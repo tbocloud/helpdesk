@@ -26,7 +26,10 @@
           <select v-model="newTask.priority" class="w-24 border border-outline-gray-2 rounded px-2 py-1.5 text-sm bg-surface-white">
             <option>High</option><option>Medium</option><option>Low</option><option>Urgent</option>
           </select>
-          <input v-model="newTask.assigned_to" placeholder="Assigned to (username)" class="w-44 border border-outline-gray-2 rounded px-2 py-1.5 text-sm bg-surface-white" />
+          <select v-model="newTask.assigned_to" class="w-44 border border-outline-gray-2 rounded px-2 py-1.5 text-sm bg-surface-white">
+            <option value="">Unassigned</option>
+            <option v-for="u in projectMembers" :key="u.user" :value="u.user">{{ u.full_name || u.user }}</option>
+          </select>
           <input v-model.number="newTask.estimated_hours" type="number" placeholder="Hrs" class="w-16 border border-outline-gray-2 rounded px-2 py-1.5 text-sm bg-surface-white" />
           <button class="px-4 py-1.5 text-sm rounded bg-surface-gray-8 text-ink-white hover:bg-surface-gray-9 disabled:opacity-50 font-medium" :disabled="!newTask.task_name || addTask.loading" @click="onAddTask">{{ addTask.loading ? "Adding..." : "+ Add Task" }}</button>
         </div>
@@ -77,7 +80,7 @@
 
 <script setup lang="ts">
 import { createResource } from "frappe-ui";
-import { reactive } from "vue";
+import { reactive, computed } from "vue";
 import { useRoute } from "vue-router";
 import { __ } from "@/translation";
 import LayoutHeader from "@/components/LayoutHeader.vue";
@@ -101,6 +104,10 @@ const expandedPhases = reactive<Set<string>>(new Set());
 const phaseTasks: Record<string, ReturnType<typeof createResource>> = reactive({});
 
 const phases = createResource({ url: "helpdesk.tasky.api.get_project_dashboard", makeParams: () => ({ project: props.projectId }), auto: true });
+
+const projectDetail = createResource({ url: "helpdesk.tasky.api.get_project_detail", makeParams: () => ({ project: props.projectId }), auto: true });
+
+const projectMembers = computed(() => projectDetail.data?.users ?? []);
 
 const newTask = reactive({ task_name: "", phase: "", category: "Functional", priority: "Medium", estimated_hours: 0, assigned_to: "" });
 
