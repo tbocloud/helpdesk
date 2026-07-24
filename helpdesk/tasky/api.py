@@ -43,6 +43,8 @@ def complete_task(task, hours_worked=0, notes=""):
     doc = frappe.get_doc("Task", str(task))
     doc.status = "Completed"
     doc.custom_actual_hours = (doc.custom_actual_hours or 0) + (float(hours_worked) or 0)
+    doc.custom_timer_start = None
+    doc.custom_timer_elapsed = 0
     doc.save()
 
     if float(hours_worked) > 0:
@@ -267,10 +269,9 @@ def get_task_detail(task):
 @frappe.whitelist()
 def update_task_status(task, status):
     """Update a task's status."""
-    doc = frappe.get_doc("Task", str(task))
-    doc.status = status
-    doc.save()
-    return {"status": doc.status}
+    frappe.db.set_value("Task", str(task), "status", str(status))
+    frappe.db.commit()
+    return {"status": str(status)}
 
 
 @frappe.whitelist()
@@ -483,52 +484,67 @@ def get_projects():
 
 @frappe.whitelist()
 def start_timer(task):
-    """Start the timer on a task by recording current datetime."""
-    doc = frappe.get_doc("Task", str(task))
-    doc.custom_timer_start = frappe.utils.now()
-    doc.db_set("custom_timer_start", doc.custom_timer_start, update_modified=False)
-    return {"timer_start": str(doc.custom_timer_start), "status": doc.status}
+    """Start the timer on a task."""
+    frappe.db.set_value("Task", str(task), "custom_timer_start", frappe.utils.now())
+    frappe.db.commit()
+    return {"ok": 1}
 
 
 @frappe.whitelist()
 def stop_timer(task):
-    """Stop the timer and return elapsed hours."""
-    if not frappe.db.exists("Task", str(task)):
-        return {"elapsed": 0, "timer_start": None}
-    timer_start = frappe.db.get_value("Task", str(task), "custom_timer_start")
+    """Stop the timer and persist elapsed."""
+    task_id = str(task)
+    timer_start = frappe.db.get_value("Task", task_id, "custom_timer_start")
     if not timer_start:
-        return {"elapsed": 0, "timer_start": None}
+        return {"elapsed": 0}
     from datetime import datetime
     start = timer_start
     if isinstance(start, str):
         start = datetime.fromisoformat(start)
     elapsed = (datetime.now() - start).total_seconds() / 3600.0
-    frappe.db.set_value("Task", str(task), "custom_timer_start", None)
-    return {"elapsed": round(elapsed, 2), "timer_start": None}
+    actual = frappe.db.get_value("Task", task_id, "custom_actual_hours") or 0
+    paused = frappe.db.get_value("Task", task_id, "custom_timer_elapsed") or 0
+    frappe.db.set_value("Task", task_id, "custom_timer_start", None)
+    frappe.db.set_value("Task", task_id, "custom_actual_hours", actual + round(elapsed, 2))
+    frappe.db.set_value("Task", task_id, "custom_timer_elapsed", paused + round(elapsed, 2))
+    frappe.db.commit()
+    return {"elapsed": round(elapsed, 2)}
 
 
 @frappe.whitelist()
 def move_task(task, new_status):
-    """Atomically move a task to a new column — handles timer start/stop and status change in one save."""
-    doc = frappe.get_doc("Task", str(task))
-    old_status = doc.status
+    """Move a task column — update timer, status, elapsed. No doc.save() to prevent deadlock."""
+    task_id = str(task)
+    old_status = frappe.db.get_value("Task", task_id, "status")
+    elapsed_paused = frappe.db.get_value("Task", task_id, "custom_timer_elapsed") or 0
+    timer_start = frappe.db.get_value("Task", task_id, "custom_timer_start")
+    actual = frappe.db.get_value("Task", task_id, "custom_actual_hours") or 0
+    elapsed_this_move = 0
 
-    if new_status == "Working" and old_status != "Working":
-        doc.custom_timer_start = frappe.utils.now()
-    elif old_status == "Working" and new_status != "Working":
-        if doc.custom_timer_start:
-            from datetime import datetime
-            start = doc.custom_timer_start
-            if isinstance(start, str):
-                start = datetime.fromisoformat(start)
-            elapsed = (datetime.now() - start).total_seconds() / 3600.0
-            doc.custom_actual_hours = (doc.custom_actual_hours or 0) + round(elapsed, 2)
-            doc.custom_timer_start = None
+    if old_status == new_status:
+        return {"status": old_status, "elapsed": 0}
 
-    doc.status = new_status
-    doc.save()
+    # Leaving Working: accumulate elapsed from running timer
+    if old_status == "Working" and timer_start:
+        from datetime import datetime
+        start = timer_start
+        if isinstance(start, str):
+            start = datetime.fromisoformat(start)
+        elapsed_this_move = (datetime.now() - start).total_seconds() / 3600.0
+        frappe.db.set_value("Task", task_id, "custom_timer_start", None)
+        frappe.db.set_value("Task", task_id, "custom_actual_hours", actual + round(elapsed_this_move, 2))
+
+        # Pausing to Open or PendingReview: save elapsed so timer resumes
+        if new_status in ("Open", "Pending Review"):
+            frappe.db.set_value("Task", task_id, "custom_timer_elapsed", (elapsed_paused or 0) + round(elapsed_this_move, 2))
+
+    # Entering Working: start timer (fresh or resume)
+    if new_status == "Working":
+        frappe.db.set_value("Task", task_id, "custom_timer_start", frappe.utils.now())
+
+    frappe.db.set_value("Task", task_id, "status", new_status)
     frappe.db.commit()
-    return {"status": doc.status, "elapsed": round(elapsed, 2) if old_status == "Working" else 0}
+    return {"status": new_status, "elapsed": round(elapsed_this_move, 2)}
 
 
 @frappe.whitelist()

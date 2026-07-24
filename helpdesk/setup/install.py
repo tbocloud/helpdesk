@@ -348,6 +348,13 @@ def get_custom_fields():
                 "insert_after": "custom_actual_hours",
                 "read_only": 1,
             },
+            {
+                "fieldname": "custom_timer_elapsed",
+                "fieldtype": "Float",
+                "label": "Paused Timer (hrs)",
+                "insert_after": "custom_timer_start",
+                "read_only": 1,
+            },
         ],
         "HD Ticket": [
             {
