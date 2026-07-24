@@ -70,7 +70,7 @@
 			"fieldtype": "Link",
 			"in_standard_filter": 1,
 			"label": "Connection",
-			"options": "Helpdesk Support Connection",
+			"options": "HDS Support Connection",
 			"reqd": 1
 		},
 		{
@@ -128,7 +128,7 @@
 	"modified": "2026-04-22 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
-	"name": "hds_site_login_log",
+	"name": "HDS Site Login Log",
 	"naming_rule": "Expression (old style)",
 	"owner": "Administrator",
 	"permissions": [

@@ -28,7 +28,7 @@
 			"in_list_view": 1,
 			"in_standard_filter": 1,
 			"label": "Connection",
-			"options": "Helpdesk Support Connection",
+			"options": "HDS Support Connection",
 			"reqd": 1
 		},
 		{
@@ -124,7 +124,7 @@
 	"modified": "2026-04-22 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
-	"name": "hds_remote_audit_log",
+	"name": "HDS Remote Audit Log",
 	"owner": "Administrator",
 	"permissions": [
 		{

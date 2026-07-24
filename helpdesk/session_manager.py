@@ -21,7 +21,7 @@ from helpdesk.mcp_client import MCPClient
 # Write tool names - these require approval instead of direct execution
 WRITE_TOOLS = {"set_value", "set_values", "create_doc", "delete_doc", "run_doc_method", "clear_cache"}
 
-# Default session limits (overridden by Helpdesk Hub Settings)
+# Default session limits (overridden by HDS Hub Settings)
 MAX_TOOL_CALLS = 30
 MAX_SESSION_TIME_SECONDS = 300  # 5 minutes
 MAX_SESSIONS_PER_TICKET = 3
@@ -78,15 +78,15 @@ def start_investigation(
 
 	Args:
 		ticket_id: HD Ticket name
-		connection_name: Helpdesk Support Connection name
+		connection_name: HDS Support Connection name
 		agent_notes: Optional notes from the support agent
 
 	Returns:
-		Helpdesk AI Support Session name
+		HDS AI Support Session name
 	"""
 	# Guard: check session limit
 	existing = frappe.db.count(
-		"Helpdesk AI Support Session",
+		"HDS AI Support Session",
 		filters={"ticket": ticket_id, "status": ["in", ["Active", "Completed"]]},
 	)
 	if existing >= MAX_SESSIONS_PER_TICKET:
@@ -94,7 +94,7 @@ def start_investigation(
 
 	# Guard: check no active session
 	active = frappe.db.exists(
-		"Helpdesk AI Support Session",
+		"HDS AI Support Session",
 		{"ticket": ticket_id, "status": "Active"},
 	)
 	if active:
@@ -105,12 +105,12 @@ def start_investigation(
 	triage_data = json.loads(ticket.custom_triage_data or "{}") if ticket.custom_triage_data else {}
 
 	# Get connection info
-	conn = frappe.get_doc("Helpdesk Support Connection", connection_name)
+	conn = frappe.get_doc("HDS Support Connection", connection_name)
 
 	# Create session doc
 	session = frappe.get_doc(
 		{
-			"doctype": "Helpdesk AI Support Session",
+			"doctype": "HDS AI Support Session",
 			"ticket": ticket_id,
 			"customer_name": conn.customer_name,
 			"connection": connection_name,
@@ -328,7 +328,7 @@ def run_investigation(
 				diagnosis += block.text
 
 		# Update session with results
-		session = frappe.get_doc("Helpdesk AI Support Session", session_name)
+		session = frappe.get_doc("HDS AI Support Session", session_name)
 		if paused_for_review:
 			session.status = "Awaiting Review"
 			# Save full conversation state for resume (includes messages + proposed_actions so far)
@@ -367,7 +367,7 @@ def run_investigation(
 	except Exception as e:
 		# Save partial results including MCP logs
 		try:
-			session = frappe.get_doc("Helpdesk AI Support Session", session_name)
+			session = frappe.get_doc("HDS AI Support Session", session_name)
 			session.status = "Failed"
 			session.ended_at = now_datetime()
 			session.diagnosis = f"Investigation failed: {e}"
@@ -386,7 +386,7 @@ def run_investigation(
 		except Exception:
 			# Fallback: at minimum update status
 			frappe.db.set_value(
-				"Helpdesk AI Support Session",
+				"HDS AI Support Session",
 				session_name,
 				{
 					"status": "Failed",
@@ -588,7 +588,7 @@ def resume_investigation(session_name, agent_guidance=""):
 	Appends agent_guidance to the conversation as a user message and continues
 	the Sonnet loop from where it stopped.
 	"""
-	session = frappe.get_doc("Helpdesk AI Support Session", session_name)
+	session = frappe.get_doc("HDS AI Support Session", session_name)
 	if session.status != "Awaiting Review":
 		frappe.throw("Session is not awaiting review (current status: %s)" % session.status)
 
@@ -635,7 +635,7 @@ def resume_investigation(session_name, agent_guidance=""):
 
 def run_investigation_resume(session_name, messages, proposed_actions, agent_guidance=""):
 	"""Background: resume a previously-paused investigation."""
-	session = frappe.get_doc("Helpdesk AI Support Session", session_name)
+	session = frappe.get_doc("HDS AI Support Session", session_name)
 	ticket_id = session.ticket
 	connection_name = session.connection
 
@@ -802,7 +802,7 @@ def run_investigation_resume(session_name, messages, proposed_actions, agent_gui
 
 	except Exception as e:
 		frappe.db.set_value(
-			"Helpdesk AI Support Session",
+			"HDS AI Support Session",
 			session_name,
 			{
 				"status": "Failed",

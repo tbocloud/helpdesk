@@ -1,7 +1,7 @@
 # Copyright (c) 2026, Quark Cyber Systems FZC and contributors
 # For license information, please see license.txt
 
-"""Backfill: normalize Helpdesk Support Connection.site_url + mcp_endpoint.
+"""Backfill: normalize HDS Support Connection.site_url + mcp_endpoint.
 
 Converts bare hostnames (e.g. "qcssupport.localhost") to fully qualified URLs
 (e.g. "http://qcssupport.localhost") so downstream consumers can use them
@@ -15,7 +15,7 @@ from helpdesk.utils import normalize_site_url
 
 def execute():
 	connections = frappe.get_all(
-		"Helpdesk Support Connection",
+		"HDS Support Connection",
 		fields=["name", "site_url", "mcp_endpoint"],
 	)
 	for conn in connections:
@@ -26,7 +26,7 @@ def execute():
 		if normalized == conn.site_url and mcp_endpoint == conn.mcp_endpoint:
 			continue
 		frappe.db.set_value(
-			"Helpdesk Support Connection",
+			"HDS Support Connection",
 			conn.name,
 			{"site_url": normalized, "mcp_endpoint": mcp_endpoint},
 			update_modified=False,

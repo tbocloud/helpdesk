@@ -61,7 +61,7 @@ def _get_data(filters):
 			SUM(cache_read_tokens) as cache_read_tokens,
 			SUM(cache_write_tokens) as cache_write_tokens,
 			SUM(estimated_cost_usd) as cost_usd
-		FROM `tabHelpdesk AI Usage Log`
+		FROM `tabHDS AI Usage Log`
 		{where}
 		GROUP BY DATE(timestamp), model
 		ORDER BY date DESC, model

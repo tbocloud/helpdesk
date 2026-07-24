@@ -13,7 +13,7 @@
  "name": "AI Usage Summary",
  "owner": "Administrator",
  "prepared_report": 0,
- "ref_doctype": "Helpdesk AI Usage Log",
+ "ref_doctype": "HDS AI Usage Log",
  "report_name": "AI Usage Summary",
  "report_type": "Script Report",
  "roles": [

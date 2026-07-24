@@ -339,7 +339,7 @@ function showRetriageDialog(doc, call, toast, $dialog) {
 
 function showInvestigationDialog(connections, doc, call, toast, $dialog) {
 	if (!connections || connections.length === 0) {
-		toast.error("No support connections configured. Create a Helpdesk Support Connection first.");
+		toast.error("No support connections configured. Create a HDS Support Connection first.");
 		return;
 	}
 

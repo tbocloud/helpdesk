@@ -67,7 +67,7 @@
 			"fieldname": "connection",
 			"fieldtype": "Link",
 			"label": "Connection",
-			"options": "Helpdesk Support Connection"
+			"options": "HDS Support Connection"
 		},
 		{
 			"fieldname": "contract_id",
@@ -167,7 +167,7 @@
 			"fieldname": "mcp_calls",
 			"fieldtype": "Table",
 			"label": "MCP Calls",
-			"options": "Helpdesk MCP Call Log"
+			"options": "HDS MCP Call Log"
 		},
 		{
 			"fieldname": "token_section",
@@ -224,7 +224,7 @@
 	"modified": "2026-03-29 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
-	"name": "hds_ai_support_session",
+	"name": "HDS AI Support Session",
 	"naming_rule": "Expression (old style)",
 	"owner": "Administrator",
 	"permissions": [

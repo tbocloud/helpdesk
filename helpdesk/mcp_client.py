@@ -40,7 +40,7 @@ def _clamp_hub_limit(tool_name: str, arguments: dict) -> dict:
 		return arguments
 
 	try:
-		cap = frappe.db.get_single_value("Helpdesk Hub Settings", settings_field)
+		cap = frappe.db.get_single_value("HDS Hub Settings", settings_field)
 		cap = int(cap) if cap and int(cap) > 0 else default
 	except Exception:
 		cap = default
@@ -56,12 +56,12 @@ class MCPClient:
 	"""Client for calling MCP tools on a customer's Frappe site."""
 
 	def __init__(self, connection_name: str):
-		"""Initialize from a Helpdesk Support Connection document.
+		"""Initialize from a HDS Support Connection document.
 
 		Args:
-			connection_name: Name of the Helpdesk Support Connection doc
+			connection_name: Name of the HDS Support Connection doc
 		"""
-		conn = frappe.get_doc("Helpdesk Support Connection", connection_name)
+		conn = frappe.get_doc("HDS Support Connection", connection_name)
 		self.connection_name = connection_name
 		self.endpoint = conn.mcp_endpoint
 		self.customer_name = conn.customer_name
@@ -69,7 +69,7 @@ class MCPClient:
 
 		# Get credentials
 		self.api_key = conn.api_key
-		self.api_secret = get_decrypted_password("Helpdesk Support Connection", connection_name, "api_secret")
+		self.api_secret = get_decrypted_password("HDS Support Connection", connection_name, "api_secret")
 
 		if not self.api_key or not self.api_secret:
 			frappe.throw(f"Missing API credentials for connection {connection_name}")
@@ -110,7 +110,7 @@ class MCPClient:
 		return result.get("tools", [])
 
 	def call_tool(self, tool_name: str, arguments: dict, ticket_id=None, session_id=None) -> dict:
-		"""Call an MCP tool and return the result. Logs every call to Helpdesk Remote Audit Log.
+		"""Call an MCP tool and return the result. Logs every call to HDS Remote Audit Log.
 
 		Args:
 			tool_name: Name of the tool to call
@@ -153,7 +153,7 @@ class MCPClient:
 		return result
 
 	def _log_audit(self, tool_name, arguments, result, elapsed_ms, session_id, error_message):
-		"""Write an entry to Helpdesk Remote Audit Log."""
+		"""Write an entry to HDS Remote Audit Log."""
 		import json as _json
 
 		WRITE_TOOLS = {"set_value", "set_values", "create_doc", "delete_doc", "run_doc_method", "clear_cache"}
@@ -166,7 +166,7 @@ class MCPClient:
 
 			frappe.get_doc(
 				{
-					"doctype": "Helpdesk Remote Audit Log",
+					"doctype": "HDS Remote Audit Log",
 					"connection": self.connection_name,
 					"timestamp": frappe.utils.now_datetime(),
 					"tool_name": tool_name,

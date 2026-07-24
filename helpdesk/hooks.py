@@ -159,7 +159,7 @@ before_tests = "helpdesk.test_utils.before_tests"
 auth_hooks = ["helpdesk.auth.authenticate"]
 
 default_log_clearing_doctypes = {
-    "Helpdesk AI Usage Log": 90,
-    "Helpdesk Site Login Log": 180,
-    "Helpdesk Remote Audit Log": 365,
+    "HDS AI Usage Log": 90,
+    "HDS Site Login Log": 180,
+    "HDS Remote Audit Log": 365,
 }

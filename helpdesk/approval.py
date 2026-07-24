@@ -4,7 +4,7 @@
 """Write operation approval workflow.
 
 When Sonnet proposes write operations during an investigation, they are
-captured as Helpdesk Support Action Requests with individual proposed actions.
+captured as HDS Support Action Requests with individual proposed actions.
 An agent reviews and approves/rejects each action, then the Hub executes
 the approved ones via MCP.
 """
@@ -31,22 +31,22 @@ def create_action_request(session_name, ticket_id, proposed_actions):
 	"""Create an action request from AI-proposed write operations.
 
 	Args:
-		session_name: Helpdesk AI Support Session name
+		session_name: HDS AI Support Session name
 		ticket_id: HD Ticket name
 		proposed_actions: list of dicts with tool_name, description, arguments
 
 	Returns:
-		Helpdesk Support Action Request name
+		HDS Support Action Request name
 	"""
-	session = frappe.get_doc("Helpdesk AI Support Session", session_name)
+	session = frappe.get_doc("HDS AI Support Session", session_name)
 
 	action_request = frappe.get_doc(
 		{
-			"doctype": "Helpdesk Support Action Request",
+			"doctype": "HDS Support Action Request",
 			"ticket": ticket_id,
 			"session": session_name,
 			"customer_name": session.customer_name,
-			"site_url": frappe.db.get_value("Helpdesk Support Connection", session.connection, "site_url")
+			"site_url": frappe.db.get_value("HDS Support Connection", session.connection, "site_url")
 			if session.connection
 			else "",
 			"status": "Pending Approval",
@@ -75,10 +75,10 @@ def approve_actions(action_request_name, approved_indices=None):
 	"""Approve specific actions in an action request.
 
 	Args:
-		action_request_name: Helpdesk Support Action Request name
+		action_request_name: HDS Support Action Request name
 		approved_indices: list of row indices to approve (0-based). If None, approve all.
 	"""
-	ar = frappe.get_doc("Helpdesk Support Action Request", action_request_name)
+	ar = frappe.get_doc("HDS Support Action Request", action_request_name)
 
 	if ar.status not in ("Pending Approval",):
 		frappe.throw("Action request is not pending approval")
@@ -107,7 +107,7 @@ def approve_actions(action_request_name, approved_indices=None):
 
 def reject_actions(action_request_name):
 	"""Reject all actions in an action request."""
-	ar = frappe.get_doc("Helpdesk Support Action Request", action_request_name)
+	ar = frappe.get_doc("HDS Support Action Request", action_request_name)
 
 	if ar.status not in ("Pending Approval",):
 		frappe.throw("Action request is not pending approval")
@@ -125,18 +125,18 @@ def execute_approved_actions(action_request_name):
 	"""Execute all approved actions via MCP.
 
 	Args:
-		action_request_name: Helpdesk Support Action Request name
+		action_request_name: HDS Support Action Request name
 
 	Returns:
 		dict with results per action
 	"""
-	ar = frappe.get_doc("Helpdesk Support Action Request", action_request_name)
+	ar = frappe.get_doc("HDS Support Action Request", action_request_name)
 
 	if ar.status not in ("Approved", "Partially Approved"):
 		frappe.throw("Action request is not approved")
 
 	# Get connection from the session
-	session = frappe.get_doc("Helpdesk AI Support Session", ar.session)
+	session = frappe.get_doc("HDS AI Support Session", ar.session)
 	if not session.connection:
 		frappe.throw("No connection found for this session")
 

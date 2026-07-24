@@ -125,7 +125,7 @@
 		{
 			"hidden": 0,
 			"is_query_report": 0,
-			"label": "Helpdesk Reports",
+			"label": "Ticket Reports",
 			"link_count": 2,
 			"onboard": 0,
 			"type": "Card Break"
@@ -153,7 +153,7 @@
 		{
 			"hidden": 0,
 			"is_query_report": 0,
-			"label": "QCS AI Support",
+			"label": "AI Support",
 			"link_count": 6,
 			"onboard": 0,
 			"type": "Card Break"
@@ -163,7 +163,7 @@
 			"is_query_report": 0,
 			"label": "Support Connections",
 			"link_count": 0,
-			"link_to": "Helpdesk Support Connection",
+			"link_to": "HDS Support Connection",
 			"link_type": "DocType",
 			"onboard": 0,
 			"type": "Link"
@@ -173,7 +173,7 @@
 			"is_query_report": 0,
 			"label": "Hub Settings",
 			"link_count": 0,
-			"link_to": "Helpdesk Hub Settings",
+			"link_to": "HDS Hub Settings",
 			"link_type": "DocType",
 			"onboard": 0,
 			"type": "Link"
@@ -183,7 +183,7 @@
 			"is_query_report": 0,
 			"label": "AI Support Sessions",
 			"link_count": 0,
-			"link_to": "Helpdesk AI Support Session",
+			"link_to": "HDS AI Support Session",
 			"link_type": "DocType",
 			"onboard": 0,
 			"type": "Link"
@@ -193,7 +193,7 @@
 			"is_query_report": 0,
 			"label": "Action Requests",
 			"link_count": 0,
-			"link_to": "Helpdesk Support Action Request",
+			"link_to": "HDS Support Action Request",
 			"link_type": "DocType",
 			"onboard": 0,
 			"type": "Link"
@@ -203,7 +203,7 @@
 			"is_query_report": 0,
 			"label": "Remote Audit Log",
 			"link_count": 0,
-			"link_to": "Helpdesk Remote Audit Log",
+			"link_to": "HDS Remote Audit Log",
 			"link_type": "DocType",
 			"onboard": 0,
 			"type": "Link"
@@ -213,7 +213,7 @@
 			"is_query_report": 0,
 			"label": "Site Login Log",
 			"link_count": 0,
-			"link_to": "Helpdesk Site Login Log",
+			"link_to": "HDS Site Login Log",
 			"link_type": "DocType",
 			"onboard": 0,
 			"type": "Link"
@@ -231,7 +231,7 @@
 			"is_query_report": 0,
 			"label": "AI Usage Log",
 			"link_count": 0,
-			"link_to": "Helpdesk AI Usage Log",
+			"link_to": "HDS AI Usage Log",
 			"link_type": "DocType",
 			"onboard": 0,
 			"type": "Link"
@@ -241,7 +241,7 @@
 			"is_query_report": 0,
 			"label": "Model Pricing",
 			"link_count": 0,
-			"link_to": "Helpdesk Model Pricing",
+			"link_to": "HDS Model Pricing",
 			"link_type": "DocType",
 			"onboard": 0,
 			"type": "Link"
@@ -267,7 +267,7 @@
 		{
 			"hidden": 0,
 			"is_query_report": 0,
-			"label": "AI Reports",
+			"label": "AI Usage Reports",
 			"link_count": 2,
 			"onboard": 0,
 			"type": "Card Break"

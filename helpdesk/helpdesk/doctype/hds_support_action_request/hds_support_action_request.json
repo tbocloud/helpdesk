@@ -42,7 +42,7 @@
 			"fieldtype": "Link",
 			"in_list_view": 1,
 			"label": "Session",
-			"options": "Helpdesk AI Support Session"
+			"options": "HDS AI Support Session"
 		},
 		{
 			"fieldname": "column_break_ar_ticket",
@@ -86,7 +86,7 @@
 			"fieldname": "proposed_actions",
 			"fieldtype": "Table",
 			"label": "Proposed Actions",
-			"options": "Helpdesk Support Proposed Action"
+			"options": "HDS Support Proposed Action"
 		},
 		{
 			"fieldname": "approval_section",
@@ -123,7 +123,7 @@
 	"modified": "2026-03-29 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
-	"name": "hds_support_action_request",
+	"name": "HDS Support Action Request",
 	"naming_rule": "Expression (old style)",
 	"owner": "Administrator",
 	"permissions": [
