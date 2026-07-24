@@ -22,14 +22,14 @@
       </div>
 
       <div
-        v-else-if="dashboard.loading"
+        v-else-if="kanban.loading"
         class="flex items-center justify-center h-full"
       >
         <div class="text-p-base text-ink-gray-6">{{ __("Loading...") }}</div>
       </div>
 
       <div
-        v-else-if="dashboard.error"
+        v-else-if="kanban.error"
         class="flex items-center justify-center h-full"
       >
         <div class="flex flex-col items-center gap-2">
@@ -73,7 +73,7 @@
             >
               <div class="flex items-start gap-2 mb-2">
                 <GripVertical class="size-4 text-ink-gray-4 shrink-0 mt-0.5 cursor-grab" />
-                <span class="text-sm text-ink-gray-9 leading-snug">{{ task.subject || task.title }}</span>
+                <span class="text-sm text-ink-gray-9 leading-snug">{{ task.subject }}</span>
               </div>
 
               <div class="flex items-center justify-between">
@@ -92,11 +92,12 @@
                     :class="priorityDotClass(task.priority)"
                   />
 
-                  <UserAvatar
-                    v-if="task.assigned_to || task.assignee"
-                    :name="task.assigned_to || task.assignee"
-                    size="sm"
-                  />
+                  <span
+                    v-if="task.assigned_to"
+                    class="size-6 rounded-full bg-ink-blue-2 text-ink-blue-8 text-xs font-medium flex items-center justify-center shrink-0"
+                  >
+                    {{ getInitials(task.assigned_to) }}
+                  </span>
                 </div>
               </div>
             </div>
@@ -108,11 +109,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from "vue";
+import { reactive, ref, watch } from "vue";
 import { createResource } from "frappe-ui";
 import { __ } from "@/translation";
 import LayoutHeader from "@/components/LayoutHeader.vue";
-import { UserAvatar } from "@/components";
 import GanttChartSquare from "~icons/lucide/gantt-chart-square";
 import AlertTriangle from "~icons/lucide/alert-triangle";
 import GripVertical from "~icons/lucide/grip-vertical";
@@ -123,13 +123,15 @@ const props = defineProps<{
 
 interface Task {
   name: string;
-  subject?: string;
-  title?: string;
+  subject: string;
+  category: string;
+  phase: string;
   status: string;
-  category?: string;
-  priority?: string;
-  assigned_to?: string;
-  assignee?: string;
+  priority: string;
+  due_date: string;
+  estimated_hours: number;
+  assigned_to: string;
+  assignees: string[];
 }
 
 const columns = [
@@ -140,9 +142,10 @@ const columns = [
   { status: "Cancelled", label: "Cancelled" },
 ];
 
-const dashboard = createResource({
-  url: "helpdesk.tasky.api.get_project_dashboard",
-  makeParams: () => ({ project: props.projectId }),
+const kanban = createResource({
+  url: "helpdesk.tasky.api.get_kanban_tasks",
+  params: { project: props.projectId },
+  auto: true,
 });
 
 const updateTaskStatus = createResource({
@@ -159,29 +162,18 @@ watch(
   () => props.projectId,
   (val) => {
     if (val) {
-      dashboard.reload();
+      kanban.reload();
     }
   },
   { immediate: true }
 );
 
 watch(
-  () => dashboard.data,
+  () => kanban.data,
   (data) => {
     if (!data) return;
     for (const col of columns) {
-      columnTasks[col.status] = [];
-    }
-
-    const phases = data.phases ?? [];
-    for (const phase of phases) {
-      const tasks = phase.tasks ?? [];
-      for (const task of tasks) {
-        const status = task.status;
-        if (status && columnTasks[status]) {
-          columnTasks[status].push(task);
-        }
-      }
+      columnTasks[col.status] = data.columns?.[col.status] ?? [];
     }
   },
   { deep: true }
@@ -230,6 +222,15 @@ function categoryClasses(category: string) {
     Common: "bg-ink-gray-2 text-ink-gray-7",
   };
   return map[category] || map.Common;
+}
+
+function getInitials(name: string) {
+  return name
+    .split(" ")
+    .map((n) => n[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
 }
 
 function priorityDotClass(priority: string) {

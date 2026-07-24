@@ -141,9 +141,9 @@
               </div>
 
               <div class="flex items-center gap-4 text-xs text-ink-gray-5">
-                <div v-if="project.start_date" class="flex items-center gap-1">
+                <div v-if="project.expected_start_date" class="flex items-center gap-1">
                   <CalendarDays class="size-3.5" />
-                  <span>{{ project.start_date }}</span>
+                  <span>{{ project.expected_start_date }}</span>
                 </div>
                 <div v-if="project.expected_end_date" class="flex items-center gap-1">
                   <Flag class="size-3.5" />
@@ -167,15 +167,23 @@
         </div>
       </template>
     </div>
+    <GenerateChecklistModal
+      v-if="showChecklistModal"
+      :show="showChecklistModal"
+      :project-id="selectedProjectId"
+      @close="showChecklistModal = false"
+      @generated="showChecklistModal = false; projects.reload()"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, computed } from "vue";
+import { reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import { createListResource, createResource } from "frappe-ui";
 import { __ } from "@/translation";
 import LayoutHeader from "@/components/LayoutHeader.vue";
+import GenerateChecklistModal from "./components/GenerateChecklistModal.vue";
 import Plus from "~icons/lucide/plus";
 import FolderKanban from "~icons/lucide/folder-kanban";
 import AlertTriangle from "~icons/lucide/alert-triangle";
@@ -215,6 +223,8 @@ const createProject = createResource({
 const projectDashboards = reactive<Record<string, ReturnType<typeof createResource>>>({});
 
 const showNewForm = ref(false);
+const showChecklistModal = ref(false);
+const selectedProjectId = ref("");
 
 const newProject = reactive({
   project_name: "",
@@ -234,7 +244,7 @@ function onCreateProject() {
   if (!newProject.project_name.trim()) return;
   createProject.submit({
     project_name: newProject.project_name,
-    start_date: newProject.start_date,
+    expected_start_date: newProject.start_date,
     expected_end_date: newProject.expected_end_date,
     team_members: newProject.team_members
       ? newProject.team_members.split(",").map((s) => s.trim()).filter(Boolean)
@@ -285,6 +295,7 @@ function statusPillClass(status: string) {
 }
 
 function onGenerateChecklist(project: Project) {
-  alert(`Generate checklist for: ${project.project_name || project.title} (coming soon)`);
+  selectedProjectId.value = project.name;
+  showChecklistModal.value = true;
 }
 </script>

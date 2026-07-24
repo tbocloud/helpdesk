@@ -103,24 +103,21 @@
               <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2 mb-1">
                   <span class="text-sm text-ink-gray-8 truncate">
-                    {{ phase.name }}
+                    {{ phase.phase_name }}
                   </span>
-                  <span
-                    class="inline-block px-2 py-0.5 rounded-full text-xs"
-                    :class="statusPillClass(phase.status)"
-                  >
-                    {{ __(phase.status) }}
-                  </span>
+                </div>
+                <div class="flex items-center gap-2 text-xs text-ink-gray-6 mb-1">
+                  <span>{{ phase.completed_count }} / {{ phase.total_count }} {{ __("tasks") }}</span>
                 </div>
                 <div class="w-full h-2 rounded-full bg-surface-gray-2 overflow-hidden">
                   <div
                     class="h-full rounded-full bg-surface-gray-5 transition-all duration-500"
-                    :style="{ width: phase.progress + '%' }"
+                    :style="{ width: phase.progress_pct + '%' }"
                   />
                 </div>
               </div>
               <span class="text-xs text-ink-gray-6 w-10 text-right">
-                {{ phase.progress }}%
+                {{ phase.progress_pct }}%
               </span>
             </div>
           </div>
@@ -139,7 +136,7 @@
             </div>
             <div
               v-for="(member, index) in teamWorkload"
-              :key="member.name"
+              :key="member.user"
               class="flex items-center gap-3 p-3"
               :class="{
                 'border-b border-outline-gray-2': index < teamWorkload.length - 1,
@@ -147,30 +144,9 @@
             >
               <div class="flex-1 min-w-0">
                 <div class="text-sm text-ink-gray-8 truncate">
-                  {{ member.name }}
-                </div>
-                <div class="text-xs text-ink-gray-5">
-                  {{ member.completed }} / {{ member.total }} {{ __("tasks completed") }}
+                  {{ member.full_name || member.user }}
                 </div>
               </div>
-              <div class="w-24 h-2 rounded-full bg-surface-gray-2 overflow-hidden">
-                <div
-                  class="h-full rounded-full bg-surface-gray-5 transition-all duration-500"
-                  :style="{
-                    width:
-                      member.total > 0
-                        ? Math.round((member.completed / member.total) * 100) + '%'
-                        : '0%',
-                  }"
-                />
-              </div>
-              <span class="text-xs text-ink-gray-6 w-8 text-right">
-                {{
-                  member.total > 0
-                    ? Math.round((member.completed / member.total) * 100)
-                    : 0
-                }}%
-              </span>
             </div>
           </div>
         </div>
@@ -218,14 +194,15 @@ watch(
 
 interface PhaseItem {
   name: string;
-  status: string;
-  progress: number;
+  phase_name: string;
+  total_count: number;
+  completed_count: number;
+  progress_pct: number;
 }
 
 interface TeamMember {
-  name: string;
-  total: number;
-  completed: number;
+  user: string;
+  full_name: string;
 }
 
 const progressPercent = computed(() => {
@@ -276,20 +253,8 @@ const phases = computed<PhaseItem[]>(() => {
 });
 
 const teamWorkload = computed<TeamMember[]>(() => {
-  return dashboard.data?.team_workload ?? [];
+  return projectDetail.data?.users ?? [];
 });
 
-function statusPillClass(status: string) {
-  const lowered = status.toLowerCase();
-  if (lowered === "completed") {
-    return "bg-surface-gray-2 text-ink-gray-7";
-  }
-  if (lowered === "working" || lowered === "in progress") {
-    return "bg-surface-gray-3 text-ink-gray-8";
-  }
-  if (lowered === "cancelled" || lowered === "blocked") {
-    return "bg-surface-gray-4 text-ink-gray-9";
-  }
-  return "bg-surface-gray-1 text-ink-gray-6";
-}
+
 </script>

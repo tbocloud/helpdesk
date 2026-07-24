@@ -66,7 +66,7 @@
           <div class="bg-surface-white border border-outline-gray-2 rounded-lg p-5">
             <div class="flex items-center gap-2 mb-1">
               <AlertTriangle class="size-4 text-ink-amber-5" />
-              <span class="text-xs text-ink-gray-5">{{ __("Blocked") }}</span>
+              <span class="text-xs text-ink-gray-5">{{ __("Cancelled") }}</span>
             </div>
             <div class="text-xl-semibold text-ink-gray-9">{{ blockedTasks.length }}</div>
           </div>
@@ -86,7 +86,7 @@
           </button>
         </div>
 
-        <div v-if="blockedTasks.length && activeFilter === 'Blocked'" class="mb-6">
+        <div v-if="blockedTasks.length && activeFilter === 'Cancelled'" class="mb-6">
           <div class="bg-surface-white border border-outline-gray-2 rounded-lg">
             <div
               v-for="task in blockedTasks"
@@ -95,7 +95,7 @@
             >
               <AlertTriangle class="size-4 text-ink-red-5 shrink-0" />
               <span class="flex-1 text-sm text-ink-gray-8 truncate">
-                {{ task.subject || task.title }}
+                {{ task.subject }}
               </span>
               <button
                 class="text-xs text-ink-gray-6 px-2 py-1 rounded border border-outline-gray-2 hover:bg-surface-gray-2 transition-colors shrink-0"
@@ -134,10 +134,10 @@
               class="flex-1 text-sm truncate"
               :class="isOverdue(task) ? 'text-ink-red-7' : 'text-ink-gray-8'"
             >
-              {{ task.subject || task.title }}
+              {{ task.subject }}
             </span>
             <span class="w-24 shrink-0 text-xs text-ink-gray-6 truncate">
-              {{ task.project || task.project_name }}
+              {{ task.project }}
             </span>
             <span
               v-if="task.category"
@@ -161,7 +161,7 @@
               {{ task.status }}
             </span>
             <span class="w-20 shrink-0 text-xs text-right" :class="isOverdue(task) ? 'text-ink-red-6' : 'text-ink-gray-5'">
-              {{ task.due_date || task.due || "-" }}
+              {{ task.due_date || "-" }}
             </span>
           </button>
         </div>
@@ -176,7 +176,7 @@
       <div class="bg-surface-white rounded-lg shadow-lg w-full max-w-lg mx-4 p-6">
         <div class="flex items-center justify-between mb-4">
           <span class="text-base-medium text-ink-gray-9">
-            {{ selectedTask.subject || selectedTask.title }}
+            {{ selectedTask.subject }}
           </span>
           <button class="text-ink-gray-5 hover:text-ink-gray-7" @click="selectedTask = null">
             <X class="size-5" />
@@ -229,16 +229,15 @@ import X from "~icons/lucide/x";
 
 interface Task {
   name: string;
-  subject?: string;
-  title?: string;
+  subject: string;
   status: string;
   category?: string;
   priority?: string;
   project?: string;
-  project_name?: string;
   due_date?: string;
-  due?: string;
-  overdue?: boolean;
+  estimated_hours?: number;
+  assigned_to?: string;
+  assignees?: string;
 }
 
 const tasks = createResource({
@@ -265,12 +264,20 @@ const filterTabs = [
 
 const allTasks = computed<Task[]>(() => tasks.data ?? []);
 
+function isOverdue(task: Task) {
+  if (!task.due_date) return false;
+  if (["Completed", "Cancelled"].includes(task.status)) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return new Date(task.due_date) < today;
+}
+
 const overdueTasks = computed<Task[]>(() =>
-  allTasks.value.filter((t) => t.overdue)
+  allTasks.value.filter((t) => isOverdue(t))
 );
 
 const blockedTasks = computed<Task[]>(() =>
-  allTasks.value.filter((t) => t.status === "Blocked")
+  allTasks.value.filter((t) => t.status === "Cancelled")
 );
 
 const filteredTasks = computed<Task[]>(() => {
@@ -290,17 +297,13 @@ const completionPercent = computed(() =>
     : 0
 );
 
-function isOverdue(task: Task) {
-  return !!task.overdue;
-}
-
 function openTaskDetail(task: Task) {
   selectedTask.value = task;
   taskDetail.submit({ task: task.name });
 }
 
 function onRequestHelp(task: Task) {
-  alert(`Request help for: ${task.subject || task.title} (coming soon)`);
+  alert(`Request help for: ${task.subject} (coming soon)`);
 }
 
 function categoryClasses(category: string) {
@@ -327,9 +330,9 @@ function statusPillClasses(status: string) {
   const map: Record<string, string> = {
     Open: "bg-ink-gray-2 text-ink-gray-7",
     Working: "bg-ink-amber-1 text-ink-amber-8",
-    "Pending Review": "bg-ink-purple-1 text-ink-purple-8",
+    "Pending Review": "bg-ink-blue-1 text-ink-blue-8",
     Completed: "bg-ink-green-1 text-ink-green-8",
-    Cancelled: "bg-ink-gray-2 text-ink-gray-5 line-through",
+    Cancelled: "bg-ink-gray-2 text-ink-gray-7",
   };
   return map[status] || map.Open;
 }
