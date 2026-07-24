@@ -116,7 +116,11 @@ interface Task { name: string; subject: string; category?: string; status: strin
 
 const kanban = createResource({ url: "helpdesk.tasky.api.get_kanban_tasks", params: { project: props.projectId }, auto: true, onSuccess(d: any) { columnTasks.value = d.columns ?? {}; } });
 const updateTaskStatus = createResource({ url: "helpdesk.tasky.api.update_task_status" });
-const completeResource = createResource({ url: "helpdesk.tasky.api.complete_task" });
+const completeResource = createResource({
+  url: "helpdesk.tasky.api.complete_task",
+  onSuccess() { kanban.reload(); },
+  onError(e: any) { alert("Failed to complete: " + (e?.message || e)); },
+});
 const startTimerR = createResource({ url: "helpdesk.tasky.api.start_timer" });
 const stopTimerR = createResource({ url: "helpdesk.tasky.api.stop_timer" });
 

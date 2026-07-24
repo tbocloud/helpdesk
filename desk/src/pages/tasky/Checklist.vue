@@ -150,7 +150,10 @@ const addTask = createResource({
 });
 
 const updateTaskStatus = createResource({ url: "helpdesk.tasky.api.update_task_status" });
-const completeResource = createResource({ url: "helpdesk.tasky.api.complete_task" });
+const completeResource = createResource({
+  url: "helpdesk.tasky.api.complete_task",
+  onError(e: any) { alert("Failed to complete: " + (e?.message || e)); },
+});
 
 const completingTask = ref<any>(null);
 const completeHours = ref(0);
