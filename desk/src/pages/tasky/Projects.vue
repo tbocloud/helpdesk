@@ -116,111 +116,63 @@
           <div
             v-for="project in projects.data"
             :key="project.name"
-            class="bg-surface-white border border-outline-gray-2 rounded-xl overflow-hidden hover:shadow-lg transition-all duration-200 group cursor-pointer"
-            @click="navigateToProject(project.name)"
+            class="bg-surface-white border border-outline-gray-2 rounded-xl overflow-hidden hover:shadow-md transition-all duration-200"
           >
-            <div class="p-5">
-              <div class="flex items-start justify-between mb-4">
-                <div class="flex-1 min-w-0 mr-3">
-                  <div class="text-base-semibold text-ink-gray-9 truncate mb-0.5">
-                    {{ project.project_name }}
-                  </div>
-                  <div class="flex items-center gap-2 text-xs text-ink-gray-5">
-                    <span class="font-mono text-ink-gray-4">{{ project.name }}</span>
-                    <span v-if="formatDateRange(project)">· {{ formatDateRange(project) }}</span>
-                  </div>
+            <button
+              class="w-full text-left p-5 flex items-start justify-between group"
+              @click="toggleExpand(project.name)"
+            >
+              <div class="flex-1 min-w-0 mr-3">
+                <div class="flex items-center gap-2 mb-0.5">
+                  <span class="text-base-semibold text-ink-gray-9 truncate">{{ project.project_name }}</span>
+                  <component
+                    :is="expandedCards.has(project.name) ? LucideChevronUp : LucideChevronDown"
+                    class="size-4 text-ink-gray-4 shrink-0 transition-transform"
+                  />
                 </div>
-                <span
-                  class="text-xs font-medium px-2.5 py-1 rounded-full shrink-0"
-                  :class="statusBadgeClass(project.status)"
-                >
-                  {{ project.status || "Open" }}
-                </span>
+                <div class="flex items-center gap-2 text-xs text-ink-gray-5">
+                  <span class="font-mono text-ink-gray-4">{{ project.name }}</span>
+                  <span v-if="formatDateRange(project)">· {{ formatDateRange(project) }}</span>
+                  <span v-if="dashboards[project.name]?.data" class="text-ink-gray-6 font-medium">· {{ dashboards[project.name].data.stats.completion_pct }}%</span>
+                </div>
               </div>
+              <span class="text-xs font-medium px-2.5 py-1 rounded-full shrink-0" :class="statusBadgeClass(project.status)">
+                {{ project.status || "Open" }}
+              </span>
+            </button>
 
+            <div v-if="expandedCards.has(project.name)" class="px-5 pb-5 border-t border-outline-gray-2 pt-4">
               <div class="mb-4" v-if="dashboards[project.name]?.data">
                 <div class="flex items-center justify-between mb-1.5">
                   <span class="text-xs text-ink-gray-5 font-medium">Progress</span>
-                  <span class="text-xs text-ink-gray-9 font-semibold tabular-nums">
-                    {{ dashboards[project.name].data.stats.completion_pct }}%
+                  <span class="text-xs text-ink-gray-7 font-medium">
+                    {{ dashboards[project.name].data.stats.completed }}/{{ dashboards[project.name].data.stats.total }} tasks
                   </span>
                 </div>
                 <div class="w-full h-2.5 rounded-full bg-surface-gray-2 overflow-hidden flex">
-                  <div
-                    v-if="segments(project).completed_pct > 0"
-                    class="h-full bg-ink-green-5 transition-all duration-700 rounded-l-full"
-                    :style="{ width: segments(project).completed_pct + '%' }"
-                  />
-                  <div
-                    v-if="segments(project).working_pct > 0"
-                    class="h-full bg-ink-amber-5 transition-all duration-700"
-                    :style="{ width: segments(project).working_pct + '%' }"
-                  />
-                  <div
-                    v-if="segments(project).review_pct > 0"
-                    class="h-full bg-ink-blue-4 transition-all duration-700"
-                    :style="{ width: segments(project).review_pct + '%' }"
-                  />
-                  <div
-                    v-if="segments(project).cancelled_pct > 0"
-                    class="h-full bg-ink-red-5 transition-all duration-700"
-                    :style="{ width: segments(project).cancelled_pct + '%' }"
-                  />
-                  <div
-                    v-if="segments(project).rest_pct > 0"
-                    class="h-full bg-ink-gray-4 transition-all duration-700 rounded-r-full"
-                    :style="{ width: segments(project).rest_pct + '%' }"
-                  />
+                  <div v-if="segments(project).completed_pct > 0" class="h-full bg-ink-green-5 rounded-l-full" :style="{ width: segments(project).completed_pct + '%' }" />
+                  <div v-if="segments(project).working_pct > 0" class="h-full bg-ink-amber-5" :style="{ width: segments(project).working_pct + '%' }" />
+                  <div v-if="segments(project).review_pct > 0" class="h-full bg-ink-blue-4" :style="{ width: segments(project).review_pct + '%' }" />
+                  <div v-if="segments(project).cancelled_pct > 0" class="h-full bg-ink-red-5" :style="{ width: segments(project).cancelled_pct + '%' }" />
+                  <div v-if="segments(project).rest_pct > 0" class="h-full bg-ink-gray-4 rounded-r-full" :style="{ width: segments(project).rest_pct + '%' }" />
                 </div>
-                <div class="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2.5 text-xs text-ink-gray-5">
-                  <span class="flex items-center gap-1.5">
-                    <span class="size-2 rounded-full bg-ink-green-5" /> {{ dashboards[project.name].data.stats.completed }} done
-                  </span>
-                  <span class="flex items-center gap-1.5">
-                    <span class="size-2 rounded-full bg-ink-amber-5" /> {{ dashboards[project.name].data.stats.in_progress }} active
-                  </span>
-                  <span class="flex items-center gap-1.5" v-if="dashboards[project.name].data.stats.reviewing">
-                    <span class="size-2 rounded-full bg-ink-blue-4" /> {{ dashboards[project.name].data.stats.reviewing }} review
-                  </span>
-                  <span class="flex items-center gap-1.5" v-if="dashboards[project.name].data.stats.overdue">
-                    <span class="size-2 rounded-full bg-ink-red-5" /> {{ dashboards[project.name].data.stats.overdue }} overdue
-                  </span>
+                <div class="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs text-ink-gray-5">
+                  <span class="flex items-center gap-1.5"><span class="size-2 rounded-full bg-ink-green-5" /> {{ dashboards[project.name].data.stats.completed }} done</span>
+                  <span class="flex items-center gap-1.5"><span class="size-2 rounded-full bg-ink-amber-5" /> {{ dashboards[project.name].data.stats.in_progress }} active</span>
+                  <span class="flex items-center gap-1.5" v-if="dashboards[project.name].data.stats.overdue"><span class="size-2 rounded-full bg-ink-red-5" /> {{ dashboards[project.name].data.stats.overdue }} overdue</span>
                 </div>
               </div>
 
               <div class="flex flex-wrap gap-1.5 mb-3" v-if="dashboards[project.name]?.data?.phases?.length">
-                <span
-                  v-for="phase in dashboards[project.name].data.phases.slice(0, 4)"
-                  :key="phase.name"
-                  class="text-xs px-2 py-0.5 rounded-full bg-surface-gray-1 text-ink-gray-6 border border-outline-gray-2"
-                >
-                  {{ phase.phase_name }} {{ phase.completed_count }}/{{ phase.total_count }}
-                </span>
-                <span v-if="dashboards[project.name].data.phases.length > 4" class="text-xs text-ink-gray-4 py-0.5">
-                  +{{ dashboards[project.name].data.phases.length - 4 }} more
-                </span>
+                <span v-for="phase in dashboards[project.name].data.phases.slice(0, 4)" :key="phase.name" class="text-xs px-2 py-0.5 rounded-full bg-surface-gray-1 text-ink-gray-6 border border-outline-gray-2">{{ phase.phase_name }} {{ phase.completed_count }}/{{ phase.total_count }}</span>
+                <span v-if="dashboards[project.name].data.phases.length > 4" class="text-xs text-ink-gray-4 py-0.5">+{{ dashboards[project.name].data.phases.length - 4 }} more</span>
               </div>
-            </div>
 
-            <div class="flex border-t border-outline-gray-2">
-              <button
-                class="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs text-ink-gray-6 hover:bg-surface-gray-1 transition-colors"
-                @click.stop="navigateToProject(project.name)"
-              >
-                <FolderKanban class="size-3.5" /> Open
-              </button>
-              <button
-                class="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs text-ink-gray-6 hover:bg-surface-gray-1 transition-colors border-x border-outline-gray-2"
-                @click.stop="onGenerateChecklist(project)"
-              >
-                <ClipboardList class="size-3.5" /> Checklist
-              </button>
-              <button
-                class="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs text-ink-gray-6 hover:bg-surface-gray-1 transition-colors"
-                @click.stop="navigateToKanban(project.name)"
-              >
-                <Layout class="size-3.5" /> Board
-              </button>
+              <div class="flex border border-outline-gray-2 rounded-lg overflow-hidden">
+                <button class="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs text-ink-gray-6 hover:bg-surface-gray-1 transition-colors" @click.stop="navigateToProject(project.name)"><FolderKanban class="size-3.5" /> Open</button>
+                <button class="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs text-ink-gray-6 hover:bg-surface-gray-1 transition-colors border-x border-outline-gray-2" @click.stop="onGenerateChecklist(project)"><ClipboardList class="size-3.5" /> Checklist</button>
+                <button class="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs text-ink-gray-6 hover:bg-surface-gray-1 transition-colors" @click.stop="navigateToKanban(project.name)"><Layout class="size-3.5" /> Board</button>
+              </div>
             </div>
           </div>
         </div>
@@ -250,6 +202,8 @@ import ClipboardList from "~icons/lucide/clipboard-list";
 import Layout from "~icons/lucide/layout";
 import LucideX from "~icons/lucide/x";
 import LucidePlus from "~icons/lucide/plus";
+import LucideChevronUp from "~icons/lucide/chevron-up";
+import LucideChevronDown from "~icons/lucide/chevron-down";
 
 const router = useRouter();
 
@@ -289,6 +243,12 @@ const createProject = createResource({
 const showNewForm = ref(false);
 const showChecklistModal = ref(false);
 const selectedProjectId = ref("");
+const expandedCards = reactive<Set<string>>(new Set());
+
+function toggleExpand(name: string) {
+  if (expandedCards.has(name)) expandedCards.delete(name);
+  else expandedCards.add(name);
+}
 
 const newProject = reactive({
   project_name: "",
