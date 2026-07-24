@@ -145,6 +145,10 @@ const completeResource = createResource({
   onError(e: any) { alert("Failed to complete: " + (e?.message || e)); },
 });
 
+// Fire-and-forget timer calls (no onSuccess needed)
+const startTimerApi = createResource({ url: "helpdesk.tasky.api.start_timer" });
+const stopTimerApi = createResource({ url: "helpdesk.tasky.api.stop_timer" });
+
 const completingTask = ref<Task | null>(null);
 const completeHours = ref(0);
 const completeNotes = ref("");
@@ -196,7 +200,7 @@ function startOrResumeTimer(task: Task) {
   } else {
     timers.value[task.name] = { running: true, paused: false, elapsed: 0 };
   }
-  frappe.call("helpdesk.tasky.api.start_timer", { task: task.name }).catch(() => {});
+  startTimerApi.submit({ task: task.name });
 }
 
 function pauseTimer(task: Task) {
@@ -205,7 +209,7 @@ function pauseTimer(task: Task) {
     t.paused = true;
     t.running = false;
   }
-  frappe.call("helpdesk.tasky.api.stop_timer", { task: task.name }).catch(() => {});
+  stopTimerApi.submit({ task: task.name });
 }
 
 function finalizeTimer(task: Task): number {
@@ -213,7 +217,7 @@ function finalizeTimer(task: Task): number {
   if (!t) return 0;
   const hours = t.elapsed / 3600;
   delete timers.value[task.name];
-  frappe.call("helpdesk.tasky.api.stop_timer", { task: task.name }).catch(() => {});
+  stopTimerApi.submit({ task: task.name });
   return Math.round(hours * 100) / 100;
 }
 
