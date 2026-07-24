@@ -1,4 +1,3 @@
-import LucideBookOpen from "~icons/lucide/book-open";
 import LucideContact2 from "~icons/lucide/contact-2";
 import LucideTicket from "~icons/lucide/ticket";
 import LucideLayoutDashboard from "~icons/lucide/layout-dashboard";
@@ -36,11 +35,6 @@ export const agentPortalSidebarOptions = [
     to: "TaskyMyTasks",
   },
   {
-    label: __("Knowledge Base"),
-    icon: LucideBookOpen,
-    to: "AgentKnowledgeBase",
-  },
-  {
     label: __("Customers"),
     icon: OrganizationsIcon,
     to: "CustomerList",
@@ -62,10 +56,5 @@ export const customerPortalSidebarOptions = [
     label: __("Tickets"),
     icon: LucideTicket,
     to: "TicketsCustomer",
-  },
-  {
-    label: __("Knowledge Base"),
-    icon: LucideBookOpen,
-    to: "CustomerKnowledgeBase",
   },
 ];
