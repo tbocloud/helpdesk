@@ -195,9 +195,11 @@ function onToggleTask(task: Record<string, any>) {
 function confirmComplete() {
   const task = completingTask.value;
   if (!task) return;
+  const hours = completeHours.value || 0;
+  if (hours <= 0) { alert("Please enter hours worked"); return; }
   completeResource.submit({
     task: task.name,
-    hours_worked: completeHours.value,
+    hours_worked: hours,
     notes: completeNotes.value,
   });
   task.status = "Completed";
