@@ -303,6 +303,44 @@ def create_template(template_name, industry="", description="", tasks="[]"):
 
 
 @frappe.whitelist()
+def get_template(template):
+    """Get a single template with all tasks."""
+    doc = frappe.get_doc("Tasky Template", str(template))
+    return {
+        "name": doc.name,
+        "template_name": doc.template_name,
+        "industry": doc.industry or "",
+        "description": doc.description or "",
+        "tasks": [{"task_name": t.task_name, "phase_name": t.phase_name or "", "category": t.category,
+                    "default_priority": t.default_priority, "estimated_hours": t.estimated_hours, "sort_order": t.sort_order}
+                  for t in doc.tasks],
+    }
+
+
+@frappe.whitelist()
+def update_template(template, template_name, industry="", description="", tasks="[]"):
+    """Update an existing Tasky Template."""
+    import json
+    tasks_list = json.loads(str(tasks)) if isinstance(tasks, str) else tasks
+    doc = frappe.get_doc("Tasky Template", str(template))
+    doc.template_name = template_name
+    doc.industry = industry
+    doc.description = description
+    doc.tasks = []
+    for t in tasks_list:
+        doc.append("tasks", {
+            "task_name": t.get("task_name", ""),
+            "phase_name": t.get("phase_name", ""),
+            "category": t.get("category", "Functional"),
+            "default_priority": t.get("default_priority", "Medium"),
+            "estimated_hours": t.get("estimated_hours", 0),
+        })
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+    return {"name": doc.name, "template_name": doc.template_name}
+
+
+@frappe.whitelist()
 def get_project_detail(project):
     """Get ERPNext project details."""
     project = _resolve_project(str(project))
