@@ -128,9 +128,17 @@ const columnKeys = columnList.map(c => c.key);
 const columnTasks = ref<Record<string, Task[]>>({});
 const draggingTask = ref<string | null>(null);
 
-interface Task { name: string; subject: string; category?: string; status: string; priority?: string; assigned_to?: string; due_date?: string; start_date?: string; estimated_hours?: number; }
+interface Task { name: string; subject: string; category?: string; status: string; priority?: string; assigned_to?: string; due_date?: string; start_date?: string; estimated_hours?: number; custom_timer_start?: string; custom_timer_elapsed?: number; }
 
-const kanban = createResource({ url: "helpdesk.tasky.api.get_kanban_tasks", params: { project: props.projectId }, auto: true, onSuccess(d: any) { columnTasks.value = d.columns ?? {}; } });
+const kanban = createResource({
+  url: "helpdesk.tasky.api.get_kanban_tasks",
+  params: { project: props.projectId },
+  auto: true,
+  onSuccess(d: any) {
+    columnTasks.value = d.columns ?? {};
+    restoreTimers(d.columns);
+  },
+});
 const moveTaskApi = createResource({ url: "helpdesk.tasky.api.move_task" });
 const completeResource = createResource({
   url: "helpdesk.tasky.api.complete_task",
@@ -159,6 +167,23 @@ let tickInterval: any = null;
 onUnmounted(() => { if (tickInterval) clearInterval(tickInterval); });
 
 watch(() => props.projectId, () => { if (props.projectId) kanban.reload(); });
+
+function restoreTimers(cols: Record<string, any[]>) {
+  if (!cols) return;
+  for (const col of Object.values(cols)) {
+    for (const task of col || []) {
+      if (task.status === "Working" && task.custom_timer_start) {
+        const start = new Date(task.custom_timer_start).getTime();
+        const now = Date.now();
+        const elapsed = Math.floor((now - start) / 1000);
+        const pausedElapsed = (task.custom_timer_elapsed || 0) * 3600;
+        timers.value[task.name] = { running: true, paused: false, elapsed: elapsed + pausedElapsed };
+      } else if (task.custom_timer_elapsed > 0) {
+        timers.value[task.name] = { running: false, paused: true, elapsed: (task.custom_timer_elapsed || 0) * 3600 };
+      }
+    }
+  }
+}
 
 const PAUSE_STATUSES = ["Open", "Pending Review"];
 

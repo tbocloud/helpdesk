@@ -34,6 +34,8 @@ def _format_task(task):
         "due_date": task.get("exp_end_date"),
         "assigned_to": assigned[0] if assigned else None,
         "assignees": assigned,
+        "custom_timer_start": task.get("custom_timer_start"),
+        "custom_timer_elapsed": task.get("custom_timer_elapsed") or 0,
     }
 
 
@@ -358,7 +360,8 @@ def get_kanban_tasks(project):
     tasks = frappe.get_all("Task",
         filters={"project": project},
         fields=["name", "subject", "custom_category", "custom_phase", "status",
-                "priority", "exp_end_date", "custom_estimated_hours", "_assign"],
+                "priority", "exp_end_date", "custom_estimated_hours", "_assign",
+                "custom_timer_start", "custom_timer_elapsed"],
         order_by="custom_phase asc, subject asc")
 
     columns = {
