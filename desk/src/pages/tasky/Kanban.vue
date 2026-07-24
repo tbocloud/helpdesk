@@ -293,48 +293,6 @@ function onDrop(e: DragEvent, newStatus: string) {
   moveTaskApi.submit({ task: task.name, new_status: newStatus });
   dropTarget.value = null;
 }
-function onDragEnd() { draggingTask.value = null; }
-
-function onDrop(e: DragEvent, newStatus: string) {
-  const taskName = e.dataTransfer?.getData("application/x-task-name");
-  if (!taskName) return;
-  let task: Task | undefined;
-  for (const col of columnKeys) {
-    const arr = columnTasks.value[col];
-    if (!arr) continue;
-    task = arr.find((t) => t.name === taskName);
-    if (task) break;
-  }
-  if (!task || task.status === newStatus || task.status === "Completed") return;
-
-  const fromWorking = task.status === "Working";
-  const toWorking = newStatus === "Working";
-
-  // Drop to Completed: show timesheet popup
-  if (newStatus === "Completed") {
-    preFilledHours.value = fromWorking ? finalizeTimer(task) : 0;
-    completingTask.value = task;
-    completeHours.value = preFilledHours.value || task.estimated_hours || 0;
-    completeNotes.value = "";
-    return;
-  }
-
-  // Move task to new column visually FIRST
-  moveToColumn(task, newStatus);
-
-  // Timer logic: started on entering Working, paused or finalized when leaving
-  if (toWorking) {
-    startOrResumeTimer(task);
-  } else if (fromWorking) {
-    if (PAUSE_STATUSES.includes(newStatus)) {
-      pauseTimer(task);
-    } else {
-      finalizeTimer(task);
-    }
-  }
-
-  moveTaskApi.submit({ task: task.name, new_status: newStatus });
-}
 
 function confirmComplete() {
   const task = completingTask.value;
