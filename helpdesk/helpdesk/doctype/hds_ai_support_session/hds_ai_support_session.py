@@ -5,5 +5,5 @@ import frappe
 from frappe.model.document import Document
 
 
-class QCSAISupportSession(Document):
+class HDSAISupportSession(Document):
 	pass

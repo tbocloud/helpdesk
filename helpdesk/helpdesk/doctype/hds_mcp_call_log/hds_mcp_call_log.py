@@ -5,5 +5,5 @@ import frappe
 from frappe.model.document import Document
 
 
-class QCSMCPCallLog(Document):
+class HDSMCPCallLog(Document):
 	pass

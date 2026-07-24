@@ -5,5 +5,5 @@ import frappe
 from frappe.model.document import Document
 
 
-class QCSSupportProposedAction(Document):
+class HDSSupportProposedAction(Document):
 	pass

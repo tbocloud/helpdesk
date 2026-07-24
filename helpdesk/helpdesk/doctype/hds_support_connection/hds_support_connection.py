@@ -7,7 +7,7 @@ from frappe.model.document import Document
 from helpdesk.utils import normalize_site_url
 
 
-class QCSSupportConnection(Document):
+class HDSSupportConnection(Document):
 	def before_save(self):
 		if self.site_url:
 			self.site_url = normalize_site_url(self.site_url)

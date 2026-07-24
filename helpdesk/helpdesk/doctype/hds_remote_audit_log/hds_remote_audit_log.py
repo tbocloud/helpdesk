@@ -5,5 +5,5 @@ import frappe
 from frappe.model.document import Document
 
 
-class QCSRemoteAuditLog(Document):
+class HDSRemoteAuditLog(Document):
 	pass

@@ -5,5 +5,5 @@ import frappe
 from frappe.model.document import Document
 
 
-class QCSSiteLoginLog(Document):
+class HDSSiteLoginLog(Document):
 	pass

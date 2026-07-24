@@ -5,5 +5,5 @@ import frappe
 from frappe.model.document import Document
 
 
-class QCSAIUsageLog(Document):
+class HDSAIUsageLog(Document):
 	pass
