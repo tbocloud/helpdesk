@@ -101,66 +101,93 @@
       </div>
 
       <template v-else>
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           <div
             v-for="project in projects.data"
             :key="project.name"
-            class="bg-surface-white border border-outline-gray-2 rounded-lg hover:shadow-md transition-shadow group"
+            class="bg-surface-white border border-outline-gray-2 rounded-xl overflow-hidden hover:shadow-lg transition-all duration-200 group cursor-pointer"
+            @click="navigateToProject(project.name)"
           >
-            <button
-              class="w-full text-left p-5"
-              @click="navigateToProject(project.name)"
-            >
-              <div class="flex items-center justify-between mb-3">
-                <div class="flex-1 min-w-0">
-                  <div class="text-sm-medium text-ink-gray-9 truncate">
-                    {{ project.project_name || project.title }}
+            <div class="p-5">
+              <div class="flex items-start justify-between mb-4">
+                <div class="flex-1 min-w-0 mr-3">
+                  <div class="text-base-semibold text-ink-gray-9 truncate mb-0.5">
+                    {{ project.project_name }}
+                  </div>
+                  <div class="text-xs text-ink-gray-5">
+                    {{ formatDateRange(project) }}
                   </div>
                 </div>
                 <span
-                  class="text-xs font-medium px-2 py-0.5 rounded-full shrink-0 ml-2"
-                  :class="statusPillClass(project.status)"
+                  class="text-xs font-medium px-2.5 py-1 rounded-full shrink-0"
+                  :class="statusBadgeClass(project.status)"
                 >
-                  {{ __(project.status || "Active") }}
+                  {{ project.status || "Open" }}
                 </span>
               </div>
 
-              <div class="mb-3">
-                <div class="flex items-center justify-between mb-1">
-                  <span class="text-xs text-ink-gray-5">{{ __("Progress") }}</span>
-                  <span class="text-xs text-ink-gray-6">
-                    {{ projectProgress(project.name) }}%
+              <div class="mb-4" v-if="dashboards[project.name]?.data">
+                <div class="flex items-center justify-between mb-1.5">
+                  <span class="text-xs text-ink-gray-5 font-medium">Progress</span>
+                  <span class="text-xs text-ink-gray-7 font-medium">
+                    {{ dashboards[project.name].data.stats.completed }}/{{ dashboards[project.name].data.stats.total }} tasks
                   </span>
                 </div>
                 <div class="w-full h-2 rounded-full bg-surface-gray-2 overflow-hidden">
                   <div
-                    class="h-full rounded-full bg-surface-gray-5 transition-all duration-500"
-                    :style="{ width: projectProgress(project.name) + '%' }"
+                    class="h-full rounded-full transition-all duration-700"
+                    :class="progressColor(dashboards[project.name].data.stats.completion_pct)"
+                    :style="{ width: dashboards[project.name].data.stats.completion_pct + '%' }"
                   />
                 </div>
+                <div class="flex items-center gap-3 mt-2 text-xs text-ink-gray-5">
+                  <span class="flex items-center gap-1">
+                    <span class="size-1.5 rounded-full bg-ink-green-5" />
+                    {{ dashboards[project.name].data.stats.completed }} done
+                  </span>
+                  <span class="flex items-center gap-1">
+                    <span class="size-1.5 rounded-full bg-ink-amber-5" />
+                    {{ dashboards[project.name].data.stats.in_progress }} active
+                  </span>
+                  <span v-if="dashboards[project.name].data.stats.overdue" class="flex items-center gap-1">
+                    <span class="size-1.5 rounded-full bg-ink-red-5" />
+                    {{ dashboards[project.name].data.stats.overdue }} overdue
+                  </span>
+                </div>
               </div>
 
-              <div class="flex items-center gap-4 text-xs text-ink-gray-5">
-                <div v-if="project.expected_start_date" class="flex items-center gap-1">
-                  <CalendarDays class="size-3.5" />
-                  <span>{{ project.expected_start_date }}</span>
-                </div>
-                <div v-if="project.expected_end_date" class="flex items-center gap-1">
-                  <Flag class="size-3.5" />
-                  <span>{{ project.expected_end_date }}</span>
-                </div>
-              </div>
-            </button>
-
-            <div class="px-5 pb-4">
-              <button
-                class="w-full text-xs text-ink-gray-5 px-3 py-1.5 rounded border border-outline-gray-2 hover:bg-surface-gray-1 transition-colors"
-                @click="onGenerateChecklist(project)"
-              >
-                <span class="flex items-center justify-center gap-1.5">
-                  <ClipboardList class="size-3.5" />
-                  {{ __("Generate Checklist") }}
+              <div class="flex flex-wrap gap-1.5 mb-3" v-if="dashboards[project.name]?.data?.phases?.length">
+                <span
+                  v-for="phase in dashboards[project.name].data.phases.slice(0, 4)"
+                  :key="phase.name"
+                  class="text-xs px-2 py-0.5 rounded-full bg-surface-gray-1 text-ink-gray-6 border border-outline-gray-2"
+                >
+                  {{ phase.phase_name }} {{ phase.completed_count }}/{{ phase.total_count }}
                 </span>
+                <span v-if="dashboards[project.name].data.phases.length > 4" class="text-xs text-ink-gray-4 py-0.5">
+                  +{{ dashboards[project.name].data.phases.length - 4 }} more
+                </span>
+              </div>
+            </div>
+
+            <div class="flex border-t border-outline-gray-2 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+              <button
+                class="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs text-ink-gray-6 hover:bg-surface-gray-1 transition-colors"
+                @click.stop="navigateToProject(project.name)"
+              >
+                <FolderKanban class="size-3.5" /> Open
+              </button>
+              <button
+                class="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs text-ink-gray-6 hover:bg-surface-gray-1 transition-colors border-x border-outline-gray-2"
+                @click.stop="onGenerateChecklist(project)"
+              >
+                <ClipboardList class="size-3.5" /> Checklist
+              </button>
+              <button
+                class="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs text-ink-gray-6 hover:bg-surface-gray-1 transition-colors"
+                @click.stop="navigateToKanban(project.name)"
+              >
+                <Layout class="size-3.5" /> Board
               </button>
             </div>
           </div>
@@ -178,7 +205,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from "vue";
+import { reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { createListResource, createResource } from "frappe-ui";
 import { __ } from "@/translation";
@@ -187,9 +214,8 @@ import GenerateChecklistModal from "./components/GenerateChecklistModal.vue";
 import Plus from "~icons/lucide/plus";
 import FolderKanban from "~icons/lucide/folder-kanban";
 import AlertTriangle from "~icons/lucide/alert-triangle";
-import CalendarDays from "~icons/lucide/calendar-days";
-import Flag from "~icons/lucide/flag";
 import ClipboardList from "~icons/lucide/clipboard-list";
+import Layout from "~icons/lucide/layout";
 
 const router = useRouter();
 
@@ -220,7 +246,6 @@ const createProject = createResource({
   },
 });
 
-const projectDashboards = reactive<Record<string, ReturnType<typeof createResource>>>({});
 
 const showNewForm = ref(false);
 const showChecklistModal = ref(false);
@@ -256,42 +281,49 @@ function navigateToProject(projectName: string) {
   router.push({ name: "TaskyProject", params: { projectId: projectName } });
 }
 
-function ensureDashboard(projectName: string) {
-  if (!projectDashboards[projectName]) {
-    projectDashboards[projectName] = createResource({
-      url: "helpdesk.tasky.api.get_project_dashboard",
-      params: { project: projectName },
-      auto: true,
+function navigateToKanban(projectName: string) {
+  router.push({ name: "TaskyKanban", params: { projectId: projectName } });
+}
+
+const dashboards = reactive<Record<string, ReturnType<typeof createResource>>>({});
+
+watch(
+  () => projects.data,
+  (list) => {
+    list?.forEach((p) => {
+      if (!dashboards[p.name]) {
+        dashboards[p.name] = createResource({
+          url: "helpdesk.tasky.api.get_project_dashboard",
+          params: { project: p.name },
+          auto: true,
+        });
+      }
     });
-  }
-  return projectDashboards[projectName];
+  },
+  { immediate: true }
+);
+
+function formatDateRange(p: Project) {
+  const parts = [];
+  if (p.expected_start_date) parts.push(p.expected_start_date);
+  if (p.expected_end_date) parts.push("→ " + p.expected_end_date);
+  return parts.join(" ") || "No dates set";
 }
 
-const progressCache = reactive<Record<string, number>>({});
-
-function projectProgress(projectName: string): number {
-  if (progressCache[projectName] !== undefined) return progressCache[projectName];
-
-  const resource = ensureDashboard(projectName);
-  if (resource.data?.stats?.completion_pct != null) {
-    progressCache[projectName] = resource.data.stats.completion_pct;
-    return progressCache[projectName];
-  }
-  return 0;
+function progressColor(pct: number) {
+  if (pct >= 100) return "bg-ink-green-5";
+  if (pct >= 60) return "bg-ink-blue-4";
+  if (pct >= 30) return "bg-ink-amber-5";
+  return "bg-ink-gray-4";
 }
 
-function statusPillClass(status: string) {
-  const lowered = status.toLowerCase();
-  if (lowered === "completed") {
-    return "bg-surface-gray-2 text-ink-gray-7";
-  }
-  if (lowered === "open") {
-    return "bg-surface-gray-3 text-ink-gray-8";
-  }
-  if (lowered === "cancelled") {
-    return "bg-surface-gray-4 text-ink-gray-9";
-  }
-  return "bg-surface-gray-1 text-ink-gray-6";
+function statusBadgeClass(status: string) {
+  const m: Record<string, string> = {
+    Open: "bg-ink-blue-1 text-ink-blue-8",
+    Completed: "bg-ink-green-1 text-ink-green-8",
+    Cancelled: "bg-ink-red-1 text-ink-red-8",
+  };
+  return m[status] || "bg-ink-gray-2 text-ink-gray-7";
 }
 
 function onGenerateChecklist(project: Project) {
