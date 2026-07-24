@@ -54,7 +54,7 @@
               <div v-for="(member, idx) in newProject.members" :key="idx" class="flex items-center gap-2 mb-2 last:mb-0">
                 <select v-model="member.user" class="flex-1 border border-outline-gray-2 rounded px-2 py-1 text-sm bg-surface-white">
                   <option value="">Select user...</option>
-                  <option v-for="u in userList" :key="u.name" :value="u.name">{{ u.full_name || u.name }}</option>
+                  <option v-for="u in (userList.data ?? [])" :key="u.name" :value="u.name">{{ u.full_name || u.name }}</option>
                 </select>
                 <select v-model="member.custom_role" class="w-40 border border-outline-gray-2 rounded px-2 py-1 text-sm bg-surface-white">
                   <option value="">Manager (no role)</option>
