@@ -18,11 +18,17 @@
           </div>
           <div class="flex flex-col gap-1">
             <label class="text-xs text-ink-gray-5">Project</label>
-            <input v-model="form.project" class="border border-outline-gray-2 rounded px-3 py-1.5 text-sm bg-surface-white focus:outline-none" placeholder="PROJ-0003" />
+            <select v-model="form.project" class="border border-outline-gray-2 rounded px-3 py-1.5 text-sm bg-surface-white focus:outline-none">
+              <option value="">None</option>
+              <option v-for="p in projectList" :key="p.name" :value="p.name">{{ p.project_name || p.name }}</option>
+            </select>
           </div>
           <div class="flex flex-col gap-1">
             <label class="text-xs text-ink-gray-5">Task (optional)</label>
-            <input v-model="form.task" class="border border-outline-gray-2 rounded px-3 py-1.5 text-sm bg-surface-white focus:outline-none" placeholder="TASK-2026-00001" />
+            <select v-model="form.task" class="border border-outline-gray-2 rounded px-3 py-1.5 text-sm bg-surface-white focus:outline-none" :disabled="!form.project">
+              <option value="">None</option>
+              <option v-for="t in taskList" :key="t.name" :value="t.name">{{ t.subject }}</option>
+            </select>
           </div>
           <div class="flex flex-col gap-1">
             <label class="text-xs text-ink-gray-5">Hours</label>
@@ -58,7 +64,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from "vue";
+import { reactive, ref, computed, watch } from "vue";
 import { createResource } from "frappe-ui";
 import { __ } from "@/translation";
 import LayoutHeader from "@/components/LayoutHeader.vue";
@@ -73,6 +79,27 @@ const timesheets = createResource({
   url: "helpdesk.tasky.api.get_my_timesheets",
   auto: true,
   transform: (d: any[]) => d ?? [],
+});
+
+const projectList = createResource({
+  url: "helpdesk.tasky.api.get_projects",
+  auto: true,
+  transform: (d: any[]) => d ?? [],
+});
+
+const taskResource = createResource({
+  url: "helpdesk.tasky.api.get_project_tasks",
+  auto: false,
+  transform: (d: any[]) => d ?? [],
+});
+
+const taskList = computed(() => taskResource.data ?? []);
+
+watch(() => form.project, (val) => {
+  form.task = "";
+  if (val) {
+    taskResource.submit({ project: val });
+  }
 });
 
 const createTs = createResource({

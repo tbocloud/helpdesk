@@ -579,6 +579,16 @@ def get_my_timesheets(limit=20):
 
 
 @frappe.whitelist()
+def get_project_tasks(project):
+    """Get all active tasks in a project for dropdown."""
+    project = _resolve_project(str(project))
+    return frappe.get_all("Task",
+        filters={"project": project, "status": ("not in", ["Completed", "Cancelled"])},
+        fields=["name", "subject"],
+        order_by="subject asc")
+
+
+@frappe.whitelist()
 def create_timesheet(title, project=None, task=None, hours=0, notes=""):
     """Manually create a timesheet."""
     employee = frappe.db.get_value("Employee", {"user_id": frappe.session.user}, "name")
