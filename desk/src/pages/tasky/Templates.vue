@@ -66,10 +66,13 @@
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" v-if="!editing">
-        <button v-for="t in templates.data" :key="t.name" class="bg-surface-white border border-outline-gray-2 rounded-lg p-5 hover:shadow-md transition-shadow text-left w-full" @click="startEdit(t.name)">
+        <button v-for="t in templates.data" :key="t.name" class="bg-surface-white border border-outline-gray-2 rounded-lg p-5 hover:shadow-md transition-shadow text-left w-full group" @click="startEdit(t.name)">
           <div class="text-base-semibold text-ink-gray-9 mb-1">{{ t.template_name }}</div>
           <div class="text-xs text-ink-gray-5 mb-3">{{ t.industry || "General" }} · {{ t.description || "No description" }}</div>
-          <span class="text-xs text-ink-gray-6 bg-surface-gray-1 px-2 py-0.5 rounded-full">{{ t.name }}</span>
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-ink-gray-6 bg-surface-gray-1 px-2 py-0.5 rounded-full">{{ t.name }}</span>
+            <span class="text-xs text-ink-gray-4 opacity-0 group-hover:opacity-100 transition-opacity">Click to edit →</span>
+          </div>
         </button>
         <div v-if="!templates.loading && !templates.data?.length" class="col-span-full flex items-center justify-center py-12">
           <div class="flex flex-col items-center gap-2"><ClipboardList class="size-12 text-ink-gray-4" /><div class="text-lg-medium text-ink-gray-6">No templates yet</div></div>
@@ -125,7 +128,6 @@ const editTitle = computed(() => editingId.value ? `Edit: ${form.template_name}`
 const detail = createResource({ url: "helpdesk.tasky.api.get_template" });
 
 function startEdit(name: string) {
-  detail.submit({ template: name });
   detail.onSuccess = (data: any) => {
     form.template_name = data.template_name;
     form.industry = data.industry;
@@ -136,6 +138,7 @@ function startEdit(name: string) {
     editing.value = true;
     editingId.value = name;
   };
+  detail.submit({ template: name });
 }
 
 function startNew() {
