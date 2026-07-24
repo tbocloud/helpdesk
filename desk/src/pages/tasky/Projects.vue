@@ -190,7 +190,7 @@
               </div>
             </div>
 
-            <div class="flex border-t border-outline-gray-2 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+            <div class="flex border-t border-outline-gray-2">
               <button
                 class="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs text-ink-gray-6 hover:bg-surface-gray-1 transition-colors"
                 @click.stop="navigateToProject(project.name)"
