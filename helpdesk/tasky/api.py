@@ -486,28 +486,49 @@ def start_timer(task):
     """Start the timer on a task by recording current datetime."""
     doc = frappe.get_doc("Task", str(task))
     doc.custom_timer_start = frappe.utils.now()
-    if doc.status != "Working":
-        doc.status = "Working"
-    doc.save()
-    frappe.db.commit()
+    doc.db_set("custom_timer_start", doc.custom_timer_start, update_modified=False)
     return {"timer_start": str(doc.custom_timer_start), "status": doc.status}
 
 
 @frappe.whitelist()
 def stop_timer(task):
     """Stop the timer and return elapsed hours."""
-    doc = frappe.get_doc("Task", str(task))
-    if not doc.custom_timer_start:
+    if not frappe.db.exists("Task", str(task)):
+        return {"elapsed": 0, "timer_start": None}
+    timer_start = frappe.db.get_value("Task", str(task), "custom_timer_start")
+    if not timer_start:
         return {"elapsed": 0, "timer_start": None}
     from datetime import datetime
-    start = doc.custom_timer_start
+    start = timer_start
     if isinstance(start, str):
         start = datetime.fromisoformat(start)
     elapsed = (datetime.now() - start).total_seconds() / 3600.0
-    doc.custom_timer_start = None
+    frappe.db.set_value("Task", str(task), "custom_timer_start", None)
+    return {"elapsed": round(elapsed, 2), "timer_start": None}
+
+
+@frappe.whitelist()
+def move_task(task, new_status):
+    """Atomically move a task to a new column — handles timer start/stop and status change in one save."""
+    doc = frappe.get_doc("Task", str(task))
+    old_status = doc.status
+
+    if new_status == "Working" and old_status != "Working":
+        doc.custom_timer_start = frappe.utils.now()
+    elif old_status == "Working" and new_status != "Working":
+        if doc.custom_timer_start:
+            from datetime import datetime
+            start = doc.custom_timer_start
+            if isinstance(start, str):
+                start = datetime.fromisoformat(start)
+            elapsed = (datetime.now() - start).total_seconds() / 3600.0
+            doc.custom_actual_hours = (doc.custom_actual_hours or 0) + round(elapsed, 2)
+            doc.custom_timer_start = None
+
+    doc.status = new_status
     doc.save()
     frappe.db.commit()
-    return {"elapsed": round(elapsed, 2), "timer_start": None}
+    return {"status": doc.status, "elapsed": round(elapsed, 2) if old_status == "Working" else 0}
 
 
 @frappe.whitelist()

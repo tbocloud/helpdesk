@@ -115,14 +115,12 @@ const draggingTask = ref<string | null>(null);
 interface Task { name: string; subject: string; category?: string; status: string; priority?: string; assigned_to?: string; due_date?: string; start_date?: string; estimated_hours?: number; }
 
 const kanban = createResource({ url: "helpdesk.tasky.api.get_kanban_tasks", params: { project: props.projectId }, auto: true, onSuccess(d: any) { columnTasks.value = d.columns ?? {}; } });
-const updateTaskStatus = createResource({ url: "helpdesk.tasky.api.update_task_status" });
+const moveTaskApi = createResource({ url: "helpdesk.tasky.api.move_task" });
 const completeResource = createResource({
   url: "helpdesk.tasky.api.complete_task",
   onSuccess() { kanban.reload(); },
   onError(e: any) { alert("Failed to complete: " + (e?.message || e)); },
 });
-const startTimerR = createResource({ url: "helpdesk.tasky.api.start_timer" });
-const stopTimerR = createResource({ url: "helpdesk.tasky.api.stop_timer" });
 
 const completingTask = ref<Task | null>(null);
 const completeHours = ref(0);
@@ -132,10 +130,7 @@ const preFilledHours = ref(0);
 const timers = ref<Record<string, { running: boolean; elapsed: number; paused: boolean }>>({});
 let tickInterval: any = null;
 
-watch(() => props.projectId, () => { if (props.projectId) kanban.reload(); });
-
-function startTick() {
-  if (tickInterval) return;
+(function startTick() {
   tickInterval = setInterval(() => {
     for (const k of Object.keys(timers.value)) {
       if (timers.value[k]?.running && !timers.value[k]?.paused) {
@@ -143,20 +138,16 @@ function startTick() {
       }
     }
   }, 1000);
-}
-startTick();
+})();
 onUnmounted(() => { if (tickInterval) clearInterval(tickInterval); });
 
-function startTimer(task: Task) {
-  startTimerR.submit({ task: task.name });
-  timers.value[task.name] = { running: true, elapsed: 0, paused: false };
-}
+watch(() => props.projectId, () => { if (props.projectId) kanban.reload(); });
 
 function stopTimer(task: Task): number {
   const t = timers.value[task.name];
   if (!t) return 0;
   const hours = t.elapsed / 3600;
-  stopTimerR.submit({ task: task.name });
+  frappe.call("helpdesk.tasky.api.stop_timer", { task: task.name }).catch(() => {});
   delete timers.value[task.name];
   return Math.round(hours * 100) / 100;
 }
@@ -166,9 +157,10 @@ function togglePause(task: Task) {
   if (!t) return;
   if (t.paused) {
     t.paused = false;
+    frappe.call("helpdesk.tasky.api.start_timer", { task: task.name }).catch(() => {});
   } else {
     t.paused = true;
-    stopTimerR.submit({ task: task.name });
+    frappe.call("helpdesk.tasky.api.stop_timer", { task: task.name }).catch(() => {});
   }
 }
 
@@ -189,9 +181,6 @@ function onDrop(e: DragEvent, newStatus: string) {
     return;
   }
 
-  if (task.status === "Working") stopTimer(task);
-  if (newStatus === "Working") startTimer(task);
-
   moveTask(task, newStatus);
 }
 
@@ -199,11 +188,20 @@ function confirmComplete() {
   const task = completingTask.value;
   if (!task) return;
   completeResource.submit({ task: task.name, hours_worked: completeHours.value, notes: completeNotes.value });
-  moveTask(task, "Completed");
+  moveToColumn(task, "Completed");
   completingTask.value = null;
 }
 
 function moveTask(task: Task, newStatus: string) {
+  if (task.status === "Working") stopTimer(task);
+  if (newStatus === "Working" && task.status !== "Working") {
+    timers.value[task.name] = { running: true, elapsed: 0, paused: false };
+  }
+  moveTaskApi.submit({ task: task.name, new_status: newStatus });
+  moveToColumn(task, newStatus);
+}
+
+function moveToColumn(task: Task, newStatus: string) {
   const arr = columnTasks.value[task.status];
   if (arr) {
     const idx = arr.indexOf(task);
@@ -212,7 +210,6 @@ function moveTask(task: Task, newStatus: string) {
   task.status = newStatus;
   if (!columnTasks.value[newStatus]) columnTasks.value[newStatus] = [];
   columnTasks.value[newStatus].push(task);
-  updateTaskStatus.submit({ task: task.name, status: newStatus });
 }
 
 function formatDate(d: string) { return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" }); }
