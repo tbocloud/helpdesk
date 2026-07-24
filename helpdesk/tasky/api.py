@@ -3,17 +3,10 @@
 import frappe
 from frappe import _
 
-CATEGORY_TO_ROLE = {
-    "Functional": "Functional Consultant",
-    "Development": "Developer",
-    "Support": "Support Engineer",
-    "Common": None,
-}
-
 
 @frappe.whitelist()
 def generate_checklist(project, template):
-    """Clone template phases and tasks into ERPNext Project + Tasks with auto-assignment."""
+    """Clone template phases and tasks into ERPNext Project + Tasks."""
     project = str(project)
     template = str(template)
 
@@ -25,9 +18,17 @@ def generate_checklist(project, template):
 
     template_doc = frappe.get_doc("Tasky Template", template)
 
+    project_users = frappe.get_all(
+        "Project User", {"parent": project}, ["user"], pluck="user"
+    )
+
     created_count = 0
     for tphase in template_doc.phases:
-        for ttask in tphase.tasks:
+        for i, ttask in enumerate(tphase.tasks):
+            assigned = None
+            if project_users:
+                assigned = project_users[i % len(project_users)]
+
             task_doc = frappe.get_doc({
                 "doctype": "Task",
                 "subject": ttask.task_name,
@@ -42,13 +43,8 @@ def generate_checklist(project, template):
             })
             task_doc.insert()
 
-            role = CATEGORY_TO_ROLE.get(ttask.category)
-            if role:
-                member = frappe.db.get_value(
-                    "Project User", {"parent": project, "user_role": role}, "user"
-                )
-                if member:
-                    task_doc.add_assign(member)
+            if assigned:
+                task_doc.add_assign(assigned)
 
             created_count += 1
 
@@ -153,7 +149,7 @@ def get_project_detail(project):
         "status": doc.status,
         "expected_start_date": str(doc.expected_start_date) if doc.expected_start_date else None,
         "expected_end_date": str(doc.expected_end_date) if doc.expected_end_date else None,
-        "users": [{"user": u.user, "role": u.user_role} for u in doc.users] if doc.users else [],
+        "users": [{"user": u.user, "full_name": u.full_name} for u in doc.users] if doc.users else [],
     }
 
 
