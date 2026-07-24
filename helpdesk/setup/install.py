@@ -267,7 +267,7 @@ def add_property_setters():
 
 
 def get_custom_fields():
-    """Helpdesk specific custom fields that needs to be added to the Assignment Rule DocType."""
+    """Helpdesk specific custom fields."""
     return {
         "Assignment Rule": [
             {
@@ -303,6 +303,115 @@ def get_custom_fields():
                 "options": "HD Customer",
                 "insert_after": "contact",
                 "set_only_once": 1,
+            },
+        ],
+        "Task": [
+            {
+                "fieldname": "custom_category",
+                "fieldtype": "Select",
+                "label": "Category",
+                "options": "Functional\nDevelopment\nSupport\nCommon",
+                "insert_after": "task_type",
+                "in_list_view": 1,
+                "in_standard_filter": 1,
+            },
+            {
+                "fieldname": "custom_phase",
+                "fieldtype": "Data",
+                "label": "Phase",
+                "insert_after": "custom_category",
+                "in_list_view": 1,
+            },
+            {
+                "fieldname": "custom_module",
+                "fieldtype": "Data",
+                "label": "Module",
+                "insert_after": "custom_phase",
+            },
+            {
+                "fieldname": "custom_estimated_hours",
+                "fieldtype": "Float",
+                "label": "Estimated Hours",
+                "insert_after": "custom_module",
+                "in_list_view": 1,
+            },
+            {
+                "fieldname": "custom_actual_hours",
+                "fieldtype": "Float",
+                "label": "Actual Hours",
+                "insert_after": "custom_estimated_hours",
+            },
+        ],
+        "HD Ticket": [
+            {
+                "fieldname": "custom_qcs_connection",
+                "fieldtype": "Link",
+                "options": "QCS Support Connection",
+                "label": "QCS Connection",
+                "insert_after": "description",
+            },
+            {
+                "fieldname": "custom_client_ticket",
+                "fieldtype": "Data",
+                "label": "Client Ticket ID",
+                "insert_after": "custom_qcs_connection",
+                "in_list_view": 1,
+            },
+            {
+                "fieldname": "custom_conv_state",
+                "fieldtype": "Select",
+                "options": "open\npaused\nclosed",
+                "label": "Conversation State",
+                "insert_after": "custom_client_ticket",
+            },
+            {
+                "fieldname": "custom_triage_status",
+                "fieldtype": "Select",
+                "options": "Pending\nCompleted\nFailed",
+                "label": "Triage Status",
+                "insert_after": "custom_conv_state",
+            },
+            {
+                "fieldname": "custom_triage_category",
+                "fieldtype": "Data",
+                "label": "Triage Category",
+                "insert_after": "custom_triage_status",
+            },
+            {
+                "fieldname": "custom_triage_priority",
+                "fieldtype": "Data",
+                "label": "Triage Priority",
+                "insert_after": "custom_triage_category",
+            },
+            {
+                "fieldname": "custom_triage_complexity",
+                "fieldtype": "Data",
+                "label": "Triage Complexity",
+                "insert_after": "custom_triage_priority",
+            },
+            {
+                "fieldname": "custom_triage_summary",
+                "fieldtype": "Text Editor",
+                "label": "Triage Summary",
+                "insert_after": "custom_triage_complexity",
+            },
+            {
+                "fieldname": "custom_triage_recommended_track",
+                "fieldtype": "Data",
+                "label": "Recommended Track",
+                "insert_after": "custom_triage_summary",
+            },
+            {
+                "fieldname": "custom_triage_timestamp",
+                "fieldtype": "Datetime",
+                "label": "Triage Timestamp",
+                "insert_after": "custom_triage_recommended_track",
+            },
+            {
+                "fieldname": "custom_triage_data",
+                "fieldtype": "JSON",
+                "label": "Triage Data",
+                "insert_after": "custom_triage_timestamp",
             },
         ],
     }

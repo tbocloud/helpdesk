@@ -28,39 +28,6 @@ after_migrate = [
     "helpdesk.setup.after_migrate",
 ]
 
-fixtures = [
-    {
-        "doctype": "Custom Field",
-        "filters": [
-            ["dt", "=", "HD Ticket"],
-            [
-                "fieldname",
-                "in",
-                [
-                    "custom_qcs_connection",
-                    "custom_client_ticket",
-                    "custom_conv_state",
-                ],
-            ],
-        ],
-    },
-    {
-        "doctype": "Custom Field",
-        "filters": [["dt", "=", "HD Ticket"], ["fieldname", "like", "custom_triage_%"]],
-    },
-    {
-        "doctype": "Custom Field",
-        "filters": [
-            ["dt", "=", "Task"],
-            [
-                "fieldname",
-                "in",
-                ["custom_category", "custom_phase", "custom_module", "custom_estimated_hours", "custom_actual_hours"],
-            ],
-        ],
-    },
-]
-
 # Full Text Search
 # ------------------
 
