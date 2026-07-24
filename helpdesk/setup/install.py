@@ -414,6 +414,15 @@ def get_custom_fields():
                 "insert_after": "custom_triage_timestamp",
             },
         ],
+        "Project User": [
+            {
+                "fieldname": "custom_role",
+                "fieldtype": "Select",
+                "label": "Role",
+                "options": "Project Manager\nFunctional Consultant\nDeveloper\nSupport Engineer",
+                "insert_after": "user",
+            },
+        ],
     }
 
 

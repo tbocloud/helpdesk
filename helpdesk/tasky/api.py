@@ -65,9 +65,29 @@ def generate_checklist(project, template):
     if not frappe.db.exists("Tasky Template", template_name):
         frappe.throw(_("Template not found"))
 
+    CATEGORY_TO_ROLE = {
+        "Functional": "Functional Consultant",
+        "Development": "Developer",
+        "Support": "Support Engineer",
+    }
+
     template_doc = frappe.get_doc("Tasky Template", template_name)
 
-    project_users = frappe.get_all("Project User", {"parent": project}, ["user"], pluck="user")
+    project_users = frappe.get_all("Project User", {"parent": project}, ["user", "custom_role"])
+
+    def find_user_by_role(role):
+        match = [u for u in project_users if u.get("custom_role") == role]
+        if match:
+            return match[0]["user"]
+        return None
+
+    def pick_user(category, fallback_index):
+        role = CATEGORY_TO_ROLE.get(category)
+        if role:
+            matched = find_user_by_role(role)
+            if matched:
+                return matched
+        return project_users[fallback_index % len(project_users)]["user"] if project_users else None
 
     created_count = 0
     for i, ttask in enumerate(template_doc.tasks):
@@ -83,8 +103,9 @@ def generate_checklist(project, template):
             "priority": ttask.default_priority or "Medium",
             "status": "Open",
         })
-        if project_users:
-            _assign_user(task_doc, project_users[i % len(project_users)])
+        assigned = pick_user(ttask.category, i)
+        if assigned:
+            _assign_user(task_doc, assigned)
         task_doc.insert()
         created_count += 1
 
