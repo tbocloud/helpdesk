@@ -4,19 +4,29 @@ import frappe
 from frappe import _
 
 
+def _resolve_project(project):
+    """Find project by name or project_name."""
+    if frappe.db.exists("Project", project):
+        return project
+    name = frappe.db.get_value("Project", {"project_name": project}, "name")
+    if name:
+        return name
+    frappe.throw(_("Project not found: {0}").format(project))
+
+
 @frappe.whitelist()
 def generate_checklist(project, template):
     """Clone template phases and tasks into ERPNext Project + Tasks."""
-    project = str(project)
-    template = str(template)
+    project = _resolve_project(str(project))
+    template_name = str(template)
 
     if not frappe.db.exists("Project", project):
         frappe.throw(_("Project not found"))
 
-    if not frappe.db.exists("Tasky Template", template):
+    if not frappe.db.exists("Tasky Template", template_name):
         frappe.throw(_("Template not found"))
 
-    template_doc = frappe.get_doc("Tasky Template", template)
+    template_doc = frappe.get_doc("Tasky Template", template_name)
 
     project_users = frappe.get_all(
         "Project User", {"parent": project}, ["user"], pluck="user"
@@ -86,7 +96,7 @@ def update_task_status(task, status):
 @frappe.whitelist()
 def get_project_dashboard(project):
     """Get aggregate stats for the PM dashboard from ERPNext Project."""
-    project = str(project)
+    project = _resolve_project(str(project))
 
     total_tasks = frappe.db.count("Task", {"project": project})
     completed = frappe.db.count("Task", {"project": project, "status": "Completed"})
@@ -141,7 +151,7 @@ def get_templates():
 @frappe.whitelist()
 def get_project_detail(project):
     """Get ERPNext project details."""
-    project = str(project)
+    project = _resolve_project(str(project))
     doc = frappe.get_doc("Project", project)
     return {
         "name": doc.name,
