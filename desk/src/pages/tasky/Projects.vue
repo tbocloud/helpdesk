@@ -49,12 +49,20 @@
             />
           </div>
           <div class="flex flex-col gap-1 md:col-span-2">
-            <label class="text-xs text-ink-gray-5">{{ __("Team Members") }}</label>
-            <input
-              v-model="newProject.team_members"
-              class="border border-outline-gray-2 rounded px-3 py-1.5 text-sm text-ink-gray-9 bg-surface-white placeholder-ink-gray-4 focus:outline-none focus:border-outline-gray-3"
-              placeholder="Enter team member emails (comma separated)"
-            />
+            <label class="text-xs font-medium text-ink-gray-6 mb-1">{{ __("Team Members") }}</label>
+            <div class="bg-surface-gray-1 rounded-lg p-3">
+              <div v-for="(member, idx) in newProject.members" :key="idx" class="flex items-center gap-2 mb-2 last:mb-0">
+                <input v-model="member.user" placeholder="Username or email" class="flex-1 border border-outline-gray-2 rounded px-2 py-1 text-sm bg-surface-white focus:outline-none" />
+                <select v-model="member.custom_role" class="w-40 border border-outline-gray-2 rounded px-2 py-1 text-sm bg-surface-white">
+                  <option value="">Manager (no role)</option>
+                  <option value="Functional Consultant">Functional Consultant</option>
+                  <option value="Developer">Developer</option>
+                  <option value="Support Engineer">Support Engineer</option>
+                </select>
+                <button @click="newProject.members.splice(idx, 1)" class="size-6 flex items-center justify-center rounded text-ink-gray-5 hover:text-ink-red-6"><LucideX class="size-3.5" /></button>
+              </div>
+              <button @click="newProject.members.push({ user: '', custom_role: '' })" class="flex items-center gap-1 text-xs text-ink-gray-5 hover:text-ink-gray-8"><LucidePlus class="size-3.5" /> Add member</button>
+            </div>
           </div>
         </div>
         <div class="flex items-center gap-2">
@@ -114,8 +122,9 @@
                   <div class="text-base-semibold text-ink-gray-9 truncate mb-0.5">
                     {{ project.project_name }}
                   </div>
-                  <div class="text-xs text-ink-gray-5">
-                    {{ formatDateRange(project) }}
+                  <div class="flex items-center gap-2 text-xs text-ink-gray-5">
+                    <span class="font-mono text-ink-gray-4">{{ project.name }}</span>
+                    <span v-if="formatDateRange(project)">· {{ formatDateRange(project) }}</span>
                   </div>
                 </div>
                 <span
@@ -236,6 +245,8 @@ import FolderKanban from "~icons/lucide/folder-kanban";
 import AlertTriangle from "~icons/lucide/alert-triangle";
 import ClipboardList from "~icons/lucide/clipboard-list";
 import Layout from "~icons/lucide/layout";
+import LucideX from "~icons/lucide/x";
+import LucidePlus from "~icons/lucide/plus";
 
 const router = useRouter();
 
@@ -275,25 +286,23 @@ const newProject = reactive({
   project_name: "",
   start_date: "",
   expected_end_date: "",
-  team_members: "",
+  members: [] as { user: string; custom_role: string }[],
 });
 
 function resetForm() {
   newProject.project_name = "";
   newProject.start_date = "";
   newProject.expected_end_date = "";
-  newProject.team_members = "";
+  newProject.members = [];
 }
 
 function onCreateProject() {
-  if (!newProject.project_name.trim()) return;
+  if (!newProject.project_name) return;
   createProject.submit({
     project_name: newProject.project_name,
     expected_start_date: newProject.start_date,
     expected_end_date: newProject.expected_end_date,
-    team_members: newProject.team_members
-      ? newProject.team_members.split(",").map((s) => s.trim()).filter(Boolean)
-      : [],
+    members: JSON.stringify(newProject.members.filter((m) => m.user.trim())),
   });
 }
 

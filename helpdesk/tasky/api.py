@@ -36,11 +36,14 @@ def _format_task(task):
 
 
 @frappe.whitelist()
-def create_project(project_name, expected_start_date=None, expected_end_date=None):
-    """Create a new ERPNext Project."""
+def create_project(project_name, expected_start_date=None, expected_end_date=None, members="[]"):
+    """Create a new ERPNext Project with optional team members."""
+    import json
     existing = frappe.db.get_value("Project", {"project_name": project_name}, "name")
     if existing:
         frappe.throw(_("Project with this name already exists: {0}").format(existing))
+
+    members_list = json.loads(str(members)) if isinstance(members, str) else (members or [])
 
     doc = frappe.get_doc({
         "doctype": "Project",
@@ -49,6 +52,11 @@ def create_project(project_name, expected_start_date=None, expected_end_date=Non
         "expected_end_date": expected_end_date or None,
         "status": "Open",
     })
+    for m in members_list:
+        doc.append("users", {
+            "user": m.get("user", ""),
+            "custom_role": m.get("custom_role", ""),
+        })
     doc.insert()
     frappe.db.commit()
     return {"name": doc.name, "project_name": doc.project_name, "status": doc.status}
