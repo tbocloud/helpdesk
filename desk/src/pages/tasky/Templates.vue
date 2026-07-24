@@ -125,10 +125,9 @@ const phaseGroups = computed(() => {
 
 const editTitle = computed(() => editingId.value ? `Edit: ${form.template_name}` : "New Template");
 
-const detail = createResource({ url: "helpdesk.tasky.api.get_template" });
-
-function startEdit(name: string) {
-  detail.onSuccess = (data: any) => {
+const detail = createResource({
+  url: "helpdesk.tasky.api.get_template",
+  onSuccess(data: any) {
     form.template_name = data.template_name;
     form.industry = data.industry;
     form.description = data.description;
@@ -136,8 +135,11 @@ function startEdit(name: string) {
     expandedPhases.clear();
     for (const t of form.tasks) { if (!expandedPhases.has(t.phase_name || "")) expandedPhases.add(t.phase_name || ""); }
     editing.value = true;
-    editingId.value = name;
-  };
+  },
+});
+
+function startEdit(name: string) {
+  editingId.value = name;
   detail.submit({ template: name });
 }
 
