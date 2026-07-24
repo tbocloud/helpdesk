@@ -1,19 +1,24 @@
 {
- "creation": "2024-01-01 00:00:00",
  "doctype": "DocType",
  "engine": "InnoDB",
  "fields": [
   {
    "fieldname": "task_name",
    "fieldtype": "Data",
+   "in_list_view": 1,
    "label": "Task Name",
-   "reqd": 1,
-   "in_list_view": 1
+   "reqd": 1
   },
   {
    "fieldname": "description",
    "fieldtype": "Text",
    "label": "Description"
+  },
+  {
+   "fieldname": "phase_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Phase"
   },
   {
    "fieldname": "module_name",
@@ -23,16 +28,16 @@
   {
    "fieldname": "category",
    "fieldtype": "Select",
+   "default": "Functional",
    "label": "Category",
-   "options": "Functional\nDevelopment\nSupport\nCommon",
-   "default": "Functional"
+   "options": "Functional\nDevelopment\nSupport\nCommon"
   },
   {
    "fieldname": "default_priority",
    "fieldtype": "Select",
+   "default": "Medium",
    "label": "Default Priority",
-   "options": "Urgent\nHigh\nMedium\nLow",
-   "default": "Medium"
+   "options": "Urgent\nHigh\nMedium\nLow"
   },
   {
    "fieldname": "estimated_hours",
@@ -51,22 +56,8 @@
  "module": "Helpdesk",
  "name": "Tasky Template Task",
  "owner": "Administrator",
- "permissions": [
-  {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "System Manager",
-   "share": 1,
-   "write": 1
-  }
- ],
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [],
- "track_changes": 1
+ "track_changes": 0
 }

@@ -33,30 +33,29 @@ def generate_checklist(project, template):
     )
 
     created_count = 0
-    for tphase in template_doc.phases:
-        for i, ttask in enumerate(tphase.tasks):
-            assigned = None
-            if project_users:
-                assigned = project_users[i % len(project_users)]
+    for i, ttask in enumerate(template_doc.tasks):
+        assigned = None
+        if project_users:
+            assigned = project_users[i % len(project_users)]
 
-            task_doc = frappe.get_doc({
-                "doctype": "Task",
-                "subject": ttask.task_name,
-                "project": project,
-                "description": ttask.description or "",
-                "custom_category": ttask.category,
-                "custom_phase": tphase.phase_name,
-                "custom_module": ttask.module_name or "",
-                "custom_estimated_hours": ttask.estimated_hours or 0,
-                "priority": ttask.default_priority or "Medium",
-                "status": "Open",
-            })
-            task_doc.insert()
+        task_doc = frappe.get_doc({
+            "doctype": "Task",
+            "subject": ttask.task_name,
+            "project": project,
+            "description": ttask.description or "",
+            "custom_category": ttask.category,
+            "custom_phase": ttask.phase_name or "",
+            "custom_module": ttask.module_name or "",
+            "custom_estimated_hours": ttask.estimated_hours or 0,
+            "priority": ttask.default_priority or "Medium",
+            "status": "Open",
+        })
+        task_doc.insert()
 
-            if assigned:
-                task_doc.add_assign(assigned)
+        if assigned:
+            task_doc.add_assign(assigned)
 
-            created_count += 1
+        created_count += 1
 
     frappe.db.commit()
     return {"tasks_created": created_count}
