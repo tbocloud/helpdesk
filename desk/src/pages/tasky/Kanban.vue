@@ -11,7 +11,7 @@
     <div class="flex-1 overflow-auto p-4">
       <div v-if="kanban.loading" class="flex items-center justify-center h-full"><div class="text-p-base text-ink-gray-6">Loading...</div></div>
       <div v-else class="flex gap-4 h-full overflow-x-auto pb-4">
-        <div v-for="col in columnList" :key="col.key" class="flex flex-col w-64 shrink-0 bg-surface-gray-1 rounded-lg" @dragover.prevent @drop="onDrop($event, col.key)">
+        <div v-for="col in columnList" :key="col.key" class="flex flex-col w-64 shrink-0 bg-surface-gray-1 rounded-lg transition-colors" :class="{ 'ring-2 ring-ink-blue-4 bg-surface-gray-2': dragOverCol === col.key }" @dragover.prevent="dragOverCol = col.key" @dragleave="dragOverCol = null" @drop="onDrop($event, col.key); dragOverCol = null">
           <div class="flex items-center justify-between px-3 py-3 border-b border-outline-gray-2" :class="{ 'border-ink-green-2': col.key === 'Working' }">
             <div class="flex items-center gap-2">
               <span class="text-sm-medium text-ink-gray-8">{{ __(col.label) }}</span>
@@ -127,6 +127,7 @@ const columnList = [
 const columnKeys = columnList.map(c => c.key);
 const columnTasks = ref<Record<string, Task[]>>({});
 const draggingTask = ref<string | null>(null);
+const dragOverCol = ref<string | null>(null);
 
 interface Task { name: string; subject: string; category?: string; status: string; priority?: string; assigned_to?: string; due_date?: string; start_date?: string; estimated_hours?: number; custom_timer_start?: string; custom_timer_elapsed?: number; }
 
