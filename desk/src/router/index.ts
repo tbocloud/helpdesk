@@ -150,6 +150,18 @@ const portalRoutes = [
     props: true,
   },
   {
+    path: "/projects/:projectId/timeline",
+    name: "TaskyTimeline",
+    component: () => import("@/pages/tasky/Timeline.vue"),
+    props: true,
+  },
+  {
+    path: "/projects/:projectId/overdue",
+    name: "TaskyOverdue",
+    component: () => import("@/pages/tasky/Overdue.vue"),
+    props: true,
+  },
+  {
     path: "/my-tasks",
     name: "TaskyMyTasks",
     component: () => import("@/pages/tasky/MyTasks.vue"),

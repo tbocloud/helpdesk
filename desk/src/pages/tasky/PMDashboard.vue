@@ -3,7 +3,22 @@
     <LayoutHeader>
       <template #left-header>
         <div class="text-lg-medium text-ink-gray-9">
-          {{ __("Project Dashboard") }}
+          {{ projectDetail.data?.project_name || __("Project Dashboard") }}
+        </div>
+      </template>
+      <template #right-header>
+        <div class="flex items-center gap-1">
+          <router-link
+            v-for="tab in tabs"
+            :key="tab.to"
+            :to="{ name: tab.to, params: { projectId } }"
+            class="px-3 py-1.5 rounded text-sm transition-colors"
+            :class="isActiveTab(tab.to)
+              ? 'bg-surface-gray-3 text-ink-gray-9'
+              : 'text-ink-gray-6 hover:bg-surface-gray-2 hover:text-ink-gray-8'"
+          >
+            {{ __(tab.label) }}
+          </router-link>
         </div>
       </template>
     </LayoutHeader>
@@ -157,6 +172,7 @@
 
 <script setup lang="ts">
 import { computed, watch } from "vue";
+import { useRoute } from "vue-router";
 import { createResource } from "frappe-ui";
 import { __ } from "@/translation";
 import LayoutHeader from "@/components/LayoutHeader.vue";
@@ -170,6 +186,20 @@ import ListChecks from "~icons/lucide/list-checks";
 const props = defineProps<{
   projectId?: string;
 }>();
+
+const route = useRoute();
+
+const tabs = [
+  { label: "Dashboard", to: "TaskyProject" },
+  { label: "Checklist", to: "TaskyChecklist" },
+  { label: "Board", to: "TaskyKanban" },
+  { label: "Timeline", to: "TaskyTimeline" },
+  { label: "Overdue", to: "TaskyOverdue" },
+];
+
+function isActiveTab(name: string) {
+  return route.name === name;
+}
 
 const dashboard = createResource({
   url: "helpdesk.tasky.api.get_project_dashboard",
