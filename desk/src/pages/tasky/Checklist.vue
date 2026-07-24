@@ -15,7 +15,8 @@
       </template>
     </LayoutHeader>
     <div class="flex-1 overflow-auto p-4">
-      <div class="bg-surface-white border border-outline-gray-2 rounded-lg p-3 mb-4">
+      <div class="bg-surface-white border border-outline-gray-2 rounded-lg p-4 mb-4">
+        <div class="text-sm-medium text-ink-gray-8 mb-3">{{ __("Add Task") }}</div>
         <div class="flex items-center gap-2 flex-wrap">
           <input v-model="newTask.task_name" placeholder="Task name" class="flex-1 min-w-[200px] border border-outline-gray-2 rounded px-3 py-1.5 text-sm bg-surface-white focus:outline-none focus:border-outline-gray-3" @keyup.enter="onAddTask" />
           <input v-model="newTask.phase" placeholder="Phase" class="w-28 border border-outline-gray-2 rounded px-2 py-1.5 text-sm bg-surface-white focus:outline-none focus:border-outline-gray-3" />
@@ -25,9 +26,9 @@
           <select v-model="newTask.priority" class="w-24 border border-outline-gray-2 rounded px-2 py-1.5 text-sm bg-surface-white">
             <option>High</option><option>Medium</option><option>Low</option><option>Urgent</option>
           </select>
-          <input v-model="newTask.assigned_to" placeholder="@user" class="w-36 border border-outline-gray-2 rounded px-2 py-1.5 text-sm bg-surface-white" />
+          <input v-model="newTask.assigned_to" placeholder="Assigned to (username)" class="w-44 border border-outline-gray-2 rounded px-2 py-1.5 text-sm bg-surface-white" />
           <input v-model.number="newTask.estimated_hours" type="number" placeholder="Hrs" class="w-16 border border-outline-gray-2 rounded px-2 py-1.5 text-sm bg-surface-white" />
-          <button class="px-3 py-1.5 text-sm rounded bg-surface-gray-3 text-ink-gray-8 hover:bg-surface-gray-4 disabled:opacity-50" :disabled="!newTask.task_name || addTask.loading" @click="onAddTask">{{ addTask.loading ? "Adding..." : "+ Add" }}</button>
+          <button class="px-4 py-1.5 text-sm rounded bg-surface-gray-8 text-ink-white hover:bg-surface-gray-9 disabled:opacity-50 font-medium" :disabled="!newTask.task_name || addTask.loading" @click="onAddTask">{{ addTask.loading ? "Adding..." : "+ Add Task" }}</button>
         </div>
       </div>
       <div v-if="phases.loading" class="flex items-center justify-center py-12">
@@ -76,7 +77,7 @@
 
 <script setup lang="ts">
 import { createResource } from "frappe-ui";
-import { reactive, ref } from "vue";
+import { reactive } from "vue";
 import { useRoute } from "vue-router";
 import { __ } from "@/translation";
 import LayoutHeader from "@/components/LayoutHeader.vue";
