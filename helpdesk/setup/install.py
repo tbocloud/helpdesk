@@ -14,7 +14,7 @@ from .ticket_feedback import create_ticket_feedback_options
 from .ticket_type import create_fallback_ticket_type, create_ootb_ticket_types
 from .welcome_ticket import create_welcome_ticket
 
-FORM_SCRIPT_NAME = "QCS AI Support Actions"
+FORM_SCRIPT_NAME = "Helpdesk AI Support Actions"
 
 
 def after_install():
@@ -347,7 +347,7 @@ def get_custom_fields():
                 "fieldname": "custom_qcs_connection",
                 "fieldtype": "Link",
                 "options": "HDS Support Connection",
-                "label": "QCS Connection",
+                "label": "HDS Connection",
                 "insert_after": "description",
             },
             {

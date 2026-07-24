@@ -7,7 +7,7 @@ from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
 from helpdesk.setup.install import get_custom_fields
 
-FORM_SCRIPT_NAME = "QCS AI Support Actions"
+FORM_SCRIPT_NAME = "Helpdesk AI Support Actions"
 
 
 def after_migrate():
