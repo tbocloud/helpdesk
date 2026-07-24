@@ -23,7 +23,7 @@
             <div v-if="!columnTasks[col.key]?.length" class="flex items-center justify-center flex-1 text-xs text-ink-gray-4 py-4">{{ col.key === 'Completed' ? 'No completed tasks' : 'No tasks' }}</div>
             <div v-for="task in columnTasks[col.key]" :key="task.name"
               :draggable="col.key !== 'Completed'"
-              class="bg-surface-white border rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow"
+              class="bg-surface-white border rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow relative"
               :class="{
                 'border-ink-red-3 bg-ink-red-0': isOverdue(task),
                 'border-outline-gray-2': !isOverdue(task),
@@ -31,7 +31,10 @@
                 '!cursor-default !shadow-sm': col.key === 'Completed',
                 'cursor-grab active:cursor-grabbing': col.key !== 'Completed',
               }"
-              @dragstart="onDragStart($event, task)" @dragend="onDragEnd">
+               @dragstart="onDragStart($event, task)" @dragend="onDragEnd"
+               @dragover.prevent="onCardDragOver($event, task)">
+              <div v-if="dropTarget?.name === task.name && dropTarget?.above" class="absolute top-0 left-1 right-1 h-0.5 bg-ink-blue-4 rounded-full pointer-events-none" />
+              <div v-if="dropTarget?.name === task.name && !dropTarget?.above" class="absolute bottom-0 left-1 right-1 h-0.5 bg-ink-blue-4 rounded-full pointer-events-none" />
               <div class="flex items-start justify-between gap-2 mb-2">
                 <div class="flex items-start gap-2 min-w-0">
                   <GripVertical v-if="col.key !== 'Completed'" class="size-4 text-ink-gray-4 shrink-0 mt-0.5 cursor-grab" />
@@ -128,6 +131,7 @@ const columnKeys = columnList.map(c => c.key);
 const columnTasks = ref<Record<string, Task[]>>({});
 const draggingTask = ref<string | null>(null);
 const dragOverCol = ref<string | null>(null);
+const dropTarget = ref<{ name: string; above: boolean } | null>(null);
 
 interface Task { name: string; subject: string; category?: string; status: string; priority?: string; assigned_to?: string; due_date?: string; start_date?: string; estimated_hours?: number; custom_timer_start?: string; custom_timer_elapsed?: number; }
 
@@ -230,6 +234,65 @@ function onDragStart(e: DragEvent, task: Task) {
   draggingTask.value = task.name;
   e.dataTransfer?.setData("application/x-task-name", task.name);
 }
+function onDragEnd() { draggingTask.value = null; dropTarget.value = null; dragOverCol.value = null; }
+
+function onCardDragOver(e: DragEvent, task: Task) {
+  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+  const above = e.clientY < rect.top + rect.height / 2;
+  dropTarget.value = { name: task.name, above };
+}
+
+function onDrop(e: DragEvent, newStatus: string) {
+  dragOverCol.value = null;
+  const taskName = e.dataTransfer?.getData("application/x-task-name");
+  if (!taskName) return;
+  let task: Task | undefined;
+  for (const col of columnKeys) {
+    const arr = columnTasks.value[col];
+    if (!arr) continue;
+    task = arr.find((t) => t.name === taskName);
+    if (task) break;
+  }
+  if (!task || task.status === newStatus || task.status === "Completed") return;
+
+  const fromWorking = task.status === "Working";
+  const toWorking = newStatus === "Working";
+
+  // Calculate target index for insertion
+  let targetIdx = -1;
+  if (dropTarget.value && columnTasks.value[newStatus]) {
+    const arr = columnTasks.value[newStatus];
+    const targetTask = arr.find((t) => t.name === dropTarget.value!.name);
+    if (targetTask) {
+      targetIdx = arr.indexOf(targetTask);
+      if (!dropTarget.value.above) targetIdx++;
+    }
+  }
+
+  if (newStatus === "Completed") {
+    preFilledHours.value = fromWorking ? finalizeTimer(task) : 0;
+    completingTask.value = task;
+    completeHours.value = preFilledHours.value || task.estimated_hours || 0;
+    completeNotes.value = "";
+    dropTarget.value = null;
+    return;
+  }
+
+  moveToColumn(task, newStatus, targetIdx);
+
+  if (toWorking) {
+    startOrResumeTimer(task);
+  } else if (fromWorking) {
+    if (PAUSE_STATUSES.includes(newStatus)) {
+      pauseTimer(task);
+    } else {
+      finalizeTimer(task);
+    }
+  }
+
+  moveTaskApi.submit({ task: task.name, new_status: newStatus });
+  dropTarget.value = null;
+}
 function onDragEnd() { draggingTask.value = null; }
 
 function onDrop(e: DragEvent, newStatus: string) {
@@ -276,22 +339,23 @@ function onDrop(e: DragEvent, newStatus: string) {
 function confirmComplete() {
   const task = completingTask.value;
   if (!task) return;
-  completeResource.submit({
-    task: task.name,
-    hours_worked: completeHours.value || 0.25,
-    notes: completeNotes.value,
-  });
+  completeResource.submit({ task: task.name, hours_worked: completeHours.value || 0.25, notes: completeNotes.value });
   finalizeTimer(task);
   moveToColumn(task, "Completed");
   completingTask.value = null;
+  dropTarget.value = null;
 }
 
-function moveToColumn(task: Task, newStatus: string) {
+function moveToColumn(task: Task, newStatus: string, insertAt: number = -1) {
   const arr = columnTasks.value[task.status];
   if (arr) { const idx = arr.indexOf(task); if (idx !== -1) arr.splice(idx, 1); }
   task.status = newStatus;
   if (!columnTasks.value[newStatus]) columnTasks.value[newStatus] = [];
-  columnTasks.value[newStatus].push(task);
+  if (insertAt >= 0) {
+    columnTasks.value[newStatus].splice(insertAt, 0, task);
+  } else {
+    columnTasks.value[newStatus].push(task);
+  }
 }
 
 function formatDate(d: string) { return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" }); }
