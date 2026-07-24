@@ -6,6 +6,7 @@ import PhoneIcon from "../icons/PhoneIcon.vue";
 import LucideHome from "~icons/lucide/home";
 import LucideFolderKanban from "~icons/lucide/folder-kanban";
 import LucideListTodo from "~icons/lucide/list-todo";
+import LucideClipboardList from "~icons/lucide/clipboard-list";
 import { __ } from "@/translation";
 
 export const agentPortalSidebarOptions = [
@@ -28,6 +29,11 @@ export const agentPortalSidebarOptions = [
     label: __("Projects"),
     icon: LucideFolderKanban,
     to: "TaskyProjects",
+  },
+  {
+    label: __("Templates"),
+    icon: LucideClipboardList,
+    to: "TaskyTemplates",
   },
   {
     label: __("My Tasks"),

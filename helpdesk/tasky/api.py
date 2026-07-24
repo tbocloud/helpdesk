@@ -273,6 +273,36 @@ def get_templates():
 
 
 @frappe.whitelist()
+def create_template(template_name, industry="", description="", tasks="[]"):
+    """Create a new Tasky Template with tasks."""
+    import json
+    tasks_list = json.loads(str(tasks)) if isinstance(tasks, str) else tasks
+
+    existing = frappe.db.exists("Tasky Template", {"template_name": template_name})
+    if existing:
+        frappe.throw(_("Template '{0}' already exists").format(template_name))
+
+    doc = frappe.get_doc({
+        "doctype": "Tasky Template",
+        "template_name": template_name,
+        "industry": industry,
+        "description": description,
+        "tasks": [],
+    })
+    for t in tasks_list:
+        doc.append("tasks", {
+            "task_name": t.get("task_name", ""),
+            "phase_name": t.get("phase_name", ""),
+            "category": t.get("category", "Functional"),
+            "default_priority": t.get("default_priority", "Medium"),
+            "estimated_hours": t.get("estimated_hours", 0),
+        })
+    doc.insert()
+    frappe.db.commit()
+    return {"name": doc.name, "template_name": doc.template_name}
+
+
+@frappe.whitelist()
 def get_project_detail(project):
     """Get ERPNext project details."""
     project = _resolve_project(str(project))

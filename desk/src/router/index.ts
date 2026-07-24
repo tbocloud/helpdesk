@@ -132,6 +132,11 @@ const portalRoutes = [
     component: () => import("@/pages/tasky/Projects.vue"),
   },
   {
+    path: "/templates",
+    name: "TaskyTemplates",
+    component: () => import("@/pages/tasky/Templates.vue"),
+  },
+  {
     path: "/projects/:projectId",
     name: "TaskyProject",
     component: () => import("@/pages/tasky/PMDashboard.vue"),
