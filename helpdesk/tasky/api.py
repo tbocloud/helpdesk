@@ -35,6 +35,21 @@ def _format_task(task):
     }
 
 
+def _compute_due_date(project_start, phase_order, task_sort_order):
+    """Compute a due date based on project start + phase delay + task stagger."""
+    if not project_start:
+        return None
+    from datetime import timedelta
+    base = project_start
+    if isinstance(base, str):
+        base = frappe.utils.get_datetime(base)
+    days_offset = (phase_order * 7) + (task_sort_order or 0)
+    result = base + timedelta(days=days_offset)
+    if hasattr(result, "date"):
+        return result.date()
+    return result
+
+
 @frappe.whitelist()
 def create_project(project_name, expected_start_date=None, expected_end_date=None, members="[]"):
     """Create a new ERPNext Project with optional team members."""
@@ -82,6 +97,13 @@ def generate_checklist(project, template):
     template_doc = frappe.get_doc("HD Task Template", template_name)
 
     project_users = frappe.get_all("Project User", {"parent": project}, ["user", "custom_role"])
+    project_start = frappe.db.get_value("Project", project, "expected_start_date")
+
+    # Collect distinct phase names in order
+    phases_seen = []
+    for ttask in template_doc.tasks:
+        if ttask.phase_name and ttask.phase_name not in phases_seen:
+            phases_seen.append(ttask.phase_name)
 
     role_pool = {}
     for u in project_users:
@@ -121,6 +143,11 @@ def generate_checklist(project, template):
             "custom_estimated_hours": ttask.estimated_hours or 0,
             "priority": ttask.default_priority or "Medium",
             "status": "Open",
+            "exp_end_date": _compute_due_date(
+                project_start,
+                phases_seen.index(ttask.phase_name) if ttask.phase_name in phases_seen else 0,
+                ttask.sort_order,
+            ),
         })
         assigned = pick_user(ttask.category)
         if assigned:
@@ -143,7 +170,7 @@ def _assign_user(task_doc, user):
 
 
 @frappe.whitelist()
-def add_task(project, task_name, phase="", category="Functional", priority="Medium", estimated_hours=0, assigned_to=""):
+def add_task(project, task_name, phase="", category="Functional", priority="Medium", estimated_hours=0, assigned_to="", due_date=None):
     """Add a single task to a project's checklist."""
     project = _resolve_project(str(project))
     doc = frappe.get_doc({
@@ -155,6 +182,7 @@ def add_task(project, task_name, phase="", category="Functional", priority="Medi
         "custom_estimated_hours": float(estimated_hours) or 0,
         "priority": str(priority),
         "status": "Open",
+        "exp_end_date": due_date if due_date and due_date != "null" else None,
     })
     _assign_user(doc, assigned_to)
     doc.insert()

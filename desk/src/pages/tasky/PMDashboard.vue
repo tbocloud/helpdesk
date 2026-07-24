@@ -87,10 +87,10 @@
             class="bg-surface-white border border-outline-gray-2 rounded-lg p-4"
           >
             <div class="flex items-center gap-2 mb-2">
-              <component :is="card.icon" class="size-4 text-ink-gray-5" />
-              <span class="text-xs text-ink-gray-6">{{ __(card.label) }}</span>
+              <component :is="card.icon" :class="card.iconClasses || 'text-ink-gray-5'" class="size-4" />
+              <span class="text-xs" :class="card.classes || 'text-ink-gray-6'">{{ __(card.label) }}</span>
             </div>
-            <div class="text-xl-semibold text-ink-gray-9">
+            <div class="text-xl-semibold" :class="card.classes || 'text-ink-gray-9'">
               {{ card.value }}
             </div>
           </div>
@@ -269,6 +269,8 @@ const statCards = computed(() => {
       label: "Overdue",
       icon: AlertTriangle,
       value: stats.overdue ?? 0,
+      classes: "text-ink-red-7",
+      iconClasses: "text-ink-red-5",
     },
     {
       label: "Completion %",

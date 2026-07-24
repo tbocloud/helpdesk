@@ -56,13 +56,14 @@
           <div v-if="expandedPhases.has(phase.phase_name)" class="border-t border-outline-gray-2">
             <div v-if="phaseTasks[phase.phase_name]?.loading" class="flex items-center justify-center py-6"><LoadingIndicator :scale="3" /></div>
             <template v-else-if="phaseTasks[phase.phase_name]?.data">
-              <div v-for="task in phaseTasks[phase.phase_name].data" :key="task.name" class="flex items-center gap-3 px-4 py-3 hover:bg-surface-sidebar border-b border-outline-gray-2 last:border-b-0">
+               <div v-for="task in phaseTasks[phase.phase_name].data" :key="task.name" class="flex items-center gap-3 px-4 py-3 hover:bg-surface-sidebar border-b border-outline-gray-2 last:border-b-0" :class="{ 'bg-ink-red-0': isOverdue(task) }">
                 <button class="flex-shrink-0 size-5 rounded border-2 flex items-center justify-center transition-colors"
                   :class="task.status === 'Completed' ? 'bg-ink-blue-4 border-ink-blue-4 text-white' : 'border-outline-gray-3 hover:border-outline-gray-4 text-transparent'"
                   @click="onToggleTask(task)">
                   <LucideCheck v-if="task.status === 'Completed'" class="size-3" />
                 </button>
-                <span class="flex-1 text-sm truncate" :class="task.status === 'Completed' ? 'text-ink-gray-5 line-through' : 'text-ink-gray-8'">{{ task.subject }}</span>
+                 <span class="flex-1 text-sm truncate" :class="isOverdue(task) ? 'text-ink-red-7' : task.status === 'Completed' ? 'text-ink-gray-5 line-through' : 'text-ink-gray-8'">{{ task.subject }}</span>
+                <span v-if="task.due_date" class="text-xs whitespace-nowrap flex items-center gap-1" :class="isOverdue(task) ? 'text-ink-red-6 font-medium' : 'text-ink-gray-5'"><LucideClock class="size-3" /> {{ formatDate(task.due_date) }}<span v-if="isOverdue(task)" class="ml-1">Overdue</span></span>
                 <span v-if="task.category" class="text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap" :class="categoryClasses(task.category)">{{ task.category }}</span>
                 <div v-if="task.assigned_to" class="flex-shrink-0"><UserAvatar :name="task.assigned_to" size="sm" :hide-avatar="false" /></div>
                 <span class="flex-shrink-0 size-1.5 rounded-full" :class="priorityDotClass(task.priority)" />
@@ -88,6 +89,7 @@ import { UserAvatar } from "@/components";
 import LucideChevronDown from "~icons/lucide/chevron-down";
 import LucideChevronRight from "~icons/lucide/chevron-right";
 import LucideCheck from "~icons/lucide/check";
+import LucideClock from "~icons/lucide/clock";
 
 const props = defineProps<{ projectId: string }>();
 const route = useRoute();
@@ -164,5 +166,12 @@ function priorityDotClass(p: string) {
 function statusPillClasses(s: string) {
   const m: Record<string, string> = { Open: "bg-ink-gray-2 text-ink-gray-7", Working: "bg-ink-amber-1 text-ink-amber-8", "Pending Review": "bg-ink-blue-1 text-ink-blue-8", Completed: "bg-ink-green-1 text-ink-green-8", Cancelled: "bg-ink-gray-2 text-ink-gray-5 line-through" };
   return m[s] || m.Open;
+}
+function isOverdue(t: Record<string, any>) {
+  if (!t.due_date || ["Completed", "Cancelled"].includes(t.status)) return false;
+  return new Date(t.due_date) < new Date();
+}
+function formatDate(d: string) {
+  return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 </script>
