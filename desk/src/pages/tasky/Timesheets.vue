@@ -20,7 +20,7 @@
             <label class="text-xs text-ink-gray-5">Project</label>
             <select v-model="form.project" class="border border-outline-gray-2 rounded px-3 py-1.5 text-sm bg-surface-white focus:outline-none">
               <option value="">None</option>
-              <option v-for="p in projectList" :key="p.name" :value="p.name">{{ p.project_name || p.name }}</option>
+              <option v-for="p in (projectList.data ?? [])" :key="p.name" :value="p.name">{{ p.project_name || p.name }}</option>
             </select>
           </div>
           <div class="flex flex-col gap-1">
