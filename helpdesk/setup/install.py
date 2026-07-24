@@ -341,6 +341,13 @@ def get_custom_fields():
                 "label": "Actual Hours",
                 "insert_after": "custom_estimated_hours",
             },
+            {
+                "fieldname": "custom_timer_start",
+                "fieldtype": "Datetime",
+                "label": "Timer Started",
+                "insert_after": "custom_actual_hours",
+                "read_only": 1,
+            },
         ],
         "HD Ticket": [
             {

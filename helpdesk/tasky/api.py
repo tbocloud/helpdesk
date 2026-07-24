@@ -470,3 +470,58 @@ def get_projects():
     """List all ERPNext Projects."""
     return frappe.get_all("Project",
         fields=["name", "project_name", "status", "expected_start_date", "expected_end_date", "priority"])
+
+
+# === Timer ===
+
+@frappe.whitelist()
+def start_timer(task):
+    """Start the timer on a task by recording current datetime."""
+    doc = frappe.get_doc("Task", str(task))
+    doc.custom_timer_start = frappe.utils.now()
+    if doc.status != "Working":
+        doc.status = "Working"
+    doc.save()
+    frappe.db.commit()
+    return {"timer_start": str(doc.custom_timer_start), "status": doc.status}
+
+
+@frappe.whitelist()
+def stop_timer(task):
+    """Stop the timer and return elapsed hours."""
+    doc = frappe.get_doc("Task", str(task))
+    if not doc.custom_timer_start:
+        return {"elapsed": 0, "timer_start": None}
+    from datetime import datetime
+    start = doc.custom_timer_start
+    if isinstance(start, str):
+        start = datetime.fromisoformat(start)
+    elapsed = (datetime.now() - start).total_seconds() / 3600.0
+    doc.custom_timer_start = None
+    doc.save()
+    frappe.db.commit()
+    return {"elapsed": round(elapsed, 2), "timer_start": None}
+
+
+@frappe.whitelist()
+def get_timer(task):
+    """Get current timer state for a task."""
+    doc = frappe.get_doc("Task", str(task))
+    if not doc.custom_timer_start:
+        return {"running": False, "elapsed": 0, "timer_start": None}
+    from datetime import datetime
+    start = doc.custom_timer_start
+    if isinstance(start, str):
+        start = datetime.fromisoformat(start)
+    elapsed = (datetime.now() - start).total_seconds() / 3600.0
+    return {"running": True, "elapsed": round(elapsed, 2), "timer_start": str(start)}
+
+
+@frappe.whitelist()
+def get_my_timesheets(limit=20):
+    """List my timesheets."""
+    return frappe.get_all("Timesheet",
+        filters={"owner": frappe.session.user},
+        fields=["name", "title", "status", "total_hours", "creation", "modified"],
+        order_by="modified desc",
+        limit=limit)

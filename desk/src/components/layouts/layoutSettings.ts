@@ -6,6 +6,7 @@ import LucideHome from "~icons/lucide/home";
 import LucideFolderKanban from "~icons/lucide/folder-kanban";
 import LucideListTodo from "~icons/lucide/list-todo";
 import LucideClipboardList from "~icons/lucide/clipboard-list";
+import LucideClock from "~icons/lucide/clock";
 import { __ } from "@/translation";
 
 export const agentPortalSidebarOptions = [
@@ -38,6 +39,11 @@ export const agentPortalSidebarOptions = [
     label: __("My Tasks"),
     icon: LucideListTodo,
     to: "TaskyMyTasks",
+  },
+  {
+    label: __("Timesheets"),
+    icon: LucideClock,
+    to: "TaskyTimesheets",
   },
   {
     label: __("Customers"),

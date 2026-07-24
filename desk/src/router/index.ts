@@ -172,6 +172,11 @@ const portalRoutes = [
     component: () => import("@/pages/tasky/MyTasks.vue"),
   },
   {
+    path: "/timesheets",
+    name: "TaskyTimesheets",
+    component: () => import("@/pages/tasky/Timesheets.vue"),
+  },
+  {
     path: "/call-logs",
     name: "CallLogs",
     component: () => import("@/pages/call-logs/CallLogs.vue"),
