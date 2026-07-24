@@ -164,12 +164,16 @@ const PAUSE_STATUSES = ["Open", "Pending Review"];
 
 function startOrResumeTimer(task: Task) {
   const existing = timers.value[task.name];
-  if (existing) {
+  if (existing && existing.paused) {
     existing.paused = false;
     existing.running = true;
+  } else if (existing && existing.running) {
+    return;
   } else {
     timers.value[task.name] = { running: true, paused: false, elapsed: 0 };
   }
+  frappe.call("helpdesk.tasky.api.start_timer", { task: task.name }).catch(() => {});
+}
   frappe.call("helpdesk.tasky.api.start_timer", { task: task.name }).catch(() => {});
 }
 
@@ -212,25 +216,34 @@ function onDrop(e: DragEvent, newStatus: string) {
   const taskName = e.dataTransfer?.getData("application/x-task-name");
   if (!taskName) return;
   let task: Task | undefined;
-  for (const col of columnKeys) { task = columnTasks.value[col]?.find((t) => t.name === taskName); if (task) break; }
+  for (const col of columnKeys) {
+    const arr = columnTasks.value[col];
+    if (!arr) continue;
+    task = arr.find((t) => t.name === taskName);
+    if (task) break;
+  }
   if (!task || task.status === newStatus || task.status === "Completed") return;
 
+  const fromWorking = task.status === "Working";
+  const toWorking = newStatus === "Working";
+
+  // Drop to Completed: show timesheet popup
   if (newStatus === "Completed") {
-    preFilledHours.value = finalizeTimer(task);
+    preFilledHours.value = fromWorking ? finalizeTimer(task) : 0;
     completingTask.value = task;
     completeHours.value = preFilledHours.value || task.estimated_hours || 0;
     completeNotes.value = "";
     return;
   }
 
-  const fromWorking = task.status === "Working";
-  const toWorking = newStatus === "Working";
-  const toPause = PAUSE_STATUSES.includes(newStatus);
+  // Move task to new column visually FIRST
+  moveToColumn(task, newStatus);
 
+  // Timer logic: started on entering Working, paused or finalized when leaving
   if (toWorking) {
     startOrResumeTimer(task);
   } else if (fromWorking) {
-    if (toPause) {
+    if (PAUSE_STATUSES.includes(newStatus)) {
       pauseTimer(task);
     } else {
       finalizeTimer(task);
@@ -238,7 +251,6 @@ function onDrop(e: DragEvent, newStatus: string) {
   }
 
   moveTaskApi.submit({ task: task.name, new_status: newStatus });
-  moveToColumn(task, newStatus);
 }
 
 function confirmComplete() {
