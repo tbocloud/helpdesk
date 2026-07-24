@@ -129,29 +129,49 @@
               <div class="mb-4" v-if="dashboards[project.name]?.data">
                 <div class="flex items-center justify-between mb-1.5">
                   <span class="text-xs text-ink-gray-5 font-medium">Progress</span>
-                  <span class="text-xs text-ink-gray-7 font-medium">
-                    {{ dashboards[project.name].data.stats.completed }}/{{ dashboards[project.name].data.stats.total }} tasks
+                  <span class="text-xs text-ink-gray-9 font-semibold tabular-nums">
+                    {{ dashboards[project.name].data.stats.completion_pct }}%
                   </span>
                 </div>
-                <div class="w-full h-2 rounded-full bg-surface-gray-2 overflow-hidden">
+                <div class="w-full h-2.5 rounded-full bg-surface-gray-2 overflow-hidden flex">
                   <div
-                    class="h-full rounded-full transition-all duration-700"
-                    :class="progressColor(dashboards[project.name].data.stats.completion_pct)"
-                    :style="{ width: dashboards[project.name].data.stats.completion_pct + '%' }"
+                    v-if="segments(project).completed_pct > 0"
+                    class="h-full bg-ink-green-5 transition-all duration-700 rounded-l-full"
+                    :style="{ width: segments(project).completed_pct + '%' }"
+                  />
+                  <div
+                    v-if="segments(project).working_pct > 0"
+                    class="h-full bg-ink-amber-5 transition-all duration-700"
+                    :style="{ width: segments(project).working_pct + '%' }"
+                  />
+                  <div
+                    v-if="segments(project).review_pct > 0"
+                    class="h-full bg-ink-blue-4 transition-all duration-700"
+                    :style="{ width: segments(project).review_pct + '%' }"
+                  />
+                  <div
+                    v-if="segments(project).cancelled_pct > 0"
+                    class="h-full bg-ink-red-5 transition-all duration-700"
+                    :style="{ width: segments(project).cancelled_pct + '%' }"
+                  />
+                  <div
+                    v-if="segments(project).rest_pct > 0"
+                    class="h-full bg-ink-gray-4 transition-all duration-700 rounded-r-full"
+                    :style="{ width: segments(project).rest_pct + '%' }"
                   />
                 </div>
-                <div class="flex items-center gap-3 mt-2 text-xs text-ink-gray-5">
-                  <span class="flex items-center gap-1">
-                    <span class="size-1.5 rounded-full bg-ink-green-5" />
-                    {{ dashboards[project.name].data.stats.completed }} done
+                <div class="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2.5 text-xs text-ink-gray-5">
+                  <span class="flex items-center gap-1.5">
+                    <span class="size-2 rounded-full bg-ink-green-5" /> {{ dashboards[project.name].data.stats.completed }} done
                   </span>
-                  <span class="flex items-center gap-1">
-                    <span class="size-1.5 rounded-full bg-ink-amber-5" />
-                    {{ dashboards[project.name].data.stats.in_progress }} active
+                  <span class="flex items-center gap-1.5">
+                    <span class="size-2 rounded-full bg-ink-amber-5" /> {{ dashboards[project.name].data.stats.in_progress }} active
                   </span>
-                  <span v-if="dashboards[project.name].data.stats.overdue" class="flex items-center gap-1">
-                    <span class="size-1.5 rounded-full bg-ink-red-5" />
-                    {{ dashboards[project.name].data.stats.overdue }} overdue
+                  <span class="flex items-center gap-1.5" v-if="dashboards[project.name].data.stats.reviewing">
+                    <span class="size-2 rounded-full bg-ink-blue-4" /> {{ dashboards[project.name].data.stats.reviewing }} review
+                  </span>
+                  <span class="flex items-center gap-1.5" v-if="dashboards[project.name].data.stats.overdue">
+                    <span class="size-2 rounded-full bg-ink-red-5" /> {{ dashboards[project.name].data.stats.overdue }} overdue
                   </span>
                 </div>
               </div>
@@ -310,11 +330,16 @@ function formatDateRange(p: Project) {
   return parts.join(" ") || "No dates set";
 }
 
-function progressColor(pct: number) {
-  if (pct >= 100) return "bg-ink-green-5";
-  if (pct >= 60) return "bg-ink-blue-4";
-  if (pct >= 30) return "bg-ink-amber-5";
-  return "bg-ink-gray-4";
+function segments(project: Project) {
+  const s = dashboards[project.name]?.data?.stats;
+  const total = s?.total || 1;
+  return {
+    completed_pct: ((s?.completed || 0) / total * 100),
+    working_pct: ((s?.in_progress || 0) / total * 100),
+    review_pct: ((s?.reviewing || 0) / total * 100),
+    cancelled_pct: ((s?.cancelled || 0) / total * 100),
+    rest_pct: Math.max(0, 100 - (((s?.completed || 0) + (s?.in_progress || 0) + (s?.reviewing || 0) + (s?.cancelled || 0)) / total * 100)),
+  };
 }
 
 function statusBadgeClass(status: string) {
