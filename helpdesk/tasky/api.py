@@ -28,16 +28,8 @@ def generate_checklist(project, template):
 
     template_doc = frappe.get_doc("Tasky Template", template_name)
 
-    project_users = frappe.get_all(
-        "Project User", {"parent": project}, ["user"], pluck="user"
-    )
-
     created_count = 0
-    for i, ttask in enumerate(template_doc.tasks):
-        assigned = None
-        if project_users:
-            assigned = project_users[i % len(project_users)]
-
+    for ttask in template_doc.tasks:
         task_doc = frappe.get_doc({
             "doctype": "Task",
             "subject": ttask.task_name,
@@ -51,10 +43,6 @@ def generate_checklist(project, template):
             "status": "Open",
         })
         task_doc.insert()
-
-        if assigned:
-            task_doc.add_assign(assigned)
-
         created_count += 1
 
     frappe.db.commit()
