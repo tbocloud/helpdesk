@@ -127,44 +127,32 @@ const portalRoutes = [
     component: () => import("@/pages/dashboard/Dashboard.vue"),
   },
   {
-    path: "/tasky",
-    name: "Tasky",
-    component: () => import("@/pages/tasky/TaskyRoot.vue"),
-    children: [
-      {
-        path: "",
-        name: "TaskyHome",
-        component: () => import("@/pages/tasky/PMDashboard.vue"),
-      },
-      {
-        path: "projects",
-        name: "TaskyProjects",
-        component: () => import("@/pages/tasky/Projects.vue"),
-      },
-      {
-        path: "projects/:projectId",
-        name: "TaskyProject",
-        component: () => import("@/pages/tasky/PMDashboard.vue"),
-        props: true,
-      },
-      {
-        path: "projects/:projectId/checklist",
-        name: "TaskyChecklist",
-        component: () => import("@/pages/tasky/Checklist.vue"),
-        props: true,
-      },
-      {
-        path: "projects/:projectId/kanban",
-        name: "TaskyKanban",
-        component: () => import("@/pages/tasky/Kanban.vue"),
-        props: true,
-      },
-      {
-        path: "my-tasks",
-        name: "TaskyMyTasks",
-        component: () => import("@/pages/tasky/MyTasks.vue"),
-      },
-    ],
+    path: "/projects",
+    name: "TaskyProjects",
+    component: () => import("@/pages/tasky/Projects.vue"),
+  },
+  {
+    path: "/projects/:projectId",
+    name: "TaskyProject",
+    component: () => import("@/pages/tasky/PMDashboard.vue"),
+    props: true,
+  },
+  {
+    path: "/projects/:projectId/checklist",
+    name: "TaskyChecklist",
+    component: () => import("@/pages/tasky/Checklist.vue"),
+    props: true,
+  },
+  {
+    path: "/projects/:projectId/kanban",
+    name: "TaskyKanban",
+    component: () => import("@/pages/tasky/Kanban.vue"),
+    props: true,
+  },
+  {
+    path: "/my-tasks",
+    name: "TaskyMyTasks",
+    component: () => import("@/pages/tasky/MyTasks.vue"),
   },
   {
     path: "/call-logs",

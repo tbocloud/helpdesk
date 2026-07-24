@@ -198,13 +198,12 @@ function priorityDotClass(priority: string) {
 
 function statusPillClasses(status: string) {
   const map: Record<string, string> = {
-    Pending: "bg-ink-gray-2 text-ink-gray-7",
-    "In Progress": "bg-ink-amber-1 text-ink-amber-8",
-    Waiting: "bg-ink-purple-1 text-ink-purple-8",
-    Blocked: "bg-ink-red-1 text-ink-red-7",
+    Open: "bg-ink-gray-2 text-ink-gray-7",
+    Working: "bg-ink-amber-1 text-ink-amber-8",
+    "Pending Review": "bg-ink-purple-1 text-ink-purple-8",
     Completed: "bg-ink-green-1 text-ink-green-8",
     Cancelled: "bg-ink-gray-2 text-ink-gray-5 line-through",
   };
-  return map[status] || map.Pending;
+  return map[status] || map.Open;
 }
 </script>

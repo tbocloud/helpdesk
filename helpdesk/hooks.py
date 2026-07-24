@@ -48,6 +48,17 @@ fixtures = [
         "doctype": "Custom Field",
         "filters": [["dt", "=", "HD Ticket"], ["fieldname", "like", "custom_triage_%"]],
     },
+    {
+        "doctype": "Custom Field",
+        "filters": [
+            ["dt", "=", "Task"],
+            [
+                "fieldname",
+                "in",
+                ["custom_category", "custom_phase", "custom_module", "custom_estimated_hours", "custom_actual_hours"],
+            ],
+        ],
+    },
 ]
 
 # Full Text Search
@@ -145,14 +156,14 @@ permission_query_conditions = {
     "HD Ticket": "helpdesk.helpdesk.doctype.hd_ticket.hd_ticket.permission_query",
     "HD Saved Reply": "helpdesk.helpdesk.doctype.hd_saved_reply.hd_saved_reply.permission_query",
     "HD Customer": "helpdesk.helpdesk.doctype.hd_customer.hd_customer.permission_query",
-    "Tasky Task": "helpdesk.tasky.permissions.task_permission_query",
+    "Task": "helpdesk.tasky.permissions.task_permission_query",
 }
 
 has_permission = {
     "HD Ticket": "helpdesk.helpdesk.doctype.hd_ticket.hd_ticket.has_permission",
     "HD Saved Reply": "helpdesk.helpdesk.doctype.hd_saved_reply.hd_saved_reply.has_permission",
     "HD Customer": "helpdesk.helpdesk.doctype.hd_customer.hd_customer.has_permission",
-    "Tasky Task": "helpdesk.tasky.permissions.has_task_permission",
+    "Task": "helpdesk.tasky.permissions.has_task_permission",
 }
 
 

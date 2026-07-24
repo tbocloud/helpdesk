@@ -281,13 +281,13 @@ const teamWorkload = computed<TeamMember[]>(() => {
 
 function statusPillClass(status: string) {
   const lowered = status.toLowerCase();
-  if (lowered === "completed" || lowered === "done") {
+  if (lowered === "completed") {
     return "bg-surface-gray-2 text-ink-gray-7";
   }
-  if (lowered === "in progress" || lowered === "active") {
+  if (lowered === "working" || lowered === "in progress") {
     return "bg-surface-gray-3 text-ink-gray-8";
   }
-  if (lowered === "blocked") {
+  if (lowered === "cancelled" || lowered === "blocked") {
     return "bg-surface-gray-4 text-ink-gray-9";
   }
   return "bg-surface-gray-1 text-ink-gray-6";

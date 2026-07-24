@@ -33,14 +33,6 @@
             />
           </div>
           <div class="flex flex-col gap-1">
-            <label class="text-xs text-ink-gray-5">{{ __("Client Name") }}</label>
-            <input
-              v-model="newProject.client_name"
-              class="border border-outline-gray-2 rounded px-3 py-1.5 text-sm text-ink-gray-9 bg-surface-white placeholder-ink-gray-4 focus:outline-none focus:border-outline-gray-3"
-              placeholder="Enter client name"
-            />
-          </div>
-          <div class="flex flex-col gap-1">
             <label class="text-xs text-ink-gray-5">{{ __("Start Date") }}</label>
             <input
               v-model="newProject.start_date"
@@ -49,9 +41,9 @@
             />
           </div>
           <div class="flex flex-col gap-1">
-            <label class="text-xs text-ink-gray-5">{{ __("Go-Live Date") }}</label>
+            <label class="text-xs text-ink-gray-5">{{ __("Expected End Date") }}</label>
             <input
-              v-model="newProject.go_live_date"
+              v-model="newProject.expected_end_date"
               type="date"
               class="border border-outline-gray-2 rounded px-3 py-1.5 text-sm text-ink-gray-9 bg-surface-white focus:outline-none focus:border-outline-gray-3"
             />
@@ -124,9 +116,6 @@
                   <div class="text-sm-medium text-ink-gray-9 truncate">
                     {{ project.project_name || project.title }}
                   </div>
-                  <div v-if="project.client_name" class="text-xs text-ink-gray-5 mt-0.5 truncate">
-                    {{ project.client_name }}
-                  </div>
                 </div>
                 <span
                   class="text-xs font-medium px-2 py-0.5 rounded-full shrink-0 ml-2"
@@ -156,9 +145,9 @@
                   <CalendarDays class="size-3.5" />
                   <span>{{ project.start_date }}</span>
                 </div>
-                <div v-if="project.go_live_date" class="flex items-center gap-1">
+                <div v-if="project.expected_end_date" class="flex items-center gap-1">
                   <Flag class="size-3.5" />
-                  <span>{{ project.go_live_date }}</span>
+                  <span>{{ project.expected_end_date }}</span>
                 </div>
               </div>
             </button>
@@ -184,7 +173,7 @@
 <script setup lang="ts">
 import { reactive, ref, computed } from "vue";
 import { useRouter } from "vue-router";
-import { createResource } from "frappe-ui";
+import { createListResource, createResource } from "frappe-ui";
 import { __ } from "@/translation";
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import Plus from "~icons/lucide/plus";
@@ -200,14 +189,16 @@ interface Project {
   name: string;
   project_name?: string;
   title?: string;
-  client_name?: string;
   status?: string;
+  expected_start_date?: string;
+  expected_end_date?: string;
+  priority?: string;
   start_date?: string;
-  go_live_date?: string;
 }
 
-const projects = createResource({
-  url: "helpdesk.tasky.api.get_projects",
+const projects = createListResource({
+  doctype: "Project",
+  fields: ["name", "project_name", "status", "expected_start_date", "expected_end_date", "priority"],
   auto: true,
   transform: (data: Project[]) => data ?? [],
 });
@@ -227,17 +218,15 @@ const showNewForm = ref(false);
 
 const newProject = reactive({
   project_name: "",
-  client_name: "",
   start_date: "",
-  go_live_date: "",
+  expected_end_date: "",
   team_members: "",
 });
 
 function resetForm() {
   newProject.project_name = "";
-  newProject.client_name = "";
   newProject.start_date = "";
-  newProject.go_live_date = "";
+  newProject.expected_end_date = "";
   newProject.team_members = "";
 }
 
@@ -245,9 +234,8 @@ function onCreateProject() {
   if (!newProject.project_name.trim()) return;
   createProject.submit({
     project_name: newProject.project_name,
-    client_name: newProject.client_name,
     start_date: newProject.start_date,
-    go_live_date: newProject.go_live_date,
+    expected_end_date: newProject.expected_end_date,
     team_members: newProject.team_members
       ? newProject.team_members.split(",").map((s) => s.trim()).filter(Boolean)
       : [],
@@ -284,13 +272,13 @@ function projectProgress(projectName: string): number {
 
 function statusPillClass(status: string) {
   const lowered = status.toLowerCase();
-  if (lowered === "completed" || lowered === "done") {
+  if (lowered === "completed") {
     return "bg-surface-gray-2 text-ink-gray-7";
   }
-  if (lowered === "in progress" || lowered === "active") {
+  if (lowered === "open") {
     return "bg-surface-gray-3 text-ink-gray-8";
   }
-  if (lowered === "blocked") {
+  if (lowered === "cancelled") {
     return "bg-surface-gray-4 text-ink-gray-9";
   }
   return "bg-surface-gray-1 text-ink-gray-6";

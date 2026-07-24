@@ -133,10 +133,9 @@ interface Task {
 }
 
 const columns = [
-  { status: "Pending", label: "Pending" },
-  { status: "In Progress", label: "In Progress" },
-  { status: "Waiting", label: "Waiting" },
-  { status: "Blocked", label: "Blocked" },
+  { status: "Open", label: "Open" },
+  { status: "Working", label: "Working" },
+  { status: "Pending Review", label: "Pending Review" },
   { status: "Completed", label: "Completed" },
   { status: "Cancelled", label: "Cancelled" },
 ];
