@@ -15,6 +15,20 @@
       </template>
     </LayoutHeader>
     <div class="flex-1 overflow-auto p-4">
+      <div class="bg-surface-white border border-outline-gray-2 rounded-lg p-3 mb-4">
+        <div class="flex items-center gap-2 flex-wrap">
+          <input v-model="newTask.task_name" placeholder="Task name" class="flex-1 min-w-[200px] border border-outline-gray-2 rounded px-3 py-1.5 text-sm bg-surface-white focus:outline-none focus:border-outline-gray-3" @keyup.enter="onAddTask" />
+          <input v-model="newTask.phase" placeholder="Phase" class="w-28 border border-outline-gray-2 rounded px-2 py-1.5 text-sm bg-surface-white focus:outline-none focus:border-outline-gray-3" />
+          <select v-model="newTask.category" class="w-28 border border-outline-gray-2 rounded px-2 py-1.5 text-sm bg-surface-white">
+            <option>Functional</option><option>Development</option><option>Support</option><option>Common</option>
+          </select>
+          <select v-model="newTask.priority" class="w-24 border border-outline-gray-2 rounded px-2 py-1.5 text-sm bg-surface-white">
+            <option>High</option><option>Medium</option><option>Low</option><option>Urgent</option>
+          </select>
+          <input v-model.number="newTask.estimated_hours" type="number" placeholder="Hrs" class="w-16 border border-outline-gray-2 rounded px-2 py-1.5 text-sm bg-surface-white" />
+          <button class="px-3 py-1.5 text-sm rounded bg-surface-gray-3 text-ink-gray-8 hover:bg-surface-gray-4 disabled:opacity-50" :disabled="!newTask.task_name || addTask.loading" @click="onAddTask">{{ addTask.loading ? "Adding..." : "+ Add" }}</button>
+        </div>
+      </div>
       <div v-if="phases.loading" class="flex items-center justify-center py-12">
         <LoadingIndicator :scale="4" />
       </div>
@@ -61,7 +75,7 @@
 
 <script setup lang="ts">
 import { createResource } from "frappe-ui";
-import { reactive } from "vue";
+import { reactive, ref } from "vue";
 import { useRoute } from "vue-router";
 import { __ } from "@/translation";
 import LayoutHeader from "@/components/LayoutHeader.vue";
@@ -86,7 +100,33 @@ const phaseTasks: Record<string, ReturnType<typeof createResource>> = reactive({
 
 const phases = createResource({ url: "helpdesk.tasky.api.get_project_dashboard", makeParams: () => ({ project: props.projectId }), auto: true });
 
+const newTask = reactive({ task_name: "", phase: "", category: "Functional", priority: "Medium", estimated_hours: 0 });
+
+const addTask = createResource({
+  url: "helpdesk.tasky.api.add_task",
+  onSuccess() {
+    newTask.task_name = "";
+    newTask.phase = "";
+    newTask.category = "Functional";
+    newTask.priority = "Medium";
+    newTask.estimated_hours = 0;
+    phases.reload();
+  },
+});
+
 const updateTaskStatus = createResource({ url: "helpdesk.tasky.api.update_task_status" });
+
+function onAddTask() {
+  if (!newTask.task_name) return;
+  addTask.submit({
+    project: props.projectId,
+    task_name: newTask.task_name,
+    phase: newTask.phase,
+    category: newTask.category,
+    priority: newTask.priority,
+    estimated_hours: newTask.estimated_hours,
+  });
+}
 
 function togglePhase(phaseName: string) {
   if (expandedPhases.has(phaseName)) { expandedPhases.delete(phaseName); return; }

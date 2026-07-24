@@ -89,6 +89,25 @@ def generate_checklist(project, template):
 
 
 @frappe.whitelist()
+def add_task(project, task_name, phase="", category="Functional", priority="Medium", estimated_hours=0):
+    """Add a single task to a project's checklist."""
+    project = _resolve_project(str(project))
+    doc = frappe.get_doc({
+        "doctype": "Task",
+        "subject": str(task_name),
+        "project": project,
+        "custom_category": str(category),
+        "custom_phase": str(phase) if phase else "",
+        "custom_estimated_hours": float(estimated_hours) or 0,
+        "priority": str(priority),
+        "status": "Open",
+    })
+    doc.insert()
+    frappe.db.commit()
+    return _format_task(doc.as_dict())
+
+
+@frappe.whitelist()
 def get_my_tasks(project=None, status=None, limit=50):
     """Get tasks assigned to current user."""
     user = frappe.session.user
