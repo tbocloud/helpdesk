@@ -68,6 +68,10 @@ def complete_task(task, hours_worked=0, notes=""):
             ts.flags.ignore_permissions = True
             ts.flags.ignore_mandatory = True
             ts.insert(ignore_permissions=True)
+            try:
+                ts.submit()
+            except Exception:
+                pass
             frappe.db.commit()
         except Exception:
             frappe.log_error(title="complete_task Timesheet Error")
@@ -572,3 +576,31 @@ def get_my_timesheets(limit=20):
         fields=["name", "title", "status", "total_hours", "creation", "modified"],
         order_by="modified desc",
         limit=limit)
+
+
+@frappe.whitelist()
+def create_timesheet(title, project=None, task=None, hours=0, notes=""):
+    """Manually create a timesheet."""
+    employee = frappe.db.get_value("Employee", {"user_id": frappe.session.user}, "name")
+    from_time = frappe.utils.now()
+    ts = frappe.get_doc({
+        "doctype": "Timesheet",
+        "title": title,
+        "employee": employee,
+        "time_logs": [{
+            "task": task,
+            "project": project,
+            "from_time": from_time,
+            "hours": float(hours) or 0,
+            "description": notes,
+        }],
+    })
+    ts.flags.ignore_permissions = True
+    ts.flags.ignore_mandatory = True
+    ts.insert(ignore_permissions=True)
+    try:
+        ts.submit()
+    except Exception:
+        pass
+    frappe.db.commit()
+    return {"name": ts.name, "title": title, "total_hours": float(hours), "status": ts.status}
