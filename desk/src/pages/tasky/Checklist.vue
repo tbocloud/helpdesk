@@ -31,6 +31,7 @@
             <option v-for="u in projectMembers" :key="u.user" :value="u.user">{{ u.full_name || u.user }}</option>
           </select>
           <input v-model.number="newTask.estimated_hours" type="number" placeholder="Hrs" class="w-16 border border-outline-gray-2 rounded px-2 py-1.5 text-sm bg-surface-white" />
+          <input v-model="newTask.due_date" type="date" class="w-32 border border-outline-gray-2 rounded px-2 py-1.5 text-sm bg-surface-white" />
           <button class="px-4 py-1.5 text-sm rounded bg-surface-gray-8 text-ink-white hover:bg-surface-gray-9 disabled:opacity-50 font-medium" :disabled="!newTask.task_name || addTask.loading" @click="onAddTask">{{ addTask.loading ? "Adding..." : "+ Add Task" }}</button>
         </div>
       </div>
@@ -63,7 +64,7 @@
                   <LucideCheck v-if="task.status === 'Completed'" class="size-3" />
                 </button>
                  <span class="flex-1 text-sm truncate" :class="isOverdue(task) ? 'text-ink-red-7' : task.status === 'Completed' ? 'text-ink-gray-5 line-through' : 'text-ink-gray-8'">{{ task.subject }}</span>
-                <span v-if="task.due_date" class="text-xs whitespace-nowrap flex items-center gap-1" :class="isOverdue(task) ? 'text-ink-red-6 font-medium' : 'text-ink-gray-5'"><LucideClock class="size-3" /> {{ formatDate(task.due_date) }}<span v-if="isOverdue(task)" class="ml-1">Overdue</span></span>
+                <span v-if="task.due_date" class="text-xs whitespace-nowrap flex items-center gap-1" :class="isOverdue(task) ? 'text-ink-red-6 font-medium' : 'text-ink-gray-5'"><LucideClock class="size-3" /> {{ formatDate(task.start_date) || formatDate(task.due_date) }} - {{ formatDate(task.due_date) }}<span v-if="isOverdue(task)" class="ml-1">Overdue</span></span>
                 <span v-if="task.category" class="text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap" :class="categoryClasses(task.category)">{{ task.category }}</span>
                 <div v-if="task.assigned_to" class="flex-shrink-0"><UserAvatar :name="task.assigned_to" size="sm" :hide-avatar="false" /></div>
                 <span class="flex-shrink-0 size-1.5 rounded-full" :class="priorityDotClass(task.priority)" />
@@ -76,12 +77,33 @@
       </template>
       <div v-else class="flex items-center justify-center py-12 text-sm text-ink-gray-5">{{ __("No phases found") }}</div>
     </div>
+
+    <div v-if="completingTask" class="fixed inset-0 z-50 flex items-center justify-center bg-black/25 backdrop-blur-sm" @click.self="completingTask = null">
+      <div class="bg-surface-white border border-outline-gray-2 rounded-xl shadow-xl w-full max-w-sm p-5">
+        <div class="text-base-semibold text-ink-gray-9 mb-1">{{ __("Complete Task") }}</div>
+        <div class="text-sm text-ink-gray-6 mb-4 truncate">{{ completingTask.subject }}</div>
+        <div class="flex flex-col gap-3 mb-4">
+          <div class="flex flex-col gap-1">
+            <label class="text-xs text-ink-gray-5">{{ __("Hours Worked") }}</label>
+            <input v-model.number="completeHours" type="number" step="0.5" min="0" class="border border-outline-gray-2 rounded px-3 py-1.5 text-sm bg-surface-white focus:outline-none" placeholder="e.g. 2.5" />
+          </div>
+          <div class="flex flex-col gap-1">
+            <label class="text-xs text-ink-gray-5">{{ __("Notes") }}</label>
+            <input v-model="completeNotes" class="border border-outline-gray-2 rounded px-3 py-1.5 text-sm bg-surface-white focus:outline-none" placeholder="What was done?" />
+          </div>
+        </div>
+        <div class="flex justify-end gap-2">
+          <button @click="completingTask = null" class="px-4 py-2 text-sm text-ink-gray-7 hover:bg-surface-gray-2 rounded-lg">{{ __("Cancel") }}</button>
+          <button @click="confirmComplete" class="px-5 py-2 text-sm font-medium rounded-lg bg-ink-gray-9 text-ink-white hover:bg-ink-gray-8">{{ __("Mark Complete") }}</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { createResource } from "frappe-ui";
-import { reactive, computed } from "vue";
+import { reactive, computed, ref } from "vue";
 import { useRoute } from "vue-router";
 import { __ } from "@/translation";
 import LayoutHeader from "@/components/LayoutHeader.vue";
@@ -111,7 +133,7 @@ const projectDetail = createResource({ url: "helpdesk.tasky.api.get_project_deta
 
 const projectMembers = computed(() => projectDetail.data?.users ?? []);
 
-const newTask = reactive({ task_name: "", phase: "", category: "Functional", priority: "Medium", estimated_hours: 0, assigned_to: "" });
+const newTask = reactive({ task_name: "", phase: "", category: "Functional", priority: "Medium", estimated_hours: 0, assigned_to: "", due_date: "" });
 
 const addTask = createResource({
   url: "helpdesk.tasky.api.add_task",
@@ -122,11 +144,17 @@ const addTask = createResource({
     newTask.priority = "Medium";
     newTask.estimated_hours = 0;
     newTask.assigned_to = "";
+    newTask.due_date = "";
     phases.reload();
   },
 });
 
 const updateTaskStatus = createResource({ url: "helpdesk.tasky.api.update_task_status" });
+const completeResource = createResource({ url: "helpdesk.tasky.api.complete_task" });
+
+const completingTask = ref<any>(null);
+const completeHours = ref(0);
+const completeNotes = ref("");
 
 function onAddTask() {
   if (!newTask.task_name) return;
@@ -138,6 +166,7 @@ function onAddTask() {
     priority: newTask.priority,
     estimated_hours: newTask.estimated_hours,
     assigned_to: newTask.assigned_to,
+    due_date: newTask.due_date || null,
   });
 }
 
@@ -150,9 +179,27 @@ function togglePhase(phaseName: string) {
 }
 
 function onToggleTask(task: Record<string, any>) {
-  const newStatus = task.status === "Completed" ? "Open" : "Completed";
-  task.status = newStatus;
-  updateTaskStatus.submit({ task: task.name, status: newStatus });
+  if (task.status === "Completed") {
+    updateTaskStatus.submit({ task: task.name, status: "Open" });
+    task.status = "Open";
+    return;
+  }
+  completingTask.value = task;
+  completeHours.value = task.estimated_hours || 0;
+  completeNotes.value = "";
+}
+
+function confirmComplete() {
+  const task = completingTask.value;
+  if (!task) return;
+  completeResource.submit({
+    task: task.name,
+    hours_worked: completeHours.value,
+    notes: completeNotes.value,
+  });
+  task.status = "Completed";
+  completingTask.value = null;
+  phases.reload();
 }
 
 function categoryClasses(c: string) {

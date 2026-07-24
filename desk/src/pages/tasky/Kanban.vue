@@ -27,7 +27,7 @@
                 <span class="text-sm text-ink-gray-9 leading-snug" :class="{ 'text-ink-red-7': isOverdue(task) }">{{ task.subject }}</span>
               </div>
               <div v-if="task.due_date" class="text-xs mb-2" :class="isOverdue(task) ? 'text-ink-red-6 font-medium' : 'text-ink-gray-5'">
-                <span class="flex items-center gap-1"><LucideClock class="size-3" />{{ formatDate(task.due_date) }}<span v-if="isOverdue(task)" class="ml-1">Overdue</span></span>
+                <span class="flex items-center gap-1"><LucideClock class="size-3" />{{ formatDate(task.start_date || task.due_date) }}{{ task.start_date ? ' - ' + formatDate(task.due_date) : '' }}<span v-if="isOverdue(task)" class="ml-1">Overdue</span></span>
               </div>
               <div class="flex items-center justify-between">
                 <span v-if="task.category" class="text-xs font-medium px-2 py-0.5 rounded-full" :class="categoryClasses(task.category)">{{ task.category }}</span>
@@ -39,6 +39,27 @@
               </div>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="completingTask" class="fixed inset-0 z-50 flex items-center justify-center bg-black/25 backdrop-blur-sm" @click.self="completingTask = null">
+      <div class="bg-surface-white border border-outline-gray-2 rounded-xl shadow-xl w-full max-w-sm p-5">
+        <div class="text-base-semibold text-ink-gray-9 mb-1">{{ __("Complete Task") }}</div>
+        <div class="text-sm text-ink-gray-6 mb-4 truncate">{{ completingTask.subject }}</div>
+        <div class="flex flex-col gap-3 mb-4">
+          <div class="flex flex-col gap-1">
+            <label class="text-xs text-ink-gray-5">{{ __("Hours Worked") }}</label>
+            <input v-model.number="completeHours" type="number" step="0.5" min="0" class="border border-outline-gray-2 rounded px-3 py-1.5 text-sm bg-surface-white focus:outline-none" placeholder="e.g. 2.5" />
+          </div>
+          <div class="flex flex-col gap-1">
+            <label class="text-xs text-ink-gray-5">{{ __("Notes") }}</label>
+            <input v-model="completeNotes" class="border border-outline-gray-2 rounded px-3 py-1.5 text-sm bg-surface-white focus:outline-none" placeholder="What was done?" />
+          </div>
+        </div>
+        <div class="flex justify-end gap-2">
+          <button @click="completingTask = null" class="px-4 py-2 text-sm text-ink-gray-7 hover:bg-surface-gray-2 rounded-lg">{{ __("Cancel") }}</button>
+          <button @click="confirmKanbanComplete" class="px-5 py-2 text-sm font-medium rounded-lg bg-ink-gray-9 text-ink-white hover:bg-ink-gray-8">{{ __("Mark Complete") }}</button>
         </div>
       </div>
     </div>
@@ -67,10 +88,15 @@ const columns = ["Open", "Working", "Pending Review", "Completed", "Cancelled"];
 const columnTasks = ref<Record<string, Task[]>>({});
 const draggingTask = ref<string | null>(null);
 
-interface Task { name: string; subject: string; category?: string; status: string; priority?: string; assigned_to?: string; due_date?: string; }
+interface Task { name: string; subject: string; category?: string; status: string; priority?: string; assigned_to?: string; due_date?: string; start_date?: string; estimated_hours?: number; }
 
 const kanban = createResource({ url: "helpdesk.tasky.api.get_kanban_tasks", params: { project: props.projectId }, auto: true, onSuccess(d: any) { columnTasks.value = d.columns ?? {}; } });
 const updateTaskStatus = createResource({ url: "helpdesk.tasky.api.update_task_status" });
+const completeResource = createResource({ url: "helpdesk.tasky.api.complete_task" });
+
+const completingTask = ref<Task | null>(null);
+const completeHours = ref(0);
+const completeNotes = ref("");
 
 watch(() => props.projectId, () => { if (props.projectId) kanban.reload(); });
 
@@ -82,6 +108,30 @@ function onDrop(e: DragEvent, newStatus: string) {
   let task: Task | undefined;
   for (const col of columns) { task = columnTasks.value[col]?.find((t) => t.name === taskName); if (task) break; }
   if (!task || task.status === newStatus) return;
+
+  if (newStatus === "Completed") {
+    completingTask.value = task;
+    completeHours.value = task.estimated_hours || 0;
+    completeNotes.value = "";
+    return;
+  }
+
+  moveTask(task, newStatus);
+}
+
+function confirmKanbanComplete() {
+  const task = completingTask.value;
+  if (!task) return;
+  completeResource.submit({
+    task: task.name,
+    hours_worked: completeHours.value,
+    notes: completeNotes.value,
+  });
+  moveTask(task, "Completed");
+  completingTask.value = null;
+}
+
+function moveTask(task: Task, newStatus: string) {
   const idx = columnTasks.value[task.status]?.indexOf(task);
   if (idx !== undefined && idx !== -1) columnTasks.value[task.status].splice(idx, 1);
   task.status = newStatus;

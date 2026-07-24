@@ -29,25 +29,58 @@ def _format_task(task):
         "phase": task.get("custom_phase") or "",
         "module": task.get("custom_module") or "",
         "estimated_hours": task.get("custom_estimated_hours") or 0,
+        "actual_hours": task.get("custom_actual_hours") or 0,
+        "start_date": task.get("exp_start_date"),
         "due_date": task.get("exp_end_date"),
         "assigned_to": assigned[0] if assigned else None,
         "assignees": assigned,
     }
 
 
+@frappe.whitelist()
+def complete_task(task, hours_worked=0, notes=""):
+    """Complete a task with optional timesheet entry."""
+    doc = frappe.get_doc("Task", str(task))
+    doc.status = "Completed"
+    doc.custom_actual_hours = (doc.custom_actual_hours or 0) + (float(hours_worked) or 0)
+    doc.save()
+
+    if float(hours_worked) > 0:
+        try:
+            ts = frappe.get_doc({
+                "doctype": "Timesheet",
+                "employee": frappe.db.get_value("Employee", {"user_id": frappe.session.user}, "name"),
+                "time_logs": [{
+                    "task": doc.name,
+                    "from_time": frappe.utils.now(),
+                    "hours": float(hours_worked),
+                    "description": notes or f"Completed task: {doc.subject}",
+                }],
+            })
+            ts.insert()
+        except Exception:
+            pass
+
+    frappe.db.commit()
+    return _format_task(doc.as_dict())
+
+
 def _compute_due_date(project_start, phase_order, task_sort_order):
-    """Compute a due date based on project start + phase delay + task stagger."""
+    """Compute start and end dates based on project start + phase delay + task stagger."""
     if not project_start:
-        return None
+        return None, None
     from datetime import timedelta
     base = project_start
     if isinstance(base, str):
         base = frappe.utils.get_datetime(base)
-    days_offset = (phase_order * 7) + (task_sort_order or 0)
-    result = base + timedelta(days=days_offset)
-    if hasattr(result, "date"):
-        return result.date()
-    return result
+    phase_days = phase_order * 7
+    start = base + timedelta(days=phase_days + (task_sort_order or 0))
+    end = start + timedelta(days=3)
+    if hasattr(start, "date"):
+        start = start.date()
+    if hasattr(end, "date"):
+        end = end.date()
+    return start, end
 
 
 @frappe.whitelist()
@@ -132,6 +165,12 @@ def generate_checklist(project, template):
 
     created_count = 0
     for ttask in template_doc.tasks:
+        task_start, task_end = _compute_due_date(
+            project_start,
+            phases_seen.index(ttask.phase_name) if ttask.phase_name in phases_seen else 0,
+            ttask.sort_order,
+        )
+
         task_doc = frappe.get_doc({
             "doctype": "Task",
             "subject": ttask.task_name,
@@ -143,11 +182,8 @@ def generate_checklist(project, template):
             "custom_estimated_hours": ttask.estimated_hours or 0,
             "priority": ttask.default_priority or "Medium",
             "status": "Open",
-            "exp_end_date": _compute_due_date(
-                project_start,
-                phases_seen.index(ttask.phase_name) if ttask.phase_name in phases_seen else 0,
-                ttask.sort_order,
-            ),
+            "exp_start_date": task_start,
+            "exp_end_date": task_end,
         })
         assigned = pick_user(ttask.category)
         if assigned:
