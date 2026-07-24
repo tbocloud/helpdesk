@@ -51,7 +51,10 @@
       </div>
       <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <div v-for="ts in timesheets.data" :key="ts.name" class="bg-surface-white border border-outline-gray-2 rounded-lg p-4">
-          <div class="text-sm-medium text-ink-gray-9 truncate mb-1">{{ ts.title || ts.name }}</div>
+          <div class="text-sm-medium text-ink-gray-9 truncate mb-0.5">{{ ts.title || ts.name }}</div>
+          <div v-if="ts.project_name || ts.projects?.length" class="text-xs text-ink-gray-5 mb-1">
+            {{ ts.project_name || "" }} {{ ts.projects && ts.projects[0] ? "(" + ts.projects[0] + ")" : "" }}
+          </div>
           <div class="flex items-center gap-3 text-xs text-ink-gray-5">
             <span class="px-2 py-0.5 rounded-full" :class="ts.status === 'Submitted' ? 'bg-ink-green-1 text-ink-green-8' : 'bg-ink-amber-1 text-ink-amber-8'">{{ ts.status }}</span>
             <span>{{ ts.total_hours || 0 }}h</span>

@@ -570,12 +570,24 @@ def get_timer(task):
 
 @frappe.whitelist()
 def get_my_timesheets(limit=20):
-    """List my timesheets."""
-    return frappe.get_all("Timesheet",
+    """List my timesheets with project info."""
+    timesheets = frappe.get_all("Timesheet",
         filters={"owner": frappe.session.user},
         fields=["name", "title", "status", "total_hours", "creation", "modified"],
         order_by="modified desc",
         limit=limit)
+    for ts in timesheets:
+        projects = frappe.db.sql("""
+            SELECT DISTINCT td.project
+            FROM `tabTimesheet Detail` td
+            WHERE td.parent = %s AND td.project IS NOT NULL AND td.project != ''
+            LIMIT 3
+        """, ts["name"], as_dict=True)
+        ts["projects"] = [p["project"] for p in projects]
+        if ts["projects"]:
+            proj_name = frappe.db.get_value("Project", ts["projects"][0], "project_name")
+            ts["project_name"] = proj_name
+    return timesheets
 
 
 @frappe.whitelist()
