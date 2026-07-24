@@ -83,22 +83,33 @@ def generate_checklist(project, template):
 
     project_users = frappe.get_all("Project User", {"parent": project}, ["user", "custom_role"])
 
-    def find_user_by_role(role):
-        match = [u for u in project_users if u.get("custom_role") == role]
-        if match:
-            return match[0]["user"]
+    role_pool = {}
+    for u in project_users:
+        role = u.get("custom_role") or "Common"
+        if role not in role_pool:
+            role_pool[role] = []
+        role_pool[role].append(u["user"])
+
+    role_counter = {}
+    all_users = [u["user"] for u in project_users]
+
+    def pick_user(category):
+        role = CATEGORY_TO_ROLE.get(category, "Common")
+        pool = role_pool.get(role, [])
+        if pool:
+            idx = role_counter.get(role, 0) % len(pool)
+            user = pool[idx]
+            role_counter[role] = idx + 1
+            return user
+        if all_users:
+            idx = role_counter.get("__all__", 0) % len(all_users)
+            user = all_users[idx]
+            role_counter["__all__"] = idx + 1
+            return user
         return None
 
-    def pick_user(category, fallback_index):
-        role = CATEGORY_TO_ROLE.get(category)
-        if role:
-            matched = find_user_by_role(role)
-            if matched:
-                return matched
-        return project_users[fallback_index % len(project_users)]["user"] if project_users else None
-
     created_count = 0
-    for i, ttask in enumerate(template_doc.tasks):
+    for ttask in template_doc.tasks:
         task_doc = frappe.get_doc({
             "doctype": "Task",
             "subject": ttask.task_name,
@@ -111,7 +122,7 @@ def generate_checklist(project, template):
             "priority": ttask.default_priority or "Medium",
             "status": "Open",
         })
-        assigned = pick_user(ttask.category, i)
+        assigned = pick_user(ttask.category)
         if assigned:
             _assign_user(task_doc, assigned)
         task_doc.insert()
