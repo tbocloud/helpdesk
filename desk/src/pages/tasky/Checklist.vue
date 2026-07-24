@@ -25,6 +25,7 @@
           <select v-model="newTask.priority" class="w-24 border border-outline-gray-2 rounded px-2 py-1.5 text-sm bg-surface-white">
             <option>High</option><option>Medium</option><option>Low</option><option>Urgent</option>
           </select>
+          <input v-model="newTask.assigned_to" placeholder="@user" class="w-36 border border-outline-gray-2 rounded px-2 py-1.5 text-sm bg-surface-white" />
           <input v-model.number="newTask.estimated_hours" type="number" placeholder="Hrs" class="w-16 border border-outline-gray-2 rounded px-2 py-1.5 text-sm bg-surface-white" />
           <button class="px-3 py-1.5 text-sm rounded bg-surface-gray-3 text-ink-gray-8 hover:bg-surface-gray-4 disabled:opacity-50" :disabled="!newTask.task_name || addTask.loading" @click="onAddTask">{{ addTask.loading ? "Adding..." : "+ Add" }}</button>
         </div>
@@ -100,7 +101,7 @@ const phaseTasks: Record<string, ReturnType<typeof createResource>> = reactive({
 
 const phases = createResource({ url: "helpdesk.tasky.api.get_project_dashboard", makeParams: () => ({ project: props.projectId }), auto: true });
 
-const newTask = reactive({ task_name: "", phase: "", category: "Functional", priority: "Medium", estimated_hours: 0 });
+const newTask = reactive({ task_name: "", phase: "", category: "Functional", priority: "Medium", estimated_hours: 0, assigned_to: "" });
 
 const addTask = createResource({
   url: "helpdesk.tasky.api.add_task",
@@ -110,6 +111,7 @@ const addTask = createResource({
     newTask.category = "Functional";
     newTask.priority = "Medium";
     newTask.estimated_hours = 0;
+    newTask.assigned_to = "";
     phases.reload();
   },
 });
@@ -125,6 +127,7 @@ function onAddTask() {
     category: newTask.category,
     priority: newTask.priority,
     estimated_hours: newTask.estimated_hours,
+    assigned_to: newTask.assigned_to,
   });
 }
 

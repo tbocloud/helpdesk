@@ -67,8 +67,10 @@ def generate_checklist(project, template):
 
     template_doc = frappe.get_doc("Tasky Template", template_name)
 
+    project_users = frappe.get_all("Project User", {"parent": project}, ["user"], pluck="user")
+
     created_count = 0
-    for ttask in template_doc.tasks:
+    for i, ttask in enumerate(template_doc.tasks):
         task_doc = frappe.get_doc({
             "doctype": "Task",
             "subject": ttask.task_name,
@@ -81,6 +83,8 @@ def generate_checklist(project, template):
             "priority": ttask.default_priority or "Medium",
             "status": "Open",
         })
+        if project_users:
+            _assign_user(task_doc, project_users[i % len(project_users)])
         task_doc.insert()
         created_count += 1
 
@@ -88,8 +92,18 @@ def generate_checklist(project, template):
     return {"tasks_created": created_count}
 
 
+def _assign_user(task_doc, user):
+    """Set _assign field on a Task document to assign it to a user."""
+    if not user:
+        return
+    user = str(user).strip()
+    if frappe.db.exists("User", user):
+        import json
+        task_doc._assign = json.dumps([user])
+
+
 @frappe.whitelist()
-def add_task(project, task_name, phase="", category="Functional", priority="Medium", estimated_hours=0):
+def add_task(project, task_name, phase="", category="Functional", priority="Medium", estimated_hours=0, assigned_to=""):
     """Add a single task to a project's checklist."""
     project = _resolve_project(str(project))
     doc = frappe.get_doc({
@@ -102,6 +116,7 @@ def add_task(project, task_name, phase="", category="Functional", priority="Medi
         "priority": str(priority),
         "status": "Open",
     })
+    _assign_user(doc, assigned_to)
     doc.insert()
     frappe.db.commit()
     return _format_task(doc.as_dict())
