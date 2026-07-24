@@ -123,6 +123,7 @@ def add_task(project, task_name, phase="", category="Functional", priority="Medi
 
 
 @frappe.whitelist()
+@frappe.whitelist()
 def get_my_tasks(project=None, status=None, limit=50):
     """Get tasks assigned to current user."""
     user = frappe.session.user
