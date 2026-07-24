@@ -8,13 +8,13 @@ import json
 import anthropic
 import frappe
 
-# Default model constants (can be overridden in QCS Hub Settings)
+# Default model constants (can be overridden in Helpdesk Hub Settings)
 HAIKU_MODEL = "claude-haiku-4-5-20251001"
 SONNET_MODEL = "claude-sonnet-4-6"
 OPUS_MODEL = "claude-opus-4-7"
 
-# Fallback prices (USD per 1M tokens) used if QCS Model Pricing record is missing.
-# The authoritative source is the QCS Model Pricing DocType - update prices there, not here.
+# Fallback prices (USD per 1M tokens) used if Helpdesk Model Pricing record is missing.
+# The authoritative source is the Helpdesk Model Pricing DocType - update prices there, not here.
 FALLBACK_MODEL_COSTS = {
 	HAIKU_MODEL: {"input": 1.00, "output": 5.00, "cache_read": 0.10, "cache_write": 1.25},
 	SONNET_MODEL: {"input": 3.00, "output": 15.00, "cache_read": 0.30, "cache_write": 3.75},
@@ -33,13 +33,13 @@ def get_model_cost(model: str) -> dict:
 	"""Return per-1M-token costs for a model.
 
 	Order of precedence:
-	1. QCS Model Pricing DocType record for this model_id (the UI-editable source of truth)
+	1. Helpdesk Model Pricing DocType record for this model_id (the UI-editable source of truth)
 	2. FALLBACK_MODEL_COSTS constant (ships with the code so pricing works before seeding)
 	3. Zeros (unknown model - cost will be 0)
 	"""
 	try:
 		row = frappe.db.get_value(
-			"QCS Model Pricing",
+			"Helpdesk Model Pricing",
 			model,
 			[
 				"input_cost_per_1m",
@@ -63,8 +63,8 @@ def get_model_cost(model: str) -> dict:
 
 
 def get_hub_settings():
-	"""Get QCS Hub Settings singleton."""
-	return frappe.get_single("QCS Hub Settings")
+	"""Get Helpdesk Hub Settings singleton."""
+	return frappe.get_single("Helpdesk Hub Settings")
 
 
 def get_models():
@@ -80,7 +80,7 @@ def get_models():
 
 
 def get_provider_config(layer="triage"):
-	"""Return (provider, base_url, api_key) from QCS Hub Settings.
+	"""Return (provider, base_url, api_key) from Helpdesk Hub Settings.
 
 	provider is one of: "Anthropic", "Anthropic Compatible", "OpenAI Compatible".
 	The key lives ONLY on the Hub — customer sites never hold an AI credential.
@@ -98,21 +98,21 @@ def get_provider_config(layer="triage"):
 		provider = settings.investigation_provider
 		base_url = (getattr(settings, "investigation_base_url", None) or "").rstrip("/") or None
 		if get_decrypted_password(
-			"QCS Hub Settings", "QCS Hub Settings", "investigation_api_key", raise_exception=False
+			"Helpdesk Hub Settings", "Helpdesk Hub Settings", "investigation_api_key", raise_exception=False
 		):
 			key_field = "investigation_api_key"
 
 	api_key = get_decrypted_password(
-		"QCS Hub Settings", "QCS Hub Settings", key_field, raise_exception=False
+		"Helpdesk Hub Settings", "Helpdesk Hub Settings", key_field, raise_exception=False
 	)
 	# Fallback to site_config for backward compatibility
 	if not api_key:
 		api_key = frappe.conf.get("anthropic_api_key")
 
 	if not api_key:
-		frappe.throw("AI API key not configured. Go to QCS Hub Settings to set it.")
+		frappe.throw("AI API key not configured. Go to Helpdesk Hub Settings to set it.")
 	if provider != "Anthropic" and not base_url:
-		frappe.throw("Base URL is required for %s providers. Go to QCS Hub Settings." % provider)
+		frappe.throw("Base URL is required for %s providers. Go to Helpdesk Hub Settings." % provider)
 
 	return provider, base_url, api_key
 
@@ -186,11 +186,11 @@ def estimate_cost(model: str, usage) -> float:
 
 
 def log_usage(model: str, usage, session_name: str | None = None, ticket_name: str | None = None):
-	"""Log API usage to QCS AI Usage Log."""
+	"""Log API usage to Helpdesk AI Usage Log."""
 	try:
 		frappe.get_doc(
 			{
-				"doctype": "QCS AI Usage Log",
+				"doctype": "Helpdesk AI Usage Log",
 				"session": session_name,
 				"ticket": ticket_name,
 				"model": model,

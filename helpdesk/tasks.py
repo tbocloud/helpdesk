@@ -12,7 +12,7 @@ from helpdesk.mcp_client import MCPClient
 def health_check_connections():
 	"""Daily: ping each customer MCP endpoint and update connection status."""
 	connections = frappe.get_all(
-		"QCS Support Connection",
+		"Helpdesk Support Connection",
 		filters={"connection_status": ["in", ["Connected", "Disconnected", "Error"]]},
 		fields=["name", "site_url", "customer_name"],
 	)
@@ -23,7 +23,7 @@ def health_check_connections():
 			is_healthy = mcp.health_check()
 
 			frappe.db.set_value(
-				"QCS Support Connection",
+				"Helpdesk Support Connection",
 				conn.name,
 				{
 					"connection_status": "Connected" if is_healthy else "Error",
@@ -35,7 +35,7 @@ def health_check_connections():
 
 		except Exception as e:
 			frappe.db.set_value(
-				"QCS Support Connection",
+				"Helpdesk Support Connection",
 				conn.name,
 				{
 					"connection_status": "Error",
@@ -70,7 +70,7 @@ def retry_pending_triages():
 
 
 def sync_model_pricing():
-	"""Weekly: flag QCS Model Pricing rows that have not been reviewed in >90 days.
+	"""Weekly: flag Helpdesk Model Pricing rows that have not been reviewed in >90 days.
 
 	Anthropic does not publish a machine-readable price list, so this job does not
 	fetch prices automatically. It logs stale rows so an admin can review them
@@ -80,7 +80,7 @@ def sync_model_pricing():
 
 	cutoff = add_days(now_datetime(), -90)
 	stale = frappe.get_all(
-		"QCS Model Pricing",
+		"Helpdesk Model Pricing",
 		filters={"is_active": 1, "last_synced_on": ["<", cutoff]},
 		fields=["name", "last_synced_on"],
 	)
@@ -90,7 +90,7 @@ def sync_model_pricing():
 
 	names = ", ".join(r.name for r in stale)
 	frappe.log_error(
-		title="QCS Model Pricing review due",
+		title="Helpdesk Model Pricing review due",
 		message=(
 			f"{len(stale)} active model(s) have not had pricing reviewed in 90+ days: "
 			f"{names}. Verify against provider pricing page and update "

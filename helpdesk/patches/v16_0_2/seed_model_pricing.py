@@ -1,7 +1,7 @@
 # Copyright (c) 2026, Quark Cyber Systems FZC and contributors
 # For license information, please see license.txt
 
-"""Seed QCS Model Pricing from the FALLBACK_MODEL_COSTS constant.
+"""Seed Helpdesk Model Pricing from the FALLBACK_MODEL_COSTS constant.
 
 Runs once on migrate. Only inserts models that do not already exist, so it is
 safe to re-run and never overwrites a price an admin has edited in the UI.
@@ -27,12 +27,12 @@ def execute():
 	deprecated = {"claude-sonnet-4-20250514": "2026-06-15"}
 
 	for model_id, costs in FALLBACK_MODEL_COSTS.items():
-		if frappe.db.exists("QCS Model Pricing", model_id):
+		if frappe.db.exists("Helpdesk Model Pricing", model_id):
 			continue
 
 		doc = frappe.get_doc(
 			{
-				"doctype": "QCS Model Pricing",
+				"doctype": "Helpdesk Model Pricing",
 				"model_id": model_id,
 				"display_name": display_names.get(model_id, model_id),
 				"provider": "Anthropic",

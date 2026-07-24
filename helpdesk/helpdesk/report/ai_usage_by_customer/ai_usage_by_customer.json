@@ -11,7 +11,7 @@
  "name": "AI Usage by Customer",
  "owner": "Administrator",
  "prepared_report": 0,
- "ref_doctype": "QCS AI Support Session",
+ "ref_doctype": "Helpdesk AI Support Session",
  "report_name": "AI Usage by Customer",
  "report_type": "Script Report",
  "roles": [

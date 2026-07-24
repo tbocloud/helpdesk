@@ -5,7 +5,7 @@
 into HD Tickets.
 
 The customer site holds no credentials. Every call originates here, using
-the per-connection API key stored on the Hub's QCS Support Connection —
+the per-connection API key stored on the Hub's Helpdesk Support Connection —
 the only place a credential belongs.
 """
 
@@ -199,7 +199,7 @@ def _push_back(mcp: MCPClient, client_ticket: str, values: dict) -> None:
 def pull_client_tickets() -> int:
 	"""Scheduled: turn Pending client tickets into HD Tickets."""
 	connections = frappe.get_all(
-		"QCS Support Connection",
+		"Helpdesk Support Connection",
 		filters={"connection_status": "Connected"},
 		fields=["name", "customer_name"],
 	)

@@ -346,7 +346,7 @@ def get_custom_fields():
             {
                 "fieldname": "custom_qcs_connection",
                 "fieldtype": "Link",
-                "options": "QCS Support Connection",
+                "options": "Helpdesk Support Connection",
                 "label": "QCS Connection",
                 "insert_after": "description",
             },

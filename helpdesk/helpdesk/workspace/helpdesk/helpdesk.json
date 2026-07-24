@@ -163,7 +163,7 @@
 			"is_query_report": 0,
 			"label": "Support Connections",
 			"link_count": 0,
-			"link_to": "QCS Support Connection",
+			"link_to": "Helpdesk Support Connection",
 			"link_type": "DocType",
 			"onboard": 0,
 			"type": "Link"
@@ -173,7 +173,7 @@
 			"is_query_report": 0,
 			"label": "Hub Settings",
 			"link_count": 0,
-			"link_to": "QCS Hub Settings",
+			"link_to": "Helpdesk Hub Settings",
 			"link_type": "DocType",
 			"onboard": 0,
 			"type": "Link"
@@ -183,7 +183,7 @@
 			"is_query_report": 0,
 			"label": "AI Support Sessions",
 			"link_count": 0,
-			"link_to": "QCS AI Support Session",
+			"link_to": "Helpdesk AI Support Session",
 			"link_type": "DocType",
 			"onboard": 0,
 			"type": "Link"
@@ -193,7 +193,7 @@
 			"is_query_report": 0,
 			"label": "Action Requests",
 			"link_count": 0,
-			"link_to": "QCS Support Action Request",
+			"link_to": "Helpdesk Support Action Request",
 			"link_type": "DocType",
 			"onboard": 0,
 			"type": "Link"
@@ -203,7 +203,7 @@
 			"is_query_report": 0,
 			"label": "Remote Audit Log",
 			"link_count": 0,
-			"link_to": "QCS Remote Audit Log",
+			"link_to": "Helpdesk Remote Audit Log",
 			"link_type": "DocType",
 			"onboard": 0,
 			"type": "Link"
@@ -213,7 +213,7 @@
 			"is_query_report": 0,
 			"label": "Site Login Log",
 			"link_count": 0,
-			"link_to": "QCS Site Login Log",
+			"link_to": "Helpdesk Site Login Log",
 			"link_type": "DocType",
 			"onboard": 0,
 			"type": "Link"
@@ -231,7 +231,7 @@
 			"is_query_report": 0,
 			"label": "AI Usage Log",
 			"link_count": 0,
-			"link_to": "QCS AI Usage Log",
+			"link_to": "Helpdesk AI Usage Log",
 			"link_type": "DocType",
 			"onboard": 0,
 			"type": "Link"
@@ -241,7 +241,7 @@
 			"is_query_report": 0,
 			"label": "Model Pricing",
 			"link_count": 0,
-			"link_to": "QCS Model Pricing",
+			"link_to": "Helpdesk Model Pricing",
 			"link_type": "DocType",
 			"onboard": 0,
 			"type": "Link"

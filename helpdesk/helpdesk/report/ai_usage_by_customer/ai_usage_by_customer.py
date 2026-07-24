@@ -64,7 +64,7 @@ def _get_data(filters):
 			SUM(total_input_tokens) as input_tokens,
 			SUM(total_output_tokens) as output_tokens,
 			SUM(estimated_cost_usd) as cost_usd
-		FROM `tabQCS AI Support Session`
+		FROM `tabHelpdesk AI Support Session`
 		{where}
 		GROUP BY customer_name
 		ORDER BY cost_usd DESC

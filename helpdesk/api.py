@@ -49,7 +49,7 @@ def get_sessions(ticket):
 	"""Get all investigation sessions for a ticket."""
 	ticket = str(ticket)
 	sessions = frappe.get_list(
-		"QCS AI Support Session",
+		"Helpdesk AI Support Session",
 		filters={"ticket": ticket},
 		fields=[
 			"name",
@@ -70,7 +70,7 @@ def get_sessions(ticket):
 @frappe.whitelist()
 def get_session_detail(session):
 	"""Get full session details including MCP call logs."""
-	doc = frappe.get_doc("QCS AI Support Session", session)
+	doc = frappe.get_doc("Helpdesk AI Support Session", session)
 	return doc.as_dict()
 
 
@@ -86,7 +86,7 @@ def resume_session(session, agent_guidance=""):
 @frappe.whitelist()
 def cancel_session(session):
 	"""Cancel a paused session permanently."""
-	doc = frappe.get_doc("QCS AI Support Session", str(session))
+	doc = frappe.get_doc("Helpdesk AI Support Session", str(session))
 	if doc.status not in ("Awaiting Review", "Active"):
 		frappe.throw("Cannot cancel a session in status '%s'" % doc.status)
 	doc.status = "Cancelled"
@@ -102,7 +102,7 @@ def get_pending_actions(ticket):
 	"""Get pending action requests for a ticket."""
 	ticket = str(ticket)
 	return frappe.get_list(
-		"QCS Support Action Request",
+		"Helpdesk Support Action Request",
 		filters={"ticket": ticket, "status": "Pending Approval"},
 		fields=["name", "status", "diagnosis", "session"],
 		order_by="creation desc",
@@ -113,7 +113,7 @@ def get_pending_actions(ticket):
 def get_connections():
 	"""Get all support connections."""
 	return frappe.get_list(
-		"QCS Support Connection",
+		"Helpdesk Support Connection",
 		fields=["name", "customer_name", "site_url", "connection_status"],
 		order_by="customer_name asc",
 	)
@@ -124,7 +124,7 @@ def get_login_url(connection, ticket=None):
 	"""Get a one-time login URL for a customer site.
 
 	Calls the customer's generate_login_url API via MCP credentials.
-	Logs every attempt (success or failure) to QCS Site Login Log.
+	Logs every attempt (success or failure) to Helpdesk Site Login Log.
 
 	Auth gate: caller must be logged in and have read on QCS Support
 	Connection (Agent or System Manager). User Permission filtering on
@@ -136,13 +136,13 @@ def get_login_url(connection, ticket=None):
 	from frappe.utils.password import get_decrypted_password
 
 	connection = str(connection)
-	conn = frappe.get_doc("QCS Support Connection", connection)
+	conn = frappe.get_doc("Helpdesk Support Connection", connection)
 
 	if not conn.api_key or not conn.site_url:
 		_log_login_attempt(connection, ticket, "Failed", "Connection not configured")
 		frappe.throw("Connection not configured")
 
-	api_secret = get_decrypted_password("QCS Support Connection", connection, "api_secret")
+	api_secret = get_decrypted_password("Helpdesk Support Connection", connection, "api_secret")
 	if not api_secret:
 		_log_login_attempt(connection, ticket, "Failed", "API secret not found")
 		frappe.throw("API secret not found for connection")
@@ -178,11 +178,11 @@ def get_login_url(connection, ticket=None):
 
 
 def _log_login_attempt(connection, ticket, status, error_message, event_type="Login"):
-	"""Insert a QCS Site Login Log entry."""
+	"""Insert a Helpdesk Site Login Log entry."""
 	try:
 		frappe.get_doc(
 			{
-				"doctype": "QCS Site Login Log",
+				"doctype": "Helpdesk Site Login Log",
 				"agent": frappe.session.user,
 				"connection": connection,
 				"ticket": str(ticket) if ticket else None,
@@ -212,7 +212,7 @@ def get_remote_audit_log(connection, action_type=None, tool_name=None, status=No
 		filters["status"] = status
 
 	entries = frappe.get_list(
-		"QCS Remote Audit Log",
+		"Helpdesk Remote Audit Log",
 		filters=filters,
 		fields=[
 			"name",
@@ -246,7 +246,7 @@ def view_connection_credentials(connection):
 	from frappe.utils.password import get_decrypted_password
 
 	connection = str(connection)
-	conn = frappe.get_doc("QCS Support Connection", connection)
+	conn = frappe.get_doc("Helpdesk Support Connection", connection)
 
 	if not conn.api_key:
 		_log_login_attempt(
@@ -255,7 +255,7 @@ def view_connection_credentials(connection):
 		frappe.throw("No API key set on this connection")
 
 	api_secret = get_decrypted_password(
-		"QCS Support Connection", connection, "api_secret", raise_exception=False
+		"Helpdesk Support Connection", connection, "api_secret", raise_exception=False
 	)
 	if not api_secret:
 		_log_login_attempt(
@@ -306,7 +306,7 @@ def view_connection_credentials(connection):
 @frappe.whitelist()
 def get_action_request_detail(action_request):
 	"""Get full action request details including proposed actions."""
-	doc = frappe.get_doc("QCS Support Action Request", str(action_request))
+	doc = frappe.get_doc("Helpdesk Support Action Request", str(action_request))
 	return doc.as_dict()
 
 
@@ -315,7 +315,7 @@ def approve_and_execute(action_request, approved_indices=None, execute=True):
 	"""Approve actions and optionally execute them.
 
 	Args:
-		action_request: QCS Support Action Request name
+		action_request: Helpdesk Support Action Request name
 		approved_indices: JSON list of indices to approve (0-based). None = approve all.
 		execute: Whether to execute immediately after approval
 	"""
@@ -355,7 +355,7 @@ def _call_client(conn, connection_name, path: str, payload: dict | None = None) 
 	if not conn.api_key:
 		frappe.throw("API Key is missing on this connection.")
 	api_secret = get_decrypted_password(
-		"QCS Support Connection", connection_name, "api_secret", raise_exception=False
+		"Helpdesk Support Connection", connection_name, "api_secret", raise_exception=False
 	)
 	if not api_secret:
 		frappe.throw("API Secret is missing on this connection.")
@@ -399,7 +399,7 @@ def register_client(connection: str):
 	"""
 	from frappe.utils import get_url
 
-	conn = frappe.get_doc("QCS Support Connection", connection)
+	conn = frappe.get_doc("Helpdesk Support Connection", connection)
 
 	if not conn.site_url:
 		_log_login_attempt(connection, None, "Failed", "Site URL missing", event_type="Register")
@@ -435,7 +435,7 @@ def rotate_credentials(connection: str):
 	with the CURRENT credentials (Token auth), and on success swaps its
 	stored credentials to the new ones.
 	"""
-	conn = frappe.get_doc("QCS Support Connection", connection)
+	conn = frappe.get_doc("Helpdesk Support Connection", connection)
 	if not conn.site_url:
 		_log_login_attempt(connection, None, "Failed", "Site URL missing", event_type="Rotate Credentials")
 		frappe.throw("Site URL is required")
@@ -475,7 +475,7 @@ def deregister_client(connection: str):
 	then marks this Connection as Disconnected. Does NOT revoke the api_key on
 	the customer site - the customer admin controls that via User -> API Access.
 	"""
-	conn = frappe.get_doc("QCS Support Connection", connection)
+	conn = frappe.get_doc("Helpdesk Support Connection", connection)
 	if not conn.site_url:
 		_log_login_attempt(connection, None, "Failed", "Site URL missing", event_type="Deregister")
 		frappe.throw("Site URL is required")
