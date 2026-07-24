@@ -209,12 +209,19 @@ function onDragStart(e: DragEvent, task: Task) {
 function onDragEnd() { draggingTask.value = null; }
 
 function onDrop(e: DragEvent, newStatus: string) {
-  if (newStatus === "Completed") return;
   const taskName = e.dataTransfer?.getData("application/x-task-name");
   if (!taskName) return;
   let task: Task | undefined;
   for (const col of columnKeys) { task = columnTasks.value[col]?.find((t) => t.name === taskName); if (task) break; }
   if (!task || task.status === newStatus || task.status === "Completed") return;
+
+  if (newStatus === "Completed") {
+    preFilledHours.value = finalizeTimer(task);
+    completingTask.value = task;
+    completeHours.value = preFilledHours.value || task.estimated_hours || 0;
+    completeNotes.value = "";
+    return;
+  }
 
   const fromWorking = task.status === "Working";
   const toWorking = newStatus === "Working";
