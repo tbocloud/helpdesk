@@ -239,7 +239,7 @@
 <script setup lang="ts">
 import { reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
-import { createListResource, createResource } from "frappe-ui";
+import { createResource } from "frappe-ui";
 import { __ } from "@/translation";
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import GenerateChecklistModal from "./components/GenerateChecklistModal.vue";
@@ -264,10 +264,10 @@ interface Project {
   start_date?: string;
 }
 
-const projects = createListResource({
-  doctype: "Project",
-  fields: ["name", "project_name", "status", "expected_start_date", "expected_end_date", "priority"],
+const projects = createResource({
+  url: "helpdesk.tasky.api.get_projects",
   auto: true,
+  transform: (d: any[]) => d ?? [],
 });
 
 const userList = createResource({
