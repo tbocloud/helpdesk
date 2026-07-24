@@ -270,10 +270,8 @@ const projects = createListResource({
   auto: true,
 });
 
-const userList = createListResource({
-  doctype: "User",
-  fields: ["name", "full_name", "email"],
-  filters: { enabled: 1 },
+const userList = createResource({
+  url: "helpdesk.tasky.api.get_users",
   auto: true,
   transform: (d: any[]) => d ?? [],
 });

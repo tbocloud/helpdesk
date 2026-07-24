@@ -385,6 +385,12 @@ def get_project_detail(project):
 
 
 @frappe.whitelist()
+def get_users():
+    """List enabled users for assignment dropdowns."""
+    return frappe.get_all("User", {"enabled": 1}, ["name", "full_name", "email", "user_image"], order_by="full_name asc")
+
+
+@frappe.whitelist()
 def get_projects():
     """List all ERPNext Projects."""
     return frappe.get_all("Project",
