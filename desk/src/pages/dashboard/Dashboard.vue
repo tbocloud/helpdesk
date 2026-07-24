@@ -182,6 +182,45 @@
           />
         </div>
       </div>
+
+      <div v-if="!projects.loading && projects.data?.length" class="mt-6">
+        <div class="text-sm-medium text-ink-gray-7 mb-3">{{ __("Projects") }}</div>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <router-link
+            v-for="p in projects.data"
+            :key="p.name"
+            :to="{ name: 'TaskyProject', params: { projectId: p.name } }"
+            class="bg-surface-white border border-outline-gray-2 rounded-lg p-4 hover:shadow-md transition-shadow"
+          >
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-sm-medium text-ink-gray-9 truncate">{{ p.project_name }}</span>
+              <span class="text-xs px-2 py-0.5 rounded-full" :class="p.status === 'Completed' ? 'bg-ink-green-1 text-ink-green-8' : 'bg-ink-blue-1 text-ink-blue-8'">{{ p.status }}</span>
+            </div>
+            <div class="w-full h-2 rounded-full bg-surface-gray-2 overflow-hidden mb-2 flex">
+              <div v-if="p._stats?.completed" class="h-full bg-ink-green-5" :style="{ width: (p._stats.completed / p._stats.total * 100) + '%' }" />
+              <div v-if="p._stats?.in_progress" class="h-full bg-ink-amber-5" :style="{ width: (p._stats.in_progress / p._stats.total * 100) + '%' }" />
+              <div v-if="p._stats?.cancelled" class="h-full bg-ink-red-5" :style="{ width: (p._stats.cancelled / p._stats.total * 100) + '%' }" />
+            </div>
+            <div class="flex items-center gap-3 text-xs text-ink-gray-5">
+              <span>{{ p._stats?.completed || 0 }}/{{ p._stats?.total || 0 }} tasks</span>
+              <span v-if="p._stats?.overdue" class="text-ink-red-6">{{ p._stats.overdue }} overdue</span>
+            </div>
+          </router-link>
+        </div>
+      </div>
+
+      <div v-if="!myTasks.loading && myTasks.data?.length" class="mt-6">
+        <div class="text-sm-medium text-ink-gray-7 mb-3">{{ __("My Tasks") }}</div>
+        <div class="bg-surface-white border border-outline-gray-2 rounded-lg overflow-hidden">
+          <div v-for="t in myTasks.data.slice(0, 5)" :key="t.name" class="flex items-center gap-3 px-4 py-2.5 border-b border-outline-gray-2 last:border-b-0 hover:bg-surface-gray-1">
+            <router-link :to="{ name: 'TaskyProject', params: { projectId: t.project } }" class="size-1.5 rounded-full shrink-0" :class="t.status === 'Completed' ? 'bg-ink-green-5' : t.status === 'Working' ? 'bg-ink-amber-5' : 'bg-ink-gray-4'" />
+            <span class="flex-1 text-sm text-ink-gray-8 truncate">{{ t.subject }}</span>
+            <span class="text-xs text-ink-gray-5">{{ t.phase }}</span>
+            <span class="text-xs font-medium px-2 py-0.5 rounded-full" :class="t.status === 'Completed' ? 'bg-ink-green-1 text-ink-green-8' : 'bg-ink-gray-2 text-ink-gray-7'">{{ t.status }}</span>
+          </div>
+          <router-link :to="{ name: 'TaskyMyTasks' }" class="block text-center text-xs text-ink-gray-6 hover:text-ink-gray-8 py-2 transition-colors">{{ __("View all tasks") }} →</router-link>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -567,6 +606,30 @@ usePageMeta(() => {
     title: __("Dashboard"),
   };
 });
+const myTasks = createResource({
+  url: "helpdesk.tasky.api.get_my_tasks",
+  auto: true,
+  transform: (d: any[]) => d ?? [],
+});
+
+const projects = createResource({
+  url: "helpdesk.tasky.api.get_projects",
+  auto: true,
+  transform(d: any[]) {
+    if (!d) return [];
+    // Fetch dashboard stats for each project
+    d.forEach((p: any) => {
+      createResource({
+        url: "helpdesk.tasky.api.get_project_dashboard",
+        params: { project: p.name },
+        auto: true,
+        onSuccess(stats: any) { p._stats = stats.stats; }
+      });
+    });
+    return d;
+  },
+});
+
 </script>
 
 <style scoped>
