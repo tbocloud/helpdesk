@@ -154,7 +154,7 @@
 			"hidden": 0,
 			"is_query_report": 0,
 			"label": "AI Support",
-			"link_count": 6,
+			"link_count": 7,
 			"onboard": 0,
 			"type": "Card Break"
 		},
@@ -214,6 +214,16 @@
 			"label": "Site Login Log",
 			"link_count": 0,
 			"link_to": "HDS Site Login Log",
+			"link_type": "DocType",
+			"onboard": 0,
+			"type": "Link"
+		},
+		{
+			"hidden": 0,
+			"is_query_report": 0,
+			"label": "MCP Call Log",
+			"link_count": 0,
+			"link_to": "HDS MCP Call Log",
 			"link_type": "DocType",
 			"onboard": 0,
 			"type": "Link"
