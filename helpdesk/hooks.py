@@ -20,10 +20,34 @@ add_to_apps_screen = [
 
 get_site_info = "helpdesk.activation.get_site_info"
 
+before_install = "helpdesk.install.before_install"
 after_install = "helpdesk.setup.install.after_install"
 after_migrate = [
     "helpdesk.search.build_index_in_background",
     "helpdesk.search.download_corpus",
+    "helpdesk.setup.after_migrate",
+]
+
+fixtures = [
+    {
+        "doctype": "Custom Field",
+        "filters": [
+            ["dt", "=", "HD Ticket"],
+            [
+                "fieldname",
+                "in",
+                [
+                    "custom_qcs_connection",
+                    "custom_client_ticket",
+                    "custom_conv_state",
+                ],
+            ],
+        ],
+    },
+    {
+        "doctype": "Custom Field",
+        "filters": [["dt", "=", "HD Ticket"], ["fieldname", "like", "custom_triage_%"]],
+    },
 ]
 
 # Full Text Search
@@ -36,11 +60,23 @@ scheduler_events = {
         "helpdesk.search.build_index_if_not_exists",
         "helpdesk.search.download_corpus",
     ],
+    "cron": {
+        "*/5 * * * *": [
+            "helpdesk.tasks.pull_client_tickets",
+            "helpdesk.tasks.push_ticket_statuses",
+            "helpdesk.tasks.sync_conversations",
+        ],
+    },
     "daily": [
-        "helpdesk.helpdesk.doctype.hd_ticket.hd_ticket.close_tickets_after_n_days"
+        "helpdesk.helpdesk.doctype.hd_ticket.hd_ticket.close_tickets_after_n_days",
+        "helpdesk.tasks.health_check_connections",
+        "helpdesk.tasks.retry_pending_triages",
     ],
     "hourly_long": [
         "helpdesk.helpdesk.doctype.hd_ticket.hd_ticket.update_sla_status_in_ticket"
+    ],
+    "weekly": [
+        "helpdesk.tasks.sync_model_pricing",
     ],
 }
 
@@ -99,6 +135,9 @@ doc_events = {
     "Notification Log": {
         "before_insert": "helpdesk.extends.notification_log.before_insert",
     },
+    "HD Ticket": {
+        "after_insert": "helpdesk.triage.auto_triage_ticket",
+    },
 }
 
 # For List View
@@ -106,12 +145,14 @@ permission_query_conditions = {
     "HD Ticket": "helpdesk.helpdesk.doctype.hd_ticket.hd_ticket.permission_query",
     "HD Saved Reply": "helpdesk.helpdesk.doctype.hd_saved_reply.hd_saved_reply.permission_query",
     "HD Customer": "helpdesk.helpdesk.doctype.hd_customer.hd_customer.permission_query",
+    "Tasky Task": "helpdesk.tasky.permissions.task_permission_query",
 }
 
 has_permission = {
     "HD Ticket": "helpdesk.helpdesk.doctype.hd_ticket.hd_ticket.has_permission",
     "HD Saved Reply": "helpdesk.helpdesk.doctype.hd_saved_reply.hd_saved_reply.has_permission",
     "HD Customer": "helpdesk.helpdesk.doctype.hd_customer.hd_customer.has_permission",
+    "Tasky Task": "helpdesk.tasky.permissions.has_task_permission",
 }
 
 
@@ -140,3 +181,9 @@ setup_wizard_complete = "helpdesk.setup.setup_wizard.setup_complete"
 
 before_tests = "helpdesk.test_utils.before_tests"
 auth_hooks = ["helpdesk.auth.authenticate"]
+
+default_log_clearing_doctypes = {
+    "QCS AI Usage Log": 90,
+    "QCS Site Login Log": 180,
+    "QCS Remote Audit Log": 365,
+}

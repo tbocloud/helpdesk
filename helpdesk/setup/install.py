@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 
 import frappe
@@ -12,6 +13,8 @@ from .file import create_helpdesk_folder
 from .ticket_feedback import create_ticket_feedback_options
 from .ticket_type import create_fallback_ticket_type, create_ootb_ticket_types
 from .welcome_ticket import create_welcome_ticket
+
+FORM_SCRIPT_NAME = "QCS AI Support Actions"
 
 
 def after_install():
@@ -35,6 +38,7 @@ def after_install():
     add_property_setters()
     add_website_settings_permission()
     add_default_views()
+    _create_form_script()
     # Always keep this at last, because sql_ddl makes the db commit
     add_fts_index()
 
@@ -462,3 +466,38 @@ def add_index_if_not_exists(table, column, index_name):
             table=table, index_name=index_name, column=column
         )
     )
+
+
+def _create_form_script():
+    js_path = os.path.join(
+        os.path.dirname(__file__), "..", "hd_form_scripts", "ai_support_actions.js"
+    )
+
+    if not os.path.exists(js_path):
+        frappe.log_error("HD Form Script JS not found", js_path)
+        return
+
+    with open(js_path) as f:
+        script_content = f.read()
+
+    if frappe.db.exists("HD Form Script", FORM_SCRIPT_NAME):
+        doc = frappe.get_doc("HD Form Script", FORM_SCRIPT_NAME)
+        doc.script = script_content
+        doc.enabled = 1
+        doc.save(ignore_permissions=True)
+        print(f"Updated HD Form Script: {FORM_SCRIPT_NAME}")
+    else:
+        doc = frappe.get_doc(
+            {
+                "doctype": "HD Form Script",
+                "name": FORM_SCRIPT_NAME,
+                "dt": "HD Ticket",
+                "apply_to": "Form",
+                "enabled": 1,
+                "script": script_content,
+            }
+        )
+        doc.insert(ignore_permissions=True)
+        print(f"Created HD Form Script: {FORM_SCRIPT_NAME}")
+
+    frappe.db.commit()

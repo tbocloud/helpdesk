@@ -1,0 +1,146 @@
+[
+ {
+  "doctype": "Custom Field",
+  "name": "HD Ticket-custom_triage_section",
+  "dt": "HD Ticket",
+  "fieldname": "custom_triage_section",
+  "fieldtype": "Section Break",
+  "label": "AI Triage",
+  "insert_after": "response_by"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "HD Ticket-custom_triage_status",
+  "dt": "HD Ticket",
+  "fieldname": "custom_triage_status",
+  "fieldtype": "Select",
+  "label": "Triage Status",
+  "options": "\nPending\nIn Progress\nCompleted\nFailed\nSkipped",
+  "insert_after": "custom_triage_section",
+  "in_standard_filter": 1
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "HD Ticket-custom_triage_category",
+  "dt": "HD Ticket",
+  "fieldname": "custom_triage_category",
+  "fieldtype": "Data",
+  "label": "Triage Category",
+  "read_only": 1,
+  "insert_after": "custom_triage_status"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "HD Ticket-custom_triage_column",
+  "dt": "HD Ticket",
+  "fieldname": "custom_triage_column",
+  "fieldtype": "Column Break",
+  "insert_after": "custom_triage_category"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "HD Ticket-custom_triage_priority",
+  "dt": "HD Ticket",
+  "fieldname": "custom_triage_priority",
+  "fieldtype": "Select",
+  "label": "Triage Priority",
+  "options": "\nLow\nMedium\nHigh\nCritical",
+  "read_only": 1,
+  "insert_after": "custom_triage_column"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "HD Ticket-custom_triage_complexity",
+  "dt": "HD Ticket",
+  "fieldname": "custom_triage_complexity",
+  "fieldtype": "Select",
+  "label": "Triage Complexity",
+  "options": "\nFunctional\nConfiguration\nData\nDev\nInfrastructure",
+  "read_only": 1,
+  "insert_after": "custom_triage_priority"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "HD Ticket-custom_triage_details_section",
+  "dt": "HD Ticket",
+  "fieldname": "custom_triage_details_section",
+  "fieldtype": "Section Break",
+  "label": "Triage Details",
+  "insert_after": "custom_triage_complexity",
+  "collapsible": 1
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "HD Ticket-custom_triage_summary",
+  "dt": "HD Ticket",
+  "fieldname": "custom_triage_summary",
+  "fieldtype": "Small Text",
+  "label": "Triage Summary",
+  "read_only": 1,
+  "insert_after": "custom_triage_details_section"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "HD Ticket-custom_triage_recommended_track",
+  "dt": "HD Ticket",
+  "fieldname": "custom_triage_recommended_track",
+  "fieldtype": "Select",
+  "label": "Recommended Track",
+  "options": "\nai_investigate\nmanual\ndev\nescalate",
+  "read_only": 1,
+  "insert_after": "custom_triage_summary"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "HD Ticket-custom_triage_data",
+  "dt": "HD Ticket",
+  "fieldname": "custom_triage_data",
+  "fieldtype": "Code",
+  "label": "Triage Data",
+  "options": "JSON",
+  "hidden": 1,
+  "insert_after": "custom_triage_recommended_track"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "HD Ticket-custom_triage_timestamp",
+  "dt": "HD Ticket",
+  "fieldname": "custom_triage_timestamp",
+  "fieldtype": "Datetime",
+  "label": "Triage Timestamp",
+  "read_only": 1,
+  "insert_after": "custom_triage_data"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "HD Ticket-custom_qcs_connection",
+  "dt": "HD Ticket",
+  "fieldname": "custom_qcs_connection",
+  "fieldtype": "Link",
+  "options": "QCS Support Connection",
+  "label": "QCS Connection",
+  "insert_after": "custom_triage_timestamp",
+  "read_only": 1,
+  "in_standard_filter": 1
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "HD Ticket-custom_client_ticket",
+  "dt": "HD Ticket",
+  "fieldname": "custom_client_ticket",
+  "fieldtype": "Data",
+  "label": "Client Ticket",
+  "insert_after": "custom_qcs_connection",
+  "read_only": 1
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "HD Ticket-custom_conv_state",
+  "dt": "HD Ticket",
+  "fieldname": "custom_conv_state",
+  "fieldtype": "Long Text",
+  "label": "Conversation Sync State",
+  "hidden": 1,
+  "insert_after": "custom_client_ticket"
+ }
+]
