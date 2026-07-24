@@ -174,8 +174,6 @@ function startOrResumeTimer(task: Task) {
   }
   frappe.call("helpdesk.tasky.api.start_timer", { task: task.name }).catch(() => {});
 }
-  frappe.call("helpdesk.tasky.api.start_timer", { task: task.name }).catch(() => {});
-}
 
 function pauseTimer(task: Task) {
   const t = timers.value[task.name];
