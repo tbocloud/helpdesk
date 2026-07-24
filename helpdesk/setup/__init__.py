@@ -14,9 +14,7 @@ def after_migrate():
 
 def _create_form_script():
     js_path = os.path.join(
-        os.path.dirname(__file__),
-        "hd_form_scripts",
-        "ai_support_actions.js",
+        os.path.dirname(__file__), "..", "hd_form_scripts", "ai_support_actions.js"
     )
 
     if not os.path.exists(js_path):
