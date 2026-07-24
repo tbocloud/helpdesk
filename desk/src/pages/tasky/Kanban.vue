@@ -275,9 +275,11 @@ function onDrop(e: DragEvent, newStatus: string) {
 function confirmComplete() {
   const task = completingTask.value;
   if (!task) return;
-  const hours = completeHours.value || 0;
-  if (hours <= 0) { alert("Please enter hours worked"); return; }
-  completeResource.submit({ task: task.name, hours_worked: hours, notes: completeNotes.value });
+  completeResource.submit({
+    task: task.name,
+    hours_worked: completeHours.value || 0.25,
+    notes: completeNotes.value,
+  });
   finalizeTimer(task);
   moveToColumn(task, "Completed");
   completingTask.value = null;
