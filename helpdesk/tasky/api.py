@@ -47,19 +47,26 @@ def complete_task(task, hours_worked=0, notes=""):
 
     if float(hours_worked) > 0:
         try:
+            employee = frappe.db.get_value("Employee", {"user_id": frappe.session.user}, "name")
             ts = frappe.get_doc({
                 "doctype": "Timesheet",
-                "employee": frappe.db.get_value("Employee", {"user_id": frappe.session.user}, "name"),
+                "title": f"Task: {doc.subject}",
+                "employee": employee,
                 "time_logs": [{
                     "task": doc.name,
                     "from_time": frappe.utils.now(),
                     "hours": float(hours_worked),
                     "description": notes or f"Completed task: {doc.subject}",
+                    "project": doc.project,
+                    "completed": 1,
                 }],
             })
-            ts.insert()
+            ts.flags.ignore_permissions = True
+            ts.flags.ignore_mandatory = True
+            ts.insert(ignore_permissions=True)
+            frappe.db.commit()
         except Exception:
-            pass
+            frappe.log_error(title="complete_task Timesheet Error")
 
     frappe.db.commit()
     return _format_task(doc.as_dict())
