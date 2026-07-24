@@ -70,7 +70,7 @@ def generate_checklist(project, template):
 
     if not frappe.db.exists("Project", project):
         frappe.throw(_("Project not found"))
-    if not frappe.db.exists("Tasky Template", template_name):
+    if not frappe.db.exists("HD Task Template", template_name):
         frappe.throw(_("Template not found"))
 
     CATEGORY_TO_ROLE = {
@@ -79,7 +79,7 @@ def generate_checklist(project, template):
         "Support": "Support Engineer",
     }
 
-    template_doc = frappe.get_doc("Tasky Template", template_name)
+    template_doc = frappe.get_doc("HD Task Template", template_name)
 
     project_users = frappe.get_all("Project User", {"parent": project}, ["user", "custom_role"])
 
@@ -308,22 +308,22 @@ def get_kanban_tasks(project):
 @frappe.whitelist()
 def get_templates():
     """List all available implementation templates."""
-    return frappe.get_all("Tasky Template",
+    return frappe.get_all("HD Task Template",
         fields=["name", "template_name", "industry", "description"])
 
 
 @frappe.whitelist()
 def create_template(template_name, industry="", description="", tasks="[]"):
-    """Create a new Tasky Template with tasks."""
+    """Create a new HD Task Template with tasks."""
     import json
     tasks_list = json.loads(str(tasks)) if isinstance(tasks, str) else tasks
 
-    existing = frappe.db.exists("Tasky Template", {"template_name": template_name})
+    existing = frappe.db.exists("HD Task Template", {"template_name": template_name})
     if existing:
         frappe.throw(_("Template '{0}' already exists").format(template_name))
 
     doc = frappe.get_doc({
-        "doctype": "Tasky Template",
+        "doctype": "HD Task Template",
         "template_name": template_name,
         "industry": industry,
         "description": description,
@@ -345,7 +345,7 @@ def create_template(template_name, industry="", description="", tasks="[]"):
 @frappe.whitelist()
 def get_template(template):
     """Get a single template with all tasks."""
-    doc = frappe.get_doc("Tasky Template", str(template))
+    doc = frappe.get_doc("HD Task Template", str(template))
     return {
         "name": doc.name,
         "template_name": doc.template_name,
@@ -359,10 +359,10 @@ def get_template(template):
 
 @frappe.whitelist()
 def update_template(template, template_name, industry="", description="", tasks="[]"):
-    """Update an existing Tasky Template."""
+    """Update an existing HD Task Template."""
     import json
     tasks_list = json.loads(str(tasks)) if isinstance(tasks, str) else tasks
-    doc = frappe.get_doc("Tasky Template", str(template))
+    doc = frappe.get_doc("HD Task Template", str(template))
     doc.template_name = template_name
     doc.industry = industry
     doc.description = description
