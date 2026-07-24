@@ -62,7 +62,7 @@
 
 <script setup lang="ts">
 import { ref } from "vue";
-import { createListResource, createResource } from "frappe-ui";
+import { createResource } from "frappe-ui";
 import LucideX from "~icons/lucide/x";
 
 const props = defineProps<{
@@ -77,10 +77,10 @@ const emit = defineEmits<{
 
 const selectedTemplate = ref("");
 
-const templates = createListResource({
-  doctype: "Tasky Template",
-  fields: ["name", "template_name", "industry", "description"],
+const templates = createResource({
+  url: "helpdesk.tasky.api.get_templates",
   auto: true,
+  transform: (d: any) => d ?? [],
 });
 
 const generateTask = createResource({
