@@ -132,8 +132,7 @@ interface Task { name: string; subject: string; category?: string; status: strin
 
 const kanban = createResource({
   url: "helpdesk.tasky.api.get_kanban_tasks",
-  params: { project: props.projectId },
-  auto: true,
+  makeParams: () => ({ project: props.projectId }),
   onSuccess(d: any) {
     columnTasks.value = d.columns ?? {};
     restoreTimers(d.columns);
@@ -166,7 +165,7 @@ let tickInterval: any = null;
 })();
 onUnmounted(() => { if (tickInterval) clearInterval(tickInterval); });
 
-watch(() => props.projectId, () => { if (props.projectId) kanban.reload(); });
+watch(() => props.projectId, () => { if (props.projectId) kanban.reload(); }, { immediate: true });
 
 function restoreTimers(cols: Record<string, any[]>) {
   if (!cols) return;
