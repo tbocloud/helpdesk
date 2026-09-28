@@ -18,17 +18,38 @@ class TestContentDelivery(FrappeTestCase):
 
     def test_counts_per_customer(self):
         today = now_datetime()
-        on_time = make_content_post("On time", CUSTOMER, status="Approved", publish_on=add_to_date(today, minutes=1))
+        on_time = make_content_post(
+            "On time",
+            CUSTOMER,
+            status="Approved",
+            publish_on=add_to_date(today, minutes=1),
+        )
         on_time.status = "Published"
         on_time.published_url = "https://instagram.com/p/1"
         on_time.save()
-        make_content_post("Late", CUSTOMER, status="Drafting", publish_on=add_to_date(today, hours=-2))
-        waiting = make_content_post("Waiting", CUSTOMER, status="Client Review", publish_on=add_to_date(today, hours=5))
+        make_content_post(
+            "Late", CUSTOMER, status="Drafting", publish_on=add_to_date(today, hours=-2)
+        )
+        waiting = make_content_post(
+            "Waiting",
+            CUSTOMER,
+            status="Client Review",
+            publish_on=add_to_date(today, hours=5),
+        )
         waiting.db_set(
-            {"sent_for_approval_on": add_to_date(today, hours=-10), "client_decided_on": add_to_date(today, hours=-4)}
+            {
+                "sent_for_approval_on": add_to_date(today, hours=-10),
+                "client_decided_on": add_to_date(today, hours=-4),
+            }
         )
 
-        _columns, rows, _msg, chart = execute({"from_date": getdate(add_to_date(today, days=-1)), "to_date": getdate(add_to_date(today, days=1)), "customer": CUSTOMER})
+        _columns, rows, _msg, chart = execute(
+            {
+                "from_date": getdate(add_to_date(today, days=-1)),
+                "to_date": getdate(add_to_date(today, days=1)),
+                "customer": CUSTOMER,
+            }
+        )
 
         row = rows[0]
         self.assertEqual(row["customer"], CUSTOMER)
