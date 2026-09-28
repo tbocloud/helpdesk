@@ -11,6 +11,7 @@ import json
 
 import anthropic
 import frappe
+from frappe import _
 from frappe.utils import now_datetime
 
 from helpdesk.ai_engine import call_haiku
@@ -106,7 +107,9 @@ def run_triage_now(ticket_id: str):
         elapsed = (now_datetime() - ticket.custom_triage_timestamp).total_seconds()
         if elapsed < TRIAGE_COOLDOWN_SECONDS:
             frappe.throw(
-                f"Triage cooldown: wait {int(TRIAGE_COOLDOWN_SECONDS - elapsed)}s"
+                _("Triage cooldown: wait {0}s").format(
+                    int(TRIAGE_COOLDOWN_SECONDS - elapsed)
+                )
             )
 
     # Guard: retry limit
@@ -117,7 +120,7 @@ def run_triage_now(ticket_id: str):
     )
     retry_count = triage_data.get("retry_count", 0)
     if retry_count >= MAX_TRIAGE_RETRIES:
-        frappe.throw(f"Triage retry limit reached ({MAX_TRIAGE_RETRIES})")
+        frappe.throw(_("Triage retry limit reached ({0})").format(MAX_TRIAGE_RETRIES))
 
     frappe.enqueue(
         "helpdesk.triage.run_triage",
@@ -138,7 +141,10 @@ def run_triage(ticket_id: str, is_retry: bool = False):
 
     # Guard: Redis lock (prevent concurrent triage on same ticket)
     # Use raw Redis SET with NX (set if not exists) + EX (expiry)
-    lock_acquired = frappe.cache.set(lock_key, 1, nx=True, ex=TRIAGE_LOCK_TIMEOUT)
+    # site-prefixed like delete_value() below, so the release actually matches
+    lock_acquired = frappe.cache.set(  # key is site-prefixed via make_key; set_value can't do NX - nosemgrep
+        frappe.cache.make_key(lock_key), 1, nx=True, ex=TRIAGE_LOCK_TIMEOUT
+    )
     if not lock_acquired:
         frappe.logger().warning(f"Triage already running for ticket {ticket_id}")
         return
@@ -172,7 +178,7 @@ def run_triage(ticket_id: str, is_retry: bool = False):
             "In Progress",
             update_modified=False,
         )
-        frappe.db.commit()
+        frappe.db.commit()  # background job: persist triage progress and failures as they happen - nosemgrep
 
         # Build triage input
         ticket = frappe.get_doc("HD Ticket", ticket_id)
@@ -191,7 +197,7 @@ def run_triage(ticket_id: str, is_retry: bool = False):
                 },
                 update_modified=False,
             )
-            frappe.db.commit()
+            frappe.db.commit()  # background job: persist triage progress and failures as they happen - nosemgrep
             return
 
         # Call the triage model. Anchor today's date so relative ranges like
@@ -235,7 +241,7 @@ def run_triage(ticket_id: str, is_retry: bool = False):
                 "HD Ticket", ticket_id, field, value, update_modified=False
             )
 
-        frappe.db.commit()
+        frappe.db.commit()  # background job: persist triage progress and failures as they happen - nosemgrep
 
         # Post triage comment (with skip_notifications to prevent cascades)
         _post_triage_comment(ticket_id, triage)
@@ -249,7 +255,7 @@ def run_triage(ticket_id: str, is_retry: bool = False):
             "Failed",
             update_modified=False,
         )
-        frappe.db.commit()
+        frappe.db.commit()  # background job: persist triage progress and failures as they happen - nosemgrep
         frappe.log_error(f"Triage API error for ticket {ticket_id}", str(e))
 
     except Exception as e:
@@ -260,7 +266,7 @@ def run_triage(ticket_id: str, is_retry: bool = False):
             "Failed",
             update_modified=False,
         )
-        frappe.db.commit()
+        frappe.db.commit()  # background job: persist triage progress and failures as they happen - nosemgrep
         frappe.log_error(f"Triage error for ticket {ticket_id}", str(e))
 
     finally:
@@ -331,4 +337,4 @@ def _post_triage_comment(ticket_id: str, triage: dict):
     )
     comment.flags.skip_notifications = True
     comment.insert(ignore_permissions=True)
-    frappe.db.commit()
+    frappe.db.commit()  # background job: persist triage progress and failures as they happen - nosemgrep

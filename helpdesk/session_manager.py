@@ -7,6 +7,7 @@ import json
 import time
 
 import frappe
+from frappe import _
 from frappe.utils import now_datetime
 
 from helpdesk.ai_engine import (
@@ -96,7 +97,9 @@ def start_investigation(
         filters={"ticket": ticket_id, "status": ["in", ["Active", "Completed"]]},
     )
     if existing >= MAX_SESSIONS_PER_TICKET:
-        frappe.throw(f"Maximum {MAX_SESSIONS_PER_TICKET} sessions per ticket reached")
+        frappe.throw(
+            _("Maximum {0} sessions per ticket reached").format(MAX_SESSIONS_PER_TICKET)
+        )
 
     # Guard: check no active session
     active = frappe.db.exists(
@@ -104,7 +107,11 @@ def start_investigation(
         {"ticket": ticket_id, "status": "Active"},
     )
     if active:
-        frappe.throw(f"Active session already exists for ticket {ticket_id}: {active}")
+        frappe.throw(
+            _("Active session already exists for ticket {0}: {1}").format(
+                ticket_id, active
+            )
+        )
 
     # Get ticket and triage data
     ticket = frappe.get_doc("HD Ticket", ticket_id)
@@ -130,7 +137,7 @@ def start_investigation(
         }
     )
     session.insert(ignore_permissions=True)
-    frappe.db.commit()
+    frappe.db.commit()  # the background investigation job reads this session - nosemgrep
 
     # Run investigation in background
     frappe.enqueue(
@@ -653,7 +660,7 @@ def resume_investigation(session_name, agent_guidance=""):
 
     messages, proposed_actions = _deserialize_state(session.conversation_state)
     if not messages:
-        frappe.throw("No saved conversation state to resume from")
+        frappe.throw(_("No saved conversation state to resume from"))
 
     # Append agent guidance as a new user message
     guidance_text = (
@@ -674,7 +681,7 @@ def resume_investigation(session_name, agent_guidance=""):
     session.ended_at = None
     session.conversation_state = ""
     session.save(ignore_permissions=True)
-    frappe.db.commit()
+    frappe.db.commit()  # the background investigation job reads this session - nosemgrep
 
     # Enqueue resume job
     frappe.enqueue(

@@ -75,7 +75,7 @@ def _get_data(filters):
 
     where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
 
-    return frappe.db.sql(
+    return frappe.db.sql(  # conditions are fixed strings; values are bound parameters - nosemgrep
         f"""
 		SELECT
 			DATE(timestamp) as date,

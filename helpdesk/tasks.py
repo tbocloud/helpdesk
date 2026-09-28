@@ -47,7 +47,7 @@ def health_check_connections():
                 update_modified=False,
             )
 
-    frappe.db.commit()
+    frappe.db.commit()  # scheduled job: keep each connection's health result even if a later one fails - nosemgrep
 
 
 def retry_pending_triages():

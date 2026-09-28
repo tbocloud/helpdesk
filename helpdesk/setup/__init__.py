@@ -25,7 +25,7 @@ def _create_form_script():
         frappe.log_error("HD Form Script JS not found", js_path)
         return
 
-    with open(js_path) as f:
+    with open(js_path) as f:  # path is this app's own bundled file - nosemgrep
         script_content = f.read()
 
     if frappe.db.exists("HD Form Script", FORM_SCRIPT_NAME):
@@ -48,4 +48,4 @@ def _create_form_script():
         doc.insert(ignore_permissions=True)
         print(f"Created HD Form Script: {FORM_SCRIPT_NAME}")
 
-    frappe.db.commit()
+    frappe.db.commit()  # migration step - nosemgrep

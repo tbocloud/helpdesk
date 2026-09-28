@@ -12,6 +12,7 @@ the approved ones via MCP.
 import json
 
 import frappe
+from frappe import _
 from frappe.utils import now_datetime
 
 from helpdesk.mcp_client import MCPClient
@@ -69,7 +70,7 @@ def create_action_request(session_name, ticket_id, proposed_actions):
         )
 
     action_request.insert(ignore_permissions=True)
-    frappe.db.commit()
+    frappe.db.commit()  # the investigation loop runs long; approvers must see the request now - nosemgrep
     return action_request.name
 
 
@@ -83,7 +84,7 @@ def approve_actions(action_request_name, approved_indices=None):
     ar = frappe.get_doc("HDS Support Action Request", action_request_name)
 
     if ar.status not in ("Pending Approval",):
-        frappe.throw("Action request is not pending approval")
+        frappe.throw(_("Action request is not pending approval"))
 
     for i, action in enumerate(ar.proposed_actions):
         if approved_indices is None or i in approved_indices:
@@ -102,7 +103,6 @@ def approve_actions(action_request_name, approved_indices=None):
     ar.approved_by = frappe.session.user
     ar.approved_at = now_datetime()
     ar.save(ignore_permissions=True)
-    frappe.db.commit()
 
     return ar.status
 
@@ -112,13 +112,12 @@ def reject_actions(action_request_name):
     ar = frappe.get_doc("HDS Support Action Request", action_request_name)
 
     if ar.status not in ("Pending Approval",):
-        frappe.throw("Action request is not pending approval")
+        frappe.throw(_("Action request is not pending approval"))
 
     ar.status = "Rejected"
     ar.approved_by = frappe.session.user
     ar.approved_at = now_datetime()
     ar.save(ignore_permissions=True)
-    frappe.db.commit()
 
     return "Rejected"
 
@@ -135,12 +134,12 @@ def execute_approved_actions(action_request_name):
     ar = frappe.get_doc("HDS Support Action Request", action_request_name)
 
     if ar.status not in ("Approved", "Partially Approved"):
-        frappe.throw("Action request is not approved")
+        frappe.throw(_("Action request is not approved"))
 
     # Get connection from the session
     session = frappe.get_doc("HDS AI Support Session", ar.session)
     if not session.connection:
-        frappe.throw("No connection found for this session")
+        frappe.throw(_("No connection found for this session"))
 
     mcp = MCPClient(session.connection)
 
@@ -181,7 +180,7 @@ def execute_approved_actions(action_request_name):
     ar.executed_at = now_datetime()
     ar.execution_log = "\n".join(execution_log)
     ar.save(ignore_permissions=True)
-    frappe.db.commit()
+    frappe.db.commit()  # remote writes already happened; always record what was executed - nosemgrep
 
     return {
         "status": ar.status,

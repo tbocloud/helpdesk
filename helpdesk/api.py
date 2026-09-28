@@ -6,13 +6,14 @@
 import json
 
 import frappe
+from frappe import _
 
 from helpdesk.utils import agent_manager_only, agent_only
 
 
 @frappe.whitelist()
 @agent_only
-def get_triage(ticket):
+def get_triage(ticket: str | int):
     """Get triage results for a ticket."""
     ticket = str(ticket)
     ticket_doc = frappe.get_doc("HD Ticket", ticket)
@@ -38,7 +39,7 @@ def get_triage(ticket):
 
 @frappe.whitelist()
 @agent_only
-def run_triage_now(ticket):
+def run_triage_now(ticket: str | int):
     """Manually trigger triage for a ticket."""
     from helpdesk.triage import run_triage_now as _run_triage_now
 
@@ -47,7 +48,7 @@ def run_triage_now(ticket):
 
 @frappe.whitelist()
 @agent_only
-def start_investigation(ticket, connection, agent_notes=""):
+def start_investigation(ticket: str | int, connection: str, agent_notes: str = ""):
     """Start an AI investigation session."""
     from helpdesk.session_manager import start_investigation as _start
 
@@ -57,7 +58,7 @@ def start_investigation(ticket, connection, agent_notes=""):
 
 @frappe.whitelist()
 @agent_only
-def get_sessions(ticket):
+def get_sessions(ticket: str | int):
     """Get all investigation sessions for a ticket."""
     ticket = str(ticket)
     sessions = frappe.get_list(
@@ -81,7 +82,7 @@ def get_sessions(ticket):
 
 @frappe.whitelist()
 @agent_only
-def get_session_detail(session):
+def get_session_detail(session: str):
     """Get full session details including MCP call logs."""
     doc = frappe.get_doc("HDS AI Support Session", session)
     return doc.as_dict()
@@ -89,7 +90,7 @@ def get_session_detail(session):
 
 @frappe.whitelist()
 @agent_only
-def resume_session(session, agent_guidance=""):
+def resume_session(session: str, agent_guidance: str = ""):
     """Resume a paused (Awaiting Review) session with optional agent guidance."""
     from helpdesk.session_manager import resume_investigation
 
@@ -99,7 +100,7 @@ def resume_session(session, agent_guidance=""):
 
 @frappe.whitelist()
 @agent_only
-def cancel_session(session):
+def cancel_session(session: str):
     """Cancel a paused session permanently."""
     doc = frappe.get_doc("HDS AI Support Session", str(session))
     if doc.status not in ("Awaiting Review", "Active"):
@@ -108,13 +109,12 @@ def cancel_session(session):
     doc.ended_at = frappe.utils.now_datetime()
     doc.conversation_state = ""
     doc.save(ignore_permissions=True)
-    frappe.db.commit()
     return {"status": "cancelled"}
 
 
 @frappe.whitelist()
 @agent_only
-def get_pending_actions(ticket):
+def get_pending_actions(ticket: str | int):
     """Get pending action requests for a ticket."""
     ticket = str(ticket)
     return frappe.get_list(
@@ -138,7 +138,7 @@ def get_connections():
 
 @frappe.whitelist()
 @agent_manager_only
-def get_login_url(connection, ticket=None):
+def get_login_url(connection: str, ticket: str | int | None = None):
     """Get a one-time login URL for a customer site.
 
     Calls the customer's generate_login_url API via MCP credentials.
@@ -158,14 +158,14 @@ def get_login_url(connection, ticket=None):
 
     if not conn.api_key or not conn.site_url:
         _log_login_attempt(connection, ticket, "Failed", "Connection not configured")
-        frappe.throw("Connection not configured")
+        frappe.throw(_("Connection not configured"))
 
     api_secret = get_decrypted_password(
         "HDS Support Connection", connection, "api_secret"
     )
     if not api_secret:
         _log_login_attempt(connection, ticket, "Failed", "API secret not found")
-        frappe.throw("API secret not found for connection")
+        frappe.throw(_("API secret not found for connection"))
 
     url = f"{conn.site_url}{conn.client_method('api.generate_login_url')}"
 
@@ -194,7 +194,7 @@ def get_login_url(connection, ticket=None):
 
     except requests.Timeout:
         _log_login_attempt(connection, ticket, "Failed", "Timeout")
-        frappe.throw("Customer site unreachable (timeout)")
+        frappe.throw(_("Customer site unreachable (timeout)"))
     except requests.ConnectionError as e:
         _log_login_attempt(
             connection, ticket, "Failed", "Connection error: %s" % str(e)[:100]
@@ -224,7 +224,11 @@ def _log_login_attempt(connection, ticket, status, error_message, event_type="Lo
 @frappe.whitelist()
 @agent_manager_only
 def get_remote_audit_log(
-    connection, action_type=None, tool_name=None, status=None, limit=100
+    connection: str,
+    action_type: str | None = None,
+    tool_name: str | None = None,
+    status: str | None = None,
+    limit: int = 100,
 ):
     """Return audit log entries for a connection.
 
@@ -262,7 +266,7 @@ def get_remote_audit_log(
 
 
 @frappe.whitelist()
-def view_connection_credentials(connection):
+def view_connection_credentials(connection: str):
     """Return decrypted credentials + ready-to-paste client configs.
 
     System Manager only. Every access is audit-logged.
@@ -276,7 +280,7 @@ def view_connection_credentials(connection):
             event_type="Credential View",
         )
         frappe.throw(
-            "Only System Managers can view credentials", frappe.PermissionError
+            _("Only System Managers can view credentials"), frappe.PermissionError
         )
 
     from frappe.utils.password import get_decrypted_password
@@ -292,7 +296,7 @@ def view_connection_credentials(connection):
             "No API key on connection",
             event_type="Credential View",
         )
-        frappe.throw("No API key set on this connection")
+        frappe.throw(_("No API key set on this connection"))
 
     api_secret = get_decrypted_password(
         "HDS Support Connection", connection, "api_secret", raise_exception=False
@@ -305,7 +309,7 @@ def view_connection_credentials(connection):
             "No API secret on connection",
             event_type="Credential View",
         )
-        frappe.throw("No API secret set on this connection")
+        frappe.throw(_("No API secret set on this connection"))
 
     # Build a Claude Desktop config snippet
     mcp_url = f"{conn.site_url}{conn.client_method('mcp.handler.handle')}"
@@ -349,7 +353,7 @@ def view_connection_credentials(connection):
 
 @frappe.whitelist()
 @agent_only
-def get_action_request_detail(action_request):
+def get_action_request_detail(action_request: str):
     """Get full action request details including proposed actions."""
     doc = frappe.get_doc("HDS Support Action Request", str(action_request))
     return doc.as_dict()
@@ -357,7 +361,11 @@ def get_action_request_detail(action_request):
 
 @frappe.whitelist()
 @agent_manager_only
-def approve_and_execute(action_request, approved_indices=None, execute=True):
+def approve_and_execute(
+    action_request: str,
+    approved_indices: str | list | None = None,
+    execute: bool = True,
+):
     """Approve actions and optionally execute them.
 
     Args:
@@ -387,7 +395,7 @@ def approve_and_execute(action_request, approved_indices=None, execute=True):
 
 @frappe.whitelist()
 @agent_manager_only
-def reject_action_request(action_request):
+def reject_action_request(action_request: str):
     """Reject all actions in an action request."""
     from helpdesk.approval import reject_actions
 
@@ -400,12 +408,12 @@ def _call_client(conn, connection_name, path: str, payload: dict | None = None) 
     from frappe.utils.password import get_decrypted_password
 
     if not conn.api_key:
-        frappe.throw("API Key is missing on this connection.")
+        frappe.throw(_("API Key is missing on this connection."))
     api_secret = get_decrypted_password(
         "HDS Support Connection", connection_name, "api_secret", raise_exception=False
     )
     if not api_secret:
-        frappe.throw("API Secret is missing on this connection.")
+        frappe.throw(_("API Secret is missing on this connection."))
 
     url = f"{conn.site_url}{path}"
     try:
@@ -416,17 +424,24 @@ def _call_client(conn, connection_name, path: str, payload: dict | None = None) 
             timeout=30,
         )
     except requests.Timeout:
-        frappe.throw(f"Customer site unreachable (timeout): {conn.site_url}")
+        frappe.throw(
+            _("Customer site unreachable (timeout): {0}").format(conn.site_url)
+        )
     except requests.ConnectionError as e:
-        frappe.throw(f"Cannot connect to {conn.site_url}: {str(e)[:150]}")
+        frappe.throw(
+            _("Cannot connect to {0}: {1}").format(conn.site_url, str(e)[:150])
+        )
 
     if response.status_code == 401:
         frappe.throw(
-            f"Authentication failed on {conn.site_url}. "
-            "Verify API Key/Secret belong to support@quarkcs.com on the customer site."
+            _(
+                "Authentication failed on {0}. Verify API Key/Secret belong to support@quarkcs.com on the customer site."
+            ).format(conn.site_url)
         )
     if response.status_code != 200:
-        frappe.throw(f"Customer site refused request: {response.text[:400]}")
+        frappe.throw(
+            _("Customer site refused request: {0}").format(response.text[:400])
+        )
     return response.json().get("message", {})
 
 
@@ -453,7 +468,7 @@ def register_client(connection: str):
         _log_login_attempt(
             connection, None, "Failed", "Site URL missing", event_type="Register"
         )
-        frappe.throw("Site URL is required on the connection")
+        frappe.throw(_("Site URL is required on the connection"))
 
     try:
         result = _call_client(
@@ -472,7 +487,6 @@ def register_client(connection: str):
     conn.mcp_client_installed = 1
     conn.last_token_update = frappe.utils.now_datetime()
     conn.save(ignore_permissions=True)
-    frappe.db.commit()
 
     _log_login_attempt(connection, None, "Success", "", event_type="Register")
 
@@ -501,7 +515,7 @@ def rotate_credentials(connection: str):
             "Site URL missing",
             event_type="Rotate Credentials",
         )
-        frappe.throw("Site URL is required")
+        frappe.throw(_("Site URL is required"))
 
     new_api_key = frappe.generate_hash(length=15)
     new_api_secret = frappe.generate_hash(length=15)
@@ -525,7 +539,7 @@ def rotate_credentials(connection: str):
     conn.api_secret = new_api_secret
     conn.last_token_update = frappe.utils.now_datetime()
     conn.save(ignore_permissions=True)
-    frappe.db.commit()
+    frappe.db.commit()  # the customer site already switched credentials; losing them would lock us out - nosemgrep
 
     _log_login_attempt(connection, None, "Success", "", event_type="Rotate Credentials")
 
@@ -546,7 +560,7 @@ def deregister_client(connection: str):
         _log_login_attempt(
             connection, None, "Failed", "Site URL missing", event_type="Deregister"
         )
-        frappe.throw("Site URL is required")
+        frappe.throw(_("Site URL is required"))
 
     try:
         _call_client(
@@ -563,7 +577,6 @@ def deregister_client(connection: str):
 
     conn.connection_status = "Disconnected"
     conn.save(ignore_permissions=True)
-    frappe.db.commit()
 
     _log_login_attempt(connection, None, "Success", "", event_type="Deregister")
 

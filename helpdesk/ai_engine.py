@@ -7,6 +7,7 @@ import json
 
 import anthropic
 import frappe
+from frappe import _
 
 # Default model constants (can be overridden in HDS Hub Settings)
 HAIKU_MODEL = "claude-haiku-4-5-20251001"
@@ -132,7 +133,7 @@ def get_provider_config(layer="triage"):
         api_key = frappe.conf.get("anthropic_api_key")
 
     if not api_key:
-        frappe.throw("AI API key not configured. Go to HDS Hub Settings to set it.")
+        frappe.throw(_("AI API key not configured. Go to HDS Hub Settings to set it."))
     if provider != "Anthropic" and not base_url:
         frappe.throw(
             "Base URL is required for %s providers. Go to HDS Hub Settings." % provider
@@ -153,8 +154,10 @@ def get_client(layer="investigation"):
 
     if provider == "OpenAI Compatible":
         frappe.throw(
-            "Investigation sessions need an Anthropic or Anthropic-Compatible "
-            "provider. OpenAI-Compatible providers currently support triage only."
+            _(
+                "Investigation sessions need an Anthropic or Anthropic-Compatible "
+                "provider. OpenAI-Compatible providers currently support triage only."
+            )
         )
 
     if base_url:

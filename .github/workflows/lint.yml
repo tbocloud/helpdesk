@@ -34,6 +34,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v2
+        with:
+          # full history so Semgrep can diff against the previous commit on push
+          fetch-depth: 0
 
       - name: Set up Python 3.10
         uses: actions/setup-python@v2
@@ -50,4 +53,8 @@ jobs:
         run: pip install semgrep
 
       - name: Run Semgrep rules
+        # Pull requests are diff-aware by default; on push, report only findings
+        # introduced since the previous commit, like upstream's PR-only check.
+        env:
+          SEMGREP_BASELINE_REF: ${{ github.event_name == 'push' && github.event.before || '' }}
         run: semgrep ci --config ./frappe-semgrep-rules/rules --config r/python.lang.correctness

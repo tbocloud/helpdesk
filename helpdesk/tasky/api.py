@@ -22,6 +22,13 @@ def _resolve_project(project, ptype="read"):
     return name
 
 
+def _task_dict(doc):
+    """as_dict() leaves out `_assign`, which the frontend needs for assignees."""
+    data = doc.as_dict()
+    data["_assign"] = frappe.db.get_value("Task", doc.name, "_assign")
+    return data
+
+
 def _format_task(task):
     """Normalize a Task dict for frontend consumption."""
     assign_raw = task.pop("_assign", None) or ""
@@ -46,7 +53,7 @@ def _format_task(task):
 
 
 @frappe.whitelist()
-def complete_task(task, hours_worked=0, notes=""):
+def complete_task(task: str, hours_worked: float | str = 0, notes: str = ""):
     """Complete a task with optional timesheet entry."""
     doc = frappe.get_doc("Task", str(task))
     doc.status = "Completed"
@@ -88,12 +95,10 @@ def complete_task(task, hours_worked=0, notes=""):
                     title=f"Timesheet submit failed for {ts.name}",
                     message=frappe.get_traceback(),
                 )
-            frappe.db.commit()
         except Exception:
             frappe.log_error(title="complete_task Timesheet Error")
 
-    frappe.db.commit()
-    return _format_task(doc.as_dict())
+    return _format_task(_task_dict(doc))
 
 
 def _compute_due_date(project_start, phase_order, task_sort_order):
@@ -117,11 +122,11 @@ def _compute_due_date(project_start, phase_order, task_sort_order):
 
 @frappe.whitelist()
 def create_project(
-    project_name,
-    expected_start_date=None,
-    expected_end_date=None,
-    members="[]",
-    customer=None,
+    project_name: str,
+    expected_start_date: str | None = None,
+    expected_end_date: str | None = None,
+    members: str | list = "[]",
+    customer: str | None = None,
 ):
     """Create a new ERPNext Project with optional team members."""
     import json
@@ -157,7 +162,6 @@ def create_project(
             "users", {"user": frappe.session.user, "custom_role": MANAGER_PROJECT_ROLE}
         )
     doc.insert()
-    frappe.db.commit()
     return {
         "name": doc.name,
         "project_name": doc.project_name,
@@ -167,7 +171,7 @@ def create_project(
 
 
 @frappe.whitelist()
-def generate_checklist(project, template):
+def generate_checklist(project: str, template: str):
     """Clone template tasks into ERPNext Project + Tasks."""
     project = _resolve_project(str(project), "write")
     template_name = str(template)
@@ -248,7 +252,6 @@ def generate_checklist(project, template):
         task_doc.insert()
         _assign_user(task_doc, pick_user(ttask.category))
 
-    frappe.db.commit()
     return {"tasks_created": len(template_doc.tasks)}
 
 
@@ -275,15 +278,15 @@ def _assign_user(task_doc, user):
 
 @frappe.whitelist()
 def add_task(
-    project,
-    task_name,
-    phase="",
-    category="Functional",
-    priority="Medium",
-    estimated_hours=0,
-    assigned_to="",
-    due_date=None,
-    description="",
+    project: str,
+    task_name: str,
+    phase: str = "",
+    category: str = "Functional",
+    priority: str = "Medium",
+    estimated_hours: float | str = 0,
+    assigned_to: str = "",
+    due_date: str | None = None,
+    description: str = "",
 ):
     """Add a single task to a project, optionally assigned to one of its members."""
     project = _resolve_project(str(project), "write")
@@ -313,12 +316,15 @@ def add_task(
     doc.insert()
     _assign_user(doc, assigned_to)
     doc.reload()
-    frappe.db.commit()
-    return _format_task(doc.as_dict())
+    return _format_task(_task_dict(doc))
 
 
 @frappe.whitelist()
-def get_my_tasks(project=None, status=None, limit=50):
+def get_my_tasks(
+    project: str | None = None,
+    status: str | None = None,
+    limit: int = 50,
+):
     """Get tasks assigned to current user."""
     user = frappe.session.user
 
@@ -360,24 +366,23 @@ def get_my_tasks(project=None, status=None, limit=50):
 
 
 @frappe.whitelist()
-def get_task_detail(task):
+def get_task_detail(task: str):
     """Get a single task with all fields."""
     doc = frappe.get_doc("Task", str(task))
     doc.check_permission("read")
-    return _format_task(doc.as_dict())
+    return _format_task(_task_dict(doc))
 
 
 @frappe.whitelist()
-def update_task_status(task, status):
+def update_task_status(task: str, status: str):
     """Update a task's status."""
     frappe.has_permission("Task", "write", str(task), throw=True)
     frappe.db.set_value("Task", str(task), "status", str(status))
-    frappe.db.commit()
     return {"status": str(status)}
 
 
 @frappe.whitelist()
-def get_project_dashboard(project):
+def get_project_dashboard(project: str):
     """Get aggregate stats and phase data for the PM dashboard.
 
     Built from the tasks the user can see, so members get stats for their own
@@ -463,7 +468,7 @@ def get_project_dashboard(project):
 
 
 @frappe.whitelist()
-def get_phase_tasks(project, phase):
+def get_phase_tasks(project: str, phase: str):
     """Get all tasks in a phase for the given project."""
     project = _resolve_project(str(project))
     phase = str(phase)
@@ -487,7 +492,7 @@ def get_phase_tasks(project, phase):
 
 
 @frappe.whitelist()
-def get_kanban_tasks(project):
+def get_kanban_tasks(project: str):
     """Get tasks grouped by status for kanban board."""
     project = _resolve_project(str(project))
     tasks = frappe.get_list(
@@ -534,7 +539,12 @@ def get_templates():
 
 
 @frappe.whitelist()
-def create_template(template_name, industry="", description="", tasks="[]"):
+def create_template(
+    template_name: str,
+    industry: str = "",
+    description: str = "",
+    tasks: str | list = "[]",
+):
     """Create a new HD Task Template with tasks."""
     import json
 
@@ -565,12 +575,11 @@ def create_template(template_name, industry="", description="", tasks="[]"):
             },
         )
     doc.insert()
-    frappe.db.commit()
     return {"name": doc.name, "template_name": doc.template_name}
 
 
 @frappe.whitelist()
-def get_template(template):
+def get_template(template: str):
     """Get a single template with all tasks."""
     doc = frappe.get_doc("HD Task Template", str(template))
     doc.check_permission("read")
@@ -594,7 +603,13 @@ def get_template(template):
 
 
 @frappe.whitelist()
-def update_template(template, template_name, industry="", description="", tasks="[]"):
+def update_template(
+    template: str,
+    template_name: str,
+    industry: str = "",
+    description: str = "",
+    tasks: str | list = "[]",
+):
     """Update an existing HD Task Template."""
     import json
 
@@ -616,12 +631,11 @@ def update_template(template, template_name, industry="", description="", tasks=
             },
         )
     doc.save()
-    frappe.db.commit()
     return {"name": doc.name, "template_name": doc.template_name}
 
 
 @frappe.whitelist()
-def get_project_detail(project):
+def get_project_detail(project: str):
     """Get ERPNext project details."""
     project = _resolve_project(str(project))
     doc = frappe.get_doc("Project", project)
@@ -678,16 +692,15 @@ def get_projects():
 
 
 @frappe.whitelist()
-def start_timer(task):
+def start_timer(task: str):
     """Start the timer on a task."""
     frappe.has_permission("Task", "write", str(task), throw=True)
     frappe.db.set_value("Task", str(task), "custom_timer_start", frappe.utils.now())
-    frappe.db.commit()
     return {"ok": 1}
 
 
 @frappe.whitelist()
-def stop_timer(task):
+def stop_timer(task: str):
     """Stop the timer and persist elapsed."""
     task_id = str(task)
     frappe.has_permission("Task", "write", task_id, throw=True)
@@ -709,12 +722,11 @@ def stop_timer(task):
     frappe.db.set_value(
         "Task", task_id, "custom_timer_elapsed", paused + round(elapsed, 2)
     )
-    frappe.db.commit()
     return {"elapsed": round(elapsed, 2)}
 
 
 @frappe.whitelist()
-def move_task(task, new_status):
+def move_task(task: str, new_status: str):
     """Move a task column — update timer, status, elapsed. No doc.save() to prevent deadlock."""
     task_id = str(task)
     frappe.has_permission("Task", "write", task_id, throw=True)
@@ -754,12 +766,11 @@ def move_task(task, new_status):
         frappe.db.set_value("Task", task_id, "custom_timer_start", frappe.utils.now())
 
     frappe.db.set_value("Task", task_id, "status", new_status)
-    frappe.db.commit()
     return {"status": new_status, "elapsed": round(elapsed_this_move, 2)}
 
 
 @frappe.whitelist()
-def get_timer(task):
+def get_timer(task: str):
     """Get current timer state for a task."""
     doc = frappe.get_doc("Task", str(task))
     doc.check_permission("read")
@@ -775,7 +786,7 @@ def get_timer(task):
 
 
 @frappe.whitelist()
-def get_my_timesheets(limit=20):
+def get_my_timesheets(limit: int = 20):
     """List my timesheets with project info."""
     timesheets = frappe.get_all(
         "Timesheet",
@@ -805,7 +816,7 @@ def get_my_timesheets(limit=20):
 
 
 @frappe.whitelist()
-def get_project_tasks(project):
+def get_project_tasks(project: str):
     """Get all active tasks in a project for dropdown."""
     project = _resolve_project(str(project))
     return frappe.get_list(
@@ -817,7 +828,13 @@ def get_project_tasks(project):
 
 
 @frappe.whitelist()
-def create_timesheet(title, project=None, task=None, hours=0, notes=""):
+def create_timesheet(
+    title: str,
+    project: str | None = None,
+    task: str | None = None,
+    hours: float | str = 0,
+    notes: str = "",
+):
     """Manually create a timesheet."""
     if task:
         frappe.has_permission("Task", "read", task, throw=True)
@@ -850,7 +867,6 @@ def create_timesheet(title, project=None, task=None, hours=0, notes=""):
             title=f"Timesheet submit failed for {ts.name}",
             message=frappe.get_traceback(),
         )
-    frappe.db.commit()
     return {
         "name": ts.name,
         "title": title,

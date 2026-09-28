@@ -80,7 +80,7 @@ def _get_data(filters):
 
     where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
 
-    rows = frappe.db.sql(
+    rows = frappe.db.sql(  # conditions are fixed strings; values are bound parameters - nosemgrep
         f"""
 		SELECT
 			COALESCE(customer_name, 'Unknown') as customer_name,
