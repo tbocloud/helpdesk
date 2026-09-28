@@ -24,7 +24,9 @@ MANAGER_PROJECT_ROLE = "Project Manager"
 
 def is_tasky_admin(user: str | None = None) -> bool:
     user = user or frappe.session.user
-    return user == "Administrator" or bool(set(ADMIN_ROLES) & set(frappe.get_roles(user)))
+    return user == "Administrator" or bool(
+        set(ADMIN_ROLES) & set(frappe.get_roles(user))
+    )
 
 
 def is_project_manager(user: str | None = None) -> bool:
@@ -38,7 +40,11 @@ def get_managed_projects(user: str) -> list[str]:
     owned = frappe.get_all("Project", filters={"owner": user}, pluck="name")
     listed = frappe.get_all(
         "Project User",
-        filters={"parenttype": "Project", "user": user, "custom_role": MANAGER_PROJECT_ROLE},
+        filters={
+            "parenttype": "Project",
+            "user": user,
+            "custom_role": MANAGER_PROJECT_ROLE,
+        },
         pluck="parent",
     )
     return list(set(owned) | set(listed))
@@ -53,7 +59,9 @@ def can_manage_project(project: str | None, user: str | None = None) -> bool:
 
 def is_project_member(project: str, user: str) -> bool:
     return bool(
-        frappe.db.exists("Project User", {"parenttype": "Project", "parent": project, "user": user})
+        frappe.db.exists(
+            "Project User", {"parenttype": "Project", "parent": project, "user": user}
+        )
     )
 
 
@@ -114,18 +122,24 @@ def timesheet_query(user: str | None = None) -> str | None:
 # --- has_permission ---
 
 
-def project_has_permission(doc, ptype: str | None = None, user: str | None = None) -> bool | None:
+def project_has_permission(
+    doc, ptype: str | None = None, user: str | None = None
+) -> bool | None:
     user = user or frappe.session.user
     if ptype == "create" or is_tasky_admin(user):
         return None
     if can_manage_project(doc.name, user):
         return None
-    if ptype in ("read", "print", "email", "report") and is_project_member(doc.name, user):
+    if ptype in ("read", "print", "email", "report") and is_project_member(
+        doc.name, user
+    ):
         return None
     return False
 
 
-def task_has_permission(doc, ptype: str | None = None, user: str | None = None) -> bool | None:
+def task_has_permission(
+    doc, ptype: str | None = None, user: str | None = None
+) -> bool | None:
     user = user or frappe.session.user
     if is_tasky_admin(user) or can_manage_project(doc.project, user):
         return None
@@ -134,11 +148,15 @@ def task_has_permission(doc, ptype: str | None = None, user: str | None = None) 
     return None if is_assigned(doc, user) else False
 
 
-def timesheet_has_permission(doc, ptype: str | None = None, user: str | None = None) -> bool | None:
+def timesheet_has_permission(
+    doc, ptype: str | None = None, user: str | None = None
+) -> bool | None:
     user = user or frappe.session.user
     if ptype == "create" or is_tasky_admin(user) or doc.owner == user:
         return None
     managed = set(get_managed_projects(user))
-    if ptype == "read" and any(log.project in managed for log in doc.get("time_logs", [])):
+    if ptype == "read" and any(
+        log.project in managed for log in doc.get("time_logs", [])
+    ):
         return None
     return False

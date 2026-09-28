@@ -2,11 +2,24 @@
   <div class="flex h-full flex-col">
     <LayoutHeader>
       <template #left-header>
-        <div class="text-lg-medium text-ink-gray-9">{{ __("Content Calendar") }}</div>
+        <div class="text-lg-medium text-ink-gray-9">
+          {{ __("Content Calendar") }}
+        </div>
       </template>
       <template #right-header>
+        <Button
+          variant="ghost"
+          :label="__('Delivery report')"
+          link="/app/query-report/Content Delivery"
+        >
+          <template #prefix
+            ><LucideChartColumn class="size-4" aria-hidden="true"
+          /></template>
+        </Button>
         <Button variant="solid" :label="__('New post')" @click="openNew()">
-          <template #prefix><LucidePlus class="size-4" aria-hidden="true" /></template>
+          <template #prefix
+            ><LucidePlus class="size-4" aria-hidden="true"
+          /></template>
         </Button>
       </template>
     </LayoutHeader>
@@ -45,7 +58,11 @@
         class="hidden items-center gap-3 text-xs text-ink-gray-5 lg:flex"
         aria-hidden="true"
       >
-        <span v-for="s in legend" :key="s.label" class="flex items-center gap-1.5">
+        <span
+          v-for="s in legend"
+          :key="s.label"
+          class="flex items-center gap-1.5"
+        >
           <span class="size-2 rounded-sm" :class="s.swatch" />{{ s.label }}
         </span>
       </div>
@@ -76,7 +93,9 @@
         :aria-label="__('Ideas without a date')"
       >
         <div class="flex items-center justify-between px-4 pb-2 pt-4">
-          <div class="text-2xs font-semibold uppercase tracking-[0.06em] text-ink-gray-5">
+          <div
+            class="text-2xs font-semibold uppercase tracking-[0.06em] text-ink-gray-5"
+          >
             {{ __("Ideas") }}
           </div>
           <span class="font-mono text-xs tabular-nums text-ink-gray-5">{{
@@ -88,7 +107,11 @@
             v-if="!ideas.loading && !ideas.data?.length"
             class="px-2 py-6 text-p-sm text-ink-gray-5"
           >
-            {{ __("No undated ideas. Jot one down with New post — no date needed.") }}
+            {{
+              __(
+                "No undated ideas. Jot one down with New post — no date needed."
+              )
+            }}
           </p>
           <button
             v-for="idea in ideas.data ?? []"
@@ -97,7 +120,9 @@
             class="flex w-full flex-col gap-0.5 rounded-lg px-2 py-2 text-left hover:bg-surface-gray-2 focus-visible:bg-surface-gray-2"
             @click="openPost(idea.name)"
           >
-            <span class="truncate text-sm text-ink-gray-9">{{ idea.title }}</span>
+            <span class="truncate text-sm text-ink-gray-9">{{
+              idea.title
+            }}</span>
             <span class="truncate text-xs text-ink-gray-5"
               >{{ idea.channel }} · {{ idea.customer }}</span
             >
@@ -106,7 +131,11 @@
       </aside>
     </div>
 
-    <PostDialog v-model:open="dialogOpen" :post="selectedPost" @saved="refresh" />
+    <PostDialog
+      v-model:open="dialogOpen"
+      :post="selectedPost"
+      @saved="refresh"
+    />
   </div>
 </template>
 
@@ -124,6 +153,7 @@ import {
   toast,
 } from "frappe-ui";
 import { computed, reactive, ref, watch } from "vue";
+import LucideChartColumn from "~icons/lucide/chart-column";
 import LucidePlus from "~icons/lucide/plus";
 import { CHANNELS, STATUSES, stageColor } from "./constants";
 import PostDialog from "./components/PostDialog.vue";
@@ -155,7 +185,9 @@ const legend = [
 
 const filters = reactive({ customer: "", channel: "", status: "" });
 const range = ref<{ start: string; end: string } | null>(null);
-const hasFilters = computed(() => !!(filters.customer || filters.channel || filters.status));
+const hasFilters = computed(
+  () => !!(filters.customer || filters.channel || filters.status)
+);
 
 function baseFilters() {
   const f: Record<string, unknown> = {};
@@ -209,7 +241,13 @@ const events = computed(() =>
   })
 );
 
-function onRangeChange({ startDate, endDate }: { startDate: string; endDate: string }) {
+function onRangeChange({
+  startDate,
+  endDate,
+}: {
+  startDate: string;
+  endDate: string;
+}) {
   range.value = {
     start: dayjs(startDate).startOf("day").format("YYYY-MM-DD HH:mm:ss"),
     end: dayjs(endDate).endOf("day").format("YYYY-MM-DD HH:mm:ss"),
@@ -229,10 +267,14 @@ function clearFilters() {
 }
 
 // Dragging a post to another day or time reschedules it; roll back if the server refuses
-async function onReschedule(event: { id?: string | number; fromDate?: string; fromTime?: string }) {
-  const publishOn = dayjs(`${event.fromDate} ${event.fromTime || "10:00"}`).format(
-    "YYYY-MM-DD HH:mm:ss"
-  );
+async function onReschedule(event: {
+  id?: string | number;
+  fromDate?: string;
+  fromTime?: string;
+}) {
+  const publishOn = dayjs(
+    `${event.fromDate} ${event.fromTime || "10:00"}`
+  ).format("YYYY-MM-DD HH:mm:ss");
   try {
     await call("frappe.client.set_value", {
       doctype: "HD Content Post",
@@ -240,7 +282,9 @@ async function onReschedule(event: { id?: string | number; fromDate?: string; fr
       fieldname: "publish_on",
       value: publishOn,
     });
-    toast.success(__("Rescheduled to {0}", dayjs(publishOn).format("D MMM, HH:mm")));
+    toast.success(
+      __("Rescheduled to {0}", dayjs(publishOn).format("D MMM, HH:mm"))
+    );
   } catch (e: any) {
     toast.error(e?.messages?.[0] || __("Couldn't reschedule this post"));
   } finally {
@@ -264,6 +308,10 @@ function openNew(publishOn?: string) {
 }
 
 function onCellClick({ date, time }: { date: Date | string; time: string }) {
-  openNew(dayjs(`${dayjs(date).format("YYYY-MM-DD")} ${time || "10:00"}`).format("YYYY-MM-DD HH:mm"));
+  openNew(
+    dayjs(`${dayjs(date).format("YYYY-MM-DD")} ${time || "10:00"}`).format(
+      "YYYY-MM-DD HH:mm"
+    )
+  );
 }
 </script>

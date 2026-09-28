@@ -16,6 +16,7 @@ from phonenumbers import NumberParseException
 from phonenumbers import PhoneNumberFormat as PNF
 from pypika.functions import Replace
 
+
 def check_permissions(doctype, parent, doc=None):
     user = frappe.session.user
 
@@ -30,9 +31,11 @@ def check_permissions(doctype, parent, doc=None):
             _("Insufficient Permission for {0}").format(doctype), frappe.PermissionError
         )
 
+
 def is_admin(user: str = None) -> bool:
     user = user or frappe.session.user
     return user == "Administrator"
+
 
 def is_agent(user: str | None = None) -> bool:
     user = user or frappe.session.user
@@ -43,9 +46,11 @@ def is_agent(user: str | None = None) -> bool:
         or bool(frappe.db.exists("HD Agent", {"name": user}))
     )
 
+
 def get_agent_name(user: str = None) -> str | None:
     user = user or frappe.session.user
     return user if frappe.db.exists("HD Agent", user) else None
+
 
 def publish_event(
     event: str,
@@ -59,11 +64,14 @@ def publish_event(
         event, message=data, room=room, after_commit=True, user=user
     )
 
+
 def get_doc_room(doctype: str, name: str) -> str:
     return f"open_doc:{doctype}/{name}"
 
+
 def capture_event(event: str):
     return _capture(event, "helpdesk")
+
 
 def get_customers(user: str = "", contact: str = "", get_roles=False):
     user = user or frappe.session.user
@@ -89,6 +97,7 @@ def get_customers(user: str = "", contact: str = "", get_roles=False):
 
     return tuple(customers)
 
+
 def extract_mentions(html):
     if not html:
         return []
@@ -100,11 +109,13 @@ def extract_mentions(html):
         )
     return mentions
 
+
 def alphanumeric_to_int(s: str) -> int | None:
     s = re.search(r"\d+", s)
     if not s:
         return
     return int(s.group(0))
+
 
 def get_context(d: Document) -> dict:
     utils = get_safe_globals().get("frappe").get("utils")
@@ -112,6 +123,7 @@ def get_context(d: Document) -> dict:
         "doc": d.as_dict(),
         "frappe": frappe._dict(utils=utils),
     }
+
 
 def agent_only(fn):
     @functools.wraps(fn)
@@ -123,7 +135,9 @@ def agent_only(fn):
                 exc=frappe.PermissionError,
             )
         return fn(*args, **kwargs)
+
     return wrapper
+
 
 def agent_manager_only(fn):
     @functools.wraps(fn)
@@ -137,7 +151,9 @@ def agent_manager_only(fn):
                 exc=frappe.PermissionError,
             )
         return fn(*args, **kwargs)
+
     return wrapper
+
 
 def get_agents_team():
     Team = frappe.qb.DocType("HD Team")
@@ -154,6 +170,7 @@ def get_agents_team():
     )
     return teams
 
+
 contact_default_columns = [
     {"label": "Name", "type": "Data", "key": "full_name", "width": "17rem"},
     {"label": "Email", "type": "Data", "key": "email_id", "width": "17rem"},
@@ -165,8 +182,20 @@ contact_default_rows = ["name", "email_id", "mobile_no", "image", "creation"]
 
 call_log_default_columns = [
     {"label": "Name", "type": "Data", "key": "name", "width": "9rem"},
-    {"label": "Caller", "type": "Link", "key": "caller", "options": "User", "width": "12rem"},
-    {"label": "Receiver", "type": "Link", "key": "receiver", "options": "User", "width": "12rem"},
+    {
+        "label": "Caller",
+        "type": "Link",
+        "key": "caller",
+        "options": "User",
+        "width": "12rem",
+    },
+    {
+        "label": "Receiver",
+        "type": "Link",
+        "key": "receiver",
+        "options": "User",
+        "width": "12rem",
+    },
     {"label": "Type", "type": "Select", "key": "type", "width": "9rem"},
     {"label": "Medium", "type": "Select", "key": "telephony_medium", "width": "9rem"},
     {"label": "Status", "type": "Select", "key": "status", "width": "9rem"},
@@ -175,6 +204,7 @@ call_log_default_columns = [
     {"label": "To (number)", "type": "Data", "key": "to", "width": "9rem"},
     {"label": "Created On", "type": "Datetime", "key": "creation", "width": "8rem"},
 ]
+
 
 def seconds_to_duration(seconds):
     if not seconds:
@@ -199,6 +229,7 @@ def seconds_to_duration(seconds):
     else:
         return "0s"
 
+
 def parse_phone_number(phone_number, default_country="IN"):
     try:
         number = phonenumbers.parse(phone_number, default_country)
@@ -220,6 +251,7 @@ def parse_phone_number(phone_number, default_country="IN"):
     except NumberParseException as e:
         return {"success": False, "error": str(e)}
 
+
 def get_contact(phone_number):
     if not phone_number:
         return {"mobile_no": phone_number}
@@ -233,8 +265,11 @@ def get_contact(phone_number):
     )
     Contact = frappe.qb.DocType("Contact")
     normalized_phone = Replace(
-        Replace(Replace(Replace(Replace(Contact.phone, " ", ""), "-", ""), "(", ""), ")", ""),
-        "+", "",
+        Replace(
+            Replace(Replace(Replace(Contact.phone, " ", ""), "-", ""), "(", ""), ")", ""
+        ),
+        "+",
+        "",
     )
     query = (
         frappe.qb.from_(Contact)
@@ -245,12 +280,14 @@ def get_contact(phone_number):
     contacts = query.run(as_dict=True)
     return contacts[0] if contacts else {"mobile_no": phone_number}
 
+
 def get_contact_by_phone_number(phone_number):
     number = parse_phone_number(phone_number)
     if number.get("is_valid"):
         return get_contact(number.get("national_number"))
     else:
         return get_contact(phone_number)
+
 
 def parse_call_log(call):
     call["show_recording"] = False
@@ -259,8 +296,11 @@ def parse_call_log(call):
         call["activity_type"] = "incoming_call"
         contact = get_contact_by_phone_number(call.get("from"))
         receiver = (
-            frappe.db.get_values("User", call.get("receiver"), ["full_name", "user_image"])[0]
-            if call.get("receiver") else [None, None]
+            frappe.db.get_values(
+                "User", call.get("receiver"), ["full_name", "user_image"]
+            )[0]
+            if call.get("receiver")
+            else [None, None]
         )
         call["_caller"] = {
             "label": contact.get("full_name", "Unknown"),
@@ -274,8 +314,11 @@ def parse_call_log(call):
         call["activity_type"] = "outgoing_call"
         contact = get_contact_by_phone_number(call.get("to"))
         caller = (
-            frappe.db.get_values("User", call.get("caller"), ["full_name", "user_image"])[0]
-            if call.get("caller") else [None, None]
+            frappe.db.get_values(
+                "User", call.get("caller"), ["full_name", "user_image"]
+            )[0]
+            if call.get("caller")
+            else [None, None]
         )
         call["_caller"] = {
             "label": caller[0] or "Unknown",
@@ -287,8 +330,10 @@ def parse_call_log(call):
         }
     return call
 
+
 def parse_call_logs(calls):
     return [parse_call_log(call) for call in calls] if calls else []
+
 
 def is_json_valid(json_string):
     try:
@@ -297,8 +342,10 @@ def is_json_valid(json_string):
     except json.JSONDecodeError:
         return False
 
+
 def is_frappe_version(version: str, above: bool = False, below: bool = False):
     from frappe.pulse.utils import get_frappe_version
+
     current_version = get_frappe_version()
     major_version = int(current_version.split(".")[0])
     target_version = int(version.split(".")[0])
@@ -307,6 +354,7 @@ def is_frappe_version(version: str, above: bool = False, below: bool = False):
     if below:
         return major_version < target_version
     return major_version == target_version
+
 
 def format_time_difference(dt, context="ago"):
     if not dt:
@@ -330,6 +378,7 @@ def format_time_difference(dt, context="ago"):
     else:
         return f"{int(total_seconds // 86400)}d"
 
+
 def get_country_from_timezone(time_zone: str):
     country = frappe.db.get_value(
         "Country", {"time_zones": ["like", f"%{time_zone}%"]}, "name"
@@ -338,6 +387,7 @@ def get_country_from_timezone(time_zone: str):
 
 
 # === QCS Support Hub helpers ===
+
 
 def normalize_site_url(raw: str | None) -> str | None:
     if not raw:

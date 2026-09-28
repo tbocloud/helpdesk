@@ -50,7 +50,10 @@
           <template #default="{ open }">
             <Button :label="ticket.doc.status" ref="statusRef" variant="solid">
               <template #prefix>
-                <span class="size-1.5 rounded-full bg-current" aria-hidden="true" />
+                <span
+                  class="size-1.5 rounded-full bg-current"
+                  aria-hidden="true"
+                />
               </template>
               <template #suffix>
                 <LucideChevronDown

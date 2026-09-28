@@ -22,7 +22,10 @@
           v-if="tasks.error"
           class="flex flex-col items-center gap-3 py-24 text-center"
         >
-          <LucideCircleAlert class="size-8 text-ink-gray-5" aria-hidden="true" />
+          <LucideCircleAlert
+            class="size-8 text-ink-gray-5"
+            aria-hidden="true"
+          />
           <div class="text-base-medium text-ink-gray-8">
             {{ __("Couldn't load your tasks") }}
           </div>
@@ -125,7 +128,10 @@
               :aria-label="__('Search tasks')"
             >
               <template #prefix>
-                <LucideSearch class="size-4 text-ink-gray-5" aria-hidden="true" />
+                <LucideSearch
+                  class="size-4 text-ink-gray-5"
+                  aria-hidden="true"
+                />
               </template>
             </TextInput>
           </div>
@@ -149,10 +155,16 @@
                 :key="i"
                 class="flex items-center gap-3 border-b border-outline-gray-1 px-4 py-3.5 last:border-b-0"
               >
-                <div class="size-4 animate-pulse rounded-full bg-surface-gray-2" />
+                <div
+                  class="size-4 animate-pulse rounded-full bg-surface-gray-2"
+                />
                 <div class="flex flex-1 flex-col gap-2">
-                  <div class="h-3.5 w-2/5 animate-pulse rounded bg-surface-gray-2" />
-                  <div class="h-3 w-1/4 animate-pulse rounded bg-surface-gray-2" />
+                  <div
+                    class="h-3.5 w-2/5 animate-pulse rounded bg-surface-gray-2"
+                  />
+                  <div
+                    class="h-3 w-1/4 animate-pulse rounded bg-surface-gray-2"
+                  />
                 </div>
               </div>
             </template>
@@ -170,8 +182,12 @@
                   aria-hidden="true"
                 />
               </div>
-              <div class="text-base-medium text-ink-gray-8">{{ emptyState.title }}</div>
-              <p class="max-w-sm text-p-sm text-ink-gray-6">{{ emptyState.message }}</p>
+              <div class="text-base-medium text-ink-gray-8">
+                {{ emptyState.title }}
+              </div>
+              <p class="max-w-sm text-p-sm text-ink-gray-6">
+                {{ emptyState.message }}
+              </p>
               <Button
                 v-if="search || activeFilter !== 'All'"
                 class="mt-2"
@@ -232,7 +248,9 @@
                     </div>
                   </div>
 
-                  <div class="hidden items-center gap-1.5 text-sm text-ink-gray-7 md:flex">
+                  <div
+                    class="hidden items-center gap-1.5 text-sm text-ink-gray-7 md:flex"
+                  >
                     <component
                       :is="priorityIcon(task.priority)"
                       class="size-4 text-ink-gray-6"
@@ -252,7 +270,9 @@
                   <div
                     class="flex items-center justify-end gap-1 text-sm tabular-nums"
                     :class="
-                      isOverdue(task) ? 'font-medium text-ink-gray-9' : 'text-ink-gray-5'
+                      isOverdue(task)
+                        ? 'font-medium text-ink-gray-9'
+                        : 'text-ink-gray-5'
                     "
                   >
                     <LucideAlarmClock
@@ -294,7 +314,10 @@
             class="h-4 animate-pulse rounded bg-surface-gray-2"
           />
         </div>
-        <div v-else-if="taskDetail.error" class="py-2 text-p-sm text-ink-gray-6">
+        <div
+          v-else-if="taskDetail.error"
+          class="py-2 text-p-sm text-ink-gray-6"
+        >
           {{ __("Couldn't load this task.") }}
         </div>
         <div v-else-if="detail" class="flex flex-col gap-5">
@@ -313,7 +336,9 @@
             </div>
           </dl>
           <div>
-            <div class="mb-1 text-xs text-ink-gray-5">{{ __("Description") }}</div>
+            <div class="mb-1 text-xs text-ink-gray-5">
+              {{ __("Description") }}
+            </div>
             <div
               v-if="detail.description"
               class="prose prose-sm max-w-none text-ink-gray-8"
@@ -365,7 +390,14 @@ interface Task {
   description?: string;
 }
 
-type Filter = "All" | "Open" | "Working" | "Pending Review" | "Completed" | "Cancelled" | "Overdue";
+type Filter =
+  | "All"
+  | "Open"
+  | "Working"
+  | "Pending Review"
+  | "Completed"
+  | "Cancelled"
+  | "Overdue";
 
 const route = useRoute();
 const router = useRouter();
@@ -377,7 +409,9 @@ const tasks = createResource({
   transform: (data: Task[]) => data ?? [],
 });
 
-const taskDetail = createResource({ url: "helpdesk.tasky.api.get_task_detail" });
+const taskDetail = createResource({
+  url: "helpdesk.tasky.api.get_task_detail",
+});
 
 const STATUS_META: Record<string, { label: string; icon: Component }> = {
   Open: { label: __("Open"), icon: LucideCircle },
@@ -407,17 +441,22 @@ const tabs: { key: Filter; label: string }[] = [
 const allTasks = computed<Task[]>(() => tasks.data ?? []);
 
 const activeFilter = ref<Filter>(
-  tabs.some((t) => t.key === route.query.status) ? (route.query.status as Filter) : "All"
+  tabs.some((t) => t.key === route.query.status)
+    ? (route.query.status as Filter)
+    : "All"
 );
 const search = ref("");
 
 // keep the filter in the URL so it survives reloads and can be shared
 watch(activeFilter, (status) => {
-  router.replace({ query: { ...route.query, status: status === "All" ? undefined : status } });
+  router.replace({
+    query: { ...route.query, status: status === "All" ? undefined : status },
+  });
 });
 
 function setFilter(filter: Filter) {
-  activeFilter.value = activeFilter.value === filter && filter !== "All" ? "All" : filter;
+  activeFilter.value =
+    activeFilter.value === filter && filter !== "All" ? "All" : filter;
 }
 
 function resetFilters() {
@@ -438,7 +477,11 @@ function isClosed(task: Task) {
 }
 
 function isOverdue(task: Task) {
-  return !!task.due_date && !isClosed(task) && dayjs(task.due_date).isBefore(dayjs(), "day");
+  return (
+    !!task.due_date &&
+    !isClosed(task) &&
+    dayjs(task.due_date).isBefore(dayjs(), "day")
+  );
 }
 
 function dueLabel(task: Task) {
@@ -446,7 +489,10 @@ function dueLabel(task: Task) {
   const due = dayjs(task.due_date);
   if (isClosed(task)) return due.format("D MMM");
   const days = due.startOf("day").diff(dayjs().startOf("day"), "day");
-  if (days < 0) return days === -1 ? __("1 day overdue") : __("{0} days overdue", String(-days));
+  if (days < 0)
+    return days === -1
+      ? __("1 day overdue")
+      : __("{0} days overdue", String(-days));
   if (days === 0) return __("Due today");
   if (days === 1) return __("Due tomorrow");
   if (days < 7) return __("Due {0}", due.format("ddd"));
@@ -465,7 +511,9 @@ function countFor(filter: Filter) {
 
 // overdue first, then by due date; finished work sinks to the bottom
 function sortKey(task: Task) {
-  const due = task.due_date ? dayjs(task.due_date).valueOf() : Number.MAX_SAFE_INTEGER;
+  const due = task.due_date
+    ? dayjs(task.due_date).valueOf()
+    : Number.MAX_SAFE_INTEGER;
   return [isClosed(task) ? 1 : 0, due] as const;
 }
 
@@ -488,13 +536,33 @@ const visibleTasks = computed<Task[]>(() => {
 
 const completed = computed(() => countFor("Completed"));
 const completionPercent = computed(() =>
-  allTasks.value.length ? Math.round((completed.value / allTasks.value.length) * 100) : 0
+  allTasks.value.length
+    ? Math.round((completed.value / allTasks.value.length) * 100)
+    : 0
 );
 
 const stats = computed(() => [
-  { key: "total", label: __("Assigned"), value: allTasks.value.length, icon: LucideListTodo, filter: "All" as Filter },
-  { key: "working", label: __("In progress"), value: countFor("Working"), icon: LucideCircleDot, filter: "Working" as Filter },
-  { key: "overdue", label: __("Overdue"), value: countFor("Overdue"), icon: LucideAlarmClock, filter: "Overdue" as Filter },
+  {
+    key: "total",
+    label: __("Assigned"),
+    value: allTasks.value.length,
+    icon: LucideListTodo,
+    filter: "All" as Filter,
+  },
+  {
+    key: "working",
+    label: __("In progress"),
+    value: countFor("Working"),
+    icon: LucideCircleDot,
+    filter: "Working" as Filter,
+  },
+  {
+    key: "overdue",
+    label: __("Overdue"),
+    value: countFor("Overdue"),
+    icon: LucideAlarmClock,
+    filter: "Overdue" as Filter,
+  },
   {
     key: "completed",
     label: __("Completed"),
@@ -519,13 +587,18 @@ const emptyState = computed(() => {
     return {
       icon: LucideCircleCheck,
       title: __("Nothing here"),
-      message: __("You have no {0} tasks right now.", __(tab?.label ?? "").toLowerCase()),
+      message: __(
+        "You have no {0} tasks right now.",
+        __(tab?.label ?? "").toLowerCase()
+      ),
     };
   }
   return {
     icon: LucideListTodo,
     title: __("No tasks assigned to you yet"),
-    message: __("When a project manager assigns you work, it will show up here."),
+    message: __(
+      "When a project manager assigns you work, it will show up here."
+    ),
   };
 });
 
@@ -544,12 +617,29 @@ const detailRows = computed(() => {
   const d = detail.value;
   if (!d) return [];
   return [
-    { label: __("Status"), value: statusMeta(d.status).label, icon: statusMeta(d.status).icon },
-    { label: __("Priority"), value: d.priority || __("Low"), icon: priorityIcon(d.priority) },
-    { label: __("Project"), value: selectedTask.value?.project_name || d.project || "—" },
+    {
+      label: __("Status"),
+      value: statusMeta(d.status).label,
+      icon: statusMeta(d.status).icon,
+    },
+    {
+      label: __("Priority"),
+      value: d.priority || __("Low"),
+      icon: priorityIcon(d.priority),
+    },
+    {
+      label: __("Project"),
+      value: selectedTask.value?.project_name || d.project || "—",
+    },
     { label: __("Phase"), value: d.phase || "—" },
-    { label: __("Due"), value: d.due_date ? dayjs(d.due_date).format("D MMM YYYY") : "—" },
-    { label: __("Estimate"), value: d.estimated_hours ? __("{0} hrs", String(d.estimated_hours)) : "—" },
+    {
+      label: __("Due"),
+      value: d.due_date ? dayjs(d.due_date).format("D MMM YYYY") : "—",
+    },
+    {
+      label: __("Estimate"),
+      value: d.estimated_hours ? __("{0} hrs", String(d.estimated_hours)) : "—",
+    },
   ];
 });
 
@@ -560,6 +650,9 @@ function openTask(task: Task) {
 
 function openBoard() {
   if (!selectedTask.value?.project) return;
-  router.push({ name: "TaskyKanban", params: { projectId: selectedTask.value.project } });
+  router.push({
+    name: "TaskyKanban",
+    params: { projectId: selectedTask.value.project },
+  });
 }
 </script>

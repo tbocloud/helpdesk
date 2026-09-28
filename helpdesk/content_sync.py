@@ -6,6 +6,8 @@ decision is pulled back onto the post. Like the ticket sync, every call starts
 here; the customer site holds no credentials.
 """
 
+import base64
+
 import frappe
 from frappe import _
 from frappe.utils import get_datetime, now_datetime
@@ -14,6 +16,9 @@ from helpdesk.mcp_client import MCPClient
 from helpdesk.ticket_puller import _unwrap
 
 APPROVAL_DOCTYPE = "Content Approval"
+IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".gif", ".webp")
+MAX_IMAGES = 6
+MAX_IMAGE_BYTES = 8 * 1024 * 1024
 DECISION_TO_STATUS = {"Approved": "Approved", "Changes Requested": "Changes Requested"}
 
 
@@ -42,24 +47,41 @@ def pull_approval_decisions() -> int:
     )
     by_connection: dict[str, dict[str, str]] = {}
     for post in posts:
-        by_connection.setdefault(post.client_connection, {})[post.client_approval_ref] = post.name
+        by_connection.setdefault(post.client_connection, {})[
+            post.client_approval_ref
+        ] = post.name
 
     applied = 0
     for connection, ref_to_post in by_connection.items():
         try:
-            decisions = _unwrap(
-                MCPClient(connection).call_tool(
-                    "get_list",
-                    {
-                        "doctype": APPROVAL_DOCTYPE,
-                        "filters": {"name": ["in", list(ref_to_post)], "status": ["!=", "Pending"]},
-                        "fields": ["name", "status", "client_comment", "decided_by"],
-                        "limit": len(ref_to_post),
-                    },
+            decisions = (
+                _unwrap(
+                    MCPClient(connection).call_tool(
+                        "get_list",
+                        {
+                            "doctype": APPROVAL_DOCTYPE,
+                            "filters": {
+                                "name": ["in", list(ref_to_post)],
+                                "status": ["!=", "Pending"],
+                            },
+                            "fields": [
+                                "name",
+                                "status",
+                                "client_comment",
+                                "decided_by",
+                                "decided_on",
+                            ],
+                            "limit": len(ref_to_post),
+                        },
+                    )
                 )
-            ) or []
+                or []
+            )
         except Exception:  # noqa: BLE001 - one failing site must not stop the sync
-            frappe.log_error(title=f"Content approval pull failed for {connection}", message=frappe.get_traceback())
+            frappe.log_error(
+                title=f"Content approval pull failed for {connection}",
+                message=frappe.get_traceback(),
+            )
             continue
 
         for decision in decisions:
@@ -69,7 +91,10 @@ def pull_approval_decisions() -> int:
                 applied += 1
             except Exception:  # noqa: BLE001 - one bad record must not stop the sync
                 frappe.db.rollback()
-                frappe.log_error(title=f"Applying content decision failed for {decision.get('name')}", message=frappe.get_traceback())
+                frappe.log_error(
+                    title=f"Applying content decision failed for {decision.get('name')}",
+                    message=frappe.get_traceback(),
+                )
     return applied
 
 
@@ -80,17 +105,30 @@ def apply_decision(post_name: str, decision: dict):
     post = frappe.get_doc("HD Content Post", post_name)
     post.status = status
     post.client_feedback = decision.get("client_comment") or post.client_feedback
+    post.client_decided_on = decision.get("decided_on") or now_datetime()
     post.save(ignore_permissions=True)
     verb = _("approved") if status == "Approved" else _("requested changes")
     note = f": {decision['client_comment']}" if decision.get("client_comment") else ""
-    post.add_comment("Info", _("Client {0} in their ERP ({1}){2}").format(verb, decision.get("decided_by") or "", note))
+    post.add_comment(
+        "Info",
+        _("Client {0} in their ERP ({1}){2}").format(
+            verb, decision.get("decided_by") or "", note
+        ),
+    )
 
 
 def push_posts_for_approval() -> int:
     posts = frappe.get_all(
         "HD Content Post",
         filters={"status": "Client Review"},
-        fields=["name", "customer", "client_approval_ref", "client_connection", "sent_for_approval_on", "modified"],
+        fields=[
+            "name",
+            "customer",
+            "client_approval_ref",
+            "client_connection",
+            "sent_for_approval_on",
+            "modified",
+        ],
     )
     pushed = 0
     for post in posts:
@@ -105,15 +143,29 @@ def push_posts_for_approval() -> int:
             pushed += 1
         except Exception:  # noqa: BLE001 - one failing site must not stop the sync
             frappe.db.rollback()
-            frappe.log_error(title=f"Content approval push failed for {post.name}", message=frappe.get_traceback())
+            frappe.log_error(
+                title=f"Content approval push failed for {post.name}",
+                message=frappe.get_traceback(),
+            )
     return pushed
 
 
 def needs_push(post) -> bool:
-    """Never sent, or edited since it was last sent (the client then reviews the new version)."""
+    """Never sent, or edited / given new images since it was last sent."""
     if not post.client_approval_ref:
         return True
-    return bool(post.sent_for_approval_on) and get_datetime(post.modified) > get_datetime(post.sent_for_approval_on)
+    if not post.sent_for_approval_on:
+        return False
+    sent = get_datetime(post.sent_for_approval_on)
+    if get_datetime(post.modified) > sent:
+        return True
+    # attaching an image doesn't touch the post's `modified`
+    latest_image = frappe.db.get_value(
+        "File",
+        {"attached_to_doctype": "HD Content Post", "attached_to_name": post.name},
+        "max(creation)",
+    )
+    return bool(latest_image) and get_datetime(latest_image) > sent
 
 
 def approval_values(post) -> dict:
@@ -142,9 +194,99 @@ def send_for_approval(post, connection: str):
         )
         ref = post.client_approval_ref
     else:
-        ref = _unwrap(mcp.call_tool("create_doc", {"doctype": APPROVAL_DOCTYPE, "values": values}))["name"]
+        ref = _unwrap(
+            mcp.call_tool("create_doc", {"doctype": APPROVAL_DOCTYPE, "values": values})
+        )["name"]
     # update_modified=False keeps `modified` as the content's last edit, which needs_push compares against
     post.db_set(
-        {"client_approval_ref": ref, "client_connection": connection, "sent_for_approval_on": now_datetime()},
+        {
+            "client_approval_ref": ref,
+            "client_connection": connection,
+            "sent_for_approval_on": now_datetime(),
+        },
         update_modified=False,
     )
+    send_images(mcp, post.name, ref)
+
+
+def post_images(post_name: str) -> list:
+    files = frappe.get_all(
+        "File",
+        filters={
+            "attached_to_doctype": "HD Content Post",
+            "attached_to_name": post_name,
+            "is_folder": 0,
+        },
+        fields=["name", "file_name", "file_size"],
+        order_by="creation asc",
+    )
+    images = [
+        f
+        for f in files
+        if (f.file_name or "").lower().endswith(IMAGE_EXTENSIONS)
+        and (f.file_size or 0) <= MAX_IMAGE_BYTES
+    ]
+    return images[:MAX_IMAGES]
+
+
+def send_images(mcp, post_name: str, ref: str):
+    """Attach the post's images to the client's approval; skip ones already there.
+
+    Images help the client decide but are not required, so a failed upload is
+    logged and never blocks the approval itself.
+    """
+    images = post_images(post_name)
+    if not images:
+        return
+    try:
+        existing = (
+            _unwrap(
+                mcp.call_tool(
+                    "get_list",
+                    {
+                        "doctype": "File",
+                        "filters": {
+                            "attached_to_doctype": APPROVAL_DOCTYPE,
+                            "attached_to_name": ref,
+                        },
+                        "fields": ["file_name"],
+                        "limit": 50,
+                    },
+                )
+            )
+            or []
+        )
+    except Exception:  # noqa: BLE001 - images are optional
+        frappe.log_error(
+            title=f"Listing client images failed for {ref}",
+            message=frappe.get_traceback(),
+        )
+        return
+    already_sent = {f.get("file_name") for f in existing}
+
+    for image in images:
+        if image.file_name in already_sent:
+            continue
+        try:
+            content = frappe.get_doc("File", image.name).get_content()
+            if isinstance(content, str):
+                content = content.encode()
+            mcp.call_tool(
+                "create_doc",
+                {
+                    "doctype": "File",
+                    "values": {
+                        "file_name": image.file_name,
+                        "attached_to_doctype": APPROVAL_DOCTYPE,
+                        "attached_to_name": ref,
+                        "is_private": 1,
+                        "content": base64.b64encode(content).decode(),
+                        "decode": 1,
+                    },
+                },
+            )
+        except Exception:  # noqa: BLE001 - images are optional
+            frappe.log_error(
+                title=f"Sending image {image.file_name} failed",
+                message=frappe.get_traceback(),
+            )

@@ -1,139 +1,385 @@
 <template>
-  <div class="flex flex-col h-full">
-    <LayoutHeader>
-      <template #left-header><div class="text-lg-medium text-ink-gray-9">{{ __("Kanban Board") }}</div></template>
-      <template #right-header>
-        <div class="flex items-center gap-1">
-          <router-link v-for="tab in projectTabs" :key="tab.to" :to="{ name: tab.to, params: { projectId } }" class="px-3 py-1.5 rounded text-sm transition-colors" :class="route.name === tab.to ? 'bg-surface-gray-3 text-ink-gray-9' : 'text-ink-gray-6 hover:bg-surface-gray-2 hover:text-ink-gray-8'">{{ __(tab.label) }}</router-link>
+  <div class="flex h-full flex-col">
+    <ProjectNav
+      :project-id="projectId"
+      :phases="phaseNames"
+      @task-created="kanban.reload()"
+    >
+      <template #actions>
+        <Button
+          variant="ghost"
+          :label="__('Refresh')"
+          :loading="kanban.loading && !!kanban.data"
+          @click="kanban.reload()"
+        >
+          <template #icon><LucideRefreshCw class="size-4" /></template>
+        </Button>
+      </template>
+    </ProjectNav>
+
+    <div class="min-h-0 flex-1 overflow-hidden">
+      <TaskyState
+        v-if="kanban.error && !kanban.data"
+        error
+        :icon="LucideCircleAlert"
+        :title="__('Couldn\'t load the board')"
+        :message="__('Check your connection and try again.')"
+      >
+        <Button :label="__('Retry')" @click="kanban.reload()" />
+      </TaskyState>
+
+      <!-- Loading -->
+      <div
+        v-else-if="!kanban.data"
+        class="flex h-full gap-3 overflow-x-auto p-4"
+        aria-busy="true"
+      >
+        <div
+          v-for="col in columnList"
+          :key="col.key"
+          class="flex w-72 shrink-0 flex-col gap-2 rounded-xl border border-outline-gray-1 bg-surface-gray-1 p-2"
+        >
+          <div
+            class="mx-1 my-1.5 h-4 w-24 animate-pulse rounded bg-surface-gray-3"
+          />
+          <div
+            v-for="i in 3"
+            :key="i"
+            class="flex flex-col gap-2 rounded-lg border border-outline-gray-2 bg-surface-base p-3"
+          >
+            <div class="h-3.5 w-4/5 animate-pulse rounded bg-surface-gray-2" />
+            <div class="h-3 w-1/3 animate-pulse rounded bg-surface-gray-2" />
+          </div>
+        </div>
+      </div>
+
+      <div v-else class="flex h-full flex-col">
+        <p
+          v-if="totalTasks === 0"
+          class="mx-4 mt-4 flex items-center gap-2 rounded-lg border border-outline-gray-2 bg-surface-base px-3 py-2.5 text-p-sm text-ink-gray-6"
+        >
+          <LucideInfo
+            class="size-4 shrink-0 text-ink-gray-5"
+            aria-hidden="true"
+          />
+          {{
+            __(
+              "This board is empty. Add a task, or generate one from a template on the Checklist tab."
+            )
+          }}
+        </p>
+
+        <div class="flex min-h-0 flex-1 gap-3 overflow-x-auto p-4">
+          <section
+            v-for="col in columnList"
+            :key="col.key"
+            class="flex w-72 shrink-0 flex-col rounded-xl border bg-surface-gray-1 transition-colors"
+            :class="
+              dragOverCol === col.key
+                ? 'border-outline-gray-4 bg-surface-gray-2'
+                : 'border-outline-gray-1'
+            "
+            :aria-labelledby="`col-${col.key}`"
+            @dragover.prevent="dragOverCol = col.key"
+            @dragleave="onColumnDragLeave($event)"
+            @drop.prevent="
+              onDrop($event, col.key);
+              dragOverCol = null;
+            "
+          >
+            <header class="flex items-center justify-between gap-2 px-3 py-2.5">
+              <h2
+                :id="`col-${col.key}`"
+                class="flex items-center gap-2 text-sm font-medium text-ink-gray-8"
+              >
+                <component
+                  :is="taskStatusMeta(col.key).icon"
+                  class="size-4"
+                  :class="
+                    col.key === 'Working' ? 'text-info' : 'text-ink-gray-5'
+                  "
+                  aria-hidden="true"
+                />
+                {{ __(taskStatusMeta(col.key).label) }}
+              </h2>
+              <span
+                class="rounded bg-surface-gray-3 px-1.5 font-mono text-xs tabular-nums text-ink-gray-6"
+                :aria-label="
+                  __('{0} tasks', String(columnTasks[col.key]?.length ?? 0))
+                "
+              >
+                {{ columnTasks[col.key]?.length ?? 0 }}
+              </span>
+            </header>
+
+            <div
+              class="flex min-h-[120px] flex-1 flex-col gap-2 overflow-y-auto px-2 pb-2"
+              role="list"
+            >
+              <div
+                v-if="!columnTasks[col.key]?.length"
+                class="flex flex-1 items-center justify-center rounded-lg border border-dashed border-outline-gray-3 px-3 py-6 text-center text-xs text-ink-gray-5"
+              >
+                {{
+                  col.key === "Completed"
+                    ? __("Drop a task here to complete it")
+                    : __("No tasks")
+                }}
+              </div>
+
+              <article
+                v-for="task in columnTasks[col.key]"
+                :key="task.name"
+                role="listitem"
+                :draggable="col.key !== 'Completed'"
+                class="relative rounded-lg border border-outline-gray-2 bg-surface-base p-3 shadow-sm transition-[box-shadow,opacity]"
+                :class="{
+                  'opacity-50': draggingTask === task.name,
+                  'cursor-grab hover:border-outline-gray-3 active:cursor-grabbing':
+                    col.key !== 'Completed',
+                }"
+                @dragstart="onDragStart($event, task)"
+                @dragend="onDragEnd"
+                @dragover.prevent="onCardDragOver($event, task)"
+              >
+                <div
+                  v-if="dropTarget?.name === task.name"
+                  class="pointer-events-none absolute inset-x-1 h-0.5 rounded-full bg-brand"
+                  :class="dropTarget.above ? '-top-1.5' : '-bottom-1.5'"
+                  aria-hidden="true"
+                />
+
+                <div class="flex items-start gap-2">
+                  <LucideGripVertical
+                    v-if="col.key !== 'Completed'"
+                    class="-ml-1 mt-0.5 size-4 shrink-0 text-ink-gray-4"
+                    aria-hidden="true"
+                  />
+                  <LucideCircleCheck
+                    v-else
+                    class="mt-0.5 size-4 shrink-0 text-success"
+                    aria-hidden="true"
+                  />
+                  <span
+                    class="min-w-0 flex-1 text-sm leading-snug"
+                    :class="
+                      col.key === 'Completed'
+                        ? 'text-ink-gray-5 line-through'
+                        : 'text-ink-gray-9'
+                    "
+                  >
+                    {{ task.subject }}
+                  </span>
+                </div>
+
+                <!-- Timer -->
+                <div
+                  v-if="
+                    timers[task.name]?.running && !timers[task.name]?.paused
+                  "
+                  class="mt-2 flex items-center gap-2 rounded-md bg-success-soft py-1 pl-2 pr-1 text-success"
+                >
+                  <span
+                    class="size-1.5 animate-pulse rounded-full bg-success"
+                    aria-hidden="true"
+                  />
+                  <span class="text-xs font-medium">{{ __("Tracking") }}</span>
+                  <span class="font-mono text-xs tabular-nums">{{
+                    formatElapsed(timers[task.name].elapsed)
+                  }}</span>
+                  <button
+                    type="button"
+                    class="ml-auto flex size-6 items-center justify-center rounded transition-colors hover:bg-surface-base"
+                    :aria-label="__('Pause timer')"
+                    @click.stop="togglePause(task)"
+                  >
+                    <LucidePause class="size-3.5" aria-hidden="true" />
+                  </button>
+                </div>
+                <div
+                  v-else-if="timers[task.name]?.paused"
+                  class="mt-2 flex items-center gap-2 rounded-md bg-warning-soft py-1 pl-2 pr-1 text-warning"
+                >
+                  <LucideCirclePause class="size-3.5" aria-hidden="true" />
+                  <span class="text-xs font-medium">{{ __("Paused") }}</span>
+                  <span class="font-mono text-xs tabular-nums">{{
+                    formatElapsed(timers[task.name].elapsed)
+                  }}</span>
+                  <button
+                    type="button"
+                    class="ml-auto flex size-6 items-center justify-center rounded transition-colors hover:bg-surface-base"
+                    :aria-label="__('Resume timer')"
+                    @click.stop="togglePause(task)"
+                  >
+                    <LucidePlay class="size-3.5" aria-hidden="true" />
+                  </button>
+                </div>
+
+                <div class="mt-2.5 flex items-center gap-2">
+                  <span
+                    v-if="task.category"
+                    class="truncate rounded bg-surface-gray-2 px-1.5 py-0.5 text-xs text-ink-gray-6"
+                  >
+                    {{ task.category }}
+                  </span>
+                  <span
+                    v-if="task.due_date"
+                    class="flex shrink-0 items-center gap-1 text-xs tabular-nums"
+                    :class="
+                      isOverdue(task)
+                        ? 'font-medium text-danger'
+                        : 'text-ink-gray-5'
+                    "
+                  >
+                    <component
+                      :is="isOverdue(task) ? LucideAlarmClock : LucideCalendar"
+                      class="size-3.5"
+                      aria-hidden="true"
+                    />
+                    {{ shortDate(task.due_date) }}
+                    <span v-if="isOverdue(task)">· {{ __("Overdue") }}</span>
+                  </span>
+                  <div class="ml-auto flex shrink-0 items-center gap-1.5">
+                    <component
+                      :is="priorityIcon(task.priority)"
+                      class="size-4"
+                      :class="
+                        task.priority === 'Urgent'
+                          ? 'text-danger'
+                          : 'text-ink-gray-5'
+                      "
+                      role="img"
+                      :aria-label="
+                        __('{0} priority', __(task.priority || 'Low'))
+                      "
+                    />
+                    <span
+                      v-if="task.assigned_to"
+                      class="flex size-6 items-center justify-center rounded-full bg-surface-gray-3 text-2xs font-medium text-ink-gray-7"
+                      :title="task.assigned_to"
+                      role="img"
+                      :aria-label="__('Assigned to {0}', task.assigned_to)"
+                    >
+                      {{ initials(task.assigned_to) }}
+                    </span>
+                  </div>
+                </div>
+              </article>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+
+    <Dialog
+      v-model:open="completeDialogOpen"
+      :title="__('Complete task')"
+      :message="completingTask?.subject"
+      size="md"
+    >
+      <form
+        id="tasky-kanban-complete"
+        class="flex flex-col gap-4"
+        @submit.prevent="confirmComplete"
+      >
+        <div class="flex flex-col gap-1.5">
+          <TextInput
+            v-model.number="completeHours"
+            type="number"
+            step="0.25"
+            min="0"
+            :label="__('Hours worked')"
+          />
+          <p
+            v-if="preFilledHours"
+            class="flex items-center gap-1 text-xs text-ink-gray-5"
+          >
+            <LucideTimer class="size-3.5" aria-hidden="true" />
+            {{ __("Filled in from the timer: {0} h", String(preFilledHours)) }}
+          </p>
+        </div>
+        <Textarea
+          v-model="completeNotes"
+          :label="__('Notes')"
+          :placeholder="__('What was done?')"
+          :rows="3"
+        />
+      </form>
+      <template #actions="{ close }">
+        <div class="flex justify-end gap-2">
+          <Button :label="__('Cancel')" @click="close" />
+          <Button
+            variant="solid"
+            type="submit"
+            form="tasky-kanban-complete"
+            :label="__('Submit timesheet')"
+          />
         </div>
       </template>
-    </LayoutHeader>
-    <div class="flex-1 overflow-auto p-4">
-      <div v-if="kanban.loading" class="flex items-center justify-center h-full"><div class="text-p-base text-ink-gray-6">Loading...</div></div>
-      <div v-else class="flex gap-4 h-full overflow-x-auto pb-4">
-        <div v-for="col in columnList" :key="col.key" class="flex flex-col w-64 shrink-0 bg-surface-gray-1 rounded-lg transition-colors" :class="{ 'ring-2 ring-ink-blue-4 bg-surface-gray-2': dragOverCol === col.key }" @dragover.prevent="dragOverCol = col.key" @dragleave="dragOverCol = null" @drop="onDrop($event, col.key); dragOverCol = null">
-          <div class="flex items-center justify-between px-3 py-3 border-b border-outline-gray-2" :class="{ 'border-ink-green-2': col.key === 'Working' }">
-            <div class="flex items-center gap-2">
-              <span class="text-sm-medium text-ink-gray-8">{{ __(col.label) }}</span>
-              <span v-if="col.key === 'Working'" class="size-1.5 rounded-full bg-ink-green-5 animate-pulse" />
-            </div>
-            <span class="text-xs text-ink-gray-5 bg-surface-gray-3 px-2 py-0.5 rounded-full">{{ columnTasks[col.key]?.length ?? 0 }}</span>
-          </div>
-          <div class="flex-1 overflow-auto p-2 flex flex-col gap-2 min-h-[120px]">
-            <div v-if="!columnTasks[col.key]?.length" class="flex items-center justify-center flex-1 text-xs text-ink-gray-4 py-4">{{ col.key === 'Completed' ? 'No completed tasks' : 'No tasks' }}</div>
-            <div v-for="task in columnTasks[col.key]" :key="task.name"
-              :draggable="col.key !== 'Completed'"
-              class="bg-surface-base border rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow relative"
-              :class="{
-                'border-ink-red-3 bg-ink-red-0': isOverdue(task),
-                'border-outline-gray-2': !isOverdue(task),
-                'opacity-50': draggingTask === task.name,
-                '!cursor-default !shadow-sm': col.key === 'Completed',
-                'cursor-grab active:cursor-grabbing': col.key !== 'Completed',
-              }"
-               @dragstart="onDragStart($event, task)" @dragend="onDragEnd"
-               @dragover.prevent="onCardDragOver($event, task)">
-              <div v-if="dropTarget?.name === task.name && dropTarget?.above" class="absolute top-0 left-1 right-1 h-0.5 bg-ink-blue-4 rounded-full pointer-events-none" />
-              <div v-if="dropTarget?.name === task.name && !dropTarget?.above" class="absolute bottom-0 left-1 right-1 h-0.5 bg-ink-blue-4 rounded-full pointer-events-none" />
-              <div class="flex items-start justify-between gap-2 mb-2">
-                <div class="flex items-start gap-2 min-w-0">
-                  <GripVertical v-if="col.key !== 'Completed'" class="size-4 text-ink-gray-4 shrink-0 mt-0.5 cursor-grab" />
-                  <LucideCheckCircle v-else class="size-4 text-ink-green-5 shrink-0 mt-0.5" />
-                  <span class="text-sm leading-snug" :class="col.key === 'Completed' ? 'text-ink-gray-5 line-through' : isOverdue(task) ? 'text-ink-red-7' : 'text-ink-gray-9'">{{ task.subject }}</span>
-                </div>
-              </div>
-
-              <div v-if="task.due_date" class="text-xs mb-2" :class="isOverdue(task) ? 'text-ink-red-6 font-medium' : 'text-ink-gray-5'">
-                <LucideClock class="size-3 inline mr-1" />{{ formatDate(task.start_date || task.due_date) }}{{ task.start_date ? ' - ' + formatDate(task.due_date) : '' }}
-                <span v-if="isOverdue(task)" class="ml-1 text-ink-red-6 font-medium">Overdue</span>
-              </div>
-
-              <div v-if="timers[task.name]?.running && !timers[task.name]?.paused" class="flex items-center gap-2 mb-2 px-2 py-1 rounded bg-ink-green-0 border border-ink-green-2">
-                <span class="size-2 rounded-full bg-ink-green-5 animate-pulse" />
-                <span class="text-xs font-mono text-ink-green-8 tabular-nums">{{ formatElapsed(timers[task.name].elapsed) }}</span>
-                <button @click.stop="togglePause(task)" class="ml-auto size-6 flex items-center justify-center rounded hover:bg-ink-green-2 text-ink-green-7 transition-colors"><LucidePause class="size-3.5" /></button>
-              </div>
-
-              <div v-if="timers[task.name]?.paused" class="flex items-center gap-2 mb-2 px-2 py-1 rounded bg-ink-amber-0 border border-ink-amber-2">
-                <LucidePauseCircle class="size-3.5 text-ink-amber-6" />
-                <span class="text-xs text-ink-amber-8">{{ formatElapsed(timers[task.name].elapsed) }} (paused)</span>
-                <button @click.stop="togglePause(task)" class="ml-auto size-6 flex items-center justify-center rounded hover:bg-ink-amber-2 text-ink-amber-7 transition-colors"><LucidePlay class="size-3.5" /></button>
-              </div>
-
-              <div class="flex items-center justify-between">
-                <span v-if="task.category" class="text-xs font-medium px-2 py-0.5 rounded-full" :class="categoryClasses(task.category)">{{ task.category }}</span>
-                <span v-else />
-                <div class="flex items-center gap-2">
-                  <span class="size-2 rounded-full shrink-0" :class="priorityDotClass(task.priority)" />
-                  <span v-if="task.assigned_to" class="size-6 rounded-full bg-ink-blue-2 text-ink-blue-8 text-xs font-medium flex items-center justify-center shrink-0">{{ getInitials(task.assigned_to) }}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div v-if="completingTask" class="fixed inset-0 z-50 flex items-center justify-center bg-black/25 backdrop-blur-sm" @click.self="completingTask = null">
-      <div class="bg-surface-base border border-outline-gray-2 rounded-xl shadow-xl w-full max-w-sm p-5">
-        <div class="text-base-semibold text-ink-gray-9 mb-1">Complete Task</div>
-        <div class="text-sm text-ink-gray-6 mb-4 truncate">{{ completingTask.subject }}</div>
-        <div class="flex flex-col gap-3 mb-4">
-          <div>
-            <label class="text-xs text-ink-gray-5">Hours Worked</label>
-            <input v-model.number="completeHours" type="number" step="0.25" min="0" class="w-full border border-outline-gray-2 rounded px-3 py-1.5 text-sm bg-surface-base focus:outline-none mt-1" />
-            <div v-if="preFilledHours" class="text-xs text-ink-gray-4 mt-0.5">Auto-filled from timer: {{ preFilledHours }}h</div>
-          </div>
-          <div>
-            <label class="text-xs text-ink-gray-5">Notes</label>
-            <input v-model="completeNotes" class="w-full border border-outline-gray-2 rounded px-3 py-1.5 text-sm bg-surface-base focus:outline-none mt-1" placeholder="What was done?" />
-          </div>
-        </div>
-        <div class="flex justify-end gap-2">
-          <button @click="completingTask = null" class="px-4 py-2 text-sm text-ink-gray-7 hover:bg-surface-gray-2 rounded-lg">Cancel</button>
-          <button @click="confirmComplete" class="px-5 py-2 text-sm font-medium rounded-lg bg-ink-gray-9 text-ink-base hover:bg-ink-gray-8">Submit Timesheet</button>
-        </div>
-      </div>
-    </div>
+    </Dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onUnmounted } from "vue";
-import { useRoute } from "vue-router";
-import { createResource } from "frappe-ui";
 import { __ } from "@/translation";
-import LayoutHeader from "@/components/LayoutHeader.vue";
-import GripVertical from "~icons/lucide/grip-vertical";
-import LucideCheckCircle from "~icons/lucide/check-circle";
-import LucideClock from "~icons/lucide/clock";
+import {
+  Button,
+  Dialog,
+  TextInput,
+  Textarea,
+  createResource,
+  toast,
+} from "frappe-ui";
+import { computed, onUnmounted, ref, watch } from "vue";
+import LucideAlarmClock from "~icons/lucide/alarm-clock";
+import LucideCalendar from "~icons/lucide/calendar";
+import LucideCircleAlert from "~icons/lucide/circle-alert";
+import LucideCircleCheck from "~icons/lucide/circle-check";
+import LucideCirclePause from "~icons/lucide/circle-pause";
+import LucideGripVertical from "~icons/lucide/grip-vertical";
+import LucideInfo from "~icons/lucide/info";
 import LucidePause from "~icons/lucide/pause";
-import LucidePauseCircle from "~icons/lucide/pause-circle";
 import LucidePlay from "~icons/lucide/play";
+import LucideRefreshCw from "~icons/lucide/refresh-cw";
+import LucideTimer from "~icons/lucide/timer";
+import ProjectNav from "./components/ProjectNav.vue";
+import TaskyState from "./components/TaskyState.vue";
+import {
+  initials,
+  isOverdue,
+  priorityIcon,
+  shortDate,
+  taskStatusMeta,
+} from "./taskMeta";
 
 const props = defineProps<{ projectId: string }>();
-const route = useRoute();
-
-const projectTabs = [
-  { label: "Dashboard", to: "TaskyProject" }, { label: "Checklist", to: "TaskyChecklist" },
-  { label: "Board", to: "TaskyKanban" }, { label: "Timeline", to: "TaskyTimeline" },
-  { label: "Overdue", to: "TaskyOverdue" },
-];
 
 const columnList = [
-  { key: "Open", label: "Open" },
-  { key: "Working", label: "Working" },
-  { key: "Pending Review", label: "Pending Review" },
-  { key: "Completed", label: "Completed" },
-  { key: "Cancelled", label: "Cancelled" },
+  { key: "Open" },
+  { key: "Working" },
+  { key: "Pending Review" },
+  { key: "Completed" },
+  { key: "Cancelled" },
 ];
-const columnKeys = columnList.map(c => c.key);
+const columnKeys = columnList.map((c) => c.key);
 const columnTasks = ref<Record<string, Task[]>>({});
 const draggingTask = ref<string | null>(null);
 const dragOverCol = ref<string | null>(null);
 const dropTarget = ref<{ name: string; above: boolean } | null>(null);
 
-interface Task { name: string; subject: string; category?: string; status: string; priority?: string; assigned_to?: string; due_date?: string; start_date?: string; estimated_hours?: number; custom_timer_start?: string; custom_timer_elapsed?: number; }
+interface Task {
+  name: string;
+  subject: string;
+  category?: string;
+  phase?: string;
+  status: string;
+  priority?: string;
+  assigned_to?: string;
+  due_date?: string;
+  estimated_hours?: number;
+  custom_timer_start?: string;
+  custom_timer_elapsed?: number;
+}
 
 const kanban = createResource({
   url: "helpdesk.tasky.api.get_kanban_tasks",
@@ -142,22 +388,65 @@ const kanban = createResource({
     columnTasks.value = d.columns ?? {};
     restoreTimers(d.columns);
   },
+  onError() {},
 });
-const moveTaskApi = createResource({ url: "helpdesk.tasky.api.move_task" });
+
+// Moves are applied optimistically; on failure, reload so the board matches the server again.
+const moveTaskApi = createResource({
+  url: "helpdesk.tasky.api.move_task",
+  onError(e: any) {
+    toast.error(errorText(e, __("Couldn't move the task.")));
+    kanban.reload();
+  },
+});
 const completeResource = createResource({
   url: "helpdesk.tasky.api.complete_task",
-  onSuccess() { kanban.reload(); },
-  onError(e: any) { alert("Failed to complete: " + (e?.message || e)); },
+  onSuccess() {
+    kanban.reload();
+  },
+  onError(e: any) {
+    toast.error(errorText(e, __("Couldn't complete the task.")));
+    kanban.reload();
+  },
 });
+
+function errorText(e: any, fallback: string) {
+  return e?.messages?.length ? e.messages.join(" ") : e?.message || fallback;
+}
+
+const totalTasks = computed(() =>
+  Object.values(columnTasks.value).reduce(
+    (n, list) => n + (list?.length ?? 0),
+    0
+  )
+);
+
+const phaseNames = computed(() =>
+  Object.values(columnTasks.value)
+    .flat()
+    .map((t) => t.phase || "")
+    .filter(Boolean)
+);
 
 const completingTask = ref<Task | null>(null);
 const completeHours = ref(0);
 const completeNotes = ref("");
 const preFilledHours = ref(0);
 
-interface TimerState { running: boolean; paused: boolean; elapsed: number; }
+const completeDialogOpen = computed({
+  get: () => !!completingTask.value,
+  set: (open: boolean) => {
+    if (!open) completingTask.value = null;
+  },
+});
+
+interface TimerState {
+  running: boolean;
+  paused: boolean;
+  elapsed: number;
+}
 const timers = ref<Record<string, TimerState>>({});
-let tickInterval: any = null;
+let tickInterval: ReturnType<typeof setInterval> | null = null;
 
 (function startTick() {
   tickInterval = setInterval(() => {
@@ -168,9 +457,17 @@ let tickInterval: any = null;
     }
   }, 1000);
 })();
-onUnmounted(() => { if (tickInterval) clearInterval(tickInterval); });
+onUnmounted(() => {
+  if (tickInterval) clearInterval(tickInterval);
+});
 
-watch(() => props.projectId, () => { if (props.projectId) kanban.reload(); }, { immediate: true });
+watch(
+  () => props.projectId,
+  () => {
+    if (props.projectId) kanban.reload();
+  },
+  { immediate: true }
+);
 
 function restoreTimers(cols: Record<string, any[]>) {
   if (!cols) return;
@@ -181,9 +478,17 @@ function restoreTimers(cols: Record<string, any[]>) {
         const now = Date.now();
         const elapsed = Math.floor((now - start) / 1000);
         const pausedElapsed = (task.custom_timer_elapsed || 0) * 3600;
-        timers.value[task.name] = { running: true, paused: false, elapsed: elapsed + pausedElapsed };
+        timers.value[task.name] = {
+          running: true,
+          paused: false,
+          elapsed: elapsed + pausedElapsed,
+        };
       } else if (task.custom_timer_elapsed > 0) {
-        timers.value[task.name] = { running: false, paused: true, elapsed: (task.custom_timer_elapsed || 0) * 3600 };
+        timers.value[task.name] = {
+          running: false,
+          paused: true,
+          elapsed: (task.custom_timer_elapsed || 0) * 3600,
+        };
       }
     }
   }
@@ -230,11 +535,26 @@ function togglePause(task: Task) {
 }
 
 function onDragStart(e: DragEvent, task: Task) {
-  if (task.status === "Completed") { e.preventDefault(); return; }
+  if (task.status === "Completed") {
+    e.preventDefault();
+    return;
+  }
   draggingTask.value = task.name;
+  if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
   e.dataTransfer?.setData("application/x-task-name", task.name);
 }
-function onDragEnd() { draggingTask.value = null; dropTarget.value = null; dragOverCol.value = null; }
+function onDragEnd() {
+  draggingTask.value = null;
+  dropTarget.value = null;
+  dragOverCol.value = null;
+}
+
+// dragleave also fires when moving onto a child card; only clear when the pointer leaves the column
+function onColumnDragLeave(e: DragEvent) {
+  const column = e.currentTarget as HTMLElement;
+  if (!column.contains(e.relatedTarget as Node | null))
+    dragOverCol.value = null;
+}
 
 function onCardDragOver(e: DragEvent, task: Task) {
   const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -258,7 +578,6 @@ function onDrop(e: DragEvent, newStatus: string) {
   const fromWorking = task.status === "Working";
   const toWorking = newStatus === "Working";
 
-  // Calculate target index for insertion
   let targetIdx = -1;
   if (dropTarget.value && columnTasks.value[newStatus]) {
     const arr = columnTasks.value[newStatus];
@@ -297,7 +616,11 @@ function onDrop(e: DragEvent, newStatus: string) {
 function confirmComplete() {
   const task = completingTask.value;
   if (!task) return;
-  completeResource.submit({ task: task.name, hours_worked: completeHours.value || 0.25, notes: completeNotes.value });
+  completeResource.submit({
+    task: task.name,
+    hours_worked: completeHours.value || 0.25,
+    notes: completeNotes.value,
+  });
   finalizeTimer(task);
   moveToColumn(task, "Completed");
   completingTask.value = null;
@@ -306,7 +629,10 @@ function confirmComplete() {
 
 function moveToColumn(task: Task, newStatus: string, insertAt: number = -1) {
   const arr = columnTasks.value[task.status];
-  if (arr) { const idx = arr.indexOf(task); if (idx !== -1) arr.splice(idx, 1); }
+  if (arr) {
+    const idx = arr.indexOf(task);
+    if (idx !== -1) arr.splice(idx, 1);
+  }
   task.status = newStatus;
   if (!columnTasks.value[newStatus]) columnTasks.value[newStatus] = [];
   if (insertAt >= 0) {
@@ -316,10 +642,12 @@ function moveToColumn(task: Task, newStatus: string, insertAt: number = -1) {
   }
 }
 
-function formatDate(d: string) { return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" }); }
-function formatElapsed(s: number) { const h = Math.floor(s/3600); const m = Math.floor((s%3600)/60); const sec = s%60; return `${h>0?h+'h ':''}${String(m).padStart(2,'0')}m ${String(sec).padStart(2,'0')}s`; }
-function getInitials(n: string) { return n.split(" ").map((x)=>x[0]).slice(0,2).join("").toUpperCase(); }
-function isOverdue(t: Task) { if (!t.due_date || ["Completed","Cancelled"].includes(t.status)) return false; return new Date(t.due_date) < new Date(); }
-function categoryClasses(c: string) { const m: Record<string,string>={Functional:"bg-ink-blue-1 text-ink-blue-8",Development:"bg-ink-purple-1 text-ink-purple-8",Support:"bg-ink-green-1 text-ink-green-8",Common:"bg-ink-gray-2 text-ink-gray-7"}; return m[c]||m.Common; }
-function priorityDotClass(p: string) { const m: Record<string,string>={Urgent:"bg-ink-red-5",High:"bg-ink-amber-5",Medium:"bg-ink-blue-4",Low:"bg-ink-gray-4"}; return m[p]||m.Low; }
+function formatElapsed(s: number) {
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = Math.floor(s % 60);
+  return `${h > 0 ? h + "h " : ""}${String(m).padStart(2, "0")}m ${String(
+    sec
+  ).padStart(2, "0")}s`;
+}
 </script>

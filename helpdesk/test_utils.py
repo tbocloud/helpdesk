@@ -585,7 +585,11 @@ def make_tasky_user(email: str, full_name: str, roles: tuple[str, ...] = ()):
     return email
 
 
-def make_project(project_name: str, members: list[tuple[str, str]] | None = None, owner: str | None = None):
+def make_project(
+    project_name: str,
+    members: list[tuple[str, str]] | None = None,
+    owner: str | None = None,
+):
     """Creates a Project directly, bypassing the tasky API.
 
     `members` is a list of (user, project role) pairs; `owner` defaults to the session user.
@@ -606,7 +610,12 @@ def make_project(project_name: str, members: list[tuple[str, str]] | None = None
 def make_content_campaign(campaign_name: str, customer: str, **kwargs):
     """Creates an HD Content Campaign for `customer`."""
     return frappe.get_doc(
-        {"doctype": "HD Content Campaign", "campaign_name": campaign_name, "customer": customer, **kwargs}
+        {
+            "doctype": "HD Content Campaign",
+            "campaign_name": campaign_name,
+            "customer": customer,
+            **kwargs,
+        }
     ).insert(ignore_permissions=True)
 
 
@@ -624,7 +633,9 @@ def make_content_post(title: str, customer: str | None = None, **kwargs):
     ).insert(ignore_permissions=True)
 
 
-def make_support_connection(customer: str, site_url: str = "https://erp.example.com", **kwargs):
+def make_support_connection(
+    customer: str, site_url: str = "https://erp.example.com", **kwargs
+):
     """Creates a Connected HDS Support Connection for `customer` (no real credentials)."""
     return frappe.get_doc(
         {
@@ -633,5 +644,27 @@ def make_support_connection(customer: str, site_url: str = "https://erp.example.
             "site_url": site_url,
             "connection_status": "Connected",
             **kwargs,
+        }
+    ).insert(ignore_permissions=True)
+
+
+def make_ticket_communication(
+    ticket: str,
+    content: str,
+    sender: str = "customer@example.com",
+    sent_or_received: str = "Received",
+):
+    """Creates an email Communication on an HD Ticket, as if received from (or sent to) the customer."""
+    return frappe.get_doc(
+        {
+            "doctype": "Communication",
+            "communication_type": "Communication",
+            "communication_medium": "Email",
+            "sent_or_received": sent_or_received,
+            "subject": f"Re: {ticket}",
+            "sender": sender,
+            "content": content,
+            "reference_doctype": "HD Ticket",
+            "reference_name": ticket,
         }
     ).insert(ignore_permissions=True)

@@ -45,25 +45,41 @@ def draft_caption(
     if customer:
         lines.append(f"Client: {customer}")
     if campaign:
-        goal = frappe.db.get_value("HD Content Campaign", campaign, ["campaign_name", "goal"], as_dict=True)
+        goal = frappe.db.get_value(
+            "HD Content Campaign", campaign, ["campaign_name", "goal"], as_dict=True
+        )
         if goal:
-            lines.append(f"Campaign: {goal.campaign_name}" + (f" (goal: {goal.goal})" if goal.goal else ""))
+            lines.append(
+                f"Campaign: {goal.campaign_name}"
+                + (f" (goal: {goal.goal})" if goal.goal else "")
+            )
     if brief:
         lines.append(f"Brief from the team: {brief}")
     if current_caption.strip():
-        lines.append(f"Improve this draft, keeping its facts and intent:\n{current_caption.strip()}")
+        lines.append(
+            f"Improve this draft, keeping its facts and intent:\n{current_caption.strip()}"
+        )
 
     try:
         result = call_haiku(SYSTEM_PROMPT, "\n".join(lines))
     except Exception:  # noqa: BLE001 - provider errors vary; show one clear message
         frappe.log_error(title="Draft with AI failed", message=frappe.get_traceback())
-        frappe.throw(_("AI drafting is unavailable right now. Check the AI provider in HDS Hub Settings."))
+        frappe.throw(
+            _(
+                "AI drafting is unavailable right now. Check the AI provider in HDS Hub Settings."
+            )
+        )
 
     response = result.get("response") or {}
     caption = (response.get("caption") or "").strip()
     if not caption:
-        frappe.throw(_("The AI didn't return a caption. Try again or add a short brief."))
-    return {"caption": caption, "hashtags": normalize_hashtags(response.get("hashtags"))}
+        frappe.throw(
+            _("The AI didn't return a caption. Try again or add a short brief.")
+        )
+    return {
+        "caption": caption,
+        "hashtags": normalize_hashtags(response.get("hashtags")),
+    }
 
 
 def normalize_hashtags(tags) -> str:

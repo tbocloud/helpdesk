@@ -49,7 +49,9 @@ class TestContentApprovalSync(FrappeTestCase):
         return frappe.get_doc("HD Content Post", self.post.name)
 
     def test_push_creates_approval_on_client_once(self):
-        self.mcp.call_tool.return_value = mcp_result({"status": "created", "name": "CA-2026-00001"})
+        self.mcp.call_tool.return_value = mcp_result(
+            {"status": "created", "name": "CA-2026-00001"}
+        )
 
         self.assertEqual(content_sync.push_posts_for_approval(), 1)
         tool, args = self.mcp.call_tool.call_args.args
@@ -65,11 +67,17 @@ class TestContentApprovalSync(FrappeTestCase):
         self.assertEqual(content_sync.push_posts_for_approval(), 0)
 
     def test_edited_post_is_resent_as_pending(self):
-        self.mcp.call_tool.return_value = mcp_result({"status": "created", "name": "CA-2026-00001"})
+        self.mcp.call_tool.return_value = mcp_result(
+            {"status": "created", "name": "CA-2026-00001"}
+        )
         content_sync.push_posts_for_approval()
 
         post = self.reload()
-        post.db_set("sent_for_approval_on", add_to_date(now_datetime(), minutes=-10), update_modified=False)
+        post.db_set(
+            "sent_for_approval_on",
+            add_to_date(now_datetime(), minutes=-10),
+            update_modified=False,
+        )
         post.caption = "Updated caption"
         post.save()
 
@@ -80,10 +88,22 @@ class TestContentApprovalSync(FrappeTestCase):
         self.assertEqual(args["values"]["status"], "Pending")
 
     def test_client_decisions_update_the_post(self):
-        self.post.db_set({"client_approval_ref": "CA-2026-00001", "client_connection": self.connection})
+        self.post.db_set(
+            {
+                "client_approval_ref": "CA-2026-00001",
+                "client_connection": self.connection,
+            }
+        )
 
         self.mcp.call_tool.return_value = mcp_result(
-            [{"name": "CA-2026-00001", "status": "Changes Requested", "client_comment": "Use the new logo", "decided_by": "fatima@alnoor.example"}]
+            [
+                {
+                    "name": "CA-2026-00001",
+                    "status": "Changes Requested",
+                    "client_comment": "Use the new logo",
+                    "decided_by": "fatima@alnoor.example",
+                }
+            ]
         )
         self.assertEqual(content_sync.pull_approval_decisions(), 1)
         post = self.reload()
@@ -93,16 +113,75 @@ class TestContentApprovalSync(FrappeTestCase):
         post.status = "Client Review"
         post.save()
         self.mcp.call_tool.return_value = mcp_result(
-            [{"name": "CA-2026-00001", "status": "Approved", "client_comment": "", "decided_by": "fatima@alnoor.example"}]
+            [
+                {
+                    "name": "CA-2026-00001",
+                    "status": "Approved",
+                    "client_comment": "",
+                    "decided_by": "fatima@alnoor.example",
+                }
+            ]
         )
         content_sync.pull_approval_decisions()
         self.assertEqual(self.reload().status, "Approved")
 
+    def test_images_go_with_the_approval_once(self):
+        frappe.get_doc(
+            {
+                "doctype": "File",
+                "file_name": "carousel-1.png",
+                "attached_to_doctype": "HD Content Post",
+                "attached_to_name": self.post.name,
+                "content": b"fake-png-bytes",
+                "is_private": 1,
+            }
+        ).insert(ignore_permissions=True)
+
+        client_files = []
+
+        def call_tool(tool, args):
+            if tool == "get_list":
+                return mcp_result(client_files)
+            if args["doctype"] == "File":
+                client_files.append({"file_name": args["values"]["file_name"]})
+                return mcp_result({"status": "created", "name": "file-1"})
+            return mcp_result({"status": "created", "name": "CA-2026-00001"})
+
+        self.mcp.call_tool.side_effect = call_tool
+        content_sync.push_posts_for_approval()
+
+        uploads = [
+            c.args[1]
+            for c in self.mcp.call_tool.call_args_list
+            if c.args[1].get("doctype") == "File" and c.args[0] == "create_doc"
+        ]
+        self.assertEqual(len(uploads), 1)
+        values = uploads[0]["values"]
+        self.assertEqual(values["attached_to_name"], "CA-2026-00001")
+        self.assertEqual(values["attached_to_doctype"], "Content Approval")
+        self.assertEqual(values["decode"], 1)
+
+        # already on the client: a re-send doesn't upload it again
+        content_sync.send_images(self.mcp, self.post.name, "CA-2026-00001")
+        uploads = [
+            c
+            for c in self.mcp.call_tool.call_args_list
+            if c.args[0] == "create_doc" and c.args[1].get("doctype") == "File"
+        ]
+        self.assertEqual(len(uploads), 1)
+
     def test_customer_without_connection_is_skipped(self):
         other = "Gulf Star Logistics"
         create_customer(other)
-        make_content_post("No ERP post", other, status="Client Review", publish_on=add_to_date(now_datetime(), days=2))
-        self.mcp.call_tool.return_value = mcp_result({"status": "created", "name": "CA-2026-00002"})
+        make_content_post(
+            "No ERP post",
+            other,
+            status="Client Review",
+            publish_on=add_to_date(now_datetime(), days=2),
+        )
+        self.mcp.call_tool.return_value = mcp_result(
+            {"status": "created", "name": "CA-2026-00002"}
+        )
 
         # only the connected customer's post goes out
         self.assertEqual(content_sync.push_posts_for_approval(), 1)
@@ -112,16 +191,23 @@ class TestDraftCaption(FrappeTestCase):
     @patch("helpdesk.api.content.call_haiku")
     def test_returns_caption_and_clean_hashtags(self, call_haiku):
         call_haiku.return_value = {
-            "response": {"caption": "Lights, offers, joy.", "hashtags": ["Diwali", "#offers", "#diwali"]}
+            "response": {
+                "caption": "Lights, offers, joy.",
+                "hashtags": ["Diwali", "#offers", "#diwali"],
+            }
         }
-        result = draft_caption(title="Diwali offer", channel="Instagram", brief="20% off")
+        result = draft_caption(
+            title="Diwali offer", channel="Instagram", brief="20% off"
+        )
         self.assertEqual(result["caption"], "Lights, offers, joy.")
         self.assertEqual(result["hashtags"], "#Diwali #offers")
         self.assertIn("20% off", call_haiku.call_args.args[1])
 
     @patch("helpdesk.api.content.call_haiku")
     def test_empty_ai_reply_is_an_error(self, call_haiku):
-        call_haiku.return_value = {"response": {"raw_response": "oops", "parse_error": True}}
+        call_haiku.return_value = {
+            "response": {"raw_response": "oops", "parse_error": True}
+        }
         with self.assertRaises(frappe.ValidationError):
             draft_caption(title="Diwali offer", channel="Instagram")
 

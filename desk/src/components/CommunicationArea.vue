@@ -3,7 +3,11 @@
     <div
       class="flex justify-between gap-3 border-t border-outline-gray-2 bg-surface-gray-1 px-6 py-3 md:px-5 md:py-2"
     >
-      <div class="flex items-center gap-0.5" role="group" :aria-label="__('Compose')">
+      <div
+        class="flex items-center gap-0.5"
+        role="group"
+        :aria-label="__('Compose')"
+      >
         <Button
           ref="sendEmailRef"
           variant="ghost"
@@ -37,6 +41,13 @@
         </Button>
         <TypingIndicator :ticketId="ticketId" />
       </div>
+      <p
+        v-if="showEmailBox && recipientSummary"
+        class="min-w-0 self-center truncate text-xs text-ink-gray-5"
+        :title="recipientSummary"
+      >
+        {{ __("To") }}: {{ recipientSummary }}
+      </p>
     </div>
     <Transition name="slide">
       <div
@@ -121,7 +132,7 @@ import { useScreenSize } from "@/composables/screen";
 import { useShortcut } from "@/composables/shortcuts";
 import { showCommentBox, showEmailBox } from "@/pages/ticket/modalStates";
 import { onClickOutside } from "@vueuse/core";
-import { ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 
 const emit = defineEmits(["update"]);
 const content = defineModel("content");
@@ -199,6 +210,12 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+});
+
+// Follows the editor's own recipient list, which changes when replying to a specific email
+const recipientSummary = computed(() => {
+  const emails = (emailEditorRef.value?.toEmails ?? props.toEmails) as string[];
+  return emails.filter(Boolean).join(", ");
 });
 
 watch(

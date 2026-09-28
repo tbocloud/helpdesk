@@ -51,7 +51,9 @@
                 >
                   <component :is="item.icon" class="size-4" />
                   <span
-                    v-if="item.key === 'notifications' && item.badge && isCollapsed"
+                    v-if="
+                      item.key === 'notifications' && item.badge && isCollapsed
+                    "
                     class="absolute -right-0.5 -top-0.5 size-1.5 rounded-full bg-surface-blue-5"
                   />
                 </span>
@@ -266,7 +268,8 @@ const sections = computed(() => {
   const result = [{ label: "", items: top, collapsible: false }];
   for (const label of ["Workspace", "Directory"]) {
     const items = navItems.value.filter((item) => item.section === label);
-    if (items.length) result.push({ label: __(label), items, collapsible: false });
+    if (items.length)
+      result.push({ label: __(label), items, collapsible: false });
   }
   if (pinnedViews.value?.length) {
     result.push({

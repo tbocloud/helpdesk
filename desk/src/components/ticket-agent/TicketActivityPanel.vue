@@ -9,7 +9,9 @@
       <button
         type="button"
         class="flex h-10 items-center gap-2 text-sm font-medium transition-colors"
-        :class="selected ? 'text-ink-gray-9' : 'text-ink-gray-5 hover:text-ink-gray-9'"
+        :class="
+          selected ? 'text-ink-gray-9' : 'text-ink-gray-5 hover:text-ink-gray-9'
+        "
       >
         <component :is="tab.icon" class="size-4" aria-hidden="true" />
         {{ __(tab.label) }}

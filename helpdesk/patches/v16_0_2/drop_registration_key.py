@@ -7,13 +7,13 @@ import frappe
 
 
 def execute():
-	doctype = "HDS Support Connection"
-	if frappe.db.has_column(doctype, "registration_key"):
-		frappe.db.sql(f"ALTER TABLE `tab{doctype}` DROP COLUMN `registration_key`")
+    doctype = "HDS Support Connection"
+    if frappe.db.has_column(doctype, "registration_key"):
+        frappe.db.sql(f"ALTER TABLE `tab{doctype}` DROP COLUMN `registration_key`")
 
-	# Clean up Auth table entries for the removed Password field.
-	frappe.db.delete(
-		"__Auth",
-		{"doctype": doctype, "fieldname": "registration_key"},
-	)
-	frappe.db.commit()
+    # Clean up Auth table entries for the removed Password field.
+    frappe.db.delete(
+        "__Auth",
+        {"doctype": doctype, "fieldname": "registration_key"},
+    )
+    frappe.db.commit()

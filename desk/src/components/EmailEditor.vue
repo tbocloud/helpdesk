@@ -144,6 +144,38 @@
             </template>
           </AttachmentItem>
         </div>
+        <!-- AI draft status -->
+        <div
+          v-if="aiError || aiUndoAvailable"
+          class="mx-6 md:mx-5 mb-2 flex items-center gap-2 text-xs"
+          aria-live="polite"
+        >
+          <p
+            v-if="aiError"
+            role="alert"
+            class="flex min-w-0 items-center gap-1.5 text-danger"
+          >
+            <LucideCircleAlert class="size-3.5 shrink-0" aria-hidden="true" />
+            <span class="truncate">{{ aiError }}</span>
+          </p>
+          <template v-else>
+            <LucideSparkles
+              class="size-3.5 shrink-0 text-ink-gray-5"
+              aria-hidden="true"
+            />
+            <span class="text-ink-gray-6">
+              {{ __("AI draft inserted. Review it before sending.") }}
+            </span>
+          </template>
+          <button
+            v-if="aiUndoAvailable"
+            type="button"
+            class="ms-auto rounded px-1 text-ink-gray-6 underline-offset-2 hover:text-ink-gray-9 hover:underline"
+            @click="undoAiDraft"
+          >
+            {{ __("Undo") }}
+          </button>
+        </div>
         <!-- Fixed Menu -->
         <div
           class="flex justify-between overflow-scroll px-4 py-2.5 items-center border-t"
@@ -181,6 +213,28 @@
                 @click="showSavedRepliesSelectorModal = true"
               >
                 <SavedReplyIcon class="h-4 w-4" />
+              </button>
+              <button
+                v-if="ticketId"
+                type="button"
+                class="inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md bg-brand-soft px-2.5 text-sm font-medium text-brand-ink transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
+                :disabled="draftReply.loading"
+                :aria-busy="draftReply.loading"
+                @click="draftWithAi"
+              >
+                <LucideLoaderCircle
+                  v-if="draftReply.loading"
+                  class="size-4 animate-spin"
+                  aria-hidden="true"
+                />
+                <LucideSparkles v-else class="size-4" aria-hidden="true" />
+                {{
+                  draftReply.loading
+                    ? __("Drafting…")
+                    : hasDraftText
+                    ? __("Improve with AI")
+                    : __("Draft with AI")
+                }}
               </button>
               <div class="h-4 w-[2px] border-s ml-1" />
             </div>
@@ -240,6 +294,10 @@ import {
   ref,
   watch,
 } from "vue";
+import { __ } from "@/translation";
+import LucideCircleAlert from "~icons/lucide/circle-alert";
+import LucideLoaderCircle from "~icons/lucide/loader-circle";
+import LucideSparkles from "~icons/lucide/sparkles";
 import SavedReplyIcon from "./icons/SavedReplyIcon.vue";
 
 // ─── Props & Emits ────────────────────────────────────────────
@@ -392,6 +450,66 @@ function applySavedReplies(template: string) {
   textEditor.chain().focus("start").insertContent(template).run();
 }
 
+// ─── Draft with AI ────────────────────────────────────────────
+const aiError = ref("");
+// Editor content from before the last AI draft; undefined when there's nothing to undo
+const aiUndoContent = ref<string | null | undefined>(undefined);
+const aiUndoAvailable = computed(() => aiUndoContent.value !== undefined);
+let contentBeforeDraft: string | null = null;
+
+const hasDraftText = computed(
+  () => !isContentEmpty(newEmail.value) && !isOnlySignature(newEmail.value)
+);
+
+// The signature is appended after the draft, so keep it out of what the AI sees
+function draftWithoutSignature(content: string | null) {
+  const text = htmlToText(content ?? "");
+  const signature = htmlToText(emailSignature.value ?? "");
+  if (signature && text.endsWith(signature)) {
+    return text.slice(0, -signature.length).trim();
+  }
+  return text;
+}
+
+const draftReply = createResource({
+  url: "helpdesk.api.ticket_ai.draft_reply",
+  makeParams: () => ({
+    ticket: props.ticketId,
+    current_draft: hasDraftText.value
+      ? draftWithoutSignature(newEmail.value)
+      : "",
+  }),
+  onSuccess: (data: { reply: string }) => {
+    aiUndoContent.value = contentBeforeDraft;
+    newEmail.value = data.reply + (emailSignature.value ?? "");
+    focusEditorAtStart();
+  },
+  onError: (error: { messages?: string[] }) => {
+    aiError.value =
+      error?.messages?.[0] || __("AI drafting failed. Try again.");
+  },
+});
+
+function draftWithAi() {
+  if (draftReply.loading) return;
+  aiError.value = "";
+  contentBeforeDraft = newEmail.value;
+  // onError already surfaces the message inline
+  draftReply.submit().catch(() => {});
+}
+
+function undoAiDraft() {
+  if (aiUndoContent.value === undefined) return;
+  newEmail.value = aiUndoContent.value;
+  clearAiState();
+  focusEditorAtStart();
+}
+
+function clearAiState() {
+  aiUndoContent.value = undefined;
+  aiError.value = "";
+}
+
 const sendMail = createResource({
   url: "run_doc_method",
   makeParams: () => ({
@@ -486,6 +604,7 @@ function addToReply(
 }
 
 function resetState() {
+  clearAiState();
   newEmail.value = emailSignature.value ? emailSignature.value : null;
   attachments.value = [];
   quotedContent.value = null;
@@ -494,6 +613,7 @@ function resetState() {
 }
 
 function handleDiscard() {
+  clearAiState();
   attachments.value = [];
   newEmail.value = getInitialContent();
   quotedContent.value = null;
@@ -630,5 +750,6 @@ defineExpose({
   addToReply,
   editor,
   submitMail,
+  toEmails: toEmailsClone,
 });
 </script>

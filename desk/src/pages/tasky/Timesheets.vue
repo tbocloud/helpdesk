@@ -1,87 +1,268 @@
 <template>
-  <div class="flex flex-col h-full">
+  <div class="flex h-full flex-col">
     <LayoutHeader>
-      <template #left-header><div class="text-lg-medium text-ink-gray-9">{{ __("Timesheets") }}</div></template>
+      <template #left-header>
+        <div class="text-lg-medium text-ink-gray-9">{{ __("Timesheets") }}</div>
+      </template>
       <template #right-header>
-        <button class="flex items-center gap-1.5 px-3 py-1.5 rounded text-sm bg-surface-gray-3 text-ink-gray-8 hover:bg-surface-gray-4 transition-colors" @click="showForm = !showForm">
-          <Plus class="size-4" /> {{ __("New Timesheet") }}
-        </button>
+        <Button
+          variant="ghost"
+          :label="__('Refresh')"
+          :loading="timesheets.loading && !!timesheets.data"
+          @click="timesheets.reload()"
+        >
+          <template #icon><LucideRefreshCw class="size-4" /></template>
+        </Button>
+        <Button variant="solid" :label="__('Log time')" @click="openForm">
+          <template #prefix
+            ><LucidePlus class="size-4" aria-hidden="true"
+          /></template>
+        </Button>
       </template>
     </LayoutHeader>
-    <div class="flex-1 overflow-auto p-5">
-      <div v-if="showForm" class="bg-surface-base border border-outline-gray-2 rounded-lg p-5 mb-6">
-        <div class="text-sm-medium text-ink-gray-8 mb-4">{{ __("Create Timesheet") }}</div>
-        <div class="grid grid-cols-2 gap-4 mb-4">
-          <div class="flex flex-col gap-1 col-span-2">
-            <label class="text-xs text-ink-gray-5">Title</label>
-            <input v-model="form.title" class="border border-outline-gray-2 rounded px-3 py-1.5 text-sm bg-surface-base focus:outline-none" placeholder="e.g. Weekly meeting, Bug fix..." />
-          </div>
-          <div class="flex flex-col gap-1">
-            <label class="text-xs text-ink-gray-5">Project</label>
-            <select v-model="form.project" class="border border-outline-gray-2 rounded px-3 py-1.5 text-sm bg-surface-base focus:outline-none">
-              <option value="">None</option>
-              <option v-for="p in (projectList.data ?? [])" :key="p.name" :value="p.name">{{ p.project_name || p.name }}</option>
-            </select>
-          </div>
-          <div class="flex flex-col gap-1">
-            <label class="text-xs text-ink-gray-5">Task (optional)</label>
-            <select v-model="form.task" class="border border-outline-gray-2 rounded px-3 py-1.5 text-sm bg-surface-base focus:outline-none" :disabled="!form.project">
-              <option value="">None</option>
-              <option v-for="t in taskList" :key="t.name" :value="t.name">{{ t.subject }}</option>
-            </select>
-          </div>
-          <div class="flex flex-col gap-1">
-            <label class="text-xs text-ink-gray-5">Hours</label>
-            <input v-model.number="form.hours" type="number" step="0.25" min="0.25" class="border border-outline-gray-2 rounded px-3 py-1.5 text-sm bg-surface-base focus:outline-none" />
-          </div>
-          <div class="flex flex-col gap-1">
-            <label class="text-xs text-ink-gray-5">Notes</label>
-            <input v-model="form.notes" class="border border-outline-gray-2 rounded px-3 py-1.5 text-sm bg-surface-base focus:outline-none" />
-          </div>
-        </div>
-        <div class="flex items-center gap-2">
-          <button class="px-4 py-1.5 rounded text-sm bg-surface-gray-3 text-ink-gray-8 hover:bg-surface-gray-4 disabled:opacity-50" :disabled="!form.title || createTs.loading" @click="onCreate">{{ createTs.loading ? "Saving..." : "Create Timesheet" }}</button>
-          <button class="px-4 py-1.5 rounded text-sm text-ink-gray-6 hover:text-ink-gray-8" @click="showForm = false">Cancel</button>
-        </div>
-      </div>
 
-      <div v-if="timesheets.loading" class="flex items-center justify-center h-64"><div class="text-p-base text-ink-gray-6">Loading...</div></div>
-      <div v-else-if="!timesheets.data?.length" class="flex items-center justify-center h-64">
-        <div class="flex flex-col items-center gap-2"><LucideClock class="size-12 text-ink-gray-4" /><div class="text-lg-medium text-ink-gray-6">No timesheets yet</div></div>
-      </div>
-      <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        <div v-for="ts in timesheets.data" :key="ts.name" class="bg-surface-base border border-outline-gray-2 rounded-lg p-4">
-          <div class="text-sm-medium text-ink-gray-9 truncate mb-0.5">{{ ts.title || ts.name }}</div>
-          <div v-if="ts.project_name || ts.projects?.length" class="text-xs text-ink-gray-5 mb-1">
-            {{ ts.project_name || "" }} {{ ts.projects && ts.projects[0] ? "(" + ts.projects[0] + ")" : "" }}
+    <div class="flex-1 overflow-auto">
+      <div class="mx-auto w-full max-w-5xl px-4 py-5 md:px-6">
+        <TaskyState
+          v-if="timesheets.error && !timesheets.data"
+          error
+          :icon="LucideCircleAlert"
+          :title="__('Couldn\'t load your timesheets')"
+          :message="__('Check your connection and try again.')"
+        >
+          <Button :label="__('Retry')" @click="timesheets.reload()" />
+        </TaskyState>
+
+        <template v-else>
+          <!-- Summary -->
+          <div class="grid grid-cols-2 gap-3 md:grid-cols-3">
+            <div
+              v-for="stat in stats"
+              :key="stat.key"
+              class="flex flex-col gap-3 rounded-lg border border-outline-gray-2 bg-surface-base p-4"
+            >
+              <div class="flex items-center justify-between">
+                <span class="text-sm text-ink-gray-6">{{ stat.label }}</span>
+                <component
+                  :is="stat.icon"
+                  class="size-4 text-ink-gray-5"
+                  aria-hidden="true"
+                />
+              </div>
+              <span class="text-2xl-semibold tabular-nums text-ink-gray-9">
+                <span
+                  v-if="!timesheets.data"
+                  class="inline-block h-7 w-10 animate-pulse rounded bg-surface-gray-2"
+                />
+                <template v-else>{{ stat.value }}</template>
+              </span>
+            </div>
           </div>
-          <div class="flex items-center gap-3 text-xs text-ink-gray-5">
-            <span class="px-2 py-0.5 rounded-full" :class="ts.status === 'Submitted' ? 'bg-ink-green-1 text-ink-green-8' : 'bg-ink-amber-1 text-ink-amber-8'">{{ ts.status }}</span>
-            <span>{{ ts.total_hours || 0 }}h</span>
-            <span>{{ formatDate(ts.modified) }}</span>
+
+          <div
+            class="mt-6 overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base shadow-sm"
+          >
+            <div
+              class="hidden grid-cols-[1fr_7rem_5rem_6rem] gap-4 border-b border-outline-gray-2 bg-surface-gray-1 px-4 py-2 text-xs text-ink-gray-5 md:grid"
+            >
+              <span>{{ __("Timesheet") }}</span>
+              <span>{{ __("Status") }}</span>
+              <span class="text-right">{{ __("Hours") }}</span>
+              <span class="text-right">{{ __("Updated") }}</span>
+            </div>
+
+            <!-- Loading -->
+            <template v-if="!timesheets.data">
+              <div
+                v-for="i in 5"
+                :key="i"
+                class="flex items-center gap-3 border-b border-outline-gray-1 px-4 py-3.5 last:border-b-0"
+                aria-hidden="true"
+              >
+                <div class="flex flex-1 flex-col gap-2">
+                  <div
+                    class="h-3.5 w-2/5 animate-pulse rounded bg-surface-gray-2"
+                  />
+                  <div
+                    class="h-3 w-1/4 animate-pulse rounded bg-surface-gray-2"
+                  />
+                </div>
+                <div class="h-3 w-10 animate-pulse rounded bg-surface-gray-2" />
+              </div>
+            </template>
+
+            <!-- Empty -->
+            <TaskyState
+              v-else-if="!timesheets.data.length"
+              :icon="LucideClock"
+              :title="__('No timesheets yet')"
+              :message="
+                __(
+                  'Log time against a project or task, or complete a task on the board to record hours.'
+                )
+              "
+            >
+              <Button variant="solid" :label="__('Log time')" @click="openForm">
+                <template #prefix
+                  ><LucidePlus class="size-4" aria-hidden="true"
+                /></template>
+              </Button>
+            </TaskyState>
+
+            <ul v-else role="list">
+              <li
+                v-for="ts in timesheets.data"
+                :key="ts.name"
+                class="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-1 border-b border-outline-gray-1 px-4 py-3 last:border-b-0 md:grid-cols-[1fr_7rem_5rem_6rem]"
+              >
+                <div class="min-w-0">
+                  <div class="truncate text-sm text-ink-gray-9">
+                    {{ ts.title || ts.name }}
+                  </div>
+                  <div
+                    class="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 text-xs text-ink-gray-5"
+                  >
+                    <span class="font-mono">{{ ts.name }}</span>
+                    <template v-if="ts.project_name || ts.projects?.length">
+                      <span aria-hidden="true">·</span>
+                      <span class="truncate">{{
+                        ts.project_name || ts.projects[0]
+                      }}</span>
+                    </template>
+                  </div>
+                </div>
+                <span class="hidden md:block">
+                  <TaskyBadge
+                    :tone="ts.status === 'Submitted' ? 'success' : 'neutral'"
+                    :icon="
+                      ts.status === 'Submitted'
+                        ? LucideCircleCheck
+                        : LucideCircleDashed
+                    "
+                    :label="__(ts.status)"
+                  />
+                </span>
+                <span
+                  class="text-right font-mono text-sm tabular-nums text-ink-gray-8"
+                >
+                  {{ formatHours(ts.total_hours) }}
+                </span>
+                <span
+                  class="hidden text-right text-sm tabular-nums text-ink-gray-5 md:block"
+                >
+                  {{ formatDate(ts.modified) }}
+                </span>
+              </li>
+            </ul>
           </div>
-        </div>
+        </template>
       </div>
     </div>
+
+    <Dialog v-model:open="showForm" :title="__('Log time')" size="lg">
+      <form
+        id="tasky-new-timesheet"
+        class="flex flex-col gap-4"
+        novalidate
+        @submit.prevent="onCreate"
+      >
+        <TextInput
+          v-model="form.title"
+          :label="__('Title')"
+          :placeholder="__('e.g. Weekly meeting, Bug fix…')"
+          required
+        />
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <FormControl
+            v-model="form.project"
+            type="select"
+            :label="__('Project')"
+            :options="projectOptions"
+          />
+          <FormControl
+            v-model="form.task"
+            type="select"
+            :label="__('Task (optional)')"
+            :options="taskOptions"
+            :disabled="!form.project || taskResource.loading"
+          />
+          <TextInput
+            v-model.number="form.hours"
+            type="number"
+            step="0.25"
+            min="0.25"
+            :label="__('Hours')"
+          />
+          <TextInput v-model="form.notes" :label="__('Notes')" />
+        </div>
+        <div
+          v-if="createTs.error"
+          role="alert"
+          class="flex items-start gap-2 rounded-md bg-danger-soft px-3 py-2 text-p-sm text-danger"
+        >
+          <LucideCircleAlert
+            class="mt-0.5 size-4 shrink-0"
+            aria-hidden="true"
+          />
+          {{ errorText(createTs.error) }}
+        </div>
+      </form>
+      <template #actions="{ close }">
+        <div class="flex justify-end gap-2">
+          <Button :label="__('Cancel')" @click="close" />
+          <Button
+            variant="solid"
+            type="submit"
+            form="tasky-new-timesheet"
+            :label="__('Create timesheet')"
+            :loading="createTs.loading"
+            :disabled="!form.title.trim()"
+          />
+        </div>
+      </template>
+    </Dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, computed, watch } from "vue";
-import { createResource } from "frappe-ui";
-import { __ } from "@/translation";
 import LayoutHeader from "@/components/LayoutHeader.vue";
+import { __ } from "@/translation";
+import {
+  Button,
+  Dialog,
+  FormControl,
+  TextInput,
+  createResource,
+  dayjs,
+  toast,
+} from "frappe-ui";
+import { computed, reactive, ref, watch } from "vue";
+import LucideCircleAlert from "~icons/lucide/circle-alert";
+import LucideCircleCheck from "~icons/lucide/circle-check";
+import LucideCircleDashed from "~icons/lucide/circle-dashed";
 import LucideClock from "~icons/lucide/clock";
-import Plus from "~icons/lucide/plus";
+import LucideFileClock from "~icons/lucide/file-clock";
+import LucidePlus from "~icons/lucide/plus";
+import LucideRefreshCw from "~icons/lucide/refresh-cw";
+import LucideTimer from "~icons/lucide/timer";
+import TaskyBadge from "./components/TaskyBadge.vue";
+import TaskyState from "./components/TaskyState.vue";
 
 const showForm = ref(false);
 
-const form = reactive({ title: "", project: "", task: "", hours: 1, notes: "" });
+const form = reactive({
+  title: "",
+  project: "",
+  task: "",
+  hours: 1,
+  notes: "",
+});
 
 const timesheets = createResource({
   url: "helpdesk.tasky.api.get_my_timesheets",
   auto: true,
   transform: (d: any[]) => d ?? [],
+  onError() {},
 });
 
 const projectList = createResource({
@@ -98,26 +279,89 @@ const taskResource = createResource({
 
 const taskList = computed(() => taskResource.data ?? []);
 
-watch(() => form.project, (val) => {
-  form.task = "";
-  if (val) {
-    taskResource.submit({ project: val });
+const projectOptions = computed(() => [
+  { label: __("None"), value: "" },
+  ...(projectList.data ?? []).map((p: any) => ({
+    label: p.project_name || p.name,
+    value: p.name,
+  })),
+]);
+
+const taskOptions = computed(() => [
+  {
+    label: taskResource.loading ? __("Loading tasks…") : __("None"),
+    value: "",
+  },
+  ...taskList.value.map((t: any) => ({ label: t.subject, value: t.name })),
+]);
+
+watch(
+  () => form.project,
+  (val) => {
+    form.task = "";
+    if (val) {
+      taskResource.submit({ project: val });
+    }
   }
-});
+);
 
 const createTs = createResource({
   url: "helpdesk.tasky.api.create_timesheet",
   onSuccess() {
-    form.title = ""; form.project = ""; form.task = ""; form.hours = 1; form.notes = "";
+    toast.success(__("Timesheet created"));
+    resetForm();
     showForm.value = false;
     timesheets.reload();
   },
+  // shown inline in the dialog
+  onError() {},
 });
 
+const stats = computed(() => {
+  const list: any[] = timesheets.data ?? [];
+  const hours = list.reduce(
+    (sum, ts) => sum + (Number(ts.total_hours) || 0),
+    0
+  );
+  return [
+    {
+      key: "count",
+      label: __("Timesheets"),
+      value: list.length,
+      icon: LucideFileClock,
+    },
+    {
+      key: "hours",
+      label: __("Hours logged"),
+      value: formatHours(hours),
+      icon: LucideTimer,
+    },
+    {
+      key: "drafts",
+      label: __("Drafts"),
+      value: list.filter((ts) => ts.status === "Draft").length,
+      icon: LucideCircleDashed,
+    },
+  ];
+});
+
+function resetForm() {
+  form.title = "";
+  form.project = "";
+  form.task = "";
+  form.hours = 1;
+  form.notes = "";
+}
+
+function openForm() {
+  createTs.reset();
+  showForm.value = true;
+}
+
 function onCreate() {
-  if (!form.title) return;
+  if (!form.title.trim() || createTs.loading) return;
   createTs.submit({
-    title: form.title,
+    title: form.title.trim(),
     project: form.project || null,
     task: form.task || null,
     hours: form.hours || 1,
@@ -125,5 +369,18 @@ function onCreate() {
   });
 }
 
-function formatDate(d: string) { return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" }); }
+function errorText(err: { messages?: string[]; message?: string }) {
+  return err.messages?.length
+    ? err.messages.join(" ")
+    : err.message || __("Couldn't create the timesheet.");
+}
+
+function formatHours(h: number | string | null | undefined) {
+  const n = Number(h) || 0;
+  return `${Math.round(n * 100) / 100}h`;
+}
+
+function formatDate(d: string) {
+  return d ? dayjs(d).format("D MMM") : "—";
+}
 </script>

@@ -49,18 +49,34 @@ class TestTaskyPermissions(FrappeTestCase):
         self.addCleanup(frappe.set_user, "Administrator")
 
         create_customer(CUSTOMER)
-        self.project = self.as_user(PM, api.create_project,
+        self.project = self.as_user(
+            PM,
+            api.create_project,
             project_name=f"{CUSTOMER} - ERP Implementation",
             customer=CUSTOMER,
-            members=json.dumps([
-                {"user": DEV_A[0], "custom_role": "Developer"},
-                {"user": DEV_B[0], "custom_role": "Developer"},
-            ]),
+            members=json.dumps(
+                [
+                    {"user": DEV_A[0], "custom_role": "Developer"},
+                    {"user": DEV_B[0], "custom_role": "Developer"},
+                ]
+            ),
         )["name"]
-        self.task_a = self.as_user(PM, api.add_task, project=self.project,
-            task_name="Configure chart of accounts", phase="Setup", assigned_to=DEV_A[0])["name"]
-        self.task_b = self.as_user(PM, api.add_task, project=self.project,
-            task_name="Migrate opening stock", phase="Data Migration", assigned_to=DEV_B[0])["name"]
+        self.task_a = self.as_user(
+            PM,
+            api.add_task,
+            project=self.project,
+            task_name="Configure chart of accounts",
+            phase="Setup",
+            assigned_to=DEV_A[0],
+        )["name"]
+        self.task_b = self.as_user(
+            PM,
+            api.add_task,
+            project=self.project,
+            task_name="Migrate opening stock",
+            phase="Data Migration",
+            assigned_to=DEV_B[0],
+        )["name"]
 
     def as_user(self, user, fn, **kwargs):
         frappe.set_user(user[0])
@@ -75,19 +91,25 @@ class TestTaskyPermissions(FrappeTestCase):
         detail = self.as_user(PM, api.get_project_detail, project=self.project)
         self.assertTrue(detail["can_manage"])
         self.assertEqual(detail["customer"], CUSTOMER)
-        roles = {u.user: u.custom_role for u in frappe.get_doc("Project", self.project).users}
+        roles = {
+            u.user: u.custom_role for u in frappe.get_doc("Project", self.project).users
+        }
         self.assertEqual(roles[PM[0]], "Project Manager")
 
     def test_developer_cannot_create_project(self):
         with self.assertRaises(frappe.PermissionError):
-            self.as_user(DEV_A, api.create_project, project_name=f"{CUSTOMER} - Side Project")
+            self.as_user(
+                DEV_A, api.create_project, project_name=f"{CUSTOMER} - Side Project"
+            )
 
     def test_members_see_project_but_cannot_manage_it(self):
         projects = {p["name"]: p for p in self.as_user(DEV_A, api.get_projects)}
         self.assertIn(self.project, projects)
         self.assertFalse(projects[self.project]["can_manage"])
         with self.assertRaises(frappe.PermissionError):
-            self.as_user(DEV_A, api.add_task, project=self.project, task_name="Sneaky task")
+            self.as_user(
+                DEV_A, api.add_task, project=self.project, task_name="Sneaky task"
+            )
 
     def test_outsider_and_other_pm_cannot_see_project(self):
         make_project(f"{OTHER_CUSTOMER} - Support Rollout", owner=OTHER_PM[0])
@@ -116,8 +138,18 @@ class TestTaskyPermissions(FrappeTestCase):
         self.assertEqual(on_board, {self.task_a, self.task_b})
 
     def test_dashboard_stats_follow_visibility(self):
-        self.assertEqual(self.as_user(PM, api.get_project_dashboard, project=self.project)["stats"]["total"], 2)
-        self.assertEqual(self.as_user(DEV_A, api.get_project_dashboard, project=self.project)["stats"]["total"], 1)
+        self.assertEqual(
+            self.as_user(PM, api.get_project_dashboard, project=self.project)["stats"][
+                "total"
+            ],
+            2,
+        )
+        self.assertEqual(
+            self.as_user(DEV_A, api.get_project_dashboard, project=self.project)[
+                "stats"
+            ]["total"],
+            1,
+        )
 
     def test_developer_can_work_own_task_only(self):
         self.as_user(DEV_A, api.move_task, task=self.task_a, new_status="Working")
@@ -135,19 +167,70 @@ class TestTaskyPermissions(FrappeTestCase):
     # --- timesheets ---
 
     def test_completing_task_logs_timesheet_visible_to_pm(self):
-        self.as_user(DEV_A, api.complete_task, task=self.task_a, hours_worked=3, notes="Accounts mapped")
-        timesheet = frappe.db.get_value("Timesheet Detail", {"task": self.task_a}, "parent")
+        self.as_user(
+            DEV_A,
+            api.complete_task,
+            task=self.task_a,
+            hours_worked=3,
+            notes="Accounts mapped",
+        )
+        timesheet = frappe.db.get_value(
+            "Timesheet Detail", {"task": self.task_a}, "parent"
+        )
         self.assertTrue(timesheet)
         self.assertEqual(frappe.db.get_value("Timesheet", timesheet, "total_hours"), 3)
 
-        self.assertIn(timesheet, self.as_user(PM, frappe.get_list, doctype="Timesheet", pluck="name"))
-        self.assertNotIn(timesheet, self.as_user(DEV_B, frappe.get_list, doctype="Timesheet", pluck="name"))
+        self.assertIn(
+            timesheet,
+            self.as_user(PM, frappe.get_list, doctype="Timesheet", pluck="name"),
+        )
+        self.assertNotIn(
+            timesheet,
+            self.as_user(DEV_B, frappe.get_list, doctype="Timesheet", pluck="name"),
+        )
 
     # --- templates ---
 
     def test_templates_are_for_project_managers(self):
-        created = self.as_user(PM, api.create_template, template_name=f"{CUSTOMER} Rollout",
-            tasks=json.dumps([{"task_name": "Kick-off workshop", "phase_name": "Discovery"}]))
+        created = self.as_user(
+            PM,
+            api.create_template,
+            template_name=f"{CUSTOMER} Rollout",
+            tasks=json.dumps(
+                [{"task_name": "Kick-off workshop", "phase_name": "Discovery"}]
+            ),
+        )
         self.assertTrue(created["name"])
         with self.assertRaises(frappe.PermissionError):
             self.as_user(DEV_A, api.get_templates)
+
+    # --- manual tasks ---
+
+    def test_pm_adds_manual_task_for_a_member(self):
+        task = self.as_user(
+            PM,
+            api.add_task,
+            project=self.project,
+            task_name="Set up tax templates",
+            description="VAT 5% and zero-rated",
+            assigned_to=DEV_B[0],
+            due_date="2026-10-15",
+        )
+        self.assertEqual(task["assignees"], [DEV_B[0]])
+        self.assertEqual(
+            frappe.db.get_value("Task", task["name"], "description"),
+            "VAT 5% and zero-rated",
+        )
+        self.assertIn(
+            task["name"], [t["name"] for t in self.as_user(DEV_B, api.get_my_tasks)]
+        )
+
+    def test_manual_task_cannot_go_to_non_member(self):
+        with self.assertRaises(frappe.ValidationError):
+            self.as_user(
+                PM,
+                api.add_task,
+                project=self.project,
+                task_name="Sneaky",
+                assigned_to=OUTSIDER[0],
+            )

@@ -11,8 +11,10 @@ from helpdesk.tasky.permissions import MANAGER_PROJECT_ROLE, can_manage_project
 
 def _resolve_project(project, ptype="read"):
     """Find project by name or project_name and check the user may `ptype` it."""
-    name = project if frappe.db.exists("Project", project) else frappe.db.get_value(
-        "Project", {"project_name": project}, "name"
+    name = (
+        project
+        if frappe.db.exists("Project", project)
+        else frappe.db.get_value("Project", {"project_name": project}, "name")
     )
     if not name:
         frappe.throw(_("Project not found: {0}").format(project))
@@ -48,33 +50,44 @@ def complete_task(task, hours_worked=0, notes=""):
     """Complete a task with optional timesheet entry."""
     doc = frappe.get_doc("Task", str(task))
     doc.status = "Completed"
-    doc.custom_actual_hours = (doc.custom_actual_hours or 0) + (float(hours_worked) or 0)
+    doc.custom_actual_hours = (doc.custom_actual_hours or 0) + (
+        float(hours_worked) or 0
+    )
     doc.custom_timer_start = None
     doc.custom_timer_elapsed = 0
     doc.save()
 
     if float(hours_worked) > 0:
         try:
-            employee = frappe.db.get_value("Employee", {"user_id": frappe.session.user}, "name")
-            ts = frappe.get_doc({
-                "doctype": "Timesheet",
-                "title": f"Task: {doc.subject}",
-                "employee": employee,
-                "time_logs": [{
-                    "task": doc.name,
-                    "from_time": frappe.utils.now(),
-                    "hours": float(hours_worked),
-                    "description": notes or f"Completed task: {doc.subject}",
-                    "project": doc.project,
-                    "completed": 1,
-                }],
-            })
+            employee = frappe.db.get_value(
+                "Employee", {"user_id": frappe.session.user}, "name"
+            )
+            ts = frappe.get_doc(
+                {
+                    "doctype": "Timesheet",
+                    "title": f"Task: {doc.subject}",
+                    "employee": employee,
+                    "time_logs": [
+                        {
+                            "task": doc.name,
+                            "from_time": frappe.utils.now(),
+                            "hours": float(hours_worked),
+                            "description": notes or f"Completed task: {doc.subject}",
+                            "project": doc.project,
+                            "completed": 1,
+                        }
+                    ],
+                }
+            )
             ts.flags.ignore_mandatory = True
             ts.insert()
             try:
                 ts.submit()
-            except Exception:
-                pass
+            except Exception:  # noqa: BLE001 - keep the draft timesheet, but say why it wasn't submitted
+                frappe.log_error(
+                    title=f"Timesheet submit failed for {ts.name}",
+                    message=frappe.get_traceback(),
+                )
             frappe.db.commit()
         except Exception:
             frappe.log_error(title="complete_task Timesheet Error")
@@ -88,6 +101,7 @@ def _compute_due_date(project_start, phase_order, task_sort_order):
     if not project_start:
         return None, None
     from datetime import timedelta
+
     base = project_start
     if isinstance(base, str):
         base = frappe.utils.get_datetime(base)
@@ -102,33 +116,54 @@ def _compute_due_date(project_start, phase_order, task_sort_order):
 
 
 @frappe.whitelist()
-def create_project(project_name, expected_start_date=None, expected_end_date=None, members="[]", customer=None):
+def create_project(
+    project_name,
+    expected_start_date=None,
+    expected_end_date=None,
+    members="[]",
+    customer=None,
+):
     """Create a new ERPNext Project with optional team members."""
     import json
+
     existing = frappe.db.get_value("Project", {"project_name": project_name}, "name")
     if existing:
         frappe.throw(_("Project with this name already exists: {0}").format(existing))
 
-    members_list = json.loads(str(members)) if isinstance(members, str) else (members or [])
+    members_list = (
+        json.loads(str(members)) if isinstance(members, str) else (members or [])
+    )
 
-    doc = frappe.get_doc({
-        "doctype": "Project",
-        "project_name": project_name,
-        "customer": customer or None,
-        "expected_start_date": expected_start_date or None,
-        "expected_end_date": expected_end_date or None,
-        "status": "Open",
-    })
+    doc = frappe.get_doc(
+        {
+            "doctype": "Project",
+            "project_name": project_name,
+            "customer": customer or None,
+            "expected_start_date": expected_start_date or None,
+            "expected_end_date": expected_end_date or None,
+            "status": "Open",
+        }
+    )
     for m in members_list:
-        doc.append("users", {
-            "user": m.get("user", ""),
-            "custom_role": m.get("custom_role", ""),
-        })
+        doc.append(
+            "users",
+            {
+                "user": m.get("user", ""),
+                "custom_role": m.get("custom_role", ""),
+            },
+        )
     if frappe.session.user not in [u.user for u in doc.users]:
-        doc.append("users", {"user": frappe.session.user, "custom_role": MANAGER_PROJECT_ROLE})
+        doc.append(
+            "users", {"user": frappe.session.user, "custom_role": MANAGER_PROJECT_ROLE}
+        )
     doc.insert()
     frappe.db.commit()
-    return {"name": doc.name, "project_name": doc.project_name, "customer": doc.customer, "status": doc.status}
+    return {
+        "name": doc.name,
+        "project_name": doc.project_name,
+        "customer": doc.customer,
+        "status": doc.status,
+    }
 
 
 @frappe.whitelist()
@@ -149,7 +184,9 @@ def generate_checklist(project, template):
     template_doc = frappe.get_doc("HD Task Template", template_name)
     template_doc.check_permission("read")
 
-    project_users = frappe.get_all("Project User", {"parent": project}, ["user", "custom_role"])
+    project_users = frappe.get_all(
+        "Project User", {"parent": project}, ["user", "custom_role"]
+    )
     project_start = frappe.db.get_value("Project", project, "expected_start_date")
 
     # Collect distinct phase names in order
@@ -183,34 +220,44 @@ def generate_checklist(project, template):
             return user
         return None
 
-    created_count = 0
     for ttask in template_doc.tasks:
         task_start, task_end = _compute_due_date(
             project_start,
-            phases_seen.index(ttask.phase_name) if ttask.phase_name in phases_seen else 0,
+            phases_seen.index(ttask.phase_name)
+            if ttask.phase_name in phases_seen
+            else 0,
             ttask.sort_order,
         )
 
-        task_doc = frappe.get_doc({
-            "doctype": "Task",
-            "subject": ttask.task_name,
-            "project": project,
-            "description": ttask.description or "",
-            "custom_category": ttask.category,
-            "custom_phase": ttask.phase_name or "",
-            "custom_module": ttask.module_name or "",
-            "custom_estimated_hours": ttask.estimated_hours or 0,
-            "priority": ttask.default_priority or "Medium",
-            "status": "Open",
-            "exp_start_date": task_start,
-            "exp_end_date": task_end,
-        })
+        task_doc = frappe.get_doc(
+            {
+                "doctype": "Task",
+                "subject": ttask.task_name,
+                "project": project,
+                "description": ttask.description or "",
+                "custom_category": ttask.category,
+                "custom_phase": ttask.phase_name or "",
+                "custom_module": ttask.module_name or "",
+                "custom_estimated_hours": ttask.estimated_hours or 0,
+                "priority": ttask.default_priority or "Medium",
+                "status": "Open",
+                "exp_start_date": task_start,
+                "exp_end_date": task_end,
+            }
+        )
         task_doc.insert()
         _assign_user(task_doc, pick_user(ttask.category))
-        created_count += 1
 
     frappe.db.commit()
-    return {"tasks_created": created_count}
+    return {"tasks_created": len(template_doc.tasks)}
+
+
+def _is_project_member(project, user):
+    return bool(
+        frappe.db.exists(
+            "Project User", {"parenttype": "Project", "parent": project, "user": user}
+        )
+    ) or (frappe.db.get_value("Project", project, "owner") == user)
 
 
 def _assign_user(task_doc, user):
@@ -227,20 +274,42 @@ def _assign_user(task_doc, user):
 
 
 @frappe.whitelist()
-def add_task(project, task_name, phase="", category="Functional", priority="Medium", estimated_hours=0, assigned_to="", due_date=None):
-    """Add a single task to a project's checklist."""
+def add_task(
+    project,
+    task_name,
+    phase="",
+    category="Functional",
+    priority="Medium",
+    estimated_hours=0,
+    assigned_to="",
+    due_date=None,
+    description="",
+):
+    """Add a single task to a project, optionally assigned to one of its members."""
     project = _resolve_project(str(project), "write")
-    doc = frappe.get_doc({
-        "doctype": "Task",
-        "subject": str(task_name),
-        "project": project,
-        "custom_category": str(category),
-        "custom_phase": str(phase) if phase else "",
-        "custom_estimated_hours": float(estimated_hours) or 0,
-        "priority": str(priority),
-        "status": "Open",
-        "exp_end_date": due_date if due_date and due_date != "null" else None,
-    })
+    if not str(task_name or "").strip():
+        frappe.throw(_("Task name is required"))
+    assigned_to = str(assigned_to or "").strip()
+    if assigned_to and not _is_project_member(project, assigned_to):
+        frappe.throw(
+            _(
+                "{0} is not a member of this project. Add them to the project first."
+            ).format(assigned_to)
+        )
+    doc = frappe.get_doc(
+        {
+            "doctype": "Task",
+            "subject": str(task_name).strip(),
+            "description": str(description or ""),
+            "project": project,
+            "custom_category": str(category),
+            "custom_phase": str(phase) if phase else "",
+            "custom_estimated_hours": float(estimated_hours) or 0,
+            "priority": str(priority),
+            "status": "Open",
+            "exp_end_date": due_date if due_date and due_date != "null" else None,
+        }
+    )
     doc.insert()
     _assign_user(doc, assigned_to)
     doc.reload()
@@ -262,18 +331,32 @@ def get_my_tasks(project=None, status=None, limit=50):
     tasks = frappe.get_list(
         "Task",
         filters=filters,
-        fields=["name", "subject", "project", "custom_category", "custom_phase",
-                "status", "priority", "exp_end_date", "custom_estimated_hours", "_assign"],
+        fields=[
+            "name",
+            "subject",
+            "project",
+            "custom_category",
+            "custom_phase",
+            "status",
+            "priority",
+            "exp_end_date",
+            "custom_estimated_hours",
+            "_assign",
+        ],
         order_by="custom_phase asc",
         limit=limit,
     )
-    project_names = dict(frappe.get_all(
-        "Project",
-        filters={"name": ("in", list({t.project for t in tasks if t.project}))},
-        fields=["name", "project_name"],
-        as_list=True,
-    ))
-    return [{**_format_task(t), "project_name": project_names.get(t.project)} for t in tasks]
+    project_names = dict(
+        frappe.get_all(
+            "Project",
+            filters={"name": ("in", list({t.project for t in tasks if t.project}))},
+            fields=["name", "project_name"],
+            as_list=True,
+        )
+    )
+    return [
+        {**_format_task(t), "project_name": project_names.get(t.project)} for t in tasks
+    ]
 
 
 @frappe.whitelist()
@@ -302,11 +385,23 @@ def get_project_dashboard(project):
     """
     project = _resolve_project(str(project))
 
-    tasks = frappe.get_list("Task",
+    tasks = frappe.get_list(
+        "Task",
         filters={"project": project},
-        fields=["name", "subject", "custom_category", "custom_phase", "status",
-                "priority", "exp_end_date", "custom_estimated_hours", "_assign", "creation"],
-        order_by="custom_phase asc, subject asc")
+        fields=[
+            "name",
+            "subject",
+            "custom_category",
+            "custom_phase",
+            "status",
+            "priority",
+            "exp_end_date",
+            "custom_estimated_hours",
+            "_assign",
+            "creation",
+        ],
+        order_by="custom_phase asc, subject asc",
+    )
 
     today = frappe.utils.getdate(frappe.utils.today())
 
@@ -317,8 +412,10 @@ def get_project_dashboard(project):
     completed = count("Completed")
     cancelled = count("Cancelled")
     overdue = sum(
-        1 for t in tasks
-        if t.exp_end_date and frappe.utils.getdate(t.exp_end_date) < today
+        1
+        for t in tasks
+        if t.exp_end_date
+        and frappe.utils.getdate(t.exp_end_date) < today
         and t.status not in ("Completed", "Cancelled")
     )
     progress_pct = round((completed / total_tasks * 100), 1) if total_tasks > 0 else 0
@@ -328,7 +425,9 @@ def get_project_dashboard(project):
     for t in sorted(tasks, key=lambda t: t.creation):
         if not t.custom_phase:
             continue
-        stats = phase_stats.setdefault(t.custom_phase, {"total_count": 0, "completed_count": 0})
+        stats = phase_stats.setdefault(
+            t.custom_phase, {"total_count": 0, "completed_count": 0}
+        )
         stats["total_count"] += 1
         stats["completed_count"] += t.status == "Completed"
 
@@ -368,11 +467,22 @@ def get_phase_tasks(project, phase):
     """Get all tasks in a phase for the given project."""
     project = _resolve_project(str(project))
     phase = str(phase)
-    tasks = frappe.get_list("Task",
+    tasks = frappe.get_list(
+        "Task",
         filters={"project": project, "custom_phase": phase},
-        fields=["name", "subject", "custom_category", "custom_phase", "status",
-                "priority", "exp_end_date", "custom_estimated_hours", "_assign"],
-        order_by="subject asc")
+        fields=[
+            "name",
+            "subject",
+            "custom_category",
+            "custom_phase",
+            "status",
+            "priority",
+            "exp_end_date",
+            "custom_estimated_hours",
+            "_assign",
+        ],
+        order_by="subject asc",
+    )
     return [_format_task(t) for t in tasks]
 
 
@@ -380,12 +490,24 @@ def get_phase_tasks(project, phase):
 def get_kanban_tasks(project):
     """Get tasks grouped by status for kanban board."""
     project = _resolve_project(str(project))
-    tasks = frappe.get_list("Task",
+    tasks = frappe.get_list(
+        "Task",
         filters={"project": project},
-        fields=["name", "subject", "custom_category", "custom_phase", "status",
-                "priority", "exp_end_date", "custom_estimated_hours", "_assign",
-                "custom_timer_start", "custom_timer_elapsed"],
-        order_by="custom_phase asc, subject asc")
+        fields=[
+            "name",
+            "subject",
+            "custom_category",
+            "custom_phase",
+            "status",
+            "priority",
+            "exp_end_date",
+            "custom_estimated_hours",
+            "_assign",
+            "custom_timer_start",
+            "custom_timer_elapsed",
+        ],
+        order_by="custom_phase asc, subject asc",
+    )
 
     columns = {
         "Open": [],
@@ -406,35 +528,42 @@ def get_kanban_tasks(project):
 @frappe.whitelist()
 def get_templates():
     """List all available implementation templates."""
-    return frappe.get_list("HD Task Template",
-        fields=["name", "template_name", "industry", "description"])
+    return frappe.get_list(
+        "HD Task Template", fields=["name", "template_name", "industry", "description"]
+    )
 
 
 @frappe.whitelist()
 def create_template(template_name, industry="", description="", tasks="[]"):
     """Create a new HD Task Template with tasks."""
     import json
+
     tasks_list = json.loads(str(tasks)) if isinstance(tasks, str) else tasks
 
     existing = frappe.db.exists("HD Task Template", {"template_name": template_name})
     if existing:
         frappe.throw(_("Template '{0}' already exists").format(template_name))
 
-    doc = frappe.get_doc({
-        "doctype": "HD Task Template",
-        "template_name": template_name,
-        "industry": industry,
-        "description": description,
-        "tasks": [],
-    })
+    doc = frappe.get_doc(
+        {
+            "doctype": "HD Task Template",
+            "template_name": template_name,
+            "industry": industry,
+            "description": description,
+            "tasks": [],
+        }
+    )
     for t in tasks_list:
-        doc.append("tasks", {
-            "task_name": t.get("task_name", ""),
-            "phase_name": t.get("phase_name", ""),
-            "category": t.get("category", "Functional"),
-            "default_priority": t.get("default_priority", "Medium"),
-            "estimated_hours": t.get("estimated_hours", 0),
-        })
+        doc.append(
+            "tasks",
+            {
+                "task_name": t.get("task_name", ""),
+                "phase_name": t.get("phase_name", ""),
+                "category": t.get("category", "Functional"),
+                "default_priority": t.get("default_priority", "Medium"),
+                "estimated_hours": t.get("estimated_hours", 0),
+            },
+        )
     doc.insert()
     frappe.db.commit()
     return {"name": doc.name, "template_name": doc.template_name}
@@ -450,9 +579,17 @@ def get_template(template):
         "template_name": doc.template_name,
         "industry": doc.industry or "",
         "description": doc.description or "",
-        "tasks": [{"task_name": t.task_name, "phase_name": t.phase_name or "", "category": t.category,
-                    "default_priority": t.default_priority, "estimated_hours": t.estimated_hours, "sort_order": t.sort_order}
-                  for t in doc.tasks],
+        "tasks": [
+            {
+                "task_name": t.task_name,
+                "phase_name": t.phase_name or "",
+                "category": t.category,
+                "default_priority": t.default_priority,
+                "estimated_hours": t.estimated_hours,
+                "sort_order": t.sort_order,
+            }
+            for t in doc.tasks
+        ],
     }
 
 
@@ -460,6 +597,7 @@ def get_template(template):
 def update_template(template, template_name, industry="", description="", tasks="[]"):
     """Update an existing HD Task Template."""
     import json
+
     tasks_list = json.loads(str(tasks)) if isinstance(tasks, str) else tasks
     doc = frappe.get_doc("HD Task Template", str(template))
     doc.template_name = template_name
@@ -467,13 +605,16 @@ def update_template(template, template_name, industry="", description="", tasks=
     doc.description = description
     doc.tasks = []
     for t in tasks_list:
-        doc.append("tasks", {
-            "task_name": t.get("task_name", ""),
-            "phase_name": t.get("phase_name", ""),
-            "category": t.get("category", "Functional"),
-            "default_priority": t.get("default_priority", "Medium"),
-            "estimated_hours": t.get("estimated_hours", 0),
-        })
+        doc.append(
+            "tasks",
+            {
+                "task_name": t.get("task_name", ""),
+                "phase_name": t.get("phase_name", ""),
+                "category": t.get("category", "Functional"),
+                "default_priority": t.get("default_priority", "Medium"),
+                "estimated_hours": t.get("estimated_hours", 0),
+            },
+        )
     doc.save()
     frappe.db.commit()
     return {"name": doc.name, "template_name": doc.template_name}
@@ -489,9 +630,15 @@ def get_project_detail(project):
         "project_name": doc.project_name,
         "customer": doc.customer,
         "status": doc.status,
-        "expected_start_date": str(doc.expected_start_date) if doc.expected_start_date else None,
-        "expected_end_date": str(doc.expected_end_date) if doc.expected_end_date else None,
-        "users": [{"user": u.user, "full_name": u.full_name} for u in doc.users] if doc.users else [],
+        "expected_start_date": str(doc.expected_start_date)
+        if doc.expected_start_date
+        else None,
+        "expected_end_date": str(doc.expected_end_date)
+        if doc.expected_end_date
+        else None,
+        "users": [{"user": u.user, "full_name": u.full_name} for u in doc.users]
+        if doc.users
+        else [],
         "can_manage": can_manage_project(doc.name),
     }
 
@@ -499,20 +646,36 @@ def get_project_detail(project):
 @frappe.whitelist()
 def get_users():
     """List enabled users for assignment dropdowns."""
-    return frappe.get_all("User", {"enabled": 1}, ["name", "full_name", "email", "user_image"], order_by="full_name asc")
+    return frappe.get_all(
+        "User",
+        {"enabled": 1},
+        ["name", "full_name", "email", "user_image"],
+        order_by="full_name asc",
+    )
 
 
 @frappe.whitelist()
 def get_projects():
     """List projects visible to the current user."""
-    projects = frappe.get_list("Project",
-        fields=["name", "project_name", "customer", "status", "expected_start_date", "expected_end_date", "priority"])
+    projects = frappe.get_list(
+        "Project",
+        fields=[
+            "name",
+            "project_name",
+            "customer",
+            "status",
+            "expected_start_date",
+            "expected_end_date",
+            "priority",
+        ],
+    )
     for p in projects:
         p["can_manage"] = can_manage_project(p["name"])
     return projects
 
 
 # === Timer ===
+
 
 @frappe.whitelist()
 def start_timer(task):
@@ -532,6 +695,7 @@ def stop_timer(task):
     if not timer_start:
         return {"elapsed": 0}
     from datetime import datetime
+
     start = timer_start
     if isinstance(start, str):
         start = datetime.fromisoformat(start)
@@ -539,8 +703,12 @@ def stop_timer(task):
     actual = frappe.db.get_value("Task", task_id, "custom_actual_hours") or 0
     paused = frappe.db.get_value("Task", task_id, "custom_timer_elapsed") or 0
     frappe.db.set_value("Task", task_id, "custom_timer_start", None)
-    frappe.db.set_value("Task", task_id, "custom_actual_hours", actual + round(elapsed, 2))
-    frappe.db.set_value("Task", task_id, "custom_timer_elapsed", paused + round(elapsed, 2))
+    frappe.db.set_value(
+        "Task", task_id, "custom_actual_hours", actual + round(elapsed, 2)
+    )
+    frappe.db.set_value(
+        "Task", task_id, "custom_timer_elapsed", paused + round(elapsed, 2)
+    )
     frappe.db.commit()
     return {"elapsed": round(elapsed, 2)}
 
@@ -562,16 +730,24 @@ def move_task(task, new_status):
     # Leaving Working: accumulate elapsed from running timer
     if old_status == "Working" and timer_start:
         from datetime import datetime
+
         start = timer_start
         if isinstance(start, str):
             start = datetime.fromisoformat(start)
         elapsed_this_move = (datetime.now() - start).total_seconds() / 3600.0
         frappe.db.set_value("Task", task_id, "custom_timer_start", None)
-        frappe.db.set_value("Task", task_id, "custom_actual_hours", actual + round(elapsed_this_move, 2))
+        frappe.db.set_value(
+            "Task", task_id, "custom_actual_hours", actual + round(elapsed_this_move, 2)
+        )
 
         # Pausing to Open or PendingReview: save elapsed so timer resumes
         if new_status in ("Open", "Pending Review"):
-            frappe.db.set_value("Task", task_id, "custom_timer_elapsed", (elapsed_paused or 0) + round(elapsed_this_move, 2))
+            frappe.db.set_value(
+                "Task",
+                task_id,
+                "custom_timer_elapsed",
+                (elapsed_paused or 0) + round(elapsed_this_move, 2),
+            )
 
     # Entering Working: start timer (fresh or resume)
     if new_status == "Working":
@@ -590,6 +766,7 @@ def get_timer(task):
     if not doc.custom_timer_start:
         return {"running": False, "elapsed": 0, "timer_start": None}
     from datetime import datetime
+
     start = doc.custom_timer_start
     if isinstance(start, str):
         start = datetime.fromisoformat(start)
@@ -600,21 +777,29 @@ def get_timer(task):
 @frappe.whitelist()
 def get_my_timesheets(limit=20):
     """List my timesheets with project info."""
-    timesheets = frappe.get_all("Timesheet",
+    timesheets = frappe.get_all(
+        "Timesheet",
         filters={"owner": frappe.session.user},
         fields=["name", "title", "status", "total_hours", "creation", "modified"],
         order_by="modified desc",
-        limit=limit)
+        limit=limit,
+    )
     for ts in timesheets:
-        projects = frappe.db.sql("""
+        projects = frappe.db.sql(
+            """
             SELECT DISTINCT td.project
             FROM `tabTimesheet Detail` td
             WHERE td.parent = %s AND td.project IS NOT NULL AND td.project != ''
             LIMIT 3
-        """, ts["name"], as_dict=True)
+        """,
+            ts["name"],
+            as_dict=True,
+        )
         ts["projects"] = [p["project"] for p in projects]
         if ts["projects"]:
-            proj_name = frappe.db.get_value("Project", ts["projects"][0], "project_name")
+            proj_name = frappe.db.get_value(
+                "Project", ts["projects"][0], "project_name"
+            )
             ts["project_name"] = proj_name
     return timesheets
 
@@ -623,10 +808,12 @@ def get_my_timesheets(limit=20):
 def get_project_tasks(project):
     """Get all active tasks in a project for dropdown."""
     project = _resolve_project(str(project))
-    return frappe.get_list("Task",
+    return frappe.get_list(
+        "Task",
         filters={"project": project, "status": ("not in", ["Completed", "Cancelled"])},
         fields=["name", "subject"],
-        order_by="subject asc")
+        order_by="subject asc",
+    )
 
 
 @frappe.whitelist()
@@ -638,23 +825,35 @@ def create_timesheet(title, project=None, task=None, hours=0, notes=""):
         _resolve_project(str(project))
     employee = frappe.db.get_value("Employee", {"user_id": frappe.session.user}, "name")
     from_time = frappe.utils.now()
-    ts = frappe.get_doc({
-        "doctype": "Timesheet",
-        "title": title,
-        "employee": employee,
-        "time_logs": [{
-            "task": task,
-            "project": project,
-            "from_time": from_time,
-            "hours": float(hours) or 0,
-            "description": notes,
-        }],
-    })
+    ts = frappe.get_doc(
+        {
+            "doctype": "Timesheet",
+            "title": title,
+            "employee": employee,
+            "time_logs": [
+                {
+                    "task": task,
+                    "project": project,
+                    "from_time": from_time,
+                    "hours": float(hours) or 0,
+                    "description": notes,
+                }
+            ],
+        }
+    )
     ts.flags.ignore_mandatory = True
     ts.insert()
     try:
         ts.submit()
-    except Exception:
-        pass
+    except Exception:  # noqa: BLE001 - keep the draft timesheet, but say why it wasn't submitted
+        frappe.log_error(
+            title=f"Timesheet submit failed for {ts.name}",
+            message=frappe.get_traceback(),
+        )
     frappe.db.commit()
-    return {"name": ts.name, "title": title, "total_hours": float(hours), "status": ts.status}
+    return {
+        "name": ts.name,
+        "title": title,
+        "total_hours": float(hours),
+        "status": ts.status,
+    }

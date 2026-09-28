@@ -12,8 +12,13 @@
         </span>
         <Button
           ref="triggerRef"
-          variant="outline"
-          class="!flex !justify-start w-full active:!bg-inherit hover:shadow-sm [&>span]:w-full"
+          :variant="quiet ? 'ghost' : 'outline'"
+          class="group !flex !justify-start w-full active:!bg-inherit [&>span]:w-full"
+          :class="
+            quiet
+              ? '!h-[30px] !px-2 text-sm font-medium hover:!bg-surface-gray-2'
+              : 'hover:shadow-sm'
+          "
           @click="togglePopover()"
         >
           <div class="flex items-center min-h-[20px] gap-2 w-full">
@@ -28,9 +33,14 @@
               >
                 {{ localAssignees.length }} {{ __("assignees") }}
               </span>
+              <span v-else-if="quiet" class="truncate text-ink-gray-9">
+                {{ assigneeLabel(localAssignees[0]) }}
+              </span>
             </template>
             <template v-else>
-              <span class="text-ink-gray-5">{{ __("No one") }}</span>
+              <span class="text-ink-gray-5" :class="quiet && 'font-normal'">{{
+                __("No one")
+              }}</span>
               <span
                 v-if="!popoverIsOpen"
                 class="text-xs text-ink-gray-6 hover:text-ink-gray-8 cursor-pointer underline ml-auto"
@@ -41,7 +51,14 @@
             </template>
           </div>
           <template #suffix>
-            <LucideChevronDown class="h-4 w-4 ms-auto text-ink-gray-5" />
+            <LucideChevronDown
+              class="h-4 w-4 ms-auto text-ink-gray-5"
+              :class="
+                quiet &&
+                'opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100'
+              "
+              aria-hidden="true"
+            />
           </template>
         </Button>
       </div>
@@ -121,7 +138,7 @@
                     class="absolute block translate-x-1/2 translate-y-1/2 transform rounded-full bottom-0.5 right-0.5"
                   >
                     <span
-                      class="block h-2 w-2 rounded-full border border-slate-2"
+                      class="block h-2 w-2 rounded-full border border-outline-gray-2"
                       :class="
                         agentStatusStore.statusColor(agent.availability || '')
                       "
@@ -179,13 +196,16 @@ import MultipleAvatar from "../MultipleAvatar.vue";
 import UserAvatar from "../UserAvatar.vue";
 interface Props {
   hideLabel?: boolean;
+  /** Borderless trigger for the ticket sidebar's label/value grid */
+  quiet?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   hideLabel: false,
+  quiet: false,
 });
 
-const { hideLabel } = props;
+const { hideLabel, quiet } = props;
 
 const ticket = inject(TicketSymbol)!;
 const assignees = inject(AssigneeSymbol)!;
@@ -390,6 +410,15 @@ function availabilitySubtitle(
   const lastSeen =
     secondsSinceChange < 60 ? __("just now") : prettyDate(changedOn);
   return lastSeen ? __("{0} · Last active {1}", label, lastSeen) : label;
+}
+
+function assigneeLabel(assignee: LocalAssignee): string {
+  return (
+    assignee.label ||
+    assignee.agent_name ||
+    getUser(assignee.name)?.full_name ||
+    assignee.name
+  );
 }
 
 function isSelected(agentName: string): boolean {

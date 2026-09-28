@@ -14,21 +14,21 @@ from helpdesk.utils import normalize_site_url
 
 
 def execute():
-	connections = frappe.get_all(
-		"HDS Support Connection",
-		fields=["name", "site_url", "mcp_endpoint"],
-	)
-	for conn in connections:
-		if not conn.site_url:
-			continue
-		normalized = normalize_site_url(conn.site_url)
-		mcp_endpoint = f"{normalized}/api/method/qcs_support_client.mcp.handler.handle"
-		if normalized == conn.site_url and mcp_endpoint == conn.mcp_endpoint:
-			continue
-		frappe.db.set_value(
-			"HDS Support Connection",
-			conn.name,
-			{"site_url": normalized, "mcp_endpoint": mcp_endpoint},
-			update_modified=False,
-		)
-	frappe.db.commit()
+    connections = frappe.get_all(
+        "HDS Support Connection",
+        fields=["name", "site_url", "mcp_endpoint"],
+    )
+    for conn in connections:
+        if not conn.site_url:
+            continue
+        normalized = normalize_site_url(conn.site_url)
+        mcp_endpoint = f"{normalized}/api/method/qcs_support_client.mcp.handler.handle"
+        if normalized == conn.site_url and mcp_endpoint == conn.mcp_endpoint:
+            continue
+        frappe.db.set_value(
+            "HDS Support Connection",
+            conn.name,
+            {"site_url": normalized, "mcp_endpoint": mcp_endpoint},
+            update_modified=False,
+        )
+    frappe.db.commit()

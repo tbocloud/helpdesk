@@ -5,28 +5,41 @@
         <h3 class="text-xl-semibold text-ink-gray-9">
           {{ isNew ? __("New post") : form.title || __("Post") }}
         </h3>
-        <span
-          v-if="!isNew"
-          class="font-mono text-xs text-ink-gray-5"
-          >{{ post?.name }}</span
-        >
+        <span v-if="!isNew" class="font-mono text-xs text-ink-gray-5">{{
+          post?.name
+        }}</span>
       </div>
     </template>
     <template #body-content>
       <div v-if="loading" class="flex flex-col gap-3 py-2">
-        <div v-for="i in 4" :key="i" class="h-8 animate-pulse rounded bg-surface-gray-2" />
+        <div
+          v-for="i in 4"
+          :key="i"
+          class="h-8 animate-pulse rounded bg-surface-gray-2"
+        />
       </div>
-      <form v-else id="content-post-form" class="flex flex-col gap-4" @submit.prevent="save">
+      <form
+        v-else
+        id="content-post-form"
+        class="flex flex-col gap-4"
+        @submit.prevent="save"
+      >
         <div
           v-if="approvalNote"
           class="flex items-start gap-2 rounded-lg px-3 py-2.5 text-p-sm"
           :class="approvalNote.tone"
           role="status"
         >
-          <component :is="approvalNote.icon" class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+          <component
+            :is="approvalNote.icon"
+            class="mt-0.5 size-4 shrink-0"
+            aria-hidden="true"
+          />
           <div>
             <div class="font-medium">{{ approvalNote.title }}</div>
-            <div v-if="approvalNote.body" class="whitespace-pre-line">{{ approvalNote.body }}</div>
+            <div v-if="approvalNote.body" class="whitespace-pre-line">
+              {{ approvalNote.body }}
+            </div>
           </div>
         </div>
         <FormControl
@@ -71,7 +84,9 @@
             v-model="form.publish_on"
             type="datetime-local"
             :label="__('Publish on')"
-            :description="form.status === 'Idea' ? __('Optional while it is an idea') : ''"
+            :description="
+              form.status === 'Idea' ? __('Optional while it is an idea') : ''
+            "
           />
           <Link
             v-model="form.writer"
@@ -88,7 +103,9 @@
         </div>
         <div class="flex flex-col gap-1.5">
           <div class="flex items-center justify-between gap-2">
-            <label for="post-caption" class="text-xs text-ink-gray-5">{{ __("Caption") }}</label>
+            <label for="post-caption" class="text-xs text-ink-gray-5">{{
+              __("Caption")
+            }}</label>
             <div class="flex items-center gap-2">
               <button
                 v-if="undoAi"
@@ -105,15 +122,27 @@
                 :aria-busy="drafting"
                 @click="draftWithAi"
               >
-                <LucideLoaderCircle v-if="drafting" class="size-4 animate-spin" aria-hidden="true" />
+                <LucideLoaderCircle
+                  v-if="drafting"
+                  class="size-4 animate-spin"
+                  aria-hidden="true"
+                />
                 <LucideSparkles v-else class="size-4" aria-hidden="true" />
-                {{ form.caption.trim() ? __("Improve with AI") : __("Draft with AI") }}
+                {{
+                  form.caption.trim()
+                    ? __("Improve with AI")
+                    : __("Draft with AI")
+                }}
               </button>
             </div>
           </div>
           <FormControl
             v-model="aiBrief"
-            :placeholder="__('Brief for AI (optional), e.g. 20% off until 5 Nov, family audience')"
+            :placeholder="
+              __(
+                'Brief for AI (optional), e.g. 20% off until 5 Nov, family audience'
+              )
+            "
             :aria-label="__('Brief for AI')"
           />
           <FormControl
@@ -123,13 +152,74 @@
             :rows="6"
             :placeholder="__('Write the caption…')"
           />
-          <p v-if="aiError" class="text-xs text-danger" role="alert">{{ aiError }}</p>
+          <p v-if="aiError" class="text-xs text-danger" role="alert">
+            {{ aiError }}
+          </p>
         </div>
         <FormControl
           v-model="form.hashtags"
           :label="__('Hashtags')"
           :placeholder="__('#diwali #offers')"
         />
+        <div class="flex flex-col gap-1.5">
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-ink-gray-5">{{ __("Images") }}</span>
+            <FileUploader
+              v-if="!isNew"
+              :file-types="['image/*']"
+              :upload-args="{
+                doctype: 'HD Content Post',
+                docname: post?.name,
+                private: true,
+              }"
+              @success="images.reload()"
+            >
+              <template #default="{ openFileSelector, uploading }">
+                <Button
+                  size="sm"
+                  :loading="uploading"
+                  :label="__('Add image')"
+                  @click="openFileSelector()"
+                >
+                  <template #prefix
+                    ><LucideImagePlus class="size-4" aria-hidden="true"
+                  /></template>
+                </Button>
+              </template>
+            </FileUploader>
+          </div>
+          <p v-if="isNew" class="text-p-sm text-ink-gray-5">
+            {{ __("Create the post first, then add its designs here.") }}
+          </p>
+          <p v-else-if="!images.data?.length" class="text-p-sm text-ink-gray-5">
+            {{
+              __(
+                "No images yet. They're sent to the client with the approval request."
+              )
+            }}
+          </p>
+          <ul v-else class="grid grid-cols-3 gap-2 sm:grid-cols-4" role="list">
+            <li
+              v-for="img in images.data"
+              :key="img.name"
+              class="group relative aspect-square overflow-hidden rounded-lg border border-outline-gray-2"
+            >
+              <img
+                :src="img.file_url"
+                :alt="img.file_name"
+                class="size-full object-cover"
+              />
+              <button
+                type="button"
+                class="absolute right-1 top-1 grid size-6 place-items-center rounded-md bg-surface-base/90 text-ink-gray-7 opacity-0 shadow-sm transition group-hover:opacity-100 focus-visible:opacity-100"
+                :aria-label="__('Remove {0}', img.file_name)"
+                @click="removeImage(img.name)"
+              >
+                <LucideX class="size-3.5" aria-hidden="true" />
+              </button>
+            </li>
+          </ul>
+        </div>
         <FormControl
           v-if="form.status === 'Published'"
           v-model="form.published_url"
@@ -172,11 +262,15 @@ import {
   Dialog,
   dayjs,
   ErrorMessage,
+  createResource,
+  FileUploader,
   FormControl,
   toast,
 } from "frappe-ui";
 import { computed, reactive, ref, watch } from "vue";
 import LucideCircleCheck from "~icons/lucide/circle-check";
+import LucideImagePlus from "~icons/lucide/image-plus";
+import LucideX from "~icons/lucide/x";
 import LucideClock from "~icons/lucide/clock";
 import LucideLoaderCircle from "~icons/lucide/loader-circle";
 import LucideMessageSquareWarning from "~icons/lucide/message-square-warning";
@@ -221,13 +315,18 @@ const isNew = computed(() => !props.post?.name);
 
 // datetime-local wants "YYYY-MM-DDTHH:mm"; Frappe stores "YYYY-MM-DD HH:mm:ss"
 const toInput = (v?: string) => (v ? dayjs(v).format("YYYY-MM-DDTHH:mm") : "");
-const toServer = (v: string) => (v ? dayjs(v).format("YYYY-MM-DD HH:mm:ss") : null);
+const toServer = (v: string) =>
+  v ? dayjs(v).format("YYYY-MM-DD HH:mm:ss") : null;
 
 watch(open, async (isOpen) => {
   if (!isOpen) return;
   error.value = "";
   Object.assign(form, EMPTY, { publish_on: toInput(props.post?.publish_on) });
-  Object.assign(approval, { client_feedback: "", client_approval_ref: "", sent_for_approval_on: "" });
+  Object.assign(approval, {
+    client_feedback: "",
+    client_approval_ref: "",
+    sent_for_approval_on: "",
+  });
   aiBrief.value = "";
   aiError.value = "";
   undoAi.value = null;
@@ -266,6 +365,39 @@ function textToHtml(text: string) {
     .split(/\n{2,}/)
     .map((para) => `<p>${escape(para).replace(/\n/g, "<br>")}</p>`)
     .join("");
+}
+
+// --- images ---
+
+const images = createResource({
+  url: "frappe.client.get_list",
+  makeParams: () => ({
+    doctype: "File",
+    filters: {
+      attached_to_doctype: "HD Content Post",
+      attached_to_name: props.post?.name,
+      is_folder: 0,
+    },
+    fields: ["name", "file_name", "file_url"],
+    order_by: "creation asc",
+  }),
+  transform: (files: any[]) =>
+    (files ?? []).filter((f) =>
+      /\.(png|jpe?g|gif|webp)$/i.test(f.file_name || "")
+    ),
+});
+
+watch(open, (isOpen) => {
+  if (isOpen && !isNew.value) images.reload();
+});
+
+async function removeImage(name: string) {
+  try {
+    await call("frappe.client.delete", { doctype: "File", name });
+    images.reload();
+  } catch (e: any) {
+    toast.error(e?.messages?.[0] || __("Couldn't remove the image"));
+  }
 }
 
 // --- AI drafting ---
@@ -330,7 +462,9 @@ const approvalNote = computed(() => {
     return {
       icon: LucideClock,
       tone: "bg-surface-gray-2 text-ink-gray-7",
-      title: __("Goes to the client's ERP within 5 minutes if they're connected"),
+      title: __(
+        "Goes to the client's ERP within 5 minutes if they're connected"
+      ),
       body: __("Otherwise, share it with them for approval yourself."),
     };
   }
@@ -355,7 +489,9 @@ async function save() {
   };
   try {
     if (isNew.value) {
-      await call("frappe.client.insert", { doc: { doctype: "HD Content Post", ...values } });
+      await call("frappe.client.insert", {
+        doc: { doctype: "HD Content Post", ...values },
+      });
       toast.success(__("Post created"));
     } else {
       await call("frappe.client.set_value", {
@@ -368,7 +504,8 @@ async function save() {
     open.value = false;
     emit("saved");
   } catch (e: any) {
-    error.value = e?.messages?.[0] || e?.message || __("Couldn't save the post");
+    error.value =
+      e?.messages?.[0] || e?.message || __("Couldn't save the post");
   } finally {
     saving.value = false;
   }

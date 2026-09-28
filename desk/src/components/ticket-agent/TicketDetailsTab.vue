@@ -1,67 +1,94 @@
 <template>
-  <div class="flex h-full flex-col">
-    <div class="shrink-0 px-4 pb-4 flex flex-col">
-      <!-- User avatar with buttons -->
-      <TicketContact />
-      <!-- Core Fields -->
-      <div class="mt-4">
-        <div
-          v-for="(section, index) in coreFields"
-          :key="index"
-          :class="
-            section.group ? 'flex gap-2 items-start max-w-full mb-3' : 'mb-3'
-          "
-        >
-          <template v-for="field in section.fields">
-            <Link
-              v-if="field.visible"
-              :key="field.fieldname"
-              :ref="(el) => setFieldRef(field.fieldname, el)"
-              class="form-control-core"
-              :id="field.fieldname"
-              :class="section.group ? 'flex-1 min-w-0' : 'w-full'"
-              :page-length="10"
-              :label="field.label"
-              :placeholder="field.placeholder"
-              :doctype="field.doctype"
-              :modelValue="field.value"
-              :required="field.required"
-              @update:model-value="
-              (val:string) => handleFieldUpdate(field.fieldname, val,true)
-            "
-            />
-          </template>
-        </div>
+  <div class="flex h-full min-h-0 flex-1 flex-col bg-surface-base">
+    <div class="shrink-0">
+      <!-- Contact card -->
+      <section
+        class="border-b border-outline-gray-1 px-5 py-4"
+        :aria-label="__('Contact')"
+      >
+        <TicketContact />
+      </section>
 
-        <!-- Assignee component -->
-        <AssignTo />
-      </div>
+      <!-- Core fields -->
+      <section
+        class="border-b border-outline-gray-1 px-5 py-4"
+        aria-labelledby="ticket-details-heading"
+      >
+        <h2
+          id="ticket-details-heading"
+          class="mb-2.5 text-2xs font-semibold uppercase tracking-[0.06em] text-ink-gray-5"
+        >
+          {{ __("Details") }}
+        </h2>
+        <div class="flex flex-col gap-0.5">
+          <template v-for="field in flatCoreFields" :key="field.fieldname">
+            <div
+              v-if="field.visible"
+              class="grid min-h-8 grid-cols-[96px_minmax(0,1fr)] items-center gap-2"
+            >
+              <span
+                :id="`ticket-field-label-${field.fieldname}`"
+                class="truncate text-xs font-medium text-ink-gray-6"
+              >
+                {{ __(field.label) }}
+                <span v-if="field.required" class="text-ink-red-6">*</span>
+              </span>
+              <Link
+                :ref="(el) => setFieldRef(field.fieldname, el)"
+                class="form-control-core min-w-0"
+                :id="field.fieldname"
+                :page-length="10"
+                :placeholder="field.placeholder"
+                :doctype="field.doctype"
+                :modelValue="field.value"
+                :required="field.required"
+                @update:model-value="
+                  (val: string) => handleFieldUpdate(field.fieldname, val, true)
+                "
+              />
+            </div>
+          </template>
+
+          <!-- Assignee -->
+          <div
+            class="grid min-h-8 grid-cols-[96px_minmax(0,1fr)] items-center gap-2"
+          >
+            <span class="truncate text-xs font-medium text-ink-gray-6">
+              {{ __("Assignee") }}
+            </span>
+            <AssignTo hide-label quiet class="min-w-0" />
+          </div>
+        </div>
+      </section>
     </div>
 
     <!-- Scrollable sections: Ticket Info + Recent / Similar Tickets -->
     <div
-      class="border-t flex-1 min-h-0 overflow-y-auto divide-y-[1px]"
+      class="flex-1 min-h-0 overflow-y-auto divide-y divide-outline-gray-1"
       v-if="Boolean(customFields.length) || showRecentSimilarTickets"
     >
       <!-- Ticket Info (custom fields) -->
       <div v-if="Boolean(customFields.length)">
         <Section label="Ticket Info" v-model:opened="openedSections.ticketInfo">
           <template #header="{ opened, toggle }">
-            <div
-              class="flex gap-2.5 items-center justify-between sticky top-0 bg-surface-base z-10 px-4 py-4 cursor-pointer"
-              @click="toggle"
-            >
-              <span class="text-ink-gray-8 text-base-semibold select-none">
-                {{ __("Ticket Info") }}
-              </span>
-              <LucideChevronRight
-                class="size-4 text-ink-gray-6"
-                :class="{ 'rotate-90': opened }"
-              />
+            <div class="sticky top-0 z-10 bg-surface-base px-5 pt-4 pb-2.5">
+              <button
+                type="button"
+                class="-mx-1 flex w-[calc(100%+0.5rem)] items-center justify-between gap-2.5 rounded px-1 text-2xs font-semibold uppercase tracking-[0.06em] text-ink-gray-5 hover:text-ink-gray-8"
+                :aria-expanded="opened"
+                @click="toggle"
+              >
+                <span class="select-none">{{ __("Ticket Info") }}</span>
+                <LucideChevronRight
+                  class="size-4 transition-transform"
+                  :class="{ 'rotate-90': opened }"
+                  aria-hidden="true"
+                />
+              </button>
             </div>
           </template>
           <div
-            class="space-y-1.5 px-4 mb-2 mt-0.5"
+            class="space-y-1.5 px-5 pb-4"
             v-if="Boolean(customFields.length)"
           >
             <template v-for="field in customFields">
@@ -88,46 +115,47 @@
             v-model:opened="openedSections[section.key]"
           >
             <template #header="{ opened, toggle }">
-              <div
-                class="flex gap-2.5 items-center justify-between sticky top-0 bg-surface-base z-10 px-4 py-4 cursor-pointer"
-                @click="toggle"
-              >
+              <div class="sticky top-0 z-10 bg-surface-base px-5 pt-4 pb-2.5">
                 <Tooltip :text="section.tooltipMessage">
-                  <span class="text-ink-gray-8 text-base-semibold select-none">
-                    {{ __(section.label) }}
-                  </span>
+                  <button
+                    type="button"
+                    class="-mx-1 flex w-[calc(100%+0.5rem)] items-center justify-between gap-2.5 rounded px-1 text-2xs font-semibold uppercase tracking-[0.06em] text-ink-gray-5 hover:text-ink-gray-8"
+                    :aria-expanded="opened"
+                    @click="toggle"
+                  >
+                    <span class="select-none">{{ __(section.label) }}</span>
+                    <LucideChevronRight
+                      class="size-4 transition-transform"
+                      :class="{ 'rotate-90': opened }"
+                      aria-hidden="true"
+                    />
+                  </button>
                 </Tooltip>
-                <LucideChevronRight
-                  class="size-4 text-ink-gray-6"
-                  :class="{ 'rotate-90': opened }"
-                />
               </div>
             </template>
-            <ul class="pt-0 px-4 divide-y divide-outline-gray-1 pb-4">
-              <li
-                v-for="t in section.tickets"
-                :key="t.name"
-                @click="openTicket(t.name)"
-              >
-                <div
-                  class="-mx-2 px-2 py-3 cursor-pointer rounded hover:bg-surface-gray-2 transition-colors"
+            <ul class="px-5 pb-4">
+              <li v-for="t in section.tickets" :key="t.name">
+                <button
+                  type="button"
+                  class="-mx-2 block w-[calc(100%+1rem)] rounded-md px-2 py-2 text-start transition-colors hover:bg-surface-gray-2"
+                  @click="openTicket(t.name)"
                 >
-                  <p class="text-sm font-base text-ink-gray-9 truncate mb-2">
+                  <p class="mb-1 truncate text-sm font-medium text-ink-gray-9">
                     {{ t.subject }}
                   </p>
                   <div class="flex items-center justify-between gap-2">
-                    <p class="text-sm text-ink-gray-5 shrink-0">
+                    <p class="shrink-0 text-xs text-ink-gray-5">
                       {{ formatDate(t.creation as string) + " · " }}
-                      <span class="">{{ "#" + t.name }}</span>
+                      <span class="font-mono">{{ "#" + t.name }}</span>
                     </p>
                     <span
-                      class="text-xs px-2 py-0.5 font-base shrink-0 rounded-sm"
+                      class="shrink-0 rounded-sm px-2 py-0.5 text-xs"
                       :class="getStatusColor(t.status as string)"
                     >
                       {{ t.status }}
                     </span>
                   </div>
-                </div>
+                </button>
               </li>
             </ul>
           </Section>
@@ -152,6 +180,7 @@ import {
   RecentSimilarTicketsSymbol,
   TicketSymbol,
 } from "@/types";
+import { __ } from "@/translation";
 import { useStorage } from "@vueuse/core";
 import { dayjs, Tooltip } from "frappe-ui";
 import { computed, inject, ref } from "vue";
@@ -194,12 +223,24 @@ const coreFields = computed(() => {
       f["ref"] = f.fieldname;
 
       f = getFieldInFormat(f, f);
+      f["placeholder"] = coreFieldPlaceholders[f.fieldname] ?? f.placeholder;
       f["visible"] = true;
       return f;
     });
   });
   return _coreFields;
 });
+
+const flatCoreFields = computed(() =>
+  coreFields.value.flatMap((section) => section.fields)
+);
+
+const coreFieldPlaceholders: Record<string, string> = {
+  ticket_type: __("Select type"),
+  priority: __("Set priority"),
+  customer: __("Add customer"),
+  agent_group: __("Assign team"),
+};
 
 const customFields = computed(() => {
   const fieldsMeta = getFields();
@@ -367,11 +408,30 @@ useShortcut({ key: "t", shift: true }, () => {
 </script>
 
 <style scoped>
+/* Core fields read as quiet selects: no chrome until hovered or focused */
 :deep(.form-control-core button) {
-  @apply text-base rounded h-7 py-1.5 border border-outline-gray-2 bg-surface-base placeholder-ink-gray-4 hover:border-outline-gray-3 hover:shadow-sm focus:bg-surface-base focus:border-outline-gray-4 focus:shadow-sm focus:ring-0 focus-visible:ring-0 text-ink-gray-8 transition-colors w-full dark:[color-scheme:dark];
+  @apply h-[30px] w-full gap-2 rounded-md border border-transparent bg-transparent px-2 py-0 text-sm font-medium text-ink-gray-9 transition-colors hover:bg-surface-gray-2 dark:[color-scheme:dark];
+}
+:deep(.form-control-core button[aria-expanded="true"]) {
+  @apply bg-surface-gray-2;
 }
 :deep(.form-control-core button > div) {
   @apply truncate;
+}
+:deep(.form-control-core button span) {
+  @apply text-sm;
+}
+/* Empty value: muted placeholder ("Add customer") */
+:deep(.form-control-core button span.text-ink-gray-4) {
+  @apply font-normal text-ink-gray-5;
+}
+:deep(.form-control-core button > svg) {
+  @apply ml-auto shrink-0 opacity-0 transition-opacity;
+}
+:deep(.form-control-core button:hover > svg),
+:deep(.form-control-core button:focus-visible > svg),
+:deep(.form-control-core button[aria-expanded="true"] > svg) {
+  @apply opacity-100;
 }
 
 :deep(.form-control-core div) {

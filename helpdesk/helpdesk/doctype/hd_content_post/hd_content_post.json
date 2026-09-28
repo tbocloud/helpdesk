@@ -26,6 +26,7 @@
 		"client_approval_ref",
 		"column_break_4",
 		"sent_for_approval_on",
+		"client_decided_on",
 		"outcome_section",
 		"client_feedback",
 		"published_url",
@@ -172,6 +173,13 @@
 			"no_copy": 1
 		},
 		{
+			"fieldname": "client_decided_on",
+			"fieldtype": "Datetime",
+			"label": "Client Decided On",
+			"read_only": 1,
+			"no_copy": 1
+		},
+		{
 			"fieldname": "outcome_section",
 			"fieldtype": "Section Break",
 			"label": "Review & Publishing",
@@ -210,7 +218,7 @@
 	],
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-09-28 18:30:00.000000",
+	"modified": "2026-09-28 19:30:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Content Post",

@@ -1,93 +1,300 @@
 <template>
-  <div class="flex flex-col h-full">
-    <LayoutHeader>
-      <template #left-header>
-        <div class="text-lg-medium text-ink-gray-9">{{ __("Overdue Tasks") }}</div>
+  <div class="flex h-full flex-col">
+    <ProjectNav
+      :project-id="projectId"
+      :phases="phaseNames"
+      @task-created="tasks.reload()"
+    >
+      <template #actions>
+        <Button
+          variant="ghost"
+          :label="__('Refresh')"
+          :loading="tasks.loading && !!tasks.data"
+          @click="tasks.reload()"
+        >
+          <template #icon><LucideRefreshCw class="size-4" /></template>
+        </Button>
       </template>
-      <template #right-header>
-        <div class="flex items-center gap-1">
-          <router-link v-for="tab in projectTabs" :key="tab.to" :to="{ name: tab.to, params: { projectId } }"
-            class="px-3 py-1.5 rounded text-sm transition-colors"
-            :class="route.name === tab.to ? 'bg-surface-gray-3 text-ink-gray-9' : 'text-ink-gray-6 hover:bg-surface-gray-2 hover:text-ink-gray-8'">
-            {{ __(tab.label) }}
-          </router-link>
-        </div>
-      </template>
-    </LayoutHeader>
-    <div class="flex-1 overflow-auto p-5">
-      <div v-if="tasks.loading" class="flex items-center justify-center h-full"><div class="text-p-base text-ink-gray-6">{{ __("Loading...") }}</div></div>
-      <template v-else>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <div class="bg-surface-base border border-outline-gray-2 rounded-lg p-4">
-            <div class="flex items-center gap-2 mb-1"><AlertTriangle class="size-4 text-ink-red-5" /><span class="text-xs text-ink-gray-5">{{ __("Overdue") }}</span></div>
-            <div class="text-xl-semibold text-ink-red-7">{{ overdue.length }}</div>
-          </div>
-          <div class="bg-surface-base border border-outline-gray-2 rounded-lg p-4">
-            <div class="flex items-center gap-2 mb-1"><Clock class="size-4 text-ink-amber-5" /><span class="text-xs text-ink-gray-5">{{ __("Due This Week") }}</span></div>
-            <div class="text-xl-semibold text-ink-amber-7">{{ dueThisWeek.length }}</div>
-          </div>
-          <div class="bg-surface-base border border-outline-gray-2 rounded-lg p-4">
-            <div class="flex items-center gap-2 mb-1"><CheckCircle2 class="size-4 text-ink-green-5" /><span class="text-xs text-ink-gray-5">{{ __("On Track") }}</span></div>
-            <div class="text-xl-semibold text-ink-green-7">{{ onTrack.length }}</div>
-          </div>
-        </div>
-        <div v-if="overdue.length" class="mb-6">
-          <div class="text-sm-medium text-ink-gray-7 mb-3">{{ __("Overdue Tasks") }}</div>
-          <div class="bg-surface-base border border-outline-gray-2 rounded-lg overflow-hidden">
-            <div v-for="task in overdue" :key="task.name" class="flex items-center gap-3 px-4 py-3 border-b border-outline-gray-2 last:border-b-0 hover:bg-surface-sidebar">
-              <AlertTriangle class="size-4 text-ink-red-5 shrink-0" />
-              <div class="flex-1 min-w-0"><div class="text-sm text-ink-gray-8 truncate">{{ task.subject }}</div><div class="text-xs text-ink-gray-5">{{ task.phase }} · {{ task.due_date }}</div></div>
-              <span class="text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap" :class="statusPillClasses(task.status)">{{ task.status }}</span>
-              <span class="text-xs text-ink-gray-6">{{ task.assigned_to || "" }}</span>
+    </ProjectNav>
+
+    <div class="flex-1 overflow-auto">
+      <div class="mx-auto w-full max-w-5xl px-4 py-5 md:px-6">
+        <TaskyState
+          v-if="tasks.error && !tasks.data"
+          error
+          :icon="LucideCircleAlert"
+          :title="__('Couldn\'t load overdue tasks')"
+          :message="__('Check your connection and try again.')"
+        >
+          <Button :label="__('Retry')" @click="tasks.reload()" />
+        </TaskyState>
+
+        <template v-else>
+          <!-- Summary -->
+          <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div
+              v-for="stat in stats"
+              :key="stat.key"
+              class="flex flex-col gap-3 rounded-lg border border-outline-gray-2 bg-surface-base p-4"
+            >
+              <div class="flex items-center justify-between">
+                <span class="text-sm text-ink-gray-6">{{ stat.label }}</span>
+                <component
+                  :is="stat.icon"
+                  class="size-4"
+                  :class="stat.iconClass"
+                  aria-hidden="true"
+                />
+              </div>
+              <span
+                class="text-2xl-semibold tabular-nums"
+                :class="stat.valueClass"
+              >
+                <span
+                  v-if="!tasks.data"
+                  class="inline-block h-7 w-8 animate-pulse rounded bg-surface-gray-2"
+                />
+                <template v-else>{{ stat.value }}</template>
+              </span>
             </div>
           </div>
-        </div>
-        <div v-if="dueThisWeek.length" class="mb-6">
-          <div class="text-sm-medium text-ink-gray-7 mb-3">{{ __("Due This Week") }}</div>
-          <div class="bg-surface-base border border-outline-gray-2 rounded-lg overflow-hidden">
-            <div v-for="task in dueThisWeek" :key="task.name" class="flex items-center gap-3 px-4 py-3 border-b border-outline-gray-2 last:border-b-0 hover:bg-surface-sidebar">
-              <Clock class="size-4 text-ink-amber-5 shrink-0" />
-              <div class="flex-1 min-w-0"><div class="text-sm text-ink-gray-8 truncate">{{ task.subject }}</div><div class="text-xs text-ink-gray-5">{{ task.phase }} · {{ task.due_date }}</div></div>
-              <span class="text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap" :class="statusPillClasses(task.status)">{{ task.status }}</span>
+
+          <!-- Loading -->
+          <div
+            v-if="!tasks.data"
+            class="mt-6 overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
+            aria-busy="true"
+          >
+            <div
+              v-for="i in 4"
+              :key="i"
+              class="flex items-center gap-3 border-b border-outline-gray-1 px-4 py-3.5 last:border-b-0"
+            >
+              <div
+                class="size-4 animate-pulse rounded-full bg-surface-gray-2"
+              />
+              <div class="flex flex-1 flex-col gap-2">
+                <div
+                  class="h-3.5 w-2/5 animate-pulse rounded bg-surface-gray-2"
+                />
+                <div
+                  class="h-3 w-1/4 animate-pulse rounded bg-surface-gray-2"
+                />
+              </div>
             </div>
           </div>
-        </div>
-        <div v-if="!overdue.length && !dueThisWeek.length" class="flex items-center justify-center py-12">
-          <div class="flex flex-col items-center gap-2"><CheckCircle2 class="size-12 text-ink-gray-4" /><div class="text-lg-medium text-ink-gray-6">{{ __("All tasks are on track") }}</div></div>
-        </div>
-      </template>
+
+          <!-- All clear -->
+          <div
+            v-else-if="!overdue.length && !dueThisWeek.length"
+            class="mt-6 rounded-xl border border-outline-gray-2 bg-surface-base"
+          >
+            <TaskyState
+              :icon="LucideCircleCheck"
+              :title="__('All tasks are on track')"
+              :message="__('Nothing is overdue or due in the next 7 days.')"
+            >
+              <Button
+                :label="__('Open board')"
+                @click="
+                  router.push({ name: 'TaskyKanban', params: { projectId } })
+                "
+              />
+            </TaskyState>
+          </div>
+
+          <template v-else>
+            <section
+              v-for="section in sections"
+              :key="section.key"
+              class="mt-6"
+              :aria-labelledby="`ov-${section.key}`"
+            >
+              <h2
+                :id="`ov-${section.key}`"
+                class="mb-2 flex items-center gap-2 text-sm font-medium text-ink-gray-7"
+              >
+                {{ section.label }}
+                <span class="font-mono text-xs tabular-nums text-ink-gray-5">{{
+                  section.tasks.length
+                }}</span>
+              </h2>
+              <ul
+                role="list"
+                class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base shadow-sm"
+              >
+                <li
+                  v-for="task in section.tasks"
+                  :key="task.name"
+                  class="flex items-center gap-3 border-b border-outline-gray-1 px-4 py-3 last:border-b-0"
+                >
+                  <component
+                    :is="section.icon"
+                    class="size-4 shrink-0"
+                    :class="section.iconClass"
+                    aria-hidden="true"
+                  />
+                  <div class="min-w-0 flex-1">
+                    <div class="truncate text-sm text-ink-gray-9">
+                      {{ task.subject }}
+                    </div>
+                    <div
+                      class="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-ink-gray-5"
+                    >
+                      <span v-if="task.phase" class="truncate">{{
+                        task.phase
+                      }}</span>
+                      <span v-if="task.phase" aria-hidden="true">·</span>
+                      <span
+                        class="tabular-nums"
+                        :class="
+                          section.key === 'overdue'
+                            ? 'font-medium text-danger'
+                            : ''
+                        "
+                      >
+                        {{ dueLabel(task) }}
+                      </span>
+                    </div>
+                  </div>
+                  <span
+                    v-if="task.assigned_to"
+                    class="hidden max-w-[12rem] truncate text-xs text-ink-gray-6 md:block"
+                  >
+                    {{ task.assigned_to }}
+                  </span>
+                  <TaskStatusBadge :status="task.status" />
+                </li>
+              </ul>
+            </section>
+          </template>
+        </template>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, watch } from "vue";
-import { useRoute } from "vue-router";
-import { createResource } from "frappe-ui";
 import { __ } from "@/translation";
-import LayoutHeader from "@/components/LayoutHeader.vue";
-import AlertTriangle from "~icons/lucide/alert-triangle";
-import Clock from "~icons/lucide/clock";
-import CheckCircle2 from "~icons/lucide/check-circle-2";
+import { Button, createResource, dayjs } from "frappe-ui";
+import { computed, watch } from "vue";
+import { useRouter } from "vue-router";
+import LucideAlarmClock from "~icons/lucide/alarm-clock";
+import LucideCalendarClock from "~icons/lucide/calendar-clock";
+import LucideCircleAlert from "~icons/lucide/circle-alert";
+import LucideCircleCheck from "~icons/lucide/circle-check";
+import LucideRefreshCw from "~icons/lucide/refresh-cw";
+import ProjectNav from "./components/ProjectNav.vue";
+import TaskStatusBadge from "./components/TaskStatusBadge.vue";
+import TaskyState from "./components/TaskyState.vue";
+import { daysUntil, isClosed, isOverdue } from "./taskMeta";
 
 const props = defineProps<{ projectId: string }>();
-const route = useRoute();
+const router = useRouter();
 
-const projectTabs = [
-  { label: "Dashboard", to: "TaskyProject" },
-  { label: "Checklist", to: "TaskyChecklist" },
-  { label: "Board", to: "TaskyKanban" },
-  { label: "Timeline", to: "TaskyTimeline" },
-  { label: "Overdue", to: "TaskyOverdue" },
-];
+interface Task {
+  name: string;
+  subject: string;
+  phase?: string;
+  status: string;
+  due_date?: string;
+  assigned_to?: string;
+}
 
-interface Task { name: string; subject: string; phase?: string; status: string; due_date?: string; assigned_to?: string; }
-const tasks = createResource({ url: "helpdesk.tasky.api.get_project_dashboard", makeParams: () => ({ project: props.projectId }), auto: true });
-watch(() => props.projectId, () => { if (props.projectId) tasks.reload(); });
+const tasks = createResource({
+  url: "helpdesk.tasky.api.get_project_dashboard",
+  makeParams: () => ({ project: props.projectId }),
+  auto: true,
+  onError() {},
+});
+watch(
+  () => props.projectId,
+  () => {
+    if (props.projectId) tasks.reload();
+  }
+);
 
 const allTasks = computed<Task[]>(() => tasks.data?.tasks ?? []);
-const overdue = computed<Task[]>(() => allTasks.value.filter((t) => { if (!t.due_date || ["Completed", "Cancelled"].includes(t.status)) return false; return new Date(t.due_date) < new Date(); }));
-const dueThisWeek = computed<Task[]>(() => { const now = new Date(); const end = new Date(now); end.setDate(now.getDate() + 7); return allTasks.value.filter((t) => { if (!t.due_date || ["Completed", "Cancelled"].includes(t.status)) return false; const d = new Date(t.due_date); return d >= now && d <= end; }); });
-const onTrack = computed<Task[]>(() => allTasks.value.filter((t) => { if (!t.due_date || ["Completed", "Cancelled"].includes(t.status)) return false; return new Date(t.due_date) >= new Date(); }));
-function statusPillClasses(s: string) { const m: Record<string, string> = { Open: "bg-ink-gray-2 text-ink-gray-7", Working: "bg-ink-amber-1 text-ink-amber-8", "Pending Review": "bg-ink-blue-1 text-ink-blue-8", Completed: "bg-ink-green-1 text-ink-green-8", Cancelled: "bg-ink-gray-2 text-ink-gray-5 line-through" }; return m[s] || m.Open; }
+const phaseNames = computed(() =>
+  allTasks.value.map((t) => t.phase || "").filter(Boolean)
+);
+
+const byDue = (a: Task, b: Task) =>
+  dayjs(a.due_date).valueOf() - dayjs(b.due_date).valueOf();
+
+const overdue = computed(() =>
+  allTasks.value.filter((t) => isOverdue(t)).sort(byDue)
+);
+const dueThisWeek = computed(() =>
+  allTasks.value
+    .filter((t) => {
+      if (!t.due_date || isClosed(t)) return false;
+      const days = daysUntil(t.due_date);
+      return days >= 0 && days <= 7;
+    })
+    .sort(byDue)
+);
+const onTrack = computed(() =>
+  allTasks.value.filter(
+    (t) => !!t.due_date && !isClosed(t) && daysUntil(t.due_date) >= 0
+  )
+);
+
+const stats = computed(() => [
+  {
+    key: "overdue",
+    label: __("Overdue"),
+    value: overdue.value.length,
+    icon: LucideAlarmClock,
+    iconClass: overdue.value.length ? "text-danger" : "text-ink-gray-5",
+    valueClass: overdue.value.length ? "text-danger" : "text-ink-gray-9",
+  },
+  {
+    key: "week",
+    label: __("Due in 7 days"),
+    value: dueThisWeek.value.length,
+    icon: LucideCalendarClock,
+    iconClass: dueThisWeek.value.length ? "text-warning" : "text-ink-gray-5",
+    valueClass: "text-ink-gray-9",
+  },
+  {
+    key: "ontrack",
+    label: __("On track"),
+    value: onTrack.value.length,
+    icon: LucideCircleCheck,
+    iconClass: "text-success",
+    valueClass: "text-ink-gray-9",
+  },
+]);
+
+const sections = computed(() =>
+  [
+    {
+      key: "overdue",
+      label: __("Overdue"),
+      tasks: overdue.value,
+      icon: LucideAlarmClock,
+      iconClass: "text-danger",
+    },
+    {
+      key: "week",
+      label: __("Due in the next 7 days"),
+      tasks: dueThisWeek.value,
+      icon: LucideCalendarClock,
+      iconClass: "text-warning",
+    },
+  ].filter((section) => section.tasks.length)
+);
+
+function dueLabel(task: Task) {
+  if (!task.due_date) return "—";
+  const days = daysUntil(task.due_date);
+  if (days < 0)
+    return days === -1
+      ? __("1 day overdue")
+      : __("{0} days overdue", String(-days));
+  if (days === 0) return __("Due today");
+  if (days === 1) return __("Due tomorrow");
+  return __("Due {0}", dayjs(task.due_date).format("ddd D MMM"));
+}
 </script>

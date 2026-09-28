@@ -25,15 +25,21 @@ class HDContentPost(Document):
 
     def set_customer_from_campaign(self):
         if self.campaign and not self.customer:
-            self.customer = frappe.db.get_value("HD Content Campaign", self.campaign, "customer")
+            self.customer = frappe.db.get_value(
+                "HD Content Campaign", self.campaign, "customer"
+            )
 
     def validate_campaign_customer(self):
         if not self.campaign:
             return
-        campaign_customer = frappe.db.get_value("HD Content Campaign", self.campaign, "customer")
+        campaign_customer = frappe.db.get_value(
+            "HD Content Campaign", self.campaign, "customer"
+        )
         if campaign_customer and campaign_customer != self.customer:
             frappe.throw(
-                _("Campaign {0} belongs to {1}, not {2}").format(self.campaign, campaign_customer, self.customer)
+                _("Campaign {0} belongs to {1}, not {2}").format(
+                    self.campaign, campaign_customer, self.customer
+                )
             )
 
     def validate_publish_on(self):
@@ -50,7 +56,6 @@ class HDContentPost(Document):
         else:
             self.published_on = None
 
-
     def warn_if_no_client_connection(self):
         if self.status != "Client Review" or not self.has_value_changed("status"):
             return
@@ -58,9 +63,9 @@ class HDContentPost(Document):
 
         if not get_client_connection(self.customer):
             frappe.msgprint(
-                _("{0} has no connected ERP, so share this post with them for approval yourself.").format(
-                    self.customer
-                ),
+                _(
+                    "{0} has no connected ERP, so share this post with them for approval yourself."
+                ).format(self.customer),
                 indicator="orange",
                 alert=True,
             )
@@ -72,13 +77,20 @@ def send_due_reminders():
     posts = frappe.get_all(
         "HD Content Post",
         filters={
-            "publish_on": ("between", [now, add_to_date(now, hours=REMINDER_WINDOW_HOURS)]),
+            "publish_on": (
+                "between",
+                [now, add_to_date(now, hours=REMINDER_WINDOW_HOURS)],
+            ),
             "status": ("not in", READY_STATUSES),
         },
         fields=["name", "title", "status", "publish_on", "writer", "designer", "owner"],
     )
     for post in posts:
-        users = {u for u in (post.writer, post.designer, post.owner) if u and u != "Administrator"}
+        users = {
+            u
+            for u in (post.writer, post.designer, post.owner)
+            if u and u != "Administrator"
+        }
         if not users:
             continue
         enqueue_create_notification(
@@ -95,3 +107,53 @@ def send_due_reminders():
                 "from_user": "Administrator",
             },
         )
+
+
+# --- permissions: leads see everything; the rest of the team sees their own work
+# and every post for the clients whose projects they are on ---
+
+
+def _is_content_lead(user: str) -> bool:
+    from helpdesk.tasky.permissions import is_project_manager
+
+    return is_project_manager(user)
+
+
+def _member_customers_sql(user: str) -> str:
+    u = frappe.db.escape(user)
+    return (
+        "select `customer` from `tabProject` where ifnull(`customer`, '') != '' and "
+        f"(`owner` = {u} or `name` in (select `parent` from `tabProject User` "
+        f"where `parenttype` = 'Project' and `user` = {u}))"
+    )
+
+
+def member_customers(user: str) -> set[str]:
+    return set(frappe.db.sql_list(_member_customers_sql(user)))
+
+
+def permission_query(user: str | None = None) -> str | None:
+    user = user or frappe.session.user
+    if _is_content_lead(user):
+        return None
+    u = frappe.db.escape(user)
+    table = "`tabHD Content Post`"
+    return (
+        f"({table}.`writer` = {u} or {table}.`designer` = {u} or {table}.`owner` = {u} "
+        f"or {table}.`customer` in ({_member_customers_sql(user)}))"
+    )
+
+
+def has_permission(
+    doc, ptype: str | None = None, user: str | None = None
+) -> bool | None:
+    user = user or frappe.session.user
+    if ptype == "create" or _is_content_lead(user):
+        return None
+    if user in (
+        doc.writer,
+        doc.designer,
+        doc.owner,
+    ) or doc.customer in member_customers(user):
+        return None
+    return False

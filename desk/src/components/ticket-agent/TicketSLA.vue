@@ -17,7 +17,9 @@
             aria-hidden="true"
           />
           <EmailIcon v-else class="size-4" aria-hidden="true" />
-          {{ ticket.doc.via_customer_portal ? __("via Portal") : __("via Email") }}
+          {{
+            ticket.doc.via_customer_portal ? __("via Portal") : __("via Email")
+          }}
         </span>
         <span class="mx-1 h-4 w-px bg-surface-gray-4" aria-hidden="true" />
 
@@ -33,7 +35,11 @@
           v-if="ticket.doc.priority"
           class="inline-flex h-[22px] items-center gap-1.5 rounded-md bg-surface-gray-2 px-2 text-xs font-medium text-ink-gray-6"
         >
-          <span class="size-2 rounded-sm" :class="priorityTone" aria-hidden="true" />
+          <span
+            class="size-2 rounded-sm"
+            :class="priorityTone"
+            aria-hidden="true"
+          />
           {{ __("{0} priority", ticket.doc.priority) }}
         </span>
 
@@ -48,12 +54,24 @@
             class="inline-flex h-[26px] items-center gap-2 rounded-md pl-2 pr-2.5 text-xs font-medium"
             :class="sla.chip"
           >
-            <component :is="sla.icon" class="size-4" :class="sla.accent" aria-hidden="true" />
+            <component
+              :is="sla.icon"
+              class="size-4"
+              :class="sla.accent"
+              aria-hidden="true"
+            />
             <span class="text-ink-gray-5">{{ sla.label }}</span>
-            <span v-if="sla.value" class="font-mono tabular-nums" :class="sla.accent || 'text-ink-gray-9'">
-              <span class="sr-only">{{ sla.state }}</span>{{ sla.value }}
+            <span
+              v-if="sla.value"
+              class="font-mono tabular-nums"
+              :class="sla.accent || 'text-ink-gray-9'"
+            >
+              <span class="sr-only">{{ sla.state }}</span
+              >{{ sla.value }}
             </span>
-            <span v-else :class="sla.accent || 'text-ink-gray-9'">{{ sla.state }}</span>
+            <span v-else :class="sla.accent || 'text-ink-gray-9'">{{
+              sla.state
+            }}</span>
           </span>
         </Tooltip>
 
@@ -61,7 +79,12 @@
           type="button"
           class="font-mono text-xs text-ink-gray-5 hover:text-ink-gray-8"
           :title="__('Copy ticket ID')"
-          @click="copyToClipboard(ticket.doc.name, `Ticket #${ticket.doc.name} copied to clipboard`)"
+          @click="
+            copyToClipboard(
+              ticket.doc.name,
+              `Ticket #${ticket.doc.name} copied to clipboard`
+            )
+          "
         >
           #{{ ticket.doc.name }}
         </button>
@@ -98,28 +121,44 @@ const statusTone = computed(
       Open: "bg-info-soft text-info",
       Paused: "bg-warning-soft text-warning",
       Resolved: "bg-success-soft text-success",
-    })[ticket.value.doc.status_category as string] ??
-    "bg-surface-gray-2 text-ink-gray-6"
+    }[ticket.value.doc.status_category as string] ??
+    "bg-surface-gray-2 text-ink-gray-6")
 );
 
 const priorityTone = computed(
   () =>
-    ({ Urgent: "bg-danger", High: "bg-danger", Medium: "bg-warning" })[
+    ({ Urgent: "bg-danger", High: "bg-danger", Medium: "bg-warning" }[
       ticket.value.doc.priority as string
-    ] ?? "bg-surface-gray-5"
+    ] ?? "bg-surface-gray-5")
 );
 
 // SLA labels read "Due in 8h 34m"; show the state in words and the duration in mono
 const SLA_TONES: Record<string, { chip: string; accent: string; icon: any }> = {
-  orange: { chip: "bg-surface-gray-2", accent: "text-success", icon: LucideClock },
+  orange: {
+    chip: "bg-surface-gray-2",
+    accent: "text-success",
+    icon: LucideClock,
+  },
   purple: { chip: "bg-surface-gray-2", accent: "", icon: LucideClock },
-  green: { chip: "bg-surface-gray-2", accent: "text-success", icon: LucideCircleCheck },
+  green: {
+    chip: "bg-surface-gray-2",
+    accent: "text-success",
+    icon: LucideCircleCheck,
+  },
   blue: { chip: "bg-warning-soft", accent: "text-warning", icon: LucidePause },
-  red: { chip: "bg-danger-soft", accent: "text-danger", icon: LucideAlarmClock },
+  red: {
+    chip: "bg-danger-soft",
+    accent: "text-danger",
+    icon: LucideAlarmClock,
+  },
   gray: { chip: "bg-surface-gray-2", accent: "", icon: LucideClock },
 };
 
-function slaChip(key: string, label: string, sla: { label: string; color: string; date?: string }) {
+function slaChip(
+  key: string,
+  label: string,
+  sla: { label: string; color: string; date?: string }
+) {
   const match = sla.label.match(/^(.*?)\s*(\d.*)$/);
   return {
     key,
