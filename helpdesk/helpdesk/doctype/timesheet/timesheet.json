@@ -1,0 +1,155 @@
+{
+	"actions": [],
+	"allow_rename": 0,
+	"autoname": "TS-.YYYY.-.#####",
+	"creation": "2026-09-28 00:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"title",
+		"employee",
+		"employee_name",
+		"column_break_1",
+		"status",
+		"total_hours",
+		"time_logs_section",
+		"time_logs",
+		"note_section",
+		"note",
+		"amended_from"
+	],
+	"fields": [
+		{
+			"fieldname": "title",
+			"fieldtype": "Data",
+			"label": "Title",
+			"no_copy": 1,
+			"print_hide": 1
+		},
+		{
+			"fieldname": "employee",
+			"fieldtype": "Link",
+			"label": "Employee",
+			"options": "Employee",
+			"in_standard_filter": 1
+		},
+		{
+			"fieldname": "employee_name",
+			"fieldtype": "Data",
+			"label": "Employee Name",
+			"fetch_from": "employee.employee_name",
+			"read_only": 1
+		},
+		{
+			"fieldname": "column_break_1",
+			"fieldtype": "Column Break",
+			"label": ""
+		},
+		{
+			"fieldname": "status",
+			"fieldtype": "Select",
+			"label": "Status",
+			"options": "Draft\nSubmitted\nCancelled",
+			"default": "Draft",
+			"read_only": 1,
+			"no_copy": 1,
+			"in_list_view": 1,
+			"in_standard_filter": 1
+		},
+		{
+			"fieldname": "total_hours",
+			"fieldtype": "Float",
+			"label": "Total Working Hours",
+			"read_only": 1,
+			"in_list_view": 1
+		},
+		{
+			"fieldname": "time_logs_section",
+			"fieldtype": "Section Break",
+			"label": "Time Sheets"
+		},
+		{
+			"fieldname": "time_logs",
+			"fieldtype": "Table",
+			"label": "Time Sheets",
+			"options": "Timesheet Detail"
+		},
+		{
+			"fieldname": "note_section",
+			"fieldtype": "Section Break",
+			"label": "Note"
+		},
+		{
+			"fieldname": "note",
+			"fieldtype": "Text Editor",
+			"label": "Note"
+		},
+		{
+			"fieldname": "amended_from",
+			"fieldtype": "Link",
+			"label": "Amended From",
+			"options": "Timesheet",
+			"read_only": 1,
+			"no_copy": 1,
+			"print_hide": 1
+		}
+	],
+	"index_web_pages_for_search": 0,
+	"is_submittable": 1,
+	"links": [],
+	"modified": "2026-09-28 00:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "Timesheet",
+	"naming_rule": "Expression (old style)",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"amend": 1,
+			"cancel": 1,
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "System Manager",
+			"share": 1,
+			"submit": 1,
+			"write": 1
+		},
+		{
+			"amend": 1,
+			"cancel": 1,
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "Agent Manager",
+			"share": 1,
+			"submit": 1,
+			"write": 1
+		},
+		{
+			"create": 1,
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "Agent",
+			"share": 1,
+			"submit": 1,
+			"write": 1
+		}
+	],
+	"sort_field": "creation",
+	"sort_order": "DESC",
+	"states": [],
+	"title_field": "title",
+	"track_changes": 1
+}

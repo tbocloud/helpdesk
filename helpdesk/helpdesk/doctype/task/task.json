@@ -1,0 +1,145 @@
+{
+	"actions": [],
+	"allow_rename": 0,
+	"autoname": "TASK-.YYYY.-.#####",
+	"creation": "2026-09-28 00:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"subject",
+		"project",
+		"column_break_1",
+		"status",
+		"priority",
+		"dates_section",
+		"exp_start_date",
+		"column_break_2",
+		"exp_end_date",
+		"details_section",
+		"description"
+	],
+	"fields": [
+		{
+			"fieldname": "subject",
+			"fieldtype": "Data",
+			"label": "Subject",
+			"reqd": 1,
+			"in_global_search": 1,
+			"search_index": 1
+		},
+		{
+			"fieldname": "project",
+			"fieldtype": "Link",
+			"label": "Project",
+			"options": "Project",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"search_index": 1
+		},
+		{
+			"fieldname": "column_break_1",
+			"fieldtype": "Column Break",
+			"label": ""
+		},
+		{
+			"fieldname": "status",
+			"fieldtype": "Select",
+			"label": "Status",
+			"options": "Open\nWorking\nPending Review\nOverdue\nTemplate\nCompleted\nCancelled",
+			"default": "Open",
+			"in_list_view": 1,
+			"in_standard_filter": 1
+		},
+		{
+			"fieldname": "priority",
+			"fieldtype": "Select",
+			"label": "Priority",
+			"options": "Low\nMedium\nHigh\nUrgent",
+			"default": "Medium",
+			"in_list_view": 1,
+			"in_standard_filter": 1
+		},
+		{
+			"fieldname": "dates_section",
+			"fieldtype": "Section Break",
+			"label": "Timeline"
+		},
+		{
+			"fieldname": "exp_start_date",
+			"fieldtype": "Date",
+			"label": "Expected Start Date"
+		},
+		{
+			"fieldname": "column_break_2",
+			"fieldtype": "Column Break",
+			"label": ""
+		},
+		{
+			"fieldname": "exp_end_date",
+			"fieldtype": "Date",
+			"label": "Expected End Date"
+		},
+		{
+			"fieldname": "details_section",
+			"fieldtype": "Section Break",
+			"label": "Details"
+		},
+		{
+			"fieldname": "description",
+			"fieldtype": "Text Editor",
+			"label": "Task Description"
+		}
+	],
+	"index_web_pages_for_search": 0,
+	"links": [],
+	"modified": "2026-09-28 00:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "Task",
+	"naming_rule": "Expression (old style)",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "System Manager",
+			"share": 1,
+			"write": 1
+		},
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "Agent Manager",
+			"share": 1,
+			"write": 1
+		},
+		{
+			"create": 1,
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "Agent",
+			"share": 1,
+			"write": 1
+		}
+	],
+	"search_fields": "subject",
+	"show_title_field_in_link": 1,
+	"sort_field": "creation",
+	"sort_order": "DESC",
+	"states": [],
+	"title_field": "subject",
+	"track_changes": 1
+}
