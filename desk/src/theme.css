@@ -1,0 +1,182 @@
+/*
+ * TBO Support theme.
+ *
+ * Re-points frappe-ui's semantic tokens at the TBO palette: cool-tinted
+ * neutrals (hue ~265) instead of pure grays, one violet brand accent for
+ * primary actions and selection, and Geist type. Lightness steps follow
+ * frappe-ui's own scale so every existing component keeps its contrast
+ * relationships; ink-gray-5 is darkened slightly so secondary text passes
+ * WCAG AA (4.5:1) on white.
+ *
+ * Selectors are doubled up so they outrank frappe-ui's :root / [data-theme]
+ * variables regardless of stylesheet order.
+ */
+
+:root:root {
+  --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --brand: oklch(0.513 0.223 282);
+  --brand-hover: oklch(0.46 0.219 280);
+  --brand-soft: oklch(0.952 0.021 292);
+  --brand-ink: oklch(0.439 0.213 279);
+  --on-brand: oklch(1 0 0);
+  --note: oklch(0.985 0.03 95);
+  --note-border: oklch(0.89 0.08 95);
+  /* status: meaning only, always paired with an icon or label */
+  --success: #1c7547;
+  --success-soft: #e6f4ec;
+  --warning: #955700;
+  --warning-soft: #fdf2de;
+  --danger: #bf3328;
+  --danger-soft: #fdebe9;
+  --info: #1e5fbf;
+  --info-soft: #e7effb;
+
+  --surface-sidebar: oklch(0.976 0.003 265);
+  --surface-gray-1: oklch(0.976 0.003 265);
+  --surface-gray-2: oklch(0.961 0.004 268);
+  --surface-gray-3: oklch(0.949 0.006 265);
+  --surface-gray-4: oklch(0.913 0.008 265);
+  --surface-gray-5: oklch(0.83 0.012 265);
+  --surface-gray-6: oklch(0.683 0.016 265);
+  --surface-gray-7: oklch(0.586 0.018 265);
+  --surface-gray-8: oklch(0.439 0.018 265);
+  --surface-gray-9: oklch(0.341 0.016 266);
+  --surface-gray-10: oklch(0.205 0.01 268);
+
+  --ink-gray-1: oklch(0.946 0.005 265);
+  --ink-gray-2: oklch(0.913 0.008 265);
+  --ink-gray-3: oklch(0.83 0.012 265);
+  --ink-gray-4: oklch(0.66 0.016 265);
+  --ink-gray-5: oklch(0.523 0.019 263);
+  --ink-gray-6: oklch(0.47 0.019 263);
+  --ink-gray-7: oklch(0.36 0.016 265);
+  --ink-gray-8: oklch(0.25 0.012 266);
+  --ink-gray-9: oklch(0.205 0.01 268);
+
+  --outline-gray-1: oklch(0.946 0.005 265);
+  --outline-gray-2: oklch(0.928 0.006 265);
+  --outline-gray-3: oklch(0.866 0.011 262);
+  --outline-gray-4: oklch(0.72 0.014 265);
+  --outline-gray-5: oklch(0.586 0.018 265);
+  --outline-gray-6: oklch(0.439 0.018 265);
+  --outline-gray-7: oklch(0.341 0.016 266);
+  --outline-gray-8: oklch(0.205 0.01 268);
+  --outline-gray-9: oklch(0.168 0.008 268);
+  --outline-elevation-1: oklch(0.928 0.006 265);
+  --outline-elevation-2: oklch(0.928 0.006 265);
+}
+
+:root[data-theme="dark"] {
+  --brand: oklch(0.683 0.176 286);
+  --brand-hover: oklch(0.73 0.15 287);
+  --brand-soft: oklch(0.262 0.06 287);
+  --brand-ink: oklch(0.802 0.107 289);
+  --on-brand: oklch(0.2 0.06 285);
+  --note: oklch(0.25 0.03 95);
+  --note-border: oklch(0.36 0.05 95);
+  --success: #52c48d;
+  --success-soft: #14281e;
+  --warning: #f0b44c;
+  --warning-soft: #2d2311;
+  --danger: #ff8c82;
+  --danger-soft: #34191a;
+  --info: #72aaff;
+  --info-soft: #15233a;
+
+  --surface-base: oklch(0.205 0.008 275);
+  --surface-sidebar: oklch(0.169 0.006 271);
+  --surface-gray-1: oklch(0.235 0.01 268);
+  --surface-gray-2: oklch(0.269 0.012 271);
+  --surface-gray-3: oklch(0.3 0.013 268);
+  --surface-gray-4: oklch(0.364 0.016 266);
+  --surface-gray-5: oklch(0.457 0.016 266);
+  --surface-gray-6: oklch(0.58 0.017 265);
+  --surface-gray-7: oklch(0.683 0.017 265);
+  --surface-gray-8: oklch(0.754 0.015 265);
+  --surface-gray-9: oklch(0.885 0.008 265);
+  --surface-gray-10: oklch(0.979 0.004 265);
+  --surface-elevation-1: oklch(0.235 0.01 268);
+  --surface-elevation-2: oklch(0.26 0.011 270);
+  --surface-elevation-3: oklch(0.33 0.014 268);
+
+  --ink-base: oklch(0.205 0.008 275);
+  --ink-gray-1: oklch(0.26 0.01 268);
+  --ink-gray-2: oklch(0.34 0.012 268);
+  --ink-gray-3: oklch(0.4 0.014 266);
+  --ink-gray-4: oklch(0.55 0.016 265);
+  --ink-gray-5: oklch(0.642 0.018 263);
+  --ink-gray-6: oklch(0.731 0.017 266);
+  --ink-gray-7: oklch(0.8 0.012 266);
+  --ink-gray-8: oklch(0.885 0.008 265);
+  --ink-gray-9: oklch(0.949 0.006 265);
+
+  --outline-gray-1: oklch(0.26 0.012 268);
+  --outline-gray-2: oklch(0.281 0.014 267);
+  --outline-gray-3: oklch(0.364 0.016 266);
+  --outline-gray-4: oklch(0.457 0.016 266);
+  --outline-gray-5: oklch(0.58 0.017 265);
+  --outline-gray-6: oklch(0.683 0.017 265);
+  --outline-gray-7: oklch(0.946 0.005 265);
+  --outline-gray-8: oklch(0.964 0.004 265);
+  --outline-gray-9: oklch(0.979 0.004 265);
+  --outline-elevation-1: oklch(0.281 0.014 267);
+  --outline-elevation-2: oklch(0.364 0.016 266);
+}
+
+html {
+  font-family: var(--font-sans);
+  font-feature-settings: "ss01", "cv11";
+}
+
+.font-mono,
+code,
+kbd {
+  font-family: var(--font-mono);
+}
+
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+/* One accent: frappe-ui's primary (solid gray) button becomes the brand button. */
+.bg-surface-gray-10.text-ink-base {
+  background-color: var(--brand);
+  color: var(--on-brand);
+}
+.bg-surface-gray-10.text-ink-base:hover {
+  background-color: var(--brand-hover);
+}
+.bg-surface-gray-10.text-ink-base:active {
+  background-color: var(--brand-ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
+
+/* Sidebar: active item sits on the panel surface with a hairline, icon in brand. */
+[data-slot="sidebar-item"] {
+  height: 2rem;
+  border-radius: 8px;
+}
+[data-slot="sidebar-item"][data-state="active"] {
+  background-color: var(--surface-base);
+  color: var(--ink-gray-9);
+  box-shadow: 0 1px 2px rgb(16 18 24 / 0.06), inset 0 0 0 1px var(--outline-gray-2);
+}
+[data-slot="sidebar-item"][data-state="active"] .tbo-nav-icon {
+  color: var(--brand);
+}
+
+/* Tabs: the sliding indicator carries the brand colour. */
+[role="tablist"] .bg-surface-gray-10 {
+  background-color: var(--brand);
+}

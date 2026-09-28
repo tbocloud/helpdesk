@@ -23,7 +23,7 @@
       </div>
       <SidebarItem
         v-if="isOnboardingStepsCompleted && !isCustomerPortal"
-        :label="__('Help')"
+        :label="__('Help & docs')"
         :icon="HelpIcon"
         :on-click="
           () => {
@@ -42,7 +42,7 @@
     v-model="showHelpModal"
     v-model:articles="articles"
     appName="helpdesk"
-    title="Frappe Helpdesk"
+    title="TBO Support"
     :logo="logo"
     docsLink="https://docs.frappe.io/helpdesk"
     :afterSkip="(step: string) => capture('onboarding_step_skipped_' + step)"
@@ -424,7 +424,7 @@ const articles = ref([
     ],
   },
   {
-    title: "Frappe Helpdesk Mobile",
+    title: "TBO Support Mobile",
     opened: false,
     subArticles: [
       { name: "pwa-installation", title: "Mobile App Installation" },

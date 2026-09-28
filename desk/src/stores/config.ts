@@ -11,7 +11,7 @@ export const useConfigStore = defineStore("config", () => {
   });
 
   const config = computed(() => configResource.data || {});
-  const brandName = computed(() => config.value.brand_name);
+  const brandName = computed(() => config.value.brand_name || "TBO Support");
   const brandLogo = computed(() => config.value.brand_logo);
   const favicon = computed(() => config.value.favicon);
 

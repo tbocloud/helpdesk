@@ -23,7 +23,7 @@
             <div v-if="!columnTasks[col.key]?.length" class="flex items-center justify-center flex-1 text-xs text-ink-gray-4 py-4">{{ col.key === 'Completed' ? 'No completed tasks' : 'No tasks' }}</div>
             <div v-for="task in columnTasks[col.key]" :key="task.name"
               :draggable="col.key !== 'Completed'"
-              class="bg-surface-white border rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow relative"
+              class="bg-surface-base border rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow relative"
               :class="{
                 'border-ink-red-3 bg-ink-red-0': isOverdue(task),
                 'border-outline-gray-2': !isOverdue(task),
@@ -75,23 +75,23 @@
     </div>
 
     <div v-if="completingTask" class="fixed inset-0 z-50 flex items-center justify-center bg-black/25 backdrop-blur-sm" @click.self="completingTask = null">
-      <div class="bg-surface-white border border-outline-gray-2 rounded-xl shadow-xl w-full max-w-sm p-5">
+      <div class="bg-surface-base border border-outline-gray-2 rounded-xl shadow-xl w-full max-w-sm p-5">
         <div class="text-base-semibold text-ink-gray-9 mb-1">Complete Task</div>
         <div class="text-sm text-ink-gray-6 mb-4 truncate">{{ completingTask.subject }}</div>
         <div class="flex flex-col gap-3 mb-4">
           <div>
             <label class="text-xs text-ink-gray-5">Hours Worked</label>
-            <input v-model.number="completeHours" type="number" step="0.25" min="0" class="w-full border border-outline-gray-2 rounded px-3 py-1.5 text-sm bg-surface-white focus:outline-none mt-1" />
+            <input v-model.number="completeHours" type="number" step="0.25" min="0" class="w-full border border-outline-gray-2 rounded px-3 py-1.5 text-sm bg-surface-base focus:outline-none mt-1" />
             <div v-if="preFilledHours" class="text-xs text-ink-gray-4 mt-0.5">Auto-filled from timer: {{ preFilledHours }}h</div>
           </div>
           <div>
             <label class="text-xs text-ink-gray-5">Notes</label>
-            <input v-model="completeNotes" class="w-full border border-outline-gray-2 rounded px-3 py-1.5 text-sm bg-surface-white focus:outline-none mt-1" placeholder="What was done?" />
+            <input v-model="completeNotes" class="w-full border border-outline-gray-2 rounded px-3 py-1.5 text-sm bg-surface-base focus:outline-none mt-1" placeholder="What was done?" />
           </div>
         </div>
         <div class="flex justify-end gap-2">
           <button @click="completingTask = null" class="px-4 py-2 text-sm text-ink-gray-7 hover:bg-surface-gray-2 rounded-lg">Cancel</button>
-          <button @click="confirmComplete" class="px-5 py-2 text-sm font-medium rounded-lg bg-ink-gray-9 text-ink-white hover:bg-ink-gray-8">Submit Timesheet</button>
+          <button @click="confirmComplete" class="px-5 py-2 text-sm font-medium rounded-lg bg-ink-gray-9 text-ink-base hover:bg-ink-gray-8">Submit Timesheet</button>
         </div>
       </div>
     </div>

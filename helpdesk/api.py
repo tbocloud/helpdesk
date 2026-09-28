@@ -7,8 +7,11 @@ import json
 
 import frappe
 
+from helpdesk.utils import agent_manager_only, agent_only
+
 
 @frappe.whitelist()
+@agent_only
 def get_triage(ticket):
 	"""Get triage results for a ticket."""
 	ticket = str(ticket)
@@ -28,6 +31,7 @@ def get_triage(ticket):
 
 
 @frappe.whitelist()
+@agent_only
 def run_triage_now(ticket):
 	"""Manually trigger triage for a ticket."""
 	from helpdesk.triage import run_triage_now as _run_triage_now
@@ -36,6 +40,7 @@ def run_triage_now(ticket):
 
 
 @frappe.whitelist()
+@agent_only
 def start_investigation(ticket, connection, agent_notes=""):
 	"""Start an AI investigation session."""
 	from helpdesk.session_manager import start_investigation as _start
@@ -45,6 +50,7 @@ def start_investigation(ticket, connection, agent_notes=""):
 
 
 @frappe.whitelist()
+@agent_only
 def get_sessions(ticket):
 	"""Get all investigation sessions for a ticket."""
 	ticket = str(ticket)
@@ -68,6 +74,7 @@ def get_sessions(ticket):
 
 
 @frappe.whitelist()
+@agent_only
 def get_session_detail(session):
 	"""Get full session details including MCP call logs."""
 	doc = frappe.get_doc("HDS AI Support Session", session)
@@ -75,6 +82,7 @@ def get_session_detail(session):
 
 
 @frappe.whitelist()
+@agent_only
 def resume_session(session, agent_guidance=""):
 	"""Resume a paused (Awaiting Review) session with optional agent guidance."""
 	from helpdesk.session_manager import resume_investigation
@@ -84,6 +92,7 @@ def resume_session(session, agent_guidance=""):
 
 
 @frappe.whitelist()
+@agent_only
 def cancel_session(session):
 	"""Cancel a paused session permanently."""
 	doc = frappe.get_doc("HDS AI Support Session", str(session))
@@ -98,6 +107,7 @@ def cancel_session(session):
 
 
 @frappe.whitelist()
+@agent_only
 def get_pending_actions(ticket):
 	"""Get pending action requests for a ticket."""
 	ticket = str(ticket)
@@ -110,6 +120,7 @@ def get_pending_actions(ticket):
 
 
 @frappe.whitelist()
+@agent_only
 def get_connections():
 	"""Get all support connections."""
 	return frappe.get_list(
@@ -120,6 +131,7 @@ def get_connections():
 
 
 @frappe.whitelist()
+@agent_manager_only
 def get_login_url(connection, ticket=None):
 	"""Get a one-time login URL for a customer site.
 
@@ -147,7 +159,7 @@ def get_login_url(connection, ticket=None):
 		_log_login_attempt(connection, ticket, "Failed", "API secret not found")
 		frappe.throw("API secret not found for connection")
 
-	url = f"{conn.site_url}/api/method/qcs_support_client.api.generate_login_url"
+	url = f"{conn.site_url}{conn.client_method('api.generate_login_url')}"
 
 	try:
 		response = requests.post(
@@ -197,6 +209,7 @@ def _log_login_attempt(connection, ticket, status, error_message, event_type="Lo
 
 
 @frappe.whitelist()
+@agent_manager_only
 def get_remote_audit_log(connection, action_type=None, tool_name=None, status=None, limit=100):
 	"""Return audit log entries for a connection.
 
@@ -264,7 +277,7 @@ def view_connection_credentials(connection):
 		frappe.throw("No API secret set on this connection")
 
 	# Build a Claude Desktop config snippet
-	mcp_url = f"{conn.site_url}/api/method/qcs_support_client.mcp.handler.handle"
+	mcp_url = f"{conn.site_url}{conn.client_method('mcp.handler.handle')}"
 
 	slug = (conn.customer_name or conn.name).lower().replace(" ", "-").replace(".", "-")
 	desktop_args = [
@@ -304,6 +317,7 @@ def view_connection_credentials(connection):
 
 
 @frappe.whitelist()
+@agent_only
 def get_action_request_detail(action_request):
 	"""Get full action request details including proposed actions."""
 	doc = frappe.get_doc("HDS Support Action Request", str(action_request))
@@ -311,6 +325,7 @@ def get_action_request_detail(action_request):
 
 
 @frappe.whitelist()
+@agent_manager_only
 def approve_and_execute(action_request, approved_indices=None, execute=True):
 	"""Approve actions and optionally execute them.
 
@@ -340,6 +355,7 @@ def approve_and_execute(action_request, approved_indices=None, execute=True):
 
 
 @frappe.whitelist()
+@agent_manager_only
 def reject_action_request(action_request):
 	"""Reject all actions in an action request."""
 	from helpdesk.approval import reject_actions
@@ -388,7 +404,7 @@ def register_client(connection: str):
 	"""Hub-initiated connection handshake.
 
 	Prerequisites (one-time, manual):
-	  - Customer admin has installed qcs_support_client, configured QCS Support
+	  - Customer admin has installed helpdesk_client, configured HDS Support
 	    Settings (Hub URL, enabled), and generated API keys for
 	    support@quarkcs.com via the User doc -> API Access.
 	  - Hub admin has pasted those api_key/api_secret into this Connection.
@@ -397,6 +413,7 @@ def register_client(connection: str):
 	It records the Hub URL + client_id on the customer side and marks this
 	Connection as Connected on the Hub side. No secrets are exchanged.
 	"""
+	frappe.only_for("System Manager")
 	from frappe.utils import get_url
 
 	conn = frappe.get_doc("HDS Support Connection", connection)
@@ -409,7 +426,7 @@ def register_client(connection: str):
 		result = _call_client(
 			conn,
 			connection,
-			"/api/method/qcs_support_client.api.register_connection",
+			conn.client_method("api.register_connection"),
 			{"hub_url": get_url(), "client_id": connection},
 		)
 	except Exception as e:
@@ -435,6 +452,7 @@ def rotate_credentials(connection: str):
 	with the CURRENT credentials (Token auth), and on success swaps its
 	stored credentials to the new ones.
 	"""
+	frappe.only_for("System Manager")
 	conn = frappe.get_doc("HDS Support Connection", connection)
 	if not conn.site_url:
 		_log_login_attempt(connection, None, "Failed", "Site URL missing", event_type="Rotate Credentials")
@@ -448,7 +466,7 @@ def rotate_credentials(connection: str):
 		_call_client(
 			conn,
 			connection,
-			"/api/method/qcs_support_client.api.rotate_credentials",
+			conn.client_method("api.rotate_credentials"),
 			{"new_api_key": new_api_key, "new_api_secret": new_api_secret},
 		)
 	except Exception as e:
@@ -475,6 +493,7 @@ def deregister_client(connection: str):
 	then marks this Connection as Disconnected. Does NOT revoke the api_key on
 	the customer site - the customer admin controls that via User -> API Access.
 	"""
+	frappe.only_for("System Manager")
 	conn = frappe.get_doc("HDS Support Connection", connection)
 	if not conn.site_url:
 		_log_login_attempt(connection, None, "Failed", "Site URL missing", event_type="Deregister")
@@ -484,7 +503,7 @@ def deregister_client(connection: str):
 		_call_client(
 			conn,
 			connection,
-			"/api/method/qcs_support_client.api.deregister",
+			conn.client_method("api.deregister"),
 			{},
 		)
 	except Exception as e:

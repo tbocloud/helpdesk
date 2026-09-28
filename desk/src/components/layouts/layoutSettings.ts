@@ -1,12 +1,12 @@
 import LucideContact2 from "~icons/lucide/contact-2";
 import LucideTicket from "~icons/lucide/ticket";
-import LucideLayoutDashboard from "~icons/lucide/layout-dashboard";
 import { OrganizationsIcon } from "../icons";
 import LucideHome from "~icons/lucide/home";
 import LucideFolderKanban from "~icons/lucide/folder-kanban";
 import LucideListTodo from "~icons/lucide/list-todo";
 import LucideClipboardList from "~icons/lucide/clipboard-list";
 import LucideClock from "~icons/lucide/clock";
+import LucideCalendarDays from "~icons/lucide/calendar-days";
 import { __ } from "@/translation";
 
 export const agentPortalSidebarOptions = [
@@ -14,46 +14,58 @@ export const agentPortalSidebarOptions = [
     label: __("Home"),
     icon: LucideHome,
     to: "Home",
-  },
-  {
-    label: __("Dashboard"),
-    icon: LucideLayoutDashboard,
-    to: "Dashboard"
+    section: "Workspace",
   },
   {
     label: __("Tickets"),
     icon: LucideTicket,
     to: "TicketsAgent",
+    section: "Workspace",
+    countKey: "tickets",
   },
   {
     label: __("Projects"),
     icon: LucideFolderKanban,
     to: "TaskyProjects",
-  },
-  {
-    label: __("Templates"),
-    icon: LucideClipboardList,
-    to: "TaskyTemplates",
+    section: "Workspace",
   },
   {
     label: __("My Tasks"),
     icon: LucideListTodo,
     to: "TaskyMyTasks",
+    section: "Workspace",
+    countKey: "my_tasks",
   },
   {
     label: __("Timesheets"),
     icon: LucideClock,
     to: "TaskyTimesheets",
+    section: "Workspace",
+  },
+  {
+    label: __("Content"),
+    icon: LucideCalendarDays,
+    to: "ContentCalendar",
+    section: "Workspace",
   },
   {
     label: __("Customers"),
     icon: OrganizationsIcon,
     to: "CustomerList",
+    section: "Directory",
   },
   {
     label: __("Contacts"),
     icon: LucideContact2,
     to: "ContactList",
+    section: "Directory",
+  },
+  {
+    label: __("Templates"),
+    icon: LucideClipboardList,
+    to: "TaskyTemplates",
+    section: "Directory",
+    projectManagerOnly: true,
   },
 ];
 

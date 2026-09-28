@@ -1,0 +1,273 @@
+{
+	"actions": [],
+	"allow_rename": 0,
+	"autoname": "POST-.YYYY.-.#####",
+	"creation": "2026-09-28 17:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"title",
+		"customer",
+		"campaign",
+		"column_break_1",
+		"status",
+		"publish_on",
+		"channel",
+		"format",
+		"team_section",
+		"writer",
+		"column_break_2",
+		"designer",
+		"content_section",
+		"caption",
+		"hashtags",
+		"approval_section",
+		"client_connection",
+		"client_approval_ref",
+		"column_break_4",
+		"sent_for_approval_on",
+		"outcome_section",
+		"client_feedback",
+		"published_url",
+		"column_break_3",
+		"published_on",
+		"task"
+	],
+	"fields": [
+		{
+			"fieldname": "title",
+			"fieldtype": "Data",
+			"label": "Title",
+			"reqd": 1,
+			"in_list_view": 1,
+			"in_global_search": 1
+		},
+		{
+			"fieldname": "customer",
+			"fieldtype": "Link",
+			"label": "Customer",
+			"options": "HD Customer",
+			"reqd": 1,
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"search_index": 1
+		},
+		{
+			"fieldname": "campaign",
+			"fieldtype": "Link",
+			"label": "Campaign",
+			"options": "HD Content Campaign",
+			"in_standard_filter": 1
+		},
+		{
+			"fieldname": "column_break_1",
+			"fieldtype": "Column Break",
+			"label": ""
+		},
+		{
+			"fieldname": "status",
+			"fieldtype": "Select",
+			"label": "Status",
+			"options": "Idea\nDrafting\nDesign\nInternal Review\nClient Review\nChanges Requested\nApproved\nScheduled\nPublished",
+			"default": "Idea",
+			"reqd": 1,
+			"in_list_view": 1,
+			"in_standard_filter": 1
+		},
+		{
+			"fieldname": "publish_on",
+			"fieldtype": "Datetime",
+			"label": "Publish On",
+			"in_list_view": 1,
+			"search_index": 1,
+			"description": "Required once the post moves past Idea"
+		},
+		{
+			"fieldname": "channel",
+			"fieldtype": "Select",
+			"label": "Channel",
+			"options": "Instagram\nFacebook\nLinkedIn\nX\nYouTube\nBlog\nEmail\nWhatsApp",
+			"reqd": 1,
+			"in_list_view": 1,
+			"in_standard_filter": 1
+		},
+		{
+			"fieldname": "format",
+			"fieldtype": "Select",
+			"label": "Format",
+			"options": "Post\nCarousel\nReel\nStory\nVideo\nArticle\nNewsletter",
+			"default": "Post"
+		},
+		{
+			"fieldname": "team_section",
+			"fieldtype": "Section Break",
+			"label": "Team"
+		},
+		{
+			"fieldname": "writer",
+			"fieldtype": "Link",
+			"label": "Writer",
+			"options": "User",
+			"in_standard_filter": 1
+		},
+		{
+			"fieldname": "column_break_2",
+			"fieldtype": "Column Break",
+			"label": ""
+		},
+		{
+			"fieldname": "designer",
+			"fieldtype": "Link",
+			"label": "Designer",
+			"options": "User",
+			"in_standard_filter": 1
+		},
+		{
+			"fieldname": "content_section",
+			"fieldtype": "Section Break",
+			"label": "Content"
+		},
+		{
+			"fieldname": "caption",
+			"fieldtype": "Text Editor",
+			"label": "Caption"
+		},
+		{
+			"fieldname": "hashtags",
+			"fieldtype": "Small Text",
+			"label": "Hashtags"
+		},
+		{
+			"fieldname": "approval_section",
+			"fieldtype": "Section Break",
+			"label": "Client Approval",
+			"collapsible": 1
+		},
+		{
+			"fieldname": "client_connection",
+			"fieldtype": "Link",
+			"label": "Sent To",
+			"options": "HDS Support Connection",
+			"read_only": 1,
+			"no_copy": 1
+		},
+		{
+			"fieldname": "client_approval_ref",
+			"fieldtype": "Data",
+			"label": "Client Approval",
+			"read_only": 1,
+			"no_copy": 1,
+			"description": "Content Approval record on the customer's ERP"
+		},
+		{
+			"fieldname": "column_break_4",
+			"fieldtype": "Column Break",
+			"label": ""
+		},
+		{
+			"fieldname": "sent_for_approval_on",
+			"fieldtype": "Datetime",
+			"label": "Sent For Approval On",
+			"read_only": 1,
+			"no_copy": 1
+		},
+		{
+			"fieldname": "outcome_section",
+			"fieldtype": "Section Break",
+			"label": "Review & Publishing",
+			"collapsible": 1
+		},
+		{
+			"fieldname": "client_feedback",
+			"fieldtype": "Small Text",
+			"label": "Client Feedback"
+		},
+		{
+			"fieldname": "published_url",
+			"fieldtype": "Data",
+			"label": "Published URL",
+			"options": "URL"
+		},
+		{
+			"fieldname": "column_break_3",
+			"fieldtype": "Column Break",
+			"label": ""
+		},
+		{
+			"fieldname": "published_on",
+			"fieldtype": "Datetime",
+			"label": "Published On",
+			"read_only": 1,
+			"no_copy": 1
+		},
+		{
+			"fieldname": "task",
+			"fieldtype": "Link",
+			"label": "Task",
+			"options": "Task",
+			"description": "Link to a Task to log time in Timesheets"
+		}
+	],
+	"index_web_pages_for_search": 0,
+	"links": [],
+	"modified": "2026-09-28 18:30:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD Content Post",
+	"naming_rule": "Expression (old style)",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "System Manager",
+			"share": 1,
+			"write": 1
+		},
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "Agent Manager",
+			"share": 1,
+			"write": 1
+		},
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "Project Manager",
+			"share": 1,
+			"write": 1
+		},
+		{
+			"create": 1,
+			"email": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "Agent",
+			"write": 1
+		}
+	],
+	"search_fields": "title,customer,channel",
+	"show_title_field_in_link": 1,
+	"sort_field": "creation",
+	"sort_order": "DESC",
+	"states": [],
+	"title_field": "title",
+	"track_changes": 1
+}

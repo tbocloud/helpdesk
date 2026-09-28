@@ -17,7 +17,7 @@
     <div class="flex-1 overflow-auto p-5">
       <div v-if="tasks.loading" class="flex items-center justify-center h-full"><div class="text-p-base text-ink-gray-6">{{ __("Loading...") }}</div></div>
       <template v-else>
-        <div class="bg-surface-white border border-outline-gray-2 rounded-lg overflow-hidden mb-4">
+        <div class="bg-surface-base border border-outline-gray-2 rounded-lg overflow-hidden mb-4">
           <div class="overflow-x-auto">
             <table class="w-full text-sm">
               <thead><tr class="border-b border-outline-gray-2 bg-surface-gray-1">

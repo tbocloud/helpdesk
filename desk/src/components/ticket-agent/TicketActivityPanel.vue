@@ -3,8 +3,24 @@
     :modelValue="tabIndex"
     :tabs="tabs"
     @update:modelValue="changeTabTo"
-    class="[&_[role='tab']]:px-0 [&_[role='tablist']]:px-5 [&_[role='tablist']]:gap-7.5 [&_[role='tablist']]:flex-shrink-0 [&_[role='tabpanel'][data-state='active']]:flex-1"
+    class="[&_[role='tab']]:px-0 [&_[role='tablist']]:px-5 [&_[role='tablist']]:gap-6 [&_[role='tablist']]:flex-shrink-0 [&_[role='tabpanel'][data-state='active']]:flex-1"
   >
+    <template #tab-item="{ tab, selected }">
+      <button
+        type="button"
+        class="flex h-10 items-center gap-2 text-sm font-medium transition-colors"
+        :class="selected ? 'text-ink-gray-9' : 'text-ink-gray-5 hover:text-ink-gray-9'"
+      >
+        <component :is="tab.icon" class="size-4" aria-hidden="true" />
+        {{ __(tab.label) }}
+        <span
+          v-if="tab.name !== 'activity' && countFor(tab.name) > 0"
+          class="rounded bg-surface-gray-2 px-1.5 font-mono text-2xs tabular-nums text-ink-gray-5"
+        >
+          {{ countFor(tab.name) }}
+        </span>
+      </button>
+    </template>
     <template #tab-panel="{ tab }">
       <TicketAgentActivities
         v-if="Boolean(activities.data)"
@@ -64,6 +80,7 @@ import {
   TicketSymbol,
   TicketTab,
 } from "@/types";
+import { __ } from "@/translation";
 import { Button, Tabs } from "frappe-ui";
 import { storeToRefs } from "pinia";
 import { computed, ComputedRef, inject, ref } from "vue";
@@ -253,6 +270,10 @@ const _activities = computed(() => {
 
   return data;
 });
+
+function countFor(eventType: TicketTab) {
+  return filterActivities(eventType).length;
+}
 
 function filterActivities(eventType: TicketTab) {
   if (eventType === "activity") {

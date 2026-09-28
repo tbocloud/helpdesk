@@ -21,6 +21,9 @@ class IntegrationTestERPNextHDSettings(FrappeTestCase):
 
     @patch("frappe.get_installed_apps", return_value=["frappe", "helpdesk", "erpnext"])
     def test_validate_with_erpnext_installed(self, mock_get_installed_apps):
+        # get_installed_apps is mocked, so check for the real Customer doctype instead
+        if not frappe.db.exists("DocType", "Customer"):
+            self.skipTest("ERPNext is not installed")
         settings_doc = frappe.get_single("ERPNext HD Settings")
         settings_doc.enabled = 1
         try:

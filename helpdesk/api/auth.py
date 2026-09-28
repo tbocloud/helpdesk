@@ -1,5 +1,6 @@
 import frappe
 
+from helpdesk.tasky.permissions import is_project_manager as tasky_is_project_manager
 from helpdesk.utils import agent_only, get_agent_name, get_agents_team
 from helpdesk.utils import is_agent as _is_agent
 
@@ -47,6 +48,7 @@ def get_user():
     user_id = user.name
     username = user.username
     is_manager = ("Agent Manager") in frappe.get_roles(current_user)
+    is_project_manager = tasky_is_project_manager(current_user)
     language = user.language or frappe.db.get_single_value(
         "System Settings", "language"
     )
@@ -64,6 +66,7 @@ def get_user():
         "has_agent_record": has_agent_record,
         "user_id": user_id,
         "is_manager": is_manager,
+        "is_project_manager": is_project_manager,
         "user_image": user_image,
         "user_first_name": user_first_name,
         "user_name": user_name,

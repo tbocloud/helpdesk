@@ -6,13 +6,22 @@ from frappe.model.document import Document
 
 from helpdesk.utils import normalize_site_url
 
+DEFAULT_CLIENT_APP = "helpdesk_client"
+
 
 class HDSSupportConnection(Document):
 	def before_save(self):
 		if self.site_url:
-			self.site_url = normalize_site_url(self.site_url)
-			self.mcp_endpoint = f"{self.site_url}/api/method/qcs_support_client.mcp.handler.handle"
+			self.normalize_urls()
 			self._warn_on_insecure_scheme()
+
+	def normalize_urls(self):
+		self.site_url = normalize_site_url(self.site_url)
+		self.mcp_endpoint = f"{self.site_url}{self.client_method('mcp.handler.handle')}"
+
+	def client_method(self, method: str) -> str:
+		"""Path of a whitelisted method in the client app on the customer site."""
+		return f"/api/method/{self.client_app or DEFAULT_CLIENT_APP}.{method}"
 
 	def _warn_on_insecure_scheme(self):
 		"""Warn (do not block) if the site URL uses plain http for a non-localhost host."""

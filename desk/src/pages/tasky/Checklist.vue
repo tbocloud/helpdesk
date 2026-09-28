@@ -15,31 +15,31 @@
       </template>
     </LayoutHeader>
     <div class="flex-1 overflow-auto p-4">
-      <div class="bg-surface-white border border-outline-gray-2 rounded-lg p-4 mb-4">
+      <div v-if="projectDetail.data?.can_manage" class="bg-surface-base border border-outline-gray-2 rounded-lg p-4 mb-4">
         <div class="text-sm-medium text-ink-gray-8 mb-3">{{ __("Add Task") }}</div>
         <div class="flex items-center gap-2 flex-wrap">
-          <input v-model="newTask.task_name" placeholder="Task name" class="flex-1 min-w-[200px] border border-outline-gray-2 rounded px-3 py-1.5 text-sm bg-surface-white focus:outline-none focus:border-outline-gray-3" @keyup.enter="onAddTask" />
-          <input v-model="newTask.phase" placeholder="Phase" class="w-28 border border-outline-gray-2 rounded px-2 py-1.5 text-sm bg-surface-white focus:outline-none focus:border-outline-gray-3" />
-          <select v-model="newTask.category" class="w-28 border border-outline-gray-2 rounded px-2 py-1.5 text-sm bg-surface-white">
+          <input v-model="newTask.task_name" placeholder="Task name" class="flex-1 min-w-[200px] border border-outline-gray-2 rounded px-3 py-1.5 text-sm bg-surface-base focus:outline-none focus:border-outline-gray-3" @keyup.enter="onAddTask" />
+          <input v-model="newTask.phase" placeholder="Phase" class="w-28 border border-outline-gray-2 rounded px-2 py-1.5 text-sm bg-surface-base focus:outline-none focus:border-outline-gray-3" />
+          <select v-model="newTask.category" class="w-28 border border-outline-gray-2 rounded px-2 py-1.5 text-sm bg-surface-base">
             <option>Functional</option><option>Development</option><option>Support</option><option>Common</option>
           </select>
-          <select v-model="newTask.priority" class="w-24 border border-outline-gray-2 rounded px-2 py-1.5 text-sm bg-surface-white">
+          <select v-model="newTask.priority" class="w-24 border border-outline-gray-2 rounded px-2 py-1.5 text-sm bg-surface-base">
             <option>High</option><option>Medium</option><option>Low</option><option>Urgent</option>
           </select>
-          <select v-model="newTask.assigned_to" class="w-44 border border-outline-gray-2 rounded px-2 py-1.5 text-sm bg-surface-white">
+          <select v-model="newTask.assigned_to" class="w-44 border border-outline-gray-2 rounded px-2 py-1.5 text-sm bg-surface-base">
             <option value="">Unassigned</option>
             <option v-for="u in projectMembers" :key="u.user" :value="u.user">{{ u.full_name || u.user }}</option>
           </select>
-          <input v-model.number="newTask.estimated_hours" type="number" placeholder="Hrs" class="w-16 border border-outline-gray-2 rounded px-2 py-1.5 text-sm bg-surface-white" />
-          <input v-model="newTask.due_date" type="date" class="w-32 border border-outline-gray-2 rounded px-2 py-1.5 text-sm bg-surface-white" />
-          <button class="px-4 py-1.5 text-sm rounded bg-surface-gray-8 text-ink-white hover:bg-surface-gray-9 disabled:opacity-50 font-medium" :disabled="!newTask.task_name || addTask.loading" @click="onAddTask">{{ addTask.loading ? "Adding..." : "+ Add Task" }}</button>
+          <input v-model.number="newTask.estimated_hours" type="number" placeholder="Hrs" class="w-16 border border-outline-gray-2 rounded px-2 py-1.5 text-sm bg-surface-base" />
+          <input v-model="newTask.due_date" type="date" class="w-32 border border-outline-gray-2 rounded px-2 py-1.5 text-sm bg-surface-base" />
+          <button class="px-4 py-1.5 text-sm rounded bg-surface-gray-8 text-ink-base hover:bg-surface-gray-9 disabled:opacity-50 font-medium" :disabled="!newTask.task_name || addTask.loading" @click="onAddTask">{{ addTask.loading ? "Adding..." : "+ Add Task" }}</button>
         </div>
       </div>
       <div v-if="phases.loading" class="flex items-center justify-center py-12">
         <LoadingIndicator :scale="4" />
       </div>
       <template v-else-if="phases.data?.phases">
-        <div v-for="phase in phases.data.phases" :key="phase.name" class="border border-outline-gray-2 rounded-lg bg-surface-white overflow-hidden mb-3">
+        <div v-for="phase in phases.data.phases" :key="phase.name" class="border border-outline-gray-2 rounded-lg bg-surface-base overflow-hidden mb-3">
           <button class="flex items-center justify-between w-full p-4 hover:bg-surface-sidebar transition-colors" @click="togglePhase(phase.phase_name)">
             <div class="flex items-center gap-3">
               <component :is="expandedPhases.has(phase.phase_name) ? LucideChevronDown : LucideChevronRight" class="size-4 text-ink-gray-6 flex-shrink-0" />
@@ -79,22 +79,22 @@
     </div>
 
     <div v-if="completingTask" class="fixed inset-0 z-50 flex items-center justify-center bg-black/25 backdrop-blur-sm" @click.self="completingTask = null">
-      <div class="bg-surface-white border border-outline-gray-2 rounded-xl shadow-xl w-full max-w-sm p-5">
+      <div class="bg-surface-base border border-outline-gray-2 rounded-xl shadow-xl w-full max-w-sm p-5">
         <div class="text-base-semibold text-ink-gray-9 mb-1">{{ __("Complete Task") }}</div>
         <div class="text-sm text-ink-gray-6 mb-4 truncate">{{ completingTask.subject }}</div>
         <div class="flex flex-col gap-3 mb-4">
           <div class="flex flex-col gap-1">
             <label class="text-xs text-ink-gray-5">{{ __("Hours Worked") }}</label>
-            <input v-model.number="completeHours" type="number" step="0.5" min="0" class="border border-outline-gray-2 rounded px-3 py-1.5 text-sm bg-surface-white focus:outline-none" placeholder="e.g. 2.5" />
+            <input v-model.number="completeHours" type="number" step="0.5" min="0" class="border border-outline-gray-2 rounded px-3 py-1.5 text-sm bg-surface-base focus:outline-none" placeholder="e.g. 2.5" />
           </div>
           <div class="flex flex-col gap-1">
             <label class="text-xs text-ink-gray-5">{{ __("Notes") }}</label>
-            <input v-model="completeNotes" class="border border-outline-gray-2 rounded px-3 py-1.5 text-sm bg-surface-white focus:outline-none" placeholder="What was done?" />
+            <input v-model="completeNotes" class="border border-outline-gray-2 rounded px-3 py-1.5 text-sm bg-surface-base focus:outline-none" placeholder="What was done?" />
           </div>
         </div>
         <div class="flex justify-end gap-2">
           <button @click="completingTask = null" class="px-4 py-2 text-sm text-ink-gray-7 hover:bg-surface-gray-2 rounded-lg">{{ __("Cancel") }}</button>
-          <button @click="confirmComplete" class="px-5 py-2 text-sm font-medium rounded-lg bg-ink-gray-9 text-ink-white hover:bg-ink-gray-8">{{ __("Mark Complete") }}</button>
+          <button @click="confirmComplete" class="px-5 py-2 text-sm font-medium rounded-lg bg-ink-gray-9 text-ink-base hover:bg-ink-gray-8">{{ __("Mark Complete") }}</button>
         </div>
       </div>
     </div>

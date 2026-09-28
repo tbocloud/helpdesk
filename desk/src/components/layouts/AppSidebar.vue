@@ -9,8 +9,17 @@
 
       <ScrollArea class="mt-2 min-h-0 flex-1 -mx-2" viewport-class="px-2">
         <template v-for="(section, index) in sections" :key="index">
+          <template v-if="section.label && !section.collapsible">
+            <div
+              v-if="!isCollapsed"
+              class="select-none px-2.5 pb-1.5 pt-3.5 text-2xs font-semibold uppercase tracking-[0.06em] text-ink-gray-5"
+            >
+              {{ section.label }}
+            </div>
+            <div v-else class="mx-2 my-2 border-t border-outline-gray-2" />
+          </template>
           <SidebarLabel
-            v-if="section.label"
+            v-else-if="section.label"
             divider
             class="my-1 select-none"
             :class="section.collapsible && !isCollapsed && 'cursor-pointer'"
@@ -25,7 +34,7 @@
             </span>
           </SidebarLabel>
           <nav
-            v-if="!section.label || isSectionOpen(section.label)"
+            v-if="!section.collapsible || isSectionOpen(section.label)"
             class="flex flex-col gap-0.5"
           >
             <SidebarItem
@@ -34,35 +43,34 @@
               :id="item.id"
               :label="__(item.label)"
               :active="item.isActive"
-              :class="item.spacedTop && 'mt-4'"
               @click="item.onClick && item.onClick()"
             >
               <template #prefix>
                 <span
-                  class="relative grid size-4 shrink-0 place-items-center text-ink-gray-7"
+                  class="tbo-nav-icon relative grid size-4 shrink-0 place-items-center text-ink-gray-6"
                 >
                   <component :is="item.icon" class="size-4" />
                   <span
-                    v-if="item.key === 'notifications' && item.badge"
+                    v-if="item.key === 'notifications' && item.badge && isCollapsed"
                     class="absolute -right-0.5 -top-0.5 size-1.5 rounded-full bg-surface-blue-5"
                   />
                 </span>
               </template>
               <template #suffix>
-                <span
+                <kbd
                   v-if="item.shortcut"
-                  class="me-2 flex items-center gap-0.5 font-medium text-ink-gray-5"
+                  class="me-2 flex items-center gap-0.5 rounded border border-outline-gray-2 px-1 text-2xs font-medium text-ink-gray-5"
                 >
                   <component :is="device.modifierIcon" class="h-3 w-3" />
-                  <span class="text-sm">K</span>
-                </span>
-                <Badge
+                  K
+                </kbd>
+                <span
                   v-else-if="item.badge"
-                  class="me-2"
-                  :label="item.badge > 9 ? '9+' : item.badge"
-                  theme="gray"
-                  variant="subtle"
-                />
+                  class="me-2 font-mono text-xs tabular-nums text-ink-gray-5"
+                  :aria-label="__('{0} unread', String(item.badge))"
+                >
+                  {{ item.badge > 99 ? "99+" : item.badge }}
+                </span>
                 <Dropdown
                   v-else-if="item.view"
                   side="right"
@@ -108,6 +116,7 @@ import CP from "@/components/command-palette/CP.vue";
 import UserMenu from "@/components/UserMenu.vue";
 import { useDevice } from "@/composables";
 import { currentView, useView } from "@/composables/useView";
+import { useAuthStore } from "@/stores/auth";
 import { useNotificationStore } from "@/stores/notification";
 import { useSidebarStore } from "@/stores/sidebar";
 import { useTelephonyStore } from "@/stores/telephony";
@@ -115,8 +124,8 @@ import { __ } from "@/translation";
 import { getIcon, isCustomerPortal } from "@/utils";
 import ViewModal from "@/components/ViewModal.vue";
 import {
-  Badge,
   Button,
+  createResource,
   Dropdown,
   ScrollArea,
   Sidebar,
@@ -143,10 +152,11 @@ const props = defineProps<{
 const route = useRoute();
 const router = useRouter();
 const device = useDevice();
+const authStore = useAuthStore();
 const notificationStore = useNotificationStore();
 const sidebarStore = useSidebarStore();
 const { isCallingEnabled } = storeToRefs(useTelephonyStore());
-const { pinnedViews, publicViews, viewActions, handleView } = useView();
+const { pinnedViews, viewActions, handleView } = useView();
 
 const showCommandPalette = ref(false);
 
@@ -191,19 +201,26 @@ function selectItem(key: string, to: RouteLocationRaw, onSelect?: () => void) {
   router.push(to);
 }
 
+// Counts of work waiting on the agent (open tickets / tasks assigned to them)
+const navCounts = createResource({
+  url: "helpdesk.api.sidebar.get_nav_counts",
+  auto: !isCustomerPortal.value,
+});
+
 const navItems = computed(() => {
   const options = isCustomerPortal.value
     ? customerPortalSidebarOptions
     : agentPortalSidebarOptions;
   return options
     .filter((item) => isCallingEnabled.value || item.label !== __("Call Logs"))
-    .map((option, index) => ({
+    .filter((item) => !item.projectManagerOnly || authStore.isProjectManager)
+    .map((option: any) => ({
       label: option.label,
       icon: option.icon,
       isActive: activeItem.value === option.to,
       onClick: () => selectItem(option.to, { name: option.to }),
-      // Separate the nav group from the search/notification tools above it.
-      spacedTop: index === 0 && !isCustomerPortal.value,
+      badge: option.countKey ? navCounts.data?.[option.countKey] : undefined,
+      section: option.section,
       key: option.label,
     }));
 });
@@ -239,22 +256,17 @@ const notificationItem = computed(() =>
       }
 );
 
-const mainItems = computed(() => {
-  if (isCustomerPortal.value) return navItems.value;
+const sections = computed(() => {
+  if (isCustomerPortal.value) {
+    return [{ label: "", items: navItems.value, collapsible: false }];
+  }
   const top = props.mobile
     ? [notificationItem.value]
     : [searchItem.value, notificationItem.value];
-  return [...top, ...navItems.value];
-});
-
-const sections = computed(() => {
-  const result = [{ label: "", items: mainItems.value, collapsible: false }];
-  if (publicViews.value?.length && !isCustomerPortal.value) {
-    result.push({
-      label: __("Public Views"),
-      items: parseViews(publicViews.value),
-      collapsible: true,
-    });
+  const result = [{ label: "", items: top, collapsible: false }];
+  for (const label of ["Workspace", "Directory"]) {
+    const items = navItems.value.filter((item) => item.section === label);
+    if (items.length) result.push({ label: __(label), items, collapsible: false });
   }
   if (pinnedViews.value?.length) {
     result.push({
@@ -286,6 +298,9 @@ function parseViews(views: any[]) {
 
 watch(
   () => [route.name, route.query.view],
-  () => (activeItem.value = currentRouteKey())
+  () => {
+    activeItem.value = currentRouteKey();
+    if (!isCustomerPortal.value) navCounts.reload();
+  }
 );
 </script>

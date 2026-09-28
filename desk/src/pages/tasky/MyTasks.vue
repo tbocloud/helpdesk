@@ -2,338 +2,564 @@
   <div class="flex flex-col h-full">
     <LayoutHeader>
       <template #left-header>
-        <div class="text-lg-medium text-ink-gray-9">
-          {{ __("My Tasks") }}
-        </div>
+        <div class="text-lg-medium text-ink-gray-9">{{ __("My Tasks") }}</div>
+      </template>
+      <template #right-header>
+        <Button
+          variant="ghost"
+          :loading="tasks.loading"
+          :aria-label="__('Refresh')"
+          @click="tasks.reload()"
+        >
+          <template #icon><LucideRefreshCw class="size-4" /></template>
+        </Button>
       </template>
     </LayoutHeader>
 
-    <div class="flex-1 overflow-auto p-5">
-      <div v-if="tasks.loading" class="flex items-center justify-center h-full">
-        <div class="text-p-base text-ink-gray-6">{{ __("Loading...") }}</div>
-      </div>
-
-      <div v-else-if="tasks.error" class="flex items-center justify-center h-full">
-        <div class="flex flex-col items-center gap-2">
-          <AlertTriangle class="size-10 text-ink-gray-5" />
-          <div class="text-p-base text-ink-gray-7">
-            {{ __("Failed to load tasks. Please try again.") }}
+    <div class="flex-1 overflow-auto">
+      <div class="mx-auto w-full max-w-6xl px-4 py-5 md:px-6">
+        <div
+          v-if="tasks.error"
+          class="flex flex-col items-center gap-3 py-24 text-center"
+        >
+          <LucideCircleAlert class="size-8 text-ink-gray-5" aria-hidden="true" />
+          <div class="text-base-medium text-ink-gray-8">
+            {{ __("Couldn't load your tasks") }}
           </div>
-        </div>
-      </div>
-
-      <template v-else>
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          <div class="bg-surface-white border border-outline-gray-2 rounded-lg p-5 flex items-center gap-4">
-            <div class="relative size-16 shrink-0">
-              <svg class="size-16 -rotate-90" viewBox="0 0 36 36">
-                <circle
-                  cx="18" cy="18" r="15.5"
-                  fill="none"
-                  class="stroke-surface-gray-2"
-                  stroke-width="3"
-                />
-                <circle
-                  cx="18" cy="18" r="15.5"
-                  fill="none"
-                  class="stroke-ink-gray-7"
-                  stroke-width="3"
-                  stroke-linecap="round"
-                  :stroke-dasharray="`${completionPercent} ${100 - completionPercent}`"
-                  stroke-dashoffset="0"
-                />
-              </svg>
-              <span class="absolute inset-0 flex items-center justify-center text-sm-medium text-ink-gray-9">
-                {{ completionPercent }}%
-              </span>
-            </div>
-            <div>
-              <div class="text-xs text-ink-gray-5 mb-0.5">{{ __("Today's Work") }}</div>
-              <div class="text-base-medium text-ink-gray-9">
-                {{ completedTasks }} / {{ totalTasks }} {{ __("completed") }}
-              </div>
-            </div>
-          </div>
-
-          <div class="bg-surface-white border border-outline-gray-2 rounded-lg p-5">
-            <div class="flex items-center gap-2 mb-1">
-              <Clock class="size-4 text-ink-red-5" />
-              <span class="text-xs text-ink-gray-5">{{ __("Overdue") }}</span>
-            </div>
-            <div class="text-xl-semibold text-ink-red-7">{{ overdueTasks.length }}</div>
-          </div>
-
-          <div class="bg-surface-white border border-outline-gray-2 rounded-lg p-5">
-            <div class="flex items-center gap-2 mb-1">
-              <AlertTriangle class="size-4 text-ink-amber-5" />
-              <span class="text-xs text-ink-gray-5">{{ __("Cancelled") }}</span>
-            </div>
-            <div class="text-xl-semibold text-ink-gray-9">{{ blockedTasks.length }}</div>
-          </div>
+          <Button :label="__('Try again')" @click="tasks.reload()" />
         </div>
 
-        <div class="flex gap-2 mb-4">
-          <button
-            v-for="tab in filterTabs"
-            :key="tab.key"
-            class="px-3 py-1.5 rounded text-sm transition-colors"
-            :class="activeFilter === tab.key
-              ? 'bg-surface-gray-3 text-ink-gray-9'
-              : 'text-ink-gray-6 hover:bg-surface-gray-2 hover:text-ink-gray-8'"
-            @click="activeFilter = tab.key"
-          >
-            {{ __(tab.label) }}
-          </button>
-        </div>
-
-        <div v-if="blockedTasks.length && activeFilter === 'Cancelled'" class="mb-6">
-          <div class="bg-surface-white border border-outline-gray-2 rounded-lg">
-            <div
-              v-for="task in blockedTasks"
-              :key="task.name"
-              class="flex items-center gap-3 px-4 py-3 border-b border-outline-gray-2 last:border-b-0"
+        <template v-else>
+          <!-- Summary -->
+          <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <button
+              v-for="stat in stats"
+              :key="stat.key"
+              type="button"
+              class="group flex flex-col gap-3 rounded-lg border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+              :class="
+                activeFilter === stat.filter
+                  ? 'border-outline-gray-4 bg-surface-gray-1'
+                  : 'border-outline-gray-2 bg-surface-base hover:border-outline-gray-3'
+              "
+              :aria-pressed="activeFilter === stat.filter"
+              @click="setFilter(stat.filter)"
             >
-              <AlertTriangle class="size-4 text-ink-red-5 shrink-0" />
-              <span class="flex-1 text-sm text-ink-gray-8 truncate">
-                {{ task.subject }}
-              </span>
-              <button
-                class="text-xs text-ink-gray-6 px-2 py-1 rounded border border-outline-gray-2 hover:bg-surface-gray-2 transition-colors shrink-0"
-                @click="onRequestHelp(task)"
+              <div class="flex items-center justify-between">
+                <span class="text-sm text-ink-gray-6">{{ stat.label }}</span>
+                <component
+                  :is="stat.icon"
+                  class="size-4 text-ink-gray-5"
+                  aria-hidden="true"
+                />
+              </div>
+              <div class="flex items-end justify-between gap-2">
+                <span class="text-2xl-semibold text-ink-gray-9 tabular-nums">
+                  <span
+                    v-if="tasks.loading && !tasks.data"
+                    class="inline-block h-7 w-8 animate-pulse rounded bg-surface-gray-2"
+                  />
+                  <template v-else>{{ stat.value }}</template>
+                </span>
+                <span v-if="stat.hint" class="text-xs text-ink-gray-5">
+                  {{ stat.hint }}
+                </span>
+              </div>
+              <div
+                v-if="stat.progress !== undefined"
+                class="h-1 w-full overflow-hidden rounded-full bg-surface-gray-2"
+                role="progressbar"
+                :aria-valuenow="stat.progress"
+                aria-valuemin="0"
+                aria-valuemax="100"
               >
-                {{ __("Request Help") }}
+                <div
+                  class="h-full rounded-full bg-surface-gray-7 transition-[width] duration-500"
+                  :style="{ width: `${stat.progress}%` }"
+                />
+              </div>
+            </button>
+          </div>
+
+          <!-- Filters -->
+          <div
+            class="mt-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between"
+          >
+            <div
+              class="-mx-1 flex gap-1 overflow-x-auto px-1"
+              role="tablist"
+              :aria-label="__('Filter tasks by status')"
+            >
+              <button
+                v-for="tab in tabs"
+                :key="tab.key"
+                type="button"
+                role="tab"
+                :aria-selected="activeFilter === tab.key"
+                class="flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+                :class="
+                  activeFilter === tab.key
+                    ? 'bg-surface-gray-3 text-ink-gray-9'
+                    : 'text-ink-gray-6 hover:bg-surface-gray-2 hover:text-ink-gray-8'
+                "
+                @click="setFilter(tab.key)"
+              >
+                {{ __(tab.label) }}
+                <span
+                  class="rounded px-1 text-xs tabular-nums"
+                  :class="
+                    activeFilter === tab.key
+                      ? 'bg-surface-base text-ink-gray-8'
+                      : 'text-ink-gray-5'
+                  "
+                >
+                  {{ countFor(tab.key) }}
+                </span>
               </button>
             </div>
+            <TextInput
+              v-model="search"
+              type="search"
+              class="w-full md:w-64"
+              :placeholder="__('Search tasks or projects')"
+              :aria-label="__('Search tasks')"
+            >
+              <template #prefix>
+                <LucideSearch class="size-4 text-ink-gray-5" aria-hidden="true" />
+              </template>
+            </TextInput>
           </div>
-        </div>
 
-        <div class="bg-surface-white border border-outline-gray-2 rounded-lg overflow-hidden">
+          <!-- List -->
           <div
-            class="flex items-center gap-4 px-4 py-2.5 border-b border-outline-gray-2 bg-surface-gray-1"
+            class="mt-3 overflow-hidden rounded-lg border border-outline-gray-2 bg-surface-base"
           >
-            <span class="flex-1 text-xs text-ink-gray-5">{{ __("Task") }}</span>
-            <span class="w-24 shrink-0 text-xs text-ink-gray-5">{{ __("Project") }}</span>
-            <span class="w-20 shrink-0 text-xs text-ink-gray-5">{{ __("Category") }}</span>
-            <span class="w-16 shrink-0 text-xs text-ink-gray-5">{{ __("Priority") }}</span>
-            <span class="w-24 shrink-0 text-xs text-ink-gray-5">{{ __("Status") }}</span>
-            <span class="w-20 shrink-0 text-xs text-ink-gray-5 text-right">{{ __("Due") }}</span>
-          </div>
-
-          <div v-if="!filteredTasks.length" class="p-6 text-center text-sm text-ink-gray-5">
-            {{ __("No tasks found") }}
-          </div>
-
-          <button
-            v-for="task in filteredTasks"
-            :key="task.name"
-            class="flex items-center gap-4 px-4 py-3 border-b border-outline-gray-2 last:border-b-0 w-full text-left hover:bg-surface-gray-1 transition-colors"
-            :class="{ 'bg-ink-red-0': isOverdue(task) }"
-            @click="openTaskDetail(task)"
-          >
-            <span
-              class="flex-1 text-sm truncate"
-              :class="isOverdue(task) ? 'text-ink-red-7' : 'text-ink-gray-8'"
+            <div
+              class="hidden grid-cols-[1fr_8rem_7rem_9rem] gap-4 border-b border-outline-gray-2 bg-surface-gray-1 px-4 py-2 text-xs text-ink-gray-5 md:grid"
             >
-              {{ task.subject }}
-            </span>
-            <span class="w-24 shrink-0 text-xs text-ink-gray-6 truncate">
-              {{ task.project }}
-            </span>
-            <span
-              v-if="task.category"
-              class="w-20 shrink-0 text-xs font-medium px-2 py-0.5 rounded-full"
-              :class="categoryClasses(task.category)"
+              <span>{{ __("Task") }}</span>
+              <span>{{ __("Priority") }}</span>
+              <span>{{ __("Status") }}</span>
+              <span class="text-right">{{ __("Due") }}</span>
+            </div>
+
+            <template v-if="tasks.loading && !tasks.data">
+              <div
+                v-for="i in 5"
+                :key="i"
+                class="flex items-center gap-3 border-b border-outline-gray-1 px-4 py-3.5 last:border-b-0"
+              >
+                <div class="size-4 animate-pulse rounded-full bg-surface-gray-2" />
+                <div class="flex flex-1 flex-col gap-2">
+                  <div class="h-3.5 w-2/5 animate-pulse rounded bg-surface-gray-2" />
+                  <div class="h-3 w-1/4 animate-pulse rounded bg-surface-gray-2" />
+                </div>
+              </div>
+            </template>
+
+            <div
+              v-else-if="!visibleTasks.length"
+              class="flex flex-col items-center gap-2 px-6 py-16 text-center"
             >
-              {{ task.category }}
-            </span>
-            <span v-else class="w-20 shrink-0" />
-            <span class="w-16 shrink-0 flex items-center gap-1.5">
-              <span
-                class="size-1.5 rounded-full shrink-0"
-                :class="priorityDotClass(task.priority)"
+              <div
+                class="mb-1 flex size-12 items-center justify-center rounded-full bg-surface-gray-2"
+              >
+                <component
+                  :is="emptyState.icon"
+                  class="size-5 text-ink-gray-6"
+                  aria-hidden="true"
+                />
+              </div>
+              <div class="text-base-medium text-ink-gray-8">{{ emptyState.title }}</div>
+              <p class="max-w-sm text-p-sm text-ink-gray-6">{{ emptyState.message }}</p>
+              <Button
+                v-if="search || activeFilter !== 'All'"
+                class="mt-2"
+                :label="__('Show all tasks')"
+                @click="resetFilters"
               />
-              <span class="text-xs text-ink-gray-6">{{ task.priority || __("Low") }}</span>
-            </span>
-            <span
-              class="w-24 shrink-0 text-xs font-medium px-2 py-0.5 rounded-full"
-              :class="statusPillClasses(task.status)"
-            >
-              {{ task.status }}
-            </span>
-            <span class="w-20 shrink-0 text-xs text-right" :class="isOverdue(task) ? 'text-ink-red-6' : 'text-ink-gray-5'">
-              {{ task.due_date || "-" }}
-            </span>
-          </button>
-        </div>
-      </template>
-    </div>
+              <Button
+                v-else
+                class="mt-2"
+                :label="__('Browse projects')"
+                @click="router.push({ name: 'TaskyProjects' })"
+              />
+            </div>
 
-    <div
-      v-if="selectedTask"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-ink-black/30"
-      @click.self="selectedTask = null"
-    >
-      <div class="bg-surface-white rounded-lg shadow-lg w-full max-w-lg mx-4 p-6">
-        <div class="flex items-center justify-between mb-4">
-          <span class="text-base-medium text-ink-gray-9">
-            {{ selectedTask.subject }}
-          </span>
-          <button class="text-ink-gray-5 hover:text-ink-gray-7" @click="selectedTask = null">
-            <X class="size-5" />
-          </button>
-        </div>
+            <ul v-else role="list">
+              <li
+                v-for="task in visibleTasks"
+                :key="task.name"
+                class="border-b border-outline-gray-1 last:border-b-0"
+              >
+                <button
+                  type="button"
+                  class="grid w-full grid-cols-[1fr_auto] items-center gap-x-4 gap-y-1 px-4 py-3 text-left transition-colors hover:bg-surface-gray-1 focus-visible:bg-surface-gray-1 focus-visible:outline-none md:grid-cols-[1fr_8rem_7rem_9rem]"
+                  @click="openTask(task)"
+                >
+                  <div class="flex min-w-0 items-start gap-3">
+                    <component
+                      :is="statusMeta(task.status).icon"
+                      class="mt-0.5 size-4 shrink-0 text-ink-gray-6"
+                      aria-hidden="true"
+                    />
+                    <div class="min-w-0">
+                      <div
+                        class="truncate text-base"
+                        :class="
+                          isClosed(task)
+                            ? 'text-ink-gray-5 line-through'
+                            : 'text-ink-gray-9'
+                        "
+                      >
+                        {{ task.subject }}
+                      </div>
+                      <div
+                        class="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 text-sm text-ink-gray-5"
+                      >
+                        <span class="truncate">{{
+                          task.project_name || task.project
+                        }}</span>
+                        <template v-if="task.phase">
+                          <span aria-hidden="true">·</span>
+                          <span class="truncate">{{ task.phase }}</span>
+                        </template>
+                        <template v-if="task.category">
+                          <span aria-hidden="true">·</span>
+                          <span>{{ task.category }}</span>
+                        </template>
+                      </div>
+                    </div>
+                  </div>
 
-        <div v-if="taskDetail.loading" class="text-sm text-ink-gray-5 py-4 text-center">
-          {{ __("Loading detail...") }}
-        </div>
-        <template v-else-if="taskDetail.data">
-          <dl class="grid grid-cols-2 gap-3 text-sm">
-            <div>
-              <dt class="text-xs text-ink-gray-5 mb-0.5">{{ __("Status") }}</dt>
-              <dd class="text-ink-gray-8">{{ taskDetail.data.status }}</dd>
-            </div>
-            <div>
-              <dt class="text-xs text-ink-gray-5 mb-0.5">{{ __("Priority") }}</dt>
-              <dd class="text-ink-gray-8">{{ taskDetail.data.priority }}</dd>
-            </div>
-            <div>
-              <dt class="text-xs text-ink-gray-5 mb-0.5">{{ __("Project") }}</dt>
-              <dd class="text-ink-gray-8">{{ taskDetail.data.project }}</dd>
-            </div>
-            <div>
-              <dt class="text-xs text-ink-gray-5 mb-0.5">{{ __("Due Date") }}</dt>
-              <dd class="text-ink-gray-8">{{ taskDetail.data.due_date || "-" }}</dd>
-            </div>
-            <div class="col-span-2">
-              <dt class="text-xs text-ink-gray-5 mb-0.5">{{ __("Description") }}</dt>
-              <dd class="text-ink-gray-8">{{ taskDetail.data.description || __("No description") }}</dd>
-            </div>
-          </dl>
+                  <div class="hidden items-center gap-1.5 text-sm text-ink-gray-7 md:flex">
+                    <component
+                      :is="priorityIcon(task.priority)"
+                      class="size-4 text-ink-gray-6"
+                      aria-hidden="true"
+                    />
+                    {{ task.priority || __("Low") }}
+                  </div>
+
+                  <div class="hidden md:block">
+                    <span
+                      class="inline-flex items-center rounded-full bg-surface-gray-2 px-2 py-0.5 text-xs text-ink-gray-7"
+                    >
+                      {{ statusMeta(task.status).label }}
+                    </span>
+                  </div>
+
+                  <div
+                    class="flex items-center justify-end gap-1 text-sm tabular-nums"
+                    :class="
+                      isOverdue(task) ? 'font-medium text-ink-gray-9' : 'text-ink-gray-5'
+                    "
+                  >
+                    <LucideAlarmClock
+                      v-if="isOverdue(task)"
+                      class="size-3.5"
+                      aria-hidden="true"
+                    />
+                    {{ dueLabel(task) }}
+                  </div>
+                </button>
+              </li>
+            </ul>
+          </div>
         </template>
-        <div v-else class="text-sm text-ink-gray-5 py-4 text-center">
-          {{ __("Failed to load task detail.") }}
-        </div>
       </div>
     </div>
+
+    <Dialog
+      v-model:open="dialogOpen"
+      :options="{
+        title: selectedTask?.subject,
+        size: 'lg',
+        actions: selectedTask?.project
+          ? [
+              {
+                label: __('Open project board'),
+                variant: 'solid',
+                onClick: openBoard,
+              },
+            ]
+          : [],
+      }"
+    >
+      <template #body-content>
+        <div v-if="taskDetail.loading" class="flex flex-col gap-3 py-2">
+          <div
+            v-for="i in 3"
+            :key="i"
+            class="h-4 animate-pulse rounded bg-surface-gray-2"
+          />
+        </div>
+        <div v-else-if="taskDetail.error" class="py-2 text-p-sm text-ink-gray-6">
+          {{ __("Couldn't load this task.") }}
+        </div>
+        <div v-else-if="detail" class="flex flex-col gap-5">
+          <dl class="grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
+            <div v-for="row in detailRows" :key="row.label">
+              <dt class="text-xs text-ink-gray-5">{{ row.label }}</dt>
+              <dd class="mt-1 flex items-center gap-1.5 text-ink-gray-8">
+                <component
+                  :is="row.icon"
+                  v-if="row.icon"
+                  class="size-4 text-ink-gray-6"
+                  aria-hidden="true"
+                />
+                {{ row.value }}
+              </dd>
+            </div>
+          </dl>
+          <div>
+            <div class="mb-1 text-xs text-ink-gray-5">{{ __("Description") }}</div>
+            <div
+              v-if="detail.description"
+              class="prose prose-sm max-w-none text-ink-gray-8"
+              v-html="detail.description"
+            />
+            <p v-else class="text-p-sm text-ink-gray-5">
+              {{ __("No description") }}
+            </p>
+          </div>
+        </div>
+      </template>
+    </Dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
-import { createResource } from "frappe-ui";
-import { __ } from "@/translation";
 import LayoutHeader from "@/components/LayoutHeader.vue";
-import AlertTriangle from "~icons/lucide/alert-triangle";
-import Clock from "~icons/lucide/clock";
-import X from "~icons/lucide/x";
+import { __ } from "@/translation";
+import { Button, Dialog, TextInput, createResource, dayjs } from "frappe-ui";
+import { computed, ref, watch, type Component } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import LucideAlarmClock from "~icons/lucide/alarm-clock";
+import LucideCircle from "~icons/lucide/circle";
+import LucideCircleAlert from "~icons/lucide/circle-alert";
+import LucideCircleCheck from "~icons/lucide/circle-check";
+import LucideCircleDot from "~icons/lucide/circle-dot";
+import LucideCircleX from "~icons/lucide/circle-x";
+import LucideEye from "~icons/lucide/eye";
+import LucideListTodo from "~icons/lucide/list-todo";
+import LucideRefreshCw from "~icons/lucide/refresh-cw";
+import LucideSearch from "~icons/lucide/search";
+import LucideSearchX from "~icons/lucide/search-x";
+import LucideSignal from "~icons/lucide/signal";
+import LucideSignalHigh from "~icons/lucide/signal-high";
+import LucideSignalLow from "~icons/lucide/signal-low";
+import LucideSignalMedium from "~icons/lucide/signal-medium";
 
 interface Task {
   name: string;
   subject: string;
   status: string;
   category?: string;
+  phase?: string;
   priority?: string;
   project?: string;
+  project_name?: string;
   due_date?: string;
   estimated_hours?: number;
-  assigned_to?: string;
-  assignees?: string;
+  description?: string;
 }
+
+type Filter = "All" | "Open" | "Working" | "Pending Review" | "Completed" | "Cancelled" | "Overdue";
+
+const route = useRoute();
+const router = useRouter();
 
 const tasks = createResource({
   url: "helpdesk.tasky.api.get_my_tasks",
+  params: { limit: 500 },
   auto: true,
   transform: (data: Task[]) => data ?? [],
 });
 
-const taskDetail = createResource({
-  url: "helpdesk.tasky.api.get_task_detail",
-});
+const taskDetail = createResource({ url: "helpdesk.tasky.api.get_task_detail" });
 
-const activeFilter = ref("All");
-const selectedTask = ref<Task | null>(null);
+const STATUS_META: Record<string, { label: string; icon: Component }> = {
+  Open: { label: __("Open"), icon: LucideCircle },
+  Working: { label: __("In progress"), icon: LucideCircleDot },
+  "Pending Review": { label: __("In review"), icon: LucideEye },
+  Completed: { label: __("Completed"), icon: LucideCircleCheck },
+  Cancelled: { label: __("Cancelled"), icon: LucideCircleX },
+};
 
-const filterTabs = [
+const PRIORITY_ICONS: Record<string, Component> = {
+  Urgent: LucideSignal,
+  High: LucideSignalHigh,
+  Medium: LucideSignalMedium,
+  Low: LucideSignalLow,
+};
+
+const tabs: { key: Filter; label: string }[] = [
   { key: "All", label: "All" },
   { key: "Open", label: "Open" },
-  { key: "Working", label: "Working" },
-  { key: "Pending Review", label: "Pending Review" },
+  { key: "Working", label: "In progress" },
+  { key: "Pending Review", label: "In review" },
+  { key: "Overdue", label: "Overdue" },
   { key: "Completed", label: "Completed" },
   { key: "Cancelled", label: "Cancelled" },
 ];
 
 const allTasks = computed<Task[]>(() => tasks.data ?? []);
 
-function isOverdue(task: Task) {
-  if (!task.due_date) return false;
-  if (["Completed", "Cancelled"].includes(task.status)) return false;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return new Date(task.due_date) < today;
-}
-
-const overdueTasks = computed<Task[]>(() =>
-  allTasks.value.filter((t) => isOverdue(t))
+const activeFilter = ref<Filter>(
+  tabs.some((t) => t.key === route.query.status) ? (route.query.status as Filter) : "All"
 );
+const search = ref("");
 
-const blockedTasks = computed<Task[]>(() =>
-  allTasks.value.filter((t) => t.status === "Cancelled")
-);
-
-const filteredTasks = computed<Task[]>(() => {
-  if (activeFilter.value === "All") return allTasks.value;
-  return allTasks.value.filter((t) => t.status === activeFilter.value);
+// keep the filter in the URL so it survives reloads and can be shared
+watch(activeFilter, (status) => {
+  router.replace({ query: { ...route.query, status: status === "All" ? undefined : status } });
 });
 
-const totalTasks = computed(() => allTasks.value.length);
+function setFilter(filter: Filter) {
+  activeFilter.value = activeFilter.value === filter && filter !== "All" ? "All" : filter;
+}
 
-const completedTasks = computed(
-  () => allTasks.value.filter((t) => t.status === "Completed").length
-);
+function resetFilters() {
+  activeFilter.value = "All";
+  search.value = "";
+}
 
+function statusMeta(status: string) {
+  return STATUS_META[status] ?? STATUS_META.Open;
+}
+
+function priorityIcon(priority?: string) {
+  return PRIORITY_ICONS[priority ?? "Low"] ?? LucideSignalLow;
+}
+
+function isClosed(task: Task) {
+  return task.status === "Completed" || task.status === "Cancelled";
+}
+
+function isOverdue(task: Task) {
+  return !!task.due_date && !isClosed(task) && dayjs(task.due_date).isBefore(dayjs(), "day");
+}
+
+function dueLabel(task: Task) {
+  if (!task.due_date) return "—";
+  const due = dayjs(task.due_date);
+  if (isClosed(task)) return due.format("D MMM");
+  const days = due.startOf("day").diff(dayjs().startOf("day"), "day");
+  if (days < 0) return days === -1 ? __("1 day overdue") : __("{0} days overdue", String(-days));
+  if (days === 0) return __("Due today");
+  if (days === 1) return __("Due tomorrow");
+  if (days < 7) return __("Due {0}", due.format("ddd"));
+  return due.format("D MMM");
+}
+
+function matches(task: Task, filter: Filter) {
+  if (filter === "All") return true;
+  if (filter === "Overdue") return isOverdue(task);
+  return task.status === filter;
+}
+
+function countFor(filter: Filter) {
+  return allTasks.value.filter((t) => matches(t, filter)).length;
+}
+
+// overdue first, then by due date; finished work sinks to the bottom
+function sortKey(task: Task) {
+  const due = task.due_date ? dayjs(task.due_date).valueOf() : Number.MAX_SAFE_INTEGER;
+  return [isClosed(task) ? 1 : 0, due] as const;
+}
+
+const visibleTasks = computed<Task[]>(() => {
+  const q = search.value.trim().toLowerCase();
+  return allTasks.value
+    .filter((t) => matches(t, activeFilter.value))
+    .filter(
+      (t) =>
+        !q ||
+        t.subject.toLowerCase().includes(q) ||
+        (t.project_name || t.project || "").toLowerCase().includes(q)
+    )
+    .sort((a, b) => {
+      const [ca, da] = sortKey(a);
+      const [cb, db] = sortKey(b);
+      return ca - cb || da - db;
+    });
+});
+
+const completed = computed(() => countFor("Completed"));
 const completionPercent = computed(() =>
-  totalTasks.value > 0
-    ? Math.round((completedTasks.value / totalTasks.value) * 100)
-    : 0
+  allTasks.value.length ? Math.round((completed.value / allTasks.value.length) * 100) : 0
 );
 
-function openTaskDetail(task: Task) {
+const stats = computed(() => [
+  { key: "total", label: __("Assigned"), value: allTasks.value.length, icon: LucideListTodo, filter: "All" as Filter },
+  { key: "working", label: __("In progress"), value: countFor("Working"), icon: LucideCircleDot, filter: "Working" as Filter },
+  { key: "overdue", label: __("Overdue"), value: countFor("Overdue"), icon: LucideAlarmClock, filter: "Overdue" as Filter },
+  {
+    key: "completed",
+    label: __("Completed"),
+    value: completed.value,
+    icon: LucideCircleCheck,
+    filter: "Completed" as Filter,
+    hint: `${completionPercent.value}%`,
+    progress: completionPercent.value,
+  },
+]);
+
+const emptyState = computed(() => {
+  if (search.value.trim()) {
+    return {
+      icon: LucideSearchX,
+      title: __("No matching tasks"),
+      message: __("Try a different search, or clear the filters."),
+    };
+  }
+  if (activeFilter.value !== "All") {
+    const tab = tabs.find((t) => t.key === activeFilter.value);
+    return {
+      icon: LucideCircleCheck,
+      title: __("Nothing here"),
+      message: __("You have no {0} tasks right now.", __(tab?.label ?? "").toLowerCase()),
+    };
+  }
+  return {
+    icon: LucideListTodo,
+    title: __("No tasks assigned to you yet"),
+    message: __("When a project manager assigns you work, it will show up here."),
+  };
+});
+
+// --- detail dialog ---
+
+const selectedTask = ref<Task | null>(null);
+const dialogOpen = computed({
+  get: () => !!selectedTask.value,
+  set: (open: boolean) => {
+    if (!open) selectedTask.value = null;
+  },
+});
+const detail = computed<Task | null>(() => taskDetail.data ?? null);
+
+const detailRows = computed(() => {
+  const d = detail.value;
+  if (!d) return [];
+  return [
+    { label: __("Status"), value: statusMeta(d.status).label, icon: statusMeta(d.status).icon },
+    { label: __("Priority"), value: d.priority || __("Low"), icon: priorityIcon(d.priority) },
+    { label: __("Project"), value: selectedTask.value?.project_name || d.project || "—" },
+    { label: __("Phase"), value: d.phase || "—" },
+    { label: __("Due"), value: d.due_date ? dayjs(d.due_date).format("D MMM YYYY") : "—" },
+    { label: __("Estimate"), value: d.estimated_hours ? __("{0} hrs", String(d.estimated_hours)) : "—" },
+  ];
+});
+
+function openTask(task: Task) {
   selectedTask.value = task;
   taskDetail.submit({ task: task.name });
 }
 
-function onRequestHelp(task: Task) {
-  alert(`Request help for: ${task.subject} (coming soon)`);
-}
-
-function categoryClasses(category: string) {
-  const map: Record<string, string> = {
-    Functional: "bg-ink-blue-1 text-ink-blue-8",
-    Development: "bg-ink-purple-1 text-ink-purple-8",
-    Support: "bg-ink-green-1 text-ink-green-8",
-    Common: "bg-ink-gray-2 text-ink-gray-7",
-  };
-  return map[category] || map.Common;
-}
-
-function priorityDotClass(priority: string) {
-  const map: Record<string, string> = {
-    Urgent: "bg-ink-red-5",
-    High: "bg-ink-amber-5",
-    Medium: "bg-ink-blue-4",
-    Low: "bg-ink-gray-4",
-  };
-  return map[priority] || map.Low;
-}
-
-function statusPillClasses(status: string) {
-  const map: Record<string, string> = {
-    Open: "bg-ink-gray-2 text-ink-gray-7",
-    Working: "bg-ink-amber-1 text-ink-amber-8",
-    "Pending Review": "bg-ink-blue-1 text-ink-blue-8",
-    Completed: "bg-ink-green-1 text-ink-green-8",
-    Cancelled: "bg-ink-gray-2 text-ink-gray-7",
-  };
-  return map[status] || map.Open;
+function openBoard() {
+  if (!selectedTask.value?.project) return;
+  router.push({ name: "TaskyKanban", params: { projectId: selectedTask.value.project } });
 }
 </script>

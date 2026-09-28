@@ -62,17 +62,21 @@ Frappe Helpdesk is an open-source ticket management tool built on the [Frappe Fr
 
 - Always prefer Tailwind CSS for styling
 - Use utility classes for layout and spacing
-- Use semantic class names wherever possible:
-  - Background colors: `bg-surface-white`, `bg-surface-gray-1` through `bg-surface-gray-9`, `bg-surface-black`
-  - Text colors: `text-ink-white`, `text-ink-gray-1` through `text-ink-gray-9`, `text-ink-black`
-  - Fill colors: `fill-ink-*`
-  - Placeholder colors: `placeholder-ink-*`
-  - Border colors: `border-outline-white`, `border-outline-gray-1` through `border-outline-gray-5`, `border-outline-black`
-  - Font sizes: `text-xs`, `text-sm`, `text-base`, `text-lg`, `text-xl`, `text-2xl`, `text-3xl`
+- frappe-ui is on the **v2 token names**. The old v1 names (`bg-surface-white`, `text-ink-white`, `surface-selected`, …) compile to nothing — use the v2 equivalents:
+  - Background colors: `bg-surface-base` (panels, cards), `bg-surface-gray-1` through `bg-surface-gray-10`
+  - Text colors: `text-ink-base` (text on solid/brand backgrounds), `text-ink-gray-1` through `text-ink-gray-9`
+  - Border colors: `border-outline-gray-1` through `border-outline-gray-9`
+  - `ink-*` tokens are text-only: `bg-ink-*`, `border-ink-*`, `ring-ink-*` do not exist
+  - Font sizes: `text-2xs`, `text-xs`, `text-sm`, `text-base`, `text-lg`, `text-xl`, `text-2xl`, `text-3xl`; weighted variants such as `text-base-medium`
   - Multiline text: `text-p-xs`, `text-p-sm`, `text-p-base`, `text-p-lg`, `text-p-xl`, `text-p-2xl`
-- Always use gray shades for everything, never use color shades even for primary states
+- **TBO theme** (`desk/src/theme.css`, reference mockup: TBO ticket view). It re-points frappe-ui's gray tokens at cool-tinted neutrals and adds:
+  - `brand` (`bg-brand`, `text-brand-on`, `bg-brand-soft`, `text-brand-ink`, `hover:bg-brand-hover`) — the **one accent**, only for the primary action and the current selection. frappe-ui `variant="solid"` buttons render in brand automatically.
+  - Status colors `success`, `warning`, `danger`, `info` (each with `-soft` background) — only to convey meaning, and always paired with an icon or text label.
+  - `note` / `note-border` for internal notes.
+  - Everything else stays neutral gray. No gradients, no decorative color.
+- Fonts: Geist (`font-sans`) and Geist Mono (`font-mono`) for IDs, emails, counts and durations; use `tabular-nums` for numbers.
 - Implement mobile-first, responsive design with CSS Grid and Flexbox
-- Ensure styles are accessible (contrast, focus states)
+- Ensure styles are accessible (contrast ≥ 4.5:1, visible `:focus-visible` rings, keyboard reachable)
 
 ### Data Fetching with frappe-ui
 
@@ -307,7 +311,7 @@ Take inspiration from "helpdesk.doctype.hd_team.hd_team.HDTeam" for examples of 
 
 ```vue
 <template>
-  <div class="bg-surface-white border border-outline-gray-2 rounded-lg p-4">
+  <div class="bg-surface-base border border-outline-gray-2 rounded-lg p-4">
     <h2 class="text-lg text-ink-gray-9 font-semibold mb-2">Ticket Details</h2>
     <p class="text-p-sm text-ink-gray-7">{{ ticket.doc.subject }}</p>
     <LucideTicket class="size-4 text-ink-gray-6" />

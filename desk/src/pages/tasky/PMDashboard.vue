@@ -84,7 +84,7 @@
           <div
             v-for="card in statCards"
             :key="card.label"
-            class="bg-surface-white border border-outline-gray-2 rounded-lg p-4"
+            class="bg-surface-base border border-outline-gray-2 rounded-lg p-4"
           >
             <div class="flex items-center gap-2 mb-2">
               <component :is="card.icon" :class="card.iconClasses || 'text-ink-gray-5'" class="size-4" />
@@ -100,7 +100,7 @@
           <div class="text-sm-medium text-ink-gray-7 mb-3">
             {{ __("Phases") }}
           </div>
-          <div class="bg-surface-white border border-outline-gray-2 rounded-lg">
+          <div class="bg-surface-base border border-outline-gray-2 rounded-lg">
             <div
               v-if="phases.length === 0"
               class="p-4 text-center text-p-sm text-ink-gray-5"
@@ -142,7 +142,7 @@
           <div class="text-sm-medium text-ink-gray-7 mb-3">
             {{ __("Team Workload") }}
           </div>
-          <div class="bg-surface-white border border-outline-gray-2 rounded-lg">
+          <div class="bg-surface-base border border-outline-gray-2 rounded-lg">
             <div
               v-if="teamWorkload.length === 0"
               class="p-4 text-center text-p-sm text-ink-gray-5"

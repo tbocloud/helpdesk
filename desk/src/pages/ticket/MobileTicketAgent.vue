@@ -621,7 +621,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
-  document.title = "Helpdesk";
+  document.title = "TBO Support";
 });
 </script>
 <style scoped>

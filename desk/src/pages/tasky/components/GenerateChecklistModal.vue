@@ -4,7 +4,7 @@
     class="fixed inset-0 z-50 flex items-center justify-center bg-black/25 backdrop-blur-sm"
     @click.self="$emit('close')"
   >
-    <div class="bg-surface-white border border-outline-gray-2 rounded-xl shadow-xl w-full max-w-md overflow-hidden">
+    <div class="bg-surface-base border border-outline-gray-2 rounded-xl shadow-xl w-full max-w-md overflow-hidden">
       <div class="flex items-center justify-between px-5 py-4 border-b border-outline-gray-2">
         <h2 class="text-base-semibold text-ink-gray-9">Generate Checklist</h2>
         <button @click="$emit('close')" class="size-7 flex items-center justify-center rounded hover:bg-surface-gray-1 text-ink-gray-5 transition-colors">
@@ -19,7 +19,7 @@
           <label class="block text-xs font-medium text-ink-gray-6 mb-1.5">Template</label>
           <select
             v-model="selectedTemplate"
-            class="w-full border border-outline-gray-2 rounded-lg px-3 py-2 text-sm text-ink-gray-9 bg-surface-white focus:outline-none focus:border-outline-gray-4"
+            class="w-full border border-outline-gray-2 rounded-lg px-3 py-2 text-sm text-ink-gray-9 bg-surface-base focus:outline-none focus:border-outline-gray-4"
           >
             <option value="" disabled>Select a template...</option>
             <option v-for="t in templates.data" :key="t.name" :value="t.name">
@@ -51,7 +51,7 @@
         <button
           @click="generate"
           :disabled="!selectedTemplate || generateTask.loading"
-          class="px-5 py-2 text-sm font-medium rounded-lg bg-ink-gray-9 text-ink-white hover:bg-ink-gray-8 disabled:opacity-40 transition-colors"
+          class="px-5 py-2 text-sm font-medium rounded-lg bg-ink-gray-9 text-ink-base hover:bg-ink-gray-8 disabled:opacity-40 transition-colors"
         >
           {{ generateTask.loading ? "Generating..." : "Generate" }}
         </button>

@@ -5,14 +5,21 @@
     alt="Brand Logo"
     class="h-8 w-8 shrink-0 object-cover"
   />
-  <HDLogo v-else class="h-8 w-8 shrink-0 rounded" />
+  <span
+    v-else
+    class="grid size-8 shrink-0 place-items-center rounded-lg bg-brand text-sm font-semibold text-brand-on"
+    aria-hidden="true"
+  >
+    {{ initials }}
+  </span>
 </template>
 
 <script setup lang="ts">
-import HDLogo from "@/assets/logos/HDLogo.vue";
-
 import { useConfigStore } from "@/stores/config";
-const config = useConfigStore();
-</script>
+import { computed } from "vue";
 
-<style scoped></style>
+const config = useConfigStore();
+const initials = computed(() =>
+  (config.brandName || "").split(" ")[0].slice(0, 2).toUpperCase()
+);
+</script>

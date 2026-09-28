@@ -384,7 +384,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   stopViewing(props.ticketId);
-  document.title = "Helpdesk";
+  document.title = "TBO Support";
   $socket.off("helpdesk:ticket-update");
 });
 </script>

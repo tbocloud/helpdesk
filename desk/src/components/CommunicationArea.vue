@@ -1,16 +1,19 @@
 <template>
   <div class="comm-area">
     <div
-      class="flex justify-between gap-3 border-t px-6 md:px-5 py-4 md:py-2.5"
+      class="flex justify-between gap-3 border-t border-outline-gray-2 bg-surface-gray-1 px-6 py-3 md:px-5 md:py-2"
     >
-      <div class="flex gap-1.5 items-center">
+      <div class="flex items-center gap-0.5" role="group" :aria-label="__('Compose')">
         <Button
           ref="sendEmailRef"
           variant="ghost"
           label="Reply"
-          :class="[
-            showEmailBox ? '!bg-surface-gray-4 hover:!bg-surface-gray-3' : '',
-          ]"
+          :class="
+            showEmailBox
+              ? '!bg-surface-base !text-ink-gray-9 shadow-sm ring-1 ring-outline-gray-2'
+              : '!text-ink-gray-6'
+          "
+          :aria-pressed="showEmailBox"
           @click="toggleEmailBox()"
         >
           <template #prefix>
@@ -20,9 +23,12 @@
         <Button
           variant="ghost"
           label="Comment"
-          :class="[
-            showCommentBox ? '!bg-surface-gray-4 hover:!bg-surface-gray-3' : '',
-          ]"
+          :class="
+            showCommentBox
+              ? '!bg-surface-base !text-ink-gray-9 shadow-sm ring-1 ring-outline-gray-2'
+              : '!text-ink-gray-6'
+          "
+          :aria-pressed="showCommentBox"
           @click="toggleCommentBox()"
         >
           <template #prefix>
@@ -107,6 +113,7 @@
 </template>
 
 <script setup lang="ts">
+import { __ } from "@/translation";
 import { CommentTextEditor, EmailEditor, TypingIndicator } from "@/components";
 import { CommentIcon, EmailIcon } from "@/components/icons/";
 import { useDevice } from "@/composables";

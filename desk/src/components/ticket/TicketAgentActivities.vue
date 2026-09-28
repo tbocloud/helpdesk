@@ -43,9 +43,12 @@
                 :image="getUser(activity.sender?.name).user_image"
                 class="bg-surface-base absolute left-[0.7px]"
               />
-              <CommentIcon
+              <Avatar
                 v-else-if="activity.type === 'comment'"
-                class="text-ink-gray-5 absolute left-[7.5px]"
+                size="md"
+                :label="activity.commenter"
+                :image="getUser(activity.commentedBy).user_image"
+                class="absolute left-[3px] top-1"
               />
               <FeatherIcon
                 v-else-if="activity.type === 'call'"
@@ -77,7 +80,7 @@
               :show-split-option="
                 !activity.isFirstEmail && ticketStatus !== 'Closed'
               "
-              class="py-2 px-3"
+              class="px-4 py-2"
               @reply="(e) => emit('email:reply', e)"
             />
             <CommentBox

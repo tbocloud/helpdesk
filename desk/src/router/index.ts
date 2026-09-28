@@ -124,7 +124,12 @@ const portalRoutes = [
   {
     path: "/dashboard",
     name: "Dashboard",
-    component: () => import("@/pages/dashboard/Dashboard.vue"),
+    redirect: "/home",
+  },
+  {
+    path: "/content",
+    name: "ContentCalendar",
+    component: () => import("@/pages/content/ContentCalendar.vue"),
   },
   {
     path: "/projects",
@@ -135,6 +140,7 @@ const portalRoutes = [
     path: "/templates",
     name: "TaskyTemplates",
     component: () => import("@/pages/tasky/Templates.vue"),
+    beforeEnter: () => useAuthStore().isProjectManager || { name: "Home" },
   },
   {
     path: "/projects/:projectId",

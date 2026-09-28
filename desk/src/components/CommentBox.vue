@@ -1,18 +1,21 @@
 <template>
-  <div class="flex-col text-base flex-1" ref="commentBoxRef">
-    <div class="mb-1 ml-0.5 flex items-center justify-between">
-      <div class="text-ink-gray-5 flex items-center gap-2">
-        <Avatar
-          size="md"
-          :label="commenter"
-          :image="getUser(commentedBy).user_image"
-        />
-        <p>
-          <span class="font-medium text-ink-gray-8">
-            {{ commenter }}
-          </span>
-          <span> {{ __(" commented") }}</span>
-        </p>
+  <div
+    class="flex-1 flex-col overflow-hidden rounded-xl border border-note-border bg-note text-base"
+    ref="commentBoxRef"
+  >
+    <div
+      class="flex items-center justify-between gap-2 border-b border-note-border py-1.5 pl-4 pr-2"
+    >
+      <div class="flex min-w-0 items-center gap-2">
+        <span class="truncate text-sm font-semibold text-ink-gray-9">
+          {{ commenter }}
+        </span>
+        <span
+          class="inline-flex h-5 items-center gap-1 rounded-md bg-warning-soft px-1.5 text-xs font-medium text-warning"
+        >
+          <LucideEye class="size-3.5" aria-hidden="true" />
+          {{ __("Internal note") }}
+        </span>
       </div>
       <div class="flex items-center gap-1">
         <Tooltip :text="dateFormat(creation, dateTooltipFormat)">
@@ -37,7 +40,7 @@
     </div>
     <div
       :id="`comment-${name}`"
-      class="rounded-md bg-surface-gray-1 transition-colors px-3 py-[6px] pt-1"
+      class="px-4 pb-3 pt-2 transition-colors"
       @keydown.ctrl.enter.capture.stop="handleSaveComment"
       @keydown.meta.enter.capture.stop="handleSaveComment"
     >
@@ -140,6 +143,7 @@
 
 <script setup lang="ts">
 import { AttachmentItem } from "@/components";
+import LucideEye from "~icons/lucide/eye";
 import ReactionIcon from "@/components/icons/ReactionIcon.vue";
 import { useDevice } from "@/composables";
 import { useScreenSize } from "@/composables/screen";

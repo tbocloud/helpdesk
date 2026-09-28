@@ -15,19 +15,19 @@
     </LayoutHeader>
 
     <div class="flex-1 overflow-auto p-5">
-      <div v-if="editing" class="bg-surface-white border border-outline-gray-2 rounded-lg p-5 mb-6">
+      <div v-if="editing" class="bg-surface-base border border-outline-gray-2 rounded-lg p-5 mb-6">
         <div class="grid grid-cols-2 gap-4 mb-4">
           <div class="flex flex-col gap-1">
             <label class="text-xs text-ink-gray-5">Template Name</label>
-            <input v-model="form.template_name" class="border border-outline-gray-2 rounded px-3 py-1.5 text-sm bg-surface-white focus:outline-none focus:border-outline-gray-3" />
+            <input v-model="form.template_name" class="border border-outline-gray-2 rounded px-3 py-1.5 text-sm bg-surface-base focus:outline-none focus:border-outline-gray-3" />
           </div>
           <div class="flex flex-col gap-1">
             <label class="text-xs text-ink-gray-5">Industry</label>
-            <input v-model="form.industry" class="border border-outline-gray-2 rounded px-3 py-1.5 text-sm bg-surface-white focus:outline-none focus:border-outline-gray-3" />
+            <input v-model="form.industry" class="border border-outline-gray-2 rounded px-3 py-1.5 text-sm bg-surface-base focus:outline-none focus:border-outline-gray-3" />
           </div>
           <div class="flex flex-col gap-1 col-span-2">
             <label class="text-xs text-ink-gray-5">Description</label>
-            <textarea v-model="form.description" rows="2" class="border border-outline-gray-2 rounded px-3 py-1.5 text-sm bg-surface-white focus:outline-none focus:border-outline-gray-3" />
+            <textarea v-model="form.description" rows="2" class="border border-outline-gray-2 rounded px-3 py-1.5 text-sm bg-surface-base focus:outline-none focus:border-outline-gray-3" />
           </div>
         </div>
 
@@ -42,17 +42,17 @@
             </button>
             <div v-if="expandedPhases.has(phase)" class="px-2 pb-1">
               <div v-for="(task, idx) in group" :key="task._key" class="flex items-center gap-2 mb-1.5">
-                <input v-model="task.task_name" placeholder="Task name" class="flex-1 border border-outline-gray-2 rounded px-2 py-1 text-sm bg-surface-white focus:outline-none" />
-                <select v-model="task.category" class="w-28 border border-outline-gray-2 rounded px-2 py-1 text-sm bg-surface-white"><option>Functional</option><option>Development</option><option>Support</option><option>Common</option></select>
-                <select v-model="task.default_priority" class="w-20 border border-outline-gray-2 rounded px-2 py-1 text-sm bg-surface-white"><option>High</option><option>Medium</option><option>Low</option><option>Urgent</option></select>
-                <input v-model.number="task.estimated_hours" type="number" placeholder="Hrs" class="w-14 border border-outline-gray-2 rounded px-2 py-1 text-sm bg-surface-white" />
+                <input v-model="task.task_name" placeholder="Task name" class="flex-1 border border-outline-gray-2 rounded px-2 py-1 text-sm bg-surface-base focus:outline-none" />
+                <select v-model="task.category" class="w-28 border border-outline-gray-2 rounded px-2 py-1 text-sm bg-surface-base"><option>Functional</option><option>Development</option><option>Support</option><option>Common</option></select>
+                <select v-model="task.default_priority" class="w-20 border border-outline-gray-2 rounded px-2 py-1 text-sm bg-surface-base"><option>High</option><option>Medium</option><option>Low</option><option>Urgent</option></select>
+                <input v-model.number="task.estimated_hours" type="number" placeholder="Hrs" class="w-14 border border-outline-gray-2 rounded px-2 py-1 text-sm bg-surface-base" />
                 <button @click="removeTaskFromGroup(phase, idx)" class="size-6 flex items-center justify-center rounded text-ink-gray-5 hover:text-ink-red-6"><LucideX class="size-3.5" /></button>
               </div>
             </div>
           </div>
           <div class="flex items-center gap-2 px-3 py-2">
-            <input v-model="newTaskName" placeholder="New task" class="flex-1 border border-outline-gray-2 rounded px-2 py-1 text-sm bg-surface-white focus:outline-none" @keyup.enter="addTaskToPhase" />
-            <input v-model="newTaskPhase" placeholder="Phase" class="w-28 border border-outline-gray-2 rounded px-2 py-1 text-sm bg-surface-white focus:outline-none" />
+            <input v-model="newTaskName" placeholder="New task" class="flex-1 border border-outline-gray-2 rounded px-2 py-1 text-sm bg-surface-base focus:outline-none" @keyup.enter="addTaskToPhase" />
+            <input v-model="newTaskPhase" placeholder="Phase" class="w-28 border border-outline-gray-2 rounded px-2 py-1 text-sm bg-surface-base focus:outline-none" />
             <button @click="addTaskToPhase" class="flex items-center gap-1 text-xs text-ink-gray-5 hover:text-ink-gray-8 px-2 py-1"><LucidePlus class="size-3.5" /> Add</button>
           </div>
         </div>
@@ -66,7 +66,7 @@
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" v-if="!editing">
-        <button v-for="t in templates.data" :key="t.name" class="bg-surface-white border border-outline-gray-2 rounded-lg p-5 hover:shadow-md transition-shadow text-left w-full group" @click="startEdit(t.name)">
+        <button v-for="t in templates.data" :key="t.name" class="bg-surface-base border border-outline-gray-2 rounded-lg p-5 hover:shadow-md transition-shadow text-left w-full group" @click="startEdit(t.name)">
           <div class="text-base-semibold text-ink-gray-9 mb-1">{{ t.template_name }}</div>
           <div class="text-xs text-ink-gray-5 mb-3">{{ t.industry || "General" }} · {{ t.description || "No description" }}</div>
           <div class="flex items-center justify-between">

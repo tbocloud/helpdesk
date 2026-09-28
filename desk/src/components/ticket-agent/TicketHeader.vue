@@ -11,7 +11,7 @@
             />
           </template>
         </Breadcrumbs>
-        <TicketSLA />
+        <TicketSLA @edit-subject="showSubjectDialog = true" />
       </div>
     </template>
     <template #right-header>
@@ -48,12 +48,15 @@
         <!-- Status -->
         <Dropdown :options="statusDropdown" placement="right">
           <template #default="{ open }">
-            <Button :label="ticket.doc.status" ref="statusRef">
+            <Button :label="ticket.doc.status" ref="statusRef" variant="solid">
               <template #prefix>
-                <IndicatorIcon
-                  :class="
-                    ticketStatusStore.getStatus(ticket.doc.status)?.parsed_color
-                  "
+                <span class="size-1.5 rounded-full bg-current" aria-hidden="true" />
+              </template>
+              <template #suffix>
+                <LucideChevronDown
+                  class="size-4 transition-transform"
+                  :class="open && 'rotate-180'"
+                  aria-hidden="true"
                 />
               </template>
             </Button>
@@ -119,6 +122,7 @@ import {
   watchEffect,
 } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import LucideChevronDown from "~icons/lucide/chevron-down";
 import LucideMerge from "~icons/lucide/merge";
 import { IndicatorIcon } from "../icons";
 import TicketNavigation from "./TicketNavigation.vue";
@@ -182,7 +186,7 @@ const breadcrumbs = computed(() => {
     }
   }
   items.push({
-    label: ticket.value.doc?.subject,
+    label: `#${ticket.value.doc?.name}`,
     onClick: () => {
       showSubjectDialog.value = true;
     },

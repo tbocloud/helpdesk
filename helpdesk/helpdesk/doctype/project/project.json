@@ -7,6 +7,7 @@
 	"engine": "InnoDB",
 	"field_order": [
 		"project_name",
+		"customer",
 		"status",
 		"priority",
 		"column_break_1",
@@ -25,6 +26,15 @@
 			"reqd": 1,
 			"unique": 1,
 			"in_list_view": 1
+		},
+		{
+			"fieldname": "customer",
+			"fieldtype": "Link",
+			"label": "Customer",
+			"options": "HD Customer",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"search_index": 1
 		},
 		{
 			"fieldname": "status",
@@ -82,7 +92,7 @@
 	],
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-09-28 00:00:00.000000",
+	"modified": "2026-09-28 15:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "Project",
@@ -115,17 +125,24 @@
 		},
 		{
 			"create": 1,
+			"delete": 1,
 			"email": 1,
 			"export": 1,
 			"print": 1,
 			"read": 1,
 			"report": 1,
-			"role": "Agent",
+			"role": "Project Manager",
 			"share": 1,
 			"write": 1
+		},
+		{
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "Agent"
 		}
 	],
-	"search_fields": "project_name",
+	"search_fields": "project_name,customer",
 	"show_title_field_in_link": 1,
 	"sort_field": "creation",
 	"sort_order": "DESC",

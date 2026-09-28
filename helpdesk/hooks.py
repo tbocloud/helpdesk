@@ -1,5 +1,5 @@
 app_name = "helpdesk"
-app_title = "Helpdesk"
+app_title = "TBO Support"
 app_publisher = "Frappe Technologies"
 app_description = "Customer Service Software"
 app_icon = "octicon octicon-file-directory"
@@ -12,7 +12,7 @@ add_to_apps_screen = [
     {
         "name": "helpdesk",
         "logo": "/assets/helpdesk/desk/favicon.svg",
-        "title": "Helpdesk",
+        "title": "TBO Support",
         "route": "/helpdesk",
         "has_permission": "helpdesk.api.permission.has_app_permission",
     }
@@ -43,12 +43,14 @@ scheduler_events = {
             "helpdesk.tasks.pull_client_tickets",
             "helpdesk.tasks.push_ticket_statuses",
             "helpdesk.tasks.sync_conversations",
+            "helpdesk.content_sync.sync_content_approvals",
         ],
     },
     "daily": [
         "helpdesk.helpdesk.doctype.hd_ticket.hd_ticket.close_tickets_after_n_days",
         "helpdesk.tasks.health_check_connections",
         "helpdesk.tasks.retry_pending_triages",
+        "helpdesk.helpdesk.doctype.hd_content_post.hd_content_post.send_due_reminders",
     ],
     "hourly_long": [
         "helpdesk.helpdesk.doctype.hd_ticket.hd_ticket.update_sla_status_in_ticket"
@@ -123,12 +125,18 @@ permission_query_conditions = {
     "HD Ticket": "helpdesk.helpdesk.doctype.hd_ticket.hd_ticket.permission_query",
     "HD Saved Reply": "helpdesk.helpdesk.doctype.hd_saved_reply.hd_saved_reply.permission_query",
     "HD Customer": "helpdesk.helpdesk.doctype.hd_customer.hd_customer.permission_query",
+    "Project": "helpdesk.tasky.permissions.project_query",
+    "Task": "helpdesk.tasky.permissions.task_query",
+    "Timesheet": "helpdesk.tasky.permissions.timesheet_query",
 }
 
 has_permission = {
     "HD Ticket": "helpdesk.helpdesk.doctype.hd_ticket.hd_ticket.has_permission",
     "HD Saved Reply": "helpdesk.helpdesk.doctype.hd_saved_reply.hd_saved_reply.has_permission",
     "HD Customer": "helpdesk.helpdesk.doctype.hd_customer.hd_customer.has_permission",
+    "Project": "helpdesk.tasky.permissions.project_has_permission",
+    "Task": "helpdesk.tasky.permissions.task_has_permission",
+    "Timesheet": "helpdesk.tasky.permissions.timesheet_has_permission",
 }
 
 

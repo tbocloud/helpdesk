@@ -8,6 +8,7 @@
       </template>
       <template #right-header>
         <button
+          v-if="authStore.isProjectManager"
           class="flex items-center gap-1.5 px-3 py-1.5 rounded text-sm bg-surface-gray-3 text-ink-gray-8 hover:bg-surface-gray-4 transition-colors"
           @click="showNewForm = !showNewForm"
         >
@@ -19,8 +20,8 @@
 
     <div class="flex-1 overflow-auto p-5">
       <div
-        v-if="showNewForm"
-        class="bg-surface-white border border-outline-gray-2 rounded-lg p-5 mb-6"
+        v-if="showNewForm && authStore.isProjectManager"
+        class="bg-surface-base border border-outline-gray-2 rounded-lg p-5 mb-6"
       >
         <div class="text-sm-medium text-ink-gray-8 mb-4">{{ __("New Project") }}</div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
@@ -28,8 +29,16 @@
             <label class="text-xs text-ink-gray-5">{{ __("Project Name") }}</label>
             <input
               v-model="newProject.project_name"
-              class="border border-outline-gray-2 rounded px-3 py-1.5 text-sm text-ink-gray-9 bg-surface-white placeholder-ink-gray-4 focus:outline-none focus:border-outline-gray-3"
+              class="border border-outline-gray-2 rounded px-3 py-1.5 text-sm text-ink-gray-9 bg-surface-base placeholder-ink-gray-4 focus:outline-none focus:border-outline-gray-3"
               placeholder="Enter project name"
+            />
+          </div>
+          <div class="flex flex-col gap-1">
+            <label class="text-xs text-ink-gray-5">{{ __("Customer") }}</label>
+            <Link
+              v-model="newProject.customer"
+              doctype="HD Customer"
+              :placeholder="__('Select customer')"
             />
           </div>
           <div class="flex flex-col gap-1">
@@ -37,7 +46,7 @@
             <input
               v-model="newProject.start_date"
               type="date"
-              class="border border-outline-gray-2 rounded px-3 py-1.5 text-sm text-ink-gray-9 bg-surface-white focus:outline-none focus:border-outline-gray-3"
+              class="border border-outline-gray-2 rounded px-3 py-1.5 text-sm text-ink-gray-9 bg-surface-base focus:outline-none focus:border-outline-gray-3"
             />
           </div>
           <div class="flex flex-col gap-1">
@@ -45,18 +54,18 @@
             <input
               v-model="newProject.expected_end_date"
               type="date"
-              class="border border-outline-gray-2 rounded px-3 py-1.5 text-sm text-ink-gray-9 bg-surface-white focus:outline-none focus:border-outline-gray-3"
+              class="border border-outline-gray-2 rounded px-3 py-1.5 text-sm text-ink-gray-9 bg-surface-base focus:outline-none focus:border-outline-gray-3"
             />
           </div>
           <div class="flex flex-col gap-1 md:col-span-2">
             <label class="text-xs font-medium text-ink-gray-6 mb-1">{{ __("Team Members") }}</label>
             <div class="bg-surface-gray-1 rounded-lg p-3">
               <div v-for="(member, idx) in newProject.members" :key="idx" class="flex items-center gap-2 mb-2 last:mb-0">
-                <select v-model="member.user" class="flex-1 border border-outline-gray-2 rounded px-2 py-1 text-sm bg-surface-white">
+                <select v-model="member.user" class="flex-1 border border-outline-gray-2 rounded px-2 py-1 text-sm bg-surface-base">
                   <option value="">Select user...</option>
                   <option v-for="u in (userList.data ?? [])" :key="u.name" :value="u.name">{{ u.full_name || u.name }}</option>
                 </select>
-                <select v-model="member.custom_role" class="w-40 border border-outline-gray-2 rounded px-2 py-1 text-sm bg-surface-white">
+                <select v-model="member.custom_role" class="w-40 border border-outline-gray-2 rounded px-2 py-1 text-sm bg-surface-base">
                   <option value="">Manager (no role)</option>
                   <option value="Functional Consultant">Functional Consultant</option>
                   <option value="Developer">Developer</option>
@@ -116,7 +125,7 @@
           <div
             v-for="project in projects.data"
             :key="project.name"
-            class="bg-surface-white border border-outline-gray-2 rounded-xl overflow-hidden hover:shadow-md transition-all duration-200"
+            class="bg-surface-base border border-outline-gray-2 rounded-xl overflow-hidden hover:shadow-md transition-all duration-200"
           >
             <button
               class="w-full text-left p-5 flex items-start justify-between group"
@@ -131,6 +140,10 @@
                   />
                 </div>
                 <div class="flex items-center gap-2 text-xs text-ink-gray-5">
+                  <span v-if="project.customer" class="flex min-w-0 items-center gap-1 text-ink-gray-6">
+                    <LucideBuilding2 class="size-3.5 shrink-0" aria-hidden="true" />
+                    <span class="truncate">{{ project.customer }}</span>
+                  </span>
                   <span class="font-mono text-ink-gray-4">{{ project.name }}</span>
                   <span v-if="formatDateRange(project)">· {{ formatDateRange(project) }}</span>
                   <span v-if="dashboards[project.name]?.data" class="text-ink-gray-6 font-medium">· {{ dashboards[project.name].data.stats.completion_pct }}%</span>
@@ -170,7 +183,7 @@
 
               <div class="flex border border-outline-gray-2 rounded-lg overflow-hidden">
                 <button class="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs text-ink-gray-6 hover:bg-surface-gray-1 transition-colors" @click.stop="navigateToProject(project.name)"><FolderKanban class="size-3.5" /> Open</button>
-                <button class="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs text-ink-gray-6 hover:bg-surface-gray-1 transition-colors border-x border-outline-gray-2" @click.stop="onGenerateChecklist(project)"><ClipboardList class="size-3.5" /> Checklist</button>
+                <button v-if="project.can_manage" class="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs text-ink-gray-6 hover:bg-surface-gray-1 transition-colors border-x border-outline-gray-2" @click.stop="onGenerateChecklist(project)"><ClipboardList class="size-3.5" /> Checklist</button>
                 <button class="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs text-ink-gray-6 hover:bg-surface-gray-1 transition-colors" @click.stop="navigateToKanban(project.name)"><Layout class="size-3.5" /> Board</button>
               </div>
             </div>
@@ -193,6 +206,9 @@ import { reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { createResource } from "frappe-ui";
 import { __ } from "@/translation";
+import { Link } from "@/components";
+import { useAuthStore } from "@/stores/auth";
+import LucideBuilding2 from "~icons/lucide/building-2";
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import GenerateChecklistModal from "./components/GenerateChecklistModal.vue";
 import Plus from "~icons/lucide/plus";
@@ -206,6 +222,7 @@ import LucideChevronUp from "~icons/lucide/chevron-up";
 import LucideChevronDown from "~icons/lucide/chevron-down";
 
 const router = useRouter();
+const authStore = useAuthStore();
 
 interface Project {
   name: string;
@@ -216,6 +233,8 @@ interface Project {
   expected_end_date?: string;
   priority?: string;
   start_date?: string;
+  customer?: string;
+  can_manage?: boolean;
 }
 
 const projects = createResource({
@@ -254,6 +273,7 @@ const newProject = reactive({
   project_name: "",
   start_date: "",
   expected_end_date: "",
+  customer: "",
   members: [] as { user: string; custom_role: string }[],
 });
 
@@ -261,6 +281,7 @@ function resetForm() {
   newProject.project_name = "";
   newProject.start_date = "";
   newProject.expected_end_date = "";
+  newProject.customer = "";
   newProject.members = [];
 }
 
@@ -270,6 +291,7 @@ function onCreateProject() {
     project_name: newProject.project_name,
     expected_start_date: newProject.start_date,
     expected_end_date: newProject.expected_end_date,
+    customer: newProject.customer,
     members: JSON.stringify(newProject.members.filter((m) => m.user.trim())),
   });
 }

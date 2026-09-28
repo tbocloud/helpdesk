@@ -2,7 +2,7 @@
   <div
     :id="`communication-${name}`"
     v-bind="$attrs"
-    class="grow cursor-pointer bg-surface-base rounded-md text-base leading-6 transition-all duration-300 ease-in-out border border-outline-gray-2"
+    class="grow cursor-pointer overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base text-base leading-6 shadow-[0_1px_2px_rgb(16_18_24/0.04),0_1px_3px_rgb(16_18_24/0.06)] transition-colors"
   >
     <div
       class="flex items-center justify-between gap-2"
@@ -23,13 +23,21 @@
         </div>
       </div>
       <!-- email design for desktop -->
-      <div v-else class="flex items-center gap-1">
-        <span>{{ sender.full_name || "Guest" }}</span>
+      <div v-else class="flex min-w-0 items-center gap-2">
+        <span class="text-sm font-semibold text-ink-gray-9">{{
+          sender.full_name || "Guest"
+        }}</span>
         <span
-          class="sm:flex hidden text-sm text-ink-gray-5"
           v-if="sender.name"
-          >{{ "<" + sender.name + ">" }}</span
+          class="hidden truncate font-mono text-xs text-ink-gray-5 sm:inline"
+          >{{ sender.name }}</span
         >
+        <span
+          class="inline-flex h-5 items-center gap-1 rounded-md px-1.5 text-xs font-medium text-ink-gray-6 ring-1 ring-inset ring-outline-gray-3"
+        >
+          <LucideMail class="size-3.5" aria-hidden="true" />
+          {{ __("Email") }}
+        </span>
       </div>
 
       <div class="flex gap-2 items-center">
@@ -95,7 +103,7 @@
         </span>
       </template>
     </div>
-    <div class="border-0 border-t my-3 border-outline-elevation-2 !-mx-3" />
+    <div class="border-0 border-t my-3 border-outline-gray-2 !-mx-4" />
     <EmailContent :content="content" />
     <div class="flex flex-wrap gap-2">
       <AttachmentItem
@@ -122,6 +130,7 @@ import { dateFormat, dateTooltipFormat, timeAgo } from "@/utils";
 import { Dropdown } from "frappe-ui";
 import { storeToRefs } from "pinia";
 import { computed, inject, ref } from "vue";
+import LucideMail from "~icons/lucide/mail";
 import LucideSplit from "~icons/lucide/split";
 import { ReplyAllIcon, ReplyIcon } from "./icons";
 import TicketSplitModal from "./ticket/TicketSplitModal.vue";

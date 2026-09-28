@@ -8,6 +8,7 @@
 		"customer_section",
 		"customer_name",
 		"site_url",
+		"client_app",
 		"column_break_cust",
 		"contract_id",
 		"mcp_endpoint",
@@ -46,6 +47,14 @@
 			"label": "Site URL",
 			"options": "URL",
 			"reqd": 1
+		},
+		{
+			"fieldname": "client_app",
+			"fieldtype": "Select",
+			"label": "Client App",
+			"options": "helpdesk_client\nqcs_support_client",
+			"default": "helpdesk_client",
+			"description": "App installed on the customer site. Legacy sites run qcs_support_client."
 		},
 		{
 			"fieldname": "column_break_cust",
@@ -127,7 +136,7 @@
 		}
 	],
 	"links": [],
-	"modified": "2026-03-29 12:00:00.000000",
+	"modified": "2026-09-28 16:30:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Support Connection",
@@ -149,6 +158,13 @@
 		{
 			"read": 1,
 			"role": "Agent"
+		},
+		{
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "Agent Manager"
 		}
 	],
 	"sort_field": "modified",

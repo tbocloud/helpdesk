@@ -121,7 +121,7 @@
 	],
 	"in_create": 1,
 	"links": [],
-	"modified": "2026-04-22 12:00:00.000000",
+	"modified": "2026-09-28 16:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Remote Audit Log",
@@ -135,6 +135,13 @@
 			"report": 1,
 			"role": "System Manager",
 			"share": 1
+		},
+		{
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "Agent Manager"
 		}
 	],
 	"sort_field": "timestamp",

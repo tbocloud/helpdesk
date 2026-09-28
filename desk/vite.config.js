@@ -55,8 +55,8 @@ export default defineConfig(async ({ mode }) => {
         },
         manifest: {
           display: "standalone",
-          name: "Frappe Helpdesk",
-          short_name: "Helpdesk",
+          name: "TBO Support",
+          short_name: "TBO Support",
           start_url: "/helpdesk",
           description:
             "Modern, Streamlined, Free and Open Source Customer Service Software",

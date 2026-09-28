@@ -573,3 +573,65 @@ def upload_test_file(file_name: str) -> str:
         }
     ).insert(ignore_permissions=True)
     return file_doc.name
+
+
+def make_tasky_user(email: str, full_name: str, roles: tuple[str, ...] = ()):
+    """Creates an agent user for tasky tests, plus any extra roles (e.g. "Project Manager")."""
+    first_name, _, last_name = full_name.partition(" ")
+    create_agent(email, first_name, last_name or None)
+    missing = [r for r in roles if r not in frappe.get_roles(email)]
+    if missing:
+        frappe.get_doc("User", email).add_roles(*missing)
+    return email
+
+
+def make_project(project_name: str, members: list[tuple[str, str]] | None = None, owner: str | None = None):
+    """Creates a Project directly, bypassing the tasky API.
+
+    `members` is a list of (user, project role) pairs; `owner` defaults to the session user.
+    """
+    doc = frappe.get_doc(
+        {
+            "doctype": "Project",
+            "project_name": project_name,
+            "status": "Open",
+            "users": [{"user": u, "custom_role": role} for u, role in members or []],
+        }
+    )
+    if owner:
+        doc.owner = owner
+    return doc.insert(ignore_permissions=True)
+
+
+def make_content_campaign(campaign_name: str, customer: str, **kwargs):
+    """Creates an HD Content Campaign for `customer`."""
+    return frappe.get_doc(
+        {"doctype": "HD Content Campaign", "campaign_name": campaign_name, "customer": customer, **kwargs}
+    ).insert(ignore_permissions=True)
+
+
+def make_content_post(title: str, customer: str | None = None, **kwargs):
+    """Creates an HD Content Post (an Instagram Idea unless overridden)."""
+    return frappe.get_doc(
+        {
+            "doctype": "HD Content Post",
+            "title": title,
+            "customer": customer,
+            "channel": "Instagram",
+            "status": "Idea",
+            **kwargs,
+        }
+    ).insert(ignore_permissions=True)
+
+
+def make_support_connection(customer: str, site_url: str = "https://erp.example.com", **kwargs):
+    """Creates a Connected HDS Support Connection for `customer` (no real credentials)."""
+    return frappe.get_doc(
+        {
+            "doctype": "HDS Support Connection",
+            "customer_name": customer,
+            "site_url": site_url,
+            "connection_status": "Connected",
+            **kwargs,
+        }
+    ).insert(ignore_permissions=True)

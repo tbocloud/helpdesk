@@ -18,22 +18,22 @@
       <div v-if="tasks.loading" class="flex items-center justify-center h-full"><div class="text-p-base text-ink-gray-6">{{ __("Loading...") }}</div></div>
       <template v-else>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <div class="bg-surface-white border border-outline-gray-2 rounded-lg p-4">
+          <div class="bg-surface-base border border-outline-gray-2 rounded-lg p-4">
             <div class="flex items-center gap-2 mb-1"><AlertTriangle class="size-4 text-ink-red-5" /><span class="text-xs text-ink-gray-5">{{ __("Overdue") }}</span></div>
             <div class="text-xl-semibold text-ink-red-7">{{ overdue.length }}</div>
           </div>
-          <div class="bg-surface-white border border-outline-gray-2 rounded-lg p-4">
+          <div class="bg-surface-base border border-outline-gray-2 rounded-lg p-4">
             <div class="flex items-center gap-2 mb-1"><Clock class="size-4 text-ink-amber-5" /><span class="text-xs text-ink-gray-5">{{ __("Due This Week") }}</span></div>
             <div class="text-xl-semibold text-ink-amber-7">{{ dueThisWeek.length }}</div>
           </div>
-          <div class="bg-surface-white border border-outline-gray-2 rounded-lg p-4">
+          <div class="bg-surface-base border border-outline-gray-2 rounded-lg p-4">
             <div class="flex items-center gap-2 mb-1"><CheckCircle2 class="size-4 text-ink-green-5" /><span class="text-xs text-ink-gray-5">{{ __("On Track") }}</span></div>
             <div class="text-xl-semibold text-ink-green-7">{{ onTrack.length }}</div>
           </div>
         </div>
         <div v-if="overdue.length" class="mb-6">
           <div class="text-sm-medium text-ink-gray-7 mb-3">{{ __("Overdue Tasks") }}</div>
-          <div class="bg-surface-white border border-outline-gray-2 rounded-lg overflow-hidden">
+          <div class="bg-surface-base border border-outline-gray-2 rounded-lg overflow-hidden">
             <div v-for="task in overdue" :key="task.name" class="flex items-center gap-3 px-4 py-3 border-b border-outline-gray-2 last:border-b-0 hover:bg-surface-sidebar">
               <AlertTriangle class="size-4 text-ink-red-5 shrink-0" />
               <div class="flex-1 min-w-0"><div class="text-sm text-ink-gray-8 truncate">{{ task.subject }}</div><div class="text-xs text-ink-gray-5">{{ task.phase }} · {{ task.due_date }}</div></div>
@@ -44,7 +44,7 @@
         </div>
         <div v-if="dueThisWeek.length" class="mb-6">
           <div class="text-sm-medium text-ink-gray-7 mb-3">{{ __("Due This Week") }}</div>
-          <div class="bg-surface-white border border-outline-gray-2 rounded-lg overflow-hidden">
+          <div class="bg-surface-base border border-outline-gray-2 rounded-lg overflow-hidden">
             <div v-for="task in dueThisWeek" :key="task.name" class="flex items-center gap-3 px-4 py-3 border-b border-outline-gray-2 last:border-b-0 hover:bg-surface-sidebar">
               <Clock class="size-4 text-ink-amber-5 shrink-0" />
               <div class="flex-1 min-w-0"><div class="text-sm text-ink-gray-8 truncate">{{ task.subject }}</div><div class="text-xs text-ink-gray-5">{{ task.phase }} · {{ task.due_date }}</div></div>
