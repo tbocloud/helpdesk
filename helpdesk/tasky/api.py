@@ -6,10 +6,7 @@ import frappe
 from frappe import _
 from frappe.desk.form import assign_to
 
-from helpdesk.tasky.permissions import (
-    MANAGER_PROJECT_ROLE,
-    can_manage_project,
-)
+from helpdesk.tasky.permissions import MANAGER_PROJECT_ROLE, can_manage_project
 
 
 def _resolve_project(project, ptype="read"):
