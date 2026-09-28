@@ -1,6 +1,9 @@
 name: Lint
 
 on:
+  push:
+    branches:
+      - main
   pull_request:
     branches:
       - main
@@ -11,6 +14,7 @@ jobs:
   commit-lint:
     name: Semantic Commits
     runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v3
         with:
@@ -27,7 +31,6 @@ jobs:
   linter:
     name: 'Frappe Linter'
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
 
     steps:
       - uses: actions/checkout@v2

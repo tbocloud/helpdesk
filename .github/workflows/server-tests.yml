@@ -1,6 +1,15 @@
 name: Server
 
 on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '**.js'
+      - '**.css'
+      - '**.md'
+      - '**.html'
+      - '**.csv'
   pull_request:
     branches:
       - main
@@ -15,7 +24,7 @@ on:
       - '**.csv'
 
 concurrency:
-  group: develop-helpdesk-${{ github.event.number }}
+  group: develop-helpdesk-${{ github.event.number || github.ref }}
   cancel-in-progress: true
 
 jobs:

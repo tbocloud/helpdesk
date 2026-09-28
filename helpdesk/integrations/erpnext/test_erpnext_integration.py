@@ -1,6 +1,8 @@
 # Copyright (c) 2022, Frappe Technologies and Contributors
 # See license.txt
 
+import unittest
+
 import frappe
 from frappe.model.rename_doc import rename_doc
 from frappe.tests.utils import FrappeTestCase
@@ -33,6 +35,12 @@ def fake_value(field: str, suffix: str) -> str:
 
 
 class TestERPNextIntegration(FrappeTestCase):
+    @classmethod
+    def setUpClass(cls):
+        if "erpnext" not in frappe.get_installed_apps():
+            raise unittest.SkipTest("ERPNext is not installed")
+        super().setUpClass()
+
     def setUp(self):
         disable_erpnext_sync()
 
