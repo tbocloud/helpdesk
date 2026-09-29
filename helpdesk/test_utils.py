@@ -668,3 +668,15 @@ def make_ticket_communication(
             "reference_name": ticket,
         }
     ).insert(ignore_permissions=True)
+
+
+def make_ai_support_session(ticket: str, connection: str | None = None, **kwargs):
+    """Creates an HDS AI Support Session for `ticket` (no investigation is run)."""
+    return frappe.get_doc(
+        {
+            "doctype": "HDS AI Support Session",
+            "ticket": ticket,
+            "connection": connection,
+            **kwargs,
+        }
+    ).insert(ignore_permissions=True)

@@ -21,7 +21,12 @@ MAX_TRIAGE_RETRIES = 2
 TRIAGE_COOLDOWN_SECONDS = 30
 TRIAGE_LOCK_TIMEOUT = 60
 MAX_CONCURRENT_TRIAGES = 10
-TRIAGE_JOB_TIMEOUT = 25
+# room for fetching the customer's error logs over MCP before the model call
+TRIAGE_JOB_TIMEOUT = 90
+ERROR_LOGS_FOR_TRIAGE = 10
+ERROR_TRACE_CHARS = 600
+# tracks that get an automatic investigation on the customer site after triage
+AUTO_INVESTIGATE_TRACKS = ("ai_investigate", "dev", "escalate")
 
 TRIAGE_SYSTEM_PROMPT = """You are an ERPNext/Frappe support triage AI. Analyze the support ticket and return a JSON object with your assessment.
 
@@ -30,7 +35,8 @@ You must return ONLY valid JSON with these exact fields:
   "category": "one of: Account, Billing, Configuration, Data, Integration, Performance, Permissions, Print, Report, Stock, Workflow, Other",
   "priority": "one of: Low, Medium, High, Critical",
   "complexity": "one of: Functional, Configuration, Data, Dev, Infrastructure",
-  "summary": "2-3 sentence summary of the issue and likely cause",
+  "summary": "3-6 sentences: what is happening, the most likely cause (cite the matching error log entries when there are any), and the business impact",
+  "error_findings": ["one line per relevant error log entry: timestamp, method, and what it means; empty list if none relate to the issue"],
   "recommended_track": "one of: ai_investigate, manual, dev, escalate",
   "scope": {
     "period_start": "YYYY-MM-DD or null if not mentioned",
@@ -49,6 +55,9 @@ Rules:
 - recommended_track = "escalate" for critical production-down issues
 - Extract ALL date references and convert relative dates to absolute (e.g., "last 2 months" → actual date range)
 - Extract ALL specific reports, documents, or entities the customer mentions
+- If recent error logs from the customer's site are provided, check them for tracebacks that match the
+  issue (same doctype, method, report or time window) and use them in the summary; ignore unrelated ones
+- Never invent errors, documents or causes that are not in the ticket or the error logs
 """
 
 
@@ -244,7 +253,8 @@ def run_triage(ticket_id: str, is_retry: bool = False):
         frappe.db.commit()  # background job: persist triage progress and failures as they happen - nosemgrep
 
         # Post triage comment (with skip_notifications to prevent cascades)
-        _post_triage_comment(ticket_id, triage)
+        investigation = _maybe_start_investigation(ticket, triage)
+        _post_triage_comment(ticket_id, triage, investigation)
 
     except anthropic.APIError as e:
         # API rate limit or error - mark failed, no retry
@@ -304,11 +314,98 @@ def _build_triage_input(ticket):
     if ticket.priority:
         parts.append("Customer Priority: %s" % ticket.priority)
 
+    error_logs = _recent_error_logs(ticket)
+    if error_logs:
+        parts.append(
+            "\nRecent error logs on the customer's site (newest first):\n" + error_logs
+        )
+
     return "\n".join(parts)
 
 
-def _post_triage_comment(ticket_id: str, triage: dict):
+def get_ticket_connection(ticket) -> str | None:
+    """The connected customer site for a ticket: the one it came from, else its customer's."""
+    from helpdesk.content_sync import get_client_connection
+
+    if ticket.get("custom_qcs_connection") and (
+        frappe.db.get_value(
+            "HDS Support Connection", ticket.custom_qcs_connection, "connection_status"
+        )
+        == "Connected"
+    ):
+        return ticket.custom_qcs_connection
+    return get_client_connection(ticket.get("customer"))
+
+
+def _recent_error_logs(ticket) -> str:
+    """Latest Error Log entries from the customer's site, trimmed for the prompt.
+
+    Best effort: triage still runs on the ticket text if the site can't be reached.
+    """
+    connection = get_ticket_connection(ticket)
+    if not connection:
+        return ""
+    try:
+        from helpdesk.mcp_client import MCPClient
+        from helpdesk.ticket_puller import _unwrap
+
+        logs = (
+            _unwrap(
+                MCPClient(connection).call_tool(
+                    "get_error_log", {"limit": ERROR_LOGS_FOR_TRIAGE}
+                )
+            )
+            or []
+        )
+    except Exception:  # noqa: BLE001 - error logs only enrich triage
+        frappe.log_error(
+            title=f"Triage could not read error logs for {ticket.name}",
+            message=frappe.get_traceback(),
+        )
+        return ""
+    lines = []
+    for log in logs:
+        trace = (log.get("error") or "").strip()
+        # the last lines of a traceback carry the exception; keep those
+        trace = trace[-ERROR_TRACE_CHARS:]
+        lines.append(
+            f"- {log.get('creation')} | {log.get('method') or 'unknown'}\n{trace}"
+        )
+    return "\n".join(lines)
+
+
+def _maybe_start_investigation(ticket, triage: dict) -> str | None:
+    """Start an AI investigation on the customer's site unless it's a simple how-to."""
+    from helpdesk.ai_engine import get_hub_settings
+
+    if not get_hub_settings().get("auto_investigate"):
+        return None
+    if triage.get("recommended_track") not in AUTO_INVESTIGATE_TRACKS:
+        return None
+    connection = get_ticket_connection(ticket)
+    if not connection:
+        return None
+    try:
+        from helpdesk.session_manager import start_investigation
+
+        return start_investigation(
+            ticket.name,
+            connection,
+            agent_notes="Started automatically after triage.",
+        )
+    except Exception:  # noqa: BLE001 - e.g. session limit reached; triage result still stands
+        frappe.log_error(
+            title=f"Auto investigation not started for {ticket.name}",
+            message=frappe.get_traceback(),
+        )
+        return None
+
+
+def _post_triage_comment(
+    ticket_id: str, triage: dict, investigation: str | None = None
+):
     """Post a summary comment on the ticket."""
+    esc = frappe.utils.escape_html
     priority = triage.get("priority", "Unknown")
     category = triage.get("category", "Unknown")
     summary = triage.get("summary", "")
@@ -321,10 +418,23 @@ def _post_triage_comment(ticket_id: str, triage: dict):
         "escalate": "Escalation",
     }
 
-    comment_text = (
-        f"<b>AI Triage:</b> {priority} priority | {category}<br>"
-        f"<b>Summary:</b> {summary}<br>"
-        f"<b>Recommended:</b> {track_labels.get(track, track)}"
+    def bullet_list(items):
+        items = [esc(str(i)) for i in items or [] if i]
+        return (
+            "<ul>" + "".join(f"<li>{i}</li>" for i in items) + "</ul>" if items else ""
+        )
+
+    findings = bullet_list(triage.get("error_findings"))
+    steps = bullet_list(triage.get("investigation_steps"))
+    comment_text = f"<b>AI Triage:</b> {esc(priority)} priority | {esc(category)}<br>" f"<b>Summary:</b> {esc(summary)}<br>" + (
+        f"<b>Error log findings:</b>{findings}" if findings else ""
+    ) + (
+        f"<b>Next steps:</b>{steps}" if steps else ""
+    ) + f"<b>Recommended:</b> {esc(track_labels.get(track, track))}" + (
+        f"<br><b>AI investigation started</b> ({esc(investigation)}): it will check the "
+        "customer's site and post its diagnosis and any proposed fixes here."
+        if investigation
+        else ""
     )
 
     comment = frappe.get_doc(

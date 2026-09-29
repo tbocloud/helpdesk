@@ -38,7 +38,9 @@ INVESTIGATION_SYSTEM_PROMPT = """You are an expert ERPNext/Frappe support engine
 You have access to MCP tools that let you read data from the customer's ERPNext instance. Use them to investigate the issue systematically.
 
 ## Investigation Methodology
-1. First understand the schema - use get_meta to understand relevant doctypes
+0. Check the Error Log first - call get_error_log (filter by method when the issue names a report, doctype
+   or action) and look for tracebacks matching the issue and its time window. Quote the key traceback lines.
+1. Understand the schema - use get_meta to understand relevant doctypes
 2. Get an overview - use get_count and get_list to understand data volumes and patterns
 3. Drill into specifics - use get_doc to examine specific records
 4. Cross-reference - compare data across doctypes to find mismatches
@@ -49,6 +51,7 @@ You have access to MCP tools that let you read data from the customer's ERPNext 
 - Be systematic - don't jump to conclusions without data
 - Report specific findings with document names and values
 - After completing your investigation steps, provide a DIAGNOSIS section with:
+  - Error log evidence (entries you found and what they show, or that none were relevant)
   - Root causes ranked by impact
   - Specific actions the customer should take
   - Whether each issue can be auto-fixed or needs manual intervention
@@ -411,6 +414,12 @@ def run_investigation(
                 f"Created action request {ar_name} with {len(proposed_actions)} actions"
             )
 
+        post_investigation_comment(
+            session_name,
+            ticket_id,
+            proposed_fixes=0 if paused_for_review else len(proposed_actions),
+        )
+
     except Exception as e:
         # Save partial results including MCP logs
         try:
@@ -448,6 +457,7 @@ def run_investigation(
             )
             frappe.db.commit()
         frappe.log_error(f"Investigation failed for session {session_name}", str(e))
+        post_investigation_comment(session_name, ticket_id)
 
 
 def _call_with_retry(client, model, system_prompt, tools, messages, max_retries=2):
@@ -903,6 +913,10 @@ def run_investigation_resume(
 
             create_action_request(session_name, ticket_id, proposed_actions)
 
+        post_investigation_comment(
+            session_name, ticket_id, proposed_fixes=len(proposed_actions or [])
+        )
+
     except Exception as e:
         frappe.db.set_value(
             "HDS AI Support Session",
@@ -916,3 +930,55 @@ def run_investigation_resume(
         )
         frappe.db.commit()
         frappe.log_error("Investigation resume failed for %s" % session_name, str(e))
+        post_investigation_comment(session_name, ticket_id)
+
+
+def post_investigation_comment(
+    session_name: str, ticket_id: str, proposed_fixes: int = 0
+):
+    """Put the investigation's outcome on the ticket so agents don't have to open the session.
+
+    Never raises: a failed comment must not turn a finished investigation into a failure.
+    """
+    try:
+        session = frappe.get_doc("HDS AI Support Session", session_name)
+        esc = frappe.utils.escape_html
+        headline = {
+            "Completed": "AI Investigation complete",
+            "Awaiting Review": "AI Investigation paused for your review",
+            "Failed": "AI Investigation failed",
+        }.get(session.status, f"AI Investigation: {session.status}")
+
+        parts = [f"<b>{esc(headline)}</b> ({esc(session_name)})"]
+        if session.diagnosis:
+            parts.append(frappe.utils.md_to_html(session.diagnosis))
+        if proposed_fixes:
+            parts.append(
+                f"<b>{proposed_fixes} fix(es) proposed</b> and waiting for an Agent Manager "
+                "to approve them (Approvals button). Nothing has been changed on the customer's site yet."
+            )
+        if session.status == "Awaiting Review":
+            parts.append(
+                "Continue or cancel it from AI Tools → View Sessions, optionally with guidance."
+            )
+        parts.append(
+            f"<small>{session.total_tool_calls or 0} checks on the customer's site"
+            f" · ${session.estimated_cost_usd or 0:.4f}</small>"
+        )
+
+        comment = frappe.get_doc(
+            {
+                "doctype": "HD Ticket Comment",
+                "reference_ticket": ticket_id,
+                "content": "<br>".join(parts),
+                "commented_by": "Administrator",
+            }
+        )
+        comment.flags.skip_notifications = True
+        comment.insert(ignore_permissions=True)
+        frappe.db.commit()  # background job: agents should see the result right away - nosemgrep
+    except Exception:  # noqa: BLE001 - see docstring
+        frappe.log_error(
+            title=f"Could not post investigation result for {session_name}",
+            message=frappe.get_traceback(),
+        )

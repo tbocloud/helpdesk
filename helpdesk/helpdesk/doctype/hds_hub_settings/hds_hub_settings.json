@@ -27,6 +27,7 @@
 		"hub_max_report_rows",
 		"triage_section",
 		"auto_triage_enabled",
+		"auto_investigate",
 		"column_break_triage",
 		"triage_job_timeout"
 	],
@@ -42,7 +43,7 @@
 			"label": "Provider",
 			"options": "Anthropic\nAnthropic Compatible\nOpenAI Compatible",
 			"default": "Anthropic",
-			"description": "Anthropic Compatible: Kimi/Moonshot, GLM/Zhipu \u2014 same API shape, set Base URL. OpenAI Compatible: Poolside, Qwen \u2014 triage only; investigation sessions need Anthropic or Anthropic Compatible."
+			"description": "Anthropic Compatible: Kimi/Moonshot, GLM/Zhipu — same API shape, set Base URL. OpenAI Compatible: Poolside, Qwen — triage only; investigation sessions need Anthropic or Anthropic Compatible."
 		},
 		{
 			"fieldname": "ai_base_url",
@@ -56,7 +57,7 @@
 			"fieldtype": "Select",
 			"label": "Investigation Provider",
 			"options": "\nAnthropic\nAnthropic Compatible",
-			"description": "Optional override: run investigation sessions on a different provider than triage (e.g. cheap OpenAI-compatible triage + Anthropic investigation). Blank = same as Provider above. OpenAI-Compatible is not offered here \u2014 sessions need Anthropic tool-use."
+			"description": "Optional override: run investigation sessions on a different provider than triage (e.g. cheap OpenAI-compatible triage + Anthropic investigation). Blank = same as Provider above. OpenAI-Compatible is not offered here — sessions need Anthropic tool-use."
 		},
 		{
 			"fieldname": "investigation_base_url",
@@ -76,7 +77,7 @@
 			"fieldtype": "Password",
 			"label": "AI API Key",
 			"reqd": 1,
-			"description": "Key for the selected provider. Stored only on the Hub \u2014 customer sites never hold an AI credential."
+			"description": "Key for the selected provider. Stored only on the Hub — customer sites never hold an AI credential."
 		},
 		{
 			"fieldname": "column_break_api",
@@ -172,6 +173,13 @@
 			"label": "Auto-Triage on New Tickets"
 		},
 		{
+			"fieldname": "auto_investigate",
+			"fieldtype": "Check",
+			"label": "Auto Investigate",
+			"default": "1",
+			"description": "After triage, automatically investigate tickets that need more than a how-to answer, on the customer's connected site (reads error logs and data). Proposed fixes still need approval."
+		},
+		{
 			"fieldname": "column_break_triage",
 			"fieldtype": "Column Break"
 		},
@@ -184,7 +192,7 @@
 	],
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-04-04 12:00:00.000000",
+	"modified": "2026-09-29 10:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Hub Settings",
