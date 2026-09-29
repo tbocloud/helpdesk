@@ -244,6 +244,20 @@ class TestTaskyPermissions(FrappeTestCase):
         self.assertEqual(roles[OUTSIDER[0]], "Developer")
         self.assertEqual(task["assignees"], [OUTSIDER[0]])
 
+    def test_disabled_people_are_not_offered_or_assignable(self):
+        frappe.db.set_value("User", OUTSIDER[0], "enabled", 0)
+        offered = [u.name for u in self.as_user(PM, api.get_users)]
+        self.assertNotIn(OUTSIDER[0], offered)
+        self.assertIn(DEV_A[0], offered)
+        with self.assertRaises(frappe.ValidationError):
+            self.as_user(
+                PM,
+                api.add_task,
+                project=self.project,
+                task_name="Bank feeds",
+                assigned_to=OUTSIDER[0],
+            )
+
     def test_manual_task_cannot_go_to_someone_who_is_not_an_agent(self):
         create_user("vendor.contact@tasky-smoke.example")
         with self.assertRaises(frappe.ValidationError):

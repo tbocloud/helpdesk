@@ -307,11 +307,10 @@ def _is_project_member(project, user):
 def _add_member_for_assignment(project: str, user: str):
     """Assigning an agent from outside the team adds them to it as a Developer.
 
-    Only reached by the project's manager or lead (checked by the caller); leads
-    can't edit the project itself, hence ignore_permissions.
+    Only reached by the project's manager or lead for an assignable agent (both
+    checked by the caller); leads can't edit the project itself, hence
+    ignore_permissions.
     """
-    if not frappe.db.exists("HD Agent", {"user": user, "is_active": 1}):
-        frappe.throw(_("{0} is not an active agent.").format(user))
     doc = frappe.get_doc("Project", project)
     doc.append("users", {"user": user, "custom_role": "Developer"})
     doc.save(ignore_permissions=True)
@@ -365,6 +364,8 @@ def add_task(
     if not str(task_name or "").strip():
         frappe.throw(_("Task name is required"))
     assigned_to = str(assigned_to or "").strip()
+    if assigned_to and not _is_assignable(assigned_to):
+        frappe.throw(_("{0} is not an active agent.").format(assigned_to))
     if assigned_to and not _is_project_member(project, assigned_to):
         _add_member_for_assignment(project, assigned_to)
     doc = frappe.get_doc(
@@ -921,13 +922,25 @@ def get_project_detail(project: str):
 
 
 @frappe.whitelist()
-def get_users():
-    """List enabled users for assignment dropdowns."""
-    return frappe.get_all(
-        "User",
-        {"enabled": 1},
-        ["name", "full_name", "email", "user_image"],
-        order_by="full_name asc",
+def get_users() -> list[dict]:
+    """People who can be on a project or get a task: active agents whose account is enabled."""
+    agent = frappe.qb.DocType("HD Agent")
+    user = frappe.qb.DocType("User")
+    return (
+        frappe.qb.from_(agent)
+        .join(user)
+        .on(agent.user == user.name)
+        .select(user.name, user.full_name, user.email, user.user_image)
+        .where((agent.is_active == 1) & (user.enabled == 1))
+        .orderby(user.full_name)
+        .run(as_dict=True)
+    )
+
+
+def _is_assignable(user: str) -> bool:
+    return bool(
+        frappe.db.exists("HD Agent", {"user": user, "is_active": 1})
+        and frappe.db.get_value("User", user, "enabled")
     )
 
 

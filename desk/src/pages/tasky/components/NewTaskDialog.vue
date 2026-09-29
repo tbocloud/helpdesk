@@ -45,7 +45,7 @@
             :label="__('Assignee')"
             :options="assigneeOptions"
             :placeholder="__('Unassigned')"
-            :loading="!membersLoaded || agentStore.agents.loading"
+            :loading="!membersLoaded || assignable.loading"
             :model-value="form.assigned_to || null"
             @update:model-value="
               (v: { value: string } | string | null) =>
@@ -147,7 +147,6 @@
 
 <script setup lang="ts">
 import { __ } from "@/translation";
-import { useAgentStore } from "@/stores/agent";
 import {
   Autocomplete,
   Button,
@@ -236,35 +235,37 @@ const membersLoaded = computed(
   () => !!projectDetail.data || !!projectDetail.error
 );
 
-const agentStore = useAgentStore();
+// active agents with enabled accounts; deleted or disabled people never appear
+const assignable = createResource({
+  url: "helpdesk.tasky.api.get_users",
+});
+
+const assignableUsers = computed(
+  () => (assignable.data ?? []) as { name: string; full_name?: string }[]
+);
 
 const memberIds = computed(() => new Set(members.value.map((m) => m.user)));
 
-// team members first; any other active agent can be picked and joins the team
-const assigneeOptions = computed(() => [
-  {
-    group: __("Project team"),
-    items: [
-      { label: __("Unassigned"), value: "" },
-      ...members.value.map((m) => ({
-        label: m.full_name || m.user,
-        value: m.user,
-      })),
-    ],
-  },
-  {
-    group: __("Other agents"),
-    items: (
-      (agentStore.agents.data ?? []) as { user: string; agent_name?: string }[]
-    )
-      .filter((a) => a.user && !memberIds.value.has(a.user))
-      .map((a) => ({
-        label: a.agent_name || a.user,
-        value: a.user,
-        description: a.user,
-      })),
-  },
-]);
+// team first; anyone else picked here joins the team as a Developer
+const assigneeOptions = computed(() => {
+  const toOption = (u: { name: string; full_name?: string }) => ({
+    label: u.full_name || u.name,
+    value: u.name,
+    description: u.name,
+  });
+  const team = assignableUsers.value.filter((u) => memberIds.value.has(u.name));
+  const others = assignableUsers.value.filter(
+    (u) => !memberIds.value.has(u.name)
+  );
+  return [
+    ...(team.length
+      ? [{ group: __("Project team"), items: team.map(toOption) }]
+      : []),
+    ...(others.length
+      ? [{ group: __("Other agents"), items: others.map(toOption) }]
+      : []),
+  ];
+});
 
 const assigneeIsNew = computed(
   () => !!form.assigned_to && !memberIds.value.has(form.assigned_to)
@@ -305,7 +306,7 @@ watch(
       projectDetail.reload();
       openTasks.reload();
     }
-    if (!agentStore.agents.data) agentStore.agents.fetch();
+    assignable.reload();
   },
   { immediate: true }
 );
