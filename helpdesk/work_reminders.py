@@ -2,6 +2,8 @@
 
 Tasks (daily): due soon -> assignees; overdue -> project lead (or its managers
 when there is no lead); overdue for ESCALATE_AFTER_DAYS -> project managers.
+Tasks on hold get no due-date reminders; a hold that lasts ESCALATE_AFTER_DAYS
+goes to the project lead and managers.
 Tickets (hourly): SLA due soon -> assignees; breached -> assignees and Agent
 Managers; breached for ESCALATE_AFTER_DAYS -> Agent Managers again.
 
@@ -22,6 +24,7 @@ TASK_DUE_SOON_DAYS = 2
 TICKET_DUE_SOON_HOURS = 4
 ESCALATE_AFTER_DAYS = 3
 MANAGER_PROJECT_ROLE = "Project Manager"
+ON_HOLD = "On Hold"
 SKIP = {"Administrator", "Guest"}
 
 
@@ -32,7 +35,7 @@ def _assignees(raw) -> list[str]:
         return []
 
 
-def _notify(users, doctype: str, name: str, subject: str):
+def notify_users(users, doctype: str, name: str, subject: str):
     users = sorted({u for u in users if u and u not in SKIP})
     if not users:
         return
@@ -49,7 +52,7 @@ def _notify(users, doctype: str, name: str, subject: str):
     )
 
 
-def _project_managers(project: str) -> list[str]:
+def get_project_managers(project: str) -> list[str]:
     owner = frappe.db.get_value("Project", project, "owner")
     listed = frappe.get_all(
         "Project User",
@@ -77,7 +80,7 @@ def send_task_reminders():
     tasks = frappe.get_all(
         "Task",
         filters={
-            "status": ("not in", ["Completed", "Cancelled", "Template"]),
+            "status": ("not in", ["Completed", "Cancelled", "Template", ON_HOLD]),
             "exp_end_date": ("<=", add_days(today, TASK_DUE_SOON_DAYS)),
         },
         fields=["name", "subject", "project", "exp_end_date", "is_key", "_assign"],
@@ -90,7 +93,7 @@ def send_task_reminders():
         assignees = _assignees(task._assign)
 
         if due >= today:
-            _notify(
+            notify_users(
                 assignees,
                 "Task",
                 task.name,
@@ -103,20 +106,46 @@ def send_task_reminders():
             if task.project
             else None
         )
-        managers = _project_managers(task.project) if task.project else []
-        _notify(
+        managers = get_project_managers(task.project) if task.project else []
+        notify_users(
             [*assignees, *([lead] if lead else managers)],
             "Task",
             task.name,
             _("Overdue since {0}: {1}").format(due_text, title),
         )
         if (today - due).days >= ESCALATE_AFTER_DAYS:
-            _notify(
+            notify_users(
                 managers,
                 "Task",
                 task.name,
                 _("Escalated, {0} days overdue: {1}").format((today - due).days, title),
             )
+
+
+def send_hold_reminders():
+    """Daily: flag tasks that have been on hold for a while, so someone unblocks them."""
+    since = add_days(getdate(nowdate()), -ESCALATE_AFTER_DAYS)
+    tasks = frappe.get_all(
+        "Task",
+        filters={"status": ON_HOLD, "hold_since": ("<=", since)},
+        fields=["name", "subject", "project", "hold_reason", "hold_since"],
+    )
+    for task in tasks:
+        if not task.project:
+            continue
+        lead = frappe.db.get_value("Project", task.project, "project_lead")
+        # the subject names the hold's start, so each hold is flagged once
+        notify_users(
+            [lead, *get_project_managers(task.project)],
+            "Task",
+            task.name,
+            _("On hold for over {0} days since {1} ({2}): {3}").format(
+                ESCALATE_AFTER_DAYS,
+                frappe.utils.formatdate(task.hold_since),
+                task.hold_reason,
+                task.subject,
+            ),
+        )
 
 
 def send_ticket_reminders():
@@ -137,7 +166,7 @@ def send_ticket_reminders():
         due_text = frappe.utils.format_datetime(ticket.resolution_by, "d MMM, HH:mm")
 
         if ticket.resolution_by > now:
-            _notify(
+            notify_users(
                 assignees,
                 "HD Ticket",
                 ticket.name,
@@ -147,14 +176,14 @@ def send_ticket_reminders():
 
         if managers is None:
             managers = _agent_managers()
-        _notify(
+        notify_users(
             [*assignees, *managers],
             "HD Ticket",
             ticket.name,
             _("SLA breached ({0}): {1}").format(due_text, title),
         )
         if (now - ticket.resolution_by).days >= ESCALATE_AFTER_DAYS:
-            _notify(
+            notify_users(
                 managers,
                 "HD Ticket",
                 ticket.name,

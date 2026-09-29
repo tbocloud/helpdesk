@@ -187,7 +187,7 @@ import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import ProjectNav from "./components/ProjectNav.vue";
 import TaskStatusBadge from "./components/TaskStatusBadge.vue";
 import TaskyState from "./components/TaskyState.vue";
-import { daysUntil, isClosed, isOverdue } from "./taskMeta";
+import { daysUntil, isClosed, isOnHold, isOverdue } from "./taskMeta";
 
 const props = defineProps<{ projectId: string }>();
 const router = useRouter();
@@ -228,7 +228,7 @@ const overdue = computed(() =>
 const dueThisWeek = computed(() =>
   allTasks.value
     .filter((t) => {
-      if (!t.due_date || isClosed(t)) return false;
+      if (!t.due_date || isClosed(t) || isOnHold(t)) return false;
       const days = daysUntil(t.due_date);
       return days >= 0 && days <= 7;
     })
@@ -236,7 +236,8 @@ const dueThisWeek = computed(() =>
 );
 const onTrack = computed(() =>
   allTasks.value.filter(
-    (t) => !!t.due_date && !isClosed(t) && daysUntil(t.due_date) >= 0
+    (t) =>
+      !!t.due_date && !isClosed(t) && !isOnHold(t) && daysUntil(t.due_date) >= 0
   )
 );
 

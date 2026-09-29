@@ -244,6 +244,19 @@
                           <span aria-hidden="true">·</span>
                           <span>{{ task.category }}</span>
                         </template>
+                        <template v-if="isOnHold(task)">
+                          <span aria-hidden="true">·</span>
+                          <span class="inline-flex min-w-0 items-center gap-1">
+                            <LucidePause
+                              class="size-3 shrink-0 text-warning"
+                              aria-hidden="true"
+                            />
+                            <span class="sr-only">{{ __("On hold:") }}</span>
+                            <span class="truncate">{{
+                              __(task.hold_reason || "On hold")
+                            }}</span>
+                          </span>
+                        </template>
                       </div>
                     </div>
                   </div>
@@ -260,23 +273,34 @@
                   </div>
 
                   <div class="hidden md:block">
-                    <span
-                      class="inline-flex items-center rounded-full bg-surface-gray-2 px-2 py-0.5 text-xs text-ink-gray-7"
-                    >
-                      {{ statusMeta(task.status).label }}
-                    </span>
+                    <TaskStatusBadge :status="task.status" />
                   </div>
 
                   <div
-                    class="flex items-center justify-end gap-1 text-sm tabular-nums"
+                    class="flex items-center justify-end gap-1 whitespace-nowrap text-sm tabular-nums"
                     :class="
-                      isOverdue(task)
-                        ? 'font-medium text-ink-gray-9'
+                      isOnHold(task)
+                        ? 'font-medium text-warning'
+                        : isOverdue(task)
+                        ? 'font-medium text-danger'
                         : 'text-ink-gray-5'
                     "
+                    :title="
+                      isOnHold(task) && task.due_date
+                        ? __(
+                            'Due {0}',
+                            dayjs(task.due_date).format('D MMM YYYY')
+                          )
+                        : undefined
+                    "
                   >
+                    <LucidePause
+                      v-if="isOnHold(task)"
+                      class="size-3.5"
+                      aria-hidden="true"
+                    />
                     <LucideAlarmClock
-                      v-if="isOverdue(task)"
+                      v-else-if="isOverdue(task)"
                       class="size-3.5"
                       aria-hidden="true"
                     />
@@ -295,15 +319,7 @@
       :options="{
         title: selectedTask?.subject,
         size: 'lg',
-        actions: selectedTask?.project
-          ? [
-              {
-                label: __('Open project board'),
-                variant: 'solid',
-                onClick: openBoard,
-              },
-            ]
-          : [],
+        actions: dialogActions,
       }"
     >
       <template #body-content>
@@ -321,6 +337,24 @@
           {{ __("Couldn't load this task.") }}
         </div>
         <div v-else-if="detail" class="flex flex-col gap-5">
+          <div
+            v-if="isOnHold(detail)"
+            class="flex flex-col gap-1 rounded-md bg-warning-soft px-3 py-2.5 text-sm text-warning"
+          >
+            <span class="flex items-center gap-2 font-medium">
+              <LucidePause class="size-4 shrink-0" aria-hidden="true" />
+              <span class="tabular-nums">{{
+                holdDurationLabel(holdDays(detail))
+              }}</span>
+              <template v-if="detail.hold_reason">
+                <span aria-hidden="true">·</span>
+                <span>{{ __(detail.hold_reason) }}</span>
+              </template>
+            </span>
+            <p v-if="detail.hold_note" class="pl-6 text-p-sm text-ink-gray-7">
+              {{ detail.hold_note }}
+            </p>
+          </div>
           <dl class="grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
             <div v-for="row in detailRows" :key="row.label">
               <dt class="text-xs text-ink-gray-5">{{ row.label }}</dt>
@@ -351,6 +385,9 @@
         </div>
       </template>
     </Dialog>
+
+    <HoldTaskDialog v-model:task="holdingTask" @held="onHoldChanged" />
+    <ResumeTaskDialog v-model:task="resumingTask" @resumed="onHoldChanged" />
   </div>
 </template>
 
@@ -358,23 +395,31 @@
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import { __ } from "@/translation";
 import { Button, Dialog, TextInput, createResource, dayjs } from "frappe-ui";
-import { computed, ref, watch, type Component } from "vue";
+import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
-import LucideCircle from "~icons/lucide/circle";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideCircleDot from "~icons/lucide/circle-dot";
-import LucideCircleX from "~icons/lucide/circle-x";
-import LucideEye from "~icons/lucide/eye";
 import LucideListTodo from "~icons/lucide/list-todo";
+import LucidePause from "~icons/lucide/pause";
+import LucidePlay from "~icons/lucide/play";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideSearch from "~icons/lucide/search";
 import LucideSearchX from "~icons/lucide/search-x";
-import LucideSignal from "~icons/lucide/signal";
-import LucideSignalHigh from "~icons/lucide/signal-high";
-import LucideSignalLow from "~icons/lucide/signal-low";
-import LucideSignalMedium from "~icons/lucide/signal-medium";
+import HoldTaskDialog from "./components/HoldTaskDialog.vue";
+import ResumeTaskDialog from "./components/ResumeTaskDialog.vue";
+import TaskStatusBadge from "./components/TaskStatusBadge.vue";
+import {
+  ON_HOLD,
+  holdDays,
+  holdDurationLabel,
+  isClosed,
+  isOnHold,
+  isOverdue,
+  priorityIcon,
+  taskStatusMeta,
+} from "./taskMeta";
 
 interface Task {
   name: string;
@@ -388,6 +433,9 @@ interface Task {
   due_date?: string;
   estimated_hours?: number;
   description?: string;
+  hold_reason?: string | null;
+  hold_note?: string | null;
+  hold_since?: string | null;
 }
 
 type Filter =
@@ -395,6 +443,7 @@ type Filter =
   | "Open"
   | "Working"
   | "Pending Review"
+  | "On Hold"
   | "Completed"
   | "Cancelled"
   | "Overdue";
@@ -413,26 +462,12 @@ const taskDetail = createResource({
   url: "helpdesk.tasky.api.get_task_detail",
 });
 
-const STATUS_META: Record<string, { label: string; icon: Component }> = {
-  Open: { label: __("Open"), icon: LucideCircle },
-  Working: { label: __("In progress"), icon: LucideCircleDot },
-  "Pending Review": { label: __("In review"), icon: LucideEye },
-  Completed: { label: __("Completed"), icon: LucideCircleCheck },
-  Cancelled: { label: __("Cancelled"), icon: LucideCircleX },
-};
-
-const PRIORITY_ICONS: Record<string, Component> = {
-  Urgent: LucideSignal,
-  High: LucideSignalHigh,
-  Medium: LucideSignalMedium,
-  Low: LucideSignalLow,
-};
-
 const tabs: { key: Filter; label: string }[] = [
   { key: "All", label: "All" },
   { key: "Open", label: "Open" },
   { key: "Working", label: "In progress" },
   { key: "Pending Review", label: "In review" },
+  { key: ON_HOLD, label: "On hold" },
   { key: "Overdue", label: "Overdue" },
   { key: "Completed", label: "Completed" },
   { key: "Cancelled", label: "Cancelled" },
@@ -465,26 +500,12 @@ function resetFilters() {
 }
 
 function statusMeta(status: string) {
-  return STATUS_META[status] ?? STATUS_META.Open;
-}
-
-function priorityIcon(priority?: string) {
-  return PRIORITY_ICONS[priority ?? "Low"] ?? LucideSignalLow;
-}
-
-function isClosed(task: Task) {
-  return task.status === "Completed" || task.status === "Cancelled";
-}
-
-function isOverdue(task: Task) {
-  return (
-    !!task.due_date &&
-    !isClosed(task) &&
-    dayjs(task.due_date).isBefore(dayjs(), "day")
-  );
+  const meta = taskStatusMeta(status);
+  return { label: __(meta.label), icon: meta.icon };
 }
 
 function dueLabel(task: Task) {
+  if (isOnHold(task)) return holdDurationLabel(holdDays(task));
   if (!task.due_date) return "—";
   const due = dayjs(task.due_date);
   if (isClosed(task)) return due.format("D MMM");
@@ -642,6 +663,47 @@ const detailRows = computed(() => {
     },
   ];
 });
+
+const holdingTask = ref<Task | null>(null);
+const resumingTask = ref<Task | null>(null);
+
+const dialogActions = computed(() => {
+  const d = detail.value;
+  const actions: Record<string, any>[] = [];
+  if (d && !taskDetail.loading && isOnHold(d)) {
+    actions.push({
+      label: __("Resume"),
+      icon: LucidePlay,
+      onClick: () => handOff(resumingTask),
+    });
+  } else if (d && !taskDetail.loading && !isClosed(d)) {
+    actions.push({
+      label: __("Put on hold"),
+      icon: LucidePause,
+      onClick: () => handOff(holdingTask),
+    });
+  }
+  if (selectedTask.value?.project) {
+    actions.push({
+      label: __("Open project board"),
+      variant: "solid",
+      onClick: openBoard,
+    });
+  }
+  return actions;
+});
+
+// close the detail first so only one modal holds focus
+function handOff(target: typeof holdingTask) {
+  const d = detail.value;
+  if (!d) return;
+  selectedTask.value = null;
+  target.value = d;
+}
+
+function onHoldChanged() {
+  tasks.reload();
+}
 
 function openTask(task: Task) {
   selectedTask.value = task;

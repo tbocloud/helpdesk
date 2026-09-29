@@ -55,6 +55,7 @@ scheduler_events = {
         "helpdesk.tasks.retry_pending_triages",
         "helpdesk.helpdesk.doctype.hd_content_post.hd_content_post.send_due_reminders",
         "helpdesk.work_reminders.send_task_reminders",
+        "helpdesk.work_reminders.send_hold_reminders",
     ],
     "hourly": [
         "helpdesk.work_reminders.send_ticket_reminders",

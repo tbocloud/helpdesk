@@ -39,11 +39,27 @@
         </template>
       </div>
       <div
+        v-if="onHold"
+        class="mt-0.5 flex min-w-0 items-center gap-1 text-xs text-ink-gray-6"
+        :title="task.hold_note || undefined"
+      >
+        <LucidePause class="size-3 shrink-0 text-warning" aria-hidden="true" />
+        <span class="sr-only">{{ __("On hold:") }}</span>
+        <span class="truncate">{{ __(task.hold_reason || "On hold") }}</span>
+      </div>
+      <div
         class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-ink-gray-5 md:hidden"
       >
         <span v-if="task.category">{{ task.category }}</span>
         <span
-          v-if="task.due_date"
+          v-if="onHold"
+          class="font-medium tabular-nums text-warning"
+          :title="dueTitle"
+        >
+          {{ holdLabel }}
+        </span>
+        <span
+          v-else-if="task.due_date"
           class="tabular-nums"
           :class="overdue ? 'font-medium text-danger' : ''"
         >
@@ -61,7 +77,15 @@
     </span>
 
     <span
-      v-if="task.due_date"
+      v-if="onHold"
+      class="hidden w-28 shrink-0 items-center justify-end gap-1 text-xs font-medium tabular-nums text-warning md:flex"
+      :title="dueTitle"
+    >
+      <LucidePause class="size-3.5" aria-hidden="true" />
+      {{ holdLabel }}
+    </span>
+    <span
+      v-else-if="task.due_date"
       class="hidden w-28 shrink-0 items-center justify-end gap-1 text-xs tabular-nums md:flex"
       :class="overdue ? 'font-medium text-danger' : 'text-ink-gray-5'"
     >
@@ -90,23 +114,71 @@
     <div class="hidden w-28 shrink-0 justify-end sm:flex">
       <TaskStatusBadge :status="task.status" />
     </div>
+
+    <div class="flex w-7 shrink-0 justify-center">
+      <Dropdown v-if="actions.length" :options="actions" align="end">
+        <Button
+          variant="ghost"
+          size="sm"
+          :aria-label="__('Actions for {0}', task.subject)"
+        >
+          <template #icon>
+            <LucideMoreHorizontal class="size-4" aria-hidden="true" />
+          </template>
+        </Button>
+      </Dropdown>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { UserAvatar } from "@/components";
 import { __ } from "@/translation";
+import { Button, Dropdown, dayjs } from "frappe-ui";
 import { computed } from "vue";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
 import LucideCalendar from "~icons/lucide/calendar";
 import LucideCheck from "~icons/lucide/check";
+import LucideMoreHorizontal from "~icons/lucide/more-horizontal";
+import LucidePause from "~icons/lucide/pause";
+import LucidePlay from "~icons/lucide/play";
 import LucideStar from "~icons/lucide/star";
-import { isOverdue, priorityIcon, shortDate } from "../taskMeta";
+import {
+  holdDays,
+  holdDurationLabel,
+  isClosed,
+  isOnHold,
+  isOverdue,
+  priorityIcon,
+  shortDate,
+} from "../taskMeta";
 import TaskStatusBadge from "./TaskStatusBadge.vue";
 
 const props = defineProps<{ task: Record<string, any> }>();
-const emit = defineEmits<{ toggle: [] }>();
+const emit = defineEmits<{ toggle: []; hold: []; resume: [] }>();
 
 const done = computed(() => props.task.status === "Completed");
 const overdue = computed(() => isOverdue(props.task));
+const onHold = computed(() => isOnHold(props.task));
+const holdLabel = computed(() => holdDurationLabel(holdDays(props.task)));
+const dueTitle = computed(() =>
+  props.task.due_date
+    ? __("Due {0}", dayjs(props.task.due_date).format("D MMM YYYY"))
+    : undefined
+);
+
+const actions = computed(() => {
+  if (onHold.value)
+    return [
+      { label: __("Resume"), icon: LucidePlay, onClick: () => emit("resume") },
+    ];
+  if (isClosed(props.task)) return [];
+  return [
+    {
+      label: __("Put on hold"),
+      icon: LucidePause,
+      onClick: () => emit("hold"),
+    },
+  ];
+});
 </script>

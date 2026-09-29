@@ -106,6 +106,16 @@
                   {{ __("overdue") }}
                 </span>
               </template>
+              <template v-if="stats.on_hold">
+                <span aria-hidden="true">·</span>
+                <span
+                  class="inline-flex items-center gap-1 font-medium text-warning"
+                >
+                  <LucidePause class="size-3.5" aria-hidden="true" />
+                  <span class="tabular-nums">{{ stats.on_hold }}</span>
+                  {{ __("on hold") }}
+                </span>
+              </template>
             </div>
             <div class="flex items-center gap-2">
               <div
@@ -229,7 +239,12 @@
                     :key="task.name"
                     class="border-b border-outline-gray-1 last:border-b-0"
                   >
-                    <ChecklistRow :task="task" @toggle="onToggleTask(task)" />
+                    <ChecklistRow
+                      :task="task"
+                      @toggle="onToggleTask(task)"
+                      @hold="holdingTask = task"
+                      @resume="resumingTask = task"
+                    />
                   </li>
                 </ul>
                 <p
@@ -266,7 +281,12 @@
                   :key="task.name"
                   class="border-b border-outline-gray-1 last:border-b-0"
                 >
-                  <ChecklistRow :task="task" @toggle="onToggleTask(task)" />
+                  <ChecklistRow
+                    :task="task"
+                    @toggle="onToggleTask(task)"
+                    @hold="holdingTask = task"
+                    @resume="resumingTask = task"
+                  />
                 </li>
               </ul>
             </section>
@@ -314,6 +334,9 @@
       </template>
     </Dialog>
 
+    <HoldTaskDialog v-model:task="holdingTask" @held="reloadAll" />
+    <ResumeTaskDialog v-model:task="resumingTask" @resumed="reloadAll" />
+
     <GenerateChecklistModal
       v-if="showChecklistModal"
       :show="showChecklistModal"
@@ -344,10 +367,13 @@ import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideClipboardList from "~icons/lucide/clipboard-list";
 import LucideInbox from "~icons/lucide/inbox";
 import LucideListChecks from "~icons/lucide/list-checks";
+import LucidePause from "~icons/lucide/pause";
 import LucidePlus from "~icons/lucide/plus";
 import ChecklistRow from "./components/ChecklistRow.vue";
 import GenerateChecklistModal from "./components/GenerateChecklistModal.vue";
+import HoldTaskDialog from "./components/HoldTaskDialog.vue";
 import ProjectNav from "./components/ProjectNav.vue";
+import ResumeTaskDialog from "./components/ResumeTaskDialog.vue";
 import TaskyState from "./components/TaskyState.vue";
 
 const props = defineProps<{ projectId: string }>();
@@ -430,6 +456,9 @@ const completeResource = createResource({
 function errorText(e: any, fallback: string) {
   return e?.messages?.length ? e.messages.join(" ") : e?.message || fallback;
 }
+
+const holdingTask = ref<Record<string, any> | null>(null);
+const resumingTask = ref<Record<string, any> | null>(null);
 
 const completingTask = ref<Record<string, any> | null>(null);
 const completeHours = ref(0);

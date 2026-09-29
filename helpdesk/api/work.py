@@ -19,6 +19,7 @@ OPEN_TASK_FILTER = ("not in", ["Completed", "Cancelled", "Template"])
 DUE_SOON_DAYS = 3
 LIST_LIMIT = 300
 WAITING_ON_TASK = "Waiting on Task"
+ON_HOLD = "On Hold"
 
 TASK_FIELDS = [
     "name",
@@ -29,6 +30,8 @@ TASK_FIELDS = [
     "exp_end_date",
     "is_key",
     "hd_ticket",
+    "hold_reason",
+    "hold_since",
     "_assign",
 ]
 TICKET_FIELDS = [
@@ -66,6 +69,8 @@ def _project_names(tasks) -> dict:
 
 def _task_item(task, project_names: dict) -> dict:
     deadline = getdate(task.exp_end_date) if task.exp_end_date else None
+    on_hold = task.status == ON_HOLD
+    today = getdate(nowdate())
     return {
         "kind": "task",
         "name": task.name,
@@ -76,8 +81,15 @@ def _task_item(task, project_names: dict) -> dict:
         "priority": task.priority,
         "deadline": str(deadline) if deadline else None,
         "is_key": bool(task.is_key),
-        "is_overdue": bool(deadline and deadline < getdate(nowdate())),
+        # the due date moves out by the days on hold, so a paused task isn't late
+        "is_overdue": bool(deadline and deadline < today and not on_hold),
         "hd_ticket": task.hd_ticket,
+        "hold_reason": task.hold_reason if on_hold else None,
+        "hold_days": (
+            (today - getdate(task.hold_since)).days
+            if on_hold and task.hold_since
+            else None
+        ),
         "assignees": _assignees(task._assign),
     }
 
@@ -188,7 +200,7 @@ def get_overview(
     items.sort(key=_sort_key)
 
     def due_soon(item):
-        if item["is_overdue"] or not item["deadline"]:
+        if item["is_overdue"] or not item["deadline"] or item["status"] == ON_HOLD:
             return False
         return getdate(item["deadline"]) <= soon
 
@@ -199,6 +211,7 @@ def get_overview(
         "waiting_on_task": [
             i for i in items if i["kind"] == "ticket" and i["status"] == WAITING_ON_TASK
         ],
+        "on_hold": [i for i in items if i["kind"] == "task" and i["status"] == ON_HOLD],
     }
     return {
         "buckets": buckets,
@@ -300,9 +313,9 @@ def create_task_from_ticket(
             or _("Ticket {0}").format(ticket),
             "description": description or "",
             "project": project,
-            "priority": "High"
-            if ticket_doc.priority in KEY_TICKET_PRIORITIES
-            else "Medium",
+            "priority": (
+                "High" if ticket_doc.priority in KEY_TICKET_PRIORITIES else "Medium"
+            ),
             "status": "Open",
             "exp_end_date": due_date or None,
             "is_key": 1 if is_key else 0,

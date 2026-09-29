@@ -49,9 +49,18 @@
             </span>
           </template>
           <span class="md:hidden" aria-hidden="true">·</span>
-          <span class="md:hidden">
+          <span class="md:hidden" :class="onHold ? 'min-w-0 max-w-full' : ''">
+            <TaskyBadge
+              v-if="onHold"
+              tone="warning"
+              :icon="LucidePause"
+              class="max-w-full"
+              :title="holdChip"
+            >
+              <span class="truncate">{{ holdChip }}</span>
+            </TaskyBadge>
             <TaskStatusBadge
-              v-if="item.kind === 'task'"
+              v-else-if="item.kind === 'task'"
               :status="item.status"
             />
             <TaskyBadge
@@ -86,8 +95,17 @@
       <span v-else class="text-sm text-ink-gray-5">{{ __("Unassigned") }}</span>
     </div>
 
-    <div class="hidden md:block">
-      <TaskStatusBadge v-if="item.kind === 'task'" :status="item.status" />
+    <div class="hidden min-w-0 md:block">
+      <TaskyBadge
+        v-if="onHold"
+        tone="warning"
+        :icon="LucidePause"
+        class="max-w-full"
+        :title="holdChip"
+      >
+        <span class="truncate">{{ holdChip }}</span>
+      </TaskyBadge>
+      <TaskStatusBadge v-else-if="item.kind === 'task'" :status="item.status" />
       <TaskyBadge
         v-else
         :tone="ticketTone"
@@ -97,6 +115,14 @@
     </div>
 
     <div
+      v-if="onHold"
+      class="flex items-center justify-end gap-1 whitespace-nowrap text-sm tabular-nums text-ink-gray-5"
+      :title="deadlineTitle ? __('Due {0}', deadlineTitle) : undefined"
+    >
+      {{ holdDuration }}
+    </div>
+    <div
+      v-else
       class="flex items-center justify-end gap-1 whitespace-nowrap text-sm tabular-nums"
       :class="deadline.overdue ? 'font-medium text-danger' : 'text-ink-gray-5'"
       :title="deadlineTitle"
@@ -120,13 +146,19 @@ import { RouterLink } from "vue-router";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
 import LucideCircleDot from "~icons/lucide/circle-dot";
 import LucideHourglass from "~icons/lucide/hourglass";
+import LucidePause from "~icons/lucide/pause";
 import LucideSquareCheck from "~icons/lucide/square-check";
 import LucideStar from "~icons/lucide/star";
 import LucideTicket from "~icons/lucide/ticket";
 import TaskStatusBadge from "@/pages/tasky/components/TaskStatusBadge.vue";
 import TaskyBadge from "@/pages/tasky/components/TaskyBadge.vue";
 import type { Tone } from "@/pages/tasky/taskMeta";
-import { deadlineInfo, itemRoute, type WorkItem } from "../workMeta";
+import {
+  deadlineInfo,
+  isHeldTask,
+  itemRoute,
+  type WorkItem,
+} from "../workMeta";
 
 const props = defineProps<{
   item: WorkItem;
@@ -137,6 +169,18 @@ const userStore = useUserStore();
 
 const to = computed(() => itemRoute(props.item));
 const deadline = computed(() => deadlineInfo(props.item));
+
+const onHold = computed(() => isHeldTask(props.item));
+const holdChip = computed(() =>
+  props.item.hold_reason
+    ? __("On hold · {0}", __(props.item.hold_reason))
+    : __("On hold")
+);
+const holdDuration = computed(() => {
+  const days = props.item.hold_days ?? 0;
+  if (days <= 0) return __("Since today");
+  return days === 1 ? __("1 day") : __("{0} days", String(days));
+});
 
 const context = computed(() =>
   props.item.kind === "ticket"

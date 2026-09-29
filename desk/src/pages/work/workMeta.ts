@@ -16,6 +16,14 @@ export interface WorkItem {
   project_name?: string | null;
   hd_ticket?: string | null;
   customer?: string | null;
+  /** Set only while a task is On Hold. */
+  hold_reason?: string | null;
+  /** Days since the hold began; null unless the task is On Hold. */
+  hold_days?: number | null;
+}
+
+export function isHeldTask(item: WorkItem) {
+  return item.kind === "task" && item.status === "On Hold";
 }
 
 export interface DeadlineInfo {

@@ -233,3 +233,99 @@ class TestReminders(WorkControlCase):
         self.assertTrue(
             any("SLA breached" in s for s in self.notified(manager, ticket.name))
         )
+
+
+class TestTaskHold(WorkControlCase):
+    def hold(self, task, reason="Laptop / system issue", days_ago=0):
+        self.as_user(
+            DEV,
+            lambda: tasky.hold_task(
+                task=task, reason=reason, note="Laptop sent for repair"
+            ),
+        )
+        if days_ago:
+            frappe.db.set_value(
+                "Task", task, "hold_since", add_days(nowdate(), -days_ago)
+            )
+
+    def test_hold_needs_a_reason(self):
+        task = self.make_task("Build sales dashboard", add_days(nowdate(), 5))
+        with self.assertRaises(frappe.ValidationError):
+            self.as_user(DEV, lambda: tasky.hold_task(task=task, reason=""))
+
+    def test_assignee_holds_and_lead_hears_about_it(self):
+        task = self.make_task("Configure payroll", add_days(nowdate(), -1))
+        frappe.db.set_value("Task", task, "status", "Working")
+        self.hold(task)
+
+        doc = frappe.get_doc("Task", task)
+        self.assertEqual(doc.status, "On Hold")
+        self.assertEqual(str(doc.hold_since), nowdate())
+        self.assertEqual(doc.hold_previous_status, "Working")
+        self.assertTrue(any("On hold since" in s for s in self.notified(LEAD, task)))
+
+        item = next(
+            i for i in self.as_user(DEV, work.get_my_work)["items"] if i["name"] == task
+        )
+        self.assertFalse(item["is_overdue"])
+        self.assertEqual(item["hold_reason"], "Laptop / system issue")
+
+    def test_resume_moves_the_due_date_by_the_days_on_hold(self):
+        due = add_days(nowdate(), 1)
+        task = self.make_task("Import item master", due)
+        self.hold(task, days_ago=2)
+
+        self.as_user(DEV, lambda: tasky.resume_task(task=task))
+
+        doc = frappe.get_doc("Task", task)
+        self.assertEqual(doc.status, "Open")
+        self.assertEqual(str(doc.exp_end_date), str(add_days(due, 2)))
+        self.assertEqual(doc.hold_days_total, 2)
+        self.assertIsNone(doc.hold_since)
+        comments = frappe.get_all(
+            "Comment",
+            filters={"reference_doctype": "Task", "reference_name": task},
+            pluck="content",
+        )
+        self.assertTrue(any("Due date moved" in c for c in comments))
+
+    def test_resume_can_keep_the_due_date(self):
+        due = add_days(nowdate(), 1)
+        task = self.make_task("Set up email alerts", due)
+        self.hold(task, days_ago=2)
+
+        self.as_user(DEV, lambda: tasky.resume_task(task=task, extend_due_date=False))
+
+        self.assertEqual(
+            str(frappe.db.get_value("Task", task, "exp_end_date")), str(due)
+        )
+
+    def test_board_moves_cannot_skip_the_reason_but_can_resume(self):
+        task = self.make_task("Print formats", add_days(nowdate(), 3))
+        with self.assertRaises(frappe.ValidationError):
+            self.as_user(DEV, lambda: tasky.move_task(task=task, new_status="On Hold"))
+
+        self.hold(task, days_ago=1)
+        self.as_user(DEV, lambda: tasky.move_task(task=task, new_status="Completed"))
+        doc = frappe.get_doc("Task", task)
+        self.assertEqual(doc.status, "Completed")
+        self.assertEqual(doc.hold_days_total, 1)
+
+    def test_held_tasks_skip_due_reminders_and_escalate_when_stuck(self):
+        task = self.make_task("Bank reconciliation", add_days(nowdate(), -4))
+        self.hold(task, days_ago=4)
+
+        work_reminders.send_task_reminders()
+        work_reminders.send_hold_reminders()
+        work_reminders.send_hold_reminders()
+
+        self.assertFalse(any("Overdue" in s for s in self.notified(DEV, task)))
+        stuck = [s for s in self.notified(PM, task) if "On hold for over" in s]
+        self.assertEqual(len(stuck), 1)
+
+    def test_overview_lists_held_work(self):
+        task = self.make_task("Tally migration", add_days(nowdate(), -1))
+        self.hold(task)
+        result = self.as_user(PM, lambda: work.get_overview(project=self.project))
+        self.assertIn(task, {i["name"] for i in result["buckets"]["on_hold"]})
+        self.assertNotIn(task, {i["name"] for i in result["buckets"]["overdue"]})

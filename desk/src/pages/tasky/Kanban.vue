@@ -96,7 +96,11 @@
                   :is="taskStatusMeta(col.key).icon"
                   class="size-4"
                   :class="
-                    col.key === 'Working' ? 'text-info' : 'text-ink-gray-5'
+                    col.key === 'Working'
+                      ? 'text-info'
+                      : col.key === ON_HOLD
+                      ? 'text-warning'
+                      : 'text-ink-gray-5'
                   "
                   aria-hidden="true"
                 />
@@ -123,6 +127,8 @@
                 {{
                   col.key === "Completed"
                     ? __("Drop a task here to complete it")
+                    : col.key === ON_HOLD
+                    ? __("Drop a task here to put it on hold")
                     : __("No tasks")
                 }}
               </div>
@@ -179,9 +185,37 @@
                   </template>
                 </div>
 
+                <div
+                  v-if="isOnHold(task)"
+                  class="mt-2 flex items-center gap-2 rounded-md bg-warning-soft py-1 pl-2 pr-1 text-warning"
+                  :title="task.hold_note || undefined"
+                >
+                  <LucidePause class="size-3.5 shrink-0" aria-hidden="true" />
+                  <span class="sr-only">{{ __("On hold:") }}</span>
+                  <span class="min-w-0 truncate text-xs font-medium">{{
+                    __(task.hold_reason || "On hold")
+                  }}</span>
+                  <span
+                    class="shrink-0 font-mono text-xs tabular-nums"
+                    :aria-label="holdDurationLabel(holdDays(task))"
+                    :title="holdDurationLabel(holdDays(task))"
+                  >
+                    {{ __("{0}d", String(holdDays(task))) }}
+                  </span>
+                  <button
+                    type="button"
+                    class="ml-auto flex size-6 shrink-0 items-center justify-center rounded transition-colors hover:bg-surface-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+                    :aria-label="__('Resume {0}', task.subject)"
+                    :title="__('Resume')"
+                    @click.stop="resumingTask = task"
+                  >
+                    <LucidePlay class="size-3.5" aria-hidden="true" />
+                  </button>
+                </div>
+
                 <!-- Timer -->
                 <div
-                  v-if="
+                  v-else-if="
                     timers[task.name]?.running && !timers[task.name]?.paused
                   "
                   class="mt-2 flex items-center gap-2 rounded-md bg-success-soft py-1 pl-2 pr-1 text-success"
@@ -278,6 +312,9 @@
       </div>
     </div>
 
+    <HoldTaskDialog v-model:task="holdingTask" @held="onHoldChanged" />
+    <ResumeTaskDialog v-model:task="resumingTask" @resumed="onHoldChanged" />
+
     <Dialog
       v-model:open="completeDialogOpen"
       :title="__('Complete task')"
@@ -350,10 +387,16 @@ import LucidePlay from "~icons/lucide/play";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideStar from "~icons/lucide/star";
 import LucideTimer from "~icons/lucide/timer";
+import HoldTaskDialog from "./components/HoldTaskDialog.vue";
 import ProjectNav from "./components/ProjectNav.vue";
+import ResumeTaskDialog from "./components/ResumeTaskDialog.vue";
 import TaskyState from "./components/TaskyState.vue";
 import {
+  ON_HOLD,
+  holdDays,
+  holdDurationLabel,
   initials,
+  isOnHold,
   isOverdue,
   priorityIcon,
   shortDate,
@@ -366,6 +409,7 @@ const columnList = [
   { key: "Open" },
   { key: "Working" },
   { key: "Pending Review" },
+  { key: ON_HOLD },
   { key: "Completed" },
   { key: "Cancelled" },
 ];
@@ -388,6 +432,9 @@ interface Task {
   custom_timer_start?: string;
   custom_timer_elapsed?: number;
   is_key?: boolean;
+  hold_reason?: string | null;
+  hold_note?: string | null;
+  hold_since?: string | null;
 }
 
 const kanban = createResource({
@@ -418,6 +465,16 @@ const completeResource = createResource({
     kanban.reload();
   },
 });
+
+const holdingTask = ref<Task | null>(null);
+const resumingTask = ref<Task | null>(null);
+
+// Holding stops the server timer and resuming may start it or move the due date,
+// so drop local timer state and take the server's view.
+function onHoldChanged(task: { name: string }) {
+  delete timers.value[task.name];
+  kanban.reload();
+}
 
 function errorText(e: any, fallback: string) {
   return e?.messages?.length ? e.messages.join(" ") : e?.message || fallback;
@@ -584,8 +641,21 @@ function onDrop(e: DragEvent, newStatus: string) {
   }
   if (!task || task.status === newStatus || task.status === "Completed") return;
 
+  // a hold needs a reason, so the move happens only once the dialog is submitted
+  if (newStatus === ON_HOLD) {
+    dropTarget.value = null;
+    if (task.status === "Cancelled") {
+      toast.error(__("Cancelled tasks can't be put on hold."));
+      return;
+    }
+    holdingTask.value = task;
+    return;
+  }
+
   const fromWorking = task.status === "Working";
   const toWorking = newStatus === "Working";
+  const fromHold = isOnHold(task);
+  const movesDueDate = fromHold && !!task.due_date && holdDays(task) > 0;
 
   let targetIdx = -1;
   if (dropTarget.value && columnTasks.value[newStatus]) {
@@ -607,6 +677,25 @@ function onDrop(e: DragEvent, newStatus: string) {
   }
 
   moveToColumn(task, newStatus, targetIdx);
+
+  if (fromHold) {
+    const name = task.name;
+    moveTaskApi.submit(
+      { task: name, new_status: newStatus },
+      {
+        onSuccess() {
+          toast.success(
+            movesDueDate
+              ? __("Task resumed. The days on hold were added to its due date.")
+              : __("Task resumed")
+          );
+          onHoldChanged({ name });
+        },
+      }
+    );
+    dropTarget.value = null;
+    return;
+  }
 
   if (toWorking) {
     startOrResumeTimer(task);

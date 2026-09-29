@@ -66,18 +66,21 @@
         </TaskyState>
 
         <template v-else>
-          <!-- Buckets -->
-          <div class="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
+          <!-- Buckets; with five tiles in two columns the last one spans the row -->
+          <div
+            class="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5"
+          >
             <button
               v-for="tile in tiles"
               :key="tile.key"
               type="button"
               class="flex flex-col gap-3 rounded-lg border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
-              :class="
+              :class="[
                 activeBucket === tile.key
                   ? 'border-outline-gray-4 bg-surface-gray-1'
-                  : 'border-outline-gray-2 bg-surface-base hover:border-outline-gray-3'
-              "
+                  : 'border-outline-gray-2 bg-surface-base hover:border-outline-gray-3',
+                tile.key === 'on_hold' ? 'col-span-2 sm:col-span-1' : '',
+              ]"
               :aria-pressed="activeBucket === tile.key"
               :aria-controls="listId"
               @click="activeBucket = tile.key"
@@ -189,13 +192,14 @@ import LucideCalendarClock from "~icons/lucide/calendar-clock";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideHourglass from "~icons/lucide/hourglass";
+import LucidePause from "~icons/lucide/pause";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideStar from "~icons/lucide/star";
 import LucideX from "~icons/lucide/x";
 import WorkItemRow from "./components/WorkItemRow.vue";
 import { itemKey, type WorkItem } from "./workMeta";
 
-type Bucket = "overdue" | "due_soon" | "key" | "waiting_on_task";
+type Bucket = "overdue" | "due_soon" | "key" | "waiting_on_task" | "on_hold";
 
 interface OverviewData {
   buckets: Record<Bucket, WorkItem[]>;
@@ -206,7 +210,13 @@ const route = useRoute();
 const router = useRouter();
 const listId = `work-overview-list-${useId()}`;
 
-const BUCKETS: Bucket[] = ["overdue", "due_soon", "key", "waiting_on_task"];
+const BUCKETS: Bucket[] = [
+  "overdue",
+  "due_soon",
+  "key",
+  "waiting_on_task",
+  "on_hold",
+];
 
 function queryValue(key: string) {
   const value = route.query[key];
@@ -313,6 +323,14 @@ const tiles = computed<
     empty: __("No tickets are waiting on a task."),
     icon: LucideHourglass,
     iconClass: "text-ink-gray-5",
+  },
+  {
+    key: "on_hold",
+    label: __("On hold"),
+    hint: __("Paused tasks; they don't count as overdue"),
+    empty: __("No tasks are on hold."),
+    icon: LucidePause,
+    iconClass: "text-warning",
   },
 ]);
 

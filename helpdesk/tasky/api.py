@@ -15,6 +15,7 @@ from helpdesk.tasky.permissions import (
 
 # member roles a project lead is rotated among
 LEAD_ROTATION_ROLES = ("Developer",)
+ON_HOLD = "On Hold"
 
 
 def _resolve_project(project, ptype="read"):
@@ -59,6 +60,10 @@ def _format_task(task):
         "custom_timer_elapsed": task.get("custom_timer_elapsed") or 0,
         "is_key": bool(task.get("is_key")),
         "hd_ticket": task.get("hd_ticket"),
+        "hold_reason": task.get("hold_reason"),
+        "hold_note": task.get("hold_note"),
+        "hold_since": task.get("hold_since"),
+        "hold_days_total": task.get("hold_days_total") or 0,
     }
 
 
@@ -100,7 +105,9 @@ def complete_task(task: str, hours_worked: float | str = 0, notes: str = ""):
             ts.insert()
             try:
                 ts.submit()
-            except Exception:  # noqa: BLE001 - keep the draft timesheet, but say why it wasn't submitted
+            except (
+                Exception
+            ):  # noqa: BLE001 - keep the draft timesheet, but say why it wasn't submitted
                 frappe.log_error(
                     title=f"Timesheet submit failed for {ts.name}",
                     message=frappe.get_traceback(),
@@ -242,9 +249,11 @@ def generate_checklist(project: str, template: str):
     for ttask in template_doc.tasks:
         task_start, task_end = _compute_due_date(
             project_start,
-            phases_seen.index(ttask.phase_name)
-            if ttask.phase_name in phases_seen
-            else 0,
+            (
+                phases_seen.index(ttask.phase_name)
+                if ttask.phase_name in phases_seen
+                else 0
+            ),
             ttask.sort_order,
         )
 
@@ -375,6 +384,8 @@ def get_my_tasks(
             "custom_estimated_hours",
             "is_key",
             "hd_ticket",
+            "hold_reason",
+            "hold_since",
             "_assign",
         ],
         order_by="custom_phase asc",
@@ -405,11 +416,56 @@ def get_task_detail(task: str):
 def update_task_status(task: str, status: str):
     """Update a task's status."""
     frappe.has_permission("Task", "write", str(task), throw=True)
+    if _changes_hold(str(task), str(status)):
+        return {"status": _save_status(str(task), str(status))}
     frappe.db.set_value("Task", str(task), "status", str(status))
     if str(status) == "Completed":
         # set_value skips the controller, so hand the linked ticket back here
         frappe.get_doc("Task", str(task)).notify_ticket_task_completed()
     return {"status": str(status)}
+
+
+def _changes_hold(task: str, new_status: str) -> bool:
+    """Holds need a reason and resuming moves the due date, so they go through the controller."""
+    if new_status == ON_HOLD:
+        frappe.throw(_("Use Put on hold so you can say why the task is on hold."))
+    return frappe.db.get_value("Task", task, "status") == ON_HOLD
+
+
+def _save_status(task: str, status: str) -> str:
+    doc = frappe.get_doc("Task", task)
+    doc.status = status
+    doc.save()
+    return doc.status
+
+
+@frappe.whitelist()
+def hold_task(task: str, reason: str, note: str = "") -> dict:
+    """Pause a task (e.g. a broken laptop); it stops counting as overdue until resumed."""
+    doc = frappe.get_doc("Task", str(task))
+    doc.check_permission("write")
+    if doc.status in ("Completed", "Cancelled"):
+        frappe.throw(_("Completed or cancelled tasks can't be put on hold."))
+    if doc.status == ON_HOLD:
+        frappe.throw(_("This task is already on hold."))
+    doc.status = ON_HOLD
+    doc.hold_reason = reason
+    doc.hold_note = (note or "").strip()
+    doc.save()
+    return _format_task(_task_dict(doc))
+
+
+@frappe.whitelist()
+def resume_task(task: str, extend_due_date: bool = True) -> dict:
+    """End a hold; by default the days on hold are added to the due date."""
+    doc = frappe.get_doc("Task", str(task))
+    doc.check_permission("write")
+    if doc.status != ON_HOLD:
+        frappe.throw(_("This task isn't on hold."))
+    doc.status = doc.hold_previous_status or "Open"
+    doc.flags.extend_due_date = bool(extend_due_date)
+    doc.save()
+    return _format_task(_task_dict(doc))
 
 
 @frappe.whitelist()
@@ -435,6 +491,8 @@ def get_project_dashboard(project: str):
             "custom_estimated_hours",
             "is_key",
             "hd_ticket",
+            "hold_reason",
+            "hold_since",
             "_assign",
             "creation",
         ],
@@ -454,7 +512,7 @@ def get_project_dashboard(project: str):
         for t in tasks
         if t.exp_end_date
         and frappe.utils.getdate(t.exp_end_date) < today
-        and t.status not in ("Completed", "Cancelled")
+        and t.status not in ("Completed", "Cancelled", ON_HOLD)
     )
     progress_pct = round((completed / total_tasks * 100), 1) if total_tasks > 0 else 0
 
@@ -492,6 +550,7 @@ def get_project_dashboard(project: str):
             "in_progress": count("Working"),
             "pending": count("Open"),
             "reviewing": count("Pending Review"),
+            "on_hold": count(ON_HOLD),
             "cancelled": cancelled,
             "blocked": cancelled,
             "overdue": overdue,
@@ -519,6 +578,8 @@ def get_phase_tasks(project: str, phase: str):
             "custom_estimated_hours",
             "is_key",
             "hd_ticket",
+            "hold_reason",
+            "hold_since",
             "_assign",
         ],
         order_by="subject asc",
@@ -544,6 +605,8 @@ def get_kanban_tasks(project: str):
             "custom_estimated_hours",
             "is_key",
             "hd_ticket",
+            "hold_reason",
+            "hold_since",
             "_assign",
             "custom_timer_start",
             "custom_timer_elapsed",
@@ -555,6 +618,7 @@ def get_kanban_tasks(project: str):
         "Open": [],
         "Working": [],
         "Pending Review": [],
+        ON_HOLD: [],
         "Completed": [],
         "Cancelled": [],
     }
@@ -682,18 +746,20 @@ def get_project_detail(project: str):
         "customer": doc.customer,
         "status": doc.status,
         "priority": doc.priority,
-        "expected_start_date": str(doc.expected_start_date)
-        if doc.expected_start_date
-        else None,
-        "expected_end_date": str(doc.expected_end_date)
-        if doc.expected_end_date
-        else None,
-        "users": [
-            {"user": u.user, "full_name": u.full_name, "role": u.custom_role}
-            for u in doc.users
-        ]
-        if doc.users
-        else [],
+        "expected_start_date": (
+            str(doc.expected_start_date) if doc.expected_start_date else None
+        ),
+        "expected_end_date": (
+            str(doc.expected_end_date) if doc.expected_end_date else None
+        ),
+        "users": (
+            [
+                {"user": u.user, "full_name": u.full_name, "role": u.custom_role}
+                for u in doc.users
+            ]
+            if doc.users
+            else []
+        ),
         "can_manage": can_manage_project(doc.name),
         "can_change_lead": is_project_owner(doc.name),
         "project_lead": doc.project_lead,
@@ -914,6 +980,8 @@ def move_task(task: str, new_status: str):
 
     if old_status == new_status:
         return {"status": old_status, "elapsed": 0}
+    if _changes_hold(task_id, new_status):
+        return {"status": _save_status(task_id, new_status), "elapsed": 0}
 
     # Leaving Working: accumulate elapsed from running timer
     if old_status == "Working" and timer_start:
@@ -1041,7 +1109,9 @@ def create_timesheet(
     ts.insert()
     try:
         ts.submit()
-    except Exception:  # noqa: BLE001 - keep the draft timesheet, but say why it wasn't submitted
+    except (
+        Exception
+    ):  # noqa: BLE001 - keep the draft timesheet, but say why it wasn't submitted
         frappe.log_error(
             title=f"Timesheet submit failed for {ts.name}",
             message=frappe.get_traceback(),

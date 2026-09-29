@@ -121,7 +121,7 @@
 
           <!-- Stats -->
           <div
-            class="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6"
+            class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7"
           >
             <component
               :is="card.to ? 'router-link' : 'div'"
@@ -136,13 +136,15 @@
                 <component
                   :is="card.icon"
                   class="size-4"
-                  :class="card.alert ? 'text-danger' : 'text-ink-gray-5'"
+                  :class="
+                    card.alert ? TONE_TEXT[card.alert] : 'text-ink-gray-5'
+                  "
                   aria-hidden="true"
                 />
               </div>
               <span
                 class="text-2xl-semibold tabular-nums"
-                :class="card.alert ? 'text-danger' : 'text-ink-gray-9'"
+                :class="card.alert ? TONE_TEXT[card.alert] : 'text-ink-gray-9'"
               >
                 <span
                   v-if="!dashboard.data"
@@ -329,8 +331,8 @@
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import { __ } from "@/translation";
 import { Button, createResource, dayjs } from "frappe-ui";
-import { computed, watch } from "vue";
-import { useRouter } from "vue-router";
+import { computed, watch, type Component } from "vue";
+import { useRouter, type RouteLocationRaw } from "vue-router";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
 import LucideBuilding2 from "~icons/lucide/building-2";
 import LucideCalendar from "~icons/lucide/calendar";
@@ -341,6 +343,7 @@ import LucideCircleX from "~icons/lucide/circle-x";
 import LucideEye from "~icons/lucide/eye";
 import LucideGanttChartSquare from "~icons/lucide/gantt-chart-square";
 import LucideListTodo from "~icons/lucide/list-todo";
+import LucidePause from "~icons/lucide/pause";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import ProjectNav from "./components/ProjectNav.vue";
 import TaskStatusBadge from "./components/TaskStatusBadge.vue";
@@ -410,7 +413,18 @@ const dateRange = computed(() => {
   return "";
 });
 
-const statCards = computed(() => {
+// Full class strings so Tailwind's scanner picks them up.
+const TONE_TEXT = { danger: "text-danger", warning: "text-warning" } as const;
+
+interface StatCard {
+  label: string;
+  icon: Component;
+  value: number;
+  alert?: keyof typeof TONE_TEXT;
+  to?: RouteLocationRaw;
+}
+
+const statCards = computed<StatCard[]>(() => {
   const stats = dashboard.data?.stats ?? {};
   const overdueRoute = {
     name: "TaskyOverdue",
@@ -433,8 +447,15 @@ const statCards = computed(() => {
       label: __("Overdue"),
       icon: LucideAlarmClock,
       value: stats.overdue ?? 0,
-      alert: (stats.overdue ?? 0) > 0,
+      alert: (stats.overdue ?? 0) > 0 ? "danger" : undefined,
       to: overdueRoute,
+    },
+    {
+      label: __("On hold"),
+      icon: LucidePause,
+      value: stats.on_hold ?? 0,
+      alert: (stats.on_hold ?? 0) > 0 ? "warning" : undefined,
+      to: { name: "TaskyKanban", params: { projectId: props.projectId } },
     },
     {
       label: __("Cancelled"),
