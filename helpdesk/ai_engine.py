@@ -274,7 +274,12 @@ def call_haiku(system_prompt, user_message, ticket_name=None):
             ],
             messages=[{"role": "user", "content": user_message}],
         )
-        text = response.content[0].text
+        # thinking-capable models (e.g. Kimi) may put a thinking block first
+        text = "".join(
+            block.text
+            for block in response.content
+            if getattr(block, "type", "text") == "text"
+        )
         usage = response.usage
 
     log_usage(haiku_model, usage, ticket_name=ticket_name)

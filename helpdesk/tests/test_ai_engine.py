@@ -92,3 +92,34 @@ class TestTriageUsesTriageProvider(FrappeTestCase):
 
         self.assertEqual(result["response"], {"category": "Stock"})
         self.assertNotIn("investigation", layers)
+
+
+class TestThinkingBlocks(FrappeTestCase):
+    def test_call_haiku_skips_thinking_blocks(self):
+        """Kimi and other thinking models can reply with a thinking block before the text."""
+        from helpdesk import ai_engine
+
+        response = MagicMock()
+        response.content = [
+            MagicMock(type="thinking", thinking="let me think"),
+            MagicMock(type="text", text='{"category": "Billing"}'),
+        ]
+        response.usage = MagicMock(input_tokens=10, output_tokens=5)
+
+        with (
+            patch.object(
+                ai_engine,
+                "get_provider_config",
+                return_value=("Anthropic Compatible", "https://x", "key"),
+            ),
+            patch.object(
+                ai_engine, "get_models", return_value=("kimi-k2.6", "kimi-k3")
+            ),
+            patch.object(ai_engine, "log_usage"),
+            patch.object(ai_engine, "estimate_cost", return_value=0),
+            patch.object(ai_engine.anthropic, "Anthropic") as client_cls,
+        ):
+            client_cls.return_value.messages.create.return_value = response
+            result = ai_engine.call_haiku("sys", "user")
+
+        self.assertEqual(result["response"], {"category": "Billing"})
