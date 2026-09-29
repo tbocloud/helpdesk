@@ -360,6 +360,7 @@ def create_task_from_ticket(
     """Turn a ticket that needs project work into a task; the ticket waits until it's done."""
     from helpdesk.tasky.api import (
         _assign_user,
+        _estimate_if_undated,
         _format_task,
         _is_project_member,
         _task_dict,
@@ -405,6 +406,7 @@ def create_task_from_ticket(
     task.insert(ignore_permissions=True)
     if assigned_to:
         _assign_user(task, assigned_to, ignore_permissions=True)
+    _estimate_if_undated(task)
     task.reload()
 
     if frappe.db.exists("HD Ticket Status", WAITING_ON_TASK):

@@ -65,6 +65,8 @@ def _format_task(task):
         "hold_since": task.get("hold_since"),
         "hold_days_total": task.get("hold_days_total") or 0,
         "is_milestone": bool(task.get("is_milestone")),
+        "ai_estimated": bool(task.get("ai_estimated")),
+        "estimate_note": task.get("estimate_note"),
         "slip_count": task.get("slip_count") or 0,
         **_dependency_info(task.get("depends_on_task")),
     }
@@ -161,6 +163,7 @@ def create_project(
     customer: str | None = None,
     project_lead: str | None = None,
     review_before_done: bool = False,
+    project_type: str | None = None,
 ):
     """Create a new ERPNext Project with optional team members and lead."""
     import json
@@ -182,6 +185,7 @@ def create_project(
             "expected_end_date": expected_end_date or None,
             "status": "Open",
             "review_before_done": 1 if review_before_done else 0,
+            "project_type": project_type or None,
         }
     )
     for m in members_list:
@@ -322,6 +326,14 @@ def _add_member_for_assignment(project: str, user: str):
     )
 
 
+def _estimate_if_undated(task_doc):
+    """No due date given: the AI sets one in the background (see helpdesk.task_estimates)."""
+    from helpdesk.task_estimates import queue_estimate, should_estimate
+
+    if should_estimate(task_doc):
+        queue_estimate(task_doc)
+
+
 def _assign_user(task_doc, user, ignore_permissions=False):
     """Assign an inserted Task to a user.
 
@@ -387,6 +399,7 @@ def add_task(
     )
     doc.insert()
     _assign_user(doc, assigned_to)
+    _estimate_if_undated(doc)
     doc.reload()
     return _format_task(_task_dict(doc))
 
@@ -918,6 +931,7 @@ def get_project_detail(project: str):
             else None
         ),
         "review_before_done": bool(doc.review_before_done),
+        "project_type": doc.project_type,
     }
 
 
@@ -989,6 +1003,7 @@ def update_project(
     members: str | list | None = None,
     project_lead: str | None = None,
     review_before_done: bool | None = None,
+    project_type: str | None = None,
 ):
     """Edit a project's details, members and lead. Project owners only."""
     project = _resolve_project(str(project))
@@ -1017,6 +1032,8 @@ def update_project(
         doc.priority = priority
     if review_before_done is not None:
         doc.review_before_done = 1 if review_before_done else 0
+    if project_type is not None:
+        doc.project_type = project_type or None
 
     if members is not None:
         members_list = json.loads(members) if isinstance(members, str) else members

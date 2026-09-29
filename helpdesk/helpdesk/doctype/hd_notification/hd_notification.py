@@ -1,3 +1,5 @@
+import html
+
 import frappe
 from frappe import _
 from frappe.model.document import Document
@@ -114,13 +116,17 @@ class HDNotification(Document):
             return
         if not is_email_notifications_enabled(self.user_to):
             return
+        text = html.unescape(frappe.utils.strip_html(self.message or ""))
         try:
             frappe.sendmail(
                 recipients=self.user_to,
-                subject=frappe.utils.strip_html(self.message),
+                # multi-line reminders (the morning brief) use their first line as subject
+                subject=text.split("\n", 1)[0],
                 template="new_notification",
                 args={
-                    "body_content": self.message,
+                    "body_content": frappe.utils.escape_html(text).replace(
+                        "\n", "<br>"
+                    ),
                     "doc_link": frappe.utils.get_url(
                         "/helpdesk" + (self.link or "/my-work")
                     ),

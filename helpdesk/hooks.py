@@ -48,6 +48,10 @@ scheduler_events = {
             "helpdesk.tasks.sync_conversations",
             "helpdesk.content_sync.sync_content_approvals",
         ],
+        # 10:00 every day: each assignee's morning brief
+        "0 10 * * *": [
+            "helpdesk.morning_brief.send_morning_briefs",
+        ],
         # Monday 08:00: last week's summary per customer
         "0 8 * * 1": [
             "helpdesk.work_summary.send_weekly_summaries",

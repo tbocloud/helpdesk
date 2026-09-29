@@ -45,7 +45,7 @@
       <div>
         <div
           v-if="n.notification_type === 'Reminder'"
-          class="mb-2 leading-5 text-ink-gray-8"
+          class="mb-2 whitespace-pre-line leading-5 text-ink-gray-8"
         >
           {{ n.message }}
         </div>

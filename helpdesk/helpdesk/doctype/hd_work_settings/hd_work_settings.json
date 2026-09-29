@@ -1,0 +1,73 @@
+{
+	"actions": [],
+	"creation": "2026-09-29 23:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"ai_task_estimates",
+		"max_task_days",
+		"weekly_off",
+		"brief_section",
+		"morning_brief"
+	],
+	"fields": [
+		{
+			"fieldname": "ai_task_estimates",
+			"fieldtype": "Check",
+			"label": "AI sets the time for new tasks",
+			"default": "1",
+			"description": "When a task is created without a due date, the AI estimates the working days and hours from the task, the project type and how long similar tasks took."
+		},
+		{
+			"fieldname": "max_task_days",
+			"fieldtype": "Int",
+			"label": "Longest estimate (working days)",
+			"default": "15",
+			"depends_on": "ai_task_estimates"
+		},
+		{
+			"fieldname": "weekly_off",
+			"fieldtype": "Select",
+			"label": "Weekly Off",
+			"default": "Sunday",
+			"options": "Sunday\nFriday\nSaturday and Sunday\nFriday and Saturday",
+			"description": "Skipped when counting working days, and no morning brief is sent on these days."
+		},
+		{
+			"fieldname": "brief_section",
+			"fieldtype": "Section Break",
+			"label": "Morning Brief"
+		},
+		{
+			"fieldname": "morning_brief",
+			"fieldtype": "Check",
+			"label": "Send each assignee a morning brief at 10:00",
+			"default": "1",
+			"description": "Overdue work, what's due today and soon, key and at-risk items, new tasks and SLA deadlines, in the notification panel and Teams or email."
+		}
+	],
+	"index_web_pages_for_search": 0,
+	"issingle": 1,
+	"links": [],
+	"modified": "2026-09-29 23:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD Work Settings",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"print": 1,
+			"read": 1,
+			"role": "System Manager",
+			"share": 1,
+			"write": 1
+		}
+	],
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": [],
+	"track_changes": 1
+}

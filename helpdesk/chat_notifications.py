@@ -118,7 +118,10 @@ def teams_message(text: str, url: str | None) -> dict:
         "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
         "type": "AdaptiveCard",
         "version": "1.4",
-        "body": [{"type": "TextBlock", "text": text, "wrap": True}],
+        # Teams only breaks lines on blank lines
+        "body": [
+            {"type": "TextBlock", "text": text.replace("\n", "\n\n"), "wrap": True}
+        ],
     }
     if url:
         card["actions"] = [

@@ -96,7 +96,13 @@
       v-else-if="task.due_date"
       class="hidden w-28 shrink-0 items-center justify-end gap-1 text-xs tabular-nums md:flex"
       :class="overdue ? 'font-medium text-danger' : 'text-ink-gray-5'"
+      :title="aiTitle"
     >
+      <LucideSparkles
+        v-if="task.ai_estimated"
+        class="size-3 text-ink-gray-4"
+        aria-hidden="true"
+      />
       <component
         :is="overdue ? LucideAlarmClock : LucideCalendar"
         class="size-3.5"
@@ -104,6 +110,9 @@
       />
       {{ shortDate(task.due_date) }}
       <span v-if="overdue" class="sr-only">{{ __("Overdue") }}</span>
+      <span v-if="task.ai_estimated" class="sr-only">{{
+        __("Due date set by AI")
+      }}</span>
     </span>
     <span v-else class="hidden w-28 shrink-0 md:block" />
 
@@ -150,6 +159,7 @@ import LucideCalendarClock from "~icons/lucide/calendar-clock";
 import LucideCheck from "~icons/lucide/check";
 import LucideCheckCheck from "~icons/lucide/check-check";
 import LucideMoreHorizontal from "~icons/lucide/more-horizontal";
+import LucideSparkles from "~icons/lucide/sparkles";
 import LucidePause from "~icons/lucide/pause";
 import LucidePlay from "~icons/lucide/play";
 import LucideStar from "~icons/lucide/star";
@@ -191,6 +201,12 @@ const dueTitle = computed(() =>
   props.task.due_date
     ? __("Due {0}", dayjs(props.task.due_date).format("D MMM YYYY"))
     : undefined
+);
+
+const aiTitle = computed(() =>
+  props.task.ai_estimated
+    ? __("Due date set by AI: {0}", props.task.estimate_note || "")
+    : dueTitle.value
 );
 
 const actions = computed(() => {

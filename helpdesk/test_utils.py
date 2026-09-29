@@ -766,3 +766,12 @@ def enable_chat_notifications(platform: str = "Microsoft Teams", **settings):
     frappe.clear_document_cache("HD Chat Settings", "HD Chat Settings")
     frappe.cache.delete_keys("helpdesk:slack_user:")
     return doc
+
+
+def set_work_settings(**values):
+    """Saves HD Work Settings (AI estimates, weekly off, morning brief) with `values`."""
+    doc = frappe.get_doc("HD Work Settings")
+    doc.update(values)
+    doc.save(ignore_permissions=True)
+    frappe.clear_document_cache("HD Work Settings", "HD Work Settings")
+    return doc

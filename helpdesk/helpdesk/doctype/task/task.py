@@ -20,6 +20,7 @@ class Task(Document):
         self.track_hold()
         self.route_completion_to_review()
         self.track_slip()
+        self.set_completed_on()
 
     def on_update(self):
         self.hand_back_ticket_when_completed()
@@ -27,6 +28,13 @@ class Task(Document):
         self.record_slip()
         self.request_review()
         self.unblock_dependents()
+
+    def set_completed_on(self):
+        """When it was done; AI estimates learn from how long finished tasks took."""
+        if self.status == "Completed":
+            self.completed_on = self.completed_on or nowdate()
+        else:
+            self.completed_on = None
 
     def status_changed(self) -> bool:
         before = self.get_doc_before_save()

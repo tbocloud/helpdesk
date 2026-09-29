@@ -33,6 +33,15 @@
         :label="__('Customer')"
         :placeholder="__('Select customer')"
       />
+      <FormControl
+        v-model="form.project_type"
+        type="select"
+        :label="__('Project type')"
+        :options="projectTypeOptions"
+        :description="
+          __('The AI uses this to estimate how long new tasks take.')
+        "
+      />
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <TextInput
           v-model="form.expected_start_date"
@@ -197,6 +206,7 @@ const formId = `tasky-project-form-${Math.random().toString(36).slice(2, 8)}`;
 const EMPTY = () => ({
   project_name: "",
   customer: "",
+  project_type: "",
   expected_start_date: "",
   expected_end_date: "",
   status: "Open",
@@ -221,6 +231,16 @@ const userOptions = computed(() =>
     value: u.name,
   }))
 );
+
+const projectTypeOptions = computed(() => [
+  { label: __("Not set"), value: "" },
+  { label: __("ERP Implementation"), value: "ERP Implementation" },
+  { label: __("Mobile App"), value: "Mobile App" },
+  { label: __("Website"), value: "Website" },
+  { label: __("Content Calendar"), value: "Content Calendar" },
+  { label: __("Support"), value: "Support" },
+  { label: __("Other"), value: "Other" },
+]);
 
 const roleOptions = computed(() => [
   { label: __("Project Manager"), value: "Project Manager" },
@@ -247,6 +267,7 @@ const detail = createResource({
     Object.assign(form, EMPTY(), {
       project_name: data.project_name || "",
       customer: data.customer || "",
+      project_type: data.project_type || "",
       expected_start_date: data.expected_start_date || "",
       expected_end_date: data.expected_end_date || "",
       status: data.status || "Open",
@@ -307,6 +328,7 @@ async function submit() {
           expected_start_date: form.expected_start_date,
           expected_end_date: form.expected_end_date,
           customer: form.customer,
+          project_type: form.project_type,
           project_lead: form.project_lead || null,
           members,
           review_before_done: form.review_before_done,
