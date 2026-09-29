@@ -25,4 +25,7 @@ class TestRenameQcsConnections(FrappeTestCase):
             frappe.db.exists("HDS Support Connection", "TBO-CONN-2031-00007")
         )
         self.assertTrue(frappe.db.exists("HDS Support Connection", connected))
-        self.assertEqual(frappe.db.get_value("Series", "TBO-CONN-2031-", "current"), 7)
+        self.assertEqual(
+            frappe.db.get_value("Series", "TBO-CONN-2031-", "current", order_by="name"),
+            7,
+        )
