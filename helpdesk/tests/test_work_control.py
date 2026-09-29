@@ -190,7 +190,8 @@ class TestTicketToTask(WorkControlCase):
         context = self.as_user(
             SUPPORT, lambda: work.get_ticket_task_context(ticket.name)
         )
-        self.assertIn(self.project, [p["name"] for p in context["projects"]])
+        project = next(p for p in context["projects"] if p["name"] == self.project)
+        self.assertEqual({m["user"] for m in project["members"]}, {LEAD[0], DEV[0]})
         self.assertEqual(len(context["linked_tasks"]), 1)
 
 

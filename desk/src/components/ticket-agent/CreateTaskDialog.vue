@@ -109,9 +109,9 @@
           type="select"
           :label="__('Assignee')"
           :options="assigneeOptions"
-          :disabled="!form.project || !membersLoaded || !members.length"
+          :disabled="!form.project || !members.length"
           :description="
-            form.project && membersLoaded && !members.length
+            form.project && !members.length
               ? __(
                   'This project has no members yet, so the task stays unassigned'
                 )
@@ -188,6 +188,7 @@ interface ContextProject {
   name: string;
   project_name?: string;
   customer?: string | null;
+  members?: Member[];
 }
 
 interface LinkedTask {
@@ -277,26 +278,13 @@ const projectOptions = computed(() => [
   })),
 ]);
 
-const projectDetail = createResource({
-  url: "helpdesk.tasky.api.get_project_detail",
-  makeParams: () => ({ project: form.project }),
-  onError() {},
-});
-
-const members = computed<Member[]>(() =>
-  form.project ? projectDetail.data?.users ?? [] : []
-);
-const membersLoaded = computed(
-  () =>
-    !projectDetail.loading && (!!projectDetail.data || !!projectDetail.error)
+const members = computed<Member[]>(
+  () => projects.value.find((p) => p.name === form.project)?.members ?? []
 );
 
 const assigneeOptions = computed(() => [
   {
-    label:
-      form.project && !membersLoaded.value
-        ? __("Loading members…")
-        : __("Unassigned"),
+    label: __("Unassigned"),
     value: "",
   },
   ...members.value.map((m) => ({
@@ -307,10 +295,8 @@ const assigneeOptions = computed(() => [
 
 watch(
   () => form.project,
-  (project) => {
+  () => {
     form.assigned_to = "";
-    projectDetail.reset();
-    if (project) projectDetail.reload();
   }
 );
 

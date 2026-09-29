@@ -602,9 +602,11 @@ def make_project(
             "users": [{"user": u, "custom_role": role} for u, role in members or []],
         }
     )
+    doc.insert(ignore_permissions=True)
     if owner:
-        doc.owner = owner
-    return doc.insert(ignore_permissions=True)
+        # insert always records the session user as owner
+        doc.db_set("owner", owner, update_modified=False)
+    return doc
 
 
 def make_content_campaign(campaign_name: str, customer: str, **kwargs):

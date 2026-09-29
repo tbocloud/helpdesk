@@ -229,6 +229,22 @@ def get_ticket_task_context(ticket: str | int) -> dict:
         if (customer and p.customer == customer) or can_manage_project(p.name)
     ]
     projects.sort(key=lambda p: p.customer != customer)
+    # sent here because support agents who aren't members can't open the project
+    members = {}
+    for row in frappe.get_all(
+        "Project User",
+        filters={
+            "parenttype": "Project",
+            "parent": ("in", [p.name for p in projects] or [""]),
+        },
+        fields=["parent", "user", "full_name"],
+        order_by="idx asc",
+    ):
+        members.setdefault(row.parent, []).append(
+            {"user": row.user, "full_name": row.full_name}
+        )
+    for p in projects:
+        p["members"] = members.get(p.name, [])
 
     linked = frappe.get_all(
         "Task",

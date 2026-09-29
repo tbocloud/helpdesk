@@ -472,8 +472,8 @@ const allProjects = computed<Project[]>(() => projects.data ?? []);
 
 // --- filters ---
 
-const statusTabs: StatusTab[] = ["All", "Open", "Completed", "Cancelled"];
-const activeStatus = ref<StatusTab>("All");
+const statusTabs: StatusTab[] = ["Open", "Completed", "Cancelled", "All"];
+const activeStatus = ref<StatusTab>("Open");
 const search = ref("");
 
 function matchesStatus(p: Project, tab: StatusTab) {
