@@ -15,6 +15,7 @@ import frappe
 import requests
 
 from helpdesk.mcp_client import MCPClient
+from helpdesk.session_replay import is_diagnostics_file, is_replay_file
 
 PULL_LIMIT = 20
 RECORDING_TIMEOUT = 60
@@ -131,13 +132,19 @@ def _create_hd_ticket(connection_name: str, customer: str, ticket: dict) -> str:
 
 
 def _attach_recording(
-    mcp: MCPClient, hd_ticket_name: str, file_url: str | None
+    mcp: MCPClient,
+    hd_ticket_name: str,
+    file_url: str | None,
+    file_name: str | None = None,
 ) -> str | None:
     """Download the customer's screen recording and attach it to the HD Ticket.
 
     The recording is a private File on the customer's site. We already hold
     that site's API key on the connection, so this is a plain authenticated
     GET — no new MCP tool required, and nothing is uploaded by the client.
+
+    `file_name` is the customer File's name; its URL may carry a suffix Frappe
+    added to keep the stored path unique (session-replay.json3f2a1c.gz).
     """
     if not file_url:
         return None
@@ -158,20 +165,64 @@ def _attach_recording(
         )
         return None
 
+    file_name = file_name or file_url.rsplit("/", 1)[-1]
     file_doc = frappe.get_doc(
         {
             "doctype": "File",
-            "file_name": file_url.rsplit("/", 1)[-1],
+            "file_name": file_name,
             "attached_to_doctype": "HD Ticket",
             "attached_to_name": hd_ticket_name,
             "is_private": 1,
             "content": content,
         }
     ).insert(ignore_permissions=True)
+    _keep_file_name(file_doc, file_name)
 
-    # Surface the file inside the Helpdesk agent UI. The agent portal renders
-    # its own HD Ticket Comment doctype — a core frappe Comment only shows in
-    # the desk view, which agents never open.
+    note = _media_note(file_doc)
+    if note:
+        # Surface the file inside the Helpdesk agent UI. The agent portal renders
+        # its own HD Ticket Comment doctype — a core frappe Comment only shows in
+        # the desk view, which agents never open.
+        comment = frappe.get_doc(
+            {
+                "doctype": "HD Ticket Comment",
+                "reference_ticket": hd_ticket_name,
+                "commented_by": "Administrator",
+                "content": note,
+            }
+        )
+        comment.flags.skip_notifications = True
+        comment.insert(ignore_permissions=True)
+
+    return file_doc.name
+
+
+def _keep_file_name(file_doc, file_name: str) -> None:
+    """Restore the customer's file name when Frappe suffixed it for a unique path.
+
+    The session replay card finds files by name, and the conversation sync
+    recognises files it already imported by name; only the stored path needs
+    to be unique.
+    """
+    if file_doc.file_name == file_name:
+        return
+    frappe.db.set_value(
+        "File", file_doc.name, "file_name", file_name, update_modified=False
+    )
+    file_doc.file_name = file_name
+
+
+def _media_note(file_doc) -> str | None:
+    """The ticket comment announcing an attached file, or None to stay quiet.
+
+    Session replay files are machine data the agent opens from the ticket's
+    Session replay card; links to raw .json/.gz files would only be noise.
+    """
+    if is_diagnostics_file(file_doc.file_name):
+        return None
+    if is_replay_file(file_doc.file_name):
+        return "\N{FILM FRAMES} Session replay attached: see the Session replay card on this ticket."
+
     is_video = file_doc.file_name.rsplit(".", 1)[-1].lower() in (
         "webm",
         "mp4",
@@ -180,21 +231,10 @@ def _attach_recording(
     )
     label = "Screen recording" if is_video else "Screenshot"
     icon = "\N{VIDEO CAMERA}" if is_video else "\N{FRAME WITH PICTURE}"
-    comment = frappe.get_doc(
-        {
-            "doctype": "HD Ticket Comment",
-            "reference_ticket": hd_ticket_name,
-            "commented_by": "Administrator",
-            "content": (
-                f"{icon} {label} from the customer: "
-                f'<a href="{file_doc.file_url}" target="_blank">{file_doc.file_name}</a>'
-            ),
-        }
+    return (
+        f"{icon} {label} from the customer: "
+        f'<a href="{file_doc.file_url}" target="_blank">{file_doc.file_name}</a>'
     )
-    comment.flags.skip_notifications = True
-    comment.insert(ignore_permissions=True)
-
-    return file_doc.name
 
 
 def _push_back(mcp: MCPClient, client_ticket: str, values: dict) -> None:
@@ -247,7 +287,9 @@ def pull_client_tickets() -> int:
                     files = [{"file_url": ticket["screen_recording"]}]
                 for f in files:
                     try:
-                        _attach_recording(mcp, hd_name, f.get("file_url"))
+                        _attach_recording(
+                            mcp, hd_name, f.get("file_url"), f.get("file_name")
+                        )
                     except Exception:
                         frappe.log_error(
                             title=f"Media attach failed for {ticket.get('name')}",
@@ -446,7 +488,7 @@ def sync_conversations() -> int:
                     url = f.get("file_url")
                     if not url or url in state["files"]:
                         continue
-                    fname = url.rsplit("/", 1)[-1]
+                    fname = f.get("file_name") or url.rsplit("/", 1)[-1]
                     if frappe.db.exists(
                         "File",
                         {
@@ -457,9 +499,13 @@ def sync_conversations() -> int:
                     ):
                         state["files"].append(url)  # imported at creation
                         continue
-                    _attach_recording(mcp, row.name, url)
+                    attached = _attach_recording(mcp, row.name, url, fname)
                     state["files"].append(url)
                     synced += 1
+                    if attached and is_replay_file(fname):
+                        from helpdesk.triage import retriage_with_session_replay
+
+                        retriage_with_session_replay(row.name)
 
                 # client close request?
                 req = (

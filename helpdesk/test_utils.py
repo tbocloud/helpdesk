@@ -1,3 +1,5 @@
+import gzip
+import json
 from datetime import datetime
 
 import frappe
@@ -775,3 +777,282 @@ def set_work_settings(**values):
     doc.save(ignore_permissions=True)
     frappe.clear_document_cache("HD Work Settings", "HD Work Settings")
     return doc
+
+
+REPLAY_START_MS = 1_790_000_000_000
+REPLAY_ERROR_MESSAGE = "Posting Date cannot be before the Invoice Date"
+
+
+def make_replay_events(
+    start_ms: int = REPLAY_START_MS, filler_clicks: int = 0
+) -> list[dict]:
+    """rrweb events for a short synthetic session on a customer's ERPNext.
+
+    The customer opens a new Sales Invoice, types a posting date, clicks Save,
+    hits a server ValidationError (with a msgprint and a console error), closes
+    the dialog and raises the ticket 20s after the first event. `filler_clicks`
+    adds that many alternating Save/Close clicks before the ticket is raised,
+    for testing the line cap.
+    """
+
+    def at(seconds, event_type, data):
+        return {
+            "type": event_type,
+            "timestamp": start_ms + seconds * 1000,
+            "data": data,
+        }
+
+    def element(node_id, tag, attributes=None, children=None):
+        return {
+            "id": node_id,
+            "type": 2,
+            "tagName": tag,
+            "attributes": attributes or {},
+            "childNodes": children or [],
+        }
+
+    def text(node_id, content):
+        return {"id": node_id, "type": 3, "textContent": content}
+
+    def click(seconds, node_id):
+        return at(seconds, 3, {"source": 2, "type": 2, "id": node_id, "x": 10, "y": 10})
+
+    snapshot = {
+        "id": 1,
+        "type": 0,
+        "childNodes": [
+            element(
+                2,
+                "html",
+                children=[
+                    element(
+                        3,
+                        "body",
+                        children=[
+                            element(
+                                4,
+                                "div",
+                                {
+                                    "class": "frappe-control",
+                                    "data-fieldname": "posting_date",
+                                },
+                                [
+                                    element(
+                                        5,
+                                        "label",
+                                        {"class": "control-label"},
+                                        [text(6, "Posting Date")],
+                                    ),
+                                    element(
+                                        7,
+                                        "input",
+                                        {
+                                            "type": "text",
+                                            "data-fieldname": "posting_date",
+                                        },
+                                    ),
+                                ],
+                            ),
+                            element(
+                                8,
+                                "button",
+                                {"class": "btn btn-primary primary-action"},
+                                [element(9, "span", children=[text(10, "Save")])],
+                            ),
+                        ],
+                    )
+                ],
+            )
+        ],
+    }
+    events = [
+        at(
+            0,
+            4,
+            {
+                "href": "https://erp.example.com/app/sales-invoice/new",
+                "width": 1440,
+                "height": 900,
+            },
+        ),
+        at(0, 2, {"node": snapshot, "initialOffset": {"top": 0, "left": 0}}),
+        at(
+            1,
+            5,
+            {
+                "tag": "frappe-route",
+                "payload": {
+                    "route": ["Form", "Sales Invoice", "new"],
+                    "url": "/app/sales-invoice/new",
+                },
+            },
+        ),
+        at(5, 3, {"source": 5, "id": 7, "text": "••-••-••••", "isChecked": False}),
+        at(6, 3, {"source": 5, "id": 7, "text": "••-••-••••", "isChecked": False}),
+        at(
+            8,
+            3,
+            {
+                "source": 0,
+                "adds": [
+                    {
+                        "parentId": 3,
+                        "nextId": None,
+                        "node": element(
+                            20,
+                            "button",
+                            {"aria-label": "Close", "class": "btn-modal-close"},
+                        ),
+                    }
+                ],
+                "removes": [],
+                "texts": [],
+                "attributes": [],
+            },
+        ),
+        click(12, 10),
+        at(
+            13,
+            5,
+            {
+                "tag": "frappe-call-error",
+                "payload": {
+                    "method": "frappe.desk.form.save.savedocs",
+                    "status": 417,
+                    "exc_type": "ValidationError",
+                    "message": REPLAY_ERROR_MESSAGE,
+                },
+            },
+        ),
+        at(
+            13,
+            5,
+            {
+                "tag": "frappe-msgprint",
+                "payload": {
+                    "title": "Message",
+                    "message": f"<p>{REPLAY_ERROR_MESSAGE}</p>",
+                },
+            },
+        ),
+        at(
+            14,
+            6,
+            {
+                "plugin": "rrweb/console@1",
+                "payload": {
+                    "level": "error",
+                    "payload": ['"Uncaught TypeError: frm.doc is undefined"'],
+                    "trace": [],
+                },
+            },
+        ),
+        click(15, 20),
+    ]
+    events += [
+        click(15 + (i + 1) * 0.01, 10 if i % 2 == 0 else 20)
+        for i in range(filler_clicks)
+    ]
+    events.append(at(20, 5, {"tag": "raise-ticket", "payload": {}}))
+    return events
+
+
+def make_replay(events: list[dict] | None = None) -> dict:
+    """A session-replay.json.gz payload (before gzip) wrapping `events`."""
+    events = events if events is not None else make_replay_events()
+    return {
+        "version": 1,
+        "minutes": 5,
+        "privacy": "mask-numbers",
+        "started_at": events[0]["timestamp"] if events else REPLAY_START_MS,
+        "ended_at": events[-1]["timestamp"] if events else REPLAY_START_MS,
+        "events": events,
+    }
+
+
+def make_diagnostics(**overrides) -> dict:
+    """A session-diagnostics.json payload as the helpdesk_client recorder writes it."""
+    return {
+        "version": 1,
+        "captured_at": REPLAY_START_MS + 20_000,
+        "url": "https://erp.example.com/app/sales-invoice/new",
+        "route": ["Form", "Sales Invoice", "new"],
+        "title": "New Sales Invoice",
+        "user_agent": "Mozilla/5.0",
+        "browser": "Chrome 128",
+        "os": "macOS 14",
+        "viewport": {"w": 1440, "h": 900},
+        "screen": {"w": 1920, "h": 1080},
+        "timezone": "Asia/Dubai",
+        "language": "en",
+        "versions": {"frappe": "15.40.0", "erpnext": "15.35.1", "hrms": "15.20.0"},
+        "site": "erp.example.com",
+        "recent_errors": [
+            {
+                "time": REPLAY_START_MS + 13_000,
+                "kind": "call",
+                "message": REPLAY_ERROR_MESSAGE,
+                "method": "frappe.desk.form.save.savedocs",
+                "status": 417,
+                "exc_type": "ValidationError",
+            }
+        ],
+        **overrides,
+    }
+
+
+def make_session_files(
+    ticket: str,
+    replay: dict | None = None,
+    diagnostics: dict | None = None,
+    with_replay: bool = True,
+) -> dict:
+    """Attaches a gzipped session replay and a diagnostics JSON to an HD Ticket as
+    private Files, the way the ticket puller stores them. `with_replay=False` mimics
+    a client that skipped a too-large replay. Returns {"replay", "diagnostics"} File docs."""
+    files = {}
+    for key, file_name, content in (
+        (
+            "replay",
+            "session-replay.json.gz",
+            gzip.compress(json.dumps(replay or make_replay()).encode()),
+        ),
+        (
+            "diagnostics",
+            "session-diagnostics.json",
+            json.dumps(diagnostics or make_diagnostics()).encode(),
+        ),
+    ):
+        if key == "replay" and not with_replay:
+            continue
+        files[key] = frappe.get_doc(
+            {
+                "doctype": "File",
+                "file_name": file_name,
+                "attached_to_doctype": "HD Ticket",
+                "attached_to_name": str(ticket),
+                "is_private": 1,
+                "content": content,
+            }
+        ).insert(ignore_permissions=True)
+    return files
+
+
+def make_download_response(content: bytes):
+    """A stand-in for the streamed `requests.get` response the ticket puller reads files from."""
+    from unittest.mock import MagicMock
+
+    response = MagicMock()
+    response.raw.read.side_effect = lambda amount, decode_content=True: content[:amount]
+    return response
+
+
+def make_puller_mcp(site_url: str = "https://erp.example.com"):
+    """An MCPClient stand-in carrying the connection details `_attach_recording` downloads with."""
+    from unittest.mock import MagicMock
+
+    mcp = MagicMock()
+    mcp.site_url = site_url
+    mcp.api_key = "key"
+    mcp.api_secret = "secret"
+    return mcp

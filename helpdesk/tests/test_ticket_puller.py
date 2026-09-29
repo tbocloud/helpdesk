@@ -7,11 +7,20 @@ Run on the staging hub (Frappe v16 + Helpdesk + helpdesk):
     bench --site <staging-hub> run-tests --module helpdesk.tests.test_ticket_puller
 """
 
+import gzip
 import json
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
+
+from helpdesk.test_utils import (
+    make_diagnostics,
+    make_download_response,
+    make_puller_mcp,
+    make_replay,
+    make_ticket,
+)
 
 
 def mcp_result(payload):
@@ -102,6 +111,108 @@ class TestAttachRecording(FrappeTestCase):
         from helpdesk.ticket_puller import _attach_recording
 
         self.assertIsNone(_attach_recording(MagicMock(), "HD-TICKET-0001", None))
+
+
+class TestAttachSessionFiles(FrappeTestCase):
+    """The recorder's replay + diagnostics come through quietly, as private files."""
+
+    def setUp(self):
+        self.addCleanup(frappe.db.rollback)
+        self.ticket = make_ticket(subject="Cannot save Sales Invoice")
+
+    @patch("helpdesk.ticket_puller.requests.get")
+    def test_session_files_are_private_and_not_linked(self, get):
+        from helpdesk.session_replay import load_diagnostics, load_replay
+        from helpdesk.ticket_puller import _attach_recording
+
+        get.side_effect = [
+            make_download_response(gzip.compress(json.dumps(make_replay()).encode())),
+            make_download_response(json.dumps(make_diagnostics()).encode()),
+        ]
+        mcp = make_puller_mcp()
+
+        # the customer's stored path carries a Frappe suffix; the File name does not
+        names = [
+            _attach_recording(
+                mcp,
+                self.ticket.name,
+                "/private/files/session-replay.json3f2a1c.gz",
+                "session-replay.json.gz",
+            ),
+            _attach_recording(
+                mcp,
+                self.ticket.name,
+                "/private/files/session-diagnostics.json",
+                "session-diagnostics.json",
+            ),
+        ]
+
+        self.assertEqual(
+            get.call_args_list[0].args[0],
+            "https://erp.example.com/private/files/session-replay.json3f2a1c.gz",
+        )
+        self.assertEqual(
+            frappe.db.get_value("File", names[0], "file_name"), "session-replay.json.gz"
+        )
+        for name in names:
+            file_doc = frappe.get_doc("File", name)
+            self.assertTrue(file_doc.is_private)
+            self.assertEqual(file_doc.attached_to_doctype, "HD Ticket")
+            self.assertEqual(file_doc.attached_to_name, self.ticket.name)
+        self.assertEqual(
+            len(load_replay(self.ticket.name)["events"]), len(make_replay()["events"])
+        )
+        self.assertEqual(load_diagnostics(self.ticket.name)["browser"], "Chrome 128")
+
+        comments = frappe.get_all(
+            "HD Ticket Comment",
+            filters={"reference_ticket": self.ticket.name},
+            pluck="content",
+        )
+        notes = [c for c in comments if "Session replay attached" in c]
+        self.assertEqual(len(notes), 1)
+        self.assertNotIn("href", notes[0])
+        self.assertFalse(
+            [
+                c
+                for c in comments
+                if "session-diagnostics" in c or "session-replay.json" in c
+            ]
+        )
+
+    @patch("helpdesk.ticket_puller.MAX_RECORDING_BYTES", 10)
+    @patch("helpdesk.ticket_puller.requests.get")
+    def test_oversized_session_file_is_skipped(self, get):
+        from helpdesk.ticket_puller import _attach_recording
+
+        get.return_value = make_download_response(b"x" * 11)
+
+        self.assertIsNone(
+            _attach_recording(
+                make_puller_mcp(),
+                self.ticket.name,
+                "/private/files/session-replay.json.gz",
+            )
+        )
+        self.assertFalse(
+            frappe.db.exists(
+                "File",
+                {
+                    "attached_to_doctype": "HD Ticket",
+                    "attached_to_name": self.ticket.name,
+                },
+            )
+        )
+
+    def test_screenshots_are_still_linked(self):
+        from helpdesk.ticket_puller import _media_note
+
+        note = _media_note(
+            MagicMock(file_name="shot.png", file_url="/private/files/shot.png")
+        )
+
+        self.assertIn('href="/private/files/shot.png"', note)
+        self.assertIn("Screenshot", note)
 
 
 class TestPushBack(FrappeTestCase):

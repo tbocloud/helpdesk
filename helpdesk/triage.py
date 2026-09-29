@@ -15,6 +15,8 @@ from frappe import _
 from frappe.utils import now_datetime
 
 from helpdesk.ai_engine import call_haiku
+from helpdesk.session_replay import TIMELINE_HEADING as SESSION_TIMELINE_HEADING
+from helpdesk.session_replay import build_triage_context
 
 # Guard constants
 MAX_TRIAGE_RETRIES = 2
@@ -27,6 +29,8 @@ ERROR_LOGS_FOR_TRIAGE = 10
 ERROR_TRACE_CHARS = 600
 # tracks that get an automatic investigation on the customer site after triage
 AUTO_INVESTIGATE_TRACKS = ("ai_investigate", "dev", "escalate")
+# session timeline + diagnostics share of the prompt (~1.5k tokens)
+MAX_SESSION_CONTEXT_CHARS = 6000
 
 TRIAGE_SYSTEM_PROMPT = """You are an ERPNext/Frappe support triage AI. Analyze the support ticket and return a JSON object with your assessment.
 
@@ -45,7 +49,9 @@ You must return ONLY valid JSON with these exact fields:
     "stated_constraint": "any specific scope the customer mentioned, verbatim"
   },
   "key_doctypes": ["list of ERPNext doctypes likely involved"],
-  "investigation_steps": ["3-5 recommended investigation steps"]
+  "investigation_steps": ["3-5 recommended investigation steps"],
+  "steps_to_reproduce": ["the customer's steps in order, only when a session timeline is provided; empty list otherwise"],
+  "likely_cause": "1-2 sentences, only when a session timeline is provided; empty string otherwise"
 }
 
 Rules:
@@ -57,7 +63,11 @@ Rules:
 - Extract ALL specific reports, documents, or entities the customer mentions
 - If recent error logs from the customer's site are provided, check them for tracebacks that match the
   issue (same doctype, method, report or time window) and use them in the summary; ignore unrelated ones
-- Never invent errors, documents or causes that are not in the ticket or the error logs
+- If a session timeline of what the customer did before raising the ticket is provided, write
+  steps_to_reproduce and likely_cause from that timeline (and its diagnostics) only: the pages opened,
+  fields typed in, buttons clicked and the errors or messages shown. Typed values are masked with "•";
+  never guess them. If the timeline shows no error, say so in likely_cause instead of inventing one
+- Never invent errors, documents or causes that are not in the ticket, the error logs or the session timeline
 """
 
 
@@ -96,7 +106,9 @@ def auto_triage_ticket(doc, method):
         "HD Ticket", doc.name, "custom_triage_status", "Pending", update_modified=False
     )
 
-    # Enqueue with deduplication
+    # After commit: the ticket puller attaches the customer's session replay and
+    # screenshots in the same transaction, and triage must see them. A job started
+    # before the commit would not even find the ticket.
     frappe.enqueue(
         "helpdesk.triage.run_triage",
         ticket_id=doc.name,
@@ -104,6 +116,42 @@ def auto_triage_ticket(doc, method):
         deduplicate=True,
         timeout=TRIAGE_JOB_TIMEOUT,
         queue="short",
+        enqueue_after_commit=True,
+    )
+
+
+def retriage_with_session_replay(ticket_id: str):
+    """Triage once more when a session replay reaches a ticket after its first triage.
+
+    The customer's files can land on their Support Ticket after the puller has
+    already imported it; the replay then arrives through the conversation sync.
+    """
+    from helpdesk.ai_engine import get_hub_settings
+
+    if not get_hub_settings().auto_triage_enabled:
+        return
+    status, data = frappe.db.get_value(
+        "HD Ticket", ticket_id, ["custom_triage_status", "custom_triage_data"]
+    ) or (None, None)
+    # a queued or running triage reads the attachments itself
+    if status in ("Pending", "In Progress"):
+        return
+    try:
+        triage_data = json.loads(data or "{}")
+    except ValueError:
+        triage_data = {}
+    if triage_data.get("used_session_replay"):
+        return
+
+    frappe.enqueue(
+        "helpdesk.triage.run_triage",
+        ticket_id=ticket_id,
+        start_investigation=False,
+        job_id=f"triage-{ticket_id}",
+        deduplicate=True,
+        timeout=TRIAGE_JOB_TIMEOUT,
+        queue="short",
+        enqueue_after_commit=True,
     )
 
 
@@ -144,8 +192,14 @@ def run_triage_now(ticket_id: str):
     return {"status": "enqueued", "ticket": ticket_id}
 
 
-def run_triage(ticket_id: str, is_retry: bool = False):
-    """Background job: run Haiku triage with Redis lock."""
+def run_triage(
+    ticket_id: str, is_retry: bool = False, start_investigation: bool = True
+):
+    """Background job: run Haiku triage with Redis lock.
+
+    `start_investigation=False` re-triages without starting a second automatic
+    investigation on the customer's site.
+    """
     lock_key = f"triage_lock:{ticket_id}"
 
     # Guard: Redis lock (prevent concurrent triage on same ticket)
@@ -229,6 +283,7 @@ def run_triage(ticket_id: str, is_retry: bool = False):
         # Store results using db_set to avoid triggering hooks
         triage_data = {
             **triage,
+            "used_session_replay": SESSION_TIMELINE_HEADING in user_message,
             "retry_count": retry_count,
             "usage": result["usage"],
             "cost_usd": result["cost"],
@@ -253,7 +308,9 @@ def run_triage(ticket_id: str, is_retry: bool = False):
         frappe.db.commit()  # background job: persist triage progress and failures as they happen - nosemgrep
 
         # Post triage comment (with skip_notifications to prevent cascades)
-        investigation = _maybe_start_investigation(ticket, triage)
+        investigation = (
+            _maybe_start_investigation(ticket, triage) if start_investigation else None
+        )
         _post_triage_comment(ticket_id, triage, investigation)
 
     except anthropic.APIError as e:
@@ -297,9 +354,11 @@ def _build_triage_input(ticket):
     if ticket.description:
         desc = frappe.utils.strip_html_tags(ticket.description).strip()
 
-    # Check if there's enough text to triage
+    session = _session_context(ticket)
+
+    # Check if there's enough text to triage; a session timeline is enough on its own
     total_text = subject + " " + desc
-    if len(total_text.strip()) < 10:
+    if len(total_text.strip()) < 10 and not session:
         return None
 
     parts = []
@@ -320,7 +379,26 @@ def _build_triage_input(ticket):
             "\nRecent error logs on the customer's site (newest first):\n" + error_logs
         )
 
+    if session:
+        parts.append(
+            "\n"
+            + session
+            + "\n(Use this timeline for steps_to_reproduce and likely_cause; do not go beyond it.)"
+        )
+
     return "\n".join(parts)
+
+
+def _session_context(ticket) -> str:
+    """The customer's recorded session timeline + diagnostics, if the ticket has one."""
+    try:
+        return build_triage_context(ticket.name, MAX_SESSION_CONTEXT_CHARS)
+    except Exception:  # noqa: BLE001 - the replay only enriches triage
+        frappe.log_error(
+            title=f"Triage could not read the session replay for {ticket.name}",
+            message=frappe.get_traceback(),
+        )
+        return ""
 
 
 def get_ticket_connection(ticket) -> str | None:
@@ -426,8 +504,20 @@ def _post_triage_comment(
 
     findings = bullet_list(triage.get("error_findings"))
     steps = bullet_list(triage.get("investigation_steps"))
+    repro = triage.get("steps_to_reproduce") or []
+    repro = [esc(str(i)) for i in repro if i] if isinstance(repro, list) else []
+    repro_list = (
+        "<ol>" + "".join(f"<li>{i}</li>" for i in repro) + "</ol>" if repro else ""
+    )
+    likely_cause = triage.get("likely_cause") or ""
     comment_text = f"<b>AI Triage:</b> {esc(priority)} priority | {esc(category)}<br>" f"<b>Summary:</b> {esc(summary)}<br>" + (
         f"<b>Error log findings:</b>{findings}" if findings else ""
+    ) + (
+        f"<b>Steps to reproduce</b> (from the session replay):{repro_list}"
+        if repro_list
+        else ""
+    ) + (
+        f"<b>Likely cause:</b> {esc(str(likely_cause))}<br>" if likely_cause else ""
     ) + (
         f"<b>Next steps:</b>{steps}" if steps else ""
     ) + f"<b>Recommended:</b> {esc(track_labels.get(track, track))}" + (
