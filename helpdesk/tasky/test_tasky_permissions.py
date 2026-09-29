@@ -238,7 +238,9 @@ class TestTaskyPermissions(FrappeTestCase):
     # --- project lead ---
 
     def test_lead_creates_and_assigns_tasks_and_sees_all(self):
-        self.as_user(PM, api.set_project_lead, project=self.project, user=DEV_A[0])
+        self.as_user(
+            PM, lambda: api.set_project_lead(project=self.project, user=DEV_A[0])
+        )
         task = self.as_user(
             DEV_A,
             api.add_task,
@@ -257,17 +259,21 @@ class TestTaskyPermissions(FrappeTestCase):
         self.assertFalse(detail["can_change_lead"])
 
     def test_lead_cannot_create_projects_or_change_the_lead(self):
-        self.as_user(PM, api.set_project_lead, project=self.project, user=DEV_A[0])
+        self.as_user(
+            PM, lambda: api.set_project_lead(project=self.project, user=DEV_A[0])
+        )
         for fn, kwargs in [
             (api.create_project, {"project_name": f"{CUSTOMER} - Lead Project"}),
-            (api.set_project_lead, {"project": self.project, "user": DEV_A[0]}),
+            (lambda: api.set_project_lead(project=self.project, user=DEV_A[0]), {}),
             (api.rotate_project_lead, {"project": self.project}),
         ]:
             with self.assertRaises(frappe.PermissionError):
                 self.as_user(DEV_A, fn, **kwargs)
 
     def test_other_members_still_cannot_add_tasks(self):
-        self.as_user(PM, api.set_project_lead, project=self.project, user=DEV_A[0])
+        self.as_user(
+            PM, lambda: api.set_project_lead(project=self.project, user=DEV_A[0])
+        )
         with self.assertRaises(frappe.PermissionError):
             self.as_user(
                 DEV_B, api.add_task, project=self.project, task_name="Not mine"
@@ -295,5 +301,5 @@ class TestTaskyPermissions(FrappeTestCase):
     def test_lead_must_be_a_member(self):
         with self.assertRaises(frappe.ValidationError):
             self.as_user(
-                PM, api.set_project_lead, project=self.project, user=OUTSIDER[0]
+                PM, lambda: api.set_project_lead(project=self.project, user=OUTSIDER[0])
             )
