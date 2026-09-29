@@ -3,6 +3,7 @@
     :open="open"
     :title="__('New task')"
     size="xl"
+    :dismissible="false"
     @update:open="(value: boolean) => emit('update:open', value)"
   >
     <form
@@ -38,18 +39,23 @@
           <option v-for="p in phaseOptions" :key="p" :value="p" />
         </datalist>
 
-        <FormControl
-          v-model="form.assigned_to"
-          type="select"
-          :label="__('Assignee')"
-          :options="assigneeOptions"
-          :disabled="!membersLoaded || !members.length"
-          :description="
-            membersLoaded && !members.length
-              ? __('Add team members to the project to assign tasks')
-              : undefined
-          "
-        />
+        <!-- the list opens outside the dialog, hence :dismissible="false" above -->
+        <div class="flex flex-col gap-1.5">
+          <Autocomplete
+            :label="__('Assignee')"
+            :options="assigneeOptions"
+            :placeholder="__('Unassigned')"
+            :loading="!membersLoaded || agentStore.agents.loading"
+            :model-value="form.assigned_to || null"
+            @update:model-value="
+              (v: { value: string } | string | null) =>
+                (form.assigned_to = (typeof v === 'string' ? v : v?.value) || '')
+            "
+          />
+          <p v-if="assigneeIsNew" class="text-p-xs text-ink-gray-5">
+            {{ __("They'll be added to the project as a Developer.") }}
+          </p>
+        </div>
 
         <FormControl
           v-model="form.category"
@@ -141,7 +147,9 @@
 
 <script setup lang="ts">
 import { __ } from "@/translation";
+import { useAgentStore } from "@/stores/agent";
 import {
+  Autocomplete,
   Button,
   Dialog,
   FormControl,
@@ -228,16 +236,39 @@ const membersLoaded = computed(
   () => !!projectDetail.data || !!projectDetail.error
 );
 
+const agentStore = useAgentStore();
+
+const memberIds = computed(() => new Set(members.value.map((m) => m.user)));
+
+// team members first; any other active agent can be picked and joins the team
 const assigneeOptions = computed(() => [
   {
-    label: membersLoaded.value ? __("Unassigned") : __("Loading members…"),
-    value: "",
+    group: __("Project team"),
+    items: [
+      { label: __("Unassigned"), value: "" },
+      ...members.value.map((m) => ({
+        label: m.full_name || m.user,
+        value: m.user,
+      })),
+    ],
   },
-  ...members.value.map((m) => ({
-    label: m.full_name || m.user,
-    value: m.user,
-  })),
+  {
+    group: __("Other agents"),
+    items: (
+      (agentStore.agents.data ?? []) as { user: string; agent_name?: string }[]
+    )
+      .filter((a) => a.user && !memberIds.value.has(a.user))
+      .map((a) => ({
+        label: a.agent_name || a.user,
+        value: a.user,
+        description: a.user,
+      })),
+  },
 ]);
+
+const assigneeIsNew = computed(
+  () => !!form.assigned_to && !memberIds.value.has(form.assigned_to)
+);
 
 const phaseOptions = computed(() =>
   [...new Set((props.phases ?? []).filter(Boolean))].sort((a, b) =>
@@ -274,6 +305,7 @@ watch(
       projectDetail.reload();
       openTasks.reload();
     }
+    if (!agentStore.agents.data) agentStore.agents.fetch();
   },
   { immediate: true }
 );

@@ -304,6 +304,25 @@ def _is_project_member(project, user):
     ) or (frappe.db.get_value("Project", project, "owner") == user)
 
 
+def _add_member_for_assignment(project: str, user: str):
+    """Assigning an agent from outside the team adds them to it as a Developer.
+
+    Only reached by the project's manager or lead (checked by the caller); leads
+    can't edit the project itself, hence ignore_permissions.
+    """
+    if not frappe.db.exists("HD Agent", {"user": user, "is_active": 1}):
+        frappe.throw(_("{0} is not an active agent.").format(user))
+    doc = frappe.get_doc("Project", project)
+    doc.append("users", {"user": user, "custom_role": "Developer"})
+    doc.save(ignore_permissions=True)
+    doc.add_comment(
+        "Info",
+        _("{0} was added to the project when a task was assigned to them.").format(
+            frappe.utils.escape_html(user)
+        ),
+    )
+
+
 def _assign_user(task_doc, user, ignore_permissions=False):
     """Assign an inserted Task to a user.
 
@@ -347,11 +366,7 @@ def add_task(
         frappe.throw(_("Task name is required"))
     assigned_to = str(assigned_to or "").strip()
     if assigned_to and not _is_project_member(project, assigned_to):
-        frappe.throw(
-            _(
-                "{0} is not a member of this project. Add them to the project first."
-            ).format(assigned_to)
-        )
+        _add_member_for_assignment(project, assigned_to)
     doc = frappe.get_doc(
         {
             "doctype": "Task",

@@ -13,7 +13,12 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from helpdesk.tasky import api
-from helpdesk.test_utils import create_customer, make_project, make_tasky_user
+from helpdesk.test_utils import (
+    create_customer,
+    create_user,
+    make_project,
+    make_tasky_user,
+)
 
 # Keep all names here so the scenario can be re-cast in one place.
 CUSTOMER = "Al Noor Trading LLC"
@@ -225,14 +230,29 @@ class TestTaskyPermissions(FrappeTestCase):
             task["name"], [t["name"] for t in self.as_user(DEV_B, api.get_my_tasks)]
         )
 
-    def test_manual_task_cannot_go_to_non_member(self):
+    def test_assigning_an_agent_from_outside_adds_them_to_the_team(self):
+        task = self.as_user(
+            PM,
+            api.add_task,
+            project=self.project,
+            task_name="Stock ageing report",
+            assigned_to=OUTSIDER[0],
+        )
+        roles = {
+            u.user: u.custom_role for u in frappe.get_doc("Project", self.project).users
+        }
+        self.assertEqual(roles[OUTSIDER[0]], "Developer")
+        self.assertEqual(task["assignees"], [OUTSIDER[0]])
+
+    def test_manual_task_cannot_go_to_someone_who_is_not_an_agent(self):
+        create_user("vendor.contact@tasky-smoke.example")
         with self.assertRaises(frappe.ValidationError):
             self.as_user(
                 PM,
                 api.add_task,
                 project=self.project,
                 task_name="Sneaky",
-                assigned_to=OUTSIDER[0],
+                assigned_to="vendor.contact@tasky-smoke.example",
             )
 
     # --- project lead ---
