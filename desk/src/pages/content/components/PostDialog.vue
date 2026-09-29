@@ -118,7 +118,7 @@
               <button
                 type="button"
                 class="inline-flex h-7 items-center gap-1.5 rounded-md bg-brand-soft px-2.5 text-sm font-medium text-brand-ink transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
-                :disabled="!form.title || !form.channel || drafting"
+                :disabled="drafting"
                 :aria-busy="drafting"
                 @click="draftWithAi"
               >
@@ -411,6 +411,12 @@ const undoAi = ref<{ caption: string; hashtags: string } | null>(null);
 
 async function draftWithAi() {
   aiError.value = "";
+  if (!form.title.trim() && !aiBrief.value.trim() && !form.caption.trim()) {
+    aiError.value = __(
+      "Add a title or a short brief so the AI knows what to write about."
+    );
+    return;
+  }
   drafting.value = true;
   try {
     const result = await call("helpdesk.api.content.draft_caption", {

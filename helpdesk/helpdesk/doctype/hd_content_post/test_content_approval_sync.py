@@ -211,6 +211,21 @@ class TestDraftCaption(FrappeTestCase):
         with self.assertRaises(frappe.ValidationError):
             draft_caption(title="Diwali offer", channel="Instagram")
 
+    @patch("helpdesk.api.content.call_haiku")
+    def test_brief_alone_is_enough(self, call_haiku):
+        call_haiku.return_value = {
+            "response": {"caption": "Big savings this week.", "hashtags": []}
+        }
+        result = draft_caption(
+            title="", channel="Facebook", brief="20% off all laptops until Friday"
+        )
+        self.assertEqual(result["caption"], "Big savings this week.")
+        self.assertIn("20% off all laptops", call_haiku.call_args.args[1])
+
+    def test_nothing_to_write_about_is_rejected(self):
+        with self.assertRaises(frappe.ValidationError):
+            draft_caption(title=" ", channel="Instagram")
+
     def test_unknown_channel_rejected(self):
         with self.assertRaises(frappe.ValidationError):
             draft_caption(title="x", channel="MySpace")

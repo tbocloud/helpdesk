@@ -25,8 +25,8 @@ Reply with JSON only: {"caption": "<the copy, using \\n for line breaks>", "hash
 @frappe.whitelist()
 @agent_only
 def draft_caption(
-    title: str,
-    channel: str,
+    title: str = "",
+    channel: str = "Instagram",
     format: str = "Post",
     customer: str | None = None,
     campaign: str | None = None,
@@ -36,11 +36,15 @@ def draft_caption(
     """Draft (or improve) a caption and hashtags for a content post."""
     if channel not in CHANNEL_GUIDE:
         frappe.throw(_("Unknown channel: {0}").format(channel))
+    if not (title.strip() or brief.strip() or current_caption.strip()):
+        frappe.throw(
+            _("Add a title or a short brief so the AI knows what to write about.")
+        )
 
     lines = [
         f"Channel: {channel} ({format})",
         f"Guidelines: {CHANNEL_GUIDE[channel]}",
-        f"Post topic: {title}",
+        f"Post topic: {title.strip() or 'see the brief below'}",
     ]
     if customer:
         lines.append(f"Client: {customer}")
