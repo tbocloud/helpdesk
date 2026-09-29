@@ -7,17 +7,15 @@ goes to the project lead and managers.
 Tickets (hourly): SLA due soon -> assignees; breached -> assignees and Agent
 Managers; breached for ESCALATE_AFTER_DAYS -> Agent Managers again.
 
-Each stage is sent once per person and item (Notification Log dedupe on the
-stage-specific subject), so nobody is nagged every run.
+Each stage is sent once per person and item (deduped on the stage-specific
+subject), so nobody is nagged every run. Reminders show in the helpdesk
+notification panel and are emailed through the outgoing email account.
 """
 
 import json
 
 import frappe
 from frappe import _
-from frappe.desk.doctype.notification_log.notification_log import (
-    enqueue_create_notification,
-)
 from frappe.utils import add_days, add_to_date, getdate, now_datetime, nowdate
 
 TASK_DUE_SOON_DAYS = 2
@@ -36,20 +34,53 @@ def _assignees(raw) -> list[str]:
 
 
 def notify_users(users, doctype: str, name: str, subject: str):
+    """Reminder in the helpdesk notification panel, plus an email (see HDNotification).
+
+    Sent once per person, document and subject, so a daily run doesn't repeat itself.
+    """
     users = sorted({u for u in users if u and u not in SKIP})
     if not users:
         return
-    enqueue_create_notification(
-        users,
-        {
-            "type": "Alert",
-            "document_type": doctype,
-            "document_name": str(name),
-            "subject": subject,
-            "from_user": "Administrator",
-        },
-        dedupe_on=["document_type", "document_name", "subject"],
+    already = set(
+        frappe.get_all(
+            "HD Notification",
+            filters={
+                "user_to": ("in", users),
+                "notification_type": "Reminder",
+                "reference_doctype": doctype,
+                "reference_name": str(name),
+                "message": subject,
+            },
+            pluck="user_to",
+        )
     )
+    link = helpdesk_path(doctype, name)
+    for user in users:
+        if user in already:
+            continue
+        frappe.get_doc(
+            {
+                "doctype": "HD Notification",
+                "notification_type": "Reminder",
+                "user_from": "Administrator",
+                "user_to": user,
+                "reference_doctype": doctype,
+                "reference_name": str(name),
+                "reference_ticket": str(name) if doctype == "HD Ticket" else None,
+                "link": link,
+                "message": subject,
+            }
+        ).insert(ignore_permissions=True)
+
+
+def helpdesk_path(doctype: str, name: str) -> str:
+    """Where the reminder opens inside /helpdesk (agents can't use /app)."""
+    if doctype == "HD Ticket":
+        return f"/tickets/{name}"
+    project = (
+        frappe.db.get_value(doctype, name, "project") if doctype == "Task" else None
+    )
+    return f"/projects/{project}" if project else "/my-work"
 
 
 def get_project_managers(project: str) -> list[str]:

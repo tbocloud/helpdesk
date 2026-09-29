@@ -48,9 +48,22 @@
           }
         "
       >
-        <UserAvatar :name="n.user_from" />
+        <span
+          v-if="n.notification_type === 'Reminder'"
+          class="grid size-8 shrink-0 place-items-center rounded-full bg-warning-soft text-warning"
+          aria-hidden="true"
+        >
+          <LucideAlarmClock class="size-4" />
+        </span>
+        <UserAvatar v-else :name="n.user_from" />
         <span>
-          <div class="mb-2 leading-5">
+          <div
+            v-if="n.notification_type === 'Reminder'"
+            class="mb-2 leading-5 text-ink-gray-8"
+          >
+            {{ n.message }}
+          </div>
+          <div v-else class="mb-2 leading-5">
             <span class="space-x-1 text-ink-gray-7">
               <span
                 class="font-medium text-ink-gray-9"
@@ -102,6 +115,7 @@ import { useSidebarStore } from "@/stores/sidebar";
 import { Notification } from "@/types";
 import { onClickOutside } from "@vueuse/core";
 import { ref } from "vue";
+import LucideAlarmClock from "~icons/lucide/alarm-clock";
 
 const notificationStore = useNotificationStore();
 const sidebarStore = useSidebarStore();
@@ -121,11 +135,13 @@ onClickOutside(
 function handleNotificationClick(n: Notification) {
   notificationStore.toggle();
   if (n.read) return;
-  notificationStore.read(n.reference_ticket);
+  notificationStore.read(n);
 }
 
 function getRoute(n: Notification) {
   switch (n.notification_type) {
+    case "Reminder":
+      return n.link || { name: "MyWork" };
     case "Mention":
       return {
         name: "TicketAgent",

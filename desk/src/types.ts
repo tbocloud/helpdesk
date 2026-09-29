@@ -297,6 +297,11 @@ export type Notification = {
   reference_ticket: string;
   user_from: UserInfo;
   user_to: UserInfo;
+  message?: string;
+  /** reminders: path inside /helpdesk to open */
+  link?: string;
+  reference_doctype?: string;
+  reference_name?: string;
 };
 
 export type UserInfo = {

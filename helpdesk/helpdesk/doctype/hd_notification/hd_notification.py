@@ -1,4 +1,5 @@
 import frappe
+from frappe import _
 from frappe.model.document import Document
 
 
@@ -49,18 +50,45 @@ class HDNotification(Document):
             }
 
     def after_insert(self):
-        if self.notification_type == "Mention":
-            skip_email_workflow = frappe.db.get_single_value(
-                "HD Settings", "skip_email_workflow"
-            )
+        self.send_mention_email()
+        self.send_reminder_email()
 
-            if skip_email_workflow:
-                return
+    def send_mention_email(self):
+        if self.notification_type != "Mention":
+            return
+        if frappe.db.get_single_value("HD Settings", "skip_email_workflow"):
+            return
+        frappe.sendmail(
+            recipients=self.user_to,
+            subject="New notification",
+            message=self.format_message(),
+            template="notification",
+            args=self.get_args(),
+        )
 
+    def send_reminder_email(self):
+        """Deadline reminders also go by email, unless the person turned email notifications off."""
+        from frappe.desk.doctype.notification_settings.notification_settings import (
+            is_email_notifications_enabled,
+        )
+
+        if self.notification_type != "Reminder":
+            return
+        if not is_email_notifications_enabled(self.user_to):
+            return
+        try:
             frappe.sendmail(
                 recipients=self.user_to,
-                subject="New notification",
-                message=self.format_message(),
-                template="notification",
-                args=self.get_args(),
+                subject=frappe.utils.strip_html(self.message),
+                template="new_notification",
+                args={
+                    "body_content": self.message,
+                    "doc_link": frappe.utils.get_url(
+                        "/helpdesk" + (self.link or "/my-work")
+                    ),
+                },
+                header=[_("Reminder"), "orange"],
             )
+        except frappe.OutgoingEmailError:
+            # no outgoing email account yet; the in-app reminder is still there
+            self.log_error("Reminder email not sent")

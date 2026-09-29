@@ -1,11 +1,15 @@
 from unittest.mock import patch
 
 import frappe
+from frappe.desk.doctype.notification_settings.notification_settings import (
+    create_notification_settings,
+)
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_days, add_to_date, now_datetime, nowdate
 
 from helpdesk import work_reminders
 from helpdesk.api import work
+from helpdesk.helpdesk.doctype.hd_notification.utils import clear as clear_notifications
 from helpdesk.patches.v16_0_2.add_waiting_on_task_status import (
     execute as add_waiting_status,
 )
@@ -73,10 +77,13 @@ class WorkControlCase(FrappeTestCase):
 
     def notified(self, user, name):
         return frappe.get_all(
-            "Notification Log",
-            # assigning also notifies, so only count reminder alerts
-            filters={"for_user": user[0], "document_name": str(name), "type": "Alert"},
-            pluck="subject",
+            "HD Notification",
+            filters={
+                "user_to": user[0],
+                "notification_type": "Reminder",
+                "reference_name": str(name),
+            },
+            pluck="message",
         )
 
 
@@ -329,3 +336,48 @@ class TestTaskHold(WorkControlCase):
         result = self.as_user(PM, lambda: work.get_overview(project=self.project))
         self.assertIn(task, {i["name"] for i in result["buckets"]["on_hold"]})
         self.assertNotIn(task, {i["name"] for i in result["buckets"]["overdue"]})
+
+
+class TestReminderDelivery(WorkControlCase):
+    def test_reminder_opens_the_project_and_is_emailed(self):
+        task = self.make_task("Share UAT build", add_days(nowdate(), 1))
+        with patch("frappe.sendmail") as sendmail:
+            work_reminders.send_task_reminders()
+
+        note = frappe.get_last_doc(
+            "HD Notification", filters={"user_to": DEV[0], "reference_name": task}
+        )
+        self.assertEqual(note.link, f"/projects/{self.project}")
+        self.assertEqual(sendmail.call_args.kwargs["recipients"], DEV[0])
+        self.assertTrue(
+            sendmail.call_args.kwargs["args"]["doc_link"].endswith(note.link)
+        )
+
+    def test_no_email_when_the_person_turned_email_off(self):
+        self.make_task("Share UAT build", add_days(nowdate(), 1))
+        if not frappe.db.exists("Notification Settings", DEV[0]):
+            create_notification_settings(DEV[0])
+        frappe.db.set_value(
+            "Notification Settings", DEV[0], "enable_email_notifications", 0
+        )
+        frappe.clear_document_cache("Notification Settings", DEV[0])
+        with patch("frappe.sendmail") as sendmail:
+            work_reminders.send_task_reminders()
+        self.assertFalse(sendmail.called)
+
+    def test_clearing_one_reminder_leaves_the_rest_unread(self):
+        first = self.make_task("Share UAT build", add_days(nowdate(), 1))
+        second = self.make_task("Collect sign-off", add_days(nowdate(), 1))
+        with patch("frappe.sendmail"):
+            work_reminders.send_task_reminders()
+        one = frappe.get_last_doc(
+            "HD Notification", filters={"reference_name": first, "user_to": DEV[0]}
+        )
+
+        self.as_user(DEV, lambda: clear_notifications(notification=one.name))
+
+        self.assertTrue(frappe.db.get_value("HD Notification", one.name, "read"))
+        other = frappe.get_last_doc(
+            "HD Notification", filters={"reference_name": second, "user_to": DEV[0]}
+        )
+        self.assertFalse(other.read)
