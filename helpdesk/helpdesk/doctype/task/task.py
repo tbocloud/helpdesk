@@ -8,15 +8,181 @@ from frappe.utils import add_days, formatdate, get_datetime, getdate, now, nowda
 
 WAITING_ON_TASK = "Waiting on Task"
 ON_HOLD = "On Hold"
+PENDING_REVIEW = "Pending Review"
+DONE = ("Completed", "Cancelled")
+# a task can't enter these while the task it depends on is still open
+NEEDS_DEPENDENCY_DONE = ("Working", PENDING_REVIEW, "Completed")
 
 
 class Task(Document):
     def validate(self):
+        self.validate_dependency()
         self.track_hold()
+        self.route_completion_to_review()
+        self.track_slip()
 
     def on_update(self):
         self.hand_back_ticket_when_completed()
         self.record_hold_change()
+        self.record_slip()
+        self.request_review()
+        self.unblock_dependents()
+
+    def status_changed(self) -> bool:
+        before = self.get_doc_before_save()
+        return not before or before.status != self.status
+
+    def validate_dependency(self):
+        """Same project, no loops, and the task it waits on must be done before this one moves on."""
+        if not self.depends_on_task:
+            return
+        if self.depends_on_task == self.name:
+            frappe.throw(_("A task can't depend on itself."))
+        dependency = frappe.db.get_value(
+            "Task",
+            self.depends_on_task,
+            ["project", "status", "subject"],
+            as_dict=True,
+        )
+        if not dependency:
+            frappe.throw(_("Task {0} not found.").format(self.depends_on_task))
+        if dependency.project != self.project:
+            frappe.throw(_("A task can only depend on a task in the same project."))
+        self.check_dependency_loop()
+        if (
+            self.status in NEEDS_DEPENDENCY_DONE
+            and self.status_changed()
+            and dependency.status not in DONE
+        ):
+            frappe.throw(
+                _("Finish {0} ({1}) first: this task depends on it.").format(
+                    self.depends_on_task, dependency.subject
+                )
+            )
+
+    def check_dependency_loop(self):
+        seen = {self.name}
+        current = self.depends_on_task
+        while current:
+            if current in seen:
+                frappe.throw(_("These tasks would depend on each other in a loop."))
+            seen.add(current)
+            current = frappe.db.get_value("Task", current, "depends_on_task")
+
+    def route_completion_to_review(self):
+        """On projects that want it, a team member's "done" goes to the lead first."""
+        from helpdesk.tasky.permissions import can_manage_project
+
+        if not self.status_changed() or self.flags.hold_ended:
+            return
+        if self.status not in ("Completed", PENDING_REVIEW):
+            return
+        if not self.project or not frappe.db.get_value(
+            "Project", self.project, "review_before_done"
+        ):
+            return
+        if self.status == "Completed" and can_manage_project(self.project):
+            return
+        self.status = PENDING_REVIEW
+        self.flags.review_requested = True
+
+    def track_slip(self):
+        """Count due dates moved later; days added by a hold resume aren't a slip."""
+        before = self.get_doc_before_save()
+        if not before or not before.exp_end_date or not self.exp_end_date:
+            return
+        if self.flags.hold_ended:
+            return
+        if getdate(self.exp_end_date) <= getdate(before.exp_end_date):
+            return
+        self.slip_count = (self.slip_count or 0) + 1
+        self.flags.slipped = {"old_due": before.exp_end_date}
+
+    def record_slip(self):
+        from helpdesk.work_reminders import notify_users
+
+        slipped = self.flags.slipped
+        if not slipped:
+            return
+        text = _("Due date moved from {0} to {1}.").format(
+            formatdate(slipped["old_due"]), formatdate(self.exp_end_date)
+        )
+        if self.flags.slip_reason:
+            text += " " + _("Reason: {0}").format(self.flags.slip_reason)
+        self.add_comment("Info", frappe.utils.escape_html(text))
+
+        notify_users(
+            [u for u in self.assignees() if u != frappe.session.user],
+            "Task",
+            self.name,
+            _("Due date moved to {0}: {1}").format(
+                formatdate(self.exp_end_date), self.subject
+            ),
+        )
+        if self.is_key or self.is_milestone:
+            label = _("Milestone") if self.is_milestone else _("Key task")
+            notify_users(
+                [
+                    u
+                    for u in self.leads_or_managers(both=True)
+                    if u != frappe.session.user
+                ],
+                "Task",
+                self.name,
+                _("{0} rescheduled to {1} (moved {2} times): {3}").format(
+                    label, formatdate(self.exp_end_date), self.slip_count, self.subject
+                ),
+            )
+
+    def request_review(self):
+        from helpdesk.work_reminders import notify_users
+
+        if not self.flags.review_requested:
+            return
+        self.add_comment("Info", _("Sent for review."))
+        notify_users(
+            [u for u in self.leads_or_managers() if u != frappe.session.user],
+            "Task",
+            self.name,
+            _("Ready for review ({0}): {1}").format(
+                formatdate(nowdate()), self.subject
+            ),
+        )
+
+    def unblock_dependents(self):
+        """Tell whoever is waiting on this task that they can go ahead."""
+        from helpdesk.work_reminders import notify_users
+
+        if self.status != "Completed" or not self.status_changed():
+            return
+        waiting = frappe.get_all(
+            "Task",
+            filters={
+                "depends_on_task": self.name,
+                "status": ("not in", list(DONE)),
+            },
+            fields=["name", "subject", "_assign"],
+        )
+        for task in waiting:
+            notify_users(
+                frappe.parse_json(task._assign or "[]"),
+                "Task",
+                task.name,
+                _("Unblocked, {0} is done: {1}").format(self.subject, task.subject),
+            )
+
+    def assignees(self) -> list[str]:
+        return frappe.parse_json(self.get("_assign") or "[]")
+
+    def leads_or_managers(self, both: bool = False) -> list[str]:
+        """The project lead, or its managers when there's no lead (or both, for escalations)."""
+        from helpdesk.work_reminders import get_project_managers
+
+        if not self.project:
+            return []
+        lead = frappe.db.get_value("Project", self.project, "project_lead")
+        managers = get_project_managers(self.project) if both or not lead else []
+        return [u for u in [lead, *managers] if u]
 
     def track_hold(self):
         if self.is_going_on_hold():
@@ -81,7 +247,7 @@ class Task(Document):
 
     def announce_hold(self):
         """Tell the project lead (or its managers) right away, and keep it in the task's history."""
-        from helpdesk.work_reminders import get_project_managers, notify_users
+        from helpdesk.work_reminders import notify_users
 
         text = _("On hold: {0}").format(self.hold_reason)
         if self.hold_note:
@@ -90,10 +256,8 @@ class Task(Document):
 
         if not self.project:
             return
-        lead = frappe.db.get_value("Project", self.project, "project_lead")
-        recipients = [lead] if lead else get_project_managers(self.project)
         notify_users(
-            [u for u in recipients if u != frappe.session.user],
+            [u for u in self.leads_or_managers() if u != frappe.session.user],
             "Task",
             self.name,
             _("On hold since {0} ({1}): {2}").format(

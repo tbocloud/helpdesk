@@ -8,6 +8,7 @@ import LucideLayoutDashboard from "~icons/lucide/layout-dashboard";
 import LucideClipboardList from "~icons/lucide/clipboard-list";
 import LucideClock from "~icons/lucide/clock";
 import LucideCalendarDays from "~icons/lucide/calendar-days";
+import LucideNewspaper from "~icons/lucide/newspaper";
 import { __ } from "@/translation";
 
 export const agentPortalSidebarOptions = [
@@ -21,6 +22,13 @@ export const agentPortalSidebarOptions = [
     label: __("Overview"),
     icon: LucideLayoutDashboard,
     to: "WorkOverview",
+    section: "Workspace",
+    overviewOnly: true,
+  },
+  {
+    label: __("Summaries"),
+    icon: LucideNewspaper,
+    to: "WorkSummaries",
     section: "Workspace",
     overviewOnly: true,
   },

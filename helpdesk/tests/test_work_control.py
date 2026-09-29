@@ -381,3 +381,179 @@ class TestReminderDelivery(WorkControlCase):
             "HD Notification", filters={"reference_name": second, "user_to": DEV[0]}
         )
         self.assertFalse(other.read)
+
+
+class TestDependenciesAndMilestones(WorkControlCase):
+    def test_task_waits_for_its_dependency_then_is_unblocked(self):
+        first = self.make_task("Install server", add_days(nowdate(), 2), assignee=LEAD)
+        second = self.make_task("Deploy app", add_days(nowdate(), 4))
+        self.as_user(
+            LEAD, lambda: tasky.update_task_plan(task=second, depends_on_task=first)
+        )
+
+        with self.assertRaises(frappe.ValidationError):
+            self.as_user(
+                DEV, lambda: tasky.move_task(task=second, new_status="Working")
+            )
+
+        self.as_user(LEAD, lambda: tasky.move_task(task=first, new_status="Completed"))
+        self.assertTrue(any("Unblocked" in s for s in self.notified(DEV, second)))
+        self.as_user(DEV, lambda: tasky.move_task(task=second, new_status="Working"))
+        self.assertEqual(frappe.db.get_value("Task", second, "status"), "Working")
+
+    def test_dependency_loops_and_other_projects_are_refused(self):
+        first = self.make_task("Design", add_days(nowdate(), 2))
+        second = self.make_task("Build", add_days(nowdate(), 4))
+        self.as_user(
+            LEAD, lambda: tasky.update_task_plan(task=second, depends_on_task=first)
+        )
+        with self.assertRaises(frappe.ValidationError):
+            self.as_user(
+                LEAD, lambda: tasky.update_task_plan(task=first, depends_on_task=second)
+            )
+
+        other = make_project(f"{OTHER_CUSTOMER} - Support", owner=PM[0]).name
+        stranger = frappe.get_doc(
+            {"doctype": "Task", "subject": "Elsewhere", "project": other}
+        ).insert(ignore_permissions=True)
+        with self.assertRaises(frappe.ValidationError):
+            self.as_user(
+                LEAD,
+                lambda: tasky.update_task_plan(
+                    task=first, depends_on_task=stranger.name
+                ),
+            )
+
+    def test_milestones_show_on_the_project_dashboard(self):
+        go_live = self.make_task("Go-live", add_days(nowdate(), 20))
+        self.as_user(
+            LEAD, lambda: tasky.update_task_plan(task=go_live, is_milestone=True)
+        )
+        dashboard = self.as_user(
+            PM, lambda: tasky.get_project_dashboard(project=self.project)
+        )
+        self.assertEqual([m["name"] for m in dashboard["milestones"]], [go_live])
+
+
+class TestReviewBeforeDone(WorkControlCase):
+    def setUp(self):
+        super().setUp()
+        frappe.db.set_value("Project", self.project, "review_before_done", 1)
+
+    def test_done_goes_to_the_lead_who_approves(self):
+        task = self.make_task("Sales invoice print format", add_days(nowdate(), 3))
+        result = self.as_user(
+            DEV, lambda: tasky.move_task(task=task, new_status="Completed")
+        )
+
+        self.assertEqual(result["status"], "Pending Review")
+        self.assertTrue(any("Ready for review" in s for s in self.notified(LEAD, task)))
+        with self.assertRaises(frappe.PermissionError):
+            self.as_user(DEV, lambda: tasky.approve_task(task=task))
+
+        self.as_user(LEAD, lambda: tasky.approve_task(task=task))
+        self.assertEqual(frappe.db.get_value("Task", task, "status"), "Completed")
+
+    def test_lead_sends_it_back_with_a_note(self):
+        task = self.make_task("Purchase workflow", add_days(nowdate(), 3))
+        self.as_user(
+            DEV, lambda: tasky.update_task_status(task=task, status="Completed")
+        )
+
+        self.as_user(
+            LEAD, lambda: tasky.send_back_task(task=task, note="Approval limit missing")
+        )
+
+        self.assertEqual(frappe.db.get_value("Task", task, "status"), "Open")
+        self.assertTrue(any("Sent back" in s for s in self.notified(DEV, task)))
+
+    def test_ticket_waits_until_the_lead_approves(self):
+        ticket = make_ticket(subject="Add approval step", customer=CUSTOMER)
+        make_assignment("HD Ticket", ticket.name, SUPPORT[0])
+        task = self.as_user(
+            SUPPORT,
+            lambda: work.create_task_from_ticket(
+                ticket=ticket.name, project=self.project, assigned_to=DEV[0]
+            ),
+        )["task"]["name"]
+
+        self.as_user(DEV, lambda: tasky.move_task(task=task, new_status="Completed"))
+        self.assertEqual(
+            frappe.db.get_value("HD Ticket", ticket.name, "status"), "Waiting on Task"
+        )
+
+        self.as_user(LEAD, lambda: tasky.approve_task(task=task))
+        self.assertEqual(
+            frappe.db.get_value("HD Ticket", ticket.name, "status"), "Open"
+        )
+
+
+class TestRescheduling(WorkControlCase):
+    def test_moving_later_needs_a_reason_and_is_counted(self):
+        due = add_days(nowdate(), 3)
+        task = self.make_task("Stock reconciliation", due, is_key=1)
+        later = add_days(due, 5)
+        with self.assertRaises(frappe.ValidationError):
+            self.as_user(
+                LEAD, lambda: tasky.update_task_plan(task=task, due_date=later)
+            )
+
+        self.as_user(
+            LEAD,
+            lambda: tasky.update_task_plan(
+                task=task, due_date=later, reason="Customer data late"
+            ),
+        )
+
+        doc = frappe.get_doc("Task", task)
+        self.assertEqual(doc.slip_count, 1)
+        self.assertTrue(any("Due date moved" in s for s in self.notified(DEV, task)))
+        self.assertTrue(
+            any("Key task rescheduled" in s for s in self.notified(PM, task))
+        )
+        comments = frappe.get_all(
+            "Comment",
+            filters={"reference_doctype": "Task", "reference_name": task},
+            pluck="content",
+        )
+        self.assertTrue(any("Customer data late" in c for c in comments))
+
+    def test_only_leads_and_managers_reschedule(self):
+        task = self.make_task("Opening stock", add_days(nowdate(), 3))
+        with self.assertRaises(frappe.PermissionError):
+            self.as_user(
+                DEV,
+                lambda: tasky.update_task_plan(
+                    task=task, due_date=add_days(nowdate(), 9), reason="Busy"
+                ),
+            )
+
+    def test_hold_extension_is_not_a_slip(self):
+        task = self.make_task("Payroll setup", add_days(nowdate(), 3))
+        self.as_user(DEV, lambda: tasky.hold_task(task=task, reason="Leave"))
+        frappe.db.set_value("Task", task, "hold_since", add_days(nowdate(), -2))
+        self.as_user(DEV, lambda: tasky.resume_task(task=task))
+        self.assertEqual(frappe.db.get_value("Task", task, "slip_count"), 0)
+
+
+class TestAtRisk(WorkControlCase):
+    def test_unstarted_and_often_moved_work_is_at_risk(self):
+        unstarted = self.make_task("Train accounts team", add_days(nowdate(), 1))
+        moved = self.make_task("Migrate balances", add_days(nowdate(), 10))
+        frappe.db.set_value("Task", moved, {"slip_count": 2, "status": "Working"})
+        fine = self.make_task("Write user guide", add_days(nowdate(), 10))
+
+        result = self.as_user(PM, lambda: work.get_overview(project=self.project))
+        risky = {i["name"]: i["risks"] for i in result["buckets"]["at_risk"]}
+        self.assertIn("Not started", risky[unstarted][0])
+        self.assertIn("Rescheduled 2 times", risky[moved])
+        self.assertNotIn(fine, risky)
+
+    def test_urgent_unassigned_ticket_is_at_risk(self):
+        ticket = make_ticket(
+            subject="Server down", priority="Urgent", customer=CUSTOMER
+        )
+        frappe.db.set_value("HD Ticket", ticket.name, "_assign", "[]")
+        result = self.as_user(PM, lambda: work.get_overview(customer=CUSTOMER))
+        risky = {i["name"]: i["risks"] for i in result["buckets"]["at_risk"]}
+        self.assertTrue(any("unassigned" in r for r in risky.get(str(ticket.name), [])))

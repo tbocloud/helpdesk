@@ -127,6 +127,17 @@
         "
       />
 
+      <FormControl
+        v-model="form.review_before_done"
+        type="checkbox"
+        :label="__('Review before done')"
+        :description="
+          __(
+            'Team members\' completed tasks go to the project lead for approval.'
+          )
+        "
+      />
+
       <div
         v-if="error"
         role="alert"
@@ -191,6 +202,7 @@ const EMPTY = () => ({
   status: "Open",
   priority: "Medium",
   project_lead: "",
+  review_before_done: false,
   members: [] as { user: string; custom_role: string }[],
 });
 const form = reactive(EMPTY());
@@ -240,6 +252,7 @@ const detail = createResource({
       status: data.status || "Open",
       priority: data.priority || "Medium",
       project_lead: data.project_lead || "",
+      review_before_done: !!data.review_before_done,
       members: (data.users ?? []).map((u: any) => ({
         user: u.user,
         custom_role: u.role || "",
@@ -296,6 +309,7 @@ async function submit() {
           customer: form.customer,
           project_lead: form.project_lead || null,
           members,
+          review_before_done: form.review_before_done,
         });
     toast.success(isEdit.value ? __("Project updated") : __("Project created"));
     open.value = false;

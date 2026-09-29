@@ -153,14 +153,15 @@ import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideInbox from "~icons/lucide/inbox";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideStar from "~icons/lucide/star";
+import LucideTriangleAlert from "~icons/lucide/triangle-alert";
 import WorkItemRow from "./components/WorkItemRow.vue";
-import { itemKey, type WorkItem } from "./workMeta";
+import { isAtRisk, itemKey, type WorkItem } from "./workMeta";
 
-type Tab = "all" | "overdue" | "key" | "task" | "ticket";
+type Tab = "all" | "overdue" | "at_risk" | "key" | "task" | "ticket";
 
 interface MyWork {
   items: WorkItem[];
-  counts: { total: number; overdue: number; key: number };
+  counts: { total: number; overdue: number; key: number; at_risk?: number };
 }
 
 const route = useRoute();
@@ -174,12 +175,13 @@ const work = createResource({
 const tabs = computed<{ key: Tab; label: string; icon?: Component }[]>(() => [
   { key: "all", label: __("All") },
   { key: "overdue", label: __("Overdue"), icon: LucideAlarmClock },
+  { key: "at_risk", label: __("At risk"), icon: LucideTriangleAlert },
   { key: "key", label: __("Key"), icon: LucideStar },
   { key: "task", label: __("Tasks") },
   { key: "ticket", label: __("Tickets") },
 ]);
 
-const TAB_KEYS: Tab[] = ["all", "overdue", "key", "task", "ticket"];
+const TAB_KEYS: Tab[] = ["all", "overdue", "at_risk", "key", "task", "ticket"];
 
 const activeTab = ref<Tab>(
   TAB_KEYS.includes(route.query.tab as Tab) ? (route.query.tab as Tab) : "all"
@@ -199,6 +201,7 @@ const items = computed<WorkItem[]>(
 function matches(item: WorkItem, tab: Tab) {
   if (tab === "all") return true;
   if (tab === "overdue") return item.is_overdue;
+  if (tab === "at_risk") return isAtRisk(item);
   if (tab === "key") return item.is_key;
   return item.kind === tab;
 }
@@ -224,6 +227,7 @@ const emptyState = computed(() => {
   }
   const messages: Record<Exclude<Tab, "all">, string> = {
     overdue: __("Nothing is overdue. Nice work."),
+    at_risk: __("Nothing looks likely to slip right now."),
     key: __("None of your work is marked as key."),
     task: __("No open tasks are assigned to you."),
     ticket: __("No open tickets are assigned to you."),

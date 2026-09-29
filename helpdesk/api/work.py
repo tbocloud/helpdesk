@@ -9,7 +9,14 @@ import json
 
 import frappe
 from frappe import _
-from frappe.utils import add_days, get_datetime, getdate, now_datetime, nowdate
+from frappe.utils import (
+    add_days,
+    add_to_date,
+    get_datetime,
+    getdate,
+    now_datetime,
+    nowdate,
+)
 
 from helpdesk.tasky.permissions import can_manage_project, is_project_manager
 from helpdesk.utils import agent_only
@@ -17,6 +24,10 @@ from helpdesk.utils import agent_only
 KEY_TICKET_PRIORITIES = ("Urgent", "High")
 OPEN_TASK_FILTER = ("not in", ["Completed", "Cancelled", "Template"])
 DUE_SOON_DAYS = 3
+# at risk: not started this close to the deadline, or pushed out this often
+NOT_STARTED_RISK_DAYS = 2
+RESCHEDULE_RISK_COUNT = 2
+SLA_RISK_HOURS = 4
 LIST_LIMIT = 300
 WAITING_ON_TASK = "Waiting on Task"
 ON_HOLD = "On Hold"
@@ -32,6 +43,9 @@ TASK_FIELDS = [
     "hd_ticket",
     "hold_reason",
     "hold_since",
+    "is_milestone",
+    "slip_count",
+    "depends_on_task",
     "_assign",
 ]
 TICKET_FIELDS = [
@@ -67,10 +81,45 @@ def _project_names(tasks) -> dict:
     )
 
 
-def _task_item(task, project_names: dict) -> dict:
+def _open_dependencies(tasks) -> dict:
+    """Subjects of the tasks these depend on that aren't done yet."""
+    names = list({t.depends_on_task for t in tasks if t.depends_on_task})
+    if not names:
+        return {}
+    return dict(
+        frappe.get_all(
+            "Task",
+            filters={
+                "name": ("in", names),
+                "status": ("not in", ["Completed", "Cancelled"]),
+            },
+            fields=["name", "subject"],
+            as_list=True,
+        )
+    )
+
+
+def _task_risks(task, deadline, today, waiting_on: str | None) -> list[str]:
+    if task.status in (ON_HOLD, "Pending Review") or not deadline or deadline < today:
+        return []
+    days_left = (deadline - today).days
+    risks = []
+    if task.status == "Open" and days_left <= NOT_STARTED_RISK_DAYS:
+        risks.append(_("Not started, due in {0} day(s)").format(days_left))
+    if (task.slip_count or 0) >= RESCHEDULE_RISK_COUNT:
+        risks.append(_("Rescheduled {0} times").format(task.slip_count))
+    if waiting_on and days_left <= DUE_SOON_DAYS:
+        risks.append(_("Still waiting on {0}").format(waiting_on))
+    return risks
+
+
+def _task_item(
+    task, project_names: dict, open_dependencies: dict | None = None
+) -> dict:
     deadline = getdate(task.exp_end_date) if task.exp_end_date else None
     on_hold = task.status == ON_HOLD
     today = getdate(nowdate())
+    waiting_on = (open_dependencies or {}).get(task.depends_on_task)
     return {
         "kind": "task",
         "name": task.name,
@@ -90,8 +139,25 @@ def _task_item(task, project_names: dict) -> dict:
             if on_hold and task.hold_since
             else None
         ),
+        "is_milestone": bool(task.is_milestone),
+        "slip_count": task.slip_count or 0,
+        "waiting_on": waiting_on,
+        "risks": _task_risks(task, deadline, today, waiting_on),
         "assignees": _assignees(task._assign),
     }
+
+
+def _ticket_risks(ticket, deadline) -> list[str]:
+    if ticket.status_category != "Open":
+        return []
+    risks = []
+    now = now_datetime()
+    if deadline and now <= deadline <= add_to_date(now, hours=SLA_RISK_HOURS):
+        hours = max(int((deadline - now).total_seconds() // 3600), 0)
+        risks.append(_("SLA due in {0}h").format(hours))
+    if ticket.priority in KEY_TICKET_PRIORITIES and not _assignees(ticket._assign):
+        risks.append(_("{0} priority and unassigned").format(ticket.priority))
+    return risks
 
 
 def _ticket_item(ticket) -> dict:
@@ -109,8 +175,19 @@ def _ticket_item(ticket) -> dict:
         "is_overdue": bool(
             deadline and ticket.status_category == "Open" and deadline < now_datetime()
         ),
+        "risks": _ticket_risks(ticket, deadline),
         "assignees": _assignees(ticket._assign),
     }
+
+
+def _items(tasks, tickets) -> list[dict]:
+    names = _project_names(tasks)
+    waiting = _open_dependencies(tasks)
+    items = [_task_item(t, names, waiting) for t in tasks] + [
+        _ticket_item(t) for t in tickets
+    ]
+    items.sort(key=_sort_key)
+    return items
 
 
 def _sort_key(item: dict):
@@ -143,15 +220,14 @@ def get_my_work() -> dict:
         fields=TICKET_FIELDS,
         limit_page_length=LIST_LIMIT,
     )
-    names = _project_names(tasks)
-    items = [_task_item(t, names) for t in tasks] + [_ticket_item(t) for t in tickets]
-    items.sort(key=_sort_key)
+    items = _items(tasks, tickets)
     return {
         "items": items,
         "counts": {
             "total": len(items),
             "overdue": sum(i["is_overdue"] for i in items),
             "key": sum(i["is_key"] for i in items),
+            "at_risk": sum(bool(i["risks"]) for i in items),
         },
     }
 
@@ -195,9 +271,7 @@ def get_overview(
             limit_page_length=LIST_LIMIT,
         )
     )
-    names = _project_names(tasks)
-    items = [_task_item(t, names) for t in tasks] + [_ticket_item(t) for t in tickets]
-    items.sort(key=_sort_key)
+    items = _items(tasks, tickets)
 
     def due_soon(item):
         if item["is_overdue"] or not item["deadline"] or item["status"] == ON_HOLD:
@@ -212,6 +286,10 @@ def get_overview(
             i for i in items if i["kind"] == "ticket" and i["status"] == WAITING_ON_TASK
         ],
         "on_hold": [i for i in items if i["kind"] == "task" and i["status"] == ON_HOLD],
+        "at_risk": [i for i in items if i["risks"]],
+        "review": [
+            i for i in items if i["kind"] == "task" and i["status"] == "Pending Review"
+        ],
     }
     return {
         "buckets": buckets,

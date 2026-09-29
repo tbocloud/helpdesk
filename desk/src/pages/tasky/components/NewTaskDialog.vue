@@ -82,13 +82,36 @@
       </div>
 
       <FormControl
-        v-model="form.is_key"
-        type="checkbox"
-        :label="__('Key task')"
+        v-model="form.depends_on_task"
+        type="select"
+        :label="__('Depends on')"
+        :options="dependencyOptions"
+        :disabled="!openTasks.data && !openTasks.error"
         :description="
-          __('Key tasks are highlighted in My Work and the overview')
+          __(
+            'Optional. The task can\'t start or finish until this one is done.'
+          )
         "
       />
+
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <FormControl
+          v-model="form.is_key"
+          type="checkbox"
+          :label="__('Key task')"
+          :description="
+            __('Key tasks are highlighted in My Work and the overview')
+          "
+        />
+        <FormControl
+          v-model="form.is_milestone"
+          type="checkbox"
+          :label="__('Milestone')"
+          :description="
+            __('Milestones are listed on the project dashboard by due date')
+          "
+        />
+      </div>
 
       <div
         v-if="errorMessage"
@@ -161,6 +184,8 @@ const form = reactive({
   due_date: "",
   assigned_to: "",
   is_key: false,
+  is_milestone: false,
+  depends_on_task: "",
 });
 
 function resetForm() {
@@ -173,12 +198,30 @@ function resetForm() {
   form.due_date = "";
   form.assigned_to = "";
   form.is_key = false;
+  form.is_milestone = false;
+  form.depends_on_task = "";
 }
 
 const projectDetail = createResource({
   url: "helpdesk.tasky.api.get_project_detail",
   makeParams: () => ({ project: props.projectId }),
 });
+
+const openTasks = createResource({
+  url: "helpdesk.tasky.api.get_project_tasks",
+  makeParams: () => ({ project: props.projectId }),
+  onError() {},
+});
+
+const dependencyOptions = computed(() => [
+  {
+    label: openTasks.data ? __("No dependency") : __("Loading tasks…"),
+    value: "",
+  },
+  ...((openTasks.data ?? []) as { name: string; subject: string }[]).map(
+    (t) => ({ label: t.subject, value: t.name })
+  ),
+]);
 
 const members = computed<Member[]>(() => projectDetail.data?.users ?? []);
 const membersLoaded = computed(
@@ -227,7 +270,10 @@ watch(
     if (!open) return;
     resetForm();
     addTask.reset();
-    if (props.projectId) projectDetail.reload();
+    if (props.projectId) {
+      projectDetail.reload();
+      openTasks.reload();
+    }
   },
   { immediate: true }
 );
@@ -245,6 +291,8 @@ function submit() {
     assigned_to: form.assigned_to,
     due_date: form.due_date || null,
     is_key: form.is_key,
+    is_milestone: form.is_milestone,
+    depends_on_task: form.depends_on_task || null,
   });
 }
 </script>

@@ -1,6 +1,7 @@
 <template>
   <div class="flex h-full flex-col">
     <ProjectNav
+      ref="nav"
       :project-id="projectId"
       :phases="phaseNames"
       @task-created="kanban.reload()"
@@ -183,6 +184,33 @@
                     />
                     <span class="sr-only">{{ __("Key task") }}</span>
                   </template>
+                  <MilestoneMark v-if="task.is_milestone" class="mt-0.5" />
+                  <Dropdown
+                    v-if="cardActions(task).length"
+                    :options="cardActions(task)"
+                    align="end"
+                  >
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      class="-mr-1 -mt-0.5 shrink-0"
+                      :aria-label="__('Actions for {0}', task.subject)"
+                    >
+                      <template #icon>
+                        <LucideMoreHorizontal
+                          class="size-4"
+                          aria-hidden="true"
+                        />
+                      </template>
+                    </Button>
+                  </Dropdown>
+                </div>
+
+                <div
+                  v-if="task.blocked && col.key !== 'Completed'"
+                  class="mt-2 flex min-w-0"
+                >
+                  <WaitingOn :subject="task.depends_on_subject" />
                 </div>
 
                 <div
@@ -280,6 +308,10 @@
                     {{ shortDate(task.due_date) }}
                     <span v-if="isOverdue(task)">· {{ __("Overdue") }}</span>
                   </span>
+                  <SlipBadge
+                    v-if="task.slip_count && !isClosed(task)"
+                    :count="task.slip_count"
+                  />
                   <div class="ml-auto flex shrink-0 items-center gap-1.5">
                     <component
                       :is="priorityIcon(task.priority)"
@@ -305,6 +337,36 @@
                     </span>
                   </div>
                 </div>
+
+                <div
+                  v-if="canManage && isPendingReview(task)"
+                  class="mt-2.5 flex items-center justify-end gap-1.5 border-t border-outline-gray-1 pt-2.5"
+                >
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    :label="__('Send back')"
+                    @click.stop="sendingBackTask = task"
+                  >
+                    <template #prefix>
+                      <LucideUndo2 class="size-3.5" aria-hidden="true" />
+                    </template>
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="subtle"
+                    :label="__('Approve')"
+                    :loading="
+                      approveResource.loading &&
+                      approveResource.params?.task === task.name
+                    "
+                    @click.stop="approve(task)"
+                  >
+                    <template #prefix>
+                      <LucideCheckCheck class="size-3.5" aria-hidden="true" />
+                    </template>
+                  </Button>
+                </div>
               </article>
             </div>
           </section>
@@ -314,6 +376,15 @@
 
     <HoldTaskDialog v-model:task="holdingTask" @held="onHoldChanged" />
     <ResumeTaskDialog v-model:task="resumingTask" @resumed="onHoldChanged" />
+    <TaskPlanDialog
+      v-model:task="planningTask"
+      :project-id="projectId"
+      @saved="kanban.reload()"
+    />
+    <SendBackTaskDialog
+      v-model:task="sendingBackTask"
+      @sent="kanban.reload()"
+    />
 
     <Dialog
       v-model:open="completeDialogOpen"
@@ -369,6 +440,7 @@ import { __ } from "@/translation";
 import {
   Button,
   Dialog,
+  Dropdown,
   TextInput,
   Textarea,
   createResource,
@@ -377,33 +449,52 @@ import {
 import { computed, onUnmounted, ref, watch } from "vue";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
 import LucideCalendar from "~icons/lucide/calendar";
+import LucideCalendarClock from "~icons/lucide/calendar-clock";
+import LucideCheckCheck from "~icons/lucide/check-check";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideCirclePause from "~icons/lucide/circle-pause";
 import LucideGripVertical from "~icons/lucide/grip-vertical";
 import LucideInfo from "~icons/lucide/info";
+import LucideMoreHorizontal from "~icons/lucide/more-horizontal";
 import LucidePause from "~icons/lucide/pause";
 import LucidePlay from "~icons/lucide/play";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideStar from "~icons/lucide/star";
 import LucideTimer from "~icons/lucide/timer";
+import LucideUndo2 from "~icons/lucide/undo-2";
 import HoldTaskDialog from "./components/HoldTaskDialog.vue";
+import MilestoneMark from "./components/MilestoneMark.vue";
 import ProjectNav from "./components/ProjectNav.vue";
 import ResumeTaskDialog from "./components/ResumeTaskDialog.vue";
+import SendBackTaskDialog from "./components/SendBackTaskDialog.vue";
+import SlipBadge from "./components/SlipBadge.vue";
+import TaskPlanDialog from "./components/TaskPlanDialog.vue";
 import TaskyState from "./components/TaskyState.vue";
+import WaitingOn from "./components/WaitingOn.vue";
 import {
   ON_HOLD,
+  blockedMessage,
+  blocksMove,
+  errorText,
   holdDays,
   holdDurationLabel,
   initials,
+  isClosed,
   isOnHold,
   isOverdue,
+  isPendingReview,
+  notifyIfSentForReview,
   priorityIcon,
   shortDate,
   taskStatusMeta,
 } from "./taskMeta";
+import { useApproveTask } from "./useApproveTask";
 
 const props = defineProps<{ projectId: string }>();
+
+const nav = ref<InstanceType<typeof ProjectNav> | null>(null);
+const canManage = computed(() => !!nav.value?.canManage);
 
 const columnList = [
   { key: "Open" },
@@ -435,6 +526,11 @@ interface Task {
   hold_reason?: string | null;
   hold_note?: string | null;
   hold_since?: string | null;
+  is_milestone?: boolean;
+  slip_count?: number;
+  depends_on_task?: string | null;
+  depends_on_subject?: string | null;
+  blocked?: boolean;
 }
 
 const kanban = createResource({
@@ -450,6 +546,11 @@ const kanban = createResource({
 // Moves are applied optimistically; on failure, reload so the board matches the server again.
 const moveTaskApi = createResource({
   url: "helpdesk.tasky.api.move_task",
+  onSuccess(data: { status?: string }) {
+    // the server can store a different status (e.g. review before done)
+    if (data?.status && data.status !== moveTaskApi.params?.new_status)
+      kanban.reload();
+  },
   onError(e: any) {
     toast.error(errorText(e, __("Couldn't move the task.")));
     kanban.reload();
@@ -457,7 +558,8 @@ const moveTaskApi = createResource({
 });
 const completeResource = createResource({
   url: "helpdesk.tasky.api.complete_task",
-  onSuccess() {
+  onSuccess(data: Record<string, any>) {
+    notifyIfSentForReview("Completed", data?.status);
     kanban.reload();
   },
   onError(e: any) {
@@ -468,16 +570,44 @@ const completeResource = createResource({
 
 const holdingTask = ref<Task | null>(null);
 const resumingTask = ref<Task | null>(null);
+const planningTask = ref<Task | null>(null);
+const sendingBackTask = ref<Task | null>(null);
+
+const { approve, resource: approveResource } = useApproveTask(() =>
+  kanban.reload()
+);
+
+function cardActions(task: Task) {
+  if (!canManage.value || isClosed(task)) return [];
+  const actions: Record<string, any>[] = [
+    {
+      label: __("Plan"),
+      icon: LucideCalendarClock,
+      onClick: () => (planningTask.value = task),
+    },
+  ];
+  if (isPendingReview(task)) {
+    actions.push(
+      {
+        label: __("Approve"),
+        icon: LucideCheckCheck,
+        onClick: () => approve(task),
+      },
+      {
+        label: __("Send back"),
+        icon: LucideUndo2,
+        onClick: () => (sendingBackTask.value = task),
+      }
+    );
+  }
+  return actions;
+}
 
 // Holding stops the server timer and resuming may start it or move the due date,
 // so drop local timer state and take the server's view.
 function onHoldChanged(task: { name: string }) {
   delete timers.value[task.name];
   kanban.reload();
-}
-
-function errorText(e: any, fallback: string) {
-  return e?.messages?.length ? e.messages.join(" ") : e?.message || fallback;
 }
 
 const totalTasks = computed(() =>
@@ -640,6 +770,13 @@ function onDrop(e: DragEvent, newStatus: string) {
     if (task) break;
   }
   if (!task || task.status === newStatus || task.status === "Completed") return;
+
+  // the server refuses these moves while the dependency is open; don't move the card at all
+  if (blocksMove(task, newStatus)) {
+    dropTarget.value = null;
+    toast.error(blockedMessage(task));
+    return;
+  }
 
   // a hold needs a reason, so the move happens only once the dialog is submitted
   if (newStatus === ON_HOLD) {

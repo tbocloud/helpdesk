@@ -692,3 +692,56 @@ def make_assignment(doctype: str, name: str, user: str):
         {"doctype": doctype, "name": str(name), "assign_to": [user]},
         ignore_permissions=True,
     )
+
+
+def make_task(project: str, subject: str, exp_end_date=None, **kwargs):
+    """Creates an open Task in `project` directly, bypassing the tasky API."""
+    return frappe.get_doc(
+        {
+            "doctype": "Task",
+            "subject": subject,
+            "project": project,
+            "status": "Open",
+            "exp_end_date": exp_end_date,
+            **kwargs,
+        }
+    ).insert(ignore_permissions=True)
+
+
+def make_work_summary(customer: str, **kwargs):
+    """Creates an HD Work Summary for `customer` for the last 7 days, without stats or AI."""
+    from frappe.utils import add_days, nowdate
+
+    return frappe.get_doc(
+        {
+            "doctype": "HD Work Summary",
+            "customer": customer,
+            "period_start": add_days(nowdate(), -6),
+            "period_end": nowdate(),
+            "summary": "<p>Test summary</p>",
+            "stats": "{}",
+            **kwargs,
+        }
+    ).insert(ignore_permissions=True)
+
+
+def run_as_user(user: str, fn):
+    """Calls `fn()` as `user`, then switches back to Administrator."""
+    frappe.set_user(user)
+    try:
+        return fn()
+    finally:
+        frappe.set_user("Administrator")
+
+
+def get_reminder_messages(user: str, reference_name) -> list[str]:
+    """Messages of the Reminder HD Notifications sent to `user` about a document."""
+    return frappe.get_all(
+        "HD Notification",
+        filters={
+            "user_to": user,
+            "notification_type": "Reminder",
+            "reference_name": str(reference_name),
+        },
+        pluck="message",
+    )

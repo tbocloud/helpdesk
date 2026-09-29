@@ -75,6 +75,8 @@ def notify_users(users, doctype: str, name: str, subject: str):
 
 def helpdesk_path(doctype: str, name: str) -> str:
     """Where the reminder opens inside /helpdesk (agents can't use /app)."""
+    if doctype == "HD Work Summary":
+        return f"/work-summary/{name}"
     if doctype == "HD Ticket":
         return f"/tickets/{name}"
     project = (
@@ -114,11 +116,23 @@ def send_task_reminders():
             "status": ("not in", ["Completed", "Cancelled", "Template", ON_HOLD]),
             "exp_end_date": ("<=", add_days(today, TASK_DUE_SOON_DAYS)),
         },
-        fields=["name", "subject", "project", "exp_end_date", "is_key", "_assign"],
+        fields=[
+            "name",
+            "subject",
+            "project",
+            "exp_end_date",
+            "is_key",
+            "is_milestone",
+            "_assign",
+        ],
     )
     for task in tasks:
         due = getdate(task.exp_end_date)
-        label = (_("Key task") + ": ") if task.is_key else ""
+        label = ""
+        if task.is_milestone:
+            label = _("Milestone") + ": "
+        elif task.is_key:
+            label = _("Key task") + ": "
         title = f"{label}{task.subject}"
         due_text = frappe.utils.formatdate(due)
         assignees = _assignees(task._assign)

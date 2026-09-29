@@ -193,6 +193,19 @@ const portalRoutes = [
     component: () => import("@/pages/work/Overview.vue"),
     beforeEnter: () => useAuthStore().canSeeOverview || { name: "Home" },
   },
+  // not guarded like Overview: project managers without the Overview get
+  // weekly reminders linking here, and the server filters what each user sees
+  {
+    path: "/work-summaries",
+    name: "WorkSummaries",
+    component: () => import("@/pages/work/WorkSummaries.vue"),
+  },
+  {
+    path: "/work-summary/:name",
+    name: "WorkSummary",
+    component: () => import("@/pages/work/WorkSummary.vue"),
+    props: true,
+  },
   {
     path: "/timesheets",
     name: "TaskyTimesheets",

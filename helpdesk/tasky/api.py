@@ -64,6 +64,21 @@ def _format_task(task):
         "hold_note": task.get("hold_note"),
         "hold_since": task.get("hold_since"),
         "hold_days_total": task.get("hold_days_total") or 0,
+        "is_milestone": bool(task.get("is_milestone")),
+        "slip_count": task.get("slip_count") or 0,
+        **_dependency_info(task.get("depends_on_task")),
+    }
+
+
+def _dependency_info(depends_on: str | None) -> dict:
+    """What the task waits on, and whether that's still open (the UI shows a lock)."""
+    if not depends_on:
+        return {"depends_on_task": None, "depends_on_subject": None, "blocked": False}
+    dep = frappe.db.get_value("Task", depends_on, ["subject", "status"], as_dict=True)
+    return {
+        "depends_on_task": depends_on,
+        "depends_on_subject": dep.subject if dep else None,
+        "blocked": bool(dep) and dep.status not in ("Completed", "Cancelled"),
     }
 
 
@@ -145,6 +160,7 @@ def create_project(
     members: str | list = "[]",
     customer: str | None = None,
     project_lead: str | None = None,
+    review_before_done: bool = False,
 ):
     """Create a new ERPNext Project with optional team members and lead."""
     import json
@@ -165,6 +181,7 @@ def create_project(
             "expected_start_date": expected_start_date or None,
             "expected_end_date": expected_end_date or None,
             "status": "Open",
+            "review_before_done": 1 if review_before_done else 0,
         }
     )
     for m in members_list:
@@ -316,6 +333,8 @@ def add_task(
     due_date: str | None = None,
     description: str = "",
     is_key: bool = False,
+    is_milestone: bool = False,
+    depends_on_task: str | None = None,
 ):
     """Add a single task to a project, optionally assigned to one of its members."""
     project = _resolve_project(str(project))
@@ -346,6 +365,8 @@ def add_task(
             "status": "Open",
             "exp_end_date": due_date if due_date and due_date != "null" else None,
             "is_key": 1 if is_key else 0,
+            "is_milestone": 1 if is_milestone else 0,
+            "depends_on_task": depends_on_task or None,
         }
     )
     doc.insert()
@@ -386,6 +407,9 @@ def get_my_tasks(
             "hd_ticket",
             "hold_reason",
             "hold_since",
+            "is_milestone",
+            "slip_count",
+            "depends_on_task",
             "_assign",
         ],
         order_by="custom_phase asc",
@@ -416,19 +440,18 @@ def get_task_detail(task: str):
 def update_task_status(task: str, status: str):
     """Update a task's status."""
     frappe.has_permission("Task", "write", str(task), throw=True)
-    if _changes_hold(str(task), str(status)):
-        return {"status": _save_status(str(task), str(status))}
-    frappe.db.set_value("Task", str(task), "status", str(status))
-    if str(status) == "Completed":
-        # set_value skips the controller, so hand the linked ticket back here
-        frappe.get_doc("Task", str(task)).notify_ticket_task_completed()
-    return {"status": str(status)}
+    _reject_direct_hold(str(status))
+    return {"status": _save_status(str(task), str(status))}
+
+
+def _reject_direct_hold(new_status: str):
+    if new_status == ON_HOLD:
+        frappe.throw(_("Use Put on hold so you can say why the task is on hold."))
 
 
 def _changes_hold(task: str, new_status: str) -> bool:
     """Holds need a reason and resuming moves the due date, so they go through the controller."""
-    if new_status == ON_HOLD:
-        frappe.throw(_("Use Put on hold so you can say why the task is on hold."))
+    _reject_direct_hold(new_status)
     return frappe.db.get_value("Task", task, "status") == ON_HOLD
 
 
@@ -468,6 +491,85 @@ def resume_task(task: str, extend_due_date: bool = True) -> dict:
     return _format_task(_task_dict(doc))
 
 
+def _get_managed_task(task: str):
+    doc = frappe.get_doc("Task", str(task))
+    if not can_manage_project(doc.project):
+        frappe.throw(
+            _("Only the project's manager or lead can do this."),
+            frappe.PermissionError,
+        )
+    return doc
+
+
+@frappe.whitelist()
+def update_task_plan(
+    task: str,
+    due_date: str | None = None,
+    reason: str = "",
+    is_key: bool | None = None,
+    is_milestone: bool | None = None,
+    depends_on_task: str | None = None,
+    clear_dependency: bool = False,
+) -> dict:
+    """Leads and managers reschedule, flag and link tasks; moving a date later needs a reason."""
+    doc = _get_managed_task(task)
+    if due_date and str(due_date) != str(doc.exp_end_date or ""):
+        later = doc.exp_end_date and frappe.utils.getdate(
+            due_date
+        ) > frappe.utils.getdate(doc.exp_end_date)
+        if later and not (reason or "").strip():
+            frappe.throw(_("Say why the due date is moving later."))
+        doc.exp_end_date = due_date
+        doc.flags.slip_reason = (reason or "").strip()
+    if is_key is not None:
+        doc.is_key = 1 if is_key else 0
+    if is_milestone is not None:
+        doc.is_milestone = 1 if is_milestone else 0
+    if clear_dependency:
+        doc.depends_on_task = None
+    elif depends_on_task:
+        doc.depends_on_task = depends_on_task
+    doc.save()
+    return _format_task(_task_dict(doc))
+
+
+@frappe.whitelist()
+def approve_task(task: str) -> dict:
+    """Lead signs off a reviewed task."""
+    doc = _get_managed_task(task)
+    if doc.status != "Pending Review":
+        frappe.throw(_("Only tasks waiting for review can be approved."))
+    doc.status = "Completed"
+    doc.save()
+    doc.add_comment("Info", _("Approved."))
+    return _format_task(_task_dict(doc))
+
+
+@frappe.whitelist()
+def send_back_task(task: str, note: str) -> dict:
+    """Lead returns a reviewed task with what still needs doing."""
+    from helpdesk.work_reminders import notify_users
+
+    doc = _get_managed_task(task)
+    if doc.status != "Pending Review":
+        frappe.throw(_("Only tasks waiting for review can be sent back."))
+    note = (note or "").strip()
+    if not note:
+        frappe.throw(_("Say what still needs doing."))
+    doc.status = "Open"
+    doc.save()
+    doc.add_comment("Info", frappe.utils.escape_html(_("Sent back: {0}").format(note)))
+    notify_users(
+        [u for u in doc.assignees() if u != frappe.session.user],
+        "Task",
+        doc.name,
+        _("Sent back on {0}: {1}").format(
+            frappe.utils.formatdate(frappe.utils.nowdate()), doc.subject
+        ),
+    )
+    return _format_task(_task_dict(doc))
+
+
 @frappe.whitelist()
 def get_project_dashboard(project: str):
     """Get aggregate stats and phase data for the PM dashboard.
@@ -493,6 +595,9 @@ def get_project_dashboard(project: str):
             "hd_ticket",
             "hold_reason",
             "hold_since",
+            "is_milestone",
+            "slip_count",
+            "depends_on_task",
             "_assign",
             "creation",
         ],
@@ -541,8 +646,29 @@ def get_project_dashboard(project: str):
     for t in tasks:
         t.pop("creation", None)
 
+    milestones = sorted(
+        (
+            {
+                "name": t.name,
+                "subject": t.subject,
+                "status": t.status,
+                "due_date": t.exp_end_date,
+                "slip_count": t.slip_count or 0,
+                "is_overdue": bool(
+                    t.exp_end_date
+                    and frappe.utils.getdate(t.exp_end_date) < today
+                    and t.status not in ("Completed", "Cancelled", ON_HOLD)
+                ),
+            }
+            for t in tasks
+            if t.is_milestone
+        ),
+        key=lambda m: str(m["due_date"] or "9999-12-31"),
+    )
+
     return {
         "phases": phases,
+        "milestones": milestones,
         "tasks": [_format_task(t) for t in tasks],
         "stats": {
             "total": total_tasks,
@@ -551,6 +677,7 @@ def get_project_dashboard(project: str):
             "pending": count("Open"),
             "reviewing": count("Pending Review"),
             "on_hold": count(ON_HOLD),
+            "rescheduled": sum(1 for t in tasks if t.slip_count),
             "cancelled": cancelled,
             "blocked": cancelled,
             "overdue": overdue,
@@ -580,6 +707,9 @@ def get_phase_tasks(project: str, phase: str):
             "hd_ticket",
             "hold_reason",
             "hold_since",
+            "is_milestone",
+            "slip_count",
+            "depends_on_task",
             "_assign",
         ],
         order_by="subject asc",
@@ -607,6 +737,9 @@ def get_kanban_tasks(project: str):
             "hd_ticket",
             "hold_reason",
             "hold_since",
+            "is_milestone",
+            "slip_count",
+            "depends_on_task",
             "_assign",
             "custom_timer_start",
             "custom_timer_elapsed",
@@ -768,6 +901,7 @@ def get_project_detail(project: str):
             if doc.project_lead
             else None
         ),
+        "review_before_done": bool(doc.review_before_done),
     }
 
 
@@ -826,6 +960,7 @@ def update_project(
     priority: str | None = None,
     members: str | list | None = None,
     project_lead: str | None = None,
+    review_before_done: bool | None = None,
 ):
     """Edit a project's details, members and lead. Project owners only."""
     project = _resolve_project(str(project))
@@ -852,6 +987,8 @@ def update_project(
         doc.status = status
     if priority:
         doc.priority = priority
+    if review_before_done is not None:
+        doc.review_before_done = 1 if review_before_done else 0
 
     if members is not None:
         members_list = json.loads(members) if isinstance(members, str) else members
@@ -1009,11 +1146,9 @@ def move_task(task: str, new_status: str):
     if new_status == "Working":
         frappe.db.set_value("Task", task_id, "custom_timer_start", frappe.utils.now())
 
-    frappe.db.set_value("Task", task_id, "status", new_status)
-    if new_status == "Completed":
-        # set_value skips the controller, so hand the linked ticket back here
-        frappe.get_doc("Task", task_id).notify_ticket_task_completed()
-    return {"status": new_status, "elapsed": round(elapsed_this_move, 2)}
+    # the controller checks dependencies, review and ticket hand-back
+    status = _save_status(task_id, new_status)
+    return {"status": status, "elapsed": round(elapsed_this_move, 2)}
 
 
 @frappe.whitelist()

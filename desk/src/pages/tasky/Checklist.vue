@@ -241,9 +241,13 @@
                   >
                     <ChecklistRow
                       :task="task"
+                      :can-manage="canManage"
                       @toggle="onToggleTask(task)"
                       @hold="holdingTask = task"
                       @resume="resumingTask = task"
+                      @plan="planningTask = task"
+                      @approve="approve(task)"
+                      @send-back="sendingBackTask = task"
                     />
                   </li>
                 </ul>
@@ -283,9 +287,13 @@
                 >
                   <ChecklistRow
                     :task="task"
+                    :can-manage="canManage"
                     @toggle="onToggleTask(task)"
                     @hold="holdingTask = task"
                     @resume="resumingTask = task"
+                    @plan="planningTask = task"
+                    @approve="approve(task)"
+                    @send-back="sendingBackTask = task"
                   />
                 </li>
               </ul>
@@ -336,6 +344,12 @@
 
     <HoldTaskDialog v-model:task="holdingTask" @held="reloadAll" />
     <ResumeTaskDialog v-model:task="resumingTask" @resumed="reloadAll" />
+    <TaskPlanDialog
+      v-model:task="planningTask"
+      :project-id="projectId"
+      @saved="reloadAll"
+    />
+    <SendBackTaskDialog v-model:task="sendingBackTask" @sent="reloadAll" />
 
     <GenerateChecklistModal
       v-if="showChecklistModal"
@@ -374,7 +388,16 @@ import GenerateChecklistModal from "./components/GenerateChecklistModal.vue";
 import HoldTaskDialog from "./components/HoldTaskDialog.vue";
 import ProjectNav from "./components/ProjectNav.vue";
 import ResumeTaskDialog from "./components/ResumeTaskDialog.vue";
+import SendBackTaskDialog from "./components/SendBackTaskDialog.vue";
+import TaskPlanDialog from "./components/TaskPlanDialog.vue";
 import TaskyState from "./components/TaskyState.vue";
+import {
+  blockedMessage,
+  blocksMove,
+  errorText,
+  notifyIfSentForReview,
+} from "./taskMeta";
+import { useApproveTask } from "./useApproveTask";
 
 const props = defineProps<{ projectId: string }>();
 
@@ -444,8 +467,10 @@ const updateTaskStatus = createResource({
 });
 const completeResource = createResource({
   url: "helpdesk.tasky.api.complete_task",
-  onSuccess() {
-    phases.reload();
+  onSuccess(data: Record<string, any>) {
+    // with review before done the server may keep it in Pending Review
+    if (notifyIfSentForReview("Completed", data?.status)) reloadAll();
+    else phases.reload();
   },
   onError(e: any) {
     toast.error(errorText(e, __("Couldn't complete the task.")));
@@ -453,12 +478,12 @@ const completeResource = createResource({
   },
 });
 
-function errorText(e: any, fallback: string) {
-  return e?.messages?.length ? e.messages.join(" ") : e?.message || fallback;
-}
-
 const holdingTask = ref<Record<string, any> | null>(null);
 const resumingTask = ref<Record<string, any> | null>(null);
+const planningTask = ref<Record<string, any> | null>(null);
+const sendingBackTask = ref<Record<string, any> | null>(null);
+
+const { approve } = useApproveTask(reloadAll);
 
 const completingTask = ref<Record<string, any> | null>(null);
 const completeHours = ref(0);
@@ -491,6 +516,10 @@ function onToggleTask(task: Record<string, any>) {
   if (task.status === "Completed") {
     updateTaskStatus.submit({ task: task.name, status: "Open" });
     task.status = "Open";
+    return;
+  }
+  if (blocksMove(task, "Completed")) {
+    toast.error(blockedMessage(task));
     return;
   }
   completingTask.value = task;

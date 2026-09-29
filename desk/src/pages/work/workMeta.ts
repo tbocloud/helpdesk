@@ -20,6 +20,17 @@ export interface WorkItem {
   hold_reason?: string | null;
   /** Days since the hold began; null unless the task is On Hold. */
   hold_days?: number | null;
+  is_milestone?: boolean;
+  /** Times the task's due date was moved later. */
+  slip_count?: number;
+  /** Subject of the task's still-open dependency, if any. */
+  waiting_on?: string | null;
+  /** Plain-language, already translated reasons the item may slip. */
+  risks?: string[];
+}
+
+export function isAtRisk(item: WorkItem) {
+  return !!item.risks?.length;
 }
 
 export function isHeldTask(item: WorkItem) {

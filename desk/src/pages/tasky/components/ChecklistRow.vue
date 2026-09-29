@@ -37,6 +37,14 @@
           />
           <span class="sr-only">{{ __("Key task") }}</span>
         </template>
+        <MilestoneMark v-if="task.is_milestone" />
+        <SlipBadge
+          v-if="task.slip_count > 0 && !done"
+          :count="task.slip_count"
+        />
+      </div>
+      <div v-if="task.blocked && !done" class="mt-0.5 flex min-w-0">
+        <WaitingOn :subject="task.depends_on_subject" />
       </div>
       <div
         v-if="onHold"
@@ -138,24 +146,42 @@ import { Button, Dropdown, dayjs } from "frappe-ui";
 import { computed } from "vue";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
 import LucideCalendar from "~icons/lucide/calendar";
+import LucideCalendarClock from "~icons/lucide/calendar-clock";
 import LucideCheck from "~icons/lucide/check";
+import LucideCheckCheck from "~icons/lucide/check-check";
 import LucideMoreHorizontal from "~icons/lucide/more-horizontal";
 import LucidePause from "~icons/lucide/pause";
 import LucidePlay from "~icons/lucide/play";
 import LucideStar from "~icons/lucide/star";
+import LucideUndo2 from "~icons/lucide/undo-2";
 import {
   holdDays,
   holdDurationLabel,
   isClosed,
   isOnHold,
+  isPendingReview,
   isOverdue,
   priorityIcon,
   shortDate,
 } from "../taskMeta";
+import MilestoneMark from "./MilestoneMark.vue";
+import SlipBadge from "./SlipBadge.vue";
 import TaskStatusBadge from "./TaskStatusBadge.vue";
+import WaitingOn from "./WaitingOn.vue";
 
-const props = defineProps<{ task: Record<string, any> }>();
-const emit = defineEmits<{ toggle: []; hold: []; resume: [] }>();
+const props = defineProps<{
+  task: Record<string, any>;
+  /** The viewer is the project's manager or lead: show plan and review actions. */
+  canManage?: boolean;
+}>();
+const emit = defineEmits<{
+  toggle: [];
+  hold: [];
+  resume: [];
+  plan: [];
+  approve: [];
+  sendBack: [];
+}>();
 
 const done = computed(() => props.task.status === "Completed");
 const overdue = computed(() => isOverdue(props.task));
@@ -168,12 +194,40 @@ const dueTitle = computed(() =>
 );
 
 const actions = computed(() => {
+  const review =
+    props.canManage && isPendingReview(props.task)
+      ? [
+          {
+            label: __("Approve"),
+            icon: LucideCheckCheck,
+            onClick: () => emit("approve"),
+          },
+          {
+            label: __("Send back"),
+            icon: LucideUndo2,
+            onClick: () => emit("sendBack"),
+          },
+        ]
+      : [];
+  const plan =
+    props.canManage && !isClosed(props.task)
+      ? [
+          {
+            label: __("Plan"),
+            icon: LucideCalendarClock,
+            onClick: () => emit("plan"),
+          },
+        ]
+      : [];
   if (onHold.value)
     return [
+      ...plan,
       { label: __("Resume"), icon: LucidePlay, onClick: () => emit("resume") },
     ];
   if (isClosed(props.task)) return [];
   return [
+    ...review,
+    ...plan,
     {
       label: __("Put on hold"),
       icon: LucidePause,

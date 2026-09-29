@@ -12,7 +12,9 @@
 		"status",
 		"priority",
 		"is_key",
+		"is_milestone",
 		"hd_ticket",
+		"depends_on_task",
 		"hold_section",
 		"hold_reason",
 		"hold_note",
@@ -24,6 +26,7 @@
 		"exp_start_date",
 		"column_break_2",
 		"exp_end_date",
+		"slip_count",
 		"details_section",
 		"description"
 	],
@@ -160,11 +163,33 @@
 			"label": "Status Before Hold",
 			"hidden": 1,
 			"read_only": 1
+		},
+		{
+			"fieldname": "is_milestone",
+			"fieldtype": "Check",
+			"label": "Milestone",
+			"in_standard_filter": 1,
+			"description": "A checkpoint for the customer (e.g. go-live). Slips are escalated like key tasks."
+		},
+		{
+			"fieldname": "depends_on_task",
+			"fieldtype": "Link",
+			"label": "Depends On",
+			"options": "Task",
+			"description": "This task can't start or be completed until that task is done."
+		},
+		{
+			"fieldname": "slip_count",
+			"fieldtype": "Int",
+			"label": "Times Rescheduled",
+			"read_only": 1,
+			"default": "0",
+			"description": "How often the due date was moved later (holds don't count)."
 		}
 	],
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-09-29 18:00:00.000000",
+	"modified": "2026-09-29 20:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "Task",
