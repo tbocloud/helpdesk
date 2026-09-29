@@ -145,7 +145,7 @@ def get_login_url(connection: str, ticket: str | int | None = None):
     Calls the customer's generate_login_url API via MCP credentials.
     Logs every attempt (success or failure) to HDS Site Login Log.
 
-    Auth gate: caller must be logged in and have read on QCS Support
+    Auth gate: caller must be logged in and have read on HDS Support
     Connection (Agent or System Manager). User Permission filtering on
     the customer_name Link is bypassed here so agents are not blocked
     from sites whose HD Customer they aren't directly permissioned for -

@@ -1,4 +1,4 @@
-"""Post-install setup for QCS features within Helpdesk."""
+"""Post-install setup for the support hub features within Helpdesk."""
 
 import os
 

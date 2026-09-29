@@ -1,7 +1,7 @@
 # Copyright (c) 2026, Quark Cyber Systems FZC and contributors
 # For license information, please see license.txt
 
-"""Pre-install fixes for QCS Support Hub."""
+"""Pre-install fixes for the TBO Support hub."""
 
 import frappe
 

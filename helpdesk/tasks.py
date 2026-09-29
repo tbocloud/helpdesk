@@ -1,7 +1,7 @@
 # Copyright (c) 2026, Quark Cyber Systems FZC and contributors
 # For license information, please see license.txt
 
-"""Scheduled jobs for QCS Support Hub."""
+"""Scheduled jobs for the TBO Support hub."""
 
 import frappe
 from frappe.utils import now_datetime

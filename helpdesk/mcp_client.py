@@ -13,7 +13,7 @@ from frappe.utils.password import get_decrypted_password
 MCP_TIMEOUT = 30  # seconds
 MCP_RETRY_COUNT = 1
 
-# Per-tool mapping of the argument key holding the row limit to the QCS Hub
+# Per-tool mapping of the argument key holding the row limit to the hub
 # Settings field that caps it. Hub-enforced to protect the Anthropic token
 # budget; applied in addition to (and independently of) the customer-site cap.
 _TOOL_LIMIT_FIELD = {

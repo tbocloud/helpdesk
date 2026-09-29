@@ -386,7 +386,7 @@ def get_country_from_timezone(time_zone: str):
     return country or None
 
 
-# === QCS Support Hub helpers ===
+# === Support hub helpers ===
 
 
 def normalize_site_url(raw: str | None) -> str | None:

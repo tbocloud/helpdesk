@@ -1,6 +1,6 @@
 {
 	"actions": [],
-	"autoname": "QCS-CONN-.YYYY.-.#####",
+	"autoname": "TBO-CONN-.YYYY.-.#####",
 	"creation": "2026-03-29 12:00:00.000000",
 	"doctype": "DocType",
 	"engine": "InnoDB",
@@ -64,7 +64,7 @@
 			"fieldtype": "Column Break"
 		},
 		{
-			"description": "Reference to QCS Support Contract in QCS ERPNext (not a Link field)",
+			"description": "Optional reference to the customer's support contract.",
 			"fieldname": "contract_id",
 			"fieldtype": "Data",
 			"label": "Contract ID"
@@ -161,7 +161,7 @@
 		}
 	],
 	"links": [],
-	"modified": "2026-09-30 10:00:00.000000",
+	"modified": "2026-09-30 11:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Support Connection",
