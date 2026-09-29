@@ -81,6 +81,15 @@
         />
       </div>
 
+      <FormControl
+        v-model="form.is_key"
+        type="checkbox"
+        :label="__('Key task')"
+        :description="
+          __('Key tasks are highlighted in My Work and the overview')
+        "
+      />
+
       <div
         v-if="errorMessage"
         role="alert"
@@ -151,6 +160,7 @@ const form = reactive({
   estimated_hours: 0 as number | string,
   due_date: "",
   assigned_to: "",
+  is_key: false,
 });
 
 function resetForm() {
@@ -162,6 +172,7 @@ function resetForm() {
   form.estimated_hours = 0;
   form.due_date = "";
   form.assigned_to = "";
+  form.is_key = false;
 }
 
 const projectDetail = createResource({
@@ -233,6 +244,7 @@ function submit() {
     estimated_hours: Number(form.estimated_hours) || 0,
     assigned_to: form.assigned_to,
     due_date: form.due_date || null,
+    is_key: form.is_key,
   });
 }
 </script>

@@ -54,6 +54,10 @@ scheduler_events = {
         "helpdesk.tasks.health_check_connections",
         "helpdesk.tasks.retry_pending_triages",
         "helpdesk.helpdesk.doctype.hd_content_post.hd_content_post.send_due_reminders",
+        "helpdesk.work_reminders.send_task_reminders",
+    ],
+    "hourly": [
+        "helpdesk.work_reminders.send_ticket_reminders",
     ],
     "hourly_long": [
         "helpdesk.helpdesk.doctype.hd_ticket.hd_ticket.update_sla_status_in_ticket"

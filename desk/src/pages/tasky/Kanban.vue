@@ -170,6 +170,13 @@
                   >
                     {{ task.subject }}
                   </span>
+                  <template v-if="task.is_key">
+                    <LucideStar
+                      class="mt-0.5 size-3.5 shrink-0 fill-current text-warning"
+                      aria-hidden="true"
+                    />
+                    <span class="sr-only">{{ __("Key task") }}</span>
+                  </template>
                 </div>
 
                 <!-- Timer -->
@@ -341,6 +348,7 @@ import LucideInfo from "~icons/lucide/info";
 import LucidePause from "~icons/lucide/pause";
 import LucidePlay from "~icons/lucide/play";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
+import LucideStar from "~icons/lucide/star";
 import LucideTimer from "~icons/lucide/timer";
 import ProjectNav from "./components/ProjectNav.vue";
 import TaskyState from "./components/TaskyState.vue";
@@ -379,6 +387,7 @@ interface Task {
   estimated_hours?: number;
   custom_timer_start?: string;
   custom_timer_elapsed?: number;
+  is_key?: boolean;
 }
 
 const kanban = createResource({

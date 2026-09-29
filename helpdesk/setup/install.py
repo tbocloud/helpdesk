@@ -517,6 +517,15 @@ def add_default_status():
             "order": 3,
         },
         {
+            "label_agent": "Waiting on Task",
+            "color": "Orange",
+            "enabled": 1,
+            "category": "Paused",
+            "different_view": 1,
+            "label_customer": "In progress",
+            "order": 5,
+        },
+        {
             "label_agent": "Closed",
             "color": "Gray",
             "enabled": 1,

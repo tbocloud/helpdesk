@@ -45,6 +45,15 @@
             </Dropdown>
           </div>
         </div>
+        <Button
+          variant="subtle"
+          :label="__('Create task')"
+          @click="showCreateTask = true"
+        >
+          <template #prefix>
+            <LucideListPlus class="size-4" aria-hidden="true" />
+          </template>
+        </Button>
         <!-- Status -->
         <Dropdown :options="statusDropdown" placement="right">
           <template #default="{ open }">
@@ -83,6 +92,13 @@
     @update="ticket.reload()"
   />
   <TicketSubjectModal v-model="showSubjectDialog" />
+  <CreateTaskDialog
+    v-if="ticket.doc?.name"
+    v-model:open="showCreateTask"
+    :ticket-id="String(ticket.doc.name)"
+    :ticket-subject="ticket.doc.subject"
+    @created="onTaskCreated"
+  />
 </template>
 
 <script setup lang="ts">
@@ -126,8 +142,10 @@ import {
 } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import LucideChevronDown from "~icons/lucide/chevron-down";
+import LucideListPlus from "~icons/lucide/list-plus";
 import LucideMerge from "~icons/lucide/merge";
 import { IndicatorIcon } from "../icons";
+import CreateTaskDialog from "./CreateTaskDialog.vue";
 import TicketNavigation from "./TicketNavigation.vue";
 import TicketSLA from "./TicketSLA.vue";
 import TicketSubjectModal from "./TicketSubjectModal.vue";
@@ -150,6 +168,13 @@ const ticket = inject(TicketSymbol)!;
 const customizations = inject(CustomizationSymbol)!;
 const activities = inject(ActivitiesSymbol)!;
 const showSubjectDialog = ref(false);
+const showCreateTask = ref(false);
+
+// the ticket moves to Waiting on Task and gets a comment, so refresh both
+function onTaskCreated() {
+  ticket.value.reload();
+  activities.value?.reload();
+}
 
 const { notifyTicketUpdate } = useNotifyTicketUpdate(ticket.value?.name);
 const statusDropdown = computed(() => {

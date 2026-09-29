@@ -4,6 +4,7 @@ import { OrganizationsIcon } from "../icons";
 import LucideHome from "~icons/lucide/home";
 import LucideFolderKanban from "~icons/lucide/folder-kanban";
 import LucideListTodo from "~icons/lucide/list-todo";
+import LucideLayoutDashboard from "~icons/lucide/layout-dashboard";
 import LucideClipboardList from "~icons/lucide/clipboard-list";
 import LucideClock from "~icons/lucide/clock";
 import LucideCalendarDays from "~icons/lucide/calendar-days";
@@ -15,6 +16,13 @@ export const agentPortalSidebarOptions = [
     icon: LucideHome,
     to: "Home",
     section: "Workspace",
+  },
+  {
+    label: __("Overview"),
+    icon: LucideLayoutDashboard,
+    to: "WorkOverview",
+    section: "Workspace",
+    overviewOnly: true,
   },
   {
     label: __("Tickets"),
@@ -30,11 +38,11 @@ export const agentPortalSidebarOptions = [
     section: "Workspace",
   },
   {
-    label: __("My Tasks"),
+    label: __("My Work"),
     icon: LucideListTodo,
-    to: "TaskyMyTasks",
+    to: "MyWork",
     section: "Workspace",
-    countKey: "my_tasks",
+    countKey: "my_work",
   },
   {
     label: __("Timesheets"),

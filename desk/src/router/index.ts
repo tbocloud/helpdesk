@@ -183,6 +183,17 @@ const portalRoutes = [
     component: () => import("@/pages/tasky/MyTasks.vue"),
   },
   {
+    path: "/my-work",
+    name: "MyWork",
+    component: () => import("@/pages/work/MyWork.vue"),
+  },
+  {
+    path: "/overview",
+    name: "WorkOverview",
+    component: () => import("@/pages/work/Overview.vue"),
+    beforeEnter: () => useAuthStore().canSeeOverview || { name: "Home" },
+  },
+  {
     path: "/timesheets",
     name: "TaskyTimesheets",
     component: () => import("@/pages/tasky/Timesheets.vue"),

@@ -11,6 +11,8 @@
 		"column_break_1",
 		"status",
 		"priority",
+		"is_key",
+		"hd_ticket",
 		"dates_section",
 		"exp_start_date",
 		"column_break_2",
@@ -60,6 +62,22 @@
 			"in_standard_filter": 1
 		},
 		{
+			"fieldname": "is_key",
+			"fieldtype": "Check",
+			"label": "Key Task",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"description": "Important for the project: gets earlier reminders and shows on the PM overview."
+		},
+		{
+			"fieldname": "hd_ticket",
+			"fieldtype": "Link",
+			"label": "Support Ticket",
+			"options": "HD Ticket",
+			"search_index": 1,
+			"description": "Ticket this task was created from; completing the task reopens it."
+		},
+		{
 			"fieldname": "dates_section",
 			"fieldtype": "Section Break",
 			"label": "Timeline"
@@ -92,7 +110,7 @@
 	],
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-09-29 12:00:00.000000",
+	"modified": "2026-09-29 15:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "Task",

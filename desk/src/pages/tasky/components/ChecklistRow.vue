@@ -23,11 +23,20 @@
     </button>
 
     <div class="min-w-0 flex-1">
-      <div
-        class="truncate text-sm"
-        :class="done ? 'text-ink-gray-5 line-through' : 'text-ink-gray-9'"
-      >
-        {{ task.subject }}
+      <div class="flex min-w-0 items-center gap-1.5">
+        <span
+          class="truncate text-sm"
+          :class="done ? 'text-ink-gray-5 line-through' : 'text-ink-gray-9'"
+        >
+          {{ task.subject }}
+        </span>
+        <template v-if="task.is_key">
+          <LucideStar
+            class="size-3.5 shrink-0 fill-current text-warning"
+            aria-hidden="true"
+          />
+          <span class="sr-only">{{ __("Key task") }}</span>
+        </template>
       </div>
       <div
         class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-ink-gray-5 md:hidden"
@@ -91,6 +100,7 @@ import { computed } from "vue";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
 import LucideCalendar from "~icons/lucide/calendar";
 import LucideCheck from "~icons/lucide/check";
+import LucideStar from "~icons/lucide/star";
 import { isOverdue, priorityIcon, shortDate } from "../taskMeta";
 import TaskStatusBadge from "./TaskStatusBadge.vue";
 

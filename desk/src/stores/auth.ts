@@ -37,6 +37,9 @@ export const useAuthStore = defineStore("auth", () => {
   const isProjectManager: ComputedRef<boolean> = computed(
     () => user__.value.is_project_manager
   );
+  const canSeeOverview: ComputedRef<boolean> = computed(
+    () => !!user__.value.can_see_overview
+  );
   const telephonyInstalled: ComputedRef<boolean> = computed(
     () => !!user__.value.telephony_installed
   );
@@ -102,6 +105,7 @@ export const useAuthStore = defineStore("auth", () => {
     hasAgentRecord,
     isManager,
     isProjectManager,
+    canSeeOverview,
     telephonyInstalled,
     isLoggedIn,
     login,

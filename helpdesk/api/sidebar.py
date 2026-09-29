@@ -20,4 +20,8 @@ def get_nav_counts() -> dict[str, int]:
             "Task",
             {"_assign": assigned, "status": ("not in", ["Completed", "Cancelled"])},
         )
+    counts["my_work"] = counts["my_tasks"] + frappe.db.count(
+        "HD Ticket",
+        {"_assign": assigned, "status_category": ("in", ["Open", "Paused"])},
+    )
     return counts

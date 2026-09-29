@@ -57,6 +57,8 @@ def _format_task(task):
         "assignees": assigned,
         "custom_timer_start": task.get("custom_timer_start"),
         "custom_timer_elapsed": task.get("custom_timer_elapsed") or 0,
+        "is_key": bool(task.get("is_key")),
+        "hd_ticket": task.get("hd_ticket"),
     }
 
 
@@ -276,17 +278,21 @@ def _is_project_member(project, user):
     ) or (frappe.db.get_value("Project", project, "owner") == user)
 
 
-def _assign_user(task_doc, user):
+def _assign_user(task_doc, user, ignore_permissions=False):
     """Assign an inserted Task to a user.
 
     Goes through a ToDo, which is what sets `_assign`; Frappe drops `_assign`
-    when it is set on a document before insert.
+    when it is set on a document before insert. `ignore_permissions` is for
+    callers that already checked the user may raise this task (ticket -> task).
     """
     if not user:
         return
     user = str(user).strip()
     if frappe.db.exists("User", user):
-        assign_to.add({"doctype": "Task", "name": task_doc.name, "assign_to": [user]})
+        assign_to._add(
+            {"doctype": "Task", "name": task_doc.name, "assign_to": [user]},
+            ignore_permissions=ignore_permissions,
+        )
 
 
 @frappe.whitelist()
@@ -300,6 +306,7 @@ def add_task(
     assigned_to: str = "",
     due_date: str | None = None,
     description: str = "",
+    is_key: bool = False,
 ):
     """Add a single task to a project, optionally assigned to one of its members."""
     project = _resolve_project(str(project))
@@ -329,6 +336,7 @@ def add_task(
             "priority": str(priority),
             "status": "Open",
             "exp_end_date": due_date if due_date and due_date != "null" else None,
+            "is_key": 1 if is_key else 0,
         }
     )
     doc.insert()
@@ -365,6 +373,8 @@ def get_my_tasks(
             "priority",
             "exp_end_date",
             "custom_estimated_hours",
+            "is_key",
+            "hd_ticket",
             "_assign",
         ],
         order_by="custom_phase asc",
@@ -396,6 +406,9 @@ def update_task_status(task: str, status: str):
     """Update a task's status."""
     frappe.has_permission("Task", "write", str(task), throw=True)
     frappe.db.set_value("Task", str(task), "status", str(status))
+    if str(status) == "Completed":
+        # set_value skips the controller, so hand the linked ticket back here
+        frappe.get_doc("Task", str(task)).notify_ticket_task_completed()
     return {"status": str(status)}
 
 
@@ -420,6 +433,8 @@ def get_project_dashboard(project: str):
             "priority",
             "exp_end_date",
             "custom_estimated_hours",
+            "is_key",
+            "hd_ticket",
             "_assign",
             "creation",
         ],
@@ -502,6 +517,8 @@ def get_phase_tasks(project: str, phase: str):
             "priority",
             "exp_end_date",
             "custom_estimated_hours",
+            "is_key",
+            "hd_ticket",
             "_assign",
         ],
         order_by="subject asc",
@@ -525,6 +542,8 @@ def get_kanban_tasks(project: str):
             "priority",
             "exp_end_date",
             "custom_estimated_hours",
+            "is_key",
+            "hd_ticket",
             "_assign",
             "custom_timer_start",
             "custom_timer_elapsed",
@@ -923,6 +942,9 @@ def move_task(task: str, new_status: str):
         frappe.db.set_value("Task", task_id, "custom_timer_start", frappe.utils.now())
 
     frappe.db.set_value("Task", task_id, "status", new_status)
+    if new_status == "Completed":
+        # set_value skips the controller, so hand the linked ticket back here
+        frappe.get_doc("Task", task_id).notify_ticket_task_completed()
     return {"status": new_status, "elapsed": round(elapsed_this_move, 2)}
 
 
