@@ -50,8 +50,46 @@ class HDNotification(Document):
             }
 
     def after_insert(self):
+        self.deliver()
+
+    def deliver(self):
+        """Chat instead of email when HD Chat Settings is on (sent after commit, in the background)."""
+        from helpdesk.chat_notifications import is_enabled
+
+        if self.notification_type not in ("Mention", "Reminder"):
+            return
+        if not is_enabled():
+            self.send_email()
+            return
+        frappe.enqueue(
+            "helpdesk.chat_notifications.deliver_notification",
+            notification=self.name,
+            enqueue_after_commit=True,
+            now=frappe.flags.in_test,
+        )
+
+    def send_email(self):
         self.send_mention_email()
         self.send_reminder_email()
+
+    def chat_text(self) -> str:
+        if self.notification_type == "Mention":
+            text = _("{0} mentioned you in ticket #{1}").format(
+                self.get_from() or self.user_from, self.reference_ticket
+            )
+            comment = frappe.utils.strip_html(self.message or "").strip()
+            return f"{text}: {comment[:300]}" if comment else text
+        return frappe.utils.strip_html(self.message or "")
+
+    def chat_path(self) -> str:
+        if self.link:
+            return self.link
+        if self.reference_ticket:
+            anchor = (
+                f"#comment-{self.reference_comment}" if self.reference_comment else ""
+            )
+            return f"/tickets/{self.reference_ticket}{anchor}"
+        return "/my-work"
 
     def send_mention_email(self):
         if self.notification_type != "Mention":

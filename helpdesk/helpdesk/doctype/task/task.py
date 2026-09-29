@@ -132,6 +132,7 @@ class Task(Document):
                 _("{0} rescheduled to {1} (moved {2} times): {3}").format(
                     label, formatdate(self.exp_end_date), self.slip_count, self.subject
                 ),
+                escalate=True,
             )
 
     def request_review(self):

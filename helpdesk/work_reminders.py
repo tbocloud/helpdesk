@@ -33,11 +33,16 @@ def _assignees(raw) -> list[str]:
         return []
 
 
-def notify_users(users, doctype: str, name: str, subject: str):
-    """Reminder in the helpdesk notification panel, plus an email (see HDNotification).
+def notify_users(users, doctype: str, name: str, subject: str, escalate: bool = False):
+    """Reminder in the helpdesk notification panel, plus an email or chat message
+    (see HDNotification); `escalate` also posts it to the team's chat channel.
 
     Sent once per person, document and subject, so a daily run doesn't repeat itself.
     """
+    from helpdesk.chat_notifications import post_escalation
+
+    if escalate:
+        post_escalation(subject, helpdesk_path(doctype, name))
     users = sorted({u for u in users if u and u not in SKIP})
     if not users:
         return
@@ -163,7 +168,9 @@ def send_task_reminders():
                 managers,
                 "Task",
                 task.name,
-                _("Escalated, {0} days overdue: {1}").format((today - due).days, title),
+                # dated, not counted, so it's sent once rather than every day
+                _("Escalated, overdue since {0}: {1}").format(due_text, title),
+                escalate=True,
             )
 
 
@@ -190,6 +197,7 @@ def send_hold_reminders():
                 task.hold_reason,
                 task.subject,
             ),
+            escalate=True,
         )
 
 
@@ -226,13 +234,13 @@ def send_ticket_reminders():
             "HD Ticket",
             ticket.name,
             _("SLA breached ({0}): {1}").format(due_text, title),
+            escalate=True,
         )
         if (now - ticket.resolution_by).days >= ESCALATE_AFTER_DAYS:
             notify_users(
                 managers,
                 "HD Ticket",
                 ticket.name,
-                _("Escalated, SLA breached {0} days ago: {1}").format(
-                    (now - ticket.resolution_by).days, title
-                ),
+                _("Escalated, SLA breached since {0}: {1}").format(due_text, title),
+                escalate=True,
             )

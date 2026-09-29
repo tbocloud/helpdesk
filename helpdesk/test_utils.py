@@ -745,3 +745,25 @@ def get_reminder_messages(user: str, reference_name) -> list[str]:
         },
         pluck="message",
     )
+
+
+def enable_chat_notifications(platform: str = "Microsoft Teams", **settings):
+    """Turns on HD Chat Settings for `platform` with dummy webhooks/token, plus any overrides."""
+    doc = frappe.get_doc("HD Chat Settings")
+    doc.update(
+        {
+            "enabled": 1,
+            "platform": platform,
+            "email_when_unreachable": 1,
+            "slack_bot_token": "xoxb-test-token",
+            "slack_escalation_channel": "",
+            "teams_direct_webhook": "https://teams.example/direct",
+            "teams_channel_webhook": "",
+            **settings,
+        }
+    )
+    doc.save(ignore_permissions=True)
+    frappe.clear_document_cache("HD Chat Settings", "HD Chat Settings")
+    frappe.cache.delete_keys("helpdesk:slack_user:")
+    frappe.cache.delete_keys("helpdesk:chat_escalation:")
+    return doc

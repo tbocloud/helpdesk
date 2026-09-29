@@ -1,0 +1,105 @@
+{
+	"actions": [],
+	"creation": "2026-09-29 21:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"enabled",
+		"platform",
+		"email_when_unreachable",
+		"slack_section",
+		"slack_bot_token",
+		"slack_escalation_channel",
+		"teams_section",
+		"teams_direct_webhook",
+		"teams_channel_webhook"
+	],
+	"fields": [
+		{
+			"fieldname": "enabled",
+			"fieldtype": "Check",
+			"label": "Send notifications to chat instead of email",
+			"default": "0",
+			"description": "Reminders, mentions and escalations go to Slack or Microsoft Teams. Emails to customers are not affected."
+		},
+		{
+			"fieldname": "platform",
+			"fieldtype": "Select",
+			"label": "Platform",
+			"options": "Slack\nMicrosoft Teams",
+			"default": "Microsoft Teams",
+			"mandatory_depends_on": "enabled"
+		},
+		{
+			"fieldname": "email_when_unreachable",
+			"fieldtype": "Check",
+			"label": "Email people who can't be reached in chat",
+			"default": "1",
+			"description": "Slack: people whose email isn't in the workspace. Teams: used only when the webhook fails."
+		},
+		{
+			"fieldname": "slack_section",
+			"fieldtype": "Section Break",
+			"label": "Slack",
+			"depends_on": "eval:doc.platform=='Slack'"
+		},
+		{
+			"fieldname": "slack_bot_token",
+			"fieldtype": "Password",
+			"label": "Bot Token",
+			"mandatory_depends_on": "eval:doc.enabled && doc.platform=='Slack'",
+			"description": "From your Slack app (OAuth & Permissions), starts with xoxb-. Scopes: chat:write, users:read, users:read.email."
+		},
+		{
+			"fieldname": "slack_escalation_channel",
+			"fieldtype": "Data",
+			"label": "Escalation Channel ID",
+			"description": "Optional, e.g. C0123ABCD. Invite the app to the channel."
+		},
+		{
+			"fieldname": "teams_section",
+			"fieldtype": "Section Break",
+			"label": "Microsoft Teams",
+			"depends_on": "eval:doc.platform=='Microsoft Teams'"
+		},
+		{
+			"fieldname": "teams_direct_webhook",
+			"fieldtype": "Password",
+			"label": "Direct Message Workflow URL",
+			"length": 1000,
+			"mandatory_depends_on": "eval:doc.enabled && doc.platform=='Microsoft Teams'",
+			"description": "Teams Workflow \"When a Teams webhook request is received\" that posts the card to the chat of the email in `recipient`."
+		},
+		{
+			"fieldname": "teams_channel_webhook",
+			"fieldtype": "Password",
+			"label": "Escalation Channel Workflow URL",
+			"length": 1000,
+			"description": "Optional. Teams Workflow template \"Post to a channel when a webhook request is received\"."
+		}
+	],
+	"index_web_pages_for_search": 0,
+	"issingle": 1,
+	"links": [],
+	"modified": "2026-09-29 21:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD Chat Settings",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"print": 1,
+			"read": 1,
+			"role": "System Manager",
+			"share": 1,
+			"write": 1
+		}
+	],
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": [],
+	"track_changes": 1
+}
