@@ -10,6 +10,7 @@ from helpdesk.tasky.permissions import (
     MANAGER_PROJECT_ROLE,
     can_manage_project,
     is_project_owner,
+    is_tasky_admin,
 )
 
 # member roles a project lead is rotated among
@@ -661,6 +662,7 @@ def get_project_detail(project: str):
         "project_name": doc.project_name,
         "customer": doc.customer,
         "status": doc.status,
+        "priority": doc.priority,
         "expected_start_date": str(doc.expected_start_date)
         if doc.expected_start_date
         else None,
@@ -723,8 +725,71 @@ def get_projects():
     )
     for p in projects:
         p["can_manage"] = can_manage_project(p["name"])
+        p["can_edit"] = is_project_owner(p["name"])
         p["project_lead_name"] = lead_names.get(p.project_lead)
     return projects
+
+
+@frappe.whitelist()
+def update_project(
+    project: str,
+    project_name: str,
+    customer: str | None = None,
+    expected_start_date: str | None = None,
+    expected_end_date: str | None = None,
+    status: str | None = None,
+    priority: str | None = None,
+    members: str | list | None = None,
+    project_lead: str | None = None,
+):
+    """Edit a project's details, members and lead. Project owners only."""
+    project = _resolve_project(str(project))
+    if not is_project_owner(project):
+        frappe.throw(
+            _("Only the project's manager can edit it."), frappe.PermissionError
+        )
+
+    project_name = (project_name or "").strip()
+    if not project_name:
+        frappe.throw(_("Project name is required"))
+    clash = frappe.db.get_value(
+        "Project", {"project_name": project_name, "name": ("!=", project)}, "name"
+    )
+    if clash:
+        frappe.throw(_("Another project already has this name: {0}").format(clash))
+
+    doc = frappe.get_doc("Project", project)
+    doc.project_name = project_name
+    doc.customer = customer or None
+    doc.expected_start_date = expected_start_date or None
+    doc.expected_end_date = expected_end_date or None
+    if status:
+        doc.status = status
+    if priority:
+        doc.priority = priority
+
+    if members is not None:
+        members_list = json.loads(members) if isinstance(members, str) else members
+        doc.set("users", [])
+        for m in members_list or []:
+            if m.get("user"):
+                doc.append(
+                    "users",
+                    {"user": m["user"], "custom_role": m.get("custom_role") or ""},
+                )
+        # an editing manager stays on the project (admins manage without being members)
+        me = frappe.session.user
+        if not is_tasky_admin(me) and me not in [u.user for u in doc.users]:
+            doc.append("users", {"user": me, "custom_role": MANAGER_PROJECT_ROLE})
+
+    lead = (project_lead or "").strip() or None
+    if lead and lead not in [u.user for u in doc.users]:
+        doc.append("users", {"user": lead, "custom_role": "Developer"})
+    if lead != doc.project_lead:
+        _change_lead(doc, lead)
+    else:
+        doc.save()
+    return {"name": doc.name, "project_name": doc.project_name}
 
 
 @frappe.whitelist()

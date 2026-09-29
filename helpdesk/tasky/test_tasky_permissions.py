@@ -303,3 +303,55 @@ class TestTaskyPermissions(FrappeTestCase):
             self.as_user(
                 PM, lambda: api.set_project_lead(project=self.project, user=OUTSIDER[0])
             )
+
+    # --- editing a project ---
+
+    def edit(self, user, **values):
+        payload = {
+            "project": self.project,
+            "project_name": f"{CUSTOMER} - ERP Implementation",
+            **values,
+        }
+        return self.as_user(user, lambda: api.update_project(**payload))
+
+    def test_pm_edits_details_members_and_lead(self):
+        members = json.dumps(
+            [
+                {"user": DEV_A[0], "custom_role": "Developer"},
+                {"user": PM[0], "custom_role": "Project Manager"},
+            ]
+        )
+        self.edit(
+            PM,
+            project_name=f"{CUSTOMER} - Phase 2",
+            priority="High",
+            members=members,
+            project_lead=DEV_A[0],
+        )
+        doc = frappe.get_doc("Project", self.project)
+        self.assertEqual(doc.project_name, f"{CUSTOMER} - Phase 2")
+        self.assertEqual(doc.priority, "High")
+        self.assertEqual(doc.project_lead, DEV_A[0])
+        self.assertNotIn(DEV_B[0], [u.user for u in doc.users])
+
+    def test_only_managers_can_edit(self):
+        self.as_user(
+            PM, lambda: api.set_project_lead(project=self.project, user=DEV_A[0])
+        )
+        for user in (DEV_A, DEV_B, OUTSIDER):
+            with self.assertRaises(frappe.PermissionError):
+                self.edit(user, priority="Low")
+
+    def test_duplicate_name_rejected(self):
+        make_project(f"{OTHER_CUSTOMER} - Existing")
+        with self.assertRaises(frappe.ValidationError):
+            self.edit(PM, project_name=f"{OTHER_CUSTOMER} - Existing")
+
+    def test_manager_cannot_remove_themselves(self):
+        self.edit(
+            PM, members=json.dumps([{"user": DEV_A[0], "custom_role": "Developer"}])
+        )
+        roles = {
+            u.user: u.custom_role for u in frappe.get_doc("Project", self.project).users
+        }
+        self.assertEqual(roles.get(PM[0]), "Project Manager")

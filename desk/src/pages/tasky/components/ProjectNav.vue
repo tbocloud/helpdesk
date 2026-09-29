@@ -26,6 +26,16 @@
     </template>
     <template #right-header>
       <slot name="actions" />
+      <Button
+        v-if="detail.data?.can_change_lead"
+        variant="ghost"
+        :label="__('Edit project')"
+        @click="showEdit = true"
+      >
+        <template #prefix
+          ><LucidePencil class="size-4" aria-hidden="true"
+        /></template>
+      </Button>
       <Dropdown v-if="detail.data?.can_change_lead" :options="leadOptions">
         <Button :loading="changingLead">
           <template #prefix
@@ -78,6 +88,13 @@
     </router-link>
   </nav>
 
+  <ProjectFormDialog
+    v-if="detail.data?.can_change_lead"
+    v-model:open="showEdit"
+    :project-id="projectId"
+    @saved="detail.reload()"
+  />
+
   <NewTaskDialog
     v-if="detail.data?.can_manage"
     v-model:open="showNewTask"
@@ -103,8 +120,10 @@ import LucideUserX from "~icons/lucide/user-x";
 import LucideKanban from "~icons/lucide/square-kanban";
 import LucideLayoutDashboard from "~icons/lucide/layout-dashboard";
 import LucideListChecks from "~icons/lucide/list-checks";
+import LucidePencil from "~icons/lucide/pencil";
 import LucidePlus from "~icons/lucide/plus";
 import NewTaskDialog from "./NewTaskDialog.vue";
+import ProjectFormDialog from "./ProjectFormDialog.vue";
 
 const props = defineProps<{
   projectId: string;
@@ -116,6 +135,7 @@ const emit = defineEmits<{ taskCreated: [] }>();
 
 const route = useRoute();
 const showNewTask = ref(false);
+const showEdit = ref(false);
 
 const tabs = [
   { label: "Dashboard", to: "TaskyProject", icon: LucideLayoutDashboard },

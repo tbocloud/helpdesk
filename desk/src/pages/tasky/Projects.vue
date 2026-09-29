@@ -344,6 +344,16 @@
                     ><LucideKanban class="size-4" aria-hidden="true"
                   /></template>
                 </Button>
+                <Button
+                  v-if="project.can_edit"
+                  variant="ghost"
+                  :label="__('Edit')"
+                  @click="openEdit(project.name)"
+                >
+                  <template #prefix
+                    ><LucidePencil class="size-4" aria-hidden="true"
+                  /></template>
+                </Button>
                 <template v-if="project.can_manage">
                   <Button
                     variant="ghost"
@@ -372,132 +382,12 @@
     </div>
 
     <!-- New project -->
-    <Dialog v-model:open="showNewForm" :title="__('New project')" size="xl">
-      <form
-        id="tasky-new-project"
-        class="flex flex-col gap-4"
-        novalidate
-        @submit.prevent="onCreateProject"
-      >
-        <TextInput
-          v-model="newProject.project_name"
-          :label="__('Project name')"
-          :placeholder="__('e.g. Acme ERP rollout')"
-          required
-        />
-        <Link
-          v-model="newProject.customer"
-          doctype="HD Customer"
-          :label="__('Customer')"
-          :placeholder="__('Select customer')"
-        />
-        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <TextInput
-            v-model="newProject.start_date"
-            type="date"
-            :label="__('Start date')"
-          />
-          <TextInput
-            v-model="newProject.expected_end_date"
-            type="date"
-            :label="__('Expected end date')"
-          />
-        </div>
-
-        <fieldset class="flex flex-col gap-2">
-          <legend class="mb-1.5 text-base text-ink-gray-5">
-            {{ __("Team members") }}
-          </legend>
-          <p
-            v-if="!newProject.members.length"
-            class="text-p-xs text-ink-gray-5"
-          >
-            {{
-              __(
-                "Add the people who will work on this project so tasks can be assigned to them."
-              )
-            }}
-          </p>
-          <div
-            v-for="(member, idx) in newProject.members"
-            :key="idx"
-            class="flex items-center gap-2"
-          >
-            <FormControl
-              v-model="member.user"
-              type="select"
-              class="min-w-0 flex-1"
-              :placeholder="__('Select user…')"
-              :options="userOptions"
-              :aria-label="__('Member {0}', String(idx + 1))"
-            />
-            <FormControl
-              v-model="member.custom_role"
-              type="select"
-              class="!w-48 shrink-0"
-              :options="roleOptions"
-              :aria-label="__('Role for member {0}', String(idx + 1))"
-            />
-            <Button
-              variant="ghost"
-              :label="__('Remove member')"
-              @click="newProject.members.splice(idx, 1)"
-            >
-              <template #icon><LucideX class="size-4" /></template>
-            </Button>
-          </div>
-          <div>
-            <Button
-              variant="subtle"
-              :label="__('Add member')"
-              @click="newProject.members.push({ user: '', custom_role: '' })"
-            >
-              <template #prefix
-                ><LucideUserPlus class="size-4" aria-hidden="true"
-              /></template>
-            </Button>
-          </div>
-        </fieldset>
-
-        <FormControl
-          v-model="newProject.project_lead"
-          type="select"
-          :label="__('Project lead')"
-          :options="leadOptions"
-          :description="
-            __(
-              'Can create and assign tasks in this project. You can rotate it later.'
-            )
-          "
-        />
-
-        <div
-          v-if="createProject.error"
-          role="alert"
-          class="flex items-start gap-2 rounded-md bg-danger-soft px-3 py-2 text-p-sm text-danger"
-        >
-          <LucideCircleAlert
-            class="mt-0.5 size-4 shrink-0"
-            aria-hidden="true"
-          />
-          {{ errorText(createProject.error) }}
-        </div>
-      </form>
-
-      <template #actions="{ close }">
-        <div class="flex justify-end gap-2">
-          <Button :label="__('Cancel')" @click="close" />
-          <Button
-            variant="solid"
-            type="submit"
-            form="tasky-new-project"
-            :label="__('Create project')"
-            :loading="createProject.loading"
-            :disabled="!newProject.project_name.trim()"
-          />
-        </div>
-      </template>
-    </Dialog>
+    <ProjectFormDialog v-model:open="showNewForm" @saved="projects.reload()" />
+    <ProjectFormDialog
+      v-model:open="showEdit"
+      :project-id="editingProject"
+      @saved="projects.reload()"
+    />
 
     <GenerateChecklistModal
       v-if="showChecklistModal"
@@ -519,19 +409,10 @@
 </template>
 
 <script setup lang="ts">
-import { Link } from "@/components";
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
-import {
-  Button,
-  Dialog,
-  FormControl,
-  TextInput,
-  createResource,
-  dayjs,
-  toast,
-} from "frappe-ui";
+import { Button, TextInput, createResource, dayjs, toast } from "frappe-ui";
 import { computed, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
@@ -543,16 +424,16 @@ import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideClipboardList from "~icons/lucide/clipboard-list";
 import LucideFolderKanban from "~icons/lucide/folder-kanban";
 import LucideLayoutDashboard from "~icons/lucide/layout-dashboard";
+import LucidePencil from "~icons/lucide/pencil";
 import LucidePlus from "~icons/lucide/plus";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideSearch from "~icons/lucide/search";
 import LucideSearchX from "~icons/lucide/search-x";
 import LucideKanban from "~icons/lucide/square-kanban";
-import LucideUserPlus from "~icons/lucide/user-plus";
 import LucideUserStar from "~icons/lucide/user-star";
-import LucideX from "~icons/lucide/x";
 import GenerateChecklistModal from "./components/GenerateChecklistModal.vue";
 import NewTaskDialog from "./components/NewTaskDialog.vue";
+import ProjectFormDialog from "./components/ProjectFormDialog.vue";
 import TaskStatusBadge from "./components/TaskStatusBadge.vue";
 import TaskyState from "./components/TaskyState.vue";
 
@@ -585,38 +466,6 @@ const projects = createResource({
   url: "helpdesk.tasky.api.get_projects",
   auto: true,
   transform: (d: Project[]) => d ?? [],
-});
-
-const userList = createResource({
-  url: "helpdesk.tasky.api.get_users",
-  auto: true,
-  transform: (d: any[]) => d ?? [],
-});
-
-const userOptions = computed(() =>
-  (userList.data ?? []).map((u: any) => ({
-    label: u.full_name || u.name,
-    value: u.name,
-  }))
-);
-
-const roleOptions = computed(() => [
-  { label: __("Manager (no role)"), value: "" },
-  { label: __("Functional Consultant"), value: "Functional Consultant" },
-  { label: __("Developer"), value: "Developer" },
-  { label: __("Support Engineer"), value: "Support Engineer" },
-]);
-
-const createProject = createResource({
-  url: "helpdesk.tasky.api.create_project",
-  onSuccess() {
-    toast.success(__("Project created"));
-    showNewForm.value = false;
-    resetForm();
-    projects.reload();
-  },
-  // shown inline in the dialog
-  onError() {},
 });
 
 const allProjects = computed<Project[]>(() => projects.data ?? []);
@@ -780,55 +629,18 @@ function navigateToKanban(projectName: string) {
 
 const showNewForm = ref(false);
 
-const newProject = reactive({
-  project_name: "",
-  start_date: "",
-  expected_end_date: "",
-  customer: "",
-  project_lead: "",
-  members: [] as { user: string; custom_role: string }[],
-});
-
-const leadOptions = computed(() => [
-  { label: __("No lead yet"), value: "" },
-  ...newProject.members
-    .filter((m) => m.user)
-    .map((m) => ({
-      label: userOptions.value.find((o) => o.value === m.user)?.label || m.user,
-      value: m.user,
-    })),
-]);
-
-function resetForm() {
-  newProject.project_name = "";
-  newProject.start_date = "";
-  newProject.expected_end_date = "";
-  newProject.customer = "";
-  newProject.project_lead = "";
-  newProject.members = [];
-}
-
 function openNewProject() {
-  createProject.reset();
   showNewForm.value = true;
 }
 
-function onCreateProject() {
-  if (!newProject.project_name.trim() || createProject.loading) return;
-  createProject.submit({
-    project_name: newProject.project_name.trim(),
-    expected_start_date: newProject.start_date,
-    expected_end_date: newProject.expected_end_date,
-    customer: newProject.customer,
-    project_lead: newProject.project_lead || null,
-    members: JSON.stringify(newProject.members.filter((m) => m.user.trim())),
-  });
-}
+// --- edit project ---
 
-function errorText(err: { messages?: string[]; message?: string }) {
-  return err.messages?.length
-    ? err.messages.join(" ")
-    : err.message || __("Something went wrong.");
+const showEdit = ref(false);
+const editingProject = ref("");
+
+function openEdit(name: string) {
+  editingProject.value = name;
+  showEdit.value = true;
 }
 
 // --- checklist & new task ---
