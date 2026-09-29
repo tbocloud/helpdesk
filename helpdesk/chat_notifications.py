@@ -215,7 +215,9 @@ def deliver_escalation(text: str, path: str | None = None):
 @frappe.whitelist()
 def send_test_message() -> dict:
     """System Managers check the setup: a message to themselves and to the channel."""
-    frappe.only_for("System Manager")
+    # only_for is skipped in tests, so check the role directly
+    if "System Manager" not in frappe.get_roles():
+        frappe.throw(_("Only System Managers can send a test."), frappe.PermissionError)
     text = _("Test message from TBO Support. Chat notifications are working.")
     try:
         direct = send_direct(frappe.session.user, text, helpdesk_url(None))

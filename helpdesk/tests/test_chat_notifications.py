@@ -59,7 +59,11 @@ class TestTeams(ChatCase):
         ) as post, patch("frappe.sendmail") as sendmail:
             work_reminders.send_task_reminders()
 
-        direct = [c for c in post.call_args_list if c.args[0] == TEAMS_DIRECT]
+        direct = [
+            c
+            for c in post.call_args_list
+            if c.args[0] == TEAMS_DIRECT and c.kwargs["json"]["recipient"] == DEV[0]
+        ]
         self.assertEqual(len(direct), 1)
         body = direct[0].kwargs["json"]
         self.assertEqual(body["recipient"], DEV[0])
@@ -82,10 +86,15 @@ class TestTeams(ChatCase):
             work_reminders.send_task_reminders()
             work_reminders.send_task_reminders()
 
-        channel = [c for c in post.call_args_list if c.args[0] == TEAMS_CHANNEL]
-        self.assertEqual(len(channel), 1)
-        text = channel[0].kwargs["json"]["attachments"][0]["content"]["body"][0]["text"]
-        self.assertIn("Escalated, overdue since", text)
+        # other overdue tasks in the test database escalate too; count this one's
+        posts = [
+            c.kwargs["json"]["attachments"][0]["content"]["body"][0]["text"]
+            for c in post.call_args_list
+            if c.args[0] == TEAMS_CHANNEL
+        ]
+        mine = [text for text in posts if "Go-live checklist" in text]
+        self.assertEqual(len(mine), 1)
+        self.assertIn("Escalated, overdue since", mine[0])
 
     def test_failed_webhook_falls_back_to_email(self):
         enable_chat_notifications("Microsoft Teams")
@@ -95,7 +104,8 @@ class TestTeams(ChatCase):
             return_value=ok_response(status=500),
         ), patch("frappe.sendmail") as sendmail, patch.object(frappe, "log_error"):
             work_reminders.send_task_reminders()
-        self.assertEqual(sendmail.call_args.kwargs["recipients"], DEV[0])
+        emailed = [c.kwargs["recipients"] for c in sendmail.call_args_list]
+        self.assertIn(DEV[0], emailed)
 
 
 class TestSlack(ChatCase):
@@ -184,5 +194,7 @@ class TestSettings(ChatCase):
 
     def test_only_system_managers_send_a_test(self):
         enable_chat_notifications("Microsoft Teams")
-        with self.assertRaises(frappe.PermissionError):
-            run_as_user(DEV[0], chat_notifications.send_test_message)
+        with patch("helpdesk.chat_notifications.requests.post") as post:
+            with self.assertRaises(frappe.PermissionError):
+                run_as_user(DEV[0], chat_notifications.send_test_message)
+        self.assertFalse(post.called)
