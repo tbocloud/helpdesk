@@ -8,6 +8,7 @@ plain summary is built from the same numbers. The managers, owners and leads
 of the customer's projects and all Agent Managers are notified.
 """
 
+import html
 import json
 
 import frappe
@@ -479,14 +480,19 @@ def key_label(task: dict) -> str:
     )
 
 
+def as_html_text(value) -> str:
+    # Frappe stores "&" in titles as "&amp;"; unescape first so it isn't escaped twice
+    return escape_html(html.unescape(str(value)))
+
+
 def render_summary(overview: str, sections: list) -> str:
     """Simple HTML (p/ul/li/strong); every piece of text is escaped here."""
-    parts = [f"<p>{escape_html(overview)}</p>"] if overview else []
+    parts = [f"<p>{as_html_text(overview)}</p>"] if overview else []
     for title, items, empty_text in sections:
-        parts.append(f"<p><strong>{escape_html(title)}</strong></p>")
+        parts.append(f"<p><strong>{as_html_text(title)}</strong></p>")
         if items:
-            rows = "".join(f"<li>{escape_html(item)}</li>" for item in items)
+            rows = "".join(f"<li>{as_html_text(item)}</li>" for item in items)
             parts.append(f"<ul>{rows}</ul>")
         else:
-            parts.append(f"<p>{escape_html(empty_text)}</p>")
+            parts.append(f"<p>{as_html_text(empty_text)}</p>")
     return "".join(parts)

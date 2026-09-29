@@ -38,8 +38,8 @@ def get_summaries(customer: str | None = None, limit: int = 20) -> list:
 @frappe.whitelist()
 @agent_only
 def get_summary(name: str | int) -> dict:
-    frappe.has_permission("HD Work Summary", "read", name, throw=True)
     doc = frappe.get_doc("HD Work Summary", name)
+    doc.check_permission("read")
     return {
         **{field: doc.get(field) for field in LIST_FIELDS},
         "summary": doc.summary,
