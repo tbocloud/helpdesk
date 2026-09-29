@@ -173,23 +173,25 @@
                 class="border-b border-outline-gray-1 last:border-b-0"
               >
                 <!-- clicking a person lists all their open tasks right here -->
-                <component
-                  :is="isFree(person) ? 'div' : 'button'"
+                <!-- a div, not a <button>: browsers don't lay out grid/contents inside buttons reliably -->
+                <div
                   v-bind="
                     isFree(person)
                       ? {}
                       : {
-                          type: 'button',
+                          role: 'button',
+                          tabindex: 0,
                           'aria-expanded': isExpanded(person),
                           onClick: () => toggle(person),
+                          onKeydown: (e: KeyboardEvent) => onRowKey(e, person),
                         }
                   "
-                  class="flex w-full flex-col gap-2.5 px-4 py-3 text-left transition-colors focus-visible:outline-none xl:grid xl:items-center xl:gap-3"
+                  class="flex flex-col gap-2.5 px-4 py-3 text-left transition-colors focus-visible:outline-none xl:grid xl:items-center xl:gap-3"
                   :class="[
                     GRID,
                     isFree(person)
                       ? ''
-                      : 'hover:bg-surface-gray-1 focus-visible:bg-surface-gray-1',
+                      : 'cursor-pointer hover:bg-surface-gray-1 focus-visible:bg-surface-gray-1',
                   ]"
                 >
                   <!-- Person -->
@@ -389,7 +391,7 @@
                       {{ __("No due date") }}
                     </span>
                   </div>
-                </component>
+                </div>
                 <div
                   v-if="isExpanded(person)"
                   class="border-t border-outline-gray-1 bg-surface-gray-1"
@@ -605,6 +607,12 @@ const expanded = reactive(new Set<string>());
 
 function isExpanded(person: Person) {
   return expanded.has(person.user);
+}
+
+function onRowKey(event: KeyboardEvent, person: Person) {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  event.preventDefault();
+  toggle(person);
 }
 
 function toggle(person: Person) {
