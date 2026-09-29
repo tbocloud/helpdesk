@@ -557,3 +557,35 @@ class TestAtRisk(WorkControlCase):
         result = self.as_user(PM, lambda: work.get_overview(customer=CUSTOMER))
         risky = {i["name"]: i["risks"] for i in result["buckets"]["at_risk"]}
         self.assertTrue(any("unassigned" in r for r in risky.get(str(ticket.name), [])))
+
+
+class TestTeamWorkload(WorkControlCase):
+    def test_lead_sees_who_is_doing_what(self):
+        working = self.make_task("Payroll setup", add_days(nowdate(), 2))
+        frappe.db.set_value("Task", working, "status", "Working")
+        self.make_task("Leave policy", add_days(nowdate(), -1))
+        done = self.make_task("Chart of accounts", add_days(nowdate(), -3))
+        frappe.db.set_value(
+            "Task", done, {"status": "Completed", "completed_on": nowdate()}
+        )
+
+        result = self.as_user(
+            LEAD, lambda: work.get_team_workload(project=self.project)
+        )
+        people = {p["user"]: p for p in result["people"]}
+
+        dev = people[DEV[0]]
+        self.assertEqual([w["title"] for w in dev["working_on"]], ["Payroll setup"])
+        self.assertEqual(
+            (dev["open"], dev["working"], dev["overdue"], dev["done_this_week"]),
+            (2, 1, 1, 1),
+        )
+        self.assertEqual(dev["next_due"]["title"], "Leave policy")
+        self.assertEqual(people[LEAD[0]]["open"], 0)
+        self.assertEqual(result["totals"]["working_now"], 1)
+        self.assertGreaterEqual(result["totals"]["free"], 1)
+        self.assertNotIn(SUPPORT[0], people)
+
+    def test_developers_cannot_see_the_team(self):
+        with self.assertRaises(frappe.PermissionError):
+            self.as_user(DEV, work.get_team_workload)

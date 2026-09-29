@@ -119,6 +119,29 @@
             </div>
           </div>
 
+          <div
+            v-if="projectDetail.data?.can_manage && undatedCount"
+            class="-mb-1 mt-3 flex justify-end"
+          >
+            <Button
+              variant="ghost"
+              size="sm"
+              :loading="estimateDates.loading"
+              :disabled="estimating"
+              :label="
+                estimating
+                  ? __('AI is setting due dates…')
+                  : __('Set due dates with AI ({0})', String(undatedCount))
+              "
+              :title="__('Open tasks without a due date get one from the AI')"
+              @click="estimateDates.submit({ project: projectId })"
+            >
+              <template #prefix>
+                <LucideSparkles class="size-4" aria-hidden="true" />
+              </template>
+            </Button>
+          </div>
+
           <!-- Stats -->
           <div
             class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-8"
@@ -434,8 +457,8 @@
 <script setup lang="ts">
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import { __ } from "@/translation";
-import { Button, createResource, dayjs } from "frappe-ui";
-import { computed, watch, type Component } from "vue";
+import { Button, createResource, dayjs, toast } from "frappe-ui";
+import { computed, onBeforeUnmount, ref, watch, type Component } from "vue";
 import { useRouter, type RouteLocationRaw } from "vue-router";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
 import LucideBuilding2 from "~icons/lucide/building-2";
@@ -451,11 +474,12 @@ import LucideGanttChartSquare from "~icons/lucide/gantt-chart-square";
 import LucideListTodo from "~icons/lucide/list-todo";
 import LucidePause from "~icons/lucide/pause";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
+import LucideSparkles from "~icons/lucide/sparkles";
 import ProjectNav from "./components/ProjectNav.vue";
 import SlipBadge from "./components/SlipBadge.vue";
 import TaskStatusBadge from "./components/TaskStatusBadge.vue";
 import TaskyState from "./components/TaskyState.vue";
-import { initials, isClosed } from "./taskMeta";
+import { errorText, initials, isClosed } from "./taskMeta";
 
 const props = defineProps<{
   projectId?: string;
@@ -635,4 +659,49 @@ function openCountFor(user: string) {
       t.assigned_to === user && !isClosed(t)
   ).length;
 }
+
+const undatedCount = computed(
+  () =>
+    (dashboard.data?.tasks ?? []).filter(
+      (t: { status?: string; due_date?: string | null }) =>
+        !t.due_date && !isClosed(t) && t.status !== "Template"
+    ).length
+);
+
+// the AI fills dates in the background, usually within a minute
+const estimating = ref(false);
+let reloadTimers: ReturnType<typeof setTimeout>[] = [];
+
+function clearReloadTimers() {
+  reloadTimers.forEach(clearTimeout);
+  reloadTimers = [];
+}
+
+const estimateDates = createResource({
+  url: "helpdesk.tasky.api.estimate_undated_tasks",
+  onSuccess(data: { queued: number }) {
+    if (!data.queued) {
+      toast.info(__("Every open task already has a due date"));
+      dashboard.reload();
+      return;
+    }
+    toast.success(
+      __("AI is setting due dates for {0} tasks", String(data.queued))
+    );
+    estimating.value = true;
+    clearReloadTimers();
+    reloadTimers = [
+      setTimeout(() => dashboard.reload(), 5000),
+      setTimeout(() => {
+        estimating.value = false;
+        dashboard.reload();
+      }, 20000),
+    ];
+  },
+  onError(e: unknown) {
+    toast.error(errorText(e, __("Couldn't set due dates with AI.")));
+  },
+});
+
+onBeforeUnmount(clearReloadTimers);
 </script>

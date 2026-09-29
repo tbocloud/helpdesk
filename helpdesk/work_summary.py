@@ -365,6 +365,9 @@ def write_summary(customer: str, stats: dict) -> tuple[str, bool]:
     response = result.get("response") or {}
     sections = ai_sections(response) if isinstance(response, dict) else None
     if not sections:
+        frappe.log_error(
+            title="Weekly summary: AI answer not usable", message=str(response)[:3000]
+        )
         return render_summary(*fallback_summary(stats)), False
     return render_summary(*sections), True
 

@@ -185,10 +185,11 @@ def ai_estimate(task, project, history: dict, max_days: int) -> dict | None:
         )
         return None
     response = result.get("response") if isinstance(result, dict) else None
-    if not isinstance(response, dict):
-        return None
-    days = cint(response.get("working_days"))
+    days = cint(response.get("working_days")) if isinstance(response, dict) else 0
     if days < 1:
+        frappe.log_error(
+            title="AI task estimate not usable", message=str(response)[:3000]
+        )
         return None
     reason = frappe.utils.strip_html(str(response.get("reason") or ""))[:300]
     return {

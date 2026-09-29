@@ -175,3 +175,39 @@ class TestEstimates(EstimateCase):
         task.status = "Open"
         task.save(ignore_permissions=True)
         self.assertIsNone(task.completed_on)
+
+
+class TestExistingTasks(EstimateCase):
+    def test_manager_fills_missing_due_dates(self):
+        undated = make_task(self.project, "Opening stock")
+        dated = make_task(self.project, "Print formats", add_days(nowdate(), 9))
+        with patch.object(task_estimates, "call_haiku", return_value=ai_answer(2)):
+            result = run_as_user(
+                PM[0], lambda: tasky.estimate_undated_tasks(project=self.project)
+            )
+
+        self.assertEqual(result["queued"], 1)
+        self.assertEqual(
+            getdate(frappe.db.get_value("Task", undated.name, "exp_end_date")),
+            task_estimates.add_working_days(nowdate(), 2),
+        )
+        self.assertEqual(
+            str(frappe.db.get_value("Task", dated.name, "exp_end_date")),
+            str(getdate(add_days(nowdate(), 9))),
+        )
+        with self.assertRaises(frappe.PermissionError):
+            run_as_user(
+                DEV[0], lambda: tasky.estimate_undated_tasks(project=self.project)
+            )
+
+    def test_json_wrapped_in_text_is_understood(self):
+        from helpdesk.ai_engine import parse_json_answer
+
+        self.assertEqual(
+            parse_json_answer(
+                'Sure! Here it is:\n{"working_days": 3}\nHope that helps.'
+            ),
+            {"working_days": 3},
+        )
+        self.assertEqual(parse_json_answer('```json\n{"a": 1}\n```'), {"a": 1})
+        self.assertTrue(parse_json_answer("no json here")["parse_error"])

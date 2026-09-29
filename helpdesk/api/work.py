@@ -18,7 +18,13 @@ from frappe.utils import (
     nowdate,
 )
 
-from helpdesk.tasky.permissions import can_manage_project, is_project_manager
+from helpdesk.tasky.permissions import (
+    can_manage_project,
+    get_led_projects,
+    get_managed_projects,
+    is_project_manager,
+    is_tasky_admin,
+)
 from helpdesk.utils import agent_only
 
 KEY_TICKET_PRIORITIES = ("Urgent", "High")
@@ -427,6 +433,173 @@ def create_task_from_ticket(
         }
     ).insert(ignore_permissions=True)
     return {"task": _format_task(_task_dict(task)), "ticket_status": ticket_doc.status}
+
+
+def _team_members(user: str, projects: list[str] | None) -> set[str]:
+    """Whose workload the viewer sees: every active agent for admins, else their projects' people."""
+    if projects is None and is_tasky_admin(user):
+        from helpdesk.tasky.api import get_users
+
+        return {u.name for u in get_users()}
+    projects = projects or list(
+        set(get_managed_projects(user)) | set(get_led_projects(user))
+    )
+    if not projects:
+        return set()
+    members = set(
+        frappe.get_all(
+            "Project User",
+            filters={"parenttype": "Project", "parent": ("in", projects)},
+            pluck="user",
+        )
+    )
+    leads = frappe.get_all(
+        "Project", filters={"name": ("in", projects)}, pluck="project_lead"
+    )
+    return {u for u in members | set(leads) if u}
+
+
+@frappe.whitelist()
+@agent_only
+def get_team_workload(project: str | None = None, customer: str | None = None) -> dict:
+    """Per person: what they're working on, open/review/on-hold/overdue counts, done this week."""
+    user = frappe.session.user
+    if not can_see_overview(user):
+        frappe.throw(
+            _("Only project managers and leads can see the team."),
+            frappe.PermissionError,
+        )
+
+    projects = None
+    if project:
+        projects = [project]
+    elif customer:
+        projects = frappe.get_all(
+            "Project", filters={"customer": customer}, pluck="name"
+        )
+    people = _team_members(user, projects)
+    if projects is not None and not projects:
+        people = set()
+
+    today = getdate(nowdate())
+    week_ago = add_days(today, -7)
+    week_ahead = add_days(today, 7)
+    task_filters = {"status": ("not in", ["Cancelled", "Template"])}
+    if projects is not None:
+        task_filters["project"] = ("in", projects or [""])
+    tasks = frappe.get_list(
+        "Task",
+        filters=task_filters,
+        or_filters={"status": ("!=", "Completed"), "completed_on": (">=", week_ago)},
+        fields=[*TASK_FIELDS, "completed_on", "custom_estimated_hours"],
+        limit_page_length=0,
+    )
+    ticket_filters = {"status_category": ("in", ["Open", "Paused"])}
+    if customer:
+        ticket_filters["customer"] = customer
+    tickets = (
+        []
+        if project
+        else frappe.get_list(
+            "HD Ticket",
+            filters=ticket_filters,
+            fields=TICKET_FIELDS,
+            limit_page_length=0,
+        )
+    )
+    names = _project_names(tasks)
+
+    rows = {
+        person: {
+            "user": person,
+            "working_on": [],
+            "next_due": None,
+            "open": 0,
+            "working": 0,
+            "review": 0,
+            "on_hold": 0,
+            "overdue": 0,
+            "due_this_week": 0,
+            "done_this_week": 0,
+            "tickets": 0,
+            "sla_breached": 0,
+            "estimated_hours": 0,
+        }
+        for person in people
+    }
+    for task in tasks:
+        item = _task_item(task, names)
+        for person in item["assignees"]:
+            row = rows.get(person)
+            if not row:
+                continue
+            if task.status == "Completed":
+                row["done_this_week"] += 1
+                continue
+            row["open"] += 1
+            row["estimated_hours"] += task.custom_estimated_hours or 0
+            if task.status == "Working":
+                row["working"] += 1
+                row["working_on"].append(
+                    {
+                        "name": task.name,
+                        "title": task.subject,
+                        "project_name": item["project_name"],
+                    }
+                )
+            elif task.status == "Pending Review":
+                row["review"] += 1
+            elif task.status == ON_HOLD:
+                row["on_hold"] += 1
+            if item["is_overdue"]:
+                row["overdue"] += 1
+            deadline = getdate(task.exp_end_date) if task.exp_end_date else None
+            if deadline and today <= deadline <= week_ahead and task.status != ON_HOLD:
+                row["due_this_week"] += 1
+            if (
+                deadline
+                and task.status != ON_HOLD
+                and (not row["next_due"] or str(deadline) < row["next_due"]["deadline"])
+            ):
+                row["next_due"] = {
+                    "name": task.name,
+                    "title": task.subject,
+                    "deadline": str(deadline),
+                }
+    for ticket in tickets:
+        item = _ticket_item(ticket)
+        for person in item["assignees"]:
+            row = rows.get(person)
+            if row:
+                row["tickets"] += 1
+                row["sla_breached"] += item["is_overdue"]
+
+    full_names = dict(
+        frappe.get_all(
+            "User",
+            filters={"name": ("in", list(rows) or [""])},
+            fields=["name", "full_name"],
+            as_list=True,
+        )
+    )
+    team = []
+    for row in rows.values():
+        row["full_name"] = full_names.get(row["user"]) or row["user"]
+        row["estimated_hours"] = round(row["estimated_hours"], 1)
+        team.append(row)
+    team.sort(key=lambda r: (-r["overdue"], -r["open"], r["full_name"]))
+    return {
+        "people": team,
+        "totals": {
+            "people": len(team),
+            "working_now": sum(1 for r in team if r["working"]),
+            "free": sum(1 for r in team if not r["open"] and not r["tickets"]),
+            "open": sum(r["open"] for r in team),
+            "overdue": sum(r["overdue"] for r in team),
+            "review": sum(r["review"] for r in team),
+            "done_this_week": sum(r["done_this_week"] for r in team),
+        },
+    }
 
 
 def can_see_overview(user: str | None = None) -> bool:

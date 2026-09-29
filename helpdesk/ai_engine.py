@@ -241,6 +241,26 @@ def log_usage(
         frappe.log_error("Failed to log AI usage")
 
 
+def parse_json_answer(text: str) -> dict:
+    """The JSON object in a model's answer, which may come in a code fence or with prose around it."""
+    candidates = [text]
+    if "```" in text:
+        fenced = text.split("```")[1]
+        candidates.append(fenced[4:] if fenced.startswith("json") else fenced)
+    start, end = text.find("{"), text.rfind("}")
+    if 0 <= start < end:
+        # models like Kimi sometimes explain before or after the JSON
+        candidates.append(text[start : end + 1])
+    for candidate in candidates:
+        try:
+            parsed = json.loads(candidate.strip())
+        except (json.JSONDecodeError, ValueError):
+            continue
+        if isinstance(parsed, dict):
+            return parsed
+    return {"raw_response": text, "parse_error": True}
+
+
 def call_haiku(system_prompt, user_message, ticket_name=None):
     """Call Haiku for triage. Returns parsed JSON response.
 
@@ -284,19 +304,7 @@ def call_haiku(system_prompt, user_message, ticket_name=None):
 
     log_usage(haiku_model, usage, ticket_name=ticket_name)
 
-    # Parse JSON from response
-    try:
-        parsed = json.loads(text)
-    except json.JSONDecodeError:
-        # Try to extract JSON from markdown code block
-        if "```json" in text:
-            json_str = text.split("```json")[1].split("```")[0].strip()
-            parsed = json.loads(json_str)
-        elif "```" in text:
-            json_str = text.split("```")[1].split("```")[0].strip()
-            parsed = json.loads(json_str)
-        else:
-            parsed = {"raw_response": text, "parse_error": True}
+    parsed = parse_json_answer(text)
 
     return {
         "response": parsed,

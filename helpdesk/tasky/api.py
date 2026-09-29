@@ -334,6 +334,32 @@ def _estimate_if_undated(task_doc):
         queue_estimate(task_doc)
 
 
+@frappe.whitelist()
+def estimate_undated_tasks(project: str) -> dict:
+    """Managers and leads: let the AI set due dates for open tasks that have none."""
+    from helpdesk.task_estimates import get_settings, queue_estimate
+
+    project = _resolve_project(str(project))
+    if not can_manage_project(project):
+        frappe.throw(
+            _("Only the project's manager or lead can do this."), frappe.PermissionError
+        )
+    if not get_settings().ai_task_estimates:
+        frappe.throw(_("AI task estimates are turned off in HD Work Settings."))
+    tasks = frappe.get_all(
+        "Task",
+        filters={
+            "project": project,
+            "exp_end_date": ("is", "not set"),
+            "status": ("not in", ["Completed", "Cancelled", "Template"]),
+        },
+        pluck="name",
+    )
+    for name in tasks:
+        queue_estimate(frappe._dict(name=name))
+    return {"queued": len(tasks)}
+
+
 def _assign_user(task_doc, user, ignore_permissions=False):
     """Assign an inserted Task to a user.
 
