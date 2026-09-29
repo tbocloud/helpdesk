@@ -172,10 +172,19 @@
                 :key="person.user"
                 class="border-b border-outline-gray-1 last:border-b-0"
               >
+                <!-- clicking a person lists all their open tasks right here -->
                 <component
-                  :is="isFree(person) ? 'div' : RouterLink"
-                  v-bind="isFree(person) ? {} : { to: personRoute(person) }"
-                  class="flex flex-col gap-2.5 px-4 py-3 text-left transition-colors focus-visible:outline-none xl:grid xl:items-center xl:gap-3"
+                  :is="isFree(person) ? 'div' : 'button'"
+                  v-bind="
+                    isFree(person)
+                      ? {}
+                      : {
+                          type: 'button',
+                          'aria-expanded': isExpanded(person),
+                          onClick: () => toggle(person),
+                        }
+                  "
+                  class="flex w-full flex-col gap-2.5 px-4 py-3 text-left transition-colors focus-visible:outline-none xl:grid xl:items-center xl:gap-3"
                   :class="[
                     GRID,
                     isFree(person)
@@ -381,6 +390,35 @@
                     </span>
                   </div>
                 </component>
+                <div
+                  v-if="isExpanded(person)"
+                  class="border-t border-outline-gray-1 bg-surface-gray-1"
+                >
+                  <ul
+                    v-if="person.tasks.length"
+                    role="list"
+                    :aria-label="__('Open tasks of {0}', person.full_name)"
+                  >
+                    <li
+                      v-for="task in person.tasks"
+                      :key="task.name"
+                      class="border-b border-outline-gray-1 last:border-b-0"
+                    >
+                      <WorkItemRow :item="task" />
+                    </li>
+                  </ul>
+                  <p v-else class="px-4 py-3 text-sm text-ink-gray-5">
+                    {{ __("No open tasks; only tickets.") }}
+                  </p>
+                  <div class="flex justify-end px-4 py-2">
+                    <RouterLink
+                      :to="personRoute(person)"
+                      class="text-sm text-ink-gray-7 underline-offset-2 hover:underline focus-visible:underline"
+                    >
+                      {{ __("Open in Overview") }}
+                    </RouterLink>
+                  </div>
+                </div>
               </li>
             </ul>
           </div>
@@ -414,6 +452,8 @@ import LucidePause from "~icons/lucide/pause";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideUsers from "~icons/lucide/users";
 import LucideX from "~icons/lucide/x";
+import WorkItemRow from "./components/WorkItemRow.vue";
+import type { WorkItem } from "./workMeta";
 
 interface TaskRef {
   name: string;
@@ -423,6 +463,7 @@ interface TaskRef {
 interface Person {
   user: string;
   full_name: string;
+  tasks: WorkItem[];
   working_on: (TaskRef & { project_name: string | null })[];
   next_due: (TaskRef & { deadline: string }) | null;
   open: number;
@@ -559,6 +600,17 @@ const tiles = computed<
     },
   ];
 });
+
+const expanded = reactive(new Set<string>());
+
+function isExpanded(person: Person) {
+  return expanded.has(person.user);
+}
+
+function toggle(person: Person) {
+  if (expanded.has(person.user)) expanded.delete(person.user);
+  else expanded.add(person.user);
+}
 
 function isFree(person: Person) {
   return !person.open && !person.tickets;

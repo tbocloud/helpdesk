@@ -462,7 +462,7 @@ def _team_members(user: str, projects: list[str] | None) -> set[str]:
 @frappe.whitelist()
 @agent_only
 def get_team_workload(project: str | None = None, customer: str | None = None) -> dict:
-    """Per person: what they're working on, open/review/on-hold/overdue counts, done this week."""
+    """Per person: their open tasks, what they're working on, counts, done this week."""
     user = frappe.session.user
     if not can_see_overview(user):
         frappe.throw(
@@ -513,6 +513,7 @@ def get_team_workload(project: str | None = None, customer: str | None = None) -
         person: {
             "user": person,
             "working_on": [],
+            "tasks": [],
             "next_due": None,
             "open": 0,
             "working": 0,
@@ -538,6 +539,7 @@ def get_team_workload(project: str | None = None, customer: str | None = None) -
                 continue
             row["open"] += 1
             row["estimated_hours"] += task.custom_estimated_hours or 0
+            row["tasks"].append(item)
             if task.status == "Working":
                 row["working"] += 1
                 row["working_on"].append(
@@ -585,6 +587,7 @@ def get_team_workload(project: str | None = None, customer: str | None = None) -
     team = []
     for row in rows.values():
         row["full_name"] = full_names.get(row["user"]) or row["user"]
+        row["tasks"].sort(key=_sort_key)
         row["estimated_hours"] = round(row["estimated_hours"], 1)
         team.append(row)
     team.sort(key=lambda r: (-r["overdue"], -r["open"], r["full_name"]))
