@@ -57,7 +57,8 @@ export default defineConfig(async ({ mode }) => {
           display: "standalone",
           name: "TBO Support",
           short_name: "TBO Support",
-          start_url: "/helpdesk",
+          start_url: "/helpdesk/",
+          scope: "/helpdesk/",
           description:
             "Modern, Streamlined, Free and Open Source Customer Service Software",
           icons: [

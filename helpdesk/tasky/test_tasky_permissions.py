@@ -355,3 +355,12 @@ class TestTaskyPermissions(FrappeTestCase):
             u.user: u.custom_role for u in frappe.get_doc("Project", self.project).users
         }
         self.assertEqual(roles.get(PM[0]), "Project Manager")
+
+    def test_end_date_cannot_precede_start_date(self):
+        with self.assertRaises(frappe.ValidationError):
+            self.edit(
+                PM, expected_start_date="2026-10-10", expected_end_date="2026-10-01"
+            )
+        self.edit(PM, expected_start_date="2026-10-01", expected_end_date="2026-10-31")
+        doc = frappe.get_doc("Project", self.project)
+        self.assertEqual(str(doc.expected_end_date), "2026-10-31")

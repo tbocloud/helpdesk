@@ -1,8 +1,11 @@
 <template>
+  <!-- the customer picker's dropdown renders outside the dialog, so an
+       outside click must not close it; Cancel and the close button still do -->
   <Dialog
     v-model:open="open"
     :title="isEdit ? __('Edit project') : __('New project')"
     size="xl"
+    :dismissible="false"
   >
     <div v-if="detail.loading" class="flex flex-col gap-3 py-2">
       <div
@@ -35,11 +38,14 @@
           v-model="form.expected_start_date"
           type="date"
           :label="__('Start date')"
+          required
         />
         <TextInput
           v-model="form.expected_end_date"
           type="date"
-          :label="__('Expected end date')"
+          :label="__('End date')"
+          :min="form.expected_start_date || undefined"
+          required
         />
         <template v-if="isEdit">
           <FormControl
@@ -140,7 +146,7 @@
           :form="formId"
           :label="isEdit ? __('Save changes') : __('Create project')"
           :loading="saving"
-          :disabled="!form.project_name.trim() || detail.loading"
+          :disabled="!canSubmit || detail.loading"
         />
       </div>
     </template>
@@ -249,14 +255,29 @@ watch(open, (isOpen) => {
   else Object.assign(form, EMPTY());
 });
 
+const canSubmit = computed(
+  () =>
+    !!form.project_name.trim() &&
+    !!form.expected_start_date &&
+    !!form.expected_end_date
+);
+
 function removeMember(idx: number) {
   const [removed] = form.members.splice(idx, 1);
   if (removed?.user === form.project_lead) form.project_lead = "";
 }
 
 async function submit() {
-  if (!form.project_name.trim() || saving.value) return;
+  if (saving.value) return;
   error.value = "";
+  if (!canSubmit.value) {
+    error.value = __("Add a project name, start date and end date.");
+    return;
+  }
+  if (form.expected_end_date < form.expected_start_date) {
+    error.value = __("The end date can't be before the start date.");
+    return;
+  }
   saving.value = true;
   const members = JSON.stringify(form.members.filter((m) => m.user.trim()));
   try {

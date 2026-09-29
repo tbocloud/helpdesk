@@ -19,7 +19,6 @@ import { spritePlugin } from "frappe-ui/icons";
 import { createDialog } from "./components/dialogs";
 import "./index.css";
 import { router } from "./router";
-import { telemetryPlugin } from "frappe-ui/frappe";
 import { isCustomerPortal } from "@/utils";
 import { translationPlugin } from "./translation";
 import CircleAlert from "~icons/lucide/circle-alert";
@@ -68,7 +67,6 @@ app.use(spritePlugin);
 app.use(pinia);
 app.use(router);
 app.use(translationPlugin);
-app.use(telemetryPlugin, { app_name: "helpdesk" });
 
 for (const c in globalComponents) {
   app.component(c, globalComponents[c]);

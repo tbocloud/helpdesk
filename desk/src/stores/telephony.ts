@@ -1,4 +1,5 @@
 import { defineStore } from "pinia";
+import { useConfigStore } from "@/stores/config";
 import { call } from "frappe-ui";
 
 interface MakeCallParams {
@@ -41,6 +42,12 @@ export const useTelephonyStore = defineStore("telephony", {
     async fetchCallIntegrationStatus() {
       try {
         this.isLoading = true;
+        const configResource = useConfigStore().configResource;
+        const config = configResource.data || (await configResource.reload());
+        if (!config?.telephony_installed) {
+          this.isCallingEnabled = false;
+          return;
+        }
         const data = await call("telephony.api.is_call_integration_enabled");
         this.isTwilioEnabled = Boolean(data.twilio_enabled);
         this.isExotelEnabled = Boolean(data.exotel_enabled);
