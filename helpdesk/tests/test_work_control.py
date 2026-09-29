@@ -582,7 +582,9 @@ class TestTeamWorkload(WorkControlCase):
         )
         self.assertEqual(dev["next_due"]["title"], "Leave policy")
         # every open task is listed, overdue first
-        self.assertEqual([t["title"] for t in dev["tasks"]], ["Leave policy", "Payroll setup"])
+        self.assertEqual(
+            [t["title"] for t in dev["tasks"]], ["Leave policy", "Payroll setup"]
+        )
         self.assertEqual(people[LEAD[0]]["open"], 0)
         self.assertEqual(result["totals"]["working_now"], 1)
         self.assertGreaterEqual(result["totals"]["free"], 1)
