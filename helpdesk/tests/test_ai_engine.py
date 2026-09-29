@@ -77,7 +77,7 @@ class TestTriageUsesTriageProvider(FrappeTestCase):
             return ("Anthropic", None, "key")
 
         response = MagicMock()
-        response.content = [MagicMock(text='{"category": "Stock"}')]
+        response.content = [MagicMock(type="text", text='{"category": "Stock"}')]
         response.usage = MagicMock(input_tokens=10, output_tokens=5)
 
         with (
