@@ -23,8 +23,6 @@ TEAMS = "Microsoft Teams"
 SLACK_API = "https://slack.com/api/"
 TIMEOUT = 10
 SLACK_USER_CACHE_SECONDS = 24 * 60 * 60
-# long enough that a daily escalation isn't posted to the channel twice
-CHANNEL_DEDUPE_SECONDS = 90 * 24 * 60 * 60
 
 
 class ChatError(Exception):
@@ -189,13 +187,20 @@ def deliver_notification(notification: str):
 
 
 def post_escalation(text: str, path: str | None = None):
-    """Queue a channel post, once per message text."""
+    """Queue a channel post, once per message text (recorded in HD Chat Escalation)."""
     if not is_enabled():
         return
-    key = "helpdesk:chat_escalation:" + hashlib.sha1(text.encode()).hexdigest()
-    if frappe.cache.get_value(key):
+    digest = hashlib.sha1(text.encode()).hexdigest()
+    if frappe.db.exists("HD Chat Escalation", digest):
         return
-    frappe.cache.set_value(key, 1, expires_in_sec=CHANNEL_DEDUPE_SECONDS)
+    frappe.get_doc(
+        {
+            "doctype": "HD Chat Escalation",
+            "message_hash": digest,
+            "message": text,
+            "link": path,
+        }
+    ).insert(ignore_permissions=True)
     frappe.enqueue(
         "helpdesk.chat_notifications.deliver_escalation",
         text=text,

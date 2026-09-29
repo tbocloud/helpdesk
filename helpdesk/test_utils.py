@@ -765,5 +765,4 @@ def enable_chat_notifications(platform: str = "Microsoft Teams", **settings):
     doc.save(ignore_permissions=True)
     frappe.clear_document_cache("HD Chat Settings", "HD Chat Settings")
     frappe.cache.delete_keys("helpdesk:slack_user:")
-    frappe.cache.delete_keys("helpdesk:chat_escalation:")
     return doc
