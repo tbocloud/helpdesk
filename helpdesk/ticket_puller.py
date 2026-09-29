@@ -352,6 +352,11 @@ def sync_conversations() -> int:
 
     synced = 0
     for conn_name, tickets in by_conn.items():
+        # comments the hub itself wrote on the customer site aren't pulled back
+        support_user = (
+            frappe.db.get_value("HDS Support Connection", conn_name, "support_user")
+            or "support@quarkcs.com"
+        )
         try:
             mcp = MCPClient(conn_name)
         except Exception:
@@ -388,10 +393,7 @@ def sync_conversations() -> int:
                     or []
                 )
                 for c in comments:
-                    if (
-                        c["name"] in state["client"]
-                        or c.get("owner") == "support@quarkcs.com"
-                    ):
+                    if c["name"] in state["client"] or c.get("owner") == support_user:
                         continue
                     hd_comment = frappe.get_doc(
                         {

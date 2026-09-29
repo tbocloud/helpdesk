@@ -7,6 +7,7 @@ import json
 
 import frappe
 from frappe import _
+from frappe.rate_limiter import rate_limit
 
 from helpdesk.utils import agent_manager_only, agent_only
 
@@ -435,8 +436,8 @@ def _call_client(conn, connection_name, path: str, payload: dict | None = None) 
     if response.status_code == 401:
         frappe.throw(
             _(
-                "Authentication failed on {0}. Verify API Key/Secret belong to support@quarkcs.com on the customer site."
-            ).format(conn.site_url)
+                "Authentication failed on {0}. Verify the API Key/Secret belong to {1} on the customer site."
+            ).format(conn.site_url, conn.support_user or LEGACY_SUPPORT_USER)
         )
     if response.status_code != 200:
         frappe.throw(
@@ -445,56 +446,148 @@ def _call_client(conn, connection_name, path: str, payload: dict | None = None) 
     return response.json().get("message", {})
 
 
+LEGACY_SUPPORT_USER = "support@quarkcs.com"
+PAIRING_CODE_HOURS = 24
+PAIRING_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no 0/O or 1/I to misread
+
+
 @frappe.whitelist()
 def register_client(connection: str):
-    """Hub-initiated connection handshake.
+    """Hub-initiated connection handshake, for a Connection whose API keys were pasted in.
 
-    Prerequisites (one-time, manual):
-      - Customer admin has installed helpdesk_client, configured HDS Support
-        Settings (Hub URL, enabled), and generated API keys for
-        support@quarkcs.com via the User doc -> API Access.
-      - Hub admin has pasted those api_key/api_secret into this Connection.
-
-    This call uses Token auth (api_key:api_secret) against the customer site.
-    It records the Hub URL + client_id on the customer side and marks this
-    Connection as Connected on the Hub side. No secrets are exchanged.
+    A connection code (create_pairing_code / pair_client) does the same without
+    anyone copying keys. This call uses Token auth (api_key:api_secret) against
+    the customer site; it records the Hub URL + client_id there and marks this
+    Connection as Connected here.
     """
     frappe.only_for("System Manager")
-    from frappe.utils import get_url
-
     conn = frappe.get_doc("HDS Support Connection", connection)
+    return _register(conn)
+
+
+def _register(conn) -> dict:
+    from frappe.utils import get_url
 
     if not conn.site_url:
         _log_login_attempt(
-            connection, None, "Failed", "Site URL missing", event_type="Register"
+            conn.name, None, "Failed", "Site URL missing", event_type="Register"
         )
         frappe.throw(_("Site URL is required on the connection"))
 
     try:
         result = _call_client(
             conn,
-            connection,
+            conn.name,
             conn.client_method("api.register_connection"),
-            {"hub_url": get_url(), "client_id": connection},
+            {"hub_url": get_url(), "client_id": conn.name},
         )
     except Exception as e:
         _log_login_attempt(
-            connection, None, "Failed", str(e)[:200], event_type="Register"
+            conn.name, None, "Failed", str(e)[:200], event_type="Register"
         )
         raise
 
     conn.connection_status = "Connected"
     conn.mcp_client_installed = 1
     conn.last_token_update = frappe.utils.now_datetime()
+    # older clients don't report it; they all used the original support user
+    conn.support_user = (
+        result.get("support_user") or conn.support_user or LEGACY_SUPPORT_USER
+    )
     conn.save(ignore_permissions=True)
 
-    _log_login_attempt(connection, None, "Success", "", event_type="Register")
+    _log_login_attempt(conn.name, None, "Success", "", event_type="Register")
 
     return {
         "status": "registered",
-        "connection": connection,
+        "connection": conn.name,
         "site": result.get("site"),
     }
+
+
+def _hash_code(code: str) -> str:
+    import hashlib
+
+    cleaned = "".join(ch for ch in (code or "").upper() if ch.isalnum())
+    return hashlib.sha256(cleaned.encode()).hexdigest()
+
+
+@frappe.whitelist()
+def create_pairing_code(connection: str) -> dict:
+    """A one-time code the customer's admin enters in their ERP to connect it, instead of copying API keys."""
+    import secrets
+
+    # only_for is skipped while testing, so check the role directly
+    if "System Manager" not in frappe.get_roles():
+        frappe.throw(
+            _("Only System Managers can create connection codes."),
+            frappe.PermissionError,
+        )
+    conn = frappe.get_doc("HDS Support Connection", connection)
+    if not conn.site_url:
+        frappe.throw(_("Save the customer's Site URL first."))
+    raw = "".join(secrets.choice(PAIRING_ALPHABET) for _ in range(10))
+    code = f"{raw[:4]}-{raw[4:8]}-{raw[8:]}"
+    expires = frappe.utils.add_to_date(
+        frappe.utils.now_datetime(), hours=PAIRING_CODE_HOURS
+    )
+    conn.db_set(
+        {"pairing_code_hash": _hash_code(code), "pairing_code_expires": expires}
+    )
+    return {"code": code, "expires": str(expires), "site_url": conn.site_url}
+
+
+@frappe.whitelist(  # the customer site isn't a hub user yet; the one-time code is the credential - nosemgrep
+    allow_guest=True, methods=["POST"]
+)
+@rate_limit(limit=10, seconds=60 * 60)
+def pair_client(
+    code: str,
+    site_url: str,
+    api_key: str,
+    api_secret: str,
+    client_app: str = "helpdesk_client",
+    support_user: str = "",
+) -> dict:
+    """Called by the customer site with a connection code and the API key it just made for the hub.
+
+    The code must be unused, unexpired and issued for this site URL; the hub then
+    runs the normal registration against that URL to prove the key works.
+    """
+    from helpdesk.utils import normalize_site_url
+
+    invalid = _(
+        "This connection code is invalid or has expired. Ask TBO Support for a new one."
+    )
+    name = frappe.db.get_value(
+        "HDS Support Connection", {"pairing_code_hash": _hash_code(code)}, "name"
+    )
+    if not name:
+        frappe.throw(invalid, frappe.AuthenticationError)
+    conn = frappe.get_doc("HDS Support Connection", name)
+    if (
+        not conn.pairing_code_expires
+        or frappe.utils.get_datetime(conn.pairing_code_expires)
+        < frappe.utils.now_datetime()
+    ):
+        frappe.throw(invalid, frappe.AuthenticationError)
+    if normalize_site_url(site_url) != normalize_site_url(conn.site_url):
+        frappe.throw(
+            _("This code was issued for {0}, not {1}.").format(conn.site_url, site_url),
+            frappe.AuthenticationError,
+        )
+    if not api_key or not api_secret:
+        frappe.throw(_("The customer site didn't send an API key."))
+
+    conn.api_key = api_key
+    conn.api_secret = api_secret
+    conn.client_app = client_app or conn.client_app
+    conn.support_user = support_user or conn.support_user
+    conn.pairing_code_hash = None
+    conn.pairing_code_expires = None
+    conn.save(ignore_permissions=True)
+    result = _register(conn)
+    return {"status": "connected", "connection": result["connection"]}
 
 
 @frappe.whitelist()

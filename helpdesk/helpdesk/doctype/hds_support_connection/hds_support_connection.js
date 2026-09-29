@@ -7,10 +7,17 @@ frappe.ui.form.on("HDS Support Connection", {
 
     if (frm.doc.connection_status !== "Connected") {
       frm
-        .add_custom_button(__("Register Client"), function () {
-          register_client(frm);
+        .add_custom_button(__("Get connection code"), function () {
+          get_connection_code(frm);
         })
         .addClass("btn-primary");
+      frm.add_custom_button(
+        __("Register with pasted API keys"),
+        function () {
+          register_client(frm);
+        },
+        __("Actions")
+      );
     } else {
       frm
         .add_custom_button(__("Login to Site"), function () {
@@ -55,6 +62,54 @@ frappe.ui.form.on("HDS Support Connection", {
   },
 });
 
+function get_connection_code(frm) {
+  if (frm.is_dirty()) {
+    frappe.msgprint(__("Save the form first."));
+    return;
+  }
+  frappe.call({
+    method: "helpdesk.api.create_pairing_code",
+    args: { connection: frm.doc.name },
+    freeze: true,
+    callback(r) {
+      if (!r.message) return;
+      const { code, expires, site_url } = r.message;
+      const d = new frappe.ui.Dialog({
+        title: __("Connection code"),
+        fields: [
+          {
+            fieldtype: "HTML",
+            options: `
+              <div style="font-family:monospace;font-size:28px;letter-spacing:4px;text-align:center;padding:12px 0">${frappe.utils.escape_html(
+                code
+              )}</div>
+              <p>${__("Valid until {0}, and only once.", [
+                frappe.datetime.str_to_user(expires),
+              ])}</p>
+              <ol>
+                <li>${__("Log in to {0} as a System Manager.", [
+                  frappe.utils.escape_html(site_url),
+                ])}</li>
+                <li>${__(
+                  "Open <b>HDS Support Settings</b> and click <b>Connect to TBO Support</b>."
+                )}</li>
+                <li>${__(
+                  "Enter this code. The connection finishes by itself; refresh this page to see it Connected."
+                )}</li>
+              </ol>`,
+          },
+        ],
+        primary_action_label: __("Copy code"),
+        primary_action() {
+          frappe.utils.copy_to_clipboard(code);
+        },
+      });
+      d.show();
+      frm.reload_doc();
+    },
+  });
+}
+
 function register_client(frm) {
   if (!frm.doc.site_url) {
     frappe.msgprint(__("Site URL is required."));
@@ -63,7 +118,7 @@ function register_client(frm) {
   if (!frm.doc.api_key) {
     frappe.msgprint(
       __(
-        "API Key is required. On the customer site, open User <b>support@quarkcs.com</b>, generate API keys via <b>API Access</b>, and paste them into this form."
+        "API Key is required. Easier: use <b>Get connection code</b> and enter the code on the customer site. Otherwise, open the support user on the customer site, generate API keys via <b>API Access</b>, and paste them here."
       )
     );
     return;
@@ -75,8 +130,8 @@ function register_client(frm) {
 
   frappe.confirm(
     __(
-      "This will call {0} as <b>support@quarkcs.com</b> (Token auth) and record this Hub as the registered one. Continue?",
-      [frm.doc.site_url]
+      "This will call {0} as <b>{1}</b> (Token auth) and record this Hub as the registered one. Continue?",
+      [frm.doc.site_url, frm.doc.support_user || "the support user"]
     ),
     function () {
       frappe.call({
@@ -268,7 +323,9 @@ function show_credentials_dialog(data, frm) {
         fieldtype: "HTML",
         options: `<div style="padding:8px 12px;background:#fff3cd;border:1px solid #ffeaa7;border-radius:4px;margin-bottom:12px">
 					<b>Security note:</b> This access is audit-logged. Anyone with these credentials can act as
-					<b>support@quarkcs.com</b> on <b>${frappe.utils.escape_html(data.site_url)}</b>.
+					<b>${frappe.utils.escape_html(
+            frm.doc.support_user || "the support user"
+          )}</b> on <b>${frappe.utils.escape_html(data.site_url)}</b>.
 					If you use these in Claude Desktop or Claude Web App, avoid clicking <b>Rotate Credentials</b>
 					while those tools are running - rotation invalidates the current keys everywhere.
 				</div>`,
