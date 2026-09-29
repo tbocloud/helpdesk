@@ -84,6 +84,15 @@ def is_project_member(project: str, user: str) -> bool:
     )
 
 
+def has_assigned_task(project: str, user: str) -> bool:
+    """A developer given a task in a project sees that project, member or not."""
+    return bool(
+        frappe.db.exists(
+            "Task", {"project": project, "_assign": ("like", f'%"{user}"%')}
+        )
+    )
+
+
 def is_assigned(doc, user: str) -> bool:
     try:
         return user in json.loads(doc.get("_assign") or "[]")
@@ -110,9 +119,11 @@ def project_query(user: str | None = None) -> str | None:
     if is_tasky_admin(user):
         return None
     u = frappe.db.escape(user)
+    assigned = frappe.db.escape(f'%"{user}"%')
     return (
         f"(`tabProject`.`owner` = {u} or `tabProject`.`project_lead` = {u} or `tabProject`.`name` in "
-        f"(select `parent` from `tabProject User` where `parenttype` = 'Project' and `user` = {u}))"
+        f"(select `parent` from `tabProject User` where `parenttype` = 'Project' and `user` = {u}) "
+        f"or `tabProject`.`name` in (select `project` from `tabTask` where `_assign` like {assigned}))"
     )
 
 
@@ -151,7 +162,9 @@ def project_has_permission(
     if is_project_owner(doc.name, user):
         return None
     if ptype in ("read", "print", "email", "report") and (
-        doc.get("project_lead") == user or is_project_member(doc.name, user)
+        doc.get("project_lead") == user
+        or is_project_member(doc.name, user)
+        or has_assigned_task(doc.name, user)
     ):
         return None
     return False

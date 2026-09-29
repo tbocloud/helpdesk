@@ -16,6 +16,7 @@ from helpdesk.tasky import api
 from helpdesk.test_utils import (
     create_customer,
     create_user,
+    make_assignment,
     make_project,
     make_tasky_user,
 )
@@ -115,6 +116,18 @@ class TestTaskyPermissions(FrappeTestCase):
             self.as_user(
                 DEV_A, api.add_task, project=self.project, task_name="Sneaky task"
             )
+
+    def test_developer_sees_the_project_of_a_task_given_to_them(self):
+        task = frappe.get_doc(
+            {"doctype": "Task", "subject": "Decimal point", "project": self.project}
+        ).insert(ignore_permissions=True)
+        # assigned directly, so they never joined the team
+        make_assignment("Task", task.name, OUTSIDER[0])
+
+        names = [p["name"] for p in self.as_user(OUTSIDER, api.get_projects)]
+        self.assertIn(self.project, names)
+        detail = self.as_user(OUTSIDER, api.get_project_detail, project=self.project)
+        self.assertFalse(detail["can_manage"])
 
     def test_outsider_and_other_pm_cannot_see_project(self):
         make_project(f"{OTHER_CUSTOMER} - Support Rollout", owner=OTHER_PM[0])
