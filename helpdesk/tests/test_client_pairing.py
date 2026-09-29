@@ -4,7 +4,7 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_to_date, now_datetime
 
-from helpdesk import api
+from helpdesk.api import support_hub as api
 from helpdesk.test_utils import create_customer, make_support_connection
 
 CUSTOMER = "Harbour Foods LLC"
@@ -90,3 +90,16 @@ class TestClientPairing(FrappeTestCase):
         frappe.set_user("Guest")
         with self.assertRaises(frappe.PermissionError):
             api.create_pairing_code(self.conn)
+
+
+class TestHubEndpointsResolve(FrappeTestCase):
+    def test_dotted_paths_reach_whitelisted_functions(self):
+        # helpdesk/api.py used to be shadowed by the helpdesk/api package
+        for name in (
+            "register_client",
+            "rotate_credentials",
+            "get_login_url",
+            "create_pairing_code",
+        ):
+            self.assertIn(frappe.get_attr(f"helpdesk.api.{name}"), frappe.whitelisted)
+        self.assertIn(frappe.get_attr("helpdesk.api.pair_client"), frappe.guest_methods)
