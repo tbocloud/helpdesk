@@ -22,6 +22,9 @@ get_site_info = "helpdesk.activation.get_site_info"
 
 before_install = "helpdesk.install.before_install"
 after_install = "helpdesk.setup.install.after_install"
+
+# only System Managers use the Frappe desk; everyone else is sent to /helpdesk
+update_website_context = ["helpdesk.desk_access.redirect_desk_to_helpdesk"]
 after_migrate = [
     "helpdesk.search.build_index_in_background",
     "helpdesk.search.download_corpus",

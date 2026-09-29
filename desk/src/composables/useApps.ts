@@ -1,6 +1,7 @@
 import { createResource } from "frappe-ui";
 import { computed, h, markRaw, type Component, type ComputedRef } from "vue";
 import AppsIcon from "@/components/icons/AppsIcon.vue";
+import { useAuthStore } from "@/stores/auth";
 
 export interface App {
   name: string;
@@ -49,7 +50,14 @@ export function useApps() {
     },
   });
 
-  const apps = computed<App[]>(() => resource.data ?? []);
+  const authStore = useAuthStore();
+  // only System Managers may use the Frappe desk; the server redirects everyone else
+  const isDeskRoute = (route: string) => /^\/(app|desk)(\/|$)/.test(route || "");
+  const apps = computed<App[]>(() =>
+    (resource.data ?? []).filter(
+      (app: App) => authStore.isAdmin || !isDeskRoute(app.route)
+    )
+  );
 
   const appsMenuOption: ComputedRef<AppsMenuOption> = computed(() => ({
     label: "Apps",

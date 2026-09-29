@@ -10,7 +10,7 @@
         <Button
           variant="ghost"
           :label="__('Delivery report')"
-          link="/app/query-report/Content Delivery"
+          :route="{ name: 'ContentReport' }"
         >
           <template #prefix
             ><LucideChartColumn class="size-4" aria-hidden="true"

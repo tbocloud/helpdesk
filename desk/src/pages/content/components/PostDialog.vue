@@ -234,7 +234,7 @@
     <template #actions>
       <div class="flex items-center gap-2">
         <Button
-          v-if="!isNew"
+          v-if="!isNew && authStore.isAdmin"
           variant="ghost"
           :label="__('Open full form')"
           :link="`/app/hd-content-post/${post?.name}`"
@@ -255,6 +255,7 @@
 
 <script setup lang="ts">
 import { Link } from "@/components";
+import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
 import {
   Button,
@@ -283,6 +284,7 @@ interface PostRef {
 }
 
 const props = defineProps<{ post: PostRef | null }>();
+const authStore = useAuthStore();
 const open = defineModel<boolean>("open", { default: false });
 const emit = defineEmits<{ (e: "saved"): void }>();
 
