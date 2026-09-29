@@ -26,6 +26,24 @@
     </template>
     <template #right-header>
       <slot name="actions" />
+      <Dropdown v-if="detail.data?.can_change_lead" :options="leadOptions">
+        <Button :loading="changingLead">
+          <template #prefix
+            ><LucideUserStar class="size-4" aria-hidden="true"
+          /></template>
+          {{ leadLabel }}
+          <template #suffix
+            ><LucideChevronDown class="size-4" aria-hidden="true"
+          /></template>
+        </Button>
+      </Dropdown>
+      <span
+        v-else-if="detail.data"
+        class="hidden items-center gap-1.5 text-sm text-ink-gray-6 sm:flex"
+      >
+        <LucideUserStar class="size-4" aria-hidden="true" />
+        {{ leadLabel }}
+      </span>
       <Button
         v-if="detail.data?.can_manage"
         variant="solid"
@@ -72,12 +90,16 @@
 <script setup lang="ts">
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import { __ } from "@/translation";
-import { Button, createResource } from "frappe-ui";
+import { Button, call, createResource, Dropdown, toast } from "frappe-ui";
 import { computed, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
 import LucideCalendarRange from "~icons/lucide/calendar-range";
+import LucideChevronDown from "~icons/lucide/chevron-down";
 import LucideChevronRight from "~icons/lucide/chevron-right";
+import LucideRefreshCw from "~icons/lucide/refresh-cw";
+import LucideUserStar from "~icons/lucide/user-star";
+import LucideUserX from "~icons/lucide/user-x";
 import LucideKanban from "~icons/lucide/square-kanban";
 import LucideLayoutDashboard from "~icons/lucide/layout-dashboard";
 import LucideListChecks from "~icons/lucide/list-checks";
@@ -117,6 +139,81 @@ watch(
   },
   { immediate: true }
 );
+
+// --- project lead: one developer per project, rotated by the project's manager ---
+
+const changingLead = ref(false);
+
+const leadLabel = computed(() =>
+  detail.data?.project_lead_name || detail.data?.project_lead
+    ? __("Lead: {0}", detail.data.project_lead_name || detail.data.project_lead)
+    : __("No lead")
+);
+
+async function changeLead(method: string, args: Record<string, unknown>) {
+  changingLead.value = true;
+  try {
+    const res = await call(`helpdesk.tasky.api.${method}`, {
+      project: props.projectId,
+      ...args,
+    });
+    await detail.reload();
+    toast.success(
+      res?.project_lead
+        ? __(
+            "{0} is now the project lead",
+            detail.data?.project_lead_name || res.project_lead
+          )
+        : __("Project lead removed")
+    );
+  } catch (e: any) {
+    toast.error(e?.messages?.[0] || __("Couldn't change the project lead"));
+  } finally {
+    changingLead.value = false;
+  }
+}
+
+const leadOptions = computed(() => {
+  const members = (detail.data?.users ?? []) as {
+    user: string;
+    full_name?: string;
+    role?: string;
+  }[];
+  // developers first: the lead normally rotates among them
+  const sorted = [...members].sort(
+    (a, b) => Number(b.role === "Developer") - Number(a.role === "Developer")
+  );
+  return [
+    {
+      group: __("Make lead"),
+      items: sorted.map((m) => ({
+        label: `${m.full_name || m.user}${
+          m.user === detail.data?.project_lead ? " \u2713" : ""
+        }`,
+        onClick: () => changeLead("set_project_lead", { user: m.user }),
+      })),
+    },
+    {
+      group: __("Actions"),
+      items: [
+        {
+          label: __("Rotate to next developer"),
+          icon: LucideRefreshCw,
+          onClick: () => changeLead("rotate_project_lead", {}),
+        },
+        ...(detail.data?.project_lead
+          ? [
+              {
+                label: __("Remove lead"),
+                icon: LucideUserX,
+                onClick: () => changeLead("set_project_lead", { user: "" }),
+              },
+            ]
+          : []),
+      ],
+    },
+  ];
+});
 
 defineExpose({
   canManage: computed(() => !!detail.data?.can_manage),

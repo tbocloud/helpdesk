@@ -191,6 +191,21 @@
                       />
                       <span class="truncate">{{ project.customer }}</span>
                     </span>
+                    <span
+                      v-if="project.project_lead"
+                      class="flex min-w-0 items-center gap-1"
+                    >
+                      <LucideUserStar
+                        class="size-3.5 shrink-0"
+                        aria-hidden="true"
+                      />
+                      <span class="truncate">{{
+                        __(
+                          "Lead: {0}",
+                          project.project_lead_name || project.project_lead
+                        )
+                      }}</span>
+                    </span>
                     <span class="flex items-center gap-1 tabular-nums">
                       <LucideCalendar
                         class="size-3.5 shrink-0"
@@ -444,6 +459,18 @@
           </div>
         </fieldset>
 
+        <FormControl
+          v-model="newProject.project_lead"
+          type="select"
+          :label="__('Project lead')"
+          :options="leadOptions"
+          :description="
+            __(
+              'Can create and assign tasks in this project. You can rotate it later.'
+            )
+          "
+        />
+
         <div
           v-if="createProject.error"
           role="alert"
@@ -522,6 +549,7 @@ import LucideSearch from "~icons/lucide/search";
 import LucideSearchX from "~icons/lucide/search-x";
 import LucideKanban from "~icons/lucide/square-kanban";
 import LucideUserPlus from "~icons/lucide/user-plus";
+import LucideUserStar from "~icons/lucide/user-star";
 import LucideX from "~icons/lucide/x";
 import GenerateChecklistModal from "./components/GenerateChecklistModal.vue";
 import NewTaskDialog from "./components/NewTaskDialog.vue";
@@ -539,6 +567,8 @@ interface Project {
   expected_end_date?: string;
   priority?: string;
   customer?: string;
+  project_lead?: string;
+  project_lead_name?: string;
   can_manage?: boolean;
 }
 
@@ -755,14 +785,26 @@ const newProject = reactive({
   start_date: "",
   expected_end_date: "",
   customer: "",
+  project_lead: "",
   members: [] as { user: string; custom_role: string }[],
 });
+
+const leadOptions = computed(() => [
+  { label: __("No lead yet"), value: "" },
+  ...newProject.members
+    .filter((m) => m.user)
+    .map((m) => ({
+      label: userOptions.value.find((o) => o.value === m.user)?.label || m.user,
+      value: m.user,
+    })),
+]);
 
 function resetForm() {
   newProject.project_name = "";
   newProject.start_date = "";
   newProject.expected_end_date = "";
   newProject.customer = "";
+  newProject.project_lead = "";
   newProject.members = [];
 }
 
@@ -778,6 +820,7 @@ function onCreateProject() {
     expected_start_date: newProject.start_date,
     expected_end_date: newProject.expected_end_date,
     customer: newProject.customer,
+    project_lead: newProject.project_lead || null,
     members: JSON.stringify(newProject.members.filter((m) => m.user.trim())),
   });
 }

@@ -8,6 +8,7 @@
 	"field_order": [
 		"project_name",
 		"customer",
+		"project_lead",
 		"status",
 		"priority",
 		"column_break_1",
@@ -35,6 +36,17 @@
 			"in_list_view": 1,
 			"in_standard_filter": 1,
 			"search_index": 1
+		},
+		{
+			"fieldname": "project_lead",
+			"fieldtype": "Link",
+			"label": "Project Lead",
+			"options": "User",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"search_index": 1,
+			"track_changes": 1,
+			"description": "Can create and assign tasks in this project. Rotate it among the project's developers."
 		},
 		{
 			"fieldname": "status",
@@ -92,7 +104,7 @@
 	],
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-09-28 15:00:00.000000",
+	"modified": "2026-09-29 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "Project",

@@ -234,3 +234,66 @@ class TestTaskyPermissions(FrappeTestCase):
                 task_name="Sneaky",
                 assigned_to=OUTSIDER[0],
             )
+
+    # --- project lead ---
+
+    def test_lead_creates_and_assigns_tasks_and_sees_all(self):
+        self.as_user(PM, api.set_project_lead, project=self.project, user=DEV_A[0])
+        task = self.as_user(
+            DEV_A,
+            api.add_task,
+            project=self.project,
+            task_name="Review tax setup",
+            assigned_to=DEV_B[0],
+        )
+        self.assertEqual(task["assignees"], [DEV_B[0]])
+
+        board = self.as_user(DEV_A, api.get_kanban_tasks, project=self.project)
+        on_board = {t["name"] for col in board["columns"].values() for t in col}
+        self.assertTrue({self.task_a, self.task_b, task["name"]} <= on_board)
+
+        detail = self.as_user(DEV_A, api.get_project_detail, project=self.project)
+        self.assertTrue(detail["can_manage"])
+        self.assertFalse(detail["can_change_lead"])
+
+    def test_lead_cannot_create_projects_or_change_the_lead(self):
+        self.as_user(PM, api.set_project_lead, project=self.project, user=DEV_A[0])
+        for fn, kwargs in [
+            (api.create_project, {"project_name": f"{CUSTOMER} - Lead Project"}),
+            (api.set_project_lead, {"project": self.project, "user": DEV_A[0]}),
+            (api.rotate_project_lead, {"project": self.project}),
+        ]:
+            with self.assertRaises(frappe.PermissionError):
+                self.as_user(DEV_A, fn, **kwargs)
+
+    def test_other_members_still_cannot_add_tasks(self):
+        self.as_user(PM, api.set_project_lead, project=self.project, user=DEV_A[0])
+        with self.assertRaises(frappe.PermissionError):
+            self.as_user(
+                DEV_B, api.add_task, project=self.project, task_name="Not mine"
+            )
+
+    def test_rotation_cycles_through_developers(self):
+        leads = [
+            self.as_user(PM, api.rotate_project_lead, project=self.project)[
+                "project_lead"
+            ]
+            for _ in range(3)
+        ]
+        self.assertEqual(leads, [DEV_A[0], DEV_B[0], DEV_A[0]])
+        self.assertTrue(
+            frappe.db.exists(
+                "Comment",
+                {
+                    "reference_doctype": "Project",
+                    "reference_name": self.project,
+                    "content": ("like", "%Project lead changed%"),
+                },
+            )
+        )
+
+    def test_lead_must_be_a_member(self):
+        with self.assertRaises(frappe.ValidationError):
+            self.as_user(
+                PM, api.set_project_lead, project=self.project, user=OUTSIDER[0]
+            )

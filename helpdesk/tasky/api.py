@@ -6,7 +6,14 @@ import frappe
 from frappe import _
 from frappe.desk.form import assign_to
 
-from helpdesk.tasky.permissions import MANAGER_PROJECT_ROLE, can_manage_project
+from helpdesk.tasky.permissions import (
+    MANAGER_PROJECT_ROLE,
+    can_manage_project,
+    is_project_owner,
+)
+
+# member roles a project lead is rotated among
+LEAD_ROTATION_ROLES = ("Developer",)
 
 
 def _resolve_project(project, ptype="read"):
@@ -127,8 +134,9 @@ def create_project(
     expected_end_date: str | None = None,
     members: str | list = "[]",
     customer: str | None = None,
+    project_lead: str | None = None,
 ):
-    """Create a new ERPNext Project with optional team members."""
+    """Create a new ERPNext Project with optional team members and lead."""
     import json
 
     existing = frappe.db.get_value("Project", {"project_name": project_name}, "name")
@@ -161,6 +169,10 @@ def create_project(
         doc.append(
             "users", {"user": frappe.session.user, "custom_role": MANAGER_PROJECT_ROLE}
         )
+    if project_lead:
+        if project_lead not in [u.user for u in doc.users]:
+            doc.append("users", {"user": project_lead, "custom_role": "Developer"})
+        doc.project_lead = project_lead
     doc.insert()
     return {
         "name": doc.name,
@@ -289,7 +301,12 @@ def add_task(
     description: str = "",
 ):
     """Add a single task to a project, optionally assigned to one of its members."""
-    project = _resolve_project(str(project), "write")
+    project = _resolve_project(str(project))
+    if not can_manage_project(project):
+        frappe.throw(
+            _("Only the project's manager or lead can add tasks."),
+            frappe.PermissionError,
+        )
     if not str(task_name or "").strip():
         frappe.throw(_("Task name is required"))
     assigned_to = str(assigned_to or "").strip()
@@ -650,10 +667,20 @@ def get_project_detail(project: str):
         "expected_end_date": str(doc.expected_end_date)
         if doc.expected_end_date
         else None,
-        "users": [{"user": u.user, "full_name": u.full_name} for u in doc.users]
+        "users": [
+            {"user": u.user, "full_name": u.full_name, "role": u.custom_role}
+            for u in doc.users
+        ]
         if doc.users
         else [],
         "can_manage": can_manage_project(doc.name),
+        "can_change_lead": is_project_owner(doc.name),
+        "project_lead": doc.project_lead,
+        "project_lead_name": (
+            frappe.db.get_value("User", doc.project_lead, "full_name")
+            if doc.project_lead
+            else None
+        ),
     }
 
 
@@ -681,11 +708,76 @@ def get_projects():
             "expected_start_date",
             "expected_end_date",
             "priority",
+            "project_lead",
         ],
+    )
+    lead_names = dict(
+        frappe.get_all(
+            "User",
+            filters={
+                "name": ("in", [p.project_lead for p in projects if p.project_lead])
+            },
+            fields=["name", "full_name"],
+            as_list=True,
+        )
     )
     for p in projects:
         p["can_manage"] = can_manage_project(p["name"])
+        p["project_lead_name"] = lead_names.get(p.project_lead)
     return projects
+
+
+@frappe.whitelist()
+def set_project_lead(project: str, user: str | None = None):
+    """Make a project member the project lead (or clear it). Project owners only."""
+    project = _resolve_project(str(project))
+    if not is_project_owner(project):
+        frappe.throw(
+            _("Only the project's manager can change its lead."), frappe.PermissionError
+        )
+    doc = frappe.get_doc("Project", project)
+    user = (user or "").strip() or None
+    if user and user not in [u.user for u in doc.users]:
+        frappe.throw(
+            _("{0} is not a member of this project. Add them first.").format(user)
+        )
+    _change_lead(doc, user)
+    return {"project_lead": doc.project_lead}
+
+
+@frappe.whitelist()
+def rotate_project_lead(project: str):
+    """Hand the lead to the next developer in the member list, wrapping around."""
+    project = _resolve_project(str(project))
+    if not is_project_owner(project):
+        frappe.throw(
+            _("Only the project's manager can change its lead."), frappe.PermissionError
+        )
+    doc = frappe.get_doc("Project", project)
+    candidates = [u.user for u in doc.users if u.custom_role in LEAD_ROTATION_ROLES]
+    if not candidates:
+        frappe.throw(_("Add developers to the project to rotate the lead among them."))
+    current = (
+        candidates.index(doc.project_lead) if doc.project_lead in candidates else -1
+    )
+    _change_lead(doc, candidates[(current + 1) % len(candidates)])
+    return {"project_lead": doc.project_lead}
+
+
+def _change_lead(doc, user):
+    previous = doc.project_lead
+    if previous == user:
+        return
+    doc.project_lead = user
+    doc.save()
+    name = lambda u: frappe.db.get_value("User", u, "full_name") or u  # noqa: E731
+    doc.add_comment(
+        "Info",
+        _("Project lead changed from {0} to {1}").format(
+            name(previous) if previous else _("nobody"),
+            name(user) if user else _("nobody"),
+        ),
+    )
 
 
 # === Timer ===
