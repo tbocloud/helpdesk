@@ -67,6 +67,8 @@ def get_user():
         "user_id": user_id,
         "is_manager": is_manager,
         "is_project_manager": is_project_manager,
+        # lets the frontend skip call-integration checks when telephony isn't installed
+        "telephony_installed": "telephony" in frappe.get_installed_apps(),
         "user_image": user_image,
         "user_first_name": user_first_name,
         "user_name": user_name,

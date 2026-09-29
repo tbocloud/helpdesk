@@ -37,6 +37,9 @@ export const useAuthStore = defineStore("auth", () => {
   const isProjectManager: ComputedRef<boolean> = computed(
     () => user__.value.is_project_manager
   );
+  const telephonyInstalled: ComputedRef<boolean> = computed(
+    () => !!user__.value.telephony_installed
+  );
 
   const userId: ComputedRef<string> = computed(() => user__.value.user_id);
   const userImage: ComputedRef<string> = computed(
@@ -99,6 +102,7 @@ export const useAuthStore = defineStore("auth", () => {
     hasAgentRecord,
     isManager,
     isProjectManager,
+    telephonyInstalled,
     isLoggedIn,
     login,
     reloadUser,

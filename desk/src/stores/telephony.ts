@@ -1,5 +1,5 @@
 import { defineStore } from "pinia";
-import { useConfigStore } from "@/stores/config";
+import { useAuthStore } from "@/stores/auth";
 import { call } from "frappe-ui";
 
 interface MakeCallParams {
@@ -42,9 +42,9 @@ export const useTelephonyStore = defineStore("telephony", {
     async fetchCallIntegrationStatus() {
       try {
         this.isLoading = true;
-        const configResource = useConfigStore().configResource;
-        const config = configResource.data || (await configResource.reload());
-        if (!config?.telephony_installed) {
+        const authStore = useAuthStore();
+        await authStore.init();
+        if (!authStore.telephonyInstalled) {
           this.isCallingEnabled = false;
           return;
         }

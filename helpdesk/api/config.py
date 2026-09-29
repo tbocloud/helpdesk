@@ -1,7 +1,9 @@
 import frappe
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist(  # branding for the login and portal pages - nosemgrep
+    allow_guest=True
+)
 def get_config():
     fields = [
         "brand_name",
@@ -19,8 +21,6 @@ def get_config():
     ]
     res = frappe.get_value(doctype="HD Settings", fieldname=fields, as_dict=True)
 
-    # the frontend skips call-integration checks when telephony isn't installed
-    res.telephony_installed = "telephony" in frappe.get_installed_apps()
     res.favicon = (
         res.favicon
         or frappe.db.get_single_value("Website Settings", "favicon")
