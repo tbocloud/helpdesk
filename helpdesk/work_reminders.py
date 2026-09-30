@@ -137,10 +137,12 @@ def send_ticket_reminders():
     now = now_datetime()
     tickets = frappe.get_all(
         "HD Ticket",
-        filters={
-            "status_category": "Open",
-            "resolution_by": ("<=", add_to_date(now, hours=TICKET_DUE_SOON_HOURS)),
-        },
+        filters=[
+            ["status_category", "=", "Open"],
+            # a ticket without an SLA has no due time; "<=" alone would match it
+            ["resolution_by", "is", "set"],
+            ["resolution_by", "<=", add_to_date(now, hours=TICKET_DUE_SOON_HOURS)],
+        ],
         fields=["name", "subject", "priority", "resolution_by", "_assign"],
     )
     managers = None

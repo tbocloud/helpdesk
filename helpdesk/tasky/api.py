@@ -14,6 +14,7 @@ from helpdesk.tasky.permissions import (
     is_tasky_admin,
 )
 from helpdesk.tasky.setup import erpnext_customer_for
+from helpdesk.tasky.task_events import notify_ticket_task_completed
 
 # member roles a project lead is rotated among
 LEAD_ROTATION_ROLES = ("Developer",)
@@ -447,7 +448,7 @@ def update_task_status(task: str, status: str):
     frappe.db.set_value("Task", str(task), "status", str(status))
     if str(status) == "Completed":
         # set_value skips the controller, so hand the linked ticket back here
-        frappe.get_doc("Task", str(task)).notify_ticket_task_completed()
+        notify_ticket_task_completed(frappe.get_doc("Task", str(task)))
     return {"status": str(status)}
 
 
@@ -986,7 +987,7 @@ def move_task(task: str, new_status: str):
     frappe.db.set_value("Task", task_id, "status", new_status)
     if new_status == "Completed":
         # set_value skips the controller, so hand the linked ticket back here
-        frappe.get_doc("Task", task_id).notify_ticket_task_completed()
+        notify_ticket_task_completed(frappe.get_doc("Task", task_id))
     return {"status": new_status, "elapsed": round(elapsed_this_move, 2)}
 
 
