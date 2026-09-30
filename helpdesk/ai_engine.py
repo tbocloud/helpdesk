@@ -241,6 +241,9 @@ def log_usage(
         frappe.log_error("Failed to log AI usage")
 
 
+TRIAGE_TOKEN_BUDGETS = (4096, 8192)
+
+
 def parse_json_answer(text: str) -> dict:
     """The JSON object in a model's answer, which may come in a code fence or with prose around it."""
     candidates = [text]
@@ -282,25 +285,31 @@ def call_haiku(system_prompt, user_message, ticket_name=None):
     else:
         # the triage layer's own provider, not the investigation one
         client = get_client(layer="triage")
-        response = client.messages.create(
-            model=haiku_model,
-            max_tokens=1024,
-            system=[
-                {
-                    "type": "text",
-                    "text": system_prompt,
-                    "cache_control": {"type": "ephemeral"},
-                }
-            ],
-            messages=[{"role": "user", "content": user_message}],
-        )
-        # thinking-capable models (e.g. Kimi) may put a thinking block first
-        text = "".join(
-            block.text
-            for block in response.content
-            if getattr(block, "type", "text") == "text"
-        )
-        usage = response.usage
+        # thinking models (e.g. Kimi) spend part of the budget thinking and can
+        # run out before writing the answer; give them room, then more once
+        for max_tokens in TRIAGE_TOKEN_BUDGETS:
+            response = client.messages.create(
+                model=haiku_model,
+                max_tokens=max_tokens,
+                system=[
+                    {
+                        "type": "text",
+                        "text": system_prompt,
+                        "cache_control": {"type": "ephemeral"},
+                    }
+                ],
+                messages=[{"role": "user", "content": user_message}],
+            )
+            # thinking-capable models may put a thinking block first
+            text = "".join(
+                block.text
+                for block in response.content
+                if getattr(block, "type", "text") == "text"
+            )
+            usage = response.usage
+            if text.strip() or getattr(response, "stop_reason", None) != "max_tokens":
+                break
+            log_usage(haiku_model, usage, ticket_name=ticket_name)
 
     log_usage(haiku_model, usage, ticket_name=ticket_name)
 

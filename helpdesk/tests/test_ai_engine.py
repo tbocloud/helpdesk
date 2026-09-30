@@ -123,3 +123,38 @@ class TestThinkingBlocks(FrappeTestCase):
             result = ai_engine.call_haiku("sys", "user")
 
         self.assertEqual(result["response"], {"category": "Billing"})
+
+
+class TestThinkingBudget(FrappeTestCase):
+    def test_call_haiku_gives_a_thinking_model_more_room_when_it_ran_out(self):
+        """Kimi can spend the whole budget thinking and return no text; try once more with a larger budget."""
+        from helpdesk import ai_engine
+
+        ran_out = MagicMock(stop_reason="max_tokens")
+        ran_out.content = [MagicMock(type="thinking", thinking="long thoughts")]
+        ran_out.usage = MagicMock(input_tokens=10, output_tokens=4096)
+        answered = MagicMock(stop_reason="end_turn")
+        answered.content = [MagicMock(type="text", text='{"summary": "ok"}')]
+        answered.usage = MagicMock(input_tokens=10, output_tokens=900)
+
+        with (
+            patch.object(
+                ai_engine,
+                "get_provider_config",
+                return_value=("Anthropic Compatible", "https://x", "key"),
+            ),
+            patch.object(
+                ai_engine, "get_models", return_value=("kimi-k2.6", "kimi-k3")
+            ),
+            patch.object(ai_engine, "log_usage"),
+            patch.object(ai_engine, "estimate_cost", return_value=0),
+            patch.object(ai_engine.anthropic, "Anthropic") as client_cls,
+        ):
+            create = client_cls.return_value.messages.create
+            create.side_effect = [ran_out, answered]
+            result = ai_engine.call_haiku("sys", "user")
+
+        self.assertEqual(result["response"], {"summary": "ok"})
+        self.assertEqual(
+            [c.kwargs["max_tokens"] for c in create.call_args_list], [4096, 8192]
+        )

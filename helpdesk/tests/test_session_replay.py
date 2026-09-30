@@ -354,3 +354,58 @@ class TestTriageWithSessionReplay(FrappeTestCase):
         frappe.db.set_value("HD Ticket", self.ticket.name, "custom_triage_data", "{}")
         triage.retriage_with_session_replay(self.ticket.name)
         enqueue.assert_not_called()
+
+
+class TestProductionFixes(FrappeTestCase):
+    def setUp(self):
+        self.addCleanup(frappe.db.rollback)
+
+    def test_values_filled_in_by_the_page_are_not_typing(self):
+        events = make_replay_events()
+        events.append(
+            {
+                "type": 3,
+                "timestamp": events[0]["timestamp"] + 2000,
+                "data": {
+                    "source": 5,
+                    "id": 7,
+                    "text": "••",
+                    "isChecked": False,
+                    "userTriggered": False,
+                },
+            }
+        )
+        events.sort(key=lambda e: e["timestamp"])
+
+        timeline = session_replay.build_timeline(make_replay(events))
+
+        self.assertNotIn("t+2s typed in", timeline)
+        self.assertIn('t+5s typed in "Posting Date"', timeline)
+
+    def test_empty_ai_answer_fails_instead_of_a_blank_triage(self):
+        ticket = make_ticket(
+            subject="Cannot save Sales Invoice", description="Save fails with an error."
+        )
+        empty = {
+            "response": {"raw_response": "", "parse_error": True},
+            "usage": {},
+            "cost": 0,
+        }
+        with patch.object(triage, "call_haiku", return_value=empty), patch.object(
+            frappe.cache, "set", return_value=True
+        ), patch.object(frappe.db, "commit"), patch.object(
+            frappe, "log_error"
+        ) as log_error:
+            triage.run_triage(ticket.name, start_investigation=False)
+
+        self.assertEqual(
+            frappe.db.get_value("HD Ticket", ticket.name, "custom_triage_status"),
+            "Failed",
+        )
+        self.assertFalse(
+            frappe.db.exists(
+                "HD Ticket Comment",
+                {"reference_ticket": ticket.name, "content": ("like", "%AI Triage%")},
+            )
+        )
+        self.assertTrue(log_error.called)

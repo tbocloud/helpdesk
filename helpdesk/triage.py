@@ -271,6 +271,16 @@ def run_triage(
         user_message = f"Today's date: {nowdate()}\n\n{user_message}"
         result = call_haiku(TRIAGE_SYSTEM_PROMPT, user_message, ticket_name=ticket_id)
         triage = result["response"]
+        if (
+            not isinstance(triage, dict)
+            or triage.get("parse_error")
+            or not triage.get("summary")
+        ):
+            # an empty or unreadable answer must not be shown as a finished triage
+            raise ValueError(
+                "AI triage answer was empty or not JSON: "
+                + str((triage or {}).get("raw_response", triage))[:1000]
+            )
 
         # Get existing triage data for retry tracking
         existing_data = (

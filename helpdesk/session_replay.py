@@ -461,6 +461,9 @@ class TimelineBuilder:
             self.typed(ts, data)
 
     def typed(self, ts: float, data: dict):
+        # the desk fills fields by script when a form loads; only count what the person did
+        if data.get("userTriggered") is False:
+            return
         node = self.nodes.get(data.get("id")) or {"attrs": {}}
         label = self.element_label(data.get("id")) or "a field"
         input_type = (node["attrs"].get("type") or "").lower()
