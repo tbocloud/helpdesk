@@ -23,7 +23,7 @@
         error
         :icon="LucideCircleAlert"
         :title="__('Couldn\'t load the board')"
-        :message="__('Check your connection and try again.')"
+        :message="loadErrorMessage(kanban.error)"
       >
         <Button :label="__('Retry')" @click="kanban.reload()" />
       </TaskyState>
@@ -355,6 +355,7 @@ import TaskyState from "./components/TaskyState.vue";
 import {
   initials,
   isOverdue,
+  loadErrorMessage,
   priorityIcon,
   shortDate,
   taskStatusMeta,

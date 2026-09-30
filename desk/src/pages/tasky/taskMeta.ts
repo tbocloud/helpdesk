@@ -112,3 +112,15 @@ export function initials(name?: string | null) {
     .join("")
     .toUpperCase();
 }
+
+// A refused project reads like an outage otherwise, so say who can open it
+export function loadErrorMessage(...errors: unknown[]) {
+  const denied = errors.some(
+    (e) => (e as { exc_type?: string } | null)?.exc_type === "PermissionError"
+  );
+  return denied
+    ? __(
+        "You're not on this project. Ask its project manager to add you as a member."
+      )
+    : __("Check your connection and try again.");
+}

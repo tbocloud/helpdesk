@@ -26,7 +26,7 @@
           error
           :icon="LucideCircleAlert"
           :title="__('Couldn\'t load the checklist')"
-          :message="__('Check your connection and try again.')"
+          :message="loadErrorMessage(phases.error)"
         >
           <Button :label="__('Retry')" @click="phases.reload()" />
         </TaskyState>
@@ -326,6 +326,7 @@
 </template>
 
 <script setup lang="ts">
+import { loadErrorMessage } from "./taskMeta";
 import { __ } from "@/translation";
 import {
   Button,
