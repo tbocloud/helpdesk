@@ -150,7 +150,11 @@ def start_session(email: str, customers: list[str]):
     )
     # no max_age, so the cookie is gone once the browser closes
     frappe.local.cookie_manager.set_cookie(
-        SESSION_COOKIE, sid, httponly=True, samesite="Lax"
+        SESSION_COOKIE,
+        sid,
+        httponly=True,
+        samesite="Lax",
+        secure=get_url().startswith("https://"),
     )
 
 
@@ -235,7 +239,9 @@ def issue_code(email: str, customer_label: str) -> dict:
     return {"success": True, "message": code_sent_message(email)}
 
 
-@frappe.whitelist(allow_guest=True, methods=["POST"])
+@frappe.whitelist(  # portal sign-in by rate-limited one-time email code - nosemgrep
+    allow_guest=True, methods=["POST"]
+)
 @rate_limit(key="email", limit=5, seconds=60 * 60)
 def request_code(email: str):
     ensure_portal_enabled()
@@ -250,7 +256,9 @@ def request_code(email: str):
     return issue_code(email, label)
 
 
-@frappe.whitelist(allow_guest=True, methods=["POST"])
+@frappe.whitelist(  # portal sign-in by rate-limited one-time email code - nosemgrep
+    allow_guest=True, methods=["POST"]
+)
 @rate_limit(key="email", limit=15, seconds=10 * 60)
 def verify_code(email: str, code: str):
     ensure_portal_enabled()
@@ -291,7 +299,9 @@ def verify_code(email: str, code: str):
     return {"success": True}
 
 
-@frappe.whitelist(allow_guest=True, methods=["POST"])
+@frappe.whitelist(  # portal clients have no user; the one-time-code session is checked inside - nosemgrep
+    allow_guest=True, methods=["POST"]
+)
 def logout():
     request = getattr(frappe.local, "request", None)
     sid = request.cookies.get(SESSION_COOKIE) if request else None
@@ -322,18 +332,24 @@ def get_portal_posts(customer: str) -> list[dict]:
 # ---------------------------------------------------------------- actions --
 
 
-@frappe.whitelist(allow_guest=True, methods=["POST"])
+@frappe.whitelist(  # portal clients have no user; the one-time-code session is checked inside - nosemgrep
+    allow_guest=True, methods=["POST"]
+)
 def approve(post: str):
     session, doc = require_post(post)
     doc.approve_from_portal(session["email"])
     return {"success": True, "status": doc.status}
 
 
-@frappe.whitelist(allow_guest=True, methods=["POST"])
-def approve_many(posts):
+@frappe.whitelist(  # portal clients have no user; the one-time-code session is checked inside - nosemgrep
+    allow_guest=True, methods=["POST"]
+)
+def approve_many(posts: str | list):
     """Approve several posts in one go; ones already decided are skipped, not failed."""
     if isinstance(posts, str):
         posts = json.loads(posts)
+    if len(posts) > MAX_POSTS:
+        frappe.throw(_("Approve at most {0} posts at a time.").format(MAX_POSTS))
     approved = []
     for post in posts:
         session, doc = require_post(post)
@@ -344,7 +360,9 @@ def approve_many(posts):
     return {"success": True, "approved": approved}
 
 
-@frappe.whitelist(allow_guest=True, methods=["POST"])
+@frappe.whitelist(  # portal clients have no user; the one-time-code session is checked inside - nosemgrep
+    allow_guest=True, methods=["POST"]
+)
 def request_changes(post: str, notes: str):
     notes = cstr(notes).strip()
     if not notes:
@@ -354,7 +372,9 @@ def request_changes(post: str, notes: str):
     return {"success": True, "status": doc.status}
 
 
-@frappe.whitelist(allow_guest=True, methods=["POST"])
+@frappe.whitelist(  # portal clients have no user; the one-time-code session is checked inside - nosemgrep
+    allow_guest=True, methods=["POST"]
+)
 def add_comment(post: str, text: str):
     text = cstr(text).strip()
     if not text:
@@ -364,7 +384,9 @@ def add_comment(post: str, text: str):
     return {"success": True}
 
 
-@frappe.whitelist(allow_guest=True, methods=["GET"])
+@frappe.whitelist(  # portal clients have no user; the one-time-code session is checked inside - nosemgrep
+    allow_guest=True, methods=["GET"]
+)
 def get_image(post: str, file: str):
     """Stream one of the post's images; they are private files, so the client can't fetch them directly."""
     _session, doc = require_post(post)

@@ -1056,6 +1056,8 @@ def make_puller_mcp(site_url: str = "https://erp.example.com"):
     mcp.api_key = "key"
     mcp.api_secret = "secret"
     return mcp
+
+
 def set_content_settings(**values):
     """Overwrite HD Content Settings fields for a test (callers roll back afterwards)."""
     frappe.db.set_single_value("HD Content Settings", values)

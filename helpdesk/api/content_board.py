@@ -22,7 +22,7 @@ ENTRY_FIELDS = (
 
 
 @frappe.whitelist(methods=["POST"])
-def add_entries(values, channels) -> list[str]:
+def add_entries(values: str | dict, channels: str | list) -> list[str]:
     """One post per channel, all with the same content, created together or not at all."""
     frappe.has_permission("HD Content Post", "create", throw=True)
     values = json.loads(values) if isinstance(values, str) else values
