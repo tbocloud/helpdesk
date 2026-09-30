@@ -278,11 +278,17 @@ class TestManualTicket(ChatwootCase):
     def test_ticket_label_creates_ticket_once(self):
         self.api.messages = [
             {
+                "id": self.mid - 1,
+                "content": "Hi! How can I help?",
+                "message_type": 1,
+                "sender": {"type": "agent_bot"},
+            },
+            {
                 "id": self.mid,
                 "content": "Printer shows blank invoices",
                 "message_type": 0,
                 "sender": {"type": "contact"},
-            }
+            },
         ]
         with patch(AI_CONFIGURED, return_value=False):
             self.conversation_event(
@@ -300,6 +306,9 @@ class TestManualTicket(ChatwootCase):
             frappe.db.get_value("HD Ticket", row.hd_ticket, "subject"),
             "Printer shows blank invoices",
         )
+        description = frappe.db.get_value("HD Ticket", row.hd_ticket, "description")
+        self.assertIn("[TBO AI]", description)
+        self.assertNotIn("You (assistant)", description)
         notes = self.api.posted(private=True)
         self.assertEqual(len(notes), 1)
         self.assertIn(f"#{row.hd_ticket}", notes[0])

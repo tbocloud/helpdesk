@@ -793,7 +793,7 @@ class ChatConversation:
         parts = []
         if summary:
             parts.append(text_to_html(summary))
-        transcript = "\n\n".join(transcript_lines(messages))
+        transcript = "\n\n".join(transcript_lines(messages, bot_role="TBO AI"))
         if len(transcript) > MAX_DESCRIPTION_TRANSCRIPT_CHARS:
             transcript = "…" + transcript[-MAX_DESCRIPTION_TRANSCRIPT_CHARS:]
         if transcript:
@@ -1195,7 +1195,10 @@ def remove_unknown_urls(text: str, articles: list[dict]) -> str:
     return re.sub(r"[ \t]{2,}", " ", text).strip()
 
 
-def transcript_lines(messages: list[dict]) -> list[str]:
+def transcript_lines(
+    messages: list[dict], bot_role: str = "You (assistant)"
+) -> list[str]:
+    """The chat as [role] blocks; the AI prompt calls the bot "you", a ticket names it."""
     lines = []
     for message in messages:
         kind = message_type_of(message)
@@ -1207,7 +1210,7 @@ def transcript_lines(messages: list[dict]) -> list[str]:
         if kind == "incoming":
             role = "Customer"
         elif sender_type_of(message) == "agent_bot":
-            role = "You (assistant)"
+            role = bot_role
         else:
             role = "Agent"
         lines.append(f"[{role}]\n{text}")
