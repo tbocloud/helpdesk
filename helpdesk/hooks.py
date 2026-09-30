@@ -100,6 +100,9 @@ doc_events = {
     "Task": {
         "on_update": "helpdesk.tasky.task_events.on_update",
     },
+    "ToDo": {
+        "after_insert": "helpdesk.tasky.task_events.on_todo_insert",
+    },
     "Assignment Rule": {
         "on_trash": "helpdesk.extends.assignment_rule.on_assignment_rule_trash",
         "validate": "helpdesk.extends.assignment_rule.on_assignment_rule_validate",

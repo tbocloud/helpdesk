@@ -18,6 +18,8 @@ from frappe.utils import (
     now_datetime,
 )
 
+from helpdesk.tasky.task_events import set_assigned_employee
+
 # Posts in these statuses are ready to go; anything else close to its date needs attention
 READY_STATUSES = ("Approved", "Scheduled", "Published")
 # Posts in these statuses are done with, so they never need a reminder or a missed alert
@@ -212,6 +214,7 @@ class HDContentPost(Document):
         if user not in assigned:
             for previous in assigned:
                 assign_to.remove("Task", task.name, previous, ignore_permissions=True)
+            set_assigned_employee(task.name, user)
             assign_to.add(
                 {
                     "doctype": "Task",

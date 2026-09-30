@@ -35,3 +35,34 @@ def notify_ticket_task_completed(task):
             "commented_by": frappe.session.user,
         }
     ).insert(ignore_permissions=True)
+
+
+ASSIGNED_EMPLOYEE_FIELD = "custom_assigned_employee"
+
+
+def on_todo_insert(todo, method=None):
+    """Fill a task's Assigned Employee when someone is assigned and it is still empty.
+
+    Sites that limit people to their own Employee record (strict user permissions)
+    only let them open tasks linked to that record.
+    """
+    if todo.reference_type != "Task" or not todo.allocated_to:
+        return
+    set_assigned_employee(todo.reference_name, todo.allocated_to, replace=False)
+
+
+def set_assigned_employee(task: str, user: str | None, replace: bool = True):
+    if not frappe.get_meta("Task").has_field(ASSIGNED_EMPLOYEE_FIELD):
+        return
+    current = frappe.db.get_value("Task", task, ASSIGNED_EMPLOYEE_FIELD)
+    if current and not replace:
+        return
+    employee = (
+        frappe.db.get_value("Employee", {"user_id": user, "status": "Active"}, "name")
+        if user
+        else None
+    )
+    if employee != current and (employee or replace):
+        frappe.db.set_value(
+            "Task", task, ASSIGNED_EMPLOYEE_FIELD, employee, update_modified=False
+        )

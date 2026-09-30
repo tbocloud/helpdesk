@@ -59,3 +59,4 @@ helpdesk.patches.v16_0_2.enable_auto_investigate
 helpdesk.patches.v16_0_2.add_waiting_on_task_status
 helpdesk.patches.v16_0_2.setup_erpnext_project_fields
 helpdesk.patches.v16_0_2.set_content_task_defaults
+helpdesk.patches.v16_0_2.fill_task_assigned_employee
