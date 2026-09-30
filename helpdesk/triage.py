@@ -22,10 +22,12 @@ from helpdesk.session_replay import build_triage_context
 # Guard constants
 MAX_TRIAGE_RETRIES = 2
 TRIAGE_COOLDOWN_SECONDS = 30
-TRIAGE_LOCK_TIMEOUT = 60
+# thinking models (Kimi) can take minutes on a long ticket; the lock must outlive the job
+TRIAGE_JOB_TIMEOUT = 300
+TRIAGE_LOCK_TIMEOUT = TRIAGE_JOB_TIMEOUT + 30
+# a triage "In Progress" longer than this was killed (timeout, worker restart)
+STUCK_TRIAGE_MINUTES = 10
 MAX_CONCURRENT_TRIAGES = 10
-# room for fetching the customer's error logs over MCP before the model call
-TRIAGE_JOB_TIMEOUT = 90
 ERROR_LOGS_FOR_TRIAGE = 10
 ERROR_TRACE_CHARS = 600
 # tracks that get an automatic investigation on the customer site after triage
@@ -234,12 +236,14 @@ def run_triage(
             )
             return
 
-        # Mark in progress
+        # Mark in progress; the timestamp lets fail_stuck_triages spot a killed job
         frappe.db.set_value(
             "HD Ticket",
             ticket_id,
-            "custom_triage_status",
-            "In Progress",
+            {
+                "custom_triage_status": "In Progress",
+                "custom_triage_timestamp": now_datetime(),
+            },
             update_modified=False,
         )
         frappe.db.commit()  # background job: persist triage progress and failures as they happen - nosemgrep
@@ -551,3 +555,25 @@ def _post_triage_comment(
     comment.flags.skip_notifications = True
     comment.insert(ignore_permissions=True)
     frappe.db.commit()  # background job: persist triage progress and failures as they happen - nosemgrep
+
+
+def fail_stuck_triages():
+    """Hourly: a triage left "In Progress" was killed mid-run; mark it Failed so it can be re-run."""
+    from frappe.utils import add_to_date
+
+    cutoff = add_to_date(now_datetime(), minutes=-STUCK_TRIAGE_MINUTES)
+    for name in frappe.get_all(
+        "HD Ticket",
+        filters={
+            "custom_triage_status": "In Progress",
+            "custom_triage_timestamp": ("<", cutoff),
+        },
+        pluck="name",
+    ):
+        frappe.db.set_value(
+            "HD Ticket", name, "custom_triage_status", "Failed", update_modified=False
+        )
+        frappe.log_error(
+            title=f"Triage timed out for ticket {name}",
+            message=f"Still In Progress after {STUCK_TRIAGE_MINUTES} minutes; marked Failed.",
+        )

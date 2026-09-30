@@ -394,6 +394,15 @@ def push_ticket_statuses() -> int:
     return pushed
 
 
+def _load_conv_state(raw) -> dict:
+    """Synced-record bookkeeping; a damaged value starts over instead of stopping the sync."""
+    try:
+        state = json.loads(raw or "{}")
+    except (TypeError, ValueError):
+        return {}
+    return state if isinstance(state, dict) else {}
+
+
 def sync_conversations() -> int:
     """Scheduled: two-way conversation + client close requests, per linked ticket.
 
@@ -443,7 +452,7 @@ def sync_conversations() -> int:
 
         for row in tickets:
             try:
-                state = json.loads(row.custom_conv_state or "{}")
+                state = _load_conv_state(row.custom_conv_state)
                 state.setdefault("client", [])
                 state.setdefault("hub", [])
                 ct = row.custom_client_ticket

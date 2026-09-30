@@ -24,7 +24,7 @@ from helpdesk.session_replay import build_triage_context
 from helpdesk.utils import get_doc_room, publish_event
 
 # room for a thinking model's second, larger attempt (see call_haiku)
-SUGGESTION_JOB_TIMEOUT = 240
+SUGGESTION_JOB_TIMEOUT = 360  # up to two long thinking-model calls
 REALTIME_EVENT = "helpdesk:ai-suggestion"
 CLOSED_STATUSES = ("Closed", "Resolved")
 CONFIDENCE_LEVELS = ("high", "medium", "low")

@@ -409,3 +409,49 @@ class TestProductionFixes(FrappeTestCase):
             )
         )
         self.assertTrue(log_error.called)
+
+
+class TestStuckTriageAndSyncState(FrappeTestCase):
+    def setUp(self):
+        self.addCleanup(frappe.db.rollback)
+
+    def test_triage_left_in_progress_is_marked_failed(self):
+        from frappe.utils import add_to_date, now_datetime
+
+        stuck = make_ticket(subject="Stuck triage", description="Needs triage.")
+        fresh = make_ticket(subject="Running triage", description="Needs triage.")
+        frappe.db.set_value(
+            "HD Ticket",
+            stuck.name,
+            {
+                "custom_triage_status": "In Progress",
+                "custom_triage_timestamp": add_to_date(now_datetime(), minutes=-30),
+            },
+        )
+        frappe.db.set_value(
+            "HD Ticket",
+            fresh.name,
+            {
+                "custom_triage_status": "In Progress",
+                "custom_triage_timestamp": now_datetime(),
+            },
+        )
+        with patch.object(frappe, "log_error"):
+            triage.fail_stuck_triages()
+
+        self.assertEqual(
+            frappe.db.get_value("HD Ticket", stuck.name, "custom_triage_status"),
+            "Failed",
+        )
+        self.assertEqual(
+            frappe.db.get_value("HD Ticket", fresh.name, "custom_triage_status"),
+            "In Progress",
+        )
+
+    def test_damaged_sync_state_starts_over(self):
+        from helpdesk.ticket_puller import _load_conv_state
+
+        self.assertEqual(_load_conv_state("not json"), {})
+        self.assertEqual(_load_conv_state(None), {})
+        self.assertEqual(_load_conv_state("[1, 2]"), {})
+        self.assertEqual(_load_conv_state('{"client": ["C1"]}'), {"client": ["C1"]})

@@ -71,6 +71,7 @@ scheduler_events = {
     ],
     "hourly": [
         "helpdesk.work_reminders.send_ticket_reminders",
+        "helpdesk.triage.fail_stuck_triages",
         "helpdesk.helpdesk.doctype.hd_content_post.hd_content_post.send_missed_post_alerts",
     ],
     "hourly_long": [
