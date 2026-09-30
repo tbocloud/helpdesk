@@ -24,7 +24,7 @@
           error
           :icon="LucideCircleAlert"
           :title="__('Couldn\'t load the timeline')"
-          :message="__('Check your connection and try again.')"
+          :message="loadErrorMessage(tasks.error)"
         >
           <Button :label="__('Retry')" @click="tasks.reload()" />
         </TaskyState>
@@ -167,7 +167,12 @@ import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import ProjectNav from "./components/ProjectNav.vue";
 import TaskStatusBadge from "./components/TaskStatusBadge.vue";
 import TaskyState from "./components/TaskyState.vue";
-import { isClosed, isOverdue, priorityIcon } from "./taskMeta";
+import {
+  isClosed,
+  isOverdue,
+  loadErrorMessage,
+  priorityIcon,
+} from "./taskMeta";
 
 const props = defineProps<{ projectId: string }>();
 

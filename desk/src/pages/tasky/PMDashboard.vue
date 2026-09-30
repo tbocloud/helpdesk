@@ -49,7 +49,7 @@
           error
           :icon="LucideCircleAlert"
           :title="__('Couldn\'t load the dashboard')"
-          :message="__('Check your connection and try again.')"
+          :message="loadErrorMessage(dashboard.error, projectDetail.error)"
         >
           <Button :label="__('Retry')" @click="reload" />
         </TaskyState>
@@ -479,7 +479,7 @@ import ProjectNav from "./components/ProjectNav.vue";
 import SlipBadge from "./components/SlipBadge.vue";
 import TaskStatusBadge from "./components/TaskStatusBadge.vue";
 import TaskyState from "./components/TaskyState.vue";
-import { errorText, initials, isClosed } from "./taskMeta";
+import { errorText, initials, isClosed, loadErrorMessage } from "./taskMeta";
 
 const props = defineProps<{
   projectId?: string;

@@ -189,3 +189,14 @@ export function blockedMessage(task: { depends_on_subject?: string | null }) {
 export function errorText(e: any, fallback: string) {
   return e?.messages?.length ? e.messages.join(" ") : e?.message || fallback;
 }
+// A refused project reads like an outage otherwise, so say who can open it
+export function loadErrorMessage(...errors: unknown[]) {
+  const denied = errors.some(
+    (e) => (e as { exc_type?: string } | null)?.exc_type === "PermissionError"
+  );
+  return denied
+    ? __(
+        "You're not on this project. Ask its project manager to add you as a member."
+      )
+    : __("Check your connection and try again.");
+}
