@@ -88,6 +88,12 @@ MAX_DESCRIPTION_TRANSCRIPT_CHARS = 4000
 MAX_SUBJECT_CHARS = 140
 MAX_OPEN_TICKETS = 5
 MIN_PHONE_DIGITS = 7
+# a conversation's first events arrive together and race to create the same row or contact
+SIBLING_RACE_ERRORS = (
+    frappe.DuplicateEntryError,
+    frappe.UniqueValidationError,
+    frappe.QueryDeadlockError,
+)
 URL_PATTERN = re.compile(r"https?://[^\s<>()\"']+")
 LINK_PATTERN = re.compile(
     r'(?is)<a\s[^>]*?href\s*=\s*["\']([^"\']+)["\'][^>]*>(.*?)</a>'
@@ -230,8 +236,16 @@ def event_key(event: str, payload: dict, raw: bytes) -> str:
     conversation_id = conversation_id_of(event, payload)
     stamp = payload.get("updated_at") or payload.get("timestamp")
     if stamp:
-        return f"{event}:{conversation_id}:{stamp}"
+        return f"{event}:{conversation_id}:{normalized_stamp(stamp)}"
     return f"{event}:{conversation_id}:{hashlib.sha256(raw or b'').hexdigest()[:32]}"
+
+
+def normalized_stamp(stamp) -> str:
+    """The account and bot webhooks print the same epoch time with different precision."""
+    try:
+        return f"{float(stamp):.6f}"
+    except (TypeError, ValueError):
+        return str(stamp)
 
 
 def conversation_id_of(event: str, payload: dict) -> int:
@@ -266,26 +280,49 @@ def process_event(event_name: str):
     previous_user = frappe.session.user
     # the job inherits Guest from the webhook; tickets and contacts need a real user
     frappe.set_user("Administrator")  # see above - nosemgrep
-    frappe.db.savepoint("chatwoot_event")
     try:
-        handled = ChatwootEvent(
-            frappe.get_single(SETTINGS),
-            doc.event,
-            frappe.parse_json(doc.payload or "{}"),
-        ).handle()
-        status, error = ("Processed" if handled else "Ignored"), None
-    except Exception:
-        frappe.db.rollback(save_point="chatwoot_event")
-        status, error = "Failed", frappe.get_traceback()
-        frappe.log_error(
-            title=_("Chatwoot event {0} failed").format(doc.name),
-            reference_doctype=EVENT,
-            reference_name=doc.name,
-        )
+        status, error = apply_event(doc)
     finally:
         # back to whoever enqueued it (Guest, or the test user)
         frappe.set_user(previous_user)  # see above - nosemgrep
     doc.db_set({"status": status, "error": error})
+
+
+def apply_event(doc) -> tuple[str, str | None]:
+    """The event's outcome and, when it failed, the traceback."""
+    for attempt in (1, 2):
+        frappe.db.savepoint("chatwoot_event")
+        try:
+            handled = ChatwootEvent(
+                frappe.get_single(SETTINGS),
+                doc.event,
+                frappe.parse_json(doc.payload or "{}"),
+            ).handle()
+            return ("Processed" if handled else "Ignored"), None
+        except SIBLING_RACE_ERRORS:
+            if attempt == 2:
+                return fail_event(doc)
+            # the other event committed the row or contact after this job's snapshot
+            # was taken; only a new transaction can read it
+            start_fresh_transaction()
+            frappe.clear_last_message()
+        except Exception:
+            return fail_event(doc)
+
+
+def fail_event(doc) -> tuple[str, str]:
+    frappe.db.rollback(save_point="chatwoot_event")
+    frappe.log_error(
+        title=_("Chatwoot event {0} failed").format(doc.name),
+        reference_doctype=EVENT,
+        reference_name=doc.name,
+    )
+    return "Failed", frappe.get_traceback()
+
+
+def start_fresh_transaction():
+    # everything the failed attempt wrote is redone by the retry
+    frappe.db.rollback()
 
 
 class ChatwootEvent:
@@ -362,18 +399,9 @@ class ChatConversation:
         conversation.row.conversation_id = conversation_id
         conversation.apply_details(details, sender)
         conversation.match_contact()
-        frappe.db.savepoint("chat_conversation_insert")
-        try:
-            conversation.row.insert(ignore_permissions=True)
-        except (frappe.DuplicateEntryError, frappe.UniqueValidationError):
-            # another event of the same conversation created it a moment ago
-            frappe.db.rollback(save_point="chat_conversation_insert")
-            frappe.clear_last_message()
-            name = frappe.db.get_value(
-                CONVERSATION, {"conversation_id": conversation_id}
-            )
-            conversation = cls(frappe.get_doc(CONVERSATION, name), settings)
-            conversation.refresh(details, sender)
+        # when another event of this conversation inserts it first, the unique
+        # conversation_id raises and process_event retries in a new transaction
+        conversation.row.insert(ignore_permissions=True)
         return conversation
 
     def refresh(self, details: dict, sender: dict | None):

@@ -131,6 +131,41 @@ class TestWebhookReceiving(ChatwootCase):
         self.assertEqual(ai.call_count, 1)
         self.assertEqual(self.api.posted(), ["Hi Anita, how can I help?"])
 
+    def test_same_conversation_event_from_both_webhooks_is_handled_once(self):
+        # the account webhook and the bot webhook print the time with different precision
+        self.assertTrue(
+            self.conversation_event(
+                "conversation_updated", "account", updated_at="1790790557.753267"
+            ).get("queued")
+        )
+        self.assertTrue(
+            self.conversation_event(
+                "conversation_updated", "bot", updated_at=1790790557.7532673
+            ).get("duplicate")
+        )
+
+    def test_event_is_retried_after_racing_its_sibling(self):
+        race = frappe.DuplicateEntryError("Contact", "Anita Rao", None)
+        with patch.object(
+            chatwoot_bridge.ChatwootEvent, "handle", side_effect=[race, True]
+        ) as handle, patch("helpdesk.chatwoot_bridge.start_fresh_transaction"):
+            queued = self.conversation_event("conversation_created").get("queued")
+        self.assertEqual(handle.call_count, 2)
+        self.assertEqual(
+            frappe.db.get_value("HD Chatwoot Event", queued, "status"), "Processed"
+        )
+
+    def test_event_fails_when_the_race_repeats(self):
+        race = frappe.DuplicateEntryError("Contact", "Anita Rao", None)
+        with patch.object(
+            chatwoot_bridge.ChatwootEvent, "handle", side_effect=race
+        ) as handle, patch("helpdesk.chatwoot_bridge.start_fresh_transaction"):
+            queued = self.conversation_event("conversation_created").get("queued")
+        self.assertEqual(handle.call_count, 2)
+        self.assertEqual(
+            frappe.db.get_value("HD Chatwoot Event", queued, "status"), "Failed"
+        )
+
     def test_outgoing_and_private_messages_are_ignored(self):
         self.assertTrue(self.message(message_type="outgoing").get("ignored"))
         self.assertTrue(
