@@ -16,6 +16,8 @@ from helpdesk.tasky.permissions import (
 # member roles a project lead is rotated among
 LEAD_ROTATION_ROLES = ("Developer",)
 ON_HOLD = "On Hold"
+# the most one completion may log; longer work belongs on a manual timesheet
+MAX_HOURS_PER_COMPLETION = 24
 
 
 def _resolve_project(project, ptype="read"):
@@ -85,54 +87,119 @@ def _dependency_info(depends_on: str | None) -> dict:
 
 
 @frappe.whitelist()
-def complete_task(task: str, hours_worked: float | str = 0, notes: str = ""):
-    """Complete a task with optional timesheet entry."""
+def complete_task(
+    task: str, hours_worked: float | str | None = None, notes: str | None = None
+) -> dict:
+    """Complete a task and log the time spent on it to the user's timesheet.
+
+    Hours and a note are required. The timesheet is part of the completion: if
+    it can't be saved, the task stays as it was.
+    """
     doc = frappe.get_doc("Task", str(task))
+    doc.check_permission("write")
+    if doc.status == "Completed":
+        frappe.throw(_("This task is already completed."))
+    hours = _completion_hours(hours_worked)
+    notes = _completion_notes(notes)
+
+    frappe.db.savepoint("complete_task")
+    try:
+        _mark_completed(doc, hours)
+        timesheet = _log_completion_time(doc, hours, notes)
+    except Exception:
+        # undo the status change too, so the task never completes without its time
+        frappe.db.rollback(save_point="complete_task")
+        raise
+    return {
+        **_format_task(_task_dict(doc)),
+        "timesheet": timesheet.name,
+        "timesheet_status": timesheet.status,
+        "hours_logged": hours,
+    }
+
+
+def _completion_hours(value: float | str | None) -> float:
+    try:
+        hours = float(value)
+    except (TypeError, ValueError):
+        hours = 0
+    # also refuses NaN, which compares false with everything
+    if not hours > 0:
+        frappe.throw(_("Enter the hours you worked on this task."))
+    if hours > MAX_HOURS_PER_COMPLETION:
+        frappe.throw(
+            _(
+                "You can log at most {0} hours when completing a task. Log longer work on a timesheet."
+            ).format(MAX_HOURS_PER_COMPLETION)
+        )
+    return round(hours, 2)
+
+
+def _completion_notes(value: str | None) -> str:
+    notes = str(value or "").strip()
+    if not notes:
+        frappe.throw(_("Add a note on what was done."))
+    return notes
+
+
+def _mark_completed(doc, hours: float):
+    """Set Completed (the controller may route it to review) and stop the timer.
+
+    Pausing the timer already added its time to actual hours, and the hours
+    logged now cover that time, so it is swapped out rather than counted twice.
+    """
+    counted = frappe.utils.flt(doc.custom_timer_elapsed)
     doc.status = "Completed"
-    doc.custom_actual_hours = (doc.custom_actual_hours or 0) + (
-        float(hours_worked) or 0
+    doc.custom_actual_hours = (
+        max(frappe.utils.flt(doc.custom_actual_hours) - counted, 0) + hours
     )
     doc.custom_timer_start = None
     doc.custom_timer_elapsed = 0
     doc.save()
 
-    if float(hours_worked) > 0:
-        try:
-            employee = frappe.db.get_value(
-                "Employee", {"user_id": frappe.session.user}, "name"
-            )
-            ts = frappe.get_doc(
-                {
-                    "doctype": "Timesheet",
-                    "title": f"Task: {doc.subject}",
-                    "employee": employee,
-                    "time_logs": [
-                        {
-                            "task": doc.name,
-                            "from_time": frappe.utils.now(),
-                            "hours": float(hours_worked),
-                            "description": notes or f"Completed task: {doc.subject}",
-                            "project": doc.project,
-                            "completed": 1,
-                        }
-                    ],
-                }
-            )
-            ts.flags.ignore_mandatory = True
-            ts.insert()
-            try:
-                ts.submit()
-            except (
-                Exception
-            ):  # noqa: BLE001 - keep the draft timesheet, but say why it wasn't submitted
-                frappe.log_error(
-                    title=f"Timesheet submit failed for {ts.name}",
-                    message=frappe.get_traceback(),
-                )
-        except Exception:
-            frappe.log_error(title="complete_task Timesheet Error")
 
-    return _format_task(_task_dict(doc))
+def _log_completion_time(task_doc, hours: float, notes: str):
+    """Insert and submit the user's timesheet for the completed task.
+
+    An insert failure propagates. A submit failure leaves the timesheet as a
+    Draft (logged, and reported through its status) rather than losing the time.
+    """
+    user = frappe.session.user
+    from_time = frappe.utils.add_to_date(frappe.utils.now_datetime(), hours=-hours)
+    ts = frappe.get_doc(
+        {
+            "doctype": "Timesheet",
+            "title": _("Task: {0}").format(task_doc.subject),
+            "employee": frappe.db.get_value("Employee", {"user_id": user}, "name"),
+            "time_logs": [
+                {
+                    "task": task_doc.name,
+                    "project": task_doc.project,
+                    "from_time": from_time,
+                    "hours": hours,
+                    "description": notes,
+                    "completed": 1,
+                }
+            ],
+        }
+    )
+    # The user's own timesheet for a task they were just allowed to complete;
+    # that check is the permission decision, whatever their Timesheet role says.
+    ts.flags.ignore_permissions = True
+    ts.insert()
+
+    frappe.db.savepoint("complete_task_timesheet_submit")
+    try:
+        ts.submit()
+    except Exception:
+        # keep the draft (the time is recorded) and report it through timesheet_status
+        frappe.db.rollback(save_point="complete_task_timesheet_submit")
+        frappe.log_error(
+            title=f"Timesheet submit failed for {ts.name}",
+            message=frappe.get_traceback(),
+        )
+        ts.reload()
+    return ts
 
 
 def _compute_due_date(project_start, phase_order, task_sort_order):

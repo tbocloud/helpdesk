@@ -466,7 +466,15 @@ def _team_members(user: str, projects: list[str] | None) -> set[str]:
     leads = frappe.get_all(
         "Project", filters={"name": ("in", projects)}, pluck="project_lead"
     )
-    return {u for u in members | set(leads) if u}
+    # people given a task directly (never added to the team) still work on the project
+    assignees = set()
+    for raw in frappe.get_all(
+        "Task",
+        filters={"project": ("in", projects), "status": OPEN_TASK_FILTER},
+        pluck="_assign",
+    ):
+        assignees.update(_assignees(raw))
+    return {u for u in members | set(leads) | assignees if u}
 
 
 @frappe.whitelist()
@@ -613,6 +621,298 @@ def get_team_workload(project: str | None = None, customer: str | None = None) -
             "done_this_week": sum(r["done_this_week"] for r in team),
         },
     }
+
+
+PROJECT_STATUSES = ("Open", "On hold", "Completed", "Cancelled")
+ALL_PROJECTS = "All"
+PORTFOLIO_TASK_FIELDS = [
+    "name",
+    "subject",
+    "project",
+    "status",
+    "exp_end_date",
+    "is_milestone",
+    "_assign",
+]
+PROJECT_FIELDS = [
+    "name",
+    "project_name",
+    "customer",
+    "project_type",
+    "status",
+    "priority",
+    "project_lead",
+    "expected_start_date",
+    "expected_end_date",
+]
+
+
+@frappe.whitelist()
+@agent_only
+def get_project_portfolio(status: str = "Open", customer: str | None = None) -> dict:
+    """Which projects exist and who works on each: progress, members and what they're doing now."""
+    user = frappe.session.user
+    if not can_see_overview(user):
+        frappe.throw(
+            _("Only project managers and leads can see the team."),
+            frappe.PermissionError,
+        )
+    status = status or "Open"
+    if status != ALL_PROJECTS and status not in PROJECT_STATUSES:
+        frappe.throw(_("Unknown project status: {0}").format(status))
+
+    admin = is_tasky_admin(user)
+    projects = _portfolio_projects(user, admin, status, customer)
+    names = [p.name for p in projects]
+    tasks = (
+        frappe.get_list(
+            "Task",
+            filters={"project": ("in", names), "status": ("!=", "Template")},
+            fields=PORTFOLIO_TASK_FIELDS,
+            order_by="exp_end_date asc",
+            limit_page_length=0,
+        )
+        if names
+        else []
+    )
+    tasks_by_project = {}
+    for task in tasks:
+        tasks_by_project.setdefault(task.project, []).append(task)
+
+    roles = _project_roles(names)
+    today = getdate(nowdate())
+    cards = [
+        _portfolio_card(p, tasks_by_project.get(p.name, []), roles, today)
+        for p in projects
+    ]
+    people = _people_matrix(cards)
+    free = _free_people() if admin else None
+
+    users = {m["user"] for c in cards for m in c["members"]}
+    users |= {c["lead"] for c in cards if c["lead"]}
+    users |= {p["user"] for p in people + (free or [])}
+    full_names = _full_names(users)
+    for card in cards:
+        card["lead_name"] = full_names.get(card["lead"]) or card["lead"]
+        for member in card["members"]:
+            member["full_name"] = full_names.get(member["user"]) or member["user"]
+        card["members"].sort(
+            key=lambda m: (not m["working_now"], -m["open"], m["full_name"].lower())
+        )
+    for person in people + (free or []):
+        person["full_name"] = full_names.get(person["user"]) or person["user"]
+    people.sort(key=lambda p: (-p["open"], p["full_name"].lower()))
+    for person in sorted(free or [], key=lambda p: p["full_name"].lower()):
+        people.append(person)
+
+    return {
+        "projects": cards,
+        "people": people,
+        "totals": {
+            "projects": len(cards),
+            "people_active": sum(1 for p in people if not p["is_free"]),
+            # only admins see every agent, so only they can tell who is free
+            "people_free": len(free) if free is not None else None,
+            "overdue": sum(c["counts"]["overdue"] for c in cards),
+        },
+    }
+
+
+def _portfolio_projects(user: str, admin: bool, status: str, customer: str | None):
+    filters = {}
+    if status != ALL_PROJECTS:
+        filters["status"] = status
+    if customer:
+        filters["customer"] = customer
+    if not admin:
+        # members see more projects than they run; the portfolio is only the ones they run
+        filters["name"] = (
+            "in",
+            list(set(get_managed_projects(user)) | set(get_led_projects(user))) or [""],
+        )
+    return frappe.get_list(
+        "Project",
+        filters=filters,
+        fields=PROJECT_FIELDS,
+        order_by="project_name asc",
+        limit_page_length=0,
+    )
+
+
+def _project_roles(projects: list[str]) -> dict:
+    """{project: {user: project role}} from the projects' member tables."""
+    if not projects:
+        return {}
+    member = frappe.qb.DocType("Project User")
+    rows = (
+        frappe.qb.from_(member)
+        .select(member.parent, member.user, member.custom_role)
+        .where((member.parenttype == "Project") & member.parent.isin(projects))
+        .orderby(member.idx)
+        .run(as_dict=True)
+    )
+    roles = {}
+    for row in rows:
+        if row.user:
+            roles.setdefault(row.parent, {})[row.user] = row.custom_role
+    return roles
+
+
+def _full_names(users: set[str]) -> dict:
+    if not users:
+        return {}
+    user = frappe.qb.DocType("User")
+    return dict(
+        frappe.qb.from_(user)
+        .select(user.name, user.full_name)
+        .where(user.name.isin(list(users)))
+        .run()
+    )
+
+
+def _portfolio_card(project, tasks: list, roles: dict, today) -> dict:
+    counts = {
+        "total": 0,
+        "done": 0,
+        "open": 0,
+        "working": 0,
+        "review": 0,
+        "on_hold": 0,
+        "overdue": 0,
+    }
+    members = {u: _member(u, role) for u, role in roles.get(project.name, {}).items()}
+    if project.project_lead:
+        members.setdefault(project.project_lead, _member(project.project_lead))
+        members[project.project_lead]["is_lead"] = True
+    milestone = None
+
+    for task in tasks:
+        if task.status == "Cancelled":
+            continue
+        counts["total"] += 1
+        if task.status == "Completed":
+            counts["done"] += 1
+            continue
+        counts["open"] += 1
+        deadline = getdate(task.exp_end_date) if task.exp_end_date else None
+        is_overdue = bool(deadline and deadline < today and task.status != ON_HOLD)
+        counts["overdue"] += is_overdue
+        if task.status == "Working":
+            counts["working"] += 1
+        elif task.status == "Pending Review":
+            counts["review"] += 1
+        elif task.status == ON_HOLD:
+            counts["on_hold"] += 1
+        if task.is_milestone and (
+            not milestone
+            or (deadline and (not milestone["due"] or str(deadline) < milestone["due"]))
+        ):
+            milestone = {
+                "name": task.name,
+                "subject": task.subject,
+                "due": str(deadline) if deadline else None,
+                "is_overdue": is_overdue,
+            }
+        for person in _assignees(task._assign):
+            member = members.setdefault(person, _member(person))
+            member["open"] += 1
+            if task.status == "Working":
+                member["working"] += 1
+                member["working_now"] = True
+                member["working_on"] = member["working_on"] or {
+                    "name": task.name,
+                    "subject": task.subject,
+                }
+
+    return {
+        "name": project.name,
+        "project_name": project.project_name or project.name,
+        "customer": project.customer,
+        "project_type": project.project_type,
+        "status": project.status,
+        "priority": project.priority,
+        "lead": project.project_lead,
+        "expected_start_date": (
+            str(project.expected_start_date) if project.expected_start_date else None
+        ),
+        "expected_end_date": (
+            str(project.expected_end_date) if project.expected_end_date else None
+        ),
+        # cancelled work was never going to be done, so it doesn't hold progress back
+        "progress": (
+            round(counts["done"] / counts["total"] * 100) if counts["total"] else 0
+        ),
+        "counts": counts,
+        "next_milestone": milestone,
+        "members": list(members.values()),
+    }
+
+
+def _member(user: str, role: str | None = None) -> dict:
+    return {
+        "user": user,
+        "role": role,
+        "is_lead": False,
+        "open": 0,
+        "working": 0,
+        "working_now": False,
+        "working_on": None,
+    }
+
+
+def _people_matrix(cards: list[dict]) -> list[dict]:
+    """Per person, the projects they have open work in, busiest project first."""
+    people = {}
+    for card in cards:
+        for member in card["members"]:
+            if not member["open"]:
+                continue
+            person = people.setdefault(
+                member["user"],
+                {
+                    "user": member["user"],
+                    "open": 0,
+                    "working": 0,
+                    "is_free": False,
+                    "projects": [],
+                },
+            )
+            person["open"] += member["open"]
+            person["working"] += member["working"]
+            person["projects"].append(
+                {
+                    "project": card["name"],
+                    "project_name": card["project_name"],
+                    "open": member["open"],
+                    "working_now": member["working_now"],
+                }
+            )
+    for person in people.values():
+        person["projects"].sort(key=lambda p: (-p["open"], p["project_name"].lower()))
+    return list(people.values())
+
+
+def _free_people() -> list[dict]:
+    """Active agents with no open task in any project, not just the ones shown."""
+    from helpdesk.tasky.api import get_users
+
+    task = frappe.qb.DocType("Task")
+    busy = set()
+    for raw in (
+        frappe.qb.from_(task)
+        .select(task["_assign"])
+        .where(
+            task.status.notin(["Completed", "Cancelled", "Template"])
+            & task["_assign"].isnotnull()
+        )
+        .run(pluck=True)
+    ):
+        busy.update(_assignees(raw))
+    return [
+        {"user": u.name, "open": 0, "working": 0, "is_free": True, "projects": []}
+        for u in get_users()
+        if u.name not in busy
+    ]
 
 
 def can_see_overview(user: str | None = None) -> bool:

@@ -307,44 +307,7 @@
       </div>
     </div>
 
-    <Dialog
-      v-model:open="completeDialogOpen"
-      :title="__('Complete task')"
-      :message="completingTask?.subject"
-      size="md"
-    >
-      <form
-        id="tasky-checklist-complete"
-        class="flex flex-col gap-4"
-        @submit.prevent="confirmComplete"
-      >
-        <TextInput
-          v-model.number="completeHours"
-          type="number"
-          step="0.5"
-          min="0"
-          :label="__('Hours worked')"
-          placeholder="2.5"
-        />
-        <Textarea
-          v-model="completeNotes"
-          :label="__('Notes')"
-          :placeholder="__('What was done?')"
-          :rows="3"
-        />
-      </form>
-      <template #actions="{ close }">
-        <div class="flex justify-end gap-2">
-          <Button :label="__('Cancel')" @click="close" />
-          <Button
-            variant="solid"
-            type="submit"
-            form="tasky-checklist-complete"
-            :label="__('Mark complete')"
-          />
-        </div>
-      </template>
-    </Dialog>
+    <CompleteTaskDialog v-model:task="completingTask" @completed="reloadAll" />
 
     <HoldTaskDialog v-model:task="holdingTask" @held="reloadAll" />
     <ResumeTaskDialog v-model:task="resumingTask" @resumed="reloadAll" />
@@ -376,14 +339,7 @@
 <script setup lang="ts">
 import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
-import {
-  Button,
-  Dialog,
-  TextInput,
-  Textarea,
-  createResource,
-  toast,
-} from "frappe-ui";
+import { Button, createResource, toast } from "frappe-ui";
 import { computed, reactive, ref, watch } from "vue";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
 import LucideChevronDown from "~icons/lucide/chevron-down";
@@ -396,6 +352,7 @@ import LucideListChecks from "~icons/lucide/list-checks";
 import LucidePause from "~icons/lucide/pause";
 import LucidePlus from "~icons/lucide/plus";
 import ChecklistRow from "./components/ChecklistRow.vue";
+import CompleteTaskDialog from "./components/CompleteTaskDialog.vue";
 import EditTaskDialog from "./components/EditTaskDialog.vue";
 import GenerateChecklistModal from "./components/GenerateChecklistModal.vue";
 import HoldTaskDialog from "./components/HoldTaskDialog.vue";
@@ -408,7 +365,7 @@ import {
   blockedMessage,
   blocksMove,
   errorText,
-  notifyIfSentForReview,
+  isPendingReview,
 } from "./taskMeta";
 import { useApproveTask } from "./useApproveTask";
 
@@ -484,18 +441,6 @@ const updateTaskStatus = createResource({
     reloadAll();
   },
 });
-const completeResource = createResource({
-  url: "helpdesk.tasky.api.complete_task",
-  onSuccess(data: Record<string, any>) {
-    // with review before done the server may keep it in Pending Review
-    if (notifyIfSentForReview("Completed", data?.status)) reloadAll();
-    else phases.reload();
-  },
-  onError(e: any) {
-    toast.error(errorText(e, __("Couldn't complete the task.")));
-    reloadAll();
-  },
-});
 
 const holdingTask = ref<Record<string, any> | null>(null);
 const resumingTask = ref<Record<string, any> | null>(null);
@@ -506,15 +451,6 @@ const sendingBackTask = ref<Record<string, any> | null>(null);
 const { approve } = useApproveTask(reloadAll);
 
 const completingTask = ref<Record<string, any> | null>(null);
-const completeHours = ref(0);
-const completeNotes = ref("");
-
-const completeDialogOpen = computed({
-  get: () => !!completingTask.value,
-  set: (open: boolean) => {
-    if (!open) completingTask.value = null;
-  },
-});
 
 function togglePhase(phaseName: string) {
   if (expandedPhases.has(phaseName)) {
@@ -542,22 +478,12 @@ function onToggleTask(task: Record<string, any>) {
     toast.error(blockedMessage(task));
     return;
   }
+  // a lead ticking a reviewed task signs it off; anyone else logs their time
+  if (isPendingReview(task) && canManage.value) {
+    approve(task);
+    return;
+  }
   completingTask.value = task;
-  completeHours.value = task.estimated_hours || 0;
-  completeNotes.value = "";
-}
-
-function confirmComplete() {
-  const task = completingTask.value;
-  if (!task) return;
-  completeResource.submit({
-    task: task.name,
-    hours_worked: completeHours.value || 0.25,
-    notes: completeNotes.value,
-  });
-  task.status = "Completed";
-  completingTask.value = null;
-  phases.reload();
 }
 
 function onChecklistGenerated() {

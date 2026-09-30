@@ -409,67 +409,18 @@
       @sent="kanban.reload()"
     />
 
-    <Dialog
-      v-model:open="completeDialogOpen"
-      :title="__('Complete task')"
-      :message="completingTask?.subject"
-      size="md"
-    >
-      <form
-        id="tasky-kanban-complete"
-        class="flex flex-col gap-4"
-        @submit.prevent="confirmComplete"
-      >
-        <div class="flex flex-col gap-1.5">
-          <TextInput
-            v-model.number="completeHours"
-            type="number"
-            step="0.25"
-            min="0"
-            :label="__('Hours worked')"
-          />
-          <p
-            v-if="preFilledHours"
-            class="flex items-center gap-1 text-xs text-ink-gray-5"
-          >
-            <LucideTimer class="size-3.5" aria-hidden="true" />
-            {{ __("Filled in from the timer: {0} h", String(preFilledHours)) }}
-          </p>
-        </div>
-        <Textarea
-          v-model="completeNotes"
-          :label="__('Notes')"
-          :placeholder="__('What was done?')"
-          :rows="3"
-        />
-      </form>
-      <template #actions="{ close }">
-        <div class="flex justify-end gap-2">
-          <Button :label="__('Cancel')" @click="close" />
-          <Button
-            variant="solid"
-            type="submit"
-            form="tasky-kanban-complete"
-            :label="__('Submit timesheet')"
-          />
-        </div>
-      </template>
-    </Dialog>
+    <CompleteTaskDialog
+      v-model:task="completingTask"
+      :tracked-hours="completingTrackedHours"
+      @completed="onCompleted"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
-import {
-  Button,
-  Dialog,
-  Dropdown,
-  TextInput,
-  Textarea,
-  createResource,
-  toast,
-} from "frappe-ui";
+import { Button, Dropdown, createResource, toast } from "frappe-ui";
 import { computed, onUnmounted, ref, watch } from "vue";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
 import LucideCalendar from "~icons/lucide/calendar";
@@ -486,8 +437,8 @@ import LucidePencil from "~icons/lucide/pencil";
 import LucidePlay from "~icons/lucide/play";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideStar from "~icons/lucide/star";
-import LucideTimer from "~icons/lucide/timer";
 import LucideUndo2 from "~icons/lucide/undo-2";
+import CompleteTaskDialog from "./components/CompleteTaskDialog.vue";
 import EditTaskDialog from "./components/EditTaskDialog.vue";
 import HoldTaskDialog from "./components/HoldTaskDialog.vue";
 import MilestoneMark from "./components/MilestoneMark.vue";
@@ -510,7 +461,6 @@ import {
   isOnHold,
   isOverdue,
   isPendingReview,
-  notifyIfSentForReview,
   priorityIcon,
   shortDate,
   taskStatusMeta,
@@ -584,17 +534,6 @@ const moveTaskApi = createResource({
     kanban.reload();
   },
 });
-const completeResource = createResource({
-  url: "helpdesk.tasky.api.complete_task",
-  onSuccess(data: Record<string, any>) {
-    notifyIfSentForReview("Completed", data?.status);
-    kanban.reload();
-  },
-  onError(e: any) {
-    toast.error(errorText(e, __("Couldn't complete the task.")));
-    kanban.reload();
-  },
-});
 
 const holdingTask = ref<Task | null>(null);
 const resumingTask = ref<Task | null>(null);
@@ -664,15 +603,10 @@ const phaseNames = computed(() =>
 );
 
 const completingTask = ref<Task | null>(null);
-const completeHours = ref(0);
-const completeNotes = ref("");
-const preFilledHours = ref(0);
-
-const completeDialogOpen = computed({
-  get: () => !!completingTask.value,
-  set: (open: boolean) => {
-    if (!open) completingTask.value = null;
-  },
+// what the card's timer shows, so the dialog offers the same hours
+const completingTrackedHours = computed(() => {
+  const timer = completingTask.value && timers.value[completingTask.value.name];
+  return timer ? timer.elapsed / 3600 : null;
 });
 
 interface TimerState {
@@ -843,12 +777,12 @@ function onDrop(e: DragEvent, newStatus: string) {
     }
   }
 
+  // completing records the time worked, so it happens once the dialog is submitted;
+  // a lead dropping a reviewed task here signs it off instead
   if (newStatus === "Completed") {
-    preFilledHours.value = fromWorking ? finalizeTimer(task) : 0;
-    completingTask.value = task;
-    completeHours.value = preFilledHours.value || task.estimated_hours || 0;
-    completeNotes.value = "";
     dropTarget.value = null;
+    if (isPendingReview(task) && canManage.value) approve(task);
+    else completingTask.value = task;
     return;
   }
 
@@ -887,18 +821,10 @@ function onDrop(e: DragEvent, newStatus: string) {
   dropTarget.value = null;
 }
 
-function confirmComplete() {
-  const task = completingTask.value;
-  if (!task) return;
-  completeResource.submit({
-    task: task.name,
-    hours_worked: completeHours.value || 0.25,
-    notes: completeNotes.value,
-  });
-  finalizeTimer(task);
-  moveToColumn(task, "Completed");
-  completingTask.value = null;
-  dropTarget.value = null;
+// the server stopped the timer and may have sent the task for review
+function onCompleted(task: { name: string }) {
+  delete timers.value[task.name];
+  kanban.reload();
 }
 
 function moveToColumn(task: Task, newStatus: string, insertAt: number = -1) {

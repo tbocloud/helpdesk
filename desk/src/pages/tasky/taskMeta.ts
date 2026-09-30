@@ -1,5 +1,5 @@
 import { __ } from "@/translation";
-import { dayjs, toast } from "frappe-ui";
+import { dayjs } from "frappe-ui";
 import type { Component } from "vue";
 import LucideCircle from "~icons/lucide/circle";
 import LucideCircleCheck from "~icons/lucide/circle-check";
@@ -184,18 +184,6 @@ export function blockedMessage(task: { depends_on_subject?: string | null }) {
   return task.depends_on_subject
     ? __("Finish {0} first: this task depends on it.", task.depends_on_subject)
     : __("Finish the task this one depends on first.");
-}
-
-/**
- * With "review before done" on, the server stores Pending Review instead of
- * Completed for team members; tell them where the task went.
- */
-export function notifyIfSentForReview(requested: string, returned?: string) {
-  if (requested === "Completed" && returned === PENDING_REVIEW) {
-    toast.info(__("Sent to the project lead for review"));
-    return true;
-  }
-  return false;
 }
 
 export function errorText(e: any, fallback: string) {

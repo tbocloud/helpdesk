@@ -710,6 +710,28 @@ def make_task(project: str, subject: str, exp_end_date=None, **kwargs):
     ).insert(ignore_permissions=True)
 
 
+def make_employee(user: str, employee_name: str | None = None):
+    """Creates an active Employee linked to `user` (the hub doesn't need one per agent)."""
+    return frappe.get_doc(
+        {
+            "doctype": "Employee",
+            "employee_name": employee_name or user,
+            "user_id": user,
+            "status": "Active",
+        }
+    ).insert(ignore_permissions=True)
+
+
+def get_task_timesheets(task: str) -> list[str]:
+    """Names of the Timesheets that have a time log for `task`."""
+    return frappe.get_all(
+        "Timesheet Detail",
+        filters={"parenttype": "Timesheet", "task": task},
+        pluck="parent",
+        distinct=True,
+    )
+
+
 def make_work_summary(customer: str, **kwargs):
     """Creates an HD Work Summary for `customer` for the last 7 days, without stats or AI."""
     from frappe.utils import add_days, nowdate

@@ -419,6 +419,10 @@
       </template>
     </Dialog>
 
+    <CompleteTaskDialog
+      v-model:task="completingTask"
+      @completed="onHoldChanged"
+    />
     <HoldTaskDialog v-model:task="holdingTask" @held="onHoldChanged" />
     <ResumeTaskDialog v-model:task="resumingTask" @resumed="onHoldChanged" />
     <EditTaskDialog
@@ -453,6 +457,7 @@ import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideSearch from "~icons/lucide/search";
 import LucideSearchX from "~icons/lucide/search-x";
 import LucideUndo2 from "~icons/lucide/undo-2";
+import CompleteTaskDialog from "./components/CompleteTaskDialog.vue";
 import EditTaskDialog from "./components/EditTaskDialog.vue";
 import HoldTaskDialog from "./components/HoldTaskDialog.vue";
 import MilestoneMark from "./components/MilestoneMark.vue";
@@ -498,6 +503,8 @@ interface Task {
   depends_on_task?: string | null;
   depends_on_subject?: string | null;
   blocked?: boolean;
+  custom_timer_start?: string | null;
+  custom_timer_elapsed?: number;
 }
 
 type Filter =
@@ -744,6 +751,7 @@ const resumingTask = ref<Task | null>(null);
 const planningTask = ref<Task | null>(null);
 const editingTask = ref<Task | null>(null);
 const sendingBackTask = ref<Task | null>(null);
+const completingTask = ref<Task | null>(null);
 
 const { approve } = useApproveTask(() => {
   selectedTask.value = null;
@@ -785,6 +793,21 @@ const dialogActions = computed(() => {
         onClick: () => handOff(planningTask),
       });
     }
+  }
+  // done work goes through the Complete dialog, which logs the hours to a timesheet
+  if (
+    d &&
+    !taskDetail.loading &&
+    !isClosed(d) &&
+    !isPendingReview(d) &&
+    !d.blocked
+  ) {
+    actions.push({
+      label: __("Complete"),
+      iconLeft: LucideCircleCheck,
+      variant: "subtle",
+      onClick: () => handOff(completingTask),
+    });
   }
   if (d && !taskDetail.loading && isOnHold(d)) {
     actions.push({

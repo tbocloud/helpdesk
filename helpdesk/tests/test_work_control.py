@@ -18,6 +18,7 @@ from helpdesk.test_utils import (
     create_customer,
     make_assignment,
     make_project,
+    make_task,
     make_tasky_user,
     make_ticket,
 )
@@ -608,3 +609,108 @@ class TestViewTeamMemberWork(WorkControlCase):
     def test_leads_cannot_open_people_outside_their_projects(self):
         with self.assertRaises(frappe.PermissionError):
             self.as_user(LEAD, lambda: work.get_my_work(user=SUPPORT[0]))
+
+
+class TestProjectPortfolio(WorkControlCase):
+    def setUp(self):
+        super().setUp()
+        self.working = self.make_task("Payroll setup", add_days(nowdate(), 2))
+        frappe.db.set_value("Task", self.working, "status", "Working")
+        self.make_task("Leave policy", add_days(nowdate(), -1))
+        done = self.make_task("Chart of accounts", add_days(nowdate(), -3))
+        frappe.db.set_value("Task", done, "status", "Completed")
+        cancelled = self.make_task("Old import", add_days(nowdate(), -5))
+        frappe.db.set_value("Task", cancelled, "status", "Cancelled")
+        go_live = self.make_task("Go-live", add_days(nowdate(), 5), assignee=LEAD)
+        frappe.db.set_value("Task", go_live, "is_milestone", 1)
+
+        # the PM runs a second project; the lead has no say in it
+        self.other = make_project(
+            f"{OTHER_CUSTOMER} - Support", members=[(DEV[0], "Developer")], owner=PM[0]
+        ).name
+        task = make_task(self.other, "Fix POS sync", add_days(nowdate(), 4))
+        make_assignment("Task", task.name, DEV[0])
+
+    def portfolio(self, user, **kwargs):
+        return self.as_user(user, lambda: work.get_project_portfolio(**kwargs))
+
+    def test_lead_sees_their_project_with_its_team(self):
+        result = self.portfolio(LEAD)
+        cards = {c["name"]: c for c in result["projects"]}
+        self.assertNotIn(self.other, cards)
+
+        card = cards[self.project]
+        self.assertEqual(card["lead"], LEAD[0])
+        self.assertEqual(card["lead_name"], LEAD[1])
+        self.assertEqual(card["customer"], CUSTOMER)
+        # cancelled work isn't counted; completed work isn't open
+        self.assertEqual(
+            {
+                k: card["counts"][k]
+                for k in ("total", "done", "open", "working", "overdue")
+            },
+            {"total": 4, "done": 1, "open": 3, "working": 1, "overdue": 1},
+        )
+        self.assertEqual(card["progress"], 25)
+        self.assertEqual(card["next_milestone"]["subject"], "Go-live")
+
+        members = card["members"]
+        # whoever is working right now comes first
+        self.assertEqual(members[0]["user"], DEV[0])
+        self.assertTrue(members[0]["working_now"])
+        self.assertEqual(members[0]["working_on"]["subject"], "Payroll setup")
+        self.assertEqual(members[0]["open"], 2)
+        self.assertEqual(members[0]["role"], "Developer")
+        lead = next(m for m in members if m["user"] == LEAD[0])
+        self.assertTrue(lead["is_lead"])
+        self.assertFalse(lead["working_now"])
+        self.assertEqual(lead["open"], 1)
+        self.assertIsNone(result["totals"]["people_free"])
+
+    def test_developers_cannot_see_the_portfolio(self):
+        with self.assertRaises(frappe.PermissionError):
+            self.portfolio(DEV)
+
+    def test_person_matrix_lists_the_projects_they_work_on(self):
+        result = self.portfolio(PM)
+        people = {p["user"]: p for p in result["people"]}
+        dev = people[DEV[0]]
+        self.assertEqual(
+            [(p["project"], p["open"], p["working_now"]) for p in dev["projects"]],
+            [(self.project, 2, True), (self.other, 1, False)],
+        )
+        self.assertEqual(dev["open"], 3)
+        self.assertEqual(
+            [p["project"] for p in people[LEAD[0]]["projects"]], [self.project]
+        )
+        self.assertNotIn(SUPPORT[0], people)
+        self.assertEqual(result["totals"]["projects"], 2)
+
+    def test_admin_sees_every_project_and_who_is_free(self):
+        unrelated = make_project("Internal tooling").name
+        result = self.portfolio(("Administrator", ""))
+        names = {c["name"] for c in result["projects"]}
+        self.assertTrue({self.project, self.other, unrelated} <= names)
+
+        people = {p["user"]: p for p in result["people"]}
+        self.assertTrue(people[SUPPORT[0]]["is_free"])
+        self.assertFalse(people[DEV[0]]["is_free"])
+        # free people come after everyone with work
+        self.assertTrue(result["people"][-1]["is_free"])
+        self.assertGreaterEqual(result["totals"]["people_free"], 1)
+
+    def test_status_and_customer_filters(self):
+        frappe.db.set_value("Project", self.other, "status", "Completed")
+        open_only = {c["name"] for c in self.portfolio(PM)["projects"]}
+        self.assertEqual(open_only, {self.project})
+        everything = {c["name"] for c in self.portfolio(PM, status="All")["projects"]}
+        self.assertEqual(everything, {self.project, self.other})
+        by_customer = self.portfolio(PM, status="All", customer=CUSTOMER)
+        self.assertEqual([c["name"] for c in by_customer["projects"]], [self.project])
+
+
+class TestAssigneeOutsideTeam(WorkControlCase):
+    def test_lead_can_open_work_of_someone_only_assigned_a_task(self):
+        task = self.make_task("Bank feeds", add_days(nowdate(), 3), assignee=SUPPORT)
+        result = self.as_user(LEAD, lambda: work.get_my_work(user=SUPPORT[0]))
+        self.assertIn(task, [i["name"] for i in result["items"]])
