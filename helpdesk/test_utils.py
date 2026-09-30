@@ -688,7 +688,7 @@ def make_assignment(doctype: str, name: str, user: str):
     """Assigns a document to `user` the normal way (ToDo), which is what sets `_assign`."""
     from frappe.desk.form import assign_to
 
-    assign_to._add(
+    assign_to.add(
         {"doctype": doctype, "name": str(name), "assign_to": [user]},
         ignore_permissions=True,
     )

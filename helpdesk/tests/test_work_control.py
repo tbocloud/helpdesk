@@ -46,7 +46,7 @@ class WorkControlCase(FrappeTestCase):
             members=[(LEAD[0], "Developer"), (DEV[0], "Developer")],
             owner=PM[0],
         ).name
-        frappe.db.set_value("Project", self.project, "customer", CUSTOMER)
+        frappe.db.set_value("Project", self.project, "hd_customer", CUSTOMER)
         frappe.db.set_value("Project", self.project, "project_lead", LEAD[0])
 
     def as_user(self, user, fn):
@@ -140,7 +140,7 @@ class TestTicketToTask(WorkControlCase):
 
     def test_other_customers_projects_are_off_limits(self):
         other = make_project(f"{OTHER_CUSTOMER} - Support", owner=PM[0]).name
-        frappe.db.set_value("Project", other, "customer", OTHER_CUSTOMER)
+        frappe.db.set_value("Project", other, "hd_customer", OTHER_CUSTOMER)
         ticket = self.make_ticket()
         with self.assertRaises(frappe.PermissionError):
             self.as_user(

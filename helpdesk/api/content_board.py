@@ -69,3 +69,33 @@ def cancel(post: str, reason: str | None = None):
     doc.check_permission("write")
     doc.cancel(reason)
     return {"status": doc.status}
+
+
+@frappe.whitelist(methods=["POST"])
+def assign(post: str, role: str, user: str | None = None, hours: float | None = None):
+    """Set a post's writer, designer or marketer; their task gets `hours` if given."""
+    if role not in TEAM_FIELDS:
+        frappe.throw(_("Unknown role {0}").format(role))
+    doc = frappe.get_doc("HD Content Post", post)
+    doc.check_permission("write")
+    doc.set(role, user or None)
+    if user and hours:
+        doc.flags.task_hours = {role: float(hours)}
+    doc.save()
+    return {role: doc.get(role)}
+
+
+@frappe.whitelist()
+def get_role_tasks(post: str) -> list[dict]:
+    """The open tasks created for this post's team, for the Assign dialog."""
+    frappe.has_permission("HD Content Post", "read", post, throw=True)
+    if not frappe.get_meta("Task").has_field("content_post"):
+        return []
+    return frappe.get_all(
+        "Task",
+        filters={
+            "content_post": post,
+            "status": ("not in", ("Completed", "Cancelled")),
+        },
+        fields=["name", "content_role", "expected_time", "status"],
+    )

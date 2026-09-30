@@ -86,9 +86,27 @@ def is_project_member(project: str, user: str) -> bool:
 
 def is_assigned(doc, user: str) -> bool:
     try:
-        return user in json.loads(doc.get("_assign") or "[]")
+        if user in json.loads(doc.get("_assign") or "[]"):
+            return True
     except (json.JSONDecodeError, TypeError):
-        return False
+        pass
+    return was_assigned(doc.name, user)
+
+
+def was_assigned(task: str, user: str) -> bool:
+    """ERPNext closes a task's assignments once it is completed, which empties `_assign`;
+    the people who did the work should keep seeing it."""
+    return bool(
+        frappe.db.exists(
+            "ToDo",
+            {
+                "reference_type": "Task",
+                "reference_name": task,
+                "allocated_to": user,
+                "status": "Closed",
+            },
+        )
+    )
 
 
 def _managed_projects_subquery(user: str) -> str:
@@ -122,9 +140,12 @@ def task_query(user: str | None = None) -> str | None:
         return None
     # _assign stores a JSON list, so match the quoted email to avoid partial matches
     assigned = frappe.db.escape(f'%"{user}"%')
+    u = frappe.db.escape(user)
     return (
         f"(`tabTask`.`project` in ({_managed_projects_subquery(user)}) "
-        f"or `tabTask`.`_assign` like {assigned})"
+        f"or `tabTask`.`_assign` like {assigned} "
+        f"or `tabTask`.`name` in (select `reference_name` from `tabToDo` "
+        f"where `reference_type` = 'Task' and `allocated_to` = {u} and `status` = 'Closed'))"
     )
 
 

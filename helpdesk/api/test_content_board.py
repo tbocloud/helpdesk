@@ -3,10 +3,15 @@
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
-from frappe.utils import add_to_date, get_datetime, now_datetime
+from frappe.utils import add_to_date, get_datetime, getdate, now_datetime
 
 from helpdesk.api import content_board
-from helpdesk.test_utils import create_customer, make_content_post, make_tasky_user
+from helpdesk.test_utils import (
+    create_customer,
+    make_content_post,
+    make_tasky_user,
+    set_content_settings,
+)
 
 CUSTOMER = "Al Noor Trading LLC"
 WRITER = ("meera.nair@content-smoke.example", "Meera Nair")
@@ -106,3 +111,102 @@ class TestContentBoard(FrappeTestCase):
         )
         with self.assertRaises(frappe.ValidationError):
             content_board.cancel(live.name)
+
+
+class TestContentRoleTasks(FrappeTestCase):
+    """Assigning someone to a post gives them an ERPNext Task for their part."""
+
+    DESIGNER = ("arjun.menon@content-smoke.example", "Arjun Menon")
+
+    def setUp(self):
+        self.addCleanup(frappe.db.rollback)
+        if not frappe.get_meta("Task").has_field("content_post"):
+            self.skipTest("needs ERPNext's Task with helpdesk's content fields")
+        create_customer(CUSTOMER)
+        make_tasky_user(*WRITER)
+        make_tasky_user(*self.DESIGNER)
+        set_content_settings(
+            create_tasks_on_assign=1, writer_hours=2, designer_hours=3, marketer_hours=1
+        )
+        frappe.clear_document_cache("HD Content Settings", "HD Content Settings")
+        self.due = add_to_date(now_datetime(), days=4)
+
+    def role_task(self, post, role):
+        return frappe.get_all(
+            "Task",
+            filters={"content_post": post.name, "content_role": role},
+            fields=[
+                "name",
+                "subject",
+                "priority",
+                "status",
+                "exp_end_date",
+                "expected_time",
+                "_assign",
+            ],
+        )
+
+    def test_assigning_creates_a_task_for_that_person(self):
+        post = make_content_post(
+            "Diwali reel",
+            CUSTOMER,
+            status="Drafting",
+            publish_on=self.due,
+            format="Reel",
+        )
+        content_board.assign(post.name, "writer", WRITER[0])
+        content_board.assign(post.name, "designer", self.DESIGNER[0], hours=5)
+
+        [writer_task] = self.role_task(post, "writer")
+        self.assertTrue(writer_task.subject.startswith("Content Finalization"))
+        self.assertEqual(writer_task.priority, "High")
+        self.assertEqual(writer_task.expected_time, 2)
+        self.assertEqual(getdate(writer_task.exp_end_date), getdate(self.due))
+        self.assertIn(WRITER[0], writer_task._assign)
+
+        [designer_task] = self.role_task(post, "designer")
+        self.assertTrue(designer_task.subject.startswith("Video Production"))
+        self.assertEqual(designer_task.expected_time, 5)
+
+    def test_reassign_moves_the_task_and_unassign_cancels_it(self):
+        post = make_content_post(
+            "Offer post",
+            CUSTOMER,
+            status="Drafting",
+            publish_on=self.due,
+            writer=WRITER[0],
+        )
+        [task] = self.role_task(post, "writer")
+
+        content_board.assign(post.name, "writer", self.DESIGNER[0])
+        [moved] = self.role_task(post, "writer")
+        self.assertEqual(moved.name, task.name)
+        self.assertIn(self.DESIGNER[0], moved._assign)
+        self.assertNotIn(WRITER[0], moved._assign)
+
+        content_board.assign(post.name, "writer", None)
+        self.assertEqual(self.role_task(post, "writer")[0].status, "Cancelled")
+
+    def test_postpone_moves_the_deadline_and_cancel_closes_tasks(self):
+        post = make_content_post(
+            "Launch", CUSTOMER, status="Drafting", publish_on=self.due, writer=WRITER[0]
+        )
+        later = add_to_date(self.due, days=3)
+        content_board.postpone(post.name, str(later), "Client asked")
+        self.assertEqual(
+            getdate(self.role_task(post, "writer")[0].exp_end_date), getdate(later)
+        )
+
+        content_board.cancel(post.name, "Dropped")
+        self.assertEqual(self.role_task(post, "writer")[0].status, "Cancelled")
+
+    def test_turned_off_creates_nothing(self):
+        set_content_settings(create_tasks_on_assign=0)
+        post = make_content_post(
+            "No tasks",
+            CUSTOMER,
+            status="Drafting",
+            publish_on=self.due,
+            writer=WRITER[0],
+        )
+        self.assertFalse(self.role_task(post, "writer"))

@@ -62,13 +62,31 @@
           :placeholder="__('Why is this post dropped?')"
         />
 
-        <Link
-          v-if="action === 'assign'"
-          v-model="user"
-          doctype="User"
-          :label="__(roleLabel)"
-          :placeholder="__('Pick a person, or clear to unassign')"
-        />
+        <template v-if="action === 'assign'">
+          <Link
+            v-model="user"
+            doctype="User"
+            :label="__(roleLabel)"
+            :placeholder="__('Pick a person, or clear to unassign')"
+          />
+          <FormControl
+            v-if="user"
+            v-model="hours"
+            type="number"
+            min="0"
+            step="0.5"
+            :label="__('Estimated hours')"
+            :placeholder="__('Default from Settings → Content')"
+            :description="
+              existingTask
+                ? __('Updates task {0}.', existingTask.name)
+                : __('A task is created for them, due on the post\'s date.')
+            "
+          />
+          <p v-else-if="existingTask" class="text-p-sm text-ink-gray-5">
+            {{ __("Unassigning cancels task {0}.", existingTask.name) }}
+          </p>
+        </template>
 
         <ErrorMessage :message="error" />
       </form>
@@ -122,6 +140,13 @@ const date = ref("");
 const time = ref("10:00");
 const reason = ref("");
 const user = ref("");
+const hours = ref<string | number>("");
+const roleTasks = ref<
+  { name: string; content_role: string; expected_time: number }[]
+>([]);
+const existingTask = computed(() =>
+  roleTasks.value.find((t) => t.content_role === props.role)
+);
 const error = ref("");
 const saving = ref(false);
 
@@ -168,6 +193,17 @@ watch(open, (isOpen) => {
   reason.value = "";
   url.value = props.post.published_url || "";
   user.value = (props.role && props.post[props.role]) || "";
+  hours.value = "";
+  roleTasks.value = [];
+  if (props.action === "assign") {
+    call("helpdesk.api.content_board.get_role_tasks", { post: props.post.name })
+      .then((tasks) => {
+        roleTasks.value = tasks;
+        if (existingTask.value?.expected_time)
+          hours.value = existingTask.value.expected_time;
+      })
+      .catch(() => {});
+  }
   const next = dayjs(props.post.publish_on || undefined).add(1, "day");
   date.value = next.format("YYYY-MM-DD");
   time.value = props.post.publish_on
@@ -206,11 +242,11 @@ async function submit() {
       });
       toast.success(__("Post cancelled"));
     } else {
-      await call("frappe.client.set_value", {
-        doctype: "HD Content Post",
-        name: post.name,
-        fieldname: props.role,
-        value: user.value || null,
+      await call("helpdesk.api.content_board.assign", {
+        post: post.name,
+        role: props.role,
+        user: user.value || null,
+        hours: Number(hours.value) || null,
       });
       toast.success(user.value ? __("Assigned") : __("Unassigned"));
     }

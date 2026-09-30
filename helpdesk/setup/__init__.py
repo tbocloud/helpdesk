@@ -6,6 +6,7 @@ import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
 from helpdesk.setup.install import get_custom_fields
+from helpdesk.tasky.setup import setup_erpnext_projects
 
 FORM_SCRIPT_NAME = "Helpdesk AI Support Actions"
 
@@ -13,6 +14,7 @@ FORM_SCRIPT_NAME = "Helpdesk AI Support Actions"
 def after_migrate():
     """Update the HD Form Script and ensure custom fields exist."""
     create_custom_fields(get_custom_fields())
+    setup_erpnext_projects()
     _create_form_script()
 
 

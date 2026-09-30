@@ -14,6 +14,12 @@
 		"missed_post_template_section",
 		"missed_post_subject",
 		"missed_post_message",
+		"tasks_section",
+		"create_tasks_on_assign",
+		"column_break_tasks",
+		"writer_hours",
+		"designer_hours",
+		"marketer_hours",
 		"portal_section",
 		"enable_client_portal",
 		"portal_code_template_section",
@@ -134,11 +140,48 @@
 			"fieldtype": "Int",
 			"label": "Alerts Sent",
 			"read_only": 1
+		},
+		{
+			"fieldname": "tasks_section",
+			"fieldtype": "Section Break",
+			"label": "Tasks from Assignments",
+			"description": "Assigning a writer, designer or digital marketer to a post creates an ERPNext Task for them, due on the post's date"
+		},
+		{
+			"fieldname": "create_tasks_on_assign",
+			"fieldtype": "Check",
+			"label": "Create Tasks on Assign",
+			"default": "1"
+		},
+		{
+			"fieldname": "column_break_tasks",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "writer_hours",
+			"fieldtype": "Float",
+			"label": "Writer Hours",
+			"default": "2",
+			"non_negative": 1
+		},
+		{
+			"fieldname": "designer_hours",
+			"fieldtype": "Float",
+			"label": "Designer Hours",
+			"default": "3",
+			"non_negative": 1
+		},
+		{
+			"fieldname": "marketer_hours",
+			"fieldtype": "Float",
+			"label": "Digital Marketer Hours",
+			"default": "1",
+			"non_negative": 1
 		}
 	],
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-09-30 10:00:00.000000",
+	"modified": "2026-09-30 15:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Content Settings",

@@ -33,7 +33,21 @@ def _assignees(raw) -> list[str]:
 
 
 def _notify(users, doctype: str, name: str, subject: str):
-    users = sorted({u for u in users if u and u not in SKIP})
+    users = {u for u in users if u and u not in SKIP}
+    # Frappe 15 has no dedupe_on, so skip anyone already told about this
+    already = set(
+        frappe.get_all(
+            "Notification Log",
+            filters={
+                "for_user": ("in", list(users) or [""]),
+                "document_type": doctype,
+                "document_name": str(name),
+                "subject": subject,
+            },
+            pluck="for_user",
+        )
+    )
+    users = sorted(users - already)
     if not users:
         return
     enqueue_create_notification(
@@ -45,7 +59,6 @@ def _notify(users, doctype: str, name: str, subject: str):
             "subject": subject,
             "from_user": "Administrator",
         },
-        dedupe_on=["document_type", "document_name", "subject"],
     )
 
 

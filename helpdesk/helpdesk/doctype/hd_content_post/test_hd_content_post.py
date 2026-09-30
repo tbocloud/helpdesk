@@ -132,6 +132,10 @@ class TestMissedPostAlerts(FrappeTestCase):
         frappe.db.delete(
             "HD Content Alert Recipient", {"parent": "HD Content Settings"}
         )
+        # posts already on the site are not this test's concern
+        frappe.db.set_value(
+            "HD Content Post", {"name": ("is", "set")}, "missed_alert_sent", 1
+        )
 
     def alerts_for(self, post) -> list[str]:
         return frappe.get_all(
@@ -240,7 +244,7 @@ class TestHDContentPostVisibility(FrappeTestCase):
         project = make_project(
             f"{CUSTOMER} - Social", members=[(TEAMMATE[0], "Developer")]
         )
-        project.db_set("customer", CUSTOMER)
+        project.db_set("hd_customer", CUSTOMER)
 
         self.own = make_content_post("Meera's reel", OTHER_CUSTOMER, writer=WRITER[0])
         self.client_post = make_content_post("Al Noor story", CUSTOMER)

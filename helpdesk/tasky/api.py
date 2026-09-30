@@ -5,6 +5,7 @@ import json
 import frappe
 from frappe import _
 from frappe.desk.form import assign_to
+from frappe.query_builder.functions import Count
 
 from helpdesk.tasky.permissions import (
     MANAGER_PROJECT_ROLE,
@@ -12,6 +13,7 @@ from helpdesk.tasky.permissions import (
     is_project_owner,
     is_tasky_admin,
 )
+from helpdesk.tasky.setup import erpnext_customer_for
 
 # member roles a project lead is rotated among
 LEAD_ROTATION_ROLES = ("Developer",)
@@ -62,6 +64,37 @@ def _format_task(task):
     }
 
 
+def _default_activity_type() -> str | None:
+    """The activity the user logged last, else the site's most used one (some sites require it)."""
+    Detail = frappe.qb.DocType("Timesheet Detail")
+    Sheet = frappe.qb.DocType("Timesheet")
+    last = (
+        frappe.qb.from_(Detail)
+        .join(Sheet)
+        .on(Sheet.name == Detail.parent)
+        .select(Detail.activity_type)
+        .where(Sheet.owner == frappe.session.user)
+        .where(Detail.activity_type.isnotnull())
+        .orderby(Detail.creation, order=frappe.qb.desc)
+        .limit(1)
+        .run(pluck=True)
+    )
+    if last:
+        return last[0]
+    top = (
+        frappe.qb.from_(Detail)
+        .select(Detail.activity_type)
+        .where(Detail.activity_type.isnotnull())
+        .groupby(Detail.activity_type)
+        .orderby(Count("*"), order=frappe.qb.desc)
+        .limit(1)
+        .run(pluck=True)
+    )
+    return (
+        top[0] if top else frappe.db.get_value("Activity Type", {"disabled": 0}, "name")
+    )
+
+
 @frappe.whitelist()
 def complete_task(task: str, hours_worked: float | str = 0, notes: str = ""):
     """Complete a task with optional timesheet entry."""
@@ -87,6 +120,7 @@ def complete_task(task: str, hours_worked: float | str = 0, notes: str = ""):
                     "time_logs": [
                         {
                             "task": doc.name,
+                            "activity_type": _default_activity_type(),
                             "from_time": frappe.utils.now(),
                             "hours": float(hours_worked),
                             "description": notes or f"Completed task: {doc.subject}",
@@ -100,7 +134,9 @@ def complete_task(task: str, hours_worked: float | str = 0, notes: str = ""):
             ts.insert()
             try:
                 ts.submit()
-            except Exception:  # noqa: BLE001 - keep the draft timesheet, but say why it wasn't submitted
+            except (
+                Exception
+            ):  # noqa: BLE001 - keep the draft timesheet, but say why it wasn't submitted
                 frappe.log_error(
                     title=f"Timesheet submit failed for {ts.name}",
                     message=frappe.get_traceback(),
@@ -154,7 +190,8 @@ def create_project(
         {
             "doctype": "Project",
             "project_name": project_name,
-            "customer": customer or None,
+            "hd_customer": customer or None,
+            "customer": erpnext_customer_for(customer),
             "expected_start_date": expected_start_date or None,
             "expected_end_date": expected_end_date or None,
             "status": "Open",
@@ -180,7 +217,7 @@ def create_project(
     return {
         "name": doc.name,
         "project_name": doc.project_name,
-        "customer": doc.customer,
+        "customer": doc.hd_customer,
         "status": doc.status,
     }
 
@@ -242,9 +279,11 @@ def generate_checklist(project: str, template: str):
     for ttask in template_doc.tasks:
         task_start, task_end = _compute_due_date(
             project_start,
-            phases_seen.index(ttask.phase_name)
-            if ttask.phase_name in phases_seen
-            else 0,
+            (
+                phases_seen.index(ttask.phase_name)
+                if ttask.phase_name in phases_seen
+                else 0
+            ),
             ttask.sort_order,
         )
 
@@ -289,7 +328,7 @@ def _assign_user(task_doc, user, ignore_permissions=False):
         return
     user = str(user).strip()
     if frappe.db.exists("User", user):
-        assign_to._add(
+        assign_to.add(
             {"doctype": "Task", "name": task_doc.name, "assign_to": [user]},
             ignore_permissions=ignore_permissions,
         )
@@ -679,21 +718,23 @@ def get_project_detail(project: str):
     return {
         "name": doc.name,
         "project_name": doc.project_name,
-        "customer": doc.customer,
+        "customer": doc.hd_customer,
         "status": doc.status,
         "priority": doc.priority,
-        "expected_start_date": str(doc.expected_start_date)
-        if doc.expected_start_date
-        else None,
-        "expected_end_date": str(doc.expected_end_date)
-        if doc.expected_end_date
-        else None,
-        "users": [
-            {"user": u.user, "full_name": u.full_name, "role": u.custom_role}
-            for u in doc.users
-        ]
-        if doc.users
-        else [],
+        "expected_start_date": (
+            str(doc.expected_start_date) if doc.expected_start_date else None
+        ),
+        "expected_end_date": (
+            str(doc.expected_end_date) if doc.expected_end_date else None
+        ),
+        "users": (
+            [
+                {"user": u.user, "full_name": u.full_name, "role": u.custom_role}
+                for u in doc.users
+            ]
+            if doc.users
+            else []
+        ),
         "can_manage": can_manage_project(doc.name),
         "can_change_lead": is_project_owner(doc.name),
         "project_lead": doc.project_lead,
@@ -724,7 +765,7 @@ def get_projects():
         fields=[
             "name",
             "project_name",
-            "customer",
+            "hd_customer as customer",
             "status",
             "expected_start_date",
             "expected_end_date",
@@ -779,7 +820,8 @@ def update_project(
 
     doc = frappe.get_doc("Project", project)
     doc.project_name = project_name
-    doc.customer = customer or None
+    doc.hd_customer = customer or None
+    doc.customer = erpnext_customer_for(customer) or doc.customer
     doc.expected_start_date = expected_start_date or None
     doc.expected_end_date = expected_end_date or None
     if status:
@@ -1041,7 +1083,9 @@ def create_timesheet(
     ts.insert()
     try:
         ts.submit()
-    except Exception:  # noqa: BLE001 - keep the draft timesheet, but say why it wasn't submitted
+    except (
+        Exception
+    ):  # noqa: BLE001 - keep the draft timesheet, but say why it wasn't submitted
         frappe.log_error(
             title=f"Timesheet submit failed for {ts.name}",
             message=frappe.get_traceback(),

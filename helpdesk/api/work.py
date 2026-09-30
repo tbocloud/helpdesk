@@ -163,7 +163,7 @@ def get_overview(
         ticket_filters["customer"] = customer
         task_filters["project"] = (
             "in",
-            frappe.get_all("Project", filters={"customer": customer}, pluck="name")
+            frappe.get_all("Project", filters={"hd_customer": customer}, pluck="name")
             or [""],
         )
     if assignee:
@@ -219,7 +219,7 @@ def get_ticket_task_context(ticket: str | int) -> dict:
     candidates = frappe.get_all(
         "Project",
         filters=filters,
-        fields=["name", "project_name", "customer"],
+        fields=["name", "project_name", "hd_customer as customer"],
         order_by="modified desc",
         limit_page_length=LIST_LIMIT,
     )
@@ -280,7 +280,7 @@ def create_task_from_ticket(
 
     if not frappe.db.exists("Project", project):
         frappe.throw(_("Project not found: {0}").format(project))
-    project_customer = frappe.db.get_value("Project", project, "customer")
+    project_customer = frappe.db.get_value("Project", project, "hd_customer")
     same_customer = (
         bool(ticket_doc.customer) and project_customer == ticket_doc.customer
     )

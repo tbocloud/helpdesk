@@ -7,6 +7,7 @@ from frappe.permissions import add_permission, update_permission_property
 
 from helpdesk.consts import DEFAULT_ARTICLE_CATEGORY
 from helpdesk.setup.default_views import add_default_views
+from helpdesk.tasky.setup import setup_erpnext_projects
 
 from .default_template import create_default_template
 from .file import create_helpdesk_folder
@@ -19,6 +20,8 @@ FORM_SCRIPT_NAME = "Helpdesk AI Support Actions"
 
 def after_install():
     create_custom_fields(get_custom_fields())
+    # Task / Project extras live on ERPNext's doctypes, so only when ERPNext is there
+    setup_erpnext_projects()
     add_default_status()
     add_default_agent_status()
     add_default_categories_and_articles()
@@ -426,15 +429,6 @@ def get_custom_fields():
                 "fieldtype": "JSON",
                 "label": "Triage Data",
                 "insert_after": "custom_triage_timestamp",
-            },
-        ],
-        "Project User": [
-            {
-                "fieldname": "custom_role",
-                "fieldtype": "Select",
-                "label": "Role",
-                "options": "Project Manager\nFunctional Consultant\nDeveloper\nSupport Engineer",
-                "insert_after": "user",
             },
         ],
     }

@@ -131,6 +131,50 @@
 
         <section>
           <h2 class="text-base-semibold text-ink-gray-9">
+            {{ __("Tasks from assignments") }}
+          </h2>
+          <SettingRow
+            :label="__('Create a task when someone is assigned')"
+            :description="
+              __(
+                'Writer, designer and digital marketer each get an ERPNext Task, due on the post\'s date. Unassigning or cancelling the post cancels it.'
+              )
+            "
+          >
+            <Switch v-model="form.create_tasks_on_assign" />
+          </SettingRow>
+          <div
+            v-if="form.create_tasks_on_assign"
+            class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3"
+          >
+            <FormControl
+              v-model="form.writer_hours"
+              type="number"
+              min="0"
+              step="0.5"
+              :label="__('Writer hours')"
+            />
+            <FormControl
+              v-model="form.designer_hours"
+              type="number"
+              min="0"
+              step="0.5"
+              :label="__('Designer hours')"
+            />
+            <FormControl
+              v-model="form.marketer_hours"
+              type="number"
+              min="0"
+              step="0.5"
+              :label="__('Digital marketer hours')"
+            />
+          </div>
+        </section>
+
+        <hr class="my-8" />
+
+        <section>
+          <h2 class="text-base-semibold text-ink-gray-9">
             {{ __("Client portal") }}
           </h2>
           <SettingRow
@@ -199,6 +243,10 @@ interface ContentSettingsForm {
   enable_client_portal: boolean;
   portal_code_subject: string;
   portal_code_message: string;
+  create_tasks_on_assign: boolean;
+  writer_hours: number;
+  designer_hours: number;
+  marketer_hours: number;
 }
 
 const DOCTYPE = "HD Content Settings";
@@ -225,6 +273,10 @@ const settings = createResource({
       enable_client_portal: Boolean(doc.enable_client_portal),
       portal_code_subject: doc.portal_code_subject || "",
       portal_code_message: doc.portal_code_message || "",
+      create_tasks_on_assign: Boolean(doc.create_tasks_on_assign),
+      writer_hours: doc.writer_hours ?? 0,
+      designer_hours: doc.designer_hours ?? 0,
+      marketer_hours: doc.marketer_hours ?? 0,
     };
     initial.value = JSON.stringify(form.value);
   },
@@ -267,6 +319,10 @@ const save = createResource({
         notify_post_team: f.notify_post_team ? 1 : 0,
         enable_client_portal: f.enable_client_portal ? 1 : 0,
         grace_period_minutes: Number(f.grace_period_minutes) || 0,
+        create_tasks_on_assign: f.create_tasks_on_assign ? 1 : 0,
+        writer_hours: Number(f.writer_hours) || 0,
+        designer_hours: Number(f.designer_hours) || 0,
+        marketer_hours: Number(f.marketer_hours) || 0,
         alert_recipients: f.alert_recipients.map((user) => ({ user })),
       },
     };

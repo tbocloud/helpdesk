@@ -97,6 +97,9 @@ user_invitation = {
 }
 
 doc_events = {
+    "Task": {
+        "on_update": "helpdesk.tasky.task_events.on_update",
+    },
     "Assignment Rule": {
         "on_trash": "helpdesk.extends.assignment_rule.on_assignment_rule_trash",
         "validate": "helpdesk.extends.assignment_rule.on_assignment_rule_validate",
