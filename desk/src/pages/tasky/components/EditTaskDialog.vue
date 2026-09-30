@@ -155,6 +155,8 @@
         </p>
       </template>
 
+      <TaskPullRequests :pull-requests="task?.pull_requests" />
+
       <div
         v-if="errorMessage"
         role="alert"
@@ -203,6 +205,7 @@ import {
   isClosed,
   priorityOptions,
 } from "../taskMeta";
+import TaskPullRequests from "./TaskPullRequests.vue";
 
 interface EditableTask {
   name: string;

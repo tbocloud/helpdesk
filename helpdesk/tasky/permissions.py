@@ -193,3 +193,31 @@ def timesheet_has_permission(
     ):
         return None
     return False
+
+
+# --- HD Pull Request: visible to whoever can read the task it's linked to ---
+
+
+def pull_request_query(user: str | None = None) -> str | None:
+    user = user or frappe.session.user
+    condition = task_query(user)
+    if condition is None:
+        return None
+    return f"`tabHD Pull Request`.`task` in (select `name` from `tabTask` where {condition})"
+
+
+def pull_request_has_permission(
+    doc, ptype: str | None = None, user: str | None = None
+) -> bool | None:
+    user = user or frappe.session.user
+    if is_tasky_admin(user):
+        return None
+    if ptype not in ("read", "print", "report", "export"):
+        return False
+    if not doc.task:
+        return False
+    return (
+        None
+        if frappe.has_permission("Task", "read", doc=doc.task, user=user)
+        else False
+    )

@@ -1,0 +1,99 @@
+{
+	"actions": [],
+	"autoname": "field:delivery_id",
+	"creation": "2026-09-30 12:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"delivery_id",
+		"event",
+		"action",
+		"column_break_delivery",
+		"repo",
+		"status",
+		"error_section",
+		"error",
+		"payload"
+	],
+	"fields": [
+		{
+			"fieldname": "delivery_id",
+			"fieldtype": "Data",
+			"label": "Delivery ID",
+			"reqd": 1,
+			"unique": 1
+		},
+		{
+			"fieldname": "event",
+			"fieldtype": "Data",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"label": "Event"
+		},
+		{
+			"fieldname": "action",
+			"fieldtype": "Data",
+			"in_list_view": 1,
+			"label": "Action"
+		},
+		{
+			"fieldname": "column_break_delivery",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "repo",
+			"fieldtype": "Data",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"label": "Repository"
+		},
+		{
+			"default": "Queued",
+			"fieldname": "status",
+			"fieldtype": "Select",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"label": "Status",
+			"options": "Queued\nProcessed\nIgnored\nFailed"
+		},
+		{
+			"fieldname": "error_section",
+			"fieldtype": "Section Break",
+			"label": "Details"
+		},
+		{
+			"fieldname": "error",
+			"fieldtype": "Code",
+			"label": "Error / Note",
+			"read_only": 1
+		},
+		{
+			"fieldname": "payload",
+			"fieldtype": "Code",
+			"label": "Payload",
+			"options": "JSON",
+			"read_only": 1
+		}
+	],
+	"in_create": 1,
+	"index_web_pages_for_search": 0,
+	"links": [],
+	"modified": "2026-09-30 12:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD GitHub Delivery",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"delete": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "System Manager"
+		}
+	],
+	"sort_field": "creation",
+	"sort_order": "DESC",
+	"states": []
+}

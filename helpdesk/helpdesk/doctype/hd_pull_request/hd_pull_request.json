@@ -1,0 +1,193 @@
+{
+	"actions": [],
+	"autoname": "hash",
+	"creation": "2026-09-30 12:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"repo",
+		"number",
+		"title",
+		"url",
+		"column_break_pr",
+		"task",
+		"link_kind",
+		"author",
+		"head_branch",
+		"status_section",
+		"state",
+		"review_state",
+		"ci_state",
+		"column_break_status",
+		"merged_at",
+		"closed_at",
+		"last_event_at",
+		"details_section",
+		"last_review_note",
+		"ci_head_sha"
+	],
+	"fields": [
+		{
+			"fieldname": "repo",
+			"fieldtype": "Data",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"label": "Repository",
+			"reqd": 1
+		},
+		{
+			"fieldname": "number",
+			"fieldtype": "Int",
+			"in_list_view": 1,
+			"label": "Number",
+			"reqd": 1
+		},
+		{
+			"fieldname": "title",
+			"fieldtype": "Data",
+			"label": "Title",
+			"length": 255
+		},
+		{
+			"fieldname": "url",
+			"fieldtype": "Data",
+			"label": "URL",
+			"options": "URL"
+		},
+		{
+			"fieldname": "column_break_pr",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "task",
+			"fieldtype": "Link",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"label": "Task",
+			"options": "Task",
+			"reqd": 1,
+			"search_index": 1
+		},
+		{
+			"default": "Refs",
+			"fieldname": "link_kind",
+			"fieldtype": "Select",
+			"label": "Link",
+			"options": "Closes\nRefs",
+			"description": "Closes: the PR says \"Closes TASK-...\", so merging it completes the task. Refs: the PR only mentions the task."
+		},
+		{
+			"fieldname": "author",
+			"fieldtype": "Data",
+			"label": "Author (GitHub)"
+		},
+		{
+			"fieldname": "head_branch",
+			"fieldtype": "Data",
+			"label": "Branch"
+		},
+		{
+			"fieldname": "status_section",
+			"fieldtype": "Section Break",
+			"label": "Status"
+		},
+		{
+			"default": "Open",
+			"fieldname": "state",
+			"fieldtype": "Select",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"label": "State",
+			"options": "Open\nDraft\nMerged\nClosed"
+		},
+		{
+			"default": "None",
+			"fieldname": "review_state",
+			"fieldtype": "Select",
+			"label": "Review",
+			"options": "None\nReview requested\nApproved\nChanges requested"
+		},
+		{
+			"default": "None",
+			"fieldname": "ci_state",
+			"fieldtype": "Select",
+			"label": "CI",
+			"options": "None\nPassing\nFailing"
+		},
+		{
+			"fieldname": "column_break_status",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "merged_at",
+			"fieldtype": "Datetime",
+			"label": "Merged At"
+		},
+		{
+			"fieldname": "closed_at",
+			"fieldtype": "Datetime",
+			"label": "Closed At"
+		},
+		{
+			"fieldname": "last_event_at",
+			"fieldtype": "Datetime",
+			"label": "Last Event At"
+		},
+		{
+			"collapsible": 1,
+			"fieldname": "details_section",
+			"fieldtype": "Section Break",
+			"label": "Details"
+		},
+		{
+			"fieldname": "last_review_note",
+			"fieldtype": "Small Text",
+			"label": "Last Review Note"
+		},
+		{
+			"description": "Commit the CI result belongs to; a pass on the same commit doesn't clear another workflow's failure.",
+			"fieldname": "ci_head_sha",
+			"fieldtype": "Data",
+			"label": "CI Commit"
+		}
+	],
+	"in_create": 1,
+	"index_web_pages_for_search": 0,
+	"links": [],
+	"modified": "2026-09-30 12:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD Pull Request",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "System Manager",
+			"share": 1,
+			"write": 1
+		},
+		{
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "Agent Manager"
+		},
+		{
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "Agent"
+		}
+	],
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": [],
+	"title_field": "title"
+}

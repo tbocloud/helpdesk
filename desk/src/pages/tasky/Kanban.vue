@@ -328,6 +328,10 @@
                     v-if="task.slip_count && !isClosed(task)"
                     :count="task.slip_count"
                   />
+                  <PullRequestChip
+                    v-if="task.pull_request"
+                    :pr="task.pull_request"
+                  />
                   <div class="ml-auto flex shrink-0 items-center gap-1.5">
                     <component
                       :is="priorityIcon(task.priority)"
@@ -444,11 +448,13 @@ import HoldTaskDialog from "./components/HoldTaskDialog.vue";
 import MilestoneMark from "./components/MilestoneMark.vue";
 import ProjectNav from "./components/ProjectNav.vue";
 import ResumeTaskDialog from "./components/ResumeTaskDialog.vue";
+import PullRequestChip from "./components/PullRequestChip.vue";
 import SendBackTaskDialog from "./components/SendBackTaskDialog.vue";
 import SlipBadge from "./components/SlipBadge.vue";
 import TaskPlanDialog from "./components/TaskPlanDialog.vue";
 import TaskyState from "./components/TaskyState.vue";
 import WaitingOn from "./components/WaitingOn.vue";
+import type { TaskPullRequest } from "./pullRequestMeta";
 import {
   ON_HOLD,
   blockedMessage,
@@ -509,6 +515,7 @@ interface Task {
   depends_on_task?: string | null;
   depends_on_subject?: string | null;
   blocked?: boolean;
+  pull_request?: TaskPullRequest | null;
 }
 
 const kanban = createResource({

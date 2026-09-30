@@ -1102,3 +1102,147 @@ def make_article(title: str, content: str, status: str = "Published"):
             "status": status,
         }
     ).insert(ignore_permissions=True)
+
+
+GITHUB_TEST_SECRET = "test-github-webhook-secret"
+GITHUB_TEST_REPO = "tbocloud/helpdesk"
+
+
+def enable_github_sync(**values):
+    """Turns on HD GitHub Settings with the test webhook secret, tbocloud/* allowed, plus any overrides."""
+    doc = frappe.get_doc("HD GitHub Settings")
+    doc.update(
+        {
+            "enabled": 1,
+            "webhook_secret": GITHUB_TEST_SECRET,
+            "allowed_repos": "tbocloud/*",
+            "complete_on_merge": 1,
+            "unlinked_pr_project": None,
+            "github_token": None,
+            **values,
+        }
+    )
+    doc.save(ignore_permissions=True)
+    return doc
+
+
+def make_github_payload(event: str, action: str = "", **overrides) -> dict:
+    """A minimal GitHub webhook payload shaped like the real one for `event`.
+
+    Overrides: repo, number, title, body, branch, draft, merged, closed, login,
+    comments, review_state, review_body, reviewer, conclusion, sha, workflow,
+    pull_requests (workflow_run: PR numbers the run belongs to).
+    """
+    repo = overrides.get("repo", GITHUB_TEST_REPO)
+    number = overrides.get("number", 7)
+    login = overrides.get("login", "dev-octocat")
+    sha = overrides.get("sha", "a1b2c3d")
+    branch = overrides.get("branch", "feature/invoice-print")
+    merged = overrides.get("merged", False)
+    closed = overrides.get("closed", merged)
+    payload = {
+        "action": action,
+        "repository": {"full_name": repo, "name": repo.split("/")[-1]},
+        "sender": {"login": login},
+    }
+    if event == "workflow_run":
+        payload["workflow_run"] = {
+            "name": overrides.get("workflow", "Server Tests"),
+            "head_branch": branch,
+            "head_sha": sha,
+            "status": "completed",
+            "conclusion": overrides.get("conclusion", "success"),
+            "pull_requests": [
+                {"number": n, "head": {"ref": branch, "sha": sha}}
+                for n in overrides.get("pull_requests", [number])
+            ],
+        }
+        return payload
+
+    payload["number"] = number
+    payload["pull_request"] = {
+        "number": number,
+        "title": overrides.get("title", "Invoice print format"),
+        "body": overrides.get("body", ""),
+        "html_url": f"https://github.com/{repo}/pull/{number}",
+        "state": "closed" if closed else "open",
+        "draft": overrides.get("draft", False),
+        "merged": merged,
+        "merged_at": "2026-09-30T10:00:00Z" if merged else None,
+        "closed_at": "2026-09-30T10:00:00Z" if closed else None,
+        "merged_by": {"login": "lead-octocat"} if merged else None,
+        "comments": overrides.get("comments", 0),
+        "user": {"login": login},
+        "head": {"ref": branch, "sha": sha},
+        "base": {"ref": "main"},
+    }
+    if event == "pull_request_review":
+        payload["review"] = {
+            "state": overrides.get("review_state", "approved"),
+            "body": overrides.get("review_body", ""),
+            "user": {"login": overrides.get("reviewer", "lead-octocat")},
+        }
+    return payload
+
+
+def github_signature(body: bytes, secret: str = GITHUB_TEST_SECRET) -> str:
+    """The X-Hub-Signature-256 header GitHub would send for `body`."""
+    import hashlib
+    import hmac
+
+    return "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+
+
+def send_github_webhook(
+    event: str,
+    payload: dict | None = None,
+    delivery: str | None = None,
+    signature: str | None = "sign",
+    body: bytes | None = None,
+):
+    """Calls helpdesk.api.github.webhook with a fake request carrying GitHub's headers.
+
+    `signature="sign"` signs the body with the test secret; None leaves the header out.
+    """
+    from werkzeug.test import EnvironBuilder
+    from werkzeug.wrappers import Request
+
+    from helpdesk.api.github import webhook
+
+    body = body if body is not None else json.dumps(payload or {}).encode()
+    headers = {
+        "X-GitHub-Event": event,
+        "X-GitHub-Delivery": delivery or frappe.generate_hash(length=20),
+    }
+    if signature == "sign":
+        headers["X-Hub-Signature-256"] = github_signature(body)
+    elif signature:
+        headers["X-Hub-Signature-256"] = signature
+    builder = EnvironBuilder(
+        path="/api/method/helpdesk.api.github.webhook",
+        method="POST",
+        base_url="http://localhost",
+        headers=headers,
+        data=body,
+        content_type="application/json",
+    )
+    previous = getattr(frappe.local, "request", None)
+    frappe.local.request = Request(builder.get_environ())
+    try:
+        return webhook()
+    finally:
+        frappe.local.request = previous
+
+
+def get_task_comments(task: str, like: str = "%") -> list[str]:
+    """Contents of the Info comments on `task` matching the SQL LIKE pattern `like`."""
+    return frappe.get_all(
+        "Comment",
+        filters={
+            "reference_doctype": "Task",
+            "reference_name": task,
+            "comment_type": "Info",
+            "content": ("like", like),
+        },
+        pluck="content",
+    )

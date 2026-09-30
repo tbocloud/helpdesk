@@ -6,6 +6,7 @@ import frappe
 from frappe import _
 from frappe.desk.form import assign_to
 
+from helpdesk.github_sync import get_pull_requests
 from helpdesk.tasky.permissions import (
     MANAGER_PROJECT_ROLE,
     can_manage_project,
@@ -555,7 +556,10 @@ def get_task_detail(task: str):
     """Get a single task with all fields."""
     doc = frappe.get_doc("Task", str(task))
     doc.check_permission("read")
-    return _format_task(_task_dict(doc))
+    return {
+        **_format_task(_task_dict(doc)),
+        "pull_requests": get_pull_requests([doc.name]).get(doc.name, []),
+    }
 
 
 @frappe.whitelist()
@@ -1008,6 +1012,9 @@ def get_kanban_tasks(project: str):
         order_by="custom_phase asc, subject asc",
     )
 
+    # one query for the whole board; a card shows its most recently active open PR
+    open_prs = get_pull_requests([t.name for t in tasks], open_only=True)
+
     columns = {
         "Open": [],
         "Working": [],
@@ -1020,7 +1027,10 @@ def get_kanban_tasks(project: str):
         status = t.get("status") or "Open"
         if status not in columns:
             status = "Open"
-        columns[status].append(_format_task(t))
+        prs = open_prs.get(t.name)
+        columns[status].append(
+            {**_format_task(t), "pull_request": prs[0] if prs else None}
+        )
 
     return {"columns": columns}
 

@@ -67,6 +67,7 @@ scheduler_events = {
         "helpdesk.helpdesk.doctype.hd_content_post.hd_content_post.send_due_reminders",
         "helpdesk.work_reminders.send_task_reminders",
         "helpdesk.work_reminders.send_hold_reminders",
+        "helpdesk.helpdesk.doctype.hd_github_delivery.hd_github_delivery.clear_old_deliveries",
     ],
     "hourly": [
         "helpdesk.work_reminders.send_ticket_reminders",
@@ -148,6 +149,7 @@ permission_query_conditions = {
     "Project": "helpdesk.tasky.permissions.project_query",
     "Task": "helpdesk.tasky.permissions.task_query",
     "Timesheet": "helpdesk.tasky.permissions.timesheet_query",
+    "HD Pull Request": "helpdesk.tasky.permissions.pull_request_query",
     "HD Content Post": "helpdesk.helpdesk.doctype.hd_content_post.hd_content_post.permission_query",
     "HD Content Campaign": "helpdesk.helpdesk.doctype.hd_content_campaign.hd_content_campaign.permission_query",
     "HD Work Summary": "helpdesk.helpdesk.doctype.hd_work_summary.hd_work_summary.permission_query",
@@ -160,6 +162,7 @@ has_permission = {
     "Project": "helpdesk.tasky.permissions.project_has_permission",
     "Task": "helpdesk.tasky.permissions.task_has_permission",
     "Timesheet": "helpdesk.tasky.permissions.timesheet_has_permission",
+    "HD Pull Request": "helpdesk.tasky.permissions.pull_request_has_permission",
     "HD Content Post": "helpdesk.helpdesk.doctype.hd_content_post.hd_content_post.has_permission",
     "HD Content Campaign": "helpdesk.helpdesk.doctype.hd_content_campaign.hd_content_campaign.has_permission",
     "HD Work Summary": "helpdesk.helpdesk.doctype.hd_work_summary.hd_work_summary.has_permission",

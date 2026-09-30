@@ -415,6 +415,7 @@
               {{ __("No description") }}
             </p>
           </div>
+          <TaskPullRequests :pull-requests="detail.pull_requests" />
         </div>
       </template>
     </Dialog>
@@ -465,9 +466,11 @@ import ResumeTaskDialog from "./components/ResumeTaskDialog.vue";
 import SendBackTaskDialog from "./components/SendBackTaskDialog.vue";
 import SlipBadge from "./components/SlipBadge.vue";
 import TaskPlanDialog from "./components/TaskPlanDialog.vue";
+import TaskPullRequests from "./components/TaskPullRequests.vue";
 import TaskStatusBadge from "./components/TaskStatusBadge.vue";
 import TaskyBadge from "./components/TaskyBadge.vue";
 import WaitingOn from "./components/WaitingOn.vue";
+import type { TaskPullRequest } from "./pullRequestMeta";
 import {
   ON_HOLD,
   holdDays,
@@ -503,6 +506,7 @@ interface Task {
   depends_on_task?: string | null;
   depends_on_subject?: string | null;
   blocked?: boolean;
+  pull_requests?: TaskPullRequest[];
   custom_timer_start?: string | null;
   custom_timer_elapsed?: number;
 }

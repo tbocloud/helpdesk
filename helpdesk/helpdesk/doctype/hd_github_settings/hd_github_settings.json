@@ -1,0 +1,86 @@
+{
+	"actions": [],
+	"creation": "2026-09-30 12:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"enabled",
+		"webhook_secret",
+		"allowed_repos",
+		"column_break_github",
+		"complete_on_merge",
+		"unlinked_pr_project",
+		"github_token"
+	],
+	"fields": [
+		{
+			"default": "0",
+			"fieldname": "enabled",
+			"fieldtype": "Check",
+			"label": "Enabled",
+			"description": "In GitHub (organization or repository Settings > Webhooks) set the Payload URL to https://&lt;this site&gt;/api/method/helpdesk.api.github.webhook, the content type to application/json, the same secret as below, and send Pull requests, Pull request reviews and Workflow runs."
+		},
+		{
+			"fieldname": "webhook_secret",
+			"fieldtype": "Password",
+			"label": "Webhook Secret",
+			"mandatory_depends_on": "enabled",
+			"description": "Every delivery is checked against this secret; unsigned or wrongly signed requests are refused."
+		},
+		{
+			"default": "tbocloud/*",
+			"fieldname": "allowed_repos",
+			"fieldtype": "Small Text",
+			"label": "Allowed Repositories",
+			"description": "One per line: owner/repo, or owner/* for every repository of that owner. Deliveries from other repositories are ignored."
+		},
+		{
+			"fieldname": "column_break_github",
+			"fieldtype": "Column Break"
+		},
+		{
+			"default": "1",
+			"fieldname": "complete_on_merge",
+			"fieldtype": "Check",
+			"label": "Complete the task when a closing PR is merged",
+			"description": "For PRs that say \"Closes TASK-...\". Projects that need review before done send the task to review instead."
+		},
+		{
+			"fieldname": "unlinked_pr_project",
+			"fieldtype": "Link",
+			"label": "Project for PRs without a task",
+			"options": "Project",
+			"description": "A PR that names no task gets a new task here. Leave empty to notify System and Agent Managers instead."
+		},
+		{
+			"fieldname": "github_token",
+			"fieldtype": "Password",
+			"label": "GitHub Token",
+			"description": "Optional. Lets TBO Support ask on a PR for its task number and read why a PR was closed. Needs read and write access to pull requests and issues."
+		}
+	],
+	"index_web_pages_for_search": 0,
+	"issingle": 1,
+	"links": [],
+	"modified": "2026-09-30 12:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD GitHub Settings",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"print": 1,
+			"read": 1,
+			"role": "System Manager",
+			"share": 1,
+			"write": 1
+		}
+	],
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": [],
+	"track_changes": 1
+}
