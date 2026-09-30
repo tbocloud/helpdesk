@@ -1,0 +1,592 @@
+{% extends "helpdesk/templates/content_portal_base.html" %}
+
+{% block title %}{{ _("Content Calendar") }}{% endblock %}
+
+{% block style %}
+<style>
+  .wrap { max-width: 960px; margin: 0 auto; padding: 24px 16px 64px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); }
+  .muted { color: var(--ink-5); }
+  .row { display: flex; align-items: center; gap: 8px; }
+  .grow { flex: 1; min-width: 0; }
+  .icon { width: 16px; height: 16px; flex-shrink: 0; }
+
+  .btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink-8); font-weight: 500; font-size: 13px; cursor: pointer; white-space: nowrap; }
+  .btn:hover { background: var(--surface-2); }
+  .btn:disabled { opacity: .55; cursor: not-allowed; }
+  .btn.primary { background: var(--brand); border-color: var(--brand); color: var(--on-brand); }
+  .btn.primary:hover:not(:disabled) { background: var(--brand-hover); border-color: var(--brand-hover); }
+  .btn.ghost { border-color: transparent; background: transparent; }
+  .btn.ghost:hover { background: var(--surface-2); }
+  .btn.sm { height: 28px; padding: 0 10px; font-size: 12px; }
+  .input { width: 100%; height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--border-strong); background: var(--surface); }
+  textarea.input { height: auto; min-height: 104px; padding: 10px 12px; resize: vertical; }
+  .select { height: 32px; padding: 0 28px 0 10px; border-radius: 8px; border: 1px solid var(--border-strong); background: var(--surface); }
+  .msg { min-height: 20px; margin: 8px 0 0; font-size: 13px; }
+  .msg.err { color: var(--danger); }
+  .msg.ok { color: var(--success); }
+
+  /* sign in */
+  .auth { max-width: 400px; margin: 10vh auto 0; padding: 28px; }
+  .auth h1 { margin: 0 0 4px; font-size: 20px; font-weight: 600; color: var(--ink-9); }
+  .auth p { margin: 0 0 20px; }
+  .auth label { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 500; color: var(--ink-7); }
+  .auth .btn.primary { width: 100%; justify-content: center; height: 36px; margin-top: 12px; }
+  .code-input { letter-spacing: .4em; font-size: 18px; text-align: center; }
+  .link-row { display: flex; justify-content: space-between; margin-top: 14px; }
+  .link-btn { background: none; border: 0; padding: 0; color: var(--brand-ink); cursor: pointer; font-size: 13px; }
+
+  /* header */
+  .hd { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 20px; }
+  .avatar { width: 40px; height: 40px; border-radius: 10px; background: var(--brand-soft); color: var(--brand-ink); display: grid; place-items: center; font-weight: 600; }
+  .hd h1 { margin: 0; font-size: 20px; font-weight: 600; color: var(--ink-9); line-height: 1.2; }
+
+  .banner { display: flex; align-items: center; gap: 10px; padding: 12px 14px; margin-bottom: 16px; border-radius: 10px; background: var(--warning-soft); color: var(--warning); }
+  .banner b { font-weight: 600; }
+
+  .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .tile { padding: 14px 16px; }
+  .tile .k { margin: 0; font-size: 12px; color: var(--ink-5); }
+  .tile .v { margin: 2px 0 0; font-size: 22px; font-weight: 600; color: var(--ink-9); }
+  .tile .s { margin: 0; font-size: 12px; color: var(--ink-5); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { height: 28px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--border-strong); background: var(--surface); font-size: 12px; font-weight: 500; cursor: pointer; color: var(--ink-7); }
+  .chip[aria-pressed="true"] { background: var(--brand-soft); border-color: var(--brand); color: var(--brand-ink); }
+
+  .bulk { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 14px; margin-bottom: 12px; }
+
+  .day { margin: 20px 0 8px; font-size: 12px; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; color: var(--ink-5); }
+  .post { padding: 16px; margin-bottom: 10px; }
+  .post-hd { display: flex; align-items: flex-start; gap: 10px; }
+  .post-title { margin: 0; font-size: 15px; font-weight: 600; color: var(--ink-9); }
+  .meta { margin: 2px 0 0; font-size: 12px; color: var(--ink-5); }
+  .pill { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 8px; border-radius: 999px; font-size: 12px; font-weight: 500; white-space: nowrap; }
+  .pill .icon { width: 13px; height: 13px; }
+  .pill.warning { background: var(--warning-soft); color: var(--warning); }
+  .pill.danger { background: var(--danger-soft); color: var(--danger); }
+  .pill.info { background: var(--info-soft); color: var(--info); }
+  .pill.success { background: var(--success-soft); color: var(--success); }
+  .caption { margin-top: 12px; color: var(--ink-8); font-size: 14px; overflow-wrap: anywhere; }
+  .caption p { margin: 0 0 8px; }
+  .caption:empty { display: none; }
+  .tags { margin: 6px 0 0; font-size: 13px; color: var(--brand-ink); overflow-wrap: anywhere; }
+  .images { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .images a { display: block; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
+  .images img { display: block; width: 112px; height: 112px; object-fit: cover; background: var(--surface-2); }
+  .note { margin-top: 12px; padding: 10px 12px; border-radius: 8px; background: var(--surface-2); font-size: 13px; color: var(--ink-7); overflow-wrap: anywhere; white-space: pre-line; }
+  .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-7); cursor: pointer; }
+  .check input { width: 16px; height: 16px; accent-color: var(--brand); }
+  .empty { padding: 40px 16px; text-align: center; }
+
+  dialog { width: min(480px, calc(100vw - 32px)); padding: 20px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--ink-8); box-shadow: 0 10px 30px oklch(0 0 0 / .2); }
+  dialog::backdrop { background: var(--overlay); }
+  dialog h2 { margin: 0 0 4px; font-size: 16px; font-weight: 600; color: var(--ink-9); }
+  dialog p { margin: 0 0 12px; }
+  .dlg-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+
+  .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); padding: 10px 16px; border-radius: 8px; background: var(--ink-9); color: var(--surface); font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .2s; }
+  .toast.show { opacity: 1; }
+
+  @media (max-width: 720px) {
+    .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .post-hd { flex-wrap: wrap; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<main class="wrap" id="app" aria-live="polite"></main>
+
+<dialog id="dlg-changes" aria-labelledby="dlg-changes-title">
+  <form method="dialog" id="form-changes">
+    <h2 id="dlg-changes-title">{{ _("Request changes") }}</h2>
+    <p class="muted" id="dlg-changes-sub"></p>
+    <label class="sr-only" for="changes-notes">{{ _("What should change") }}</label>
+    <textarea class="input" id="changes-notes" required placeholder="{{ _('Tell us what should change on this post') }}"></textarea>
+    <p class="msg err" id="changes-msg" role="alert"></p>
+    <div class="dlg-actions">
+      <button type="button" class="btn" data-close>{{ _("Cancel") }}</button>
+      <button type="submit" class="btn primary" id="changes-submit">{{ _("Send to the team") }}</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlg-comment" aria-labelledby="dlg-comment-title">
+  <form method="dialog" id="form-comment">
+    <h2 id="dlg-comment-title">{{ _("Add a comment") }}</h2>
+    <p class="muted">{{ _("Goes straight to the team. It does not change the post's status.") }}</p>
+    <label class="sr-only" for="comment-text">{{ _("Comment") }}</label>
+    <textarea class="input" id="comment-text" required placeholder="{{ _('Leave a note about this post') }}"></textarea>
+    <p class="msg err" id="comment-msg" role="alert"></p>
+    <div class="dlg-actions">
+      <button type="button" class="btn" data-close>{{ _("Cancel") }}</button>
+      <button type="submit" class="btn primary" id="comment-submit">{{ _("Send comment") }}</button>
+    </div>
+  </form>
+</dialog>
+
+<div class="toast" id="toast" role="status"></div>
+{% endblock %}
+
+{% block script %}
+<script id="portal-data" type="application/json">{{ portal_data }}</script>
+<script>
+(function () {
+  const DATA = JSON.parse(document.getElementById("portal-data").textContent);
+  const API = "/api/method/helpdesk.api.content_portal.";
+  const app = document.getElementById("app");
+
+  const ICONS = {
+    clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+    check: '<path d="M20 6 9 17l-5-5"/>',
+    pencil: '<path d="M21.2 6.8a2.8 2.8 0 0 0-4-4L3.8 16.2 2.5 21.5l5.3-1.3Z"/>',
+    calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+    send: '<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>',
+    message: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+    link: '<path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
+    logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>',
+    left: '<path d="m15 18-6-6 6-6"/>',
+    right: '<path d="m9 18 6-6-6-6"/>',
+    alert: '<circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>',
+  };
+  function icon(name) {
+    return `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
+  }
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  }
+
+  // ------------------------------------------------------------- api --
+  async function call(method, args, httpMethod) {
+    const opts = { method: httpMethod || "POST", headers: { Accept: "application/json" }, credentials: "same-origin" };
+    if (opts.method === "POST") {
+      opts.headers["Content-Type"] = "application/json";
+      if (DATA.csrf_token) opts.headers["X-Frappe-CSRF-Token"] = DATA.csrf_token;
+      opts.body = JSON.stringify(args || {});
+    }
+    const res = await fetch(API + method, opts);
+    let body = {};
+    try { body = await res.json(); } catch (e) { /* non-JSON error page */ }
+    if (!res.ok) {
+      if (body.exc_type === "AuthenticationError") {
+        location.reload();
+      }
+      throw new Error(serverMessage(body) || {{ _('Something went wrong. Try again.')|tojson }});
+    }
+    return body.message;
+  }
+  function serverMessage(body) {
+    try {
+      const msgs = JSON.parse(body._server_messages || "[]");
+      if (msgs.length) {
+        const m = JSON.parse(msgs[msgs.length - 1]);
+        const div = document.createElement("div");
+        div.innerHTML = m.message || "";
+        return div.textContent;
+      }
+    } catch (e) { /* fall through */ }
+    return body.message || "";
+  }
+
+  let toastTimer;
+  function toast(text) {
+    const el = document.getElementById("toast");
+    el.textContent = text;
+    el.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove("show"), 2600);
+  }
+
+  // ---------------------------------------------------------- states --
+  if (!DATA.enabled) {
+    app.innerHTML = `<div class="card auth"><h1>{{ _("Content Calendar") }}</h1><p class="muted">{{ _("The content portal is not available right now. Contact your account team.") }}</p></div>`;
+    return;
+  }
+  if (!DATA.signed_in) {
+    renderSignIn();
+    return;
+  }
+  renderPortal();
+
+  // --------------------------------------------------------- sign in --
+  function renderSignIn() {
+    const params = new URLSearchParams(location.search);
+    let email = (params.get("email") || "").trim();
+
+    function emailStep(message) {
+      app.innerHTML = `
+        <form class="card auth" id="f-email" novalidate>
+          <h1>{{ _("Your content calendar") }}</h1>
+          <p class="muted">{{ _("Enter the email your account team has on file. We'll send you a one-time code.") }}</p>
+          <label for="in-email">{{ _("Email") }}</label>
+          <input class="input" id="in-email" type="email" autocomplete="email" required value="${esc(email)}">
+          <p class="msg err" id="m-email" role="alert">${esc(message || "")}</p>
+          <button class="btn primary" type="submit">{{ _("Email me a code") }}</button>
+        </form>`;
+      const form = document.getElementById("f-email");
+      const input = document.getElementById("in-email");
+      input.focus();
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        email = input.value.trim();
+        const msg = document.getElementById("m-email");
+        if (!email) { msg.textContent = {{ _('Enter your email.')|tojson }}; return; }
+        const btn = form.querySelector("button");
+        btn.disabled = true;
+        try {
+          const r = await call("request_code", { email });
+          if (r.success) codeStep(r.message);
+          else msg.textContent = r.message;
+        } catch (err) {
+          msg.textContent = err.message;
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    }
+
+    function codeStep(message) {
+      app.innerHTML = `
+        <form class="card auth" id="f-code" novalidate>
+          <h1>{{ _("Enter your code") }}</h1>
+          <p class="muted">${esc(message)}</p>
+          <label for="in-code">{{ _("6-digit code") }}</label>
+          <input class="input code-input mono" id="in-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" required>
+          <p class="msg" id="m-code" role="alert"></p>
+          <button class="btn primary" type="submit">{{ _("Open my calendar") }}</button>
+          <div class="link-row">
+            <button type="button" class="link-btn" id="b-back">{{ _("Use a different email") }}</button>
+            <button type="button" class="link-btn" id="b-resend">{{ _("Send a new code") }}</button>
+          </div>
+        </form>`;
+      const form = document.getElementById("f-code");
+      const input = document.getElementById("in-code");
+      const msg = document.getElementById("m-code");
+      input.focus();
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const code = input.value.trim();
+        if (!/^\d{6}$/.test(code)) { msg.className = "msg err"; msg.textContent = {{ _('Enter the 6 digits from the email.')|tojson }}; return; }
+        const btn = form.querySelector("button[type=submit]");
+        btn.disabled = true;
+        try {
+          const r = await call("verify_code", { email, code });
+          if (r.success) {
+            // drop email/code_sent from the URL so a refresh doesn't land on the code step
+            location.replace(location.pathname);
+            return;
+          }
+          msg.className = "msg err";
+          msg.textContent = r.message;
+        } catch (err) {
+          msg.className = "msg err";
+          msg.textContent = err.message;
+        }
+        btn.disabled = false;
+      });
+      document.getElementById("b-back").addEventListener("click", () => emailStep());
+      document.getElementById("b-resend").addEventListener("click", async (e) => {
+        e.target.disabled = true;
+        try {
+          const r = await call("request_code", { email });
+          msg.className = r.success ? "msg ok" : "msg err";
+          msg.textContent = r.success ? {{ _('A new code is on its way.')|tojson }} : r.message;
+        } catch (err) {
+          msg.className = "msg err";
+          msg.textContent = err.message;
+        }
+        e.target.disabled = false;
+      });
+    }
+
+    // links in the code email already carry a fresh code, so skip asking for another
+    if (email && params.get("code_sent") === "1") {
+      codeStep({{ _("Enter the code we emailed to {0}")|tojson }}.replace("{0}", email));
+    } else {
+      emailStep();
+    }
+  }
+
+  // ---------------------------------------------------------- portal --
+  function renderPortal() {
+    const STATUS = {
+      "Client Review": { label: {{ _('Awaiting your review')|tojson }}, tone: "warning", icon: "clock" },
+      "Changes Requested": { label: {{ _('Changes requested')|tojson }}, tone: "danger", icon: "pencil" },
+      "Approved": { label: {{ _('Approved')|tojson }}, tone: "info", icon: "check" },
+      "Scheduled": { label: {{ _('Scheduled')|tojson }}, tone: "info", icon: "calendar" },
+      "Published": { label: {{ _('Published')|tojson }}, tone: "success", icon: "send" },
+    };
+    const FILTERS = [
+      { key: "all", label: {{ _('All')|tojson }}, match: () => true },
+      { key: "review", label: {{ _('Awaiting review')|tojson }}, match: (p) => p.status === "Client Review" },
+      { key: "changes", label: {{ _('Changes requested')|tojson }}, match: (p) => p.status === "Changes Requested" },
+      { key: "approved", label: {{ _('Approved')|tojson }}, match: (p) => p.status === "Approved" || p.status === "Scheduled" },
+      { key: "published", label: {{ _('Published')|tojson }}, match: (p) => p.status === "Published" },
+    ];
+    const posts = DATA.posts;
+    const selected = new Set();
+    const monthKey = (p) => (p.publish_on || "").slice(0, 7);
+    const months = [...new Set(posts.map(monthKey).filter(Boolean))].sort();
+    const thisMonth = new Date().toISOString().slice(0, 7);
+    let month = months.includes(thisMonth) ? thisMonth : (months.find((m) => m > thisMonth) || months[months.length - 1] || "all");
+    let filter = "all";
+    let activePost = null;
+
+    const monthLabel = (key) => key === "all"
+      ? {{ _('All months')|tojson }}
+      : new Date(key + "-01T00:00:00").toLocaleDateString(undefined, { month: "long", year: "numeric" });
+    const dayLabel = (dt) => new Date(dt.replace(" ", "T")).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+    const timeLabel = (dt) => new Date(dt.replace(" ", "T")).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+    const initials = (name) => (name || "?").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join("");
+    const imageUrl = (post, file) => API + "get_image?post=" + encodeURIComponent(post) + "&file=" + encodeURIComponent(file);
+
+    function inMonth() {
+      return posts.filter((p) => month === "all" || monthKey(p) === month);
+    }
+
+    function render() {
+      const scoped = inMonth();
+      const visible = scoped.filter(FILTERS.find((f) => f.key === filter).match);
+      const awaitingAll = posts.filter((p) => p.status === "Client Review").length;
+      const awaitingVisible = visible.filter((p) => p.status === "Client Review");
+      for (const name of [...selected]) {
+        if (!awaitingVisible.some((p) => p.name === name)) selected.delete(name);
+      }
+      const now = new Date().toISOString().slice(0, 16).replace("T", " ");
+      const next = posts.find((p) => p.publish_on && p.publish_on.slice(0, 16) >= now && p.status !== "Published");
+      const count = (fn) => scoped.filter(fn).length;
+
+      app.innerHTML = `
+        <header class="hd">
+          <div class="avatar" aria-hidden="true">${esc(initials(DATA.customer))}</div>
+          <div class="grow">
+            <h1>${esc(DATA.customer)}</h1>
+            <div class="meta">{{ _("Content calendar") }} · <span class="mono">${esc(DATA.email)}</span></div>
+          </div>
+          ${DATA.customers.length > 1 ? `
+            <label class="sr-only" for="sel-customer">{{ _("Account") }}</label>
+            <select class="select" id="sel-customer">
+              ${DATA.customers.map((c) => `<option value="${esc(c)}" ${c === DATA.customer ? "selected" : ""}>${esc(c)}</option>`).join("")}
+            </select>` : ""}
+          <button class="btn ghost" id="b-logout">${icon("logout")} {{ _("Sign out") }}</button>
+        </header>
+
+        ${awaitingAll ? `
+          <div class="banner" role="status">
+            ${icon("clock")}
+            <div class="grow"><b class="num">${awaitingAll}</b> ${awaitingAll === 1 ? {{ _('post is waiting for your review')|tojson }} : {{ _('posts are waiting for your review')|tojson }}}</div>
+            ${filter !== "review" || month !== "all" ? `<button class="btn sm" id="b-show-review">{{ _("Review now") }}</button>` : ""}
+          </div>` : ""}
+
+        <section class="tiles" aria-label={{ _('Summary')|tojson }}>
+          <div class="card tile"><p class="k">{{ _("Planned") }}</p><p class="v num">${scoped.length}</p><p class="s">${esc(monthLabel(month))}</p></div>
+          <div class="card tile"><p class="k">{{ _("Approved") }}</p><p class="v num">${count((p) => ["Approved", "Scheduled"].includes(p.status))}</p><p class="s">{{ _("ready to go out") }}</p></div>
+          <div class="card tile"><p class="k">{{ _("Published") }}</p><p class="v num">${count((p) => p.status === "Published")}</p><p class="s">{{ _("already live") }}</p></div>
+          <div class="card tile"><p class="k">{{ _("Next post") }}</p><p class="v" style="font-size:15px;padding-top:4px;">${next ? esc(dayLabel(next.publish_on)) : "—"}</p><p class="s">${next ? esc(next.title) : {{ _('Nothing scheduled')|tojson }}}</p></div>
+        </section>
+
+        <div class="toolbar">
+          <div class="row">
+            <button class="btn sm ghost" id="b-prev" aria-label={{ _('Previous month')|tojson }} ${month === "all" || months.indexOf(month) <= 0 ? "disabled" : ""}>${icon("left")}</button>
+            <label class="sr-only" for="sel-month">{{ _("Month") }}</label>
+            <select class="select" id="sel-month">
+              <option value="all" ${month === "all" ? "selected" : ""}>{{ _("All months") }}</option>
+              ${months.map((m) => `<option value="${m}" ${m === month ? "selected" : ""}>${esc(monthLabel(m))}</option>`).join("")}
+            </select>
+            <button class="btn sm ghost" id="b-next" aria-label={{ _('Next month')|tojson }} ${month === "all" || months.indexOf(month) >= months.length - 1 ? "disabled" : ""}>${icon("right")}</button>
+          </div>
+          <div class="chips" role="group" aria-label={{ _('Filter posts')|tojson }}>
+            ${FILTERS.map((f) => {
+              const n = scoped.filter(f.match).length;
+              return (f.key === "all" || n) ? `<button class="chip" data-filter="${f.key}" aria-pressed="${filter === f.key}">${esc(f.label)} <span class="num">${n}</span></button>` : "";
+            }).join("")}
+          </div>
+        </div>
+
+        ${awaitingVisible.length > 1 ? `
+          <div class="card bulk">
+            <label class="check"><input type="checkbox" id="c-all"> {{ _("Select all awaiting review") }}</label>
+            <span class="muted num grow" id="bulk-count"></span>
+            <button class="btn sm primary" id="b-bulk" disabled>${icon("check")} {{ _("Approve selected") }}</button>
+          </div>` : ""}
+
+        <section id="list">${visible.length ? renderList(visible) : `
+          <div class="card empty"><p class="muted">${posts.length ? {{ _('No posts match this view.')|tojson }} : {{ _('Your team has not shared any posts yet.')|tojson }}}</p></div>`}
+        </section>`;
+      bind();
+      updateBulk();
+    }
+
+    function renderList(items) {
+      let html = "";
+      let lastDay = null;
+      for (const p of items) {
+        const day = p.publish_on ? p.publish_on.slice(0, 10) : "";
+        if (day !== lastDay) {
+          html += `<h2 class="day">${day ? esc(dayLabel(p.publish_on)) : {{ _('No date yet')|tojson }}}</h2>`;
+          lastDay = day;
+        }
+        html += renderPost(p);
+      }
+      return html;
+    }
+
+    function renderPost(p) {
+      const s = STATUS[p.status] || { label: p.status, tone: "info", icon: "clock" };
+      const awaiting = p.status === "Client Review";
+      const images = (p.images || []).map((f, i) => `
+        <a href="${imageUrl(p.name, f)}" target="_blank" rel="noopener">
+          <img src="${imageUrl(p.name, f)}" loading="lazy" alt="${esc(p.title)} {{ _('image') }} ${i + 1}">
+        </a>`).join("");
+      return `
+        <article class="card post" aria-labelledby="t-${esc(p.name)}">
+          <div class="post-hd">
+            <div class="grow">
+              <h3 class="post-title" id="t-${esc(p.name)}">${esc(p.title)}</h3>
+              <p class="meta">${esc(p.channel)} · ${esc(p.format || "")}${p.publish_on ? ` · <span class="num">${esc(timeLabel(p.publish_on))}</span>` : ""}</p>
+            </div>
+            <span class="pill ${s.tone}">${icon(s.icon)} ${esc(s.label)}</span>
+          </div>
+          <div class="caption">${p.caption || ""}</div>
+          ${p.hashtags ? `<p class="tags">${esc(p.hashtags)}</p>` : ""}
+          ${images ? `<div class="images">${images}</div>` : ""}
+          ${p.status === "Changes Requested" && p.client_feedback ? `<div class="note"><b>{{ _("You asked for:") }}</b> ${esc(p.client_feedback)}</div>` : ""}
+          ${p.status === "Published" && /^https?:\/\//i.test(p.published_url || "") ? `<p class="meta" style="margin-top:10px;"><a href="${esc(p.published_url)}" target="_blank" rel="noopener">${icon("link")} {{ _("View the live post") }}</a></p>` : ""}
+          <div class="actions">
+            ${awaiting ? `
+              <label class="check"><input type="checkbox" data-select="${esc(p.name)}" ${selected.has(p.name) ? "checked" : ""}> {{ _("Select") }}</label>
+              <button class="btn sm primary" data-approve="${esc(p.name)}">${icon("check")} {{ _("Approve") }}</button>
+              <button class="btn sm" data-changes="${esc(p.name)}">${icon("pencil")} {{ _("Request changes") }}</button>` : ""}
+            <button class="btn sm ghost" data-comment="${esc(p.name)}">${icon("message")} {{ _("Comment") }}</button>
+          </div>
+        </article>`;
+    }
+
+    // selection changes only touch the bulk bar, so keyboard focus stays where it was
+    function updateBulk() {
+      const boxes = app.querySelectorAll("[data-select]");
+      const all = document.getElementById("c-all");
+      if (!all) return;
+      all.checked = boxes.length > 0 && selected.size === boxes.length;
+      all.indeterminate = selected.size > 0 && selected.size < boxes.length;
+      document.getElementById("bulk-count").textContent = selected.size ? selected.size + " " + {{ _('selected')|tojson }} : "";
+      document.getElementById("b-bulk").disabled = !selected.size;
+    }
+
+    function byName(name) {
+      return posts.find((p) => p.name === name);
+    }
+
+    function bind() {
+      const on = (id, ev, fn) => { const el = document.getElementById(id); if (el) el.addEventListener(ev, fn); };
+      on("b-logout", "click", async () => {
+        try { await call("logout"); } finally { location.replace(location.pathname); }
+      });
+      on("sel-customer", "change", (e) => { location.href = "?customer=" + encodeURIComponent(e.target.value); });
+      on("sel-month", "change", (e) => { month = e.target.value; render(); });
+      on("b-prev", "click", () => { month = months[months.indexOf(month) - 1]; render(); });
+      on("b-next", "click", () => { month = months[months.indexOf(month) + 1]; render(); });
+      on("b-show-review", "click", () => { filter = "review"; month = "all"; render(); });
+      on("c-all", "change", (e) => {
+        selected.clear();
+        app.querySelectorAll("[data-select]").forEach((c) => {
+          c.checked = e.target.checked;
+          if (c.checked) selected.add(c.dataset.select);
+        });
+        updateBulk();
+      });
+      on("b-bulk", "click", async (e) => {
+        e.currentTarget.disabled = true;
+        try {
+          const r = await call("approve_many", { posts: [...selected] });
+          r.approved.forEach((name) => { byName(name).status = "Approved"; });
+          selected.clear();
+          toast(r.approved.length === 1 ? {{ _('1 post approved')|tojson }} : r.approved.length + " {{ _('posts approved') }}");
+        } catch (err) {
+          toast(err.message);
+        }
+        render();
+      });
+      app.querySelectorAll("[data-filter]").forEach((b) => b.addEventListener("click", () => { filter = b.dataset.filter; render(); }));
+      app.querySelectorAll("[data-select]").forEach((c) => c.addEventListener("change", () => {
+        c.checked ? selected.add(c.dataset.select) : selected.delete(c.dataset.select);
+        updateBulk();
+      }));
+      app.querySelectorAll("[data-approve]").forEach((b) => b.addEventListener("click", async () => {
+        b.disabled = true;
+        try {
+          const r = await call("approve", { post: b.dataset.approve });
+          byName(b.dataset.approve).status = r.status;
+          selected.delete(b.dataset.approve);
+          toast({{ _('Approved. Thank you!')|tojson }});
+          render();
+        } catch (err) {
+          toast(err.message);
+          b.disabled = false;
+        }
+      }));
+      app.querySelectorAll("[data-changes]").forEach((b) => b.addEventListener("click", () => openDialog("dlg-changes", b.dataset.changes)));
+      app.querySelectorAll("[data-comment]").forEach((b) => b.addEventListener("click", () => openDialog("dlg-comment", b.dataset.comment)));
+    }
+
+    // ---------------------------------------------------------- dialogs --
+    function openDialog(id, name) {
+      activePost = name;
+      const dlg = document.getElementById(id);
+      dlg.querySelector("textarea").value = "";
+      dlg.querySelector(".msg").textContent = "";
+      if (id === "dlg-changes") document.getElementById("dlg-changes-sub").textContent = byName(name).title;
+      dlg.showModal();
+      dlg.querySelector("textarea").focus();
+    }
+    document.querySelectorAll("dialog [data-close]").forEach((b) => b.addEventListener("click", () => b.closest("dialog").close()));
+
+    document.getElementById("form-changes").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const notes = document.getElementById("changes-notes").value.trim();
+      const msg = document.getElementById("changes-msg");
+      if (!notes) { msg.textContent = {{ _('Tell us what should change.')|tojson }}; return; }
+      const btn = document.getElementById("changes-submit");
+      btn.disabled = true;
+      try {
+        const r = await call("request_changes", { post: activePost, notes });
+        const p = byName(activePost);
+        p.status = r.status;
+        p.client_feedback = notes;
+        selected.delete(activePost);
+        document.getElementById("dlg-changes").close();
+        toast({{ _('Sent. The team will revise it.')|tojson }});
+        render();
+      } catch (err) {
+        msg.textContent = err.message;
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    document.getElementById("form-comment").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const text = document.getElementById("comment-text").value.trim();
+      const msg = document.getElementById("comment-msg");
+      if (!text) { msg.textContent = {{ _('Write a comment first.')|tojson }}; return; }
+      const btn = document.getElementById("comment-submit");
+      btn.disabled = true;
+      try {
+        await call("add_comment", { post: activePost, text });
+        document.getElementById("dlg-comment").close();
+        toast({{ _('Comment sent')|tojson }});
+      } catch (err) {
+        msg.textContent = err.message;
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    render();
+  }
+})();
+</script>
+{% endblock %}

@@ -692,3 +692,15 @@ def make_assignment(doctype: str, name: str, user: str):
         {"doctype": doctype, "name": str(name), "assign_to": [user]},
         ignore_permissions=True,
     )
+
+
+def set_content_settings(**values):
+    """Overwrite HD Content Settings fields for a test (callers roll back afterwards)."""
+    frappe.db.set_single_value("HD Content Settings", values)
+
+
+def make_portal_contact(customer: str, email: str):
+    """Adds a user-less Contact with `email` to `customer`, so that email can sign in to the content portal."""
+    contact = create_contact(email.split("@")[0], email, user=False)["contact"]
+    add_contact_in_customer(frappe.get_doc("HD Customer", customer), contact)
+    return contact

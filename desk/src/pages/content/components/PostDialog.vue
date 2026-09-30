@@ -52,7 +52,7 @@
           <Link
             v-model="form.customer"
             doctype="HD Customer"
-            :label="__('Customer')"
+            :label="__('Customer') + ' *'"
             :placeholder="__('Select customer')"
           />
           <Link
@@ -99,6 +99,12 @@
             doctype="User"
             :label="__('Designer')"
             :placeholder="__('Assign designer')"
+          />
+          <Link
+            v-model="form.marketer"
+            doctype="User"
+            :label="__('Digital marketer')"
+            :placeholder="__('Assign marketer')"
           />
         </div>
         <div class="flex flex-col gap-1.5">
@@ -160,6 +166,14 @@
           v-model="form.hashtags"
           :label="__('Hashtags')"
           :placeholder="__('#diwali #offers')"
+        />
+        <FormControl
+          v-model="form.brief"
+          type="textarea"
+          :rows="2"
+          :label="__('Brief for the creative team')"
+          :placeholder="__('What should the design or video look like?')"
+          :description="__('Internal only. The client never sees this.')"
         />
         <div class="flex flex-col gap-1.5">
           <div class="flex items-center justify-between">
@@ -276,7 +290,13 @@ import LucideClock from "~icons/lucide/clock";
 import LucideLoaderCircle from "~icons/lucide/loader-circle";
 import LucideMessageSquareWarning from "~icons/lucide/message-square-warning";
 import LucideSparkles from "~icons/lucide/sparkles";
-import { CHANNELS, FORMATS, STATUSES } from "../constants";
+import {
+  CHANNELS,
+  FORMATS,
+  STATUSES,
+  htmlToText,
+  textToHtml,
+} from "../constants";
 
 interface PostRef {
   name?: string;
@@ -298,8 +318,10 @@ const EMPTY = {
   publish_on: "",
   writer: "",
   designer: "",
+  marketer: "",
   caption: "",
   hashtags: "",
+  brief: "",
   published_url: "",
 };
 
@@ -348,26 +370,6 @@ watch(open, async (isOpen) => {
     loading.value = false;
   }
 });
-
-function htmlToText(html?: string) {
-  if (!html) return "";
-  const el = document.createElement("div");
-  el.innerHTML = html;
-  return el.innerText.trim();
-}
-
-function textToHtml(text: string) {
-  if (!text.trim()) return "";
-  const escape = (s: string) => {
-    const el = document.createElement("div");
-    el.textContent = s;
-    return el.innerHTML;
-  };
-  return text
-    .split(/\n{2,}/)
-    .map((para) => `<p>${escape(para).replace(/\n/g, "<br>")}</p>`)
-    .join("");
-}
 
 // --- images ---
 
@@ -489,6 +491,11 @@ const approvalNote = computed(() => {
 
 async function save() {
   error.value = "";
+  // The server fills customer from the campaign, so only one of them is needed
+  if (!form.customer && !form.campaign) {
+    error.value = __("Select a customer for this post");
+    return;
+  }
   saving.value = true;
   const values = {
     ...form,

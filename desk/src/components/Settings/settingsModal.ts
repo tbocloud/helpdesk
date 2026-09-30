@@ -33,6 +33,8 @@ import SettingsGear from "~icons/lucide/settings";
 import SavedReplyIcon from "../icons/SavedReplyIcon.vue";
 import ProfilePage from "./Profile/ProfilePage.vue";
 import Preferences from "./Preferences/Preferences.vue";
+import ContentSettings from "./Content/ContentSettings.vue";
+import LucideCalendarDays from "~icons/lucide/calendar-days";
 
 export const showSettingsModal = ref(false);
 
@@ -133,6 +135,13 @@ export const tabs = computed(() => {
           icon: markRaw(SavedReplyIcon),
           component: markRaw(SavedReplies),
         },
+        {
+          label: __("Content"),
+          icon: markRaw(LucideCalendarDays),
+          component: markRaw(ContentSettings),
+          condition: () =>
+            auth.isAdmin || auth.isManager || auth.isProjectManager,
+        },
       ],
     },
     {
@@ -186,7 +195,8 @@ type TabName =
   | "Field Dependencies"
   | "Telephony"
   | "ERPNext"
-  | "Saved Replies";
+  | "Saved Replies"
+  | "Content";
 
 export const setActiveSettingsTab = (tabName: TabName) => {
   activeTab.value =

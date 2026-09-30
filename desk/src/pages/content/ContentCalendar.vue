@@ -9,6 +9,15 @@
       <template #right-header>
         <Button
           variant="ghost"
+          :label="__('Send portal email')"
+          @click="shareOpen = true"
+        >
+          <template #prefix
+            ><LucideMail class="size-4" aria-hidden="true"
+          /></template>
+        </Button>
+        <Button
+          variant="ghost"
           :label="__('Delivery report')"
           :route="{ name: 'ContentReport' }"
         >
@@ -16,7 +25,7 @@
             ><LucideChartColumn class="size-4" aria-hidden="true"
           /></template>
         </Button>
-        <Button variant="solid" :label="__('New post')" @click="openNew()">
+        <Button variant="solid" :label="__('Add entry')" @click="openAdd()">
           <template #prefix
             ><LucidePlus class="size-4" aria-hidden="true"
           /></template>
@@ -33,20 +42,22 @@
         class="w-full sm:w-56"
         :placeholder="__('All customers')"
       />
-      <FormControl
-        v-model="filters.channel"
-        type="select"
-        class="w-40"
-        :options="[{ label: __('All channels'), value: '' }, ...CHANNELS]"
-        :aria-label="__('Channel')"
-      />
-      <FormControl
-        v-model="filters.status"
-        type="select"
-        class="w-44"
-        :options="[{ label: __('All statuses'), value: '' }, ...STATUSES]"
-        :aria-label="__('Status')"
-      />
+      <div class="w-40">
+        <FormControl
+          v-model="filters.channel"
+          type="select"
+          :options="[{ label: __('All channels'), value: '' }, ...CHANNELS]"
+          :aria-label="__('Channel')"
+        />
+      </div>
+      <div class="w-44">
+        <FormControl
+          v-model="filters.status"
+          type="select"
+          :options="[{ label: __('All statuses'), value: '' }, ...STATUSES]"
+          :aria-label="__('Status')"
+        />
+      </div>
       <Button
         v-if="hasFilters"
         variant="ghost"
@@ -55,6 +66,7 @@
       />
       <div class="flex-1" />
       <div
+        v-if="view === 'calendar'"
         class="hidden items-center gap-3 text-xs text-ink-gray-5 lg:flex"
         aria-hidden="true"
       >
@@ -69,16 +81,87 @@
     </div>
 
     <div class="flex min-h-0 flex-1">
-      <div class="relative min-w-0 flex-1 p-3 md:p-4">
+      <div class="relative flex min-w-0 flex-1 flex-col gap-3 p-3 md:p-4">
+        <div class="flex flex-wrap items-center gap-2">
+          <div
+            class="inline-flex rounded-lg bg-surface-gray-2 p-0.5"
+            role="tablist"
+            :aria-label="__('View')"
+          >
+            <button
+              v-for="v in VIEWS"
+              :key="v.key"
+              type="button"
+              role="tab"
+              :aria-selected="view === v.key"
+              class="inline-flex h-7 items-center gap-1.5 rounded-md px-3 text-sm"
+              :class="
+                view === v.key
+                  ? 'bg-surface-base text-ink-gray-9 shadow-sm'
+                  : 'text-ink-gray-6 hover:text-ink-gray-8'
+              "
+              @click="view = v.key"
+            >
+              <component :is="v.icon" class="size-4" aria-hidden="true" />
+              {{ v.label }}
+            </button>
+          </div>
+          <div v-if="view !== 'calendar'" class="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              :aria-label="__('Previous month')"
+              @click="shiftMonth(-1)"
+            >
+              <LucideChevronLeft class="size-4" aria-hidden="true" />
+            </Button>
+            <span
+              class="min-w-[9rem] text-center text-base font-medium text-ink-gray-9"
+              >{{ dayjs(`${month}-01`).format("MMMM YYYY") }}</span
+            >
+            <Button
+              variant="ghost"
+              :aria-label="__('Next month')"
+              @click="shiftMonth(1)"
+            >
+              <LucideChevronRight class="size-4" aria-hidden="true" />
+            </Button>
+            <Button
+              v-if="month !== thisMonth"
+              variant="ghost"
+              :label="__('This month')"
+              @click="month = thisMonth"
+            />
+          </div>
+        </div>
         <div
-          v-if="posts.error"
+          v-if="(view === 'calendar' ? posts : monthPosts).error"
           class="absolute inset-x-4 top-4 z-10 flex items-center justify-between gap-3 rounded-lg bg-danger-soft px-4 py-2.5 text-sm text-danger"
           role="alert"
         >
           {{ __("Couldn't load posts.") }}
-          <Button size="sm" :label="__('Retry')" @click="posts.reload()" />
+          <Button size="sm" :label="__('Retry')" @click="refresh()" />
+        </div>
+        <div v-if="view !== 'calendar'" class="min-h-0 flex-1 overflow-y-auto">
+          <ContentBoard
+            v-if="view === 'board'"
+            :posts="monthPosts.data ?? []"
+            :month="month"
+            :loading="monthPosts.loading"
+            :filters-customer="filters.customer"
+            @open="openPost"
+            @add="openAdd"
+            @action="openAction"
+          />
+          <ContentSheet
+            v-else
+            :posts="monthPosts.data ?? []"
+            :loading="monthPosts.loading"
+            :filters-customer="filters.customer"
+            @open="openPost"
+          />
         </div>
         <Calendar
+          v-else
           :events="events"
           :config="calendarConfig"
           :on-click="({ calendarEvent }) => openPost(String(calendarEvent.id))"
@@ -108,9 +191,7 @@
             class="px-2 py-6 text-p-sm text-ink-gray-5"
           >
             {{
-              __(
-                "No undated ideas. Jot one down with New post — no date needed."
-              )
+              __("No undated ideas. Use Add entry and leave the date empty.")
             }}
           </p>
           <button
@@ -136,6 +217,20 @@
       :post="selectedPost"
       @saved="refresh"
     />
+    <AddEntryDialog
+      v-model:open="addOpen"
+      :customer="filters.customer"
+      :date="addDate"
+      @saved="refresh"
+    />
+    <EntryActionDialog
+      v-model:open="actionOpen"
+      :post="actionPost"
+      :action="actionKind"
+      :role="actionRole"
+      @done="refresh"
+    />
+    <SharePortalDialog v-model:open="shareOpen" :customer="filters.customer" />
   </div>
 </template>
 
@@ -152,20 +247,31 @@ import {
   FormControl,
   toast,
 } from "frappe-ui";
-import { computed, reactive, ref, watch } from "vue";
+import { useStorage } from "@vueuse/core";
+import { computed, markRaw, reactive, ref, watch } from "vue";
+import { useRoute } from "vue-router";
+import LucideCalendarDays from "~icons/lucide/calendar-days";
 import LucideChartColumn from "~icons/lucide/chart-column";
+import LucideChevronLeft from "~icons/lucide/chevron-left";
+import LucideChevronRight from "~icons/lucide/chevron-right";
+import LucideLayoutList from "~icons/lucide/layout-list";
 import LucidePlus from "~icons/lucide/plus";
-import { CHANNELS, STATUSES, stageColor } from "./constants";
+import LucideMail from "~icons/lucide/mail";
+import LucideSheet from "~icons/lucide/sheet";
+import {
+  CHANNELS,
+  STATUSES,
+  stageColor,
+  type ContentPost,
+  type EntryAction,
+  type TeamRole,
+} from "./constants";
+import AddEntryDialog from "./components/AddEntryDialog.vue";
+import ContentBoard from "./components/ContentBoard.vue";
+import ContentSheet from "./components/ContentSheet.vue";
+import EntryActionDialog from "./components/EntryActionDialog.vue";
 import PostDialog from "./components/PostDialog.vue";
-
-interface Post {
-  name: string;
-  title: string;
-  status: string;
-  channel: string;
-  customer: string;
-  publish_on?: string;
-}
+import SharePortalDialog from "./components/SharePortalDialog.vue";
 
 const calendarConfig = {
   defaultMode: "Month",
@@ -183,6 +289,20 @@ const legend = [
   { label: __("Published"), swatch: "bg-success" },
 ];
 
+type View = "board" | "calendar" | "sheet";
+const VIEWS: { key: View; label: string; icon: unknown }[] = [
+  { key: "board", label: __("Board"), icon: markRaw(LucideLayoutList) },
+  { key: "calendar", label: __("Calendar"), icon: markRaw(LucideCalendarDays) },
+  { key: "sheet", label: __("Sheet"), icon: markRaw(LucideSheet) },
+];
+const view = useStorage<View>("helpdesk-content-view", "board");
+
+const thisMonth = dayjs().format("YYYY-MM");
+const month = ref(thisMonth);
+function shiftMonth(by: number) {
+  month.value = dayjs(`${month.value}-01`).add(by, "month").format("YYYY-MM");
+}
+
 const filters = reactive({ customer: "", channel: "", status: "" });
 const range = ref<{ start: string; end: string } | null>(null);
 const hasFilters = computed(
@@ -193,7 +313,8 @@ function baseFilters() {
   const f: Record<string, unknown> = {};
   if (filters.customer) f.customer = filters.customer;
   if (filters.channel) f.channel = filters.channel;
-  if (filters.status) f.status = filters.status;
+  // cancelled posts stay off the calendar unless asked for
+  f.status = filters.status || ["!=", "Cancelled"];
   return f;
 }
 
@@ -213,6 +334,44 @@ const posts = createResource({
   }),
 });
 
+// Board and Sheet show cancelled posts too, behind their own filter
+const BOARD_FIELDS = [
+  ...FIELDS,
+  "format",
+  "caption",
+  "brief",
+  "writer",
+  "designer",
+  "marketer",
+  "published_on",
+  "published_url",
+  "times_postponed",
+];
+const monthPosts = createResource({
+  url: "frappe.client.get_list",
+  makeParams: () => {
+    const start = dayjs(`${month.value}-01`);
+    const f = baseFilters();
+    if (!filters.status) delete f.status;
+    return {
+      doctype: "HD Content Post",
+      fields: BOARD_FIELDS,
+      filters: {
+        ...f,
+        publish_on: [
+          "between",
+          [
+            start.format("YYYY-MM-DD 00:00:00"),
+            start.endOf("month").format("YYYY-MM-DD 23:59:59"),
+          ],
+        ],
+      },
+      order_by: "publish_on asc",
+      limit_page_length: 1000,
+    };
+  },
+});
+
 const ideas = createResource({
   url: "frappe.client.get_list",
   makeParams: () => ({
@@ -226,7 +385,7 @@ const ideas = createResource({
 });
 
 const events = computed(() =>
-  (posts.data ?? []).map((p: Post) => {
+  (posts.data ?? []).map((p: ContentPost) => {
     const start = dayjs(p.publish_on);
     return {
       id: p.name,
@@ -256,11 +415,16 @@ function onRangeChange({
 }
 
 function refresh() {
-  if (range.value) posts.reload();
+  if (view.value === "calendar") {
+    if (range.value) posts.reload();
+  } else {
+    monthPosts.reload();
+  }
   ideas.reload();
 }
 
 watch(filters, refresh);
+watch([view, month], refresh, { immediate: true });
 
 function clearFilters() {
   Object.assign(filters, { customer: "", channel: "", status: "" });
@@ -295,6 +459,7 @@ async function onReschedule(event: {
 // --- dialog ---
 
 const dialogOpen = ref(false);
+const shareOpen = ref(false);
 const selectedPost = ref<{ name?: string; publish_on?: string } | null>(null);
 
 function openPost(name: string) {
@@ -302,16 +467,31 @@ function openPost(name: string) {
   dialogOpen.value = true;
 }
 
-function openNew(publishOn?: string) {
-  selectedPost.value = publishOn ? { publish_on: publishOn } : null;
-  dialogOpen.value = true;
+// Missed-post alert emails link to /content?post=<name>
+const route = useRoute();
+if (typeof route.query.post === "string") openPost(route.query.post);
+
+const addOpen = ref(false);
+const addDate = ref("");
+
+function openAdd(date?: string) {
+  addDate.value = date || "";
+  addOpen.value = true;
 }
 
-function onCellClick({ date, time }: { date: Date | string; time: string }) {
-  openNew(
-    dayjs(`${dayjs(date).format("YYYY-MM-DD")} ${time || "10:00"}`).format(
-      "YYYY-MM-DD HH:mm"
-    )
-  );
+function onCellClick({ date }: { date: Date | string }) {
+  openAdd(dayjs(date).format("YYYY-MM-DD"));
+}
+
+const actionOpen = ref(false);
+const actionPost = ref<ContentPost | null>(null);
+const actionKind = ref<EntryAction | null>(null);
+const actionRole = ref<TeamRole | undefined>();
+
+function openAction(post: ContentPost, action: EntryAction, role?: TeamRole) {
+  actionPost.value = post;
+  actionKind.value = action;
+  actionRole.value = role;
+  actionOpen.value = true;
 }
 </script>

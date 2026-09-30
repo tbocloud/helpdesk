@@ -58,6 +58,7 @@ scheduler_events = {
     ],
     "hourly": [
         "helpdesk.work_reminders.send_ticket_reminders",
+        "helpdesk.helpdesk.doctype.hd_content_post.hd_content_post.send_missed_post_alerts",
     ],
     "hourly_long": [
         "helpdesk.helpdesk.doctype.hd_ticket.hd_ticket.update_sla_status_in_ticket"
