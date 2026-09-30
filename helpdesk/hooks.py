@@ -42,8 +42,11 @@ scheduler_events = {
         "helpdesk.search.download_corpus",
     ],
     "cron": {
-        "*/5 * * * *": [
+        # every minute: new customer tickets arrive quickly (sites also ping on raise)
+        "* * * * *": [
             "helpdesk.tasks.pull_client_tickets",
+        ],
+        "*/5 * * * *": [
             "helpdesk.tasks.push_ticket_statuses",
             "helpdesk.tasks.sync_conversations",
             "helpdesk.content_sync.sync_content_approvals",

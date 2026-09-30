@@ -674,3 +674,30 @@ def deregister_client(connection: str):
     _log_login_attempt(connection, None, "Success", "", event_type="Deregister")
 
     return {"status": "deregistered", "connection": connection}
+
+
+@frappe.whitelist(  # a customer site saying "check me now"; it carries no data and only queues our own pull - nosemgrep
+    allow_guest=True, methods=["POST"]
+)
+@rate_limit(limit=60, seconds=60)
+def ticket_raised(client_id: str) -> dict:
+    """Pull that site's new tickets right away instead of waiting for the next scheduled run.
+
+    Answers the same whether or not the connection exists, so it can't be used
+    to discover connection names.
+    """
+    from helpdesk.ticket_puller import PULLABLE_STATUSES
+
+    status = frappe.db.get_value(
+        "HDS Support Connection", client_id, "connection_status"
+    )
+    if status in PULLABLE_STATUSES:
+        frappe.enqueue(
+            "helpdesk.ticket_puller.pull_connection",
+            connection=client_id,
+            queue="short",
+            job_id=f"pull-client-tickets-{client_id}",
+            deduplicate=True,
+            enqueue_after_commit=True,
+        )
+    return {"ok": True}

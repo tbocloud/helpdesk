@@ -233,11 +233,72 @@ class TestPushBack(FrappeTestCase):
 
 
 class TestSchedulerWiring(FrappeTestCase):
-    def test_pull_and_push_are_scheduled_every_five_minutes(self):
+    def test_pull_runs_every_minute_and_push_every_five(self):
         cron = frappe.get_hooks("scheduler_events", app_name="helpdesk").get("cron", {})
-        jobs = cron.get("*/5 * * * *", [])
-        self.assertIn("helpdesk.tasks.pull_client_tickets", jobs)
-        self.assertIn("helpdesk.tasks.push_ticket_statuses", jobs)
+        self.assertIn("helpdesk.tasks.pull_client_tickets", cron.get("* * * * *", []))
+        self.assertIn(
+            "helpdesk.tasks.push_ticket_statuses", cron.get("*/5 * * * *", [])
+        )
+
+
+class TestConnectionHealth(FrappeTestCase):
+    def setUp(self):
+        from helpdesk.test_utils import create_customer, make_support_connection
+
+        self.addCleanup(frappe.db.rollback)
+        create_customer("Harbour Foods LLC")
+        self.conn = make_support_connection(
+            "Harbour Foods LLC", connection_status="Error", last_error="503 at midnight"
+        ).name
+
+    def test_error_connection_is_retried_and_recovers(self):
+        from helpdesk import ticket_puller
+
+        with patch.object(ticket_puller, "MCPClient"), patch.object(
+            ticket_puller, "_pending_tickets", return_value=[]
+        ) as pending:
+            ticket_puller.pull_client_tickets()
+
+        self.assertTrue(pending.called)
+        row = frappe.db.get_value(
+            "HDS Support Connection",
+            self.conn,
+            ["connection_status", "last_error"],
+            as_dict=True,
+        )
+        self.assertEqual((row.connection_status, row.last_error), ("Connected", ""))
+
+    def test_failure_marks_the_connection_with_the_reason(self):
+        from helpdesk import ticket_puller
+
+        frappe.db.set_value(
+            "HDS Support Connection", self.conn, "connection_status", "Connected"
+        )
+        with patch.object(ticket_puller, "MCPClient"), patch.object(
+            ticket_puller,
+            "_pending_tickets",
+            side_effect=RuntimeError("503 Service Unavailable"),
+        ), patch.object(frappe, "log_error"):
+            ticket_puller.pull_connection(self.conn)
+
+        row = frappe.db.get_value(
+            "HDS Support Connection",
+            self.conn,
+            ["connection_status", "last_error"],
+            as_dict=True,
+        )
+        self.assertEqual(row.connection_status, "Error")
+        self.assertIn("503", row.last_error)
+
+    def test_ping_queues_a_pull_for_known_sites_only(self):
+        from helpdesk.api import support_hub
+
+        with patch.object(frappe, "enqueue") as enqueue:
+            self.assertEqual(support_hub.ticket_raised(self.conn), {"ok": True})
+            self.assertEqual(support_hub.ticket_raised("NO-SUCH-CONN"), {"ok": True})
+
+        self.assertEqual(enqueue.call_count, 1)
+        self.assertEqual(enqueue.call_args.kwargs["connection"], self.conn)
 
 
 class TestInstallFixes(FrappeTestCase):

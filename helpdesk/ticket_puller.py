@@ -249,66 +249,99 @@ def _push_back(mcp: MCPClient, client_ticket: str, values: dict) -> None:
     )
 
 
+# "Error" is retried every run so a brief outage on the customer site (e.g. during
+# its own update) doesn't stop tickets for the rest of the day
+PULLABLE_STATUSES = ("Connected", "Error")
+
+
 def pull_client_tickets() -> int:
     """Scheduled: turn Pending client tickets into HD Tickets."""
     connections = frappe.get_all(
         "HDS Support Connection",
-        filters={"connection_status": "Connected"},
+        filters={"connection_status": ("in", PULLABLE_STATUSES)},
         fields=["name", "customer_name"],
     )
+    return sum(pull_connection(conn.name, conn.customer_name) for conn in connections)
+
+
+def pull_connection(connection: str, customer_name: str | None = None) -> int:
+    """Import one customer site's Pending tickets; also used right after the site pings us."""
+    if customer_name is None:
+        customer_name = frappe.db.get_value(
+            "HDS Support Connection", connection, "customer_name"
+        )
+    try:
+        mcp = MCPClient(connection)
+        tickets = _pending_tickets(mcp)
+    except Exception as e:
+        frappe.log_error(
+            title=f"Ticket pull failed for {connection}",
+            message=frappe.get_traceback(),
+        )
+        _set_connection_health(connection, error=str(e)[:500])
+        return 0
+    _set_connection_health(connection)
 
     created = 0
-    for conn in connections:
+    for ticket in tickets:
         try:
-            mcp = MCPClient(conn.name)
-            tickets = _pending_tickets(mcp)
+            if _already_imported(connection, ticket["name"]):
+                # HD Ticket exists; the previous push-back must have failed.
+                _push_back(mcp, ticket["name"], {"status": "Open"})
+                continue
+
+            hd_name = _create_hd_ticket(connection, customer_name, ticket)
+
+            # Media is nice-to-have; never let a fetch failure (403,
+            # timeout, ...) block the ticket import — that would retry
+            # the same ticket every cycle forever.
+            files = _ticket_files(mcp, ticket["name"])
+            if not files and ticket.get("screen_recording"):
+                # older clients that don't attach files to the ticket
+                files = [{"file_url": ticket["screen_recording"]}]
+            for f in files:
+                try:
+                    _attach_recording(
+                        mcp, hd_name, f.get("file_url"), f.get("file_name")
+                    )
+                except Exception:
+                    frappe.log_error(
+                        title=f"Media attach failed for {ticket.get('name')}",
+                        message=frappe.get_traceback(),
+                    )
+            frappe.db.commit()  # keep each imported ticket even if a later one fails - nosemgrep
+
+            _push_back(mcp, ticket["name"], {"ticket_id": hd_name, "status": "Open"})
+            created += 1
         except Exception:
+            frappe.db.rollback()
             frappe.log_error(
-                title=f"Ticket pull failed for {conn.name}",
+                title=f"Ticket import failed for {ticket.get('name')}",
                 message=frappe.get_traceback(),
             )
-            continue
-
-        for ticket in tickets:
-            try:
-                if _already_imported(conn.name, ticket["name"]):
-                    # HD Ticket exists; the previous push-back must have failed.
-                    _push_back(mcp, ticket["name"], {"status": "Open"})
-                    continue
-
-                hd_name = _create_hd_ticket(conn.name, conn.customer_name, ticket)
-
-                # Media is nice-to-have; never let a fetch failure (403,
-                # timeout, ...) block the ticket import — that would retry
-                # the same ticket every cycle forever.
-                files = _ticket_files(mcp, ticket["name"])
-                if not files and ticket.get("screen_recording"):
-                    # older clients that don't attach files to the ticket
-                    files = [{"file_url": ticket["screen_recording"]}]
-                for f in files:
-                    try:
-                        _attach_recording(
-                            mcp, hd_name, f.get("file_url"), f.get("file_name")
-                        )
-                    except Exception:
-                        frappe.log_error(
-                            title=f"Media attach failed for {ticket.get('name')}",
-                            message=frappe.get_traceback(),
-                        )
-                frappe.db.commit()
-
-                _push_back(
-                    mcp, ticket["name"], {"ticket_id": hd_name, "status": "Open"}
-                )
-                created += 1
-            except Exception:
-                frappe.db.rollback()
-                frappe.log_error(
-                    title=f"Ticket import failed for {ticket.get('name')}",
-                    message=frappe.get_traceback(),
-                )
 
     return created
+
+
+def _set_connection_health(connection: str, error: str | None = None):
+    status = "Error" if error else "Connected"
+    current = frappe.db.get_value(
+        "HDS Support Connection",
+        connection,
+        ["connection_status", "last_error"],
+        as_dict=True,
+    )
+    if current and (current.connection_status, current.last_error or "") == (
+        status,
+        error or "",
+    ):
+        return
+    frappe.db.set_value(
+        "HDS Support Connection",
+        connection,
+        {"connection_status": status, "last_error": error or ""},
+        update_modified=False,
+    )
 
 
 def push_ticket_statuses() -> int:

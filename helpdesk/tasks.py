@@ -138,7 +138,7 @@ def sync_model_pricing():
 
 
 def pull_client_tickets():
-    """Every 5 min: import Pending tickets from customer sites over MCP."""
+    """Every minute: import Pending tickets from customer sites over MCP."""
     from helpdesk.ticket_puller import pull_client_tickets as _pull
 
     return _pull()

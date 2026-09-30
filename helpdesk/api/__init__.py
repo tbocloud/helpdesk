@@ -21,5 +21,6 @@ from helpdesk.api.support_hub import (  # noqa: F401
     rotate_credentials,
     run_triage_now,
     start_investigation,
+    ticket_raised,
     view_connection_credentials,
 )
