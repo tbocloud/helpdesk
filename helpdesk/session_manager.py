@@ -16,6 +16,7 @@ from helpdesk.ai_engine import (
     get_models,
     log_usage,
 )
+from helpdesk.ai_suggestion import queue_suggestion
 from helpdesk.mcp_client import MCPClient
 
 # Write tool names - these require approval instead of direct execution
@@ -976,6 +977,9 @@ def post_investigation_comment(
         )
         comment.flags.skip_notifications = True
         comment.insert(ignore_permissions=True)
+        if session.status == "Completed":
+            # redraft the suggested reply now that the customer's site has been checked
+            queue_suggestion(ticket_id)
         frappe.db.commit()  # background job: agents should see the result right away - nosemgrep
     except Exception:  # noqa: BLE001 - see docstring
         frappe.log_error(

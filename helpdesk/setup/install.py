@@ -427,6 +427,48 @@ def get_custom_fields():
                 "label": "Triage Data",
                 "insert_after": "custom_triage_timestamp",
             },
+            # AI suggested reply: only ever inserted into the composer by an agent
+            {
+                "fieldname": "custom_ai_suggestion_status",
+                "fieldtype": "Select",
+                "options": "\nPending\nReady\nFailed",
+                "label": "AI Suggestion Status",
+                "insert_after": "custom_triage_data",
+                "read_only": 1,
+                "hidden": 1,
+            },
+            {
+                "fieldname": "custom_ai_suggested_reply",
+                "fieldtype": "Text Editor",
+                "label": "AI Suggested Reply",
+                "insert_after": "custom_ai_suggestion_status",
+                "read_only": 1,
+                "hidden": 1,
+            },
+            {
+                "fieldname": "custom_ai_suggestion_note",
+                "fieldtype": "Small Text",
+                "label": "AI Suggestion Note",
+                "insert_after": "custom_ai_suggested_reply",
+                "read_only": 1,
+                "hidden": 1,
+            },
+            {
+                "fieldname": "custom_ai_suggestion_at",
+                "fieldtype": "Datetime",
+                "label": "AI Suggestion Time",
+                "insert_after": "custom_ai_suggestion_note",
+                "read_only": 1,
+                "hidden": 1,
+            },
+            {
+                "fieldname": "custom_ai_suggestion_sources",
+                "fieldtype": "JSON",
+                "label": "AI Suggestion Sources",
+                "insert_after": "custom_ai_suggestion_at",
+                "read_only": 1,
+                "hidden": 1,
+            },
         ],
         "Project User": [
             {

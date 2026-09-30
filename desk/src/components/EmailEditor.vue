@@ -294,6 +294,7 @@ import {
   ref,
   watch,
 } from "vue";
+import { pendingReplyInsert } from "@/pages/ticket/modalStates";
 import { __ } from "@/translation";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideLoaderCircle from "~icons/lucide/loader-circle";
@@ -480,9 +481,7 @@ const draftReply = createResource({
       : "",
   }),
   onSuccess: (data: { reply: string }) => {
-    aiUndoContent.value = contentBeforeDraft;
-    newEmail.value = data.reply + (emailSignature.value ?? "");
-    focusEditorAtStart();
+    applyAiDraft(data.reply, contentBeforeDraft);
   },
   onError: (error: { messages?: string[] }) => {
     aiError.value =
@@ -497,6 +496,25 @@ function draftWithAi() {
   // onError already surfaces the message inline
   draftReply.submit().catch(() => {});
 }
+
+// Shared by "Draft with AI" and the side panel's AI suggested reply, so both
+// get the same "review before sending" notice and Undo
+function applyAiDraft(reply: string, previousContent: string | null) {
+  aiError.value = "";
+  aiUndoContent.value = previousContent;
+  newEmail.value = reply + (emailSignature.value ?? "");
+  focusEditorAtStart();
+}
+
+watch(
+  pendingReplyInsert,
+  (insert) => {
+    if (!insert || insert.ticketId !== String(props.ticketId)) return;
+    pendingReplyInsert.value = null;
+    applyAiDraft(insert.html, newEmail.value);
+  },
+  { immediate: true }
+);
 
 function undoAiDraft() {
   if (aiUndoContent.value === undefined) return;

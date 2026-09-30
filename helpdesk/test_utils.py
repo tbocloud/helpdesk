@@ -1068,3 +1068,15 @@ def make_portal_contact(customer: str, email: str):
     contact = create_contact(email.split("@")[0], email, user=False)["contact"]
     add_contact_in_customer(frappe.get_doc("HD Customer", customer), contact)
     return contact
+
+
+def make_article(title: str, content: str, status: str = "Published"):
+    """Creates an HD Article with `title` and HTML `content` (Published unless `status` says otherwise)."""
+    return frappe.get_doc(
+        {
+            "doctype": "HD Article",
+            "title": title,
+            "content": content,
+            "status": status,
+        }
+    ).insert(ignore_permissions=True)

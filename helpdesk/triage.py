@@ -15,6 +15,7 @@ from frappe import _
 from frappe.utils import now_datetime
 
 from helpdesk.ai_engine import call_haiku
+from helpdesk.ai_suggestion import queue_suggestion
 from helpdesk.session_replay import TIMELINE_HEADING as SESSION_TIMELINE_HEADING
 from helpdesk.session_replay import build_triage_context
 
@@ -322,6 +323,8 @@ def run_triage(
             _maybe_start_investigation(ticket, triage) if start_investigation else None
         )
         _post_triage_comment(ticket_id, triage, investigation)
+        # a draft reply for the agent to review; it is never sent on its own
+        queue_suggestion(ticket_id)
 
     except anthropic.APIError as e:
         # API rate limit or error - mark failed, no retry
