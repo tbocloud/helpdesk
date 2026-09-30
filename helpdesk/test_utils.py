@@ -1413,7 +1413,7 @@ class FakeChatwootAPI:
                 "method": method,
                 "url": url,
                 "body": json or {},
-                "token": (headers or {}).get("api_access_token"),
+                "token": (headers or {}).get("Api-Access-Token"),
             }
         )
         response = MagicMock()

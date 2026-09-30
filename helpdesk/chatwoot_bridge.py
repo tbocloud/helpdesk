@@ -1024,7 +1024,9 @@ class ChatwootClient:
                 method,
                 self.base + path,
                 json=body,
-                headers={"api_access_token": token, "Accept": "application/json"},
+                # dashes, not underscores: proxies such as Caddy/nginx drop
+                # underscore header names, and Chatwoot reads both spellings
+                headers={"Api-Access-Token": token, "Accept": "application/json"},
                 timeout=REQUEST_TIMEOUT,
             )
         except requests.RequestException:
