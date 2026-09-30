@@ -49,7 +49,7 @@
           <td
             class="whitespace-nowrap px-3 py-2 font-mono text-xs tabular-nums text-ink-gray-7"
           >
-            {{ dayjs(post.publish_on).format("ddd DD MMM, HH:mm") }}
+            {{ dayjs(post.publish_on).format("ddd DD MMM, h:mm A") }}
           </td>
           <td class="max-w-[18rem] px-3 py-2">
             <button

@@ -39,6 +39,8 @@
             <FormControl
               v-model="time"
               type="time"
+              format="h:mm A"
+              :interval="5"
               :label="__('Time')"
               required
             />
@@ -196,7 +198,7 @@ async function submit() {
       toast.success(
         __(
           "Moved to {0}",
-          dayjs(`${date.value} ${time.value}`).format("D MMM, HH:mm")
+          dayjs(`${date.value} ${time.value}`).format("D MMM, h:mm A")
         )
       );
     } else if (props.action === "cancel") {

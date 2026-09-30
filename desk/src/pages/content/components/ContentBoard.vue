@@ -162,7 +162,7 @@
               </p>
             </div>
             <span class="font-mono text-xs tabular-nums text-ink-gray-5">{{
-              dayjs(post.publish_on).format("HH:mm")
+              dayjs(post.publish_on).format("h:mm A")
             }}</span>
             <StatusPill :post="post" />
           </header>
@@ -460,7 +460,7 @@ const tiles = computed(() => {
     },
     {
       label: __("Next post"),
-      value: next ? dayjs(next.publish_on).format("ddd D MMM, HH:mm") : "—",
+      value: next ? dayjs(next.publish_on).format("ddd D MMM, h:mm A") : "—",
       sub: next ? `${next.title} · ${next.channel}` : __("Nothing scheduled"),
     },
   ];
@@ -493,10 +493,10 @@ function captionOf(post: ContentPost) {
 }
 
 function statusLine(post: ContentPost) {
-  const when = dayjs(post.publish_on).format("ddd D MMM, HH:mm");
+  const when = dayjs(post.publish_on).format("ddd D MMM, h:mm A");
   if (post.status === "Published") {
     return post.published_on
-      ? __("Published {0}", dayjs(post.published_on).format("D MMM, HH:mm"))
+      ? __("Published {0}", dayjs(post.published_on).format("D MMM, h:mm A"))
       : __("Published");
   }
   if (post.status === "Cancelled") return __("Cancelled");

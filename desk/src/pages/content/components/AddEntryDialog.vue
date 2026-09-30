@@ -44,6 +44,8 @@
           <FormControl
             v-model="form.time"
             type="time"
+            format="h:mm A"
+            :interval="5"
             :label="__('Posting time')"
             :disabled="!form.date"
           />
