@@ -278,7 +278,7 @@ const calendarConfig = {
   disableModes: ["Day"],
   isEditMode: true,
   enableShortcuts: false,
-  timeFormat: "24h",
+  timeFormat: "12h",
   eventIcons: {},
 };
 
@@ -447,7 +447,7 @@ async function onReschedule(event: {
       value: publishOn,
     });
     toast.success(
-      __("Rescheduled to {0}", dayjs(publishOn).format("D MMM, HH:mm"))
+      __("Rescheduled to {0}", dayjs(publishOn).format("D MMM, h:mm A"))
     );
   } catch (e: any) {
     toast.error(e?.messages?.[0] || __("Couldn't reschedule this post"));
