@@ -589,6 +589,145 @@ def update_task_plan(
 
 
 @frappe.whitelist()
+def update_task(
+    task: str,
+    task_name: str | None = None,
+    description: str | None = None,
+    priority: str | None = None,
+    category: str | None = None,
+    phase: str | None = None,
+    estimated_hours: float | str | None = None,
+    assigned_to: str | None = None,
+) -> dict:
+    """Edit a task's details. Leads and managers change anything; its assignee only the description.
+
+    Only the fields passed change. Dates, key, milestone and dependency go through
+    update_task_plan, which asks why a due date moves later.
+    """
+    doc = frappe.get_doc("Task", str(task))
+    details = {
+        "task_name": task_name,
+        "priority": priority,
+        "category": category,
+        "phase": phase,
+        "estimated_hours": estimated_hours,
+        "assigned_to": assigned_to,
+    }
+    _check_can_edit(doc, details)
+
+    if task_name is not None:
+        doc.subject = _required_task_name(task_name)
+    if description is not None:
+        doc.description = str(description)
+    if priority is not None:
+        doc.priority = _task_option("priority", str(priority), _("Priority"))
+    if category is not None:
+        doc.custom_category = (
+            _task_option("custom_category", str(category), _("Category"))
+            if str(category)
+            else ""
+        )
+    if phase is not None:
+        doc.custom_phase = str(phase).strip()
+    if estimated_hours is not None:
+        doc.custom_estimated_hours = _estimated_hours(estimated_hours)
+    new_assignee = None if assigned_to is None else str(assigned_to).strip()
+    if new_assignee and not _is_assignable(new_assignee):
+        frappe.throw(_("{0} is not an active agent.").format(new_assignee))
+
+    previous_assignees = doc.assignees()
+    # saved before reassigning: save() writes the loaded `_assign` back, which
+    # would undo the ToDo changes below
+    doc.save()
+    if new_assignee is not None:
+        _reassign(doc, previous_assignees, new_assignee)
+    return _format_task(_task_dict(doc))
+
+
+def _check_can_edit(doc, details: dict):
+    """Leads and managers edit everything; the assignee may only rewrite the description."""
+    if can_manage_project(doc.project):
+        return
+    if frappe.session.user not in doc.assignees():
+        frappe.throw(_("You can't edit this task."), frappe.PermissionError)
+    if any(value is not None for value in details.values()):
+        frappe.throw(
+            _(
+                "Only the project's manager or lead can change this. You can edit the description."
+            ),
+            frappe.PermissionError,
+        )
+
+
+def _required_task_name(task_name: str) -> str:
+    task_name = str(task_name).strip()
+    if not task_name:
+        frappe.throw(_("Task name is required"))
+    return task_name
+
+
+def _task_option(fieldname: str, value: str, label: str) -> str:
+    """The value, if it's one of the Task select field's options."""
+    options = [
+        o
+        for o in (frappe.get_meta("Task").get_options(fieldname) or "").split("\n")
+        if o
+    ]
+    if value not in options:
+        frappe.throw(
+            _("{0} must be one of: {1}").format(label, ", ".join(options)),
+        )
+    return value
+
+
+def _estimated_hours(value: float | str) -> float:
+    try:
+        hours = float(value or 0)
+    except (TypeError, ValueError):
+        frappe.throw(_("Estimated hours must be a number."))
+    if hours < 0:
+        frappe.throw(_("Estimated hours can't be negative."))
+    return hours
+
+
+def _reassign(doc, previous: list[str], new_assignee: str):
+    """Hand the task to `new_assignee` ("" = nobody) through ToDos.
+
+    Going through assign_to keeps `_assign` in step, cancels the old assignee's
+    ToDo and sends the new one Frappe's assignment notification.
+    """
+    new = [new_assignee] if new_assignee else []
+    if set(previous) == set(new):
+        return
+    if (
+        new_assignee
+        and doc.project
+        and not _is_project_member(doc.project, new_assignee)
+    ):
+        _add_member_for_assignment(doc.project, new_assignee)
+    for user in previous:
+        if user not in new:
+            # the caller manages the project, checked in _check_can_edit
+            assign_to._remove("Task", doc.name, user, ignore_permissions=True)
+    if new_assignee and new_assignee not in previous:
+        _assign_user(doc, new_assignee)
+
+    def name(user):
+        return frappe.db.get_value("User", user, "full_name") or user
+
+    doc.add_comment(
+        "Info",
+        frappe.utils.escape_html(
+            _("Reassigned from {0} to {1} by {2}").format(
+                ", ".join(name(u) for u in previous) or _("nobody"),
+                name(new_assignee) if new_assignee else _("nobody"),
+                name(frappe.session.user),
+            )
+        ),
+    )
+
+
+@frappe.whitelist()
 def approve_task(task: str) -> dict:
     """Lead signs off a reviewed task."""
     doc = _get_managed_task(task)

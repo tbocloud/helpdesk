@@ -242,10 +242,12 @@
                     <ChecklistRow
                       :task="task"
                       :can-manage="canManage"
+                      :can-edit="canEdit(task)"
                       @toggle="onToggleTask(task)"
                       @hold="holdingTask = task"
                       @resume="resumingTask = task"
                       @plan="planningTask = task"
+                      @edit="editingTask = task"
                       @approve="approve(task)"
                       @send-back="sendingBackTask = task"
                     />
@@ -288,10 +290,12 @@
                   <ChecklistRow
                     :task="task"
                     :can-manage="canManage"
+                    :can-edit="canEdit(task)"
                     @toggle="onToggleTask(task)"
                     @hold="holdingTask = task"
                     @resume="resumingTask = task"
                     @plan="planningTask = task"
+                    @edit="editingTask = task"
                     @approve="approve(task)"
                     @send-back="sendingBackTask = task"
                   />
@@ -344,6 +348,13 @@
 
     <HoldTaskDialog v-model:task="holdingTask" @held="reloadAll" />
     <ResumeTaskDialog v-model:task="resumingTask" @resumed="reloadAll" />
+    <EditTaskDialog
+      v-model:task="editingTask"
+      :project-id="projectId"
+      :phases="phaseNames"
+      @saved="reloadAll"
+      @plan="(t) => (planningTask = t)"
+    />
     <TaskPlanDialog
       v-model:task="planningTask"
       :project-id="projectId"
@@ -363,6 +374,7 @@
 </template>
 
 <script setup lang="ts">
+import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
 import {
   Button,
@@ -384,6 +396,7 @@ import LucideListChecks from "~icons/lucide/list-checks";
 import LucidePause from "~icons/lucide/pause";
 import LucidePlus from "~icons/lucide/plus";
 import ChecklistRow from "./components/ChecklistRow.vue";
+import EditTaskDialog from "./components/EditTaskDialog.vue";
 import GenerateChecklistModal from "./components/GenerateChecklistModal.vue";
 import HoldTaskDialog from "./components/HoldTaskDialog.vue";
 import ProjectNav from "./components/ProjectNav.vue";
@@ -442,6 +455,12 @@ watch(
 );
 
 const canManage = computed(() => !!projectDetail.data?.can_manage);
+const authStore = useAuthStore();
+
+// the assignee may edit the description; leads and managers everything
+function canEdit(task: Record<string, any>) {
+  return canManage.value || !!task.assignees?.includes(authStore.userId);
+}
 const phaseList = computed<Phase[]>(() => phases.data?.phases ?? []);
 const phaseNames = computed(() => phaseList.value.map((p) => p.phase_name));
 const stats = computed(() => phases.data?.stats ?? {});
@@ -481,6 +500,7 @@ const completeResource = createResource({
 const holdingTask = ref<Record<string, any> | null>(null);
 const resumingTask = ref<Record<string, any> | null>(null);
 const planningTask = ref<Record<string, any> | null>(null);
+const editingTask = ref<Record<string, any> | null>(null);
 const sendingBackTask = ref<Record<string, any> | null>(null);
 
 const { approve } = useApproveTask(reloadAll);

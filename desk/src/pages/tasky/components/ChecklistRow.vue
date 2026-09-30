@@ -161,6 +161,7 @@ import LucideCheckCheck from "~icons/lucide/check-check";
 import LucideMoreHorizontal from "~icons/lucide/more-horizontal";
 import LucideSparkles from "~icons/lucide/sparkles";
 import LucidePause from "~icons/lucide/pause";
+import LucidePencil from "~icons/lucide/pencil";
 import LucidePlay from "~icons/lucide/play";
 import LucideStar from "~icons/lucide/star";
 import LucideUndo2 from "~icons/lucide/undo-2";
@@ -183,12 +184,15 @@ const props = defineProps<{
   task: Record<string, any>;
   /** The viewer is the project's manager or lead: show plan and review actions. */
   canManage?: boolean;
+  /** The viewer may edit the task (manager, lead, or its assignee). */
+  canEdit?: boolean;
 }>();
 const emit = defineEmits<{
   toggle: [];
   hold: [];
   resume: [];
   plan: [];
+  edit: [];
   approve: [];
   sendBack: [];
 }>();
@@ -210,6 +214,9 @@ const aiTitle = computed(() =>
 );
 
 const actions = computed(() => {
+  const edit = props.canEdit
+    ? [{ label: __("Edit"), icon: LucidePencil, onClick: () => emit("edit") }]
+    : [];
   const review =
     props.canManage && isPendingReview(props.task)
       ? [
@@ -237,11 +244,13 @@ const actions = computed(() => {
       : [];
   if (onHold.value)
     return [
+      ...edit,
       ...plan,
       { label: __("Resume"), icon: LucidePlay, onClick: () => emit("resume") },
     ];
-  if (isClosed(props.task)) return [];
+  if (isClosed(props.task)) return edit;
   return [
+    ...edit,
     ...review,
     ...plan,
     {

@@ -167,7 +167,23 @@
                     class="mt-0.5 size-4 shrink-0 text-success"
                     aria-hidden="true"
                   />
+                  <!-- a click (not a drag) on the title opens Edit -->
+                  <button
+                    v-if="canEdit(task)"
+                    type="button"
+                    class="min-w-0 flex-1 rounded text-left text-sm leading-snug underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+                    :class="
+                      col.key === 'Completed'
+                        ? 'text-ink-gray-5 line-through'
+                        : 'text-ink-gray-9'
+                    "
+                    :aria-label="__('Edit {0}', task.subject)"
+                    @click.stop="editingTask = task"
+                  >
+                    {{ task.subject }}
+                  </button>
                   <span
+                    v-else
                     class="min-w-0 flex-1 text-sm leading-snug"
                     :class="
                       col.key === 'Completed'
@@ -376,6 +392,13 @@
 
     <HoldTaskDialog v-model:task="holdingTask" @held="onHoldChanged" />
     <ResumeTaskDialog v-model:task="resumingTask" @resumed="onHoldChanged" />
+    <EditTaskDialog
+      v-model:task="editingTask"
+      :project-id="projectId"
+      :phases="phaseNames"
+      @saved="kanban.reload()"
+      @plan="(t) => (planningTask = t as Task)"
+    />
     <TaskPlanDialog
       v-model:task="planningTask"
       :project-id="projectId"
@@ -436,6 +459,7 @@
 </template>
 
 <script setup lang="ts">
+import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
 import {
   Button,
@@ -458,11 +482,13 @@ import LucideGripVertical from "~icons/lucide/grip-vertical";
 import LucideInfo from "~icons/lucide/info";
 import LucideMoreHorizontal from "~icons/lucide/more-horizontal";
 import LucidePause from "~icons/lucide/pause";
+import LucidePencil from "~icons/lucide/pencil";
 import LucidePlay from "~icons/lucide/play";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideStar from "~icons/lucide/star";
 import LucideTimer from "~icons/lucide/timer";
 import LucideUndo2 from "~icons/lucide/undo-2";
+import EditTaskDialog from "./components/EditTaskDialog.vue";
 import HoldTaskDialog from "./components/HoldTaskDialog.vue";
 import MilestoneMark from "./components/MilestoneMark.vue";
 import ProjectNav from "./components/ProjectNav.vue";
@@ -495,6 +521,7 @@ const props = defineProps<{ projectId: string }>();
 
 const nav = ref<InstanceType<typeof ProjectNav> | null>(null);
 const canManage = computed(() => !!nav.value?.canManage);
+const authStore = useAuthStore();
 
 const columnList = [
   { key: "Open" },
@@ -518,6 +545,7 @@ interface Task {
   status: string;
   priority?: string;
   assigned_to?: string;
+  assignees?: string[];
   due_date?: string;
   estimated_hours?: number;
   custom_timer_start?: string;
@@ -571,21 +599,32 @@ const completeResource = createResource({
 const holdingTask = ref<Task | null>(null);
 const resumingTask = ref<Task | null>(null);
 const planningTask = ref<Task | null>(null);
+const editingTask = ref<Task | null>(null);
 const sendingBackTask = ref<Task | null>(null);
 
 const { approve, resource: approveResource } = useApproveTask(() =>
   kanban.reload()
 );
 
+// the assignee may edit the description; leads and managers everything
+function canEdit(task: Task) {
+  return canManage.value || !!task.assignees?.includes(authStore.userId);
+}
+
 function cardActions(task: Task) {
-  if (!canManage.value || isClosed(task)) return [];
-  const actions: Record<string, any>[] = [
-    {
-      label: __("Plan"),
-      icon: LucideCalendarClock,
-      onClick: () => (planningTask.value = task),
-    },
-  ];
+  const actions: Record<string, any>[] = [];
+  if (canEdit(task))
+    actions.push({
+      label: __("Edit"),
+      icon: LucidePencil,
+      onClick: () => (editingTask.value = task),
+    });
+  if (!canManage.value || isClosed(task)) return actions;
+  actions.push({
+    label: __("Plan"),
+    icon: LucideCalendarClock,
+    onClick: () => (planningTask.value = task),
+  });
   if (isPendingReview(task)) {
     actions.push(
       {

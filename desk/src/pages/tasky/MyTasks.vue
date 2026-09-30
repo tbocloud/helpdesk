@@ -421,6 +421,11 @@
 
     <HoldTaskDialog v-model:task="holdingTask" @held="onHoldChanged" />
     <ResumeTaskDialog v-model:task="resumingTask" @resumed="onHoldChanged" />
+    <EditTaskDialog
+      v-model:task="editingTask"
+      @saved="onHoldChanged"
+      @plan="(t) => (planningTask = t as Task)"
+    />
     <TaskPlanDialog v-model:task="planningTask" @saved="onHoldChanged" />
     <SendBackTaskDialog v-model:task="sendingBackTask" @sent="onHoldChanged" />
   </div>
@@ -442,11 +447,13 @@ import LucideFlag from "~icons/lucide/flag";
 import LucideListTodo from "~icons/lucide/list-todo";
 import LucideLock from "~icons/lucide/lock";
 import LucidePause from "~icons/lucide/pause";
+import LucidePencil from "~icons/lucide/pencil";
 import LucidePlay from "~icons/lucide/play";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideSearch from "~icons/lucide/search";
 import LucideSearchX from "~icons/lucide/search-x";
 import LucideUndo2 from "~icons/lucide/undo-2";
+import EditTaskDialog from "./components/EditTaskDialog.vue";
 import HoldTaskDialog from "./components/HoldTaskDialog.vue";
 import MilestoneMark from "./components/MilestoneMark.vue";
 import ResumeTaskDialog from "./components/ResumeTaskDialog.vue";
@@ -735,6 +742,7 @@ const detailRows = computed(() => {
 const holdingTask = ref<Task | null>(null);
 const resumingTask = ref<Task | null>(null);
 const planningTask = ref<Task | null>(null);
+const editingTask = ref<Task | null>(null);
 const sendingBackTask = ref<Task | null>(null);
 
 const { approve } = useApproveTask(() => {
@@ -745,6 +753,14 @@ const { approve } = useApproveTask(() => {
 const dialogActions = computed(() => {
   const d = detail.value;
   const actions: Record<string, any>[] = [];
+  // everything here is assigned to the viewer, so they can at least edit the description
+  if (d && !taskDetail.loading) {
+    actions.push({
+      label: __("Edit"),
+      iconLeft: LucidePencil,
+      onClick: () => handOff(editingTask),
+    });
+  }
   if (d && !taskDetail.loading && canManageSelected.value) {
     if (isPendingReview(d)) {
       actions.push(

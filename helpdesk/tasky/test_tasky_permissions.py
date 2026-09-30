@@ -411,3 +411,121 @@ class TestTaskyPermissions(FrappeTestCase):
         self.edit(PM, expected_start_date="2026-10-01", expected_end_date="2026-10-31")
         doc = frappe.get_doc("Project", self.project)
         self.assertEqual(str(doc.expected_end_date), "2026-10-31")
+
+    # --- editing a task ---
+
+    def assignees(self, task):
+        return frappe.parse_json(frappe.db.get_value("Task", task, "_assign") or "[]")
+
+    def todo_statuses(self, task, user):
+        return frappe.get_all(
+            "ToDo",
+            filters={
+                "reference_type": "Task",
+                "reference_name": task,
+                "allocated_to": user,
+            },
+            pluck="status",
+        )
+
+    def test_lead_and_manager_edit_task_details(self):
+        self.as_user(
+            PM, lambda: api.set_project_lead(project=self.project, user=DEV_A[0])
+        )
+        task = self.as_user(
+            DEV_A,
+            api.update_task,
+            task=self.task_b,
+            task_name="Migrate opening stock and batches",
+            description="Include batch numbers",
+            priority="High",
+            category="Development",
+            phase="Go-live",
+            estimated_hours="6.5",
+        )
+        self.assertEqual(task["subject"], "Migrate opening stock and batches")
+        doc = frappe.get_doc("Task", self.task_b)
+        self.assertEqual(doc.description, "Include batch numbers")
+        self.assertEqual(doc.priority, "High")
+        self.assertEqual(doc.custom_category, "Development")
+        self.assertEqual(doc.custom_phase, "Go-live")
+        self.assertEqual(doc.custom_estimated_hours, 6.5)
+
+        self.as_user(PM, api.update_task, task=self.task_b, priority="Low")
+        doc.reload()
+        self.assertEqual(doc.priority, "Low")
+        # fields not passed are left alone
+        self.assertEqual(doc.custom_phase, "Go-live")
+
+    def test_task_edits_are_validated(self):
+        for kwargs in (
+            {"task_name": "   "},
+            {"priority": "Whenever"},
+            {"category": "Marketing"},
+            {"estimated_hours": -2},
+        ):
+            with self.assertRaises(frappe.ValidationError):
+                self.as_user(PM, api.update_task, task=self.task_a, **kwargs)
+        self.assertEqual(
+            frappe.db.get_value("Task", self.task_a, "subject"),
+            "Configure chart of accounts",
+        )
+
+    def test_assignee_edits_only_the_description(self):
+        self.as_user(
+            DEV_A, api.update_task, task=self.task_a, description="Use the GCC template"
+        )
+        self.assertEqual(
+            frappe.db.get_value("Task", self.task_a, "description"),
+            "Use the GCC template",
+        )
+        with self.assertRaises(frappe.PermissionError):
+            self.as_user(DEV_A, api.update_task, task=self.task_a, task_name="Mine now")
+        with self.assertRaises(frappe.PermissionError):
+            self.as_user(DEV_A, api.update_task, task=self.task_a, assigned_to="")
+        self.assertEqual(self.assignees(self.task_a), [DEV_A[0]])
+
+    def test_others_cannot_edit_a_task(self):
+        for user in (DEV_B, OUTSIDER, OTHER_PM):
+            with self.assertRaises(frappe.PermissionError):
+                self.as_user(user, api.update_task, task=self.task_a, description="x")
+
+    def test_reassign_moves_the_assignment(self):
+        self.as_user(PM, api.update_task, task=self.task_a, assigned_to=DEV_B[0])
+        self.assertEqual(self.assignees(self.task_a), [DEV_B[0]])
+        self.assertTrue(self.todo_statuses(self.task_a, DEV_A[0]))
+        self.assertNotIn("Open", self.todo_statuses(self.task_a, DEV_A[0]))
+        self.assertIn("Open", self.todo_statuses(self.task_a, DEV_B[0]))
+        self.assertTrue(
+            frappe.db.exists(
+                "Comment",
+                {
+                    "reference_doctype": "Task",
+                    "reference_name": self.task_a,
+                    "content": ("like", "%Reassigned from Arjun Menon to Sara Haddad%"),
+                },
+            )
+        )
+        self.assertNotIn(
+            self.task_a, [t["name"] for t in self.as_user(DEV_A, api.get_my_tasks)]
+        )
+
+    def test_reassigning_to_an_outside_agent_adds_them_to_the_team(self):
+        self.as_user(PM, api.update_task, task=self.task_a, assigned_to=OUTSIDER[0])
+        roles = {
+            u.user: u.custom_role for u in frappe.get_doc("Project", self.project).users
+        }
+        self.assertEqual(roles[OUTSIDER[0]], "Developer")
+        self.assertEqual(self.assignees(self.task_a), [OUTSIDER[0]])
+
+    def test_unassign_a_task(self):
+        task = self.as_user(PM, api.update_task, task=self.task_a, assigned_to="")
+        self.assertEqual(task["assignees"], [])
+        self.assertEqual(self.assignees(self.task_a), [])
+        self.assertNotIn("Open", self.todo_statuses(self.task_a, DEV_A[0]))
+
+    def test_cannot_reassign_to_a_disabled_user(self):
+        frappe.db.set_value("User", OUTSIDER[0], "enabled", 0)
+        with self.assertRaises(frappe.ValidationError):
+            self.as_user(PM, api.update_task, task=self.task_a, assigned_to=OUTSIDER[0])
+        self.assertEqual(self.assignees(self.task_a), [DEV_A[0]])
