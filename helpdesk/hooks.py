@@ -68,6 +68,7 @@ scheduler_events = {
         "helpdesk.work_reminders.send_task_reminders",
         "helpdesk.work_reminders.send_hold_reminders",
         "helpdesk.helpdesk.doctype.hd_github_delivery.hd_github_delivery.clear_old_deliveries",
+        "helpdesk.helpdesk.doctype.hd_chatwoot_event.hd_chatwoot_event.clear_old_events",
     ],
     "hourly": [
         "helpdesk.work_reminders.send_ticket_reminders",
@@ -139,6 +140,10 @@ doc_events = {
     },
     "HD Ticket": {
         "after_insert": "helpdesk.triage.auto_triage_ticket",
+        "on_update": "helpdesk.chatwoot_bridge.on_ticket_update",
+    },
+    "Communication": {
+        "after_insert": "helpdesk.chatwoot_bridge.on_communication_insert",
     },
 }
 

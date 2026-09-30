@@ -36,7 +36,9 @@ from helpdesk.utils import (
     get_doc_room,
     is_admin,
     is_agent,
+    is_chat_placeholder_email,
     publish_event,
+    strip_chat_placeholders,
 )
 
 from ..hd_notification.utils import clear as clear_notifications
@@ -123,6 +125,7 @@ class HDTicket(Document):
             or self.feedback_rating
             or not self.has_value_changed("status")
             or not self.key
+            or self.has_chat_only_contact()
         ):
             return
 
@@ -184,6 +187,7 @@ class HDTicket(Document):
             not self.via_customer_portal
             and not frappe.flags.initial_sync
             and send_ack_email
+            and not self.has_chat_only_contact()
         ):
             self.send_acknowledgement_email()
 
@@ -541,6 +545,10 @@ class HDTicket(Document):
         for comment in comments:
             frappe.db.delete("HD Ticket Comment", comment)
 
+    def has_chat_only_contact(self) -> bool:
+        """A chat contact without an email: mail to its stand-in address would only bounce."""
+        return is_chat_placeholder_email(self.raised_by)
+
     def skip_email_workflow(self):
         skip: str = frappe.get_value("HD Settings", None, "skip_email_workflow") or "0"
 
@@ -702,6 +710,12 @@ class HDTicket(Document):
             "HD Settings", "enable_reply_email_via_agent"
         ):
             return
+
+        if recipients:
+            recipients = strip_chat_placeholders(recipients)
+            if not recipients:
+                # a chat-only contact gets the reply in the chat (helpdesk.chatwoot_bridge)
+                return
 
         if not sender_email:
             frappe.throw(

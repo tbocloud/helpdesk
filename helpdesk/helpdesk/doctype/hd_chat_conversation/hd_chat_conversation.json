@@ -1,0 +1,194 @@
+{
+	"actions": [],
+	"autoname": "hash",
+	"creation": "2026-09-30 18:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"conversation_id",
+		"status",
+		"channel",
+		"inbox_id",
+		"column_break_conversation",
+		"hd_ticket",
+		"hd_customer",
+		"contact",
+		"contact_section",
+		"contact_name",
+		"contact_email",
+		"contact_phone",
+		"column_break_contact",
+		"chatwoot_contact_id",
+		"identity_verified",
+		"sync_section",
+		"ai_reply_count",
+		"column_break_sync",
+		"last_synced_message_id"
+	],
+	"fields": [
+		{
+			"fieldname": "conversation_id",
+			"fieldtype": "Int",
+			"in_list_view": 1,
+			"label": "Conversation ID",
+			"read_only": 1,
+			"reqd": 1,
+			"unique": 1
+		},
+		{
+			"default": "Pending",
+			"fieldname": "status",
+			"fieldtype": "Select",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"label": "Status",
+			"options": "Pending\nOpen\nResolved",
+			"read_only": 1,
+			"description": "Pending: the AI bot is answering. Open: a person handles it. Mirrors the conversation in TBO Chat."
+		},
+		{
+			"fieldname": "channel",
+			"fieldtype": "Data",
+			"in_standard_filter": 1,
+			"label": "Source Channel",
+			"read_only": 1
+		},
+		{
+			"fieldname": "inbox_id",
+			"fieldtype": "Int",
+			"label": "Inbox ID",
+			"read_only": 1
+		},
+		{
+			"fieldname": "column_break_conversation",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "hd_ticket",
+			"fieldtype": "Link",
+			"in_list_view": 1,
+			"label": "Ticket",
+			"options": "HD Ticket",
+			"search_index": 1
+		},
+		{
+			"fieldname": "hd_customer",
+			"fieldtype": "Link",
+			"in_standard_filter": 1,
+			"label": "Customer",
+			"options": "HD Customer"
+		},
+		{
+			"fieldname": "contact",
+			"fieldtype": "Link",
+			"label": "Contact",
+			"options": "Contact"
+		},
+		{
+			"fieldname": "contact_section",
+			"fieldtype": "Section Break",
+			"label": "Chat Contact"
+		},
+		{
+			"fieldname": "contact_name",
+			"fieldtype": "Data",
+			"in_list_view": 1,
+			"label": "Name",
+			"read_only": 1
+		},
+		{
+			"fieldname": "contact_email",
+			"fieldtype": "Data",
+			"label": "Email",
+			"options": "Email",
+			"read_only": 1
+		},
+		{
+			"fieldname": "contact_phone",
+			"fieldtype": "Data",
+			"label": "Phone",
+			"read_only": 1
+		},
+		{
+			"fieldname": "column_break_contact",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "chatwoot_contact_id",
+			"fieldtype": "Int",
+			"label": "Chatwoot Contact ID",
+			"read_only": 1
+		},
+		{
+			"default": "0",
+			"fieldname": "identity_verified",
+			"fieldtype": "Check",
+			"label": "Identity Verified",
+			"read_only": 1,
+			"description": "Website chat contacts type their own email; it counts as verified only with Chatwoot identity validation (HMAC). Other channels (e.g. WhatsApp) verify the number themselves."
+		},
+		{
+			"fieldname": "sync_section",
+			"fieldtype": "Section Break",
+			"label": "Sync"
+		},
+		{
+			"default": "0",
+			"fieldname": "ai_reply_count",
+			"fieldtype": "Int",
+			"label": "AI Replies",
+			"read_only": 1
+		},
+		{
+			"fieldname": "column_break_sync",
+			"fieldtype": "Column Break"
+		},
+		{
+			"default": "0",
+			"fieldname": "last_synced_message_id",
+			"fieldtype": "Int",
+			"label": "Last Synced Message ID",
+			"read_only": 1,
+			"description": "Customer messages up to this one are already on the ticket."
+		}
+	],
+	"in_create": 1,
+	"index_web_pages_for_search": 0,
+	"links": [],
+	"modified": "2026-09-30 18:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD Chat Conversation",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "System Manager",
+			"share": 1,
+			"write": 1
+		},
+		{
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "Agent Manager"
+		},
+		{
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "Agent"
+		}
+	],
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": [],
+	"title_field": "contact_name"
+}

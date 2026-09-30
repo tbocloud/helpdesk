@@ -1246,3 +1246,239 @@ def get_task_comments(task: str, like: str = "%") -> list[str]:
         },
         pluck="content",
     )
+
+
+CHATWOOT_TEST_SECRET = "test-chatwoot-account-secret"
+CHATWOOT_TEST_BOT_SECRET = "test-chatwoot-bot-secret"
+CHATWOOT_TEST_URL = "https://chat.example.com"
+
+
+def enable_chatwoot_bridge(**values):
+    """Turns on HD Chatwoot Settings with test tokens and both webhook secrets, plus any overrides."""
+    doc = frappe.get_doc("HD Chatwoot Settings")
+    doc.update(
+        {
+            "enabled": 1,
+            "base_url": CHATWOOT_TEST_URL,
+            "account_id": 1,
+            "api_access_token": "bridge-user-token",
+            "bot_access_token": "ai-bot-token",
+            "webhook_secret": CHATWOOT_TEST_SECRET,
+            "bot_webhook_secret": CHATWOOT_TEST_BOT_SECRET,
+            "ai_first_reply": 1,
+            "max_ai_replies": 6,
+            "handoff_team_id": 0,
+            "default_customer": None,
+            **values,
+        }
+    )
+    doc.save(ignore_permissions=True)
+    return doc
+
+
+def make_chatwoot_payload(event: str, **overrides) -> dict:
+    """A Chatwoot webhook payload shaped like the real one for `event`.
+
+    Overrides: conversation_id, message_id, content, message_type, private,
+    sender_type, attachments, status, labels, name, email, phone, contact_id,
+    channel, inbox_id, hmac_verified, updated_at, account_id.
+    """
+    import time
+
+    contact = {
+        "id": overrides.get("contact_id", 77),
+        "name": overrides.get("name", "Anita Rao"),
+        "email": overrides.get("email", ""),
+        "phone_number": overrides.get("phone", ""),
+        "type": "contact",
+    }
+    account = {"id": overrides.get("account_id", 1), "name": "TBO"}
+    conversation = {
+        "id": overrides.get("conversation_id", 4242),
+        "inbox_id": overrides.get("inbox_id", 3),
+        "status": overrides.get("status", "pending"),
+        "channel": overrides.get("channel", "Channel::WebWidget"),
+        "labels": overrides.get("labels", []),
+        "meta": {
+            "sender": contact,
+            "assignee": None,
+            "hmac_verified": overrides.get("hmac_verified", False),
+        },
+        "updated_at": overrides.get("updated_at", time.time()),
+        "timestamp": int(time.time()),
+    }
+    if event.startswith("message_"):
+        sender_type = overrides.get("sender_type", "contact")
+        sender = (
+            contact
+            if sender_type == "contact"
+            else {"id": 5, "name": "TBO AI", "type": sender_type}
+        )
+        return {
+            "event": event,
+            "id": overrides.get("message_id", 1001),
+            "content": overrides.get("content", "Hello, I need help."),
+            "message_type": overrides.get("message_type", "incoming"),
+            "content_type": "text",
+            "private": overrides.get("private", False),
+            "attachments": overrides.get("attachments", []),
+            "account": account,
+            "inbox": {"id": conversation["inbox_id"], "name": "Website"},
+            "sender": sender,
+            "conversation": conversation,
+        }
+    return {
+        "event": event,
+        "account": account,
+        "changed_attributes": [],
+        **conversation,
+    }
+
+
+def chatwoot_signature(body: bytes, timestamp: str, secret: str) -> str:
+    """The X-Chatwoot-Signature header Chatwoot sends: HMAC-SHA256 over "{timestamp}.{body}"."""
+    import hashlib
+    import hmac
+
+    signed = timestamp.encode() + b"." + body
+    return "sha256=" + hmac.new(secret.encode(), signed, hashlib.sha256).hexdigest()
+
+
+def send_chatwoot_webhook(
+    source: str,
+    payload: dict | None = None,
+    signature: str | None = "sign",
+    timestamp: str | None = None,
+    token: str | None = None,
+    body: bytes | None = None,
+):
+    """Calls helpdesk.api.chatwoot.<source>_webhook with a fake request carrying Chatwoot's headers.
+
+    `signature="sign"` signs the body with the test secret of that webhook; None
+    leaves the signature out. `token` goes in the query string.
+    """
+    import time
+
+    from werkzeug.test import EnvironBuilder
+    from werkzeug.wrappers import Request
+
+    from helpdesk.api.chatwoot import account_webhook, bot_webhook
+
+    body = body if body is not None else json.dumps(payload or {}).encode()
+    timestamp = timestamp or str(int(time.time()))
+    headers = {
+        "X-Chatwoot-Timestamp": timestamp,
+        "X-Chatwoot-Delivery": frappe.generate_hash(length=20),
+    }
+    if signature == "sign":
+        secret = CHATWOOT_TEST_BOT_SECRET if source == "bot" else CHATWOOT_TEST_SECRET
+        headers["X-Chatwoot-Signature"] = chatwoot_signature(body, timestamp, secret)
+    elif signature:
+        headers["X-Chatwoot-Signature"] = signature
+    method = f"helpdesk.api.chatwoot.{source}_webhook"
+    builder = EnvironBuilder(
+        path=f"/api/method/{method}",
+        method="POST",
+        base_url="http://localhost",
+        headers=headers,
+        data=body,
+        content_type="application/json",
+        query_string={"token": token} if token else None,
+    )
+    previous = getattr(frappe.local, "request", None)
+    frappe.local.request = Request(builder.get_environ())
+    try:
+        return bot_webhook() if source == "bot" else account_webhook()
+    finally:
+        frappe.local.request = previous
+
+
+class FakeChatwootAPI:
+    """Stands in for `requests.request` in helpdesk.chatwoot_bridge: records every call and answers like Chatwoot.
+
+    GET .../messages returns `messages`; every POST returns a new message id.
+    `fail=True` answers everything with HTTP 500.
+    """
+
+    def __init__(self, messages: list[dict] | None = None, fail: bool = False):
+        self.messages = messages or []
+        self.fail = fail
+        self.calls = []
+
+    def __call__(self, method, url, json=None, headers=None, timeout=None, **kwargs):
+        from unittest.mock import MagicMock
+
+        self.calls.append(
+            {
+                "method": method,
+                "url": url,
+                "body": json or {},
+                "token": (headers or {}).get("api_access_token"),
+            }
+        )
+        response = MagicMock()
+        if self.fail:
+            response.status_code = 500
+            response.text = "Internal Server Error"
+            return response
+        response.status_code = 200
+        if method == "GET":
+            response.json.return_value = {"payload": self.messages}
+        else:
+            response.json.return_value = {"id": 900000 + len(self.calls)}
+        return response
+
+    def calls_to(self, suffix: str, method: str = "POST") -> list[dict]:
+        return [
+            c for c in self.calls if c["method"] == method and c["url"].endswith(suffix)
+        ]
+
+    def posted(self, private: bool | None = None) -> list[str]:
+        """Contents of the messages posted, optionally only private notes (True) or public ones (False)."""
+        return [
+            c["body"].get("content")
+            for c in self.calls_to("/messages")
+            if private is None or bool(c["body"].get("private")) == private
+        ]
+
+    def statuses(self) -> list[str]:
+        """The statuses the bridge toggled conversations to, in order."""
+        return [c["body"].get("status") for c in self.calls_to("/toggle_status")]
+
+
+def make_chat_conversation(conversation_id: int, **values):
+    """Creates an HD Chat Conversation row for `conversation_id` (Open, website chat) with any overrides."""
+    return frappe.get_doc(
+        {
+            "doctype": "HD Chat Conversation",
+            "conversation_id": conversation_id,
+            "status": "Open",
+            "channel": "Channel::WebWidget",
+            "contact_name": "Anita Rao",
+            **values,
+        }
+    ).insert(ignore_permissions=True)
+
+
+def get_chat_conversation(conversation_id: int):
+    """The HD Chat Conversation row of `conversation_id`, or None."""
+    name = frappe.db.get_value(
+        "HD Chat Conversation", {"conversation_id": conversation_id}
+    )
+    return frappe.get_doc("HD Chat Conversation", name) if name else None
+
+
+def make_phone_contact(first_name: str, phone: str):
+    """Creates a Contact whose only detail is the mobile number `phone`, stored as typed."""
+    contact = frappe.get_doc({"doctype": "Contact", "first_name": first_name})
+    contact.append("phone_nos", {"phone": phone, "is_primary_mobile_no": 1})
+    return contact.insert(ignore_permissions=True)
+
+
+def ai_chat_answer(reply: str, action: str = "answer", **fields) -> dict:
+    """What call_haiku returns for a chat reply: `reply`, `action` and any ticket_subject / ticket_summary."""
+    return {
+        "response": {"reply": reply, "action": action, **fields},
+        "usage": {},
+        "cost": 0,
+    }
