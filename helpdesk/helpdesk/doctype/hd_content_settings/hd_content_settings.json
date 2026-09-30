@@ -1,0 +1,182 @@
+{
+	"actions": [],
+	"creation": "2026-09-30 10:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"missed_posts_section",
+		"enable_missed_post_alerts",
+		"grace_period_minutes",
+		"notify_post_team",
+		"column_break_alerts",
+		"alert_recipients",
+		"alert_emails",
+		"missed_post_template_section",
+		"missed_post_subject",
+		"missed_post_message",
+		"portal_section",
+		"enable_client_portal",
+		"portal_code_template_section",
+		"portal_code_subject",
+		"portal_code_message",
+		"last_run_section",
+		"last_alert_run_on",
+		"column_break_last_run",
+		"last_alerts_sent"
+	],
+	"fields": [
+		{
+			"fieldname": "missed_posts_section",
+			"fieldtype": "Section Break",
+			"label": "Missed Post Alerts",
+			"description": "Hourly email when a post's publish time has passed and it is still not Published or Cancelled"
+		},
+		{
+			"fieldname": "enable_missed_post_alerts",
+			"fieldtype": "Check",
+			"label": "Enable Missed Post Alerts",
+			"default": "1"
+		},
+		{
+			"fieldname": "grace_period_minutes",
+			"fieldtype": "Int",
+			"label": "Grace Period (Minutes)",
+			"default": "30",
+			"non_negative": 1,
+			"description": "How long after the publish time to wait before alerting"
+		},
+		{
+			"fieldname": "notify_post_team",
+			"fieldtype": "Check",
+			"label": "Notify the Post's Writer, Designer and Marketer",
+			"default": "1"
+		},
+		{
+			"fieldname": "column_break_alerts",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "alert_recipients",
+			"fieldtype": "Table MultiSelect",
+			"label": "Always Notify",
+			"options": "HD Content Alert Recipient"
+		},
+		{
+			"fieldname": "alert_emails",
+			"fieldtype": "Small Text",
+			"label": "Also Email",
+			"description": "Extra addresses, one per line or comma separated"
+		},
+		{
+			"fieldname": "missed_post_template_section",
+			"fieldtype": "Section Break",
+			"label": "Missed Post Email",
+			"collapsible": 1,
+			"description": "Placeholders: {title}, {customer}, {channel}, {due_datetime}, {hours_late}, {post_link}. Leave empty to use the default."
+		},
+		{
+			"fieldname": "missed_post_subject",
+			"fieldtype": "Data",
+			"label": "Subject"
+		},
+		{
+			"fieldname": "missed_post_message",
+			"fieldtype": "Text Editor",
+			"label": "Message"
+		},
+		{
+			"fieldname": "portal_section",
+			"fieldtype": "Section Break",
+			"label": "Client Portal",
+			"description": "Clients sign in at /content-portal with their contact email and a one-time code"
+		},
+		{
+			"fieldname": "enable_client_portal",
+			"fieldtype": "Check",
+			"label": "Enable Client Portal",
+			"default": "1"
+		},
+		{
+			"fieldname": "portal_code_template_section",
+			"fieldtype": "Section Break",
+			"label": "Sign-in Code Email",
+			"collapsible": 1,
+			"description": "Placeholders: {customer}, {otp}, {otp_expiry_minutes}, {portal_link}. Leave empty to use the default."
+		},
+		{
+			"fieldname": "portal_code_subject",
+			"fieldtype": "Data",
+			"label": "Subject"
+		},
+		{
+			"fieldname": "portal_code_message",
+			"fieldtype": "Text Editor",
+			"label": "Message"
+		},
+		{
+			"fieldname": "last_run_section",
+			"fieldtype": "Section Break",
+			"label": "Last Alert Run",
+			"collapsible": 1
+		},
+		{
+			"fieldname": "last_alert_run_on",
+			"fieldtype": "Datetime",
+			"label": "Last Run On",
+			"read_only": 1
+		},
+		{
+			"fieldname": "column_break_last_run",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "last_alerts_sent",
+			"fieldtype": "Int",
+			"label": "Alerts Sent",
+			"read_only": 1
+		}
+	],
+	"issingle": 1,
+	"links": [],
+	"modified": "2026-09-30 10:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD Content Settings",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"print": 1,
+			"read": 1,
+			"role": "System Manager",
+			"share": 1,
+			"write": 1
+		},
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"print": 1,
+			"read": 1,
+			"role": "Agent Manager",
+			"share": 1,
+			"write": 1
+		},
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"print": 1,
+			"read": 1,
+			"role": "Project Manager",
+			"share": 1,
+			"write": 1
+		}
+	],
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": [],
+	"track_changes": 1
+}

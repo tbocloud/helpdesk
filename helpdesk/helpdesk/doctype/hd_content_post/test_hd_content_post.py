@@ -5,13 +5,17 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_to_date, now_datetime
 
-from helpdesk.helpdesk.doctype.hd_content_post.hd_content_post import send_due_reminders
+from helpdesk.helpdesk.doctype.hd_content_post.hd_content_post import (
+    send_due_reminders,
+    send_missed_post_alerts,
+)
 from helpdesk.test_utils import (
     create_customer,
     make_content_campaign,
     make_content_post,
     make_project,
     make_tasky_user,
+    set_content_settings,
 )
 
 CUSTOMER = "Al Noor Trading LLC"
@@ -105,6 +109,122 @@ class TestHDContentPost(FrappeTestCase):
         self.assertIn(due.name, notified)
         self.assertNotIn(ready.name, notified)
         self.assertNotIn(later.name, notified)
+
+
+class TestMissedPostAlerts(FrappeTestCase):
+    """Hourly email about posts whose publish time passed without being published or cancelled."""
+
+    OPS = "content-ops@content-smoke.example"
+
+    def setUp(self):
+        self.addCleanup(frappe.db.rollback)
+        create_customer(CUSTOMER)
+        make_tasky_user(*WRITER)
+        set_content_settings(
+            enable_missed_post_alerts=1,
+            grace_period_minutes=30,
+            notify_post_team=1,
+            alert_emails=self.OPS,
+            missed_post_subject="",
+            missed_post_message="",
+        )
+        # only the recipients each test sets up, not whatever the site has configured
+        frappe.db.delete(
+            "HD Content Alert Recipient", {"parent": "HD Content Settings"}
+        )
+
+    def alerts_for(self, post) -> list[str]:
+        return frappe.get_all(
+            "Email Queue",
+            filters={
+                "reference_doctype": "HD Content Post",
+                "reference_name": post.name,
+            },
+            pluck="name",
+        )
+
+    def overdue_post(self, title, status="Drafting", **kwargs):
+        return make_content_post(
+            title,
+            CUSTOMER,
+            status=status,
+            publish_on=add_to_date(now_datetime(), hours=-2),
+            writer=WRITER[0],
+            **kwargs,
+        )
+
+    def test_alerts_once_per_publish_time(self):
+        post = self.overdue_post("Diwali carousel")
+
+        send_missed_post_alerts()
+        self.assertEqual(
+            frappe.db.get_single_value("HD Content Settings", "last_alerts_sent"), 1
+        )
+        send_missed_post_alerts()
+
+        self.assertEqual(len(self.alerts_for(post)), 1)
+        recipients = frappe.get_all(
+            "Email Queue Recipient",
+            filters={"parent": self.alerts_for(post)[0]},
+            pluck="recipient",
+        )
+        self.assertEqual(set(recipients), {self.OPS, WRITER[0]})
+
+        # a new publish time is a new deadline
+        post.reload()
+        post.publish_on = add_to_date(now_datetime(), hours=-1)
+        post.save()
+        self.assertFalse(post.missed_alert_sent)
+        send_missed_post_alerts()
+        self.assertEqual(len(self.alerts_for(post)), 2)
+
+    def test_skips_done_future_and_grace_period_posts(self):
+        published = self.overdue_post(
+            "Live reel", status="Published", published_url="https://instagram.com/p/x"
+        )
+        cancelled = self.overdue_post("Dropped story", status="Cancelled")
+        future = make_content_post(
+            "Next week",
+            CUSTOMER,
+            status="Drafting",
+            publish_on=add_to_date(now_datetime(), days=2),
+        )
+        within_grace = make_content_post(
+            "Just now",
+            CUSTOMER,
+            status="Drafting",
+            publish_on=add_to_date(now_datetime(), minutes=-10),
+        )
+
+        send_missed_post_alerts()
+
+        for post in (published, cancelled, future, within_grace):
+            self.assertFalse(self.alerts_for(post), post.title)
+
+    def test_no_recipients_leaves_post_for_later(self):
+        set_content_settings(alert_emails="", notify_post_team=0)
+        post = self.overdue_post("Nobody to tell")
+
+        send_missed_post_alerts()
+
+        self.assertFalse(self.alerts_for(post))
+        self.assertFalse(
+            frappe.db.get_value("HD Content Post", post.name, "missed_alert_sent")
+        )
+
+    def test_disabled_sends_nothing(self):
+        set_content_settings(enable_missed_post_alerts=0)
+        post = self.overdue_post("Alerts off")
+
+        send_missed_post_alerts()
+
+        self.assertFalse(self.alerts_for(post))
+
+    def test_cancelled_post_needs_no_date(self):
+        post = make_content_post("Scrapped idea", CUSTOMER)
+        post.status = "Cancelled"
+        post.save()
+        self.assertEqual(post.status, "Cancelled")
 
 
 class TestHDContentPostVisibility(FrappeTestCase):

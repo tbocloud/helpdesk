@@ -18,9 +18,11 @@
 		"writer",
 		"column_break_2",
 		"designer",
+		"marketer",
 		"content_section",
 		"caption",
 		"hashtags",
+		"brief",
 		"approval_section",
 		"client_connection",
 		"client_approval_ref",
@@ -32,7 +34,9 @@
 		"published_url",
 		"column_break_3",
 		"published_on",
-		"task"
+		"task",
+		"missed_alert_sent",
+		"times_postponed"
 	],
 	"fields": [
 		{
@@ -69,7 +73,7 @@
 			"fieldname": "status",
 			"fieldtype": "Select",
 			"label": "Status",
-			"options": "Idea\nDrafting\nDesign\nInternal Review\nClient Review\nChanges Requested\nApproved\nScheduled\nPublished",
+			"options": "Idea\nDrafting\nDesign\nInternal Review\nClient Review\nChanges Requested\nApproved\nScheduled\nPublished\nCancelled",
 			"default": "Idea",
 			"reqd": 1,
 			"in_list_view": 1,
@@ -81,7 +85,7 @@
 			"label": "Publish On",
 			"in_list_view": 1,
 			"search_index": 1,
-			"description": "Required once the post moves past Idea"
+			"description": "Required once the post moves past Idea (unless it is Cancelled)"
 		},
 		{
 			"fieldname": "channel",
@@ -214,11 +218,42 @@
 			"label": "Task",
 			"options": "Task",
 			"description": "Link to a Task to log time in Timesheets"
+		},
+		{
+			"fieldname": "missed_alert_sent",
+			"fieldtype": "Check",
+			"label": "Missed Alert Sent",
+			"default": "0",
+			"hidden": 1,
+			"read_only": 1,
+			"no_copy": 1,
+			"description": "Set once the missed-post alert has gone out; cleared when the publish time changes"
+		},
+		{
+			"fieldname": "marketer",
+			"fieldtype": "Link",
+			"label": "Digital Marketer",
+			"options": "User",
+			"in_standard_filter": 1
+		},
+		{
+			"fieldname": "brief",
+			"fieldtype": "Small Text",
+			"label": "Brief",
+			"description": "What the design or video should look like. Internal only, never shown to the client"
+		},
+		{
+			"fieldname": "times_postponed",
+			"fieldtype": "Int",
+			"label": "Times Postponed",
+			"default": "0",
+			"read_only": 1,
+			"no_copy": 1
 		}
 	],
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-09-28 19:30:00.000000",
+	"modified": "2026-09-30 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Content Post",

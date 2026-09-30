@@ -75,7 +75,9 @@ def get_rows(filters) -> list[dict]:
         "publish_on": [
             "between",
             [f"{filters.from_date} 00:00:00", f"{filters.to_date} 23:59:59"],
-        ]
+        ],
+        # a cancelled post was never going to be delivered
+        "status": ["!=", "Cancelled"],
     }
     if filters.customer:
         post_filters["customer"] = filters.customer
