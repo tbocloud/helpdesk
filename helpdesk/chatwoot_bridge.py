@@ -186,7 +186,8 @@ def receive_webhook(source: str, raw: bytes, headers, token: str | None = None) 
         "helpdesk.chatwoot_bridge.process_event",
         queue="short",
         timeout=AI_JOB_TIMEOUT,
-        event=row.name,
+        # not "event": frappe.enqueue has its own parameter by that name
+        event_name=row.name,
         enqueue_after_commit=True,
         now=frappe.flags.in_test,
     )
@@ -257,9 +258,9 @@ def sender_type_of(message: dict) -> str:
 # --- processing ---
 
 
-def process_event(event: str):
+def process_event(event_name: str):
     """Background job: apply one logged delivery; a failure is recorded, never retried blindly."""
-    doc = frappe.get_doc(EVENT, event)
+    doc = frappe.get_doc(EVENT, event_name)
     if doc.status != "Queued":
         return
     previous_user = frappe.session.user
