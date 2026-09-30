@@ -2,9 +2,21 @@
   <div class="flex h-full flex-col">
     <LayoutHeader>
       <template #left-header>
-        <div class="text-lg-medium text-ink-gray-9">{{ __("My Work") }}</div>
+        <div class="text-lg-medium text-ink-gray-9">{{ pageTitle }}</div>
       </template>
       <template #right-header>
+        <!-- leads and managers can open a team member's list -->
+        <div v-if="authStore.canSeeOverview" class="w-56">
+          <Autocomplete
+            :options="personOptions"
+            :placeholder="__('Show work for…')"
+            :model-value="viewUser || null"
+            @update:model-value="
+              (v: { value: string } | string | null) =>
+                (viewUser = (typeof v === 'string' ? v : v?.value) || '')
+            "
+          />
+        </div>
         <Button
           variant="ghost"
           :loading="work.loading"
@@ -144,7 +156,8 @@
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import TaskyState from "@/pages/tasky/components/TaskyState.vue";
 import { __ } from "@/translation";
-import { Button, createResource } from "frappe-ui";
+import { useAuthStore } from "@/stores/auth";
+import { Autocomplete, Button, createResource } from "frappe-ui";
 import { computed, ref, watch, type Component } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
@@ -167,9 +180,46 @@ interface MyWork {
 const route = useRoute();
 const router = useRouter();
 
+const authStore = useAuthStore();
+
+const viewUser = ref((route.query.user as string) || "");
+
 const work = createResource({
   url: "helpdesk.api.work.get_my_work",
+  makeParams: () => ({ user: viewUser.value || undefined }),
   auto: true,
+});
+
+const people = createResource({
+  url: "helpdesk.tasky.api.get_users",
+  auto: authStore.canSeeOverview,
+});
+
+const personOptions = computed(() => [
+  { label: __("Me"), value: "" },
+  ...((people.data ?? []) as { name: string; full_name?: string }[])
+    .filter((p) => p.name !== authStore.userId)
+    .map((p) => ({
+      label: p.full_name || p.name,
+      value: p.name,
+      description: p.name,
+    })),
+]);
+
+const viewName = computed(() => {
+  const person = (
+    (people.data ?? []) as { name: string; full_name?: string }[]
+  ).find((p) => p.name === viewUser.value);
+  return person?.full_name || viewUser.value;
+});
+
+const pageTitle = computed(() =>
+  viewUser.value ? __("Work of {0}", viewName.value) : __("My Work")
+);
+
+watch(viewUser, (user) => {
+  router.replace({ query: { ...route.query, user: user || undefined } });
+  work.reload();
 });
 
 const tabs = computed<{ key: Tab; label: string; icon?: Component }[]>(() => [
@@ -219,10 +269,16 @@ const emptyState = computed(() => {
   if (activeTab.value === "all") {
     return {
       icon: LucideInbox,
-      title: __("Nothing assigned to you right now"),
-      message: __(
-        "Tasks and tickets assigned to you will show up here, most urgent first."
-      ),
+      title: viewUser.value
+        ? __("Nothing assigned to {0} right now", viewName.value)
+        : __("Nothing assigned to you right now"),
+      message: authStore.canSeeOverview
+        ? __(
+            "Pick a team member above to see their work, or open the Team page for everyone."
+          )
+        : __(
+            "Tasks and tickets assigned to you will show up here, most urgent first."
+          ),
     };
   }
   const messages: Record<Exclude<Tab, "all">, string> = {

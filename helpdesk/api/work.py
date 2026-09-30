@@ -208,9 +208,19 @@ def _assigned_to(user: str):
 
 @frappe.whitelist()
 @agent_only
-def get_my_work() -> dict:
-    """The current user's open tasks and tickets, overdue first, then by deadline."""
-    user = frappe.session.user
+def get_my_work(user: str | None = None) -> dict:
+    """Open tasks and tickets of the current user (or, for leads and managers, a team member), overdue first."""
+    viewer = frappe.session.user
+    user = (user or "").strip() or viewer
+    if user != viewer:
+        allowed = can_see_overview(viewer) and (
+            is_tasky_admin(viewer) or user in _team_members(viewer, None)
+        )
+        if not allowed:
+            frappe.throw(
+                _("You can only see the work of people on your projects."),
+                frappe.PermissionError,
+            )
     tasks = frappe.get_list(
         "Task",
         filters={"_assign": _assigned_to(user), "status": OPEN_TASK_FILTER},

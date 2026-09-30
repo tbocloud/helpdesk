@@ -593,3 +593,18 @@ class TestTeamWorkload(WorkControlCase):
     def test_developers_cannot_see_the_team(self):
         with self.assertRaises(frappe.PermissionError):
             self.as_user(DEV, work.get_team_workload)
+
+
+class TestViewTeamMemberWork(WorkControlCase):
+    def test_lead_opens_a_team_members_work(self):
+        task = self.make_task("Bank reconciliation", add_days(nowdate(), 2))
+        result = self.as_user(LEAD, lambda: work.get_my_work(user=DEV[0]))
+        self.assertIn(task, [i["name"] for i in result["items"]])
+
+    def test_developers_only_see_their_own(self):
+        with self.assertRaises(frappe.PermissionError):
+            self.as_user(DEV, lambda: work.get_my_work(user=LEAD[0]))
+
+    def test_leads_cannot_open_people_outside_their_projects(self):
+        with self.assertRaises(frappe.PermissionError):
+            self.as_user(LEAD, lambda: work.get_my_work(user=SUPPORT[0]))
