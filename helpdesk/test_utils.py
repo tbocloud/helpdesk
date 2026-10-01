@@ -1518,3 +1518,20 @@ def make_pull_request(task: str, number: int, state: str = "Open", **kwargs):
             **kwargs,
         }
     ).insert(ignore_permissions=True)
+
+
+def make_timesheet(project: str, hours: float, from_time, task: str | None = None):
+    """Creates a draft Timesheet with one time log of `hours` on `project` (and `task`)."""
+    return frappe.get_doc(
+        {
+            "doctype": "Timesheet",
+            "time_logs": [
+                {
+                    "project": project,
+                    "task": task,
+                    "hours": hours,
+                    "from_time": from_time,
+                }
+            ],
+        }
+    ).insert(ignore_permissions=True)

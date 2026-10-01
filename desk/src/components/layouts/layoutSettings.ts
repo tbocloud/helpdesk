@@ -10,6 +10,7 @@ import LucideClock from "~icons/lucide/clock";
 import LucideCalendarDays from "~icons/lucide/calendar-days";
 import LucideNewspaper from "~icons/lucide/newspaper";
 import LucideUsers from "~icons/lucide/users";
+import LucideFileSpreadsheet from "~icons/lucide/file-spreadsheet";
 import { __ } from "@/translation";
 
 export const agentPortalSidebarOptions = [
@@ -39,6 +40,13 @@ export const agentPortalSidebarOptions = [
     to: "WorkSummaries",
     section: "Workspace",
     overviewOnly: true,
+  },
+  {
+    label: __("Customer report"),
+    icon: LucideFileSpreadsheet,
+    to: "CustomerReport",
+    section: "Workspace",
+    customerReportOnly: true,
   },
   {
     label: __("Tickets"),

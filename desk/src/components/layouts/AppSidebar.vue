@@ -217,6 +217,9 @@ const navItems = computed(() => {
     .filter((item) => isCallingEnabled.value || item.label !== __("Call Logs"))
     .filter((item) => !item.projectManagerOnly || authStore.isProjectManager)
     .filter((item) => !item.overviewOnly || authStore.canSeeOverview)
+    .filter(
+      (item) => !item.customerReportOnly || authStore.canSeeCustomerReport
+    )
     .map((option: any) => ({
       label: option.label,
       icon: option.icon,

@@ -207,6 +207,12 @@ const portalRoutes = [
     component: () => import("@/pages/work/WorkSummaries.vue"),
   },
   {
+    path: "/customer-report",
+    name: "CustomerReport",
+    component: () => import("@/pages/work/CustomerReport.vue"),
+    beforeEnter: () => useAuthStore().canSeeCustomerReport || { name: "Home" },
+  },
+  {
     path: "/work-summary/:name",
     name: "WorkSummary",
     component: () => import("@/pages/work/WorkSummary.vue"),
