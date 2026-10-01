@@ -207,13 +207,12 @@ import {
   FormControl,
   toast,
 } from "frappe-ui";
-import { useStorage } from "@vueuse/core";
 import { computed, nextTick, reactive, ref, watch } from "vue";
 import { CHANNELS, FORMATS, TEAM_ROLES, textToHtml } from "../constants";
 import ChipToggle from "./ChipToggle.vue";
 
-// remembered between entries: most teams always work one way
-const separate = useStorage("helpdesk-content-separate-posts", true);
+// off by default: several platforms make one post unless asked otherwise
+const separate = ref(false);
 const CAPTION_LIMIT = 2200;
 
 const props = defineProps<{ customer?: string; date?: string }>();
@@ -244,6 +243,7 @@ const captionTooLong = computed(() => form.caption.length > CAPTION_LIMIT);
 
 watch(open, (isOpen) => {
   if (!isOpen) return;
+  separate.value = false;
   error.value = "";
   Object.assign(form, EMPTY, {
     channels: [...EMPTY.channels],
