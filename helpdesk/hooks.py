@@ -46,6 +46,10 @@ scheduler_events = {
         "* * * * *": [
             "helpdesk.tasks.pull_client_tickets",
         ],
+        # every 15 minutes: SLA reminders, so a short first-reply SLA isn't missed
+        "*/15 * * * *": [
+            "helpdesk.work_reminders.send_ticket_reminders",
+        ],
         "*/5 * * * *": [
             "helpdesk.tasks.push_ticket_statuses",
             "helpdesk.tasks.sync_conversations",
@@ -75,7 +79,6 @@ scheduler_events = {
         "helpdesk.helpdesk.doctype.hd_chatwoot_event.hd_chatwoot_event.clear_old_events",
     ],
     "hourly": [
-        "helpdesk.work_reminders.send_ticket_reminders",
         "helpdesk.triage.fail_stuck_triages",
         "helpdesk.helpdesk.doctype.hd_content_post.hd_content_post.send_missed_post_alerts",
     ],
