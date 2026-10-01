@@ -34,6 +34,8 @@ DUE_SOON_DAYS = 3
 NOT_STARTED_RISK_DAYS = 2
 RESCHEDULE_RISK_COUNT = 2
 SLA_RISK_HOURS = 4
+# how far back My Work's Completed tab looks
+DONE_DAYS = 30
 LIST_LIMIT = 300
 WAITING_ON_TASK = "Waiting on Task"
 ON_HOLD = "On Hold"
@@ -237,15 +239,72 @@ def get_my_work(user: str | None = None) -> dict:
         limit_page_length=LIST_LIMIT,
     )
     items = _items(tasks, tickets)
+    done = _done_items(user)
     return {
         "items": items,
+        "done": done,
         "counts": {
             "total": len(items),
             "overdue": sum(i["is_overdue"] for i in items),
             "key": sum(i["is_key"] for i in items),
             "at_risk": sum(bool(i["risks"]) for i in items),
+            "done": len(done),
         },
     }
+
+
+def _done_items(user: str) -> list[dict]:
+    """Tasks the person completed and tickets they resolved lately, newest first."""
+    since = add_days(getdate(nowdate()), -DONE_DAYS)
+    tasks = frappe.get_list(
+        "Task",
+        filters={
+            "_assign": _assigned_to(user),
+            "status": "Completed",
+            "completed_on": (">=", since),
+        },
+        fields=["name", "subject", "project", "completed_on", "custom_actual_hours"],
+        order_by="completed_on desc",
+        limit_page_length=LIST_LIMIT,
+    )
+    tickets = frappe.get_list(
+        "HD Ticket",
+        filters={
+            "_assign": _assigned_to(user),
+            "status_category": "Resolved",
+            "resolution_date": (">=", since),
+        },
+        fields=["name", "subject", "customer", "status", "resolution_date"],
+        order_by="resolution_date desc",
+        limit_page_length=LIST_LIMIT,
+    )
+    project_names = _project_names(tasks)
+    done = [
+        {
+            "kind": "task",
+            "name": t.name,
+            "title": t.subject,
+            "project": t.project,
+            "project_name": project_names.get(t.project),
+            "status": "Completed",
+            "done_on": str(t.completed_on) if t.completed_on else None,
+            "hours": t.custom_actual_hours or 0,
+        }
+        for t in tasks
+    ] + [
+        {
+            "kind": "ticket",
+            "name": str(t.name),
+            "title": t.subject,
+            "customer": t.customer,
+            "status": t.status,
+            "done_on": str(getdate(t.resolution_date)) if t.resolution_date else None,
+            "hours": None,
+        }
+        for t in tickets
+    ]
+    done.sort(key=lambda i: i["done_on"] or "", reverse=True)
+    return done
 
 
 @frappe.whitelist()
