@@ -58,3 +58,4 @@ helpdesk.patches.v16_0_2.add_waiting_on_task_status
 helpdesk.patches.v16_0_2.set_connection_support_user
 helpdesk.patches.v16_0_2.rename_qcs_connections
 helpdesk.patches.v16_0_2.ignore_automated_emails
+helpdesk.patches.v16_0_2.enable_kb_drafts

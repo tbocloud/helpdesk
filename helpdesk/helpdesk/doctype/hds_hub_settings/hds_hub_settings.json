@@ -28,6 +28,7 @@
 		"triage_section",
 		"auto_triage_enabled",
 		"auto_investigate",
+		"draft_kb_articles",
 		"column_break_triage",
 		"triage_job_timeout"
 	],
@@ -188,11 +189,18 @@
 			"fieldname": "triage_job_timeout",
 			"fieldtype": "Int",
 			"label": "Triage Job Timeout (seconds)"
+		},
+		{
+			"fieldname": "draft_kb_articles",
+			"fieldtype": "Check",
+			"label": "Draft KB Articles from Resolved Tickets",
+			"default": "1",
+			"description": "When a ticket is resolved, the AI drafts a knowledge base article if other customers are likely to ask the same thing. Drafts are never published automatically."
 		}
 	],
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-09-29 10:00:00.000000",
+	"modified": "2026-10-01 22:30:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Hub Settings",

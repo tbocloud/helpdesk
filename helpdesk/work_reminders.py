@@ -84,6 +84,8 @@ def helpdesk_path(doctype: str, name: str) -> str:
         return f"/work-summary/{name}"
     if doctype == "HD Ticket":
         return f"/tickets/{name}"
+    if doctype == "HD Article":
+        return f"/kb/articles/{name}"
     project = (
         frappe.db.get_value(doctype, name, "project") if doctype == "Task" else None
     )

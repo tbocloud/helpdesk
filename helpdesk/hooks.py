@@ -140,7 +140,10 @@ doc_events = {
     },
     "HD Ticket": {
         "after_insert": "helpdesk.triage.auto_triage_ticket",
-        "on_update": "helpdesk.chatwoot_bridge.on_ticket_update",
+        "on_update": [
+            "helpdesk.chatwoot_bridge.on_ticket_update",
+            "helpdesk.kb_drafts.on_ticket_update",
+        ],
     },
     "Communication": {
         "after_insert": "helpdesk.chatwoot_bridge.on_communication_insert",
