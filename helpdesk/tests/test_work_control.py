@@ -910,3 +910,47 @@ class TestTeamTimesheets(WorkControlCase):
         self.assertTrue(self.as_user(DEV, tasky.get_my_timesheets))
         with self.assertRaises(frappe.PermissionError):
             self.as_user(DEV, lambda: tasky.get_my_timesheets(team=1))
+
+
+class TestCompletedWork(WorkControlCase):
+    def test_my_work_lists_what_was_completed_lately(self):
+        task = self.make_task("Opening balances", add_days(nowdate(), 3))
+        self.as_user(
+            DEV,
+            lambda: tasky.complete_task(task=task, hours_worked=2, notes="Imported"),
+        )
+        old = self.make_task("Chart of accounts", add_days(nowdate(), -50))
+        frappe.db.set_value(
+            "Task",
+            old,
+            {"status": "Completed", "completed_on": add_days(nowdate(), -40)},
+        )
+        ticket = make_ticket(subject="Report filter fixed", customer=CUSTOMER)
+        make_assignment("HD Ticket", ticket.name, DEV[0])
+        frappe.db.set_value(
+            "HD Ticket",
+            ticket.name,
+            {
+                "status": "Resolved",
+                "status_category": "Resolved",
+                "resolution_date": now_datetime(),
+            },
+        )
+
+        result = self.as_user(DEV, work.get_my_work)
+
+        done = {i["name"]: i for i in result["done"]}
+        self.assertEqual(done[task]["hours"], 2)
+        self.assertEqual(done[task]["done_on"], nowdate())
+        self.assertIn(str(ticket.name), done)
+        self.assertNotIn(old, done)
+        self.assertEqual(result["counts"]["done"], len(result["done"]))
+        self.assertNotIn(task, [i["name"] for i in result["items"]])
+
+    def test_lead_sees_a_team_members_completed_work(self):
+        task = self.make_task("Opening balances", add_days(nowdate(), 3))
+        self.as_user(
+            DEV, lambda: tasky.complete_task(task=task, hours_worked=1, notes="Done")
+        )
+        result = self.as_user(LEAD, lambda: work.get_my_work(user=DEV[0]))
+        self.assertIn(task, [i["name"] for i in result["done"]])
