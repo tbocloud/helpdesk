@@ -62,8 +62,9 @@
       </section>
     </div>
 
-    <!-- Scrollable sections: AI suggested reply, Session replay, Ticket Info, Recent / Similar Tickets -->
+    <!-- Scrollable sections: Possible duplicates, AI suggested reply, Session replay, Ticket Info, Recent / Similar Tickets -->
     <div class="flex-1 min-h-0 overflow-y-auto divide-y divide-outline-gray-1">
+      <DuplicateTicketsCard v-if="ticketId" :ticket-id="ticketId" />
       <AiSuggestedReplyCard v-if="ticketId" :ticket-id="ticketId" />
       <SessionReplayCard v-if="ticketId" :ticket-id="ticketId" />
 
@@ -189,6 +190,7 @@ import Section from "../Section.vue";
 import TicketField from "../TicketField.vue";
 import AiSuggestedReplyCard from "./AiSuggestedReplyCard.vue";
 import AssignTo from "./AssignTo.vue";
+import DuplicateTicketsCard from "./DuplicateTicketsCard.vue";
 import SessionReplayCard from "./SessionReplayCard.vue";
 import TicketContact from "./TicketContact.vue";
 
