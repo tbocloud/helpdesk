@@ -171,8 +171,10 @@ def export_xlsx(from_date: str, to_date: str, customer: str | None = None):
     data += [[row.get(c["fieldname"]) for c in columns] for row in rows]
     data.append(total_row(columns, rows))
 
-    sheet = f"Delivery {from_date} to {to_date}"
-    xlsx = make_xlsx(data, sheet, column_widths=[c["width"] // 7 for c in columns])
+    # Excel refuses sheet names over 31 characters; the dates are in the file name
+    xlsx = make_xlsx(
+        data, "Content delivery", column_widths=[c["width"] // 7 for c in columns]
+    )
     suffix = f"-{frappe.scrub(customer)}" if customer else ""
     frappe.response.filename = f"content-delivery-{from_date}-to-{to_date}{suffix}.xlsx"
     frappe.response.filecontent = xlsx.getvalue()
