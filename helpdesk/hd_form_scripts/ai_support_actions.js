@@ -106,6 +106,18 @@ function setupForm({ doc, call, toast, $dialog }) {
         },
       },
       {
+        label: "Copy fix brief for AI",
+        onClick: async function () {
+          await shareFixBrief(doc, call, toast, "copy");
+        },
+      },
+      {
+        label: "Download fix brief (.md)",
+        onClick: async function () {
+          await shareFixBrief(doc, call, toast, "download");
+        },
+      },
+      {
         label: "Re-run Triage",
         onClick: async function () {
           try {
@@ -145,6 +157,41 @@ function setupForm({ doc, call, toast, $dialog }) {
   });
 
   return { actions: actions };
+}
+
+// The ticket as a Markdown brief for an AI coding agent (Claude Code etc.) working outside the hub
+async function shareFixBrief(doc, call, toast, mode) {
+  var brief;
+  try {
+    brief = await call("helpdesk.api.fix_brief.get_fix_brief", {
+      ticket: doc.name,
+    });
+  } catch (error) {
+    toast.error("Couldn't build the fix brief");
+    console.error("Fix brief error:", error);
+    return;
+  }
+  if (mode === "copy") {
+    try {
+      await navigator.clipboard.writeText(brief.markdown);
+      toast.success(
+        "Fix brief copied. Paste it into Claude Code or another AI tool."
+      );
+      return;
+    } catch (error) {
+      // some browsers refuse clipboard access after a server call; download instead
+      console.warn("Clipboard refused, downloading instead:", error);
+    }
+  }
+  var url = URL.createObjectURL(
+    new Blob([brief.markdown], { type: "text/markdown" })
+  );
+  var link = document.createElement("a");
+  link.href = url;
+  link.download = brief.filename;
+  link.click();
+  URL.revokeObjectURL(url);
+  toast.success("Fix brief downloaded: " + brief.filename);
 }
 
 async function doLogin(connectionName, ticketName, call, toast) {
