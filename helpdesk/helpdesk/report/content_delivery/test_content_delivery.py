@@ -85,3 +85,33 @@ class TestContentDelivery(FrappeTestCase):
         self.assertEqual(rows[0][:2], ("Customer", "Planned"))
         self.assertEqual(rows[1][:2], (CUSTOMER, 2))
         self.assertEqual(rows[-1][:2], ("Total", 2))
+
+    def test_pdf_has_the_report_rows(self):
+        from unittest.mock import patch
+
+        from helpdesk.helpdesk.report.content_delivery.content_delivery import (
+            export_pdf,
+        )
+
+        day = add_to_date(now_datetime(), days=2)
+        make_content_post("Teaser", CUSTOMER, status="Drafting", publish_on=day)
+        date = str(getdate(day))
+
+        # without wkhtmltopdf: a page the browser prints to PDF
+        with patch("shutil.which", return_value=None):
+            frappe.response.clear()
+            export_pdf(from_date=date, to_date=date, customer=CUSTOMER)
+        self.assertEqual(frappe.response.type, "download")
+        self.assertIn(CUSTOMER, frappe.response.filecontent)
+        self.assertIn("window.print", frappe.response.filecontent)
+
+        # with it: a real PDF
+        with (
+            patch("shutil.which", return_value="/usr/bin/wkhtmltopdf"),
+            patch("frappe.utils.pdf.get_pdf", return_value=b"%PDF-1.4") as get_pdf,
+        ):
+            frappe.response.clear()
+            export_pdf(from_date=date, to_date=date, customer=CUSTOMER)
+        self.assertEqual(frappe.response.type, "pdf")
+        self.assertTrue(frappe.response.filename.endswith(".pdf"))
+        self.assertIn(CUSTOMER, get_pdf.call_args.args[0])
