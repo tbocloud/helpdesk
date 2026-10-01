@@ -152,13 +152,20 @@ def teams_post(webhook_field: str, payload: dict):
 
 
 def send_direct(email: str, text: str, url: str | None = None) -> bool:
-    """Message one person; False when they can't be found (Slack only)."""
-    if get_settings().platform == SLACK:
+    """Message one person; False when chat can't reach them, so they get an email.
+
+    That is someone missing from Slack, or Teams without the direct-message
+    workflow (only the escalation channel is set up).
+    """
+    settings = get_settings()
+    if settings.platform == SLACK:
         user_id = slack_user_id(email)
         if not user_id:
             return False
         slack_post(user_id, text, url)
         return True
+    if not settings.get_password("teams_direct_webhook", raise_exception=False):
+        return False
     teams_post("teams_direct_webhook", {"recipient": email, **teams_message(text, url)})
     return True
 
@@ -232,10 +239,20 @@ def send_test_message() -> dict:
         channel = post_to_channel(text, helpdesk_url(None))
     except (ChatError, requests.RequestException) as e:
         frappe.throw(_("The chat platform refused the message: {0}").format(str(e)))
-    if not direct:
-        frappe.msgprint(
-            _(
-                "{0} wasn't found in Slack. Use the same email in Slack and here."
-            ).format(frappe.session.user)
+    if not direct and not channel:
+        frappe.throw(
+            _("Nothing was sent: add a Direct Message or Escalation Channel URL first.")
         )
+    if not direct:
+        frappe.msgprint(_direct_not_sent_message())
     return {"direct": direct, "channel": channel}
+
+
+def _direct_not_sent_message() -> str:
+    if get_settings().platform == SLACK:
+        return _(
+            "{0} wasn't found in Slack. Use the same email in Slack and here."
+        ).format(frappe.session.user)
+    return _(
+        "Only the escalation channel was tested. Without a Direct Message Workflow URL, people get their reminders by email."
+    )
