@@ -164,6 +164,7 @@ class HDTicket(Document):
                 reference_name=self.name,
                 now=True,
                 in_reply_to=last_communication.name if last_communication else None,
+                reply_to=self.reply_to_address(),
                 email_headers={"X-Auto-Generated": "hd-email-feedback"},
             )
             frappe.msgprint(_("Feedback email has been sent to the customer"))
@@ -618,6 +619,24 @@ class HDTicket(Document):
         if email_account := default_outgoing_email_account():
             return email_account
 
+    def reply_to_address(self, sender_email=None) -> str | None:
+        """Where the customer's reply should go: a mailbox we read.
+
+        Mail may go out from a send-only account (a no-reply address on an email
+        service); replies to that would never come back to the ticket, so point
+        them at the account the ticket came in through, or the default incoming one.
+        """
+        sender_email = sender_email or frappe._dict()
+        default_incoming = frappe.db.get_value(
+            "Email Account", {"default_incoming": 1, "enable_incoming": 1}
+        )
+        for account in (sender_email.get("name"), self.email_account, default_incoming):
+            if account and frappe.db.get_value(
+                "Email Account", account, "enable_incoming"
+            ):
+                return frappe.db.get_value("Email Account", account, "email_id")
+        return sender_email.get("email_id")
+
     @property
     def portal_uri(self):
         root_uri = frappe.utils.get_url()
@@ -640,7 +659,7 @@ class HDTicket(Document):
                 "HD Ticket Comment", c.name, attachment.get("file_url")
             )
 
-    @frappe.whitelist()
+    @frappe.whitelist(methods=["POST"])
     def reply_via_agent(
         self,
         message: str,
@@ -724,7 +743,7 @@ class HDTicket(Document):
 
         message = self.parse_content(message)
 
-        reply_to_email = sender_email.email_id
+        reply_to_email = self.reply_to_address(sender_email)
         rendered_template: str | None = None
         if self.via_customer_portal:
             email_content = frappe.db.get_single_value(
@@ -762,7 +781,7 @@ class HDTicket(Document):
                 reference_doctype="HD Ticket",
                 reference_name=self.name,
                 reply_to=reply_to_email,
-                sender=reply_to_email,
+                sender=sender_email.email_id,
                 subject=subject,
                 with_container=False,
                 in_reply_to=last_communication.name if last_communication else None,
@@ -893,6 +912,7 @@ class HDTicket(Document):
                 reference_name=self.name,
                 now=True,
                 expose_recipients="header",
+                reply_to=self.reply_to_address(),
                 email_headers={"X-Auto-Generated": "hd-acknowledgement"},
             )
         except Exception as e:

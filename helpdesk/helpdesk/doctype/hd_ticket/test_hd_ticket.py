@@ -2,6 +2,7 @@
 # See license.txt
 
 from datetime import timedelta
+from unittest.mock import patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
@@ -23,6 +24,7 @@ from helpdesk.test_utils import (
     get_current_week_monday,
     get_latest_ticket_communication,
     get_priority_response_resolution_time,
+    make_email_account,
     make_status,
     make_ticket,
     remove_holidays,
@@ -1552,3 +1554,36 @@ class TestHDTicket(FrappeTestCase):
         remove_holidays()
         frappe.db.set_single_value("HD Settings", "default_ticket_status", "Open")
         frappe.delete_doc("HD Ticket Status", "New", force=True)
+
+
+class TestReplyToAddress(FrappeTestCase):
+    """Replies must reach a mailbox we read, even when mail goes out from a no-reply sender."""
+
+    def setUp(self):
+        self.addCleanup(frappe.db.rollback)
+        self.inbox = make_email_account(
+            "support-inbox@example.com", enable_outgoing=0, enable_incoming=1
+        )
+        self.no_reply = make_email_account("no-reply-sender@example.com")
+        self.ticket = make_ticket()
+        self.ticket.db_set("email_account", self.inbox.name)
+
+    def test_send_only_sender_points_replies_at_the_ticket_mailbox(self):
+        self.assertEqual(
+            self.ticket.reply_to_address(self.no_reply), "support-inbox@example.com"
+        )
+
+    def test_a_sender_that_receives_keeps_its_own_address(self):
+        both = make_email_account(
+            "both-ways@example.com", enable_incoming=1, enable_outgoing=1
+        )
+        self.assertEqual(self.ticket.reply_to_address(both), "both-ways@example.com")
+
+    def test_agent_reply_goes_out_from_the_sender_with_reply_to_the_mailbox(self):
+        with patch.object(
+            self.ticket, "sender_email", return_value=self.no_reply
+        ), patch("frappe.sendmail") as sendmail:
+            self.ticket.reply_via_agent(message="We are looking into it")
+        kwargs = sendmail.call_args.kwargs
+        self.assertEqual(kwargs["sender"], "no-reply-sender@example.com")
+        self.assertEqual(kwargs["reply_to"], "support-inbox@example.com")

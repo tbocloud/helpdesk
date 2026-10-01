@@ -1482,3 +1482,21 @@ def ai_chat_answer(reply: str, action: str = "answer", **fields) -> dict:
         "usage": {},
         "cost": 0,
     }
+
+
+def make_email_account(email_id: str, **kwargs):
+    """Creates an Email Account for `email_id` on a fake server: send-only unless kwargs enable incoming."""
+    name = kwargs.pop("email_account_name", email_id)
+    if frappe.db.exists("Email Account", name):
+        return frappe.get_doc("Email Account", name)
+    return frappe.get_doc(
+        {
+            "doctype": "Email Account",
+            "email_account_name": name,
+            "email_id": email_id,
+            "enable_outgoing": 1,
+            "smtp_server": "smtp.example.com",
+            "password": "password",
+            **kwargs,
+        }
+    ).insert(ignore_permissions=True)
