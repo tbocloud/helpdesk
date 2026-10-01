@@ -55,10 +55,10 @@ class TestSearchWithoutRediSearch(FrappeTestCase):
 
 class TestRediSearchDetection(FrappeTestCase):
     def tearDown(self):
-        frappe.local.__dict__.pop("helpdesk_redisearch", None)
+        frappe.local.helpdesk_redisearch = None
 
     def check(self, modules):
-        frappe.local.__dict__.pop("helpdesk_redisearch", None)
+        frappe.local.helpdesk_redisearch = None
         with patch.object(frappe.cache(), "module_list", return_value=modules):
             return search.redisearch_available()
 

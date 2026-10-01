@@ -332,7 +332,7 @@ def redisearch_available() -> bool:
     FT.* command fails, so the article index is skipped and article search falls
     back to the database. The main helpdesk search uses SQLite (search_sqlite.py).
     """
-    if not hasattr(frappe.local, "helpdesk_redisearch"):
+    if getattr(frappe.local, "helpdesk_redisearch", None) is None:
         try:
             modules = frappe.cache().module_list()
         except ResponseError:  # MODULE may be disabled
@@ -427,7 +427,12 @@ def search_articles_in_db(
 @frappe.whitelist(methods=["POST"])
 def rebuild_search_index() -> str:
     """HD Settings button: rebuild the SQLite search, and the article index where Redis supports it."""
-    frappe.only_for("System Manager")
+    # only_for is skipped in tests, so check the role directly
+    if "System Manager" not in frappe.get_roles():
+        frappe.throw(
+            _("Only System Managers can rebuild the search index."),
+            frappe.PermissionError,
+        )
     frappe.enqueue(
         "frappe.search.sqlite_search.build_index",
         queue="long",
