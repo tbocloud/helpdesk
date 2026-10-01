@@ -4,9 +4,6 @@ import json
 
 import frappe
 from frappe import _
-from frappe.core.utils import html2text
-from frappe.utils import format_date, format_datetime, get_datetime, now_datetime
-from frappe.utils.xlsxutils import make_xlsx
 
 TEAM_FIELDS = ("writer", "designer", "marketer")
 # fields the Add entry dialog may set on every post it creates
@@ -115,78 +112,3 @@ def get_role_tasks(post: str) -> list[dict]:
         },
         fields=["name", "content_role", "expected_time", "status"],
     )
-
-
-EXPORT_COLUMNS = (
-    ("Post", "name", 18),
-    ("Publish date", "date", 14),
-    ("Time", "time", 10),
-    ("Campaign or topic", "title", 40),
-    ("Customer", "customer", 26),
-    ("Campaign", "campaign", 22),
-    ("Platforms", "platforms", 24),
-    ("Type", "format", 12),
-    ("Status", "status", 16),
-    ("Missed", "missed", 9),
-    ("Writer", "writer", 28),
-    ("Designer", "designer", 28),
-    ("Digital marketer", "marketer", 28),
-    ("Caption", "caption", 60),
-    ("Hashtags", "hashtags", 30),
-    ("Brief", "brief", 50),
-    ("Times postponed", "times_postponed", 10),
-    ("Client feedback", "client_feedback", 40),
-    ("Published URL", "published_url", 40),
-    ("Published on", "published_on", 18),
-)
-
-
-@frappe.whitelist()
-def export_posts(
-    start: str,
-    end: str,
-    customer: str | None = None,
-    channel: str | None = None,
-    status: str | None = None,
-):
-    """The Sheet view as an Excel file: same period and filters, same visibility rules."""
-    filters = {"publish_on": ["between", [f"{start} 00:00:00", f"{end} 23:59:59"]]}
-    if customer:
-        filters["customer"] = customer
-    if channel:
-        filters["platforms"] = ["like", f"%{channel}%"]
-    if status:
-        filters["status"] = status
-
-    fields = [f for _l, f, _w in EXPORT_COLUMNS if f not in ("date", "time", "missed")]
-    posts = frappe.get_list(
-        "HD Content Post",
-        filters=filters,
-        fields=["publish_on", "channel", *fields],
-        order_by="publish_on asc",
-        limit_page_length=0,
-    )
-
-    now = now_datetime()
-    rows = [[_(label) for label, _f, _w in EXPORT_COLUMNS]]
-    for post in posts:
-        publish_on = get_datetime(post.publish_on)
-        post.date = format_date(publish_on)
-        post.time = publish_on.strftime("%I:%M %p").lstrip("0")
-        post.platforms = post.platforms or post.channel
-        post.missed = (
-            _("Yes")
-            if publish_on < now and post.status not in ("Published", "Cancelled")
-            else ""
-        )
-        post.caption = html2text(post.caption or "").strip()
-        post.published_on = (
-            format_datetime(post.published_on) if post.published_on else ""
-        )
-        rows.append([post.get(field) or "" for _l, field, _w in EXPORT_COLUMNS])
-
-    sheet = f"Content {start} to {end}"
-    xlsx = make_xlsx(rows, sheet, column_widths=[w for _l, _f, w in EXPORT_COLUMNS])
-    frappe.response.filename = f"content-calendar-{start}-to-{end}.xlsx"
-    frappe.response.filecontent = xlsx.getvalue()
-    frappe.response.type = "binary"
