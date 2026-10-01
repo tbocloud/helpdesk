@@ -1,10 +1,10 @@
 <template>
-  <component
-    :is="to ? RouterLink : 'div'"
-    v-bind="to ? { to } : {}"
-    class="grid w-full grid-cols-[1fr_auto] items-center gap-x-4 gap-y-1 px-4 py-3 text-left transition-colors focus-visible:outline-none"
+  <!-- the title's link covers the whole row (::after); the PR chips sit above it
+       as their own links to GitHub, so no link is nested in another -->
+  <div
+    class="relative grid w-full grid-cols-[1fr_auto] items-center gap-x-4 gap-y-1 px-4 py-3 text-left transition-colors"
     :class="[
-      to ? 'hover:bg-surface-gray-1 focus-visible:bg-surface-gray-1' : '',
+      to ? 'hover:bg-surface-gray-1 focus-within:bg-surface-gray-1' : '',
       showAssignees
         ? 'md:grid-cols-[1fr_9rem_8rem_9rem]'
         : 'md:grid-cols-[1fr_8rem_9rem]',
@@ -21,7 +21,14 @@
           <span class="sr-only">{{
             item.kind === "ticket" ? __("Ticket") : __("Task")
           }}</span>
-          <span class="truncate text-base text-ink-gray-9">
+          <RouterLink
+            v-if="to"
+            :to="to"
+            class="truncate text-base text-ink-gray-9 after:absolute after:inset-0 after:content-[''] focus-visible:outline-none"
+          >
+            {{ item.title }}
+          </RouterLink>
+          <span v-else class="truncate text-base text-ink-gray-9">
             {{ item.title }}
           </span>
           <template v-if="item.is_key">
@@ -37,9 +44,11 @@
             :count="item.slip_count"
           />
           <PullRequestChip
-            v-if="item.kind === 'task' && item.pull_request"
-            :pr="item.pull_request"
-            :plain="!!to"
+            v-for="pr in pullRequests"
+            :key="`${pr.repo}#${pr.number}`"
+            :pr="pr"
+            :show-repo="severalRepos"
+            class="relative z-10"
           />
         </div>
         <div
@@ -163,7 +172,7 @@
       />
       {{ deadline.label }}
     </div>
-  </component>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -202,6 +211,13 @@ const props = defineProps<{
 const userStore = useUserStore();
 
 const to = computed(() => itemRoute(props.item));
+
+const pullRequests = computed(() =>
+  props.item.kind === "task" ? props.item.pull_requests ?? [] : []
+);
+const severalRepos = computed(
+  () => new Set(pullRequests.value.map((pr) => pr.repo)).size > 1
+);
 const risks = computed(() => props.item.risks ?? []);
 const deadline = computed(() => deadlineInfo(props.item));
 

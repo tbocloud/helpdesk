@@ -958,15 +958,17 @@ class TestCompletedWork(WorkControlCase):
 
 
 class TestPullRequestsInWorkLists(WorkControlCase):
-    def test_open_pull_request_shows_with_the_task(self):
+    def test_tasks_show_their_pull_requests_open_ones_first(self):
         task = self.make_task("Home dashboard", add_days(nowdate(), 2))
-        other = self.make_task("Old change", add_days(nowdate(), 2))
+        merged_only = self.make_task("Old change", add_days(nowdate(), 2))
+        make_pull_request(task, 4, state="Merged")
         make_pull_request(task, 5, ci_state="Passing")
-        make_pull_request(other, 3, state="Merged")
+        make_pull_request(merged_only, 3, state="Merged")
 
         items = {i["name"]: i for i in self.as_user(DEV, work.get_my_work)["items"]}
 
-        self.assertEqual(items[task]["pull_request"]["number"], 5)
-        self.assertEqual(items[task]["pull_request"]["ci_state"], "Passing")
-        # merged or closed PRs no longer move the task
-        self.assertIsNone(items[other]["pull_request"])
+        prs = items[task]["pull_requests"]
+        self.assertEqual([p["number"] for p in prs], [5, 4])
+        self.assertEqual(prs[0]["ci_state"], "Passing")
+        # a task whose PRs are merged is still recognisable as Git work
+        self.assertEqual(items[merged_only]["pull_requests"][0]["state"], "Merged")
