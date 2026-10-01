@@ -91,7 +91,7 @@
 			"fieldtype": "Check",
 			"label": "Post hub errors to the escalation channel",
 			"default": "1",
-			"description": "Every 15 minutes, new entries in the Error Log are grouped by title and posted once to the escalation channel, so problems are seen before customers report them."
+			"description": "Every 10 minutes, new entries in the Error Log are grouped by title and posted once to the escalation channel, so problems are seen before customers report them."
 		},
 		{
 			"fieldname": "ignored_error_titles",

@@ -792,6 +792,18 @@ def enable_chat_notifications(platform: str = "Microsoft Teams", **settings):
     return doc
 
 
+def make_error_log(title: str, at=None):
+    """Creates an Error Log entry titled `title`, logged at `at` (default: now)."""
+    doc = frappe.get_doc(
+        {"doctype": "Error Log", "method": title, "error": "Traceback (test)"}
+    ).insert(ignore_permissions=True)
+    if at:
+        frappe.db.set_value(
+            "Error Log", doc.name, "creation", at, update_modified=False
+        )
+    return doc
+
+
 def set_work_settings(**values):
     """Saves HD Work Settings (AI estimates, weekly off, morning brief) with `values`."""
     doc = frappe.get_doc("HD Work Settings")
@@ -1518,15 +1530,3 @@ def make_pull_request(task: str, number: int, state: str = "Open", **kwargs):
             **kwargs,
         }
     ).insert(ignore_permissions=True)
-
-
-def make_error_log(title: str, at=None):
-    """Creates an Error Log entry titled `title`, logged at `at` (default: now)."""
-    doc = frappe.get_doc(
-        {"doctype": "Error Log", "method": title, "error": "Traceback (test)"}
-    ).insert(ignore_permissions=True)
-    if at:
-        frappe.db.set_value(
-            "Error Log", doc.name, "creation", at, update_modified=False
-        )
-    return doc

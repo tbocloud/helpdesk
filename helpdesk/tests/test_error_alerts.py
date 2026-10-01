@@ -24,7 +24,7 @@ class TestErrorAlerts(FrappeTestCase):
             teams_channel_webhook=CHANNEL,
             post_error_alerts=1,
             ignored_error_titles="",
-            errors_checked_until=add_to_date(self.now, minutes=-15),
+            errors_checked_until=add_to_date(self.now, minutes=-10),
         )
         # only this test's errors count
         frappe.db.delete("Error Log")

@@ -17,7 +17,7 @@ from frappe.utils import add_to_date, format_datetime, get_datetime, now_datetim
 
 from helpdesk.chat_notifications import ChatError, is_enabled, post_to_channel
 
-DIGEST_MINUTES = 15
+DIGEST_MINUTES = 10
 MAX_TITLES = 5
 UNTITLED = "(no title)"
 CHAT_ERROR_TITLES = ("Chat notification not sent", "Chat escalation not posted")
