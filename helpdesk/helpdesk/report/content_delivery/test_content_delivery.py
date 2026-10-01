@@ -78,11 +78,10 @@ class TestContentDelivery(FrappeTestCase):
 
         frappe.response.clear()
         export_xlsx(from_date=date, to_date=date, customer=CUSTOMER)
-        rows = list(
-            openpyxl.load_workbook(
-                io.BytesIO(frappe.response.filecontent)
-            ).active.iter_rows(values_only=True)
-        )
+        sheet = openpyxl.load_workbook(io.BytesIO(frappe.response.filecontent)).active
+        # Excel reports the file as damaged when a sheet name is longer than 31
+        self.assertLessEqual(len(sheet.title), 31)
+        rows = list(sheet.iter_rows(values_only=True))
         self.assertEqual(rows[0][:2], ("Customer", "Planned"))
         self.assertEqual(rows[1][:2], (CUSTOMER, 2))
         self.assertEqual(rows[-1][:2], ("Total", 2))
