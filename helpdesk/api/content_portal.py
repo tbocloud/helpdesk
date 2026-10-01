@@ -43,6 +43,7 @@ CLIENT_FIELDS = (
     "title",
     "status",
     "channel",
+    "platforms",
     "format",
     "publish_on",
     "caption",

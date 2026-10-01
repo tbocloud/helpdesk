@@ -22,20 +22,33 @@ ENTRY_FIELDS = (
 
 
 @frappe.whitelist(methods=["POST"])
-def add_entries(values, channels) -> list[str]:
-    """One post per channel, all with the same content, created together or not at all."""
+def add_entries(
+    values: str | dict, channels: str | list, separate: bool | int | str = True
+) -> list[str]:
+    """Create the entry for the chosen platforms, all together or not at all.
+
+    `separate` makes one post per platform (each can be scheduled, approved and
+    published on its own); otherwise one post covers every platform.
+    """
     frappe.has_permission("HD Content Post", "create", throw=True)
     values = json.loads(values) if isinstance(values, str) else values
     channels = json.loads(channels) if isinstance(channels, str) else channels
     channels = list(dict.fromkeys(c for c in channels or [] if c))
     if not channels:
         frappe.throw(_("Pick at least one platform"))
+    separate = frappe.utils.sbool(separate)
 
     common = {k: values.get(k) for k in ENTRY_FIELDS if values.get(k) not in (None, "")}
+    groups = [[c] for c in channels] if separate else [channels]
     names = []
-    for channel in channels:
+    for platforms in groups:
         post = frappe.get_doc(
-            {"doctype": "HD Content Post", **common, "channel": channel}
+            {
+                "doctype": "HD Content Post",
+                **common,
+                "channel": platforms[0],
+                "platforms": ", ".join(platforms),
+            }
         )
         post.insert()
         names.append(post.name)

@@ -290,7 +290,7 @@
               idea.title
             }}</span>
             <span class="truncate text-xs text-ink-gray-5"
-              >{{ idea.channel }} · {{ idea.customer }}</span
+              >{{ platformsOf(idea).join(", ") }} · {{ idea.customer }}</span
             >
           </button>
         </div>
@@ -346,11 +346,12 @@ import LucideMail from "~icons/lucide/mail";
 import LucideSheet from "~icons/lucide/sheet";
 import {
   CHANNELS,
-  STATUSES,
-  isMissed,
-  stageColor,
   type ContentPost,
   type EntryAction,
+  isMissed,
+  platformsOf,
+  stageColor,
+  STATUSES,
   type TeamRole,
 } from "./constants";
 import AddEntryDialog from "./components/AddEntryDialog.vue";
@@ -511,13 +512,22 @@ const hasFilters = computed(
 function baseFilters() {
   const f: Record<string, unknown> = {};
   if (filters.customer) f.customer = filters.customer;
-  if (filters.channel) f.channel = filters.channel;
+  // a post can go out on several platforms; channel is only the first
+  if (filters.channel) f.platforms = ["like", `%${filters.channel}%`];
   // cancelled posts stay off the calendar unless asked for
   f.status = filters.status || ["!=", "Cancelled"];
   return f;
 }
 
-const FIELDS = ["name", "title", "status", "channel", "customer", "publish_on"];
+const FIELDS = [
+  "name",
+  "title",
+  "status",
+  "channel",
+  "platforms",
+  "customer",
+  "publish_on",
+];
 
 const posts = createResource({
   url: "frappe.client.get_list",
@@ -587,7 +597,7 @@ const events = computed(() =>
     const start = dayjs(p.publish_on);
     return {
       id: p.name,
-      title: `${p.channel} · ${p.title}`,
+      title: `${platformsOf(p).join(", ")} · ${p.title}`,
       participant: `${p.status} · ${p.customer}`,
       fromDate: start.format("YYYY-MM-DD"),
       toDate: start.format("YYYY-MM-DD"),

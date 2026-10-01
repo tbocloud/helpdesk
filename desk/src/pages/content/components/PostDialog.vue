@@ -62,12 +62,21 @@
             :label="__('Campaign (optional)')"
             :placeholder="__('Select campaign')"
           />
-          <FormControl
-            v-model="form.channel"
-            type="select"
-            :label="__('Channel')"
-            :options="CHANNELS"
-          />
+          <fieldset class="flex flex-col gap-1.5 sm:col-span-2">
+            <legend class="mb-1.5 text-xs text-ink-gray-5">
+              {{ __("Platforms") }} ·
+              <span>{{ __("this one post goes out on each") }}</span>
+            </legend>
+            <div class="flex flex-wrap gap-1.5">
+              <ChipToggle
+                v-for="channel in CHANNELS"
+                :key="channel"
+                :label="channel"
+                :pressed="platforms.includes(channel)"
+                @toggle="togglePlatform(channel)"
+              />
+            </div>
+          </fieldset>
           <FormControl
             v-model="form.format"
             type="select"
@@ -295,8 +304,10 @@ import {
   FORMATS,
   STATUSES,
   htmlToText,
+  platformsOf,
   textToHtml,
 } from "../constants";
+import ChipToggle from "./ChipToggle.vue";
 
 interface PostRef {
   name?: string;
@@ -326,6 +337,14 @@ const EMPTY = {
 };
 
 const form = reactive({ ...EMPTY });
+// every platform the post goes out on; the first is saved as its channel
+const platforms = ref<string[]>([EMPTY.channel]);
+
+function togglePlatform(channel: string) {
+  platforms.value = platforms.value.includes(channel)
+    ? platforms.value.filter((c) => c !== channel)
+    : [...platforms.value, channel];
+}
 // read-only approval state from the server, never sent back on save
 const approval = reactive({
   client_feedback: "",
@@ -346,6 +365,7 @@ watch(open, async (isOpen) => {
   if (!isOpen) return;
   error.value = "";
   Object.assign(form, EMPTY, { publish_on: toInput(props.post?.publish_on) });
+  platforms.value = [EMPTY.channel];
   Object.assign(approval, {
     client_feedback: "",
     client_approval_ref: "",
@@ -362,6 +382,7 @@ watch(open, async (isOpen) => {
       name: props.post!.name,
     });
     for (const key of Object.keys(EMPTY)) form[key] = doc[key] ?? "";
+    platforms.value = platformsOf(doc);
     form.publish_on = toInput(doc.publish_on);
     // Text Editor stores HTML; the dialog edits plain text
     form.caption = htmlToText(doc.caption);
@@ -497,8 +518,14 @@ async function save() {
     return;
   }
   saving.value = true;
+  if (!platforms.value.length) {
+    error.value = __("Pick at least one platform");
+    return;
+  }
   const values = {
     ...form,
+    channel: platforms.value[0],
+    platforms: platforms.value.join(", "),
     publish_on: toServer(form.publish_on),
     caption: textToHtml(form.caption),
   };

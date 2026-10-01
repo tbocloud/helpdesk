@@ -446,7 +446,7 @@
           <div class="post-hd">
             <div class="grow">
               <h3 class="post-title" id="t-${esc(p.name)}">${esc(p.title)}</h3>
-              <p class="meta">${esc(p.channel)} · ${esc(p.format || "")}${p.publish_on ? ` · <span class="num">${esc(timeLabel(p.publish_on))}</span>` : ""}</p>
+              <p class="meta">${esc(p.platforms || p.channel)} · ${esc(p.format || "")}${p.publish_on ? ` · <span class="num">${esc(timeLabel(p.publish_on))}</span>` : ""}</p>
             </div>
             <span class="pill ${s.tone}">${icon(s.icon)} ${esc(s.label)}</span>
           </div>

@@ -53,10 +53,7 @@
 
         <fieldset class="flex flex-col gap-1.5">
           <legend class="mb-1.5 text-xs text-ink-gray-5">
-            {{ __("Platforms") }} ·
-            <span class="text-ink-gray-5">{{
-              __("one post is created for each")
-            }}</span>
+            {{ __("Platforms") }}
           </legend>
           <div class="flex flex-wrap gap-1.5">
             <ChipToggle
@@ -66,6 +63,29 @@
               :pressed="form.channels.includes(channel)"
               @toggle="toggleChannel(channel)"
             />
+          </div>
+          <div
+            v-if="form.channels.length > 1"
+            class="mt-1 flex flex-col gap-1 rounded-lg bg-surface-gray-1 px-3 py-2.5"
+          >
+            <FormControl
+              v-model="separate"
+              type="checkbox"
+              :label="__('Create a separate post for each platform')"
+            />
+            <p class="ps-6 text-p-sm text-ink-gray-5">
+              {{
+                separate
+                  ? __(
+                      "{0} posts, one per platform. Each can be scheduled, approved and published on its own.",
+                      String(form.channels.length)
+                    )
+                  : __(
+                      "1 post that goes out on {0}. It is scheduled, approved and published once.",
+                      form.channels.join(", ")
+                    )
+              }}
+            </p>
           </div>
         </fieldset>
 
@@ -165,7 +185,7 @@
           :loading="saving === 'close'"
           :disabled="!!saving"
           :label="
-            form.channels.length > 1
+            form.channels.length > 1 && separate
               ? __('Save {0} posts', String(form.channels.length))
               : __('Save entry')
           "
@@ -187,10 +207,13 @@ import {
   FormControl,
   toast,
 } from "frappe-ui";
+import { useStorage } from "@vueuse/core";
 import { computed, nextTick, reactive, ref, watch } from "vue";
 import { CHANNELS, FORMATS, TEAM_ROLES, textToHtml } from "../constants";
 import ChipToggle from "./ChipToggle.vue";
 
+// remembered between entries: most teams always work one way
+const separate = useStorage("helpdesk-content-separate-posts", true);
 const CAPTION_LIMIT = 2200;
 
 const props = defineProps<{ customer?: string; date?: string }>();
@@ -267,6 +290,7 @@ async function save(addNext: boolean) {
   try {
     const names = await call("helpdesk.api.content_board.add_entries", {
       channels: form.channels,
+      separate: separate.value ? 1 : 0,
       values: {
         customer: form.customer,
         campaign: form.campaign,

@@ -4,7 +4,7 @@
       <div class="flex flex-col gap-0.5">
         <h3 class="text-xl-semibold text-ink-gray-9">{{ copy.title }}</h3>
         <p v-if="post" class="truncate text-p-sm text-ink-gray-5">
-          {{ post.title }} · {{ post.channel }}
+          {{ post.title }} · {{ platformsOf(post).join(", ") }}
         </p>
       </div>
     </template>
@@ -123,9 +123,10 @@ import {
 } from "frappe-ui";
 import { computed, ref, watch } from "vue";
 import {
-  TEAM_ROLES,
   type ContentPost,
   type EntryAction,
+  platformsOf,
+  TEAM_ROLES,
   type TeamRole,
 } from "../constants";
 
