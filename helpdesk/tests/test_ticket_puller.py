@@ -300,6 +300,25 @@ class TestConnectionHealth(FrappeTestCase):
         self.assertEqual(enqueue.call_count, 1)
         self.assertEqual(enqueue.call_args.kwargs["connection"], self.conn)
 
+    def test_status_push_sends_the_hub_ticket_number(self):
+        # a ticket restored after deletion comes back under a new number
+        from helpdesk import ticket_puller
+
+        ticket = make_ticket(subject="Filter not working")
+        ticket.db_set(
+            {"custom_client_ticket": "SUP-0001", "custom_qcs_connection": self.conn}
+        )
+        mcp = MagicMock()
+        with patch.object(ticket_puller, "MCPClient", return_value=mcp):
+            ticket_puller.push_ticket_statuses()
+
+        pushed = [
+            c.args[1]
+            for c in mcp.call_tool.call_args_list
+            if c.args[0] == "set_values" and c.args[1]["name"] == "SUP-0001"
+        ]
+        self.assertEqual(pushed[0]["values"]["ticket_id"], ticket.name)
+
 
 class TestInstallFixes(FrappeTestCase):
     def test_illegal_check_default_is_normalised(self):

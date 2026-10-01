@@ -382,7 +382,13 @@ def push_ticket_statuses() -> int:
                 _push_back(
                     mcp,
                     row.custom_client_ticket,
-                    {"status": row.status, "priority": row.priority or ""},
+                    {
+                        "status": row.status,
+                        "priority": row.priority or "",
+                        # keeps the customer's "TBO #" right if the hub ticket
+                        # was restored under a new number
+                        "ticket_id": row.name,
+                    },
                 )
                 pushed += 1
             except Exception:
