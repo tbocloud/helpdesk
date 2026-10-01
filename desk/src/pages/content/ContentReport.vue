@@ -15,6 +15,20 @@
           <span class="text-ink-gray-9">{{ __("Delivery report") }}</span>
         </div>
       </template>
+      <template #right-header>
+        <Button
+          :label="__('Export to Excel')"
+          :tooltip="
+            __('Download this report with the current dates and customer')
+          "
+          :disabled="!rows.length"
+          @click="exportReport"
+        >
+          <template #prefix
+            ><LucideDownload class="size-4" aria-hidden="true"
+          /></template>
+        </Button>
+      </template>
     </LayoutHeader>
 
     <div
@@ -167,6 +181,7 @@ import { __ } from "@/translation";
 import { Button, createResource, dayjs, FormControl } from "frappe-ui";
 import { computed, reactive, watch } from "vue";
 import LucideChevronRight from "~icons/lucide/chevron-right";
+import LucideDownload from "~icons/lucide/download";
 
 interface Row {
   customer: string;
@@ -215,6 +230,18 @@ const report = createResource({
 });
 
 watch(filters, () => report.reload());
+
+function exportReport() {
+  const params = new URLSearchParams({
+    from_date: filters.from_date,
+    to_date: filters.to_date,
+  });
+  if (filters.customer) params.set("customer", filters.customer);
+  window.open(
+    `/api/method/helpdesk.helpdesk.report.content_delivery.content_delivery.export_xlsx?${params}`,
+    "_blank"
+  );
+}
 
 // the report adds a total row; show it in the tiles instead of the table
 const allRows = computed<Row[]>(() =>

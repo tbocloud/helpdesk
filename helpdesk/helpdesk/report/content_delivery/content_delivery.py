@@ -155,3 +155,41 @@ def get_chart(rows: list[dict]) -> dict | None:
         "type": "bar",
         "barOptions": {"spaceRatio": 0.4},
     }
+
+
+@frappe.whitelist()
+def export_xlsx(from_date: str, to_date: str, customer: str | None = None):
+    """The delivery report as an Excel file, with a total row; same rows the page shows."""
+    from frappe.utils.xlsxutils import make_xlsx
+
+    frappe.has_permission("HD Content Post", "read", throw=True)
+    filters = frappe._dict(from_date=from_date, to_date=to_date, customer=customer)
+    columns = get_columns()
+    rows = get_rows(filters)
+
+    data = [[c["label"] for c in columns]]
+    data += [[row.get(c["fieldname"]) for c in columns] for row in rows]
+    data.append(total_row(columns, rows))
+
+    sheet = f"Delivery {from_date} to {to_date}"
+    xlsx = make_xlsx(data, sheet, column_widths=[c["width"] // 7 for c in columns])
+    suffix = f"-{frappe.scrub(customer)}" if customer else ""
+    frappe.response.filename = f"content-delivery-{from_date}-to-{to_date}{suffix}.xlsx"
+    frappe.response.filecontent = xlsx.getvalue()
+    frappe.response.type = "binary"
+
+
+def total_row(columns: list[dict], rows: list[dict]) -> list:
+    totals = {
+        key: sum(r[key] for r in rows)
+        for key in ("planned", "published", "on_time", "overdue", "awaiting_client")
+    }
+    totals["customer"] = _("Total")
+    totals["on_time_pct"] = (
+        round(totals["on_time"] / totals["published"] * 100, 1)
+        if totals["published"]
+        else 0
+    )
+    # averaging the per-customer averages would overweight small customers
+    totals["avg_approval_hours"] = None
+    return [totals.get(c["fieldname"]) for c in columns]

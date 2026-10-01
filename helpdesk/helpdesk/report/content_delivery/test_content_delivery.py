@@ -61,3 +61,28 @@ class TestContentDelivery(FrappeTestCase):
         self.assertEqual(row["avg_approval_hours"], 6.0)
         self.assertGreaterEqual(row["overdue"], 1)
         self.assertEqual(chart["type"], "bar")
+
+    def test_export_has_the_report_rows_and_a_total(self):
+        import io
+
+        import openpyxl
+
+        from helpdesk.helpdesk.report.content_delivery.content_delivery import (
+            export_xlsx,
+        )
+
+        day = add_to_date(now_datetime(), days=2)
+        for title in ("First", "Second"):
+            make_content_post(title, CUSTOMER, status="Drafting", publish_on=day)
+        date = str(getdate(day))
+
+        frappe.response.clear()
+        export_xlsx(from_date=date, to_date=date, customer=CUSTOMER)
+        rows = list(
+            openpyxl.load_workbook(
+                io.BytesIO(frappe.response.filecontent)
+            ).active.iter_rows(values_only=True)
+        )
+        self.assertEqual(rows[0][:2], ("Customer", "Planned"))
+        self.assertEqual(rows[1][:2], (CUSTOMER, 2))
+        self.assertEqual(rows[-1][:2], ("Total", 2))
