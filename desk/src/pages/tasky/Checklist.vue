@@ -250,6 +250,8 @@
                       @edit="editingTask = task"
                       @approve="approve(task)"
                       @send-back="sendingBackTask = task"
+                      @ask-help="helpingTask = task"
+                      @hand-over="handingOverTask = task"
                     />
                   </li>
                 </ul>
@@ -298,6 +300,8 @@
                     @edit="editingTask = task"
                     @approve="approve(task)"
                     @send-back="sendingBackTask = task"
+                    @ask-help="helpingTask = task"
+                    @hand-over="handingOverTask = task"
                   />
                 </li>
               </ul>
@@ -311,6 +315,16 @@
 
     <HoldTaskDialog v-model:task="holdingTask" @held="reloadAll" />
     <ResumeTaskDialog v-model:task="resumingTask" @resumed="reloadAll" />
+    <RequestHelpDialog
+      v-model:task="helpingTask"
+      :project-id="projectId"
+      @requested="reloadAll"
+    />
+    <HandOverTaskDialog
+      v-model:task="handingOverTask"
+      :project-id="projectId"
+      @handed-over="reloadAll"
+    />
     <EditTaskDialog
       v-model:task="editingTask"
       :project-id="projectId"
@@ -355,8 +369,10 @@ import ChecklistRow from "./components/ChecklistRow.vue";
 import CompleteTaskDialog from "./components/CompleteTaskDialog.vue";
 import EditTaskDialog from "./components/EditTaskDialog.vue";
 import GenerateChecklistModal from "./components/GenerateChecklistModal.vue";
+import HandOverTaskDialog from "./components/HandOverTaskDialog.vue";
 import HoldTaskDialog from "./components/HoldTaskDialog.vue";
 import ProjectNav from "./components/ProjectNav.vue";
+import RequestHelpDialog from "./components/RequestHelpDialog.vue";
 import ResumeTaskDialog from "./components/ResumeTaskDialog.vue";
 import SendBackTaskDialog from "./components/SendBackTaskDialog.vue";
 import TaskPlanDialog from "./components/TaskPlanDialog.vue";
@@ -447,6 +463,8 @@ const resumingTask = ref<Record<string, any> | null>(null);
 const planningTask = ref<Record<string, any> | null>(null);
 const editingTask = ref<Record<string, any> | null>(null);
 const sendingBackTask = ref<Record<string, any> | null>(null);
+const helpingTask = ref<Record<string, any> | null>(null);
+const handingOverTask = ref<Record<string, any> | null>(null);
 
 const { approve } = useApproveTask(reloadAll);
 

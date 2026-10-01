@@ -425,6 +425,11 @@
       @completed="onHoldChanged"
     />
     <HoldTaskDialog v-model:task="holdingTask" @held="onHoldChanged" />
+    <RequestHelpDialog v-model:task="helpingTask" @requested="onHoldChanged" />
+    <HandOverTaskDialog
+      v-model:task="handingOverTask"
+      @handed-over="onHoldChanged"
+    />
     <ResumeTaskDialog v-model:task="resumingTask" @resumed="onHoldChanged" />
     <EditTaskDialog
       v-model:task="editingTask"
@@ -443,6 +448,7 @@ import { Button, Dialog, TextInput, createResource, dayjs } from "frappe-ui";
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
+import LucideArrowRight from "~icons/lucide/arrow-right";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideCircleDot from "~icons/lucide/circle-dot";
@@ -458,10 +464,13 @@ import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideSearch from "~icons/lucide/search";
 import LucideSearchX from "~icons/lucide/search-x";
 import LucideUndo2 from "~icons/lucide/undo-2";
+import LucideUserPlus from "~icons/lucide/user-plus";
 import CompleteTaskDialog from "./components/CompleteTaskDialog.vue";
 import EditTaskDialog from "./components/EditTaskDialog.vue";
+import HandOverTaskDialog from "./components/HandOverTaskDialog.vue";
 import HoldTaskDialog from "./components/HoldTaskDialog.vue";
 import MilestoneMark from "./components/MilestoneMark.vue";
+import RequestHelpDialog from "./components/RequestHelpDialog.vue";
 import ResumeTaskDialog from "./components/ResumeTaskDialog.vue";
 import SendBackTaskDialog from "./components/SendBackTaskDialog.vue";
 import SlipBadge from "./components/SlipBadge.vue";
@@ -756,6 +765,8 @@ const planningTask = ref<Task | null>(null);
 const editingTask = ref<Task | null>(null);
 const sendingBackTask = ref<Task | null>(null);
 const completingTask = ref<Task | null>(null);
+const helpingTask = ref<Task | null>(null);
+const handingOverTask = ref<Task | null>(null);
 
 const { approve } = useApproveTask(() => {
   selectedTask.value = null;
@@ -824,6 +835,22 @@ const dialogActions = computed(() => {
       label: __("Put on hold"),
       icon: LucidePause,
       onClick: () => handOff(holdingTask),
+    });
+  }
+  if (d && !taskDetail.loading && !isClosed(d)) {
+    // a task waits on one other task, so asking for help needs it free
+    if (!d.blocked)
+      actions.push({
+        label: __("Ask a teammate for help"),
+        icon: LucideUserPlus,
+        tooltip: __("Ask a teammate for help"),
+        onClick: () => handOff(helpingTask),
+      });
+    actions.push({
+      label: __("Hand over"),
+      icon: LucideArrowRight,
+      tooltip: __("Hand over to a teammate"),
+      onClick: () => handOff(handingOverTask),
     });
   }
   if (selectedTask.value?.project) {

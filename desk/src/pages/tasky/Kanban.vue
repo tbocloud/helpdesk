@@ -396,6 +396,16 @@
 
     <HoldTaskDialog v-model:task="holdingTask" @held="onHoldChanged" />
     <ResumeTaskDialog v-model:task="resumingTask" @resumed="onHoldChanged" />
+    <RequestHelpDialog
+      v-model:task="helpingTask"
+      :project-id="projectId"
+      @requested="kanban.reload()"
+    />
+    <HandOverTaskDialog
+      v-model:task="handingOverTask"
+      :project-id="projectId"
+      @handed-over="kanban.reload()"
+    />
     <EditTaskDialog
       v-model:task="editingTask"
       :project-id="projectId"
@@ -427,6 +437,7 @@ import { __ } from "@/translation";
 import { Button, Dropdown, createResource, toast } from "frappe-ui";
 import { computed, onUnmounted, ref, watch } from "vue";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
+import LucideArrowRight from "~icons/lucide/arrow-right";
 import LucideCalendar from "~icons/lucide/calendar";
 import LucideCalendarClock from "~icons/lucide/calendar-clock";
 import LucideCheckCheck from "~icons/lucide/check-check";
@@ -442,11 +453,14 @@ import LucidePlay from "~icons/lucide/play";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideStar from "~icons/lucide/star";
 import LucideUndo2 from "~icons/lucide/undo-2";
+import LucideUserPlus from "~icons/lucide/user-plus";
 import CompleteTaskDialog from "./components/CompleteTaskDialog.vue";
 import EditTaskDialog from "./components/EditTaskDialog.vue";
+import HandOverTaskDialog from "./components/HandOverTaskDialog.vue";
 import HoldTaskDialog from "./components/HoldTaskDialog.vue";
 import MilestoneMark from "./components/MilestoneMark.vue";
 import ProjectNav from "./components/ProjectNav.vue";
+import RequestHelpDialog from "./components/RequestHelpDialog.vue";
 import ResumeTaskDialog from "./components/ResumeTaskDialog.vue";
 import PullRequestChip from "./components/PullRequestChip.vue";
 import SendBackTaskDialog from "./components/SendBackTaskDialog.vue";
@@ -547,6 +561,8 @@ const resumingTask = ref<Task | null>(null);
 const planningTask = ref<Task | null>(null);
 const editingTask = ref<Task | null>(null);
 const sendingBackTask = ref<Task | null>(null);
+const helpingTask = ref<Task | null>(null);
+const handingOverTask = ref<Task | null>(null);
 
 const { approve, resource: approveResource } = useApproveTask(() =>
   kanban.reload()
@@ -565,6 +581,20 @@ function cardActions(task: Task) {
       icon: LucidePencil,
       onClick: () => (editingTask.value = task),
     });
+  if (canEdit(task) && !isClosed(task)) {
+    // a task waits on one other task, so asking for help needs it free
+    if (!task.blocked)
+      actions.push({
+        label: __("Ask a teammate for help"),
+        icon: LucideUserPlus,
+        onClick: () => (helpingTask.value = task),
+      });
+    actions.push({
+      label: __("Hand over"),
+      icon: LucideArrowRight,
+      onClick: () => (handingOverTask.value = task),
+    });
+  }
   if (!canManage.value || isClosed(task)) return actions;
   actions.push({
     label: __("Plan"),

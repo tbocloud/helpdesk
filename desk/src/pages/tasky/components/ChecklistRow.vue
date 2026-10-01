@@ -154,6 +154,7 @@ import { __ } from "@/translation";
 import { Button, Dropdown, dayjs } from "frappe-ui";
 import { computed } from "vue";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
+import LucideArrowRight from "~icons/lucide/arrow-right";
 import LucideCalendar from "~icons/lucide/calendar";
 import LucideCalendarClock from "~icons/lucide/calendar-clock";
 import LucideCheck from "~icons/lucide/check";
@@ -165,6 +166,7 @@ import LucidePencil from "~icons/lucide/pencil";
 import LucidePlay from "~icons/lucide/play";
 import LucideStar from "~icons/lucide/star";
 import LucideUndo2 from "~icons/lucide/undo-2";
+import LucideUserPlus from "~icons/lucide/user-plus";
 import {
   holdDays,
   holdDurationLabel,
@@ -195,6 +197,8 @@ const emit = defineEmits<{
   edit: [];
   approve: [];
   sendBack: [];
+  askHelp: [];
+  handOver: [];
 }>();
 
 const done = computed(() => props.task.status === "Completed");
@@ -212,6 +216,28 @@ const aiTitle = computed(() =>
     ? __("Due date set by AI: {0}", props.task.estimate_note || "")
     : dueTitle.value
 );
+
+// the assignee (or lead) brings in a teammate or passes the task on
+const teamwork = computed(() => {
+  if (!props.canEdit || isClosed(props.task)) return [];
+  return [
+    // a task waits on one other task, so asking for help needs it free
+    ...(props.task.blocked
+      ? []
+      : [
+          {
+            label: __("Ask a teammate for help"),
+            icon: LucideUserPlus,
+            onClick: () => emit("askHelp"),
+          },
+        ]),
+    {
+      label: __("Hand over"),
+      icon: LucideArrowRight,
+      onClick: () => emit("handOver"),
+    },
+  ];
+});
 
 const actions = computed(() => {
   const edit = props.canEdit
@@ -246,6 +272,7 @@ const actions = computed(() => {
     return [
       ...edit,
       ...plan,
+      ...teamwork.value,
       { label: __("Resume"), icon: LucidePlay, onClick: () => emit("resume") },
     ];
   if (isClosed(props.task)) return edit;
@@ -253,6 +280,7 @@ const actions = computed(() => {
     ...edit,
     ...review,
     ...plan,
+    ...teamwork.value,
     {
       label: __("Put on hold"),
       icon: LucidePause,

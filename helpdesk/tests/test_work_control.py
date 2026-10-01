@@ -29,6 +29,7 @@ PM = ("pm.control@work-control.example", "Leena Varghese")
 LEAD = ("lead.control@work-control.example", "Nikhil Das")
 DEV = ("dev.control@work-control.example", "Fathima Rizwana")
 SUPPORT = ("support.control@work-control.example", "Joel Mathew")
+TEAMMATE = ("teammate.control@work-control.example", "Anjali Menon")
 
 
 class WorkControlCase(FrappeTestCase):
@@ -714,3 +715,137 @@ class TestAssigneeOutsideTeam(WorkControlCase):
         task = self.make_task("Bank feeds", add_days(nowdate(), 3), assignee=SUPPORT)
         result = self.as_user(LEAD, lambda: work.get_my_work(user=SUPPORT[0]))
         self.assertIn(task, [i["name"] for i in result["items"]])
+
+
+class TestHelpAndHandOver(WorkControlCase):
+    def setUp(self):
+        super().setUp()
+        make_tasky_user(*TEAMMATE)
+        project = frappe.get_doc("Project", self.project)
+        project.append("users", {"user": TEAMMATE[0], "custom_role": "Developer"})
+        project.save(ignore_permissions=True)
+
+    def ask(self, task, teammate=TEAMMATE, due=None, user=DEV):
+        return self.as_user(
+            user,
+            lambda: tasky.request_help(
+                task=task,
+                teammate=teammate[0],
+                task_name="Share the customer's chart of accounts",
+                description="Needed to map the opening balances",
+                due_date=due,
+            ),
+        )
+
+    def comments(self, task):
+        return frappe.get_all(
+            "Comment",
+            filters={"reference_doctype": "Task", "reference_name": task},
+            pluck="content",
+        )
+
+    def test_assignee_asks_a_teammate_and_waits_for_it(self):
+        task = self.make_task("Import opening balances", add_days(nowdate(), 5))
+        result = self.ask(task, due=add_days(nowdate(), 2))
+
+        help_task = result["help_task"]["name"]
+        self.assertEqual(result["task"]["depends_on_task"], help_task)
+        self.assertTrue(result["task"]["blocked"])
+        helper = frappe.get_doc("Task", help_task)
+        self.assertEqual(helper.project, self.project)
+        self.assertEqual(helper.assignees(), [TEAMMATE[0]])
+        self.assertEqual(str(helper.exp_end_date), str(add_days(nowdate(), 2)))
+        self.assertTrue(
+            any("needs your help" in s for s in self.notified(TEAMMATE, help_task))
+        )
+        self.assertTrue(any("asked" in s for s in self.notified(LEAD, task)))
+        self.assertTrue(any("Waiting on" in c for c in self.comments(task)))
+
+        self.as_user(
+            TEAMMATE, lambda: tasky.move_task(task=help_task, new_status="Completed")
+        )
+        self.assertTrue(any("Unblocked" in s for s in self.notified(DEV, task)))
+
+    def test_help_must_fit_before_the_task_is_due(self):
+        task = self.make_task("Import opening balances", add_days(nowdate(), 3))
+        with self.assertRaises(frappe.ValidationError):
+            self.ask(task, due=add_days(nowdate(), 4))
+        with self.assertRaises(frappe.ValidationError):
+            self.ask(task, due=add_days(nowdate(), -1))
+
+    def test_an_open_dependency_is_not_replaced(self):
+        first = self.make_task("Install server", add_days(nowdate(), 2), assignee=LEAD)
+        task = self.make_task("Deploy app", add_days(nowdate(), 5))
+        self.as_user(
+            LEAD, lambda: tasky.update_task_plan(task=task, depends_on_task=first)
+        )
+        with self.assertRaises(frappe.ValidationError):
+            self.ask(task)
+
+    def test_developers_only_ask_people_on_the_team(self):
+        task = self.make_task("Import opening balances", add_days(nowdate(), 5))
+        with self.assertRaises(frappe.ValidationError):
+            self.ask(task, teammate=SUPPORT)
+        with self.assertRaises(frappe.ValidationError):
+            self.ask(task, teammate=DEV)
+
+    def test_only_the_assignee_or_lead_can_ask(self):
+        task = self.make_task("Import opening balances", add_days(nowdate(), 5))
+        with self.assertRaises(frappe.PermissionError):
+            self.ask(task, teammate=LEAD, user=TEAMMATE)
+
+    def test_assignee_hands_over_and_the_lead_hears_why(self):
+        task = self.make_task("Configure payroll", add_days(nowdate(), 4))
+        self.as_user(
+            DEV,
+            lambda: tasky.hand_over_task(
+                task=task, teammate=TEAMMATE[0], reason="Moved to the Galom go-live"
+            ),
+        )
+
+        doc = frappe.get_doc("Task", task)
+        self.assertEqual(doc.assignees(), [TEAMMATE[0]])
+        self.assertTrue(
+            any("handed you a task" in s for s in self.notified(TEAMMATE, task))
+        )
+        self.assertTrue(any("Galom go-live" in s for s in self.notified(LEAD, task)))
+        self.assertTrue(any("Handed over" in c for c in self.comments(task)))
+        self.assertNotIn(
+            task, [t["name"] for t in self.as_user(DEV, tasky.get_my_tasks)]
+        )
+
+    def test_hand_over_needs_a_reason_a_teammate_and_a_stopped_timer(self):
+        task = self.make_task("Configure payroll", add_days(nowdate(), 4))
+        with self.assertRaises(frappe.ValidationError):
+            self.as_user(
+                DEV,
+                lambda: tasky.hand_over_task(
+                    task=task, teammate=TEAMMATE[0], reason=" "
+                ),
+            )
+        with self.assertRaises(frappe.ValidationError):
+            self.as_user(
+                DEV,
+                lambda: tasky.hand_over_task(
+                    task=task, teammate=SUPPORT[0], reason="Busy"
+                ),
+            )
+        frappe.db.set_value("Task", task, "custom_timer_start", now_datetime())
+        with self.assertRaises(frappe.ValidationError):
+            self.as_user(
+                DEV,
+                lambda: tasky.hand_over_task(
+                    task=task, teammate=TEAMMATE[0], reason="Busy"
+                ),
+            )
+
+    def test_closed_tasks_cannot_be_handed_over(self):
+        task = self.make_task("Configure payroll", add_days(nowdate(), 4))
+        frappe.db.set_value("Task", task, "status", "Completed")
+        with self.assertRaises(frappe.ValidationError):
+            self.as_user(
+                DEV,
+                lambda: tasky.hand_over_task(
+                    task=task, teammate=TEAMMATE[0], reason="Busy"
+                ),
+            )

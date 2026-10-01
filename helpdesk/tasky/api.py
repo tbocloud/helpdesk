@@ -17,6 +17,7 @@ from helpdesk.tasky.permissions import (
 # member roles a project lead is rotated among
 LEAD_ROTATION_ROLES = ("Developer",)
 ON_HOLD = "On Hold"
+TASK_DONE = ("Completed", "Cancelled")
 # the most one completion may log; longer work belongs on a manual timesheet
 MAX_HOURS_PER_COMPLETION = 24
 
@@ -617,6 +618,209 @@ def resume_task(task: str, extend_due_date: bool = True) -> dict:
     return _format_task(_task_dict(doc))
 
 
+@frappe.whitelist()
+def request_help(
+    task: str,
+    teammate: str,
+    task_name: str,
+    description: str = "",
+    due_date: str | None = None,
+) -> dict:
+    """The assignee asks a teammate for something their task needs.
+
+    The teammate gets a new task in the same project and the asking task waits
+    on it, so it shows as blocked until the help is done. The lead is told.
+    """
+    from helpdesk.work_reminders import notify_users
+
+    doc = _get_own_task(task)
+    teammate = _teammate(doc, teammate)
+    if teammate == frappe.session.user:
+        frappe.throw(_("Pick a teammate to ask, not yourself."))
+    _check_no_open_dependency(doc)
+    if not _is_on_team(doc.project, teammate):
+        _add_member_for_assignment(doc.project, teammate)
+
+    helper = frappe.get_doc(
+        {
+            "doctype": "Task",
+            "subject": _required_task_name(task_name),
+            "description": str(description or ""),
+            "project": doc.project,
+            "custom_category": doc.custom_category,
+            "custom_phase": doc.custom_phase,
+            "priority": doc.priority,
+            "status": "Open",
+            "exp_end_date": _help_due_date(doc, due_date),
+        }
+    )
+    # developers can't create tasks; _get_own_task checked this one is theirs
+    helper.insert(ignore_permissions=True)
+    _assign_user(helper, teammate, ignore_permissions=True)
+    _estimate_if_undated(helper)
+
+    doc.depends_on_task = helper.name
+    doc.save()
+
+    asker = _full_name(frappe.session.user)
+    helper.add_comment(
+        "Info",
+        frappe.utils.escape_html(
+            _("{0} asked for this to finish {1}: {2}").format(
+                asker, doc.name, doc.subject
+            )
+        ),
+    )
+    doc.add_comment(
+        "Info",
+        frappe.utils.escape_html(
+            _("Waiting on {0} ({1}), asked of {2} by {3}").format(
+                helper.name, helper.subject, _full_name(teammate), asker
+            )
+        ),
+    )
+    notify_users(
+        [teammate],
+        "Task",
+        helper.name,
+        _("{0} needs your help: {1}").format(asker, helper.subject),
+    )
+    notify_users(
+        [
+            u
+            for u in doc.leads_or_managers()
+            if u not in (frappe.session.user, teammate)
+        ],
+        "Task",
+        doc.name,
+        _("{0} asked {1} for help, so {2} waits on it").format(
+            asker, _full_name(teammate), doc.subject
+        ),
+    )
+    helper.reload()
+    return {
+        "task": _format_task(_task_dict(doc)),
+        "help_task": _format_task(_task_dict(helper)),
+    }
+
+
+@frappe.whitelist()
+def hand_over_task(task: str, teammate: str, reason: str) -> dict:
+    """The assignee passes their task to a teammate and says why; the lead is told."""
+    from helpdesk.work_reminders import notify_users
+
+    doc = _get_own_task(task)
+    reason = (reason or "").strip()
+    if not reason:
+        frappe.throw(_("Say why you're handing it over."))
+    teammate = _teammate(doc, teammate)
+    previous = doc.assignees()
+    if teammate in previous:
+        frappe.throw(_("{0} already has this task.").format(_full_name(teammate)))
+    if doc.custom_timer_start:
+        frappe.throw(_("Stop the timer first, so your time on it is saved."))
+
+    _reassign(doc, previous, teammate, ignore_permissions=True)
+    doc.add_comment(
+        "Info", frappe.utils.escape_html(_("Handed over: {0}").format(reason))
+    )
+
+    giver = _full_name(frappe.session.user)
+    notify_users(
+        [teammate],
+        "Task",
+        doc.name,
+        _("{0} handed you a task: {1}").format(giver, doc.subject),
+    )
+    notify_users(
+        [
+            u
+            for u in doc.leads_or_managers()
+            if u not in (frappe.session.user, teammate)
+        ],
+        "Task",
+        doc.name,
+        _("{0} handed {1} to {2}: {3}").format(
+            giver, doc.subject, _full_name(teammate), reason
+        ),
+    )
+    return _format_task(_task_dict(doc))
+
+
+def _get_own_task(task: str):
+    """An open project task the caller is assigned to, or manages."""
+    doc = frappe.get_doc("Task", str(task))
+    if frappe.session.user not in doc.assignees() and not can_manage_project(
+        doc.project
+    ):
+        frappe.throw(
+            _("Only the task's assignee or the project lead can do this."),
+            frappe.PermissionError,
+        )
+    if not doc.project:
+        frappe.throw(_("Only tasks in a project can do this."))
+    if doc.status in TASK_DONE:
+        frappe.throw(_("This task is already closed."))
+    return doc
+
+
+def _teammate(doc, user: str) -> str:
+    """An active agent on the task's project; leads and managers may pick anyone."""
+    user = str(user or "").strip()
+    if not user:
+        frappe.throw(_("Pick a teammate."))
+    if not _is_assignable(user):
+        frappe.throw(_("{0} is not an active agent.").format(user))
+    if not _is_on_team(doc.project, user) and not can_manage_project(doc.project):
+        frappe.throw(
+            _(
+                "Pick someone on the project team. The project lead can add other people."
+            )
+        )
+    return user
+
+
+def _is_on_team(project: str, user: str) -> bool:
+    return _is_project_member(project, user) or (
+        frappe.db.get_value("Project", project, "project_lead") == user
+    )
+
+
+def _check_no_open_dependency(doc):
+    """A task waits on one other task; an open one has to stay."""
+    if not doc.depends_on_task:
+        return
+    dependency = frappe.db.get_value(
+        "Task", doc.depends_on_task, ["status", "subject"], as_dict=True
+    )
+    if dependency and dependency.status not in TASK_DONE:
+        frappe.throw(
+            _(
+                "This task already waits on {0} ({1}). Ask the project lead to change that first."
+            ).format(doc.depends_on_task, dependency.subject)
+        )
+
+
+def _help_due_date(doc, due_date: str | None) -> str | None:
+    """None lets the AI estimate it; a date must fit before the asking task is due."""
+    if not due_date or due_date == "null":
+        return None
+    day = frappe.utils.getdate(due_date)
+    if day < frappe.utils.getdate(frappe.utils.nowdate()):
+        frappe.throw(_("The date can't be in the past."))
+    if doc.exp_end_date and day > frappe.utils.getdate(doc.exp_end_date):
+        frappe.throw(
+            _(
+                "Pick a date on or before {0}, when your task is due. Ask the project lead if your task needs more time."
+            ).format(frappe.utils.formatdate(doc.exp_end_date))
+        )
+    return str(day)
+
+
+def _full_name(user: str) -> str:
+    return frappe.db.get_value("User", user, "full_name") or user
+
+
 def _get_managed_task(task: str):
     doc = frappe.get_doc("Task", str(task))
     if not can_manage_project(doc.project):
@@ -761,11 +965,15 @@ def _estimated_hours(value: float | str) -> float:
     return hours
 
 
-def _reassign(doc, previous: list[str], new_assignee: str):
+def _reassign(
+    doc, previous: list[str], new_assignee: str, ignore_permissions: bool = False
+):
     """Hand the task to `new_assignee` ("" = nobody) through ToDos.
 
     Going through assign_to keeps `_assign` in step, cancels the old assignee's
     ToDo and sends the new one Frappe's assignment notification.
+    `ignore_permissions` is for an assignee handing their own task over: once
+    their ToDo is cancelled they can no longer read it to assign the next person.
     """
     new = [new_assignee] if new_assignee else []
     if set(previous) == set(new):
@@ -778,21 +986,18 @@ def _reassign(doc, previous: list[str], new_assignee: str):
         _add_member_for_assignment(doc.project, new_assignee)
     for user in previous:
         if user not in new:
-            # the caller manages the project, checked in _check_can_edit
+            # the caller manages the project or hands over their own task (checked by the caller)
             assign_to._remove("Task", doc.name, user, ignore_permissions=True)
     if new_assignee and new_assignee not in previous:
-        _assign_user(doc, new_assignee)
-
-    def name(user):
-        return frappe.db.get_value("User", user, "full_name") or user
+        _assign_user(doc, new_assignee, ignore_permissions=ignore_permissions)
 
     doc.add_comment(
         "Info",
         frappe.utils.escape_html(
             _("Reassigned from {0} to {1} by {2}").format(
-                ", ".join(name(u) for u in previous) or _("nobody"),
-                name(new_assignee) if new_assignee else _("nobody"),
-                name(frappe.session.user),
+                ", ".join(_full_name(u) for u in previous) or _("nobody"),
+                _full_name(new_assignee) if new_assignee else _("nobody"),
+                _full_name(frappe.session.user),
             )
         ),
     )
