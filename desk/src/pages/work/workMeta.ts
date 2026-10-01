@@ -1,3 +1,4 @@
+import type { TaskPullRequest } from "@/pages/tasky/pullRequestMeta";
 import { __ } from "@/translation";
 import { dayjs } from "frappe-ui";
 
@@ -27,6 +28,8 @@ export interface WorkItem {
   waiting_on?: string | null;
   /** Plain-language, already translated reasons the item may slip. */
   risks?: string[];
+  /** The task's most recently active open GitHub pull request, if any. */
+  pull_request?: TaskPullRequest | null;
 }
 
 export function isAtRisk(item: WorkItem) {

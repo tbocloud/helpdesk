@@ -18,6 +18,7 @@ from frappe.utils import (
     nowdate,
 )
 
+from helpdesk.github_sync import get_pull_requests
 from helpdesk.tasky.permissions import (
     can_manage_project,
     get_led_projects,
@@ -191,9 +192,12 @@ def _ticket_item(ticket) -> dict:
 def _items(tasks, tickets) -> list[dict]:
     names = _project_names(tasks)
     waiting = _open_dependencies(tasks)
-    items = [_task_item(t, names, waiting) for t in tasks] + [
-        _ticket_item(t) for t in tickets
-    ]
+    task_items = [_task_item(t, names, waiting) for t in tasks]
+    # the PR moving each task, newest activity first, as the board shows it
+    open_prs = get_pull_requests([t.name for t in tasks], open_only=True)
+    for item in task_items:
+        item["pull_request"] = (open_prs.get(item["name"]) or [None])[0]
+    items = task_items + [_ticket_item(t) for t in tickets]
     items.sort(key=_sort_key)
     return items
 
