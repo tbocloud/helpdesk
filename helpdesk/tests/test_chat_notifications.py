@@ -107,6 +107,49 @@ class TestTeams(ChatCase):
         emailed = [c.kwargs["recipients"] for c in sendmail.call_args_list]
         self.assertIn(DEV[0], emailed)
 
+    def test_channel_only_setup_emails_reminders_without_errors(self):
+        # until the direct-message workflow exists, only escalations use Teams
+        enable_chat_notifications(
+            "Microsoft Teams",
+            teams_direct_webhook="",
+            teams_channel_webhook=TEAMS_CHANNEL,
+        )
+        self.due_soon_task()
+        with patch(
+            "helpdesk.chat_notifications.requests.post", return_value=ok_response()
+        ) as post, patch("frappe.sendmail") as sendmail, patch.object(
+            frappe, "log_error"
+        ) as log_error:
+            work_reminders.send_task_reminders()
+
+        self.assertFalse([c for c in post.call_args_list if c.args[0] != TEAMS_CHANNEL])
+        self.assertIn(DEV[0], [c.kwargs["recipients"] for c in sendmail.call_args_list])
+        titles = [c.kwargs.get("title") for c in log_error.call_args_list]
+        self.assertNotIn("Chat notification not sent", titles)
+
+    def test_test_message_checks_only_the_channel_when_that_is_all(self):
+        enable_chat_notifications(
+            "Microsoft Teams",
+            teams_direct_webhook="",
+            teams_channel_webhook=TEAMS_CHANNEL,
+        )
+        with patch(
+            "helpdesk.chat_notifications.requests.post", return_value=ok_response()
+        ) as post:
+            result = chat_notifications.send_test_message()
+
+        self.assertEqual(result, {"direct": False, "channel": True})
+        self.assertEqual([c.args[0] for c in post.call_args_list], [TEAMS_CHANNEL])
+
+    def test_test_message_needs_at_least_one_workflow(self):
+        enable_chat_notifications(
+            "Microsoft Teams", teams_direct_webhook="", teams_channel_webhook=""
+        )
+        with patch("helpdesk.chat_notifications.requests.post") as post:
+            with self.assertRaises(frappe.ValidationError):
+                chat_notifications.send_test_message()
+        self.assertFalse(post.called)
+
 
 class TestSlack(ChatCase):
     def slack(self, found=True):
