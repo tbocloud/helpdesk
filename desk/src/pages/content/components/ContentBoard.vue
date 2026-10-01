@@ -160,7 +160,7 @@
                 {{ post.title }}
               </button>
               <p class="text-xs text-ink-gray-5">
-                {{ post.channel }} · {{ post.format }}
+                {{ platformsOf(post).join(", ") }} · {{ post.format }}
                 <template v-if="!filtersCustomer">
                   · {{ post.customer }}</template
                 >
@@ -315,11 +315,12 @@ import LucidePlus from "~icons/lucide/plus";
 import LucideSend from "~icons/lucide/send";
 import {
   CLOSED_STATUSES,
-  TEAM_ROLES,
-  htmlToText,
-  isMissed,
   type ContentPost,
   type EntryAction,
+  htmlToText,
+  isMissed,
+  platformsOf,
+  TEAM_ROLES,
   type TeamRole,
 } from "../constants";
 import ChipToggle from "./ChipToggle.vue";
@@ -487,7 +488,9 @@ const tiles = computed(() => {
     {
       label: __("Next post"),
       value: next ? dayjs(next.publish_on).format("ddd D MMM, h:mm A") : "—",
-      sub: next ? `${next.title} · ${next.channel}` : __("Nothing scheduled"),
+      sub: next
+        ? `${next.title} · ${platformsOf(next).join(", ")}`
+        : __("Nothing scheduled"),
     },
   ];
 });

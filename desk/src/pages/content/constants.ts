@@ -1,5 +1,22 @@
-export const CHANNELS = ["Instagram", "Facebook", "LinkedIn", "X", "YouTube", "Blog", "Email", "WhatsApp"];
-export const FORMATS = ["Post", "Carousel", "Reel", "Story", "Video", "Article", "Newsletter"];
+export const CHANNELS = [
+  "Instagram",
+  "Facebook",
+  "LinkedIn",
+  "X",
+  "YouTube",
+  "Blog",
+  "Email",
+  "WhatsApp",
+];
+export const FORMATS = [
+  "Post",
+  "Carousel",
+  "Reel",
+  "Story",
+  "Video",
+  "Article",
+  "Newsletter",
+];
 export const STATUSES = [
   "Idea",
   "Drafting",
@@ -17,7 +34,10 @@ export const STATUSES = [
 export function stageColor(status: string) {
   if (status === "Published") return "green";
   if (["Approved", "Scheduled"].includes(status)) return "violet";
-  if (["Internal Review", "Client Review", "Changes Requested"].includes(status)) return "amber";
+  if (
+    ["Internal Review", "Client Review", "Changes Requested"].includes(status)
+  )
+    return "amber";
   return "blue";
 }
 
@@ -26,6 +46,7 @@ export interface ContentPost {
   title: string;
   status: string;
   channel: string;
+  platforms?: string;
   format?: string;
   customer: string;
   publish_on?: string;
@@ -78,4 +99,12 @@ export function textToHtml(text: string) {
     .split(/\n{2,}/)
     .map((para) => `<p>${escape(para).replace(/\n/g, "<br>")}</p>`)
     .join("");
+}
+
+// Every platform a post goes out on; older posts only have their channel
+export function platformsOf(post: { channel?: string; platforms?: string }) {
+  return (post.platforms || post.channel || "")
+    .split(",")
+    .map((p) => p.trim())
+    .filter(Boolean);
 }

@@ -70,7 +70,9 @@
           >
             {{ post.customer }}
           </td>
-          <td class="px-3 py-2 text-ink-gray-7">{{ post.channel }}</td>
+          <td class="px-3 py-2 text-ink-gray-7">
+            {{ platformsOf(post).join(", ") }}
+          </td>
           <td class="px-3 py-2 text-ink-gray-7">{{ post.format }}</td>
           <td class="px-3 py-2"><StatusPill :post="post" /></td>
           <td
@@ -90,7 +92,7 @@
 import { __ } from "@/translation";
 import { dayjs } from "frappe-ui";
 import { computed } from "vue";
-import { TEAM_ROLES, type ContentPost } from "../constants";
+import { type ContentPost, platformsOf, TEAM_ROLES } from "../constants";
 import StatusPill from "./StatusPill.vue";
 
 const props = defineProps<{
