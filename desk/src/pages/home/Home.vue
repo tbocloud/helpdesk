@@ -52,7 +52,7 @@
         <template v-else>
           <!-- At a glance -->
           <section :aria-label="__('At a glance')">
-            <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+            <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <component
                 :is="tile.to ? 'router-link' : 'div'"
                 v-for="tile in tiles"
@@ -455,6 +455,7 @@ import LucideCircleX from "~icons/lucide/circle-x";
 import LucideFolderKanban from "~icons/lucide/folder-kanban";
 import LucideInfo from "~icons/lucide/info";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
+import LucideReply from "~icons/lucide/reply";
 import LucideStar from "~icons/lucide/star";
 import LucideTicket from "~icons/lucide/ticket";
 import LucideTriangleAlert from "~icons/lucide/triangle-alert";
@@ -465,6 +466,8 @@ interface TicketSummary {
   new_today: number;
   unassigned: number;
   sla_breached: number;
+  first_reply_overdue: number;
+  rating: { average: number | null; count: number; low: number };
   by_customer: { customer: string | null; open: number }[];
 }
 
@@ -524,7 +527,7 @@ interface HomeData {
 interface Tile {
   key: string;
   label: string;
-  value: number;
+  value: number | string;
   icon: Component;
   tone: Tone;
   alert: boolean;
@@ -632,6 +635,14 @@ const tiles = computed<Tile[]>(() => {
       hint: __("{0} new today", String(t.new_today)),
     },
     tile(
+      "first_reply",
+      __("First reply overdue"),
+      t.first_reply_overdue,
+      LucideReply,
+      "danger",
+      { name: "TicketsAgent" }
+    ),
+    tile(
       "sla",
       __("SLA breached"),
       t.sla_breached,
@@ -647,6 +658,7 @@ const tiles = computed<Tile[]>(() => {
       "warning",
       { name: "TicketsAgent" }
     ),
+    ratingTile(t.rating),
     tile(
       "overdue",
       __("Overdue work"),
@@ -676,6 +688,25 @@ const tiles = computed<Tile[]>(() => {
     },
   ];
 });
+
+function ratingTile(rating: TicketSummary["rating"]): Tile {
+  return {
+    key: "rating",
+    label: __("Customer rating"),
+    value: rating.average === null ? "–" : `${rating.average}/5`,
+    icon: LucideStar,
+    tone: "warning",
+    alert: rating.low > 0,
+    hint: rating.low
+      ? __(
+          "{0} low of {1}, last 30 days",
+          String(rating.low),
+          String(rating.count)
+        )
+      : __("{0} ratings, last 30 days", String(rating.count)),
+    to: { name: "TicketsAgent" },
+  };
+}
 
 function tile(
   key: string,

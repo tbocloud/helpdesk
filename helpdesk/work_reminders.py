@@ -4,8 +4,10 @@ Tasks (daily): due soon -> assignees; overdue -> project lead (or its managers
 when there is no lead); overdue for ESCALATE_AFTER_DAYS -> project managers.
 Tasks on hold get no due-date reminders; a hold that lasts ESCALATE_AFTER_DAYS
 goes to the project lead and managers.
-Tickets (hourly): SLA due soon -> assignees; breached -> assignees and Agent
-Managers; breached for ESCALATE_AFTER_DAYS -> Agent Managers again.
+Tickets (every 15 minutes), for the first reply and for resolution: due soon
+-> assignees (the chat channel when nobody is assigned); breached -> assignees,
+Agent Managers and the channel; resolution breached for ESCALATE_AFTER_DAYS ->
+Agent Managers again.
 
 Each stage is sent once per person and item (deduped on the stage-specific
 subject), so nobody is nagged every run. Reminders show in the helpdesk
@@ -20,6 +22,7 @@ from frappe.utils import add_days, add_to_date, getdate, now_datetime, nowdate
 
 TASK_DUE_SOON_DAYS = 2
 TICKET_DUE_SOON_HOURS = 4
+FIRST_REPLY_DUE_SOON_MINUTES = 30
 ESCALATE_AFTER_DAYS = 3
 MANAGER_PROJECT_ROLE = "Project Manager"
 ON_HOLD = "On Hold"
@@ -202,8 +205,54 @@ def send_hold_reminders():
 
 
 def send_ticket_reminders():
-    """Hourly: SLA reminders and escalation for open tickets."""
+    """Every 15 minutes: SLA reminders and escalation for open tickets.
+
+    Paused tickets (waiting on the customer or a task) are left alone, like the
+    SLA clock. A ticket nobody is assigned to goes to the team's chat channel
+    as soon as it is due soon, since no one would hear about it otherwise.
+    """
     now = now_datetime()
+    managers = _agent_managers()
+    remind_first_replies(now, managers)
+    remind_resolutions(now, managers)
+
+
+def remind_first_replies(now, managers: list[str]):
+    tickets = frappe.get_all(
+        "HD Ticket",
+        filters={
+            "status_category": "Open",
+            "first_responded_on": ("is", "not set"),
+            "response_by": (
+                "<=",
+                add_to_date(now, minutes=FIRST_REPLY_DUE_SOON_MINUTES),
+            ),
+        },
+        fields=["name", "subject", "response_by", "_assign"],
+    )
+    for ticket in tickets:
+        title = _("Ticket #{0}: {1}").format(ticket.name, ticket.subject)
+        assignees = _assignees(ticket._assign)
+        due_text = frappe.utils.format_datetime(ticket.response_by, "d MMM, HH:mm")
+        if ticket.response_by > now:
+            notify_users(
+                assignees,
+                "HD Ticket",
+                ticket.name,
+                _("First reply due {0}: {1}").format(due_text, title),
+                escalate=not assignees,
+            )
+            continue
+        notify_users(
+            [*assignees, *managers],
+            "HD Ticket",
+            ticket.name,
+            _("First reply overdue ({0}): {1}").format(due_text, title),
+            escalate=True,
+        )
+
+
+def remind_resolutions(now, managers: list[str]):
     tickets = frappe.get_all(
         "HD Ticket",
         filters={
@@ -212,7 +261,6 @@ def send_ticket_reminders():
         },
         fields=["name", "subject", "priority", "resolution_by", "_assign"],
     )
-    managers = None
     for ticket in tickets:
         title = _("Ticket #{0}: {1}").format(ticket.name, ticket.subject)
         assignees = _assignees(ticket._assign)
@@ -224,11 +272,10 @@ def send_ticket_reminders():
                 "HD Ticket",
                 ticket.name,
                 _("SLA due {0}: {1}").format(due_text, title),
+                escalate=not assignees,
             )
             continue
 
-        if managers is None:
-            managers = _agent_managers()
         notify_users(
             [*assignees, *managers],
             "HD Ticket",

@@ -9,7 +9,7 @@ Lists go through `frappe.get_list`, so nobody sees records they couldn't open.
 from collections import Counter
 
 import frappe
-from frappe.utils import get_datetime, getdate, now_datetime, nowdate
+from frappe.utils import add_days, get_datetime, getdate, now_datetime, nowdate
 
 from helpdesk.api.work import (
     _assignees,
@@ -18,6 +18,7 @@ from helpdesk.api.work import (
     get_overview,
     get_project_portfolio,
 )
+from helpdesk.helpdesk.doctype.hd_ticket.hd_ticket import LOW_RATING_STARS
 from helpdesk.tasky.permissions import is_tasky_admin
 from helpdesk.utils import agent_only
 
@@ -26,6 +27,7 @@ CUSTOMER_LIMIT = 6
 PEOPLE_LIMIT = 10
 OPEN_TICKET_CATEGORIES = ("in", ["Open", "Paused"])
 OPEN_CHAT_STATUSES = ("in", ["Open", "Pending"])
+RATING_DAYS = 30
 
 
 @frappe.whitelist()
@@ -61,7 +63,14 @@ def _ticket_summary() -> dict:
     open_tickets = frappe.get_list(
         "HD Ticket",
         filters={"status_category": OPEN_TICKET_CATEGORIES},
-        fields=["customer", "status_category", "resolution_by", "_assign"],
+        fields=[
+            "customer",
+            "status_category",
+            "response_by",
+            "first_responded_on",
+            "resolution_by",
+            "_assign",
+        ],
         limit_page_length=0,
     )
     by_customer = Counter(t.customer or "" for t in open_tickets)
@@ -84,10 +93,38 @@ def _ticket_summary() -> dict:
             and t.resolution_by
             and get_datetime(t.resolution_by) < now
         ),
+        "first_reply_overdue": sum(
+            1
+            for t in open_tickets
+            if t.status_category == "Open"
+            and not t.first_responded_on
+            and t.response_by
+            and get_datetime(t.response_by) < now
+        ),
+        "rating": _rating(),
         "by_customer": [
             {"customer": customer or None, "open": count}
             for customer, count in by_customer.most_common(CUSTOMER_LIMIT)
         ],
+    }
+
+
+def _rating() -> dict:
+    """Customers' ratings on tickets updated in the last RATING_DAYS, out of 5."""
+    ratings = frappe.get_list(
+        "HD Ticket",
+        filters={
+            "feedback_rating": (">", 0),
+            "modified": (">=", add_days(now_datetime(), -RATING_DAYS)),
+        },
+        pluck="feedback_rating",
+        limit_page_length=0,
+    )
+    return {
+        "average": round(sum(ratings) / len(ratings) * 5, 1) if ratings else None,
+        "count": len(ratings),
+        # ratings are stored as 0-1
+        "low": sum(1 for r in ratings if r * 5 <= LOW_RATING_STARS),
     }
 
 

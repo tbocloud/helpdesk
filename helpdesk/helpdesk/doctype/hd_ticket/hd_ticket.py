@@ -40,9 +40,12 @@ from helpdesk.utils import (
     publish_event,
     strip_chat_placeholders,
 )
+from helpdesk.work_reminders import _agent_managers, _assignees, notify_users
 
 from ..hd_notification.utils import clear as clear_notifications
 from ..hd_service_level_agreement.utils import get_sla
+
+LOW_RATING_STARS = 2
 
 
 class HDTicket(Document):
@@ -225,8 +228,33 @@ class HDTicket(Document):
                         self.notify_agent(agent.name, "Reaction")
 
         self.remove_assignment_if_not_in_team()
+        self.alert_low_rating()
         self.publish_update()
         self.capture_update_telemetry_events()
+
+    def alert_low_rating(self):
+        """A customer's rating of LOW_RATING_STARS or less reaches the assignees,
+        Agent Managers and the team's chat channel, while it can still be put right."""
+        rating = self.feedback_rating or 0
+        if not rating or rating * 5 > LOW_RATING_STARS:
+            return
+        if not self.has_value_changed("feedback_rating"):
+            return
+        subject = _("Low rating ({0}/5) from {1}: Ticket #{2}: {3}").format(
+            round(rating * 5),
+            self.customer or self.raised_by,
+            self.name,
+            self.subject,
+        )
+        if self.feedback:
+            subject += f" ({self.feedback})"
+        notify_users(
+            [*_assignees(self._assign), *_agent_managers()],
+            "HD Ticket",
+            self.name,
+            subject,
+            escalate=True,
+        )
 
     def notify_agent(self, agent, notification_type="Assignment"):
         frappe.get_doc(
