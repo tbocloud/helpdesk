@@ -18,6 +18,7 @@ from helpdesk.test_utils import (
     create_customer,
     make_assignment,
     make_project,
+    make_pull_request,
     make_task,
     make_tasky_user,
     make_ticket,
@@ -954,3 +955,18 @@ class TestCompletedWork(WorkControlCase):
         )
         result = self.as_user(LEAD, lambda: work.get_my_work(user=DEV[0]))
         self.assertIn(task, [i["name"] for i in result["done"]])
+
+
+class TestPullRequestsInWorkLists(WorkControlCase):
+    def test_open_pull_request_shows_with_the_task(self):
+        task = self.make_task("Home dashboard", add_days(nowdate(), 2))
+        other = self.make_task("Old change", add_days(nowdate(), 2))
+        make_pull_request(task, 5, ci_state="Passing")
+        make_pull_request(other, 3, state="Merged")
+
+        items = {i["name"]: i for i in self.as_user(DEV, work.get_my_work)["items"]}
+
+        self.assertEqual(items[task]["pull_request"]["number"], 5)
+        self.assertEqual(items[task]["pull_request"]["ci_state"], "Passing")
+        # merged or closed PRs no longer move the task
+        self.assertIsNone(items[other]["pull_request"])

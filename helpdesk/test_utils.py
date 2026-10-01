@@ -1500,3 +1500,21 @@ def make_email_account(email_id: str, **kwargs):
             **kwargs,
         }
     ).insert(ignore_permissions=True)
+
+
+def make_pull_request(task: str, number: int, state: str = "Open", **kwargs):
+    """Creates an HD Pull Request linking a GitHub PR (no real GitHub call) to `task`."""
+    return frappe.get_doc(
+        {
+            "doctype": "HD Pull Request",
+            "repo": "tbocloud/helpdesk",
+            "number": number,
+            "title": f"PR {number}",
+            "url": f"https://github.com/tbocloud/helpdesk/pull/{number}",
+            "task": task,
+            "link_kind": "Refs",
+            "state": state,
+            "last_event_at": frappe.utils.now_datetime(),
+            **kwargs,
+        }
+    ).insert(ignore_permissions=True)

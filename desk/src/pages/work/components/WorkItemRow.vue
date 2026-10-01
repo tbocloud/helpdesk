@@ -36,6 +36,11 @@
             v-if="item.kind === 'task' && item.slip_count"
             :count="item.slip_count"
           />
+          <PullRequestChip
+            v-if="item.kind === 'task' && item.pull_request"
+            :pr="item.pull_request"
+            :plain="!!to"
+          />
         </div>
         <div
           class="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 text-sm text-ink-gray-5"
@@ -176,6 +181,7 @@ import LucideStar from "~icons/lucide/star";
 import LucideTicket from "~icons/lucide/ticket";
 import LucideTriangleAlert from "~icons/lucide/triangle-alert";
 import MilestoneMark from "@/pages/tasky/components/MilestoneMark.vue";
+import PullRequestChip from "@/pages/tasky/components/PullRequestChip.vue";
 import SlipBadge from "@/pages/tasky/components/SlipBadge.vue";
 import TaskStatusBadge from "@/pages/tasky/components/TaskStatusBadge.vue";
 import TaskyBadge from "@/pages/tasky/components/TaskyBadge.vue";
