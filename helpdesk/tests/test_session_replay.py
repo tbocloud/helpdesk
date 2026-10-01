@@ -455,3 +455,50 @@ class TestStuckTriageAndSyncState(FrappeTestCase):
         self.assertEqual(_load_conv_state(None), {})
         self.assertEqual(_load_conv_state("[1, 2]"), {})
         self.assertEqual(_load_conv_state('{"client": ["C1"]}'), {"client": ["C1"]})
+
+    def test_long_sync_state_is_saved_and_nothing_syncs_twice(self):
+        # a ticket with a dozen customer comments outgrew the old 140-character
+        # field, so every sync rolled back and the comments never arrived
+        from helpdesk import ticket_puller
+        from helpdesk.test_utils import create_customer, make_support_connection
+
+        create_customer("Sync State Trading LLC")
+        connection = make_support_connection("Sync State Trading LLC").name
+        ticket = make_ticket(subject="Filter not working", description="Sales list.")
+        ticket.db_set(
+            {"custom_client_ticket": "ST-0001", "custom_qcs_connection": connection}
+        )
+        comments = [
+            {
+                "name": f"comment-{i:04d}-abcdef",
+                "content": f"Update {i}",
+                "owner": "customer@example.com",
+            }
+            for i in range(12)
+        ]
+
+        def call_tool(tool, args):
+            rows = (
+                comments
+                if tool == "get_list" and args.get("doctype") == "Comment"
+                else []
+            )
+            return {"content": [{"type": "text", "text": json.dumps(rows)}]}
+
+        mcp = MagicMock()
+        mcp.call_tool.side_effect = call_tool
+        with patch.object(ticket_puller, "MCPClient", return_value=mcp), patch.object(
+            frappe.db, "commit"
+        ), patch.object(frappe, "log_error") as log_error:
+            ticket_puller.sync_conversations()
+            ticket_puller.sync_conversations()
+
+        log_error.assert_not_called()
+        state = json.loads(
+            frappe.db.get_value("HD Ticket", ticket.name, "custom_sync_state")
+        )
+        self.assertEqual(len(state["client"]), 12)
+        self.assertEqual(
+            frappe.db.count("HD Ticket Comment", {"reference_ticket": ticket.name}),
+            12,
+        )

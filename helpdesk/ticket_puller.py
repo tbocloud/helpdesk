@@ -413,7 +413,7 @@ def sync_conversations() -> int:
     - close_requested on the client closes the HD Ticket; the status push
       mirrors Closed back, confirming to the user.
 
-    Idempotency: synced record names are tracked in custom_conv_state.
+    Idempotency: synced record names are tracked in custom_sync_state.
     """
     rows = frappe.get_all(
         "HD Ticket",
@@ -427,6 +427,7 @@ def sync_conversations() -> int:
             "custom_client_ticket",
             "custom_qcs_connection",
             "custom_conv_state",
+            "custom_sync_state",
         ],
         limit=100,
     )
@@ -452,7 +453,8 @@ def sync_conversations() -> int:
 
         for row in tickets:
             try:
-                state = _load_conv_state(row.custom_conv_state)
+                # older tickets kept the state in custom_conv_state
+                state = _load_conv_state(row.custom_sync_state or row.custom_conv_state)
                 state.setdefault("client", [])
                 state.setdefault("hub", [])
                 ct = row.custom_client_ticket
@@ -570,7 +572,7 @@ def sync_conversations() -> int:
                 frappe.db.set_value(
                     "HD Ticket",
                     row.name,
-                    "custom_conv_state",
+                    "custom_sync_state",
                     json.dumps(state),
                     update_modified=False,
                 )

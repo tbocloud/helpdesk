@@ -379,6 +379,18 @@ def get_custom_fields():
                 "insert_after": "custom_client_ticket",
             },
             {
+                # what the conversation sync already copied; the Select field
+                # above is too short (140 chars) for it, and Frappe won't change
+                # a Select field into a text field
+                "fieldname": "custom_sync_state",
+                "fieldtype": "Long Text",
+                "label": "Conversation Sync State",
+                "insert_after": "custom_conv_state",
+                "hidden": 1,
+                "read_only": 1,
+                "no_copy": 1,
+            },
+            {
                 "fieldname": "custom_triage_status",
                 "fieldtype": "Select",
                 "options": "Pending\nCompleted\nFailed",
