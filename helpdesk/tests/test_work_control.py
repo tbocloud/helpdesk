@@ -176,7 +176,9 @@ class TestTicketToTask(WorkControlCase):
             ),
         )["task"]["name"]
 
-        self.as_user(DEV, lambda: tasky.move_task(task=task, new_status="Completed"))
+        self.as_user(
+            DEV, lambda: tasky.complete_task(task=task, hours_worked=1, notes="Done")
+        )
 
         self.assertEqual(
             frappe.db.get_value("HD Ticket", ticket.name, "status"), "Open"
@@ -315,9 +317,9 @@ class TestTaskHold(WorkControlCase):
             self.as_user(DEV, lambda: tasky.move_task(task=task, new_status="On Hold"))
 
         self.hold(task, days_ago=1)
-        self.as_user(DEV, lambda: tasky.move_task(task=task, new_status="Completed"))
+        self.as_user(DEV, lambda: tasky.move_task(task=task, new_status="Working"))
         doc = frappe.get_doc("Task", task)
-        self.assertEqual(doc.status, "Completed")
+        self.assertEqual(doc.status, "Working")
         self.assertEqual(doc.hold_days_total, 1)
 
     def test_held_tasks_skip_due_reminders_and_escalate_when_stuck(self):
@@ -398,7 +400,9 @@ class TestDependenciesAndMilestones(WorkControlCase):
                 DEV, lambda: tasky.move_task(task=second, new_status="Working")
             )
 
-        self.as_user(LEAD, lambda: tasky.move_task(task=first, new_status="Completed"))
+        self.as_user(
+            LEAD, lambda: tasky.complete_task(task=first, hours_worked=1, notes="Done")
+        )
         self.assertTrue(any("Unblocked" in s for s in self.notified(DEV, second)))
         self.as_user(DEV, lambda: tasky.move_task(task=second, new_status="Working"))
         self.assertEqual(frappe.db.get_value("Task", second, "status"), "Working")
@@ -445,7 +449,8 @@ class TestReviewBeforeDone(WorkControlCase):
     def test_done_goes_to_the_lead_who_approves(self):
         task = self.make_task("Sales invoice print format", add_days(nowdate(), 3))
         result = self.as_user(
-            DEV, lambda: tasky.move_task(task=task, new_status="Completed")
+            DEV,
+            lambda: tasky.complete_task(task=task, hours_worked=1, notes="Done"),
         )
 
         self.assertEqual(result["status"], "Pending Review")
@@ -459,7 +464,8 @@ class TestReviewBeforeDone(WorkControlCase):
     def test_lead_sends_it_back_with_a_note(self):
         task = self.make_task("Purchase workflow", add_days(nowdate(), 3))
         self.as_user(
-            DEV, lambda: tasky.update_task_status(task=task, status="Completed")
+            DEV,
+            lambda: tasky.complete_task(task=task, hours_worked=1, notes="Done"),
         )
 
         self.as_user(
@@ -479,7 +485,10 @@ class TestReviewBeforeDone(WorkControlCase):
             ),
         )["task"]["name"]
 
-        self.as_user(DEV, lambda: tasky.move_task(task=task, new_status="Completed"))
+        self.as_user(
+            DEV,
+            lambda: tasky.complete_task(task=task, hours_worked=1, notes="Done"),
+        )
         self.assertEqual(
             frappe.db.get_value("HD Ticket", ticket.name, "status"), "Waiting on Task"
         )
@@ -762,7 +771,8 @@ class TestHelpAndHandOver(WorkControlCase):
         self.assertTrue(any("Waiting on" in c for c in self.comments(task)))
 
         self.as_user(
-            TEAMMATE, lambda: tasky.move_task(task=help_task, new_status="Completed")
+            TEAMMATE,
+            lambda: tasky.complete_task(task=help_task, hours_worked=1, notes="Done"),
         )
         self.assertTrue(any("Unblocked" in s for s in self.notified(DEV, task)))
 
@@ -849,3 +859,54 @@ class TestHelpAndHandOver(WorkControlCase):
                     task=task, teammate=TEAMMATE[0], reason="Busy"
                 ),
             )
+
+
+class TestCompletionNeedsTime(WorkControlCase):
+    def test_board_and_status_changes_cannot_complete_without_hours(self):
+        task = self.make_task("Payroll setup", add_days(nowdate(), 3))
+        for status in ("Completed", "Pending Review"):
+            with self.assertRaises(frappe.ValidationError):
+                self.as_user(
+                    DEV, lambda s=status: tasky.move_task(task=task, new_status=s)
+                )
+            with self.assertRaises(frappe.ValidationError):
+                self.as_user(
+                    DEV, lambda s=status: tasky.update_task_status(task=task, status=s)
+                )
+        self.assertEqual(frappe.db.get_value("Task", task, "status"), "Open")
+
+    def test_timer_uses_the_site_time_zone_and_never_goes_negative(self):
+        task = self.make_task("Payroll setup", add_days(nowdate(), 3))
+        frappe.db.set_value(
+            "Task", task, "custom_timer_start", add_to_date(now_datetime(), hours=-1)
+        )
+        elapsed = self.as_user(DEV, lambda: tasky.stop_timer(task=task))["elapsed"]
+        self.assertAlmostEqual(elapsed, 1, delta=0.05)
+
+        frappe.db.set_value(
+            "Task", task, "custom_timer_start", add_to_date(now_datetime(), hours=2)
+        )
+        self.assertEqual(
+            self.as_user(DEV, lambda: tasky.stop_timer(task=task))["elapsed"], 0
+        )
+        self.assertGreaterEqual(
+            frappe.db.get_value("Task", task, "custom_actual_hours"), 0
+        )
+
+
+class TestTeamTimesheets(WorkControlCase):
+    def test_lead_sees_the_teams_timesheets_and_developers_only_their_own(self):
+        task = self.make_task("Opening balances", add_days(nowdate(), 3))
+        self.as_user(
+            DEV,
+            lambda: tasky.complete_task(task=task, hours_worked=2, notes="Imported"),
+        )
+
+        team = self.as_user(LEAD, lambda: tasky.get_my_timesheets(team=1))
+        mine = [t for t in team if t["owner"] == DEV[0]]
+        self.assertTrue(mine)
+        self.assertEqual(mine[0]["owner_name"], DEV[1])
+        self.assertEqual(self.as_user(LEAD, tasky.get_my_timesheets), [])
+        self.assertTrue(self.as_user(DEV, tasky.get_my_timesheets))
+        with self.assertRaises(frappe.PermissionError):
+            self.as_user(DEV, lambda: tasky.get_my_timesheets(team=1))
