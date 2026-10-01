@@ -194,6 +194,11 @@ const portalRoutes = [
     beforeEnter: () => useAuthStore().canSeeOverview || { name: "Home" },
   },
   {
+    path: "/performance",
+    name: "Performance",
+    component: () => import("@/pages/performance/Performance.vue"),
+  },
+  {
     path: "/timesheets",
     name: "TaskyTimesheets",
     component: () => import("@/pages/tasky/Timesheets.vue"),

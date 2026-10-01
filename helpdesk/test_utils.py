@@ -704,3 +704,54 @@ def make_portal_contact(customer: str, email: str):
     contact = create_contact(email.split("@")[0], email, user=False)["contact"]
     add_contact_in_customer(frappe.get_doc("HD Customer", customer), contact)
     return contact
+
+
+def make_employee_with_user(email: str, full_name: str, roles: tuple[str, ...] = ()):
+    """An agent user (with extra roles) linked to an active Employee; returns the Employee name."""
+    make_tasky_user(email, full_name, roles)
+    existing = frappe.db.get_value("Employee", {"user_id": email}, "name")
+    if existing:
+        return existing
+    first, _, last = full_name.partition(" ")
+    employee = frappe.get_doc(
+        {
+            "doctype": "Employee",
+            "first_name": first,
+            "last_name": last or None,
+            "user_id": email,
+            "gender": frappe.db.get_value("Gender", {}, "name") or "Female",
+            "date_of_birth": "1995-01-01",
+            "date_of_joining": "2024-01-01",
+            "company": frappe.db.get_value("Company", {}, "name"),
+            "status": "Active",
+        }
+    )
+    # sites often make HR fields (payroll, holiday list...) mandatory; tests don't need them
+    employee.flags.ignore_mandatory = True
+    return employee.insert(ignore_permissions=True).name
+
+
+def make_timesheet_hours(
+    employee: str, day, hours: float, activity_type: str | None = None
+):
+    """A draft timesheet with one time log of `hours` on `day` for `employee`."""
+    if activity_type and not frappe.db.exists("Activity Type", activity_type):
+        frappe.get_doc(
+            {"doctype": "Activity Type", "activity_type": activity_type}
+        ).insert(ignore_permissions=True)
+    sheet = frappe.get_doc(
+        {
+            "doctype": "Timesheet",
+            "employee": employee,
+            "time_logs": [
+                {
+                    "activity_type": activity_type,
+                    "from_time": f"{day} 09:00:00",
+                    "hours": hours,
+                }
+            ],
+        }
+    )
+    sheet.flags.ignore_validate = True
+    sheet.flags.ignore_mandatory = True
+    return sheet.insert(ignore_permissions=True)

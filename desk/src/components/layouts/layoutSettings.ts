@@ -8,6 +8,7 @@ import LucideLayoutDashboard from "~icons/lucide/layout-dashboard";
 import LucideClipboardList from "~icons/lucide/clipboard-list";
 import LucideClock from "~icons/lucide/clock";
 import LucideCalendarDays from "~icons/lucide/calendar-days";
+import LucideChartColumn from "~icons/lucide/chart-column";
 import { __ } from "@/translation";
 
 export const agentPortalSidebarOptions = [
@@ -48,6 +49,12 @@ export const agentPortalSidebarOptions = [
     label: __("Timesheets"),
     icon: LucideClock,
     to: "TaskyTimesheets",
+    section: "Workspace",
+  },
+  {
+    label: __("Performance"),
+    icon: LucideChartColumn,
+    to: "Performance",
     section: "Workspace",
   },
   {
