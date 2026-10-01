@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 import frappe
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_days, add_to_date, now_datetime, nowdate
@@ -21,6 +23,11 @@ class TestHome(FrappeTestCase):
     def setUp(self):
         self.addCleanup(frappe.db.rollback)
         self.addCleanup(frappe.set_user, "Administrator")
+        # code under test commits (e.g. assignment); keep everything in this
+        # test's transaction so other test modules don't see its project and task
+        commit = patch.object(frappe.db, "commit")
+        commit.start()
+        self.addCleanup(commit.stop)
         create_customer(CUSTOMER)
         make_tasky_user(*LEAD)
         make_tasky_user(*DEV)
