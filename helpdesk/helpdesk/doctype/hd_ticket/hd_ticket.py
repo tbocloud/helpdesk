@@ -72,6 +72,7 @@ class HDTicket(Document):
         return self.name
 
     def before_insert(self):
+        self.reject_unwanted_email()
         self.generate_key()
 
     def before_validate(self):
@@ -618,6 +619,14 @@ class HDTicket(Document):
 
         if email_account := default_outgoing_email_account():
             return email_account
+
+    def reject_unwanted_email(self):
+        """Notifications and newsletters in the support mailbox don't become tickets."""
+        from helpdesk.email_filter import UnwantedTicketEmail, is_unwanted_sender
+
+        # only tickets opened by an incoming email carry the account it came through
+        if self.email_account and is_unwanted_sender(self.raised_by):
+            raise UnwantedTicketEmail
 
     def reply_to_address(self, sender_email=None) -> str | None:
         """Where the customer's reply should go: a mailbox we read.

@@ -82,7 +82,10 @@
   "reply_email_to_agent_content",
   "reply_from_agent_section",
   "enable_reply_email_via_agent",
-  "reply_via_agent_email_content"
+  "reply_via_agent_email_content",
+  "incoming_email_filter_section",
+  "ignore_automated_emails",
+  "ignored_email_senders"
  ],
  "fields": [
   {
@@ -427,6 +430,24 @@
    "label": "Email Content"
   },
   {
+   "fieldname": "incoming_email_filter_section",
+   "fieldtype": "Section Break",
+   "label": "Tickets From Email"
+  },
+  {
+   "default": "1",
+   "description": "Don't open tickets for emails from automated senders such as noreply@, no-reply@, notifications@ and mailer-daemon@. Replies on existing tickets still come through.",
+   "fieldname": "ignore_automated_emails",
+   "fieldtype": "Check",
+   "label": "Ignore automated emails"
+  },
+  {
+   "description": "One per line: an email address (news@example.com) or a domain (example.com, which also covers its subdomains). Emails from these never open a ticket.",
+   "fieldname": "ignored_email_senders",
+   "fieldtype": "Small Text",
+   "label": "Never open tickets from"
+  },
+  {
    "fieldname": "reply_from_contact_section",
    "fieldtype": "Section Break",
    "label": "Reply From Contact"
@@ -541,7 +562,7 @@
  "grid_page_length": 50,
  "issingle": 1,
  "links": [],
- "modified": "2026-07-10 14:58:15.922364",
+ "modified": "2026-10-01 15:00:00.000000",
  "modified_by": "Administrator",
  "module": "Helpdesk",
  "name": "HD Settings",
