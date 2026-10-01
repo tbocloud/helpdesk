@@ -9,6 +9,7 @@
  "field_order": [
   "title",
   "status",
+  "source_ticket",
   "published_on",
   "views",
   "column_break_7",
@@ -86,11 +87,21 @@
    "fieldtype": "Int",
    "label": "Views",
    "read_only": 1
+  },
+  {
+   "fieldname": "source_ticket",
+   "fieldtype": "Link",
+   "label": "Drafted From Ticket",
+   "options": "HD Ticket",
+   "read_only": 1,
+   "no_copy": 1,
+   "search_index": 1,
+   "description": "Set when the AI drafted this article from a resolved ticket."
   }
  ],
  "links": [],
  "make_attachments_public": 1,
- "modified": "2026-06-28 13:55:21.075010",
+ "modified": "2026-10-01 22:30:00.000000",
  "modified_by": "Administrator",
  "module": "Helpdesk",
  "name": "HD Article",
