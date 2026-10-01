@@ -106,32 +106,63 @@
               {{ v.label }}
             </button>
           </div>
-          <div v-if="view !== 'calendar'" class="flex items-center gap-1">
-            <Button
-              variant="ghost"
-              :aria-label="__('Previous month')"
-              @click="shiftMonth(-1)"
+          <template v-if="view !== 'calendar'">
+            <div
+              class="inline-flex rounded-lg bg-surface-gray-2 p-0.5"
+              role="tablist"
+              :aria-label="__('Period')"
             >
-              <LucideChevronLeft class="size-4" aria-hidden="true" />
-            </Button>
-            <span
-              class="min-w-[9rem] text-center text-base font-medium text-ink-gray-9"
-              >{{ dayjs(`${month}-01`).format("MMMM YYYY") }}</span
-            >
-            <Button
-              variant="ghost"
-              :aria-label="__('Next month')"
-              @click="shiftMonth(1)"
-            >
-              <LucideChevronRight class="size-4" aria-hidden="true" />
-            </Button>
-            <Button
-              v-if="month !== thisMonth"
-              variant="ghost"
-              :label="__('This month')"
-              @click="month = thisMonth"
-            />
-          </div>
+              <button
+                v-for="p in PERIODS"
+                :key="p.key"
+                type="button"
+                role="tab"
+                :aria-selected="period === p.key"
+                class="h-7 rounded-md px-3 text-sm"
+                :class="
+                  period === p.key
+                    ? 'bg-surface-base text-ink-gray-9 shadow-sm'
+                    : 'text-ink-gray-6 hover:text-ink-gray-8'
+                "
+                @click="period = p.key"
+              >
+                {{ p.label }}
+              </button>
+            </div>
+            <div class="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                :aria-label="__('Previous {0}', periodNoun)"
+                @click="shiftPeriod(-1)"
+              >
+                <LucideChevronLeft class="size-4" aria-hidden="true" />
+              </Button>
+              <span
+                class="min-w-[10rem] text-center text-base font-medium text-ink-gray-9"
+                >{{ periodLabel }}</span
+              >
+              <Button
+                variant="ghost"
+                :aria-label="__('Next {0}', periodNoun)"
+                @click="shiftPeriod(1)"
+              >
+                <LucideChevronRight class="size-4" aria-hidden="true" />
+              </Button>
+              <div class="w-40">
+                <FormControl
+                  v-model="anchor"
+                  type="date"
+                  :aria-label="__('Go to date')"
+                />
+              </div>
+              <Button
+                v-if="!includesToday"
+                variant="ghost"
+                :label="__('Today')"
+                @click="anchor = today"
+              />
+            </div>
+          </template>
         </div>
         <div
           v-if="(view === 'calendar' ? posts : monthPosts).error"
@@ -145,7 +176,8 @@
           <ContentBoard
             v-if="view === 'board'"
             :posts="monthPosts.data ?? []"
-            :month="month"
+            :month="rangeKey"
+            :period="period"
             :loading="monthPosts.loading"
             :filters-customer="filters.customer"
             @open="openPost"
@@ -154,6 +186,7 @@
           />
           <ContentSheet
             v-else
+            :period="period"
             :posts="monthPosts.data ?? []"
             :loading="monthPosts.loading"
             :filters-customer="filters.customer"
@@ -297,10 +330,48 @@ const VIEWS: { key: View; label: string; icon: unknown }[] = [
 ];
 const view = useStorage<View>("helpdesk-content-view", "board");
 
-const thisMonth = dayjs().format("YYYY-MM");
-const month = ref(thisMonth);
-function shiftMonth(by: number) {
-  month.value = dayjs(`${month.value}-01`).add(by, "month").format("YYYY-MM");
+type Period = "day" | "week" | "month";
+const PERIODS: { key: Period; label: string }[] = [
+  { key: "day", label: __("Day") },
+  { key: "week", label: __("Week") },
+  { key: "month", label: __("Month") },
+];
+const period = useStorage<Period>("helpdesk-content-period", "month");
+const today = dayjs().format("YYYY-MM-DD");
+// any date inside the period on screen; the period is worked out from it
+const anchor = ref(today);
+
+const rangeStart = computed(() =>
+  dayjs(anchor.value || today).startOf(period.value)
+);
+const rangeEnd = computed(() =>
+  dayjs(anchor.value || today).endOf(period.value)
+);
+const rangeKey = computed(
+  () => `${period.value}:${rangeStart.value.format("YYYY-MM-DD")}`
+);
+const includesToday = computed(
+  () =>
+    !dayjs(today).isBefore(rangeStart.value, "day") &&
+    !dayjs(today).isAfter(rangeEnd.value, "day")
+);
+const periodNoun = computed(
+  () => ({ day: __("day"), week: __("week"), month: __("month") }[period.value])
+);
+const periodLabel = computed(() => {
+  const start = rangeStart.value;
+  if (period.value === "day") return start.format("ddd, D MMM YYYY");
+  if (period.value === "month") return start.format("MMMM YYYY");
+  const end = rangeEnd.value;
+  return start.month() === end.month()
+    ? `${start.format("D")} – ${end.format("D MMM YYYY")}`
+    : `${start.format("D MMM")} – ${end.format("D MMM YYYY")}`;
+});
+
+function shiftPeriod(by: number) {
+  anchor.value = dayjs(anchor.value || today)
+    .add(by, period.value)
+    .format("YYYY-MM-DD");
 }
 
 const filters = reactive({ customer: "", channel: "", status: "" });
@@ -350,7 +421,6 @@ const BOARD_FIELDS = [
 const monthPosts = createResource({
   url: "frappe.client.get_list",
   makeParams: () => {
-    const start = dayjs(`${month.value}-01`);
     const f = baseFilters();
     if (!filters.status) delete f.status;
     return {
@@ -361,8 +431,8 @@ const monthPosts = createResource({
         publish_on: [
           "between",
           [
-            start.format("YYYY-MM-DD 00:00:00"),
-            start.endOf("month").format("YYYY-MM-DD 23:59:59"),
+            rangeStart.value.format("YYYY-MM-DD 00:00:00"),
+            rangeEnd.value.format("YYYY-MM-DD 23:59:59"),
           ],
         ],
       },
@@ -424,7 +494,7 @@ function refresh() {
 }
 
 watch(filters, refresh);
-watch([view, month], refresh, { immediate: true });
+watch([view, rangeKey], refresh, { immediate: true });
 
 function clearFilters() {
   Object.assign(filters, { customer: "", channel: "", status: "" });
