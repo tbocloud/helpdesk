@@ -100,10 +100,15 @@
         {{
           posts.length
             ? __("No entries match this filter.")
+            : day
+            ? __("Nothing planned for {0}.", dayjs(day).format("ddd D MMM"))
             : PERIOD_TEXT[period || "month"].empty
         }}
       </p>
-      <Button :label="__('Add entry')" @click="emit('add')">
+      <Button
+        :label="day ? __('Add entry for this day') : __('Add entry')"
+        @click="emit('add', day || undefined)"
+      >
         <template #prefix
           ><LucidePlus class="size-4" aria-hidden="true"
         /></template>
@@ -342,6 +347,8 @@ const props = defineProps<{
   posts: ContentPost[];
   month: string;
   period?: "day" | "week" | "month";
+  // set in Day view, so an empty day offers to add an entry on it
+  day?: string;
   loading?: boolean;
   filtersCustomer?: string;
 }>();
