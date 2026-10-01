@@ -187,6 +187,8 @@ override_doctype_class = {
 ignore_links_on_delete = [
     "HD Notification",
     "HD Ticket Comment",
+    # AI cost records are an audit trail; they keep the old ticket number
+    "HDS AI Usage Log",
 ]
 
 # setup wizard
