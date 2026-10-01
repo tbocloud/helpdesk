@@ -65,6 +65,25 @@ class TestContentBoard(FrappeTestCase):
         post.save()
         self.assertEqual((post.channel, post.platforms), ("Facebook", "Facebook"))
 
+    def test_export_matches_the_sheet_filters(self):
+        import io
+
+        import openpyxl
+
+        content_board.add_entries(self.entry(), ["Instagram", "Facebook"], separate=1)
+        day = str(getdate(add_to_date(now_datetime(), days=3)))
+        frappe.response.clear()
+        content_board.export_posts(
+            start=day, end=day, customer=CUSTOMER, channel="Facebook"
+        )
+        sheet = openpyxl.load_workbook(io.BytesIO(frappe.response.filecontent)).active
+        rows = list(sheet.iter_rows(values_only=True))
+        self.assertEqual(
+            rows[0][:4], ("Post", "Publish date", "Time", "Campaign or topic")
+        )
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[1][6], "Facebook")
+
     def test_needs_a_platform_and_valid_post(self):
         with self.assertRaises(frappe.ValidationError):
             content_board.add_entries(self.entry(), [])

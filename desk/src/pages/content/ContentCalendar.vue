@@ -152,6 +152,17 @@
               </label>
             </div>
             <div class="flex-1" />
+            <Button
+              v-if="view === 'sheet'"
+              :label="__('Export to Excel')"
+              :tooltip="__('Download what this sheet shows as an .xlsx file')"
+              :disabled="!visiblePosts.length"
+              @click="exportSheet"
+            >
+              <template #prefix
+                ><LucideDownload class="size-4" aria-hidden="true"
+              /></template>
+            </Button>
             <div
               class="inline-flex rounded-lg bg-surface-gray-2 p-0.5"
               role="tablist"
@@ -338,6 +349,7 @@ import { useRoute } from "vue-router";
 import LucideCalendarDays from "~icons/lucide/calendar-days";
 import LucideChartColumn from "~icons/lucide/chart-column";
 import LucideChevronDown from "~icons/lucide/chevron-down";
+import LucideDownload from "~icons/lucide/download";
 import LucideChevronLeft from "~icons/lucide/chevron-left";
 import LucideChevronRight from "~icons/lucide/chevron-right";
 import LucideLayoutList from "~icons/lucide/layout-list";
@@ -448,6 +460,21 @@ const weekDays = computed(() => {
     };
   });
 });
+
+// same period and filters as the sheet; the server applies the same visibility rules
+function exportSheet() {
+  const params = new URLSearchParams({
+    start: rangeStart.value.format("YYYY-MM-DD"),
+    end: rangeEnd.value.format("YYYY-MM-DD"),
+  });
+  for (const key of ["customer", "channel", "status"] as const) {
+    if (filters[key]) params.set(key, filters[key]);
+  }
+  window.open(
+    `/api/method/helpdesk.api.content_board.export_posts?${params}`,
+    "_blank"
+  );
+}
 
 function openDay(date: string) {
   anchor.value = date;
