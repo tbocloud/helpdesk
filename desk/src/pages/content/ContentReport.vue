@@ -17,12 +17,26 @@
       </template>
       <template #right-header>
         <Button
+          :label="__('Download PDF')"
+          :tooltip="
+            __(
+              'Download this report as a PDF with the current dates and customer'
+            )
+          "
+          :disabled="!rows.length"
+          @click="downloadReport('export_pdf')"
+        >
+          <template #prefix
+            ><LucideFileText class="size-4" aria-hidden="true"
+          /></template>
+        </Button>
+        <Button
           :label="__('Export to Excel')"
           :tooltip="
             __('Download this report with the current dates and customer')
           "
           :disabled="!rows.length"
-          @click="exportReport"
+          @click="downloadReport('export_xlsx')"
         >
           <template #prefix
             ><LucideDownload class="size-4" aria-hidden="true"
@@ -182,6 +196,7 @@ import { Button, createResource, dayjs, FormControl } from "frappe-ui";
 import { computed, reactive, watch } from "vue";
 import LucideChevronRight from "~icons/lucide/chevron-right";
 import LucideDownload from "~icons/lucide/download";
+import LucideFileText from "~icons/lucide/file-text";
 
 interface Row {
   customer: string;
@@ -231,14 +246,14 @@ const report = createResource({
 
 watch(filters, () => report.reload());
 
-function exportReport() {
+function downloadReport(method: "export_xlsx" | "export_pdf") {
   const params = new URLSearchParams({
     from_date: filters.from_date,
     to_date: filters.to_date,
   });
   if (filters.customer) params.set("customer", filters.customer);
   window.open(
-    `/api/method/helpdesk.helpdesk.report.content_delivery.content_delivery.export_xlsx?${params}`,
+    `/api/method/helpdesk.helpdesk.report.content_delivery.content_delivery.${method}?${params}`,
     "_blank"
   );
 }

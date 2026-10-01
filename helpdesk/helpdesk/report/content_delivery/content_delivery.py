@@ -6,7 +6,13 @@ what is late, and how long clients take to approve."""
 
 import frappe
 from frappe import _
-from frappe.utils import get_datetime, getdate, now_datetime
+from frappe.utils import (
+    format_datetime,
+    formatdate,
+    get_datetime,
+    getdate,
+    now_datetime,
+)
 
 
 def execute(filters=None):
@@ -195,3 +201,52 @@ def total_row(columns: list[dict], rows: list[dict]) -> list:
     # averaging the per-customer averages would overweight small customers
     totals["avg_approval_hours"] = None
     return [totals.get(c["fieldname"]) for c in columns]
+
+
+@frappe.whitelist()
+def export_pdf(from_date: str, to_date: str, customer: str | None = None):
+    """The delivery report as a PDF download.
+
+    Frappe renders PDFs with wkhtmltopdf. Where it is not installed, the same page is
+    returned ready to print, and the browser's print dialog saves it as a PDF.
+    """
+    import shutil
+
+    frappe.has_permission("HD Content Post", "read", throw=True)
+    filters = frappe._dict(from_date=from_date, to_date=to_date, customer=customer)
+    columns = get_columns()
+    rows = get_rows(filters)
+    can_render_pdf = bool(shutil.which("wkhtmltopdf"))
+    html = frappe.render_template(
+        "helpdesk/helpdesk/report/content_delivery/content_delivery_pdf.html",
+        {
+            "title": _("Content delivery report"),
+            "period": _("{0} to {1}").format(
+                formatdate(from_date), formatdate(to_date)
+            ),
+            "customer": customer,
+            "columns": [frappe._dict(c) for c in columns],
+            "rows": [[row.get(c["fieldname"]) for c in columns] for row in rows],
+            "total": total_row(columns, rows),
+            "generated_on": format_datetime(now_datetime()),
+            "generated_by": frappe.utils.get_fullname(frappe.session.user),
+            "auto_print": not can_render_pdf,
+        },
+    )
+    suffix = f"-{frappe.scrub(customer)}" if customer else ""
+    filename = f"content-delivery-{from_date}-to-{to_date}{suffix}"
+
+    if can_render_pdf:
+        from frappe.utils.pdf import get_pdf
+
+        frappe.response.filename = f"{filename}.pdf"
+        frappe.response.filecontent = get_pdf(
+            html, {"orientation": "Landscape", "page-size": "A4"}
+        )
+        frappe.response.type = "pdf"
+        return
+
+    frappe.response.filename = f"{filename}.html"
+    frappe.response.filecontent = html
+    frappe.response.type = "download"
+    frappe.response.display_content_as = "inline"
