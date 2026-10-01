@@ -3,9 +3,7 @@
   <component
     :is="plain ? 'span' : 'a'"
     v-bind="
-      plain
-        ? {}
-        : { href: pr.url, target: '_blank', rel: 'noopener noreferrer' }
+      plain ? {} : { href: link, target: '_blank', rel: 'noopener noreferrer' }
     "
     class="inline-flex h-5 shrink-0 items-center gap-1 whitespace-nowrap rounded-md px-1.5 font-mono text-xs font-medium tabular-nums focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
     :class="TONE_CLASSES[signal.tone]"
@@ -15,7 +13,7 @@
     @click="!plain && $event.stopPropagation()"
   >
     <component :is="signal.icon" class="size-3.5" aria-hidden="true" />
-    <span aria-hidden="true">#{{ pr.number }}</span>
+    <span aria-hidden="true">{{ label }}</span>
   </component>
 </template>
 
@@ -33,7 +31,22 @@ const props = defineProps<{
   pr: TaskPullRequest;
   /** Text instead of a link, for use inside a row that is a link. */
   plain?: boolean;
+  /** Prefix the repository name, when a task has PRs in several repositories. */
+  showRepo?: boolean;
 }>();
+
+const label = computed(() =>
+  props.showRepo
+    ? `${props.pr.repo.split("/").pop()}#${props.pr.number}`
+    : `#${props.pr.number}`
+);
+
+// an open PR opens where it is reviewed and approved
+const link = computed(() =>
+  props.pr.url && ["Open", "Draft"].includes(props.pr.state)
+    ? `${props.pr.url}/files`
+    : props.pr.url
+);
 
 const signal = computed(() => prSignal(props.pr));
 const description = computed(() => prDescription(props.pr));

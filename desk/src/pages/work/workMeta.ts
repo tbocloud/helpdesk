@@ -28,8 +28,8 @@ export interface WorkItem {
   waiting_on?: string | null;
   /** Plain-language, already translated reasons the item may slip. */
   risks?: string[];
-  /** The task's most recently active open GitHub pull request, if any. */
-  pull_request?: TaskPullRequest | null;
+  /** The task's GitHub pull requests: open ones first, then merged or closed. */
+  pull_requests?: TaskPullRequest[];
 }
 
 export function isAtRisk(item: WorkItem) {

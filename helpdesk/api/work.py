@@ -18,6 +18,7 @@ from frappe.utils import (
     nowdate,
 )
 
+from helpdesk.github_sync import OPEN_STATES as PR_OPEN_STATES
 from helpdesk.github_sync import get_pull_requests
 from helpdesk.tasky.permissions import (
     can_manage_project,
@@ -37,6 +38,7 @@ RESCHEDULE_RISK_COUNT = 2
 SLA_RISK_HOURS = 4
 # how far back My Work's Completed tab looks
 DONE_DAYS = 30
+PRS_PER_ITEM = 3
 LIST_LIMIT = 300
 WAITING_ON_TASK = "Waiting on Task"
 ON_HOLD = "On Hold"
@@ -193,10 +195,13 @@ def _items(tasks, tickets) -> list[dict]:
     names = _project_names(tasks)
     waiting = _open_dependencies(tasks)
     task_items = [_task_item(t, names, waiting) for t in tasks]
-    # the PR moving each task, newest activity first, as the board shows it
-    open_prs = get_pull_requests([t.name for t in tasks], open_only=True)
+    # a task's pull requests mark it as Git work: open ones first, then the
+    # latest merged or closed, newest activity first within each
+    prs = get_pull_requests([t.name for t in tasks])
     for item in task_items:
-        item["pull_request"] = (open_prs.get(item["name"]) or [None])[0]
+        task_prs = prs.get(item["name"]) or []
+        task_prs.sort(key=lambda pr: pr.state not in PR_OPEN_STATES)
+        item["pull_requests"] = task_prs[:PRS_PER_ITEM]
     items = task_items + [_ticket_item(t) for t in tickets]
     items.sort(key=_sort_key)
     return items
