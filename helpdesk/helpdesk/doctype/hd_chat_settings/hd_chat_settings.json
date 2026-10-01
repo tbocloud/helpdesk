@@ -12,7 +12,11 @@
 		"slack_escalation_channel",
 		"teams_section",
 		"teams_direct_webhook",
-		"teams_channel_webhook"
+		"teams_channel_webhook",
+		"error_alerts_section",
+		"post_error_alerts",
+		"ignored_error_titles",
+		"errors_checked_until"
 	],
 	"fields": [
 		{
@@ -76,12 +80,39 @@
 			"label": "Escalation Channel Workflow URL",
 			"length": 1000,
 			"description": "Optional. Teams Workflow template \"Post to a channel when a webhook request is received\"."
+		},
+		{
+			"fieldname": "error_alerts_section",
+			"fieldtype": "Section Break",
+			"label": "Error Alerts"
+		},
+		{
+			"fieldname": "post_error_alerts",
+			"fieldtype": "Check",
+			"label": "Post hub errors to the escalation channel",
+			"default": "1",
+			"description": "Every 10 minutes, new entries in the Error Log are grouped by title and posted once to the escalation channel, so problems are seen before customers report them."
+		},
+		{
+			"fieldname": "ignored_error_titles",
+			"fieldtype": "Small Text",
+			"label": "Don't post errors whose title contains",
+			"depends_on": "post_error_alerts",
+			"description": "One per line, not case-sensitive. For known, harmless errors."
+		},
+		{
+			"fieldname": "errors_checked_until",
+			"fieldtype": "Datetime",
+			"label": "Errors Checked Until",
+			"hidden": 1,
+			"read_only": 1,
+			"no_copy": 1
 		}
 	],
 	"index_web_pages_for_search": 0,
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-09-29 21:00:00.000000",
+	"modified": "2026-10-01 22:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Chat Settings",

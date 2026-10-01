@@ -51,6 +51,10 @@ scheduler_events = {
             "helpdesk.tasks.sync_conversations",
             "helpdesk.content_sync.sync_content_approvals",
         ],
+        # every 10 minutes: new hub errors to the team's chat channel
+        "*/10 * * * *": [
+            "helpdesk.error_alerts.post_error_digest",
+        ],
         # 10:00 every day: each assignee's morning brief
         "0 10 * * *": [
             "helpdesk.morning_brief.send_morning_briefs",
