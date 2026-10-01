@@ -17,6 +17,7 @@ from helpdesk.tasky.permissions import (
 # member roles a project lead is rotated among
 LEAD_ROTATION_ROLES = ("Developer",)
 ON_HOLD = "On Hold"
+PENDING_REVIEW_STATUS = "Pending Review"
 TASK_DONE = ("Completed", "Cancelled")
 # the most one completion may log; longer work belongs on a manual timesheet
 MAX_HOURS_PER_COMPLETION = 24
@@ -568,7 +569,18 @@ def update_task_status(task: str, status: str):
     """Update a task's status."""
     frappe.has_permission("Task", "write", str(task), throw=True)
     _reject_direct_hold(str(status))
+    _reject_completion_without_time(str(status))
     return {"status": _save_status(str(task), str(status))}
+
+
+def _reject_completion_without_time(new_status: str):
+    """Done work goes through complete_task, which logs the hours and notes."""
+    if new_status in ("Completed", PENDING_REVIEW_STATUS):
+        frappe.throw(
+            _(
+                "Use Complete on the task so your hours and notes are saved to the timesheet."
+            )
+        )
 
 
 def _reject_direct_hold(new_status: str):
@@ -1578,12 +1590,7 @@ def stop_timer(task: str):
     timer_start = frappe.db.get_value("Task", task_id, "custom_timer_start")
     if not timer_start:
         return {"elapsed": 0}
-    from datetime import datetime
-
-    start = timer_start
-    if isinstance(start, str):
-        start = datetime.fromisoformat(start)
-    elapsed = (datetime.now() - start).total_seconds() / 3600.0
+    elapsed = _timer_hours(timer_start)
     actual = frappe.db.get_value("Task", task_id, "custom_actual_hours") or 0
     paused = frappe.db.get_value("Task", task_id, "custom_timer_elapsed") or 0
     frappe.db.set_value("Task", task_id, "custom_timer_start", None)
@@ -1609,17 +1616,13 @@ def move_task(task: str, new_status: str):
 
     if old_status == new_status:
         return {"status": old_status, "elapsed": 0}
+    _reject_completion_without_time(new_status)
     if _changes_hold(task_id, new_status):
         return {"status": _save_status(task_id, new_status), "elapsed": 0}
 
     # Leaving Working: accumulate elapsed from running timer
     if old_status == "Working" and timer_start:
-        from datetime import datetime
-
-        start = timer_start
-        if isinstance(start, str):
-            start = datetime.fromisoformat(start)
-        elapsed_this_move = (datetime.now() - start).total_seconds() / 3600.0
+        elapsed_this_move = _timer_hours(timer_start)
         frappe.db.set_value("Task", task_id, "custom_timer_start", None)
         frappe.db.set_value(
             "Task", task_id, "custom_actual_hours", actual + round(elapsed_this_move, 2)
@@ -1650,25 +1653,51 @@ def get_timer(task: str):
     doc.check_permission("read")
     if not doc.custom_timer_start:
         return {"running": False, "elapsed": 0, "timer_start": None}
-    from datetime import datetime
+    elapsed = _timer_hours(doc.custom_timer_start)
+    return {
+        "running": True,
+        "elapsed": round(elapsed, 2),
+        "timer_start": str(doc.custom_timer_start),
+    }
 
-    start = doc.custom_timer_start
-    if isinstance(start, str):
-        start = datetime.fromisoformat(start)
-    elapsed = (datetime.now() - start).total_seconds() / 3600.0
-    return {"running": True, "elapsed": round(elapsed, 2), "timer_start": str(start)}
+
+def _timer_hours(timer_start) -> float:
+    """Hours the timer has run. The start was stored in the site's time zone, so
+    compare with now in that zone, not the server clock (UTC on our servers)."""
+    started = frappe.utils.get_datetime(timer_start)
+    elapsed = (frappe.utils.now_datetime() - started).total_seconds() / 3600.0
+    return max(elapsed, 0.0)
 
 
 @frappe.whitelist()
-def get_my_timesheets(limit: int = 20):
-    """List my timesheets with project info."""
-    timesheets = frappe.get_all(
+def get_my_timesheets(limit: int = 20, team: bool = False):
+    """My timesheets with project info; `team` shows everyone's that a lead or manager may see."""
+    from helpdesk.api.work import can_see_overview
+
+    team = frappe.utils.cint(team)
+    if team and not can_see_overview():
+        frappe.throw(
+            _("Only project leads and managers can see the team's timesheets."),
+            frappe.PermissionError,
+        )
+    # get_list applies the timesheet permission rules: a lead sees the
+    # timesheets on their projects, admins see all
+    timesheets = frappe.get_list(
         "Timesheet",
-        filters={"owner": frappe.session.user},
-        fields=["name", "title", "status", "total_hours", "creation", "modified"],
+        filters={} if team else {"owner": frappe.session.user},
+        fields=[
+            "name",
+            "title",
+            "status",
+            "total_hours",
+            "creation",
+            "modified",
+            "owner",
+        ],
         order_by="modified desc",
-        limit=limit,
+        limit_page_length=frappe.utils.cint(limit) or 20,
     )
+    names = {}
     for ts in timesheets:
         projects = frappe.db.sql(
             """
@@ -1686,6 +1715,9 @@ def get_my_timesheets(limit: int = 20):
                 "Project", ts["projects"][0], "project_name"
             )
             ts["project_name"] = proj_name
+        if ts.owner not in names:
+            names[ts.owner] = _full_name(ts.owner)
+        ts["owner_name"] = names[ts.owner]
     return timesheets
 
 

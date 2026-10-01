@@ -814,8 +814,14 @@ function onDrop(e: DragEvent, newStatus: string) {
     }
   }
 
-  // completing records the time worked, so it happens once the dialog is submitted;
-  // a lead dropping a reviewed task here signs it off instead
+  // completing records the time worked, so it happens once the dialog is submitted
+  // (that also sends it to review when the project wants one); a lead dropping a
+  // reviewed task on Completed signs it off instead
+  if (newStatus === "Pending Review") {
+    dropTarget.value = null;
+    completingTask.value = task;
+    return;
+  }
   if (newStatus === "Completed") {
     dropTarget.value = null;
     if (isPendingReview(task) && canManage.value) approve(task);

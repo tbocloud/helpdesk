@@ -232,7 +232,7 @@
                     name: 'TaskyProject',
                     params: { projectId: project.name },
                   }"
-                  class="grid grid-cols-1 items-center gap-2 px-4 py-3 hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-outline-gray-4 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_8rem_auto]"
+                  class="grid grid-cols-1 items-center gap-2 px-4 py-3 hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-outline-gray-4 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_8rem_4.5rem]"
                 >
                   <div class="min-w-0">
                     <div class="truncate text-sm text-ink-gray-9">
