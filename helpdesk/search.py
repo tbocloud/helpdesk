@@ -12,7 +12,8 @@ from typing import TYPE_CHECKING, Literal
 
 import frappe
 from bs4 import BeautifulSoup, PageElement
-from frappe.utils import cstr, strip_html_tags, update_progress_bar
+from frappe import _
+from frappe.utils import cstr, escape_html, strip_html_tags, update_progress_bar
 from frappe.utils.caching import redis_cache
 from frappe.utils.synchronization import filelock
 from redis.commands.search.field import TagField, TextField
@@ -29,6 +30,9 @@ if TYPE_CHECKING:
     from helpdesk.helpdesk.doctype.hd_settings.hd_settings import HDSettings
 
 NUM_RESULTS = 5
+DB_SEARCH_CANDIDATES = 50
+REDISEARCH_MODULES = {"search", "ft"}
+SQLITE_SEARCH_CLASS = "helpdesk.search_sqlite.HelpdeskSearch"
 
 STOPWORDS = [
     "a",
@@ -321,7 +325,26 @@ class HelpdeskSearch(Search):
         return records
 
 
+def redisearch_available() -> bool:
+    """Whether Redis has the RediSearch module this index needs.
+
+    Frappe Cloud / Press and most hosts run plain Redis: without the module every
+    FT.* command fails, so the article index is skipped and article search falls
+    back to the database. The main helpdesk search uses SQLite (search_sqlite.py).
+    """
+    if not hasattr(frappe.local, "helpdesk_redisearch"):
+        try:
+            modules = frappe.cache().module_list()
+        except ResponseError:  # MODULE may be disabled
+            modules = []
+        names = {cstr(m.get(b"name") or m.get("name")).lower() for m in modules}
+        frappe.local.helpdesk_redisearch = bool(names & REDISEARCH_MODULES)
+    return frappe.local.helpdesk_redisearch
+
+
 def search(query, qtype: Literal["and", "or"] = "and") -> list[dict[str, list[dict]]]:
+    if not redisearch_available():
+        return search_articles_in_db(query, qtype)
     search = HelpdeskSearch()
     query = search.clean_query(query)
     query_parts: list[str] = query.split()
@@ -354,9 +377,75 @@ def search(query, qtype: Literal["and", "or"] = "and") -> list[dict[str, list[di
     return out
 
 
+def search_articles_in_db(
+    query: str, qtype: Literal["and", "or"] = "and"
+) -> list[dict[str, list[dict]]]:
+    """Published articles matching the query's words, shaped like the RediSearch results."""
+    words = [
+        w
+        for w in re.findall(r"[a-z0-9]+", (query or "").lower())
+        if len(w) > 2 and w not in get_stopwords()
+    ]
+    if not words:
+        return []
+    Article = frappe.qb.DocType("HD Article")
+    Category = frappe.qb.DocType("HD Article Category")
+    matches = [
+        Article.title.like(f"%{w}%") | Article.content.like(f"%{w}%") for w in words
+    ]
+    condition = matches[0]
+    for match in matches[1:]:
+        condition = (condition & match) if qtype == "and" else (condition | match)
+    rows = (
+        frappe.qb.from_(Article)
+        .left_join(Category)
+        .on(Category.name == Article.category)
+        .select(Article.name, Article.title, Article.content, Category.category_name)
+        .where(Article.status == "Published")
+        .where(condition)
+        .limit(DB_SEARCH_CANDIDATES)
+        .run(as_dict=True)
+    )
+
+    def score(row):
+        title = (row.title or "").lower()
+        return sum(3 * (w in title) for w in words)
+
+    items = [
+        frappe._dict(
+            id=f"HD Article:{row.name}",
+            name=f"{row.name}#",
+            subject=row.title,
+            headings=row.category_name or "",
+            description=escape_html(strip_html_tags(row.content or "")[:200]),
+        )
+        for row in sorted(rows, key=score, reverse=True)[:NUM_RESULTS]
+    ]
+    return [{"title": "Articles", "items": items}] if items else []
+
+
+@frappe.whitelist(methods=["POST"])
+def rebuild_search_index() -> str:
+    """HD Settings button: rebuild the SQLite search, and the article index where Redis supports it."""
+    frappe.only_for("System Manager")
+    frappe.enqueue(
+        "frappe.search.sqlite_search.build_index",
+        queue="long",
+        job_id=SQLITE_SEARCH_CLASS,
+        deduplicate=True,
+        search_class_path=SQLITE_SEARCH_CLASS,
+        force=True,
+    )
+    if redisearch_available():
+        build_index_in_background()
+    return _("The search index is being rebuilt in the background.")
+
+
 @frappe.whitelist()
 @filelock("helpdesk_search_indexing", timeout=1)
 def build_index():
+    if not redisearch_available():
+        return
     frappe.cache().set_value("helpdesk_search_indexing_in_progress", True)
     search = HelpdeskSearch()
     search.build_index()
@@ -364,11 +453,15 @@ def build_index():
 
 
 def build_index_in_background():
+    if not redisearch_available():
+        return
     if not frappe.cache().get_value("helpdesk_search_indexing_in_progress"):
         frappe.enqueue(build_index, queue="long")
 
 
 def build_index_if_not_exists():
+    if not redisearch_available():
+        return
     search = HelpdeskSearch()
     if not search.index_exists():
         build_index()
