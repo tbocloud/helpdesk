@@ -2,7 +2,7 @@
   <div class="flex flex-col gap-4">
     <section
       class="grid grid-cols-2 gap-3 lg:grid-cols-4"
-      :aria-label="__('Month summary')"
+      :aria-label="__('Summary')"
     >
       <div
         v-for="tile in tiles"
@@ -100,7 +100,7 @@
         {{
           posts.length
             ? __("No entries match this filter.")
-            : __("Nothing planned for this month yet.")
+            : PERIOD_TEXT[period || "month"].empty
         }}
       </p>
       <Button :label="__('Add entry')" @click="emit('add')">
@@ -320,9 +320,28 @@ import {
 import ChipToggle from "./ChipToggle.vue";
 import StatusPill from "./StatusPill.vue";
 
+const PERIOD_TEXT = {
+  day: {
+    progress: __("Day progress"),
+    sub: __("this day"),
+    empty: __("Nothing planned for this day."),
+  },
+  week: {
+    progress: __("Week progress"),
+    sub: __("this week"),
+    empty: __("Nothing planned for this week."),
+  },
+  month: {
+    progress: __("Month progress"),
+    sub: __("this month"),
+    empty: __("Nothing planned for this month yet."),
+  },
+};
+
 const props = defineProps<{
   posts: ContentPost[];
   month: string;
+  period?: "day" | "week" | "month";
   loading?: boolean;
   filtersCustomer?: string;
 }>();
@@ -432,7 +451,7 @@ const tiles = computed(() => {
   const planned = active.value.length;
   return [
     {
-      label: __("Month progress"),
+      label: PERIOD_TEXT[props.period || "month"].progress,
       value: planned
         ? `${Math.round((published.value.length / planned) * 100)}%`
         : "—",
@@ -456,7 +475,7 @@ const tiles = computed(() => {
     {
       label: __("Postponed"),
       value: String(postponed),
-      sub: __("this month"),
+      sub: PERIOD_TEXT[props.period || "month"].sub,
     },
     {
       label: __("Next post"),

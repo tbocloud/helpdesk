@@ -36,7 +36,11 @@
             {{
               loading
                 ? __("Loading…")
-                : __("Nothing planned for this month yet.")
+                : {
+                    day: __("Nothing planned for this day."),
+                    week: __("Nothing planned for this week."),
+                    month: __("Nothing planned for this month yet."),
+                  }[period || "month"]
             }}
           </td>
         </tr>
@@ -93,6 +97,7 @@ const props = defineProps<{
   posts: ContentPost[];
   loading?: boolean;
   filtersCustomer?: string;
+  period?: "day" | "week" | "month";
 }>();
 const emit = defineEmits<{ (e: "open", name: string): void }>();
 
