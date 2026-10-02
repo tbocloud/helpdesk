@@ -13,6 +13,8 @@ from helpdesk.helpdesk.doctype.hd_meeting.hd_meeting import (
     sync_with_outlook,
 )
 from helpdesk.test_utils import (
+    add_contact_in_customer,
+    create_contact,
     create_customer,
     enable_teams_meetings,
     fake_graph_token,
@@ -20,6 +22,8 @@ from helpdesk.test_utils import (
     graph_response,
     make_assignment,
     make_meeting,
+    make_project,
+    make_task,
     make_tasky_user,
     make_ticket,
 )
@@ -197,6 +201,74 @@ class TestScheduling(MeetingCase):
         self.assertIn(AGENT[0], emails)
         self.assertIn(OTHER_AGENT[0], emails)
         self.assertEqual(defaults["duration"], 30)
+
+
+class TestAttendeesAndMeetNow(MeetingCase):
+    def defaults(self, doctype="HD Ticket", name=None):
+        frappe.set_user(AGENT[0])
+        try:
+            return meetings.get_meeting_defaults(doctype, name or self.ticket)
+        finally:
+            frappe.set_user("Administrator")
+
+    def test_addresses_that_cannot_receive_mail_are_not_prefilled(self):
+        for raised_by in ("visitor@example.com", "chat-77@chat.invalid"):
+            frappe.db.set_value("HD Ticket", self.ticket, "raised_by", raised_by)
+            emails = [a["email"] for a in self.defaults()["attendees"]]
+            self.assertNotIn(raised_by, emails)
+        self.assertFalse(meetings.is_deliverable("someone@qa.test"))
+        for broken in ("notanemail", "@galom.ae", "", "accounts@"):
+            self.assertFalse(meetings.is_deliverable(broken), broken)
+        self.assertTrue(meetings.is_deliverable("accounts@galom.ae"))
+
+    def test_the_customers_contacts_are_suggested(self):
+        contact = create_contact(
+            "Fathima", "fathima@meeting-traders.example", user=False
+        )
+        add_contact_in_customer(
+            frappe.get_doc("HD Customer", CUSTOMER), contact["contact"], is_primary=True
+        )
+
+        suggested = [s["email"] for s in self.defaults()["suggestions"]]
+
+        self.assertIn("fathima@meeting-traders.example", suggested)
+        # already invited people aren't suggested again
+        self.assertNotIn(AGENT[0], suggested)
+
+    def test_a_task_suggests_its_project_team(self):
+        project = make_project(
+            "Meetings Rollout",
+            members=[(AGENT[0], "Developer"), (OTHER_AGENT[0], "Developer")],
+        ).name
+        task = make_task(project, "Plan go-live")
+        make_assignment("Task", task.name, AGENT[0])
+
+        defaults = self.defaults("Task", task.name)
+
+        self.assertIn(AGENT[0], [a["email"] for a in defaults["attendees"]])
+        self.assertIn(OTHER_AGENT[0], [s["email"] for s in defaults["suggestions"]])
+
+    def test_meet_now_starts_this_minute(self):
+        graph = self.graph()
+        frappe.set_user(AGENT[0])
+        result = meetings.start_meeting_now(
+            "HD Ticket",
+            self.ticket,
+            attendees=json.dumps([{"email": CUSTOMER_EMAIL}]),
+            duration=15,
+        )
+        frappe.set_user("Administrator")
+
+        meeting = frappe.get_doc("HD Meeting", result["name"])
+        self.assertEqual(result["join_url"], JOIN_URL)
+        self.assertLessEqual(
+            abs((meeting.starts_on - now_datetime()).total_seconds()), 120
+        )
+        self.assertEqual((meeting.ends_on - meeting.starts_on).total_seconds(), 15 * 60)
+        self.assertEqual(
+            graph.call_args.kwargs["json"]["start"],
+            teams_meetings.graph_time(meeting.starts_on),
+        )
 
 
 class TestCancelAndRemind(MeetingCase):

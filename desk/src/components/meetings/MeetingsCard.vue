@@ -12,21 +12,33 @@
         <LucideVideo class="size-3.5" aria-hidden="true" />
         {{ __("Meetings") }}
       </h2>
-      <Button
-        v-if="data?.enabled"
-        size="sm"
-        variant="ghost"
-        :label="__('Schedule')"
-        :icon-left="LucidePlus"
-        @click="showSchedule = true"
-      />
+      <div v-if="data?.enabled" class="flex gap-1">
+        <Button
+          size="sm"
+          variant="ghost"
+          :label="__('Meet now')"
+          :icon-left="LucideVideo"
+          @click="openDialog('now')"
+        />
+        <Button
+          size="sm"
+          variant="ghost"
+          :label="__('Schedule')"
+          :icon-left="LucidePlus"
+          @click="openDialog('later')"
+        />
+      </div>
     </div>
 
     <p
       v-if="!data?.upcoming.length && !data?.earlier.length"
       class="text-p-xs text-ink-gray-5"
     >
-      {{ __("No meetings yet. Schedule a Teams call with the customer.") }}
+      {{
+        __(
+          "No meetings yet. Meet now for an instant Teams link, or schedule one."
+        )
+      }}
     </p>
 
     <ul v-if="data?.upcoming.length" role="list" class="flex flex-col gap-2">
@@ -84,6 +96,7 @@
       v-model:open="showSchedule"
       :reference-doctype="referenceDoctype"
       :reference-name="referenceName"
+      :initial-mode="dialogMode"
       @scheduled="onChanged"
     />
 
@@ -170,6 +183,12 @@ const SOON_MINUTES = 15;
 const refreshTicket = inject<() => void>("refreshTicket", () => {});
 const headingId = `meetings-${useId()}`;
 const showSchedule = ref(false);
+const dialogMode = ref<"now" | "later">("later");
+
+function openDialog(mode: "now" | "later") {
+  dialogMode.value = mode;
+  showSchedule.value = true;
+}
 const cancelling = ref<MeetingRow | null>(null);
 const cancelReason = ref("");
 

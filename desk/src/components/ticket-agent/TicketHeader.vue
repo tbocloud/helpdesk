@@ -115,6 +115,7 @@
     v-model:open="showScheduleMeeting"
     reference-doctype="HD Ticket"
     :reference-name="String(ticket.doc.name)"
+    initial-mode="now"
     @scheduled="onMeetingScheduled"
   />
 </template>

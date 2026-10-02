@@ -2,12 +2,53 @@
   <!-- kept open on outside clicks so a half-filled invitation isn't lost -->
   <Dialog
     v-model:open="open"
-    :title="__('Schedule Teams meeting')"
+    :title="started ? __('Teams meeting started') : __('Teams meeting')"
     size="lg"
     :dismissible="false"
   >
+    <!-- Meet now: the link is ready -->
+    <div v-if="started" class="flex flex-col gap-4">
+      <p class="text-p-sm text-ink-gray-7">
+        {{
+          __(
+            "Everyone you added has an Outlook invitation with this link. Share it with anyone else who should join."
+          )
+        }}
+      </p>
+      <div
+        class="flex items-center gap-2 rounded-md border border-outline-gray-2 bg-surface-gray-1 px-3 py-2"
+      >
+        <LucideVideo
+          class="size-4 shrink-0 text-ink-gray-5"
+          aria-hidden="true"
+        />
+        <span class="min-w-0 flex-1 truncate font-mono text-xs text-ink-gray-7">
+          {{ started.join_url }}
+        </span>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <Button
+          variant="solid"
+          :label="__('Join now')"
+          :icon-left="LucideVideo"
+          :link="started.join_url"
+        />
+        <Button
+          :label="copied ? __('Copied') : __('Copy link')"
+          :icon-left="copied ? LucideCheck : LucideCopy"
+          @click="copyLink"
+        />
+        <Button
+          v-if="referenceDoctype === 'HD Ticket'"
+          :label="__('Add link to reply')"
+          :icon-left="LucideReply"
+          @click="addToReply"
+        />
+      </div>
+    </div>
+
     <div
-      v-if="defaults.loading && !defaults.data"
+      v-else-if="defaults.loading && !defaults.data"
       class="flex flex-col gap-3 py-2"
       aria-busy="true"
       :aria-label="__('Loading')"
@@ -26,6 +67,14 @@
       novalidate
       @submit.prevent="submit"
     >
+      <TabButtons
+        v-model="mode"
+        :buttons="[
+          { label: __('Meet now'), value: 'now' },
+          { label: __('Schedule for later'), value: 'later' },
+        ]"
+      />
+
       <TextInput
         v-model="form.subject"
         :label="__('Subject')"
@@ -33,21 +82,26 @@
         required
       />
 
-      <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <TextInput
-          v-model="form.date"
-          type="date"
-          :label="__('Date')"
-          :min="today"
-          required
-        />
-        <TextInput
-          v-model="form.time"
-          type="time"
-          :label="__('Time')"
-          step="300"
-          required
-        />
+      <div
+        class="grid grid-cols-1 gap-4"
+        :class="mode === 'later' ? 'sm:grid-cols-3' : 'sm:grid-cols-2'"
+      >
+        <template v-if="mode === 'later'">
+          <TextInput
+            v-model="form.date"
+            type="date"
+            :label="__('Date')"
+            :min="today"
+            required
+          />
+          <TextInput
+            v-model="form.time"
+            type="time"
+            :label="__('Time')"
+            step="300"
+            required
+          />
+        </template>
         <FormControl
           v-model="form.duration"
           type="select"
@@ -83,6 +137,23 @@
             </button>
           </li>
         </ul>
+        <div
+          v-if="suggestions.length"
+          class="flex flex-wrap items-center gap-1.5"
+        >
+          <span class="text-xs text-ink-gray-5">{{ __("Add:") }}</span>
+          <button
+            v-for="person in suggestions"
+            :key="person.email"
+            type="button"
+            class="flex max-w-full items-center gap-1 rounded-full border border-dashed border-outline-gray-3 py-0.5 pl-1.5 pr-2.5 text-sm text-ink-gray-7 hover:border-outline-gray-4 hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+            :title="person.email"
+            @click="addPerson(person)"
+          >
+            <LucidePlus class="size-3.5 shrink-0" aria-hidden="true" />
+            <span class="truncate">{{ person.full_name || person.email }}</span>
+          </button>
+        </div>
         <div class="flex items-end gap-2">
           <TextInput
             v-model="newEmail"
@@ -100,6 +171,7 @@
       </fieldset>
 
       <Textarea
+        v-if="mode === 'later'"
         v-model="form.agenda"
         :label="__('Agenda (optional)')"
         :placeholder="__('What will you go through? Attendees see this.')"
@@ -127,26 +199,38 @@
 
     <template #actions="{ close }">
       <div class="flex justify-end gap-2">
-        <Button :label="__('Cancel')" @click="close" />
-        <Button
-          variant="solid"
-          type="submit"
-          :form="formId"
-          :label="__('Schedule and send invites')"
-          :loading="schedule.loading"
-          :disabled="!canSubmit"
-        />
+        <template v-if="started">
+          <Button :label="__('Done')" @click="close" />
+        </template>
+        <template v-else>
+          <Button :label="__('Cancel')" @click="close" />
+          <Button
+            variant="solid"
+            type="submit"
+            :form="formId"
+            :label="
+              mode === 'now'
+                ? __('Start meeting now')
+                : __('Schedule and send invites')
+            "
+            :icon-left="mode === 'now' ? LucideVideo : undefined"
+            :loading="busy"
+            :disabled="!canSubmit"
+          />
+        </template>
       </div>
     </template>
   </Dialog>
 </template>
 
 <script setup lang="ts">
+import { insertIntoReply } from "@/pages/ticket/modalStates";
 import { __ } from "@/translation";
 import {
   Button,
   Dialog,
   FormControl,
+  TabButtons,
   TextInput,
   Textarea,
   createResource,
@@ -154,7 +238,12 @@ import {
   toast,
 } from "frappe-ui";
 import { computed, reactive, ref, useId, watch } from "vue";
+import LucideCheck from "~icons/lucide/check";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
+import LucideCopy from "~icons/lucide/copy";
+import LucidePlus from "~icons/lucide/plus";
+import LucideReply from "~icons/lucide/reply";
+import LucideVideo from "~icons/lucide/video";
 import LucideX from "~icons/lucide/x";
 
 interface Attendee {
@@ -165,17 +254,28 @@ interface Attendee {
 interface MeetingDefaults {
   subject: string;
   attendees: Attendee[];
+  suggestions: Attendee[];
   duration: number;
   organizer: string;
 }
 
-const props = defineProps<{
-  referenceDoctype: "HD Ticket" | "Task";
-  referenceName: string;
-}>();
+interface CreatedMeeting {
+  name: string;
+  join_url: string;
+}
+
+const props = withDefaults(
+  defineProps<{
+    referenceDoctype: "HD Ticket" | "Task";
+    referenceName: string;
+    // the tab the dialog opens on
+    initialMode?: "now" | "later";
+  }>(),
+  { initialMode: "later" }
+);
 
 const emit = defineEmits<{
-  scheduled: [result: { name: string; join_url: string }];
+  scheduled: [result: CreatedMeeting];
 }>();
 
 const open = defineModel<boolean>("open", { default: false });
@@ -189,6 +289,7 @@ const durationOptions = [15, 30, 45, 60, 90, 120].map((m) => ({
   value: String(m),
 }));
 
+const mode = ref<"now" | "later">(props.initialMode);
 const form = reactive({
   subject: "",
   date: today,
@@ -199,6 +300,8 @@ const form = reactive({
 });
 const newEmail = ref("");
 const emailError = ref("");
+const started = ref<CreatedMeeting | null>(null);
+const copied = ref(false);
 
 function errorText(err: any, fallback: string) {
   if (!err) return "";
@@ -221,23 +324,25 @@ const defaults = createResource({
   onError() {},
 });
 
+// suggestions not added yet (customer contacts, or the task's project team)
+const suggestions = computed<Attendee[]>(() =>
+  ((defaults.data as MeetingDefaults | undefined)?.suggestions ?? []).filter(
+    (s) => !form.attendees.some((a) => a.email === s.email)
+  )
+);
+
 function nextSlot() {
-  // the next full hour, or 10:00 tomorrow when that is after working hours
+  // the next full hour, or 10:00 the next working morning outside 8:00–19:00
   const next = dayjs().add(1, "hour").startOf("hour");
   return next.hour() >= 19 || next.hour() < 8
     ? next.add(next.hour() >= 19 ? 1 : 0, "day").hour(10)
     : next;
 }
 
-function reset() {
-  const slot = nextSlot();
-  form.date = slot.format("YYYY-MM-DD");
-  form.time = slot.format("HH:mm");
-  form.agenda = "";
-  newEmail.value = "";
-  emailError.value = "";
-  schedule.reset();
-  defaults.fetch();
+function addPerson(person: Attendee) {
+  if (!form.attendees.some((a) => a.email === person.email)) {
+    form.attendees.push({ ...person });
+  }
 }
 
 function addAttendee() {
@@ -248,9 +353,7 @@ function addAttendee() {
     emailError.value = __("{0} doesn't look like an email address.", email);
     return;
   }
-  if (!form.attendees.some((a) => a.email === email)) {
-    form.attendees.push({ email });
-  }
+  addPerson({ email });
   newEmail.value = "";
 }
 
@@ -258,44 +361,112 @@ function removeAttendee(email: string) {
   form.attendees = form.attendees.filter((a) => a.email !== email);
 }
 
+function onCreated(data: CreatedMeeting) {
+  emit("scheduled", data);
+  if (mode.value === "now") {
+    // stay open with the link; opening Teams here would be blocked as a pop-up
+    started.value = data;
+  } else {
+    toast.success(__("Meeting scheduled. Invitations are on their way."));
+    open.value = false;
+  }
+}
+
 const schedule = createResource({
   url: "helpdesk.api.meetings.schedule_meeting",
-  onSuccess(data: { name: string; join_url: string }) {
-    toast.success(__("Meeting scheduled. Invitations are on their way."));
-    emit("scheduled", data);
-    open.value = false;
-  },
+  onSuccess: onCreated,
   onError() {},
 });
 
+const startNow = createResource({
+  url: "helpdesk.api.meetings.start_meeting_now",
+  onSuccess: onCreated,
+  onError() {},
+});
+
+const busy = computed(() => schedule.loading || startNow.loading);
+
 const errorMessage = computed(() =>
-  errorText(schedule.error, __("Couldn't schedule the meeting."))
+  mode.value === "now"
+    ? errorText(startNow.error, __("Couldn't start the meeting."))
+    : errorText(schedule.error, __("Couldn't schedule the meeting."))
 );
 
 const canSubmit = computed(
   () =>
     !!form.subject.trim() &&
-    !!form.date &&
-    !!form.time &&
     form.attendees.length > 0 &&
-    !schedule.loading
+    (mode.value === "now" || (!!form.date && !!form.time)) &&
+    !busy.value
 );
 
-// after `schedule` exists: reset() clears its last error
+function reset() {
+  const slot = nextSlot();
+  mode.value = props.initialMode;
+  form.date = slot.format("YYYY-MM-DD");
+  form.time = slot.format("HH:mm");
+  form.agenda = "";
+  newEmail.value = "";
+  emailError.value = "";
+  started.value = null;
+  copied.value = false;
+  schedule.reset();
+  startNow.reset();
+  defaults.fetch();
+}
+
+// after the resources exist: reset() clears their last error
 watch(open, (isOpen) => isOpen && reset(), { immediate: true });
 
 function submit() {
   // an email typed but not added yet still counts
   if (newEmail.value.trim()) addAttendee();
   if (!canSubmit.value) return;
-  schedule.submit({
+  const common = {
     reference_doctype: props.referenceDoctype,
     reference_name: props.referenceName,
     subject: form.subject.trim(),
-    starts_on: `${form.date} ${form.time}:00`,
     duration: Number(form.duration),
     attendees: JSON.stringify(form.attendees),
+  };
+  if (mode.value === "now") {
+    startNow.submit(common);
+    return;
+  }
+  schedule.submit({
+    ...common,
+    starts_on: `${form.date} ${form.time}:00`,
     agenda: form.agenda.trim(),
   });
+}
+
+async function copyLink() {
+  if (!started.value) return;
+  try {
+    await navigator.clipboard.writeText(started.value.join_url);
+    copied.value = true;
+  } catch {
+    toast.error(__("Couldn't copy. Select the link and copy it."));
+  }
+}
+
+function escapeHtml(text: string) {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function addToReply() {
+  if (!started.value) return;
+  const url = escapeHtml(started.value.join_url);
+  insertIntoReply(
+    props.referenceName,
+    `<p>${escapeHtml(
+      __("Please join our Teams meeting:")
+    )} <a href="${url}">${url}</a></p>`
+  );
+  open.value = false;
 }
 </script>
