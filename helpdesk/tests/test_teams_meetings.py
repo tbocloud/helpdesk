@@ -447,6 +447,8 @@ class TestOutlookSyncIsolation(OutlookCase):
                 "status": {"response": "accepted"},
             }
         )
+        # the organizer's mailbox as Exchange spells it
+        frappe.db.set_value("HD Meeting", meeting.name, "organizer", AGENT[0].upper())
         with self.route({"AAMk-test": answer}):
             sync_with_outlook()
 

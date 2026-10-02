@@ -155,9 +155,11 @@ class HDMeeting(Document):
                 replies[email] = OUTLOOK_REPLIES.get(response, "No reply")
         changed = False
         kept = []
+        # attendee emails are stored lowercased (clean_attendees); the organizer may not be
+        organizer = (self.organizer or "").lower()
         for row in self.attendees:
             # an empty list means Outlook sent none, not that everyone left
-            if replies and row.email not in replies and row.email != self.organizer:
+            if replies and row.email not in replies and row.email != organizer:
                 changed = True
                 continue
             reply = replies.pop(row.email, None)
