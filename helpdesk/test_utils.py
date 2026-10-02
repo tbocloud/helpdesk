@@ -835,6 +835,16 @@ def enable_teams_meetings(**values):
     return doc
 
 
+def fake_graph_token(roles: list[str] | None = None) -> str:
+    """An unsigned JWT shaped like a Microsoft access token, carrying `roles`."""
+    import base64
+
+    def part(data: dict) -> str:
+        return base64.urlsafe_b64encode(json.dumps(data).encode()).decode().rstrip("=")
+
+    return f"{part({'alg': 'none'})}.{part({'roles': roles or []})}.signature"
+
+
 def graph_response(payload: dict | None = None, status: int = 200):
     """A fake requests response from Microsoft Graph or its token endpoint."""
     from unittest.mock import MagicMock
