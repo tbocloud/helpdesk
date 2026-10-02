@@ -771,6 +771,17 @@ def get_reminder_messages(user: str, reference_name) -> list[str]:
     )
 
 
+# shaped like Teams Workflows URLs, so HD Chat Settings accepts them
+TEST_TEAMS_DIRECT_URL = (
+    "https://prod-01.westeurope.logic.azure.com/workflows/direct/triggers/manual/"
+    "paths/invoke?api-version=2016-06-01&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=test-direct"
+)
+TEST_TEAMS_CHANNEL_URL = (
+    "https://default0000.f5.environment.api.powerplatform.com/powerautomate/automations/"
+    "direct/workflows/channel/triggers/manual/paths/invoke?api-version=1&sp=x&sv=1.0&sig=test-channel"
+)
+
+
 def enable_chat_notifications(platform: str = "Microsoft Teams", **settings):
     """Turns on HD Chat Settings for `platform` with dummy webhooks/token, plus any overrides."""
     doc = frappe.get_doc("HD Chat Settings")
@@ -781,7 +792,7 @@ def enable_chat_notifications(platform: str = "Microsoft Teams", **settings):
             "email_when_unreachable": 1,
             "slack_bot_token": "xoxb-test-token",
             "slack_escalation_channel": "",
-            "teams_direct_webhook": "https://teams.example/direct",
+            "teams_direct_webhook": TEST_TEAMS_DIRECT_URL,
             "teams_channel_webhook": "",
             **settings,
         }

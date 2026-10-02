@@ -5,9 +5,13 @@ from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_to_date, now_datetime
 
 from helpdesk import error_alerts
-from helpdesk.test_utils import enable_chat_notifications, make_error_log
+from helpdesk.test_utils import (
+    TEST_TEAMS_CHANNEL_URL,
+    enable_chat_notifications,
+    make_error_log,
+)
 
-CHANNEL = "https://teams.example/channel"
+CHANNEL = TEST_TEAMS_CHANNEL_URL
 
 
 class TestErrorAlerts(FrappeTestCase):

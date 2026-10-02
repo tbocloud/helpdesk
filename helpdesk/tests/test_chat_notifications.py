@@ -6,6 +6,8 @@ from frappe.utils import add_days, nowdate
 
 from helpdesk import chat_notifications, work_reminders
 from helpdesk.test_utils import (
+    TEST_TEAMS_CHANNEL_URL,
+    TEST_TEAMS_DIRECT_URL,
     enable_chat_notifications,
     make_assignment,
     make_project,
@@ -17,8 +19,8 @@ from helpdesk.test_utils import (
 
 PM = ("pm.chat@chat-notify.example", "Rekha Pillai")
 DEV = ("dev.chat@chat-notify.example", "Arjun Menon")
-TEAMS_DIRECT = "https://teams.example/direct"
-TEAMS_CHANNEL = "https://teams.example/channel"
+TEAMS_DIRECT = TEST_TEAMS_DIRECT_URL
+TEAMS_CHANNEL = TEST_TEAMS_CHANNEL_URL
 
 
 def ok_response(payload=None, status=200):
@@ -149,6 +151,49 @@ class TestTeams(ChatCase):
             with self.assertRaises(frappe.ValidationError):
                 chat_notifications.send_test_message()
         self.assertFalse(post.called)
+
+
+class TestTeamsUrlCheck(ChatCase):
+    def refused(self, url, field="teams_direct_webhook"):
+        with self.assertRaises(frappe.ValidationError) as caught:
+            enable_chat_notifications("Microsoft Teams", **{field: url})
+        return str(caught.exception)
+
+    def test_a_teams_message_link_is_refused(self):
+        message = self.refused(
+            "https://teams.microsoft.com/l/message/19:abc@unq.gbl.spaces/1790916392311"
+        )
+        self.assertIn("link to a Teams message", message)
+
+    def test_a_cut_off_workflow_url_is_refused(self):
+        cut = TEAMS_CHANNEL.split("&sig=")[0]
+        self.assertIn("cut off", self.refused(cut, "teams_channel_webhook"))
+
+    def test_other_sites_are_refused(self):
+        self.assertIn(
+            "Power Automate", self.refused("https://example.com/hook?sig=abc")
+        )
+
+    def test_saving_again_keeps_the_stored_url(self):
+        enable_chat_notifications(
+            "Microsoft Teams", teams_channel_webhook=TEAMS_CHANNEL
+        )
+        doc = frappe.get_doc("HD Chat Settings")
+        doc.email_when_unreachable = 0
+        doc.save(ignore_permissions=True)  # the URLs are masked "*****" here
+
+        self.assertEqual(doc.get_password("teams_direct_webhook"), TEAMS_DIRECT)
+
+    def test_a_refusal_explains_itself(self):
+        enable_chat_notifications("Microsoft Teams", teams_channel_webhook="")
+        with patch(
+            "helpdesk.chat_notifications.requests.post",
+            return_value=ok_response(status=405),
+        ):
+            with self.assertRaises(frappe.ValidationError) as caught:
+                chat_notifications.send_test_message()
+        self.assertIn("http_405", str(caught.exception))
+        self.assertIn("isn't a workflow's HTTP URL", str(caught.exception))
 
 
 class TestSlack(ChatCase):
