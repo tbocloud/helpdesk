@@ -416,6 +416,11 @@
             </p>
           </div>
           <TaskPullRequests :pull-requests="detail.pull_requests" />
+          <MeetingsCard
+            reference-doctype="Task"
+            :reference-name="detail.name"
+            flush
+          />
         </div>
       </template>
     </Dialog>
@@ -475,6 +480,7 @@ import ResumeTaskDialog from "./components/ResumeTaskDialog.vue";
 import SendBackTaskDialog from "./components/SendBackTaskDialog.vue";
 import SlipBadge from "./components/SlipBadge.vue";
 import TaskPlanDialog from "./components/TaskPlanDialog.vue";
+import MeetingsCard from "@/components/meetings/MeetingsCard.vue";
 import TaskPullRequests from "./components/TaskPullRequests.vue";
 import TaskStatusBadge from "./components/TaskStatusBadge.vue";
 import TaskyBadge from "./components/TaskyBadge.vue";

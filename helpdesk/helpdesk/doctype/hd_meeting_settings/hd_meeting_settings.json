@@ -1,0 +1,92 @@
+{
+	"actions": [],
+	"creation": "2026-10-02 10:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"enabled",
+		"connected_app",
+		"organizer",
+		"shared_mailbox",
+		"column_break_defaults",
+		"default_duration",
+		"reminder_minutes"
+	],
+	"fields": [
+		{
+			"fieldname": "enabled",
+			"fieldtype": "Check",
+			"label": "Schedule Teams meetings from tickets and tasks",
+			"default": "0"
+		},
+		{
+			"fieldname": "connected_app",
+			"fieldtype": "Link",
+			"label": "Microsoft App",
+			"options": "Connected App",
+			"mandatory_depends_on": "enabled",
+			"description": "The Entra app already used for the support mailbox works. In Entra, add the Microsoft Graph application permission Calendars.ReadWrite and grant admin consent; limit it to staff mailboxes with an Exchange ApplicationAccessPolicy."
+		},
+		{
+			"fieldname": "organizer",
+			"fieldtype": "Select",
+			"label": "Meetings Are Created In",
+			"options": "The calendar of the person scheduling\nA shared mailbox",
+			"default": "The calendar of the person scheduling"
+		},
+		{
+			"fieldname": "shared_mailbox",
+			"fieldtype": "Data",
+			"label": "Shared Mailbox",
+			"options": "Email",
+			"depends_on": "eval:doc.organizer=='A shared mailbox'",
+			"mandatory_depends_on": "eval:doc.enabled && doc.organizer=='A shared mailbox'",
+			"description": "e.g. support@teambackoffice.com"
+		},
+		{
+			"fieldname": "column_break_defaults",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "default_duration",
+			"fieldtype": "Int",
+			"label": "Default Length (minutes)",
+			"default": "30",
+			"non_negative": 1
+		},
+		{
+			"fieldname": "reminder_minutes",
+			"fieldtype": "Int",
+			"label": "Remind Staff Before (minutes)",
+			"default": "10",
+			"non_negative": 1,
+			"description": "0 turns reminders off."
+		}
+	],
+	"index_web_pages_for_search": 0,
+	"links": [],
+	"modified": "2026-10-02 10:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"owner": "Administrator",
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": [],
+	"name": "HD Meeting Settings",
+	"issingle": 1,
+	"track_changes": 1,
+	"permissions": [
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "System Manager",
+			"share": 1,
+			"write": 1
+		}
+	]
+}

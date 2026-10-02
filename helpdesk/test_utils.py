@@ -804,6 +804,46 @@ def make_error_log(title: str, at=None):
     return doc
 
 
+def enable_teams_meetings(**values):
+    """Turns on HD Meeting Settings with a dummy Microsoft Connected App (no real Graph call)."""
+    app_name = "Test Microsoft Graph"
+    if not frappe.db.exists("Connected App", {"provider_name": app_name}):
+        frappe.get_doc(
+            {
+                "doctype": "Connected App",
+                "provider_name": app_name,
+                "client_id": "test-client-id",
+                "client_secret": "test-client-secret",
+                "token_uri": "https://login.example/tenant/oauth2/v2.0/token",
+            }
+        ).insert(ignore_permissions=True)
+    app = frappe.db.get_value("Connected App", {"provider_name": app_name}, "name")
+    doc = frappe.get_doc("HD Meeting Settings")
+    doc.update(
+        {
+            "enabled": 1,
+            "connected_app": app,
+            "organizer": "The calendar of the person scheduling",
+            "default_duration": 30,
+            "reminder_minutes": 10,
+            **values,
+        }
+    )
+    doc.save(ignore_permissions=True)
+    frappe.clear_document_cache("HD Meeting Settings", "HD Meeting Settings")
+    frappe.cache.delete_value(f"helpdesk:graph_token:{app}")
+    return doc
+
+
+def graph_response(payload: dict | None = None, status: int = 200):
+    """A fake requests response from Microsoft Graph or its token endpoint."""
+    from unittest.mock import MagicMock
+
+    response = MagicMock(status_code=status)
+    response.json.return_value = payload or {}
+    return response
+
+
 def set_work_settings(**values):
     """Saves HD Work Settings (AI estimates, weekly off, morning brief) with `values`."""
     doc = frappe.get_doc("HD Work Settings")
