@@ -54,6 +54,7 @@ scheduler_events = {
             "helpdesk.tasks.push_ticket_statuses",
             "helpdesk.tasks.sync_conversations",
             "helpdesk.content_sync.sync_content_approvals",
+            "helpdesk.helpdesk.doctype.hd_meeting.hd_meeting.send_reminders",
         ],
         # every 10 minutes: new hub errors to the team's chat channel
         "*/10 * * * *": [
@@ -196,6 +197,8 @@ override_doctype_class = {
 
 ignore_links_on_delete = [
     "HD Notification",
+    # a meeting stays in Outlook after its ticket is deleted
+    "HD Meeting",
     "HD Ticket Comment",
     # AI cost records are an audit trail; they keep the old ticket number
     "HDS AI Usage Log",
