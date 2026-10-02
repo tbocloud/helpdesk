@@ -38,6 +38,14 @@
           <LucideMail class="size-3.5" aria-hidden="true" />
           {{ __("Email") }}
         </span>
+        <span
+          v-if="aiDrafted"
+          class="inline-flex h-5 items-center gap-1 rounded-md px-1.5 text-xs font-medium text-ink-gray-6 ring-1 ring-inset ring-outline-gray-3"
+          :title="__('Sent by this agent from a draft written by TBO AI')"
+        >
+          <LucideSparkles class="size-3.5" aria-hidden="true" />
+          {{ __("AI-drafted") }}
+        </span>
       </div>
 
       <div class="flex gap-2 items-center">
@@ -131,6 +139,7 @@ import { Dropdown } from "frappe-ui";
 import { storeToRefs } from "pinia";
 import { computed, inject, ref } from "vue";
 import LucideMail from "~icons/lucide/mail";
+import LucideSparkles from "~icons/lucide/sparkles";
 import LucideSplit from "~icons/lucide/split";
 import { ReplyAllIcon, ReplyIcon } from "./icons";
 import TicketSplitModal from "./ticket/TicketSplitModal.vue";
@@ -157,6 +166,7 @@ const {
   content,
   name,
   deliveryStatus,
+  aiDrafted,
 } = props.activity;
 
 const emit = defineEmits(["reply"]);

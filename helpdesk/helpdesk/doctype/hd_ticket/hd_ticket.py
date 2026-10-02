@@ -705,6 +705,7 @@ class HDTicket(Document):
         cc: str | None = None,
         bcc: str | None = None,
         attachments: list[str] = [],
+        ai_drafted: bool | int | None = None,
     ):
         if not is_agent():
             frappe.throw(
@@ -744,6 +745,8 @@ class HDTicket(Document):
                 "sent_or_received": "Sent",
                 "status": "Linked",
                 "subject": subject,
+                # still the agent's reply; the tag says the AI wrote the first draft
+                "custom_ai_drafted": cint(ai_drafted),
             }
         )
 

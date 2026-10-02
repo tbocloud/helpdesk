@@ -14,6 +14,7 @@ import json
 import frappe
 import requests
 
+from helpdesk.automation import automation_user
 from helpdesk.mcp_client import MCPClient
 from helpdesk.session_replay import is_diagnostics_file, is_replay_file
 
@@ -187,7 +188,7 @@ def _attach_recording(
             {
                 "doctype": "HD Ticket Comment",
                 "reference_ticket": hd_ticket_name,
-                "commented_by": "Administrator",
+                "commented_by": automation_user(),
                 "content": note,
             }
         )

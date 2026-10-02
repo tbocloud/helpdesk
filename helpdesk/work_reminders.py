@@ -20,6 +20,8 @@ import frappe
 from frappe import _
 from frappe.utils import add_days, add_to_date, getdate, now_datetime, nowdate
 
+from helpdesk.automation import automation_user
+
 TASK_DUE_SOON_DAYS = 2
 TICKET_DUE_SOON_HOURS = 4
 FIRST_REPLY_DUE_SOON_MINUTES = 30
@@ -70,7 +72,7 @@ def notify_users(users, doctype: str, name: str, subject: str, escalate: bool = 
             {
                 "doctype": "HD Notification",
                 "notification_type": "Reminder",
-                "user_from": "Administrator",
+                "user_from": automation_user(),
                 "user_to": user,
                 "reference_doctype": doctype,
                 "reference_name": str(name),

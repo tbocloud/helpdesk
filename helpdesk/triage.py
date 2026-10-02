@@ -16,6 +16,7 @@ from frappe.utils import now_datetime
 
 from helpdesk.ai_engine import call_haiku
 from helpdesk.ai_suggestion import queue_suggestion
+from helpdesk.automation import automation_user
 from helpdesk.session_replay import TIMELINE_HEADING as SESSION_TIMELINE_HEADING
 from helpdesk.session_replay import build_triage_context
 
@@ -549,7 +550,7 @@ def _post_triage_comment(
             "doctype": "HD Ticket Comment",
             "reference_ticket": ticket_id,
             "content": comment_text,
-            "commented_by": "Administrator",
+            "commented_by": automation_user(),
         }
     )
     comment.flags.skip_notifications = True

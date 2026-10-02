@@ -41,6 +41,7 @@ from frappe.utils import (
 )
 
 from helpdesk.work_reminders import notify_users
+from helpdesk.automation import acting_user
 
 SETTINGS = "HD GitHub Settings"
 DELIVERY = "HD GitHub Delivery"
@@ -529,7 +530,7 @@ class PullRequestSync:
                     frappe.bold(link.task.name),
                     escape_html(self.title),
                 ),
-                "commented_by": frappe.session.user,
+                "commented_by": acting_user(),
             }
         ).insert(ignore_permissions=True)
 

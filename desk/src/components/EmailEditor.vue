@@ -540,6 +540,8 @@ const sendMail = createResource({
       to: toEmailsClone.value.join(","),
       cc: ccEmailsClone.value?.join(","),
       bcc: bccEmailsClone.value?.join(","),
+      // set while the reply holds an AI draft (side panel or "Draft with AI")
+      ai_drafted: aiUndoContent.value !== undefined ? 1 : 0,
       message:
         newEmail.value +
         (quotedContentRef.value
