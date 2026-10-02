@@ -21,7 +21,8 @@ REFERENCE_DOCTYPES = ("HD Ticket", "Task")
 SCHEDULED = "Scheduled"
 CANCELLED = "Cancelled"
 MAX_ATTENDEES = 50
-SYNC_DAYS_AHEAD = 60
+MAX_SYNCED_MEETINGS = 300
+OUTLOOK_EVENT_GONE = "ErrorItemNotFound"
 # Outlook's attendee replies, as shown in the hub; the organizer has no reply
 OUTLOOK_REPLIES = {
     "accepted": "Accepted",
@@ -109,7 +110,8 @@ class HDMeeting(Document):
         try:
             event = teams_meetings.get_event(self)
         except teams_meetings.GraphError as e:
-            if e.status != 404:
+            # a 404 for a missing or unlicensed mailbox doesn't mean the meeting is gone
+            if e.code != OUTLOOK_EVENT_GONE:
                 raise
             self.status = CANCELLED
             self.cancel_reason = _("Deleted in Outlook")
@@ -143,20 +145,28 @@ class HDMeeting(Document):
         return changes, bool(changes) or replies_changed
 
     def take_replies(self, attendees: list[dict]) -> bool:
-        """Each attendee's Accepted/Tentative/Declined; people added in Outlook join the list."""
+        """Each attendee's Accepted/Tentative/Declined. People added in Outlook join
+        the list and people removed there leave it (no more reminders for them)."""
         replies = {}
         for attendee in attendees:
             email = ((attendee.get("emailAddress") or {}).get("address") or "").lower()
             response = (attendee.get("status") or {}).get("response") or "none"
-            if email and response != "organizer":
+            if email and response != "organizer" and validate_email_address(email):
                 replies[email] = OUTLOOK_REPLIES.get(response, "No reply")
         changed = False
+        kept = []
         for row in self.attendees:
+            # an empty list means Outlook sent none, not that everyone left
+            if replies and row.email not in replies and row.email != self.organizer:
+                changed = True
+                continue
             reply = replies.pop(row.email, None)
             # no reply yet and Outlook's "none" are the same thing
             if reply and reply != (row.response or "No reply"):
                 row.response = reply
                 changed = True
+            kept.append(row)
+        self.attendees = kept
         for email, reply in replies.items():
             if len(self.attendees) >= MAX_ATTENDEES:
                 break
@@ -253,34 +263,56 @@ def send_reminders():
 
 
 def sync_with_outlook():
-    """Every 15 minutes: upcoming meetings take the changes made in Outlook."""
+    """Every 15 minutes: upcoming meetings take the changes made in Outlook.
+
+    Each meeting is saved on its own, so one that can't be saved (its ticket was
+    deleted, Outlook sent something the hub refuses) is logged and skipped
+    without undoing the others. Only a failure every call would hit stops the run.
+    """
     if not teams_meetings.is_enabled():
         return
-    now = now_datetime()
     names = frappe.get_all(
         "HD Meeting",
         filters={
             "status": SCHEDULED,
             "external_id": ("is", "set"),
-            "ends_on": (">=", add_to_date(now, days=-1)),
-            "starts_on": ("<=", add_to_date(now, days=SYNC_DAYS_AHEAD)),
+            # every upcoming meeting: one far away may have been moved closer in Outlook
+            "ends_on": (">=", add_to_date(now_datetime(), days=-1)),
         },
+        order_by="starts_on asc",
+        limit=MAX_SYNCED_MEETINGS,
         pluck="name",
     )
     for name in names:
-        meeting = frappe.get_doc("HD Meeting", name)
+        savepoint = f"meeting_sync_{frappe.generate_hash(length=8)}"
+        frappe.db.savepoint(savepoint)
         try:
-            changes, changed = meeting.sync_from_outlook()
-        except (teams_meetings.GraphError, requests.RequestException):
-            # the same problem (a revoked permission, an outage) would fail every meeting
+            sync_meeting(name)
+        except teams_meetings.GraphError as e:
+            frappe.db.rollback(save_point=savepoint)
+            frappe.log_error(title="Teams meeting sync failed")
+            if e.is_global:
+                return
+        except requests.RequestException:
+            frappe.db.rollback(save_point=savepoint)
             frappe.log_error(title="Teams meeting sync failed")
             return
-        if not changed:
-            continue
-        meeting.save(ignore_permissions=True)
-        if changes:
-            meeting.note_on_reference(
-                _("Teams meeting {0} changed in Outlook: {1}").format(
-                    meeting.subject, ", ".join(changes)
-                )
+        except Exception:  # noqa: BLE001 - one meeting must not block the others
+            frappe.db.rollback(save_point=savepoint)
+            frappe.log_error(title=f"Teams meeting {name} not synced")
+        else:
+            frappe.db.commit()  # nosemgrep - each meeting stands on its own, see docstring
+
+
+def sync_meeting(name: str):
+    meeting = frappe.get_doc("HD Meeting", name)
+    changes, changed = meeting.sync_from_outlook()
+    if not changed:
+        return
+    meeting.save(ignore_permissions=True)
+    if changes:
+        meeting.note_on_reference(
+            _("Teams meeting {0} changed in Outlook: {1}").format(
+                meeting.subject, ", ".join(changes)
             )
+        )

@@ -15,9 +15,9 @@
         />
         <Button
           variant="ghost"
-          :loading="calendar.loading"
+          :loading="loading"
           :aria-label="__('Refresh')"
-          @click="calendar.reload()"
+          @click="load"
         >
           <template #icon>
             <LucideRefreshCw class="size-4" aria-hidden="true" />
@@ -46,8 +46,8 @@
             {{ item.label }}
           </li>
         </ul>
-        <p v-if="calendar.error" role="alert" class="text-p-xs text-danger">
-          {{ errorText(calendar.error, __("Couldn't load the calendar.")) }}
+        <p v-if="loadError" role="alert" class="text-p-xs text-danger">
+          {{ errorText(loadError, __("Couldn't load the calendar.")) }}
         </p>
       </div>
 
@@ -98,7 +98,7 @@
 <script setup lang="ts">
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import { __ } from "@/translation";
-import { Button, Calendar, TabButtons, createResource, dayjs } from "frappe-ui";
+import { Button, Calendar, TabButtons, call, dayjs } from "frappe-ui";
 import { computed, ref, watch } from "vue";
 import { useRouter, type RouteLocationRaw } from "vue-router";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
@@ -165,18 +165,42 @@ const range = ref({
   end: dayjs().endOf("week").format("YYYY-MM-DD"),
 });
 
-const calendar = createResource({
-  url: "helpdesk.api.calendar.get_calendar",
-  makeParams: () => ({
-    start: range.value.start,
-    end: range.value.end,
-    team: scope.value === "team" ? 1 : 0,
-  }),
-  auto: true,
-});
-watch(scope, () => calendar.reload());
+// only the latest request may fill the calendar: weeks clicked through quickly
+// (or Mine/Team flipped) must not be overwritten by a slower, older answer
+let latestRequest = 0;
+const calendarData = ref<CalendarData | null>(null);
+const loading = ref(false);
+const loadError = ref<any>(null);
 
-const data = computed<CalendarData | null>(() => calendar.data ?? null);
+async function load() {
+  const request = ++latestRequest;
+  loading.value = true;
+  try {
+    const result = await call("helpdesk.api.calendar.get_calendar", {
+      start: range.value.start,
+      end: range.value.end,
+      team: scope.value === "team" ? 1 : 0,
+    });
+    if (request === latestRequest) {
+      calendarData.value = result;
+      loadError.value = null;
+    }
+  } catch (e) {
+    if (request === latestRequest) loadError.value = e;
+  } finally {
+    if (request === latestRequest) loading.value = false;
+  }
+}
+
+load();
+watch(scope, load);
+
+const data = computed(() => calendarData.value);
+
+// the month view also shows the last days of the previous month and the
+// first of the next, but reports only the month itself
+const MONTH_VIEW_DAYS = 28;
+const PADDING_DAYS = 7;
 
 function onRangeChange({
   startDate,
@@ -185,11 +209,17 @@ function onRangeChange({
   startDate: string;
   endDate: string;
 }) {
+  let start = dayjs(startDate);
+  let end = dayjs(endDate);
+  if (end.diff(start, "day") >= MONTH_VIEW_DAYS) {
+    start = start.subtract(PADDING_DAYS, "day");
+    end = end.add(PADDING_DAYS, "day");
+  }
   range.value = {
-    start: dayjs(startDate).format("YYYY-MM-DD"),
-    end: dayjs(endDate).format("YYYY-MM-DD"),
+    start: start.format("YYYY-MM-DD"),
+    end: end.format("YYYY-MM-DD"),
   };
-  calendar.reload();
+  load();
 }
 
 const events = computed(() => {

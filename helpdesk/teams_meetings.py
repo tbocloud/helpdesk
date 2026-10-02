@@ -33,9 +33,15 @@ REQUIRED_ROLE = "Calendars.ReadWrite"
 class GraphError(Exception):
     """Graph refused a call; the message is safe to show to the agent."""
 
-    def __init__(self, message: str, status: int | None = None):
+    def __init__(self, message: str, status: int | None = None, code: str = ""):
         super().__init__(message)
         self.status = status
+        self.code = code
+
+    @property
+    def is_global(self) -> bool:
+        """A failure every call would hit (sign-in, throttling, an outage), not one mailbox's or event's."""
+        return self.status is None or self.status in (401, 429) or self.status >= 500
 
 
 def get_settings():
@@ -113,7 +119,7 @@ def graph(method: str, path: str, payload: dict | None = None) -> dict:
         )
         if response.status_code == 403:
             message += " " + access_denied_hint(token)
-        raise GraphError(message, response.status_code)
+        raise GraphError(message, response.status_code, error.get("code") or "")
     return data
 
 
