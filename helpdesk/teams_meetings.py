@@ -11,6 +11,8 @@ organizer's calendar, so Outlook sends the invitations (to customers too) and
 handles their replies.
 """
 
+import base64
+import json
 from datetime import timezone
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
@@ -25,6 +27,7 @@ GRAPH_SCOPE = "https://graph.microsoft.com/.default"
 TIMEOUT = 20
 TOKEN_CACHE_KEY = "helpdesk:graph_token:{0}"
 TOKEN_EARLY_REFRESH_SECONDS = 120
+REQUIRED_ROLE = "Calendars.ReadWrite"
 
 
 class GraphError(Exception):
@@ -80,23 +83,52 @@ def access_token() -> str:
     return data["access_token"]
 
 
+def forget_token():
+    """The next call signs in again, e.g. after a permission was granted in Entra."""
+    frappe.cache.delete_value(TOKEN_CACHE_KEY.format(get_settings().connected_app))
+
+
 def graph(method: str, path: str, payload: dict | None = None) -> dict:
+    token = access_token()
     response = requests.request(
         method,
         GRAPH + path,
         json=payload,
-        headers={"Authorization": f"Bearer {access_token()}"},
+        headers={"Authorization": f"Bearer {token}"},
         timeout=TIMEOUT,
     )
     data = _json(response)
     if response.status_code >= 300:
         error = data.get("error") or {}
-        raise GraphError(
-            _("Microsoft Teams refused the request: {0}").format(
-                error.get("message") or error.get("code") or response.status_code
-            )
+        message = _("Microsoft Teams refused the request: {0}").format(
+            error.get("message") or error.get("code") or response.status_code
         )
+        if response.status_code == 403:
+            message += " " + access_denied_hint(token)
+        raise GraphError(message)
     return data
+
+
+def access_denied_hint(token: str) -> str:
+    """Why Graph said no: the token's own permissions tell a missing grant from a mailbox policy."""
+    if REQUIRED_ROLE not in token_roles(token):
+        return _(
+            "The Microsoft app has no {0} application permission with admin consent yet. Add it in Entra (API permissions > Microsoft Graph > Application permissions), grant admin consent, wait a few minutes and test again."
+        ).format(REQUIRED_ROLE)
+    return _(
+        "The app has {0}, so an Exchange ApplicationAccessPolicy is keeping it out of this mailbox. Add the mailbox to the policy's group, or check it with Test-ApplicationAccessPolicy."
+    ).format(REQUIRED_ROLE)
+
+
+def token_roles(token: str) -> list[str]:
+    """The application permissions inside a Microsoft access token (read only, not verified)."""
+    try:
+        claims = token.split(".")[1]
+        claims += "=" * (-len(claims) % 4)
+        roles = json.loads(base64.urlsafe_b64decode(claims)).get("roles")
+    except (IndexError, ValueError):
+        return []
+    return roles if isinstance(roles, list) else []
 
 
 def event_payload(meeting) -> dict:

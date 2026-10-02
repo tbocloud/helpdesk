@@ -11,6 +11,7 @@ from helpdesk.helpdesk.doctype.hd_meeting.hd_meeting import send_reminders
 from helpdesk.test_utils import (
     create_customer,
     enable_teams_meetings,
+    fake_graph_token,
     get_reminder_messages,
     graph_response,
     make_assignment,
@@ -220,6 +221,42 @@ class TestCancelAndRemind(MeetingCase):
         self.assertEqual(len(messages), 1)
         self.assertIn(JOIN_URL, messages[0])
         self.assertTrue(frappe.db.get_value("HD Meeting", name, "reminder_sent"))
+
+
+class TestAccessDenied(MeetingCase):
+    DENIED = {"error": {"code": "ErrorAccessDenied", "message": "Access is denied."}}
+
+    def run_connection_test(self, roles):
+        token = patch(
+            "helpdesk.teams_meetings.requests.post",
+            return_value=graph_response(
+                {"access_token": fake_graph_token(roles), "expires_in": 3600}
+            ),
+        )
+        calls = patch(
+            "helpdesk.teams_meetings.requests.request",
+            return_value=graph_response(self.DENIED, 403),
+        )
+        with token as sign_in, calls:
+            with self.assertRaises(frappe.ValidationError) as caught:
+                meetings.test_connection()
+        return str(caught.exception), sign_in
+
+    def test_missing_permission_is_named(self):
+        message, _sign_in = self.run_connection_test([])
+        self.assertIn("no Calendars.ReadWrite application permission", message)
+
+    def test_mailbox_policy_is_named_when_the_permission_is_there(self):
+        message, _sign_in = self.run_connection_test(["Calendars.ReadWrite"])
+        self.assertIn("ApplicationAccessPolicy", message)
+
+    def test_the_test_signs_in_afresh(self):
+        app = teams_meetings.get_settings().connected_app
+        frappe.cache.set_value(
+            teams_meetings.TOKEN_CACHE_KEY.format(app), "old-token-without-roles"
+        )
+        _message, sign_in = self.run_connection_test(["Calendars.ReadWrite"])
+        sign_in.assert_called_once()
 
 
 class TestGraphTime(FrappeTestCase):

@@ -172,6 +172,8 @@ def test_connection() -> dict:
     settings = teams_meetings.get_settings()
     if not settings.connected_app:
         frappe.throw(_("Choose the Microsoft App first and save."))
+    # a test right after granting a permission must not reuse the old sign-in
+    teams_meetings.forget_token()
     try:
         return teams_meetings.check_connection(teams_meetings.organizer_mailbox())
     except teams_meetings.GraphError as e:
