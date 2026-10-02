@@ -45,7 +45,7 @@ class HDChatSettings(Document):
             problem = self.teams_url_problem(value)
             if problem:
                 frappe.throw(
-                    _("{0}: {1}").format(self.meta.get_label(fieldname), problem)
+                    _("{0}: {1}").format(_(self.meta.get_label(fieldname)), problem)
                 )
 
     @staticmethod
