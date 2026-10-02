@@ -173,6 +173,19 @@ class TestTeamsUrlCheck(ChatCase):
         self.assertIn(
             "Power Automate", self.refused("https://example.com/hook?sig=abc")
         )
+        # a look-alike name, not a subdomain
+        self.assertIn(
+            "Power Automate",
+            self.refused("https://notpowerplatform.com/hook?sp=x&sv=1.0&sig=abc"),
+        )
+
+    def test_spaces_alone_clear_the_url(self):
+        enable_chat_notifications("Microsoft Teams", teams_channel_webhook="   ")
+
+        doc = frappe.get_doc("HD Chat Settings")
+        self.assertIsNone(
+            doc.get_password("teams_channel_webhook", raise_exception=False)
+        )
 
     def test_saving_again_keeps_the_stored_url(self):
         enable_chat_notifications(
