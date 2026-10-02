@@ -49,6 +49,7 @@ scheduler_events = {
         # every 15 minutes: SLA reminders, so a short first-reply SLA isn't missed
         "*/15 * * * *": [
             "helpdesk.work_reminders.send_ticket_reminders",
+            "helpdesk.helpdesk.doctype.hd_meeting.hd_meeting.sync_with_outlook",
         ],
         "*/5 * * * *": [
             "helpdesk.tasks.push_ticket_statuses",

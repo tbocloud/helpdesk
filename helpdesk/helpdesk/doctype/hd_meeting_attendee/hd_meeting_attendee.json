@@ -6,7 +6,8 @@
 	"field_order": [
 		"email",
 		"full_name",
-		"is_internal"
+		"is_internal",
+		"response"
 	],
 	"fields": [
 		{
@@ -29,11 +30,20 @@
 			"label": "TBO Staff",
 			"in_list_view": 1,
 			"description": "A helpdesk user; gets the reminder in TBO Support."
+		},
+		{
+			"fieldname": "response",
+			"fieldtype": "Select",
+			"label": "Reply",
+			"options": "\nAccepted\nTentative\nDeclined\nNo reply",
+			"read_only": 1,
+			"in_list_view": 1,
+			"description": "From Outlook, updated every 15 minutes."
 		}
 	],
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-10-02 10:00:00.000000",
+	"modified": "2026-10-02 14:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"owner": "Administrator",

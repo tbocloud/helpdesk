@@ -49,9 +49,14 @@ def get_meetings(reference_doctype: str, reference_name: str | int) -> dict:
     ]
     earlier = [r for r in rows if r not in upcoming][-PAST_MEETINGS:][::-1]
     for row in upcoming + earlier:
-        row["attendee_count"] = frappe.db.count(
-            "HD Meeting Attendee", {"parent": row.name, "parenttype": "HD Meeting"}
+        replies = frappe.get_all(
+            "HD Meeting Attendee",
+            filters={"parent": row.name, "parenttype": "HD Meeting"},
+            pluck="response",
         )
+        row["attendee_count"] = len(replies)
+        row["accepted"] = replies.count("Accepted")
+        row["declined"] = replies.count("Declined")
         row["can_cancel"] = row.status == SCHEDULED and _can_change(row)
     return {
         "enabled": teams_meetings.is_enabled(),

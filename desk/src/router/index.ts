@@ -207,6 +207,11 @@ const portalRoutes = [
     component: () => import("@/pages/work/WorkSummaries.vue"),
   },
   {
+    path: "/calendar",
+    name: "WorkCalendar",
+    component: () => import("@/pages/work/WorkCalendar.vue"),
+  },
+  {
     path: "/customer-report",
     name: "CustomerReport",
     component: () => import("@/pages/work/CustomerReport.vue"),

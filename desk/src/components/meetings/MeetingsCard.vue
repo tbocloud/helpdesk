@@ -40,7 +40,7 @@
         </p>
         <p class="mt-0.5 text-sm text-ink-gray-8">{{ m.subject }}</p>
         <p class="mt-0.5 text-xs text-ink-gray-5">
-          {{ __("{0} invited", String(m.attendee_count)) }}
+          {{ replies(m) }}
         </p>
         <div class="mt-2 flex flex-wrap gap-2">
           <Button
@@ -147,6 +147,8 @@ interface MeetingRow {
   status: "Scheduled" | "Cancelled";
   join_url: string | null;
   attendee_count: number;
+  accepted: number;
+  declined: number;
   can_cancel: boolean;
 }
 
@@ -201,6 +203,14 @@ function when(m: MeetingRow) {
     ? __("Tomorrow")
     : start.format("ddd D MMM");
   return `${day}, ${start.format("HH:mm")}–${dayjs(m.ends_on).format("HH:mm")}`;
+}
+
+// replies come from Outlook every 15 minutes
+function replies(m: MeetingRow) {
+  const parts = [__("{0} invited", String(m.attendee_count))];
+  if (m.accepted) parts.push(__("{0} accepted", String(m.accepted)));
+  if (m.declined) parts.push(__("{0} declined", String(m.declined)));
+  return parts.join(" · ");
 }
 
 function startsSoon(m: MeetingRow) {
