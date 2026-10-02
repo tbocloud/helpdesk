@@ -223,13 +223,23 @@
                 :key="itemKey(item)"
                 class="border-b border-outline-gray-1 last:border-b-0"
               >
-                <WorkItemRow :item="item" />
+                <WorkItemRow
+                  :item="item"
+                  :actions="!viewUser"
+                  @complete="completing = $event"
+                  @approve="approve"
+                />
               </li>
             </ul>
           </div>
         </template>
       </div>
     </div>
+
+    <CompleteTaskDialog
+      v-model:task="completingTask"
+      @completed="work.reload()"
+    />
   </div>
 </template>
 
@@ -248,6 +258,8 @@ import LucideInbox from "~icons/lucide/inbox";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideStar from "~icons/lucide/star";
 import LucideTriangleAlert from "~icons/lucide/triangle-alert";
+import CompleteTaskDialog from "@/pages/tasky/components/CompleteTaskDialog.vue";
+import { useApproveTask } from "@/pages/tasky/useApproveTask";
 import WorkItemRow from "./components/WorkItemRow.vue";
 import { isAtRisk, itemKey, type WorkItem } from "./workMeta";
 
@@ -283,6 +295,22 @@ const work = createResource({
   makeParams: () => ({ user: viewUser.value || undefined }),
   auto: true,
 });
+
+// Complete asks for hours and a note; Approve signs off a reviewed task
+const completing = ref<WorkItem | null>(null);
+const completingTask = computed({
+  get: () =>
+    completing.value
+      ? { name: completing.value.name, subject: completing.value.title }
+      : null,
+  set: (value) => {
+    if (!value) completing.value = null;
+  },
+});
+const { approve: approveTask } = useApproveTask(() => work.reload());
+function approve(item: WorkItem) {
+  approveTask({ name: item.name });
+}
 
 const people = createResource({
   url: "helpdesk.tasky.api.get_users",

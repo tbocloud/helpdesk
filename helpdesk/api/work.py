@@ -42,6 +42,7 @@ PRS_PER_ITEM = 3
 LIST_LIMIT = 300
 WAITING_ON_TASK = "Waiting on Task"
 ON_HOLD = "On Hold"
+PENDING_REVIEW = "Pending Review"
 
 TASK_FIELDS = [
     "name",
@@ -202,6 +203,13 @@ def _items(tasks, tickets) -> list[dict]:
         task_prs = prs.get(item["name"]) or []
         task_prs.sort(key=lambda pr: pr.state not in PR_OPEN_STATES)
         item["pull_requests"] = task_prs[:PRS_PER_ITEM]
+    # who may sign off a task waiting for review: the project's manager or lead
+    managed = {}
+    for item in task_items:
+        if item["status"] == PENDING_REVIEW:
+            if item["project"] not in managed:
+                managed[item["project"]] = can_manage_project(item["project"])
+            item["can_approve"] = managed[item["project"]]
     items = task_items + [_ticket_item(t) for t in tickets]
     items.sort(key=_sort_key)
     return items
