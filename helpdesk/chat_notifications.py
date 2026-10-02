@@ -238,7 +238,11 @@ def send_test_message() -> dict:
         direct = send_direct(frappe.session.user, text, helpdesk_url(None))
         channel = post_to_channel(text, helpdesk_url(None))
     except (ChatError, requests.RequestException) as e:
-        frappe.throw(_("The chat platform refused the message: {0}").format(str(e)))
+        hint = teams_http_hint(str(e))
+        frappe.throw(
+            _("The chat platform refused the message: {0}").format(str(e))
+            + (f" {hint}" if hint else "")
+        )
     if not direct and not channel:
         frappe.throw(
             _("Nothing was sent: add a Direct Message or Escalation Channel URL first.")
@@ -246,6 +250,24 @@ def send_test_message() -> dict:
     if not direct:
         frappe.msgprint(_direct_not_sent_message())
     return {"direct": direct, "channel": channel}
+
+
+def teams_http_hint(error: str) -> str:
+    """What a Teams Workflows refusal usually means, for the person setting it up."""
+    return {
+        "http_401": _(
+            "The workflow refused the caller: its URL has no &sig= part, or the trigger's 'Who can trigger the flow' isn't Anyone."
+        ),
+        "http_403": _(
+            "The workflow refused the caller: check that the trigger's 'Who can trigger the flow' is Anyone."
+        ),
+        "http_404": _(
+            "No workflow at that URL: the flow was deleted, or the URL was copied before the flow was saved."
+        ),
+        "http_405": _(
+            "That URL isn't a workflow's HTTP URL (for example a link to a Teams message). Copy the HTTP URL from the flow's trigger."
+        ),
+    }.get(error, "")
 
 
 def _direct_not_sent_message() -> str:
