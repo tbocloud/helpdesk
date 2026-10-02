@@ -217,6 +217,8 @@ class TestAttendeesAndMeetNow(MeetingCase):
             emails = [a["email"] for a in self.defaults()["attendees"]]
             self.assertNotIn(raised_by, emails)
         self.assertFalse(meetings.is_deliverable("someone@qa.test"))
+        for broken in ("notanemail", "@galom.ae", "", "accounts@"):
+            self.assertFalse(meetings.is_deliverable(broken), broken)
         self.assertTrue(meetings.is_deliverable("accounts@galom.ae"))
 
     def test_the_customers_contacts_are_suggested(self):

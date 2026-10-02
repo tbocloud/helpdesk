@@ -351,8 +351,9 @@ def _customer_contacts(reference) -> list[dict]:
 
 def is_deliverable(email: str) -> bool:
     """False for chat stand-ins and reserved test domains: an invitation there only bounces."""
-    domain = email.rpartition("@")[2].lower()
-    if not domain or is_chat_placeholder_email(email):
+    local, at, domain = (email or "").strip().rpartition("@")
+    domain = domain.lower()
+    if not (local and at and domain) or is_chat_placeholder_email(email):
         return False
     return domain not in UNDELIVERABLE_DOMAINS and not domain.endswith(
         UNDELIVERABLE_SUFFIXES
