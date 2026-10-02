@@ -30,6 +30,8 @@ export interface WorkItem {
   risks?: string[];
   /** The task's GitHub pull requests: open ones first, then merged or closed. */
   pull_requests?: TaskPullRequest[];
+  /** Set on tasks in Pending Review: whether this user may approve them. */
+  can_approve?: boolean;
 }
 
 export function isAtRisk(item: WorkItem) {

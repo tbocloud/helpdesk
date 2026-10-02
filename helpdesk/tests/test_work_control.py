@@ -108,6 +108,24 @@ class TestMyWorkAndOverview(WorkControlCase):
         self.assertTrue(ticket_item["is_key"])
         self.assertGreaterEqual(result["counts"]["overdue"], 1)
 
+    def test_tasks_waiting_for_review_say_who_may_approve(self):
+        task = self.make_task("Sign off payroll", add_days(nowdate(), 2), LEAD)
+        frappe.db.set_value("Task", task, "status", "Pending Review")
+
+        def review_item(user):
+            items = self.as_user(user, work.get_my_work)["items"]
+            return next(i for i in items if i["name"] == task)
+
+        # the project lead may sign it off; a developer on it may not
+        self.assertTrue(review_item(LEAD)["can_approve"])
+        make_assignment("Task", task, DEV[0])
+        self.assertFalse(review_item(DEV)["can_approve"])
+        open_task = self.make_task("Train users", add_days(nowdate(), 5))
+        items = self.as_user(DEV, work.get_my_work)["items"]
+        self.assertNotIn(
+            "can_approve", next(i for i in items if i["name"] == open_task)
+        )
+
     def test_overview_buckets_for_the_project_manager(self):
         overdue = self.make_task("Close GL", add_days(nowdate(), -1))
         soon = self.make_task("UAT sign-off", add_days(nowdate(), 1), is_key=1)
