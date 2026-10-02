@@ -137,6 +137,7 @@ import {
 import { computed, inject, ref, useId, watch } from "vue";
 import LucidePlus from "~icons/lucide/plus";
 import LucideVideo from "~icons/lucide/video";
+import { meetingsChanged } from "./meetingsBus";
 import ScheduleMeetingDialog from "./ScheduleMeetingDialog.vue";
 
 interface MeetingRow {
@@ -184,6 +185,7 @@ watch(
   () => [props.referenceDoctype, props.referenceName],
   () => meetings.reload()
 );
+watch(meetingsChanged, () => meetings.reload());
 
 const data = computed<MeetingsData | null>(() => meetings.data ?? null);
 // hidden until Teams meetings are set up, unless meetings already exist
