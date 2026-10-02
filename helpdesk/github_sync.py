@@ -40,6 +40,7 @@ from frappe.utils import (
     strip_html,
 )
 
+from helpdesk.automation import acting_user, credit
 from helpdesk.work_reminders import notify_users
 
 SETTINGS = "HD GitHub Settings"
@@ -262,7 +263,7 @@ class PullRequestLink:
         url = self.row.url or ""
         if url.startswith("https://github.com/"):
             label = f'<a href="{escape_html(url)}">{label}</a>'
-        self.task.add_comment("Info", f"{label} {escape_html(text)}")
+        credit(self.task.add_comment("Info", f"{label} {escape_html(text)}"))
 
     def notify_assignees(self, subject: str):
         notify_users(self.task.assignees(), "Task", self.task.name, subject)
@@ -529,7 +530,7 @@ class PullRequestSync:
                     frappe.bold(link.task.name),
                     escape_html(self.title),
                 ),
-                "commented_by": frappe.session.user,
+                "commented_by": acting_user(),
             }
         ).insert(ignore_permissions=True)
 

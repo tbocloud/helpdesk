@@ -15,6 +15,7 @@ from frappe.utils import (
 )
 
 from helpdesk import teams_meetings
+from helpdesk.automation import acting_user, credit
 from helpdesk.work_reminders import notify_users
 
 REFERENCE_DOCTYPES = ("HD Ticket", "Task")
@@ -196,18 +197,26 @@ class HDMeeting(Document):
     # --- notes and reminders ---
 
     def note_on_reference(self, text: str):
-        """An internal note on the ticket or task, so the team sees the meeting there."""
+        """An internal note on the ticket or task, so the team sees the meeting there.
+
+        The Outlook sync runs as a job; its notes are the hub's (helpdesk.automation)."""
+        by = acting_user()
         if self.reference_doctype == "HD Ticket":
             frappe.get_doc(
                 {
                     "doctype": "HD Ticket Comment",
                     "reference_ticket": self.reference_name,
-                    "commented_by": frappe.session.user,
+                    "commented_by": by,
                     "content": f"<p>{escape_html(text)}</p>",
                 }
             ).insert(ignore_permissions=True)
         else:
-            frappe.get_doc("Task", self.reference_name).add_comment("Comment", text)
+            credit(
+                frappe.get_doc("Task", self.reference_name).add_comment(
+                    "Comment", text
+                ),
+                by,
+            )
 
     def when_label(self) -> str:
         return format_datetime(self.starts_on, "d MMM, HH:mm")

@@ -19,6 +19,7 @@ from helpdesk.ai_engine import call_haiku
 from helpdesk.ai_suggestion import find_related_articles, is_ai_configured
 from helpdesk.api.knowledge_base import get_general_category
 from helpdesk.api.ticket_ai import build_prompt, html_to_text, truncate
+from helpdesk.automation import automation_user
 from helpdesk.work_reminders import _agent_managers, notify_users
 
 DRAFT_JOB_TIMEOUT = 300
@@ -150,7 +151,7 @@ def parse_draft(response) -> dict | None:
 
 
 def create_draft(ticket, draft: dict):
-    return frappe.get_doc(
+    article = frappe.get_doc(
         {
             "doctype": "HD Article",
             "title": draft["title"],
@@ -160,6 +161,9 @@ def create_draft(ticket, draft: dict):
             "source_ticket": ticket.name,
         }
     ).insert(ignore_permissions=True)
+    # before_insert makes the session user (the job's Administrator) the author
+    article.db_set("author", automation_user(), update_modified=False)
+    return article
 
 
 def notify_reviewers(ticket, article):

@@ -17,6 +17,7 @@ from helpdesk.ai_engine import (
     log_usage,
 )
 from helpdesk.ai_suggestion import queue_suggestion
+from helpdesk.automation import automation_user
 from helpdesk.mcp_client import MCPClient
 
 # Write tool names - these require approval instead of direct execution
@@ -972,7 +973,7 @@ def post_investigation_comment(
                 "doctype": "HD Ticket Comment",
                 "reference_ticket": ticket_id,
                 "content": "<br>".join(parts),
-                "commented_by": "Administrator",
+                "commented_by": automation_user(),
             }
         )
         comment.flags.skip_notifications = True

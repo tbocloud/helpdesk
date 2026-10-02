@@ -6,6 +6,8 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.utils import add_days, formatdate, get_datetime, getdate, now, nowdate
 
+from helpdesk.automation import acting_user
+
 WAITING_ON_TASK = "Waiting on Task"
 ON_HOLD = "On Hold"
 PENDING_REVIEW = "Pending Review"
@@ -293,10 +295,9 @@ class Task(Document):
         if ticket.status == WAITING_ON_TASK:
             ticket.status = "Open"
             ticket.save(ignore_permissions=True)
-        done_by = (
-            frappe.db.get_value("User", frappe.session.user, "full_name")
-            or frappe.session.user
-        )
+        # a merged pull request completes a task without a person
+        by = acting_user()
+        done_by = frappe.db.get_value("User", by, "full_name") or by
         comment = frappe.get_doc(
             {
                 "doctype": "HD Ticket Comment",
@@ -308,7 +309,7 @@ class Task(Document):
                     frappe.utils.escape_html(self.subject or ""),
                     done_by,
                 ),
-                "commented_by": frappe.session.user,
+                "commented_by": by,
             }
         )
         comment.insert(ignore_permissions=True)

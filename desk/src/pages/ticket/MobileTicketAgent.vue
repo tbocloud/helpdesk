@@ -494,6 +494,7 @@ const _activities = computed(() => {
         attachments: email.attachments,
         name: email.name,
         deliveryStatus: email.delivery_status,
+        aiDrafted: !!email.custom_ai_drafted,
         isFirstEmail: idx === 0,
       };
     }

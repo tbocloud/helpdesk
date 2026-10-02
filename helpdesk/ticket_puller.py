@@ -14,6 +14,7 @@ import json
 import frappe
 import requests
 
+from helpdesk.automation import automation_user
 from helpdesk.mcp_client import MCPClient
 from helpdesk.session_replay import is_diagnostics_file, is_replay_file
 
@@ -187,7 +188,7 @@ def _attach_recording(
             {
                 "doctype": "HD Ticket Comment",
                 "reference_ticket": hd_ticket_name,
-                "commented_by": "Administrator",
+                "commented_by": automation_user(),
                 "content": note,
             }
         )
@@ -487,6 +488,8 @@ def sync_conversations() -> int:
                 for c in comments:
                     if c["name"] in state["client"] or c.get("owner") == support_user:
                         continue
+                    # the customer's own words relayed from their ERP: not the
+                    # hub's work, so not credited to the automation user
                     hd_comment = frappe.get_doc(
                         {
                             "doctype": "HD Ticket Comment",
