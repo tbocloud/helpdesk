@@ -177,6 +177,14 @@ class TestScheduling(MeetingCase):
         frappe.set_user(AGENT[0])
         self.assertFalse(meetings.get_meetings("HD Ticket", self.ticket)["enabled"])
 
+    def test_the_header_button_follows_the_settings(self):
+        frappe.set_user(AGENT[0])
+        self.assertTrue(meetings.meetings_enabled())
+        frappe.set_user("Administrator")
+        enable_teams_meetings(enabled=0)
+        frappe.set_user(AGENT[0])
+        self.assertFalse(meetings.meetings_enabled())
+
     def test_defaults_invite_the_customer_and_the_team(self):
         frappe.set_user(AGENT[0])
         defaults = meetings.get_meeting_defaults("HD Ticket", self.ticket)

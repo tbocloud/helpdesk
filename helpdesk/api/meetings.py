@@ -67,6 +67,13 @@ def get_meetings(reference_doctype: str, reference_name: str | int) -> dict:
 
 @frappe.whitelist()
 @agent_only
+def meetings_enabled() -> bool:
+    """Whether to offer Schedule meeting (the ticket header asks before showing its button)."""
+    return teams_meetings.is_enabled()
+
+
+@frappe.whitelist()
+@agent_only
 def get_meeting_defaults(reference_doctype: str, reference_name: str | int) -> dict:
     """Subject, attendees and length to start the Schedule meeting dialog with."""
     reference = _reference(reference_doctype, reference_name)
