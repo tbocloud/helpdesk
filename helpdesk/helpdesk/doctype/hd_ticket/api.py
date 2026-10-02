@@ -175,9 +175,16 @@ def get_communications(ticket: str):
     if not frappe.has_permission("HD Ticket", "read", ticket):
         return []
     QBCommunication = frappe.qb.DocType("Communication")
+    # custom_ai_drafted is a custom field (setup.after_migrate); read it once it exists
+    extra = (
+        [QBCommunication.custom_ai_drafted]
+        if frappe.get_meta("Communication").has_field("custom_ai_drafted")
+        else []
+    )
     communications = (
         frappe.qb.from_(QBCommunication)
         .select(
+            *extra,
             QBCommunication.bcc,
             QBCommunication.cc,
             QBCommunication.content,
@@ -190,7 +197,6 @@ def get_communications(ticket: str):
             QBCommunication.delivery_status,
             QBCommunication.sent_or_received,
             QBCommunication.user,
-            QBCommunication.custom_ai_drafted,
         )
         .where(QBCommunication.reference_doctype == "HD Ticket")
         .where(QBCommunication.reference_name == ticket)

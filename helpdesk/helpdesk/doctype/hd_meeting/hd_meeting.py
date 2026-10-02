@@ -15,7 +15,7 @@ from frappe.utils import (
 )
 
 from helpdesk import teams_meetings
-from helpdesk.automation import acting_user
+from helpdesk.automation import acting_user, credit
 from helpdesk.work_reminders import notify_users
 
 REFERENCE_DOCTYPES = ("HD Ticket", "Task")
@@ -211,11 +211,11 @@ class HDMeeting(Document):
                 }
             ).insert(ignore_permissions=True)
         else:
-            frappe.get_doc("Task", self.reference_name).add_comment(
-                "Comment",
-                text,
-                comment_email=by,
-                comment_by=frappe.db.get_value("User", by, "full_name") or by,
+            credit(
+                frappe.get_doc("Task", self.reference_name).add_comment(
+                    "Comment", text
+                ),
+                by,
             )
 
     def when_label(self) -> str:

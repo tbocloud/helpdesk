@@ -361,6 +361,13 @@ const cachedEmail = useStorage<null | string>(
 
 const newEmail = ref<null | string>(cachedEmail.value);
 
+// whether the reply in the box started as an AI draft; kept with the cached
+// draft so a reload or a trip to another ticket doesn't lose it
+const aiDrafted = useStorage<boolean>(
+  "emailBoxAiDrafted" + props.ticketId,
+  false
+);
+
 const emailSignature = ref<string | null>(null);
 
 function isOnlySignature(content: string | null) {
@@ -502,6 +509,7 @@ function draftWithAi() {
 function applyAiDraft(reply: string, previousContent: string | null) {
   aiError.value = "";
   aiUndoContent.value = previousContent;
+  aiDrafted.value = true;
   newEmail.value = reply + (emailSignature.value ?? "");
   focusEditorAtStart();
 }
@@ -525,6 +533,7 @@ function undoAiDraft() {
 
 function clearAiState() {
   aiUndoContent.value = undefined;
+  aiDrafted.value = false;
   aiError.value = "";
 }
 
@@ -541,7 +550,7 @@ const sendMail = createResource({
       cc: ccEmailsClone.value?.join(","),
       bcc: bccEmailsClone.value?.join(","),
       // set while the reply holds an AI draft (side panel or "Draft with AI")
-      ai_drafted: aiUndoContent.value !== undefined ? 1 : 0,
+      ai_drafted: aiDrafted.value ? 1 : 0,
       message:
         newEmail.value +
         (quotedContentRef.value
@@ -618,6 +627,7 @@ function addToReply(
   }
 
   nextTick(() => {
+    clearAiState();
     newEmail.value = getInitialContent();
   });
   focusEditorAtStart();
@@ -687,6 +697,7 @@ function handleDelete(e: KeyboardEvent) {
     e.preventDefault();
 
     editorRef.value?.editor?.commands?.clearContent();
+    clearAiState();
     newEmail.value = null;
     quotedContent.value = null;
 
@@ -714,6 +725,13 @@ watch(newEmail, (newValue, oldValue) => {
     onUserType();
   }
   cachedEmail.value = isOnlySignature(newValue) ? null : newValue;
+  // everything deleted: whatever is typed next is the agent's own
+  if (
+    aiDrafted.value &&
+    (isContentEmpty(newValue) || isOnlySignature(newValue))
+  ) {
+    clearAiState();
+  }
 });
 
 watch(quotedContent, (newVal, oldVal) => {

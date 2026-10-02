@@ -307,7 +307,8 @@ def get_custom_fields():
         ],
         "Communication": [
             {
-                # an agent sent this reply from an AI draft (it is still their reply)
+                # an agent sent this reply from an AI draft (it is still their reply);
+                # existing sites get it from setup.after_migrate on the next migrate
                 "fieldname": "custom_ai_drafted",
                 "fieldtype": "Check",
                 "label": "AI Drafted",

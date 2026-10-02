@@ -488,6 +488,8 @@ def sync_conversations() -> int:
                 for c in comments:
                     if c["name"] in state["client"] or c.get("owner") == support_user:
                         continue
+                    # the customer's own words relayed from their ERP: not the
+                    # hub's work, so not credited to the automation user
                     hd_comment = frappe.get_doc(
                         {
                             "doctype": "HD Ticket Comment",

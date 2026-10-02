@@ -5,7 +5,15 @@ from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_to_date, now_datetime
 
 from helpdesk import automation
-from helpdesk.test_utils import make_meeting, make_tasky_user, make_ticket, run_as_user
+from helpdesk.helpdesk.doctype.hd_ticket.api import get_communications
+from helpdesk.test_utils import (
+    make_meeting,
+    make_project,
+    make_task,
+    make_tasky_user,
+    make_ticket,
+    run_as_user,
+)
 from helpdesk.work_reminders import notify_users
 
 AI = "tbo.ai@automation.example"
@@ -43,11 +51,41 @@ class TestAutomationUser(FrappeTestCase):
         with self.assertRaises(frappe.ValidationError):
             automation.create_automation_user("not-an-email")
 
+    def test_a_persons_account_is_never_taken_over(self):
+        with self.assertRaises(frappe.ValidationError):
+            automation.create_automation_user(AGENT[0])  # an agent who signs in
+        self.assertNotEqual(automation.automation_user(), AGENT[0])
+
+    def test_an_existing_disabled_address_is_enabled_again(self):
+        automation.create_automation_user(AI)
+        frappe.db.set_value("User", AI, "enabled", 0)
+
+        automation.create_automation_user(AI)
+
+        self.assertEqual(automation.automation_user(), AI)
+
     def test_jobs_act_as_the_automation_user_and_people_as_themselves(self):
         automation.create_automation_user(AI)
 
         self.assertEqual(automation.acting_user(), AI)  # tests run as Administrator
         self.assertEqual(run_as_user(AGENT[0], automation.acting_user), AGENT[0])
+
+        # someone signed in as Administrator in the browser is a person
+        frappe.local.request = object()
+        try:
+            self.assertEqual(automation.acting_user(), "Administrator")
+        finally:
+            del frappe.local.request
+
+    def test_task_timeline_comments_from_jobs_are_credited_to_it(self):
+        automation.create_automation_user(AI)
+        project = make_project("Automation credit").name
+        task = make_task(project, "Merge the fix")
+
+        comment = task.add_comment("Info", "PR #7 merged")
+        automation.credit(comment)
+
+        self.assertEqual(frappe.db.get_value("Comment", comment.name, "owner"), AI)
 
     def test_reminders_and_job_notes_are_credited_to_it(self):
         automation.create_automation_user(AI)
@@ -101,3 +139,8 @@ class TestAiDraftedReplies(FrappeTestCase):
         tagged = {r.content: r.custom_ai_drafted for r in rows}
         self.assertEqual(tagged["<p>Drafted by AI</p>"], 1)
         self.assertEqual(tagged["<p>Written by hand</p>"], 0)
+
+        shown = {
+            c.content: c.custom_ai_drafted for c in get_communications(ticket.name)
+        }
+        self.assertEqual(shown["<p>Drafted by AI</p>"], 1)
