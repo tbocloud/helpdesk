@@ -846,6 +846,35 @@ def enable_teams_meetings(**values):
     return doc
 
 
+def make_meeting(
+    reference_doctype: str,
+    reference_name: str,
+    starts_on,
+    attendees: list[str],
+    scheduled_by: str = "Administrator",
+    **values,
+):
+    """Creates a scheduled HD Meeting as if Teams had already made it (no Graph call)."""
+    return frappe.get_doc(
+        {
+            "doctype": "HD Meeting",
+            "subject": values.pop("subject", "Test meeting"),
+            "starts_on": starts_on,
+            "ends_on": frappe.utils.add_to_date(starts_on, minutes=30),
+            "reference_doctype": reference_doctype,
+            "reference_name": str(reference_name),
+            "organizer": values.pop("organizer", "organizer@meetings.example"),
+            "scheduled_by": scheduled_by,
+            "external_id": values.pop("external_id", "AAMk-test"),
+            "join_url": values.pop(
+                "join_url", "https://teams.microsoft.com/l/meetup-join/x"
+            ),
+            "attendees": [{"email": email} for email in attendees],
+            **values,
+        }
+    ).insert(ignore_permissions=True)
+
+
 def fake_graph_token(roles: list[str] | None = None) -> str:
     """An unsigned JWT shaped like a Microsoft access token, carrying `roles`."""
     import base64

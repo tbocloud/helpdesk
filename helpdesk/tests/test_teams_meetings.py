@@ -7,7 +7,10 @@ from frappe.utils import add_days, add_to_date, now_datetime, nowdate
 
 from helpdesk import teams_meetings
 from helpdesk.api import meetings
-from helpdesk.helpdesk.doctype.hd_meeting.hd_meeting import send_reminders
+from helpdesk.helpdesk.doctype.hd_meeting.hd_meeting import (
+    send_reminders,
+    sync_with_outlook,
+)
 from helpdesk.test_utils import (
     create_customer,
     enable_teams_meetings,
@@ -15,6 +18,7 @@ from helpdesk.test_utils import (
     get_reminder_messages,
     graph_response,
     make_assignment,
+    make_meeting,
     make_tasky_user,
     make_ticket,
 )
@@ -257,6 +261,142 @@ class TestAccessDenied(MeetingCase):
         )
         _message, sign_in = self.run_connection_test(["Calendars.ReadWrite"])
         sign_in.assert_called_once()
+
+
+class TestOutlookSync(MeetingCase):
+    def meeting(self, **values):
+        return make_meeting(
+            "HD Ticket",
+            self.ticket,
+            # whole minutes, as meetings are scheduled
+            add_to_date(now_datetime(), days=1).replace(second=0, microsecond=0),
+            [CUSTOMER_EMAIL, AGENT[0]],
+            scheduled_by=AGENT[0],
+            organizer=AGENT[0],
+            **values,
+        )
+
+    def outlook(self, meeting, **changes):
+        """Graph's GET event answer: the meeting as stored, with `changes`."""
+        start = changes.pop("start", meeting.starts_on)
+        end = changes.pop("end", meeting.ends_on)
+
+        def utc(value):
+            return {
+                "dateTime": teams_meetings.graph_time(value)["dateTime"] + ".0000000",
+                "timeZone": "UTC",
+            }
+
+        return {
+            "subject": changes.pop("subject", meeting.subject),
+            "start": utc(start),
+            "end": utc(end),
+            "isCancelled": changes.pop("isCancelled", False),
+            "attendees": changes.pop(
+                "attendees",
+                [
+                    {
+                        "emailAddress": {"address": CUSTOMER_EMAIL},
+                        "status": {"response": "none"},
+                    }
+                ],
+            ),
+        }
+
+    def notes(self):
+        return frappe.get_all(
+            "HD Ticket Comment",
+            filters={
+                "reference_ticket": self.ticket,
+                "content": ("like", "%changed in Outlook%"),
+            },
+            pluck="content",
+        )
+
+    def test_a_meeting_moved_in_outlook_moves_here(self):
+        meeting = self.meeting(reminder_sent=1)
+        later = add_to_date(meeting.starts_on, hours=2)
+        self.graph(
+            graph_response(
+                self.outlook(
+                    meeting,
+                    start=later,
+                    end=add_to_date(later, minutes=45),
+                    attendees=[
+                        {
+                            "emailAddress": {"address": CUSTOMER_EMAIL.upper()},
+                            "status": {"response": "accepted"},
+                        },
+                        {
+                            "emailAddress": {"address": AGENT[0]},
+                            "status": {"response": "organizer"},
+                        },
+                        {
+                            "emailAddress": {"address": "cfo@meeting-traders.example"},
+                            "status": {"response": "tentativelyAccepted"},
+                        },
+                    ],
+                )
+            )
+        )
+
+        sync_with_outlook()
+
+        meeting.reload()
+        self.assertEqual(str(meeting.starts_on), str(later))
+        self.assertEqual(meeting.reminder_sent, 0)
+        replies = {a.email: a.response for a in meeting.attendees}
+        self.assertEqual(replies[CUSTOMER_EMAIL], "Accepted")
+        self.assertEqual(replies["cfo@meeting-traders.example"], "Tentative")
+        self.assertTrue(any("moved to" in n for n in self.notes()))
+
+    def test_cancelled_or_deleted_in_outlook_is_cancelled_here(self):
+        cancelled = self.meeting(external_id="AAMk-cancelled")
+        deleted = self.meeting(external_id="AAMk-deleted")
+        self.graph()  # sign-in only; Graph answers per event below
+
+        def outlook(method, url, **kwargs):
+            if "AAMk-deleted" in url:
+                return graph_response({"error": {"code": "ErrorItemNotFound"}}, 404)
+            return graph_response(self.outlook(cancelled, isCancelled=True))
+
+        with patch("helpdesk.teams_meetings.requests.request", side_effect=outlook):
+            sync_with_outlook()
+
+        cancelled.reload()
+        deleted.reload()
+        self.assertEqual(cancelled.status, "Cancelled")
+        self.assertEqual(cancelled.cancel_reason, "Cancelled in Outlook")
+        self.assertEqual(deleted.status, "Cancelled")
+        self.assertEqual(deleted.cancel_reason, "Deleted in Outlook")
+
+    def test_nothing_changed_means_nothing_saved(self):
+        meeting = self.meeting()
+        self.graph(graph_response(self.outlook(meeting)))
+
+        sync_with_outlook()
+
+        self.assertEqual(
+            str(frappe.db.get_value("HD Meeting", meeting.name, "modified")),
+            str(meeting.modified),
+        )
+        self.assertEqual(self.notes(), [])
+
+    def test_a_graph_failure_is_logged_once_and_stops_the_run(self):
+        self.meeting(external_id="AAMk-1")
+        self.meeting(external_id="AAMk-2")
+        calls = self.graph(
+            graph_response({"error": {"code": "ServiceUnavailable"}}, 503),
+            graph_response({"error": {"code": "ServiceUnavailable"}}, 503),
+        )
+        with patch("frappe.log_error") as log_error:
+            sync_with_outlook()
+
+        self.assertEqual(calls.call_count, 1)
+        self.assertEqual(
+            [c.kwargs.get("title") for c in log_error.call_args_list],
+            ["Teams meeting sync failed"],
+        )
 
 
 class TestGraphTime(FrappeTestCase):

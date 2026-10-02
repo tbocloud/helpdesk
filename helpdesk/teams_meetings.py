@@ -33,6 +33,10 @@ REQUIRED_ROLE = "Calendars.ReadWrite"
 class GraphError(Exception):
     """Graph refused a call; the message is safe to show to the agent."""
 
+    def __init__(self, message: str, status: int | None = None):
+        super().__init__(message)
+        self.status = status
+
 
 def get_settings():
     return frappe.get_cached_doc("HD Meeting Settings")
@@ -94,7 +98,11 @@ def graph(method: str, path: str, payload: dict | None = None) -> dict:
         method,
         GRAPH + path,
         json=payload,
-        headers={"Authorization": f"Bearer {token}"},
+        headers={
+            "Authorization": f"Bearer {token}",
+            # event times come back in UTC, whatever the mailbox's own time zone
+            "Prefer": 'outlook.timezone="UTC"',
+        },
         timeout=TIMEOUT,
     )
     data = _json(response)
@@ -105,7 +113,7 @@ def graph(method: str, path: str, payload: dict | None = None) -> dict:
         )
         if response.status_code == 403:
             message += " " + access_denied_hint(token)
-        raise GraphError(message)
+        raise GraphError(message, response.status_code)
     return data
 
 
@@ -177,6 +185,15 @@ def cancel_event(meeting, comment: str = ""):
     )
 
 
+def get_event(meeting) -> dict:
+    """The meeting as Outlook has it now: subject, times, cancelled and the attendees' replies."""
+    return graph(
+        "GET",
+        f"/users/{quote(meeting.organizer)}/events/{quote(meeting.external_id, safe='')}"
+        "?$select=subject,start,end,isCancelled,attendees",
+    )
+
+
 def check_connection(mailbox: str) -> dict:
     """Reads the mailbox's calendar, which needs the same permission as creating meetings."""
     data = graph("GET", f"/users/{quote(mailbox)}/calendar")
@@ -188,6 +205,16 @@ def graph_time(value) -> dict:
     local = get_datetime(value).replace(tzinfo=ZoneInfo(get_system_timezone()))
     utc = local.astimezone(timezone.utc)
     return {"dateTime": utc.strftime("%Y-%m-%dT%H:%M:%S"), "timeZone": "UTC"}
+
+
+def system_time(value: dict | None):
+    """A Graph {dateTime, timeZone: UTC} as a naive datetime in the system time zone."""
+    if not value or not value.get("dateTime"):
+        return None
+    # Graph sends seven decimal places; datetime takes six
+    stamp = value["dateTime"].split(".")[0]
+    utc = get_datetime(stamp).replace(tzinfo=timezone.utc)
+    return utc.astimezone(ZoneInfo(get_system_timezone())).replace(tzinfo=None)
 
 
 def _json(response) -> dict:
