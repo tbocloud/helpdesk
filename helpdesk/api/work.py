@@ -179,7 +179,8 @@ def get_overview(
     )
     tickets = (
         []
-        if project  # a project filter narrows to project work only
+        # a project filter narrows to project work; Helpdesk Employees never get tickets
+        if project or not can_see_tickets()
         else frappe.get_list(
             "HD Ticket",
             filters=ticket_filters,

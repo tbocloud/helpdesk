@@ -53,6 +53,9 @@ class TestHelpdeskEmployeeRole(FrappeTestCase):
         my_work = self.as_user(EMPLOYEE, work.get_my_work)
         self.assertFalse([i for i in my_work["items"] if i["kind"] == "ticket"])
         self.assertEqual(self.as_user(EMPLOYEE, sidebar.get_nav_counts)["tickets"], 0)
+        overview = self.as_user(EMPLOYEE, work.get_overview)
+        all_items = [i for bucket in overview["buckets"].values() for i in bucket]
+        self.assertFalse([i for i in all_items if i["kind"] == "ticket"])
         self.assertFalse(self.as_user(EMPLOYEE, auth.get_user)["can_see_tickets"])
 
     def test_support_agents_and_managers_are_unchanged(self):

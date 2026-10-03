@@ -180,6 +180,7 @@
 import { Link } from "@/components";
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import TaskyState from "@/pages/tasky/components/TaskyState.vue";
+import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
 import { Button, createResource } from "frappe-ui";
 import { computed, reactive, ref, useId, watch, type Component } from "vue";
@@ -202,6 +203,7 @@ interface OverviewData {
   counts: Record<Bucket, number>;
 }
 
+const authStore = useAuthStore();
 const route = useRoute();
 const router = useRouter();
 const listId = `work-overview-list-${useId()}`;
@@ -306,14 +308,18 @@ const tiles = computed<
     icon: LucideStar,
     iconClass: "text-ink-gray-5",
   },
-  {
-    key: "waiting_on_task",
-    label: __("Waiting on task"),
-    hint: __("Tickets blocked by project work"),
-    empty: __("No tickets are waiting on a task."),
-    icon: LucideHourglass,
-    iconClass: "text-ink-gray-5",
-  },
+  ...(authStore.canSeeTickets
+    ? [
+        {
+          key: "waiting_on_task",
+          label: __("Waiting on task"),
+          hint: __("Tickets blocked by project work"),
+          empty: __("No tickets are waiting on a task."),
+          icon: LucideHourglass,
+          iconClass: "text-ink-gray-5",
+        },
+      ]
+    : []),
 ]);
 
 const activeTile = computed(
