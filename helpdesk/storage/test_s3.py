@@ -123,3 +123,42 @@ class TestS3Storage(FrappeTestCase):
         doc.reload()
         self.assertTrue(doc.get(s3.KEY_FIELD))
         self.assertEqual(self.bucket.objects[doc.get(s3.KEY_FIELD)], b"old")
+
+
+class TestS3KeepLocalCopy(FrappeTestCase):
+    """The default: files stay on this server and the bucket holds a second copy."""
+
+    def setUp(self):
+        self.addCleanup(frappe.db.rollback)
+        self.bucket = FakeS3()
+        patcher = patch.object(s3, "get_client", return_value=self.bucket)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        create_customer(CUSTOMER)
+        enable_file_storage(keep_local_copy=1)
+        self.post = make_content_post("Kept post", CUSTOMER)
+
+    def test_file_stays_local_and_is_copied(self):
+        doc = make_attachment("HD Content Post", self.post.name, "kept.png", b"both")
+        doc.reload()
+        local = doc.get_full_path()
+        self.addCleanup(lambda: os.path.exists(local) and os.remove(local))
+
+        self.assertTrue(doc.file_url.startswith("/private/files/"))
+        self.assertTrue(os.path.exists(local))
+        self.assertEqual(self.bucket.objects[doc.get(s3.KEY_FIELD)], b"both")
+        self.assertEqual(doc.get_content(), b"both")
+
+        # a lost local copy is read back from the bucket, and saving still works
+        os.remove(local)
+        doc = frappe.get_doc("File", doc.name)
+        self.assertEqual(doc.get_content(), b"both")
+        doc.save(ignore_permissions=True)
+
+    def test_delete_removes_both_copies(self):
+        doc = make_attachment("HD Content Post", self.post.name, "gone.png", b"bye")
+        doc.reload()
+        local, key = doc.get_full_path(), doc.get(s3.KEY_FIELD)
+        doc.delete(ignore_permissions=True)
+        self.assertFalse(os.path.exists(local))
+        self.assertNotIn(key, self.bucket.objects)

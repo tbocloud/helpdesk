@@ -170,6 +170,20 @@
             />
           </div>
           <SettingRow
+            :label="__('Keep a copy on this server')"
+            :description="
+              form.keep_local_copy
+                ? __(
+                    'Files stay on this server and open from here; the bucket holds a second copy. If the server copy is lost, it is read back from the bucket.'
+                  )
+                : __(
+                    'Files live only in the bucket and are removed from this server after upload.'
+                  )
+            "
+          >
+            <Switch v-model="form.keep_local_copy" />
+          </SettingRow>
+          <SettingRow
             :label="__('Delete from the bucket when a file is deleted')"
             :description="
               __('Keep this on unless your bucket keeps old versions for you.')
@@ -197,7 +211,7 @@
           </p>
           <div>
             <Button
-              :label="__('Move existing files to S3')"
+              :label="__('Copy existing files to S3')"
               :disabled="!settings.data?.enabled || !overview.data?.local"
               :loading="move.loading"
               @click="move.submit()"
@@ -210,7 +224,7 @@
           <p class="text-p-sm text-ink-gray-5">
             {{
               __(
-                "Runs in the background. Files that fail to upload stay on this server and are listed in the Error Log."
+                "Copies them to the bucket in the background. Files that fail to upload stay on this server and are listed in the Error Log."
               )
             }}
           </p>
@@ -254,6 +268,7 @@ interface StorageForm {
   document_types: string[];
   link_expiry_seconds: number;
   delete_from_bucket: boolean;
+  keep_local_copy: boolean;
 }
 
 const DOCTYPE = "HD File Storage Settings";
@@ -283,6 +298,7 @@ const settings = createResource({
       ),
       link_expiry_seconds: doc.link_expiry_seconds || 600,
       delete_from_bucket: Boolean(doc.delete_from_bucket),
+      keep_local_copy: Boolean(doc.keep_local_copy),
     };
     initial.value = JSON.stringify(form.value);
     if (doc.last_test_result) {
@@ -319,6 +335,7 @@ const save = createResource({
       ...f,
       enabled: f.enabled ? 1 : 0,
       delete_from_bucket: f.delete_from_bucket ? 1 : 0,
+      keep_local_copy: f.keep_local_copy ? 1 : 0,
       link_expiry_seconds: Number(f.link_expiry_seconds) || 600,
       document_types: f.document_types.map((document_type) => ({
         document_type,

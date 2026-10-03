@@ -16,6 +16,7 @@
 		"scope_section",
 		"document_types",
 		"column_break_scope",
+		"keep_local_copy",
 		"link_expiry_seconds",
 		"delete_from_bucket",
 		"status_section",
@@ -129,6 +130,13 @@
 			"fieldtype": "Check",
 			"label": "Last Test Passed",
 			"read_only": 1
+		},
+		{
+			"fieldname": "keep_local_copy",
+			"fieldtype": "Check",
+			"label": "Keep a Copy on This Server",
+			"default": "1",
+			"description": "Files stay on this server and are served from it; the bucket holds a second copy. Off: files live only in the bucket."
 		}
 	],
 	"issingle": 1,

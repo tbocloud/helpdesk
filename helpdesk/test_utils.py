@@ -1667,7 +1667,7 @@ class FakeS3:
         return f"https://bucket.example/{Params['Key']}?expires={ExpiresIn}"
 
 
-def enable_file_storage(doctypes=("HD Content Post",)):
+def enable_file_storage(doctypes=("HD Content Post",), keep_local_copy=0):
     """Turns S3 file storage on for attachments of `doctypes` (pair with a patched FakeS3 client)."""
     settings = frappe.get_single("HD File Storage Settings")
     settings.update(
@@ -1680,6 +1680,7 @@ def enable_file_storage(doctypes=("HD Content Post",)):
             "key_prefix": "test-site",
             "link_expiry_seconds": 600,
             "delete_from_bucket": 1,
+            "keep_local_copy": keep_local_copy,
         }
     )
     settings.set("document_types", [{"document_type": d} for d in doctypes])
