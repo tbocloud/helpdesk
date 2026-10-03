@@ -108,13 +108,41 @@ class TestTaskyPermissions(FrappeTestCase):
                 DEV_A, api.create_project, project_name=f"{CUSTOMER} - Side Project"
             )
 
-    def test_members_see_project_but_cannot_manage_it(self):
+    def test_members_see_project_and_add_tasks_but_cannot_manage_it(self):
         projects = {p["name"]: p for p in self.as_user(DEV_A, api.get_projects)}
         self.assertIn(self.project, projects)
         self.assertFalse(projects[self.project]["can_manage"])
+        self.assertTrue(projects[self.project]["can_add_tasks"])
+        task = self.as_user(
+            DEV_A,
+            api.add_task,
+            project=self.project,
+            task_name="Check tax rounding",
+            assigned_to=DEV_B[0],
+        )
+        self.assertEqual(task["assignees"], [DEV_B[0]])
+        # the one who added it can still see it
+        self.assertEqual(
+            self.as_user(DEV_A, api.get_task_detail, task=task["name"])["name"],
+            task["name"],
+        )
+
+    def test_a_member_cannot_bring_someone_new_onto_the_team(self):
         with self.assertRaises(frappe.PermissionError):
             self.as_user(
-                DEV_A, api.add_task, project=self.project, task_name="Sneaky task"
+                DEV_A,
+                api.add_task,
+                project=self.project,
+                task_name="Needs an outsider",
+                assigned_to=OUTSIDER[0],
+            )
+        members = {u.user for u in frappe.get_doc("Project", self.project).users}
+        self.assertNotIn(OUTSIDER[0], members)
+
+    def test_people_not_on_the_project_cannot_add_tasks(self):
+        with self.assertRaises(frappe.PermissionError):
+            self.as_user(
+                OUTSIDER, api.add_task, project=self.project, task_name="Sneaky task"
             )
 
     def test_developer_sees_the_project_of_a_task_given_to_them(self):
@@ -317,14 +345,16 @@ class TestTaskyPermissions(FrappeTestCase):
             with self.assertRaises(frappe.PermissionError):
                 self.as_user(DEV_A, fn, **kwargs)
 
-    def test_other_members_still_cannot_add_tasks(self):
+    def test_other_members_add_tasks_but_cannot_approve(self):
         self.as_user(
             PM, lambda: api.set_project_lead(project=self.project, user=DEV_A[0])
         )
+        task = self.as_user(
+            DEV_B, api.add_task, project=self.project, task_name="Mine to add"
+        )
+        frappe.db.set_value("Task", task["name"], "status", "Pending Review")
         with self.assertRaises(frappe.PermissionError):
-            self.as_user(
-                DEV_B, api.add_task, project=self.project, task_name="Not mine"
-            )
+            self.as_user(DEV_B, api.approve_task, task=task["name"])
 
     def test_rotation_cycles_through_developers(self):
         leads = [
