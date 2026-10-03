@@ -1637,3 +1637,66 @@ def make_timesheet(project: str, hours: float, from_time, task: str | None = Non
             ],
         }
     ).insert(ignore_permissions=True)
+
+
+class FakeS3:
+    """In-memory stand-in for a boto3 S3 client, so storage tests never reach a real bucket."""
+
+    def __init__(self, fail_uploads: bool = False):
+        self.objects: dict[str, bytes] = {}
+        self.fail_uploads = fail_uploads
+
+    def upload_file(self, path, bucket, key, ExtraArgs=None):
+        if self.fail_uploads:
+            raise ConnectionError("bucket unreachable")
+        with open(path, "rb") as f:
+            self.objects[key] = f.read()
+
+    def put_object(self, Bucket, Key, Body):
+        self.objects[Key] = Body
+
+    def get_object(self, Bucket, Key):
+        import io
+
+        return {"Body": io.BytesIO(self.objects[Key])}
+
+    def delete_object(self, Bucket, Key):
+        self.objects.pop(Key, None)
+
+    def generate_presigned_url(self, op, Params, ExpiresIn):
+        return f"https://bucket.example/{Params['Key']}?expires={ExpiresIn}"
+
+
+def enable_file_storage(doctypes=("HD Content Post",)):
+    """Turns S3 file storage on for attachments of `doctypes` (pair with a patched FakeS3 client)."""
+    settings = frappe.get_single("HD File Storage Settings")
+    settings.update(
+        {
+            "enabled": 1,
+            "bucket": "test-bucket",
+            "region": "ap-south-1",
+            "access_key_id": "AKIATEST",
+            "secret_access_key": "test-secret",
+            "key_prefix": "test-site",
+            "link_expiry_seconds": 600,
+            "delete_from_bucket": 1,
+        }
+    )
+    settings.set("document_types", [{"document_type": d} for d in doctypes])
+    settings.save(ignore_permissions=True)
+    frappe.clear_document_cache("HD File Storage Settings", "HD File Storage Settings")
+    return settings
+
+
+def make_attachment(doctype: str, name: str, file_name: str, content: bytes, private=1):
+    """A File with `content` attached to the given document."""
+    return frappe.get_doc(
+        {
+            "doctype": "File",
+            "file_name": file_name,
+            "attached_to_doctype": doctype,
+            "attached_to_name": name,
+            "is_private": private,
+            "content": content,
+        }
+    ).insert(ignore_permissions=True)

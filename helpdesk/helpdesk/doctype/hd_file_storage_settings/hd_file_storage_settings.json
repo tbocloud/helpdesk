@@ -1,0 +1,157 @@
+{
+	"actions": [],
+	"creation": "2026-10-03 12:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"enabled",
+		"connection_section",
+		"bucket",
+		"region",
+		"endpoint_url",
+		"column_break_keys",
+		"access_key_id",
+		"secret_access_key",
+		"key_prefix",
+		"scope_section",
+		"document_types",
+		"column_break_scope",
+		"link_expiry_seconds",
+		"delete_from_bucket",
+		"status_section",
+		"last_test_on",
+		"last_test_ok",
+		"last_test_result"
+	],
+	"fields": [
+		{
+			"fieldname": "enabled",
+			"fieldtype": "Check",
+			"label": "Store Files in S3",
+			"default": "0",
+			"description": "New files attached to the document types below go to the bucket instead of this server"
+		},
+		{
+			"fieldname": "connection_section",
+			"fieldtype": "Section Break",
+			"label": "Bucket"
+		},
+		{
+			"fieldname": "bucket",
+			"fieldtype": "Data",
+			"label": "Bucket Name",
+			"mandatory_depends_on": "enabled"
+		},
+		{
+			"fieldname": "region",
+			"fieldtype": "Data",
+			"label": "Region",
+			"description": "e.g. ap-south-1",
+			"mandatory_depends_on": "enabled"
+		},
+		{
+			"fieldname": "endpoint_url",
+			"fieldtype": "Data",
+			"label": "Endpoint URL",
+			"description": "Leave empty for AWS. Set it for S3-compatible storage (MinIO, Wasabi, DigitalOcean Spaces...)"
+		},
+		{
+			"fieldname": "column_break_keys",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "access_key_id",
+			"fieldtype": "Data",
+			"label": "Access Key ID",
+			"mandatory_depends_on": "enabled"
+		},
+		{
+			"fieldname": "secret_access_key",
+			"fieldtype": "Password",
+			"label": "Secret Access Key",
+			"mandatory_depends_on": "enabled"
+		},
+		{
+			"fieldname": "key_prefix",
+			"fieldtype": "Data",
+			"label": "Folder Prefix",
+			"description": "Files are stored under this folder in the bucket. Defaults to the site name."
+		},
+		{
+			"fieldname": "scope_section",
+			"fieldtype": "Section Break",
+			"label": "What Goes to S3"
+		},
+		{
+			"fieldname": "document_types",
+			"fieldtype": "Table MultiSelect",
+			"label": "Attachments Of",
+			"options": "HD File Storage Doctype"
+		},
+		{
+			"fieldname": "column_break_scope",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "link_expiry_seconds",
+			"fieldtype": "Int",
+			"label": "Download Link Valid For (Seconds)",
+			"default": "600",
+			"non_negative": 1,
+			"description": "People get a short-lived signed link after their access is checked"
+		},
+		{
+			"fieldname": "delete_from_bucket",
+			"fieldtype": "Check",
+			"label": "Delete From Bucket When the File Is Deleted",
+			"default": "1"
+		},
+		{
+			"fieldname": "status_section",
+			"fieldtype": "Section Break",
+			"label": "Status",
+			"collapsible": 1
+		},
+		{
+			"fieldname": "last_test_on",
+			"fieldtype": "Datetime",
+			"label": "Connection Last Tested",
+			"read_only": 1
+		},
+		{
+			"fieldname": "last_test_result",
+			"fieldtype": "Small Text",
+			"label": "Last Test Result",
+			"read_only": 1
+		},
+		{
+			"fieldname": "last_test_ok",
+			"fieldtype": "Check",
+			"label": "Last Test Passed",
+			"read_only": 1
+		}
+	],
+	"issingle": 1,
+	"links": [],
+	"modified": "2026-10-03 12:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD File Storage Settings",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"print": 1,
+			"read": 1,
+			"role": "System Manager",
+			"share": 1,
+			"write": 1
+		}
+	],
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": [],
+	"track_changes": 1
+}
