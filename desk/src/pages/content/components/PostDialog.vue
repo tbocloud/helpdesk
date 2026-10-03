@@ -193,7 +193,24 @@
         >
           <div class="flex items-center justify-between gap-2">
             <span class="text-xs text-ink-gray-5">{{ __("Attachments") }}</span>
-            <template v-if="!isNew">
+            <div v-if="!isNew" class="flex items-center gap-1.5">
+              <Button
+                v-if="(attachments.data?.length ?? 0) > 1"
+                size="sm"
+                variant="ghost"
+                :label="__('Download all')"
+                :tooltip="
+                  __(
+                    'All {0} files as one .zip',
+                    String(attachments.data.length)
+                  )
+                "
+                @click="downloadAll"
+              >
+                <template #prefix
+                  ><LucideDownload class="size-4" aria-hidden="true"
+                /></template>
+              </Button>
               <input
                 ref="fileInput"
                 type="file"
@@ -220,7 +237,7 @@
                   ><LucidePaperclip class="size-4" aria-hidden="true"
                 /></template>
               </Button>
-            </template>
+            </div>
           </div>
           <p v-if="isNew" class="text-p-sm text-ink-gray-5">
             {{
@@ -256,14 +273,29 @@
                     loading="lazy"
                   />
                 </a>
-                <button
-                  type="button"
-                  class="absolute right-1 top-1 grid size-6 place-items-center rounded-md bg-surface-base/90 text-ink-gray-7 opacity-0 shadow-sm transition group-hover:opacity-100 focus-visible:opacity-100"
-                  :aria-label="__('Remove {0}', img.file_name)"
-                  @click="removeFile(img.name)"
+                <!-- always shown on touch screens, on hover / focus elsewhere -->
+                <div
+                  class="absolute right-1 top-1 flex gap-1 transition sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
                 >
-                  <LucideX class="size-3.5" aria-hidden="true" />
-                </button>
+                  <a
+                    :href="img.file_url"
+                    :download="img.file_name"
+                    class="grid size-6 place-items-center rounded-md bg-surface-base/90 text-ink-gray-7 shadow-sm hover:text-ink-gray-9"
+                    :aria-label="__('Download {0}', img.file_name)"
+                    :title="__('Download')"
+                  >
+                    <LucideDownload class="size-3.5" aria-hidden="true" />
+                  </a>
+                  <button
+                    type="button"
+                    class="grid size-6 place-items-center rounded-md bg-surface-base/90 text-ink-gray-7 shadow-sm hover:text-danger"
+                    :aria-label="__('Remove {0}', img.file_name)"
+                    :title="__('Remove')"
+                    @click="removeFile(img.name)"
+                  >
+                    <LucideX class="size-3.5" aria-hidden="true" />
+                  </button>
+                </div>
               </li>
             </ul>
             <ul
@@ -290,9 +322,19 @@
                 <span class="shrink-0 font-mono text-xs text-ink-gray-5">{{
                   fileSize(f.file_size)
                 }}</span>
+                <a
+                  :href="f.file_url"
+                  :download="f.file_name"
+                  class="grid size-6 place-items-center rounded-md text-ink-gray-5 hover:bg-surface-gray-2 hover:text-ink-gray-8"
+                  :aria-label="__('Download {0}', f.file_name)"
+                  :title="__('Download')"
+                >
+                  <LucideDownload class="size-3.5" aria-hidden="true" />
+                </a>
                 <button
                   type="button"
-                  class="grid size-6 place-items-center rounded-md text-ink-gray-5 hover:bg-surface-gray-2 hover:text-ink-gray-8"
+                  class="grid size-6 place-items-center rounded-md text-ink-gray-5 hover:bg-surface-gray-2 hover:text-danger"
+                  :title="__('Remove')"
                   :aria-label="__('Remove {0}', f.file_name)"
                   @click="removeFile(f.name)"
                 >
@@ -352,6 +394,7 @@ import {
 } from "frappe-ui";
 import { computed, reactive, ref, watch } from "vue";
 import LucideCircleCheck from "~icons/lucide/circle-check";
+import LucideDownload from "~icons/lucide/download";
 import LucideFileText from "~icons/lucide/file-text";
 import LucidePaperclip from "~icons/lucide/paperclip";
 import LucideX from "~icons/lucide/x";
@@ -523,6 +566,13 @@ async function uploadFiles(files: File[]) {
   if (failed.length) {
     toast.error(__("Couldn't upload {0}", failed.join(", ")));
   }
+}
+
+// Frappe zips them and checks read access on every file
+function downloadAll() {
+  const names = (attachments.data ?? []).map((f: { name: string }) => f.name);
+  const params = new URLSearchParams({ files: JSON.stringify(names) });
+  window.open(`/api/method/frappe.core.api.file.zip_files?${params}`, "_blank");
 }
 
 function fileSize(bytes?: number) {
