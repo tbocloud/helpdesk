@@ -4,19 +4,44 @@
       <template #left-header>
         <div class="flex items-center gap-1.5 text-lg-medium">
           <button
-            v-if="scope.data?.sees_team && employee"
+            v-if="view === 'customers' && customer"
             type="button"
             class="text-ink-gray-5 hover:text-ink-gray-8"
-            @click="employee = ''"
+            @click="customer = ''"
           >
-            {{ __("Performance") }}
+            {{ __("Customers") }}
           </button>
           <LucideChevronRight
-            v-if="scope.data?.sees_team && employee"
+            v-if="view === 'customers' && customer"
             class="size-4 text-ink-gray-4"
             aria-hidden="true"
           />
           <span class="text-ink-gray-9">{{ heading }}</span>
+        </div>
+      </template>
+      <template #right-header>
+        <div
+          class="inline-flex rounded-lg bg-surface-gray-2 p-0.5"
+          role="tablist"
+          :aria-label="__('Report')"
+        >
+          <button
+            v-for="v in VIEWS"
+            :key="v.key"
+            type="button"
+            role="tab"
+            :aria-selected="view === v.key"
+            class="inline-flex h-7 items-center gap-1.5 rounded-md px-3 text-sm"
+            :class="
+              view === v.key
+                ? 'bg-surface-base text-ink-gray-9 shadow-sm'
+                : 'text-ink-gray-6 hover:text-ink-gray-8'
+            "
+            @click="view = v.key"
+          >
+            <component :is="v.icon" class="size-4" aria-hidden="true" />
+            {{ v.label }}
+          </button>
         </div>
       </template>
     </LayoutHeader>
@@ -50,7 +75,10 @@
 
       <template v-if="scope.data?.sees_team">
         <div class="mx-1 h-5 w-px bg-outline-gray-2" aria-hidden="true" />
-        <div v-if="!employee && scope.data.departments.length" class="w-52">
+        <div
+          v-if="(view === 'customers' || !employee) && scope.data.departments.length"
+          class="w-52"
+        >
           <FormControl
             v-model="department"
             type="select"
@@ -61,7 +89,7 @@
             :aria-label="__('Department')"
           />
         </div>
-        <div class="w-60">
+        <div v-if="view === 'content'" class="w-60">
           <FormControl
             v-model="employee"
             type="select"
@@ -123,8 +151,19 @@
         class="transition-opacity"
         :class="report.loading ? 'opacity-60' : ''"
       >
-        <EmployeeView v-if="employee" :data="report.data" />
-        <TeamView v-else :data="report.data" @select="employee = $event" />
+        <ContentPerformanceView
+          v-if="view === 'content'"
+          :data="report.data"
+          :period-label="rangeLabel"
+          @select="employee = $event"
+        />
+        <CustomerPerformanceView
+          v-else
+          :data="report.data"
+          :period-label="rangeLabel"
+          @select="customer = $event"
+          @person="openPerson"
+        />
       </div>
     </div>
   </div>
@@ -134,11 +173,13 @@
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import { __ } from "@/translation";
 import { Button, createResource, dayjs, FormControl } from "frappe-ui";
-import { computed, reactive, ref, watch } from "vue";
+import { computed, markRaw, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import LucideChevronRight from "~icons/lucide/chevron-right";
-import EmployeeView from "./components/EmployeeView.vue";
-import TeamView from "./components/TeamView.vue";
+import LucideCalendarDays from "~icons/lucide/calendar-days";
+import LucideBuilding2 from "~icons/lucide/building-2";
+import ContentPerformanceView from "./components/ContentPerformanceView.vue";
+import CustomerPerformanceView from "./components/CustomerPerformanceView.vue";
 
 type Preset =
   | "this_week"
@@ -170,6 +211,14 @@ const custom = reactive({
   to: query("to") || dayjs().format("YYYY-MM-DD"),
 });
 const employee = ref(query("employee"));
+
+type View = "customers" | "content";
+const VIEWS: { key: View; label: string; icon: unknown }[] = [
+  { key: "customers", label: __("Customers"), icon: markRaw(LucideBuilding2) },
+  { key: "content", label: __("By employee"), icon: markRaw(LucideCalendarDays) },
+];
+const view = ref<View>(query("view") === "content" ? "content" : "customers");
+const customer = ref(query("customer"));
 const department = ref(query("department"));
 
 const range = computed(() => {
@@ -225,25 +274,41 @@ const scope = createResource({
 });
 
 const heading = computed(() => {
-  if (!employee.value) return __("Team performance");
-  const person = scope.data?.employees?.find(
-    (e: { employee: string }) => e.employee === employee.value
-  );
+  if (view.value === "content")
+    return scope.data?.sees_team
+      ? __("Content performance")
+      : __("My content performance");
+  if (customer.value) return customer.value;
   return scope.data?.sees_team
-    ? person?.employee_name || __("Performance")
-    : __("My performance");
+    ? __("Performance by customer")
+    : __("My customers");
 });
 
+function openPerson(person: string) {
+  employee.value = person;
+  view.value = "content";
+}
+
 const params = () => ({ from_date: range.value.from, to_date: range.value.to });
-const teamReport = createResource({
-  url: "helpdesk.api.performance.get_team_performance",
-  makeParams: () => ({ ...params(), department: department.value || null }),
+const customerReport = createResource({
+  url: "helpdesk.api.content_performance.get_customer_performance",
+  makeParams: () => ({
+    ...params(),
+    customer: customer.value || null,
+    department: department.value || null,
+  }),
 });
-const personReport = createResource({
-  url: "helpdesk.api.performance.get_employee_performance",
-  makeParams: () => ({ ...params(), employee: employee.value }),
+const contentReport = createResource({
+  url: "helpdesk.api.content_performance.get_content_performance",
+  makeParams: () => ({
+    ...params(),
+    employee: employee.value || null,
+    department: department.value || null,
+  }),
 });
-const report = computed(() => (employee.value ? personReport : teamReport));
+const report = computed(() =>
+  view.value === "content" ? contentReport : customerReport
+);
 
 function load() {
   if (!scope.data) return;
@@ -253,16 +318,22 @@ function load() {
 }
 
 watch(
-  [() => scope.data, employee, department, range],
+  [() => scope.data, employee, customer, department, range, view],
   () => {
     router.replace({
       query: {
+        ...(view.value === "content" ? { view: "content" } : {}),
         period: preset.value,
         ...(preset.value === "custom"
           ? { from: custom.from, to: custom.to }
           : {}),
-        ...(employee.value ? { employee: employee.value } : {}),
-        ...(department.value && !employee.value
+        ...(view.value === "content" && employee.value
+          ? { employee: employee.value }
+          : {}),
+        ...(view.value === "customers" && customer.value
+          ? { customer: customer.value }
+          : {}),
+        ...(department.value && (view.value === "customers" || !employee.value)
           ? { department: department.value }
           : {}),
       },

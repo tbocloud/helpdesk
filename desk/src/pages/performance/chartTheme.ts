@@ -42,6 +42,8 @@ export interface ChartColors {
   textPrimary: string;
   textSecondary: string;
   danger: string;
+  success: string;
+  warning: string;
 }
 
 function readColors(): ChartColors {
@@ -58,6 +60,8 @@ function readColors(): ChartColors {
     textPrimary: token("--ink-gray-8"),
     textSecondary: token("--ink-gray-5"),
     danger: token("--danger"),
+    success: token("--success"),
+    warning: token("--warning"),
   };
 }
 
@@ -77,12 +81,6 @@ export function escapeHtml(value: unknown) {
   const el = document.createElement("div");
   el.textContent = String(value ?? "");
   return el.innerHTML;
-}
-
-export function formatHours(hours: number | null | undefined) {
-  if (hours == null) return "—";
-  const rounded = Math.round(hours * 10) / 10;
-  return `${rounded.toLocaleString(undefined, { maximumFractionDigits: 1 })} h`;
 }
 
 /** Shared chrome: recessive hairline grid, text tokens, value-first tooltip. */

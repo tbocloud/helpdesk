@@ -13,14 +13,27 @@ export const FILL: Record<Tone, string> = {
   danger: "bg-danger",
 };
 
-/** Below half of the working hours needs attention; most of them is healthy. */
-export function utilTone(pct: number | null | undefined): Tone {
-  if (pct == null) return "brand";
-  if (pct < 50) return "danger";
-  if (pct < 80) return "warning";
-  return "success";
-}
-
 export function pctText(pct: number | null | undefined) {
   return pct == null ? "—" : `${pct}%`;
+}
+
+/** How a content post went, in the order charts stack them. */
+export const TIMINGS = ["On time", "Late", "Missed", "Upcoming"] as const;
+export type Timing = (typeof TIMINGS)[number];
+
+/** Chart colour of each timing: status colours, with "not due yet" neutral. */
+export function timingColor(
+  c: { success: string; warning: string; danger: string; other: string },
+  timing: Timing
+) {
+  return {
+    "On time": c.success,
+    Late: c.warning,
+    Missed: c.danger,
+    Upcoming: c.other,
+  }[timing];
+}
+
+export function scoreText(score: number | null | undefined) {
+  return score == null ? "—" : String(score);
 }
