@@ -33,6 +33,8 @@ TASK_ROLES = {"writer": "Writer", "designer": "Designer", "marketer": "Marketer"
 SHARED_ROLE = "All"
 CONTENT_PROJECT_TYPE = "Content Calendar"
 DONE_TASK_STATUSES = ("Completed", "Cancelled")
+# publishing ends the post's open work; cancelling the post cancels it
+CLOSE_TASKS_AS = {"Published": "Completed", "Cancelled": "Cancelled"}
 # a finished task moves an early post forward (never back)
 STAGES = ("Idea", "Drafting", "Design", "Internal Review")
 NEXT_STATUS_AFTER = {
@@ -81,26 +83,26 @@ class HDContentPost(Document):
             return
         tasks = self.content_tasks()
         open_tasks = {
-            t.content_role: t for t in tasks if t.status not in DONE_TASK_STATUSES
+            t.content_role: t.name for t in tasks if t.status not in DONE_TASK_STATUSES
         }
-        if self.status == "Published":
-            for task in open_tasks.values():
-                self.close_task(task.name, "Completed")
-            return
-        if self.status == "Cancelled":
-            for task in open_tasks.values():
-                self.close_task(task.name, "Cancelled")
-            return
-        finished = {t.content_role for t in tasks if t.status == "Completed"}
-        wanted = self.wanted_tasks()
+        # a part that was finished or cancelled isn't recreated; reopen its task instead
+        handled = {t.content_role for t in tasks if t.status in DONE_TASK_STATUSES}
+        closing = CLOSE_TASKS_AS.get(self.status)
+        wanted = {} if closing else self.wanted_tasks()
+
+        for role, name in open_tasks.items():
+            task = frappe.get_doc("Task", name)
+            if role in wanted:
+                if self.plan_task(task, wanted[role]):
+                    task.save(ignore_permissions=True)
+                self.reassign_task(task, wanted[role]["users"])
+            else:
+                self.close_task(task, closing or "Cancelled")
+                task.save(ignore_permissions=True)
+                assign_to.close_all_assignments("Task", name, ignore_permissions=True)
         for role, plan in wanted.items():
-            if role in open_tasks:
-                self.update_task(open_tasks[role], plan)
-            elif role not in finished:
+            if role not in open_tasks and role not in handled:
                 self.create_task(role, plan)
-        for role, task in open_tasks.items():
-            if role not in wanted:
-                self.close_task(task.name, "Cancelled")
 
     def content_tasks(self) -> list:
         return frappe.get_all(
@@ -181,24 +183,26 @@ class HDContentPost(Document):
         for user in plan["users"]:
             self.give_task(task, user)
 
-    def update_task(self, task, plan: dict):
-        doc = frappe.get_doc("Task", task.name)
+    def plan_task(self, task, plan: dict) -> bool:
+        """Set the task's due date and subject from the post; True if anything changed."""
         changed = False
-        if plan["due"] and getdate(doc.exp_end_date or "1900-01-01") != getdate(
+        if plan["due"] and getdate(task.exp_end_date or "1900-01-01") != getdate(
             plan["due"]
         ):
-            doc.exp_end_date = plan["due"]
+            task.exp_end_date = plan["due"]
             changed = True
-        if doc.subject != self.task_subject(task.content_role):
-            doc.subject = self.task_subject(task.content_role)
+        subject = self.task_subject(task.content_role)
+        if task.subject != subject:
+            task.subject = subject
             changed = True
-        if changed:
-            doc.save(ignore_permissions=True)
-        current = set(doc.assignees())
-        for user in current - set(plan["users"]):
-            assign_to._remove("Task", doc.name, user, ignore_permissions=True)
-        for user in set(plan["users"]) - current:
-            self.give_task(doc, user)
+        return changed
+
+    def reassign_task(self, task, users: list):
+        current = set(task.assignees())
+        for user in current - set(users):
+            assign_to._remove("Task", task.name, user, ignore_permissions=True)
+        for user in set(users) - current:
+            self.give_task(task, user)
 
     def give_task(self, task, user: str):
         # the post's rules decided who does it; _add skips the caller's Task permission
@@ -220,12 +224,10 @@ class HDContentPost(Document):
         )
 
     @staticmethod
-    def close_task(task_name: str, status: str):
-        doc = frappe.get_doc("Task", task_name)
-        doc.status = status
-        doc.flags.from_content_post = True
-        doc.save(ignore_permissions=True)
-        assign_to.close_all_assignments("Task", task_name, ignore_permissions=True)
+    def close_task(task, status: str):
+        task.status = status
+        # the post closed it, so it skips the project's review round
+        task.flags.from_content_post = True
 
     def advance_after_task(self, role: str):
         """A finished part moves an early post to the next stage (writer done: design)."""

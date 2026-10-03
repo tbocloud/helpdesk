@@ -128,6 +128,24 @@ class TestTasksFromPosts(ContentTaskCase):
             getdate(tasks["Marketer"].exp_end_date), add_days(getdate(self.publish), 2)
         )
 
+    def test_a_cancelled_part_is_not_recreated(self):
+        post = self.post()
+        designer_task = frappe.get_doc("Task", self.tasks(post)["Designer"].name)
+        designer_task.status = "Cancelled"
+        designer_task.save(ignore_permissions=True)
+
+        post.reload()
+        post.publish_on = add_to_date(self.publish, days=1)
+        post.save(ignore_permissions=True)
+
+        self.assertNotIn("Designer", self.tasks(post))
+        self.assertEqual(
+            frappe.db.count(
+                "Task", {"content_post": post.name, "content_role": "Designer"}
+            ),
+            1,
+        )
+
     def test_finishing_the_writing_moves_the_post_to_design(self):
         post = self.post()
         writer_task = frappe.get_doc("Task", self.tasks(post)["Writer"].name)
@@ -179,3 +197,15 @@ class TestContentTeamRole(ContentTaskCase):
 
         frappe.get_doc("User", WRITER[0]).add_roles("Project Manager")
         self.assertFalse(is_content_only(WRITER[0]))
+        frappe.db.set_single_value("HD Settings", "restrict_tickets_by_agent_group", 0)
+        frappe.set_user(WRITER[0])
+        self.assertEqual(
+            len(
+                frappe.get_list(
+                    "HD Ticket",
+                    filters={"subject": "Someone else's ticket"},
+                    pluck="name",
+                )
+            ),
+            1,
+        )
