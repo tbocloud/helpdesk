@@ -312,6 +312,15 @@ class TestPullRequestFlow(GitHubSyncCase):
         self.assertTrue(url.endswith(f"/repos/{GITHUB_TEST_REPO}/issues/43/comments"))
         self.assertEqual(frappe.get_all("HD Pull Request", filters={"number": 43}), [])
 
+        # the admins' reminder opens the PR itself, where the task number goes
+        links = frappe.get_all(
+            "HD Notification",
+            filters={"message": ("like", "PR #43 in % names no task%")},
+            pluck="link",
+        )
+        self.assertTrue(links)
+        self.assertTrue(all(link.startswith("https://github.com/") for link in links))
+
     def test_processing_an_event_twice_adds_nothing(self):
         for delivery in ("gh-twice-1", "gh-twice-2"):
             send_github_webhook(

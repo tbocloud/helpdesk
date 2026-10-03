@@ -574,6 +574,7 @@ class PullRequestSync:
         project = self.settings.unlinked_pr_project
         if project and frappe.db.exists("Project", project):
             return self.link_rows({self.create_unlinked_task(project): "Closes"})
+        url = self.pr.get("html_url") or ""
         notify_users(
             admin_users(),
             DELIVERY,
@@ -581,6 +582,8 @@ class PullRequestSync:
             _("PR #{0} in {1} names no task: {2}").format(
                 self.number, self.repo, self.title
             ),
+            # the fix happens on the PR: add "Refs TASK-…" to its title or description
+            link=url if url.startswith("https://github.com/") else None,
         )
         return []
 

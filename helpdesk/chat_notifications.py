@@ -38,6 +38,9 @@ def is_enabled() -> bool:
 
 
 def helpdesk_url(path: str | None) -> str:
+    """A page in TBO Support, or an outside link (a GitHub pull request) as it is."""
+    if path and path.startswith("https://"):
+        return path
     return frappe.utils.get_url("/helpdesk" + (path or "/my-work"))
 
 
