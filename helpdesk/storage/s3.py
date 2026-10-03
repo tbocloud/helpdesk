@@ -158,9 +158,9 @@ def signed_url(file_doc, settings=None, *, as_attachment: bool = False) -> str:
     if content_type:
         params["ResponseContentType"] = content_type
     disposition = "attachment" if as_attachment else "inline"
-    params["ResponseContentDisposition"] = (
-        f"{disposition}; filename*=UTF-8''{quote(file_doc.file_name or 'file')}"
-    )
+    params[
+        "ResponseContentDisposition"
+    ] = f"{disposition}; filename*=UTF-8''{quote(file_doc.file_name or 'file')}"
     return get_client(settings).generate_presigned_url(
         "get_object", Params=params, ExpiresIn=settings.link_expiry_seconds or 600
     )
@@ -174,7 +174,8 @@ def read(file_doc, settings=None) -> bytes:
     return response["Body"].read()
 
 
-@frappe.whitelist(allow_guest=True, methods=["GET"])
+# public files open like /files/ do; File.is_downloadable checks the rest
+@frappe.whitelist(allow_guest=True, methods=["GET"])  # nosemgrep
 def download(file: str, download: int | str = 0):
     """Open a stored file: same access rules as Frappe's own files, then a short-lived link."""
     if not frappe.db.exists("File", file):

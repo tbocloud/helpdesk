@@ -193,7 +193,7 @@ has_permission = {
 # DocType Class
 # ---------------
 # Override standard doctype classes
-override_doctype_class = {
+override_doctype_class = {  # Frappe v15 has no extend_doctype_class; only helpdesk overrides File here - nosemgrep
     "Email Account": "helpdesk.overrides.email_account.CustomEmailAccount",
     "Assignment Rule": "helpdesk.overrides.assignment_rule.HelpdeskAssignmentRule",
     "User Invitation": "helpdesk.overrides.user_invitation.HelpdeskUserInvitation",

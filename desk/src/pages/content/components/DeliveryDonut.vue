@@ -22,7 +22,11 @@ import {
   tooltipRow,
   useChartColors,
 } from "@/pages/performance/chartTheme";
-import { TIMINGS, timingColor, type Timing } from "@/pages/performance/performanceMeta";
+import {
+  TIMINGS,
+  timingColor,
+  type Timing,
+} from "@/pages/performance/performanceMeta";
 
 const props = defineProps<{
   counts: Record<Timing, number>;

@@ -14,7 +14,6 @@ from frappe.utils import (
     now_datetime,
 )
 
-
 # where a post is in the workflow, grouped the way the calendar colours them
 STAGES = {
     "Idea": "planning",
@@ -239,7 +238,7 @@ def export_pdf(from_date: str, to_date: str, customer: str | None = None):
     columns = get_columns()
     rows = get_rows(filters)
     can_render_pdf = bool(shutil.which("wkhtmltopdf"))
-    html = frappe.render_template(
+    html = frappe.render_template(  # the app's own fixed template, not user input - nosemgrep
         "helpdesk/helpdesk/report/content_delivery/content_delivery_pdf.html",
         {
             "title": _("Content delivery report"),

@@ -70,7 +70,9 @@
     </div>
 
     <div class="flex-1 overflow-auto">
-      <div class="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-5 md:px-6">
+      <div
+        class="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-5 md:px-6"
+      >
         <div
           v-if="report.error"
           class="flex items-center justify-between gap-3 rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger"
@@ -608,8 +610,10 @@ const avgApproval = computed(() => {
   const weight = timed.reduce((n, r) => n + r.planned, 0);
   if (!weight) return null;
   const hours =
-    timed.reduce((n, r) => n + (r.avg_approval_hours as number) * r.planned, 0) /
-    weight;
+    timed.reduce(
+      (n, r) => n + (r.avg_approval_hours as number) * r.planned,
+      0
+    ) / weight;
   return Math.round(hours * 10) / 10;
 });
 
