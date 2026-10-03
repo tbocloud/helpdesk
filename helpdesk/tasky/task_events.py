@@ -44,7 +44,11 @@ class TaskRules:
         object.__setattr__(self, "doc", doc)
 
     def __getattr__(self, name):
-        return getattr(self.doc, name)
+        try:
+            return getattr(self.doc, name)
+        except AttributeError:
+            # a field this site hasn't added yet (before migrate) reads as empty
+            return self.doc.get(name)
 
     def __setattr__(self, name, value):
         setattr(self.doc, name, value)

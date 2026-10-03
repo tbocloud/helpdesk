@@ -248,7 +248,6 @@ import LayoutHeader from "@/components/LayoutHeader.vue";
 import TaskyState from "@/pages/tasky/components/TaskyState.vue";
 import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
-import { useAuthStore } from "@/stores/auth";
 import { Autocomplete, Button, createResource, dayjs } from "frappe-ui";
 import { computed, ref, watch, type Component } from "vue";
 import { useRoute, useRouter } from "vue-router";
