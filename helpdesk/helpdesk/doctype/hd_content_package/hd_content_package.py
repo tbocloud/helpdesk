@@ -178,7 +178,7 @@ class HDContentPackage(Document):
                 "format": item.format,
                 "status": "Idea",
                 "publish_on": datetime.combine(
-                    slot.date, get_time(str(self.publish_time or "10:00:00"))
+                    slot.date, get_time(self.publish_time or "10:00")
                 ),
                 "writer": self.writer,
                 "designer": self.designer,
