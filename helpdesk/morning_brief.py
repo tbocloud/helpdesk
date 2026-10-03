@@ -79,13 +79,17 @@ def unassigned_work_by_lead() -> dict:
 
 
 def _project_owners(project: str) -> list[str]:
+    """The project lead, or its managers when there's no lead or the lead can't receive it."""
+
+    def reachable(users) -> list[str]:
+        return [
+            u
+            for u in dict.fromkeys(users)
+            if u and u not in SKIP and frappe.db.get_value("User", u, "enabled")
+        ]
+
     lead = frappe.db.get_value("Project", project, "project_lead")
-    people = [lead] if lead else get_project_managers(project)
-    return [
-        u
-        for u in dict.fromkeys(people)
-        if u and u not in SKIP and frappe.db.get_value("User", u, "enabled")
-    ]
+    return reachable([lead]) or reachable(get_project_managers(project))
 
 
 def _assignees(raw) -> list[str]:

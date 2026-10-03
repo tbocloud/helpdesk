@@ -103,6 +103,9 @@ class TestMorningBrief(FrappeTestCase):
 
     def test_without_a_lead_the_project_manager_hears_about_it(self):
         make_task(self.project, "Opening stock upload", add_days(nowdate(), -1))
+        # a lead who has left counts as no lead
+        frappe.db.set_value("Project", self.project, "project_lead", DEV[0])
+        frappe.db.set_value("User", DEV[0], "enabled", 0)
 
         with patch("frappe.sendmail"), patch.object(
             morning_brief, "is_working_day", return_value=True
