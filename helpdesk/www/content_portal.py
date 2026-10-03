@@ -1,6 +1,7 @@
 import frappe
 from frappe.sessions import get_csrf_token
 
+from helpdesk.api.config import get_config
 from helpdesk.api.content_portal import get_portal_posts, get_session, portal_enabled
 
 no_cache = 1
@@ -8,6 +9,8 @@ no_cache = 1
 
 def get_context(context):
     context.no_cache = 1
+    # same icon as the helpdesk app (HD Settings, then Website Settings, then ours)
+    context.favicon = get_config().favicon
     context.portal_data = to_script_json(build_portal_data())
     return context
 

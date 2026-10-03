@@ -222,3 +222,20 @@ class TestContentSettingsTemplates(FrappeTestCase):
         )
         self.assertIn("Al Noor", subject)
         self.assertEqual(message, "<p>&lt;b&gt;Sale&lt;/b&gt; {unknown}</p>")
+
+
+class TestPortalPage(FrappeTestCase):
+    def setUp(self):
+        hold_commits(self)
+
+    def test_page_has_one_portal_script_and_an_icon(self):
+        from helpdesk.www.content_portal import get_context
+
+        frappe.db.set_single_value("HD Content Settings", "enable_client_portal", 1)
+        context = get_context(frappe._dict())
+        html = frappe.render_template("helpdesk/www/content-portal.html", context)
+
+        # a duplicated renderPortal once left the script unparseable and the page blank
+        self.assertEqual(html.count("function renderPortal("), 1)
+        self.assertEqual(html.count("function renderSignIn("), 1)
+        self.assertIn(f'<link rel="icon" href="{context.favicon}"', html)
