@@ -62,6 +62,8 @@ PROPERTY_SETTERS = (
     ("Project", "status", "options", "Open\nOn hold\nCompleted\nCancelled", "Text"),
     ("Task", "status", "default", "Open", "Text"),
     ("Task", "priority", "default", "Medium", "Text"),
+    # the members table decides who sees a project, so don't hide it in a collapsed section
+    ("Project", "users_section", "collapsible", "0", "Check"),
 )
 
 
@@ -140,6 +142,9 @@ def get_project_custom_fields() -> dict:
                 "label": "Role",
                 "options": "Project Manager\nFunctional Consultant\nDeveloper\nSupport Engineer",
                 "insert_after": "user",
+                # shown as a column, so members' roles are set right in the table
+                "in_list_view": 1,
+                "columns": 2,
             },
         ],
     }
