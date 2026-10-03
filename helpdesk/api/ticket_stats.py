@@ -8,7 +8,7 @@ from frappe.utils import add_days, nowdate
 
 from helpdesk.api.agent_home.utils import calculate_percentage_change
 from helpdesk.api.analytics_utils import _apply_scope, get_avg_time_metric
-from helpdesk.utils import agent_only
+from helpdesk.utils import ticket_agents_only
 
 Scope = str  # Literal["agent", "customer", "contact"]
 
@@ -51,7 +51,7 @@ def _fill_date_series(from_date_str, to_date_str, rows: list) -> list:
 
 
 @frappe.whitelist()
-@agent_only
+@ticket_agents_only
 def get_feedback_received(
     scope: Scope,
     value: str,
@@ -91,7 +91,7 @@ def get_feedback_received(
 
 
 @frappe.whitelist()
-@agent_only
+@ticket_agents_only
 def get_sla_violations(
     dt: str,
     dn: str,
@@ -206,7 +206,7 @@ def _get_sla_violations(
 
 
 @frappe.whitelist()
-@agent_only
+@ticket_agents_only
 def get_avg_first_response_time(
     dt: str,
     dn: str,
@@ -216,7 +216,7 @@ def get_avg_first_response_time(
 
 
 @frappe.whitelist()
-@agent_only
+@ticket_agents_only
 def get_avg_resolution_time(
     dt: str,
     dn: str,
@@ -226,7 +226,7 @@ def get_avg_resolution_time(
 
 
 @frappe.whitelist()
-@agent_only
+@ticket_agents_only
 def get_ticket_stats(
     dt: str,
     dn: str,

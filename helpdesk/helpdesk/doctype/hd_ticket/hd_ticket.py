@@ -30,6 +30,7 @@ from helpdesk.helpdesk.utils.email import (
     default_ticket_outgoing_email_account,
 )
 from helpdesk.utils import (
+    can_see_tickets,
     capture_event,
     get_agents_team,
     get_customers,
@@ -1266,7 +1267,7 @@ def has_permission(doc, user=None):
         return True
     if _is_customer_manager(doc.customer, user):
         return True
-    if not is_agent(user):
+    if not is_agent(user) or not can_see_tickets(user):
         return False
     return _agent_has_permission(doc, user)
 
@@ -1313,6 +1314,9 @@ def permission_query(user: str | None = None):
         return
     if not is_agent(user):
         return _customer_query(user)
+    if not can_see_tickets(user):
+        # Helpdesk Employees: only tickets they raised themselves
+        return _get_base_visibility(user)
     return _agent_query(user)
 
 

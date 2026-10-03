@@ -12,7 +12,7 @@ from frappe import _
 from frappe.utils import add_days, get_datetime, getdate, now_datetime, nowdate
 
 from helpdesk.tasky.permissions import can_manage_project, is_project_manager
-from helpdesk.utils import agent_only
+from helpdesk.utils import agent_only, can_see_tickets
 
 KEY_TICKET_PRIORITIES = ("Urgent", "High")
 OPEN_TASK_FILTER = ("not in", ["Completed", "Cancelled", "Template"])
@@ -122,14 +122,18 @@ def get_my_work() -> dict:
         fields=TASK_FIELDS,
         limit_page_length=LIST_LIMIT,
     )
-    tickets = frappe.get_list(
-        "HD Ticket",
-        filters={
-            "_assign": _assigned_to(user),
-            "status_category": ("in", ["Open", "Paused"]),
-        },
-        fields=TICKET_FIELDS,
-        limit_page_length=LIST_LIMIT,
+    tickets = (
+        frappe.get_list(
+            "HD Ticket",
+            filters={
+                "_assign": _assigned_to(user),
+                "status_category": ("in", ["Open", "Paused"]),
+            },
+            fields=TICKET_FIELDS,
+            limit_page_length=LIST_LIMIT,
+        )
+        if can_see_tickets(user)
+        else []
     )
     names = _project_names(tasks)
     items = [_task_item(t, names) for t in tasks] + [_ticket_item(t) for t in tickets]
@@ -300,9 +304,9 @@ def create_task_from_ticket(
             or _("Ticket {0}").format(ticket),
             "description": description or "",
             "project": project,
-            "priority": "High"
-            if ticket_doc.priority in KEY_TICKET_PRIORITIES
-            else "Medium",
+            "priority": (
+                "High" if ticket_doc.priority in KEY_TICKET_PRIORITIES else "Medium"
+            ),
             "status": "Open",
             "exp_end_date": due_date or None,
             "is_key": 1 if is_key else 0,

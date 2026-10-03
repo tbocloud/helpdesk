@@ -1,11 +1,11 @@
 import frappe
 from frappe import _
 
-from helpdesk.utils import agent_only, is_admin
+from helpdesk.utils import is_admin, ticket_agents_only
 
 
 @frappe.whitelist()
-@agent_only
+@ticket_agents_only
 def bulk_reply(ticket_ids: list, message: str, attachments: list | None = None):
 
     link_attachments_to_tickets(attachments, ticket_ids)

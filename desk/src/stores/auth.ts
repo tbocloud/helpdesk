@@ -40,6 +40,10 @@ export const useAuthStore = defineStore("auth", () => {
   const canSeeOverview: ComputedRef<boolean> = computed(
     () => !!user__.value.can_see_overview
   );
+  // false for Helpdesk Employees: projects, work and content, no tickets
+  const canSeeTickets: ComputedRef<boolean> = computed(
+    () => user__.value.can_see_tickets !== false
+  );
   const telephonyInstalled: ComputedRef<boolean> = computed(
     () => !!user__.value.telephony_installed
   );
@@ -106,6 +110,7 @@ export const useAuthStore = defineStore("auth", () => {
     isManager,
     isProjectManager,
     canSeeOverview,
+    canSeeTickets,
     telephonyInstalled,
     isLoggedIn,
     login,

@@ -125,6 +125,34 @@ def get_context(d: Document) -> dict:
     }
 
 
+EMPLOYEE_ROLE = "Helpdesk Employee"
+
+
+def can_see_tickets(user: str | None = None) -> bool:
+    """Helpdesk Employees use projects, work and content, but not support tickets."""
+    user = user or frappe.session.user
+    if is_admin(user):
+        return True
+    roles = frappe.get_roles(user)
+    return "Agent Manager" in roles or EMPLOYEE_ROLE not in roles
+
+
+def ticket_agents_only(fn):
+    """Like agent_only, for ticket screens a Helpdesk Employee doesn't get."""
+
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        if not is_agent() or not can_see_tickets():
+            frappe.throw(
+                msg=_("You are not permitted to access this resource."),
+                title=_("Not Allowed"),
+                exc=frappe.PermissionError,
+            )
+        return fn(*args, **kwargs)
+
+    return wrapper
+
+
 def agent_only(fn):
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):

@@ -105,7 +105,7 @@
       </div>
     </div>
   </Sidebar>
-  <CP v-if="!mobile" v-model="showCommandPalette" />
+  <CP v-if="!mobile && authStore.canSeeTickets" v-model="showCommandPalette" />
   <ViewModal
     v-if="viewDialogConfig.show"
     v-model="viewDialogConfig"
@@ -217,6 +217,7 @@ const navItems = computed(() => {
     .filter((item) => isCallingEnabled.value || item.label !== __("Call Logs"))
     .filter((item) => !item.projectManagerOnly || authStore.isProjectManager)
     .filter((item) => !item.overviewOnly || authStore.canSeeOverview)
+    .filter((item) => !item.ticketsOnly || authStore.canSeeTickets)
     .map((option: any) => ({
       label: option.label,
       icon: option.icon,
@@ -263,9 +264,11 @@ const sections = computed(() => {
   if (isCustomerPortal.value) {
     return [{ label: "", items: navItems.value, collapsible: false }];
   }
-  const top = props.mobile
-    ? [notificationItem.value]
-    : [searchItem.value, notificationItem.value];
+  // search covers tickets, so Helpdesk Employees don't get it
+  const top =
+    props.mobile || !authStore.canSeeTickets
+      ? [notificationItem.value]
+      : [searchItem.value, notificationItem.value];
   const result = [{ label: "", items: top, collapsible: false }];
   for (const label of ["Workspace", "Directory"]) {
     const items = navItems.value.filter((item) => item.section === label);

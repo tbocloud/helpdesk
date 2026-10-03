@@ -7,7 +7,7 @@ from frappe.query_builder import DocType
 from frappe.query_builder.functions import Avg, Count, Function
 from pypika import Case
 
-from helpdesk.utils import agent_only, is_frappe_version
+from helpdesk.utils import is_frappe_version, ticket_agents_only
 
 HD_TICKET = "HD Ticket"
 
@@ -21,7 +21,7 @@ COUNT_DESC = "count desc"
 
 
 @frappe.whitelist()
-@agent_only
+@ticket_agents_only
 def get_dashboard_data(
     dashboard_type: str, filters: dict[str, any] = None
 ) -> list[dict[str, any]] | None:

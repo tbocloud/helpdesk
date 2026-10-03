@@ -17,6 +17,8 @@ export const agentPortalSidebarOptions = [
     icon: LucideHome,
     to: "Home",
     section: "Workspace",
+    // the home dashboard is ticket analytics
+    ticketsOnly: true,
   },
   {
     label: __("Overview"),
@@ -31,6 +33,7 @@ export const agentPortalSidebarOptions = [
     to: "TicketsAgent",
     section: "Workspace",
     countKey: "tickets",
+    ticketsOnly: true,
   },
   {
     label: __("Projects"),

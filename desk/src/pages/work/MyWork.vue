@@ -143,6 +143,7 @@
 <script setup lang="ts">
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import TaskyState from "@/pages/tasky/components/TaskyState.vue";
+import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
 import { Button, createResource } from "frappe-ui";
 import { computed, ref, watch, type Component } from "vue";
@@ -171,12 +172,15 @@ const work = createResource({
   auto: true,
 });
 
+const authStore = useAuthStore();
 const tabs = computed<{ key: Tab; label: string; icon?: Component }[]>(() => [
   { key: "all", label: __("All") },
   { key: "overdue", label: __("Overdue"), icon: LucideAlarmClock },
   { key: "key", label: __("Key"), icon: LucideStar },
   { key: "task", label: __("Tasks") },
-  { key: "ticket", label: __("Tickets") },
+  ...(authStore.canSeeTickets
+    ? [{ key: "ticket" as Tab, label: __("Tickets") }]
+    : []),
 ]);
 
 const TAB_KEYS: Tab[] = ["all", "overdue", "key", "task", "ticket"];

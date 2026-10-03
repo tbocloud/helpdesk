@@ -62,3 +62,4 @@ helpdesk.patches.v16_0_2.set_content_task_defaults
 helpdesk.patches.v16_0_2.fill_task_assigned_employee
 helpdesk.patches.v16_0_2.set_content_post_platforms
 helpdesk.patches.v16_0_2.set_file_storage_defaults
+helpdesk.patches.v16_0_2.add_helpdesk_employee_role

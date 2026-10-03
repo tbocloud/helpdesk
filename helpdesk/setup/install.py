@@ -20,6 +20,7 @@ FORM_SCRIPT_NAME = "Helpdesk AI Support Actions"
 
 def after_install():
     create_custom_fields(get_custom_fields())
+    add_employee_role()
     # Task / Project extras live on ERPNext's doctypes, so only when ERPNext is there
     setup_erpnext_projects()
     add_default_status()
@@ -221,6 +222,19 @@ def add_agent_manager_permissions():
         add_permission(dt, "Agent Manager")
         for p in doc_to_permissions[dt]:
             update_permission_property(dt, "Agent Manager", 0, p, 1)
+
+
+def add_employee_role():
+    """Agents with this role use projects, work and content but never see tickets."""
+    from helpdesk.utils import EMPLOYEE_ROLE
+
+    if frappe.db.exists("Role", EMPLOYEE_ROLE):
+        return
+    role = frappe.new_doc("Role")
+    role.role_name = EMPLOYEE_ROLE
+    role.home_page = "/helpdesk/my-work"
+    role.desk_access = frappe.db.get_value("Role", "Agent", "desk_access") or 0
+    role.insert(ignore_permissions=True)
 
 
 def setup_customer_role(fresh_install=True):

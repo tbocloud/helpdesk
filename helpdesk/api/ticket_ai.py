@@ -6,7 +6,7 @@ from frappe import _
 from frappe.utils import escape_html, strip_html
 
 from helpdesk.ai_engine import call_haiku
-from helpdesk.utils import agent_only
+from helpdesk.utils import ticket_agents_only
 
 # Bounds keep the prompt small (and cheap) however long the thread gets
 MAX_MESSAGES = 6
@@ -27,7 +27,7 @@ Reply with JSON only: {"reply": "<the email body, using \\n\\n between paragraph
 
 
 @frappe.whitelist()
-@agent_only
+@ticket_agents_only
 def draft_reply(ticket: str, instructions: str = "", current_draft: str = "") -> dict:
     """Draft (or improve) an email reply to the customer on `ticket`."""
     frappe.has_permission("HD Ticket", "read", ticket, throw=True)

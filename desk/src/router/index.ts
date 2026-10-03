@@ -321,6 +321,14 @@ router.beforeEach(async (to, _, next) => {
       (redirectURL ? `?redirect-to=/helpdesk${redirectURL}` : "/helpdesk");
   } else if (!to.meta.public && !authStore.hasDeskAccess) {
     next({ name: "TicketsCustomer" });
+  } else if (
+    !authStore.canSeeTickets &&
+    ["Home", "TicketsAgent", "TicketAgent", "TicketAgentNew"].includes(
+      to.name as string
+    )
+  ) {
+    // Helpdesk Employees start on their own work instead of ticket screens
+    next({ name: "MyWork" });
   } else if (to.name === "TicketAgent" && !authStore.isAgent) {
     const ticketId = to.params.ticketId;
     next({
