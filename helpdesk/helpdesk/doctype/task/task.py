@@ -30,6 +30,18 @@ class Task(Document):
         self.record_slip()
         self.request_review()
         self.unblock_dependents()
+        self.advance_content_post()
+
+    def advance_content_post(self):
+        """Finishing a content task moves its post to the next stage."""
+        if not self.get("content_post") or self.flags.from_content_post:
+            return
+        if self.status != "Completed" or not self.status_changed():
+            return
+        if not frappe.db.exists("HD Content Post", self.content_post):
+            return
+        post = frappe.get_doc("HD Content Post", self.content_post)
+        post.advance_after_task(self.content_role)
 
     def set_completed_on(self):
         """When it was done; AI estimates learn from how long finished tasks took."""
@@ -83,7 +95,12 @@ class Task(Document):
         """On projects that want it, a team member's "done" goes to the lead first."""
         from helpdesk.tasky.permissions import can_manage_project
 
-        if not self.status_changed() or self.flags.hold_ended:
+        # a published or cancelled content post closes its tasks without a review round
+        if (
+            not self.status_changed()
+            or self.flags.hold_ended
+            or self.flags.from_content_post
+        ):
             return
         if self.status not in ("Completed", PENDING_REVIEW):
             return

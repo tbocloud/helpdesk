@@ -3,6 +3,7 @@ import { canViewPersona, personaInterrupt } from "@/persona";
 import { useAuthStore } from "@/stores/auth";
 import { useUserStore } from "@/stores/user";
 import { isCustomerPortal } from "@/utils";
+import { CONTENT_TEAM_ROUTES } from "@/pages/content/contentTeam";
 import { createRouter, createWebHistory } from "vue-router";
 const { isMobileView } = useScreenSize();
 
@@ -346,6 +347,13 @@ router.beforeEach(async (to, _, next) => {
       (redirectURL ? `?redirect-to=/helpdesk${redirectURL}` : "/helpdesk");
   } else if (!to.meta.public && !authStore.hasDeskAccess) {
     next({ name: "TicketsCustomer" });
+  } else if (
+    !to.meta.public &&
+    authStore.isContentTeam &&
+    !CONTENT_TEAM_ROUTES.has(String(to.name))
+  ) {
+    // writers and designers land on the content calendar, not tickets
+    next({ name: "ContentCalendar" });
   } else if (to.name === "TicketAgent" && !authStore.isAgent) {
     const ticketId = to.params.ticketId;
     next({

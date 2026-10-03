@@ -22,7 +22,11 @@
 		"last_run_section",
 		"last_alert_run_on",
 		"column_break_last_run",
-		"last_alerts_sent"
+		"last_alerts_sent",
+		"tasks_section",
+		"default_task_mode",
+		"writer_days_before",
+		"designer_days_before"
 	],
 	"fields": [
 		{
@@ -134,11 +138,38 @@
 			"fieldtype": "Int",
 			"label": "Alerts Sent",
 			"read_only": 1
+		},
+		{
+			"fieldname": "tasks_section",
+			"fieldtype": "Section Break",
+			"label": "Tasks"
+		},
+		{
+			"fieldname": "default_task_mode",
+			"fieldtype": "Select",
+			"label": "Tasks for New Entries",
+			"options": "One task per person\nOne task for the post\nNo tasks",
+			"default": "One task per person"
+		},
+		{
+			"fieldname": "writer_days_before",
+			"fieldtype": "Int",
+			"label": "Writer Due (days before publishing)",
+			"default": "3",
+			"non_negative": 1
+		},
+		{
+			"fieldname": "designer_days_before",
+			"fieldtype": "Int",
+			"label": "Designer Due (days before publishing)",
+			"default": "1",
+			"non_negative": 1,
+			"description": "The marketer's task is due on the publish date; a single task for the post is due with the designer."
 		}
 	],
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-09-30 10:00:00.000000",
+	"modified": "2026-10-03 18:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Content Settings",

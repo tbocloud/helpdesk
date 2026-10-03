@@ -11,6 +11,7 @@ from helpdesk.api import content_portal
 from helpdesk.test_utils import (
     add_contact_in_customer,
     create_customer,
+    hold_commits,
     make_content_post,
     make_portal_contact,
     set_content_settings,
@@ -24,7 +25,7 @@ SHARED_EMAIL = "marketing@shared-portal.example"
 
 class TestContentPortal(FrappeTestCase):
     def setUp(self):
-        self.addCleanup(frappe.db.rollback)
+        hold_commits(self)
         create_customer(CUSTOMER)
         create_customer(OTHER_CUSTOMER)
         make_portal_contact(CUSTOMER, CLIENT_EMAIL)
@@ -204,7 +205,7 @@ class TestContentPortal(FrappeTestCase):
 
 class TestContentSettingsTemplates(FrappeTestCase):
     def setUp(self):
-        self.addCleanup(frappe.db.rollback)
+        hold_commits(self)
 
     def test_unknown_placeholder_is_refused(self):
         settings = frappe.get_single("HD Content Settings")

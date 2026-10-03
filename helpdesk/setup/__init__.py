@@ -5,6 +5,7 @@ import os
 import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
+from helpdesk.content_team import ensure_role as ensure_content_team_role
 from helpdesk.setup.install import get_custom_fields
 
 FORM_SCRIPT_NAME = "Helpdesk AI Support Actions"
@@ -14,6 +15,7 @@ def after_migrate():
     """Update the HD Form Script and ensure custom fields exist."""
     create_custom_fields(get_custom_fields())
     _create_form_script()
+    ensure_content_team_role()
 
 
 def _create_form_script():

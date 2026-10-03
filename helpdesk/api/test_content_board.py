@@ -6,7 +6,12 @@ from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_to_date, get_datetime, now_datetime
 
 from helpdesk.api import content_board
-from helpdesk.test_utils import create_customer, make_content_post, make_tasky_user
+from helpdesk.test_utils import (
+    create_customer,
+    hold_commits,
+    make_content_post,
+    make_tasky_user,
+)
 
 CUSTOMER = "Al Noor Trading LLC"
 WRITER = ("meera.nair@content-smoke.example", "Meera Nair")
@@ -14,7 +19,7 @@ WRITER = ("meera.nair@content-smoke.example", "Meera Nair")
 
 class TestContentBoard(FrappeTestCase):
     def setUp(self):
-        self.addCleanup(frappe.db.rollback)
+        hold_commits(self)
         create_customer(CUSTOMER)
         make_tasky_user(*WRITER)
 
