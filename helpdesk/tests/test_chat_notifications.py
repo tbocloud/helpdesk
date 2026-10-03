@@ -153,6 +153,20 @@ class TestTeams(ChatCase):
         self.assertFalse(post.called)
 
 
+class TestOutsideLinks(ChatCase):
+    def test_outside_links_are_kept_and_pages_get_the_helpdesk_prefix(self):
+        pr = "https://github.com/tbocloud/helpdesk/pull/26"
+        self.assertEqual(chat_notifications.helpdesk_url(pr), pr)
+        self.assertTrue(
+            chat_notifications.helpdesk_url("/tickets/7").endswith(
+                "/helpdesk/tickets/7"
+            )
+        )
+        self.assertTrue(
+            chat_notifications.helpdesk_url(None).endswith("/helpdesk/my-work")
+        )
+
+
 class TestTeamsUrlCheck(ChatCase):
     def refused(self, url, field="teams_direct_webhook"):
         with self.assertRaises(frappe.ValidationError) as caught:

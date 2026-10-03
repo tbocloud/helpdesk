@@ -38,16 +38,25 @@ def _assignees(raw) -> list[str]:
         return []
 
 
-def notify_users(users, doctype: str, name: str, subject: str, escalate: bool = False):
+def notify_users(
+    users,
+    doctype: str,
+    name: str,
+    subject: str,
+    escalate: bool = False,
+    link: str | None = None,
+):
     """Reminder in the helpdesk notification panel, plus an email or chat message
     (see HDNotification); `escalate` also posts it to the team's chat channel.
+    `link` replaces the usual page, e.g. a pull request on GitHub.
 
     Sent once per person, document and subject, so a daily run doesn't repeat itself.
     """
     from helpdesk.chat_notifications import post_escalation
 
+    link = link or helpdesk_path(doctype, name)
     if escalate:
-        post_escalation(subject, helpdesk_path(doctype, name))
+        post_escalation(subject, link)
     users = sorted({u for u in users if u and u not in SKIP})
     if not users:
         return
@@ -64,7 +73,6 @@ def notify_users(users, doctype: str, name: str, subject: str, escalate: bool = 
             pluck="user_to",
         )
     )
-    link = helpdesk_path(doctype, name)
     for user in users:
         if user in already:
             continue

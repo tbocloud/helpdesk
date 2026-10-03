@@ -37,11 +37,12 @@
       </div>
     </div>
     <div class="divide-y text-base" v-if="notificationStore.data.length">
-      <RouterLink
+      <component
+        :is="isOutside(n) ? 'a' : RouterLink"
         v-for="n in notificationStore.data"
         :key="n.name"
         class="flex cursor-pointer items-start gap-3.5 px-5 py-2.5 hover:bg-surface-gray-2"
-        :to="getRoute(n)"
+        v-bind="linkProps(n)"
         @click="
           () => {
             handleNotificationClick(n);
@@ -95,7 +96,7 @@
             />
           </div>
         </span>
-      </RouterLink>
+      </component>
     </div>
     <div
       class="p-5 text-center text-ink-gray-4 flex flex-col items-center justify-center gap-2 mt-20"
@@ -108,6 +109,7 @@
 </template>
 
 <script setup lang="ts">
+import { RouterLink } from "vue-router";
 import { UserAvatar } from "@/components";
 import { dayjs } from "frappe-ui";
 import { useNotificationStore } from "@/stores/notification";
@@ -136,6 +138,17 @@ function handleNotificationClick(n: Notification) {
   notificationStore.toggle();
   if (n.read) return;
   notificationStore.read(n);
+}
+
+// a reminder can point outside TBO Support, e.g. a pull request on GitHub
+function isOutside(n: Notification) {
+  return typeof n.link === "string" && n.link.startsWith("https://");
+}
+
+function linkProps(n: Notification) {
+  return isOutside(n)
+    ? { href: n.link, target: "_blank", rel: "noopener noreferrer" }
+    : { to: getRoute(n) };
 }
 
 function getRoute(n: Notification) {

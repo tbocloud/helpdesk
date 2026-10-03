@@ -298,7 +298,7 @@ export type Notification = {
   user_from: UserInfo;
   user_to: UserInfo;
   message?: string;
-  /** reminders: path inside /helpdesk to open */
+  /** reminders: path inside /helpdesk to open, or an https:// link (a GitHub PR) */
   link?: string;
   reference_doctype?: string;
   reference_name?: string;

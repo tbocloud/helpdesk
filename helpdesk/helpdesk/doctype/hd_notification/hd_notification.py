@@ -4,6 +4,8 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 
+from helpdesk.chat_notifications import helpdesk_url
+
 
 class HDNotification(Document):
     def format_message(self):
@@ -127,9 +129,7 @@ class HDNotification(Document):
                     "body_content": frappe.utils.escape_html(text).replace(
                         "\n", "<br>"
                     ),
-                    "doc_link": frappe.utils.get_url(
-                        "/helpdesk" + (self.link or "/my-work")
-                    ),
+                    "doc_link": helpdesk_url(self.chat_path()),
                 },
                 header=[_("Reminder"), "orange"],
             )
