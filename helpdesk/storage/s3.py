@@ -35,7 +35,12 @@ def get_settings():
 
 def is_enabled(settings=None) -> bool:
     settings = settings or get_settings()
-    return bool(settings.enabled and settings.bucket)
+    return bool(settings.enabled and settings.bucket) and not real_bucket_blocked()
+
+
+def real_bucket_blocked() -> bool:
+    """Tests never reach a real bucket: only those that switch on the fake one use storage."""
+    return bool(frappe.flags.in_test and not frappe.flags.hd_fake_s3)
 
 
 def stored_doctypes(settings=None) -> set[str]:
@@ -193,7 +198,12 @@ def download(file: str, download: int | str = 0):
 def delete_object(file_doc, settings=None):
     settings = settings or get_settings()
     key = file_doc.get(KEY_FIELD)
-    if not key or not settings.delete_from_bucket:
+    if (
+        not key
+        or not settings.bucket
+        or not settings.delete_from_bucket
+        or real_bucket_blocked()
+    ):
         return
     if frappe.db.exists("File", {KEY_FIELD: key, "name": ("!=", file_doc.name)}):
         return
@@ -278,7 +288,7 @@ def move_existing_files():
     return {"queued": True}
 
 
-def move_existing_files_job():
+def move_existing_files_job(extra_filters: dict | None = None):
     settings = frappe.get_doc(SETTINGS)
     doctypes = list(stored_doctypes(settings))
     if not is_enabled(settings) or not doctypes:
@@ -289,6 +299,7 @@ def move_existing_files_job():
             "attached_to_doctype": ("in", doctypes),
             "is_folder": 0,
             KEY_FIELD: ("is", "not set"),
+            **(extra_filters or {}),
         },
         pluck="name",
         limit=MOVE_BATCH,
@@ -300,4 +311,8 @@ def move_existing_files_job():
             frappe.db.commit()  # nosemgrep - each file is done once its bytes are in the bucket
     if moved == MOVE_BATCH:
         # more to go: run again rather than hold one job for hours
-        frappe.enqueue("helpdesk.storage.s3.move_existing_files_job", queue="long")
+        frappe.enqueue(
+            "helpdesk.storage.s3.move_existing_files_job",
+            queue="long",
+            extra_filters=extra_filters,
+        )
