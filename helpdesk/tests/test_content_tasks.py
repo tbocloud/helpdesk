@@ -195,6 +195,18 @@ class TestContentTeamRole(ContentTaskCase):
         )
         frappe.set_user("Administrator")
 
+        # a ticket they raised themselves stays theirs to list and open
+        own = make_ticket(subject="My own ticket", raised_by=WRITER[0])
+        frappe.set_user(WRITER[0])
+        self.assertEqual(
+            frappe.get_list(
+                "HD Ticket", filters={"subject": "My own ticket"}, pluck="name"
+            ),
+            [own.name],
+        )
+        self.assertTrue(frappe.get_doc("HD Ticket", own.name).has_permission("read"))
+        frappe.set_user("Administrator")
+
         frappe.get_doc("User", WRITER[0]).add_roles("Project Manager")
         self.assertFalse(is_content_only(WRITER[0]))
         frappe.db.set_single_value("HD Settings", "restrict_tickets_by_agent_group", 0)

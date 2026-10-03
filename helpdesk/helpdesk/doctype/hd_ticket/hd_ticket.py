@@ -1337,6 +1337,8 @@ def has_permission(doc, user=None):
     user = user or frappe.session.user
     if is_admin(user):
         return True
+    # everyone, content-only users included, opens the tickets they raised or own;
+    # this matches _get_base_visibility, which their list query uses
     if user in (doc.contact, doc.raised_by, doc.owner):
         return True
     if _is_customer_manager(doc.customer, user):

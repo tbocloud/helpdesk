@@ -438,7 +438,8 @@ def send_due_reminders():
     )
     for post in posts:
         users = [post.writer, post.designer, post.marketer, post.owner]
-        # same path as other reminders: the bell plus Teams or email, once per day and stage
+        # same path as other reminders: the bell plus Teams or email, once per day and stage;
+        # notify_users drops empty slots, Administrator and Guest, and duplicates
         notify_users(
             users,
             "HD Content Post",
