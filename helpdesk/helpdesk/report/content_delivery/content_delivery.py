@@ -15,6 +15,20 @@ from frappe.utils import (
 )
 
 
+# where a post is in the workflow, grouped the way the calendar colours them
+STAGES = {
+    "Idea": "planning",
+    "Drafting": "planning",
+    "Design": "planning",
+    "Internal Review": "review",
+    "Client Review": "review",
+    "Changes Requested": "review",
+    "Approved": "ready",
+    "Scheduled": "ready",
+    "Published": "published",
+}
+
+
 def execute(filters=None):
     filters = frappe._dict(filters or {})
     rows = get_rows(filters)
@@ -115,18 +129,26 @@ def get_rows(filters) -> list[dict]:
                 "on_time": 0,
                 "overdue": 0,
                 "awaiting_client": 0,
+                "late": 0,
+                "upcoming": 0,
+                "stages": dict.fromkeys(set(STAGES.values()), 0),
                 "_approval_hours": [],
             },
         )
         row["planned"] += 1
+        row["stages"][STAGES.get(post.status, "planning")] += 1
         if post.status == "Published":
             row["published"] += 1
             if post.published_on and getdate(post.published_on) <= getdate(
                 post.publish_on
             ):
                 row["on_time"] += 1
+            else:
+                row["late"] += 1
         elif get_datetime(post.publish_on) < now:
             row["overdue"] += 1
+        else:
+            row["upcoming"] += 1
         if post.status == "Client Review":
             row["awaiting_client"] += 1
         if post.sent_for_approval_on and post.client_decided_on:
