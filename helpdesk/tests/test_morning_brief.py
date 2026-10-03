@@ -84,6 +84,39 @@ class TestMorningBrief(FrappeTestCase):
         ]
         self.assertEqual(subjects, [text.split("\n", 1)[0]])
 
+    def test_unassigned_work_goes_to_the_project_lead(self):
+        make_task(self.project, "Daily sales report change", nowdate())
+        make_task(self.project, "Someday idea", add_days(nowdate(), 30))
+        frappe.db.set_value("Project", self.project, "project_lead", DEV[0])
+
+        with patch("frappe.sendmail"), patch.object(
+            morning_brief, "is_working_day", return_value=True
+        ):
+            morning_brief.send_morning_briefs()
+
+        text = self.briefs()[0]
+        self.assertIn(
+            "Not assigned to anyone yet: assign or do\n- Daily sales report change",
+            text,
+        )
+        self.assertNotIn("Someday idea", text)
+
+    def test_without_a_lead_the_project_manager_hears_about_it(self):
+        make_task(self.project, "Opening stock upload", add_days(nowdate(), -1))
+
+        with patch("frappe.sendmail"), patch.object(
+            morning_brief, "is_working_day", return_value=True
+        ):
+            morning_brief.send_morning_briefs()
+
+        pm_briefs = frappe.get_all(
+            "HD Notification",
+            filters={"user_to": PM[0], "reference_doctype": "User"},
+            pluck="message",
+        )
+        self.assertTrue(any("Opening stock upload" in b for b in pm_briefs))
+        self.assertEqual(self.briefs(), [])
+
     def test_nothing_to_report_means_no_brief(self):
         self.task("Phase 2 scoping", add_days(nowdate(), 20), days_old=5)
         with patch("frappe.sendmail"), patch.object(
