@@ -14,5 +14,6 @@ def execute():
         settings.append("document_types", {"document_type": doctype})
     settings.link_expiry_seconds = settings.link_expiry_seconds or 600
     settings.delete_from_bucket = 1
+    settings.keep_local_copy = 1
     settings.flags.ignore_mandatory = True
     settings.save(ignore_permissions=True)

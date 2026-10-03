@@ -1,7 +1,9 @@
 """Keep chosen attachments in an S3 bucket instead of on this server.
 
-A File that lives in the bucket carries its object key in `hd_s3_key` and a
-`file_url` pointing at `download` below, so everything that links to a file
+Every File sent to the bucket carries its object key in `hd_s3_key`. With
+"Keep a copy on this server" (the default) nothing else changes: the file stays
+on disk and is served from there, and the bucket holds a second copy. Without
+it, the local copy is removed and `file_url` points at `download` below, so everything that links to a file
 (thumbnails, attachment lists) keeps working. Opening that URL checks the
 viewer's access to the File first and only then hands out a short-lived signed
 link. Code that needs the bytes (zip downloads, the client portal, the client
@@ -116,6 +118,10 @@ def upload(file_doc, settings=None) -> bool:
         )
         return False
 
+    if settings.keep_local_copy:
+        # the bucket is a second copy; the file is still served from this server
+        file_doc.db_set(KEY_FIELD, key, update_modified=False)
+        return True
     file_doc.db_set(
         {KEY_FIELD: key, "file_url": download_url(file_doc)}, update_modified=False
     )
