@@ -76,10 +76,33 @@ def can_manage_project(project: str | None, user: str | None = None) -> bool:
     )
 
 
+def can_add_tasks(project: str | None, user: str | None = None) -> bool:
+    """Anyone on the project (owner, lead, member, or with a task in it) may add
+    tasks; approving, editing others' tasks and deleting stay with managers."""
+    user = user or frappe.session.user
+    if not project:
+        return False
+    return (
+        is_tasky_admin(user)
+        or can_manage_project(project, user)
+        or is_project_member(project, user)
+        or has_assigned_task(project, user)
+    )
+
+
 def is_project_member(project: str, user: str) -> bool:
     return bool(
         frappe.db.exists(
             "Project User", {"parenttype": "Project", "parent": project, "user": user}
+        )
+    )
+
+
+def has_assigned_task(project: str, user: str) -> bool:
+    """A developer given a task in a project sees that project, member or not."""
+    return bool(
+        frappe.db.exists(
+            "Task", {"project": project, "_assign": ("like", f'%"{user}"%')}
         )
     )
 
@@ -128,9 +151,11 @@ def project_query(user: str | None = None) -> str | None:
     if is_tasky_admin(user):
         return None
     u = frappe.db.escape(user)
+    assigned = frappe.db.escape(f'%"{user}"%')
     return (
         f"(`tabProject`.`owner` = {u} or `tabProject`.`project_lead` = {u} or `tabProject`.`name` in "
-        f"(select `parent` from `tabProject User` where `parenttype` = 'Project' and `user` = {u}))"
+        f"(select `parent` from `tabProject User` where `parenttype` = 'Project' and `user` = {u}) "
+        f"or `tabProject`.`name` in (select `project` from `tabTask` where `_assign` like {assigned}))"
     )
 
 
@@ -141,9 +166,11 @@ def task_query(user: str | None = None) -> str | None:
     # _assign stores a JSON list, so match the quoted email to avoid partial matches
     assigned = frappe.db.escape(f'%"{user}"%')
     u = frappe.db.escape(user)
+    # a task someone added for a teammate stays visible to them, and so does one
+    # whose assignment ERPNext closed when it was completed
     return (
         f"(`tabTask`.`project` in ({_managed_projects_subquery(user)}) "
-        f"or `tabTask`.`_assign` like {assigned} "
+        f"or `tabTask`.`_assign` like {assigned} or `tabTask`.`owner` = {u} "
         f"or `tabTask`.`name` in (select `reference_name` from `tabToDo` "
         f"where `reference_type` = 'Task' and `allocated_to` = {u} and `status` = 'Closed'))"
     )
@@ -172,7 +199,9 @@ def project_has_permission(
     if is_project_owner(doc.name, user):
         return None
     if ptype in ("read", "print", "email", "report") and (
-        doc.get("project_lead") == user or is_project_member(doc.name, user)
+        doc.get("project_lead") == user
+        or is_project_member(doc.name, user)
+        or has_assigned_task(doc.name, user)
     ):
         return None
     return False
@@ -184,8 +213,12 @@ def task_has_permission(
     user = user or frappe.session.user
     if is_tasky_admin(user) or can_manage_project(doc.project, user):
         return None
-    if ptype in ("create", "delete"):
+    if ptype == "create":
+        return None if can_add_tasks(doc.project, user) else False
+    if ptype == "delete":
         return False
+    if ptype in ("read", "print", "email", "report") and doc.get("owner") == user:
+        return None
     return None if is_assigned(doc, user) else False
 
 
@@ -201,3 +234,31 @@ def timesheet_has_permission(
     ):
         return None
     return False
+
+
+# --- HD Pull Request: visible to whoever can read the task it's linked to ---
+
+
+def pull_request_query(user: str | None = None) -> str | None:
+    user = user or frappe.session.user
+    condition = task_query(user)
+    if condition is None:
+        return None
+    return f"`tabHD Pull Request`.`task` in (select `name` from `tabTask` where {condition})"
+
+
+def pull_request_has_permission(
+    doc, ptype: str | None = None, user: str | None = None
+) -> bool | None:
+    user = user or frappe.session.user
+    if is_tasky_admin(user):
+        return None
+    if ptype not in ("read", "print", "report", "export"):
+        return False
+    if not doc.task:
+        return False
+    return (
+        None
+        if frappe.has_permission("Task", "read", doc=doc.task, user=user)
+        else False
+    )

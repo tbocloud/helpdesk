@@ -1,6 +1,7 @@
 <template>
   <div class="flex h-full flex-col">
     <ProjectNav
+      ref="nav"
       :project-id="projectId"
       :phases="phaseNames"
       @task-created="kanban.reload()"
@@ -96,7 +97,11 @@
                   :is="taskStatusMeta(col.key).icon"
                   class="size-4"
                   :class="
-                    col.key === 'Working' ? 'text-info' : 'text-ink-gray-5'
+                    col.key === 'Working'
+                      ? 'text-info'
+                      : col.key === ON_HOLD
+                      ? 'text-warning'
+                      : 'text-ink-gray-5'
                   "
                   aria-hidden="true"
                 />
@@ -123,6 +128,8 @@
                 {{
                   col.key === "Completed"
                     ? __("Drop a task here to complete it")
+                    : col.key === ON_HOLD
+                    ? __("Drop a task here to put it on hold")
                     : __("No tasks")
                 }}
               </div>
@@ -160,7 +167,23 @@
                     class="mt-0.5 size-4 shrink-0 text-success"
                     aria-hidden="true"
                   />
+                  <!-- a click (not a drag) on the title opens Edit -->
+                  <button
+                    v-if="canEdit(task)"
+                    type="button"
+                    class="min-w-0 flex-1 rounded text-left text-sm leading-snug underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+                    :class="
+                      col.key === 'Completed'
+                        ? 'text-ink-gray-5 line-through'
+                        : 'text-ink-gray-9'
+                    "
+                    :aria-label="__('Edit {0}', task.subject)"
+                    @click.stop="editingTask = task"
+                  >
+                    {{ task.subject }}
+                  </button>
                   <span
+                    v-else
                     class="min-w-0 flex-1 text-sm leading-snug"
                     :class="
                       col.key === 'Completed'
@@ -177,11 +200,66 @@
                     />
                     <span class="sr-only">{{ __("Key task") }}</span>
                   </template>
+                  <MilestoneMark v-if="task.is_milestone" class="mt-0.5" />
+                  <Dropdown
+                    v-if="cardActions(task).length"
+                    :options="cardActions(task)"
+                    align="end"
+                  >
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      class="-mr-1 -mt-0.5 shrink-0"
+                      :aria-label="__('Actions for {0}', task.subject)"
+                    >
+                      <template #icon>
+                        <LucideMoreHorizontal
+                          class="size-4"
+                          aria-hidden="true"
+                        />
+                      </template>
+                    </Button>
+                  </Dropdown>
+                </div>
+
+                <div
+                  v-if="task.blocked && col.key !== 'Completed'"
+                  class="mt-2 flex min-w-0"
+                >
+                  <WaitingOn :subject="task.depends_on_subject" />
+                </div>
+
+                <div
+                  v-if="isOnHold(task)"
+                  class="mt-2 flex items-center gap-2 rounded-md bg-warning-soft py-1 pl-2 pr-1 text-warning"
+                  :title="task.hold_note || undefined"
+                >
+                  <LucidePause class="size-3.5 shrink-0" aria-hidden="true" />
+                  <span class="sr-only">{{ __("On hold:") }}</span>
+                  <span class="min-w-0 truncate text-xs font-medium">{{
+                    __(task.hold_reason || "On hold")
+                  }}</span>
+                  <span
+                    class="shrink-0 font-mono text-xs tabular-nums"
+                    :aria-label="holdDurationLabel(holdDays(task))"
+                    :title="holdDurationLabel(holdDays(task))"
+                  >
+                    {{ __("{0}d", String(holdDays(task))) }}
+                  </span>
+                  <button
+                    type="button"
+                    class="ml-auto flex size-6 shrink-0 items-center justify-center rounded transition-colors hover:bg-surface-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+                    :aria-label="__('Resume {0}', task.subject)"
+                    :title="__('Resume')"
+                    @click.stop="resumingTask = task"
+                  >
+                    <LucidePlay class="size-3.5" aria-hidden="true" />
+                  </button>
                 </div>
 
                 <!-- Timer -->
                 <div
-                  v-if="
+                  v-else-if="
                     timers[task.name]?.running && !timers[task.name]?.paused
                   "
                   class="mt-2 flex items-center gap-2 rounded-md bg-success-soft py-1 pl-2 pr-1 text-success"
@@ -246,6 +324,14 @@
                     {{ shortDate(task.due_date) }}
                     <span v-if="isOverdue(task)">· {{ __("Overdue") }}</span>
                   </span>
+                  <SlipBadge
+                    v-if="task.slip_count && !isClosed(task)"
+                    :count="task.slip_count"
+                  />
+                  <PullRequestChip
+                    v-if="task.pull_request"
+                    :pr="task.pull_request"
+                  />
                   <div class="ml-auto flex shrink-0 items-center gap-1.5">
                     <component
                       :is="priorityIcon(task.priority)"
@@ -271,6 +357,36 @@
                     </span>
                   </div>
                 </div>
+
+                <div
+                  v-if="canManage && isPendingReview(task)"
+                  class="mt-2.5 flex items-center justify-end gap-1.5 border-t border-outline-gray-1 pt-2.5"
+                >
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    :label="__('Send back')"
+                    @click.stop="sendingBackTask = task"
+                  >
+                    <template #prefix>
+                      <LucideUndo2 class="size-3.5" aria-hidden="true" />
+                    </template>
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="subtle"
+                    :label="__('Approve')"
+                    :loading="
+                      approveResource.loading &&
+                      approveResource.params?.task === task.name
+                    "
+                    @click.stop="approve(task)"
+                  >
+                    <template #prefix>
+                      <LucideCheckCheck class="size-3.5" aria-hidden="true" />
+                    </template>
+                  </Button>
+                </div>
               </article>
             </div>
           </section>
@@ -278,95 +394,111 @@
       </div>
     </div>
 
-    <Dialog
-      v-model:open="completeDialogOpen"
-      :title="__('Complete task')"
-      :message="completingTask?.subject"
-      size="md"
-    >
-      <form
-        id="tasky-kanban-complete"
-        class="flex flex-col gap-4"
-        @submit.prevent="confirmComplete"
-      >
-        <div class="flex flex-col gap-1.5">
-          <TextInput
-            v-model.number="completeHours"
-            type="number"
-            step="0.25"
-            min="0"
-            :label="__('Hours worked')"
-          />
-          <p
-            v-if="preFilledHours"
-            class="flex items-center gap-1 text-xs text-ink-gray-5"
-          >
-            <LucideTimer class="size-3.5" aria-hidden="true" />
-            {{ __("Filled in from the timer: {0} h", String(preFilledHours)) }}
-          </p>
-        </div>
-        <Textarea
-          v-model="completeNotes"
-          :label="__('Notes')"
-          :placeholder="__('What was done?')"
-          :rows="3"
-        />
-      </form>
-      <template #actions="{ close }">
-        <div class="flex justify-end gap-2">
-          <Button :label="__('Cancel')" @click="close" />
-          <Button
-            variant="solid"
-            type="submit"
-            form="tasky-kanban-complete"
-            :label="__('Submit timesheet')"
-          />
-        </div>
-      </template>
-    </Dialog>
+    <HoldTaskDialog v-model:task="holdingTask" @held="onHoldChanged" />
+    <ResumeTaskDialog v-model:task="resumingTask" @resumed="onHoldChanged" />
+    <RequestHelpDialog
+      v-model:task="helpingTask"
+      :project-id="projectId"
+      @requested="kanban.reload()"
+    />
+    <HandOverTaskDialog
+      v-model:task="handingOverTask"
+      :project-id="projectId"
+      @handed-over="kanban.reload()"
+    />
+    <EditTaskDialog
+      v-model:task="editingTask"
+      :project-id="projectId"
+      :phases="phaseNames"
+      @saved="kanban.reload()"
+      @plan="(t) => (planningTask = t as Task)"
+    />
+    <TaskPlanDialog
+      v-model:task="planningTask"
+      :project-id="projectId"
+      @saved="kanban.reload()"
+    />
+    <SendBackTaskDialog
+      v-model:task="sendingBackTask"
+      @sent="kanban.reload()"
+    />
+
+    <CompleteTaskDialog
+      v-model:task="completingTask"
+      :tracked-hours="completingTrackedHours"
+      @completed="onCompleted"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
+import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
-import {
-  Button,
-  Dialog,
-  TextInput,
-  Textarea,
-  createResource,
-  toast,
-} from "frappe-ui";
+import { Button, Dropdown, createResource, toast } from "frappe-ui";
 import { computed, onUnmounted, ref, watch } from "vue";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
+import LucideArrowRight from "~icons/lucide/arrow-right";
 import LucideCalendar from "~icons/lucide/calendar";
+import LucideCalendarClock from "~icons/lucide/calendar-clock";
+import LucideCheckCheck from "~icons/lucide/check-check";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideCirclePause from "~icons/lucide/circle-pause";
 import LucideGripVertical from "~icons/lucide/grip-vertical";
 import LucideInfo from "~icons/lucide/info";
+import LucideMoreHorizontal from "~icons/lucide/more-horizontal";
 import LucidePause from "~icons/lucide/pause";
+import LucidePencil from "~icons/lucide/pencil";
 import LucidePlay from "~icons/lucide/play";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideStar from "~icons/lucide/star";
-import LucideTimer from "~icons/lucide/timer";
+import LucideUndo2 from "~icons/lucide/undo-2";
+import LucideUserPlus from "~icons/lucide/user-plus";
+import CompleteTaskDialog from "./components/CompleteTaskDialog.vue";
+import EditTaskDialog from "./components/EditTaskDialog.vue";
+import HandOverTaskDialog from "./components/HandOverTaskDialog.vue";
+import HoldTaskDialog from "./components/HoldTaskDialog.vue";
+import MilestoneMark from "./components/MilestoneMark.vue";
 import ProjectNav from "./components/ProjectNav.vue";
+import RequestHelpDialog from "./components/RequestHelpDialog.vue";
+import ResumeTaskDialog from "./components/ResumeTaskDialog.vue";
+import PullRequestChip from "./components/PullRequestChip.vue";
+import SendBackTaskDialog from "./components/SendBackTaskDialog.vue";
+import SlipBadge from "./components/SlipBadge.vue";
+import TaskPlanDialog from "./components/TaskPlanDialog.vue";
 import TaskyState from "./components/TaskyState.vue";
+import WaitingOn from "./components/WaitingOn.vue";
+import type { TaskPullRequest } from "./pullRequestMeta";
 import {
+  ON_HOLD,
+  blockedMessage,
+  blocksMove,
+  errorText,
+  holdDays,
+  holdDurationLabel,
   initials,
+  isClosed,
+  isOnHold,
   isOverdue,
   loadErrorMessage,
+  isPendingReview,
   priorityIcon,
   shortDate,
   taskStatusMeta,
 } from "./taskMeta";
+import { useApproveTask } from "./useApproveTask";
 
 const props = defineProps<{ projectId: string }>();
+
+const nav = ref<InstanceType<typeof ProjectNav> | null>(null);
+const canManage = computed(() => !!nav.value?.canManage);
+const authStore = useAuthStore();
 
 const columnList = [
   { key: "Open" },
   { key: "Working" },
   { key: "Pending Review" },
+  { key: ON_HOLD },
   { key: "Completed" },
   { key: "Cancelled" },
 ];
@@ -384,11 +516,21 @@ interface Task {
   status: string;
   priority?: string;
   assigned_to?: string;
+  assignees?: string[];
   due_date?: string;
   estimated_hours?: number;
   custom_timer_start?: string;
   custom_timer_elapsed?: number;
   is_key?: boolean;
+  hold_reason?: string | null;
+  hold_note?: string | null;
+  hold_since?: string | null;
+  is_milestone?: boolean;
+  slip_count?: number;
+  depends_on_task?: string | null;
+  depends_on_subject?: string | null;
+  blocked?: boolean;
+  pull_request?: TaskPullRequest | null;
 }
 
 const kanban = createResource({
@@ -404,24 +546,84 @@ const kanban = createResource({
 // Moves are applied optimistically; on failure, reload so the board matches the server again.
 const moveTaskApi = createResource({
   url: "helpdesk.tasky.api.move_task",
+  onSuccess(data: { status?: string }) {
+    // the server can store a different status (e.g. review before done)
+    if (data?.status && data.status !== moveTaskApi.params?.new_status)
+      kanban.reload();
+  },
   onError(e: any) {
     toast.error(errorText(e, __("Couldn't move the task.")));
     kanban.reload();
   },
 });
-const completeResource = createResource({
-  url: "helpdesk.tasky.api.complete_task",
-  onSuccess() {
-    kanban.reload();
-  },
-  onError(e: any) {
-    toast.error(errorText(e, __("Couldn't complete the task.")));
-    kanban.reload();
-  },
-});
 
-function errorText(e: any, fallback: string) {
-  return e?.messages?.length ? e.messages.join(" ") : e?.message || fallback;
+const holdingTask = ref<Task | null>(null);
+const resumingTask = ref<Task | null>(null);
+const planningTask = ref<Task | null>(null);
+const editingTask = ref<Task | null>(null);
+const sendingBackTask = ref<Task | null>(null);
+const helpingTask = ref<Task | null>(null);
+const handingOverTask = ref<Task | null>(null);
+
+const { approve, resource: approveResource } = useApproveTask(() =>
+  kanban.reload()
+);
+
+// the assignee may edit the description; leads and managers everything
+function canEdit(task: Task) {
+  return canManage.value || !!task.assignees?.includes(authStore.userId);
+}
+
+function cardActions(task: Task) {
+  const actions: Record<string, any>[] = [];
+  if (canEdit(task))
+    actions.push({
+      label: __("Edit"),
+      icon: LucidePencil,
+      onClick: () => (editingTask.value = task),
+    });
+  if (canEdit(task) && !isClosed(task)) {
+    // a task waits on one other task, so asking for help needs it free
+    if (!task.blocked)
+      actions.push({
+        label: __("Ask a teammate for help"),
+        icon: LucideUserPlus,
+        onClick: () => (helpingTask.value = task),
+      });
+    actions.push({
+      label: __("Hand over"),
+      icon: LucideArrowRight,
+      onClick: () => (handingOverTask.value = task),
+    });
+  }
+  if (!canManage.value || isClosed(task)) return actions;
+  actions.push({
+    label: __("Plan"),
+    icon: LucideCalendarClock,
+    onClick: () => (planningTask.value = task),
+  });
+  if (isPendingReview(task)) {
+    actions.push(
+      {
+        label: __("Approve"),
+        icon: LucideCheckCheck,
+        onClick: () => approve(task),
+      },
+      {
+        label: __("Send back"),
+        icon: LucideUndo2,
+        onClick: () => (sendingBackTask.value = task),
+      }
+    );
+  }
+  return actions;
+}
+
+// Holding stops the server timer and resuming may start it or move the due date,
+// so drop local timer state and take the server's view.
+function onHoldChanged(task: { name: string }) {
+  delete timers.value[task.name];
+  kanban.reload();
 }
 
 const totalTasks = computed(() =>
@@ -439,15 +641,10 @@ const phaseNames = computed(() =>
 );
 
 const completingTask = ref<Task | null>(null);
-const completeHours = ref(0);
-const completeNotes = ref("");
-const preFilledHours = ref(0);
-
-const completeDialogOpen = computed({
-  get: () => !!completingTask.value,
-  set: (open: boolean) => {
-    if (!open) completingTask.value = null;
-  },
+// what the card's timer shows, so the dialog offers the same hours
+const completingTrackedHours = computed(() => {
+  const timer = completingTask.value && timers.value[completingTask.value.name];
+  return timer ? timer.elapsed / 3600 : null;
 });
 
 interface TimerState {
@@ -585,8 +782,28 @@ function onDrop(e: DragEvent, newStatus: string) {
   }
   if (!task || task.status === newStatus || task.status === "Completed") return;
 
+  // the server refuses these moves while the dependency is open; don't move the card at all
+  if (blocksMove(task, newStatus)) {
+    dropTarget.value = null;
+    toast.error(blockedMessage(task));
+    return;
+  }
+
+  // a hold needs a reason, so the move happens only once the dialog is submitted
+  if (newStatus === ON_HOLD) {
+    dropTarget.value = null;
+    if (task.status === "Cancelled") {
+      toast.error(__("Cancelled tasks can't be put on hold."));
+      return;
+    }
+    holdingTask.value = task;
+    return;
+  }
+
   const fromWorking = task.status === "Working";
   const toWorking = newStatus === "Working";
+  const fromHold = isOnHold(task);
+  const movesDueDate = fromHold && !!task.due_date && holdDays(task) > 0;
 
   let targetIdx = -1;
   if (dropTarget.value && columnTasks.value[newStatus]) {
@@ -598,16 +815,41 @@ function onDrop(e: DragEvent, newStatus: string) {
     }
   }
 
-  if (newStatus === "Completed") {
-    preFilledHours.value = fromWorking ? finalizeTimer(task) : 0;
-    completingTask.value = task;
-    completeHours.value = preFilledHours.value || task.estimated_hours || 0;
-    completeNotes.value = "";
+  // completing records the time worked, so it happens once the dialog is submitted
+  // (that also sends it to review when the project wants one); a lead dropping a
+  // reviewed task on Completed signs it off instead
+  if (newStatus === "Pending Review") {
     dropTarget.value = null;
+    completingTask.value = task;
+    return;
+  }
+  if (newStatus === "Completed") {
+    dropTarget.value = null;
+    if (isPendingReview(task) && canManage.value) approve(task);
+    else completingTask.value = task;
     return;
   }
 
   moveToColumn(task, newStatus, targetIdx);
+
+  if (fromHold) {
+    const name = task.name;
+    moveTaskApi.submit(
+      { task: name, new_status: newStatus },
+      {
+        onSuccess() {
+          toast.success(
+            movesDueDate
+              ? __("Task resumed. The days on hold were added to its due date.")
+              : __("Task resumed")
+          );
+          onHoldChanged({ name });
+        },
+      }
+    );
+    dropTarget.value = null;
+    return;
+  }
 
   if (toWorking) {
     startOrResumeTimer(task);
@@ -623,18 +865,10 @@ function onDrop(e: DragEvent, newStatus: string) {
   dropTarget.value = null;
 }
 
-function confirmComplete() {
-  const task = completingTask.value;
-  if (!task) return;
-  completeResource.submit({
-    task: task.name,
-    hours_worked: completeHours.value || 0.25,
-    notes: completeNotes.value,
-  });
-  finalizeTimer(task);
-  moveToColumn(task, "Completed");
-  completingTask.value = null;
-  dropTarget.value = null;
+// the server stopped the timer and may have sent the task for review
+function onCompleted(task: { name: string }) {
+  delete timers.value[task.name];
+  kanban.reload();
 }
 
 function moveToColumn(task: Task, newStatus: string, insertAt: number = -1) {

@@ -199,6 +199,36 @@ const portalRoutes = [
     component: () => import("@/pages/performance/Performance.vue"),
   },
   {
+    path: "/team",
+    name: "TeamWorkload",
+    component: () => import("@/pages/work/Team.vue"),
+    beforeEnter: () => useAuthStore().canSeeOverview || { name: "Home" },
+  },
+  // not guarded like Overview: project managers without the Overview get
+  // weekly reminders linking here, and the server filters what each user sees
+  {
+    path: "/work-summaries",
+    name: "WorkSummaries",
+    component: () => import("@/pages/work/WorkSummaries.vue"),
+  },
+  {
+    path: "/calendar",
+    name: "WorkCalendar",
+    component: () => import("@/pages/work/WorkCalendar.vue"),
+  },
+  {
+    path: "/customer-report",
+    name: "CustomerReport",
+    component: () => import("@/pages/work/CustomerReport.vue"),
+    beforeEnter: () => useAuthStore().canSeeCustomerReport || { name: "Home" },
+  },
+  {
+    path: "/work-summary/:name",
+    name: "WorkSummary",
+    component: () => import("@/pages/work/WorkSummary.vue"),
+    props: true,
+  },
+  {
     path: "/timesheets",
     name: "TaskyTimesheets",
     component: () => import("@/pages/tasky/Timesheets.vue"),

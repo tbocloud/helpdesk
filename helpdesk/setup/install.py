@@ -334,6 +334,18 @@ def get_custom_fields():
                 "set_only_once": 1,
             },
         ],
+        "Communication": [
+            {
+                # an agent sent this reply from an AI draft (it is still their reply);
+                # existing sites get it from setup.after_migrate on the next migrate
+                "fieldname": "custom_ai_drafted",
+                "fieldtype": "Check",
+                "label": "AI Drafted",
+                "insert_after": "sent_or_received",
+                "read_only": 1,
+                "no_copy": 1,
+            },
+        ],
         "Task": [
             {
                 "fieldname": "custom_category",
@@ -408,6 +420,18 @@ def get_custom_fields():
                 "insert_after": "custom_client_ticket",
             },
             {
+                # what the conversation sync already copied; the Select field
+                # above is too short (140 chars) for it, and Frappe won't change
+                # a Select field into a text field
+                "fieldname": "custom_sync_state",
+                "fieldtype": "Long Text",
+                "label": "Conversation Sync State",
+                "insert_after": "custom_conv_state",
+                "hidden": 1,
+                "read_only": 1,
+                "no_copy": 1,
+            },
+            {
                 "fieldname": "custom_triage_status",
                 "fieldtype": "Select",
                 "options": "Pending\nCompleted\nFailed",
@@ -455,6 +479,48 @@ def get_custom_fields():
                 "fieldtype": "JSON",
                 "label": "Triage Data",
                 "insert_after": "custom_triage_timestamp",
+            },
+            # AI suggested reply: only ever inserted into the composer by an agent
+            {
+                "fieldname": "custom_ai_suggestion_status",
+                "fieldtype": "Select",
+                "options": "\nPending\nReady\nFailed",
+                "label": "AI Suggestion Status",
+                "insert_after": "custom_triage_data",
+                "read_only": 1,
+                "hidden": 1,
+            },
+            {
+                "fieldname": "custom_ai_suggested_reply",
+                "fieldtype": "Text Editor",
+                "label": "AI Suggested Reply",
+                "insert_after": "custom_ai_suggestion_status",
+                "read_only": 1,
+                "hidden": 1,
+            },
+            {
+                "fieldname": "custom_ai_suggestion_note",
+                "fieldtype": "Small Text",
+                "label": "AI Suggestion Note",
+                "insert_after": "custom_ai_suggested_reply",
+                "read_only": 1,
+                "hidden": 1,
+            },
+            {
+                "fieldname": "custom_ai_suggestion_at",
+                "fieldtype": "Datetime",
+                "label": "AI Suggestion Time",
+                "insert_after": "custom_ai_suggestion_note",
+                "read_only": 1,
+                "hidden": 1,
+            },
+            {
+                "fieldname": "custom_ai_suggestion_sources",
+                "fieldtype": "JSON",
+                "label": "AI Suggestion Sources",
+                "insert_after": "custom_ai_suggestion_at",
+                "read_only": 1,
+                "hidden": 1,
             },
         ],
     }

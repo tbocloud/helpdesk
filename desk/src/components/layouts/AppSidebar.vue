@@ -218,6 +218,9 @@ const navItems = computed(() => {
     .filter((item) => !item.projectManagerOnly || authStore.isProjectManager)
     .filter((item) => !item.overviewOnly || authStore.canSeeOverview)
     .filter((item) => !item.ticketsOnly || authStore.canSeeTickets)
+    .filter(
+      (item) => !item.customerReportOnly || authStore.canSeeCustomerReport
+    )
     .map((option: any) => ({
       label: option.label,
       icon: option.icon,

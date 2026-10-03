@@ -1,3 +1,4 @@
+import type { TaskPullRequest } from "@/pages/tasky/pullRequestMeta";
 import { __ } from "@/translation";
 import { dayjs } from "frappe-ui";
 
@@ -16,6 +17,29 @@ export interface WorkItem {
   project_name?: string | null;
   hd_ticket?: string | null;
   customer?: string | null;
+  /** Set only while a task is On Hold. */
+  hold_reason?: string | null;
+  /** Days since the hold began; null unless the task is On Hold. */
+  hold_days?: number | null;
+  is_milestone?: boolean;
+  /** Times the task's due date was moved later. */
+  slip_count?: number;
+  /** Subject of the task's still-open dependency, if any. */
+  waiting_on?: string | null;
+  /** Plain-language, already translated reasons the item may slip. */
+  risks?: string[];
+  /** The task's GitHub pull requests: open ones first, then merged or closed. */
+  pull_requests?: TaskPullRequest[];
+  /** Set on tasks in Pending Review: whether this user may approve them. */
+  can_approve?: boolean;
+}
+
+export function isAtRisk(item: WorkItem) {
+  return !!item.risks?.length;
+}
+
+export function isHeldTask(item: WorkItem) {
+  return item.kind === "task" && item.status === "On Hold";
 }
 
 export interface DeadlineInfo {

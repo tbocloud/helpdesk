@@ -55,7 +55,7 @@
         {{ leadLabel }}
       </span>
       <Button
-        v-if="detail.data?.can_manage"
+        v-if="detail.data?.can_add_tasks"
         variant="solid"
         :label="__('New task')"
         @click="showNewTask = true"

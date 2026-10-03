@@ -28,6 +28,8 @@
 		"triage_section",
 		"auto_triage_enabled",
 		"auto_investigate",
+		"automation_user",
+		"draft_kb_articles",
 		"column_break_triage",
 		"triage_job_timeout"
 	],
@@ -188,11 +190,25 @@
 			"fieldname": "triage_job_timeout",
 			"fieldtype": "Int",
 			"label": "Triage Job Timeout (seconds)"
+		},
+		{
+			"fieldname": "draft_kb_articles",
+			"fieldtype": "Check",
+			"label": "Draft KB Articles from Resolved Tickets",
+			"default": "1",
+			"description": "When a ticket is resolved, the AI drafts a knowledge base article if other customers are likely to ask the same thing. Drafts are never published automatically."
+		},
+		{
+			"fieldname": "automation_user",
+			"fieldtype": "Link",
+			"options": "User",
+			"label": "Hub's Own Work Shown As",
+			"description": "AI triage and investigation notes, reminders, KB drafts and changes from Outlook or GitHub are credited to this user, e.g. a \"TBO AI\" user (ai@teambackoffice.com). Empty: Administrator. Agents' own replies stay theirs."
 		}
 	],
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-09-29 10:00:00.000000",
+	"modified": "2026-10-02 18:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Hub Settings",

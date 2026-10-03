@@ -61,9 +61,27 @@ PROPERTY_SETTERS = (
     # (doctype, fieldname, property, value, property_type)
     ("Project", "status", "options", "Open\nOn hold\nCompleted\nCancelled", "Text"),
     ("Task", "status", "default", "Open", "Text"),
+    (
+        "Task",
+        "status",
+        "options",
+        "Open\nWorking\nPending Review\nOn Hold\nOverdue\nTemplate\nCompleted\nCancelled",
+        "Text",
+    ),
     ("Task", "priority", "default", "Medium", "Text"),
     # the members table decides who sees a project, so don't hide it in a collapsed section
     ("Project", "users_section", "collapsible", "0", "Check"),
+)
+
+
+# ERPNext's Project Type links to records; these are the types the AI estimates know
+PROJECT_TYPES = (
+    "ERP Implementation",
+    "Mobile App",
+    "Website",
+    "Content Calendar",
+    "Support",
+    "Other",
 )
 
 
@@ -111,6 +129,103 @@ def get_project_custom_fields() -> dict:
                 "read_only": 1,
                 "depends_on": "content_post",
             },
+            {
+                "fieldname": "is_milestone",
+                "fieldtype": "Check",
+                "label": "Milestone",
+                "insert_after": "is_key",
+                "in_standard_filter": 1,
+                "description": "A checkpoint for the customer (e.g. go-live). Slips are escalated like key tasks.",
+            },
+            {
+                # one task to wait on; ERPNext's own depends_on table is for templates and Gantt
+                "fieldname": "depends_on_task",
+                "fieldtype": "Link",
+                "label": "Waits On",
+                "options": "Task",
+                "insert_after": "content_role",
+                "search_index": 1,
+                "description": "This task can't start or be completed until that task is done.",
+            },
+            {
+                "fieldname": "hold_section",
+                "fieldtype": "Section Break",
+                "label": "On Hold",
+                "insert_after": "depends_on_task",
+                "collapsible": 1,
+                "depends_on": "eval:doc.status=='On Hold' || doc.hold_days_total",
+            },
+            {
+                "fieldname": "hold_reason",
+                "fieldtype": "Select",
+                "label": "Hold Reason",
+                "options": "\nLaptop / system issue\nLeave\nWaiting on customer\nWaiting on another task\nOther",
+                "insert_after": "hold_section",
+                "depends_on": "eval:doc.status=='On Hold'",
+                "mandatory_depends_on": "eval:doc.status=='On Hold'",
+            },
+            {
+                "fieldname": "hold_note",
+                "fieldtype": "Small Text",
+                "label": "Hold Note",
+                "insert_after": "hold_reason",
+                "depends_on": "eval:doc.status=='On Hold'",
+            },
+            {
+                "fieldname": "column_break_hold",
+                "fieldtype": "Column Break",
+                "insert_after": "hold_note",
+            },
+            {
+                "fieldname": "hold_since",
+                "fieldtype": "Date",
+                "label": "On Hold Since",
+                "insert_after": "column_break_hold",
+                "read_only": 1,
+                "depends_on": "eval:doc.status=='On Hold'",
+            },
+            {
+                "fieldname": "hold_days_total",
+                "fieldtype": "Int",
+                "label": "Days On Hold",
+                "insert_after": "hold_since",
+                "read_only": 1,
+                "default": "0",
+                "description": "All days this task has spent on hold. They're added to the due date on resume.",
+            },
+            {
+                "fieldname": "hold_previous_status",
+                "fieldtype": "Data",
+                "label": "Status Before Hold",
+                "insert_after": "hold_days_total",
+                "hidden": 1,
+                "read_only": 1,
+            },
+            {
+                "fieldname": "slip_count",
+                "fieldtype": "Int",
+                "label": "Times Rescheduled",
+                "insert_after": "exp_end_date",
+                "read_only": 1,
+                "default": "0",
+                "description": "How often the due date was moved later (holds don't count).",
+            },
+            {
+                "fieldname": "ai_estimated",
+                "fieldtype": "Check",
+                "label": "Due Date Set by AI",
+                "insert_after": "slip_count",
+                "read_only": 1,
+                "default": "0",
+            },
+            {
+                "fieldname": "estimate_note",
+                "fieldtype": "Small Text",
+                "label": "Estimate Note",
+                "insert_after": "ai_estimated",
+                "read_only": 1,
+                "depends_on": "ai_estimated",
+            },
         ],
         "Project": [
             {
@@ -133,6 +248,14 @@ def get_project_custom_fields() -> dict:
                 "insert_after": "customer",
                 "in_standard_filter": 1,
                 "search_index": 1,
+            },
+            {
+                "fieldname": "review_before_done",
+                "fieldtype": "Check",
+                "label": "Review Before Done",
+                "insert_after": "project_lead",
+                "default": "0",
+                "description": "When a team member completes a task, it goes to the project lead for review first.",
             },
         ],
         "Project User": [
@@ -165,6 +288,15 @@ def setup_erpnext_projects():
             validate_fields_for_doctype=False,
         )
     add_role_permissions()
+    add_project_types()
+
+
+def add_project_types():
+    for project_type in PROJECT_TYPES:
+        if not frappe.db.exists("Project Type", project_type):
+            frappe.get_doc(
+                {"doctype": "Project Type", "project_type": project_type}
+            ).insert(ignore_permissions=True)
 
 
 def add_role_permissions():

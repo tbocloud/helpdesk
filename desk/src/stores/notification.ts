@@ -22,6 +22,9 @@ export const useNotificationStore = defineStore("notification", () => {
       "read",
       "reference_comment",
       "reference_ticket",
+      "reference_doctype",
+      "reference_name",
+      "link",
       "user_from",
       "user_to",
     ],
@@ -33,13 +36,14 @@ export const useNotificationStore = defineStore("notification", () => {
     onSuccess: () => resource.reload(),
   });
 
-  const read = (ticket: string) => {
+  const read = (n: Notification) => {
     createResource({
       url: "helpdesk.helpdesk.doctype.hd_notification.utils.clear",
       auto: true,
-      params: {
-        ticket,
-      },
+      // without a ticket the server would mark every notification read
+      params: n.reference_ticket
+        ? { ticket: n.reference_ticket }
+        : { notification: n.name },
       onSuccess: () => resource.reload(),
     });
   };

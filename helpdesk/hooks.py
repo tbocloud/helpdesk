@@ -42,11 +42,32 @@ scheduler_events = {
         "helpdesk.search.download_corpus",
     ],
     "cron": {
-        "*/5 * * * *": [
+        # every minute: new customer tickets arrive quickly (sites also ping on raise)
+        "* * * * *": [
             "helpdesk.tasks.pull_client_tickets",
+        ],
+        # every 15 minutes: SLA reminders, so a short first-reply SLA isn't missed
+        "*/15 * * * *": [
+            "helpdesk.work_reminders.send_ticket_reminders",
+            "helpdesk.helpdesk.doctype.hd_meeting.hd_meeting.sync_with_outlook",
+        ],
+        "*/5 * * * *": [
             "helpdesk.tasks.push_ticket_statuses",
             "helpdesk.tasks.sync_conversations",
             "helpdesk.content_sync.sync_content_approvals",
+            "helpdesk.helpdesk.doctype.hd_meeting.hd_meeting.send_reminders",
+        ],
+        # every 10 minutes: new hub errors to the team's chat channel
+        "*/10 * * * *": [
+            "helpdesk.error_alerts.post_error_digest",
+        ],
+        # 10:00 every day: each assignee's morning brief
+        "0 10 * * *": [
+            "helpdesk.morning_brief.send_morning_briefs",
+        ],
+        # Monday 08:00: last week's summary per customer
+        "0 8 * * 1": [
+            "helpdesk.work_summary.send_weekly_summaries",
         ],
     },
     "daily": [
@@ -55,9 +76,13 @@ scheduler_events = {
         "helpdesk.tasks.retry_pending_triages",
         "helpdesk.helpdesk.doctype.hd_content_post.hd_content_post.send_due_reminders",
         "helpdesk.work_reminders.send_task_reminders",
+        "helpdesk.work_reminders.send_hold_reminders",
+        "helpdesk.helpdesk.doctype.hd_github_delivery.hd_github_delivery.clear_old_deliveries",
+        "helpdesk.helpdesk.doctype.hd_chatwoot_event.hd_chatwoot_event.clear_old_events",
     ],
     "hourly": [
-        "helpdesk.work_reminders.send_ticket_reminders",
+        "helpdesk.tasky.task_events.restore_held_tasks",
+        "helpdesk.triage.fail_stuck_triages",
         "helpdesk.helpdesk.doctype.hd_content_post.hd_content_post.send_missed_post_alerts",
     ],
     "hourly_long": [
@@ -98,6 +123,7 @@ user_invitation = {
 
 doc_events = {
     "Task": {
+        "before_validate": "helpdesk.tasky.task_events.before_validate",
         "on_update": "helpdesk.tasky.task_events.on_update",
     },
     "ToDo": {
@@ -134,6 +160,13 @@ doc_events = {
     },
     "HD Ticket": {
         "after_insert": "helpdesk.triage.auto_triage_ticket",
+        "on_update": [
+            "helpdesk.chatwoot_bridge.on_ticket_update",
+            "helpdesk.kb_drafts.on_ticket_update",
+        ],
+    },
+    "Communication": {
+        "after_insert": "helpdesk.chatwoot_bridge.on_communication_insert",
     },
 }
 
@@ -145,8 +178,10 @@ permission_query_conditions = {
     "Project": "helpdesk.tasky.permissions.project_query",
     "Task": "helpdesk.tasky.permissions.task_query",
     "Timesheet": "helpdesk.tasky.permissions.timesheet_query",
+    "HD Pull Request": "helpdesk.tasky.permissions.pull_request_query",
     "HD Content Post": "helpdesk.helpdesk.doctype.hd_content_post.hd_content_post.permission_query",
     "HD Content Campaign": "helpdesk.helpdesk.doctype.hd_content_campaign.hd_content_campaign.permission_query",
+    "HD Work Summary": "helpdesk.helpdesk.doctype.hd_work_summary.hd_work_summary.permission_query",
 }
 
 has_permission = {
@@ -156,8 +191,10 @@ has_permission = {
     "Project": "helpdesk.tasky.permissions.project_has_permission",
     "Task": "helpdesk.tasky.permissions.task_has_permission",
     "Timesheet": "helpdesk.tasky.permissions.timesheet_has_permission",
+    "HD Pull Request": "helpdesk.tasky.permissions.pull_request_has_permission",
     "HD Content Post": "helpdesk.helpdesk.doctype.hd_content_post.hd_content_post.has_permission",
     "HD Content Campaign": "helpdesk.helpdesk.doctype.hd_content_campaign.hd_content_campaign.has_permission",
+    "HD Work Summary": "helpdesk.helpdesk.doctype.hd_work_summary.hd_work_summary.has_permission",
 }
 
 
@@ -173,7 +210,11 @@ override_doctype_class = {
 
 ignore_links_on_delete = [
     "HD Notification",
+    # a meeting stays in Outlook after its ticket is deleted
+    "HD Meeting",
     "HD Ticket Comment",
+    # AI cost records are an audit trail; they keep the old ticket number
+    "HDS AI Usage Log",
 ]
 
 # setup wizard

@@ -1,12 +1,16 @@
 <template>
-  <component
-    :is="to ? RouterLink : 'div'"
-    v-bind="to ? { to } : {}"
-    class="grid w-full grid-cols-[1fr_auto] items-center gap-x-4 gap-y-1 px-4 py-3 text-left transition-colors focus-visible:outline-none"
+  <!-- the title's link covers the whole row (::after); the PR chips sit above it
+       as their own links to GitHub, so no link is nested in another -->
+  <div
+    class="relative grid w-full grid-cols-[1fr_auto] items-center gap-x-4 gap-y-1 px-4 py-3 text-left transition-colors"
     :class="[
-      to ? 'hover:bg-surface-gray-1 focus-visible:bg-surface-gray-1' : '',
+      to ? 'hover:bg-surface-gray-1 focus-within:bg-surface-gray-1' : '',
       showAssignees
-        ? 'md:grid-cols-[1fr_9rem_8rem_9rem]'
+        ? actions
+          ? 'md:grid-cols-[1fr_9rem_8rem_14rem]'
+          : 'md:grid-cols-[1fr_9rem_8rem_9rem]'
+        : actions
+        ? 'md:grid-cols-[1fr_8rem_14rem]'
         : 'md:grid-cols-[1fr_8rem_9rem]',
     ]"
   >
@@ -21,7 +25,14 @@
           <span class="sr-only">{{
             item.kind === "ticket" ? __("Ticket") : __("Task")
           }}</span>
-          <span class="truncate text-base text-ink-gray-9">
+          <RouterLink
+            v-if="to"
+            :to="to"
+            class="truncate text-base text-ink-gray-9 after:absolute after:inset-0 after:content-[''] focus-visible:outline-none"
+          >
+            {{ item.title }}
+          </RouterLink>
+          <span v-else class="truncate text-base text-ink-gray-9">
             {{ item.title }}
           </span>
           <template v-if="item.is_key">
@@ -31,6 +42,18 @@
             />
             <span class="sr-only">{{ __("Key") }}</span>
           </template>
+          <MilestoneMark v-if="item.kind === 'task' && item.is_milestone" />
+          <SlipBadge
+            v-if="item.kind === 'task' && item.slip_count"
+            :count="item.slip_count"
+          />
+          <PullRequestChip
+            v-for="pr in pullRequests"
+            :key="`${pr.repo}#${pr.number}`"
+            :pr="pr"
+            :show-repo="severalRepos"
+            class="relative z-10"
+          />
         </div>
         <div
           class="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 text-sm text-ink-gray-5"
@@ -48,10 +71,23 @@
               >
             </span>
           </template>
+          <template v-if="item.kind === 'task' && item.waiting_on">
+            <span aria-hidden="true">·</span>
+            <WaitingOn :subject="item.waiting_on" />
+          </template>
           <span class="md:hidden" aria-hidden="true">·</span>
-          <span class="md:hidden">
+          <span class="md:hidden" :class="onHold ? 'min-w-0 max-w-full' : ''">
+            <TaskyBadge
+              v-if="onHold"
+              tone="warning"
+              :icon="LucidePause"
+              class="max-w-full"
+              :title="holdChip"
+            >
+              <span class="truncate">{{ holdChip }}</span>
+            </TaskyBadge>
             <TaskStatusBadge
-              v-if="item.kind === 'task'"
+              v-else-if="item.kind === 'task'"
               :status="item.status"
             />
             <TaskyBadge
@@ -61,6 +97,21 @@
               :label="item.status"
             />
           </span>
+        </div>
+        <div
+          v-if="risks.length"
+          class="mt-1 flex min-w-0 items-center gap-1 text-xs text-warning"
+          :title="risks.join('\n')"
+        >
+          <LucideTriangleAlert class="size-3 shrink-0" aria-hidden="true" />
+          <span class="sr-only">{{ __("At risk:") }}</span>
+          <span class="truncate">{{ risks[0] }}</span>
+          <template v-if="risks.length > 1">
+            <span class="shrink-0 font-mono tabular-nums" aria-hidden="true">
+              +{{ risks.length - 1 }}
+            </span>
+            <span class="sr-only">{{ risks.slice(1).join("; ") }}</span>
+          </template>
         </div>
       </div>
     </div>
@@ -86,8 +137,17 @@
       <span v-else class="text-sm text-ink-gray-5">{{ __("Unassigned") }}</span>
     </div>
 
-    <div class="hidden md:block">
-      <TaskStatusBadge v-if="item.kind === 'task'" :status="item.status" />
+    <div class="hidden min-w-0 md:block">
+      <TaskyBadge
+        v-if="onHold"
+        tone="warning"
+        :icon="LucidePause"
+        class="max-w-full"
+        :title="holdChip"
+      >
+        <span class="truncate">{{ holdChip }}</span>
+      </TaskyBadge>
+      <TaskStatusBadge v-else-if="item.kind === 'task'" :status="item.status" />
       <TaskyBadge
         v-else
         :tone="ticketTone"
@@ -96,47 +156,128 @@
       />
     </div>
 
-    <div
-      class="flex items-center justify-end gap-1 whitespace-nowrap text-sm tabular-nums"
-      :class="deadline.overdue ? 'font-medium text-danger' : 'text-ink-gray-5'"
-      :title="deadlineTitle"
-    >
-      <LucideAlarmClock
-        v-if="deadline.overdue"
-        class="size-3.5 shrink-0"
-        aria-hidden="true"
+    <div class="flex items-center justify-end gap-2">
+      <div
+        v-if="onHold"
+        class="flex items-center justify-end gap-1 whitespace-nowrap text-sm tabular-nums text-ink-gray-5"
+        :title="deadlineTitle ? __('Due {0}', deadlineTitle) : undefined"
+      >
+        {{ holdDuration }}
+      </div>
+      <div
+        v-else
+        class="flex items-center justify-end gap-1 whitespace-nowrap text-sm tabular-nums"
+        :class="
+          deadline.overdue ? 'font-medium text-danger' : 'text-ink-gray-5'
+        "
+        :title="deadlineTitle"
+      >
+        <LucideAlarmClock
+          v-if="deadline.overdue"
+          class="size-3.5 shrink-0"
+          aria-hidden="true"
+        />
+        {{ deadline.label }}
+      </div>
+      <!-- above the row's stretched link, so it doesn't open the task -->
+      <Button
+        v-if="action"
+        size="sm"
+        class="relative z-10 shrink-0"
+        :label="action.label"
+        :icon-left="action.icon"
+        :aria-label="`${action.label}: ${item.title}`"
+        @click="emit(action.event, item)"
       />
-      {{ deadline.label }}
     </div>
-  </component>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { useUserStore } from "@/stores/user";
 import { __ } from "@/translation";
-import { Avatar, dayjs } from "frappe-ui";
+import { Avatar, Button, dayjs } from "frappe-ui";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
+import LucideCheck from "~icons/lucide/check";
+import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideCircleDot from "~icons/lucide/circle-dot";
 import LucideHourglass from "~icons/lucide/hourglass";
+import LucidePause from "~icons/lucide/pause";
 import LucideSquareCheck from "~icons/lucide/square-check";
 import LucideStar from "~icons/lucide/star";
 import LucideTicket from "~icons/lucide/ticket";
+import LucideTriangleAlert from "~icons/lucide/triangle-alert";
+import MilestoneMark from "@/pages/tasky/components/MilestoneMark.vue";
+import PullRequestChip from "@/pages/tasky/components/PullRequestChip.vue";
+import SlipBadge from "@/pages/tasky/components/SlipBadge.vue";
 import TaskStatusBadge from "@/pages/tasky/components/TaskStatusBadge.vue";
 import TaskyBadge from "@/pages/tasky/components/TaskyBadge.vue";
+import WaitingOn from "@/pages/tasky/components/WaitingOn.vue";
 import type { Tone } from "@/pages/tasky/taskMeta";
-import { deadlineInfo, itemRoute, type WorkItem } from "../workMeta";
+import {
+  deadlineInfo,
+  isHeldTask,
+  itemRoute,
+  type WorkItem,
+} from "../workMeta";
 
 const props = defineProps<{
   item: WorkItem;
   showAssignees?: boolean;
+  /** Offer Complete on open tasks and Approve on tasks waiting for this user's review. */
+  actions?: boolean;
 }>();
+
+const emit = defineEmits<{
+  complete: [item: WorkItem];
+  approve: [item: WorkItem];
+}>();
+
+// statuses a task can be completed from here (held or reviewed tasks can't)
+const COMPLETABLE = ["Open", "Working", "Overdue"];
+
+const action = computed(() => {
+  if (!props.actions || props.item.kind !== "task") return null;
+  if (props.item.status === "Pending Review") {
+    return props.item.can_approve
+      ? { label: __("Approve"), icon: LucideCheck, event: "approve" as const }
+      : null;
+  }
+  return COMPLETABLE.includes(props.item.status)
+    ? {
+        label: __("Complete"),
+        icon: LucideCircleCheck,
+        event: "complete" as const,
+      }
+    : null;
+});
 
 const userStore = useUserStore();
 
 const to = computed(() => itemRoute(props.item));
+
+const pullRequests = computed(() =>
+  props.item.kind === "task" ? props.item.pull_requests ?? [] : []
+);
+const severalRepos = computed(
+  () => new Set(pullRequests.value.map((pr) => pr.repo)).size > 1
+);
+const risks = computed(() => props.item.risks ?? []);
 const deadline = computed(() => deadlineInfo(props.item));
+
+const onHold = computed(() => isHeldTask(props.item));
+const holdChip = computed(() =>
+  props.item.hold_reason
+    ? __("On hold · {0}", __(props.item.hold_reason))
+    : __("On hold")
+);
+const holdDuration = computed(() => {
+  const days = props.item.hold_days ?? 0;
+  if (days <= 0) return __("Since today");
+  return days === 1 ? __("1 day") : __("{0} days", String(days));
+});
 
 const context = computed(() =>
   props.item.kind === "ticket"

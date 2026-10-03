@@ -3,6 +3,7 @@
     :open="open"
     :title="__('New task')"
     size="xl"
+    :dismissible="false"
     @update:open="(value: boolean) => emit('update:open', value)"
   >
     <form
@@ -38,18 +39,23 @@
           <option v-for="p in phaseOptions" :key="p" :value="p" />
         </datalist>
 
-        <FormControl
-          v-model="form.assigned_to"
-          type="select"
-          :label="__('Assignee')"
-          :options="assigneeOptions"
-          :disabled="!membersLoaded || !members.length"
-          :description="
-            membersLoaded && !members.length
-              ? __('Add team members to the project to assign tasks')
-              : undefined
-          "
-        />
+        <!-- the list opens outside the dialog, hence :dismissible="false" above -->
+        <div class="flex flex-col gap-1.5">
+          <Autocomplete
+            :label="__('Assignee')"
+            :options="assigneeOptions"
+            :placeholder="__('Unassigned')"
+            :loading="!membersLoaded || assignable.loading"
+            :model-value="form.assigned_to || null"
+            @update:model-value="
+              (v: { value: string } | string | null) =>
+                (form.assigned_to = (typeof v === 'string' ? v : v?.value) || '')
+            "
+          />
+          <p v-if="assigneeIsNew" class="text-p-xs text-ink-gray-5">
+            {{ __("They'll be added to the project as a Developer.") }}
+          </p>
+        </div>
 
         <FormControl
           v-model="form.category"
@@ -82,13 +88,36 @@
       </div>
 
       <FormControl
-        v-model="form.is_key"
-        type="checkbox"
-        :label="__('Key task')"
+        v-model="form.depends_on_task"
+        type="select"
+        :label="__('Depends on')"
+        :options="dependencyOptions"
+        :disabled="!openTasks.data && !openTasks.error"
         :description="
-          __('Key tasks are highlighted in My Work and the overview')
+          __(
+            'Optional. The task can\'t start or finish until this one is done.'
+          )
         "
       />
+
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <FormControl
+          v-model="form.is_key"
+          type="checkbox"
+          :label="__('Key task')"
+          :description="
+            __('Key tasks are highlighted in My Work and the overview')
+          "
+        />
+        <FormControl
+          v-model="form.is_milestone"
+          type="checkbox"
+          :label="__('Milestone')"
+          :description="
+            __('Milestones are listed on the project dashboard by due date')
+          "
+        />
+      </div>
 
       <div
         v-if="errorMessage"
@@ -119,6 +148,7 @@
 <script setup lang="ts">
 import { __ } from "@/translation";
 import {
+  Autocomplete,
   Button,
   Dialog,
   FormControl,
@@ -161,6 +191,8 @@ const form = reactive({
   due_date: "",
   assigned_to: "",
   is_key: false,
+  is_milestone: false,
+  depends_on_task: "",
 });
 
 function resetForm() {
@@ -173,6 +205,8 @@ function resetForm() {
   form.due_date = "";
   form.assigned_to = "";
   form.is_key = false;
+  form.is_milestone = false;
+  form.depends_on_task = "";
 }
 
 const projectDetail = createResource({
@@ -180,21 +214,64 @@ const projectDetail = createResource({
   makeParams: () => ({ project: props.projectId }),
 });
 
+const openTasks = createResource({
+  url: "helpdesk.tasky.api.get_project_tasks",
+  makeParams: () => ({ project: props.projectId }),
+  onError() {},
+});
+
+const dependencyOptions = computed(() => [
+  {
+    label: openTasks.data ? __("No dependency") : __("Loading tasks…"),
+    value: "",
+  },
+  ...((openTasks.data ?? []) as { name: string; subject: string }[]).map(
+    (t) => ({ label: t.subject, value: t.name })
+  ),
+]);
+
 const members = computed<Member[]>(() => projectDetail.data?.users ?? []);
 const membersLoaded = computed(
   () => !!projectDetail.data || !!projectDetail.error
 );
 
-const assigneeOptions = computed(() => [
-  {
-    label: membersLoaded.value ? __("Unassigned") : __("Loading members…"),
-    value: "",
-  },
-  ...members.value.map((m) => ({
-    label: m.full_name || m.user,
-    value: m.user,
-  })),
-]);
+// active agents with enabled accounts; deleted or disabled people never appear
+const assignable = createResource({
+  url: "helpdesk.tasky.api.get_users",
+});
+
+const assignableUsers = computed(
+  () => (assignable.data ?? []) as { name: string; full_name?: string }[]
+);
+
+const memberIds = computed(() => new Set(members.value.map((m) => m.user)));
+
+// team first; anyone else picked here joins the team as a Developer
+const assigneeOptions = computed(() => {
+  const toOption = (u: { name: string; full_name?: string }) => ({
+    label: u.full_name || u.name,
+    value: u.name,
+    description: u.name,
+  });
+  const team = assignableUsers.value.filter((u) => memberIds.value.has(u.name));
+  const others = assignableUsers.value.filter(
+    (u) => !memberIds.value.has(u.name)
+  );
+  // only the project's manager or lead brings new people onto the team
+  const canBringIn = !!projectDetail.data?.can_manage;
+  return [
+    ...(team.length
+      ? [{ group: __("Project team"), items: team.map(toOption) }]
+      : []),
+    ...(others.length && canBringIn
+      ? [{ group: __("Other agents"), items: others.map(toOption) }]
+      : []),
+  ];
+});
+
+const assigneeIsNew = computed(
+  () => !!form.assigned_to && !memberIds.value.has(form.assigned_to)
+);
 
 const phaseOptions = computed(() =>
   [...new Set((props.phases ?? []).filter(Boolean))].sort((a, b) =>
@@ -227,7 +304,11 @@ watch(
     if (!open) return;
     resetForm();
     addTask.reset();
-    if (props.projectId) projectDetail.reload();
+    if (props.projectId) {
+      projectDetail.reload();
+      openTasks.reload();
+    }
+    assignable.reload();
   },
   { immediate: true }
 );
@@ -245,6 +326,8 @@ function submit() {
     assigned_to: form.assigned_to,
     due_date: form.due_date || null,
     is_key: form.is_key,
+    is_milestone: form.is_milestone,
+    depends_on_task: form.depends_on_task || null,
   });
 }
 </script>

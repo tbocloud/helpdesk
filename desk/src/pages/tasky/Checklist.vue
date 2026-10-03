@@ -63,11 +63,14 @@
                 ? __(
                     'Generate a checklist from a template, or add tasks one at a time.'
                   )
+                : canAddTasks
+                ? __('Add a task, or wait for tasks assigned to you.')
                 : __('Tasks assigned to you in this project will show up here.')
             "
           >
-            <template v-if="canManage">
+            <template v-if="canAddTasks">
               <Button
+                v-if="canManage"
                 :label="__('Generate checklist')"
                 @click="showChecklistModal = true"
               />
@@ -104,6 +107,16 @@
                   <LucideAlarmClock class="size-3.5" aria-hidden="true" />
                   <span class="tabular-nums">{{ stats.overdue }}</span>
                   {{ __("overdue") }}
+                </span>
+              </template>
+              <template v-if="stats.on_hold">
+                <span aria-hidden="true">·</span>
+                <span
+                  class="inline-flex items-center gap-1 font-medium text-warning"
+                >
+                  <LucidePause class="size-3.5" aria-hidden="true" />
+                  <span class="tabular-nums">{{ stats.on_hold }}</span>
+                  {{ __("on hold") }}
                 </span>
               </template>
             </div>
@@ -229,7 +242,20 @@
                     :key="task.name"
                     class="border-b border-outline-gray-1 last:border-b-0"
                   >
-                    <ChecklistRow :task="task" @toggle="onToggleTask(task)" />
+                    <ChecklistRow
+                      :task="task"
+                      :can-manage="canManage"
+                      :can-edit="canEdit(task)"
+                      @toggle="onToggleTask(task)"
+                      @hold="holdingTask = task"
+                      @resume="resumingTask = task"
+                      @plan="planningTask = task"
+                      @edit="editingTask = task"
+                      @approve="approve(task)"
+                      @send-back="sendingBackTask = task"
+                      @ask-help="helpingTask = task"
+                      @hand-over="handingOverTask = task"
+                    />
                   </li>
                 </ul>
                 <p
@@ -266,7 +292,20 @@
                   :key="task.name"
                   class="border-b border-outline-gray-1 last:border-b-0"
                 >
-                  <ChecklistRow :task="task" @toggle="onToggleTask(task)" />
+                  <ChecklistRow
+                    :task="task"
+                    :can-manage="canManage"
+                    :can-edit="canEdit(task)"
+                    @toggle="onToggleTask(task)"
+                    @hold="holdingTask = task"
+                    @resume="resumingTask = task"
+                    @plan="planningTask = task"
+                    @edit="editingTask = task"
+                    @approve="approve(task)"
+                    @send-back="sendingBackTask = task"
+                    @ask-help="helpingTask = task"
+                    @hand-over="handingOverTask = task"
+                  />
                 </li>
               </ul>
             </section>
@@ -275,44 +314,33 @@
       </div>
     </div>
 
-    <Dialog
-      v-model:open="completeDialogOpen"
-      :title="__('Complete task')"
-      :message="completingTask?.subject"
-      size="md"
-    >
-      <form
-        id="tasky-checklist-complete"
-        class="flex flex-col gap-4"
-        @submit.prevent="confirmComplete"
-      >
-        <TextInput
-          v-model.number="completeHours"
-          type="number"
-          step="0.5"
-          min="0"
-          :label="__('Hours worked')"
-          placeholder="2.5"
-        />
-        <Textarea
-          v-model="completeNotes"
-          :label="__('Notes')"
-          :placeholder="__('What was done?')"
-          :rows="3"
-        />
-      </form>
-      <template #actions="{ close }">
-        <div class="flex justify-end gap-2">
-          <Button :label="__('Cancel')" @click="close" />
-          <Button
-            variant="solid"
-            type="submit"
-            form="tasky-checklist-complete"
-            :label="__('Mark complete')"
-          />
-        </div>
-      </template>
-    </Dialog>
+    <CompleteTaskDialog v-model:task="completingTask" @completed="reloadAll" />
+
+    <HoldTaskDialog v-model:task="holdingTask" @held="reloadAll" />
+    <ResumeTaskDialog v-model:task="resumingTask" @resumed="reloadAll" />
+    <RequestHelpDialog
+      v-model:task="helpingTask"
+      :project-id="projectId"
+      @requested="reloadAll"
+    />
+    <HandOverTaskDialog
+      v-model:task="handingOverTask"
+      :project-id="projectId"
+      @handed-over="reloadAll"
+    />
+    <EditTaskDialog
+      v-model:task="editingTask"
+      :project-id="projectId"
+      :phases="phaseNames"
+      @saved="reloadAll"
+      @plan="(t) => (planningTask = t)"
+    />
+    <TaskPlanDialog
+      v-model:task="planningTask"
+      :project-id="projectId"
+      @saved="reloadAll"
+    />
+    <SendBackTaskDialog v-model:task="sendingBackTask" @sent="reloadAll" />
 
     <GenerateChecklistModal
       v-if="showChecklistModal"
@@ -327,15 +355,9 @@
 
 <script setup lang="ts">
 import { loadErrorMessage } from "./taskMeta";
+import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
-import {
-  Button,
-  Dialog,
-  TextInput,
-  Textarea,
-  createResource,
-  toast,
-} from "frappe-ui";
+import { Button, createResource, toast } from "frappe-ui";
 import { computed, reactive, ref, watch } from "vue";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
 import LucideChevronDown from "~icons/lucide/chevron-down";
@@ -345,11 +367,27 @@ import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideClipboardList from "~icons/lucide/clipboard-list";
 import LucideInbox from "~icons/lucide/inbox";
 import LucideListChecks from "~icons/lucide/list-checks";
+import LucidePause from "~icons/lucide/pause";
 import LucidePlus from "~icons/lucide/plus";
 import ChecklistRow from "./components/ChecklistRow.vue";
+import CompleteTaskDialog from "./components/CompleteTaskDialog.vue";
+import EditTaskDialog from "./components/EditTaskDialog.vue";
 import GenerateChecklistModal from "./components/GenerateChecklistModal.vue";
+import HandOverTaskDialog from "./components/HandOverTaskDialog.vue";
+import HoldTaskDialog from "./components/HoldTaskDialog.vue";
 import ProjectNav from "./components/ProjectNav.vue";
+import RequestHelpDialog from "./components/RequestHelpDialog.vue";
+import ResumeTaskDialog from "./components/ResumeTaskDialog.vue";
+import SendBackTaskDialog from "./components/SendBackTaskDialog.vue";
+import TaskPlanDialog from "./components/TaskPlanDialog.vue";
 import TaskyState from "./components/TaskyState.vue";
+import {
+  blockedMessage,
+  blocksMove,
+  errorText,
+  isPendingReview,
+} from "./taskMeta";
+import { useApproveTask } from "./useApproveTask";
 
 const props = defineProps<{ projectId: string }>();
 
@@ -394,6 +432,13 @@ watch(
 );
 
 const canManage = computed(() => !!projectDetail.data?.can_manage);
+const canAddTasks = computed(() => !!projectDetail.data?.can_add_tasks);
+const authStore = useAuthStore();
+
+// the assignee may edit the description; leads and managers everything
+function canEdit(task: Record<string, any>) {
+  return canManage.value || !!task.assignees?.includes(authStore.userId);
+}
 const phaseList = computed<Phase[]>(() => phases.data?.phases ?? []);
 const phaseNames = computed(() => phaseList.value.map((p) => p.phase_name));
 const stats = computed(() => phases.data?.stats ?? {});
@@ -417,31 +462,18 @@ const updateTaskStatus = createResource({
     reloadAll();
   },
 });
-const completeResource = createResource({
-  url: "helpdesk.tasky.api.complete_task",
-  onSuccess() {
-    phases.reload();
-  },
-  onError(e: any) {
-    toast.error(errorText(e, __("Couldn't complete the task.")));
-    reloadAll();
-  },
-});
 
-function errorText(e: any, fallback: string) {
-  return e?.messages?.length ? e.messages.join(" ") : e?.message || fallback;
-}
+const holdingTask = ref<Record<string, any> | null>(null);
+const resumingTask = ref<Record<string, any> | null>(null);
+const planningTask = ref<Record<string, any> | null>(null);
+const editingTask = ref<Record<string, any> | null>(null);
+const sendingBackTask = ref<Record<string, any> | null>(null);
+const helpingTask = ref<Record<string, any> | null>(null);
+const handingOverTask = ref<Record<string, any> | null>(null);
+
+const { approve } = useApproveTask(reloadAll);
 
 const completingTask = ref<Record<string, any> | null>(null);
-const completeHours = ref(0);
-const completeNotes = ref("");
-
-const completeDialogOpen = computed({
-  get: () => !!completingTask.value,
-  set: (open: boolean) => {
-    if (!open) completingTask.value = null;
-  },
-});
 
 function togglePhase(phaseName: string) {
   if (expandedPhases.has(phaseName)) {
@@ -465,22 +497,16 @@ function onToggleTask(task: Record<string, any>) {
     task.status = "Open";
     return;
   }
+  if (blocksMove(task, "Completed")) {
+    toast.error(blockedMessage(task));
+    return;
+  }
+  // a lead ticking a reviewed task signs it off; anyone else logs their time
+  if (isPendingReview(task) && canManage.value) {
+    approve(task);
+    return;
+  }
   completingTask.value = task;
-  completeHours.value = task.estimated_hours || 0;
-  completeNotes.value = "";
-}
-
-function confirmComplete() {
-  const task = completingTask.value;
-  if (!task) return;
-  completeResource.submit({
-    task: task.name,
-    hours_worked: completeHours.value || 0.25,
-    notes: completeNotes.value,
-  });
-  task.status = "Completed";
-  completingTask.value = null;
-  phases.reload();
 }
 
 function onChecklistGenerated() {

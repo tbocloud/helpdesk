@@ -75,7 +75,7 @@ def run(dry_run: bool = True) -> dict:
     if dry_run:
         frappe.db.rollback()
     else:
-        frappe.db.commit()
+        frappe.db.commit()  # one-off import run from the console; keep what was imported - nosemgrep
     print(("DRY RUN (nothing saved) " if dry_run else "") + frappe.as_json(summary))
     return summary
 
@@ -101,9 +101,8 @@ def import_clients(summary: dict, dry_run: bool) -> dict[str, str]:
             )
         mapping[client.name] = customer
         summary["customers"][client.name] = customer
-        if client.email:
-            if add_portal_contact(customer, client.email.strip().lower()):
-                summary["contacts"] += 1
+        if client.email and add_portal_contact(customer, client.email.strip().lower()):
+            summary["contacts"] += 1
     return mapping
 
 

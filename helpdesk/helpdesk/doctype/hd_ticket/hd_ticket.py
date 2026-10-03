@@ -37,11 +37,16 @@ from helpdesk.utils import (
     get_doc_room,
     is_admin,
     is_agent,
+    is_chat_placeholder_email,
     publish_event,
+    strip_chat_placeholders,
 )
+from helpdesk.work_reminders import _agent_managers, _assignees, notify_users
 
 from ..hd_notification.utils import clear as clear_notifications
 from ..hd_service_level_agreement.utils import get_sla
+
+LOW_RATING_STARS = 2
 
 
 class HDTicket(Document):
@@ -71,6 +76,7 @@ class HDTicket(Document):
         return self.name
 
     def before_insert(self):
+        self.reject_unwanted_email()
         self.generate_key()
 
     def before_validate(self):
@@ -124,6 +130,7 @@ class HDTicket(Document):
             or self.feedback_rating
             or not self.has_value_changed("status")
             or not self.key
+            or self.has_chat_only_contact()
         ):
             return
 
@@ -162,6 +169,7 @@ class HDTicket(Document):
                 reference_name=self.name,
                 now=True,
                 in_reply_to=last_communication.name if last_communication else None,
+                reply_to=self.reply_to_address(),
                 email_headers={"X-Auto-Generated": "hd-email-feedback"},
             )
             frappe.msgprint(_("Feedback email has been sent to the customer"))
@@ -185,6 +193,7 @@ class HDTicket(Document):
             not self.via_customer_portal
             and not frappe.flags.initial_sync
             and send_ack_email
+            and not self.has_chat_only_contact()
         ):
             self.send_acknowledgement_email()
 
@@ -220,8 +229,33 @@ class HDTicket(Document):
                         self.notify_agent(agent.name, "Reaction")
 
         self.remove_assignment_if_not_in_team()
+        self.alert_low_rating()
         self.publish_update()
         self.capture_update_telemetry_events()
+
+    def alert_low_rating(self):
+        """A customer's rating of LOW_RATING_STARS or less reaches the assignees,
+        Agent Managers and the team's chat channel, while it can still be put right."""
+        rating = self.feedback_rating or 0
+        if not rating or rating * 5 > LOW_RATING_STARS:
+            return
+        if not self.has_value_changed("feedback_rating"):
+            return
+        subject = _("Low rating ({0}/5) from {1}: Ticket #{2}: {3}").format(
+            round(rating * 5),
+            self.customer or self.raised_by,
+            self.name,
+            self.subject,
+        )
+        if self.feedback:
+            subject += f" ({self.feedback})"
+        notify_users(
+            [*_assignees(self._assign), *_agent_managers()],
+            "HD Ticket",
+            self.name,
+            subject,
+            escalate=True,
+        )
 
     def notify_agent(self, agent, notification_type="Assignment"):
         frappe.get_doc(
@@ -542,6 +576,10 @@ class HDTicket(Document):
         for comment in comments:
             frappe.db.delete("HD Ticket Comment", comment)
 
+    def has_chat_only_contact(self) -> bool:
+        """A chat contact without an email: mail to its stand-in address would only bounce."""
+        return is_chat_placeholder_email(self.raised_by)
+
     def skip_email_workflow(self):
         skip: str = frappe.get_value("HD Settings", None, "skip_email_workflow") or "0"
 
@@ -611,6 +649,32 @@ class HDTicket(Document):
         if email_account := default_outgoing_email_account():
             return email_account
 
+    def reject_unwanted_email(self):
+        """Notifications and newsletters in the support mailbox don't become tickets."""
+        from helpdesk.email_filter import UnwantedTicketEmail, is_unwanted_sender
+
+        # only tickets opened by an incoming email carry the account it came through
+        if self.email_account and is_unwanted_sender(self.raised_by):
+            raise UnwantedTicketEmail
+
+    def reply_to_address(self, sender_email=None) -> str | None:
+        """Where the customer's reply should go: a mailbox we read.
+
+        Mail may go out from a send-only account (a no-reply address on an email
+        service); replies to that would never come back to the ticket, so point
+        them at the account the ticket came in through, or the default incoming one.
+        """
+        sender_email = sender_email or frappe._dict()
+        default_incoming = frappe.db.get_value(
+            "Email Account", {"default_incoming": 1, "enable_incoming": 1}
+        )
+        for account in (sender_email.get("name"), self.email_account, default_incoming):
+            if account and frappe.db.get_value(
+                "Email Account", account, "enable_incoming"
+            ):
+                return frappe.db.get_value("Email Account", account, "email_id")
+        return sender_email.get("email_id")
+
     @property
     def portal_uri(self):
         root_uri = frappe.utils.get_url()
@@ -633,7 +697,7 @@ class HDTicket(Document):
                 "HD Ticket Comment", c.name, attachment.get("file_url")
             )
 
-    @frappe.whitelist()
+    @frappe.whitelist(methods=["POST"])
     def reply_via_agent(
         self,
         message: str,
@@ -642,6 +706,7 @@ class HDTicket(Document):
         cc: str | None = None,
         bcc: str | None = None,
         attachments: list[str] = [],
+        ai_drafted: bool | int | None = None,
     ):
         if not is_agent():
             frappe.throw(
@@ -681,6 +746,8 @@ class HDTicket(Document):
                 "sent_or_received": "Sent",
                 "status": "Linked",
                 "subject": subject,
+                # still the agent's reply; the tag says the AI wrote the first draft
+                "custom_ai_drafted": cint(ai_drafted),
             }
         )
 
@@ -704,6 +771,12 @@ class HDTicket(Document):
         ):
             return
 
+        if recipients:
+            recipients = strip_chat_placeholders(recipients)
+            if not recipients:
+                # a chat-only contact gets the reply in the chat (helpdesk.chatwoot_bridge)
+                return
+
         if not sender_email:
             frappe.throw(
                 _("Unable to send email. Please setup default outgoing email account.")
@@ -711,7 +784,7 @@ class HDTicket(Document):
 
         message = self.parse_content(message)
 
-        reply_to_email = sender_email.email_id
+        reply_to_email = self.reply_to_address(sender_email)
         rendered_template: str | None = None
         if self.via_customer_portal:
             email_content = frappe.db.get_single_value(
@@ -749,7 +822,7 @@ class HDTicket(Document):
                 reference_doctype="HD Ticket",
                 reference_name=self.name,
                 reply_to=reply_to_email,
-                sender=reply_to_email,
+                sender=sender_email.email_id,
                 subject=subject,
                 with_container=False,
                 in_reply_to=last_communication.name if last_communication else None,
@@ -880,6 +953,7 @@ class HDTicket(Document):
                 reference_name=self.name,
                 now=True,
                 expose_recipients="header",
+                reply_to=self.reply_to_address(),
                 email_headers={"X-Auto-Generated": "hd-acknowledgement"},
             )
         except Exception as e:

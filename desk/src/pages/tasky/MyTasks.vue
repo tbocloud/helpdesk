@@ -220,15 +220,22 @@
                       aria-hidden="true"
                     />
                     <div class="min-w-0">
-                      <div
-                        class="truncate text-base"
-                        :class="
-                          isClosed(task)
-                            ? 'text-ink-gray-5 line-through'
-                            : 'text-ink-gray-9'
-                        "
-                      >
-                        {{ task.subject }}
+                      <div class="flex min-w-0 items-center gap-1.5">
+                        <span
+                          class="truncate text-base"
+                          :class="
+                            isClosed(task)
+                              ? 'text-ink-gray-5 line-through'
+                              : 'text-ink-gray-9'
+                          "
+                        >
+                          {{ task.subject }}
+                        </span>
+                        <MilestoneMark v-if="task.is_milestone" />
+                        <SlipBadge
+                          v-if="task.slip_count && !isClosed(task)"
+                          :count="task.slip_count"
+                        />
                       </div>
                       <div
                         class="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 text-sm text-ink-gray-5"
@@ -243,6 +250,23 @@
                         <template v-if="task.category">
                           <span aria-hidden="true">·</span>
                           <span>{{ task.category }}</span>
+                        </template>
+                        <template v-if="isOnHold(task)">
+                          <span aria-hidden="true">·</span>
+                          <span class="inline-flex min-w-0 items-center gap-1">
+                            <LucidePause
+                              class="size-3 shrink-0 text-warning"
+                              aria-hidden="true"
+                            />
+                            <span class="sr-only">{{ __("On hold:") }}</span>
+                            <span class="truncate">{{
+                              __(task.hold_reason || "On hold")
+                            }}</span>
+                          </span>
+                        </template>
+                        <template v-if="task.blocked && !isClosed(task)">
+                          <span aria-hidden="true">·</span>
+                          <WaitingOn :subject="task.depends_on_subject" />
                         </template>
                       </div>
                     </div>
@@ -260,23 +284,34 @@
                   </div>
 
                   <div class="hidden md:block">
-                    <span
-                      class="inline-flex items-center rounded-full bg-surface-gray-2 px-2 py-0.5 text-xs text-ink-gray-7"
-                    >
-                      {{ statusMeta(task.status).label }}
-                    </span>
+                    <TaskStatusBadge :status="task.status" />
                   </div>
 
                   <div
-                    class="flex items-center justify-end gap-1 text-sm tabular-nums"
+                    class="flex items-center justify-end gap-1 whitespace-nowrap text-sm tabular-nums"
                     :class="
-                      isOverdue(task)
-                        ? 'font-medium text-ink-gray-9'
+                      isOnHold(task)
+                        ? 'font-medium text-warning'
+                        : isOverdue(task)
+                        ? 'font-medium text-danger'
                         : 'text-ink-gray-5'
                     "
+                    :title="
+                      isOnHold(task) && task.due_date
+                        ? __(
+                            'Due {0}',
+                            dayjs(task.due_date).format('D MMM YYYY')
+                          )
+                        : undefined
+                    "
                   >
+                    <LucidePause
+                      v-if="isOnHold(task)"
+                      class="size-3.5"
+                      aria-hidden="true"
+                    />
                     <LucideAlarmClock
-                      v-if="isOverdue(task)"
+                      v-else-if="isOverdue(task)"
                       class="size-3.5"
                       aria-hidden="true"
                     />
@@ -295,15 +330,7 @@
       :options="{
         title: selectedTask?.subject,
         size: 'lg',
-        actions: selectedTask?.project
-          ? [
-              {
-                label: __('Open project board'),
-                variant: 'solid',
-                onClick: openBoard,
-              },
-            ]
-          : [],
+        actions: dialogActions,
       }"
     >
       <template #body-content>
@@ -321,6 +348,46 @@
           {{ __("Couldn't load this task.") }}
         </div>
         <div v-else-if="detail" class="flex flex-col gap-5">
+          <div
+            v-if="isOnHold(detail)"
+            class="flex flex-col gap-1 rounded-md bg-warning-soft px-3 py-2.5 text-sm text-warning"
+          >
+            <span class="flex items-center gap-2 font-medium">
+              <LucidePause class="size-4 shrink-0" aria-hidden="true" />
+              <span class="tabular-nums">{{
+                holdDurationLabel(holdDays(detail))
+              }}</span>
+              <template v-if="detail.hold_reason">
+                <span aria-hidden="true">·</span>
+                <span>{{ __(detail.hold_reason) }}</span>
+              </template>
+            </span>
+            <p v-if="detail.hold_note" class="pl-6 text-p-sm text-ink-gray-7">
+              {{ detail.hold_note }}
+            </p>
+          </div>
+          <div
+            v-if="detail.blocked && !isClosed(detail)"
+            class="flex items-start gap-2 rounded-md bg-warning-soft px-3 py-2.5 text-p-sm text-warning"
+          >
+            <LucideLock class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+            <span>
+              {{ waitingOnLabel(detail.depends_on_subject) }}.
+              {{ __("It can't start or finish until that task is done.") }}
+            </span>
+          </div>
+          <div
+            v-if="detail.is_milestone || detail.slip_count"
+            class="flex flex-wrap items-center gap-2"
+          >
+            <TaskyBadge
+              v-if="detail.is_milestone"
+              tone="info"
+              :icon="LucideFlag"
+              :label="__('Milestone')"
+            />
+            <SlipBadge v-if="detail.slip_count" :count="detail.slip_count" />
+          </div>
           <dl class="grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
             <div v-for="row in detailRows" :key="row.label">
               <dt class="text-xs text-ink-gray-5">{{ row.label }}</dt>
@@ -348,9 +415,34 @@
               {{ __("No description") }}
             </p>
           </div>
+          <TaskPullRequests :pull-requests="detail.pull_requests" />
+          <MeetingsCard
+            reference-doctype="Task"
+            :reference-name="detail.name"
+            flush
+          />
         </div>
       </template>
     </Dialog>
+
+    <CompleteTaskDialog
+      v-model:task="completingTask"
+      @completed="onHoldChanged"
+    />
+    <HoldTaskDialog v-model:task="holdingTask" @held="onHoldChanged" />
+    <RequestHelpDialog v-model:task="helpingTask" @requested="onHoldChanged" />
+    <HandOverTaskDialog
+      v-model:task="handingOverTask"
+      @handed-over="onHoldChanged"
+    />
+    <ResumeTaskDialog v-model:task="resumingTask" @resumed="onHoldChanged" />
+    <EditTaskDialog
+      v-model:task="editingTask"
+      @saved="onHoldChanged"
+      @plan="(t) => (planningTask = t as Task)"
+    />
+    <TaskPlanDialog v-model:task="planningTask" @saved="onHoldChanged" />
+    <SendBackTaskDialog v-model:task="sendingBackTask" @sent="onHoldChanged" />
   </div>
 </template>
 
@@ -358,23 +450,55 @@
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import { __ } from "@/translation";
 import { Button, Dialog, TextInput, createResource, dayjs } from "frappe-ui";
-import { computed, ref, watch, type Component } from "vue";
+import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
-import LucideCircle from "~icons/lucide/circle";
+import LucideArrowRight from "~icons/lucide/arrow-right";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideCircleDot from "~icons/lucide/circle-dot";
-import LucideCircleX from "~icons/lucide/circle-x";
-import LucideEye from "~icons/lucide/eye";
+import LucideCalendarClock from "~icons/lucide/calendar-clock";
+import LucideCheckCheck from "~icons/lucide/check-check";
+import LucideFlag from "~icons/lucide/flag";
 import LucideListTodo from "~icons/lucide/list-todo";
+import LucideLock from "~icons/lucide/lock";
+import LucidePause from "~icons/lucide/pause";
+import LucidePencil from "~icons/lucide/pencil";
+import LucidePlay from "~icons/lucide/play";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideSearch from "~icons/lucide/search";
 import LucideSearchX from "~icons/lucide/search-x";
-import LucideSignal from "~icons/lucide/signal";
-import LucideSignalHigh from "~icons/lucide/signal-high";
-import LucideSignalLow from "~icons/lucide/signal-low";
-import LucideSignalMedium from "~icons/lucide/signal-medium";
+import LucideUndo2 from "~icons/lucide/undo-2";
+import LucideUserPlus from "~icons/lucide/user-plus";
+import CompleteTaskDialog from "./components/CompleteTaskDialog.vue";
+import EditTaskDialog from "./components/EditTaskDialog.vue";
+import HandOverTaskDialog from "./components/HandOverTaskDialog.vue";
+import HoldTaskDialog from "./components/HoldTaskDialog.vue";
+import MilestoneMark from "./components/MilestoneMark.vue";
+import RequestHelpDialog from "./components/RequestHelpDialog.vue";
+import ResumeTaskDialog from "./components/ResumeTaskDialog.vue";
+import SendBackTaskDialog from "./components/SendBackTaskDialog.vue";
+import SlipBadge from "./components/SlipBadge.vue";
+import TaskPlanDialog from "./components/TaskPlanDialog.vue";
+import MeetingsCard from "@/components/meetings/MeetingsCard.vue";
+import TaskPullRequests from "./components/TaskPullRequests.vue";
+import TaskStatusBadge from "./components/TaskStatusBadge.vue";
+import TaskyBadge from "./components/TaskyBadge.vue";
+import WaitingOn from "./components/WaitingOn.vue";
+import type { TaskPullRequest } from "./pullRequestMeta";
+import {
+  ON_HOLD,
+  holdDays,
+  holdDurationLabel,
+  isClosed,
+  isOnHold,
+  isOverdue,
+  isPendingReview,
+  priorityIcon,
+  taskStatusMeta,
+  waitingOnLabel,
+} from "./taskMeta";
+import { useApproveTask } from "./useApproveTask";
 
 interface Task {
   name: string;
@@ -388,6 +512,18 @@ interface Task {
   due_date?: string;
   estimated_hours?: number;
   description?: string;
+  hold_reason?: string | null;
+  hold_note?: string | null;
+  hold_since?: string | null;
+  is_key?: boolean;
+  is_milestone?: boolean;
+  slip_count?: number;
+  depends_on_task?: string | null;
+  depends_on_subject?: string | null;
+  blocked?: boolean;
+  pull_requests?: TaskPullRequest[];
+  custom_timer_start?: string | null;
+  custom_timer_elapsed?: number;
 }
 
 type Filter =
@@ -395,6 +531,7 @@ type Filter =
   | "Open"
   | "Working"
   | "Pending Review"
+  | "On Hold"
   | "Completed"
   | "Cancelled"
   | "Overdue";
@@ -413,26 +550,25 @@ const taskDetail = createResource({
   url: "helpdesk.tasky.api.get_task_detail",
 });
 
-const STATUS_META: Record<string, { label: string; icon: Component }> = {
-  Open: { label: __("Open"), icon: LucideCircle },
-  Working: { label: __("In progress"), icon: LucideCircleDot },
-  "Pending Review": { label: __("In review"), icon: LucideEye },
-  Completed: { label: __("Completed"), icon: LucideCircleCheck },
-  Cancelled: { label: __("Cancelled"), icon: LucideCircleX },
-};
-
-const PRIORITY_ICONS: Record<string, Component> = {
-  Urgent: LucideSignal,
-  High: LucideSignalHigh,
-  Medium: LucideSignalMedium,
-  Low: LucideSignalLow,
-};
+// plan and review actions are for the task's project manager or lead only
+const projectAccess = createResource({
+  url: "helpdesk.tasky.api.get_project_detail",
+  onError() {},
+});
+const canManageSelected = computed(
+  () =>
+    !!selectedTask.value?.project &&
+    !projectAccess.loading &&
+    projectAccess.params?.project === selectedTask.value.project &&
+    !!projectAccess.data?.can_manage
+);
 
 const tabs: { key: Filter; label: string }[] = [
   { key: "All", label: "All" },
   { key: "Open", label: "Open" },
   { key: "Working", label: "In progress" },
   { key: "Pending Review", label: "In review" },
+  { key: ON_HOLD, label: "On hold" },
   { key: "Overdue", label: "Overdue" },
   { key: "Completed", label: "Completed" },
   { key: "Cancelled", label: "Cancelled" },
@@ -465,26 +601,12 @@ function resetFilters() {
 }
 
 function statusMeta(status: string) {
-  return STATUS_META[status] ?? STATUS_META.Open;
-}
-
-function priorityIcon(priority?: string) {
-  return PRIORITY_ICONS[priority ?? "Low"] ?? LucideSignalLow;
-}
-
-function isClosed(task: Task) {
-  return task.status === "Completed" || task.status === "Cancelled";
-}
-
-function isOverdue(task: Task) {
-  return (
-    !!task.due_date &&
-    !isClosed(task) &&
-    dayjs(task.due_date).isBefore(dayjs(), "day")
-  );
+  const meta = taskStatusMeta(status);
+  return { label: __(meta.label), icon: meta.icon };
 }
 
 function dueLabel(task: Task) {
+  if (isOnHold(task)) return holdDurationLabel(holdDays(task));
   if (!task.due_date) return "—";
   const due = dayjs(task.due_date);
   if (isClosed(task)) return due.format("D MMM");
@@ -643,9 +765,127 @@ const detailRows = computed(() => {
   ];
 });
 
+const holdingTask = ref<Task | null>(null);
+const resumingTask = ref<Task | null>(null);
+const planningTask = ref<Task | null>(null);
+const editingTask = ref<Task | null>(null);
+const sendingBackTask = ref<Task | null>(null);
+const completingTask = ref<Task | null>(null);
+const helpingTask = ref<Task | null>(null);
+const handingOverTask = ref<Task | null>(null);
+
+const { approve } = useApproveTask(() => {
+  selectedTask.value = null;
+  tasks.reload();
+});
+
+const dialogActions = computed(() => {
+  const d = detail.value;
+  const actions: Record<string, any>[] = [];
+  // everything here is assigned to the viewer, so they can at least edit the description
+  if (d && !taskDetail.loading) {
+    actions.push({
+      label: __("Edit"),
+      iconLeft: LucidePencil,
+      onClick: () => handOff(editingTask),
+    });
+  }
+  if (d && !taskDetail.loading && canManageSelected.value) {
+    if (isPendingReview(d)) {
+      actions.push(
+        {
+          label: __("Send back"),
+          iconLeft: LucideUndo2,
+          onClick: () => handOff(sendingBackTask),
+        },
+        {
+          label: __("Approve"),
+          iconLeft: LucideCheckCheck,
+          variant: "subtle",
+          onClick: () => approve(d),
+        }
+      );
+    }
+    if (!isClosed(d)) {
+      actions.push({
+        label: __("Plan"),
+        icon: LucideCalendarClock,
+        tooltip: __("Plan"),
+        onClick: () => handOff(planningTask),
+      });
+    }
+  }
+  // done work goes through the Complete dialog, which logs the hours to a timesheet
+  if (
+    d &&
+    !taskDetail.loading &&
+    !isClosed(d) &&
+    !isPendingReview(d) &&
+    !d.blocked
+  ) {
+    actions.push({
+      label: __("Complete"),
+      iconLeft: LucideCircleCheck,
+      variant: "subtle",
+      onClick: () => handOff(completingTask),
+    });
+  }
+  if (d && !taskDetail.loading && isOnHold(d)) {
+    actions.push({
+      label: __("Resume"),
+      icon: LucidePlay,
+      onClick: () => handOff(resumingTask),
+    });
+  } else if (d && !taskDetail.loading && !isClosed(d)) {
+    actions.push({
+      label: __("Put on hold"),
+      icon: LucidePause,
+      onClick: () => handOff(holdingTask),
+    });
+  }
+  if (d && !taskDetail.loading && !isClosed(d)) {
+    // a task waits on one other task, so asking for help needs it free
+    if (!d.blocked)
+      actions.push({
+        label: __("Ask a teammate for help"),
+        icon: LucideUserPlus,
+        tooltip: __("Ask a teammate for help"),
+        onClick: () => handOff(helpingTask),
+      });
+    actions.push({
+      label: __("Hand over"),
+      icon: LucideArrowRight,
+      tooltip: __("Hand over to a teammate"),
+      onClick: () => handOff(handingOverTask),
+    });
+  }
+  if (selectedTask.value?.project) {
+    actions.push({
+      label: __("Open project board"),
+      variant: "solid",
+      onClick: openBoard,
+    });
+  }
+  return actions;
+});
+
+// close the detail first so only one modal holds focus
+function handOff(target: typeof holdingTask) {
+  const d = detail.value;
+  if (!d) return;
+  selectedTask.value = null;
+  target.value = d;
+}
+
+function onHoldChanged() {
+  tasks.reload();
+}
+
 function openTask(task: Task) {
   selectedTask.value = task;
   taskDetail.submit({ task: task.name });
+  if (task.project && projectAccess.params?.project !== task.project)
+    projectAccess.submit({ project: task.project });
 }
 
 function openBoard() {

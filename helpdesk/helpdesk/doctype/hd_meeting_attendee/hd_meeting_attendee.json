@@ -1,0 +1,57 @@
+{
+	"actions": [],
+	"creation": "2026-10-02 10:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"email",
+		"full_name",
+		"is_internal",
+		"response"
+	],
+	"fields": [
+		{
+			"fieldname": "email",
+			"fieldtype": "Data",
+			"label": "Email",
+			"options": "Email",
+			"reqd": 1,
+			"in_list_view": 1
+		},
+		{
+			"fieldname": "full_name",
+			"fieldtype": "Data",
+			"label": "Name",
+			"in_list_view": 1
+		},
+		{
+			"fieldname": "is_internal",
+			"fieldtype": "Check",
+			"label": "TBO Staff",
+			"in_list_view": 1,
+			"description": "A helpdesk user; gets the reminder in TBO Support."
+		},
+		{
+			"fieldname": "response",
+			"fieldtype": "Select",
+			"label": "Reply",
+			"options": "\nAccepted\nTentative\nDeclined\nNo reply",
+			"read_only": 1,
+			"in_list_view": 1,
+			"description": "From Outlook, updated every 15 minutes."
+		}
+	],
+	"index_web_pages_for_search": 0,
+	"links": [],
+	"modified": "2026-10-02 14:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"owner": "Administrator",
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": [],
+	"name": "HD Meeting Attendee",
+	"istable": 1,
+	"editable_grid": 1,
+	"permissions": []
+}

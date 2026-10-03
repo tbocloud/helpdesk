@@ -66,18 +66,21 @@
         </TaskyState>
 
         <template v-else>
-          <!-- Buckets -->
-          <div class="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
+          <!-- Seven tiles: 2 and 4 columns leave one gap, so the last tile widens to fill it -->
+          <div
+            class="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-7"
+          >
             <button
-              v-for="tile in tiles"
+              v-for="(tile, index) in tiles"
               :key="tile.key"
               type="button"
               class="flex flex-col gap-3 rounded-lg border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
-              :class="
+              :class="[
                 activeBucket === tile.key
                   ? 'border-outline-gray-4 bg-surface-gray-1'
-                  : 'border-outline-gray-2 bg-surface-base hover:border-outline-gray-3'
-              "
+                  : 'border-outline-gray-2 bg-surface-base hover:border-outline-gray-3',
+                index === tiles.length - 1 ? 'col-span-2 xl:col-span-1' : '',
+              ]"
               :aria-pressed="activeBucket === tile.key"
               :aria-controls="listId"
               @click="activeBucket = tile.key"
@@ -189,14 +192,24 @@ import LucideAlarmClock from "~icons/lucide/alarm-clock";
 import LucideCalendarClock from "~icons/lucide/calendar-clock";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideCircleCheck from "~icons/lucide/circle-check";
+import LucideClipboardCheck from "~icons/lucide/clipboard-check";
 import LucideHourglass from "~icons/lucide/hourglass";
+import LucidePause from "~icons/lucide/pause";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideStar from "~icons/lucide/star";
+import LucideTriangleAlert from "~icons/lucide/triangle-alert";
 import LucideX from "~icons/lucide/x";
 import WorkItemRow from "./components/WorkItemRow.vue";
 import { itemKey, type WorkItem } from "./workMeta";
 
-type Bucket = "overdue" | "due_soon" | "key" | "waiting_on_task";
+type Bucket =
+  | "overdue"
+  | "at_risk"
+  | "due_soon"
+  | "key"
+  | "review"
+  | "waiting_on_task"
+  | "on_hold";
 
 interface OverviewData {
   buckets: Record<Bucket, WorkItem[]>;
@@ -208,7 +221,15 @@ const route = useRoute();
 const router = useRouter();
 const listId = `work-overview-list-${useId()}`;
 
-const BUCKETS: Bucket[] = ["overdue", "due_soon", "key", "waiting_on_task"];
+const BUCKETS: Bucket[] = [
+  "overdue",
+  "at_risk",
+  "due_soon",
+  "key",
+  "review",
+  "waiting_on_task",
+  "on_hold",
+];
 
 function queryValue(key: string) {
   const value = route.query[key];
@@ -293,6 +314,14 @@ const tiles = computed<
     iconClass: "text-danger",
   },
   {
+    key: "at_risk",
+    label: __("At risk"),
+    hint: __("Likely to slip: not started, rescheduled or blocked"),
+    empty: __("Nothing looks likely to slip right now."),
+    icon: LucideTriangleAlert,
+    iconClass: "text-warning",
+  },
+  {
     key: "due_soon",
     label: __("Due soon"),
     hint: __("Due in the next 3 days"),
@@ -308,6 +337,14 @@ const tiles = computed<
     icon: LucideStar,
     iconClass: "text-ink-gray-5",
   },
+  {
+    key: "review",
+    label: __("Review"),
+    hint: __("Tasks waiting for the project lead's approval"),
+    empty: __("No tasks are waiting for review."),
+    icon: LucideClipboardCheck,
+    iconClass: "text-info",
+  },
   ...(authStore.canSeeTickets
     ? [
         {
@@ -320,6 +357,14 @@ const tiles = computed<
         },
       ]
     : []),
+  {
+    key: "on_hold",
+    label: __("On hold"),
+    hint: __("Paused tasks; they don't count as overdue"),
+    empty: __("No tasks are on hold."),
+    icon: LucidePause,
+    iconClass: "text-warning",
+  },
 ]);
 
 const activeTile = computed(

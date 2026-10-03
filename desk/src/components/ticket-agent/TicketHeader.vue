@@ -46,6 +46,17 @@
           </div>
         </div>
         <Button
+          v-if="meetingsEnabled.data"
+          variant="subtle"
+          :label="__('Meeting')"
+          :aria-label="__('Schedule Teams meeting')"
+          @click="showScheduleMeeting = true"
+        >
+          <template #prefix>
+            <LucideVideo class="size-4" aria-hidden="true" />
+          </template>
+        </Button>
+        <Button
           variant="subtle"
           :label="__('Create task')"
           @click="showCreateTask = true"
@@ -99,6 +110,14 @@
     :ticket-subject="ticket.doc.subject"
     @created="onTaskCreated"
   />
+  <ScheduleMeetingDialog
+    v-if="ticket.doc?.name && showScheduleMeeting"
+    v-model:open="showScheduleMeeting"
+    reference-doctype="HD Ticket"
+    :reference-name="String(ticket.doc.name)"
+    initial-mode="now"
+    @scheduled="onMeetingScheduled"
+  />
 </template>
 
 <script setup lang="ts">
@@ -143,6 +162,12 @@ import {
 import { useRoute, useRouter } from "vue-router";
 import LucideChevronDown from "~icons/lucide/chevron-down";
 import LucideListPlus from "~icons/lucide/list-plus";
+import LucideVideo from "~icons/lucide/video";
+import {
+  meetingsChanged,
+  meetingsEnabled,
+} from "@/components/meetings/meetingsBus";
+import ScheduleMeetingDialog from "@/components/meetings/ScheduleMeetingDialog.vue";
 import LucideMerge from "~icons/lucide/merge";
 import { IndicatorIcon } from "../icons";
 import CreateTaskDialog from "./CreateTaskDialog.vue";
@@ -169,6 +194,13 @@ const customizations = inject(CustomizationSymbol)!;
 const activities = inject(ActivitiesSymbol)!;
 const showSubjectDialog = ref(false);
 const showCreateTask = ref(false);
+const showScheduleMeeting = ref(false);
+
+// the Meetings card lists it, and the internal note shows in the activity
+function onMeetingScheduled() {
+  meetingsChanged.value++;
+  activities.value?.reload();
+}
 
 // the ticket moves to Waiting on Task and gets a comment, so refresh both
 function onTaskCreated() {

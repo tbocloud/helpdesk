@@ -1,4 +1,7 @@
+import html
+
 import frappe
+from frappe import _
 from frappe.model.document import Document
 
 
@@ -49,18 +52,87 @@ class HDNotification(Document):
             }
 
     def after_insert(self):
+        self.deliver()
+
+    def deliver(self):
+        """Chat instead of email when HD Chat Settings is on (sent after commit, in the background)."""
+        from helpdesk.chat_notifications import is_enabled
+
+        if self.notification_type not in ("Mention", "Reminder"):
+            return
+        if not is_enabled():
+            self.send_email()
+            return
+        frappe.enqueue(
+            "helpdesk.chat_notifications.deliver_notification",
+            notification=self.name,
+            enqueue_after_commit=True,
+            now=frappe.flags.in_test,
+        )
+
+    def send_email(self):
+        self.send_mention_email()
+        self.send_reminder_email()
+
+    def chat_text(self) -> str:
         if self.notification_type == "Mention":
-            skip_email_workflow = frappe.db.get_single_value(
-                "HD Settings", "skip_email_workflow"
+            text = _("{0} mentioned you in ticket #{1}").format(
+                self.get_from() or self.user_from, self.reference_ticket
             )
+            comment = frappe.utils.strip_html(self.message or "").strip()
+            return f"{text}: {comment[:300]}" if comment else text
+        return frappe.utils.strip_html(self.message or "")
 
-            if skip_email_workflow:
-                return
+    def chat_path(self) -> str:
+        if self.link:
+            return self.link
+        if self.reference_ticket:
+            anchor = (
+                f"#comment-{self.reference_comment}" if self.reference_comment else ""
+            )
+            return f"/tickets/{self.reference_ticket}{anchor}"
+        return "/my-work"
 
+    def send_mention_email(self):
+        if self.notification_type != "Mention":
+            return
+        if frappe.db.get_single_value("HD Settings", "skip_email_workflow"):
+            return
+        frappe.sendmail(
+            recipients=self.user_to,
+            subject="New notification",
+            message=self.format_message(),
+            template="notification",
+            args=self.get_args(),
+        )
+
+    def send_reminder_email(self):
+        """Deadline reminders also go by email, unless the person turned email notifications off."""
+        from frappe.desk.doctype.notification_settings.notification_settings import (
+            is_email_notifications_enabled,
+        )
+
+        if self.notification_type != "Reminder":
+            return
+        if not is_email_notifications_enabled(self.user_to):
+            return
+        text = html.unescape(frappe.utils.strip_html(self.message or ""))
+        try:
             frappe.sendmail(
                 recipients=self.user_to,
-                subject="New notification",
-                message=self.format_message(),
-                template="notification",
-                args=self.get_args(),
+                # multi-line reminders (the morning brief) use their first line as subject
+                subject=text.split("\n", 1)[0],
+                template="new_notification",
+                args={
+                    "body_content": frappe.utils.escape_html(text).replace(
+                        "\n", "<br>"
+                    ),
+                    "doc_link": frappe.utils.get_url(
+                        "/helpdesk" + (self.link or "/my-work")
+                    ),
+                },
+                header=[_("Reminder"), "orange"],
             )
+        except frappe.OutgoingEmailError:
+            # no outgoing email account yet; the in-app reminder is still there
+            self.log_error("Reminder email not sent")

@@ -119,9 +119,32 @@
             </div>
           </div>
 
+          <div
+            v-if="projectDetail.data?.can_manage && undatedCount"
+            class="-mb-1 mt-3 flex justify-end"
+          >
+            <Button
+              variant="ghost"
+              size="sm"
+              :loading="estimateDates.loading"
+              :disabled="estimating"
+              :label="
+                estimating
+                  ? __('AI is setting due dates…')
+                  : __('Set due dates with AI ({0})', String(undatedCount))
+              "
+              :title="__('Open tasks without a due date get one from the AI')"
+              @click="estimateDates.submit({ project: projectId })"
+            >
+              <template #prefix>
+                <LucideSparkles class="size-4" aria-hidden="true" />
+              </template>
+            </Button>
+          </div>
+
           <!-- Stats -->
           <div
-            class="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6"
+            class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-8"
           >
             <component
               :is="card.to ? 'router-link' : 'div'"
@@ -136,13 +159,15 @@
                 <component
                   :is="card.icon"
                   class="size-4"
-                  :class="card.alert ? 'text-danger' : 'text-ink-gray-5'"
+                  :class="
+                    card.alert ? TONE_TEXT[card.alert] : 'text-ink-gray-5'
+                  "
                   aria-hidden="true"
                 />
               </div>
               <span
                 class="text-2xl-semibold tabular-nums"
-                :class="card.alert ? 'text-danger' : 'text-ink-gray-9'"
+                :class="card.alert ? TONE_TEXT[card.alert] : 'text-ink-gray-9'"
               >
                 <span
                   v-if="!dashboard.data"
@@ -152,6 +177,110 @@
               </span>
             </component>
           </div>
+
+          <!-- Milestones -->
+          <section
+            v-if="milestones.length || projectDetail.data?.can_manage"
+            aria-labelledby="pm-milestones"
+            class="mt-6"
+          >
+            <h2
+              id="pm-milestones"
+              class="mb-2 flex items-center gap-2 text-sm font-medium text-ink-gray-7"
+            >
+              {{ __("Milestones") }}
+              <span
+                v-if="milestones.length"
+                class="font-mono text-xs tabular-nums text-ink-gray-5"
+              >
+                {{ milestonesDone }}/{{ milestones.length }}
+              </span>
+            </h2>
+            <div
+              class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base shadow-sm"
+            >
+              <p
+                v-if="!milestones.length"
+                class="flex items-center gap-2 px-4 py-4 text-p-sm text-ink-gray-6"
+              >
+                <LucideFlag
+                  class="size-4 shrink-0 text-ink-gray-5"
+                  aria-hidden="true"
+                />
+                {{
+                  __(
+                    "No milestones yet. Mark a task as a milestone from its Plan menu on the checklist or board."
+                  )
+                }}
+              </p>
+              <ol v-else role="list">
+                <li
+                  v-for="m in milestones"
+                  :key="m.name"
+                  class="flex items-center gap-3 border-b border-outline-gray-1 px-4 py-2.5 last:border-b-0"
+                >
+                  <component
+                    :is="milestoneIcon(m)"
+                    class="size-4 shrink-0"
+                    :class="milestoneIconClass(m)"
+                    aria-hidden="true"
+                  />
+                  <div class="min-w-0 flex-1">
+                    <div class="flex min-w-0 items-center gap-2">
+                      <span
+                        class="truncate text-sm"
+                        :class="
+                          isClosed(m)
+                            ? 'text-ink-gray-5 line-through'
+                            : 'text-ink-gray-8'
+                        "
+                      >
+                        {{ m.subject }}
+                      </span>
+                      <SlipBadge
+                        v-if="m.slip_count && !isClosed(m)"
+                        :count="m.slip_count"
+                      />
+                    </div>
+                    <div
+                      class="mt-0.5 flex items-center gap-1 font-mono text-xs tabular-nums sm:hidden"
+                      :class="
+                        m.is_overdue
+                          ? 'font-medium text-danger'
+                          : 'text-ink-gray-5'
+                      "
+                    >
+                      {{ milestoneDate(m) }}
+                      <span v-if="m.is_overdue" class="font-sans"
+                        >· {{ __("Overdue") }}</span
+                      >
+                    </div>
+                  </div>
+                  <span
+                    class="hidden w-32 shrink-0 items-center justify-end gap-1 font-mono text-xs tabular-nums sm:flex"
+                    :class="
+                      m.is_overdue
+                        ? 'font-medium text-danger'
+                        : 'text-ink-gray-5'
+                    "
+                  >
+                    <LucideAlarmClock
+                      v-if="m.is_overdue"
+                      class="size-3.5"
+                      aria-hidden="true"
+                    />
+                    {{ milestoneDate(m) }}
+                    <span v-if="m.is_overdue" class="sr-only">{{
+                      __("Overdue")
+                    }}</span>
+                  </span>
+                  <div class="flex w-28 shrink-0 justify-end">
+                    <TaskStatusBadge :status="m.status" />
+                  </div>
+                </li>
+              </ol>
+            </div>
+          </section>
 
           <div class="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_20rem]">
             <!-- Phases -->
@@ -328,9 +457,9 @@
 <script setup lang="ts">
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import { __ } from "@/translation";
-import { Button, createResource, dayjs } from "frappe-ui";
-import { computed, watch } from "vue";
-import { useRouter } from "vue-router";
+import { Button, createResource, dayjs, toast } from "frappe-ui";
+import { computed, onBeforeUnmount, ref, watch, type Component } from "vue";
+import { useRouter, type RouteLocationRaw } from "vue-router";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
 import LucideBuilding2 from "~icons/lucide/building-2";
 import LucideCalendar from "~icons/lucide/calendar";
@@ -338,14 +467,19 @@ import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideCircleDot from "~icons/lucide/circle-dot";
 import LucideCircleX from "~icons/lucide/circle-x";
+import LucideCalendarClock from "~icons/lucide/calendar-clock";
 import LucideEye from "~icons/lucide/eye";
+import LucideFlag from "~icons/lucide/flag";
 import LucideGanttChartSquare from "~icons/lucide/gantt-chart-square";
 import LucideListTodo from "~icons/lucide/list-todo";
+import LucidePause from "~icons/lucide/pause";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
+import LucideSparkles from "~icons/lucide/sparkles";
 import ProjectNav from "./components/ProjectNav.vue";
+import SlipBadge from "./components/SlipBadge.vue";
 import TaskStatusBadge from "./components/TaskStatusBadge.vue";
 import TaskyState from "./components/TaskyState.vue";
-import { initials, isClosed, loadErrorMessage } from "./taskMeta";
+import { errorText, initials, isClosed, loadErrorMessage } from "./taskMeta";
 
 const props = defineProps<{
   projectId?: string;
@@ -410,7 +544,22 @@ const dateRange = computed(() => {
   return "";
 });
 
-const statCards = computed(() => {
+// Full class strings so Tailwind's scanner picks them up.
+const TONE_TEXT = {
+  danger: "text-danger",
+  warning: "text-warning",
+  info: "text-info",
+} as const;
+
+interface StatCard {
+  label: string;
+  icon: Component;
+  value: number;
+  alert?: keyof typeof TONE_TEXT;
+  to?: RouteLocationRaw;
+}
+
+const statCards = computed<StatCard[]>(() => {
   const stats = dashboard.data?.stats ?? {};
   const overdueRoute = {
     name: "TaskyOverdue",
@@ -428,13 +577,32 @@ const statCards = computed(() => {
       icon: LucideCircleDot,
       value: stats.in_progress ?? 0,
     },
-    { label: __("In review"), icon: LucideEye, value: stats.reviewing ?? 0 },
+    {
+      label: __("Waiting review"),
+      icon: LucideEye,
+      value: stats.reviewing ?? 0,
+      alert: (stats.reviewing ?? 0) > 0 ? "info" : undefined,
+      to: { name: "TaskyKanban", params: { projectId: props.projectId } },
+    },
     {
       label: __("Overdue"),
       icon: LucideAlarmClock,
       value: stats.overdue ?? 0,
-      alert: (stats.overdue ?? 0) > 0,
+      alert: (stats.overdue ?? 0) > 0 ? "danger" : undefined,
       to: overdueRoute,
+    },
+    {
+      label: __("On hold"),
+      icon: LucidePause,
+      value: stats.on_hold ?? 0,
+      alert: (stats.on_hold ?? 0) > 0 ? "warning" : undefined,
+      to: { name: "TaskyKanban", params: { projectId: props.projectId } },
+    },
+    {
+      label: __("Rescheduled"),
+      icon: LucideCalendarClock,
+      value: stats.rescheduled ?? 0,
+      alert: (stats.rescheduled ?? 0) > 0 ? "warning" : undefined,
     },
     {
       label: __("Cancelled"),
@@ -446,6 +614,41 @@ const statCards = computed(() => {
 
 const phases = computed<PhaseItem[]>(() => dashboard.data?.phases ?? []);
 
+interface Milestone {
+  name: string;
+  subject: string;
+  status: string;
+  due_date: string | null;
+  slip_count: number;
+  is_overdue: boolean;
+}
+
+// the server sorts milestones by due date, undated last
+const milestones = computed<Milestone[]>(
+  () => dashboard.data?.milestones ?? []
+);
+const milestonesDone = computed(
+  () => milestones.value.filter((m) => m.status === "Completed").length
+);
+
+function milestoneDate(m: Milestone) {
+  return m.due_date ? dayjs(m.due_date).format("D MMM YYYY") : __("No date");
+}
+
+function milestoneIcon(m: Milestone) {
+  if (m.status === "Completed") return LucideCircleCheck;
+  if (m.status === "Cancelled") return LucideCircleX;
+  if (m.is_overdue) return LucideAlarmClock;
+  return LucideFlag;
+}
+
+function milestoneIconClass(m: Milestone) {
+  if (m.status === "Completed") return "text-success";
+  if (m.status === "Cancelled") return "text-ink-gray-5";
+  if (m.is_overdue) return "text-danger";
+  return "text-info";
+}
+
 const teamWorkload = computed<TeamMember[]>(
   () => projectDetail.data?.users ?? []
 );
@@ -456,4 +659,49 @@ function openCountFor(user: string) {
       t.assigned_to === user && !isClosed(t)
   ).length;
 }
+
+const undatedCount = computed(
+  () =>
+    (dashboard.data?.tasks ?? []).filter(
+      (t: { status?: string; due_date?: string | null }) =>
+        !t.due_date && !isClosed(t) && t.status !== "Template"
+    ).length
+);
+
+// the AI fills dates in the background, usually within a minute
+const estimating = ref(false);
+let reloadTimers: ReturnType<typeof setTimeout>[] = [];
+
+function clearReloadTimers() {
+  reloadTimers.forEach(clearTimeout);
+  reloadTimers = [];
+}
+
+const estimateDates = createResource({
+  url: "helpdesk.tasky.api.estimate_undated_tasks",
+  onSuccess(data: { queued: number }) {
+    if (!data.queued) {
+      toast.info(__("Every open task already has a due date"));
+      dashboard.reload();
+      return;
+    }
+    toast.success(
+      __("AI is setting due dates for {0} tasks", String(data.queued))
+    );
+    estimating.value = true;
+    clearReloadTimers();
+    reloadTimers = [
+      setTimeout(() => dashboard.reload(), 5000),
+      setTimeout(() => {
+        estimating.value = false;
+        dashboard.reload();
+      }, 20000),
+    ];
+  },
+  onError(e: unknown) {
+    toast.error(errorText(e, __("Couldn't set due dates with AI.")));
+  },
+});
+
+onBeforeUnmount(clearReloadTimers);
 </script>

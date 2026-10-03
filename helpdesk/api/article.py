@@ -11,7 +11,7 @@ from helpdesk.search import search as hd_search
 def get_nouns(blob: TextBlob):
     try:
         return [word for word, pos in blob.pos_tags if pos[0] == "N"]
-    except LookupError:
+    except (LookupError, MissingCorpusError):
         return []
 
 

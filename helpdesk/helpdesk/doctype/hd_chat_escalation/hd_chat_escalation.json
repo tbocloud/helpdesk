@@ -1,0 +1,54 @@
+{
+	"actions": [],
+	"autoname": "field:message_hash",
+	"creation": "2026-09-29 22:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"description": "Escalations already posted to the chat channel, so each is posted once.",
+	"field_order": [
+		"message_hash",
+		"message",
+		"link"
+	],
+	"fields": [
+		{
+			"fieldname": "message_hash",
+			"fieldtype": "Data",
+			"label": "Message Hash",
+			"unique": 1,
+			"read_only": 1
+		},
+		{
+			"fieldname": "message",
+			"fieldtype": "Small Text",
+			"label": "Message",
+			"in_list_view": 1,
+			"read_only": 1
+		},
+		{
+			"fieldname": "link",
+			"fieldtype": "Data",
+			"label": "Link",
+			"read_only": 1
+		}
+	],
+	"in_create": 1,
+	"index_web_pages_for_search": 0,
+	"links": [],
+	"modified": "2026-09-29 22:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD Chat Escalation",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"delete": 1,
+			"read": 1,
+			"report": 1,
+			"role": "System Manager"
+		}
+	],
+	"sort_field": "creation",
+	"sort_order": "DESC",
+	"states": []
+}

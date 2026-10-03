@@ -15,6 +15,9 @@
   "reference_ticket",
   "column_break_ibly",
   "reference_comment",
+  "reference_doctype",
+  "reference_name",
+  "link",
   "message"
  ],
  "fields": [
@@ -39,7 +42,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Type",
-   "options": "Assignment\nMention\nReaction",
+   "options": "Assignment\nMention\nReaction\nReminder",
    "reqd": 1
   },
   {
@@ -78,11 +81,30 @@
    "fieldname": "message",
    "fieldtype": "Text",
    "label": "Message"
+  },
+  {
+   "fieldname": "reference_doctype",
+   "fieldtype": "Link",
+   "label": "Reference Document Type",
+   "options": "DocType"
+  },
+  {
+   "fieldname": "reference_name",
+   "fieldtype": "Dynamic Link",
+   "label": "Reference Name",
+   "options": "reference_doctype",
+   "search_index": 1
+  },
+  {
+   "fieldname": "link",
+   "fieldtype": "Data",
+   "label": "Link",
+   "description": "Path inside /helpdesk to open, for reminders about tasks and tickets."
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-02-20 12:18:20.219347",
+ "modified": "2026-09-29 19:00:00.000000",
  "modified_by": "Administrator",
  "module": "Helpdesk",
  "name": "HD Notification",

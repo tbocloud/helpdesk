@@ -7,6 +7,7 @@ import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideCircleDot from "~icons/lucide/circle-dot";
 import LucideCircleX from "~icons/lucide/circle-x";
 import LucideEye from "~icons/lucide/eye";
+import LucidePause from "~icons/lucide/pause";
 import LucideSignal from "~icons/lucide/signal";
 import LucideSignalHigh from "~icons/lucide/signal-high";
 import LucideSignalLow from "~icons/lucide/signal-low";
@@ -37,6 +38,7 @@ const TASK_STATUS: Record<string, StatusMeta> = {
   "Pending Review": { label: "In review", icon: LucideEye, tone: "warning" },
   // ERPNext moves open tasks past their due date to Overdue on its own
   Overdue: { label: "Overdue", icon: LucideCircleAlert, tone: "danger" },
+  "On Hold": { label: "On hold", icon: LucidePause, tone: "warning" },
   Completed: { label: "Completed", icon: LucideCircleCheck, tone: "success" },
   Cancelled: { label: "Cancelled", icon: LucideCircleX, tone: "neutral" },
 };
@@ -91,11 +93,43 @@ export function isClosed(task: { status?: string }) {
   return task.status === "Completed" || task.status === "Cancelled";
 }
 
+export const ON_HOLD = "On Hold";
+
+// Exact values of Task.hold_reason; translated at render time.
+export const HOLD_REASONS = [
+  "Laptop / system issue",
+  "Leave",
+  "Waiting on customer",
+  "Waiting on another task",
+  "Other",
+];
+
+export function isOnHold(task: { status?: string }) {
+  return task.status === ON_HOLD;
+}
+
+/** Whole days since the hold began (0 on the first day). */
+export function holdDays(task: { hold_since?: string | null }) {
+  if (!task.hold_since) return 0;
+  return Math.max(
+    dayjs().startOf("day").diff(dayjs(task.hold_since).startOf("day"), "day"),
+    0
+  );
+}
+
+export function holdDurationLabel(days: number) {
+  if (days <= 0) return __("On hold since today");
+  if (days === 1) return __("On hold 1 day");
+  return __("On hold {0} days", String(days));
+}
+
 // Due dates are date-only, so a task is overdue from the day after it's due.
+// A task on hold is never overdue: its due date moves out when it resumes.
 export function isOverdue(task: { status?: string; due_date?: string | null }) {
   return (
     !!task.due_date &&
     !isClosed(task) &&
+    !isOnHold(task) &&
     dayjs(task.due_date).isBefore(dayjs(), "day")
   );
 }
@@ -129,4 +163,47 @@ export function loadErrorMessage(...errors: unknown[]) {
         "You're not on this project. Ask its project manager to add you as a member."
       )
     : __("Check your connection and try again.");
+}
+
+export const PENDING_REVIEW = "Pending Review";
+
+export function isPendingReview(task: { status?: string }) {
+  return task.status === PENDING_REVIEW;
+}
+
+/** Short chip text for a task whose due date was pushed later. */
+export function slipLabel(count: number) {
+  return __("Moved {0}×", String(count));
+}
+
+export function slipTitle(count: number) {
+  return count === 1
+    ? __("Due date moved later 1 time")
+    : __("Due date moved later {0} times", String(count));
+}
+
+export function waitingOnLabel(subject?: string | null) {
+  return subject
+    ? __("Waiting on {0}", subject)
+    : __("Waiting on another task");
+}
+
+// Statuses the server refuses while the task's dependency is still open.
+const BLOCKED_STATUSES = ["Working", PENDING_REVIEW, "Completed"];
+
+export function blocksMove(
+  task: { blocked?: boolean; depends_on_subject?: string | null },
+  newStatus: string
+) {
+  return !!task.blocked && BLOCKED_STATUSES.includes(newStatus);
+}
+
+export function blockedMessage(task: { depends_on_subject?: string | null }) {
+  return task.depends_on_subject
+    ? __("Finish {0} first: this task depends on it.", task.depends_on_subject)
+    : __("Finish the task this one depends on first.");
+}
+
+export function errorText(e: any, fallback: string) {
+  return e?.messages?.length ? e.messages.join(" ") : e?.message || fallback;
 }

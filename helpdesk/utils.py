@@ -16,6 +16,8 @@ from phonenumbers import NumberParseException
 from phonenumbers import PhoneNumberFormat as PNF
 from pypika.functions import Replace
 
+from helpdesk.consts import CHAT_PLACEHOLDER_DOMAIN
+
 
 def check_permissions(doctype, parent, doc=None):
     user = frappe.session.user
@@ -414,7 +416,7 @@ def get_country_from_timezone(time_zone: str):
     return country or None
 
 
-# === QCS Support Hub helpers ===
+# === Support hub helpers ===
 
 
 def normalize_site_url(raw: str | None) -> str | None:
@@ -428,3 +430,22 @@ def normalize_site_url(raw: str | None) -> str | None:
     host = value.split("/")[0]
     scheme = "http" if "localhost" in host.lower() else "https"
     return f"{scheme}://{value}"
+
+
+# === Chat contacts ===
+
+
+def is_chat_placeholder_email(email: str | None) -> bool:
+    """Whether `email` is the stand-in address of a chat contact who never gave one."""
+    address = (email or "").strip().strip(">").lower()
+    return address.endswith("@" + CHAT_PLACEHOLDER_DOMAIN)
+
+
+def strip_chat_placeholders(addresses: str | None) -> str:
+    """The comma-separated `addresses` without chat stand-ins, which would only bounce."""
+    kept = [
+        address.strip()
+        for address in (addresses or "").split(",")
+        if address.strip() and not is_chat_placeholder_email(address)
+    ]
+    return ", ".join(kept)

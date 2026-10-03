@@ -34,6 +34,31 @@
         </TaskyState>
 
         <template v-else>
+          <!-- Mine / team (leads and managers) -->
+          <div
+            v-if="canSeeTeam"
+            class="mb-5 inline-flex gap-1 rounded-lg bg-surface-gray-2 p-0.5"
+            role="tablist"
+            :aria-label="__('Whose timesheets')"
+          >
+            <button
+              v-for="option in SCOPES"
+              :key="option.key"
+              type="button"
+              role="tab"
+              :aria-selected="scope === option.key"
+              class="rounded-md px-3 py-1.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+              :class="
+                scope === option.key
+                  ? 'bg-surface-base text-ink-gray-9 shadow-sm'
+                  : 'text-ink-gray-6 hover:text-ink-gray-8'
+              "
+              @click="scope = option.key"
+            >
+              {{ option.label }}
+            </button>
+          </div>
+
           <!-- Summary -->
           <div class="grid grid-cols-2 gap-3 md:grid-cols-3">
             <div
@@ -122,6 +147,12 @@
                   <div
                     class="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 text-xs text-ink-gray-5"
                   >
+                    <template v-if="scope === 'team'">
+                      <span class="text-ink-gray-7">{{
+                        ts.owner_name || ts.owner
+                      }}</span>
+                      <span aria-hidden="true">·</span>
+                    </template>
                     <span class="font-mono">{{ ts.name }}</span>
                     <template v-if="ts.project_name || ts.projects?.length">
                       <span aria-hidden="true">·</span>
@@ -226,6 +257,7 @@
 
 <script setup lang="ts">
 import LayoutHeader from "@/components/LayoutHeader.vue";
+import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
 import {
   Button,
@@ -258,12 +290,24 @@ const form = reactive({
   notes: "",
 });
 
+const authStore = useAuthStore();
+const canSeeTeam = computed(() => authStore.canSeeOverview);
+
+const SCOPES = [
+  { key: "mine", label: __("Mine") },
+  { key: "team", label: __("Team") },
+] as const;
+const scope = ref<"mine" | "team">("mine");
+
 const timesheets = createResource({
   url: "helpdesk.tasky.api.get_my_timesheets",
+  makeParams: () => ({ team: scope.value === "team" ? 1 : 0, limit: 100 }),
   auto: true,
   transform: (d: any[]) => d ?? [],
   onError() {},
 });
+
+watch(scope, () => timesheets.reload());
 
 const projectList = createResource({
   url: "helpdesk.tasky.api.get_projects",

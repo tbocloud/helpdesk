@@ -1,6 +1,6 @@
 {
 	"actions": [],
-	"autoname": "QCS-AI-.YYYY.-.#####",
+	"autoname": "TBO-AI-.YYYY.-.#####",
 	"creation": "2026-03-29 12:00:00.000000",
 	"doctype": "DocType",
 	"engine": "InnoDB",
@@ -221,7 +221,7 @@
 		}
 	],
 	"links": [],
-	"modified": "2026-09-28 16:00:00.000000",
+	"modified": "2026-09-30 11:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS AI Support Session",

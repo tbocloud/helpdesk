@@ -1,6 +1,6 @@
 {
 	"actions": [],
-	"autoname": "QCS-CONN-.YYYY.-.#####",
+	"autoname": "TBO-CONN-.YYYY.-.#####",
 	"creation": "2026-03-29 12:00:00.000000",
 	"doctype": "DocType",
 	"engine": "InnoDB",
@@ -17,6 +17,9 @@
 		"api_secret",
 		"column_break_cred",
 		"last_token_update",
+		"support_user",
+		"pairing_code_hash",
+		"pairing_code_expires",
 		"health_section",
 		"connection_status",
 		"last_health_check",
@@ -61,7 +64,7 @@
 			"fieldtype": "Column Break"
 		},
 		{
-			"description": "Reference to QCS Support Contract in QCS ERPNext (not a Link field)",
+			"description": "Optional reference to the customer's support contract.",
 			"fieldname": "contract_id",
 			"fieldtype": "Data",
 			"label": "Contract ID"
@@ -133,10 +136,32 @@
 			"fieldtype": "Small Text",
 			"label": "Last Error",
 			"read_only": 1
+		},
+		{
+			"fieldname": "support_user",
+			"fieldtype": "Data",
+			"options": "Email",
+			"label": "Support User",
+			"read_only": 1,
+			"description": "The user this hub signs in as on the customer site. Set when the site connects."
+		},
+		{
+			"fieldname": "pairing_code_hash",
+			"fieldtype": "Data",
+			"label": "Connection Code Hash",
+			"hidden": 1,
+			"read_only": 1
+		},
+		{
+			"fieldname": "pairing_code_expires",
+			"fieldtype": "Datetime",
+			"label": "Connection Code Expires",
+			"read_only": 1,
+			"depends_on": "pairing_code_expires"
 		}
 	],
 	"links": [],
-	"modified": "2026-09-28 16:30:00.000000",
+	"modified": "2026-09-30 11:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Support Connection",

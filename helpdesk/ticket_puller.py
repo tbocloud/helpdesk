@@ -14,7 +14,9 @@ import json
 import frappe
 import requests
 
+from helpdesk.automation import automation_user
 from helpdesk.mcp_client import MCPClient
+from helpdesk.session_replay import is_diagnostics_file, is_replay_file
 
 PULL_LIMIT = 20
 RECORDING_TIMEOUT = 60
@@ -131,13 +133,19 @@ def _create_hd_ticket(connection_name: str, customer: str, ticket: dict) -> str:
 
 
 def _attach_recording(
-    mcp: MCPClient, hd_ticket_name: str, file_url: str | None
+    mcp: MCPClient,
+    hd_ticket_name: str,
+    file_url: str | None,
+    file_name: str | None = None,
 ) -> str | None:
     """Download the customer's screen recording and attach it to the HD Ticket.
 
     The recording is a private File on the customer's site. We already hold
     that site's API key on the connection, so this is a plain authenticated
     GET — no new MCP tool required, and nothing is uploaded by the client.
+
+    `file_name` is the customer File's name; its URL may carry a suffix Frappe
+    added to keep the stored path unique (session-replay.json3f2a1c.gz).
     """
     if not file_url:
         return None
@@ -158,20 +166,64 @@ def _attach_recording(
         )
         return None
 
+    file_name = file_name or file_url.rsplit("/", 1)[-1]
     file_doc = frappe.get_doc(
         {
             "doctype": "File",
-            "file_name": file_url.rsplit("/", 1)[-1],
+            "file_name": file_name,
             "attached_to_doctype": "HD Ticket",
             "attached_to_name": hd_ticket_name,
             "is_private": 1,
             "content": content,
         }
     ).insert(ignore_permissions=True)
+    _keep_file_name(file_doc, file_name)
 
-    # Surface the file inside the Helpdesk agent UI. The agent portal renders
-    # its own HD Ticket Comment doctype — a core frappe Comment only shows in
-    # the desk view, which agents never open.
+    note = _media_note(file_doc)
+    if note:
+        # Surface the file inside the Helpdesk agent UI. The agent portal renders
+        # its own HD Ticket Comment doctype — a core frappe Comment only shows in
+        # the desk view, which agents never open.
+        comment = frappe.get_doc(
+            {
+                "doctype": "HD Ticket Comment",
+                "reference_ticket": hd_ticket_name,
+                "commented_by": automation_user(),
+                "content": note,
+            }
+        )
+        comment.flags.skip_notifications = True
+        comment.insert(ignore_permissions=True)
+
+    return file_doc.name
+
+
+def _keep_file_name(file_doc, file_name: str) -> None:
+    """Restore the customer's file name when Frappe suffixed it for a unique path.
+
+    The session replay card finds files by name, and the conversation sync
+    recognises files it already imported by name; only the stored path needs
+    to be unique.
+    """
+    if file_doc.file_name == file_name:
+        return
+    frappe.db.set_value(
+        "File", file_doc.name, "file_name", file_name, update_modified=False
+    )
+    file_doc.file_name = file_name
+
+
+def _media_note(file_doc) -> str | None:
+    """The ticket comment announcing an attached file, or None to stay quiet.
+
+    Session replay files are machine data the agent opens from the ticket's
+    Session replay card; links to raw .json/.gz files would only be noise.
+    """
+    if is_diagnostics_file(file_doc.file_name):
+        return None
+    if is_replay_file(file_doc.file_name):
+        return "\N{FILM FRAMES} Session replay attached: see the Session replay card on this ticket."
+
     is_video = file_doc.file_name.rsplit(".", 1)[-1].lower() in (
         "webm",
         "mp4",
@@ -180,21 +232,10 @@ def _attach_recording(
     )
     label = "Screen recording" if is_video else "Screenshot"
     icon = "\N{VIDEO CAMERA}" if is_video else "\N{FRAME WITH PICTURE}"
-    comment = frappe.get_doc(
-        {
-            "doctype": "HD Ticket Comment",
-            "reference_ticket": hd_ticket_name,
-            "commented_by": "Administrator",
-            "content": (
-                f"{icon} {label} from the customer: "
-                f'<a href="{file_doc.file_url}" target="_blank">{file_doc.file_name}</a>'
-            ),
-        }
+    return (
+        f"{icon} {label} from the customer: "
+        f'<a href="{file_doc.file_url}" target="_blank">{file_doc.file_name}</a>'
     )
-    comment.flags.skip_notifications = True
-    comment.insert(ignore_permissions=True)
-
-    return file_doc.name
 
 
 def _push_back(mcp: MCPClient, client_ticket: str, values: dict) -> None:
@@ -209,64 +250,99 @@ def _push_back(mcp: MCPClient, client_ticket: str, values: dict) -> None:
     )
 
 
+# "Error" is retried every run so a brief outage on the customer site (e.g. during
+# its own update) doesn't stop tickets for the rest of the day
+PULLABLE_STATUSES = ("Connected", "Error")
+
+
 def pull_client_tickets() -> int:
     """Scheduled: turn Pending client tickets into HD Tickets."""
     connections = frappe.get_all(
         "HDS Support Connection",
-        filters={"connection_status": "Connected"},
+        filters={"connection_status": ("in", PULLABLE_STATUSES)},
         fields=["name", "customer_name"],
     )
+    return sum(pull_connection(conn.name, conn.customer_name) for conn in connections)
+
+
+def pull_connection(connection: str, customer_name: str | None = None) -> int:
+    """Import one customer site's Pending tickets; also used right after the site pings us."""
+    if customer_name is None:
+        customer_name = frappe.db.get_value(
+            "HDS Support Connection", connection, "customer_name"
+        )
+    try:
+        mcp = MCPClient(connection)
+        tickets = _pending_tickets(mcp)
+    except Exception as e:
+        frappe.log_error(
+            title=f"Ticket pull failed for {connection}",
+            message=frappe.get_traceback(),
+        )
+        _set_connection_health(connection, error=str(e)[:500])
+        return 0
+    _set_connection_health(connection)
 
     created = 0
-    for conn in connections:
+    for ticket in tickets:
         try:
-            mcp = MCPClient(conn.name)
-            tickets = _pending_tickets(mcp)
+            if _already_imported(connection, ticket["name"]):
+                # HD Ticket exists; the previous push-back must have failed.
+                _push_back(mcp, ticket["name"], {"status": "Open"})
+                continue
+
+            hd_name = _create_hd_ticket(connection, customer_name, ticket)
+
+            # Media is nice-to-have; never let a fetch failure (403,
+            # timeout, ...) block the ticket import — that would retry
+            # the same ticket every cycle forever.
+            files = _ticket_files(mcp, ticket["name"])
+            if not files and ticket.get("screen_recording"):
+                # older clients that don't attach files to the ticket
+                files = [{"file_url": ticket["screen_recording"]}]
+            for f in files:
+                try:
+                    _attach_recording(
+                        mcp, hd_name, f.get("file_url"), f.get("file_name")
+                    )
+                except Exception:
+                    frappe.log_error(
+                        title=f"Media attach failed for {ticket.get('name')}",
+                        message=frappe.get_traceback(),
+                    )
+            frappe.db.commit()  # keep each imported ticket even if a later one fails - nosemgrep
+
+            _push_back(mcp, ticket["name"], {"ticket_id": hd_name, "status": "Open"})
+            created += 1
         except Exception:
+            frappe.db.rollback()
             frappe.log_error(
-                title=f"Ticket pull failed for {conn.name}",
+                title=f"Ticket import failed for {ticket.get('name')}",
                 message=frappe.get_traceback(),
             )
-            continue
-
-        for ticket in tickets:
-            try:
-                if _already_imported(conn.name, ticket["name"]):
-                    # HD Ticket exists; the previous push-back must have failed.
-                    _push_back(mcp, ticket["name"], {"status": "Open"})
-                    continue
-
-                hd_name = _create_hd_ticket(conn.name, conn.customer_name, ticket)
-
-                # Media is nice-to-have; never let a fetch failure (403,
-                # timeout, ...) block the ticket import — that would retry
-                # the same ticket every cycle forever.
-                files = _ticket_files(mcp, ticket["name"])
-                if not files and ticket.get("screen_recording"):
-                    # older clients that don't attach files to the ticket
-                    files = [{"file_url": ticket["screen_recording"]}]
-                for f in files:
-                    try:
-                        _attach_recording(mcp, hd_name, f.get("file_url"))
-                    except Exception:
-                        frappe.log_error(
-                            title=f"Media attach failed for {ticket.get('name')}",
-                            message=frappe.get_traceback(),
-                        )
-                frappe.db.commit()
-
-                _push_back(
-                    mcp, ticket["name"], {"ticket_id": hd_name, "status": "Open"}
-                )
-                created += 1
-            except Exception:
-                frappe.db.rollback()
-                frappe.log_error(
-                    title=f"Ticket import failed for {ticket.get('name')}",
-                    message=frappe.get_traceback(),
-                )
 
     return created
+
+
+def _set_connection_health(connection: str, error: str | None = None):
+    status = "Error" if error else "Connected"
+    current = frappe.db.get_value(
+        "HDS Support Connection",
+        connection,
+        ["connection_status", "last_error"],
+        as_dict=True,
+    )
+    if current and (current.connection_status, current.last_error or "") == (
+        status,
+        error or "",
+    ):
+        return
+    frappe.db.set_value(
+        "HDS Support Connection",
+        connection,
+        {"connection_status": status, "last_error": error or ""},
+        update_modified=False,
+    )
 
 
 def push_ticket_statuses() -> int:
@@ -307,7 +383,13 @@ def push_ticket_statuses() -> int:
                 _push_back(
                     mcp,
                     row.custom_client_ticket,
-                    {"status": row.status, "priority": row.priority or ""},
+                    {
+                        "status": row.status,
+                        "priority": row.priority or "",
+                        # keeps the customer's "TBO #" right if the hub ticket
+                        # was restored under a new number
+                        "ticket_id": row.name,
+                    },
                 )
                 pushed += 1
             except Exception:
@@ -317,6 +399,15 @@ def push_ticket_statuses() -> int:
                 )
 
     return pushed
+
+
+def _load_conv_state(raw) -> dict:
+    """Synced-record bookkeeping; a damaged value starts over instead of stopping the sync."""
+    try:
+        state = json.loads(raw or "{}")
+    except (TypeError, ValueError):
+        return {}
+    return state if isinstance(state, dict) else {}
 
 
 def sync_conversations() -> int:
@@ -329,7 +420,7 @@ def sync_conversations() -> int:
     - close_requested on the client closes the HD Ticket; the status push
       mirrors Closed back, confirming to the user.
 
-    Idempotency: synced record names are tracked in custom_conv_state.
+    Idempotency: synced record names are tracked in custom_sync_state.
     """
     rows = frappe.get_all(
         "HD Ticket",
@@ -343,6 +434,7 @@ def sync_conversations() -> int:
             "custom_client_ticket",
             "custom_qcs_connection",
             "custom_conv_state",
+            "custom_sync_state",
         ],
         limit=100,
     )
@@ -352,6 +444,11 @@ def sync_conversations() -> int:
 
     synced = 0
     for conn_name, tickets in by_conn.items():
+        # comments the hub itself wrote on the customer site aren't pulled back
+        support_user = (
+            frappe.db.get_value("HDS Support Connection", conn_name, "support_user")
+            or "support@quarkcs.com"
+        )
         try:
             mcp = MCPClient(conn_name)
         except Exception:
@@ -363,7 +460,8 @@ def sync_conversations() -> int:
 
         for row in tickets:
             try:
-                state = json.loads(row.custom_conv_state or "{}")
+                # older tickets kept the state in custom_conv_state
+                state = _load_conv_state(row.custom_sync_state or row.custom_conv_state)
                 state.setdefault("client", [])
                 state.setdefault("hub", [])
                 ct = row.custom_client_ticket
@@ -388,11 +486,10 @@ def sync_conversations() -> int:
                     or []
                 )
                 for c in comments:
-                    if (
-                        c["name"] in state["client"]
-                        or c.get("owner") == "support@quarkcs.com"
-                    ):
+                    if c["name"] in state["client"] or c.get("owner") == support_user:
                         continue
+                    # the customer's own words relayed from their ERP: not the
+                    # hub's work, so not credited to the automation user
                     hd_comment = frappe.get_doc(
                         {
                             "doctype": "HD Ticket Comment",
@@ -444,7 +541,7 @@ def sync_conversations() -> int:
                     url = f.get("file_url")
                     if not url or url in state["files"]:
                         continue
-                    fname = url.rsplit("/", 1)[-1]
+                    fname = f.get("file_name") or url.rsplit("/", 1)[-1]
                     if frappe.db.exists(
                         "File",
                         {
@@ -455,9 +552,13 @@ def sync_conversations() -> int:
                     ):
                         state["files"].append(url)  # imported at creation
                         continue
-                    _attach_recording(mcp, row.name, url)
+                    attached = _attach_recording(mcp, row.name, url, fname)
                     state["files"].append(url)
                     synced += 1
+                    if attached and is_replay_file(fname):
+                        from helpdesk.triage import retriage_with_session_replay
+
+                        retriage_with_session_replay(row.name)
 
                 # client close request?
                 req = (
@@ -480,7 +581,7 @@ def sync_conversations() -> int:
                 frappe.db.set_value(
                     "HD Ticket",
                     row.name,
-                    "custom_conv_state",
+                    "custom_sync_state",
                     json.dumps(state),
                     update_modified=False,
                 )

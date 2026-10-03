@@ -354,26 +354,27 @@
                     ><LucidePencil class="size-4" aria-hidden="true"
                   /></template>
                 </Button>
-                <template v-if="project.can_manage">
-                  <Button
-                    variant="ghost"
-                    class="ml-auto"
-                    :label="__('Checklist')"
-                    @click="onGenerateChecklist(project)"
-                  >
-                    <template #prefix
-                      ><LucideClipboardList class="size-4" aria-hidden="true"
-                    /></template>
-                  </Button>
-                  <Button
-                    :label="__('New task')"
-                    @click="openNewTask(project.name)"
-                  >
-                    <template #prefix
-                      ><LucidePlus class="size-4" aria-hidden="true"
-                    /></template>
-                  </Button>
-                </template>
+                <Button
+                  v-if="project.can_manage"
+                  variant="ghost"
+                  class="ml-auto"
+                  :label="__('Checklist')"
+                  @click="onGenerateChecklist(project)"
+                >
+                  <template #prefix
+                    ><LucideClipboardList class="size-4" aria-hidden="true"
+                  /></template>
+                </Button>
+                <Button
+                  v-if="project.can_add_tasks"
+                  :class="project.can_manage ? '' : 'ml-auto'"
+                  :label="__('New task')"
+                  @click="openNewTask(project.name)"
+                >
+                  <template #prefix
+                    ><LucidePlus class="size-4" aria-hidden="true"
+                  /></template>
+                </Button>
               </div>
             </li>
           </ul>

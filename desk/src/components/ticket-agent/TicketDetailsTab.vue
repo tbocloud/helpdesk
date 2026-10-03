@@ -62,11 +62,17 @@
       </section>
     </div>
 
-    <!-- Scrollable sections: Ticket Info + Recent / Similar Tickets -->
-    <div
-      class="flex-1 min-h-0 overflow-y-auto divide-y divide-outline-gray-1"
-      v-if="Boolean(customFields.length) || showRecentSimilarTickets"
-    >
+    <!-- Scrollable sections: Possible duplicates, Meetings, AI suggested reply, Session replay, Ticket Info, Recent / Similar Tickets -->
+    <div class="flex-1 min-h-0 overflow-y-auto divide-y divide-outline-gray-1">
+      <DuplicateTicketsCard v-if="ticketId" :ticket-id="ticketId" />
+      <MeetingsCard
+        v-if="ticketId"
+        reference-doctype="HD Ticket"
+        :reference-name="ticketId"
+      />
+      <AiSuggestedReplyCard v-if="ticketId" :ticket-id="ticketId" />
+      <SessionReplayCard v-if="ticketId" :ticket-id="ticketId" />
+
       <!-- Ticket Info (custom fields) -->
       <div v-if="Boolean(customFields.length)">
         <Section label="Ticket Info" v-model:opened="openedSections.ticketInfo">
@@ -187,7 +193,11 @@ import { computed, inject, ref } from "vue";
 import LucideChevronRight from "~icons/lucide/chevron-right";
 import Section from "../Section.vue";
 import TicketField from "../TicketField.vue";
+import MeetingsCard from "@/components/meetings/MeetingsCard.vue";
+import AiSuggestedReplyCard from "./AiSuggestedReplyCard.vue";
 import AssignTo from "./AssignTo.vue";
+import DuplicateTicketsCard from "./DuplicateTicketsCard.vue";
+import SessionReplayCard from "./SessionReplayCard.vue";
 import TicketContact from "./TicketContact.vue";
 
 const ticket = inject(TicketSymbol)!;
@@ -197,6 +207,7 @@ const activities = inject(ActivitiesSymbol)!;
 const recentSimilarTickets = inject(RecentSimilarTicketsSymbol)!;
 const { getFields, getField } = getMeta("HD Ticket");
 const { notifyTicketUpdate } = useNotifyTicketUpdate(ticket.value?.name);
+const ticketId = computed(() => String(ticket.value?.doc?.name ?? ""));
 
 const dateFormat = window.date_format;
 const { getStatus, colorMap } = useTicketStatusStore();

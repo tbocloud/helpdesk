@@ -1,3 +1,5 @@
+import gzip
+import json
 from datetime import datetime
 
 import frappe
@@ -694,6 +696,492 @@ def make_assignment(doctype: str, name: str, user: str):
     )
 
 
+def make_task(project: str, subject: str, exp_end_date=None, **kwargs):
+    """Creates an open Task in `project` directly, bypassing the tasky API."""
+    return frappe.get_doc(
+        {
+            "doctype": "Task",
+            "subject": subject,
+            "project": project,
+            "status": "Open",
+            "exp_end_date": exp_end_date,
+            **kwargs,
+        }
+    ).insert(ignore_permissions=True)
+
+
+def make_employee(user: str, employee_name: str | None = None):
+    """Creates an active Employee linked to `user` (the hub doesn't need one per agent)."""
+    return frappe.get_doc(
+        {
+            "doctype": "Employee",
+            "employee_name": employee_name or user,
+            "user_id": user,
+            "status": "Active",
+        }
+    ).insert(ignore_permissions=True)
+
+
+def get_task_timesheets(task: str) -> list[str]:
+    """Names of the Timesheets that have a time log for `task`."""
+    return frappe.get_all(
+        "Timesheet Detail",
+        filters={"parenttype": "Timesheet", "task": task},
+        pluck="parent",
+        distinct=True,
+    )
+
+
+def make_work_summary(customer: str, **kwargs):
+    """Creates an HD Work Summary for `customer` for the last 7 days, without stats or AI."""
+    from frappe.utils import add_days, nowdate
+
+    return frappe.get_doc(
+        {
+            "doctype": "HD Work Summary",
+            "customer": customer,
+            "period_start": add_days(nowdate(), -6),
+            "period_end": nowdate(),
+            "summary": "<p>Test summary</p>",
+            "stats": "{}",
+            **kwargs,
+        }
+    ).insert(ignore_permissions=True)
+
+
+def run_as_user(user: str, fn):
+    """Calls `fn()` as `user`, then switches back to Administrator."""
+    frappe.set_user(user)
+    try:
+        return fn()
+    finally:
+        frappe.set_user("Administrator")
+
+
+def get_reminder_messages(user: str, reference_name) -> list[str]:
+    """Messages of the Reminder HD Notifications sent to `user` about a document."""
+    return frappe.get_all(
+        "HD Notification",
+        filters={
+            "user_to": user,
+            "notification_type": "Reminder",
+            "reference_name": str(reference_name),
+        },
+        pluck="message",
+    )
+
+
+# shaped like Teams Workflows URLs, so HD Chat Settings accepts them
+TEST_TEAMS_DIRECT_URL = (
+    "https://prod-01.westeurope.logic.azure.com/workflows/direct/triggers/manual/"
+    "paths/invoke?api-version=2016-06-01&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=test-direct"
+)
+TEST_TEAMS_CHANNEL_URL = (
+    "https://default0000.f5.environment.api.powerplatform.com/powerautomate/automations/"
+    "direct/workflows/channel/triggers/manual/paths/invoke?api-version=1&sp=x&sv=1.0&sig=test-channel"
+)
+
+
+def enable_chat_notifications(platform: str = "Microsoft Teams", **settings):
+    """Turns on HD Chat Settings for `platform` with dummy webhooks/token, plus any overrides."""
+    doc = frappe.get_doc("HD Chat Settings")
+    doc.update(
+        {
+            "enabled": 1,
+            "platform": platform,
+            "email_when_unreachable": 1,
+            "slack_bot_token": "xoxb-test-token",
+            "slack_escalation_channel": "",
+            "teams_direct_webhook": TEST_TEAMS_DIRECT_URL,
+            "teams_channel_webhook": "",
+            **settings,
+        }
+    )
+    doc.save(ignore_permissions=True)
+    frappe.clear_document_cache("HD Chat Settings", "HD Chat Settings")
+    frappe.cache.delete_keys("helpdesk:slack_user:")
+    return doc
+
+
+def make_error_log(title: str, at=None):
+    """Creates an Error Log entry titled `title`, logged at `at` (default: now)."""
+    doc = frappe.get_doc(
+        {"doctype": "Error Log", "method": title, "error": "Traceback (test)"}
+    ).insert(ignore_permissions=True)
+    if at:
+        frappe.db.set_value(
+            "Error Log", doc.name, "creation", at, update_modified=False
+        )
+    return doc
+
+
+def enable_teams_meetings(**values):
+    """Turns on HD Meeting Settings with a dummy Microsoft Connected App (no real Graph call)."""
+    app_name = "Test Microsoft Graph"
+    if not frappe.db.exists("Connected App", {"provider_name": app_name}):
+        frappe.get_doc(
+            {
+                "doctype": "Connected App",
+                "provider_name": app_name,
+                "client_id": "test-client-id",
+                "client_secret": "test-client-secret",
+                "token_uri": "https://login.example/tenant/oauth2/v2.0/token",
+            }
+        ).insert(ignore_permissions=True)
+    app = frappe.db.get_value("Connected App", {"provider_name": app_name}, "name")
+    doc = frappe.get_doc("HD Meeting Settings")
+    doc.update(
+        {
+            "enabled": 1,
+            "connected_app": app,
+            "organizer": "The calendar of the person scheduling",
+            "default_duration": 30,
+            "reminder_minutes": 10,
+            **values,
+        }
+    )
+    doc.save(ignore_permissions=True)
+    frappe.clear_document_cache("HD Meeting Settings", "HD Meeting Settings")
+    frappe.cache.delete_value(f"helpdesk:graph_token:{app}")
+    return doc
+
+
+def make_meeting(
+    reference_doctype: str,
+    reference_name: str,
+    starts_on,
+    attendees: list[str],
+    scheduled_by: str = "Administrator",
+    **values,
+):
+    """Creates a scheduled HD Meeting as if Teams had already made it (no Graph call)."""
+    return frappe.get_doc(
+        {
+            "doctype": "HD Meeting",
+            "subject": values.pop("subject", "Test meeting"),
+            "starts_on": starts_on,
+            "ends_on": frappe.utils.add_to_date(starts_on, minutes=30),
+            "reference_doctype": reference_doctype,
+            "reference_name": str(reference_name),
+            "organizer": values.pop("organizer", "organizer@meetings.example"),
+            "scheduled_by": scheduled_by,
+            "external_id": values.pop("external_id", "AAMk-test"),
+            "join_url": values.pop(
+                "join_url", "https://teams.microsoft.com/l/meetup-join/x"
+            ),
+            "attendees": [{"email": email} for email in attendees],
+            **values,
+        }
+    ).insert(ignore_permissions=True)
+
+
+def fake_graph_token(roles: list[str] | None = None) -> str:
+    """An unsigned JWT shaped like a Microsoft access token, carrying `roles`."""
+    import base64
+
+    def part(data: dict) -> str:
+        return base64.urlsafe_b64encode(json.dumps(data).encode()).decode().rstrip("=")
+
+    return f"{part({'alg': 'none'})}.{part({'roles': roles or []})}.signature"
+
+
+def graph_response(payload: dict | None = None, status: int = 200):
+    """A fake requests response from Microsoft Graph or its token endpoint."""
+    from unittest.mock import MagicMock
+
+    response = MagicMock(status_code=status)
+    response.json.return_value = payload or {}
+    return response
+
+
+def set_work_settings(**values):
+    """Saves HD Work Settings (AI estimates, weekly off, morning brief) with `values`."""
+    doc = frappe.get_doc("HD Work Settings")
+    doc.update(values)
+    doc.save(ignore_permissions=True)
+    frappe.clear_document_cache("HD Work Settings", "HD Work Settings")
+    return doc
+
+
+REPLAY_START_MS = 1_790_000_000_000
+REPLAY_ERROR_MESSAGE = "Posting Date cannot be before the Invoice Date"
+
+
+def make_replay_events(
+    start_ms: int = REPLAY_START_MS, filler_clicks: int = 0
+) -> list[dict]:
+    """rrweb events for a short synthetic session on a customer's ERPNext.
+
+    The customer opens a new Sales Invoice, types a posting date, clicks Save,
+    hits a server ValidationError (with a msgprint and a console error), closes
+    the dialog and raises the ticket 20s after the first event. `filler_clicks`
+    adds that many alternating Save/Close clicks before the ticket is raised,
+    for testing the line cap.
+    """
+
+    def at(seconds, event_type, data):
+        return {
+            "type": event_type,
+            "timestamp": start_ms + seconds * 1000,
+            "data": data,
+        }
+
+    def element(node_id, tag, attributes=None, children=None):
+        return {
+            "id": node_id,
+            "type": 2,
+            "tagName": tag,
+            "attributes": attributes or {},
+            "childNodes": children or [],
+        }
+
+    def text(node_id, content):
+        return {"id": node_id, "type": 3, "textContent": content}
+
+    def click(seconds, node_id):
+        return at(seconds, 3, {"source": 2, "type": 2, "id": node_id, "x": 10, "y": 10})
+
+    snapshot = {
+        "id": 1,
+        "type": 0,
+        "childNodes": [
+            element(
+                2,
+                "html",
+                children=[
+                    element(
+                        3,
+                        "body",
+                        children=[
+                            element(
+                                4,
+                                "div",
+                                {
+                                    "class": "frappe-control",
+                                    "data-fieldname": "posting_date",
+                                },
+                                [
+                                    element(
+                                        5,
+                                        "label",
+                                        {"class": "control-label"},
+                                        [text(6, "Posting Date")],
+                                    ),
+                                    element(
+                                        7,
+                                        "input",
+                                        {
+                                            "type": "text",
+                                            "data-fieldname": "posting_date",
+                                        },
+                                    ),
+                                ],
+                            ),
+                            element(
+                                8,
+                                "button",
+                                {"class": "btn btn-primary primary-action"},
+                                [element(9, "span", children=[text(10, "Save")])],
+                            ),
+                        ],
+                    )
+                ],
+            )
+        ],
+    }
+    events = [
+        at(
+            0,
+            4,
+            {
+                "href": "https://erp.example.com/app/sales-invoice/new",
+                "width": 1440,
+                "height": 900,
+            },
+        ),
+        at(0, 2, {"node": snapshot, "initialOffset": {"top": 0, "left": 0}}),
+        at(
+            1,
+            5,
+            {
+                "tag": "frappe-route",
+                "payload": {
+                    "route": ["Form", "Sales Invoice", "new"],
+                    "url": "/app/sales-invoice/new",
+                },
+            },
+        ),
+        at(5, 3, {"source": 5, "id": 7, "text": "••-••-••••", "isChecked": False}),
+        at(6, 3, {"source": 5, "id": 7, "text": "••-••-••••", "isChecked": False}),
+        at(
+            8,
+            3,
+            {
+                "source": 0,
+                "adds": [
+                    {
+                        "parentId": 3,
+                        "nextId": None,
+                        "node": element(
+                            20,
+                            "button",
+                            {"aria-label": "Close", "class": "btn-modal-close"},
+                        ),
+                    }
+                ],
+                "removes": [],
+                "texts": [],
+                "attributes": [],
+            },
+        ),
+        click(12, 10),
+        at(
+            13,
+            5,
+            {
+                "tag": "frappe-call-error",
+                "payload": {
+                    "method": "frappe.desk.form.save.savedocs",
+                    "status": 417,
+                    "exc_type": "ValidationError",
+                    "message": REPLAY_ERROR_MESSAGE,
+                },
+            },
+        ),
+        at(
+            13,
+            5,
+            {
+                "tag": "frappe-msgprint",
+                "payload": {
+                    "title": "Message",
+                    "message": f"<p>{REPLAY_ERROR_MESSAGE}</p>",
+                },
+            },
+        ),
+        at(
+            14,
+            6,
+            {
+                "plugin": "rrweb/console@1",
+                "payload": {
+                    "level": "error",
+                    "payload": ['"Uncaught TypeError: frm.doc is undefined"'],
+                    "trace": [],
+                },
+            },
+        ),
+        click(15, 20),
+    ]
+    events += [
+        click(15 + (i + 1) * 0.01, 10 if i % 2 == 0 else 20)
+        for i in range(filler_clicks)
+    ]
+    events.append(at(20, 5, {"tag": "raise-ticket", "payload": {}}))
+    return events
+
+
+def make_replay(events: list[dict] | None = None) -> dict:
+    """A session-replay.json.gz payload (before gzip) wrapping `events`."""
+    events = events if events is not None else make_replay_events()
+    return {
+        "version": 1,
+        "minutes": 5,
+        "privacy": "mask-numbers",
+        "started_at": events[0]["timestamp"] if events else REPLAY_START_MS,
+        "ended_at": events[-1]["timestamp"] if events else REPLAY_START_MS,
+        "events": events,
+    }
+
+
+def make_diagnostics(**overrides) -> dict:
+    """A session-diagnostics.json payload as the helpdesk_client recorder writes it."""
+    return {
+        "version": 1,
+        "captured_at": REPLAY_START_MS + 20_000,
+        "url": "https://erp.example.com/app/sales-invoice/new",
+        "route": ["Form", "Sales Invoice", "new"],
+        "title": "New Sales Invoice",
+        "user_agent": "Mozilla/5.0",
+        "browser": "Chrome 128",
+        "os": "macOS 14",
+        "viewport": {"w": 1440, "h": 900},
+        "screen": {"w": 1920, "h": 1080},
+        "timezone": "Asia/Dubai",
+        "language": "en",
+        "versions": {"frappe": "15.40.0", "erpnext": "15.35.1", "hrms": "15.20.0"},
+        "site": "erp.example.com",
+        "recent_errors": [
+            {
+                "time": REPLAY_START_MS + 13_000,
+                "kind": "call",
+                "message": REPLAY_ERROR_MESSAGE,
+                "method": "frappe.desk.form.save.savedocs",
+                "status": 417,
+                "exc_type": "ValidationError",
+            }
+        ],
+        **overrides,
+    }
+
+
+def make_session_files(
+    ticket: str,
+    replay: dict | None = None,
+    diagnostics: dict | None = None,
+    with_replay: bool = True,
+) -> dict:
+    """Attaches a gzipped session replay and a diagnostics JSON to an HD Ticket as
+    private Files, the way the ticket puller stores them. `with_replay=False` mimics
+    a client that skipped a too-large replay. Returns {"replay", "diagnostics"} File docs."""
+    files = {}
+    for key, file_name, content in (
+        (
+            "replay",
+            "session-replay.json.gz",
+            gzip.compress(json.dumps(replay or make_replay()).encode()),
+        ),
+        (
+            "diagnostics",
+            "session-diagnostics.json",
+            json.dumps(diagnostics or make_diagnostics()).encode(),
+        ),
+    ):
+        if key == "replay" and not with_replay:
+            continue
+        files[key] = frappe.get_doc(
+            {
+                "doctype": "File",
+                "file_name": file_name,
+                "attached_to_doctype": "HD Ticket",
+                "attached_to_name": str(ticket),
+                "is_private": 1,
+                "content": content,
+            }
+        ).insert(ignore_permissions=True)
+    return files
+
+
+def make_download_response(content: bytes):
+    """A stand-in for the streamed `requests.get` response the ticket puller reads files from."""
+    from unittest.mock import MagicMock
+
+    response = MagicMock()
+    response.raw.read.side_effect = lambda amount, decode_content=True: content[:amount]
+    return response
+
+
+def make_puller_mcp(site_url: str = "https://erp.example.com"):
+    """An MCPClient stand-in carrying the connection details `_attach_recording` downloads with."""
+    from unittest.mock import MagicMock
+
+    mcp = MagicMock()
+    mcp.site_url = site_url
+    mcp.api_key = "key"
+    mcp.api_secret = "secret"
+    return mcp
+
+
 def set_content_settings(**values):
     """Overwrite HD Content Settings fields for a test (callers roll back afterwards)."""
     frappe.db.set_single_value("HD Content Settings", values)
@@ -819,5 +1307,450 @@ def make_attachment(doctype: str, name: str, file_name: str, content: bytes, pri
             "attached_to_name": name,
             "is_private": private,
             "content": content,
+        }
+    ).insert(ignore_permissions=True)
+
+
+def make_article(title: str, content: str, status: str = "Published"):
+    """Creates an HD Article with `title` and HTML `content` (Published unless `status` says otherwise)."""
+    return frappe.get_doc(
+        {
+            "doctype": "HD Article",
+            "title": title,
+            "content": content,
+            "status": status,
+        }
+    ).insert(ignore_permissions=True)
+
+
+GITHUB_TEST_SECRET = "test-github-webhook-secret"
+GITHUB_TEST_REPO = "tbocloud/helpdesk"
+
+
+def enable_github_sync(**values):
+    """Turns on HD GitHub Settings with the test webhook secret, tbocloud/* allowed, plus any overrides."""
+    doc = frappe.get_doc("HD GitHub Settings")
+    doc.update(
+        {
+            "enabled": 1,
+            "webhook_secret": GITHUB_TEST_SECRET,
+            "allowed_repos": "tbocloud/*",
+            "complete_on_merge": 1,
+            "unlinked_pr_project": None,
+            "github_token": None,
+            **values,
+        }
+    )
+    doc.save(ignore_permissions=True)
+    return doc
+
+
+def make_github_payload(event: str, action: str = "", **overrides) -> dict:
+    """A minimal GitHub webhook payload shaped like the real one for `event`.
+
+    Overrides: repo, number, title, body, branch, draft, merged, closed, login,
+    comments, review_state, review_body, reviewer, conclusion, sha, workflow,
+    pull_requests (workflow_run: PR numbers the run belongs to).
+    """
+    repo = overrides.get("repo", GITHUB_TEST_REPO)
+    number = overrides.get("number", 7)
+    login = overrides.get("login", "dev-octocat")
+    sha = overrides.get("sha", "a1b2c3d")
+    branch = overrides.get("branch", "feature/invoice-print")
+    merged = overrides.get("merged", False)
+    closed = overrides.get("closed", merged)
+    payload = {
+        "action": action,
+        "repository": {"full_name": repo, "name": repo.split("/")[-1]},
+        "sender": {"login": login},
+    }
+    if event == "workflow_run":
+        payload["workflow_run"] = {
+            "name": overrides.get("workflow", "Server Tests"),
+            "head_branch": branch,
+            "head_sha": sha,
+            "status": "completed",
+            "conclusion": overrides.get("conclusion", "success"),
+            "pull_requests": [
+                {"number": n, "head": {"ref": branch, "sha": sha}}
+                for n in overrides.get("pull_requests", [number])
+            ],
+        }
+        return payload
+
+    payload["number"] = number
+    payload["pull_request"] = {
+        "number": number,
+        "title": overrides.get("title", "Invoice print format"),
+        "body": overrides.get("body", ""),
+        "html_url": f"https://github.com/{repo}/pull/{number}",
+        "state": "closed" if closed else "open",
+        "draft": overrides.get("draft", False),
+        "merged": merged,
+        "merged_at": "2026-09-30T10:00:00Z" if merged else None,
+        "closed_at": "2026-09-30T10:00:00Z" if closed else None,
+        "merged_by": {"login": "lead-octocat"} if merged else None,
+        "comments": overrides.get("comments", 0),
+        "user": {"login": login},
+        "head": {"ref": branch, "sha": sha},
+        "base": {"ref": "main"},
+    }
+    if event == "pull_request_review":
+        payload["review"] = {
+            "state": overrides.get("review_state", "approved"),
+            "body": overrides.get("review_body", ""),
+            "user": {"login": overrides.get("reviewer", "lead-octocat")},
+        }
+    return payload
+
+
+def github_signature(body: bytes, secret: str = GITHUB_TEST_SECRET) -> str:
+    """The X-Hub-Signature-256 header GitHub would send for `body`."""
+    import hashlib
+    import hmac
+
+    return "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+
+
+def send_github_webhook(
+    event: str,
+    payload: dict | None = None,
+    delivery: str | None = None,
+    signature: str | None = "sign",
+    body: bytes | None = None,
+):
+    """Calls helpdesk.api.github.webhook with a fake request carrying GitHub's headers.
+
+    `signature="sign"` signs the body with the test secret; None leaves the header out.
+    """
+    from werkzeug.test import EnvironBuilder
+    from werkzeug.wrappers import Request
+
+    from helpdesk.api.github import webhook
+
+    body = body if body is not None else json.dumps(payload or {}).encode()
+    headers = {
+        "X-GitHub-Event": event,
+        "X-GitHub-Delivery": delivery or frappe.generate_hash(length=20),
+    }
+    if signature == "sign":
+        headers["X-Hub-Signature-256"] = github_signature(body)
+    elif signature:
+        headers["X-Hub-Signature-256"] = signature
+    builder = EnvironBuilder(
+        path="/api/method/helpdesk.api.github.webhook",
+        method="POST",
+        base_url="http://localhost",
+        headers=headers,
+        data=body,
+        content_type="application/json",
+    )
+    previous = getattr(frappe.local, "request", None)
+    frappe.local.request = Request(builder.get_environ())
+    try:
+        return webhook()
+    finally:
+        frappe.local.request = previous
+
+
+def get_task_comments(task: str, like: str = "%") -> list[str]:
+    """Contents of the Info comments on `task` matching the SQL LIKE pattern `like`."""
+    return frappe.get_all(
+        "Comment",
+        filters={
+            "reference_doctype": "Task",
+            "reference_name": task,
+            "comment_type": "Info",
+            "content": ("like", like),
+        },
+        pluck="content",
+    )
+
+
+CHATWOOT_TEST_SECRET = "test-chatwoot-account-secret"
+CHATWOOT_TEST_BOT_SECRET = "test-chatwoot-bot-secret"
+CHATWOOT_TEST_URL = "https://chat.example.com"
+
+
+def enable_chatwoot_bridge(**values):
+    """Turns on HD Chatwoot Settings with test tokens and both webhook secrets, plus any overrides."""
+    doc = frappe.get_doc("HD Chatwoot Settings")
+    doc.update(
+        {
+            "enabled": 1,
+            "base_url": CHATWOOT_TEST_URL,
+            "account_id": 1,
+            "api_access_token": "bridge-user-token",
+            "bot_access_token": "ai-bot-token",
+            "webhook_secret": CHATWOOT_TEST_SECRET,
+            "bot_webhook_secret": CHATWOOT_TEST_BOT_SECRET,
+            "ai_first_reply": 1,
+            "max_ai_replies": 6,
+            "handoff_team_id": 0,
+            "default_customer": None,
+            **values,
+        }
+    )
+    doc.save(ignore_permissions=True)
+    return doc
+
+
+def make_chatwoot_payload(event: str, **overrides) -> dict:
+    """A Chatwoot webhook payload shaped like the real one for `event`.
+
+    Overrides: conversation_id, message_id, content, message_type, private,
+    sender_type, attachments, status, labels, name, email, phone, contact_id,
+    channel, inbox_id, hmac_verified, updated_at, account_id.
+    """
+    import time
+
+    contact = {
+        "id": overrides.get("contact_id", 77),
+        "name": overrides.get("name", "Anita Rao"),
+        "email": overrides.get("email", ""),
+        "phone_number": overrides.get("phone", ""),
+        "type": "contact",
+    }
+    account = {"id": overrides.get("account_id", 1), "name": "TBO"}
+    conversation = {
+        "id": overrides.get("conversation_id", 4242),
+        "inbox_id": overrides.get("inbox_id", 3),
+        "status": overrides.get("status", "pending"),
+        "channel": overrides.get("channel", "Channel::WebWidget"),
+        "labels": overrides.get("labels", []),
+        "meta": {
+            "sender": contact,
+            "assignee": None,
+            "hmac_verified": overrides.get("hmac_verified", False),
+        },
+        "updated_at": overrides.get("updated_at", time.time()),
+        "timestamp": int(time.time()),
+    }
+    if event.startswith("message_"):
+        sender_type = overrides.get("sender_type", "contact")
+        sender = (
+            contact
+            if sender_type == "contact"
+            else {"id": 5, "name": "TBO AI", "type": sender_type}
+        )
+        return {
+            "event": event,
+            "id": overrides.get("message_id", 1001),
+            "content": overrides.get("content", "Hello, I need help."),
+            "message_type": overrides.get("message_type", "incoming"),
+            "content_type": "text",
+            "private": overrides.get("private", False),
+            "attachments": overrides.get("attachments", []),
+            "account": account,
+            "inbox": {"id": conversation["inbox_id"], "name": "Website"},
+            "sender": sender,
+            "conversation": conversation,
+        }
+    return {
+        "event": event,
+        "account": account,
+        "changed_attributes": [],
+        **conversation,
+    }
+
+
+def chatwoot_signature(body: bytes, timestamp: str, secret: str) -> str:
+    """The X-Chatwoot-Signature header Chatwoot sends: HMAC-SHA256 over "{timestamp}.{body}"."""
+    import hashlib
+    import hmac
+
+    signed = timestamp.encode() + b"." + body
+    return "sha256=" + hmac.new(secret.encode(), signed, hashlib.sha256).hexdigest()
+
+
+def send_chatwoot_webhook(
+    source: str,
+    payload: dict | None = None,
+    signature: str | None = "sign",
+    timestamp: str | None = None,
+    token: str | None = None,
+    body: bytes | None = None,
+):
+    """Calls helpdesk.api.chatwoot.<source>_webhook with a fake request carrying Chatwoot's headers.
+
+    `signature="sign"` signs the body with the test secret of that webhook; None
+    leaves the signature out. `token` goes in the query string.
+    """
+    import time
+
+    from werkzeug.test import EnvironBuilder
+    from werkzeug.wrappers import Request
+
+    from helpdesk.api.chatwoot import account_webhook, bot_webhook
+
+    body = body if body is not None else json.dumps(payload or {}).encode()
+    timestamp = timestamp or str(int(time.time()))
+    headers = {
+        "X-Chatwoot-Timestamp": timestamp,
+        "X-Chatwoot-Delivery": frappe.generate_hash(length=20),
+    }
+    if signature == "sign":
+        secret = CHATWOOT_TEST_BOT_SECRET if source == "bot" else CHATWOOT_TEST_SECRET
+        headers["X-Chatwoot-Signature"] = chatwoot_signature(body, timestamp, secret)
+    elif signature:
+        headers["X-Chatwoot-Signature"] = signature
+    method = f"helpdesk.api.chatwoot.{source}_webhook"
+    builder = EnvironBuilder(
+        path=f"/api/method/{method}",
+        method="POST",
+        base_url="http://localhost",
+        headers=headers,
+        data=body,
+        content_type="application/json",
+        query_string={"token": token} if token else None,
+    )
+    previous = getattr(frappe.local, "request", None)
+    frappe.local.request = Request(builder.get_environ())
+    try:
+        return bot_webhook() if source == "bot" else account_webhook()
+    finally:
+        frappe.local.request = previous
+
+
+class FakeChatwootAPI:
+    """Stands in for `requests.request` in helpdesk.chatwoot_bridge: records every call and answers like Chatwoot.
+
+    GET .../messages returns `messages`; every POST returns a new message id.
+    `fail=True` answers everything with HTTP 500.
+    """
+
+    def __init__(self, messages: list[dict] | None = None, fail: bool = False):
+        self.messages = messages or []
+        self.fail = fail
+        self.calls = []
+
+    def __call__(self, method, url, json=None, headers=None, timeout=None, **kwargs):
+        from unittest.mock import MagicMock
+
+        self.calls.append(
+            {
+                "method": method,
+                "url": url,
+                "body": json or {},
+                "token": (headers or {}).get("Api-Access-Token"),
+            }
+        )
+        response = MagicMock()
+        if self.fail:
+            response.status_code = 500
+            response.text = "Internal Server Error"
+            return response
+        response.status_code = 200
+        if method == "GET":
+            response.json.return_value = {"payload": self.messages}
+        else:
+            response.json.return_value = {"id": 900000 + len(self.calls)}
+        return response
+
+    def calls_to(self, suffix: str, method: str = "POST") -> list[dict]:
+        return [
+            c for c in self.calls if c["method"] == method and c["url"].endswith(suffix)
+        ]
+
+    def posted(self, private: bool | None = None) -> list[str]:
+        """Contents of the messages posted, optionally only private notes (True) or public ones (False)."""
+        return [
+            c["body"].get("content")
+            for c in self.calls_to("/messages")
+            if private is None or bool(c["body"].get("private")) == private
+        ]
+
+    def statuses(self) -> list[str]:
+        """The statuses the bridge toggled conversations to, in order."""
+        return [c["body"].get("status") for c in self.calls_to("/toggle_status")]
+
+
+def make_chat_conversation(conversation_id: int, **values):
+    """Creates an HD Chat Conversation row for `conversation_id` (Open, website chat) with any overrides."""
+    return frappe.get_doc(
+        {
+            "doctype": "HD Chat Conversation",
+            "conversation_id": conversation_id,
+            "status": "Open",
+            "channel": "Channel::WebWidget",
+            "contact_name": "Anita Rao",
+            **values,
+        }
+    ).insert(ignore_permissions=True)
+
+
+def get_chat_conversation(conversation_id: int):
+    """The HD Chat Conversation row of `conversation_id`, or None."""
+    name = frappe.db.get_value(
+        "HD Chat Conversation", {"conversation_id": conversation_id}
+    )
+    return frappe.get_doc("HD Chat Conversation", name) if name else None
+
+
+def make_phone_contact(first_name: str, phone: str):
+    """Creates a Contact whose only detail is the mobile number `phone`, stored as typed."""
+    contact = frappe.get_doc({"doctype": "Contact", "first_name": first_name})
+    contact.append("phone_nos", {"phone": phone, "is_primary_mobile_no": 1})
+    return contact.insert(ignore_permissions=True)
+
+
+def ai_chat_answer(reply: str, action: str = "answer", **fields) -> dict:
+    """What call_haiku returns for a chat reply: `reply`, `action` and any ticket_subject / ticket_summary."""
+    return {
+        "response": {"reply": reply, "action": action, **fields},
+        "usage": {},
+        "cost": 0,
+    }
+
+
+def make_email_account(email_id: str, **kwargs):
+    """Creates an Email Account for `email_id` on a fake server: send-only unless kwargs enable incoming."""
+    name = kwargs.pop("email_account_name", email_id)
+    if frappe.db.exists("Email Account", name):
+        return frappe.get_doc("Email Account", name)
+    return frappe.get_doc(
+        {
+            "doctype": "Email Account",
+            "email_account_name": name,
+            "email_id": email_id,
+            "enable_outgoing": 1,
+            "smtp_server": "smtp.example.com",
+            "password": "password",
+            **kwargs,
+        }
+    ).insert(ignore_permissions=True)
+
+
+def make_pull_request(task: str, number: int, state: str = "Open", **kwargs):
+    """Creates an HD Pull Request linking a GitHub PR (no real GitHub call) to `task`."""
+    return frappe.get_doc(
+        {
+            "doctype": "HD Pull Request",
+            "repo": "tbocloud/helpdesk",
+            "number": number,
+            "title": f"PR {number}",
+            "url": f"https://github.com/tbocloud/helpdesk/pull/{number}",
+            "task": task,
+            "link_kind": "Refs",
+            "state": state,
+            "last_event_at": frappe.utils.now_datetime(),
+            **kwargs,
+        }
+    ).insert(ignore_permissions=True)
+
+
+def make_timesheet(project: str, hours: float, from_time, task: str | None = None):
+    """Creates a draft Timesheet with one time log of `hours` on `project` (and `task`)."""
+    return frappe.get_doc(
+        {
+            "doctype": "Timesheet",
+            "time_logs": [
+                {
+                    "project": project,
+                    "task": task,
+                    "hours": hours,
+                    "from_time": from_time,
+                }
+            ],
         }
     ).insert(ignore_permissions=True)

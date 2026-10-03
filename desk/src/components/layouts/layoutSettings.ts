@@ -9,6 +9,10 @@ import LucideClipboardList from "~icons/lucide/clipboard-list";
 import LucideClock from "~icons/lucide/clock";
 import LucideCalendarDays from "~icons/lucide/calendar-days";
 import LucideChartColumn from "~icons/lucide/chart-column";
+import LucideNewspaper from "~icons/lucide/newspaper";
+import LucideUsers from "~icons/lucide/users";
+import LucideFileSpreadsheet from "~icons/lucide/file-spreadsheet";
+import LucideCalendarClock from "~icons/lucide/calendar-clock";
 import { __ } from "@/translation";
 
 export const agentPortalSidebarOptions = [
@@ -26,6 +30,27 @@ export const agentPortalSidebarOptions = [
     to: "WorkOverview",
     section: "Workspace",
     overviewOnly: true,
+  },
+  {
+    label: __("Team"),
+    icon: LucideUsers,
+    to: "TeamWorkload",
+    section: "Workspace",
+    overviewOnly: true,
+  },
+  {
+    label: __("Summaries"),
+    icon: LucideNewspaper,
+    to: "WorkSummaries",
+    section: "Workspace",
+    overviewOnly: true,
+  },
+  {
+    label: __("Customer report"),
+    icon: LucideFileSpreadsheet,
+    to: "CustomerReport",
+    section: "Workspace",
+    customerReportOnly: true,
   },
   {
     label: __("Tickets"),
@@ -47,6 +72,12 @@ export const agentPortalSidebarOptions = [
     to: "MyWork",
     section: "Workspace",
     countKey: "my_work",
+  },
+  {
+    label: __("Calendar"),
+    icon: LucideCalendarClock,
+    to: "WorkCalendar",
+    section: "Workspace",
   },
   {
     label: __("Timesheets"),
