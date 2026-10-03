@@ -94,6 +94,26 @@ class TestS3Storage(FrappeTestCase):
         with self.assertRaises(frappe.PermissionError):
             s3.download(doc.name)
 
+    def test_a_stranger_learns_nothing_about_a_local_file(self):
+        doc = frappe.get_doc(
+            {
+                "doctype": "File",
+                "file_name": "local-only.txt",
+                "content": b"kept on this server",
+                "is_private": 1,
+                "attached_to_doctype": "HD Content Post",
+                "attached_to_name": self.post.name,
+            }
+        ).insert(ignore_permissions=True)
+        frappe.db.set_value("File", doc.name, s3.KEY_FIELD, None)
+
+        make_tasky_user(*OUTSIDER)
+        frappe.set_user(OUTSIDER[0])
+        frappe.local.response.pop("location", None)
+        with self.assertRaises(frappe.PermissionError):
+            s3.download(doc.name)
+        self.assertNotIn("location", frappe.local.response)
+
     def test_zip_and_delete(self):
         first = self.attach("one.png", b"one")
         second = self.attach("two.png", b"two")

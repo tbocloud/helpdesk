@@ -181,12 +181,13 @@ def download(file: str, download: int | str = 0):
     if not frappe.db.exists("File", file):
         raise frappe.DoesNotExistError(_("File not found"))
     file_doc = frappe.get_doc("File", file)
+    # checked first, so even a file kept only on this server says nothing to a stranger
+    if not file_doc.is_downloadable():
+        raise frappe.PermissionError(_("You can't open this file."))
     if not file_doc.get(KEY_FIELD):
         frappe.local.response["type"] = "redirect"
         frappe.local.response["location"] = file_doc.file_url
         return
-    if not file_doc.is_downloadable():
-        raise frappe.PermissionError(_("You can't open this file."))
     frappe.local.response["type"] = "redirect"
     frappe.local.response["location"] = signed_url(
         file_doc, as_attachment=frappe.utils.cint(download)
