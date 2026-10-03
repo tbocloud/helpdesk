@@ -223,8 +223,6 @@ class HDContentPost(Document):
     def close_task(task_name: str, status: str):
         doc = frappe.get_doc("Task", task_name)
         doc.status = status
-        # publishing or cancelling the post ends the work; no review round for it
-        doc.flags.hold_ended = True
         doc.flags.from_content_post = True
         doc.save(ignore_permissions=True)
         assign_to.close_all_assignments("Task", task_name, ignore_permissions=True)

@@ -95,7 +95,12 @@ class Task(Document):
         """On projects that want it, a team member's "done" goes to the lead first."""
         from helpdesk.tasky.permissions import can_manage_project
 
-        if not self.status_changed() or self.flags.hold_ended:
+        # a published or cancelled content post closes its tasks without a review round
+        if (
+            not self.status_changed()
+            or self.flags.hold_ended
+            or self.flags.from_content_post
+        ):
             return
         if self.status not in ("Completed", PENDING_REVIEW):
             return

@@ -1,6 +1,7 @@
 import gzip
 import json
 from datetime import datetime
+from unittest.mock import patch
 
 import frappe
 from frappe.core.doctype.communication.test_communication import create_email_account
@@ -621,6 +622,18 @@ def make_content_campaign(campaign_name: str, customer: str, **kwargs):
             **kwargs,
         }
     ).insert(ignore_permissions=True)
+
+
+def hold_commits(test_case):
+    """Rolls back everything a test wrote, even where Frappe commits mid-test.
+
+    Assigning a task sends the assignee an email, and in tests that email is sent
+    at once and commits; without this a post's tasks would leak into other tests.
+    """
+    test_case.addCleanup(frappe.db.rollback)
+    commit = patch.object(frappe.db, "commit")
+    commit.start()
+    test_case.addCleanup(commit.stop)
 
 
 def make_content_post(title: str, customer: str | None = None, **kwargs):

@@ -1,13 +1,12 @@
-from unittest.mock import patch
-
 import frappe
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_days, add_to_date, getdate, now_datetime
 
-from helpdesk.content_team import CONTENT_TEAM_ROLE, is_content_only
+from helpdesk.content_team import CONTENT_TEAM_ROLE, ensure_role, is_content_only
 from helpdesk.helpdesk.doctype.hd_ticket.hd_ticket import permission_query
 from helpdesk.test_utils import (
     create_customer,
+    hold_commits,
     make_content_post,
     make_project,
     make_tasky_user,
@@ -24,14 +23,12 @@ OTHER = ("other.ct@content-tasks.example", "Nisha Other")
 
 class ContentTaskCase(FrappeTestCase):
     def setUp(self):
-        self.addCleanup(frappe.db.rollback)
+        hold_commits(self)
         self.addCleanup(frappe.set_user, "Administrator")
-        commit = patch.object(frappe.db, "commit")
-        commit.start()
-        self.addCleanup(commit.stop)
         self.addCleanup(
             frappe.clear_document_cache, "HD Content Settings", "HD Content Settings"
         )
+        ensure_role()
         create_customer(CUSTOMER)
         for person in (WRITER, DESIGNER, MARKETER, OTHER):
             make_tasky_user(*person)

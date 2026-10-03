@@ -6,6 +6,7 @@ from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 from frappe.permissions import add_permission, update_permission_property
 
 from helpdesk.consts import DEFAULT_ARTICLE_CATEGORY
+from helpdesk.content_team import ensure_role as ensure_content_team_role
 from helpdesk.setup.default_views import add_default_views
 
 from .default_template import create_default_template
@@ -39,6 +40,7 @@ def after_install():
     add_website_settings_permission()
     add_default_views()
     _create_form_script()
+    ensure_content_team_role()
     # Always keep this at last, because sql_ddl makes the db commit
     add_fts_index()
 

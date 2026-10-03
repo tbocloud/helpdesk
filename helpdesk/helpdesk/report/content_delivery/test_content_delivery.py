@@ -6,14 +6,14 @@ from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_to_date, getdate, now_datetime
 
 from helpdesk.helpdesk.report.content_delivery.content_delivery import execute
-from helpdesk.test_utils import create_customer, make_content_post
+from helpdesk.test_utils import create_customer, hold_commits, make_content_post
 
 CUSTOMER = "Al Noor Trading LLC"
 
 
 class TestContentDelivery(FrappeTestCase):
     def setUp(self):
-        self.addCleanup(frappe.db.rollback)
+        hold_commits(self)
         create_customer(CUSTOMER)
 
     def test_counts_per_customer(self):

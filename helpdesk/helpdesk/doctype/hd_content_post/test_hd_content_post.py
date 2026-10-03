@@ -11,6 +11,7 @@ from helpdesk.helpdesk.doctype.hd_content_post.hd_content_post import (
 )
 from helpdesk.test_utils import (
     create_customer,
+    hold_commits,
     make_content_campaign,
     make_content_post,
     make_project,
@@ -27,7 +28,7 @@ OUTSIDER = ("anita.joseph@content-smoke.example", "Anita Joseph")
 
 class TestHDContentPost(FrappeTestCase):
     def setUp(self):
-        self.addCleanup(frappe.db.rollback)
+        hold_commits(self)
         create_customer(CUSTOMER)
         create_customer(OTHER_CUSTOMER)
         make_tasky_user(*WRITER)
@@ -118,7 +119,7 @@ class TestMissedPostAlerts(FrappeTestCase):
     OPS = "content-ops@content-smoke.example"
 
     def setUp(self):
-        self.addCleanup(frappe.db.rollback)
+        hold_commits(self)
         create_customer(CUSTOMER)
         make_tasky_user(*WRITER)
         set_content_settings(
@@ -232,7 +233,7 @@ class TestHDContentPostVisibility(FrappeTestCase):
     """Writers see their own posts and their clients' posts, not other clients'."""
 
     def setUp(self):
-        self.addCleanup(frappe.db.rollback)
+        hold_commits(self)
         self.addCleanup(frappe.set_user, "Administrator")
         create_customer(CUSTOMER)
         create_customer(OTHER_CUSTOMER)
