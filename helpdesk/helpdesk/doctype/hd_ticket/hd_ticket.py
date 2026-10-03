@@ -18,6 +18,7 @@ from pypika.functions import Count
 from pypika.queries import Query
 from pypika.terms import Criterion
 
+from helpdesk.content_team import is_content_only
 from helpdesk.helpdesk.doctype.hd_settings.helpers import (
     get_default_email_content,
     is_email_content_empty,
@@ -1340,7 +1341,7 @@ def has_permission(doc, user=None):
         return True
     if _is_customer_manager(doc.customer, user):
         return True
-    if not is_agent(user):
+    if not is_agent(user) or is_content_only(user):
         return False
     return _agent_has_permission(doc, user)
 
@@ -1385,6 +1386,9 @@ def permission_query(user: str | None = None):
     user = user or frappe.session.user
     if is_admin(user):
         return
+    if is_content_only(user):
+        # writers and designers work on content only; tickets they raised stay theirs
+        return _get_base_visibility(user)
     if not is_agent(user):
         return _customer_query(user)
     return _agent_query(user)

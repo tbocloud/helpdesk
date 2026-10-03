@@ -99,11 +99,12 @@ class TestHDContentPost(FrappeTestCase):
 
         send_due_reminders()
 
+        # reminders go through HD Notification: the bell plus Teams or email
         notified = set(
             frappe.get_all(
-                "Notification Log",
-                filters={"for_user": WRITER[0], "document_type": "HD Content Post"},
-                pluck="document_name",
+                "HD Notification",
+                filters={"user_to": WRITER[0], "reference_doctype": "HD Content Post"},
+                pluck="reference_name",
             )
         )
         self.assertIn(due.name, notified)

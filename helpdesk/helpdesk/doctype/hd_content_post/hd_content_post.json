@@ -35,6 +35,7 @@
 		"published_url",
 		"column_break_3",
 		"published_on",
+		"task_mode",
 		"task",
 		"missed_alert_sent",
 		"times_postponed"
@@ -258,11 +259,19 @@
 			"label": "Platforms",
 			"description": "Every platform this one post goes out on, comma separated. Defaults to the Channel.",
 			"in_standard_filter": 0
+		},
+		{
+			"fieldname": "task_mode",
+			"fieldtype": "Select",
+			"label": "Tasks",
+			"options": "One task per person\nOne task for the post\nNo tasks",
+			"default": "One task per person",
+			"description": "One task per person: the writer, designer and marketer each get a task, due before the publish date. One task for the post: one task shared by all of them."
 		}
 	],
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-10-01 17:00:00.000000",
+	"modified": "2026-10-03 18:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Content Post",

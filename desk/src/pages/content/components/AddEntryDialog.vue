@@ -166,6 +166,14 @@
           </div>
         </div>
 
+        <FormControl
+          v-model="form.task_mode"
+          type="select"
+          :label="__('Tasks')"
+          :options="TASK_MODES"
+          :description="taskModeHint"
+        />
+
         <ErrorMessage :message="error" />
       </form>
     </template>
@@ -233,13 +241,30 @@ const EMPTY = {
   writer: "",
   designer: "",
   marketer: "",
+  task_mode: "One task per person",
 };
+
+const TASK_MODES = [
+  { label: __("One task per person"), value: "One task per person" },
+  { label: __("One task for the post"), value: "One task for the post" },
+  { label: __("No tasks"), value: "No tasks" },
+];
 const form = reactive({ ...EMPTY, channels: [...EMPTY.channels] });
 const error = ref("");
 const saving = ref<"" | "next" | "close">("");
 const titleInput = ref();
 
 const captionTooLong = computed(() => form.caption.length > CAPTION_LIMIT);
+
+const taskModeHint = computed(() => {
+  if (form.task_mode === "One task for the post")
+    return __("One task shared by everyone above, in their My Work.");
+  if (form.task_mode === "No tasks")
+    return __("The post is tracked on the calendar only.");
+  return __(
+    "The writer, designer and marketer each get a task, due before the publish date. Finishing one moves the post on."
+  );
+});
 
 watch(open, (isOpen) => {
   if (!isOpen) return;
@@ -306,6 +331,7 @@ async function save(addNext: boolean) {
         writer: form.writer,
         designer: form.designer,
         marketer: form.marketer,
+        task_mode: form.task_mode,
       },
     });
     toast.success(

@@ -114,6 +114,7 @@
 </template>
 
 <script setup lang="ts">
+import { CONTENT_TEAM_ROUTES } from "@/pages/content/contentTeam";
 import CP from "@/components/command-palette/CP.vue";
 import UserMenu from "@/components/UserMenu.vue";
 import { useDevice } from "@/composables";
@@ -219,6 +220,12 @@ const navItems = computed(() => {
     .filter((item) => !item.overviewOnly || authStore.canSeeOverview)
     .filter(
       (item) => !item.customerReportOnly || authStore.canSeeCustomerReport
+    )
+    .filter(
+      (item) =>
+        !authStore.isContentTeam ||
+        isCustomerPortal.value ||
+        CONTENT_TEAM_ROUTES.has(item.to)
     )
     .map((option: any) => ({
       label: option.label,

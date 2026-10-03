@@ -17,6 +17,7 @@ ENTRY_FIELDS = (
     "caption",
     "hashtags",
     "brief",
+    "task_mode",
     *TEAM_FIELDS,
 )
 

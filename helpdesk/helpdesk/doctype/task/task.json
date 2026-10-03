@@ -14,6 +14,8 @@
 		"is_key",
 		"is_milestone",
 		"hd_ticket",
+		"content_post",
+		"content_role",
 		"depends_on_task",
 		"hold_section",
 		"hold_reason",
@@ -208,11 +210,29 @@
 			"label": "Estimate Note",
 			"read_only": 1,
 			"depends_on": "ai_estimated"
+		},
+		{
+			"fieldname": "content_post",
+			"fieldtype": "Link",
+			"label": "Content Post",
+			"options": "HD Content Post",
+			"read_only": 1,
+			"search_index": 1,
+			"no_copy": 1
+		},
+		{
+			"fieldname": "content_role",
+			"fieldtype": "Select",
+			"label": "Content Role",
+			"options": "\nWriter\nDesigner\nMarketer\nAll",
+			"read_only": 1,
+			"no_copy": 1,
+			"depends_on": "content_post"
 		}
 	],
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-09-29 23:00:00.000000",
+	"modified": "2026-10-03 18:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "Task",

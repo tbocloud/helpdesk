@@ -41,6 +41,10 @@ export const useAuthStore = defineStore("auth", () => {
     () => !!user__.value.can_see_overview
   );
   // the server allows the same people (helpdesk.api.customer_report)
+  // writers, designers and marketers who only work on content
+  const isContentTeam: ComputedRef<boolean> = computed(
+    () => !!user__.value.is_content_team
+  );
   const canSeeCustomerReport: ComputedRef<boolean> = computed(
     () => !!(user__.value.is_manager || user__.value.is_project_manager)
   );
@@ -111,6 +115,7 @@ export const useAuthStore = defineStore("auth", () => {
     isProjectManager,
     canSeeOverview,
     canSeeCustomerReport,
+    isContentTeam,
     telephonyInstalled,
     isLoggedIn,
     login,
