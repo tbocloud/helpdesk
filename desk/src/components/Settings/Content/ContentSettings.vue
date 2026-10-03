@@ -1,7 +1,9 @@
 <template>
   <SettingsLayoutBase
     :description="
-      __('Missed post alerts and the client portal for the Content Calendar.')
+      __(
+        'Tasks, monthly plans, client follow-up, missed post alerts and the client portal for the Content Calendar.'
+      )
     "
   >
     <template #title>
@@ -131,6 +133,113 @@
 
         <section>
           <h2 class="text-base-semibold text-ink-gray-9">
+            {{ __("Tasks and monthly plans") }}
+          </h2>
+          <SettingRow
+            :label="__('Tasks for a new post')"
+            :description="
+              __('Used when Add entry or a monthly package doesn\'t choose.')
+            "
+          >
+            <FormControl
+              v-model="form.default_task_mode"
+              type="select"
+              class="w-52"
+              :options="TASK_MODES"
+              :aria-label="__('Tasks for a new post')"
+            />
+          </SettingRow>
+          <SettingRow
+            :label="__('Writer\'s task due')"
+            :description="__('Days before the publish date.')"
+          >
+            <FormControl
+              v-model="form.writer_days_before"
+              type="number"
+              class="w-24"
+              min="0"
+              :aria-label="__('Writer\'s task due, days before publishing')"
+            />
+          </SettingRow>
+          <SettingRow
+            :label="__('Designer\'s task due')"
+            :description="
+              __(
+                'Days before the publish date. The marketer\'s is due on the day.'
+              )
+            "
+          >
+            <FormControl
+              v-model="form.designer_days_before"
+              type="number"
+              class="w-24"
+              min="0"
+              :aria-label="__('Designer\'s task due, days before publishing')"
+            />
+          </SettingRow>
+          <SettingRow
+            :label="__('Plan next month on day')"
+            :description="
+              __(
+                'From this day of the month, next month\'s posts are created for every customer with a monthly package.'
+              )
+            "
+          >
+            <FormControl
+              v-model="form.plan_day"
+              type="number"
+              class="w-24"
+              min="1"
+              max="28"
+              :aria-label="__('Plan next month on day')"
+            />
+          </SettingRow>
+        </section>
+
+        <hr class="my-8" />
+
+        <section>
+          <h2 class="text-base-semibold text-ink-gray-9">
+            {{ __("Client approval follow-up") }}
+          </h2>
+          <SettingRow
+            :label="__('Remind the client after')"
+            :description="
+              __(
+                'Days in Client Review before the client\'s contacts get one reminder email. 0 turns it off.'
+              )
+            "
+          >
+            <FormControl
+              v-model="form.client_reminder_days"
+              type="number"
+              class="w-24"
+              min="0"
+              :aria-label="__('Remind the client after, in days')"
+            />
+          </SettingRow>
+          <SettingRow
+            :label="__('Alert the team after')"
+            :description="
+              __(
+                'Days with no decision before the marketer, the post\'s creator and the project lead are told. 0 turns it off.'
+              )
+            "
+          >
+            <FormControl
+              v-model="form.client_escalate_days"
+              type="number"
+              class="w-24"
+              min="0"
+              :aria-label="__('Alert the team after, in days')"
+            />
+          </SettingRow>
+        </section>
+
+        <hr class="my-8" />
+
+        <section>
+          <h2 class="text-base-semibold text-ink-gray-9">
             {{ __("Client portal") }}
           </h2>
           <SettingRow
@@ -199,7 +308,27 @@ interface ContentSettingsForm {
   enable_client_portal: boolean;
   portal_code_subject: string;
   portal_code_message: string;
+  default_task_mode: string;
+  writer_days_before: number;
+  designer_days_before: number;
+  plan_day: number;
+  client_reminder_days: number;
+  client_escalate_days: number;
 }
+
+const TASK_MODES = [
+  { label: __("One task per person"), value: "One task per person" },
+  { label: __("One task for the post"), value: "One task for the post" },
+  { label: __("No tasks"), value: "No tasks" },
+];
+const NUMBER_FIELDS = [
+  "grace_period_minutes",
+  "writer_days_before",
+  "designer_days_before",
+  "plan_day",
+  "client_reminder_days",
+  "client_escalate_days",
+] as const;
 
 const DOCTYPE = "HD Content Settings";
 const form = ref<ContentSettingsForm | null>(null);
@@ -225,6 +354,12 @@ const settings = createResource({
       enable_client_portal: Boolean(doc.enable_client_portal),
       portal_code_subject: doc.portal_code_subject || "",
       portal_code_message: doc.portal_code_message || "",
+      default_task_mode: doc.default_task_mode || "One task per person",
+      writer_days_before: doc.writer_days_before ?? 3,
+      designer_days_before: doc.designer_days_before ?? 1,
+      plan_day: doc.plan_day || 20,
+      client_reminder_days: doc.client_reminder_days ?? 2,
+      client_escalate_days: doc.client_escalate_days ?? 4,
     };
     initial.value = JSON.stringify(form.value);
   },
@@ -266,7 +401,10 @@ const save = createResource({
         enable_missed_post_alerts: f.enable_missed_post_alerts ? 1 : 0,
         notify_post_team: f.notify_post_team ? 1 : 0,
         enable_client_portal: f.enable_client_portal ? 1 : 0,
-        grace_period_minutes: Number(f.grace_period_minutes) || 0,
+        ...Object.fromEntries(
+          NUMBER_FIELDS.map((key) => [key, Number(f[key]) || 0])
+        ),
+        plan_day: Math.min(Math.max(Number(f.plan_day) || 20, 1), 28),
         alert_recipients: f.alert_recipients.map((user) => ({ user })),
       },
     };
