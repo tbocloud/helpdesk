@@ -42,6 +42,24 @@ class TestContentBoard(FrappeTestCase):
         self.assertEqual(sorted(p.channel for p in posts), ["Facebook", "Instagram"])
         self.assertTrue(all(p.brief == "Gold and green" for p in posts))
 
+    def test_one_post_can_cover_several_platforms(self):
+        [name] = content_board.add_entries(
+            self.entry(), ["Instagram", "Facebook", "LinkedIn"], separate=0
+        )
+        post = frappe.get_doc("HD Content Post", name)
+        self.assertEqual(post.channel, "Instagram")
+        self.assertEqual(post.platforms, "Instagram, Facebook, LinkedIn")
+
+        # an edit that only changes channel (Desk form, older screens) makes it the main platform
+        post.channel = "LinkedIn"
+        post.save()
+        self.assertEqual(post.platforms, "LinkedIn, Instagram, Facebook")
+
+        # unknown platforms are dropped, never saved
+        post.platforms = "Facebook, MySpace"
+        post.save()
+        self.assertEqual((post.channel, post.platforms), ("Facebook", "Facebook"))
+
     def test_needs_a_platform_and_valid_post(self):
         with self.assertRaises(frappe.ValidationError):
             content_board.add_entries(self.entry(), [])

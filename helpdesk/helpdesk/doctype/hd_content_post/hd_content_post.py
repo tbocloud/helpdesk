@@ -25,6 +25,7 @@ REMINDER_WINDOW_HOURS = 48
 
 class HDContentPost(Document):
     def validate(self):
+        self.sync_platforms()
         self.set_customer_from_campaign()
         self.validate_campaign_customer()
         self.validate_publish_on()
@@ -32,6 +33,29 @@ class HDContentPost(Document):
         self.set_published_on()
         self.reset_missed_alert()
         self.warn_if_no_client_connection()
+
+    def sync_platforms(self):
+        """Keep `platforms` (all of them) and `channel` (the main one) in step."""
+        platforms = self.platform_list()
+        if self.has_value_changed("channel") and not self.has_value_changed(
+            "platforms"
+        ):
+            # an edit that only touched channel (old screens, the Desk form) moves the main platform
+            platforms = [self.channel] + [p for p in platforms if p != self.channel]
+        valid = self.meta.get_field("channel").options.split("\n")
+        platforms = [p for p in platforms if p in valid] or [self.channel]
+        self.channel = platforms[0]
+        self.platforms = ", ".join(platforms)
+
+    def platform_list(self) -> list[str]:
+        raw = [p.strip() for p in (self.platforms or "").split(",")]
+        return list(dict.fromkeys(p for p in raw if p)) or (
+            [self.channel] if self.channel else []
+        )
+
+    @property
+    def platforms_label(self) -> str:
+        return ", ".join(self.platform_list())
 
     def set_customer_from_campaign(self):
         if self.campaign and not self.customer:
@@ -222,6 +246,7 @@ def send_missed_post_alerts():
             Post.title,
             Post.customer,
             Post.channel,
+            Post.platforms,
             Post.publish_on,
             Post.writer,
             Post.designer,
@@ -270,7 +295,7 @@ def _send_missed_post_alert(settings, post, recipients: set[str]):
         {
             "title": post.title,
             "customer": post.customer,
-            "channel": post.channel,
+            "channel": post.platforms or post.channel,
             "due_datetime": format_datetime(post.publish_on),
             "hours_late": round(hours_late, 1),
             "post_link": get_url(f"/helpdesk/content?post={post.name}"),

@@ -2,7 +2,7 @@
   <div class="flex flex-col gap-4">
     <section
       class="grid grid-cols-2 gap-3 lg:grid-cols-4"
-      :aria-label="__('Month summary')"
+      :aria-label="__('Summary')"
     >
       <div
         v-for="tile in tiles"
@@ -100,10 +100,15 @@
         {{
           posts.length
             ? __("No entries match this filter.")
-            : __("Nothing planned for this month yet.")
+            : day
+            ? __("Nothing planned for {0}.", dayjs(day).format("ddd D MMM"))
+            : PERIOD_TEXT[period || "month"].empty
         }}
       </p>
-      <Button :label="__('Add entry')" @click="emit('add')">
+      <Button
+        :label="day ? __('Add entry for this day') : __('Add entry')"
+        @click="emit('add', day || undefined)"
+      >
         <template #prefix
           ><LucidePlus class="size-4" aria-hidden="true"
         /></template>
@@ -155,7 +160,7 @@
                 {{ post.title }}
               </button>
               <p class="text-xs text-ink-gray-5">
-                {{ post.channel }} · {{ post.format }}
+                {{ platformsOf(post).join(", ") }} · {{ post.format }}
                 <template v-if="!filtersCustomer">
                   · {{ post.customer }}</template
                 >
@@ -310,19 +315,41 @@ import LucidePlus from "~icons/lucide/plus";
 import LucideSend from "~icons/lucide/send";
 import {
   CLOSED_STATUSES,
-  TEAM_ROLES,
-  htmlToText,
-  isMissed,
   type ContentPost,
   type EntryAction,
+  htmlToText,
+  isMissed,
+  platformsOf,
+  TEAM_ROLES,
   type TeamRole,
 } from "../constants";
 import ChipToggle from "./ChipToggle.vue";
 import StatusPill from "./StatusPill.vue";
 
+const PERIOD_TEXT = {
+  day: {
+    progress: __("Day progress"),
+    sub: __("this day"),
+    empty: __("Nothing planned for this day."),
+  },
+  week: {
+    progress: __("Week progress"),
+    sub: __("this week"),
+    empty: __("Nothing planned for this week."),
+  },
+  month: {
+    progress: __("Month progress"),
+    sub: __("this month"),
+    empty: __("Nothing planned for this month yet."),
+  },
+};
+
 const props = defineProps<{
   posts: ContentPost[];
   month: string;
+  period?: "day" | "week" | "month";
+  // set in Day view, so an empty day offers to add an entry on it
+  day?: string;
   loading?: boolean;
   filtersCustomer?: string;
 }>();
@@ -432,7 +459,7 @@ const tiles = computed(() => {
   const planned = active.value.length;
   return [
     {
-      label: __("Month progress"),
+      label: PERIOD_TEXT[props.period || "month"].progress,
       value: planned
         ? `${Math.round((published.value.length / planned) * 100)}%`
         : "—",
@@ -456,12 +483,14 @@ const tiles = computed(() => {
     {
       label: __("Postponed"),
       value: String(postponed),
-      sub: __("this month"),
+      sub: PERIOD_TEXT[props.period || "month"].sub,
     },
     {
       label: __("Next post"),
       value: next ? dayjs(next.publish_on).format("ddd D MMM, h:mm A") : "—",
-      sub: next ? `${next.title} · ${next.channel}` : __("Nothing scheduled"),
+      sub: next
+        ? `${next.title} · ${platformsOf(next).join(", ")}`
+        : __("Nothing scheduled"),
     },
   ];
 });

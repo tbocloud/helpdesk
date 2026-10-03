@@ -6,7 +6,26 @@ what is late, and how long clients take to approve."""
 
 import frappe
 from frappe import _
-from frappe.utils import get_datetime, getdate, now_datetime
+from frappe.utils import (
+    format_datetime,
+    formatdate,
+    get_datetime,
+    getdate,
+    now_datetime,
+)
+
+# where a post is in the workflow, grouped the way the calendar colours them
+STAGES = {
+    "Idea": "planning",
+    "Drafting": "planning",
+    "Design": "planning",
+    "Internal Review": "review",
+    "Client Review": "review",
+    "Changes Requested": "review",
+    "Approved": "ready",
+    "Scheduled": "ready",
+    "Published": "published",
+}
 
 
 def execute(filters=None):
@@ -109,18 +128,26 @@ def get_rows(filters) -> list[dict]:
                 "on_time": 0,
                 "overdue": 0,
                 "awaiting_client": 0,
+                "late": 0,
+                "upcoming": 0,
+                "stages": dict.fromkeys(set(STAGES.values()), 0),
                 "_approval_hours": [],
             },
         )
         row["planned"] += 1
+        row["stages"][STAGES.get(post.status, "planning")] += 1
         if post.status == "Published":
             row["published"] += 1
             if post.published_on and getdate(post.published_on) <= getdate(
                 post.publish_on
             ):
                 row["on_time"] += 1
+            else:
+                row["late"] += 1
         elif get_datetime(post.publish_on) < now:
             row["overdue"] += 1
+        else:
+            row["upcoming"] += 1
         if post.status == "Client Review":
             row["awaiting_client"] += 1
         if post.sent_for_approval_on and post.client_decided_on:
@@ -155,3 +182,92 @@ def get_chart(rows: list[dict]) -> dict | None:
         "type": "bar",
         "barOptions": {"spaceRatio": 0.4},
     }
+
+
+@frappe.whitelist()
+def export_xlsx(from_date: str, to_date: str, customer: str | None = None):
+    """The delivery report as an Excel file, with a total row; same rows the page shows."""
+    from frappe.utils.xlsxutils import make_xlsx
+
+    frappe.has_permission("HD Content Post", "read", throw=True)
+    filters = frappe._dict(from_date=from_date, to_date=to_date, customer=customer)
+    columns = get_columns()
+    rows = get_rows(filters)
+
+    data = [[c["label"] for c in columns]]
+    data += [[row.get(c["fieldname"]) for c in columns] for row in rows]
+    data.append(total_row(columns, rows))
+
+    # Excel refuses sheet names over 31 characters; the dates are in the file name
+    xlsx = make_xlsx(
+        data, "Content delivery", column_widths=[c["width"] // 7 for c in columns]
+    )
+    suffix = f"-{frappe.scrub(customer)}" if customer else ""
+    frappe.response.filename = f"content-delivery-{from_date}-to-{to_date}{suffix}.xlsx"
+    frappe.response.filecontent = xlsx.getvalue()
+    frappe.response.type = "binary"
+
+
+def total_row(columns: list[dict], rows: list[dict]) -> list:
+    totals = {
+        key: sum(r[key] for r in rows)
+        for key in ("planned", "published", "on_time", "overdue", "awaiting_client")
+    }
+    totals["customer"] = _("Total")
+    totals["on_time_pct"] = (
+        round(totals["on_time"] / totals["published"] * 100, 1)
+        if totals["published"]
+        else 0
+    )
+    # averaging the per-customer averages would overweight small customers
+    totals["avg_approval_hours"] = None
+    return [totals.get(c["fieldname"]) for c in columns]
+
+
+@frappe.whitelist()
+def export_pdf(from_date: str, to_date: str, customer: str | None = None):
+    """The delivery report as a PDF download.
+
+    Frappe renders PDFs with wkhtmltopdf. Where it is not installed, the same page is
+    returned ready to print, and the browser's print dialog saves it as a PDF.
+    """
+    import shutil
+
+    frappe.has_permission("HD Content Post", "read", throw=True)
+    filters = frappe._dict(from_date=from_date, to_date=to_date, customer=customer)
+    columns = get_columns()
+    rows = get_rows(filters)
+    can_render_pdf = bool(shutil.which("wkhtmltopdf"))
+    html = frappe.render_template(  # the app's own fixed template, not user input - nosemgrep
+        "helpdesk/helpdesk/report/content_delivery/content_delivery_pdf.html",
+        {
+            "title": _("Content delivery report"),
+            "period": _("{0} to {1}").format(
+                formatdate(from_date), formatdate(to_date)
+            ),
+            "customer": customer,
+            "columns": [frappe._dict(c) for c in columns],
+            "rows": [[row.get(c["fieldname"]) for c in columns] for row in rows],
+            "total": total_row(columns, rows),
+            "generated_on": format_datetime(now_datetime()),
+            "generated_by": frappe.utils.get_fullname(frappe.session.user),
+            "auto_print": not can_render_pdf,
+        },
+    )
+    suffix = f"-{frappe.scrub(customer)}" if customer else ""
+    filename = f"content-delivery-{from_date}-to-{to_date}{suffix}"
+
+    if can_render_pdf:
+        from frappe.utils.pdf import get_pdf
+
+        frappe.response.filename = f"{filename}.pdf"
+        frappe.response.filecontent = get_pdf(
+            html, {"orientation": "Landscape", "page-size": "A4"}
+        )
+        frappe.response.type = "pdf"
+        return
+
+    frappe.response.filename = f"{filename}.html"
+    frappe.response.filecontent = html
+    frappe.response.type = "download"
+    frappe.response.display_content_as = "inline"

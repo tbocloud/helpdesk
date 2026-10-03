@@ -24,7 +24,7 @@
         error
         :icon="LucideCircleAlert"
         :title="__('Couldn\'t load the board')"
-        :message="__('Check your connection and try again.')"
+        :message="loadErrorMessage(kanban.error)"
       >
         <Button :label="__('Retry')" @click="kanban.reload()" />
       </TaskyState>
@@ -481,6 +481,7 @@ import {
   isOnHold,
   isOverdue,
   isPendingReview,
+  loadErrorMessage,
   priorityIcon,
   shortDate,
   taskStatusMeta,

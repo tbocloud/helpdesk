@@ -13,6 +13,7 @@
 		"status",
 		"publish_on",
 		"channel",
+		"platforms",
 		"format",
 		"team_section",
 		"writer",
@@ -94,7 +95,8 @@
 			"options": "Instagram\nFacebook\nLinkedIn\nX\nYouTube\nBlog\nEmail\nWhatsApp",
 			"reqd": 1,
 			"in_list_view": 1,
-			"in_standard_filter": 1
+			"in_standard_filter": 1,
+			"description": "Main platform; the first of Platforms"
 		},
 		{
 			"fieldname": "format",
@@ -249,11 +251,18 @@
 			"default": "0",
 			"read_only": 1,
 			"no_copy": 1
+		},
+		{
+			"fieldname": "platforms",
+			"fieldtype": "Small Text",
+			"label": "Platforms",
+			"description": "Every platform this one post goes out on, comma separated. Defaults to the Channel.",
+			"in_standard_filter": 0
 		}
 	],
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-09-30 12:00:00.000000",
+	"modified": "2026-10-01 17:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Content Post",

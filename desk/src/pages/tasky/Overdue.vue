@@ -24,7 +24,7 @@
           error
           :icon="LucideCircleAlert"
           :title="__('Couldn\'t load overdue tasks')"
-          :message="__('Check your connection and try again.')"
+          :message="loadErrorMessage(tasks.error)"
         >
           <Button :label="__('Retry')" @click="tasks.reload()" />
         </TaskyState>
@@ -187,7 +187,13 @@ import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import ProjectNav from "./components/ProjectNav.vue";
 import TaskStatusBadge from "./components/TaskStatusBadge.vue";
 import TaskyState from "./components/TaskyState.vue";
-import { daysUntil, isClosed, isOnHold, isOverdue } from "./taskMeta";
+import {
+  daysUntil,
+  isClosed,
+  isOnHold,
+  isOverdue,
+  loadErrorMessage,
+} from "./taskMeta";
 
 const props = defineProps<{ projectId: string }>();
 const router = useRouter();

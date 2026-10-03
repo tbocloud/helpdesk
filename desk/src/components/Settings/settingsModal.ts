@@ -34,6 +34,8 @@ import SavedReplyIcon from "../icons/SavedReplyIcon.vue";
 import ProfilePage from "./Profile/ProfilePage.vue";
 import Preferences from "./Preferences/Preferences.vue";
 import ContentSettings from "./Content/ContentSettings.vue";
+import FileStorageSettings from "./FileStorage/FileStorageSettings.vue";
+import LucideHardDrive from "~icons/lucide/hard-drive";
 import LucideCalendarDays from "~icons/lucide/calendar-days";
 
 export const showSettingsModal = ref(false);
@@ -153,6 +155,12 @@ export const tabs = computed(() => {
           component: markRaw(TelephonyPage),
         },
         {
+          label: __("File storage"),
+          icon: markRaw(LucideHardDrive),
+          component: markRaw(FileStorageSettings),
+          condition: () => auth.isAdmin,
+        },
+        {
           label: __("ERPNext"),
           icon: markRaw(ERPNextSettingsIcon),
           component: markRaw(ERPNextIntegrationSettings),
@@ -196,7 +204,8 @@ type TabName =
   | "Telephony"
   | "ERPNext"
   | "Saved Replies"
-  | "Content";
+  | "Content"
+  | "File storage";
 
 export const setActiveSettingsTab = (tabName: TabName) => {
   activeTab.value =
