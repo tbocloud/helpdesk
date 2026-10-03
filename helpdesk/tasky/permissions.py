@@ -76,6 +76,20 @@ def can_manage_project(project: str | None, user: str | None = None) -> bool:
     )
 
 
+def can_add_tasks(project: str | None, user: str | None = None) -> bool:
+    """Anyone on the project (owner, lead, member, or with a task in it) may add
+    tasks; approving, editing others' tasks and deleting stay with managers."""
+    user = user or frappe.session.user
+    if not project:
+        return False
+    return (
+        is_tasky_admin(user)
+        or can_manage_project(project, user)
+        or is_project_member(project, user)
+        or has_assigned_task(project, user)
+    )
+
+
 def is_project_member(project: str, user: str) -> bool:
     return bool(
         frappe.db.exists(
@@ -133,9 +147,11 @@ def task_query(user: str | None = None) -> str | None:
         return None
     # _assign stores a JSON list, so match the quoted email to avoid partial matches
     assigned = frappe.db.escape(f'%"{user}"%')
+    # a task someone added for a teammate stays visible to them
+    owner = frappe.db.escape(user)
     return (
         f"(`tabTask`.`project` in ({_managed_projects_subquery(user)}) "
-        f"or `tabTask`.`_assign` like {assigned})"
+        f"or `tabTask`.`_assign` like {assigned} or `tabTask`.`owner` = {owner})"
     )
 
 
@@ -176,8 +192,12 @@ def task_has_permission(
     user = user or frappe.session.user
     if is_tasky_admin(user) or can_manage_project(doc.project, user):
         return None
-    if ptype in ("create", "delete"):
+    if ptype == "create":
+        return None if can_add_tasks(doc.project, user) else False
+    if ptype == "delete":
         return False
+    if ptype in ("read", "print", "email", "report") and doc.get("owner") == user:
+        return None
     return None if is_assigned(doc, user) else False
 
 

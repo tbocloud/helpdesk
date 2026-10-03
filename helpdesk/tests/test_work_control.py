@@ -126,6 +126,27 @@ class TestMyWorkAndOverview(WorkControlCase):
             "can_approve", next(i for i in items if i["name"] == open_task)
         )
 
+    def test_a_ticket_becomes_a_task_in_any_project_you_are_on(self):
+        internal = make_project(
+            "Internal tooling", members=[(SUPPORT[0], "Developer")]
+        ).name
+        ticket = make_ticket(subject="Need a report", customer=OTHER_CUSTOMER)
+
+        context = self.as_user(
+            SUPPORT, lambda: work.get_ticket_task_context(ticket.name)
+        )
+        self.assertIn(internal, [p["name"] for p in context["projects"]])
+        result = self.as_user(
+            SUPPORT,
+            lambda: work.create_task_from_ticket(
+                ticket.name, internal, task_name="Build the report"
+            ),
+        )
+        self.assertEqual(
+            frappe.db.get_value("Task", result["task"]["name"], "hd_ticket"),
+            str(ticket.name),
+        )
+
     def test_overview_buckets_for_the_project_manager(self):
         overdue = self.make_task("Close GL", add_days(nowdate(), -1))
         soon = self.make_task("UAT sign-off", add_days(nowdate(), 1), is_key=1)

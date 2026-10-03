@@ -21,6 +21,7 @@ from frappe.utils import (
 from helpdesk.github_sync import OPEN_STATES as PR_OPEN_STATES
 from helpdesk.github_sync import get_pull_requests
 from helpdesk.tasky.permissions import (
+    can_add_tasks,
     can_manage_project,
     get_led_projects,
     get_managed_projects,
@@ -398,7 +399,7 @@ def get_ticket_task_context(ticket: str | int) -> dict:
     customer = frappe.db.get_value("HD Ticket", ticket, "customer")
 
     filters = {"status": ("not in", ["Completed", "Cancelled"])}
-    # the customer's projects are open to support agents; others only to their managers
+    # the customer's projects are open to support agents; others to the people on them
     candidates = frappe.get_all(
         "Project",
         filters=filters,
@@ -409,7 +410,7 @@ def get_ticket_task_context(ticket: str | int) -> dict:
     projects = [
         p
         for p in candidates
-        if (customer and p.customer == customer) or can_manage_project(p.name)
+        if (customer and p.customer == customer) or can_add_tasks(p.name)
     ]
     projects.sort(key=lambda p: p.customer != customer)
     # sent here because support agents who aren't members can't open the project
@@ -468,9 +469,11 @@ def create_task_from_ticket(
     same_customer = (
         bool(ticket_doc.customer) and project_customer == ticket_doc.customer
     )
-    if not (same_customer or can_manage_project(project)):
+    if not (same_customer or can_add_tasks(project)):
         frappe.throw(
-            _("You can only create tasks in this customer's projects."),
+            _(
+                "You can only create tasks in this customer's projects or in projects you are on."
+            ),
             frappe.PermissionError,
         )
     assigned_to = (assigned_to or "").strip()

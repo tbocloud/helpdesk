@@ -63,11 +63,14 @@
                 ? __(
                     'Generate a checklist from a template, or add tasks one at a time.'
                   )
+                : canAddTasks
+                ? __('Add a task, or wait for tasks assigned to you.')
                 : __('Tasks assigned to you in this project will show up here.')
             "
           >
-            <template v-if="canManage">
+            <template v-if="canAddTasks">
               <Button
+                v-if="canManage"
                 :label="__('Generate checklist')"
                 @click="showChecklistModal = true"
               />
@@ -428,6 +431,7 @@ watch(
 );
 
 const canManage = computed(() => !!projectDetail.data?.can_manage);
+const canAddTasks = computed(() => !!projectDetail.data?.can_add_tasks);
 const authStore = useAuthStore();
 
 // the assignee may edit the description; leads and managers everything

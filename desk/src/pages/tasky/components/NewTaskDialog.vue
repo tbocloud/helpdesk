@@ -257,11 +257,13 @@ const assigneeOptions = computed(() => {
   const others = assignableUsers.value.filter(
     (u) => !memberIds.value.has(u.name)
   );
+  // only the project's manager or lead brings new people onto the team
+  const canBringIn = !!projectDetail.data?.can_manage;
   return [
     ...(team.length
       ? [{ group: __("Project team"), items: team.map(toOption) }]
       : []),
-    ...(others.length
+    ...(others.length && canBringIn
       ? [{ group: __("Other agents"), items: others.map(toOption) }]
       : []),
   ];

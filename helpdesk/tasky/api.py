@@ -9,6 +9,7 @@ from frappe.desk.form import assign_to
 from helpdesk.github_sync import get_pull_requests
 from helpdesk.tasky.permissions import (
     MANAGER_PROJECT_ROLE,
+    can_add_tasks,
     can_manage_project,
     is_project_owner,
     is_tasky_admin,
@@ -464,17 +465,26 @@ def add_task(
 ):
     """Add a single task to a project, optionally assigned to one of its members."""
     project = _resolve_project(str(project))
-    if not can_manage_project(project):
+    if not can_add_tasks(project):
         frappe.throw(
-            _("Only the project's manager or lead can add tasks."),
+            _("Only people on this project can add tasks to it."),
             frappe.PermissionError,
         )
     if not str(task_name or "").strip():
         frappe.throw(_("Task name is required"))
     assigned_to = str(assigned_to or "").strip()
+    manages = can_manage_project(project)
     if assigned_to and not _is_assignable(assigned_to):
         frappe.throw(_("{0} is not an active agent.").format(assigned_to))
     if assigned_to and not _is_project_member(project, assigned_to):
+        # adding people to the team is the manager's call
+        if not manages:
+            frappe.throw(
+                _(
+                    "{0} isn't on this project. Ask the project's manager or lead to add them."
+                ).format(assigned_to),
+                frappe.PermissionError,
+            )
         _add_member_for_assignment(project, assigned_to)
     doc = frappe.get_doc(
         {
@@ -494,7 +504,8 @@ def add_task(
         }
     )
     doc.insert()
-    _assign_user(doc, assigned_to)
+    # a member may add work for a teammate; the rules above already allowed it
+    _assign_user(doc, assigned_to, ignore_permissions=not manages)
     _estimate_if_undated(doc)
     doc.reload()
     return _format_task(_task_dict(doc))
@@ -1382,6 +1393,7 @@ def get_project_detail(project: str):
             else []
         ),
         "can_manage": can_manage_project(doc.name),
+        "can_add_tasks": can_add_tasks(doc.name),
         "can_change_lead": is_project_owner(doc.name),
         "project_lead": doc.project_lead,
         "project_lead_name": (
@@ -1445,6 +1457,7 @@ def get_projects():
     )
     for p in projects:
         p["can_manage"] = can_manage_project(p["name"])
+        p["can_add_tasks"] = can_add_tasks(p["name"])
         p["can_edit"] = is_project_owner(p["name"])
         p["project_lead_name"] = lead_names.get(p.project_lead)
     return projects
