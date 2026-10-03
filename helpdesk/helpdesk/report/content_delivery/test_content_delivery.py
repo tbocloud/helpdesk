@@ -60,6 +60,14 @@ class TestContentDelivery(FrappeTestCase):
         self.assertEqual(row["awaiting_client"], 1)
         self.assertEqual(row["avg_approval_hours"], 6.0)
         self.assertGreaterEqual(row["overdue"], 1)
+        # every post lands in exactly one delivery segment and one stage
+        self.assertEqual(
+            row["on_time"] + row["late"] + row["overdue"] + row["upcoming"],
+            row["planned"],
+        )
+        self.assertEqual(sum(row["stages"].values()), row["planned"])
+        self.assertEqual(row["stages"]["published"], 1)
+        self.assertEqual(row["stages"]["review"], 1)
         self.assertEqual(chart["type"], "bar")
 
     def test_export_has_the_report_rows_and_a_total(self):
