@@ -228,6 +228,21 @@
                   }}
                 </template>
               </button>
+              <!-- how far that person is with their task for this post -->
+              <div
+                v-if="post[role.field] && taskOf(post.name, role.field)"
+                class="flex items-center gap-1.5"
+                :title="taskOf(post.name, role.field)!.task"
+              >
+                <TaskStatusBadge
+                  :status="taskOf(post.name, role.field)!.status"
+                />
+                <span
+                  v-if="isTaskLate(taskOf(post.name, role.field)!)"
+                  class="text-xs text-danger"
+                  >{{ __("late") }}</span
+                >
+              </div>
             </div>
           </div>
 
@@ -305,7 +320,8 @@
 
 <script setup lang="ts">
 import { __ } from "@/translation";
-import { Avatar, Button, dayjs } from "frappe-ui";
+import TaskStatusBadge from "@/pages/tasky/components/TaskStatusBadge.vue";
+import { Avatar, Button, createResource, dayjs } from "frappe-ui";
 import { computed, ref, watch } from "vue";
 import LucideBan from "~icons/lucide/ban";
 import LucideCalendarClock from "~icons/lucide/calendar-clock";
@@ -358,6 +374,39 @@ const emit = defineEmits<{
   (e: "add", date?: string): void;
   (e: "action", post: ContentPost, action: EntryAction, role?: TeamRole): void;
 }>();
+
+interface RoleTask {
+  task: string;
+  status: string;
+  due: string | null;
+}
+
+// each post's role tasks (created when someone is assigned), refreshed with the posts
+const teamTasks = createResource({
+  url: "helpdesk.api.content_board.get_team_task_status",
+  makeParams: () => ({ posts: props.posts.map((p) => p.name) }),
+});
+watch(
+  () =>
+    props.posts
+      .map((p) => `${p.name}:${p.writer}:${p.designer}:${p.marketer}`)
+      .join(),
+  () => props.posts.length && teamTasks.reload(),
+  { immediate: true }
+);
+
+function taskOf(post: string, role: TeamRole): RoleTask | undefined {
+  return teamTasks.data?.[post]?.[role];
+}
+
+function isTaskLate(task: RoleTask) {
+  return (
+    !!task.due &&
+    // an Overdue status already says so
+    !["Completed", "Cancelled", "Overdue"].includes(task.status) &&
+    dayjs(task.due).isBefore(dayjs(), "day")
+  );
+}
 
 type FilterKey = "all" | "missed" | "upcoming" | "published" | "cancelled";
 const filter = ref<FilterKey>("all");

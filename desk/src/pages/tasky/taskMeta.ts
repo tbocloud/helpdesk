@@ -2,6 +2,7 @@ import { __ } from "@/translation";
 import { dayjs } from "frappe-ui";
 import type { Component } from "vue";
 import LucideCircle from "~icons/lucide/circle";
+import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideCircleDot from "~icons/lucide/circle-dot";
 import LucideCircleX from "~icons/lucide/circle-x";
@@ -34,6 +35,8 @@ const TASK_STATUS: Record<string, StatusMeta> = {
   Open: { label: "Open", icon: LucideCircle, tone: "neutral" },
   Working: { label: "In progress", icon: LucideCircleDot, tone: "info" },
   "Pending Review": { label: "In review", icon: LucideEye, tone: "warning" },
+  // ERPNext moves open tasks past their due date to Overdue on its own
+  Overdue: { label: "Overdue", icon: LucideCircleAlert, tone: "danger" },
   Completed: { label: "Completed", icon: LucideCircleCheck, tone: "success" },
   Cancelled: { label: "Cancelled", icon: LucideCircleX, tone: "neutral" },
 };
@@ -51,7 +54,10 @@ const PRIORITY_ICONS: Record<string, Component> = {
   Low: LucideSignalLow,
 };
 
-export const TASK_STATUSES = Object.keys(TASK_STATUS);
+// Overdue is set by the system, never picked
+export const TASK_STATUSES = Object.keys(TASK_STATUS).filter(
+  (s) => s !== "Overdue"
+);
 export const CATEGORIES = ["Functional", "Development", "Support", "Common"];
 export const PRIORITIES = ["Low", "Medium", "High", "Urgent"];
 

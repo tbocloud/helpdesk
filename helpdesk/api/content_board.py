@@ -112,3 +112,35 @@ def get_role_tasks(post: str) -> list[dict]:
         },
         fields=["name", "content_role", "expected_time", "status"],
     )
+
+
+@frappe.whitelist()
+def get_team_task_status(posts: str | list) -> dict:
+    """Each post's role tasks and their status, for the posts on screen.
+
+    Only posts the viewer can see are answered; the task details are limited to
+    what the board shows, so people whose Task access is narrower still see how
+    their teammates are getting on.
+    """
+    posts = json.loads(posts) if isinstance(posts, str) else posts
+    if not posts or not frappe.get_meta("Task").has_field("content_post"):
+        return {}
+    visible = frappe.get_list(
+        "HD Content Post", filters={"name": ("in", posts[:500])}, pluck="name"
+    )
+    if not visible:
+        return {}
+    out: dict[str, dict] = {}
+    for task in frappe.get_all(
+        "Task",
+        filters={"content_post": ("in", visible), "content_role": ("is", "set")},
+        fields=["name", "content_post", "content_role", "status", "exp_end_date"],
+        order_by="creation asc",
+    ):
+        # the newest task for a role wins, e.g. after a cancelled one was replaced
+        out.setdefault(task.content_post, {})[task.content_role] = {
+            "task": task.name,
+            "status": task.status,
+            "due": str(task.exp_end_date) if task.exp_end_date else None,
+        }
+    return out
