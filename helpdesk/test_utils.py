@@ -1686,6 +1686,8 @@ def enable_file_storage(doctypes=("HD Content Post",), keep_local_copy=0):
     settings.set("document_types", [{"document_type": d} for d in doctypes])
     settings.save(ignore_permissions=True)
     frappe.clear_document_cache("HD File Storage Settings", "HD File Storage Settings")
+    # lets storage run in tests; callers must patch s3.get_client with FakeS3
+    frappe.flags.hd_fake_s3 = True
     return settings
 
 

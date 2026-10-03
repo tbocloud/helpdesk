@@ -25,12 +25,14 @@ OUTSIDER = ("s3.outsider@s3-test.example", "Omar Outsider")
 
 class TestS3Storage(FrappeTestCase):
     def setUp(self):
-        self.addCleanup(frappe.db.rollback)
-        self.addCleanup(frappe.set_user, "Administrator")
         self.bucket = FakeS3()
         patcher = patch.object(s3, "get_client", return_value=self.bucket)
         patcher.start()
+        # cleanups run last-in first-out: roll back while the fake bucket is still in place
         self.addCleanup(patcher.stop)
+        self.addCleanup(setattr, frappe.flags, "hd_fake_s3", False)
+        self.addCleanup(frappe.db.rollback)
+        self.addCleanup(frappe.set_user, "Administrator")
         create_customer(CUSTOMER)
         enable_file_storage()
         self.post = make_content_post("S3 post", CUSTOMER)
@@ -70,13 +72,13 @@ class TestS3Storage(FrappeTestCase):
 
     def test_bucket_failure_keeps_the_file_local(self):
         self.bucket.fail_uploads = True
-        doc = self.attach("kept.png")
+        # Error Logs survive a rollback, so capture the call instead of writing one
+        with patch.object(frappe, "log_error") as log_error:
+            doc = self.attach("kept.png")
         self.assertFalse(doc.get(s3.KEY_FIELD))
         self.assertTrue(os.path.exists(doc.get_full_path()))
-        self.assertTrue(
-            frappe.db.exists(
-                "Error Log", {"method": f"S3 upload failed for {doc.name}"}
-            )
+        self.assertEqual(
+            log_error.call_args.kwargs["title"], f"S3 upload failed for {doc.name}"
         )
 
     def test_download_checks_access_then_signs(self):
@@ -118,7 +120,8 @@ class TestS3Storage(FrappeTestCase):
         frappe.clear_document_cache(
             "HD File Storage Settings", "HD File Storage Settings"
         )
-        s3.move_existing_files_job()
+        # only this test's files: never the site's real attachments
+        s3.move_existing_files_job({"attached_to_name": self.post.name})
 
         doc.reload()
         self.assertTrue(doc.get(s3.KEY_FIELD))
@@ -129,11 +132,12 @@ class TestS3KeepLocalCopy(FrappeTestCase):
     """The default: files stay on this server and the bucket holds a second copy."""
 
     def setUp(self):
-        self.addCleanup(frappe.db.rollback)
         self.bucket = FakeS3()
         patcher = patch.object(s3, "get_client", return_value=self.bucket)
         patcher.start()
         self.addCleanup(patcher.stop)
+        self.addCleanup(setattr, frappe.flags, "hd_fake_s3", False)
+        self.addCleanup(frappe.db.rollback)
         create_customer(CUSTOMER)
         enable_file_storage(keep_local_copy=1)
         self.post = make_content_post("Kept post", CUSTOMER)
