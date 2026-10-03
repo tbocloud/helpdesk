@@ -196,12 +196,13 @@ class HDContentPost(Document):
             doc.save(ignore_permissions=True)
         current = set(doc.assignees())
         for user in current - set(plan["users"]):
-            assign_to.remove("Task", doc.name, user, ignore_permissions=True)
+            assign_to._remove("Task", doc.name, user, ignore_permissions=True)
         for user in set(plan["users"]) - current:
             self.give_task(doc, user)
 
     def give_task(self, task, user: str):
-        assign_to.add(
+        # the post's rules decided who does it; _add skips the caller's Task permission
+        assign_to._add(
             {"doctype": "Task", "name": task.name, "assign_to": [user]},
             ignore_permissions=True,
         )
