@@ -1,0 +1,228 @@
+{
+	"actions": [],
+	"creation": "2026-10-03 20:30:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"customer",
+		"enabled",
+		"posts_per_month",
+		"column_break_1",
+		"posting_days",
+		"publish_time",
+		"task_mode",
+		"plan_section",
+		"items",
+		"team_section",
+		"writer",
+		"column_break_2",
+		"designer",
+		"column_break_3",
+		"marketer",
+		"occasions_section",
+		"include_occasions",
+		"column_break_4",
+		"occasions_india",
+		"occasions_kerala",
+		"occasions_uae",
+		"status_section",
+		"last_planned_month"
+	],
+	"fields": [
+		{
+			"fieldname": "customer",
+			"fieldtype": "Link",
+			"label": "Customer",
+			"options": "HD Customer",
+			"reqd": 1,
+			"unique": 1,
+			"in_list_view": 1,
+			"in_standard_filter": 1
+		},
+		{
+			"fieldname": "enabled",
+			"fieldtype": "Check",
+			"label": "Plan Automatically",
+			"default": "1",
+			"in_list_view": 1,
+			"description": "Next month's posts are created on the planning day set in Content Settings."
+		},
+		{
+			"fieldname": "posts_per_month",
+			"fieldtype": "Int",
+			"label": "Posts per Month",
+			"read_only": 1,
+			"in_list_view": 1
+		},
+		{
+			"fieldname": "column_break_1",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "posting_days",
+			"fieldtype": "Select",
+			"label": "Posting Days",
+			"options": "Monday to Saturday\nMonday to Friday\nEvery day",
+			"default": "Monday to Saturday"
+		},
+		{
+			"fieldname": "publish_time",
+			"fieldtype": "Select",
+			"label": "Publish Time",
+			"default": "10:00",
+			"options": "07:00\n07:30\n08:00\n08:30\n09:00\n09:30\n10:00\n10:30\n11:00\n11:30\n12:00\n12:30\n13:00\n13:30\n14:00\n14:30\n15:00\n15:30\n16:00\n16:30\n17:00\n17:30\n18:00\n18:30\n19:00\n19:30\n20:00\n20:30\n21:00\n21:30\n22:00\n22:30"
+		},
+		{
+			"fieldname": "task_mode",
+			"fieldtype": "Select",
+			"label": "Tasks",
+			"options": "\nOne task per person\nOne task for the post\nNo tasks",
+			"description": "Leave empty to use the default in Content Settings."
+		},
+		{
+			"fieldname": "plan_section",
+			"fieldtype": "Section Break",
+			"label": "What Goes Out Each Month"
+		},
+		{
+			"fieldname": "items",
+			"fieldtype": "Table",
+			"label": "Posts",
+			"options": "HD Content Package Item",
+			"reqd": 1
+		},
+		{
+			"fieldname": "team_section",
+			"fieldtype": "Section Break",
+			"label": "Team"
+		},
+		{
+			"fieldname": "writer",
+			"fieldtype": "Link",
+			"label": "Writer",
+			"options": "User"
+		},
+		{
+			"fieldname": "column_break_2",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "designer",
+			"fieldtype": "Link",
+			"label": "Designer",
+			"options": "User"
+		},
+		{
+			"fieldname": "column_break_3",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "marketer",
+			"fieldtype": "Link",
+			"label": "Digital Marketer",
+			"options": "User"
+		},
+		{
+			"fieldname": "occasions_section",
+			"fieldtype": "Section Break",
+			"label": "Occasions",
+			"description": "Planned posts move onto occasion days (from HD Content Occasion) and get the occasion's idea as their brief."
+		},
+		{
+			"fieldname": "include_occasions",
+			"fieldtype": "Check",
+			"label": "Plan Posts on Occasions",
+			"default": "1"
+		},
+		{
+			"fieldname": "column_break_4",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "occasions_india",
+			"fieldtype": "Check",
+			"label": "India",
+			"default": "1",
+			"depends_on": "include_occasions"
+		},
+		{
+			"fieldname": "occasions_kerala",
+			"fieldtype": "Check",
+			"label": "Kerala",
+			"default": "0",
+			"depends_on": "include_occasions"
+		},
+		{
+			"fieldname": "occasions_uae",
+			"fieldtype": "Check",
+			"label": "UAE",
+			"default": "0",
+			"depends_on": "include_occasions"
+		},
+		{
+			"fieldname": "status_section",
+			"fieldtype": "Section Break",
+			"label": "Planning"
+		},
+		{
+			"fieldname": "last_planned_month",
+			"fieldtype": "Date",
+			"label": "Last Planned Month",
+			"read_only": 1,
+			"no_copy": 1
+		}
+	],
+	"index_web_pages_for_search": 0,
+	"links": [],
+	"modified": "2026-10-03 20:30:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD Content Package",
+	"owner": "Administrator",
+	"sort_field": "creation",
+	"sort_order": "DESC",
+	"states": [],
+	"track_changes": 1,
+	"autoname": "field:customer",
+	"naming_rule": "By fieldname",
+	"title_field": "customer",
+	"search_fields": "customer",
+	"permissions": [
+		{
+			"read": 1,
+			"role": "System Manager",
+			"report": 1,
+			"print": 1,
+			"email": 1,
+			"create": 1,
+			"write": 1,
+			"delete": 1,
+			"export": 1,
+			"share": 1
+		},
+		{
+			"read": 1,
+			"role": "Agent Manager",
+			"report": 1,
+			"print": 1,
+			"email": 1,
+			"create": 1,
+			"write": 1,
+			"delete": 1,
+			"export": 1,
+			"share": 1
+		},
+		{
+			"read": 1,
+			"role": "Project Manager",
+			"report": 1,
+			"print": 1,
+			"email": 1,
+			"create": 1,
+			"write": 1,
+			"delete": 1,
+			"export": 1,
+			"share": 1
+		}
+	]
+}

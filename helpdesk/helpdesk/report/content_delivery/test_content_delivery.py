@@ -90,9 +90,10 @@ class TestContentDelivery(FrappeTestCase):
         # Excel reports the file as damaged when a sheet name is longer than 31
         self.assertLessEqual(len(sheet.title), 31)
         rows = list(sheet.iter_rows(values_only=True))
-        self.assertEqual(rows[0][:2], ("Customer", "Planned"))
-        self.assertEqual(rows[1][:2], (CUSTOMER, 2))
-        self.assertEqual(rows[-1][:2], ("Total", 2))
+        # no monthly package, so nothing promised
+        self.assertEqual(rows[0][:3], ("Customer", "Promised", "Planned"))
+        self.assertEqual(rows[1][:3], (CUSTOMER, None, 2))
+        self.assertEqual(rows[-1][:3], ("Total", None, 2))
 
     def test_pdf_has_the_report_rows(self):
         from unittest.mock import patch

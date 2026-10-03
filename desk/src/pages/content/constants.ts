@@ -80,6 +80,22 @@ export function isMissed(post: ContentPost, now = new Date()) {
   );
 }
 
+// Not approved yet and going live within two days: the client needs chasing
+const APPROVED_STATUSES = ["Approved", "Scheduled", ...CLOSED_STATUSES];
+export function needsApprovalSoon(post: ContentPost, now = new Date()) {
+  if (!post.publish_on || APPROVED_STATUSES.includes(post.status)) return false;
+  const left =
+    new Date(post.publish_on.replace(" ", "T")).getTime() - now.getTime();
+  return left >= 0 && left <= 48 * 60 * 60 * 1000;
+}
+
+export interface ContentOccasion {
+  date: string;
+  occasion: string;
+  region: string;
+  idea?: string;
+}
+
 // Text Editor fields store HTML; the dialogs edit plain text
 export function htmlToText(html?: string) {
   if (!html) return "";

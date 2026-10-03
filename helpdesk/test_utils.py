@@ -1200,6 +1200,37 @@ def set_content_settings(**values):
     frappe.db.set_single_value("HD Content Settings", values)
 
 
+def make_content_package(customer: str, items: list[tuple[str, str, int]], **kwargs):
+    """Creates a monthly HD Content Package; `items` are (channel, format, posts per month)."""
+    return frappe.get_doc(
+        {
+            "doctype": "HD Content Package",
+            "customer": customer,
+            "items": [
+                {"channel": channel, "format": fmt, "posts_per_month": count}
+                for channel, fmt, count in items
+            ],
+            **kwargs,
+        }
+    ).insert(ignore_permissions=True)
+
+
+def make_content_occasion(
+    name: str, date: str, region: str = "Everywhere", repeats_yearly: int = 0, **kwargs
+):
+    """Creates an HD Content Occasion on `date` (a one-off unless `repeats_yearly`)."""
+    return frappe.get_doc(
+        {
+            "doctype": "HD Content Occasion",
+            "occasion_name": name,
+            "occasion_date": date,
+            "region": region,
+            "repeats_yearly": repeats_yearly,
+            **kwargs,
+        }
+    ).insert(ignore_permissions=True)
+
+
 def make_portal_contact(customer: str, email: str):
     """Adds a user-less Contact with `email` to `customer`, so that email can sign in to the content portal."""
     contact = create_contact(email.split("@")[0], email, user=False)["contact"]

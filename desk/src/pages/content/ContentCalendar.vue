@@ -17,6 +17,16 @@
           /></template>
         </Button>
         <Button
+          v-if="auth.isAdmin || auth.isManager || auth.isProjectManager"
+          variant="ghost"
+          :label="__('Monthly plans')"
+          link="/app/hd-content-package"
+        >
+          <template #prefix
+            ><LucideCalendarSync class="size-4" aria-hidden="true"
+          /></template>
+        </Button>
+        <Button
           variant="ghost"
           :label="__('Delivery report')"
           :route="{ name: 'ContentReport' }"
@@ -175,6 +185,38 @@
               </button>
             </div>
           </template>
+        </div>
+        <div
+          v-if="view !== 'calendar' && occasionsInRange.length"
+          class="flex flex-wrap items-center gap-1.5"
+          role="group"
+          :aria-label="__('Occasions')"
+        >
+          <span class="text-xs text-ink-gray-5">{{ __("Occasions") }}</span>
+          <button
+            v-for="o in occasionsInRange"
+            :key="`${o.date}-${o.occasion}`"
+            type="button"
+            class="inline-flex h-7 items-center gap-1.5 rounded-full border border-outline-gray-2 bg-surface-base px-2.5 text-xs text-ink-gray-7 hover:bg-surface-gray-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-3"
+            :title="o.idea || ''"
+            :aria-label="
+              __(
+                'Add an entry for {0} on {1}',
+                o.occasion,
+                dayjs(o.date).format('D MMMM')
+              )
+            "
+            @click="openAdd(o.date)"
+          >
+            <LucideSparkles
+              class="size-3.5 text-ink-gray-5"
+              aria-hidden="true"
+            />
+            <span class="font-mono tabular-nums">{{
+              dayjs(o.date).format("D MMM")
+            }}</span>
+            {{ o.occasion }}
+          </button>
         </div>
         <div
           v-if="view !== 'calendar' && period !== 'month'"
@@ -344,8 +386,12 @@ import LucideLayoutList from "~icons/lucide/layout-list";
 import LucidePlus from "~icons/lucide/plus";
 import LucideMail from "~icons/lucide/mail";
 import LucideSheet from "~icons/lucide/sheet";
+import LucideCalendarSync from "~icons/lucide/calendar-sync";
+import LucideSparkles from "~icons/lucide/sparkles";
+import { useAuthStore } from "@/stores/auth";
 import {
   CHANNELS,
+  type ContentOccasion,
   type ContentPost,
   type EntryAction,
   isMissed,
@@ -580,6 +626,25 @@ const monthPosts = createResource({
   },
 });
 
+const auth = useAuthStore();
+
+// festivals and national days in the period; a customer's package picks its regions
+const occasions = createResource({
+  url: "helpdesk.api.content_board.get_occasions",
+  makeParams: () => ({
+    start: fetchStart.value.format("YYYY-MM-DD"),
+    end: fetchEnd.value.format("YYYY-MM-DD"),
+    customer: filters.customer || undefined,
+  }),
+});
+const occasionsInRange = computed<ContentOccasion[]>(() =>
+  (occasions.data ?? []).filter(
+    (o: ContentOccasion) =>
+      !dayjs(o.date).isBefore(rangeStart.value, "day") &&
+      !dayjs(o.date).isAfter(rangeEnd.value, "day")
+  )
+);
+
 const ideas = createResource({
   url: "frappe.client.get_list",
   makeParams: () => ({
@@ -627,6 +692,7 @@ function refresh() {
     if (range.value) posts.reload();
   } else {
     monthPosts.reload();
+    occasions.reload();
   }
   ideas.reload();
 }

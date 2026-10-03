@@ -9,6 +9,7 @@
 		"title",
 		"customer",
 		"campaign",
+		"content_package",
 		"column_break_1",
 		"status",
 		"publish_on",
@@ -28,8 +29,11 @@
 		"client_connection",
 		"client_approval_ref",
 		"column_break_4",
+		"client_review_since",
 		"sent_for_approval_on",
 		"client_decided_on",
+		"client_reminded_on",
+		"client_escalated_on",
 		"outcome_section",
 		"client_feedback",
 		"published_url",
@@ -267,11 +271,42 @@
 			"options": "One task per person\nOne task for the post\nNo tasks",
 			"default": "One task per person",
 			"description": "One task per person: the writer, designer and marketer each get a task, due before the publish date. One task for the post: one task shared by all of them."
+		},
+		{
+			"fieldname": "content_package",
+			"fieldtype": "Link",
+			"label": "Monthly Package",
+			"options": "HD Content Package",
+			"read_only": 1,
+			"search_index": 1,
+			"description": "Set when the post was planned from the customer's monthly package."
+		},
+		{
+			"fieldname": "client_reminded_on",
+			"fieldtype": "Datetime",
+			"label": "Client Reminded On",
+			"read_only": 1,
+			"no_copy": 1
+		},
+		{
+			"fieldname": "client_escalated_on",
+			"fieldtype": "Datetime",
+			"label": "Team Alerted On",
+			"read_only": 1,
+			"no_copy": 1,
+			"description": "When the team was told the client still hadn't decided."
+		},
+		{
+			"fieldname": "client_review_since",
+			"fieldtype": "Datetime",
+			"label": "In Client Review Since",
+			"read_only": 1,
+			"no_copy": 1
 		}
 	],
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-10-03 18:00:00.000000",
+	"modified": "2026-10-03 20:30:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Content Post",

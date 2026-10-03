@@ -46,6 +46,12 @@ class HDContentSettings(Document):
     def validate(self):
         self.validate_placeholders()
         self.validate_alert_emails()
+        self.validate_plan_day()
+
+    def validate_plan_day(self):
+        # every month has a 28th, so the plan never skips a short month
+        if self.plan_day and not 1 <= self.plan_day <= 28:
+            frappe.throw(_("Plan next month on a day from 1 to 28."))
 
     def validate_placeholders(self):
         for subject_field, message_field, *_defaults, allowed in TEMPLATES.values():

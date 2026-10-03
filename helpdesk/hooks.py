@@ -65,6 +65,14 @@ scheduler_events = {
         "0 10 * * *": [
             "helpdesk.morning_brief.send_morning_briefs",
         ],
+        # 09:00: from the planning day on, next month's content plans
+        "0 9 * * *": [
+            "helpdesk.helpdesk.doctype.hd_content_package.hd_content_package.plan_upcoming_months",
+        ],
+        # 11:00: remind clients about posts waiting for approval, then alert the team
+        "0 11 * * *": [
+            "helpdesk.content_follow_up.send_client_follow_ups",
+        ],
         # Monday 08:00: last week's summary per customer
         "0 8 * * 1": [
             "helpdesk.work_summary.send_weekly_summaries",

@@ -63,6 +63,7 @@ class HDContentPost(Document):
         self.reset_missed_alert()
         self.warn_if_no_client_connection()
         self.set_task_mode()
+        self.start_client_review()
 
     def on_update(self):
         self.sync_tasks()
@@ -205,6 +206,21 @@ class HDContentPost(Document):
             self.give_task(task, user)
 
     def give_task(self, task, user: str):
+        if self.flags.quiet_tasks:
+            # a monthly plan hands out many tasks at once and its package sends one
+            # summary, so the ToDo is created without Frappe's notice per task
+            frappe.get_doc(
+                {
+                    "doctype": "ToDo",
+                    "allocated_to": user,
+                    "reference_type": "Task",
+                    "reference_name": task.name,
+                    "description": task.subject,
+                    "date": task.exp_end_date,
+                    "assigned_by": frappe.session.user,
+                }
+            ).insert(ignore_permissions=True)
+            return
         # the post's rules decided who does it; _add skips the caller's Task permission
         assign_to._add(
             {"doctype": "Task", "name": task.name, "assign_to": [user]},
@@ -259,6 +275,14 @@ class HDContentPost(Document):
             ),
             link=self.board_path(),
         )
+
+    def start_client_review(self):
+        """Entering Client Review starts the clock for the client reminder and team alert."""
+        if self.status != "Client Review" or not self.has_value_changed("status"):
+            return
+        self.client_review_since = now_datetime()
+        self.client_reminded_on = None
+        self.client_escalated_on = None
 
     def board_path(self) -> str:
         return f"/content?post={self.name}"
