@@ -184,64 +184,123 @@
           :placeholder="__('What should the design or video look like?')"
           :description="__('Internal only. The client never sees this.')"
         />
-        <div class="flex flex-col gap-1.5">
-          <div class="flex items-center justify-between">
-            <span class="text-xs text-ink-gray-5">{{ __("Images") }}</span>
-            <FileUploader
-              v-if="!isNew"
-              :file-types="['image/*']"
-              :upload-args="{
-                doctype: 'HD Content Post',
-                docname: post?.name,
-                private: true,
-              }"
-              @success="images.reload()"
-            >
-              <template #default="{ openFileSelector, uploading }">
-                <Button
-                  size="sm"
-                  :loading="uploading"
-                  :label="__('Add image')"
-                  @click="openFileSelector()"
-                >
-                  <template #prefix
-                    ><LucideImagePlus class="size-4" aria-hidden="true"
-                  /></template>
-                </Button>
-              </template>
-            </FileUploader>
+        <div
+          class="flex flex-col gap-1.5 rounded-lg transition-colors"
+          :class="dragging ? 'bg-brand-soft ring-2 ring-brand' : ''"
+          @dragover.prevent="!isNew && (dragging = true)"
+          @dragleave.self="dragging = false"
+          @drop.prevent="onDrop"
+        >
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-xs text-ink-gray-5">{{ __("Attachments") }}</span>
+            <template v-if="!isNew">
+              <input
+                ref="fileInput"
+                type="file"
+                multiple
+                :accept="ACCEPT"
+                class="hidden"
+                @change="onPick"
+              />
+              <Button
+                size="sm"
+                :loading="!!uploading"
+                :label="
+                  uploading
+                    ? __(
+                        'Uploading {0} of {1}',
+                        String(uploading.done + 1),
+                        String(uploading.total)
+                      )
+                    : __('Add files')
+                "
+                @click="fileInput?.click()"
+              >
+                <template #prefix
+                  ><LucidePaperclip class="size-4" aria-hidden="true"
+                /></template>
+              </Button>
+            </template>
           </div>
           <p v-if="isNew" class="text-p-sm text-ink-gray-5">
-            {{ __("Create the post first, then add its designs here.") }}
+            {{
+              __("Create the post first, then add its designs and files here.")
+            }}
           </p>
-          <p v-else-if="!images.data?.length" class="text-p-sm text-ink-gray-5">
+          <p
+            v-else-if="!attachments.data?.length"
+            class="rounded-lg border border-dashed border-outline-gray-3 px-3 py-5 text-center text-p-sm text-ink-gray-5"
+          >
             {{
               __(
-                "No images yet. They're sent to the client with the approval request."
+                "Drop files here or use Add files. You can pick several at once. Images are sent to the client with the approval request."
               )
             }}
           </p>
-          <ul v-else class="grid grid-cols-3 gap-2 sm:grid-cols-4" role="list">
-            <li
-              v-for="img in images.data"
-              :key="img.name"
-              class="group relative aspect-square overflow-hidden rounded-lg border border-outline-gray-2"
+          <template v-else>
+            <ul
+              v-if="imageFiles.length"
+              class="grid grid-cols-3 gap-2 sm:grid-cols-4"
+              role="list"
             >
-              <img
-                :src="img.file_url"
-                :alt="img.file_name"
-                class="size-full object-cover"
-              />
-              <button
-                type="button"
-                class="absolute right-1 top-1 grid size-6 place-items-center rounded-md bg-surface-base/90 text-ink-gray-7 opacity-0 shadow-sm transition group-hover:opacity-100 focus-visible:opacity-100"
-                :aria-label="__('Remove {0}', img.file_name)"
-                @click="removeImage(img.name)"
+              <li
+                v-for="img in imageFiles"
+                :key="img.name"
+                class="group relative aspect-square overflow-hidden rounded-lg border border-outline-gray-2"
               >
-                <LucideX class="size-3.5" aria-hidden="true" />
-              </button>
-            </li>
-          </ul>
+                <a :href="img.file_url" target="_blank" rel="noopener">
+                  <img
+                    :src="img.file_url"
+                    :alt="img.file_name"
+                    class="size-full object-cover"
+                    loading="lazy"
+                  />
+                </a>
+                <button
+                  type="button"
+                  class="absolute right-1 top-1 grid size-6 place-items-center rounded-md bg-surface-base/90 text-ink-gray-7 opacity-0 shadow-sm transition group-hover:opacity-100 focus-visible:opacity-100"
+                  :aria-label="__('Remove {0}', img.file_name)"
+                  @click="removeFile(img.name)"
+                >
+                  <LucideX class="size-3.5" aria-hidden="true" />
+                </button>
+              </li>
+            </ul>
+            <ul
+              v-if="otherFiles.length"
+              class="flex flex-col gap-1.5"
+              role="list"
+            >
+              <li
+                v-for="f in otherFiles"
+                :key="f.name"
+                class="flex items-center gap-2 rounded-lg border border-outline-gray-2 px-3 py-2"
+              >
+                <LucideFileText
+                  class="size-4 shrink-0 text-ink-gray-5"
+                  aria-hidden="true"
+                />
+                <a
+                  :href="f.file_url"
+                  target="_blank"
+                  rel="noopener"
+                  class="min-w-0 flex-1 truncate text-sm text-ink-gray-8 hover:underline"
+                  >{{ f.file_name }}</a
+                >
+                <span class="shrink-0 font-mono text-xs text-ink-gray-5">{{
+                  fileSize(f.file_size)
+                }}</span>
+                <button
+                  type="button"
+                  class="grid size-6 place-items-center rounded-md text-ink-gray-5 hover:bg-surface-gray-2 hover:text-ink-gray-8"
+                  :aria-label="__('Remove {0}', f.file_name)"
+                  @click="removeFile(f.name)"
+                >
+                  <LucideX class="size-3.5" aria-hidden="true" />
+                </button>
+              </li>
+            </ul>
+          </template>
         </div>
         <FormControl
           v-if="form.status === 'Published'"
@@ -287,13 +346,14 @@ import {
   dayjs,
   ErrorMessage,
   createResource,
-  FileUploader,
+  FileUploadHandler,
   FormControl,
   toast,
 } from "frappe-ui";
 import { computed, reactive, ref, watch } from "vue";
 import LucideCircleCheck from "~icons/lucide/circle-check";
-import LucideImagePlus from "~icons/lucide/image-plus";
+import LucideFileText from "~icons/lucide/file-text";
+import LucidePaperclip from "~icons/lucide/paperclip";
 import LucideX from "~icons/lucide/x";
 import LucideClock from "~icons/lucide/clock";
 import LucideLoaderCircle from "~icons/lucide/loader-circle";
@@ -394,7 +454,12 @@ watch(open, async (isOpen) => {
 
 // --- images ---
 
-const images = createResource({
+const IMAGE = /\.(png|jpe?g|gif|webp)$/i;
+// designs, videos, documents and source files; the client portal shows the images
+const ACCEPT =
+  "image/*,video/*,application/pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.zip,.psd,.ai,.svg";
+
+const attachments = createResource({
   url: "frappe.client.get_list",
   makeParams: () => ({
     doctype: "File",
@@ -403,25 +468,79 @@ const images = createResource({
       attached_to_name: props.post?.name,
       is_folder: 0,
     },
-    fields: ["name", "file_name", "file_url"],
+    fields: ["name", "file_name", "file_url", "file_size"],
     order_by: "creation asc",
   }),
-  transform: (files: any[]) =>
-    (files ?? []).filter((f) =>
-      /\.(png|jpe?g|gif|webp)$/i.test(f.file_name || "")
-    ),
 });
+const imageFiles = computed(() =>
+  (attachments.data ?? []).filter((f: any) => IMAGE.test(f.file_name || ""))
+);
+const otherFiles = computed(() =>
+  (attachments.data ?? []).filter((f: any) => !IMAGE.test(f.file_name || ""))
+);
+
+const fileInput = ref<HTMLInputElement | null>(null);
+const uploading = ref<{ done: number; total: number } | null>(null);
+const dragging = ref(false);
+
+function onPick(e: Event) {
+  const input = e.target as HTMLInputElement;
+  uploadFiles([...(input.files ?? [])]);
+  input.value = "";
+}
+
+function onDrop(e: DragEvent) {
+  dragging.value = false;
+  if (isNew.value) return;
+  uploadFiles([...(e.dataTransfer?.files ?? [])]);
+}
+
+// one at a time: a failed file is reported by name and the rest still upload
+async function uploadFiles(files: File[]) {
+  if (!files.length || !props.post?.name) return;
+  uploading.value = { done: 0, total: files.length };
+  const failed: string[] = [];
+  for (const file of files) {
+    try {
+      await new FileUploadHandler().upload(file, {
+        doctype: "HD Content Post",
+        docname: props.post.name,
+        private: true,
+      });
+    } catch {
+      failed.push(file.name);
+    }
+    uploading.value.done++;
+  }
+  uploading.value = null;
+  attachments.reload();
+  const added = files.length - failed.length;
+  if (added) {
+    toast.success(
+      added === 1 ? __("1 file added") : __("{0} files added", String(added))
+    );
+  }
+  if (failed.length) {
+    toast.error(__("Couldn't upload {0}", failed.join(", ")));
+  }
+}
+
+function fileSize(bytes?: number) {
+  if (!bytes) return "";
+  if (bytes < 1024 * 1024) return `${Math.max(Math.round(bytes / 1024), 1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
 
 watch(open, (isOpen) => {
-  if (isOpen && !isNew.value) images.reload();
+  if (isOpen && !isNew.value) attachments.reload();
 });
 
-async function removeImage(name: string) {
+async function removeFile(name: string) {
   try {
     await call("frappe.client.delete", { doctype: "File", name });
-    images.reload();
+    attachments.reload();
   } catch (e: any) {
-    toast.error(e?.messages?.[0] || __("Couldn't remove the image"));
+    toast.error(e?.messages?.[0] || __("Couldn't remove the file"));
   }
 }
 
