@@ -165,6 +165,13 @@
                   · {{ post.customer }}</template
                 >
               </p>
+              <p
+                v-if="needsApprovalSoon(post, now)"
+                class="mt-1 inline-flex items-center gap-1 rounded bg-warning-soft px-1.5 py-0.5 text-xs text-warning"
+              >
+                <LucideTriangleAlert class="size-3.5" aria-hidden="true" />
+                {{ __("Goes live within 2 days and isn't approved yet") }}
+              </p>
             </div>
             <span class="font-mono text-xs tabular-nums text-ink-gray-5">{{
               dayjs(post.publish_on).format("h:mm A")
@@ -313,12 +320,14 @@ import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideExternalLink from "~icons/lucide/external-link";
 import LucidePlus from "~icons/lucide/plus";
 import LucideSend from "~icons/lucide/send";
+import LucideTriangleAlert from "~icons/lucide/triangle-alert";
 import {
   CLOSED_STATUSES,
   type ContentPost,
   type EntryAction,
   htmlToText,
   isMissed,
+  needsApprovalSoon,
   platformsOf,
   TEAM_ROLES,
   type TeamRole,

@@ -7,9 +7,12 @@ what is late, and how long clients take to approve."""
 import frappe
 from frappe import _
 from frappe.utils import (
+    add_days,
     format_datetime,
     formatdate,
     get_datetime,
+    get_first_day,
+    get_last_day,
     getdate,
     now_datetime,
 )
@@ -42,6 +45,12 @@ def get_columns():
             "fieldtype": "Link",
             "options": "HD Customer",
             "width": 220,
+        },
+        {
+            "fieldname": "promised",
+            "label": _("Promised"),
+            "fieldtype": "Int",
+            "width": 100,
         },
         {
             "fieldname": "planned",
@@ -119,21 +128,7 @@ def get_rows(filters) -> list[dict]:
     now = now_datetime()
     by_customer: dict[str, dict] = {}
     for post in posts:
-        row = by_customer.setdefault(
-            post.customer,
-            {
-                "customer": post.customer,
-                "planned": 0,
-                "published": 0,
-                "on_time": 0,
-                "overdue": 0,
-                "awaiting_client": 0,
-                "late": 0,
-                "upcoming": 0,
-                "stages": dict.fromkeys(set(STAGES.values()), 0),
-                "_approval_hours": [],
-            },
-        )
+        row = by_customer.setdefault(post.customer, new_row(post.customer))
         row["planned"] += 1
         row["stages"][STAGES.get(post.status, "planning")] += 1
         if post.status == "Published":
@@ -157,6 +152,9 @@ def get_rows(filters) -> list[dict]:
             ).total_seconds() / 3600
             row["_approval_hours"].append(max(hours, 0))
 
+    for customer, promised in promised_posts(filters, set(by_customer)).items():
+        by_customer.setdefault(customer, new_row(customer))["promised"] = promised
+
     rows = []
     for row in sorted(by_customer.values(), key=lambda r: r["customer"] or ""):
         hours = row.pop("_approval_hours")
@@ -166,6 +164,55 @@ def get_rows(filters) -> list[dict]:
         row["avg_approval_hours"] = round(sum(hours) / len(hours), 1) if hours else None
         rows.append(row)
     return rows
+
+
+def new_row(customer: str) -> dict:
+    return {
+        "customer": customer,
+        "promised": None,
+        "planned": 0,
+        "published": 0,
+        "on_time": 0,
+        "overdue": 0,
+        "awaiting_client": 0,
+        "late": 0,
+        "upcoming": 0,
+        "stages": dict.fromkeys(set(STAGES.values()), 0),
+        "_approval_hours": [],
+    }
+
+
+def promised_posts(filters, visible: set) -> dict[str, int]:
+    """Posts each customer's monthly package promises over the period (pro rata by day).
+
+    Customers the viewer can't see posts for are left out unless they may read packages.
+    """
+    package_filters = {"enabled": 1}
+    if filters.customer:
+        package_filters["customer"] = filters.customer
+    packages = frappe.get_all(
+        "HD Content Package",
+        filters=package_filters,
+        fields=["customer", "posts_per_month"],
+    )
+    sees_all = frappe.has_permission("HD Content Package", "read")
+    start, end = getdate(filters.from_date), getdate(filters.to_date)
+    return {
+        p.customer: prorated(p.posts_per_month or 0, start, end)
+        for p in packages
+        if sees_all or p.customer in visible
+    }
+
+
+def prorated(per_month: int, start, end) -> int:
+    total = 0.0
+    month = get_first_day(start)
+    while month <= end:
+        last = get_last_day(month)
+        days = (min(end, last) - max(start, month)).days + 1
+        total += per_month * days / last.day
+        month = add_days(last, 1)
+    return round(total)
 
 
 def get_chart(rows: list[dict]) -> dict | None:
@@ -213,6 +260,7 @@ def total_row(columns: list[dict], rows: list[dict]) -> list:
         key: sum(r[key] for r in rows)
         for key in ("planned", "published", "on_time", "overdue", "awaiting_client")
     }
+    totals["promised"] = sum(r["promised"] or 0 for r in rows) or None
     totals["customer"] = _("Total")
     totals["on_time_pct"] = (
         round(totals["on_time"] / totals["published"] * 100, 1)

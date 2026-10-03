@@ -1,0 +1,52 @@
+{
+	"actions": [],
+	"creation": "2026-10-03 20:30:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"channel",
+		"format",
+		"posts_per_month"
+	],
+	"fields": [
+		{
+			"fieldname": "channel",
+			"fieldtype": "Select",
+			"label": "Channel",
+			"options": "Instagram\nFacebook\nLinkedIn\nX\nYouTube\nBlog\nEmail\nWhatsApp",
+			"reqd": 1,
+			"in_list_view": 1
+		},
+		{
+			"fieldname": "format",
+			"fieldtype": "Select",
+			"label": "Format",
+			"options": "Post\nCarousel\nReel\nStory\nVideo\nArticle\nNewsletter",
+			"default": "Post",
+			"reqd": 1,
+			"in_list_view": 1
+		},
+		{
+			"fieldname": "posts_per_month",
+			"fieldtype": "Int",
+			"label": "Posts per Month",
+			"default": "4",
+			"reqd": 1,
+			"in_list_view": 1
+		}
+	],
+	"index_web_pages_for_search": 0,
+	"links": [],
+	"modified": "2026-10-03 20:30:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD Content Package Item",
+	"owner": "Administrator",
+	"sort_field": "creation",
+	"sort_order": "DESC",
+	"states": [],
+	"track_changes": 1,
+	"istable": 1,
+	"editable_grid": 1,
+	"permissions": []
+}

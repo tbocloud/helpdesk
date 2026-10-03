@@ -26,7 +26,13 @@
 		"tasks_section",
 		"default_task_mode",
 		"writer_days_before",
-		"designer_days_before"
+		"designer_days_before",
+		"planning_section",
+		"plan_day",
+		"follow_up_section",
+		"client_reminder_days",
+		"column_break_follow_up",
+		"client_escalate_days"
 	],
 	"fields": [
 		{
@@ -165,11 +171,46 @@
 			"default": "1",
 			"non_negative": 1,
 			"description": "The marketer's task is due on the publish date; a single task for the post is due with the designer."
+		},
+		{
+			"fieldname": "planning_section",
+			"fieldtype": "Section Break",
+			"label": "Monthly Plans"
+		},
+		{
+			"fieldname": "plan_day",
+			"fieldtype": "Int",
+			"label": "Plan Next Month On Day",
+			"default": "20",
+			"description": "From this day of the month, next month's posts are created for every customer with a monthly package (HD Content Package)."
+		},
+		{
+			"fieldname": "follow_up_section",
+			"fieldtype": "Section Break",
+			"label": "Client Approval Follow-up"
+		},
+		{
+			"fieldname": "client_reminder_days",
+			"fieldtype": "Int",
+			"label": "Remind Client After (Days)",
+			"default": "2",
+			"description": "Posts still in Client Review this many days after they were sent: the client's contacts get one reminder email. 0 turns it off."
+		},
+		{
+			"fieldname": "column_break_follow_up",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "client_escalate_days",
+			"fieldtype": "Int",
+			"label": "Alert Team After (Days)",
+			"default": "4",
+			"description": "Still no decision after this many days: the post's marketer, its creator and the project lead are told. 0 turns it off."
 		}
 	],
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-10-03 18:00:00.000000",
+	"modified": "2026-10-03 20:30:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Content Settings",

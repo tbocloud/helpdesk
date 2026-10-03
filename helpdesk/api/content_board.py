@@ -4,6 +4,11 @@ import json
 
 import frappe
 from frappe import _
+from frappe.utils import date_diff
+
+from helpdesk.helpdesk.doctype.hd_content_occasion.hd_content_occasion import (
+    occasions_between,
+)
 
 TEAM_FIELDS = ("writer", "designer", "marketer")
 # fields the Add entry dialog may set on every post it creates
@@ -67,6 +72,28 @@ def get_team_defaults(customer: str) -> dict:
         limit=1,
     )
     return latest[0] if latest else dict.fromkeys(TEAM_FIELDS)
+
+
+@frappe.whitelist()
+def get_occasions(start: str, end: str, customer: str | None = None) -> list[dict]:
+    """Occasions between two dates; for one customer, only its package's regions."""
+    frappe.has_permission("HD Content Post", "read", throw=True)
+    if date_diff(end, start) > 400:
+        frappe.throw(_("Pick a range of at most a year."))
+    regions = None
+    if customer and frappe.db.exists("HD Content Package", customer):
+        regions = frappe.get_cached_doc(
+            "HD Content Package", customer
+        ).occasion_regions()
+    return [
+        {
+            "date": str(o.date),
+            "occasion": o.occasion_name,
+            "region": o.region,
+            "idea": o.idea,
+        }
+        for o in occasions_between(start, end, regions)
+    ]
 
 
 @frappe.whitelist(methods=["POST"])

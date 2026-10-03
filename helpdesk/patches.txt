@@ -51,6 +51,7 @@ helpdesk.patches.set_persona_captured_for_existing_sites
 helpdesk.patches.set_default_portal_settings
 helpdesk.patches.v16_0_2.seed_model_pricing
 helpdesk.patches.v16_0_2.set_content_task_settings
+helpdesk.patches.v16_0_2.content_plans_and_follow_ups
 helpdesk.patches.v16_0_2.enable_kb_drafts
 helpdesk.patches.v16_0_2.normalize_site_urls
 helpdesk.patches.v16_0_2.drop_registration_key

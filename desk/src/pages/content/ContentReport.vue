@@ -417,6 +417,8 @@ import DeliveryDonut from "./components/DeliveryDonut.vue";
 
 interface Row {
   customer: string;
+  // from the customer's monthly package; null when it has none
+  promised: number | null;
   planned: number;
   published: number;
   on_time: number;
@@ -465,7 +467,21 @@ const NUMERIC: {
   format: (r: Row) => string;
   tone?: (r: Row) => string;
 }[] = [
-  { key: "planned", label: __("Planned"), format: (r) => String(r.planned) },
+  {
+    key: "promised",
+    label: __("Promised"),
+    format: (r) => (r.promised == null ? "—" : String(r.promised)),
+  },
+  {
+    key: "planned",
+    label: __("Planned"),
+    format: (r) => String(r.planned),
+    // fewer posts planned than the package promises
+    tone: (r) =>
+      r.promised != null && r.planned < r.promised
+        ? "bg-warning-soft text-warning"
+        : "",
+  },
   {
     key: "published",
     label: __("Published"),
