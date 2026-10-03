@@ -278,7 +278,7 @@
                   class="absolute right-1 top-1 flex gap-1 transition sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
                 >
                   <a
-                    :href="img.file_url"
+                    :href="downloadHref(img.file_url)"
                     :download="img.file_name"
                     class="grid size-6 place-items-center rounded-md bg-surface-base/90 text-ink-gray-7 shadow-sm hover:text-ink-gray-9"
                     :aria-label="__('Download {0}', img.file_name)"
@@ -323,7 +323,7 @@
                   fileSize(f.file_size)
                 }}</span>
                 <a
-                  :href="f.file_url"
+                  :href="downloadHref(f.file_url)"
                   :download="f.file_name"
                   class="grid size-6 place-items-center rounded-md text-ink-gray-5 hover:bg-surface-gray-2 hover:text-ink-gray-8"
                   :aria-label="__('Download {0}', f.file_name)"
@@ -566,6 +566,14 @@ async function uploadFiles(files: File[]) {
   if (failed.length) {
     toast.error(__("Couldn't upload {0}", failed.join(", ")));
   }
+}
+
+// Files kept in S3 open through a signed link on another host, where browsers
+// ignore the download attribute; ask the server for a "save" link instead
+function downloadHref(url: string) {
+  return url.includes("helpdesk.storage.s3.download")
+    ? `${url}&download=1`
+    : url;
 }
 
 // Frappe zips them and checks read access on every file
