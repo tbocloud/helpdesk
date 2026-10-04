@@ -13,6 +13,7 @@ from helpdesk.helpdesk.doctype.hd_content_package.hd_content_package import (
 )
 from helpdesk.helpdesk.report.content_delivery.content_delivery import execute
 from helpdesk.test_utils import (
+    content_plan_values,
     create_customer,
     hold_commits,
     make_content_occasion,
@@ -298,25 +299,15 @@ class TestMonthlyPlansPage(ContentPlanningCase):
 
     PLANS_NOWDATE = "helpdesk.api.content_plans.nowdate"
 
-    def values(self, **overrides):
-        return {
-            "customer": CUSTOMER,
-            "items": [
-                {"channel": "Instagram", "format": "Post", "posts_per_month": 6},
-                {"channel": "LinkedIn", "format": "Article", "posts_per_month": 2},
-            ],
-            "writer": WRITER[0],
-            "posting_days": "Monday to Friday",
-            "publish_time": "18:30",
-            "enabled": 1,
-            **overrides,
-        }
-
     def test_create_edit_plan_and_list_it(self):
-        name = content_plans.save_plan(self.values())
+        name = content_plans.save_plan(content_plan_values(CUSTOMER, writer=WRITER[0]))
         content_plans.save_plan(
-            self.values(
-                items=[{"channel": "Instagram", "format": "Reel", "posts_per_month": 3}]
+            content_plan_values(
+                CUSTOMER,
+                writer=WRITER[0],
+                items=[
+                    {"channel": "Instagram", "format": "Reel", "posts_per_month": 3}
+                ],
             ),
             name=name,
         )
@@ -336,7 +327,7 @@ class TestMonthlyPlansPage(ContentPlanningCase):
         self.assertTrue(data["can_edit"])
 
     def test_plan_now_from_the_page(self):
-        name = content_plans.save_plan(self.values())
+        name = content_plans.save_plan(content_plan_values(CUSTOMER, writer=WRITER[0]))
         with patch(NOWDATE, return_value=TODAY):
             self.assertEqual(content_plans.plan_now(name, "next"), 8)
         with patch(self.PLANS_NOWDATE, return_value=TODAY):
@@ -351,7 +342,7 @@ class TestMonthlyPlansPage(ContentPlanningCase):
         self.assertTrue(all(getdate(p).weekday() < 5 for p in posts))
 
     def test_deleting_a_plan_keeps_its_posts(self):
-        name = content_plans.save_plan(self.values())
+        name = content_plans.save_plan(content_plan_values(CUSTOMER, writer=WRITER[0]))
         with patch(NOWDATE, return_value=TODAY):
             content_plans.plan_now(name, "next")
         content_plans.delete_plan(name)

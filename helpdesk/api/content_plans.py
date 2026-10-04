@@ -175,4 +175,5 @@ def save_occasion(values: str | dict, name: str | None = None) -> str:
 
 @frappe.whitelist(methods=["POST"])
 def delete_occasion(name: str):
+    frappe.get_doc(OCCASION, name).check_permission("delete")
     frappe.delete_doc(OCCASION, name)

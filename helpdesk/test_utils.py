@@ -1215,6 +1215,22 @@ def make_content_package(customer: str, items: list[tuple[str, str, int]], **kwa
     ).insert(ignore_permissions=True)
 
 
+def content_plan_values(customer: str, **overrides) -> dict:
+    """What the Monthly plans page sends to save a plan: 6 Instagram posts and
+    2 LinkedIn articles a month, weekdays at 18:30, planning automatically."""
+    return {
+        "customer": customer,
+        "items": [
+            {"channel": "Instagram", "format": "Post", "posts_per_month": 6},
+            {"channel": "LinkedIn", "format": "Article", "posts_per_month": 2},
+        ],
+        "posting_days": "Monday to Friday",
+        "publish_time": "18:30",
+        "enabled": 1,
+        **overrides,
+    }
+
+
 def make_content_occasion(
     name: str, date: str, region: str = "Everywhere", repeats_yearly: int = 0, **kwargs
 ):
