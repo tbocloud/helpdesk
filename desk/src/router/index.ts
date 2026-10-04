@@ -138,6 +138,11 @@ const portalRoutes = [
     component: () => import("@/pages/content/ContentReport.vue"),
   },
   {
+    path: "/content/plans",
+    name: "ContentPlans",
+    component: () => import("@/pages/content/ContentPlans.vue"),
+  },
+  {
     path: "/projects",
     name: "TaskyProjects",
     component: () => import("@/pages/tasky/Projects.vue"),
