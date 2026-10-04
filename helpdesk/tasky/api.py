@@ -300,6 +300,7 @@ def generate_checklist(project: str, template: str):
     CATEGORY_TO_ROLE = {
         "Functional": "Functional Consultant",
         "Development": "Developer",
+        "DevOps": "DevOps Engineer",
         "Support": "Support Engineer",
     }
 

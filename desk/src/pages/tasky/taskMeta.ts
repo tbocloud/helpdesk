@@ -54,7 +54,13 @@ const PRIORITY_ICONS: Record<string, Component> = {
 };
 
 export const TASK_STATUSES = Object.keys(TASK_STATUS);
-export const CATEGORIES = ["Functional", "Development", "Support", "Common"];
+export const CATEGORIES = [
+  "Functional",
+  "Development",
+  "DevOps",
+  "Support",
+  "Common",
+];
 export const PRIORITIES = ["Low", "Medium", "High", "Urgent"];
 
 export function categoryOptions() {
