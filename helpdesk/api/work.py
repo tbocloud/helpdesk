@@ -501,6 +501,7 @@ def create_task_from_ticket(
             "exp_end_date": due_date or None,
             "is_key": 1 if is_key else 0,
             "hd_ticket": ticket,
+            # Task's existing "Estimated Hours" custom field (setup/install.py)
             "custom_estimated_hours": frappe.utils.flt(estimated_hours) or 0,
         }
     )
