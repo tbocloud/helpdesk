@@ -246,6 +246,7 @@ const roleOptions = computed(() => [
   { label: __("Project Manager"), value: "Project Manager" },
   { label: __("Developer"), value: "Developer" },
   { label: __("Functional Consultant"), value: "Functional Consultant" },
+  { label: __("DevOps Engineer"), value: "DevOps Engineer" },
   { label: __("Support Engineer"), value: "Support Engineer" },
   { label: __("Member"), value: "" },
 ]);
