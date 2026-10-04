@@ -61,6 +61,10 @@ def _format_task(task):
         "start_date": task.get("exp_start_date"),
         "due_date": task.get("exp_end_date"),
         "assigned_to": assigned[0] if assigned else None,
+        # cached per request, so a board of tasks doesn't query User per card
+        "assigned_to_name": frappe.utils.get_fullname(assigned[0])
+        if assigned
+        else None,
         "assignees": assigned,
         "custom_timer_start": task.get("custom_timer_start"),
         "custom_timer_elapsed": task.get("custom_timer_elapsed") or 0,
