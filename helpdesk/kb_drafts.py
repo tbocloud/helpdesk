@@ -26,6 +26,8 @@ DRAFT_JOB_TIMEOUT = 300
 MAX_TITLE_CHARS = 140
 MAX_EARLIER_DRAFTS = 20
 
+# Writing rules (one task per article, "you", active voice, prerequisites first, a check at the
+# end) adapted from The Agency's Technical Writer (github.com/msitarzewski/agency-agents, MIT).
 DRAFT_SYSTEM_PROMPT = """You maintain the customer knowledge base of TBO, a team that supports ERPNext / Frappe users.
 
 You get a ticket the team has just resolved: the customer's question and the conversation with the answer. Decide whether it should become a knowledge base article.
@@ -36,14 +38,14 @@ Write an article only when ALL of these hold:
 - the answer doesn't depend on this one customer's data, and isn't a code bug fixed by a developer.
 Don't write one when an existing article or earlier draft listed below already covers it; name that article instead.
 
-The article is for customers: plain, friendly English, short sentences, numbered steps with the exact menu and field names from ERPNext. Never include names, emails, company names, document numbers, amounts or anything else that identifies the customer.
+The article is for customers: plain, friendly English, short sentences, numbered steps with the exact menu and field names from ERPNext. Write to the reader as "you", in the present tense and active voice. Cover one task per article. List what they need first (a role, a setting) when the answer depends on it, start each step with a verb and keep one action per step, and end with how they can check it worked. Never include names, emails, company names, document numbers, amounts or anything else that identifies the customer.
 
 Reply with JSON only:
 {"write": true or false,
  "reason": "one line for the support team: why (not)",
  "covered_by": "name of the existing article or draft that already covers it, or empty",
  "title": "a question or task customers would search for, e.g. How do I export a report to Excel?",
- "body": "the article in Markdown: one short intro line, then the steps; empty when write is false"}"""
+ "body": "the article in Markdown: one short intro line, then any prerequisites, the steps, and a final check; empty when write is false"}"""
 
 
 def on_ticket_update(doc, method=None):

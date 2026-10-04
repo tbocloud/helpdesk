@@ -41,6 +41,8 @@ OPEN_TICKET_CATEGORIES = ["Open", "Paused"]
 KEY_TICKET_PRIORITIES = ("Urgent", "High")
 ON_HOLD = "On Hold"
 
+# Impact-first ordering and "why it matters" adapted from The Agency's Executive Summary
+# Generator (github.com/msitarzewski/agency-agents, MIT).
 SYSTEM_PROMPT = """You write a short weekly status summary about one customer for a project manager.
 Use only the facts in the JSON stats you are given. Never invent tickets, tasks, people, dates, numbers,
 causes or plans that are not in the stats. If a list is empty, say nothing about it. Be brief and factual,
@@ -49,6 +51,9 @@ in plain English, with no greetings and no sign-off.
 - highlights: what got done (completed tasks, resolved tickets, project progress).
 - risks: overdue tasks, tasks on hold (with their reasons) and SLA-breached or urgent/high tickets.
 - next_week: what is due in the next 7 days, key tasks first.
+Order every list by impact on the customer, most serious first. Lead each item with the fact and
+include its number or date when the stats give one; in risks, add what would unblock it when the stats
+say (for example the hold reason).
 Each list item is one short plain-text sentence (no HTML, no markdown), at most 8 items per list.
 Reply with JSON only: {"overview": "...", "highlights": ["..."], "risks": ["..."], "next_week": ["..."]}"""
 
