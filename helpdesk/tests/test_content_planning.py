@@ -380,3 +380,98 @@ class TestMonthlyPlansPage(ContentPlanningCase):
         )
         content_plans.delete_occasion(diwali)
         self.assertFalse(frappe.db.exists("HD Content Occasion", diwali))
+
+
+class TestTopicIdeas(ContentPlanningCase):
+    """After planning, the AI gives each placeholder post a topic and brief."""
+
+    AI_ON = "helpdesk.ai_suggestion.is_ai_configured"
+    CALL = "helpdesk.content_topics.call_haiku"
+
+    def ideas(self, count):
+        return {
+            "response": {
+                "ideas": [
+                    {
+                        "slot": i,
+                        "title": f"Topic {i}",
+                        "brief": f"Brief for topic {i}.",
+                    }
+                    for i in range(1, count + 1)
+                ]
+            }
+        }
+
+    def plan(self, **values):
+        package = make_content_package(
+            CUSTOMER,
+            [("Instagram", "Post", 3)],
+            writer=WRITER[0],
+            about_brand="Artisan bakery in Kochi; sourdough and custom cakes.",
+            **values,
+        )
+        with patch(NOWDATE, return_value=TODAY):
+            package.plan("next")
+        return package
+
+    def test_placeholders_get_topics_and_occasions_keep_theirs(self):
+        make_content_occasion("Diwali", "2026-11-08", region="India", idea="Sweets")
+        with patch(self.AI_ON, return_value=True), patch(
+            self.CALL, return_value=self.ideas(2)
+        ) as call:
+            package = self.plan()
+
+        prompt = call.call_args.args[1]
+        self.assertIn("Artisan bakery in Kochi", prompt)
+        self.assertIn("Diwali", prompt)
+        titles = sorted(p.title for p in self.planned(package))
+        self.assertEqual(titles[:2], ["Diwali · Instagram Post", "Topic 1"])
+        self.assertEqual(titles[2], "Topic 2")
+        post = frappe.get_doc(
+            "HD Content Post", {"content_package": package.name, "title": "Topic 1"}
+        )
+        self.assertIn("Brief for topic 1.", post.brief)
+        # the writer's task follows the new title
+        self.assertTrue(
+            frappe.db.exists(
+                "Task",
+                {"content_post": post.name, "subject": ("like", "Writer: Topic 1%")},
+            )
+        )
+
+    def test_a_renamed_post_is_left_alone(self):
+        from helpdesk.content_topics import fill_topics
+
+        with patch(self.AI_ON, return_value=False):
+            package = self.plan()
+        posts = self.planned(package)
+        placeholders = {p.name: p.title for p in posts}
+        frappe.db.set_value("HD Content Post", posts[0].name, "title", "Our own idea")
+
+        with patch(self.CALL, return_value=self.ideas(3)):
+            fill_topics(package.name, placeholders)
+        titles = {p.name: p.title for p in self.planned(package)}
+        self.assertEqual(titles[posts[0].name], "Our own idea")
+        self.assertEqual(titles[posts[1].name], "Topic 2")
+
+    def test_ai_failure_keeps_the_placeholders(self):
+        with patch(self.AI_ON, return_value=True), patch(
+            self.CALL, side_effect=TimeoutError("model timed out")
+        ):
+            package = self.plan()
+        self.assertTrue(all("/3 · Nov 2026" in p.title for p in self.planned(package)))
+
+    def test_the_brand_note_is_saved_from_the_plans_page(self):
+        name = content_plans.save_plan(
+            content_plan_values(
+                CUSTOMER, ai_topics=1, about_brand="Bakery; sourdough and cakes."
+            )
+        )
+        plan = next(p for p in content_plans.get_plans()["plans"] if p["name"] == name)
+        self.assertEqual(plan["about_brand"], "Bakery; sourdough and cakes.")
+        self.assertTrue(plan["ai_topics"])
+
+    def test_switched_off_means_no_ai_call(self):
+        with patch(self.AI_ON, return_value=True), patch(self.CALL) as call:
+            self.plan(ai_topics=0)
+        call.assert_not_called()
