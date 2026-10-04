@@ -109,12 +109,22 @@ def plan_now(name: str, which: str = "next") -> int:
     """Create this or next month's posts for one customer now; returns how many."""
     if which not in ("this", "next"):
         frappe.throw(_("Plan this month or next month."))
-    return frappe.get_doc(PACKAGE, name).plan(which)
+    doc = frappe.get_doc(PACKAGE, name)
+    doc.check_permission("write")
+    return doc.plan(which)
 
 
 @frappe.whitelist(methods=["POST"])
 def delete_plan(name: str):
     """Stop planning for a customer; posts already planned stay on the calendar."""
+    frappe.get_doc(PACKAGE, name).check_permission("delete")
+    # the posts keep their place on the calendar, just no longer tied to a plan
+    for post in frappe.get_all(
+        "HD Content Post", filters={"content_package": name}, pluck="name"
+    ):
+        frappe.db.set_value(
+            "HD Content Post", post, "content_package", None, update_modified=False
+        )
     frappe.delete_doc(PACKAGE, name)
 
 

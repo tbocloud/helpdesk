@@ -270,7 +270,18 @@
           </div>
 
           <div
-            v-if="occasions.loading && !occasions.data"
+            v-if="occasions.error"
+            role="alert"
+            class="rounded-lg bg-danger-soft px-4 py-2.5 text-sm text-danger"
+          >
+            {{
+              occasions.error?.messages?.[0] ||
+              __("Couldn't load the occasions.")
+            }}
+          </div>
+
+          <div
+            v-else-if="occasions.loading && !occasions.data"
             class="flex flex-col gap-2"
           >
             <div
