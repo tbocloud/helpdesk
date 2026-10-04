@@ -1683,21 +1683,22 @@ def _timer_hours(timer_start) -> float:
 
 
 @frappe.whitelist()
-def get_my_timesheets(limit: int = 20, team: bool = False):
-    """My timesheets with project info; `team` shows everyone's that a lead or manager may see."""
-    from helpdesk.api.work import can_see_overview
+def get_my_timesheets(
+    limit: int = 20,
+    team: bool = False,
+    agent: str | None = None,
+    from_date: str | None = None,
+    to_date: str | None = None,
+):
+    """My timesheets with project info; `team` shows everyone's that a lead or manager may see.
 
-    team = frappe.utils.cint(team)
-    if team and not can_see_overview():
-        frappe.throw(
-            _("Only project leads and managers can see the team's timesheets."),
-            frappe.PermissionError,
-        )
+    `agent` narrows the team view to one person; `from_date` / `to_date` to when it was logged.
+    """
     # get_list applies the timesheet permission rules: a lead sees the
     # timesheets on their projects, admins see all
     timesheets = frappe.get_list(
         "Timesheet",
-        filters={} if team else {"owner": frappe.session.user},
+        filters=_timesheet_filters(team, agent, from_date, to_date),
         fields=[
             "name",
             "title",
@@ -1732,6 +1733,130 @@ def get_my_timesheets(limit: int = 20, team: bool = False):
             names[ts.owner] = _full_name(ts.owner)
         ts["owner_name"] = names[ts.owner]
     return timesheets
+
+
+@frappe.whitelist()
+def get_timesheet_agents() -> list[dict]:
+    """Everyone with a timesheet the lead or manager may see, for the team filter."""
+    _timesheet_filters(team=True)
+    owners = frappe.get_list(
+        "Timesheet", fields=["owner"], distinct=True, limit_page_length=0
+    )
+    people = [{"user": o.owner, "full_name": _full_name(o.owner)} for o in owners]
+    return sorted(people, key=lambda p: p["full_name"].lower())
+
+
+@frappe.whitelist()
+def export_timesheets_csv(
+    team: bool = False,
+    agent: str | None = None,
+    from_date: str | None = None,
+    to_date: str | None = None,
+):
+    """Download the timesheets on screen as CSV, one row per time log."""
+    import csv
+    import io
+
+    filters = _timesheet_filters(team, agent, from_date, to_date)
+    sheets = {
+        ts.name: ts
+        for ts in frappe.get_list(
+            "Timesheet",
+            filters=filters,
+            fields=["name", "title", "status", "owner"],
+            limit_page_length=0,
+        )
+    }
+    logs = (
+        frappe.get_all(
+            "Timesheet Detail",
+            filters={"parent": ["in", list(sheets)], "parenttype": "Timesheet"},
+            fields=["parent", "from_time", "hours", "project", "task", "description"],
+            order_by="from_time asc",
+        )
+        if sheets
+        else []
+    )
+    projects = _names_of("Project", "project_name", {log.project for log in logs})
+    tasks = _names_of("Task", "subject", {log.task for log in logs})
+
+    out = io.StringIO()
+    writer = csv.writer(out)
+    writer.writerow(
+        [
+            _("Date"),
+            _("Agent"),
+            _("Timesheet"),
+            _("Title"),
+            _("Status"),
+            _("Project"),
+            _("Task"),
+            _("Hours"),
+            _("Notes"),
+        ]
+    )
+    for log in logs:
+        ts = sheets[log.parent]
+        writer.writerow(
+            [
+                frappe.utils.getdate(log.from_time) if log.from_time else "",
+                _full_name(ts.owner),
+                ts.name,
+                ts.title,
+                _(ts.status),
+                projects.get(log.project, log.project or ""),
+                tasks.get(log.task, log.task or ""),
+                log.hours,
+                frappe.utils.strip_html(log.description or ""),
+            ]
+        )
+    period = "-".join(d for d in (from_date, to_date) if d) or "all"
+    frappe.response.filename = f"timesheets-{period}.csv"
+    frappe.response.filecontent = out.getvalue()
+    frappe.response.type = "download"
+
+
+def _timesheet_filters(team=False, agent=None, from_date=None, to_date=None) -> dict:
+    """Filters for the timesheets list; only leads and managers see the team's."""
+    from helpdesk.api.work import can_see_overview
+
+    team = frappe.utils.cint(team)
+    if team and not can_see_overview():
+        frappe.throw(
+            _("Only project leads and managers can see the team's timesheets."),
+            frappe.PermissionError,
+        )
+    filters = {}
+    if not team:
+        filters["owner"] = frappe.session.user
+    elif agent:
+        filters["owner"] = agent
+    from_date = str(frappe.utils.getdate(from_date)) if from_date else None
+    to_date = str(frappe.utils.getdate(to_date)) if to_date else None
+    if from_date and to_date:
+        filters["creation"] = [
+            "between",
+            [f"{from_date} 00:00:00", f"{to_date} 23:59:59"],
+        ]
+    elif from_date:
+        filters["creation"] = [">=", f"{from_date} 00:00:00"]
+    elif to_date:
+        filters["creation"] = ["<=", f"{to_date} 23:59:59"]
+    return filters
+
+
+def _names_of(doctype: str, field: str, names: set) -> dict:
+    names = [n for n in names if n]
+    if not names:
+        return {}
+    return dict(
+        frappe.get_all(
+            doctype,
+            filters={"name": ["in", names]},
+            fields=["name", field],
+            as_list=True,
+        )
+    )
 
 
 @frappe.whitelist()

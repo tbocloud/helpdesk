@@ -951,6 +951,39 @@ class TestTeamTimesheets(WorkControlCase):
         with self.assertRaises(frappe.PermissionError):
             self.as_user(DEV, lambda: tasky.get_my_timesheets(team=1))
 
+    def test_lead_filters_by_agent_and_date_and_downloads_csv(self):
+        task = self.make_task("Opening balances", add_days(nowdate(), 3))
+        self.as_user(
+            DEV,
+            lambda: tasky.complete_task(task=task, hours_worked=2, notes="Imported"),
+        )
+
+        def names(**filters):
+            rows = self.as_user(
+                LEAD, lambda: tasky.get_my_timesheets(team=1, **filters)
+            )
+            return {t["owner"] for t in rows}
+
+        self.assertEqual(names(agent=DEV[0]), {DEV[0]})
+        self.assertEqual(names(agent=LEAD[0]), set())
+        self.assertEqual(names(agent=DEV[0], from_date=nowdate()), {DEV[0]})
+        self.assertEqual(names(from_date=add_days(nowdate(), 1)), set())
+
+        agents = self.as_user(LEAD, tasky.get_timesheet_agents)
+        self.assertIn({"user": DEV[0], "full_name": DEV[1]}, agents)
+
+        frappe.response.clear()
+        self.as_user(LEAD, lambda: tasky.export_timesheets_csv(team=1, agent=DEV[0]))
+        self.assertEqual(frappe.response.type, "download")
+        self.assertTrue(frappe.response.filename.endswith(".csv"))
+        lines = frappe.response.filecontent.strip().splitlines()
+        self.assertTrue(lines[0].startswith("Date,Agent,Timesheet"))
+        self.assertTrue(
+            any(DEV[1] in line and "Opening balances" in line for line in lines[1:])
+        )
+        with self.assertRaises(frappe.PermissionError):
+            self.as_user(DEV, lambda: tasky.export_timesheets_csv(team=1))
+
 
 class TestCompletedWork(WorkControlCase):
     def test_my_work_lists_what_was_completed_lately(self):
