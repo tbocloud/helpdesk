@@ -222,6 +222,23 @@ class TestDraftCaption(FrappeTestCase):
         self.assertEqual(result["caption"], "Big savings this week.")
         self.assertIn("20% off all laptops", call_haiku.call_args.args[1])
 
+    @patch("helpdesk.api.content.call_haiku")
+    def test_channel_and_format_guidance_reach_the_model(self, call_haiku):
+        call_haiku.return_value = {
+            "response": {"caption": "Swipe for 5 GST mistakes.", "hashtags": []}
+        }
+        draft_caption(
+            title="GST mistakes", channel="LinkedIn", format="Carousel", brief="5 tips"
+        )
+        system_prompt, prompt = call_haiku.call_args.args[:2]
+        self.assertIn("No links in the body", prompt)
+        self.assertIn("swipe", prompt)
+        self.assertIn("Avoid stock phrases", system_prompt)
+
+        # a format without its own guidance adds nothing
+        draft_caption(title="GST mistakes", channel="Instagram", format="Post")
+        self.assertNotIn("Format:", call_haiku.call_args.args[1])
+
     def test_nothing_to_write_about_is_rejected(self):
         with self.assertRaises(frappe.ValidationError):
             draft_caption(title=" ", channel="Instagram")
