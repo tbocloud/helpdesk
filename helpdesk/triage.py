@@ -16,6 +16,7 @@ from frappe.utils import now_datetime
 
 from helpdesk.ai_engine import call_haiku
 from helpdesk.ai_suggestion import queue_suggestion
+from helpdesk.api.customization import record_triage_estimate
 from helpdesk.automation import automation_user
 from helpdesk.session_replay import TIMELINE_HEADING as SESSION_TIMELINE_HEADING
 from helpdesk.session_replay import build_triage_context
@@ -46,6 +47,9 @@ You must return ONLY valid JSON with these exact fields:
   "summary": "3-6 sentences: what is happening, the most likely cause (cite the matching error log entries when there are any), and the business impact",
   "error_findings": ["one line per relevant error log entry: timestamp, method, and what it means; empty list if none relate to the issue"],
   "recommended_track": "one of: ai_investigate, manual, dev, escalate",
+  "request_type": "one of: issue, question, customization",
+  "estimate_hours": "only for a customization: developer hours to build, test and deliver it, as a number; null otherwise",
+  "estimate_note": "only for a customization: one line on what drives the estimate; empty string otherwise",
   "scope": {
     "period_start": "YYYY-MM-DD or null if not mentioned",
     "period_end": "YYYY-MM-DD or null if not mentioned",
@@ -63,6 +67,11 @@ Rules:
 - recommended_track = "manual" for simple how-to questions or UI guidance
 - recommended_track = "dev" for bugs, custom code issues, or feature requests
 - recommended_track = "escalate" for critical production-down issues
+- request_type = "customization" when the customer asks for something new or changed to be built (a report
+  or filter, print format, field, form change, workflow, automation or integration); "issue" when something
+  that should work doesn't; "question" for how-to questions. A customization usually has recommended_track "dev"
+- estimate_hours: count build, testing and deployment for an experienced ERPNext developer; small report or
+  print-format changes are often 2-8 hours. Give one number, not a range
 - Extract ALL date references and convert relative dates to absolute (e.g., "last 2 months" → actual date range)
 - Extract ALL specific reports, documents, or entities the customer mentions
 - If recent error logs from the customer's site are provided, check them for tracebacks that match the
@@ -320,6 +329,7 @@ def run_triage(
             frappe.db.set_value(
                 "HD Ticket", ticket_id, field, value, update_modified=False
             )
+        record_triage_estimate(ticket_id, triage)
 
         frappe.db.commit()  # background job: persist triage progress and failures as they happen - nosemgrep
 

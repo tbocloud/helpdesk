@@ -70,6 +70,12 @@
         reference-doctype="HD Ticket"
         :reference-name="ticketId"
       />
+      <CustomizationEstimateCard
+        v-if="ticketId"
+        :ticket-id="ticketId"
+        :ticket-subject="ticket.doc?.subject"
+        @changed="ticket.reload()"
+      />
       <AiSuggestedReplyCard v-if="ticketId" :ticket-id="ticketId" />
       <SessionReplayCard v-if="ticketId" :ticket-id="ticketId" />
 
@@ -195,6 +201,7 @@ import Section from "../Section.vue";
 import TicketField from "../TicketField.vue";
 import MeetingsCard from "@/components/meetings/MeetingsCard.vue";
 import AiSuggestedReplyCard from "./AiSuggestedReplyCard.vue";
+import CustomizationEstimateCard from "./CustomizationEstimateCard.vue";
 import AssignTo from "./AssignTo.vue";
 import DuplicateTicketsCard from "./DuplicateTicketsCard.vue";
 import SessionReplayCard from "./SessionReplayCard.vue";

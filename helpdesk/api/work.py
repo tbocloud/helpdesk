@@ -449,8 +449,12 @@ def create_task_from_ticket(
     assigned_to: str = "",
     due_date: str | None = None,
     is_key: bool = False,
+    estimated_hours: float | str | None = None,
 ) -> dict:
-    """Turn a ticket that needs project work into a task; the ticket waits until it's done."""
+    """Turn a ticket that needs project work into a task; the ticket waits until it's done.
+
+    An approved customization estimate fills in the due date and hours when they aren't given.
+    """
     from helpdesk.tasky.api import (
         _assign_user,
         _estimate_if_undated,
@@ -480,6 +484,9 @@ def create_task_from_ticket(
     if assigned_to and not _is_project_member(project, assigned_to):
         frappe.throw(_("{0} is not a member of this project.").format(assigned_to))
 
+    if ticket_doc.get("custom_estimate_status") == "Approved":
+        due_date = due_date or ticket_doc.get("custom_agreed_delivery")
+        estimated_hours = estimated_hours or ticket_doc.get("custom_estimate_hours")
     task = frappe.get_doc(
         {
             "doctype": "Task",
@@ -494,6 +501,8 @@ def create_task_from_ticket(
             "exp_end_date": due_date or None,
             "is_key": 1 if is_key else 0,
             "hd_ticket": ticket,
+            # Task's existing "Estimated Hours" custom field (setup/install.py)
+            "custom_estimated_hours": frappe.utils.flt(estimated_hours) or 0,
         }
     )
     # support agents may raise work in the customer's project without managing it;
