@@ -354,6 +354,7 @@ async function save() {
         occasions_kerala: form.occasions_kerala ? 1 : 0,
         occasions_uae: form.occasions_uae ? 1 : 0,
         ai_topics: form.ai_topics ? 1 : 0,
+        about_brand: form.about_brand.trim(),
       },
     });
     toast.success(__("Plan saved"));

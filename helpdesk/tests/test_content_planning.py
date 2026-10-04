@@ -461,6 +461,16 @@ class TestTopicIdeas(ContentPlanningCase):
             package = self.plan()
         self.assertTrue(all("/3 · Nov 2026" in p.title for p in self.planned(package)))
 
+    def test_the_brand_note_is_saved_from_the_plans_page(self):
+        name = content_plans.save_plan(
+            content_plan_values(
+                CUSTOMER, ai_topics=1, about_brand="Bakery; sourdough and cakes."
+            )
+        )
+        plan = next(p for p in content_plans.get_plans()["plans"] if p["name"] == name)
+        self.assertEqual(plan["about_brand"], "Bakery; sourdough and cakes.")
+        self.assertTrue(plan["ai_topics"])
+
     def test_switched_off_means_no_ai_call(self):
         with patch(self.AI_ON, return_value=True), patch(self.CALL) as call:
             self.plan(ai_topics=0)
