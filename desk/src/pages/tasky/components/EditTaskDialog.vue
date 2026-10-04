@@ -4,7 +4,6 @@
     :title="__('Edit task')"
     :message="canManage ? undefined : task?.subject"
     size="xl"
-    :dismissible="false"
     @update:open="onOpenChange"
   >
     <div
@@ -62,17 +61,17 @@
             <option v-for="p in phaseOptions" :key="p" :value="p" />
           </datalist>
 
-          <!-- the list opens outside the dialog, hence :dismissible="false" above -->
+          <!-- Combobox layers inside the dialog, so Escape and clicking outside still close it -->
           <div class="flex flex-col gap-1.5">
-            <Autocomplete
+            <Combobox
               :label="__('Assignee')"
               :options="assigneeOptions"
               :placeholder="__('Unassigned')"
               :loading="assignable.loading"
-              :model-value="form.assigned_to || null"
+              :model-value="form.assigned_to || UNASSIGNED"
               @update:model-value="
-                (v: { value: string } | string | null) =>
-                  (form.assigned_to = (typeof v === 'string' ? v : v?.value) || '')
+                (v: string | null) =>
+                  (form.assigned_to = v && v !== UNASSIGNED ? v : '')
               "
             />
             <p v-if="assigneeIsNew" class="text-p-xs text-ink-gray-5">
@@ -186,8 +185,8 @@
 <script setup lang="ts">
 import { __ } from "@/translation";
 import {
-  Autocomplete,
   Button,
+  Combobox,
   Dialog,
   FormControl,
   TextInput,
@@ -301,6 +300,8 @@ const members = computed<{ user: string; full_name?: string }[]>(
 const memberIds = computed(() => new Set(members.value.map((m) => m.user)));
 const assignableUsers = computed(() => (assignable.data ?? []) as Person[]);
 
+const UNASSIGNED = "__unassigned__";
+
 // team first; anyone else picked here joins the team as a Developer
 const assigneeOptions = computed(() => {
   const toOption = (u: Person) => ({
@@ -313,11 +314,12 @@ const assigneeOptions = computed(() => {
     (u) => !memberIds.value.has(u.name)
   );
   return [
+    { label: __("Unassigned"), value: UNASSIGNED },
     ...(team.length
-      ? [{ group: __("Project team"), items: team.map(toOption) }]
+      ? [{ group: __("Project team"), options: team.map(toOption) }]
       : []),
     ...(others.length
-      ? [{ group: __("Other agents"), items: others.map(toOption) }]
+      ? [{ group: __("Other agents"), options: others.map(toOption) }]
       : []),
   ];
 });

@@ -174,6 +174,9 @@ class TestTaskyPermissions(FrappeTestCase):
         board = self.as_user(DEV_A, api.get_kanban_tasks, project=self.project)
         on_board = [t["name"] for col in board["columns"].values() for t in col]
         self.assertEqual(on_board, [self.task_a])
+        # cards show the assignee's name, not just initials from the email
+        card = next(t for col in board["columns"].values() for t in col)
+        self.assertEqual(card["assigned_to_name"], DEV_A[1])
 
         with self.assertRaises(frappe.PermissionError):
             self.as_user(DEV_A, api.get_task_detail, task=self.task_b)
