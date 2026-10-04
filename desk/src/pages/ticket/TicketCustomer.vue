@@ -38,6 +38,11 @@
           >
           </Alert>
         </div>
+        <!-- a customization estimate waiting for the customer's answer -->
+        <EstimateApprovalBanner
+          :ticket-id="String(ticketId)"
+          @decided="ticket.reload()"
+        />
         <!-- Mobile: Activity / Details tabs -->
         <Tabs
           v-if="isMobileView"
@@ -125,6 +130,7 @@ import {
 } from "vue";
 import { useRouter } from "vue-router";
 import { ITicket } from "./symbols";
+import EstimateApprovalBanner from "./EstimateApprovalBanner.vue";
 import TicketConversation from "./TicketConversation.vue";
 import TicketCustomerTemplateFields from "./TicketCustomerTemplateFields.vue";
 import TicketFeedback from "./TicketFeedback.vue";

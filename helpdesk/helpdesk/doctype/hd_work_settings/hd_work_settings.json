@@ -7,6 +7,7 @@
 		"ai_task_estimates",
 		"max_task_days",
 		"weekly_off",
+		"dev_hours_per_day",
 		"brief_section",
 		"morning_brief"
 	],
@@ -44,12 +45,19 @@
 			"label": "Send each assignee a morning brief at 10:00",
 			"default": "1",
 			"description": "Overdue work, what's due today and soon, key and at-risk items, new tasks and SLA deadlines, in the notification panel and Teams or email."
+		},
+		{
+			"fieldname": "dev_hours_per_day",
+			"fieldtype": "Int",
+			"label": "Development Hours per Day",
+			"default": "6",
+			"description": "Hours a developer spends on build work in a day; a customization estimate in hours becomes a delivery date with this."
 		}
 	],
 	"index_web_pages_for_search": 0,
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-09-29 23:00:00.000000",
+	"modified": "2026-10-05 10:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Work Settings",

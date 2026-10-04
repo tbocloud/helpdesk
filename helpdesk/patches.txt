@@ -64,3 +64,4 @@ helpdesk.patches.v16_0_2.ignore_automated_emails
 helpdesk.patches.v16_0_2.enable_error_alerts
 helpdesk.patches.v16_0_2.set_content_post_platforms
 helpdesk.patches.v16_0_2.set_file_storage_defaults
+helpdesk.patches.v16_0_2.customization_estimates

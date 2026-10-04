@@ -5,6 +5,9 @@ import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 from frappe.permissions import add_permission, update_permission_property
 
+from helpdesk.api.customization import (
+    ensure_ticket_type as ensure_customization_ticket_type,
+)
 from helpdesk.consts import DEFAULT_ARTICLE_CATEGORY
 from helpdesk.content_team import ensure_role as ensure_content_team_role
 from helpdesk.helpdesk.doctype.hd_content_occasion.hd_content_occasion import (
@@ -45,6 +48,7 @@ def after_install():
     _create_form_script()
     ensure_content_team_role()
     ensure_default_occasions()
+    ensure_customization_ticket_type()
     # Always keep this at last, because sql_ddl makes the db commit
     add_fts_index()
 
@@ -513,6 +517,63 @@ def get_custom_fields():
                 "fieldtype": "JSON",
                 "label": "AI Suggestion Sources",
                 "insert_after": "custom_ai_suggestion_at",
+                "read_only": 1,
+                "hidden": 1,
+            },
+            # customization estimates (helpdesk/api/customization.py)
+            {
+                "fieldname": "custom_estimate_hours",
+                "fieldtype": "Float",
+                "label": "Estimate (Hours)",
+                "insert_after": "custom_ai_suggestion_sources",
+                "read_only": 1,
+            },
+            {
+                "fieldname": "custom_estimate_status",
+                "fieldtype": "Select",
+                "options": "\nEstimated\nSent\nApproved\nDeclined",
+                "label": "Estimate Status",
+                "insert_after": "custom_estimate_hours",
+                "read_only": 1,
+                "in_standard_filter": 1,
+            },
+            {
+                "fieldname": "custom_agreed_delivery",
+                "fieldtype": "Date",
+                "label": "Delivery Date",
+                "insert_after": "custom_estimate_status",
+                "read_only": 1,
+                "description": "Proposed with the estimate; agreed once the customer approves it.",
+            },
+            {
+                "fieldname": "custom_estimate_note",
+                "fieldtype": "Small Text",
+                "label": "Estimate Note",
+                "insert_after": "custom_agreed_delivery",
+                "read_only": 1,
+            },
+            {
+                "fieldname": "custom_estimate_sent_on",
+                "fieldtype": "Datetime",
+                "label": "Estimate Sent On",
+                "insert_after": "custom_estimate_note",
+                "read_only": 1,
+                "hidden": 1,
+            },
+            {
+                "fieldname": "custom_estimate_decided_on",
+                "fieldtype": "Datetime",
+                "label": "Estimate Decided On",
+                "insert_after": "custom_estimate_sent_on",
+                "read_only": 1,
+                "hidden": 1,
+            },
+            {
+                "fieldname": "custom_estimate_decided_by",
+                "fieldtype": "Link",
+                "options": "User",
+                "label": "Estimate Decided By",
+                "insert_after": "custom_estimate_decided_on",
                 "read_only": 1,
                 "hidden": 1,
             },
