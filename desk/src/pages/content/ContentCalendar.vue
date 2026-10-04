@@ -20,7 +20,7 @@
           v-if="auth.isAdmin || auth.isManager || auth.isProjectManager"
           variant="ghost"
           :label="__('Monthly plans')"
-          link="/app/hd-content-package"
+          :route="{ name: 'ContentPlans' }"
         >
           <template #prefix
             ><LucideCalendarSync class="size-4" aria-hidden="true"

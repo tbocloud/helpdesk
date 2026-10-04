@@ -5,6 +5,7 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_days, get_datetime, getdate, now_datetime
 
+from helpdesk.api import content_plans
 from helpdesk.api.content_board import get_occasions
 from helpdesk.content_follow_up import send_client_follow_ups
 from helpdesk.helpdesk.doctype.hd_content_package.hd_content_package import (
@@ -290,3 +291,101 @@ class TestClientFollowUp(ContentPlanningCase):
         self.assertGreater(
             get_datetime(post.client_review_since), add_days(now_datetime(), -1)
         )
+
+
+class TestMonthlyPlansPage(ContentPlanningCase):
+    """The API behind the Content Calendar's Monthly plans page."""
+
+    PLANS_NOWDATE = "helpdesk.api.content_plans.nowdate"
+
+    def values(self, **overrides):
+        return {
+            "customer": CUSTOMER,
+            "items": [
+                {"channel": "Instagram", "format": "Post", "posts_per_month": 6},
+                {"channel": "LinkedIn", "format": "Article", "posts_per_month": 2},
+            ],
+            "writer": WRITER[0],
+            "posting_days": "Monday to Friday",
+            "publish_time": "18:30",
+            "enabled": 1,
+            **overrides,
+        }
+
+    def test_create_edit_plan_and_list_it(self):
+        name = content_plans.save_plan(self.values())
+        content_plans.save_plan(
+            self.values(
+                items=[{"channel": "Instagram", "format": "Reel", "posts_per_month": 3}]
+            ),
+            name=name,
+        )
+        with patch(self.PLANS_NOWDATE, return_value=TODAY):
+            data = content_plans.get_plans()
+
+        plan = next(p for p in data["plans"] if p["customer"] == CUSTOMER)
+        self.assertEqual(plan["posts_per_month"], 3)
+        self.assertEqual(
+            plan["items"],
+            [{"channel": "Instagram", "format": "Reel", "posts_per_month": 3}],
+        )
+        self.assertEqual(plan["team"], {"writer": WRITER[1]})
+        self.assertEqual(plan["publish_time"], "18:30")
+        self.assertFalse(plan["next_month_planned"])
+        self.assertEqual(data["next_month"], "2026-11-01")
+        self.assertTrue(data["can_edit"])
+
+    def test_plan_now_from_the_page(self):
+        name = content_plans.save_plan(self.values())
+        with patch(NOWDATE, return_value=TODAY):
+            self.assertEqual(content_plans.plan_now(name, "next"), 8)
+        with patch(self.PLANS_NOWDATE, return_value=TODAY):
+            plan = content_plans.get_plans()["plans"][0]
+        self.assertTrue(plan["next_month_planned"])
+        posts = frappe.get_all(
+            "HD Content Post", filters={"content_package": name}, pluck="publish_on"
+        )
+        self.assertTrue(
+            all(get_datetime(p).strftime("%H:%M") == "18:30" for p in posts)
+        )
+        self.assertTrue(all(getdate(p).weekday() < 5 for p in posts))
+
+    def test_deleting_a_plan_keeps_its_posts(self):
+        name = content_plans.save_plan(self.values())
+        with patch(NOWDATE, return_value=TODAY):
+            content_plans.plan_now(name, "next")
+        content_plans.delete_plan(name)
+        self.assertFalse(frappe.db.exists("HD Content Package", name))
+        self.assertEqual(frappe.db.count("HD Content Post", {"customer": CUSTOMER}), 8)
+
+    def test_occasions_for_a_year(self):
+        diwali = content_plans.save_occasion(
+            {
+                "occasion_name": "Diwali",
+                "occasion_date": "2027-10-29",
+                "region": "India",
+            }
+        )
+        content_plans.save_occasion(
+            {
+                "occasion_name": "New Year's Day",
+                "occasion_date": "2026-01-01",
+                "repeats_yearly": 1,
+            }
+        )
+        listed = content_plans.get_occasions_for_year(2027)["occasions"]
+        self.assertEqual(
+            [(o["date"], o["occasion_name"]) for o in listed],
+            [("2027-01-01", "New Year's Day"), ("2027-10-29", "Diwali")],
+        )
+        self.assertEqual(
+            content_plans.get_occasions_for_year(2026)["occasions"][0]["occasion_name"],
+            "New Year's Day",
+        )
+
+        content_plans.save_occasion({"idea": "Lights offer"}, name=diwali)
+        self.assertEqual(
+            frappe.db.get_value("HD Content Occasion", diwali, "idea"), "Lights offer"
+        )
+        content_plans.delete_occasion(diwali)
+        self.assertFalse(frappe.db.exists("HD Content Occasion", diwali))
