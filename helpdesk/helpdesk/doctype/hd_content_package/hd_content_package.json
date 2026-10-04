@@ -19,6 +19,9 @@
 		"designer",
 		"column_break_3",
 		"marketer",
+		"topics_section",
+		"ai_topics",
+		"about_brand",
 		"occasions_section",
 		"include_occasions",
 		"column_break_4",
@@ -170,11 +173,30 @@
 			"label": "Last Planned Month",
 			"read_only": 1,
 			"no_copy": 1
+		},
+		{
+			"fieldname": "topics_section",
+			"fieldtype": "Section Break",
+			"label": "Topic Ideas"
+		},
+		{
+			"fieldname": "ai_topics",
+			"fieldtype": "Check",
+			"label": "Suggest Topics with AI",
+			"default": "1",
+			"description": "After a month is planned, the AI gives each planned post a topic and brief. Posts you've already renamed are left alone."
+		},
+		{
+			"fieldname": "about_brand",
+			"fieldtype": "Small Text",
+			"label": "About the Brand",
+			"depends_on": "ai_topics",
+			"description": "What the business sells, who its customers are and its tone. The AI uses only this, so it never invents offers."
 		}
 	],
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-10-03 20:30:00.000000",
+	"modified": "2026-10-04 23:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Content Package",

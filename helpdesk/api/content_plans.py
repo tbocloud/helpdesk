@@ -28,6 +28,8 @@ PACKAGE_FIELDS = (
     "occasions_india",
     "occasions_kerala",
     "occasions_uae",
+    "ai_topics",
+    "about_brand",
 )
 OCCASION_FIELDS = ("occasion_name", "occasion_date", "repeats_yearly", "region", "idea")
 

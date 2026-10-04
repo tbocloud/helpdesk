@@ -143,6 +143,33 @@
           </div>
         </fieldset>
 
+        <fieldset class="flex flex-col gap-2">
+          <FormControl
+            v-model="form.ai_topics"
+            type="checkbox"
+            :label="__('Suggest topics with AI')"
+          />
+          <p class="ps-6 text-p-sm text-ink-gray-5">
+            {{
+              __(
+                "After a month is planned, each planned post gets a topic and brief. Posts you've renamed are left alone."
+              )
+            }}
+          </p>
+          <FormControl
+            v-if="form.ai_topics"
+            v-model="form.about_brand"
+            type="textarea"
+            :rows="3"
+            :label="__('About the brand')"
+            :placeholder="
+              __(
+                'What they sell, who their customers are, their tone. The AI uses only this, so it never invents offers.'
+              )
+            "
+          />
+        </fieldset>
+
         <FormControl
           v-model="form.enabled"
           type="checkbox"
@@ -204,6 +231,8 @@ export interface ContentPlan {
   occasions_india: number;
   occasions_kerala: number;
   occasions_uae: number;
+  ai_topics: number;
+  about_brand?: string;
   posts_per_month: number;
   last_planned_month?: string;
   next_month_planned: boolean;
@@ -256,6 +285,8 @@ function blank() {
     occasions_india: true,
     occasions_kerala: false,
     occasions_uae: false,
+    ai_topics: true,
+    about_brand: "",
     enabled: true,
   };
 }
@@ -286,6 +317,8 @@ watch(open, (isOpen) => {
           occasions_kerala: !!p.occasions_kerala,
           occasions_uae: !!p.occasions_uae,
           enabled: !!p.enabled,
+          ai_topics: !!p.ai_topics,
+          about_brand: p.about_brand || "",
         }
       : {}
   );
@@ -320,6 +353,7 @@ async function save() {
         occasions_india: form.occasions_india ? 1 : 0,
         occasions_kerala: form.occasions_kerala ? 1 : 0,
         occasions_uae: form.occasions_uae ? 1 : 0,
+        ai_topics: form.ai_topics ? 1 : 0,
       },
     });
     toast.success(__("Plan saved"));

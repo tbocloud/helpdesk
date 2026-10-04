@@ -91,12 +91,32 @@ class HDContentPackage(Document):
     def plan_month(self, month) -> int:
         """Create the month's posts and tell the team once; the caller saves the package."""
         slots = self.slots(month)
+        placeholders = {}
         for slot in slots:
-            self.make_post(slot, month)
+            post = self.make_post(slot, month)
+            if not slot.occasion:
+                placeholders[post.name] = post.title
         if slots:
             self.notify_team(month, len(slots))
+        self.queue_topic_ideas(placeholders)
         self.last_planned_month = month
         return len(slots)
+
+    def queue_topic_ideas(self, placeholders: dict):
+        """Ask the AI for a topic per placeholder post, after the plan is saved."""
+        from helpdesk.ai_suggestion import is_ai_configured
+
+        if not placeholders or not self.ai_topics or not is_ai_configured():
+            return
+        frappe.enqueue(
+            "helpdesk.content_topics.suggest_topics",
+            package=self.name,
+            placeholders=placeholders,
+            queue="long",
+            timeout=300,
+            enqueue_after_commit=True,
+            now=frappe.flags.in_test,
+        )
 
     def slots(self, month) -> list:
         """One slot per post: its item and day, spread evenly over the posting days."""
@@ -190,7 +210,7 @@ class HDContentPackage(Document):
         )
         # one summary per person (notify_team) instead of a notice per task
         post.flags.quiet_tasks = True
-        post.insert(ignore_permissions=True)
+        return post.insert(ignore_permissions=True)
 
     def notify_team(self, month, count: int):
         from helpdesk.work_reminders import notify_users
