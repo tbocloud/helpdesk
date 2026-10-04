@@ -273,7 +273,12 @@ def add_property_setters():
 
 
 def get_custom_fields():
-    """Helpdesk specific custom fields."""
+    """Helpdesk specific custom fields.
+
+    Also applied on every migrate (helpdesk.setup.after_migrate calls
+    create_custom_fields, which updates existing fields), so a changed option list
+    such as a new Task category reaches existing sites without a patch.
+    """
     return {
         "File": [
             {

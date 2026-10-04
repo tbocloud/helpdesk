@@ -488,9 +488,8 @@ class TestTaskyPermissions(FrappeTestCase):
         doc.reload()
         self.assertEqual(doc.priority, "Low")
         self.as_user(PM, api.update_task, task=self.task_b, category="DevOps")
-        self.assertEqual(
-            frappe.db.get_value("Task", self.task_b, "custom_category"), "DevOps"
-        )
+        doc.reload()
+        self.assertEqual(doc.custom_category, "DevOps")
         # fields not passed are left alone
         self.assertEqual(doc.custom_phase, "Go-live")
 
