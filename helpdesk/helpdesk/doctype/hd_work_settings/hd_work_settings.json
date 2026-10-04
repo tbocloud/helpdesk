@@ -7,6 +7,7 @@
 		"ai_task_estimates",
 		"max_task_days",
 		"weekly_off",
+		"saturdays_off",
 		"dev_hours_per_day",
 		"brief_section",
 		"morning_brief"
@@ -52,12 +53,20 @@
 			"label": "Development Hours per Day",
 			"default": "6",
 			"description": "Hours a developer spends on build work in a day; a customization estimate in hours becomes a delivery date with this."
+		},
+		{
+			"fieldname": "saturdays_off",
+			"fieldtype": "Select",
+			"label": "Saturdays Off",
+			"options": "\n2nd and 4th\n1st and 3rd\nAll",
+			"depends_on": "eval:doc.weekly_off=='Sunday'",
+			"description": "When Saturday is a working day: which Saturdays of the month are off. They're skipped in task and estimate dates and added to every SLA's holiday list for the coming year."
 		}
 	],
 	"index_web_pages_for_search": 0,
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-10-05 10:00:00.000000",
+	"modified": "2026-10-05 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Work Settings",

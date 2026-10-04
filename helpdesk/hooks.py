@@ -85,6 +85,7 @@ scheduler_events = {
         "helpdesk.helpdesk.doctype.hd_content_post.hd_content_post.send_due_reminders",
         "helpdesk.work_reminders.send_task_reminders",
         "helpdesk.work_reminders.send_hold_reminders",
+        "helpdesk.work_calendar.sync_saturdays_off",
         "helpdesk.helpdesk.doctype.hd_github_delivery.hd_github_delivery.clear_old_deliveries",
         "helpdesk.helpdesk.doctype.hd_chatwoot_event.hd_chatwoot_event.clear_old_events",
     ],

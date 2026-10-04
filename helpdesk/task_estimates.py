@@ -56,7 +56,10 @@ def weekly_off_days() -> set[int]:
 
 
 def is_working_day(day) -> bool:
-    return getdate(day).weekday() not in weekly_off_days()
+    from helpdesk.work_calendar import is_saturday_off
+
+    day = getdate(day)
+    return day.weekday() not in weekly_off_days() and not is_saturday_off(day)
 
 
 def add_working_days(start, days: int):
