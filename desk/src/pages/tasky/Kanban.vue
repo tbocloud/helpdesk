@@ -350,12 +350,6 @@
                       v-if="task.assigned_to"
                       class="flex min-w-0 items-center gap-1.5"
                       :title="task.assigned_to"
-                      :aria-label="
-                        __(
-                          'Assigned to {0}',
-                          task.assigned_to_name || task.assigned_to
-                        )
-                      "
                     >
                       <span
                         class="flex size-6 shrink-0 items-center justify-center rounded-full bg-surface-gray-3 text-2xs font-medium text-ink-gray-7"
@@ -365,9 +359,10 @@
                           initials(task.assigned_to_name || task.assigned_to)
                         }}
                       </span>
+                      <!-- the visible name is what screen readers announce -->
                       <span
                         class="max-w-[9rem] truncate text-xs text-ink-gray-7"
-                        aria-hidden="true"
+                        ><span class="sr-only">{{ __("Assigned to") }} </span
                         >{{ task.assigned_to_name || task.assigned_to }}</span
                       >
                     </span>
