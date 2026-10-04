@@ -1710,6 +1710,8 @@ def get_my_timesheets(
         ],
         order_by="modified desc",
         limit_page_length=frappe.utils.cint(limit) or 20,
+        # a date filter joins the time logs; one row per timesheet
+        distinct=True,
     )
     names = {}
     for ts in timesheets:
@@ -1765,12 +1767,18 @@ def export_timesheets_csv(
             filters=filters,
             fields=["name", "title", "status", "owner"],
             limit_page_length=0,
+            distinct=True,
         )
     }
+    # only the time logs in the chosen dates, from timesheets the viewer may see
+    log_filters = {"parent": ["in", list(sheets)], "parenttype": "Timesheet"}
+    log_range = _log_date_range(from_date, to_date)
+    if log_range:
+        log_filters["from_time"] = log_range
     logs = (
         frappe.get_all(
             "Timesheet Detail",
-            filters={"parent": ["in", list(sheets)], "parenttype": "Timesheet"},
+            filters=log_filters,
             fields=["parent", "from_time", "hours", "project", "task", "description"],
             order_by="from_time asc",
         )
@@ -1816,7 +1824,7 @@ def export_timesheets_csv(
     frappe.response.type = "download"
 
 
-def _timesheet_filters(team=False, agent=None, from_date=None, to_date=None) -> dict:
+def _timesheet_filters(team=False, agent=None, from_date=None, to_date=None) -> list:
     """Filters for the timesheets list; only leads and managers see the team's."""
     from helpdesk.api.work import can_see_overview
 
@@ -1826,23 +1834,29 @@ def _timesheet_filters(team=False, agent=None, from_date=None, to_date=None) -> 
             _("Only project leads and managers can see the team's timesheets."),
             frappe.PermissionError,
         )
-    filters = {}
+    filters = []
     if not team:
-        filters["owner"] = frappe.session.user
+        filters.append(["Timesheet", "owner", "=", frappe.session.user])
     elif agent:
-        filters["owner"] = agent
-    from_date = str(frappe.utils.getdate(from_date)) if from_date else None
-    to_date = str(frappe.utils.getdate(to_date)) if to_date else None
-    if from_date and to_date:
-        filters["creation"] = [
-            "between",
-            [f"{from_date} 00:00:00", f"{to_date} 23:59:59"],
-        ]
-    elif from_date:
-        filters["creation"] = [">=", f"{from_date} 00:00:00"]
-    elif to_date:
-        filters["creation"] = ["<=", f"{to_date} 23:59:59"]
+        filters.append(["Timesheet", "owner", "=", agent])
+    log_range = _log_date_range(from_date, to_date)
+    if log_range:
+        # the day the work was done, not when the timesheet was saved
+        filters.append(["Timesheet Detail", "from_time", *log_range])
     return filters
+
+
+def _log_date_range(from_date=None, to_date=None) -> list | None:
+    """A [operator, value] filter on a time log's start for the chosen dates."""
+    start = f"{frappe.utils.getdate(from_date)} 00:00:00" if from_date else None
+    end = f"{frappe.utils.getdate(to_date)} 23:59:59" if to_date else None
+    if start and end:
+        return ["between", [start, end]]
+    if start:
+        return [">=", start]
+    if end:
+        return ["<=", end]
+    return None
 
 
 def _names_of(doctype: str, field: str, names: set) -> dict:

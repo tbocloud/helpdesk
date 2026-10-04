@@ -22,6 +22,7 @@ from helpdesk.test_utils import (
     make_task,
     make_tasky_user,
     make_ticket,
+    make_timesheet,
 )
 
 CUSTOMER = "Al Noor Trading LLC"
@@ -968,6 +969,27 @@ class TestTeamTimesheets(WorkControlCase):
         self.assertEqual(names(agent=LEAD[0]), set())
         self.assertEqual(names(agent=DEV[0], from_date=nowdate()), {DEV[0]})
         self.assertEqual(names(from_date=add_days(nowdate(), 1)), set())
+
+        # entered today for work done ten days ago: it belongs to that date
+        late = self.as_user(
+            DEV,
+            lambda: make_timesheet(
+                self.project, 1.5, add_to_date(now_datetime(), days=-10)
+            ),
+        ).name
+        rows = self.as_user(
+            LEAD,
+            lambda: tasky.get_my_timesheets(
+                team=1,
+                from_date=add_days(nowdate(), -11),
+                to_date=add_days(nowdate(), -9),
+            ),
+        )
+        self.assertEqual([t["name"] for t in rows], [late])
+        today = self.as_user(
+            LEAD, lambda: tasky.get_my_timesheets(team=1, from_date=nowdate())
+        )
+        self.assertNotIn(late, [t["name"] for t in today])
 
         agents = self.as_user(LEAD, tasky.get_timesheet_agents)
         self.assertIn({"user": DEV[0], "full_name": DEV[1]}, agents)
