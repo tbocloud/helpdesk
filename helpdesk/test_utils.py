@@ -1712,6 +1712,7 @@ class FakeCRM:
         self.failing = set(failing)
         self.role_calls: list[tuple[tuple, str]] = []
         self.orgs = [{"name": o, "organization_name": o} for o in organizations or []]
+        self.erp = []
 
     def logged_user(self):
         return "api@crm.example"
@@ -1748,6 +1749,9 @@ class FakeCRM:
 
     def organizations(self):
         return list(self.orgs)
+
+    def erp_customers(self):
+        return [{"name": c, "organization_name": c} for c in self.erp]
 
     def create_organization(self, name, website=None):
         self.orgs.append({"name": name, "organization_name": name, "website": website})

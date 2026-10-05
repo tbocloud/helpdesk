@@ -36,11 +36,14 @@ Only what's missing is created; existing accounts keep their roles and details.
 
 ## Customers, both ways (implemented)
 
-*Sync customers both ways*: helpdesk **HD Customer** ↔ CRM **CRM Organization**, matched by
-name ignoring case and extra spaces.
+*Sync customers both ways*: helpdesk **HD Customer** ↔ the CRM's customers, matched by
+name ignoring case and extra spaces. On the CRM site a customer is a **CRM Organization**,
+or an ERPNext **Customer** (not disabled) when that site runs ERPNext too; both are read.
 
-- An HD Customer missing in the CRM becomes a CRM Organization (with its domain as website).
-- A CRM Organization missing in helpdesk becomes an HD Customer (website as domain).
+- An HD Customer missing in the CRM becomes a CRM Organization (with its domain as website);
+  it isn't created as an ERPNext Customer, which needs a group and territory.
+- A CRM Organization or ERPNext Customer missing in helpdesk becomes an HD Customer
+  (website as domain).
 - Existing records on either side are never changed or deleted. Contacts are not synced yet.
 
 Code: `helpdesk/integrations/crm/customers.py`.

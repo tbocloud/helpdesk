@@ -113,6 +113,30 @@ class CRMClient:
         )
         return (data or {}).get("data") or []
 
+    def erp_customers(self) -> list[dict]:
+        """ERPNext Customers on the CRM site, shaped like organizations; none without ERPNext."""
+        try:
+            data = self.request(
+                "GET",
+                "/api/resource/Customer",
+                params={
+                    "fields": json.dumps(["name", "customer_name", "website"]),
+                    "filters": json.dumps([["disabled", "=", 0]]),
+                    "limit_page_length": 0,
+                },
+            )
+        except CRMError:
+            # no ERPNext on the CRM site (or no access to it): nothing to add
+            return []
+        return [
+            {
+                "name": c.get("name"),
+                "organization_name": c.get("customer_name") or c.get("name"),
+                "website": c.get("website"),
+            }
+            for c in (data or {}).get("data") or []
+        ]
+
     def create_organization(self, name: str, website: str | None = None) -> dict:
         data = self.request(
             "POST",
