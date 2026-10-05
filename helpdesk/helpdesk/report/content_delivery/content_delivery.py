@@ -38,63 +38,31 @@ def execute(filters=None):
 
 
 def get_columns():
+    def col(fieldname, label, fieldtype="Int", width=100, **extra):
+        return {
+            "fieldname": fieldname,
+            "label": label,
+            "fieldtype": fieldtype,
+            "width": width,
+            **extra,
+        }
+
     return [
-        {
-            "fieldname": "customer",
-            "label": _("Customer"),
-            "fieldtype": "Link",
-            "options": "HD Customer",
-            "width": 220,
-        },
-        {
-            "fieldname": "promised",
-            "label": _("Promised"),
-            "fieldtype": "Int",
-            "width": 100,
-        },
-        {
-            "fieldname": "planned",
-            "label": _("Planned"),
-            "fieldtype": "Int",
-            "width": 100,
-        },
-        {
-            "fieldname": "published",
-            "label": _("Published"),
-            "fieldtype": "Int",
-            "width": 100,
-        },
-        {
-            "fieldname": "on_time",
-            "label": _("On Time"),
-            "fieldtype": "Int",
-            "width": 100,
-        },
-        {
-            "fieldname": "on_time_pct",
-            "label": _("On Time %"),
-            "fieldtype": "Percent",
-            "width": 110,
-        },
-        {
-            "fieldname": "overdue",
-            "label": _("Overdue"),
-            "fieldtype": "Int",
-            "width": 100,
-        },
-        {
-            "fieldname": "awaiting_client",
-            "label": _("Awaiting Client"),
-            "fieldtype": "Int",
-            "width": 130,
-        },
-        {
-            "fieldname": "avg_approval_hours",
-            "label": _("Avg Approval (hrs)"),
-            "fieldtype": "Float",
-            "precision": 1,
-            "width": 150,
-        },
+        col("customer", _("Customer"), "Link", 220, options="HD Customer"),
+        col("health", _("Health"), "Data", 120),
+        col("promised", _("Promised")),
+        col("planned", _("Planned")),
+        col("published", _("Published")),
+        col("on_time", _("Published On Time"), width=140),
+        col("late", _("Published Late"), width=120),
+        col("overdue", _("Overdue")),
+        col("upcoming", _("Not Due Yet")),
+        col("on_time_pct", _("On Time %"), "Percent", 110),
+        col("awaiting_client", _("Awaiting Client"), width=130),
+        col("avg_approval_hours", _("Avg Approval (hrs)"), "Float", 150, precision=1),
+        col("planning", _("Planning")),
+        col("review", _("In Review")),
+        col("ready", _("Ready")),
     ]
 
 
@@ -158,10 +126,17 @@ def get_rows(filters) -> list[dict]:
     rows = []
     for row in sorted(by_customer.values(), key=lambda r: r["customer"] or ""):
         hours = row.pop("_approval_hours")
+        # nothing published means there is no on-time rate, not a rate of 0%
         row["on_time_pct"] = (
-            round(row["on_time"] / row["published"] * 100, 1) if row["published"] else 0
+            round(row["on_time"] / row["published"] * 100, 1)
+            if row["published"]
+            else None
         )
         row["avg_approval_hours"] = round(sum(hours) / len(hours), 1) if hours else None
+        row["health"] = health(row)
+        row.update(
+            {stage: row["stages"][stage] for stage in ("planning", "review", "ready")}
+        )
         rows.append(row)
     return rows
 
@@ -215,6 +190,18 @@ def prorated(per_month: int, start, end) -> int:
     return round(total)
 
 
+def health(row: dict) -> str:
+    """The page's health badge, so the downloads say the same."""
+    due = row["planned"] - row["upcoming"]
+    if not due:
+        return _("Nothing due yet")
+    if row["overdue"] / due >= 0.5:
+        return _("Behind")
+    if row["overdue"] or (row["on_time_pct"] or 0) < 80:
+        return _("At risk")
+    return _("On track")
+
+
 def get_chart(rows: list[dict]) -> dict | None:
     if not rows:
         return None
@@ -241,9 +228,17 @@ def export_xlsx(from_date: str, to_date: str, customer: str | None = None):
     columns = get_columns()
     rows = get_rows(filters)
 
-    data = [[c["label"] for c in columns]]
+    period = _("{0} to {1}").format(formatdate(from_date), formatdate(to_date))
+    data = [
+        [_("Content delivery report")],
+        [period + (f" · {customer}" if customer else "")],
+    ]
+    data += [[line] for line in (summary_lines(rows) if rows else [])]
+    data.append([])
+    data.append([c["label"] for c in columns])
     data += [[row.get(c["fieldname"]) for c in columns] for row in rows]
-    data.append(total_row(columns, rows))
+    if rows:
+        data.append(total_row(columns, rows))
 
     # Excel refuses sheet names over 31 characters; the dates are in the file name
     xlsx = make_xlsx(
@@ -255,21 +250,71 @@ def export_xlsx(from_date: str, to_date: str, customer: str | None = None):
     frappe.response.type = "binary"
 
 
-def total_row(columns: list[dict], rows: list[dict]) -> list:
-    totals = {
-        key: sum(r[key] for r in rows)
-        for key in ("planned", "published", "on_time", "overdue", "awaiting_client")
-    }
+def get_totals(rows: list[dict]) -> dict:
+    """The page's headline numbers: sums, plus rates worked out from the sums."""
+    keys = (
+        "planned",
+        "published",
+        "on_time",
+        "late",
+        "overdue",
+        "upcoming",
+        "awaiting_client",
+        "planning",
+        "review",
+        "ready",
+    )
+    totals = {key: sum(r[key] for r in rows) for key in keys}
     totals["promised"] = sum(r["promised"] or 0 for r in rows) or None
     totals["customer"] = _("Total")
+    totals["health"] = None
     totals["on_time_pct"] = (
         round(totals["on_time"] / totals["published"] * 100, 1)
         if totals["published"]
-        else 0
+        else None
     )
-    # averaging the per-customer averages would overweight small customers
-    totals["avg_approval_hours"] = None
+    # weighted by each customer's posts, as on the page; a plain average of
+    # averages would overweight small customers
+    timed = [r for r in rows if r["avg_approval_hours"] is not None]
+    weight = sum(r["planned"] for r in timed)
+    totals["avg_approval_hours"] = (
+        round(sum(r["avg_approval_hours"] * r["planned"] for r in timed) / weight, 1)
+        if weight
+        else None
+    )
+    due = totals["planned"] - totals["upcoming"]
+    totals["delivered_pct"] = (
+        round((totals["on_time"] + totals["late"]) / due * 100) if due else None
+    )
+    totals["due"] = due
+    return totals
+
+
+def total_row(columns: list[dict], rows: list[dict]) -> list:
+    totals = get_totals(rows)
     return [totals.get(c["fieldname"]) for c in columns]
+
+
+def summary_lines(rows: list[dict]) -> list[str]:
+    """The headline the page shows above the table, as plain sentences."""
+    t = get_totals(rows)
+    pct = lambda v: "—" if v is None else f"{v:g}%"
+    return [
+        _("{0} delivered: {1} of {2} posts due are published.").format(
+            pct(t["delivered_pct"]), t["published"], t["due"]
+        ),
+        _("Published on time {0}, late {1}, overdue {2}, not due yet {3}.").format(
+            t["on_time"], t["late"], t["overdue"], t["upcoming"]
+        ),
+        _("On time {0}. Awaiting client {1}. Average approval {2}.").format(
+            pct(t["on_time_pct"]),
+            t["awaiting_client"],
+            "—" if t["avg_approval_hours"] is None else f"{t['avg_approval_hours']} h",
+        ),
+        _("Planning {0}, in review {1}, ready {2}, published {3}.").format(
+            t["planning"], t["review"], t["ready"], t["published"]
+        ),
+    ]
 
 
 @frappe.whitelist()
@@ -297,6 +342,7 @@ def export_pdf(from_date: str, to_date: str, customer: str | None = None):
             "columns": [frappe._dict(c) for c in columns],
             "rows": [[row.get(c["fieldname"]) for c in columns] for row in rows],
             "total": total_row(columns, rows),
+            "summary": summary_lines(rows) if rows else [],
             "generated_on": format_datetime(now_datetime()),
             "generated_by": frappe.utils.get_fullname(frappe.session.user),
             "auto_print": not can_render_pdf,

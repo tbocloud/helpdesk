@@ -90,10 +90,23 @@ class TestContentDelivery(FrappeTestCase):
         # Excel reports the file as damaged when a sheet name is longer than 31
         self.assertLessEqual(len(sheet.title), 31)
         rows = list(sheet.iter_rows(values_only=True))
+        header = rows.index(next(r for r in rows if r[0] == "Customer"))
+        # the same headline the page shows comes first
+        self.assertIn("0 of 0 posts due are published", rows[header - 5][0])
+        self.assertEqual(
+            rows[header][:4], ("Customer", "Health", "Promised", "Planned")
+        )
+        values = dict(zip(rows[header], rows[header + 1]))
+        self.assertEqual(values["Customer"], CUSTOMER)
+        self.assertEqual(values["Planned"], 2)
+        self.assertEqual(values["Not Due Yet"], 2)
+        self.assertEqual(values["Health"], "Nothing due yet")
         # no monthly package, so nothing promised
-        self.assertEqual(rows[0][:3], ("Customer", "Promised", "Planned"))
-        self.assertEqual(rows[1][:3], (CUSTOMER, None, 2))
-        self.assertEqual(rows[-1][:3], ("Total", None, 2))
+        self.assertIsNone(values["Promised"])
+        # nothing published yet: no on-time rate, rather than 0%
+        self.assertIsNone(values["On Time %"])
+        self.assertEqual(rows[-1][0], "Total")
+        self.assertEqual(dict(zip(rows[header], rows[-1]))["Planned"], 2)
 
     def test_pdf_has_the_report_rows(self):
         from unittest.mock import patch
