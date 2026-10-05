@@ -47,7 +47,11 @@ const label = (r: Row) => r.customer || __("No customer");
 // biggest at the top
 const ordered = computed(() => [...props.rows].reverse());
 
-function onClick(params: { dataIndex?: number; value?: string; componentType?: string }) {
+function onClick(params: {
+  dataIndex?: number;
+  value?: string;
+  componentType?: string;
+}) {
   const row =
     params.componentType === "yAxis"
       ? ordered.value.find((r) => label(r) === params.value)
@@ -80,7 +84,9 @@ const options = computed(() => {
         );
         return `<div style="font-weight:600;margin-bottom:4px">${escapeHtml(
           label(row)
-        )} · ${escapeHtml(__("{0} posts", String(row.posts)))}</div>${lines.join("")}`;
+        )} · ${escapeHtml(
+          __("{0} posts", String(row.posts))
+        )}</div>${lines.join("")}`;
       },
     },
     xAxis: valueAxis(c, { minInterval: 1 }),
@@ -91,6 +97,13 @@ const options = computed(() => {
         fontSize: 12,
         width: 140,
         overflow: "truncate",
+        // the customer open below reads in brand
+        formatter: (name: string) =>
+          props.selected != null &&
+          name === label({ customer: props.selected } as Row)
+            ? `{sel|${name}}`
+            : name,
+        rich: { sel: { color: c.brand, fontWeight: 600, fontSize: 12 } },
       },
       triggerEvent: true,
     }),
@@ -111,7 +124,8 @@ const options = computed(() => {
         itemStyle: {
           ...(lastKey[ri] === t ? { borderRadius: [0, 4, 4, 0] } : {}),
           // the customer open below stays at full strength
-          opacity: props.selected == null || r.customer === props.selected ? 1 : 0.45,
+          opacity:
+            props.selected == null || r.customer === props.selected ? 1 : 0.45,
         },
       })),
       label:

@@ -34,7 +34,7 @@
             class="inline-flex h-7 items-center gap-1.5 rounded-md px-3 text-sm"
             :class="
               view === v.key
-                ? 'bg-surface-base text-ink-gray-9 shadow-sm'
+                ? 'bg-brand text-brand-on shadow-sm'
                 : 'text-ink-gray-6 hover:text-ink-gray-8'
             "
             @click="view = v.key"

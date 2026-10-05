@@ -447,7 +447,7 @@
 <script setup lang="ts">
 import { __ } from "@/translation";
 import { Avatar, dayjs } from "frappe-ui";
-import type { Tone } from "../performanceMeta";
+import { channelColor, type Tone } from "../performanceMeta";
 import { computed, h, ref } from "vue";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideCircleCheck from "~icons/lucide/circle-check";
@@ -504,8 +504,6 @@ const scoreClass = (score: number | null) =>
     ? "text-success"
     : "text-brand-ink";
 
-const channelColor = (channel: string) =>
-  `var(--channel-${channel.toLowerCase()}, var(--ink-gray-7))`;
 
 const sort = ref<"best" | "date">("best");
 const detail = computed(() => props.data.detail);
