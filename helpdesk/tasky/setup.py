@@ -130,14 +130,6 @@ def get_project_custom_fields() -> dict:
                 "depends_on": "content_post",
             },
             {
-                "fieldname": "is_milestone",
-                "fieldtype": "Check",
-                "label": "Milestone",
-                "insert_after": "is_key",
-                "in_standard_filter": 1,
-                "description": "A checkpoint for the customer (e.g. go-live). Slips are escalated like key tasks.",
-            },
-            {
                 # one task to wait on; ERPNext's own depends_on table is for templates and Gantt
                 "fieldname": "depends_on_task",
                 "fieldtype": "Link",
