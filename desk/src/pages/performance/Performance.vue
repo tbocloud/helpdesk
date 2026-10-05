@@ -73,6 +73,16 @@
       </template>
       <span v-else class="text-sm text-ink-gray-6">{{ rangeLabel }}</span>
 
+      <div class="mx-1 h-5 w-px bg-outline-gray-2" aria-hidden="true" />
+      <div class="w-56">
+        <Link
+          v-model="forCustomer"
+          doctype="HD Customer"
+          :placeholder="__('All customers')"
+          :aria-label="__('Customer')"
+        />
+      </div>
+
       <template v-if="scope.data?.sees_team">
         <div class="mx-1 h-5 w-px bg-outline-gray-2" aria-hidden="true" />
         <div
@@ -170,6 +180,7 @@
 </template>
 
 <script setup lang="ts">
+import { Link } from "@/components";
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import { __ } from "@/translation";
 import { Button, createResource, dayjs, FormControl } from "frappe-ui";
@@ -219,6 +230,11 @@ const VIEWS: { key: View; label: string; icon: unknown }[] = [
 ];
 const view = ref<View>(query("view") === "content" ? "content" : "customers");
 const customer = ref(query("customer"));
+// limits both tabs to one customer's posts
+const forCustomer = ref(query("for_customer"));
+watch(forCustomer, (value) => {
+  customer.value = value || "";
+});
 const department = ref(query("department"));
 
 const range = computed(() => {
@@ -296,6 +312,7 @@ const customerReport = createResource({
     ...params(),
     customer: customer.value || null,
     department: department.value || null,
+    for_customer: forCustomer.value || null,
   }),
 });
 const contentReport = createResource({
@@ -304,6 +321,7 @@ const contentReport = createResource({
     ...params(),
     employee: employee.value || null,
     department: department.value || null,
+    for_customer: forCustomer.value || null,
   }),
 });
 const report = computed(() =>
@@ -318,7 +336,7 @@ function load() {
 }
 
 watch(
-  [() => scope.data, employee, customer, department, range, view],
+  [() => scope.data, employee, customer, forCustomer, department, range, view],
   () => {
     router.replace({
       query: {
@@ -333,6 +351,7 @@ watch(
         ...(view.value === "customers" && customer.value
           ? { customer: customer.value }
           : {}),
+        ...(forCustomer.value ? { for_customer: forCustomer.value } : {}),
         ...(department.value && (view.value === "customers" || !employee.value)
           ? { department: department.value }
           : {}),

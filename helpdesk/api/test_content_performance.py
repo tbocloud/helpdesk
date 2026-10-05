@@ -100,6 +100,23 @@ class TestContentPerformance(FrappeTestCase):
                 self.start, self.end, employee=self.designer
             )
 
+    def test_customer_filter_limits_both_reports(self):
+        by_customer = content_performance.get_customer_performance(
+            self.start, self.end, for_customer=GLOBEX
+        )
+        self.assertEqual([r["customer"] for r in by_customer["customers"]], [GLOBEX])
+        self.assertEqual(by_customer["detail"]["customer"], GLOBEX)
+        self.assertEqual(by_customer["summary"]["posts"], 2)
+
+        by_employee = content_performance.get_content_performance(
+            self.start, self.end, for_customer=GLOBEX
+        )
+        rows = {r["employee"]: r for r in by_employee["team"]}
+        # only the Missed post: the designer's Acme post doesn't count here
+        self.assertEqual(rows[self.designer]["posts"], 1)
+        self.assertEqual(rows[self.designer]["missed"], 1)
+        self.assertEqual(rows[self.writer]["posts"], 1)
+
     def test_employee_ranking(self):
         report = content_performance.get_content_performance(
             self.start, self.end, employee=self.designer

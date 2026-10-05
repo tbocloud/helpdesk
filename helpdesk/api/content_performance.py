@@ -27,9 +27,9 @@ CHANGE_PENALTY = 10
 CHANGES_REQUESTED = "Changes Requested"
 
 
-def period_posts(start, end) -> list[dict]:
+def period_posts(start, end, customer: str | None = None) -> list[dict]:
     Post = frappe.qb.DocType("HD Content Post")
-    return (
+    query = (
         frappe.qb.from_(Post)
         .select(
             Post.name,
@@ -49,8 +49,10 @@ def period_posts(start, end) -> list[dict]:
         .where(Post.publish_on[f"{start} 00:00:00":f"{end} 23:59:59"])
         .where(Post.status != "Cancelled")
         .orderby(Post.publish_on)
-        .run(as_dict=True)
     )
+    if customer:
+        query = query.where(Post.customer == customer)
+    return query.run(as_dict=True)
 
 
 def change_requests(post_names: list[str]) -> dict[str, int]:
@@ -123,9 +125,9 @@ def summarise(posts: list[dict]) -> dict:
     }
 
 
-def scored_posts(start, end) -> list[dict]:
+def scored_posts(start, end, customer: str | None = None) -> list[dict]:
     now = now_datetime()
-    raw = period_posts(start, end)
+    raw = period_posts(start, end, customer)
     changes = change_requests([p.name for p in raw])
     posts = []
     for p in raw:
@@ -156,7 +158,9 @@ def get_content_performance(
     to_date: str,
     employee: str | None = None,
     department: str | None = None,
+    for_customer: str | None = None,
 ) -> dict:
+    """`for_customer` limits everything, the ranking included, to that customer's posts."""
     start, end = check_range(from_date, to_date)
     people = resolve_scope(None, department)
     if employee and employee not in {p.employee for p in people}:
@@ -164,7 +168,7 @@ def get_content_performance(
             _("You can't view this employee's performance."), frappe.PermissionError
         )
 
-    posts = scored_posts(start, end)
+    posts = scored_posts(start, end, for_customer)
 
     by_user = defaultdict(list)
     for post in posts:
@@ -254,12 +258,17 @@ def get_customer_performance(
     to_date: str,
     customer: str | None = None,
     department: str | None = None,
+    for_customer: str | None = None,
 ) -> dict:
-    """Content delivery per customer, and who on the team worked on each."""
+    """Content delivery per customer, and who on the team worked on each.
+
+    `customer` picks the one shown in detail; `for_customer` limits the whole
+    report to that customer.
+    """
     start, end = check_range(from_date, to_date)
     people = resolve_scope(None, department)
     person_of = {p.user_id: p for p in people}
-    posts = scored_posts(start, end)
+    posts = scored_posts(start, end, for_customer)
     # people who see everyone also see posts nobody is on yet
     if department or not sees_everyone(frappe.session.user):
         posts = [p for p in posts if set(p["team"].values()) & person_of.keys()]
