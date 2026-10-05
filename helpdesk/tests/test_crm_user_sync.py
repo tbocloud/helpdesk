@@ -168,3 +168,28 @@ class TestCRMCustomers(TestCRMUserSync):
             again = sync_customers()
         self.assertEqual(again["created_in_crm"], [])
         self.assertEqual(again["created_in_helpdesk"], [])
+
+    def test_a_failed_agent_leaves_no_half_made_user(self):
+        self.crm.users[SALES_ONLY] = {
+            "name": SALES_ONLY,
+            "enabled": 1,
+            "roles": [{"role": "Sales User"}],
+        }
+        with patch(
+            "helpdesk.integrations.crm.users.frappe.get_doc",
+            side_effect=_fail_on_agent(frappe.get_doc),
+        ):
+            result = self.sync()
+        self.assertTrue(any(SALES_ONLY in f for f in result["failed"]))
+        self.assertFalse(frappe.db.exists("User", SALES_ONLY))
+
+
+def _fail_on_agent(get_doc):
+    """get_doc that refuses to build an HD Agent, like a validation error would."""
+
+    def wrapped(*args, **kwargs):
+        if args and isinstance(args[0], dict) and args[0].get("doctype") == "HD Agent":
+            raise frappe.ValidationError("agent refused")
+        return get_doc(*args, **kwargs)
+
+    return wrapped

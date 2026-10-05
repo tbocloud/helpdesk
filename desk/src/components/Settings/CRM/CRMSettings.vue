@@ -24,10 +24,7 @@
       </Transition>
     </template>
     <template #content>
-      <div
-        v-if="!form"
-        class="flex items-center justify-center absolute inset-x-0 top-5.5 bottom-0"
-      >
+      <div v-if="!form" class="flex justify-center py-10">
         <LoadingIndicator class="w-4" />
       </div>
       <div v-else class="flex flex-col gap-8">

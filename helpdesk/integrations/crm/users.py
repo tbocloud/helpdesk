@@ -116,12 +116,16 @@ def pull_users(client, settings, result: dict):
         email = (person.get("email") or "").strip().lower()
         if not email or email in SKIP or frappe.db.exists("User", email):
             continue
+        # User and HD Agent together or not at all: a User left without its agent
+        # would be skipped by every later run
+        frappe.db.savepoint("crm_add_agent")
         try:
             add_helpdesk_agent(
                 email, person.get("full_name"), settings.send_welcome_email
             )
             result["added_to_helpdesk"].append(email)
         except frappe.ValidationError as e:
+            frappe.db.rollback(save_point="crm_add_agent")
             result["failed"].append(f"{email}: {str(e)}")
 
 
