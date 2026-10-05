@@ -1,6 +1,6 @@
 # TBO CRM integration
 
-Status: phase 1 (users) is implemented; phase 2 (customers from the CRM) is planned.
+Status: users and customers both ways are implemented (missing records only).
 This document is the source of truth for the feature and changes with it.
 
 ## What it connects
@@ -16,40 +16,53 @@ Code: `helpdesk/integrations/crm/client.py` (REST client), `helpdesk/integration
 (user sync), `helpdesk/api/crm.py` (settings page actions),
 `desk/src/components/Settings/CRM/CRMSettings.vue`.
 
-## Phase 1: every helpdesk agent is a CRM user (implemented)
+## Users, both ways (implemented)
 
-- Who: active HD Agents with an enabled desk user, except Administrator and the TBO AI
-  automation user.
-- For each person:
-  - not on the CRM site → create the User (welcome email if the setting is on, so they
-    can set a password);
+Only what's missing is created; existing accounts keep their roles and details.
+
+- **Helpdesk → CRM** (*Add helpdesk agents missing in the CRM*): active HD Agents with an
+  enabled desk user, except Administrator and the TBO AI automation user.
+  - not on the CRM site → create the User (welcome email if that setting is on);
   - disabled on the CRM site → enable it;
-  - no CRM role (Sales User, Sales Manager or System Manager) → give the role from
-    settings through Frappe CRM's own `crm.api.user.add_existing_users`.
-- People who leave the helpdesk are **not** removed or disabled on the CRM site; that is
-  a manual decision there.
-- When: every hour, when an agent is added or re-activated (HD Agent hook), and with
-  **Sync users now** in Settings → CRM. The result is kept in Last Sync Result.
-- A failure for one person is recorded and the rest continue; the hourly job logs
-  connection errors instead of raising.
-- Tests: `helpdesk/tests/test_crm_user_sync.py` (with `test_utils.FakeCRM`).
+  - no CRM role (Sales User, Sales Manager or System Manager) → give the role from settings
+    through Frappe CRM's own `crm.api.user.add_existing_users`.
+- **CRM → helpdesk** (*Add CRM users missing in helpdesk, as agents*): users Frappe CRM lists
+  as CRM users (`crm.api.session.get_users`) without a helpdesk account get a User and an
+  active HD Agent (HD Agent adds the Agent role). Existing helpdesk users are not changed.
+- **Leaving** (*Disable CRM users who leave helpdesk*): users this connection created on the
+  CRM site (remembered in HD CRM Settings, hidden field `created_in_crm`) are disabled there
+  once they're disabled or deactivated in helpdesk. People created directly in the CRM are
+  never touched, and nobody is deleted.
 
-## Phase 2: customers from the CRM into helpdesk (planned)
+## Customers, both ways (implemented)
 
-Customers created on the CRM site are fetched into helpdesk as HD Customers (with their
-contacts), so support can start the moment a deal is won. Open questions before
-building it:
+*Sync customers both ways*: helpdesk **HD Customer** ↔ CRM **CRM Organization**, matched by
+name ignoring case and extra spaces.
 
-- Which record on tboindia is "a customer": a **CRM Organization**, a **CRM Deal** marked
-  Won, or an ERPNext **Customer** (if ERPNext runs on tboindia)?
-- One-way (CRM → helpdesk) only, or should helpdesk changes go back?
-- Match existing HD Customers by name, or by a stored CRM ID (recommended: a
-  `crm_reference` field on HD Customer)?
-- How fast: every few minutes (pull) or a webhook from the CRM site?
+- An HD Customer missing in the CRM becomes a CRM Organization (with its domain as website).
+- A CRM Organization missing in helpdesk becomes an HD Customer (website as domain).
+- Existing records on either side are never changed or deleted. Contacts are not synced yet.
+
+Code: `helpdesk/integrations/crm/customers.py`.
+
+## When it runs
+
+Every hour (users, then customers), soon after an agent is added, re-activated or
+deactivated (HD Agent hook, queued once), and with **Sync now** in Settings → CRM. One
+failing record is listed in Last Sync Result and the rest continue; the hourly job logs
+connection errors instead of raising.
+
+Tests: `helpdesk/tests/test_crm_user_sync.py` (with `test_utils.FakeCRM`).
+
+## Possible next steps
+
+- Contacts of a customer, both ways.
+- A CRM Deal marked Won creating the customer's project in helpdesk.
+- A webhook from the CRM site for new organizations, instead of waiting for the hourly run.
 
 ## Security
 
 - Keys are entered only in Settings → CRM, never sent in chat or email; rotate any key
   that was.
 - The CRM API user needs System Manager (to create users) on the CRM site.
-- The hub only creates and enables users and assigns CRM roles; it never deletes.
+- The hub only creates, enables and (for users it created) disables records; it never deletes.

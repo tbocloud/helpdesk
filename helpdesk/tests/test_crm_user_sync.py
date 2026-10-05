@@ -110,3 +110,61 @@ class TestCRMUserSync(FrappeTestCase):
         settings.site_url = ""
         with self.assertRaises(frappe.ValidationError):
             settings.save()
+
+
+SALES_ONLY = "sales.only@crm-sync.example"
+
+
+class TestCRMBothWays(TestCRMUserSync):
+    def test_crm_users_missing_in_helpdesk_become_agents(self):
+        self.crm.users[SALES_ONLY] = {
+            "name": SALES_ONLY,
+            "full_name": "Sara Sales",
+            "enabled": 1,
+            "roles": [{"role": "Sales User"}],
+        }
+        result = self.sync()
+
+        self.assertIn(SALES_ONLY, result["added_to_helpdesk"])
+        self.assertEqual(frappe.db.get_value("HD Agent", SALES_ONLY, "is_active"), 1)
+        self.assertIn("Agent", frappe.get_roles(SALES_ONLY))
+        # someone already in helpdesk is left alone
+        self.assertNotIn(SYNCED, result["added_to_helpdesk"])
+
+    def test_only_users_we_created_are_disabled_when_they_leave(self):
+        self.sync()  # creates NEW in the CRM
+        frappe.db.set_value("HD Agent", NEW, "is_active", 0)
+        frappe.db.set_value("HD Agent", SYNCED, "is_active", 0)
+
+        result = self.sync()
+
+        self.assertEqual(result["disabled_in_crm"], [NEW])
+        self.assertEqual(self.crm.users[NEW]["enabled"], 0)
+        # SYNCED was created in the CRM directly, so it stays enabled there
+        self.assertEqual(self.crm.users[SYNCED]["enabled"], 1)
+
+
+class TestCRMCustomers(TestCRMUserSync):
+    def test_missing_customers_are_added_on_each_side_only(self):
+        from helpdesk.integrations.crm.customers import sync_customers
+        from helpdesk.test_utils import create_customer
+
+        create_customer("Helpdesk Only Co")
+        create_customer("Shared Co")
+        self.crm.orgs = [
+            {"name": "CRM Only Co", "organization_name": "CRM Only Co"},
+            {"name": "shared co", "organization_name": "shared co "},
+        ]
+        with patch(FROM_SETTINGS, return_value=self.crm):
+            result = sync_customers()
+
+        self.assertIn("Helpdesk Only Co", result["created_in_crm"])
+        self.assertNotIn("Shared Co", result["created_in_crm"])
+        self.assertEqual(result["created_in_helpdesk"], ["CRM Only Co"])
+        self.assertTrue(frappe.db.exists("HD Customer", "CRM Only Co"))
+
+        # a second run adds nothing
+        with patch(FROM_SETTINGS, return_value=self.crm):
+            again = sync_customers()
+        self.assertEqual(again["created_in_crm"], [])
+        self.assertEqual(again["created_in_helpdesk"], [])

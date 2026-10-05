@@ -96,10 +96,24 @@
           </h2>
           <Switch
             v-model="form.sync_users"
-            :label="__('Keep every helpdesk agent in the CRM')"
+            :label="__('Add helpdesk agents missing in the CRM')"
             :description="
               __(
-                'Checked every hour and when an agent is added. People who leave are not removed from the CRM.'
+                'Checked every hour and when an agent is added or leaves. Existing CRM users keep their roles.'
+              )
+            "
+          />
+          <Switch
+            v-model="form.add_crm_users"
+            :label="__('Add CRM users missing in helpdesk, as agents')"
+            :description="__('Existing helpdesk users are left as they are.')"
+          />
+          <Switch
+            v-model="form.disable_left_users"
+            :label="__('Disable CRM users who leave helpdesk')"
+            :description="
+              __(
+                'Only users this connection created in the CRM; people created there directly are never touched.'
               )
             "
           />
@@ -113,20 +127,26 @@
           </div>
           <Switch
             v-model="form.send_welcome_email"
-            :label="
-              __('Send new CRM users a welcome email to set their password')
+            :label="__('Send new users a welcome email to set their password')"
+          />
+        </section>
+
+        <section class="flex flex-col gap-4">
+          <h2 class="text-base-semibold text-ink-gray-9">
+            {{ __("Customers") }}
+          </h2>
+          <Switch
+            v-model="form.sync_customers"
+            :label="__('Sync customers both ways')"
+            :description="
+              __(
+                'An HD Customer missing in the CRM becomes a CRM Organization, and the other way round. Matched by name; nothing existing is changed.'
+              )
             "
           />
           <div class="flex flex-wrap items-center gap-3">
             <Button
-              :label="
-                overview.data
-                  ? __(
-                      'Sync {0} users now',
-                      String(overview.data.helpdesk_users)
-                    )
-                  : __('Sync users now')
-              "
+              :label="__('Sync now')"
               :loading="sync.loading"
               :disabled="isDirty"
               @click="sync.submit()"
@@ -171,6 +191,9 @@ interface CRMForm {
   sync_users: boolean;
   crm_role: string;
   send_welcome_email: boolean;
+  add_crm_users: boolean;
+  disable_left_users: boolean;
+  sync_customers: boolean;
 }
 
 const DOCTYPE = "HD CRM Settings";
@@ -183,6 +206,11 @@ const form = ref<CRMForm | null>(null);
 const initial = ref("");
 const hasSecret = ref(false);
 const lastSync = ref<{ on?: string; result?: string }>({});
+
+// a new single has no saved value yet; these switches start on
+function onByDefault(value: unknown) {
+  return value === undefined || value === null ? true : Boolean(value);
+}
 
 const settings = createResource({
   url: "frappe.client.get",
@@ -203,14 +231,12 @@ const settings = createResource({
         doc.send_welcome_email === undefined
           ? true
           : Boolean(doc.send_welcome_email),
+      add_crm_users: onByDefault(doc.add_crm_users),
+      disable_left_users: onByDefault(doc.disable_left_users),
+      sync_customers: onByDefault(doc.sync_customers),
     };
     initial.value = JSON.stringify(form.value);
   },
-});
-
-const overview = createResource({
-  url: "helpdesk.api.crm.get_overview",
-  auto: true,
 });
 
 const isDirty = computed(
@@ -227,6 +253,9 @@ const save = createResource({
       enabled: f.enabled ? 1 : 0,
       sync_users: f.sync_users ? 1 : 0,
       send_welcome_email: f.send_welcome_email ? 1 : 0,
+      add_crm_users: f.add_crm_users ? 1 : 0,
+      disable_left_users: f.disable_left_users ? 1 : 0,
+      sync_customers: f.sync_customers ? 1 : 0,
     };
     if (!f.api_secret) delete fieldname.api_secret;
     return { doctype: DOCTYPE, name: DOCTYPE, fieldname };
@@ -246,12 +275,12 @@ const test = createResource({
 });
 
 const sync = createResource({
-  url: "helpdesk.api.crm.sync_users_now",
+  url: "helpdesk.api.crm.sync_now",
   method: "POST",
   onSuccess(data: { ok: boolean; message: string }) {
     lastSync.value = { on: dayjs().format(), result: data.message };
-    if (data.ok) toast.success(__("Users synced with the CRM"));
-    else toast.error(data.message || __("Some users couldn't be synced"));
+    if (data.ok) toast.success(__("Synced with the CRM"));
+    else toast.error(data.message || __("Some records couldn't be synced"));
   },
   onError(e: { messages?: string[] }) {
     toast.error(e.messages?.[0] || __("Couldn't sync users"));

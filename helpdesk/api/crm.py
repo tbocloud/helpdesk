@@ -1,10 +1,11 @@
-"""Settings → CRM: test the connection to the TBO CRM site and sync users now."""
+"""Settings → CRM: test the connection to the TBO CRM site and sync users and customers now."""
 
 import frappe
 from frappe import _
 
 from helpdesk.integrations.crm.client import CRMClient, CRMError
-from helpdesk.integrations.crm.users import helpdesk_users, sync_users
+from helpdesk.integrations.crm.customers import sync_customers
+from helpdesk.integrations.crm.users import sync_users
 
 ADMIN_ROLES = {"System Manager", "Agent Manager"}
 
@@ -18,12 +19,6 @@ def require_admin():
             _("Only System Managers and Agent Managers can manage the CRM connection."),
             frappe.PermissionError,
         )
-
-
-@frappe.whitelist()
-def get_overview() -> dict:
-    require_admin()
-    return {"helpdesk_users": len(helpdesk_users())}
 
 
 @frappe.whitelist(methods=["POST"])
@@ -40,14 +35,21 @@ def test_connection() -> dict:
 
 
 @frappe.whitelist(methods=["POST"])
-def sync_users_now() -> dict:
+def sync_now() -> dict:
+    """Users both ways, then customers both ways (when switched on)."""
     require_admin()
     try:
-        result = sync_users()
+        users = sync_users()
+        customers = (
+            sync_customers()
+            if frappe.db.get_single_value("HD CRM Settings", "sync_customers")
+            else {"failed": []}
+        )
     except CRMError as e:
         return {"ok": False, "message": str(e)}
     return {
-        "ok": not result["failed"],
+        "ok": not (users["failed"] or customers["failed"]),
         "message": frappe.db.get_single_value("HD CRM Settings", "last_sync_result"),
-        **result,
+        "users": users,
+        "customers": customers,
     }

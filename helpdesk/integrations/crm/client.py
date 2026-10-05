@@ -84,6 +84,43 @@ class CRMClient:
     def enable_user(self, email: str):
         self.request("PUT", f"/api/resource/User/{quote(email)}", json={"enabled": 1})
 
+    def disable_user(self, email: str):
+        self.request("PUT", f"/api/resource/User/{quote(email)}", json={"enabled": 0})
+
+    def crm_users(self) -> list[dict]:
+        """Enabled users with a CRM role (Frappe CRM's own list, so it matches its rules)."""
+        data = self.request("GET", "/api/method/crm.api.session.get_users") or {}
+        message = data.get("message") or [[], []]
+        users = message[1] if isinstance(message, list) and len(message) > 1 else []
+        return [
+            {
+                "email": u.get("email") or u.get("name"),
+                "full_name": u.get("full_name")
+                or " ".join(n for n in (u.get("first_name"), u.get("last_name")) if n),
+            }
+            for u in users
+            if u.get("name") != "Administrator" and u.get("enabled", 1)
+        ]
+
+    def organizations(self) -> list[dict]:
+        data = self.request(
+            "GET",
+            f"/api/resource/{quote('CRM Organization')}",
+            params={
+                "fields": json.dumps(["name", "organization_name", "website"]),
+                "limit_page_length": 0,
+            },
+        )
+        return (data or {}).get("data") or []
+
+    def create_organization(self, name: str, website: str | None = None) -> dict:
+        data = self.request(
+            "POST",
+            f"/api/resource/{quote('CRM Organization')}",
+            json={"organization_name": name, "website": website or None},
+        )
+        return (data or {}).get("data") or {}
+
     def add_to_crm(self, emails: list[str], role: str):
         """Give existing users a CRM role (Frappe CRM's own API, so its rules apply)."""
         self.request(

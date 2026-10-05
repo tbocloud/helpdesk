@@ -1702,10 +1702,16 @@ def make_timesheet(project: str, hours: float, from_time, task: str | None = Non
 class FakeCRM:
     """In-memory stand-in for the TBO CRM site's REST API (helpdesk.integrations.crm.client)."""
 
-    def __init__(self, users: list[dict] | None = None, failing: tuple = ()):
+    def __init__(
+        self,
+        users: list[dict] | None = None,
+        failing: tuple = (),
+        organizations: list[str] | None = None,
+    ):
         self.users = {u["name"]: {"roles": [], "enabled": 1, **u} for u in users or []}
         self.failing = set(failing)
         self.role_calls: list[tuple[tuple, str]] = []
+        self.orgs = [{"name": o, "organization_name": o} for o in organizations or []]
 
     def logged_user(self):
         return "api@crm.example"
@@ -1729,6 +1735,23 @@ class FakeCRM:
 
     def enable_user(self, email):
         self.users[email]["enabled"] = 1
+
+    def disable_user(self, email):
+        self.users[email]["enabled"] = 0
+
+    def crm_users(self):
+        return [
+            {"email": u["name"], "full_name": u.get("full_name") or ""}
+            for u in self.users.values()
+            if u.get("enabled") and u.get("roles")
+        ]
+
+    def organizations(self):
+        return list(self.orgs)
+
+    def create_organization(self, name, website=None):
+        self.orgs.append({"name": name, "organization_name": name, "website": website})
+        return self.orgs[-1]
 
     def add_to_crm(self, emails, role):
         self.role_calls.append((tuple(emails), role))
