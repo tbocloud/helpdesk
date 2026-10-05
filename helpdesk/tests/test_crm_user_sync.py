@@ -193,3 +193,27 @@ def _fail_on_agent(get_doc):
         return get_doc(*args, **kwargs)
 
     return wrapped
+
+    def test_the_customers_line_appears_once(self):
+        from helpdesk.integrations.crm.customers import sync_customers
+
+        with patch(FROM_SETTINGS, return_value=self.crm):
+            crm_users.sync_users()
+            sync_customers()
+            sync_customers()
+        result = frappe.db.get_single_value("HD CRM Settings", "last_sync_result")
+        self.assertEqual(result.count("Customers:"), 1)
+        self.assertTrue(result.startswith("Users:"))
+
+    def test_erpnext_customers_on_the_crm_site_come_in_too(self):
+        from helpdesk.integrations.crm.customers import sync_customers
+
+        self.crm.erp = ["ERP Only Traders"]
+        with patch(FROM_SETTINGS, return_value=self.crm):
+            result = sync_customers()
+        self.assertIn("ERP Only Traders", result["created_in_helpdesk"])
+        self.assertTrue(frappe.db.exists("HD Customer", "ERP Only Traders"))
+        # it isn't pushed back as a duplicate CRM Organization
+        self.assertNotIn(
+            "ERP Only Traders", [o["organization_name"] for o in self.crm.orgs]
+        )
