@@ -32,6 +32,19 @@
   --danger-soft: #fdebe9;
   --info: #1e5fbf;
   --info-soft: #e7effb;
+  /* performance dashboard tiles and channel colours; always with a text label */
+  --pink: #a3245d;
+  --pink-soft: #fcebf2;
+  --teal: #136b62;
+  --teal-soft: #e3f4f1;
+  --channel-instagram: #b8306f;
+  --channel-facebook: #2f5fc4;
+  --channel-linkedin: #1f63b8;
+  --channel-x: #1f2430;
+  --channel-youtube: #c42b1c;
+  --channel-blog: #8a5a00;
+  --channel-email: #136b62;
+  --channel-whatsapp: #1c7a43;
 
   --surface-sidebar: oklch(0.976 0.003 265);
   --surface-gray-1: oklch(0.976 0.003 265);
@@ -84,6 +97,18 @@
   --danger-soft: #34191a;
   --info: #72aaff;
   --info-soft: #15233a;
+  --pink: #f08bbb;
+  --pink-soft: #33141f;
+  --teal: #5fcfc1;
+  --teal-soft: #102a27;
+  --channel-instagram: #f08bbb;
+  --channel-facebook: #8fb2f5;
+  --channel-linkedin: #7fb0f5;
+  --channel-x: #e6e8ee;
+  --channel-youtube: #f58a7e;
+  --channel-blog: #e3b35c;
+  --channel-email: #5fcfc1;
+  --channel-whatsapp: #6fd39a;
 
   --surface-base: oklch(0.205 0.008 275);
   --surface-sidebar: oklch(0.169 0.006 271);

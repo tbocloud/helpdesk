@@ -33,14 +33,18 @@
             class="flex w-60 shrink-0 flex-col gap-2 rounded-xl border bg-surface-base p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-3"
             :class="
               row.employee === detail?.employee
-                ? 'border-ink-gray-9 ring-1 ring-ink-gray-9'
+                ? 'border-brand ring-1 ring-brand'
                 : 'border-outline-gray-2 hover:border-outline-gray-4'
             "
             :aria-pressed="row.employee === detail?.employee"
             @click="emit('select', row.employee)"
           >
             <div class="flex items-start gap-2.5">
-              <Avatar size="lg" :image="row.image" :label="row.employee_name" />
+              <PersonBadge
+                :image="row.image"
+                :name="row.employee_name"
+                :tone="toneOf(row.rank)"
+              />
               <div class="min-w-0 flex-1">
                 <div class="truncate text-sm font-semibold text-ink-gray-9">
                   {{ row.employee_name }}
@@ -49,13 +53,15 @@
                   {{ postsLine(row) }}
                 </div>
               </div>
-              <span class="font-mono text-xs tabular-nums text-ink-gray-5"
+              <span
+                class="rounded-md px-1.5 py-0.5 font-mono text-xs font-semibold tabular-nums"
+                :class="rankClass(row.rank)"
                 >#{{ row.rank }}</span
               >
             </div>
             <div class="flex items-baseline justify-between text-xs">
               <span class="text-ink-gray-6">{{ __("Avg. post score") }}</span>
-              <b class="text-sm font-semibold tabular-nums text-ink-gray-9">{{
+              <b class="text-sm font-semibold tabular-nums text-brand-ink">{{
                 scoreText(row.avg_score)
               }}</b>
             </div>
@@ -72,7 +78,10 @@
               </div>
               <div>
                 <div class="text-ink-gray-5">{{ __("On time") }}</div>
-                <div class="font-semibold tabular-nums text-ink-gray-8">
+                <div
+                  class="font-semibold tabular-nums"
+                  :class="onTimeClass(row.on_time_pct)"
+                >
                   {{ pctText(row.on_time_pct) }}
                 </div>
               </div>
@@ -88,10 +97,11 @@
         :aria-label="detail.employee_name"
       >
         <header class="mb-4 flex flex-wrap items-center gap-3">
-          <Avatar
-            size="3xl"
+          <PersonBadge
             :image="detail.image"
-            :label="detail.employee_name"
+            :name="detail.employee_name"
+            tone="solid"
+            large
           />
           <div class="min-w-0 flex-1">
             <h2 class="text-xl font-semibold text-ink-gray-9">
@@ -109,7 +119,7 @@
           </div>
           <span
             v-if="detail.rank"
-            class="rounded-md bg-surface-gray-2 px-2.5 py-1 text-xs font-medium text-ink-gray-7"
+            class="rounded-md bg-warning-soft px-2.5 py-1 text-xs font-semibold text-warning"
           >
             {{
               __(
@@ -122,12 +132,14 @@
         </header>
         <div class="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
           <Tile
+            tone="brand"
             :label="__('Avg. post score')"
             :value="scoreText(s.avg_score)"
             :sub="vsTeam"
             :sub-tone="vsTeamTone"
           />
           <Tile
+            tone="info"
             :label="__('Posts published')"
             :value="String(s.published)"
             :sub="
@@ -140,21 +152,25 @@
             :sub-tone="s.missed ? 'danger' : 'muted'"
           />
           <Tile
+            tone="teal"
             :label="__('On-time rate')"
             :value="pctText(s.on_time_pct)"
             :sub="__('team {0}', pctText(t.on_time_pct))"
           />
           <Tile
+            tone="warning"
             :label="__('Client change requests')"
             :value="String(s.change_requests)"
             :sub="perPost(s.change_requests, s.posts)"
           />
           <Tile
+            tone="pink"
             :label="__('Postponed')"
             :value="String(s.postponed)"
             :sub="__('of {0} posts', String(s.posts))"
           />
           <Tile
+            tone="success"
             :label="__('Best channel')"
             :value="bestChannel?.channel || '—'"
             :sub="
@@ -200,7 +216,7 @@
                 class="h-7 rounded-md px-3 text-sm"
                 :class="
                   sort === o.key
-                    ? 'bg-surface-base text-ink-gray-9 shadow-sm'
+                    ? 'bg-brand text-brand-on shadow-sm'
                     : 'text-ink-gray-6 hover:text-ink-gray-8'
                 "
                 @click="sort = o.key"
@@ -262,8 +278,17 @@
                       </template>
                     </div>
                   </td>
-                  <td class="px-4 py-2.5 text-ink-gray-7">
-                    {{ p.platforms.join(", ") }}
+                  <td class="whitespace-nowrap px-4 py-2.5">
+                    <span
+                      v-for="(c, i) in p.platforms"
+                      :key="c"
+                      class="font-medium"
+                      :style="{ color: channelColor(c) }"
+                      >{{ c
+                      }}<template v-if="i < p.platforms.length - 1"
+                        >,
+                      </template></span
+                    >
                   </td>
                   <td
                     class="whitespace-nowrap px-4 py-2.5 text-xs text-ink-gray-6"
@@ -274,17 +299,18 @@
                   <td class="px-4 py-2.5">
                     <div class="flex items-center gap-2">
                       <b
-                        class="w-7 text-right text-sm font-semibold tabular-nums text-ink-gray-9"
+                        class="w-7 text-right text-sm font-semibold tabular-nums"
+                        :class="scoreClass(p.score)"
                         >{{ scoreText(p.score) }}</b
                       >
                       <div class="w-24">
-                        <ScoreBar :value="p.score" />
+                        <ScoreBar :value="p.score" :tone="scoreTone(p.score)" />
                       </div>
                     </div>
                   </td>
                   <td class="whitespace-nowrap px-4 py-2.5">
                     <span
-                      class="inline-flex items-center gap-1 text-xs font-medium"
+                      class="inline-flex h-6 items-center gap-1 rounded-full px-2 text-xs font-medium"
                       :class="TIMING[p.timing].class"
                     >
                       <component
@@ -301,7 +327,7 @@
           </div>
           <div
             v-if="missedDates.length"
-            class="m-4 rounded-lg border border-dashed border-danger bg-danger-soft px-3 py-2 text-p-sm text-danger"
+            class="m-4 rounded-lg border border-dashed border-warning bg-warning-soft px-3 py-2 text-p-sm text-warning"
           >
             <b class="font-semibold">{{ __("Missed slots:") }}</b>
             {{ missedDates.join(", ") }}
@@ -374,11 +400,18 @@
                 :key="c.channel"
                 class="grid grid-cols-[6rem_1fr_1.5rem_2.5rem] items-center gap-2 text-sm"
               >
-                <span class="truncate text-ink-gray-8">{{ c.channel }}</span>
+                <span
+                  class="truncate font-medium"
+                  :style="{ color: channelColor(c.channel) }"
+                  >{{ c.channel }}</span
+                >
                 <div class="h-2 rounded-full bg-surface-gray-2">
                   <div
-                    class="h-full rounded-full bg-brand"
-                    :style="{ width: `${(c.posts / maxChannelPosts) * 100}%` }"
+                    class="h-full rounded-full"
+                    :style="{
+                      width: `${(c.posts / maxChannelPosts) * 100}%`,
+                      background: channelColor(c.channel),
+                    }"
                   />
                 </div>
                 <span
@@ -389,7 +422,7 @@
                   class="rounded px-1.5 py-0.5 text-center font-mono text-xs font-semibold tabular-nums"
                   :class="
                     c.channel === bestChannel?.channel
-                      ? 'bg-brand text-brand-on'
+                      ? 'bg-success-soft text-success'
                       : 'bg-brand-soft text-brand-ink'
                   "
                   >{{ scoreText(c.avg_score) }}</span
@@ -414,6 +447,7 @@
 <script setup lang="ts">
 import { __ } from "@/translation";
 import { Avatar, dayjs } from "frappe-ui";
+import type { Tone } from "../performanceMeta";
 import { computed, h, ref } from "vue";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideCircleCheck from "~icons/lucide/circle-check";
@@ -429,15 +463,49 @@ const ROLE_LABEL: Record<string, string> = {
   marketer: "Digital marketer",
 };
 const TIMING: Record<string, { class: string; icon: unknown }> = {
-  "On time": { class: "text-success", icon: LucideCircleCheck },
-  Late: { class: "text-warning", icon: LucideClock },
-  Missed: { class: "text-danger", icon: LucideCircleAlert },
-  Upcoming: { class: "text-ink-gray-5", icon: LucideHourglass },
+  "On time": { class: "bg-success-soft text-success", icon: LucideCircleCheck },
+  Late: { class: "bg-warning-soft text-warning", icon: LucideClock },
+  Missed: { class: "bg-danger-soft text-danger", icon: LucideCircleAlert },
+  Upcoming: {
+    class: "bg-surface-gray-2 text-ink-gray-6",
+    icon: LucideHourglass,
+  },
 };
 const SORTS = [
   { key: "best", label: __("Best first") },
   { key: "date", label: __("By date") },
 ] as const;
+
+// --- colours (always alongside a number or label, never on their own) ---
+type CardTone = "brand" | "pink" | "info" | "teal" | "warning";
+const PERSON_TONES: CardTone[] = ["brand", "pink", "info", "teal", "warning"];
+const toneOf = (rank: number) => PERSON_TONES[(rank - 1) % PERSON_TONES.length];
+
+function rankClass(rank: number) {
+  if (rank === 1) return "bg-warning-soft text-warning";
+  if (rank === 2) return "bg-surface-gray-2 text-ink-gray-7";
+  if (rank === 3) return "bg-pink-soft text-pink";
+  return "bg-surface-gray-2 text-ink-gray-6";
+}
+
+function onTimeClass(pct: number | null) {
+  if (pct == null) return "text-ink-gray-5";
+  if (pct >= 95) return "text-success";
+  if (pct >= 80) return "text-brand-ink";
+  return "text-danger";
+}
+
+const scoreTone = (score: number | null): Tone =>
+  score != null && score >= 90 ? "success" : "brand";
+const scoreClass = (score: number | null) =>
+  score == null
+    ? "text-ink-gray-5"
+    : score >= 90
+    ? "text-success"
+    : "text-brand-ink";
+
+const channelColor = (channel: string) =>
+  `var(--channel-${channel.toLowerCase()}, var(--ink-gray-7))`;
 
 const sort = ref<"best" | "date">("best");
 const detail = computed(() => props.data.detail);
@@ -540,10 +608,16 @@ const comparisons = computed(() => {
 });
 
 // small presentational pieces kept local to this view
-const ScoreBar = (p: { value: number | null; marker?: number | null }) =>
+const ScoreBar = (p: {
+  value: number | null;
+  marker?: number | null;
+  tone?: Tone;
+}) =>
   h("div", { class: "relative h-2 rounded-full bg-surface-gray-2" }, [
     h("div", {
-      class: "h-full rounded-full bg-brand",
+      class: `h-full rounded-full ${
+        p.tone === "success" ? "bg-success" : "bg-brand"
+      }`,
       style: { width: `${Math.max(0, Math.min(p.value ?? 0, 100))}%` },
     }),
     p.marker != null
@@ -555,7 +629,53 @@ const ScoreBar = (p: { value: number | null; marker?: number | null }) =>
         })
       : null,
   ]);
-ScoreBar.props = ["value", "marker"];
+ScoreBar.props = ["value", "marker", "tone"];
+
+const TONE_CLASSES: Record<string, { soft: string; ink: string }> = {
+  brand: { soft: "bg-brand-soft", ink: "text-brand-ink" },
+  pink: { soft: "bg-pink-soft", ink: "text-pink" },
+  info: { soft: "bg-info-soft", ink: "text-info" },
+  teal: { soft: "bg-teal-soft", ink: "text-teal" },
+  warning: { soft: "bg-warning-soft", ink: "text-warning" },
+  success: { soft: "bg-success-soft", ink: "text-success" },
+};
+
+/** Photo when there is one, else coloured initials. */
+const PersonBadge = (p: {
+  image?: string;
+  name: string;
+  tone: CardTone | "solid";
+  large?: boolean;
+}) => {
+  if (p.image)
+    return h(Avatar, {
+      size: p.large ? "3xl" : "lg",
+      image: p.image,
+      label: p.name,
+    });
+  const initials = p.name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase();
+  const colours =
+    p.tone === "solid"
+      ? "bg-brand text-brand-on"
+      : `${TONE_CLASSES[p.tone].soft} ${TONE_CLASSES[p.tone].ink}`;
+  return h(
+    "span",
+    {
+      class: `inline-flex shrink-0 items-center justify-center rounded-full font-semibold ${colours} ${
+        p.large ? "size-12 text-base" : "size-8 text-xs"
+      }`,
+      "aria-hidden": "true",
+    },
+    initials
+  );
+};
+PersonBadge.props = ["image", "name", "tone", "large"];
 
 const CompareBar = (p: {
   value: number | null;
@@ -601,29 +721,42 @@ const Tile = (p: {
   value: string;
   sub?: string;
   subTone?: "muted" | "success" | "danger";
+  tone?: string;
 }) =>
-  h("div", { class: "rounded-lg border border-outline-gray-2 p-3" }, [
-    h("div", { class: "text-xs text-ink-gray-5" }, p.label),
-    h(
-      "div",
-      { class: "mt-0.5 truncate text-xl font-semibold text-ink-gray-9" },
-      p.value
-    ),
-    p.sub
-      ? h(
-          "div",
-          {
-            class: `text-xs ${
-              p.subTone === "success"
-                ? "text-success"
-                : p.subTone === "danger"
-                ? "text-danger"
-                : "text-ink-gray-5"
-            }`,
-          },
-          p.sub
-        )
-      : null,
-  ]);
-Tile.props = ["label", "value", "sub", "subTone"];
+  h(
+    "div",
+    {
+      class: `rounded-lg p-3 ${
+        p.tone ? TONE_CLASSES[p.tone].soft : "border border-outline-gray-2"
+      }`,
+    },
+    [
+      h("div", { class: "text-xs text-ink-gray-6" }, p.label),
+      h(
+        "div",
+        {
+          class: `mt-0.5 truncate text-2xl font-semibold tabular-nums ${
+            p.tone ? TONE_CLASSES[p.tone].ink : "text-ink-gray-9"
+          }`,
+        },
+        p.value
+      ),
+      p.sub
+        ? h(
+            "div",
+            {
+              class: `text-xs ${
+                p.subTone === "success"
+                  ? "text-success"
+                  : p.subTone === "danger"
+                  ? "text-danger"
+                  : "text-ink-gray-6"
+              }`,
+            },
+            p.sub
+          )
+        : null,
+    ]
+  );
+Tile.props = ["label", "value", "sub", "subTone", "tone"];
 </script>
