@@ -43,6 +43,8 @@ def add_entries(
     if not channels:
         frappe.throw(_("Pick at least one platform"))
     separate = frappe.utils.sbool(separate)
+    if not values.get("publish_on"):
+        frappe.throw(_("Pick the posting date and time"))
 
     common = {k: values.get(k) for k in ENTRY_FIELDS if values.get(k) not in (None, "")}
     groups = [[c] for c in channels] if separate else [channels]
