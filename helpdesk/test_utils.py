@@ -591,10 +591,12 @@ def make_project(
     project_name: str,
     members: list[tuple[str, str]] | None = None,
     owner: str | None = None,
+    **kwargs,
 ):
     """Creates a Project directly, bypassing the tasky API.
 
-    `members` is a list of (user, project role) pairs; `owner` defaults to the session user.
+    `members` is a list of (user, project role) pairs; `owner` defaults to the session
+    user; other keyword arguments are set on the project (e.g. hd_customer).
     """
     doc = frappe.get_doc(
         {
@@ -602,6 +604,7 @@ def make_project(
             "project_name": project_name,
             "status": "Open",
             "users": [{"user": u, "custom_role": role} for u, role in members or []],
+            **kwargs,
         }
     )
     doc.insert(ignore_permissions=True)

@@ -9,6 +9,7 @@ from helpdesk.api import content_board
 from helpdesk.test_utils import (
     create_customer,
     make_content_post,
+    make_project,
     make_tasky_user,
     set_content_settings,
 )
@@ -148,6 +149,25 @@ class TestContentRoleTasks(FrappeTestCase):
         )
         frappe.clear_document_cache("HD Content Settings", "HD Content Settings")
         self.due = add_to_date(now_datetime(), days=4)
+
+    def test_post_without_campaign_uses_the_customers_project(self):
+        from helpdesk.tasky.setup import add_project_types
+
+        add_project_types()
+        make_project("CB Test Support", hd_customer=CUSTOMER, project_type="Support")
+        content = make_project(
+            "CB Test Content", hd_customer=CUSTOMER, project_type="Content Calendar"
+        )
+        make_project("CB Test Closed", hd_customer=CUSTOMER, status="Completed")
+        post = make_content_post(
+            "No campaign", CUSTOMER, status="Drafting", publish_on=self.due
+        )
+        post.writer = WRITER[0]
+        post.save()
+        self.assertEqual(
+            frappe.db.get_value("Task", self.role_task(post, "writer")[0].name, "project"),
+            content.name,
+        )
 
     def role_task(self, post, role):
         return frappe.get_all(

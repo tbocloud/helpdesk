@@ -194,16 +194,50 @@ class HDContentPost(Document):
         }
 
     def task_project(self, due):
-        """The campaign's project, unless the post falls after the project ends (ERPNext refuses that)."""
-        if not self.campaign:
+        """The campaign's project, else the customer's open project.
+
+        A project that ends before the post is due is skipped: ERPNext refuses
+        tasks dated after their project's end.
+        """
+        campaign_project = (
+            frappe.db.get_value("HD Content Campaign", self.campaign, "project")
+            if self.campaign
+            else None
+        )
+        if campaign_project:
+            return campaign_project if self.project_covers(campaign_project, due) else None
+        return self.customer_project(due)
+
+    @staticmethod
+    def project_covers(project: str, due) -> bool:
+        end = frappe.db.get_value("Project", project, "expected_end_date")
+        return not (due and end and getdate(end) < due)
+
+    def customer_project(self, due) -> str | None:
+        """The customer's open project; a Content Calendar one first, then the newest."""
+        if not self.customer or not frappe.get_meta("Project").has_field("hd_customer"):
             return None
-        project = frappe.db.get_value("HD Content Campaign", self.campaign, "project")
-        if not project:
+        Project = frappe.qb.DocType("Project")
+        query = (
+            frappe.qb.from_(Project)
+            .select(Project.name)
+            .where(Project.hd_customer == self.customer)
+            .where(Project.status == "Open")
+            .orderby(Project.creation, order=frappe.qb.desc)
+        )
+        if due:
+            query = query.where(
+                Project.expected_end_date.isnull() | (Project.expected_end_date >= due)
+            )
+        projects = query.run(pluck=True)
+        if not projects:
             return None
-        project_end = frappe.db.get_value("Project", project, "expected_end_date")
-        if due and project_end and getdate(project_end) < due:
-            return None
-        return project
+        content = frappe.get_all(
+            "Project",
+            filters={"name": ("in", projects), "project_type": "Content Calendar"},
+            pluck="name",
+        )
+        return next((p for p in projects if p in content), projects[0])
 
     def create_role_task(self, role: str, user: str, hours):
         task = frappe.get_doc(
