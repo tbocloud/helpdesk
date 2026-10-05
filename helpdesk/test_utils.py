@@ -1699,6 +1699,43 @@ def make_timesheet(project: str, hours: float, from_time, task: str | None = Non
     ).insert(ignore_permissions=True)
 
 
+class FakeCRM:
+    """In-memory stand-in for the TBO CRM site's REST API (helpdesk.integrations.crm.client)."""
+
+    def __init__(self, users: list[dict] | None = None, failing: tuple = ()):
+        self.users = {u["name"]: {"roles": [], "enabled": 1, **u} for u in users or []}
+        self.failing = set(failing)
+        self.role_calls: list[tuple[tuple, str]] = []
+
+    def logged_user(self):
+        return "api@crm.example"
+
+    def get_user(self, email):
+        from helpdesk.integrations.crm.client import CRMError
+
+        if email in self.failing:
+            raise CRMError("CRM said no")
+        return self.users.get(email)
+
+    def create_user(self, email, full_name, send_welcome_email):
+        self.users[email] = {
+            "name": email,
+            "full_name": full_name,
+            "enabled": 1,
+            "roles": [],
+            "welcome_email": send_welcome_email,
+        }
+        return self.users[email]
+
+    def enable_user(self, email):
+        self.users[email]["enabled"] = 1
+
+    def add_to_crm(self, emails, role):
+        self.role_calls.append((tuple(emails), role))
+        for email in emails:
+            self.users[email]["roles"].append({"role": role})
+
+
 class FakeS3:
     """In-memory stand-in for a boto3 S3 client, so storage tests never reach a real bucket."""
 

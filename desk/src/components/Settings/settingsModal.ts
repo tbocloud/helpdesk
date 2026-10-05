@@ -35,6 +35,8 @@ import ProfilePage from "./Profile/ProfilePage.vue";
 import Preferences from "./Preferences/Preferences.vue";
 import ContentSettings from "./Content/ContentSettings.vue";
 import FileStorageSettings from "./FileStorage/FileStorageSettings.vue";
+import CRMSettings from "./CRM/CRMSettings.vue";
+import LucideHandshake from "~icons/lucide/handshake";
 import LucideHardDrive from "~icons/lucide/hard-drive";
 import LucideCalendarDays from "~icons/lucide/calendar-days";
 
@@ -164,6 +166,12 @@ export const tabs = computed(() => {
           label: __("ERPNext"),
           icon: markRaw(ERPNextSettingsIcon),
           component: markRaw(ERPNextIntegrationSettings),
+          condition: () => auth.isAdmin || auth.isManager,
+        },
+        {
+          label: __("CRM"),
+          icon: markRaw(LucideHandshake),
+          component: markRaw(CRMSettings),
           condition: () => auth.isAdmin || auth.isManager,
         },
       ],

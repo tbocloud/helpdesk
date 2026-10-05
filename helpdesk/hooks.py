@@ -91,6 +91,7 @@ scheduler_events = {
     ],
     "hourly": [
         "helpdesk.triage.fail_stuck_triages",
+        "helpdesk.integrations.crm.users.sync_users_job",
         "helpdesk.helpdesk.doctype.hd_content_post.hd_content_post.send_missed_post_alerts",
     ],
     "hourly_long": [
@@ -132,6 +133,11 @@ user_invitation = {
 doc_events = {
     "File": {
         "after_insert": "helpdesk.storage.s3.after_insert",
+    },
+    # a new or re-activated agent gets their TBO CRM user (helpdesk/integrations/crm)
+    "HD Agent": {
+        "after_insert": "helpdesk.integrations.crm.users.on_agent_change",
+        "on_update": "helpdesk.integrations.crm.users.on_agent_change",
     },
     "Assignment Rule": {
         "on_trash": "helpdesk.extends.assignment_rule.on_assignment_rule_trash",
