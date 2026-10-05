@@ -72,15 +72,12 @@
   .caption p { margin: 0 0 8px; }
   .caption:empty { display: none; }
   .tags { margin: 6px 0 0; font-size: 13px; color: var(--brand-ink); overflow-wrap: anywhere; }
-  /* full pictures, never cropped: the client is approving exactly what will go out */
-  .images { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; margin-top: 12px; }
-  .images.one { grid-template-columns: minmax(0, 640px); }
-  .shot { position: relative; display: flex; align-items: center; justify-content: center; padding: 0; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--surface-2); cursor: zoom-in; }
-  .images:not(.one) .shot { height: 280px; }
-  .shot img { display: block; max-width: 100%; max-height: min(70vh, 640px); object-fit: contain; }
-  .images:not(.one) .shot img { max-height: 100%; }
-  .shot .zoom { position: absolute; right: 8px; bottom: 8px; display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 999px; background: oklch(0 0 0 / .55); color: #fff; font-size: 12px; opacity: 0; transition: opacity .15s; }
-  .shot:hover .zoom, .shot:focus-visible .zoom { opacity: 1; }
+  /* previews at a normal size, never cropped; View full size opens the original */
+  .images { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+  .shot { display: flex; flex-direction: column; gap: 6px; width: 180px; }
+  .shot-img { display: flex; align-items: center; justify-content: center; height: 180px; padding: 0; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--surface-2); cursor: zoom-in; }
+  .shot-img img { display: block; max-width: 100%; max-height: 100%; object-fit: contain; }
+  .shot .btn { justify-content: center; }
 
   /* full-screen viewer */
   dialog.viewer { width: 100vw; max-width: 100vw; height: 100vh; max-height: 100vh; margin: 0; padding: 0; border: 0; border-radius: 0; background: oklch(0.12 0 0); color: #fff; box-shadow: none; }
@@ -178,6 +175,7 @@
   const ICONS = {
     clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
     check: '<path d="M20 6 9 17l-5-5"/>',
+    expand: '<path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="m21 3-7 7"/><path d="m3 21 7-7"/>',
     pencil: '<path d="M21.2 6.8a2.8 2.8 0 0 0-4-4L3.8 16.2 2.5 21.5l5.3-1.3Z"/>',
     calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
     send: '<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>',
@@ -474,10 +472,12 @@
       const s = STATUS[p.status] || { label: p.status, tone: "info", icon: "clock" };
       const awaiting = p.status === "Client Review";
       const images = (p.images || []).map((f, i) => `
-        <button type="button" class="shot" data-view="${esc(p.name)}" data-index="${i}" aria-label="{{ _('View full size') }}: ${esc(p.title)} ${i + 1}">
-          <img src="${imageUrl(p.name, f)}" loading="lazy" alt="${esc(p.title)} {{ _('image') }} ${i + 1}">
-          <span class="zoom" aria-hidden="true">{{ _("View full size") }}</span>
-        </button>`).join("");
+        <div class="shot">
+          <button type="button" class="shot-img" data-view="${esc(p.name)}" data-index="${i}" aria-label="{{ _('View full size') }}: ${esc(p.title)} ${i + 1}">
+            <img src="${imageUrl(p.name, f)}" loading="lazy" alt="${esc(p.title)} {{ _('image') }} ${i + 1}">
+          </button>
+          <button type="button" class="btn sm" data-view="${esc(p.name)}" data-index="${i}">${icon("expand")} {{ _("View full size") }}</button>
+        </div>`).join("");
       return `
         <article class="card post" aria-labelledby="t-${esc(p.name)}">
           <div class="post-hd">
@@ -489,7 +489,7 @@
           </div>
           <div class="caption">${p.caption || ""}</div>
           ${p.hashtags ? `<p class="tags">${esc(p.hashtags)}</p>` : ""}
-          ${images ? `<div class="images ${p.images.length === 1 ? "one" : ""}">${images}</div>` : ""}
+          ${images ? `<div class="images">${images}</div>` : ""}
           ${p.status === "Changes Requested" && p.client_feedback ? `<div class="note"><b>{{ _("You asked for:") }}</b> ${esc(p.client_feedback)}</div>` : ""}
           ${p.status === "Published" && /^https?:\/\//i.test(p.published_url || "") ? `<p class="meta" style="margin-top:10px;"><a href="${esc(p.published_url)}" target="_blank" rel="noopener">${icon("link")} {{ _("View the live post") }}</a></p>` : ""}
           <div class="actions">
