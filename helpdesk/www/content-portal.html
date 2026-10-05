@@ -72,9 +72,30 @@
   .caption p { margin: 0 0 8px; }
   .caption:empty { display: none; }
   .tags { margin: 6px 0 0; font-size: 13px; color: var(--brand-ink); overflow-wrap: anywhere; }
-  .images { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-  .images a { display: block; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
-  .images img { display: block; width: 112px; height: 112px; object-fit: cover; background: var(--surface-2); }
+  /* full pictures, never cropped: the client is approving exactly what will go out */
+  .images { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; margin-top: 12px; }
+  .images.one { grid-template-columns: minmax(0, 640px); }
+  .shot { position: relative; display: flex; align-items: center; justify-content: center; padding: 0; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--surface-2); cursor: zoom-in; }
+  .images:not(.one) .shot { height: 280px; }
+  .shot img { display: block; max-width: 100%; max-height: min(70vh, 640px); object-fit: contain; }
+  .images:not(.one) .shot img { max-height: 100%; }
+  .shot .zoom { position: absolute; right: 8px; bottom: 8px; display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 999px; background: oklch(0 0 0 / .55); color: #fff; font-size: 12px; opacity: 0; transition: opacity .15s; }
+  .shot:hover .zoom, .shot:focus-visible .zoom { opacity: 1; }
+
+  /* full-screen viewer */
+  dialog.viewer { width: 100vw; max-width: 100vw; height: 100vh; max-height: 100vh; margin: 0; padding: 0; border: 0; border-radius: 0; background: oklch(0.12 0 0); color: #fff; box-shadow: none; }
+  dialog.viewer::backdrop { background: oklch(0 0 0 / .8); }
+  .viewer-body { display: flex; flex-direction: column; height: 100%; }
+  .viewer-bar { display: flex; align-items: center; gap: 8px; padding: 10px 14px; }
+  .viewer-bar .grow { font-size: 13px; opacity: .85; }
+  .viewer-bar a, .viewer-bar button { color: #fff; background: oklch(1 0 0 / .12); border: 0; }
+  .viewer-bar a:hover, .viewer-bar button:hover { background: oklch(1 0 0 / .22); }
+  .viewer-stage { position: relative; flex: 1; display: flex; align-items: center; justify-content: center; min-height: 0; padding: 0 56px 20px; }
+  .viewer-stage img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .viewer-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 40px; height: 40px; border-radius: 999px; border: 0; background: oklch(1 0 0 / .14); color: #fff; font-size: 20px; cursor: pointer; }
+  .viewer-nav:hover { background: oklch(1 0 0 / .26); }
+  .viewer-nav.prev { left: 10px; } .viewer-nav.next { right: 10px; }
+  .viewer-nav[hidden] { display: none; }
   .note { margin-top: 12px; padding: 10px 12px; border-radius: 8px; background: var(--surface-2); font-size: 13px; color: var(--ink-7); overflow-wrap: anywhere; white-space: pre-line; }
   .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
   .check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-7); cursor: pointer; }
@@ -126,6 +147,21 @@
       <button type="submit" class="btn primary" id="comment-submit">{{ _("Send comment") }}</button>
     </div>
   </form>
+</dialog>
+
+<dialog id="dlg-image" class="viewer" aria-label="{{ _('Image') }}">
+  <div class="viewer-body">
+    <div class="viewer-bar">
+      <span class="grow" id="viewer-caption"></span>
+      <a class="btn sm" id="viewer-original" target="_blank" rel="noopener">{{ _("Open original") }}</a>
+      <button type="button" class="btn sm" data-close>{{ _("Close") }}</button>
+    </div>
+    <div class="viewer-stage">
+      <button type="button" class="viewer-nav prev" id="viewer-prev" aria-label="{{ _('Previous image') }}">‹</button>
+      <img id="viewer-img" alt="">
+      <button type="button" class="viewer-nav next" id="viewer-next" aria-label="{{ _('Next image') }}">›</button>
+    </div>
+  </div>
 </dialog>
 
 <div class="toast" id="toast" role="status"></div>
@@ -438,9 +474,10 @@
       const s = STATUS[p.status] || { label: p.status, tone: "info", icon: "clock" };
       const awaiting = p.status === "Client Review";
       const images = (p.images || []).map((f, i) => `
-        <a href="${imageUrl(p.name, f)}" target="_blank" rel="noopener">
+        <button type="button" class="shot" data-view="${esc(p.name)}" data-index="${i}" aria-label="{{ _('View full size') }}: ${esc(p.title)} ${i + 1}">
           <img src="${imageUrl(p.name, f)}" loading="lazy" alt="${esc(p.title)} {{ _('image') }} ${i + 1}">
-        </a>`).join("");
+          <span class="zoom" aria-hidden="true">{{ _("View full size") }}</span>
+        </button>`).join("");
       return `
         <article class="card post" aria-labelledby="t-${esc(p.name)}">
           <div class="post-hd">
@@ -452,7 +489,7 @@
           </div>
           <div class="caption">${p.caption || ""}</div>
           ${p.hashtags ? `<p class="tags">${esc(p.hashtags)}</p>` : ""}
-          ${images ? `<div class="images">${images}</div>` : ""}
+          ${images ? `<div class="images ${p.images.length === 1 ? "one" : ""}">${images}</div>` : ""}
           ${p.status === "Changes Requested" && p.client_feedback ? `<div class="note"><b>{{ _("You asked for:") }}</b> ${esc(p.client_feedback)}</div>` : ""}
           ${p.status === "Published" && /^https?:\/\//i.test(p.published_url || "") ? `<p class="meta" style="margin-top:10px;"><a href="${esc(p.published_url)}" target="_blank" rel="noopener">${icon("link")} {{ _("View the live post") }}</a></p>` : ""}
           <div class="actions">
@@ -464,6 +501,42 @@
           </div>
         </article>`;
     }
+
+    // full-size viewer: the original file, one image at a time
+    const viewer = { post: null, index: 0 };
+    function showImage() {
+      const files = viewer.post.images;
+      const url = imageUrl(viewer.post.name, files[viewer.index]);
+      const img = document.getElementById("viewer-img");
+      img.src = url;
+      img.alt = `${viewer.post.title} {{ _('image') }} ${viewer.index + 1}`;
+      document.getElementById("viewer-original").href = url;
+      document.getElementById("viewer-caption").textContent =
+        files.length > 1 ? `${viewer.post.title} · ${viewer.index + 1} / ${files.length}` : viewer.post.title;
+      document.getElementById("viewer-prev").hidden = files.length < 2;
+      document.getElementById("viewer-next").hidden = files.length < 2;
+    }
+    function stepImage(by) {
+      const n = viewer.post.images.length;
+      viewer.index = (viewer.index + by + n) % n;
+      showImage();
+    }
+    function openViewer(post, index) {
+      viewer.post = post;
+      viewer.index = index;
+      showImage();
+      document.getElementById("dlg-image").showModal();
+    }
+    document.getElementById("viewer-prev").addEventListener("click", () => stepImage(-1));
+    document.getElementById("viewer-next").addEventListener("click", () => stepImage(1));
+    document.getElementById("dlg-image").addEventListener("keydown", (e) => {
+      if (e.key === "ArrowLeft") stepImage(-1);
+      if (e.key === "ArrowRight") stepImage(1);
+    });
+    // a click on the dark area around the picture closes it
+    document.getElementById("dlg-image").addEventListener("click", (e) => {
+      if (e.target.classList.contains("viewer-stage")) e.currentTarget.close();
+    });
 
     // selection changes only touch the bulk bar, so keyboard focus stays where it was
     function updateBulk() {
@@ -510,6 +583,10 @@
         }
         render();
       });
+      app.querySelectorAll("[data-view]").forEach((b) => b.addEventListener("click", () => {
+        const post = posts.find((x) => x.name === b.dataset.view);
+        if (post) openViewer(post, +b.dataset.index);
+      }));
       app.querySelectorAll("[data-filter]").forEach((b) => b.addEventListener("click", () => { filter = b.dataset.filter; render(); }));
       app.querySelectorAll("[data-select]").forEach((c) => c.addEventListener("change", () => {
         c.checked ? selected.add(c.dataset.select) : selected.delete(c.dataset.select);
