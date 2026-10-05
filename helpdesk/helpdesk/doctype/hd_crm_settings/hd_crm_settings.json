@@ -1,0 +1,181 @@
+{
+	"actions": [],
+	"creation": "2026-10-05 12:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"issingle": 1,
+	"field_order": [
+		"enabled",
+		"site_url",
+		"column_break_1",
+		"api_key",
+		"api_secret",
+		"users_section",
+		"sync_users",
+		"crm_role",
+		"column_break_2",
+		"send_welcome_email",
+		"users_back_section",
+		"add_crm_users",
+		"column_break_3",
+		"disable_left_users",
+		"customers_section",
+		"sync_customers",
+		"created_in_crm",
+		"status_section",
+		"last_sync_on",
+		"last_sync_result"
+	],
+	"fields": [
+		{
+			"fieldname": "enabled",
+			"fieldtype": "Check",
+			"label": "Enabled",
+			"default": "0"
+		},
+		{
+			"fieldname": "site_url",
+			"fieldtype": "Data",
+			"label": "CRM Site URL",
+			"options": "URL",
+			"description": "For example https://tboindia.tbocloud.in"
+		},
+		{
+			"fieldname": "column_break_1",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "api_key",
+			"fieldtype": "Data",
+			"label": "API Key"
+		},
+		{
+			"fieldname": "api_secret",
+			"fieldtype": "Password",
+			"label": "API Secret",
+			"description": "From a System Manager user on the CRM site: User → API Access → Generate Keys."
+		},
+		{
+			"fieldname": "users_section",
+			"fieldtype": "Section Break",
+			"label": "Users"
+		},
+		{
+			"fieldname": "sync_users",
+			"fieldtype": "Check",
+			"label": "Keep Helpdesk Agents in the CRM",
+			"default": "1",
+			"description": "Every active agent gets a CRM user with the role below; checked every hour and when an agent is added."
+		},
+		{
+			"fieldname": "crm_role",
+			"fieldtype": "Select",
+			"label": "CRM Role",
+			"options": "Sales User\nSales Manager",
+			"default": "Sales User"
+		},
+		{
+			"fieldname": "column_break_2",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "send_welcome_email",
+			"fieldtype": "Check",
+			"label": "Send Welcome Email to New CRM Users",
+			"default": "1",
+			"description": "So they can set a password on the CRM site."
+		},
+		{
+			"fieldname": "status_section",
+			"fieldtype": "Section Break",
+			"label": "Last Sync"
+		},
+		{
+			"fieldname": "last_sync_on",
+			"fieldtype": "Datetime",
+			"label": "Last Sync On",
+			"read_only": 1
+		},
+		{
+			"fieldname": "last_sync_result",
+			"fieldtype": "Small Text",
+			"label": "Last Sync Result",
+			"read_only": 1
+		},
+		{
+			"fieldname": "users_back_section",
+			"fieldtype": "Section Break",
+			"label": "CRM Users in Helpdesk"
+		},
+		{
+			"fieldname": "add_crm_users",
+			"fieldtype": "Check",
+			"label": "Add CRM Users Missing in Helpdesk",
+			"default": "1",
+			"description": "CRM users (Sales User, Sales Manager) without a helpdesk account get one, as agents. Existing helpdesk users are left as they are."
+		},
+		{
+			"fieldname": "column_break_3",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "disable_left_users",
+			"fieldtype": "Check",
+			"label": "Disable CRM Users Who Leave Helpdesk",
+			"default": "1",
+			"description": "Only users this connection created on the CRM site; people created directly in the CRM are never touched."
+		},
+		{
+			"fieldname": "customers_section",
+			"fieldtype": "Section Break",
+			"label": "Customers"
+		},
+		{
+			"fieldname": "sync_customers",
+			"fieldtype": "Check",
+			"label": "Sync Customers Both Ways",
+			"default": "1",
+			"description": "An HD Customer missing in the CRM becomes a CRM Organization, and a CRM Organization missing in helpdesk becomes an HD Customer. Matched by name; existing records are not changed."
+		},
+		{
+			"fieldname": "created_in_crm",
+			"fieldtype": "Long Text",
+			"label": "Users Created in the CRM",
+			"read_only": 1,
+			"hidden": 1
+		}
+	],
+	"index_web_pages_for_search": 0,
+	"links": [],
+	"modified": "2026-10-05 14:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD CRM Settings",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"print": 1,
+			"read": 1,
+			"role": "System Manager",
+			"share": 1,
+			"write": 1
+		},
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"print": 1,
+			"read": 1,
+			"role": "Agent Manager",
+			"share": 1,
+			"write": 1
+		}
+	],
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": [],
+	"track_changes": 1
+}
