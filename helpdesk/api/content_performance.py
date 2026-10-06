@@ -1,11 +1,12 @@
 """Content calendar performance by employee.
 
-A post counts for everyone on it: writer, designer and digital marketer. Each
-post that is due gets a delivery score:
+A post counts for everyone on it: its writers, designers, video editors and
+digital marketers, the extra people on its team included. Each post that is due
+gets a delivery score:
 
 - published on or before its publish date: 100
 - published after it: 60
-- due and still not published: 0
+- its publish date has passed and it is still not published: 0
 - minus 10 for every time the client asked for changes (never below 0)
 
 Posts not due yet, and cancelled posts, are listed but not scored. Who sees
@@ -17,11 +18,15 @@ from collections import defaultdict
 
 import frappe
 from frappe import _
-from frappe.utils import add_days, date_diff, get_datetime, getdate, now_datetime
+from frappe.utils import add_days, date_diff, getdate
 
 from helpdesk.api.performance import check_range, resolve_scope, sees_everyone
+from helpdesk.helpdesk.doctype.hd_content_post.hd_content_post import (
+    TASK_ROLES,
+    team_of,
+)
 
-ROLES = ("writer", "designer", "marketer")
+ROLES = tuple(TASK_ROLES)
 ON_TIME, LATE, MISSED = 100, 60, 0
 CHANGE_PENALTY = 10
 CHANGES_REQUESTED = "Changes Requested"
@@ -46,6 +51,7 @@ def period_posts(start, end, customer: str | None = None) -> list[dict]:
             Post.writer,
             Post.designer,
             Post.marketer,
+            Post.video_editor,
         )
         .where(Post.publish_on[f"{start} 00:00:00":f"{end} 23:59:59"])
         .where(Post.status != "Cancelled")
@@ -56,36 +62,65 @@ def period_posts(start, end, customer: str | None = None) -> list[dict]:
     return query.run(as_dict=True)
 
 
+def extra_teams(post_names: list[str]) -> dict[str, list[dict]]:
+    """The extra people on each post's team, beyond the main person per role."""
+    if not post_names:
+        return {}
+    Member = frappe.qb.DocType("HD Content Post Member")
+    rows = (
+        frappe.qb.from_(Member)
+        .select(Member.parent, Member.role, Member.user)
+        .where(Member.parenttype == "HD Content Post")
+        .where(Member.parent.isin(post_names))
+        .orderby(Member.idx)
+        .run(as_dict=True)
+    )
+    teams = defaultdict(list)
+    for row in rows:
+        teams[row.parent].append(row)
+    return teams
+
+
 def change_requests(post_names: list[str]) -> dict[str, int]:
     """How many times each post was sent back by the client, from its change history."""
     if not post_names:
         return {}
+    Version = frappe.qb.DocType("Version")
+    versions = (
+        frappe.qb.from_(Version)
+        .select(Version.docname, Version.data)
+        .where(Version.ref_doctype == "HD Content Post")
+        .where(Version.docname.isin(post_names))
+        .where(Version.data.like(f"%{CHANGES_REQUESTED}%"))
+        .run(as_dict=True)
+    )
     counts: dict[str, int] = defaultdict(int)
-    for version in frappe.get_all(
-        "Version",
-        filters={
-            "ref_doctype": "HD Content Post",
-            "docname": ("in", post_names),
-            "data": ("like", f"%{CHANGES_REQUESTED}%"),
-        },
-        fields=["docname", "data"],
-    ):
+    for version in versions:
         try:
             changed = json.loads(version.data or "{}").get("changed", [])
         except ValueError:
             continue
-        if any(c[0] == "status" and c[2] == CHANGES_REQUESTED for c in changed):
+        new_values = {c[0]: c[2] for c in changed}
+        # staff can set the status too; only the client's decision (from the
+        # portal or their ERP) also stamps client_decided_on
+        if (
+            new_values.get("status") == CHANGES_REQUESTED
+            and "client_decided_on" in new_values
+        ):
             counts[version.docname] += 1
     return counts
 
 
-def timing(post, now) -> str:
-    """How a post went: On time, Late, Missed, or Upcoming when not due yet."""
+def timing(post, today) -> str:
+    """How a post went: On time, Late, Missed, or Upcoming when not due yet.
+
+    By date, like Late: a post has until the end of its publish day.
+    """
     if post.status == "Published":
         if post.published_on and getdate(post.published_on) > getdate(post.publish_on):
             return "Late"
         return "On time"
-    return "Missed" if get_datetime(post.publish_on) < now else "Upcoming"
+    return "Missed" if getdate(post.publish_on) < today else "Upcoming"
 
 
 def score(timing_: str, changes: int) -> int | None:
@@ -139,12 +174,14 @@ def summarise(posts: list[dict]) -> dict:
 
 def scored_posts(start, end, customer: str | None = None) -> list[dict]:
     """The period's posts with their timing, change requests, score and team."""
-    now = now_datetime()
+    today = getdate()
     raw = period_posts(start, end, customer)
-    changes = change_requests([p.name for p in raw])
+    names = [p.name for p in raw]
+    changes = change_requests(names)
+    extras = extra_teams(names)
     posts = []
     for p in raw:
-        t = timing(p, now)
+        t = timing(p, today)
         n = changes.get(p.name, 0)
         posts.append(
             {
@@ -159,8 +196,7 @@ def scored_posts(start, end, customer: str | None = None) -> list[dict]:
                 "changes": n,
                 "times_postponed": p.times_postponed or 0,
                 "score": score(t, n),
-                # a list per role, so the reports already handle several people on one
-                "team": {r: [p.get(r)] if p.get(r) else [] for r in ROLES},
+                "team": team_of(frappe._dict(p, extra_team=extras.get(p.name, []))),
             }
         )
     return posts

@@ -656,6 +656,19 @@ def make_content_post(title: str, customer: str | None = None, **kwargs):
     ).insert(ignore_permissions=True)
 
 
+def make_content_post_due(title: str, customer: str, days: int, **kwargs):
+    """Creates a Drafting HD Content Post due at 10:00, `days` from today (negative: past)."""
+    from frappe.utils import add_days, nowdate
+
+    return make_content_post(
+        title,
+        customer,
+        status="Drafting",
+        publish_on=f"{add_days(nowdate(), days)} 10:00:00",
+        **kwargs,
+    )
+
+
 def make_support_connection(
     customer: str, site_url: str = "https://erp.example.com", **kwargs
 ):
