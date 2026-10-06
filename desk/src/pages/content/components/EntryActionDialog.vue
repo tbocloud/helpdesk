@@ -65,11 +65,16 @@
         />
 
         <template v-if="action === 'assign'">
+          <!-- picks made before everyone on the role loads would be overwritten -->
           <PeoplePicker
+            v-if="teamLoaded"
             v-model="people"
             :label="__(roleLabel)"
             :placeholder="__('Pick one or more people')"
           />
+          <p v-else-if="!error" class="text-p-sm text-ink-gray-5">
+            {{ __("Loading who is on this role…") }}
+          </p>
           <p class="text-p-sm text-ink-gray-5">
             {{
               __(

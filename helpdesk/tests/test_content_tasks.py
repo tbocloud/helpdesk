@@ -260,6 +260,21 @@ class TestSeveralPeopleAndVideoEditor(ContentTaskCase):
         post.reload()
         self.assertEqual(post.status, "Internal Review")
 
+    def test_cancelling_a_design_part_never_skips_drafting(self):
+        post = self.post(video_editor=EDITOR[0])
+        tasks = self.tasks(post)
+        post.db_set("status", "Drafting")
+        designer_task = frappe.get_doc("Task", tasks["Designer"].name)
+        designer_task.status = "Completed"
+        designer_task.save(ignore_permissions=True)
+
+        editor_task = frappe.get_doc("Task", tasks["Video Editor"].name)
+        editor_task.status = "Cancelled"
+        editor_task.save(ignore_permissions=True)
+
+        post.reload()
+        self.assertEqual(post.status, "Drafting")
+
     def test_design_nobody_did_does_not_end_design(self):
         post = self.post(video_editor=EDITOR[0])
         tasks = self.tasks(post)

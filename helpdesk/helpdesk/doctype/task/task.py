@@ -48,6 +48,9 @@ class Task(Document):
         if not frappe.db.exists("HD Content Post", self.content_post):
             return
         post = frappe.get_doc("HD Content Post", self.content_post)
+        # a cancelled part only ends a design stage already under way, never skips one
+        if self.status == "Cancelled" and post.status != "Design":
+            return
         post.advance_after_task(self.content_role)
 
     def set_completed_on(self):

@@ -126,6 +126,8 @@ def get_team_task_status(posts: str | list) -> dict:
         "HD Content Post",
         filters={"name": ("in", posts)},
         fields=["name", "task_mode"],
+        # get_list stops at 20 rows unless told otherwise
+        limit_page_length=len(posts),
     )
     if not visible:
         return {}
