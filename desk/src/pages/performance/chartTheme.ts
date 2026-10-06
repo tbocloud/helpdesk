@@ -44,6 +44,7 @@ export interface ChartColors {
   danger: string;
   success: string;
   warning: string;
+  info: string;
 }
 
 function readColors(): ChartColors {
@@ -62,6 +63,7 @@ function readColors(): ChartColors {
     danger: token("--danger"),
     success: token("--success"),
     warning: token("--warning"),
+    info: token("--info"),
   };
 }
 
