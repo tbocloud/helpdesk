@@ -57,14 +57,25 @@ export interface ContentPost {
   writer?: string;
   designer?: string;
   marketer?: string;
+  video_editor?: string;
   times_postponed?: number;
 }
 
 export const TEAM_ROLES = [
   { field: "writer", label: "Writer" },
   { field: "designer", label: "Designer" },
+  { field: "video_editor", label: "Video editor" },
   { field: "marketer", label: "Digital marketer" },
 ] as const;
+
+/** One person on a role, with how far they are with that role's task. */
+export interface RolePerson {
+  user: string;
+  full_name: string;
+  task?: string;
+  status?: string;
+  due?: string | null;
+}
 
 export type TeamRole = (typeof TEAM_ROLES)[number]["field"];
 export type EntryAction = "publish" | "postpone" | "cancel" | "assign";

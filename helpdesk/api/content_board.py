@@ -9,8 +9,13 @@ from frappe.utils import date_diff
 from helpdesk.helpdesk.doctype.hd_content_occasion.hd_content_occasion import (
     occasions_between,
 )
+from helpdesk.helpdesk.doctype.hd_content_post.hd_content_post import (
+    SHARED_ROLE,
+    TASK_ROLES,
+    team_of,
+)
 
-TEAM_FIELDS = ("writer", "designer", "marketer")
+TEAM_FIELDS = ("writer", "designer", "marketer", "video_editor")
 # fields the Add entry dialog may set on every post it creates
 ENTRY_FIELDS = (
     "title",
@@ -29,12 +34,16 @@ ENTRY_FIELDS = (
 
 @frappe.whitelist(methods=["POST"])
 def add_entries(
-    values: str | dict, channels: str | list, separate: bool | int | str = True
+    values: str | dict,
+    channels: str | list,
+    separate: bool | int | str = True,
+    team: str | dict | None = None,
 ) -> list[str]:
     """Create the entry for the chosen platforms, all together or not at all.
 
     `separate` makes one post per platform (each can be scheduled, approved and
-    published on its own); otherwise one post covers every platform.
+    published on its own); otherwise one post covers every platform. `team`
+    ({role: [users]}) puts several people on a role; the first is its main person.
     """
     frappe.has_permission("HD Content Post", "create", throw=True)
     values = json.loads(values) if isinstance(values, str) else values
@@ -46,6 +55,7 @@ def add_entries(
     if not values.get("publish_on"):
         frappe.throw(_("Pick the posting date and time"))
 
+    team = json.loads(team) if isinstance(team, str) else team or {}
     common = {k: values.get(k) for k in ENTRY_FIELDS if values.get(k) not in (None, "")}
     groups = [[c] for c in channels] if separate else [channels]
     names = []
@@ -58,6 +68,9 @@ def add_entries(
                 "platforms": ", ".join(platforms),
             }
         )
+        for role in TEAM_FIELDS:
+            if role in team:
+                post.set_people(role, team[role] or [])
         post.insert()
         names.append(post.name)
     return names
@@ -65,15 +78,94 @@ def add_entries(
 
 @frappe.whitelist()
 def get_team_defaults(customer: str) -> dict:
-    """The team on this customer's most recent post, to pre-fill a new entry."""
+    """Everyone on this customer's most recent post, by role, to pre-fill a new entry."""
     latest = frappe.get_list(
         "HD Content Post",
         filters={"customer": customer},
-        fields=list(TEAM_FIELDS),
+        pluck="name",
         order_by="creation desc",
         limit=1,
     )
-    return latest[0] if latest else dict.fromkeys(TEAM_FIELDS)
+    if not latest:
+        return {role: [] for role in TEAM_FIELDS}
+    return team_of(frappe.get_doc("HD Content Post", latest[0]))
+
+
+@frappe.whitelist(methods=["POST"])
+def assign(post: str, role: str, users: str | list | None = None) -> list[str]:
+    """Put these people on one role of a post; the first is its main person.
+
+    Their tasks follow the post's task mode: in one-task-per-person mode
+    everyone on the role shares that role's task.
+    """
+    if role not in TEAM_FIELDS:
+        frappe.throw(_("Unknown role {0}").format(role))
+    users = json.loads(users) if isinstance(users, str) else users or []
+    doc = frappe.get_doc("HD Content Post", post)
+    doc.check_permission("write")
+    doc.set_people(role, users)
+    doc.save()
+    return doc.people(role)
+
+
+@frappe.whitelist()
+def get_team_task_status(posts: str | list) -> dict:
+    """Each post's people by role, with how far each is with their task.
+
+    {post: {role: [{user, full_name, task, status, due}]}}. Only posts the viewer
+    can see are answered, and only what the board shows of each task, so people
+    with narrower Task access still see how their teammates are getting on.
+    """
+    posts = json.loads(posts) if isinstance(posts, str) else posts or []
+    names = frappe.get_list(
+        "HD Content Post", filters={"name": ("in", posts[:500])}, pluck="name"
+    )
+    if not names:
+        return {}
+    docs = {name: frappe.get_doc("HD Content Post", name) for name in names}
+    tasks = role_tasks(names)
+    full_names = user_full_names(
+        {u for doc in docs.values() for users in team_of(doc).values() for u in users}
+    )
+    out = {}
+    for name, doc in docs.items():
+        out[name] = {}
+        for role, users in team_of(doc).items():
+            # a shared task for the post stands for every role's part
+            task = tasks.get((name, TASK_ROLES[role])) or tasks.get((name, SHARED_ROLE))
+            out[name][role] = [
+                {"user": u, "full_name": full_names.get(u, u), **(task or {})}
+                for u in users
+            ]
+    return out
+
+
+def role_tasks(posts: list[str]) -> dict[tuple[str, str], dict]:
+    """The newest task per (post, content role), as the board shows it."""
+    out = {}
+    for task in frappe.get_all(
+        "Task",
+        filters={"content_post": ("in", posts), "content_role": ("is", "set")},
+        fields=["name", "content_post", "content_role", "status", "exp_end_date"],
+        order_by="creation asc",
+    ):
+        out[(task.content_post, task.content_role)] = {
+            "task": task.name,
+            "status": task.status,
+            "due": str(task.exp_end_date) if task.exp_end_date else None,
+        }
+    return out
+
+
+def user_full_names(users: set[str]) -> dict[str, str]:
+    if not users:
+        return {}
+    return {
+        u.name: u.full_name or u.name
+        for u in frappe.get_all(
+            "User", filters={"name": ("in", list(users))}, fields=["name", "full_name"]
+        )
+    }
 
 
 @frappe.whitelist()

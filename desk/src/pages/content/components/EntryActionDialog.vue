@@ -64,13 +64,20 @@
           :placeholder="__('Why is this post dropped?')"
         />
 
-        <Link
-          v-if="action === 'assign'"
-          v-model="user"
-          doctype="User"
-          :label="__(roleLabel)"
-          :placeholder="__('Pick a person, or clear to unassign')"
-        />
+        <template v-if="action === 'assign'">
+          <PeoplePicker
+            v-model="people"
+            :label="__(roleLabel)"
+            :placeholder="__('Pick one or more people')"
+          />
+          <p class="text-p-sm text-ink-gray-5">
+            {{
+              __(
+                "Everyone on this gets the post's task for it. Remove everyone to unassign."
+              )
+            }}
+          </p>
+        </template>
 
         <ErrorMessage :message="error" />
       </form>
@@ -92,7 +99,6 @@
 </template>
 
 <script setup lang="ts">
-import { Link } from "@/components";
 import { __ } from "@/translation";
 import {
   Button,
@@ -104,6 +110,7 @@ import {
   toast,
 } from "frappe-ui";
 import { computed, ref, watch } from "vue";
+import PeoplePicker from "./PeoplePicker.vue";
 import {
   type ContentPost,
   type EntryAction,
@@ -124,7 +131,7 @@ const url = ref("");
 const date = ref("");
 const time = ref("10:00");
 const reason = ref("");
-const user = ref("");
+const people = ref<string[]>([]);
 const error = ref("");
 const saving = ref(false);
 
@@ -170,7 +177,21 @@ watch(open, (isOpen) => {
   error.value = "";
   reason.value = "";
   url.value = props.post.published_url || "";
-  user.value = (props.role && props.post[props.role]) || "";
+  people.value =
+    props.role && props.post[props.role] ? [props.post[props.role]!] : [];
+  if (props.action === "assign" && props.role) {
+    const role = props.role;
+    // the post list only carries the main person; everyone else comes from here
+    call("helpdesk.api.content_board.get_team_task_status", {
+      posts: [props.post.name],
+    })
+      .then((team) => {
+        const onRole = team?.[props.post!.name]?.[role];
+        if (onRole?.length)
+          people.value = onRole.map((p: { user: string }) => p.user);
+      })
+      .catch(() => {});
+  }
   const next = dayjs(props.post.publish_on || undefined).add(1, "day");
   date.value = next.format("YYYY-MM-DD");
   time.value = props.post.publish_on
@@ -209,13 +230,14 @@ async function submit() {
       });
       toast.success(__("Post cancelled"));
     } else {
-      await call("frappe.client.set_value", {
-        doctype: "HD Content Post",
-        name: post.name,
-        fieldname: props.role,
-        value: user.value || null,
+      await call("helpdesk.api.content_board.assign", {
+        post: post.name,
+        role: props.role,
+        users: people.value,
       });
-      toast.success(user.value ? __("Assigned") : __("Unassigned"));
+      toast.success(
+        people.value.length ? __("Team updated") : __("Unassigned")
+      );
     }
     open.value = false;
     emit("done");

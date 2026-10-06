@@ -122,7 +122,7 @@ def alert_team(post, days: int):
     project = doc.content_project()
     lead = frappe.db.get_value("Project", project, "project_lead") if project else None
     notify_users(
-        [post.marketer, post.owner, lead],
+        [*doc.people("marketer"), post.owner, lead],
         "HD Content Post",
         post.name,
         _(

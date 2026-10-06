@@ -29,8 +29,15 @@ PER_PERSON = "One task per person"
 ONE_TASK = "One task for the post"
 NO_TASKS = "No tasks"
 # who does which part, in order; the marketer's part is due on the publish date
-TASK_ROLES = {"writer": "Writer", "designer": "Designer", "marketer": "Marketer"}
+TASK_ROLES = {
+    "writer": "Writer",
+    "designer": "Designer",
+    "video_editor": "Video Editor",
+    "marketer": "Marketer",
+}
 SHARED_ROLE = "All"
+# the design stage's parts: the post leaves Design once all of them are done
+DESIGN_ROLES = ("Designer", "Video Editor")
 CONTENT_PROJECT_TYPE = "Content Calendar"
 DONE_TASK_STATUSES = ("Completed", "Cancelled")
 # publishing ends the post's open work; cancelling the post cancels it
@@ -40,13 +47,14 @@ STAGES = ("Idea", "Drafting", "Design", "Internal Review")
 NEXT_STATUS_AFTER = {
     "Writer": "Design",
     "Designer": "Internal Review",
+    "Video Editor": "Internal Review",
     SHARED_ROLE: "Internal Review",
 }
 # who hears about a post moving into each status
 NEXT_PERSON = {
     "Drafting": ("writer",),
-    "Design": ("designer",),
-    "Changes Requested": ("writer", "designer"),
+    "Design": ("designer", "video_editor"),
+    "Changes Requested": ("writer", "designer", "video_editor"),
     "Approved": ("marketer",),
     "Scheduled": ("marketer",),
 }
@@ -54,6 +62,7 @@ NEXT_PERSON = {
 
 class HDContentPost(Document):
     def validate(self):
+        self.clean_team()
         self.sync_platforms()
         self.set_customer_from_campaign()
         self.validate_campaign_customer()
@@ -68,6 +77,39 @@ class HDContentPost(Document):
     def on_update(self):
         self.sync_tasks()
         self.notify_next_person()
+
+    # --- the team: one main person per role, plus anyone in extra_team ---
+
+    def people(self, role: str) -> list[str]:
+        """Everyone on a role, the main person first."""
+        return team_of(self)[role]
+
+    def everyone(self) -> list[str]:
+        """Everyone on the post, in role order, each once."""
+        return list(dict.fromkeys(u for users in team_of(self).values() for u in users))
+
+    def set_people(self, role: str, users: list[str]):
+        """Put exactly these people on a role; the first becomes its main person."""
+        users = list(dict.fromkeys(u for u in users if u))
+        self.set(role, users[0] if users else None)
+        others = [
+            {"role": r.role, "user": r.user}
+            for r in self.get("extra_team") or []
+            if r.role != role
+        ]
+        self.set("extra_team", others + [{"role": role, "user": u} for u in users[1:]])
+
+    def clean_team(self):
+        """No one twice on a role, and a role with anyone on it has a main person."""
+        for role in TASK_ROLES:
+            people = self.people(role)
+            extras = [r.user for r in self.get("extra_team") or [] if r.role == role]
+            # rows are only rewritten when something is off, not on every save
+            if (
+                self.get(role) != (people[0] if people else None)
+                or extras != people[1:]
+            ):
+                self.set_people(role, people)
 
     # --- tasks: each person's part of the post (or one shared task) ---
 
@@ -123,18 +165,18 @@ class HDContentPost(Document):
         days = {
             "writer": settings.writer_days_before,
             "designer": settings.designer_days_before,
+            "video_editor": settings.video_editor_days_before,
             "marketer": 0,
         }
         if self.task_mode == PER_PERSON:
+            # one task per role; several people on a role share it
             return {
-                label: {"users": [self.get(field)], "due": due(days[field])}
+                label: {"users": self.people(field), "due": due(days[field])}
                 for field, label in TASK_ROLES.items()
-                if self.get(field)
+                if self.people(field)
             }
         if self.task_mode == ONE_TASK:
-            users = list(
-                dict.fromkeys(u for u in (self.get(f) for f in TASK_ROLES) if u)
-            )
+            users = self.everyone()
             if users:
                 return {SHARED_ROLE: {"users": users, "due": due(days["designer"])}}
         return {}
@@ -250,17 +292,28 @@ class HDContentPost(Document):
         next_status = NEXT_STATUS_AFTER.get(role)
         if not next_status or self.status not in STAGES:
             return
+        if role in DESIGN_ROLES and self.design_still_open():
+            # design and video are one stage: it ends when both are done
+            return
         if STAGES.index(self.status) >= STAGES.index(next_status):
             return
         self.status = next_status
         self.save(ignore_permissions=True)
+
+    def design_still_open(self) -> bool:
+        return any(
+            t.content_role in DESIGN_ROLES and t.status not in DONE_TASK_STATUSES
+            for t in self.content_tasks()
+        )
 
     def notify_next_person(self):
         """Whoever's turn it is now hears about it, in the bell and in Teams or email."""
         # a new post's people hear through their new task instead
         if self.flags.in_insert or not self.has_value_changed("status"):
             return
-        users = [self.get(field) for field in NEXT_PERSON.get(self.status, ())]
+        users = [
+            u for field in NEXT_PERSON.get(self.status, ()) for u in self.people(field)
+        ]
         if self.status == "Internal Review":
             users.append(self.owner)
         users = [u for u in dict.fromkeys(users) if u and u != frappe.session.user]
@@ -455,14 +508,12 @@ def send_due_reminders():
             "title",
             "status",
             "publish_on",
-            "writer",
-            "designer",
-            "marketer",
             "owner",
         ],
     )
+    teams = teams_of([p.name for p in posts])
     for post in posts:
-        users = [post.writer, post.designer, post.marketer, post.owner]
+        users = [*teams[post.name], post.owner]
         # same path as other reminders: the bell plus Teams or email, once per day and stage;
         # notify_users drops empty slots, Administrator and Guest, and duplicates
         notify_users(
@@ -495,9 +546,6 @@ def send_missed_post_alerts():
             Post.channel,
             Post.platforms,
             Post.publish_on,
-            Post.writer,
-            Post.designer,
-            Post.marketer,
         )
         .where(Post.publish_on <= cutoff)
         .where(Post.status.notin(CLOSED_STATUSES))
@@ -506,12 +554,11 @@ def send_missed_post_alerts():
     )
 
     always = settings.get_alert_recipients()
+    teams = teams_of([p.name for p in posts])
     sent = 0
     for post in posts:
         recipients = always | (
-            _user_emails((post.writer, post.designer, post.marketer))
-            if settings.notify_post_team
-            else set()
+            _user_emails(teams[post.name]) if settings.notify_post_team else set()
         )
         if not recipients:
             # left unflagged so it is picked up once someone is assigned or configured
@@ -528,7 +575,7 @@ def send_missed_post_alerts():
             "HD Content Post", post.name, "missed_alert_sent", 1, update_modified=False
         )
         notify_users(
-            [post.writer, post.designer, post.marketer],
+            teams[post.name],
             "HD Content Post",
             post.name,
             _(
@@ -564,6 +611,40 @@ def _send_missed_post_alert(settings, post, recipients: set[str]):
         reference_doctype="HD Content Post",
         reference_name=post.name,
     )
+
+
+def team_of(doc) -> dict[str, list[str]]:
+    """Each role's people, the main person first, without repeats."""
+    team = {}
+    for role in TASK_ROLES:
+        users = [doc.get(role)] + [
+            r.user for r in doc.get("extra_team") or [] if r.role == role
+        ]
+        team[role] = list(dict.fromkeys(u for u in users if u))
+    return team
+
+
+def teams_of(posts: list[str]) -> dict[str, list[str]]:
+    """Everyone on each of these posts, in role order, for reminders and alerts."""
+    if not posts:
+        return {}
+    main = frappe.get_all(
+        "HD Content Post",
+        filters={"name": ("in", posts)},
+        fields=["name", *TASK_ROLES],
+    )
+    extra = frappe.get_all(
+        "HD Content Post Member",
+        filters={"parenttype": "HD Content Post", "parent": ("in", posts)},
+        fields=["parent", "user"],
+        order_by="idx asc",
+    )
+    out = {p.name: [p.get(role) for role in TASK_ROLES] for p in main}
+    for row in extra:
+        out[row.parent].append(row.user)
+    return {
+        name: list(dict.fromkeys(u for u in users if u)) for name, users in out.items()
+    }
 
 
 def _user_emails(users) -> set[str]:
@@ -608,7 +689,9 @@ def permission_query(user: str | None = None) -> str | None:
     table = "`tabHD Content Post`"
     return (
         f"({table}.`writer` = {u} or {table}.`designer` = {u} or {table}.`marketer` = {u} "
-        f"or {table}.`owner` = {u} "
+        f"or {table}.`video_editor` = {u} or {table}.`owner` = {u} "
+        f"or {table}.`name` in (select `parent` from `tabHD Content Post Member` "
+        f"where `parenttype` = 'HD Content Post' and `user` = {u}) "
         f"or {table}.`customer` in ({_member_customers_sql(user)}))"
     )
 
@@ -619,11 +702,7 @@ def has_permission(
     user = user or frappe.session.user
     if ptype == "create" or _is_content_lead(user):
         return None
-    if user in (
-        doc.writer,
-        doc.designer,
-        doc.marketer,
-        doc.owner,
-    ) or doc.customer in member_customers(user):
+    on_team = any(user in people for people in team_of(doc).values())
+    if on_team or user == doc.owner or doc.customer in member_customers(user):
         return None
     return False

@@ -79,14 +79,14 @@ class TestContentBoard(FrappeTestCase):
     def test_team_defaults_come_from_the_latest_post(self):
         self.assertEqual(
             content_board.get_team_defaults(CUSTOMER),
-            {"writer": None, "designer": None, "marketer": None},
+            {"writer": [], "designer": [], "marketer": [], "video_editor": []},
         )
         make_content_post("Older", CUSTOMER, designer="Administrator")
         make_content_post("Newer", CUSTOMER, writer=WRITER[0])
 
         team = content_board.get_team_defaults(CUSTOMER)
-        self.assertEqual(team.writer, WRITER[0])
-        self.assertFalse(team.designer)
+        self.assertEqual(team["writer"], [WRITER[0]])
+        self.assertEqual(team["designer"], [])
 
     def test_postpone_needs_a_reason_and_is_recorded(self):
         due = add_to_date(now_datetime(), hours=-2)

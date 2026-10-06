@@ -152,12 +152,11 @@
           <span class="text-xs text-ink-gray-5">{{
             __("Team · filled in from this customer's last post")
           }}</span>
-          <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <Link
+          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <PeoplePicker
               v-for="role in TEAM_ROLES"
               :key="role.field"
-              v-model="form[role.field]"
-              doctype="User"
+              v-model="team[role.field]"
               :label="__(role.label)"
               :placeholder="__('Assign')"
             />
@@ -214,8 +213,15 @@ import {
   toast,
 } from "frappe-ui";
 import { computed, nextTick, reactive, ref, watch } from "vue";
-import { CHANNELS, FORMATS, TEAM_ROLES, textToHtml } from "../constants";
+import {
+  CHANNELS,
+  FORMATS,
+  TEAM_ROLES,
+  type TeamRole,
+  textToHtml,
+} from "../constants";
 import ChipToggle from "./ChipToggle.vue";
+import PeoplePicker from "./PeoplePicker.vue";
 
 // off by default: several platforms make one post unless asked otherwise
 const separate = ref(false);
@@ -236,11 +242,16 @@ const EMPTY = {
   caption: "",
   brief: "",
   hashtags: "",
-  writer: "",
-  designer: "",
-  marketer: "",
   task_mode: "One task per person",
 };
+// everyone on each role, the main person first
+const emptyTeam = (): Record<TeamRole, string[]> => ({
+  writer: [],
+  designer: [],
+  video_editor: [],
+  marketer: [],
+});
+const team = reactive(emptyTeam());
 
 const TASK_MODES = [
   { label: __("One task per person"), value: "One task per person" },
@@ -260,7 +271,7 @@ const taskModeHint = computed(() => {
   if (form.task_mode === "No tasks")
     return __("The post is tracked on the calendar only.");
   return __(
-    "The writer, designer and marketer each get a task, due before the publish date. Finishing one moves the post on."
+    "Each role gets a task, shared by everyone on it and due before the publish date. Finishing one moves the post on."
   );
 });
 
@@ -273,6 +284,7 @@ watch(open, (isOpen) => {
     customer: props.customer || "",
     date: props.date || "",
   });
+  Object.assign(team, emptyTeam());
   loadTeam(form.customer);
 });
 
@@ -286,10 +298,11 @@ watch(
 async function loadTeam(customer: string) {
   if (!customer) return;
   try {
-    const team = await call("helpdesk.api.content_board.get_team_defaults", {
+    const last = await call("helpdesk.api.content_board.get_team_defaults", {
       customer,
     });
-    for (const role of TEAM_ROLES) form[role.field] = team[role.field] || "";
+    for (const role of TEAM_ROLES)
+      team[role.field] = [...(last[role.field] || [])];
   } catch {
     // defaults are a convenience; the entry can still be saved without them
   }
@@ -326,11 +339,9 @@ async function save(addNext: boolean) {
         caption: textToHtml(form.caption),
         brief: form.brief,
         hashtags: form.hashtags,
-        writer: form.writer,
-        designer: form.designer,
-        marketer: form.marketer,
         task_mode: form.task_mode,
       },
+      team,
     });
     toast.success(
       names.length > 1

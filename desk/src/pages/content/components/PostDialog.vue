@@ -95,23 +95,12 @@
             :label="__('Publish on') + ' *'"
             required
           />
-          <Link
-            v-model="form.writer"
-            doctype="User"
-            :label="__('Writer')"
-            :placeholder="__('Assign writer')"
-          />
-          <Link
-            v-model="form.designer"
-            doctype="User"
-            :label="__('Designer')"
-            :placeholder="__('Assign designer')"
-          />
-          <Link
-            v-model="form.marketer"
-            doctype="User"
-            :label="__('Digital marketer')"
-            :placeholder="__('Assign marketer')"
+          <PeoplePicker
+            v-for="role in TEAM_ROLES"
+            :key="role.field"
+            v-model="team[role.field]"
+            :label="__(role.label)"
+            :placeholder="__('Assign')"
           />
         </div>
         <div class="flex flex-col gap-1.5">
@@ -406,8 +395,11 @@ import {
   STATUSES,
   htmlToText,
   platformsOf,
+  TEAM_ROLES,
+  type TeamRole,
   textToHtml,
 } from "../constants";
+import PeoplePicker from "./PeoplePicker.vue";
 import ChipToggle from "./ChipToggle.vue";
 
 interface PostRef {
@@ -428,9 +420,6 @@ const EMPTY = {
   format: "Post",
   status: "Idea",
   publish_on: "",
-  writer: "",
-  designer: "",
-  marketer: "",
   caption: "",
   hashtags: "",
   brief: "",
@@ -438,6 +427,14 @@ const EMPTY = {
 };
 
 const form = reactive({ ...EMPTY });
+// everyone on each role, the main person first; saved as the role's field plus More People
+const emptyTeam = (): Record<TeamRole, string[]> => ({
+  writer: [],
+  designer: [],
+  video_editor: [],
+  marketer: [],
+});
+const team = reactive(emptyTeam());
 // every platform the post goes out on; the first is saved as its channel
 const platforms = ref<string[]>([EMPTY.channel]);
 
@@ -466,6 +463,7 @@ watch(open, async (isOpen) => {
   if (!isOpen) return;
   error.value = "";
   Object.assign(form, EMPTY, { publish_on: toInput(props.post?.publish_on) });
+  Object.assign(team, emptyTeam());
   platforms.value = [EMPTY.channel];
   Object.assign(approval, {
     client_feedback: "",
@@ -483,6 +481,13 @@ watch(open, async (isOpen) => {
       name: props.post!.name,
     });
     for (const key of Object.keys(EMPTY)) form[key] = doc[key] ?? "";
+    for (const role of TEAM_ROLES)
+      team[role.field] = [
+        doc[role.field],
+        ...(doc.extra_team || [])
+          .filter((r: { role: string }) => r.role === role.field)
+          .map((r: { user: string }) => r.user),
+      ].filter(Boolean);
     platforms.value = platformsOf(doc);
     form.publish_on = toInput(doc.publish_on);
     // Text Editor stores HTML; the dialog edits plain text
@@ -707,6 +712,12 @@ async function save() {
     platforms: platforms.value.join(", "),
     publish_on: toServer(form.publish_on),
     caption: textToHtml(form.caption),
+    ...Object.fromEntries(
+      TEAM_ROLES.map((r) => [r.field, team[r.field][0] || ""])
+    ),
+    extra_team: TEAM_ROLES.flatMap((r) =>
+      team[r.field].slice(1).map((user) => ({ role: r.field, user }))
+    ),
   };
   try {
     if (isNew.value) {
