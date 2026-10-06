@@ -199,6 +199,12 @@ const portalRoutes = [
     component: () => import("@/pages/work/Overview.vue"),
     beforeEnter: () => useAuthStore().canSeeOverview || { name: "Home" },
   },
+  // everyone may open it; the server decides whose numbers they see
+  {
+    path: "/performance",
+    name: "Performance",
+    component: () => import("@/pages/performance/Performance.vue"),
+  },
   {
     path: "/team",
     name: "TeamWorkload",
