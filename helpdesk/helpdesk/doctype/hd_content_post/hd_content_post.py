@@ -30,6 +30,7 @@ ROLE_TASKS = {
     "writer": ("Content Finalization", "High"),
     "designer": ("Graphic Design", "Medium"),
     "marketer": ("Publishing", "Urgent"),
+    "video_editor": ("Video Editing", "Medium"),
 }
 VIDEO_FORMATS = ("Reel", "Video")
 DONE_TASK_STATUSES = ("Completed", "Cancelled")
@@ -434,12 +435,19 @@ def send_due_reminders():
             "writer",
             "designer",
             "marketer",
+            "video_editor",
             "owner",
         ],
     )
     extras = extra_people([p.name for p in posts])
     for post in posts:
-        team = (post.writer, post.designer, post.marketer, post.owner)
+        team = (
+            post.writer,
+            post.designer,
+            post.marketer,
+            post.video_editor,
+            post.owner,
+        )
         users = {
             u for u in (*team, *extras.get(post.name, ())) if u and u != "Administrator"
         }
@@ -481,6 +489,7 @@ def send_missed_post_alerts():
             Post.writer,
             Post.designer,
             Post.marketer,
+            Post.video_editor,
         )
         .where(Post.publish_on <= cutoff)
         .where(Post.status.notin(CLOSED_STATUSES))
@@ -492,7 +501,7 @@ def send_missed_post_alerts():
     extras = extra_people([p.name for p in posts])
     sent = 0
     for post in posts:
-        team = (post.writer, post.designer, post.marketer)
+        team = (post.writer, post.designer, post.marketer, post.video_editor)
         recipients = always | (
             _user_emails((*team, *extras.get(post.name, ())))
             if settings.notify_post_team
@@ -613,6 +622,7 @@ def permission_query(user: str | None = None) -> str | None:
     table = "`tabHD Content Post`"
     return (
         f"({table}.`writer` = {u} or {table}.`designer` = {u} or {table}.`marketer` = {u} "
+        f"or {table}.`video_editor` = {u} "
         f"or {table}.`owner` = {u} "
         f"or {table}.`name` in (select `parent` from `tabHD Content Post Member` "
         f"where `parenttype` = 'HD Content Post' and `user` = {u}) "

@@ -59,7 +59,11 @@
               />
             </SettingRow>
             <SettingRow
-              :label="__('Notify the post\'s writer, designer and marketer')"
+              :label="
+                __(
+                  'Notify the post\'s writer, designer, marketer and video editor'
+                )
+              "
               :description="__('Along with the people below.')"
             >
               <Switch v-model="form.notify_post_team" />
@@ -137,7 +141,7 @@
             :label="__('Create a task when someone is assigned')"
             :description="
               __(
-                'Writer, designer and digital marketer each get an ERPNext Task, due on the post\'s date. Unassigning or cancelling the post cancels it.'
+                'Writer, designer, digital marketer and video editor each get an ERPNext Task, due on the post\'s date. Unassigning or cancelling the post cancels it.'
               )
             "
           >
@@ -145,7 +149,7 @@
           </SettingRow>
           <div
             v-if="form.create_tasks_on_assign"
-            class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3"
+            class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4"
           >
             <FormControl
               v-model="form.writer_hours"
@@ -167,6 +171,13 @@
               min="0"
               step="0.5"
               :label="__('Digital marketer hours')"
+            />
+            <FormControl
+              v-model="form.video_editor_hours"
+              type="number"
+              min="0"
+              step="0.5"
+              :label="__('Video editor hours')"
             />
           </div>
         </section>
@@ -247,6 +258,7 @@ interface ContentSettingsForm {
   writer_hours: number;
   designer_hours: number;
   marketer_hours: number;
+  video_editor_hours: number;
 }
 
 const DOCTYPE = "HD Content Settings";
@@ -277,6 +289,7 @@ const settings = createResource({
       writer_hours: doc.writer_hours ?? 0,
       designer_hours: doc.designer_hours ?? 0,
       marketer_hours: doc.marketer_hours ?? 0,
+      video_editor_hours: doc.video_editor_hours ?? 0,
     };
     initial.value = JSON.stringify(form.value);
   },
@@ -323,6 +336,7 @@ const save = createResource({
         writer_hours: Number(f.writer_hours) || 0,
         designer_hours: Number(f.designer_hours) || 0,
         marketer_hours: Number(f.marketer_hours) || 0,
+        video_editor_hours: Number(f.video_editor_hours) || 0,
         alert_recipients: f.alert_recipients.map((user) => ({ user })),
       },
     };

@@ -23,7 +23,7 @@ from helpdesk.tasky.permissions import get_managed_projects, is_tasky_admin
 TEAM_ROLES = ("System Manager", "Agent Manager", "HR Manager", "HR User")
 OPEN_TASK = ("Open", "Working", "Pending Review", "Overdue")
 CLOSED_POST = ("Published", "Cancelled")
-CONTENT_ROLES = ("writer", "designer", "marketer")
+CONTENT_ROLES = ("writer", "designer", "marketer", "video_editor")
 TOP_ACTIVITIES = 5
 MAX_RANGE_DAYS = 366
 
@@ -207,8 +207,9 @@ def relevant_posts(start, end) -> list[dict]:
             Post.writer,
             Post.designer,
             Post.marketer,
+            Post.video_editor,
         )
-        .where(Post.publish_on[f"{start} 00:00:00":f"{end} 23:59:59"])
+        .where(Post.publish_on[f"{start} 00:00:00" : f"{end} 23:59:59"])
         .where(Post.status != "Cancelled")
         .run(as_dict=True)
     )
@@ -216,7 +217,9 @@ def relevant_posts(start, end) -> list[dict]:
 
 def post_metrics(posts: list[dict], user: str) -> dict:
     now = get_datetime()
-    mine = [p for p in posts if user in (p.writer, p.designer, p.marketer)]
+    mine = [
+        p for p in posts if user in (p.writer, p.designer, p.marketer, p.video_editor)
+    ]
     published = [p for p in mine if p.status == "Published"]
     on_time = [
         p
@@ -250,7 +253,9 @@ def expected_hours(employee: str, start, end, hours_per_day: float) -> float:
         )
     except ImportError:
         holidays = sum(
-            1 for i in range(days) if add_days(start, i).weekday() >= 5  # Sat, Sun
+            1
+            for i in range(days)
+            if add_days(start, i).weekday() >= 5  # Sat, Sun
         )
     return round(max(days - holidays, 0) * hours_per_day, 1)
 
@@ -448,7 +453,11 @@ def get_employee_performance(employee: str, from_date: str, to_date: str) -> dic
         ),
         key=lambda t: ({"Overdue": 0}.get(t["state"], 1), t["due"] or "9999"),
     )
-    mine = [p for p in posts if person.user_id in (p.writer, p.designer, p.marketer)]
+    mine = [
+        p
+        for p in posts
+        if person.user_id in (p.writer, p.designer, p.marketer, p.video_editor)
+    ]
     now = get_datetime()
 
     metrics = task_metrics(tasks, start, end) | post_metrics(posts, person.user_id)
@@ -501,7 +510,9 @@ def get_employee_performance(employee: str, from_date: str, to_date: str) -> dic
                     else (
                         "Published late"
                         if p.status == "Published"
-                        else "Missed" if get_datetime(p.publish_on) < now else p.status
+                        else "Missed"
+                        if get_datetime(p.publish_on) < now
+                        else p.status
                     )
                 ),
             }

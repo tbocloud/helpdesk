@@ -434,6 +434,7 @@ const team = reactive<Record<TeamRole, string[]>>({
   writer: [],
   designer: [],
   marketer: [],
+  video_editor: [],
 });
 // every platform the post goes out on; the first is saved as its channel
 const platforms = ref<string[]>([EMPTY.channel]);
@@ -463,7 +464,12 @@ async function loadPost(isOpen: boolean) {
   if (!isOpen) return;
   error.value = "";
   Object.assign(form, EMPTY, { publish_on: toInput(props.post?.publish_on) });
-  Object.assign(team, { writer: [], designer: [], marketer: [] });
+  Object.assign(team, {
+    writer: [],
+    designer: [],
+    marketer: [],
+    video_editor: [],
+  });
   platforms.value = [EMPTY.channel];
   Object.assign(approval, {
     client_feedback: "",

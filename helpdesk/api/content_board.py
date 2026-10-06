@@ -7,7 +7,7 @@ from frappe import _
 
 from helpdesk.helpdesk.doctype.hd_content_post.hd_content_post import team_of
 
-TEAM_FIELDS = ("writer", "designer", "marketer")
+TEAM_FIELDS = ("writer", "designer", "marketer", "video_editor")
 # fields the Add entry dialog may set on every post it creates
 ENTRY_FIELDS = (
     "title",
@@ -112,7 +112,7 @@ def assign(
     hours: float | None = None,
     users: str | list | None = None,
 ):
-    """Put people on a post's writer, designer or marketer role.
+    """Put people on a post's writer, designer, marketer or video editor role.
 
     `users` sets everyone on the role (the first is the main person); `user`
     alone replaces the role with that one person. New tasks get `hours` if given.

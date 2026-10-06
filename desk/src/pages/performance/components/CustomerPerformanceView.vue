@@ -607,6 +607,7 @@ const ROLES = [
   { role: "writer", label: __("Writer"), short: __("W") },
   { role: "designer", label: __("Designer"), short: __("D") },
   { role: "marketer", label: __("Marketer"), short: __("M") },
+  { role: "video_editor", label: __("Video editor"), short: __("V") },
 ];
 const TIMING: Record<string, { class: string; icon: unknown }> = {
   "On time": { class: "bg-success-soft text-success", icon: LucideCircleCheck },

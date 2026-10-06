@@ -20,6 +20,7 @@
 		"column_break_2",
 		"designer",
 		"marketer",
+		"video_editor",
 		"extra_team",
 		"content_section",
 		"caption",
@@ -240,11 +241,18 @@
 			"in_standard_filter": 1
 		},
 		{
+			"fieldname": "video_editor",
+			"fieldtype": "Link",
+			"label": "Video Editor",
+			"options": "User",
+			"in_standard_filter": 1
+		},
+		{
 			"fieldname": "extra_team",
 			"fieldtype": "Table",
 			"label": "More People",
 			"options": "HD Content Post Member",
-			"description": "Anyone else working on this post, besides the writer, designer and digital marketer above. Each gets their own task."
+			"description": "Anyone else working on this post, besides the writer, designer, digital marketer and video editor above. Each gets their own task."
 		},
 		{
 			"fieldname": "brief",
@@ -270,7 +278,7 @@
 	],
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-10-05 16:00:00.000000",
+	"modified": "2026-10-06 11:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Content Post",

@@ -84,7 +84,13 @@ class TestContentBoard(FrappeTestCase):
                 "writer": None,
                 "designer": None,
                 "marketer": None,
-                "team": {"writer": [], "designer": [], "marketer": []},
+                "video_editor": None,
+                "team": {
+                    "writer": [],
+                    "designer": [],
+                    "marketer": [],
+                    "video_editor": [],
+                },
             },
         )
         make_content_post("Older", CUSTOMER, designer="Administrator")
@@ -273,6 +279,19 @@ class TestContentRoleTasks(FrappeTestCase):
         self.assertEqual(
             len(self.role_task(post, "designer")) - len(open_tasks), 1, "one cancelled"
         )
+
+    def test_video_editor_gets_a_video_editing_task(self):
+        post = make_content_post(
+            "Launch reel",
+            CUSTOMER,
+            status="Drafting",
+            publish_on=self.due,
+            format="Reel",
+        )
+        content_board.assign(post.name, "video_editor", self.DESIGNER[0])
+        [task] = self.role_task(post, "video_editor")
+        self.assertTrue(task.subject.startswith("Video Editing"))
+        self.assertIn(self.DESIGNER[0], task._assign)
 
     def test_extra_people_can_see_the_post(self):
         from helpdesk.helpdesk.doctype.hd_content_post.hd_content_post import (

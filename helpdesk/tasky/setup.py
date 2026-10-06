@@ -124,7 +124,7 @@ def get_project_custom_fields() -> dict:
                 "fieldname": "content_role",
                 "fieldtype": "Select",
                 "label": "Content Role",
-                "options": "\nwriter\ndesigner\nmarketer",
+                "options": "\nwriter\ndesigner\nmarketer\nvideo_editor",
                 "insert_after": "content_post",
                 "read_only": 1,
                 "depends_on": "content_post",

@@ -461,6 +461,7 @@ const ROLE_LABEL: Record<string, string> = {
   writer: "Writer",
   designer: "Designer",
   marketer: "Digital marketer",
+  video_editor: "Video editor",
 };
 const TIMING: Record<string, { class: string; icon: unknown }> = {
   "On time": { class: "bg-success-soft text-success", icon: LucideCircleCheck },

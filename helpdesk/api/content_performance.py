@@ -1,6 +1,6 @@
 """Content calendar performance by employee.
 
-A post counts for everyone on it: writer, designer and digital marketer. Each
+A post counts for everyone on it: writer, designer, digital marketer and video editor. Each
 post that is due gets a delivery score:
 
 - published on or before its publish date: 100
@@ -21,7 +21,7 @@ from frappe.utils import add_days, date_diff, get_datetime, getdate, now_datetim
 
 from helpdesk.api.performance import check_range, resolve_scope, sees_everyone
 
-ROLES = ("writer", "designer", "marketer")
+ROLES = ("writer", "designer", "marketer", "video_editor")
 ON_TIME, LATE, MISSED = 100, 60, 0
 CHANGE_PENALTY = 10
 CHANGES_REQUESTED = "Changes Requested"
@@ -45,6 +45,7 @@ def period_posts(start, end, customer: str | None = None) -> list[dict]:
             Post.writer,
             Post.designer,
             Post.marketer,
+            Post.video_editor,
         )
         .where(Post.publish_on[f"{start} 00:00:00" : f"{end} 23:59:59"])
         .where(Post.status != "Cancelled")

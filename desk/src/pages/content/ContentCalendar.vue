@@ -552,6 +552,7 @@ const BOARD_FIELDS = [
   "writer",
   "designer",
   "marketer",
+  "video_editor",
   "published_on",
   "published_url",
   "times_postponed",

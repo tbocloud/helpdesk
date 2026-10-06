@@ -20,6 +20,7 @@
 		"writer_hours",
 		"designer_hours",
 		"marketer_hours",
+		"video_editor_hours",
 		"portal_section",
 		"enable_client_portal",
 		"portal_code_template_section",
@@ -145,7 +146,7 @@
 			"fieldname": "tasks_section",
 			"fieldtype": "Section Break",
 			"label": "Tasks from Assignments",
-			"description": "Assigning a writer, designer or digital marketer to a post creates an ERPNext Task for them, due on the post's date"
+			"description": "Assigning a writer, designer, digital marketer or video editor to a post creates an ERPNext Task for them, due on the post's date"
 		},
 		{
 			"fieldname": "create_tasks_on_assign",
@@ -177,11 +178,18 @@
 			"label": "Digital Marketer Hours",
 			"default": "1",
 			"non_negative": 1
+		},
+		{
+			"fieldname": "video_editor_hours",
+			"fieldtype": "Float",
+			"label": "Video Editor Hours",
+			"default": "1",
+			"non_negative": 1
 		}
 	],
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-09-30 15:00:00.000000",
+	"modified": "2026-10-06 11:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Content Settings",

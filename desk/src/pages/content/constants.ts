@@ -57,6 +57,7 @@ export interface ContentPost {
   writer?: string;
   designer?: string;
   marketer?: string;
+  video_editor?: string;
   times_postponed?: number;
 }
 
@@ -64,6 +65,7 @@ export const TEAM_ROLES = [
   { field: "writer", label: "Writer" },
   { field: "designer", label: "Designer" },
   { field: "marketer", label: "Digital marketer" },
+  { field: "video_editor", label: "Video editor" },
 ] as const;
 
 export type TeamRole = (typeof TEAM_ROLES)[number]["field"];

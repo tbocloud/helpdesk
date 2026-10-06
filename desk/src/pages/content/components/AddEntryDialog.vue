@@ -152,7 +152,7 @@
           <span class="text-xs text-ink-gray-5">{{
             __("Team · filled in from this customer's last post")
           }}</span>
-          <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <PeoplePicker
               v-for="role in TEAM_ROLES"
               :key="role.field"
@@ -239,6 +239,7 @@ const emptyTeam = (): Record<TeamRole, string[]> => ({
   writer: [],
   designer: [],
   marketer: [],
+  video_editor: [],
 });
 const form = reactive({
   ...EMPTY,
