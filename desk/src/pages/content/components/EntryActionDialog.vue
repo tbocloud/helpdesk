@@ -65,14 +65,13 @@
         />
 
         <template v-if="action === 'assign'">
-          <Link
-            v-model="user"
-            doctype="User"
+          <PeoplePicker
+            v-model="people"
             :label="__(roleLabel)"
-            :placeholder="__('Pick a person, or clear to unassign')"
+            :placeholder="__('Pick one or more people')"
           />
           <FormControl
-            v-if="user"
+            v-if="people.length"
             v-model="hours"
             type="number"
             min="0"
@@ -80,13 +79,13 @@
             :label="__('Estimated hours')"
             :placeholder="__('Default from Settings → Content')"
             :description="
-              existingTask
-                ? __('Updates task {0}.', existingTask.name)
-                : __('A task is created for them, due on the post\'s date.')
+              __(
+                'Each person gets their own task, due on the post\'s date. Removing someone cancels theirs.'
+              )
             "
           />
           <p v-else-if="existingTask" class="text-p-sm text-ink-gray-5">
-            {{ __("Unassigning cancels task {0}.", existingTask.name) }}
+            {{ __("Removing everyone cancels their tasks.") }}
           </p>
         </template>
 
@@ -110,7 +109,6 @@
 </template>
 
 <script setup lang="ts">
-import { Link } from "@/components";
 import { __ } from "@/translation";
 import {
   Button,
@@ -122,6 +120,7 @@ import {
   toast,
 } from "frappe-ui";
 import { computed, ref, watch } from "vue";
+import PeoplePicker from "./PeoplePicker.vue";
 import {
   type ContentPost,
   type EntryAction,
@@ -142,7 +141,7 @@ const url = ref("");
 const date = ref("");
 const time = ref("10:00");
 const reason = ref("");
-const user = ref("");
+const people = ref<string[]>([]);
 const hours = ref<string | number>("");
 const roleTasks = ref<
   { name: string; content_role: string; expected_time: number }[]
@@ -195,7 +194,21 @@ watch(open, (isOpen) => {
   error.value = "";
   reason.value = "";
   url.value = props.post.published_url || "";
-  user.value = (props.role && props.post[props.role]) || "";
+  people.value =
+    props.role && props.post[props.role] ? [props.post[props.role]!] : [];
+  if (props.action === "assign" && props.role) {
+    const role = props.role;
+    // the post list only carries the main person; everyone else comes from here
+    call("helpdesk.api.content_board.get_team_task_status", {
+      posts: [props.post.name],
+    })
+      .then((team) => {
+        const onRole = team?.[props.post!.name]?.[role];
+        if (onRole?.length)
+          people.value = onRole.map((p: { user: string }) => p.user);
+      })
+      .catch(() => {});
+  }
   hours.value = "";
   roleTasks.value = [];
   if (props.action === "assign") {
@@ -248,10 +261,12 @@ async function submit() {
       await call("helpdesk.api.content_board.assign", {
         post: post.name,
         role: props.role,
-        user: user.value || null,
+        users: people.value,
         hours: Number(hours.value) || null,
       });
-      toast.success(user.value ? __("Assigned") : __("Unassigned"));
+      toast.success(
+        people.value.length ? __("Team updated") : __("Unassigned")
+      );
     }
     open.value = false;
     emit("done");

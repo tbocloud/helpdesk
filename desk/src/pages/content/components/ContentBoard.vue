@@ -210,39 +210,43 @@
                 class="text-2xs uppercase tracking-[0.06em] text-ink-gray-5"
                 >{{ __(role.label) }}</span
               >
+              <!-- everyone on the role, each with how far they are with their task -->
               <button
+                v-if="!peopleOf(post, role.field).length"
                 type="button"
-                class="flex items-center gap-1.5 rounded text-sm hover:underline"
-                :class="post[role.field] ? 'text-ink-gray-8' : 'text-brand-ink'"
+                class="flex items-center gap-1.5 rounded text-sm text-brand-ink hover:underline"
                 @click="emit('action', post, 'assign', role.field)"
               >
-                <template v-if="post[role.field]">
-                  <Avatar size="xs" :label="post[role.field]" />
-                  <span class="max-w-[12rem] truncate">{{
-                    post[role.field]
-                  }}</span>
-                </template>
-                <template v-else>
-                  <LucidePlus class="size-3.5" aria-hidden="true" />{{
-                    __("Assign")
-                  }}
-                </template>
+                <LucidePlus class="size-3.5" aria-hidden="true" />{{
+                  __("Assign")
+                }}
               </button>
-              <!-- how far that person is with their task for this post -->
-              <div
-                v-if="post[role.field] && taskOf(post.name, role.field)"
-                class="flex items-center gap-1.5"
-                :title="taskOf(post.name, role.field)!.task"
+              <button
+                v-else
+                type="button"
+                class="flex flex-col items-start gap-1 rounded text-left text-sm text-ink-gray-8"
+                :title="__('Change who is on this')"
+                @click="emit('action', post, 'assign', role.field)"
               >
-                <TaskStatusBadge
-                  :status="taskOf(post.name, role.field)!.status"
-                />
                 <span
-                  v-if="isTaskLate(taskOf(post.name, role.field)!)"
-                  class="text-xs text-danger"
-                  >{{ __("late") }}</span
+                  v-for="person in peopleOf(post, role.field)"
+                  :key="person.user"
+                  class="flex flex-wrap items-center gap-1.5"
                 >
-              </div>
+                  <Avatar size="xs" :label="person.full_name" />
+                  <span class="max-w-[12rem] truncate hover:underline">{{
+                    person.full_name
+                  }}</span>
+                  <TaskStatusBadge
+                    v-if="person.status"
+                    :status="person.status"
+                    :title="person.task"
+                  />
+                  <span v-if="isTaskLate(person)" class="text-xs text-danger">{{
+                    __("late")
+                  }}</span>
+                </span>
+              </button>
             </div>
           </div>
 
@@ -375,10 +379,12 @@ const emit = defineEmits<{
   (e: "action", post: ContentPost, action: EntryAction, role?: TeamRole): void;
 }>();
 
-interface RoleTask {
-  task: string;
-  status: string;
-  due: string | null;
+interface RolePerson {
+  user: string;
+  full_name: string;
+  task?: string;
+  status?: string;
+  due?: string | null;
 }
 
 // each post's role tasks (created when someone is assigned), refreshed with the posts
@@ -386,24 +392,25 @@ const teamTasks = createResource({
   url: "helpdesk.api.content_board.get_team_task_status",
   makeParams: () => ({ posts: props.posts.map((p) => p.name) }),
 });
+// a reload brings a new list, so team changes from the Assign dialog show up too
 watch(
-  () =>
-    props.posts
-      .map((p) => `${p.name}:${p.writer}:${p.designer}:${p.marketer}`)
-      .join(),
+  () => props.posts,
   () => props.posts.length && teamTasks.reload(),
   { immediate: true }
 );
 
-function taskOf(post: string, role: TeamRole): RoleTask | undefined {
-  return teamTasks.data?.[post]?.[role];
+/** Everyone on a role, the main person first; just the main person until the team has loaded. */
+function peopleOf(post: ContentPost, role: TeamRole): RolePerson[] {
+  const team = teamTasks.data?.[post.name]?.[role];
+  if (team) return team;
+  return post[role] ? [{ user: post[role]!, full_name: post[role]! }] : [];
 }
 
-function isTaskLate(task: RoleTask) {
+function isTaskLate(task: RolePerson) {
   return (
     !!task.due &&
     // an Overdue status already says so
-    !["Completed", "Cancelled", "Overdue"].includes(task.status) &&
+    !["Completed", "Cancelled", "Overdue"].includes(task.status ?? "") &&
     dayjs(task.due).isBefore(dayjs(), "day")
   );
 }

@@ -153,11 +153,10 @@
             __("Team · filled in from this customer's last post")
           }}</span>
           <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <Link
+            <PeoplePicker
               v-for="role in TEAM_ROLES"
               :key="role.field"
-              v-model="form[role.field]"
-              doctype="User"
+              v-model="form.team[role.field]"
               :label="__(role.label)"
               :placeholder="__('Assign')"
             />
@@ -206,7 +205,14 @@ import {
   toast,
 } from "frappe-ui";
 import { computed, nextTick, reactive, ref, watch } from "vue";
-import { CHANNELS, FORMATS, TEAM_ROLES, textToHtml } from "../constants";
+import {
+  CHANNELS,
+  FORMATS,
+  TEAM_ROLES,
+  type TeamRole,
+  textToHtml,
+} from "../constants";
+import PeoplePicker from "./PeoplePicker.vue";
 import ChipToggle from "./ChipToggle.vue";
 
 // off by default: several platforms make one post unless asked otherwise
@@ -228,11 +234,17 @@ const EMPTY = {
   caption: "",
   brief: "",
   hashtags: "",
-  writer: "",
-  designer: "",
-  marketer: "",
 };
-const form = reactive({ ...EMPTY, channels: [...EMPTY.channels] });
+const emptyTeam = (): Record<TeamRole, string[]> => ({
+  writer: [],
+  designer: [],
+  marketer: [],
+});
+const form = reactive({
+  ...EMPTY,
+  channels: [...EMPTY.channels],
+  team: emptyTeam(),
+});
 const error = ref("");
 const saving = ref<"" | "next" | "close">("");
 const titleInput = ref();
@@ -245,6 +257,7 @@ watch(open, (isOpen) => {
   error.value = "";
   Object.assign(form, EMPTY, {
     channels: [...EMPTY.channels],
+    team: emptyTeam(),
     customer: props.customer || "",
     date: props.date || "",
   });
@@ -264,7 +277,8 @@ async function loadTeam(customer: string) {
     const team = await call("helpdesk.api.content_board.get_team_defaults", {
       customer,
     });
-    for (const role of TEAM_ROLES) form[role.field] = team[role.field] || "";
+    for (const role of TEAM_ROLES)
+      form.team[role.field] = [...(team.team?.[role.field] || [])];
   } catch {
     // defaults are a convenience; the entry can still be saved without them
   }
@@ -301,10 +315,8 @@ async function save(addNext: boolean) {
         caption: textToHtml(form.caption),
         brief: form.brief,
         hashtags: form.hashtags,
-        writer: form.writer,
-        designer: form.designer,
-        marketer: form.marketer,
       },
+      team: form.team,
     });
     toast.success(
       names.length > 1

@@ -80,7 +80,12 @@ class TestContentBoard(FrappeTestCase):
     def test_team_defaults_come_from_the_latest_post(self):
         self.assertEqual(
             content_board.get_team_defaults(CUSTOMER),
-            {"writer": None, "designer": None, "marketer": None},
+            {
+                "writer": None,
+                "designer": None,
+                "marketer": None,
+                "team": {"writer": [], "designer": [], "marketer": []},
+            },
         )
         make_content_post("Older", CUSTOMER, designer="Administrator")
         make_content_post("Newer", CUSTOMER, writer=WRITER[0])
@@ -88,6 +93,7 @@ class TestContentBoard(FrappeTestCase):
         team = content_board.get_team_defaults(CUSTOMER)
         self.assertEqual(team.writer, WRITER[0])
         self.assertFalse(team.designer)
+        self.assertEqual(team.team["writer"], [WRITER[0]])
 
     def test_postpone_needs_a_reason_and_is_recorded(self):
         due = add_to_date(now_datetime(), hours=-2)
@@ -169,7 +175,9 @@ class TestContentRoleTasks(FrappeTestCase):
         post.writer = WRITER[0]
         post.save()
         self.assertEqual(
-            frappe.db.get_value("Task", self.role_task(post, "writer")[0].name, "project"),
+            frappe.db.get_value(
+                "Task", self.role_task(post, "writer")[0].name, "project"
+            ),
             content.name,
         )
 
@@ -228,6 +236,66 @@ class TestContentRoleTasks(FrappeTestCase):
 
         content_board.assign(post.name, "writer", None)
         self.assertEqual(self.role_task(post, "writer")[0].status, "Cancelled")
+
+    def test_several_people_on_a_role_each_get_a_task(self):
+        second = make_tasky_user(
+            "second.designer@content-smoke.example", "Second Designer"
+        )
+        post = make_content_post(
+            "Festive carousel", CUSTOMER, status="Drafting", publish_on=self.due
+        )
+        content_board.assign(
+            post.name, "designer", users=[self.DESIGNER[0], second, self.DESIGNER[0]]
+        )
+        post.reload()
+        self.assertEqual(post.designer, self.DESIGNER[0])
+        self.assertEqual(post.people("designer"), [self.DESIGNER[0], second])
+        tasks = self.role_task(post, "designer")
+        self.assertEqual(len(tasks), 2)
+        self.assertEqual(
+            {frappe.parse_json(t._assign)[0] for t in tasks}, {self.DESIGNER[0], second}
+        )
+
+        # the board sees both, each with their own task
+        status = content_board.get_team_task_status([post.name])[post.name]["designer"]
+        self.assertEqual([p["user"] for p in status], [self.DESIGNER[0], second])
+        self.assertTrue(all(p.get("task") for p in status))
+
+        # taking the main person off: the other one becomes main, the task is cancelled
+        content_board.assign(post.name, "designer", users=[second])
+        post.reload()
+        self.assertEqual((post.designer, post.extra_team), (second, []))
+        open_tasks = [
+            t for t in self.role_task(post, "designer") if t.status != "Cancelled"
+        ]
+        self.assertEqual(len(open_tasks), 1)
+        self.assertIn(second, open_tasks[0]._assign)
+        self.assertEqual(
+            len(self.role_task(post, "designer")) - len(open_tasks), 1, "one cancelled"
+        )
+
+    def test_extra_people_can_see_the_post(self):
+        from helpdesk.helpdesk.doctype.hd_content_post.hd_content_post import (
+            has_permission,
+        )
+
+        outsider = make_tasky_user("extra.writer@content-smoke.example", "Extra Writer")
+        post = make_content_post(
+            "Team post",
+            CUSTOMER,
+            status="Drafting",
+            publish_on=self.due,
+            writer=WRITER[0],
+        )
+        self.assertFalse(has_permission(post, "read", outsider))
+        content_board.set_team(post.name, {"writer": [WRITER[0], outsider]})
+        post.reload()
+        self.assertIsNone(has_permission(post, "read", outsider))
+        frappe.set_user(outsider)
+        try:
+            self.assertIn(post.name, frappe.get_list("HD Content Post", pluck="name"))
+        finally:
+            frappe.set_user("Administrator")
 
     def test_postpone_moves_the_deadline_and_cancel_closes_tasks(self):
         post = make_content_post(

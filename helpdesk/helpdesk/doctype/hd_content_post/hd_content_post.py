@@ -40,6 +40,7 @@ class HDContentPost(Document):
         self.sync_role_tasks()
 
     def validate(self):
+        self.clean_team()
         self.sync_platforms()
         self.set_customer_from_campaign()
         self.validate_campaign_customer()
@@ -127,40 +128,88 @@ class HDContentPost(Document):
             )
         frappe.msgprint(message.format(self.customer), indicator="orange", alert=True)
 
-    # --- one ERPNext Task per assigned role ---
+    # --- the team: one main person per role, plus anyone in extra_team ---
+
+    def people(self, role: str) -> list[str]:
+        """Everyone on this role, the main person first."""
+        return team_of(self)[role]
+
+    def set_people(self, role: str, users: list[str]):
+        """Put exactly these people on the role; the first becomes the main person."""
+        users = list(dict.fromkeys(u for u in users if u))
+        self.set(role, users[0] if users else None)
+        if not self.meta.has_field("extra_team"):
+            return
+        others = [
+            {"role": r.role, "user": r.user}
+            for r in self.get("extra_team") or []
+            if r.role != role
+        ]
+        self.set("extra_team", others + [{"role": role, "user": u} for u in users[1:]])
+
+    def clean_team(self):
+        """No one twice on a role, and a role's main person is filled whenever anyone is on it."""
+        if not self.meta.has_field("extra_team"):
+            return
+        for role in ROLE_TASKS:
+            self.set_people(role, self.people(role))
+
+    def team_changed(self) -> bool:
+        before = self.get_doc_before_save()
+        return team_of(self) != (team_of(before) if before else empty_team())
+
+    # --- one ERPNext Task per person per role ---
 
     def sync_role_tasks(self):
-        """Keep each role's open task in step with who is assigned, the date and the status."""
+        """Keep each person's open task in step with the team, the date and the status."""
         if not self.role_tasks_enabled():
             return
-        watched = ("publish_on", "status", "title", *ROLE_TASKS)
         hours = self.flags.get("task_hours") or {}
-        if not hours and not any(self.has_value_changed(f) for f in watched):
+        watched = ("publish_on", "status", "title")
+        if (
+            not hours
+            and not self.team_changed()
+            and not any(self.has_value_changed(f) for f in watched)
+        ):
             return
 
         settings = frappe.get_cached_doc("HD Content Settings")
-        open_tasks = {
-            t.content_role: t
-            for t in frappe.get_all(
-                "Task",
-                filters={
-                    "content_post": self.name,
-                    "status": ("not in", DONE_TASK_STATUSES),
-                },
-                fields=["name", "content_role"],
-            )
-        }
+        by_role: dict[str, list] = {}
+        for task in frappe.get_all(
+            "Task",
+            filters={
+                "content_post": self.name,
+                "status": ("not in", DONE_TASK_STATUSES),
+            },
+            fields=["name", "content_role", "_assign"],
+            order_by="creation asc",
+        ):
+            assigned = frappe.parse_json(task._assign or "[]")
+            task.assignee = assigned[0] if assigned else None
+            by_role.setdefault(task.content_role, []).append(task)
+
         for role in ROLE_TASKS:
-            user = self.get(role)
-            task = open_tasks.get(role)
-            if task and (not user or self.status == "Cancelled"):
+            people = [] if self.status == "Cancelled" else self.people(role)
+            kept, spare = {}, []
+            for task in by_role.get(role, []):
+                if task.assignee in people and task.assignee not in kept:
+                    kept[task.assignee] = task
+                else:
+                    spare.append(task)
+            for user in people:
+                if user in kept:
+                    self.update_role_task(kept[user].name, role, user, hours.get(role))
+                elif spare:
+                    # someone was replaced: their open task moves to the new person
+                    self.update_role_task(
+                        spare.pop(0).name, role, user, hours.get(role)
+                    )
+                elif self.status not in CLOSED_STATUSES:
+                    self.create_role_task(
+                        role, user, hours.get(role) or settings.get(f"{role}_hours")
+                    )
+            for task in spare:
                 self.cancel_role_task(task.name)
-            elif user and not task and self.status not in CLOSED_STATUSES:
-                self.create_role_task(
-                    role, user, hours.get(role) or settings.get(f"{role}_hours")
-                )
-            elif user and task:
-                self.update_role_task(task.name, role, user, hours.get(role))
 
     def role_tasks_enabled(self) -> bool:
         # the fields arrive with a migrate; until then assigning just sets the person
@@ -205,7 +254,9 @@ class HDContentPost(Document):
             else None
         )
         if campaign_project:
-            return campaign_project if self.project_covers(campaign_project, due) else None
+            return (
+                campaign_project if self.project_covers(campaign_project, due) else None
+            )
         return self.customer_project(due)
 
     @staticmethod
@@ -386,11 +437,11 @@ def send_due_reminders():
             "owner",
         ],
     )
+    extras = extra_people([p.name for p in posts])
     for post in posts:
+        team = (post.writer, post.designer, post.marketer, post.owner)
         users = {
-            u
-            for u in (post.writer, post.designer, post.marketer, post.owner)
-            if u and u != "Administrator"
+            u for u in (*team, *extras.get(post.name, ())) if u and u != "Administrator"
         }
         if not users:
             continue
@@ -438,10 +489,12 @@ def send_missed_post_alerts():
     )
 
     always = settings.get_alert_recipients()
+    extras = extra_people([p.name for p in posts])
     sent = 0
     for post in posts:
+        team = (post.writer, post.designer, post.marketer)
         recipients = always | (
-            _user_emails((post.writer, post.designer, post.marketer))
+            _user_emails((*team, *extras.get(post.name, ())))
             if settings.notify_post_team
             else set()
         )
@@ -489,6 +542,35 @@ def _send_missed_post_alert(settings, post, recipients: set[str]):
     )
 
 
+def empty_team() -> dict[str, list[str]]:
+    return {role: [] for role in ROLE_TASKS}
+
+
+def team_of(doc) -> dict[str, list[str]]:
+    """Each role's people, the main person first, without repeats."""
+    team = empty_team()
+    for role in ROLE_TASKS:
+        users = [doc.get(role)] + [
+            r.user for r in doc.get("extra_team") or [] if r.role == role
+        ]
+        team[role] = list(dict.fromkeys(u for u in users if u))
+    return team
+
+
+def extra_people(posts: list[str]) -> dict[str, list[str]]:
+    """The extra team members of these posts, by post."""
+    if not posts or not frappe.db.exists("DocType", "HD Content Post Member"):
+        return {}
+    out: dict[str, list[str]] = {}
+    for row in frappe.get_all(
+        "HD Content Post Member",
+        filters={"parenttype": "HD Content Post", "parent": ("in", posts)},
+        fields=["parent", "user"],
+    ):
+        out.setdefault(row.parent, []).append(row.user)
+    return out
+
+
 def _user_emails(users) -> set[str]:
     users = [u for u in users if u and u != "Administrator"]
     if not users:
@@ -532,6 +614,8 @@ def permission_query(user: str | None = None) -> str | None:
     return (
         f"({table}.`writer` = {u} or {table}.`designer` = {u} or {table}.`marketer` = {u} "
         f"or {table}.`owner` = {u} "
+        f"or {table}.`name` in (select `parent` from `tabHD Content Post Member` "
+        f"where `parenttype` = 'HD Content Post' and `user` = {u}) "
         f"or {table}.`customer` in ({_member_customers_sql(user)}))"
     )
 
@@ -542,11 +626,7 @@ def has_permission(
     user = user or frappe.session.user
     if ptype == "create" or _is_content_lead(user):
         return None
-    if user in (
-        doc.writer,
-        doc.designer,
-        doc.marketer,
-        doc.owner,
-    ) or doc.customer in member_customers(user):
+    on_team = any(user in people for people in team_of(doc).values())
+    if on_team or user == doc.owner or doc.customer in member_customers(user):
         return None
     return False

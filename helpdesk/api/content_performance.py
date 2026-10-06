@@ -46,7 +46,7 @@ def period_posts(start, end, customer: str | None = None) -> list[dict]:
             Post.designer,
             Post.marketer,
         )
-        .where(Post.publish_on[f"{start} 00:00:00":f"{end} 23:59:59"])
+        .where(Post.publish_on[f"{start} 00:00:00" : f"{end} 23:59:59"])
         .where(Post.status != "Cancelled")
         .orderby(Post.publish_on)
     )
@@ -93,6 +93,26 @@ def score(timing_: str, changes: int) -> int | None:
     return max(base - CHANGE_PENALTY * changes, 0)
 
 
+def extra_team(posts: list[str]) -> dict[tuple[str, str], list[str]]:
+    """Everyone besides each role's main person, by (post, role)."""
+    if not posts or not frappe.db.exists("DocType", "HD Content Post Member"):
+        return {}
+    out: dict[tuple[str, str], list[str]] = defaultdict(list)
+    for row in frappe.get_all(
+        "HD Content Post Member",
+        filters={"parenttype": "HD Content Post", "parent": ("in", posts)},
+        fields=["parent", "role", "user"],
+        order_by="idx asc",
+    ):
+        out[(row.parent, row.role)].append(row.user)
+    return out
+
+
+def members(post: dict) -> set[str]:
+    """Everyone on the post, whatever their role."""
+    return {u for users in post["team"].values() for u in users}
+
+
 def platforms_of(post) -> list[str]:
     raw = [p.strip() for p in (post.platforms or "").split(",")]
     return [p for p in raw if p] or ([post.channel] if post.channel else [])
@@ -129,6 +149,7 @@ def scored_posts(start, end, customer: str | None = None) -> list[dict]:
     now = now_datetime()
     raw = period_posts(start, end, customer)
     changes = change_requests([p.name for p in raw])
+    extras = extra_team([p.name for p in raw])
     posts = []
     for p in raw:
         t = timing(p, now)
@@ -146,7 +167,14 @@ def scored_posts(start, end, customer: str | None = None) -> list[dict]:
                 "changes": n,
                 "times_postponed": p.times_postponed or 0,
                 "score": score(t, n),
-                "team": {r: p.get(r) for r in ROLES},
+                "team": {
+                    r: list(
+                        dict.fromkeys(
+                            u for u in [p.get(r), *extras.get((p.name, r), [])] if u
+                        )
+                    )
+                    for r in ROLES
+                },
             }
         )
     return posts
@@ -172,7 +200,7 @@ def get_content_performance(
 
     by_user = defaultdict(list)
     for post in posts:
-        for user in {u for u in post["team"].values() if u}:
+        for user in members(post):
             by_user[user].append(post)
 
     team = []
@@ -220,7 +248,7 @@ def get_content_performance(
             "ranked_of": len(team),
             "summary": summarise(mine),
             "posts": [
-                {**p, "roles": [r for r in ROLES if p["team"][r] == person.user_id]}
+                {**p, "roles": [r for r in ROLES if person.user_id in p["team"][r]]}
                 for p in mine
             ],
             "channels": channel_mix(mine),
@@ -271,7 +299,7 @@ def get_customer_performance(
     posts = scored_posts(start, end, for_customer)
     # people who see everyone also see posts nobody is on yet
     if department or not sees_everyone(frappe.session.user):
-        posts = [p for p in posts if set(p["team"].values()) & person_of.keys()]
+        posts = [p for p in posts if members(p) & person_of.keys()]
 
     by_customer = defaultdict(list)
     for post in posts:
@@ -300,7 +328,13 @@ def get_customer_performance(
             "summary": summarise(mine),
             "people": people_on(mine, person_of),
             "posts": [
-                {**p, "team": {r: team_member(p["team"][r], person_of) for r in ROLES}}
+                {
+                    **p,
+                    "team": {
+                        r: [team_member(u, person_of) for u in p["team"][r]]
+                        for r in ROLES
+                    },
+                }
                 for p in mine
             ],
             "channels": channel_mix(mine),
@@ -318,7 +352,7 @@ def get_customer_performance(
 
 
 def contributors(posts: list[dict], person_of: dict) -> set[str]:
-    return {u for p in posts for u in p["team"].values() if u in person_of}
+    return {u for p in posts for u in members(p) if u in person_of}
 
 
 def people_on(posts: list[dict], person_of: dict) -> list[dict]:
@@ -326,16 +360,14 @@ def people_on(posts: list[dict], person_of: dict) -> list[dict]:
     rows = []
     for user in contributors(posts, person_of):
         person = person_of[user]
-        theirs = [p for p in posts if user in p["team"].values()]
+        theirs = [p for p in posts if user in members(p)]
         rows.append(
             {
                 "employee": person.employee,
                 "employee_name": person.employee_name,
                 "image": person.image,
                 "designation": person.designation,
-                "roles": {
-                    r: sum(p["team"][r] == user for p in theirs) for r in ROLES
-                },
+                "roles": {r: sum(user in p["team"][r] for p in theirs) for r in ROLES},
                 **summarise(theirs),
             }
         )
@@ -369,9 +401,7 @@ def format_mix(posts: list[dict]) -> list[dict]:
 def trend(posts: list[dict], start, end) -> dict:
     """Posts due per day (per week for periods over a month), split by how they went."""
     weekly = date_diff(end, start) > 31
-    bucket_of = (
-        (lambda d: add_days(d, -d.weekday())) if weekly else (lambda d: d)
-    )
+    bucket_of = (lambda d: add_days(d, -d.weekday())) if weekly else (lambda d: d)
     buckets = []
     day = bucket_of(start)
     while day <= end:
