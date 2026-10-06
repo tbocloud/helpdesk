@@ -97,6 +97,13 @@ const options = computed(() => {
         fontSize: 12,
         width: 140,
         overflow: "truncate",
+        // the customer open below reads in brand
+        formatter: (name: string) =>
+          props.selected != null &&
+          name === label({ customer: props.selected } as Row)
+            ? `{sel|${name}}`
+            : name,
+        rich: { sel: { color: c.brand, fontWeight: 600, fontSize: 12 } },
       },
       triggerEvent: true,
     }),
