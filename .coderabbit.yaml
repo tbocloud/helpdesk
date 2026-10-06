@@ -38,6 +38,9 @@ reviews:
           option list needs no patch. Check there before claiming a custom field is missing.
         - Only report a blocker when you can name the input that breaks it. Say "verify" instead
           of "blocker" when it depends on code outside the diff.
+        - Features with a spec in docs/ (e.g. docs/tbo-crm-integration.md,
+          docs/ai-customization-pipeline.md) keep it current in the same PR: flag a code change
+          that the matching spec doesn't describe, or a spec section for something removed.
     - path: "helpdesk/**/*.py"
       instructions: |
         - Frappe v15: frappe.desk.form.assign_to.add(args) takes no ignore_permissions; use
@@ -69,10 +72,6 @@ reviews:
         - Features get a page or dialog in the helpdesk app; don't send users to /app desk forms.
         - A Dialog that uses frappe-ui Autocomplete (a popover outside the dialog) breaks Escape
           and outside clicks; prefer Combobox.
-    - path: "docs/**/*.md"
-      instructions: |
-        Specs are the source of truth for their feature: flag a code change in the PR that the
-        matching spec doesn't describe.
 
 knowledge_base:
   code_guidelines:
