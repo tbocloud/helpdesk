@@ -44,6 +44,10 @@ LIST_LIMIT = 300
 WAITING_ON_TASK = "Waiting on Task"
 ON_HOLD = "On Hold"
 PENDING_REVIEW = "Pending Review"
+# the Overview's donut counts each item once, under the first of these it falls in
+URGENCY_ORDER = ("overdue", "at_risk", "due_soon", "key")
+TOP_PROJECTS = 7
+ATTENTION_LIMIT = 8
 
 TASK_FIELDS = [
     "name",
@@ -332,7 +336,11 @@ def get_overview(
     customer: str | None = None,
     assignee: str | None = None,
 ) -> dict:
-    """Overdue, due-soon, key and waiting work across the projects and tickets the user can see."""
+    """Overdue, due-soon, key and waiting work across the projects and tickets the user can see.
+
+    Also the Overview's charts: active work split by urgency, open tasks of the
+    busiest projects, and the items that need attention first.
+    """
     today = getdate(nowdate())
     soon = add_days(today, DUE_SOON_DAYS)
 
@@ -387,7 +395,114 @@ def get_overview(
     return {
         "buckets": buckets,
         "counts": {k: len(v) for k, v in buckets.items()},
+        "active": _urgency_split(items, buckets),
+        "projects": _tasks_by_project(task_filters),
+        "attention": _attention(buckets),
     }
+
+
+def _urgency_split(items: list[dict], buckets: dict) -> dict:
+    """Active work counted once, under its most urgent bucket, so the parts add up to the total."""
+    members = {b: {(i["kind"], i["name"]) for i in buckets[b]} for b in URGENCY_ORDER}
+    split = dict.fromkeys((*URGENCY_ORDER, "other"), 0)
+    for item in items:
+        key = (item["kind"], item["name"])
+        split[next((b for b in URGENCY_ORDER if key in members[b]), "other")] += 1
+    return {"total": len(items), **split}
+
+
+def _tasks_by_project(task_filters: dict) -> list[dict]:
+    """Open tasks per project under the overview's filters, busiest projects first."""
+    filters = {**task_filters}
+    filters.setdefault("project", ("is", "set"))
+    rows = frappe.get_list(
+        "Task",
+        filters=filters,
+        fields=["project", "count(*) as count"],
+        group_by="project",
+        order_by="count desc, project asc",
+        limit_page_length=TOP_PROJECTS,
+    )
+    names = _project_names(rows)
+    return [
+        {
+            "project": r.project,
+            "project_name": names.get(r.project) or r.project,
+            "count": r.count,
+        }
+        for r in rows
+    ]
+
+
+def _attention(buckets: dict) -> list[dict]:
+    """Overdue work first, then work likely to slip; each item once, with its customer's latest summary."""
+    seen = set()
+    items = []
+    for item in buckets["overdue"] + buckets["at_risk"]:
+        key = (item["kind"], item["name"])
+        if key not in seen:
+            seen.add(key)
+            items.append(item)
+    items = items[:ATTENTION_LIMIT]
+
+    projects = list({i["project"] for i in items if i.get("project")})
+    project_customers = (
+        dict(
+            # only projects the user may read add their customer
+            frappe.get_list(
+                "Project",
+                filters={"name": ("in", projects)},
+                fields=["name", "customer"],
+                as_list=True,
+            )
+        )
+        if projects
+        else {}
+    )
+    attention = [
+        {
+            **i,
+            "customer": i.get("customer") or project_customers.get(i.get("project")),
+        }
+        for i in items
+    ]
+    summaries = _latest_summaries({i["customer"] for i in attention if i["customer"]})
+    for item in attention:
+        item["summary"] = summaries.get(item["customer"])
+    return attention
+
+
+def _latest_summaries(customers: set[str]) -> dict:
+    """Each customer's newest work summary that the user may read."""
+    if not customers:
+        return {}
+    latest = frappe.get_list(
+        "HD Work Summary",
+        filters={"customer": ("in", list(customers))},
+        fields=["customer", "max(period_end) as period_end"],
+        group_by="customer",
+        order_by="customer asc",
+    )
+    wanted = {(r.customer, str(r.period_end)) for r in latest if r.period_end}
+    if not wanted:
+        return {}
+    # several summaries can share the newest period; the latest generated wins
+    rows = frappe.get_list(
+        "HD Work Summary",
+        filters={
+            "customer": ("in", list({customer for customer, _end in wanted})),
+            "period_end": ("in", list({end for _customer, end in wanted})),
+        },
+        fields=["name", "customer", "period_end"],
+        order_by="creation desc",
+    )
+    summaries = {}
+    for r in rows:
+        if (r.customer, str(r.period_end)) in wanted:
+            summaries.setdefault(
+                r.customer, {"name": r.name, "period_end": str(r.period_end)}
+            )
+    return summaries
 
 
 @frappe.whitelist()

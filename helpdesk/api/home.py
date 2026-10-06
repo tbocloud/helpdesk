@@ -48,7 +48,7 @@ def _company() -> dict:
     return {
         "tickets": _ticket_summary(),
         "work": overview["counts"],
-        "attention": _attention(overview["buckets"]),
+        "attention": overview["attention"][:LIST_LIMIT],
         "projects": [_project(card) for card in projects[:LIST_LIMIT]],
         "project_count": len(projects),
         "people": [_person(p) for p in portfolio["people"] if not p["is_free"]][
@@ -126,18 +126,6 @@ def _rating() -> dict:
         # ratings are stored as 0-1
         "low": sum(1 for r in ratings if r * 5 <= LOW_RATING_STARS),
     }
-
-
-def _attention(buckets: dict) -> list[dict]:
-    """Overdue work first, then work likely to slip; each item once."""
-    seen = set()
-    items = []
-    for item in buckets["overdue"] + buckets["at_risk"]:
-        key = (item["kind"], item["name"])
-        if key not in seen:
-            seen.add(key)
-            items.append(item)
-    return items[:LIST_LIMIT]
 
 
 def _project_order(card: dict):
