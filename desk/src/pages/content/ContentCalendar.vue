@@ -584,15 +584,19 @@ const hasFilters = computed(
     !!(filters.customer || filters.channel || filters.status || filters.person)
 );
 
-/** Posts the chosen person is on, in any role. */
-function personFilters() {
+/** Posts the chosen person is on, in any role, each listed once. */
+function personQuery() {
   const u = filters.person;
-  if (!u) return undefined;
-  return [
-    ...TEAM_ROLES.map((r) => [r.field, "=", u]),
-    // or one of several people on a role
-    ["HD Content Post Member", "user", "=", u],
-  ];
+  if (!u) return {};
+  return {
+    or_filters: [
+      ...TEAM_ROLES.map((r) => [r.field, "=", u]),
+      // or one of several people on a role
+      ["HD Content Post Member", "user", "=", u],
+    ],
+    // filtering on the member table joins it, which repeats a post once per member
+    group_by: "`tabHD Content Post`.`name`",
+  };
 }
 
 function baseFilters() {
@@ -624,7 +628,7 @@ const posts = createResource({
       ...baseFilters(),
       publish_on: ["between", [range.value!.start, range.value!.end]],
     },
-    or_filters: personFilters(),
+    ...personQuery(),
     order_by: "publish_on asc",
     limit_page_length: 1000,
   }),
@@ -662,7 +666,7 @@ const monthPosts = createResource({
           ],
         ],
       },
-      or_filters: personFilters(),
+      ...personQuery(),
       order_by: "publish_on asc",
       limit_page_length: 1000,
     };
@@ -734,7 +738,7 @@ const undated = createResource({
           : ["!=", "Cancelled"],
       publish_on: ["is", "not set"],
     },
-    or_filters: personFilters(),
+    ...personQuery(),
     order_by: "creation desc",
     limit_page_length: 100,
   }),
