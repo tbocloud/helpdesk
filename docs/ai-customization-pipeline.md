@@ -48,7 +48,7 @@ Ticket ──▶ AI triage ──▶ Estimate ──▶ Customer ──▶ AI bu
    records an email or phone approval).
 4. **Build on staging.** The AI agent makes the change on the customer's staging site:
    configuration through the hub's MCP connection, code through a pull request.
-5. **Checks.** Tests, the shared AI review (tbocloud/ai-review), lint, and running the
+5. **Checks.** Tests, the CodeRabbit review, lint, and running the
    changed report or form on staging data.
 6. **Gate 2a: developer approval** of the diff or configuration.
 7. **Gate 2b: customer acceptance** on staging (portal button).
