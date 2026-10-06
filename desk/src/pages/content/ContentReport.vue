@@ -422,12 +422,18 @@ interface Row {
   planned: number;
   published: number;
   on_time: number;
-  on_time_pct: number;
+  on_time_pct: number | null;
   late: number;
   overdue: number;
   upcoming: number;
   awaiting_client: number;
   avg_approval_hours: number | null;
+  // every timed approval, so totals average over approvals, not over customers
+  approval_count: number;
+  approval_hours: number;
+  // decided on the server, so the page and the downloads always agree
+  health: string;
+  health_key: "nothing-due" | "behind" | "at-risk" | "on-track";
   stages: Record<"planning" | "review" | "ready" | "published", number>;
 }
 
@@ -456,8 +462,8 @@ const segmentLabel = (row: Row) =>
 
 function onTimeTone(row: Row) {
   if (!row.published) return "";
-  if (row.on_time_pct >= 80) return "bg-success-soft text-success";
-  if (row.on_time_pct >= 50) return "bg-warning-soft text-warning";
+  if ((row.on_time_pct ?? 0) >= 80) return "bg-success-soft text-success";
+  if ((row.on_time_pct ?? 0) >= 50) return "bg-warning-soft text-warning";
   return "bg-danger-soft text-danger";
 }
 
@@ -490,7 +496,7 @@ const NUMERIC: {
   {
     key: "on_time_pct",
     label: __("On time"),
-    format: (r) => (r.published ? `${Math.round(r.on_time_pct)}%` : "—"),
+    format: (r) => (r.published ? `${r.on_time_pct ?? 0}%` : "—"),
     tone: onTimeTone,
   },
   {
@@ -513,31 +519,27 @@ const NUMERIC: {
   },
 ];
 
-function health(row: Row) {
-  const due = row.planned - (row.upcoming ?? 0);
-  if (!due)
-    return {
-      label: __("Nothing due yet"),
-      classes: "bg-surface-gray-2 text-ink-gray-6",
-      icon: LucideHourglass,
-    };
-  if (row.overdue / due >= 0.5)
-    return {
-      label: __("Behind"),
-      classes: "bg-danger-soft text-danger",
-      icon: LucideCircleAlert,
-    };
-  if (row.overdue || row.on_time_pct < 80)
-    return {
-      label: __("At risk"),
-      classes: "bg-warning-soft text-warning",
-      icon: LucideTriangleAlert,
-    };
-  return {
-    label: __("On track"),
+const HEALTH_STYLE: Record<
+  Row["health_key"],
+  { classes: string; icon: unknown }
+> = {
+  "nothing-due": {
+    classes: "bg-surface-gray-2 text-ink-gray-6",
+    icon: LucideHourglass,
+  },
+  behind: { classes: "bg-danger-soft text-danger", icon: LucideCircleAlert },
+  "at-risk": {
+    classes: "bg-warning-soft text-warning",
+    icon: LucideTriangleAlert,
+  },
+  "on-track": {
     classes: "bg-success-soft text-success",
     icon: LucideCircleCheck,
-  };
+  },
+};
+
+function health(row: Row) {
+  return { label: row.health, ...HEALTH_STYLE[row.health_key] };
 }
 
 const filters = reactive({
@@ -620,17 +622,12 @@ const segments = computed<Record<Timing, number>>(() => ({
   Upcoming: total.value.upcoming,
 }));
 
-// approval time weighted by each customer's posts, not a plain average of averages
+// the average over every timed approval, as in the downloads
 const avgApproval = computed(() => {
-  const timed = rows.value.filter((r) => r.avg_approval_hours != null);
-  const weight = timed.reduce((n, r) => n + r.planned, 0);
-  if (!weight) return null;
-  const hours =
-    timed.reduce(
-      (n, r) => n + (r.avg_approval_hours as number) * r.planned,
-      0
-    ) / weight;
-  return Math.round(hours * 10) / 10;
+  const count = rows.value.reduce((n, r) => n + (r.approval_count || 0), 0);
+  if (!count) return null;
+  const hours = rows.value.reduce((n, r) => n + (r.approval_hours || 0), 0);
+  return Math.round((hours / count) * 10) / 10;
 });
 
 const kpis = computed(() => [

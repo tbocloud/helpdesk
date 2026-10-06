@@ -330,8 +330,9 @@ class HDContentPost(Document):
             )
 
     def validate_publish_on(self):
-        if self.status not in ("Idea", "Cancelled") and not self.publish_on:
-            frappe.throw(_("Set a Publish On date before moving the post past Idea"))
+        # a post without a date has no slot on the calendar, so nobody would see it
+        if self.status != "Cancelled" and not self.publish_on:
+            frappe.throw(_("Set the posting date and time"))
 
     def validate_published(self):
         if self.status == "Published" and not self.published_url:

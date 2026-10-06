@@ -149,13 +149,21 @@ def import_items(customers: dict[str, str], summary: dict, dry_run: bool):
             summary["skipped"].append(f"{item.name}: calendar {item.parent} not found")
             continue
         for channel in item_channels(item.platforms, summary):
-            if import_item(item, calendar, customers[calendar.client], channel):
+            result = import_item(item, calendar, customers[calendar.client], channel)
+            if result == "imported":
                 summary["posts"] += 1
+            elif result == "no-date":
+                summary["skipped"].append(f"{item.name} ({channel}): no posting date")
             else:
                 summary["skipped"].append(f"{item.name} ({channel}): already imported")
 
 
-def import_item(item, calendar, customer: str, channel: str) -> bool:
+def import_item(item, calendar, customer: str, channel: str) -> str:
+    """Import one item for one channel: "imported", "duplicate" or "no-date".
+
+    A post needs a posting date to have a slot on the calendar; an undated item
+    is reported instead of becoming a post nobody would find.
+    """
     title = (item.campaign_name or "Untitled").strip()
     publish_on = item_publish_on(item)
     if frappe.db.exists(
@@ -167,11 +175,11 @@ def import_item(item, calendar, customer: str, channel: str) -> bool:
             "publish_on": publish_on,
         },
     ):
-        return False
+        return "duplicate"
 
     status = item_status(item, calendar)
     if not publish_on and status != "Cancelled":
-        status = "Idea"
+        return "no-date"
     post = frappe.get_doc(
         {
             "doctype": "HD Content Post",
@@ -214,7 +222,7 @@ def import_item(item, calendar, customer: str, channel: str) -> bool:
     if brief:
         note += f"<br><br><b>Brief:</b> {escape_html(brief)}"
     post.add_comment("Info", note)
-    return True
+    return "imported"
 
 
 def item_channels(platforms: str | None, summary: dict) -> list[str]:

@@ -68,6 +68,27 @@
           :aria-label="__('Status')"
         />
       </div>
+      <div class="w-full sm:w-56">
+        <Link
+          v-model="filters.person"
+          doctype="User"
+          :filters="{ enabled: 1, user_type: 'System User' }"
+          :placeholder="__('Everyone')"
+          :aria-label="__('Person')"
+        />
+      </div>
+      <Button
+        :variant="filters.person === auth.userId ? 'subtle' : 'ghost'"
+        :label="__('My posts')"
+        :title="__('Posts where I am the writer, designer or marketer')"
+        @click="
+          filters.person = filters.person === auth.userId ? '' : auth.userId
+        "
+      >
+        <template #prefix
+          ><LucideUser class="size-4" aria-hidden="true"
+        /></template>
+      </Button>
       <Button
         v-if="hasFilters"
         variant="ghost"
@@ -257,6 +278,50 @@
             </span>
           </button>
         </div>
+        <!-- posts saved before a date was required have no slot, so list them here -->
+        <div
+          v-if="undated.data?.length"
+          class="flex flex-col gap-2 rounded-lg border border-outline-gray-2 bg-surface-gray-1 px-4 py-2.5"
+          role="status"
+        >
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <p class="text-sm text-ink-gray-7">
+              <LucideCalendarX
+                class="mr-1 inline size-4 align-text-bottom text-ink-gray-5"
+                aria-hidden="true"
+              />
+              {{
+                undated.data.length === 1
+                  ? __(
+                      "1 post has no posting date, so it isn't on the calendar."
+                    )
+                  : __(
+                      "{0} posts have no posting date, so they aren't on the calendar.",
+                      String(undated.data.length)
+                    )
+              }}
+            </p>
+            <Button
+              size="sm"
+              variant="ghost"
+              :label="showUndated ? __('Hide') : __('Show them')"
+              @click="showUndated = !showUndated"
+            />
+          </div>
+          <ul v-if="showUndated" class="flex flex-wrap gap-1.5">
+            <li v-for="p in undated.data" :key="p.name">
+              <button
+                type="button"
+                class="rounded-md border border-outline-gray-2 bg-surface-base px-2 py-1 text-left text-sm text-ink-gray-8 hover:bg-surface-gray-2"
+                :title="__('Open it and set a posting date')"
+                @click="openPost(p.name)"
+              >
+                {{ p.title }}
+                <span class="text-xs text-ink-gray-5">· {{ p.customer }}</span>
+              </button>
+            </li>
+          </ul>
+        </div>
         <div
           v-if="(view === 'calendar' ? posts : monthPosts).error"
           class="absolute inset-x-4 top-4 z-10 flex items-center justify-between gap-3 rounded-lg bg-danger-soft px-4 py-2.5 text-sm text-danger"
@@ -297,46 +362,6 @@
           @range-change="onRangeChange"
         />
       </div>
-
-      <aside
-        class="hidden w-72 shrink-0 flex-col border-l border-outline-gray-2 xl:flex"
-        :aria-label="__('Ideas without a date')"
-      >
-        <div class="flex items-center justify-between px-4 pb-2 pt-4">
-          <div
-            class="text-2xs font-semibold uppercase tracking-[0.06em] text-ink-gray-5"
-          >
-            {{ __("Ideas") }}
-          </div>
-          <span class="font-mono text-xs tabular-nums text-ink-gray-5">{{
-            ideas.data?.length ?? 0
-          }}</span>
-        </div>
-        <div class="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
-          <p
-            v-if="!ideas.loading && !ideas.data?.length"
-            class="px-2 py-6 text-p-sm text-ink-gray-5"
-          >
-            {{
-              __("No undated ideas. Use Add entry and leave the date empty.")
-            }}
-          </p>
-          <button
-            v-for="idea in ideas.data ?? []"
-            :key="idea.name"
-            type="button"
-            class="flex w-full flex-col gap-0.5 rounded-lg px-2 py-2 text-left hover:bg-surface-gray-2 focus-visible:bg-surface-gray-2"
-            @click="openPost(idea.name)"
-          >
-            <span class="truncate text-sm text-ink-gray-9">{{
-              idea.title
-            }}</span>
-            <span class="truncate text-xs text-ink-gray-5"
-              >{{ platformsOf(idea).join(", ") }} · {{ idea.customer }}</span
-            >
-          </button>
-        </div>
-      </aside>
     </div>
 
     <PostDialog
@@ -388,6 +413,8 @@ import LucideMail from "~icons/lucide/mail";
 import LucideSheet from "~icons/lucide/sheet";
 import LucideCalendarSync from "~icons/lucide/calendar-sync";
 import LucideSparkles from "~icons/lucide/sparkles";
+import LucideCalendarX from "~icons/lucide/calendar-x";
+import LucideUser from "~icons/lucide/user";
 import { useAuthStore } from "@/stores/auth";
 import {
   CHANNELS,
@@ -398,6 +425,7 @@ import {
   platformsOf,
   stageColor,
   STATUSES,
+  TEAM_ROLES,
   type TeamRole,
 } from "./constants";
 import AddEntryDialog from "./components/AddEntryDialog.vue";
@@ -549,11 +577,19 @@ function shiftPeriod(by: number) {
     .format("YYYY-MM-DD");
 }
 
-const filters = reactive({ customer: "", channel: "", status: "" });
+const filters = reactive({ customer: "", channel: "", status: "", person: "" });
 const range = ref<{ start: string; end: string } | null>(null);
 const hasFilters = computed(
-  () => !!(filters.customer || filters.channel || filters.status)
+  () =>
+    !!(filters.customer || filters.channel || filters.status || filters.person)
 );
+
+/** Posts the chosen person is on, in any role. */
+function personFilters() {
+  const u = filters.person;
+  if (!u) return undefined;
+  return TEAM_ROLES.map((r) => [r.field, "=", u]);
+}
 
 function baseFilters() {
   const f: Record<string, unknown> = {};
@@ -584,6 +620,7 @@ const posts = createResource({
       ...baseFilters(),
       publish_on: ["between", [range.value!.start, range.value!.end]],
     },
+    or_filters: personFilters(),
     order_by: "publish_on asc",
     limit_page_length: 1000,
   }),
@@ -620,6 +657,7 @@ const monthPosts = createResource({
           ],
         ],
       },
+      or_filters: personFilters(),
       order_by: "publish_on asc",
       limit_page_length: 1000,
     };
@@ -644,18 +682,6 @@ const occasionsInRange = computed<ContentOccasion[]>(() =>
       !dayjs(o.date).isAfter(rangeEnd.value, "day")
   )
 );
-
-const ideas = createResource({
-  url: "frappe.client.get_list",
-  makeParams: () => ({
-    doctype: "HD Content Post",
-    fields: FIELDS,
-    filters: { ...baseFilters(), publish_on: ["is", "not set"] },
-    order_by: "creation desc",
-    limit_page_length: 200,
-  }),
-  auto: true,
-});
 
 const events = computed(() =>
   (posts.data ?? []).map((p: ContentPost) => {
@@ -687,21 +713,43 @@ function onRangeChange({
   posts.reload();
 }
 
+// posts saved before a posting date was required; opening one asks for a date
+const showUndated = ref(false);
+const undated = createResource({
+  url: "frappe.client.get_list",
+  makeParams: () => ({
+    doctype: "HD Content Post",
+    fields: ["name", "title", "customer"],
+    filters: {
+      ...baseFilters(),
+      // a cancelled post needs no date, so it never needs fixing
+      status:
+        filters.status && filters.status !== "Cancelled"
+          ? filters.status
+          : ["!=", "Cancelled"],
+      publish_on: ["is", "not set"],
+    },
+    or_filters: personFilters(),
+    order_by: "creation desc",
+    limit_page_length: 100,
+  }),
+});
+
 function refresh() {
+  undated.reload();
   if (view.value === "calendar") {
     if (range.value) posts.reload();
   } else {
     monthPosts.reload();
     occasions.reload();
   }
-  ideas.reload();
 }
 
 watch(filters, refresh);
 watch([view, fetchKey], refresh, { immediate: true });
 
 function clearFilters() {
-  Object.assign(filters, { customer: "", channel: "", status: "" });
+  Object.assign(filters, { customer: "", channel: "", status: "", person: "" });
 }
 
 // Dragging a post to another day or time reschedules it; roll back if the server refuses

@@ -68,9 +68,13 @@ class TestContentBoard(FrappeTestCase):
     def test_needs_a_platform_and_valid_post(self):
         with self.assertRaises(frappe.ValidationError):
             content_board.add_entries(self.entry(), [])
-        # later stages need a date; none of the posts may be created
-        with self.assertRaises(frappe.ValidationError):
-            content_board.add_entries(self.entry(publish_on=None), ["Instagram"])
+        # every new entry needs its posting date and time, even an idea
+        for status in ("Drafting", "Idea"):
+            with self.assertRaises(frappe.ValidationError):
+                content_board.add_entries(
+                    self.entry(publish_on=None, status=status), ["Instagram"]
+                )
+        self.assertFalse(frappe.db.exists("HD Content Post", {"title": "Diwali offer"}))
 
     def test_team_defaults_come_from_the_latest_post(self):
         self.assertEqual(

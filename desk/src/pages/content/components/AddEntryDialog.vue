@@ -36,18 +36,16 @@
           <FormControl
             v-model="form.date"
             type="date"
-            :label="__('Posting date')"
-            :description="
-              form.date ? '' : __('Leave empty to keep it as an idea')
-            "
+            :label="__('Posting date') + ' *'"
+            required
           />
           <FormControl
             v-model="form.time"
             type="time"
             format="h:mm A"
             :interval="5"
-            :label="__('Posting time')"
-            :disabled="!form.date"
+            :label="__('Posting time') + ' *'"
+            required
           />
         </div>
 
@@ -306,6 +304,8 @@ function toggleChannel(channel: string) {
 async function save(addNext: boolean) {
   error.value = "";
   if (!form.customer) return (error.value = __("Select a customer"));
+  if (!form.date) return (error.value = __("Pick the posting date"));
+  if (!form.time) return (error.value = __("Pick the posting time"));
   if (!form.title.trim())
     return (error.value = __("Name the campaign or topic"));
   if (!form.channels.length)
@@ -321,10 +321,8 @@ async function save(addNext: boolean) {
         campaign: form.campaign,
         title: form.title.trim(),
         format: form.format,
-        status: form.date ? "Drafting" : "Idea",
-        publish_on: form.date
-          ? `${form.date} ${form.time || "10:00"}:00`
-          : null,
+        status: "Drafting",
+        publish_on: `${form.date} ${form.time}:00`,
         caption: textToHtml(form.caption),
         brief: form.brief,
         hashtags: form.hashtags,

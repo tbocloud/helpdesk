@@ -11,7 +11,7 @@
       body {
         font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
         color: #1f2430;
-        font-size: 11px;
+        font-size: 10px;
         margin: 0;
       }
       h1 {
@@ -31,11 +31,11 @@
         font-weight: 600;
         color: #5d6472;
         border-bottom: 1.5px solid #c9cdd6;
-        padding: 6px 8px;
+        padding: 5px 6px;
       }
       td {
         border-bottom: 1px solid #e4e6eb;
-        padding: 6px 8px;
+        padding: 5px 6px;
       }
       th.num,
       td.num {
@@ -46,6 +46,26 @@
         font-weight: 600;
         border-top: 1.5px solid #c9cdd6;
         border-bottom: none;
+      }
+      .summary {
+        margin: 0 0 14px;
+        padding-left: 16px;
+        color: #1f2430;
+      }
+      .summary li {
+        margin: 2px 0;
+      }
+      td.health-behind {
+        color: #bf3328;
+        font-weight: 600;
+      }
+      td.health-at-risk {
+        color: #955700;
+        font-weight: 600;
+      }
+      td.health-on-track {
+        color: #1c7547;
+        font-weight: 600;
       }
       .empty {
         color: #5d6472;
@@ -68,20 +88,30 @@
     <p class="meta">
       {{ period|e }}{% if customer %} · {{ customer|e }}{% endif %}
     </p>
-    {% if rows %}
+    {% if summary %}
+    <ul class="summary">
+      {% for line in summary %}
+      <li>{{ line|e }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %} {% if rows %}
     <table>
       <thead>
         <tr>
           {% for c in columns %}
-          <th class="{{ 'num' if c.fieldtype != 'Link' }}">{{ c.label|e }}</th>
+          <th class="{{ 'num' if c.fieldtype not in ('Link', 'Data') }}">
+            {{ c.label|e }}
+          </th>
           {% endfor %}
         </tr>
       </thead>
       <tbody>
-        {% for row in rows %}
+        {% for row in rows %}{% set health_key = health_keys[loop.index0] %}
         <tr>
           {% for c in columns %}
-          <td class="{{ 'num' if c.fieldtype != 'Link' }}">
+          <td
+            class="{{ 'num' if c.fieldtype not in ('Link', 'Data') }}{{ (' health-' ~ health_key) if c.fieldname == 'health' }}"
+          >
             {{ (row[loop.index0] if row[loop.index0] is not none else "—")|e }}
           </td>
           {% endfor %}
@@ -89,7 +119,7 @@
         {% endfor %}
         <tr class="total">
           {% for value in total %}
-          <td class="{{ 'num' if not loop.first }}">
+          <td class="{{ 'num' if loop.index0 > 1 }}">
             {{ (value if value is not none else "—")|e }}
           </td>
           {% endfor %}

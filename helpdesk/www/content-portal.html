@@ -337,24 +337,121 @@ _("Content Calendar") }}{% endblock %} {% block style %}
     color: var(--brand-ink);
     overflow-wrap: anywhere;
   }
+  /* previews at a normal size, never cropped; View full size opens the original */
   .images {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 10px;
     margin-top: 12px;
   }
-  .images a {
-    display: block;
-    border-radius: 8px;
-    overflow: hidden;
-    border: 1px solid var(--border);
+  .shot {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 180px;
   }
-  .images img {
-    display: block;
-    width: 112px;
-    height: 112px;
-    object-fit: cover;
+  .shot-img {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 180px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
     background: var(--surface-2);
+    cursor: zoom-in;
+  }
+  .shot-img img {
+    display: block;
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+  }
+  .shot .btn {
+    justify-content: center;
+  }
+
+  /* full-screen viewer */
+  dialog.viewer {
+    width: 100vw;
+    max-width: 100vw;
+    height: 100vh;
+    max-height: 100vh;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: oklch(0.12 0 0);
+    color: #fff;
+    box-shadow: none;
+  }
+  dialog.viewer::backdrop {
+    background: oklch(0 0 0 / 0.8);
+  }
+  .viewer-body {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+  .viewer-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+  }
+  .viewer-bar .grow {
+    font-size: 13px;
+    opacity: 0.85;
+  }
+  .viewer-bar a,
+  .viewer-bar button {
+    color: #fff;
+    background: oklch(1 0 0 / 0.12);
+    border: 0;
+  }
+  .viewer-bar a:hover,
+  .viewer-bar button:hover {
+    background: oklch(1 0 0 / 0.22);
+  }
+  .viewer-stage {
+    position: relative;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 0;
+    padding: 0 56px 20px;
+  }
+  .viewer-stage img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+  }
+  .viewer-nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 40px;
+    height: 40px;
+    border-radius: 999px;
+    border: 0;
+    background: oklch(1 0 0 / 0.14);
+    color: #fff;
+    font-size: 20px;
+    cursor: pointer;
+  }
+  .viewer-nav:hover {
+    background: oklch(1 0 0 / 0.26);
+  }
+  .viewer-nav.prev {
+    left: 10px;
+  }
+  .viewer-nav.next {
+    right: 10px;
+  }
+  .viewer-nav[hidden] {
+    display: none;
   }
   .note {
     margin-top: 12px;
@@ -498,6 +595,37 @@ _("Content Calendar") }}{% endblock %} {% block style %}
   </form>
 </dialog>
 
+<dialog id="dlg-image" class="viewer" aria-label="{{ _('Image') }}">
+  <div class="viewer-body">
+    <div class="viewer-bar">
+      <span class="grow" id="viewer-caption"></span>
+      <a class="btn sm" id="viewer-original" target="_blank" rel="noopener"
+        >{{ _("Open original") }}</a
+      >
+      <button type="button" class="btn sm" data-close>{{ _("Close") }}</button>
+    </div>
+    <div class="viewer-stage">
+      <button
+        type="button"
+        class="viewer-nav prev"
+        id="viewer-prev"
+        aria-label="{{ _('Previous image') }}"
+      >
+        ‹
+      </button>
+      <img id="viewer-img" alt="" />
+      <button
+        type="button"
+        class="viewer-nav next"
+        id="viewer-next"
+        aria-label="{{ _('Next image') }}"
+      >
+        ›
+      </button>
+    </div>
+  </div>
+</dialog>
+
 <div class="toast" id="toast" role="status"></div>
 {% endblock %} {% block script %}
 <script id="portal-data" type="application/json">
@@ -512,6 +640,7 @@ _("Content Calendar") }}{% endblock %} {% block style %}
       const ICONS = {
         clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
         check: '<path d="M20 6 9 17l-5-5"/>',
+        expand: '<path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="m21 3-7 7"/><path d="m3 21 7-7"/>',
         pencil: '<path d="M21.2 6.8a2.8 2.8 0 0 0-4-4L3.8 16.2 2.5 21.5l5.3-1.3Z"/>',
         calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
         send: '<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>',
@@ -808,9 +937,12 @@ _("Content Calendar") }}{% endblock %} {% block style %}
         const s = STATUS[p.status] || { label: p.status, tone: "info", icon: "clock" };
         const awaiting = p.status === "Client Review";
         const images = (p.images || []).map((f, i) => `
-          <a href="${imageUrl(p.name, f)}" target="_blank" rel="noopener">
-            <img src="${imageUrl(p.name, f)}" loading="lazy" alt="${esc(p.title)} {{ _('image') }} ${i + 1}">
-          </a>`).join("");
+          <div class="shot">
+            <button type="button" class="shot-img" data-view="${esc(p.name)}" data-index="${i}" aria-label="{{ _('View full size') }}: ${esc(p.title)} ${i + 1}">
+              <img src="${imageUrl(p.name, f)}" loading="lazy" alt="${esc(p.title)} {{ _('image') }} ${i + 1}">
+            </button>
+            <button type="button" class="btn sm" data-view="${esc(p.name)}" data-index="${i}">${icon("expand")} {{ _("View full size") }}</button>
+          </div>`).join("");
         return `
           <article class="card post" aria-labelledby="t-${esc(p.name)}">
             <div class="post-hd">
@@ -834,6 +966,42 @@ _("Content Calendar") }}{% endblock %} {% block style %}
             </div>
           </article>`;
       }
+
+      // full-size viewer: the original file, one image at a time
+      const viewer = { post: null, index: 0 };
+      function showImage() {
+        const files = viewer.post.images;
+        const url = imageUrl(viewer.post.name, files[viewer.index]);
+        const img = document.getElementById("viewer-img");
+        img.src = url;
+        img.alt = `${viewer.post.title} {{ _('image') }} ${viewer.index + 1}`;
+        document.getElementById("viewer-original").href = url;
+        document.getElementById("viewer-caption").textContent =
+          files.length > 1 ? `${viewer.post.title} · ${viewer.index + 1} / ${files.length}` : viewer.post.title;
+        document.getElementById("viewer-prev").hidden = files.length < 2;
+        document.getElementById("viewer-next").hidden = files.length < 2;
+      }
+      function stepImage(by) {
+        const n = viewer.post.images.length;
+        viewer.index = (viewer.index + by + n) % n;
+        showImage();
+      }
+      function openViewer(post, index) {
+        viewer.post = post;
+        viewer.index = index;
+        showImage();
+        document.getElementById("dlg-image").showModal();
+      }
+      document.getElementById("viewer-prev").addEventListener("click", () => stepImage(-1));
+      document.getElementById("viewer-next").addEventListener("click", () => stepImage(1));
+      document.getElementById("dlg-image").addEventListener("keydown", (e) => {
+        if (e.key === "ArrowLeft") stepImage(-1);
+        if (e.key === "ArrowRight") stepImage(1);
+      });
+      // a click on the dark area around the picture closes it
+      document.getElementById("dlg-image").addEventListener("click", (e) => {
+        if (e.target.classList.contains("viewer-stage")) e.currentTarget.close();
+      });
 
       // selection changes only touch the bulk bar, so keyboard focus stays where it was
       function updateBulk() {
@@ -880,6 +1048,10 @@ _("Content Calendar") }}{% endblock %} {% block style %}
           }
           render();
         });
+        app.querySelectorAll("[data-view]").forEach((b) => b.addEventListener("click", () => {
+          const post = posts.find((x) => x.name === b.dataset.view);
+          if (post) openViewer(post, +b.dataset.index);
+        }));
         app.querySelectorAll("[data-filter]").forEach((b) => b.addEventListener("click", () => { filter = b.dataset.filter; render(); }));
         app.querySelectorAll("[data-select]").forEach((c) => c.addEventListener("change", () => {
           c.checked ? selected.add(c.dataset.select) : selected.delete(c.dataset.select);
