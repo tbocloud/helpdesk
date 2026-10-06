@@ -3,6 +3,7 @@ from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_days, add_to_date, getdate, now_datetime
 
 from helpdesk.content_team import CONTENT_TEAM_ROLE, ensure_role, is_content_only
+from helpdesk.helpdesk.doctype.hd_content_post.hd_content_post import TASK_ROLES
 from helpdesk.helpdesk.doctype.hd_ticket.hd_ticket import permission_query
 from helpdesk.test_utils import (
     create_customer,
@@ -224,6 +225,104 @@ class TestSeveralPeopleAndVideoEditor(ContentTaskCase):
         editor_task.save(ignore_permissions=True)
         post.reload()
         self.assertEqual(post.status, "Internal Review")
+
+    def in_design_with_the_designer_done(self):
+        post = self.post(video_editor=EDITOR[0])
+        tasks = self.tasks(post)
+        post.db_set("status", "Design")
+        designer_task = frappe.get_doc("Task", tasks["Designer"].name)
+        designer_task.status = "Completed"
+        designer_task.save(ignore_permissions=True)
+        post.reload()
+        self.assertEqual(post.status, "Design")
+        return post, tasks
+
+    def test_cancelling_the_last_open_design_part_ends_design(self):
+        post, tasks = self.in_design_with_the_designer_done()
+
+        editor_task = frappe.get_doc("Task", tasks["Video Editor"].name)
+        editor_task.status = "Cancelled"
+        editor_task.save(ignore_permissions=True)
+
+        post.reload()
+        self.assertEqual(post.status, "Internal Review")
+
+    def test_taking_the_video_editor_off_ends_design(self):
+        post, tasks = self.in_design_with_the_designer_done()
+
+        post.set_people("video_editor", [])
+        post.save(ignore_permissions=True)
+
+        self.assertEqual(
+            frappe.db.get_value("Task", tasks["Video Editor"].name, "status"),
+            "Cancelled",
+        )
+        post.reload()
+        self.assertEqual(post.status, "Internal Review")
+
+    def test_cancelling_a_design_part_never_skips_drafting(self):
+        post = self.post(video_editor=EDITOR[0])
+        tasks = self.tasks(post)
+        post.db_set("status", "Drafting")
+        designer_task = frappe.get_doc("Task", tasks["Designer"].name)
+        designer_task.status = "Completed"
+        designer_task.save(ignore_permissions=True)
+
+        editor_task = frappe.get_doc("Task", tasks["Video Editor"].name)
+        editor_task.status = "Cancelled"
+        editor_task.save(ignore_permissions=True)
+
+        post.reload()
+        self.assertEqual(post.status, "Drafting")
+
+    def test_design_nobody_did_does_not_end_design(self):
+        post = self.post(video_editor=EDITOR[0])
+        tasks = self.tasks(post)
+        post.db_set("status", "Design")
+        for role in ("Designer", "Video Editor"):
+            task = frappe.get_doc("Task", tasks[role].name)
+            task.status = "Cancelled"
+            task.save(ignore_permissions=True)
+
+        post.reload()
+        self.assertEqual(post.status, "Design")
+
+    def test_person_filter_lists_each_post_once(self):
+        from frappe.client import get_list
+
+        post = self.post()
+        post.set_people("writer", [WRITER[0], OTHER[0]])
+        post.set_people("designer", [DESIGNER[0], OTHER[0]])
+        post.save(ignore_permissions=True)
+
+        # the same query the calendar's person filter and "My posts" send
+        or_filters = [
+            *([role, "=", OTHER[0]] for role in TASK_ROLES),
+            ["HD Content Post Member", "user", "=", OTHER[0]],
+        ]
+        names = get_list(
+            "HD Content Post",
+            fields=["name", "title", "publish_on"],
+            filters={"customer": CUSTOMER},
+            or_filters=or_filters,
+            group_by="`tabHD Content Post`.`name`",
+            order_by="publish_on asc",
+            limit_page_length=1000,
+        )
+        self.assertEqual([p["name"] for p in names], [post.name])
+
+    def test_board_follows_the_task_mode(self):
+        from helpdesk.api import content_board
+
+        post = self.post()
+        post.task_mode = "One task for the post"
+        post.save(ignore_permissions=True)
+
+        shared = self.tasks(post)["All"].name
+        status = content_board.get_team_task_status([post.name])[post.name]
+        # the per-role tasks the switch cancelled no longer stand for the role
+        self.assertEqual(status["designer"][0]["task"], shared)
+        self.assertEqual(status["designer"][0]["status"], "Open")
 
     def test_one_task_for_the_post_includes_everyone(self):
         post = self.post(task_mode="One task for the post", video_editor=EDITOR[0])

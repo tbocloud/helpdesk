@@ -1,6 +1,8 @@
 <template>
   <div class="flex flex-col gap-1.5">
-    <span v-if="label" class="text-xs text-ink-gray-5">{{ label }}</span>
+    <label v-if="label" :for="inputId" class="text-xs text-ink-gray-5">{{
+      label
+    }}</label>
     <ul
       v-if="modelValue.length"
       class="flex flex-wrap gap-1.5"
@@ -34,9 +36,26 @@
       :key="adds"
       doctype="User"
       :filters="{ enabled: 1, user_type: 'System User' }"
-      :placeholder="modelValue.length ? __('Add another person') : placeholder"
       @update:model-value="add"
-    />
+    >
+      <!-- our own trigger, so the role's label can name it -->
+      <template #target="{ togglePopover }">
+        <button
+          :id="inputId"
+          type="button"
+          class="flex h-7 w-full items-center justify-between gap-2 rounded border border-outline-gray-1 bg-surface-gray-2 px-2 text-base text-ink-gray-4 transition-colors hover:bg-surface-gray-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-3"
+          @click="togglePopover()"
+        >
+          <span class="truncate">{{
+            modelValue.length ? __("Add another person") : placeholder
+          }}</span>
+          <LucideChevronDown
+            class="size-4 shrink-0 text-ink-gray-5"
+            aria-hidden="true"
+          />
+        </button>
+      </template>
+    </Link>
   </div>
 </template>
 
@@ -44,7 +63,8 @@
 import { Link } from "@/components";
 import { __ } from "@/translation";
 import { Avatar, call } from "frappe-ui";
-import { reactive, ref, watch } from "vue";
+import { reactive, ref, useId, watch } from "vue";
+import LucideChevronDown from "~icons/lucide/chevron-down";
 import LucideX from "~icons/lucide/x";
 
 const props = withDefaults(
@@ -54,6 +74,7 @@ const props = withDefaults(
 const emit = defineEmits<{ (e: "update:modelValue", value: string[]): void }>();
 
 const adds = ref(0);
+const inputId = useId();
 
 function add(user: string) {
   if (!user) return;

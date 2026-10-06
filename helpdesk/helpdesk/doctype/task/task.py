@@ -34,13 +34,23 @@ class Task(Document):
 
     def advance_content_post(self):
         """Finishing a content task moves its post to the next stage."""
+        from helpdesk.helpdesk.doctype.hd_content_post.hd_content_post import (
+            DESIGN_ROLES,
+        )
+
         if not self.get("content_post") or self.flags.from_content_post:
             return
-        if self.status != "Completed" or not self.status_changed():
+        if self.status not in DONE or not self.status_changed():
+            return
+        # cancelling a design part can leave the rest of the stage done
+        if self.status == "Cancelled" and self.content_role not in DESIGN_ROLES:
             return
         if not frappe.db.exists("HD Content Post", self.content_post):
             return
         post = frappe.get_doc("HD Content Post", self.content_post)
+        # a cancelled part only ends a design stage already under way, never skips one
+        if self.status == "Cancelled" and post.status != "Design":
+            return
         post.advance_after_task(self.content_role)
 
     def set_completed_on(self):

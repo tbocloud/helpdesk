@@ -65,11 +65,16 @@
         />
 
         <template v-if="action === 'assign'">
+          <!-- picks made before everyone on the role loads would be overwritten -->
           <PeoplePicker
+            v-if="teamLoaded"
             v-model="people"
             :label="__(roleLabel)"
             :placeholder="__('Pick one or more people')"
           />
+          <p v-else-if="!error" class="text-p-sm text-ink-gray-5">
+            {{ __("Loading who is on this role…") }}
+          </p>
           <p class="text-p-sm text-ink-gray-5">
             {{
               __(
@@ -91,6 +96,7 @@
           type="submit"
           form="entry-action-form"
           :loading="saving"
+          :disabled="!teamLoaded"
           :label="copy.submit"
         />
       </div>
@@ -134,6 +140,9 @@ const reason = ref("");
 const people = ref<string[]>([]);
 const error = ref("");
 const saving = ref(false);
+// saving before everyone on the role has loaded would take the others off it
+const teamLoaded = ref(true);
+let teamRequest = 0;
 
 const roleLabel = computed(
   () => TEAM_ROLES.find((r) => r.field === props.role)?.label || "Assign"
@@ -179,18 +188,27 @@ watch(open, (isOpen) => {
   url.value = props.post.published_url || "";
   people.value =
     props.role && props.post[props.role] ? [props.post[props.role]!] : [];
+  const request = ++teamRequest;
+  teamLoaded.value = true;
   if (props.action === "assign" && props.role) {
     const role = props.role;
+    const name = props.post.name;
+    teamLoaded.value = false;
     // the post list only carries the main person; everyone else comes from here
-    call("helpdesk.api.content_board.get_team_task_status", {
-      posts: [props.post.name],
-    })
+    call("helpdesk.api.content_board.get_team_task_status", { posts: [name] })
       .then((team) => {
-        const onRole = team?.[props.post!.name]?.[role];
+        if (request !== teamRequest) return;
+        const onRole = team?.[name]?.[role];
         if (onRole?.length)
           people.value = onRole.map((p: { user: string }) => p.user);
+        teamLoaded.value = true;
       })
-      .catch(() => {});
+      .catch((e: any) => {
+        if (request !== teamRequest) return;
+        error.value =
+          e?.messages?.[0] ||
+          __("Couldn't load who is on this role. Close and try again.");
+      });
   }
   const next = dayjs(props.post.publish_on || undefined).add(1, "day");
   date.value = next.format("YYYY-MM-DD");
@@ -200,6 +218,7 @@ watch(open, (isOpen) => {
 });
 
 async function submit() {
+  if (!teamLoaded.value) return;
   const post = props.post!;
   error.value = "";
   saving.value = true;
