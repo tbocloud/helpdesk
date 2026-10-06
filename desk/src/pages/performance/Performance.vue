@@ -73,7 +73,7 @@
       </template>
       <span v-else class="text-sm text-ink-gray-6">{{ rangeLabel }}</span>
 
-      <div class="mx-1 h-5 w-px bg-outline-gray-2" aria-hidden="true" />
+      <div class="mx-1 h-5 border-l border-outline-gray-2" aria-hidden="true" />
       <div class="w-56">
         <Link
           v-model="forCustomer"
@@ -84,11 +84,12 @@
       </div>
 
       <template v-if="scope.data?.sees_team">
-        <div class="mx-1 h-5 w-px bg-outline-gray-2" aria-hidden="true" />
         <div
-          v-if="
-            (view === 'customers' || !employee) && scope.data.departments.length
-          "
+          class="mx-1 h-5 border-l border-outline-gray-2"
+          aria-hidden="true"
+        />
+        <div
+          v-if="departmentShown && scope.data.departments.length"
           class="w-52"
         >
           <FormControl
@@ -242,17 +243,27 @@ watch(forCustomer, (value) => {
   customer.value = value || "";
 });
 const department = ref(query("department"));
+// one person's report isn't narrowed by department, so the filter hides and
+// stops applying; it comes back as it was for the whole team
+const departmentShown = computed(
+  () => view.value === "customers" || !employee.value
+);
+const activeDepartment = () =>
+  (departmentShown.value && department.value) || null;
 
 const range = computed(() => {
   const today = dayjs();
   const fmt = (d: ReturnType<typeof dayjs>) => d.format("YYYY-MM-DD");
+  // weeks run Monday to Sunday, like the report's weekly buckets
+  const monday = today.subtract((today.day() + 6) % 7, "day");
   switch (preset.value) {
     case "this_week":
-      return { from: fmt(today.startOf("week")), to: fmt(today.endOf("week")) };
-    case "last_week": {
-      const d = today.subtract(1, "week");
-      return { from: fmt(d.startOf("week")), to: fmt(d.endOf("week")) };
-    }
+      return { from: fmt(monday), to: fmt(monday.add(6, "day")) };
+    case "last_week":
+      return {
+        from: fmt(monday.subtract(7, "day")),
+        to: fmt(monday.subtract(1, "day")),
+      };
     case "last_month": {
       const d = today.subtract(1, "month");
       return { from: fmt(d.startOf("month")), to: fmt(d.endOf("month")) };
@@ -317,7 +328,7 @@ const customerReport = createResource({
   makeParams: () => ({
     ...params(),
     customer: customer.value || null,
-    department: department.value || null,
+    department: activeDepartment(),
     for_customer: forCustomer.value || null,
   }),
 });
@@ -326,7 +337,7 @@ const contentReport = createResource({
   makeParams: () => ({
     ...params(),
     employee: employee.value || null,
-    department: department.value || null,
+    department: activeDepartment(),
     for_customer: forCustomer.value || null,
   }),
 });
@@ -358,9 +369,7 @@ watch(
           ? { customer: customer.value }
           : {}),
         ...(forCustomer.value ? { for_customer: forCustomer.value } : {}),
-        ...(department.value && (view.value === "customers" || !employee.value)
-          ? { department: department.value }
-          : {}),
+        ...(activeDepartment() ? { department: activeDepartment() } : {}),
       },
     });
     load();

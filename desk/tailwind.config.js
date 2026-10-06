@@ -41,14 +41,6 @@ export default {
           DEFAULT: "var(--info)",
           soft: "var(--info-soft)",
         },
-        pink: {
-          DEFAULT: "var(--pink)",
-          soft: "var(--pink-soft)",
-        },
-        teal: {
-          DEFAULT: "var(--teal)",
-          soft: "var(--teal-soft)",
-        },
       },
       fontFamily: {
         sans: ["var(--font-sans)"],
