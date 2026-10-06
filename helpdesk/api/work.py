@@ -360,7 +360,9 @@ def get_overview(
         task_filters["_assign"] = _assigned_to(assignee)
         ticket_filters["_assign"] = _assigned_to(assignee)
     if department:
-        task_filters["project"] = _in_department(task_filters.get("project"), department)
+        task_filters["project"] = _in_department(
+            task_filters.get("project"), department
+        )
 
     tasks = frappe.get_list(
         "Task", filters=task_filters, fields=TASK_FIELDS, limit_page_length=LIST_LIMIT

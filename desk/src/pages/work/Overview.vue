@@ -437,7 +437,12 @@ import { itemKey, type WorkItem } from "./workMeta";
 
 // one place to add a filter: the key here, a Link above, and the API argument
 type FilterKey = "project" | "customer" | "assignee" | "department";
-const FILTER_KEYS: FilterKey[] = ["project", "customer", "assignee", "department"];
+const FILTER_KEYS: FilterKey[] = [
+  "project",
+  "customer",
+  "assignee",
+  "department",
+];
 const ATTENTION_SHOWN = 5;
 
 interface Tile {
