@@ -1,0 +1,84 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# CodeRabbit reviews every pull request (it replaces the Kimi reviewer, tbocloud/ai-review).
+# The rules below come from AGENTS.md and from what earlier reviews got wrong.
+language: en-US
+tone_instructions: "Be direct and specific. Name the file and line, say what breaks and for whom, and suggest the fix. Skip praise and style nitpicks the linters already catch."
+early_access: false
+
+reviews:
+  profile: chill
+  request_changes_workflow: true
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: true
+  sequence_diagrams: false
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - main
+  path_filters:
+    - "!helpdesk/public/**"
+    - "!desk/components.d.ts"
+    - "!desk/auto-imports.d.ts"
+    - "!**/yarn.lock"
+    - "!**/*.min.js"
+    - "!helpdesk/locale/**"
+  path_instructions:
+    - path: "**/*"
+      instructions: |
+        Context you can't see in the diff:
+        - This is TBO Support, a fork of Frappe Helpdesk on Frappe Framework v15 (not v16).
+        - The hub has NO ERPNext. Helpdesk ships its own Task, Project, Project User, Timesheet,
+          Timesheet Detail and Employee doctypes; never accept code that deletes them or assumes
+          ERPNext's versions. ERPNext may only be optional, behind a check that it is installed.
+        - Custom fields are defined in helpdesk/setup/install.py (get_custom_fields) and are
+          re-applied on every migrate by helpdesk/setup/__init__.py after_migrate, so a changed
+          option list needs no patch. Check there before claiming a custom field is missing.
+        - Only report a blocker when you can name the input that breaks it. Say "verify" instead
+          of "blocker" when it depends on code outside the diff.
+    - path: "helpdesk/**/*.py"
+      instructions: |
+        - Frappe v15: frappe.desk.form.assign_to.add(args) takes no ignore_permissions; use
+          assign_to._add(args, ignore_permissions=True). frappe.only_for is skipped in tests, so
+          permission checks must check roles directly.
+        - Whitelisted methods need type hints; writes and deletes use methods=["POST"] and an
+          explicit permission check (doc.check_permission or frappe.has_permission(..., throw=True)).
+        - Prefer frappe.qb.get_query() over frappe.db.get_all() for new queries.
+        - Controller lifecycle hooks only call methods; logic lives in methods. Save a document
+          once per hook; helpers mutate and the owner saves.
+        - Pass str(e), not the exception, into a translated string's .format().
+        - Patches that insert data go after model sync; Singles' defaults only apply to new sites.
+        - Never commit secrets, API keys or staff emails.
+    - path: "helpdesk/**/test_*.py"
+      instructions: |
+        - Test helpers (factories, fakes, toggles) belong in helpdesk/test_utils.py, not in the
+          test file.
+        - Assigning a task emails the assignee, and in tests that email commits; tests that
+          create content posts or tasks must use test_utils.hold_commits(self).
+    - path: "desk/src/**/*.{vue,ts}"
+      instructions: |
+        - Vue 3 <script setup lang="ts">, frappe-ui createResource / createListResource, Lucide
+          icons via ~icons/lucide/*.
+        - frappe-ui v2 tokens only: bg-surface-*, text-ink-*, border-outline-*; the old v1 names
+          (bg-surface-white, text-ink-white, surface-selected) compile to nothing. text-lg-semibold,
+          text-base-medium and top-5.5 are valid in this project.
+        - One accent colour (brand) for the primary action and the current selection; status
+          colours only with an icon or label. Accessible: labels, focus-visible rings, keyboard.
+        - Features get a page or dialog in the helpdesk app; don't send users to /app desk forms.
+        - A Dialog that uses frappe-ui Autocomplete (a popover outside the dialog) breaks Escape
+          and outside clicks; prefer Combobox.
+    - path: "docs/**/*.md"
+      instructions: |
+        Specs are the source of truth for their feature: flag a code change in the PR that the
+        matching spec doesn't describe.
+
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - "AGENTS.md"
+
+chat:
+  auto_reply: true
