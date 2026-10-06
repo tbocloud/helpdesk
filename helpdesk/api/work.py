@@ -335,6 +335,7 @@ def get_overview(
     project: str | None = None,
     customer: str | None = None,
     assignee: str | None = None,
+    department: str | None = None,
 ) -> dict:
     """Overdue, due-soon, key and waiting work across the projects and tickets the user can see.
 
@@ -358,13 +359,19 @@ def get_overview(
     if assignee:
         task_filters["_assign"] = _assigned_to(assignee)
         ticket_filters["_assign"] = _assigned_to(assignee)
+    if department:
+        task_filters["project"] = _in_department(
+            task_filters.get("project"), department
+        )
 
     tasks = frappe.get_list(
         "Task", filters=task_filters, fields=TASK_FIELDS, limit_page_length=LIST_LIMIT
     )
     tickets = (
         []
-        if project  # a project filter narrows to project work only
+        # a project or department filter narrows to project work only;
+        # tickets belong to customers, not departments
+        if project or department
         else frappe.get_list(
             "HD Ticket",
             filters=ticket_filters,
@@ -399,6 +406,20 @@ def get_overview(
         "projects": _tasks_by_project(task_filters),
         "attention": _attention(buckets),
     }
+
+
+def _in_department(project_filter, department: str) -> tuple:
+    """Narrow a task's project filter (a name, an "in" list or none) to one department's projects."""
+    in_department = frappe.get_all(
+        "Project", filters={"custom_department": department}, pluck="name"
+    )
+    if isinstance(project_filter, str):
+        wanted = [project_filter]
+    elif project_filter:
+        wanted = project_filter[1]
+    else:
+        wanted = in_department
+    return ("in", [p for p in wanted if p in in_department] or [""])
 
 
 def _urgency_split(items: list[dict], buckets: dict) -> dict:

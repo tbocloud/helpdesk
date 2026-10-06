@@ -17,6 +17,7 @@ from helpdesk.tasky import api as tasky
 from helpdesk.test_utils import (
     create_customer,
     make_assignment,
+    make_department,
     make_project,
     make_pull_request,
     make_task,
@@ -204,6 +205,15 @@ class TestMyWorkAndOverview(WorkControlCase):
         self.assertEqual(counts(), [(self.project, 2), (other, 1)])
         self.assertEqual(counts(customer=CUSTOMER), [(self.project, 2)])
         self.assertEqual(counts(project=other), [(other, 1)])
+
+        make_department("Work Control Creative")
+        frappe.db.set_value(
+            "Project", other, "custom_department", "Work Control Creative"
+        )
+        self.assertEqual(counts(department="Work Control Creative"), [(other, 1)])
+        self.assertEqual(
+            counts(department="Work Control Creative", customer=CUSTOMER), []
+        )
         self.assertEqual(
             sorted(counts(assignee=DEV[0])), sorted([(self.project, 1), (other, 1)])
         )

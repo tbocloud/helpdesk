@@ -21,6 +21,11 @@ the matching categories go to them.
   status-tab counts follow the department filter, and each chip counts projects in the
   current status tab. The filter is not kept in the URL, because the page keeps none of
   its filters there.
+- **Overview**: a **Department** filter next to Project, Customer and Assignee (kept in the
+  URL like the others). It narrows the page to tasks of that department's projects; tickets
+  are left out, as with the Project filter, because tickets belong to customers, not
+  departments. It combines with the other filters (e.g. a customer's projects in one
+  department). API: `helpdesk.api.work.get_overview(department=...)`.
 
 ## Data model
 
@@ -45,13 +50,14 @@ the matching categories go to them.
 | `get_departments(include_inactive=False)` | GET | read | Departments in order, each with `project_count` |
 | `add_department(department_name, description=None)` | POST | create | Adds one at the end |
 | `rename_department(department, new_name)` | POST | write | `frappe.rename_doc`; projects follow |
-| `move_department(department, direction)` | POST | write | `up`/`down`; renumbers all to 1..n |
+| `move_department(department, direction)` | POST | write | `up`/`down`; locks the rows (`FOR UPDATE`) and renumbers all to 1..n |
 | `set_department_active(department, is_active)` | POST | write | Activates or deactivates |
 | `delete_department(department)` | POST | delete | Turns Frappe's `LinkExistsError` into a clear message |
 
 `helpdesk/tasky/api.py`: `create_project` and `update_project` take `department` (leaving it out
-of an update keeps the project's department, an empty value clears it). Picking an inactive
-department is refused unless the project already has it. `get_projects` and
+of an update keeps the project's department, an empty value clears it). `Project.validate`
+refuses a newly picked inactive department on every save (helpdesk, Desk, REST or import); a
+project keeps a department that was deactivated later. `get_projects` and
 `get_project_detail` return `department`.
 
 ## Roles and task categories
