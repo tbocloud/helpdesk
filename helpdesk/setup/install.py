@@ -585,6 +585,9 @@ def get_custom_fields():
                 "label": "Role",
                 "options": "Project Manager\nFunctional Consultant\nDeveloper\nDevOps Engineer\nSupport Engineer",
                 "insert_after": "user",
+                # a column, so each member's role is seen and set right in the table
+                "in_list_view": 1,
+                "columns": 2,
             },
         ],
     }
