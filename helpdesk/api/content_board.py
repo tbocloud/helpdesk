@@ -10,8 +10,11 @@ from helpdesk.helpdesk.doctype.hd_content_occasion.hd_content_occasion import (
     occasions_between,
 )
 from helpdesk.helpdesk.doctype.hd_content_post.hd_content_post import (
+    DONE_TASK_STATUSES,
+    ONE_TASK,
     SHARED_ROLE,
     TASK_ROLES,
+    role_teams_of,
     team_of,
 )
 
@@ -117,27 +120,48 @@ def get_team_task_status(posts: str | list) -> dict:
     with narrower Task access still see how their teammates are getting on.
     """
     posts = json.loads(posts) if isinstance(posts, str) else posts or []
-    names = frappe.get_list(
-        "HD Content Post", filters={"name": ("in", posts[:500])}, pluck="name"
-    )
-    if not names:
+    if not posts:
         return {}
-    docs = {name: frappe.get_doc("HD Content Post", name) for name in names}
+    visible = frappe.get_list(
+        "HD Content Post",
+        filters={"name": ("in", posts)},
+        fields=["name", "task_mode"],
+    )
+    if not visible:
+        return {}
+    names = [p.name for p in visible]
+    teams = role_teams_of(names)
     tasks = role_tasks(names)
     full_names = user_full_names(
-        {u for doc in docs.values() for users in team_of(doc).values() for u in users}
+        {u for team in teams.values() for users in team.values() for u in users}
     )
     out = {}
-    for name, doc in docs.items():
-        out[name] = {}
-        for role, users in team_of(doc).items():
-            # a shared task for the post stands for every role's part
-            task = tasks.get((name, TASK_ROLES[role])) or tasks.get((name, SHARED_ROLE))
-            out[name][role] = [
+    for post in visible:
+        out[post.name] = {}
+        for role, users in teams[post.name].items():
+            task = task_for_role(tasks, post, role)
+            out[post.name][role] = [
                 {"user": u, "full_name": full_names.get(u, u), **(task or {})}
                 for u in users
             ]
     return out
+
+
+def task_for_role(tasks: dict, post, role: str) -> dict | None:
+    """The task that stands for a role's part.
+
+    The kind the post's task mode makes comes first, unless only the other kind is
+    still open; switching the mode cancels the old kind's tasks.
+    """
+    own = tasks.get((post.name, TASK_ROLES[role]))
+    shared = tasks.get((post.name, SHARED_ROLE))
+    candidates = [t for t in (own, shared) if t]
+    if post.task_mode == ONE_TASK:
+        candidates.reverse()
+    for task in candidates:
+        if task["status"] not in DONE_TASK_STATUSES:
+            return task
+    return candidates[0] if candidates else None
 
 
 def role_tasks(posts: list[str]) -> dict[tuple[str, str], dict]:

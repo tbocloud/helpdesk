@@ -72,6 +72,7 @@ class HDContentPost(Document):
         self.reset_missed_alert()
         self.warn_if_no_client_connection()
         self.set_task_mode()
+        self.end_design_when_its_last_part_is_dropped()
         self.start_client_review()
 
     def on_update(self):
@@ -105,10 +106,9 @@ class HDContentPost(Document):
             people = self.people(role)
             extras = [r.user for r in self.get("extra_team") or [] if r.role == role]
             # rows are only rewritten when something is off, not on every save
-            if (
-                self.get(role) != (people[0] if people else None)
-                or extras != people[1:]
-            ):
+            # the post dialog sends "" for an empty role
+            main = self.get(role) or None
+            if main != (people[0] if people else None) or extras != people[1:]:
                 self.set_people(role, people)
 
     # --- tasks: each person's part of the post (or one shared task) ---
@@ -292,19 +292,49 @@ class HDContentPost(Document):
         next_status = NEXT_STATUS_AFTER.get(role)
         if not next_status or self.status not in STAGES:
             return
-        if role in DESIGN_ROLES and self.design_still_open():
-            # design and video are one stage: it ends when both are done
+        if role in DESIGN_ROLES and not self.design_done(self.content_tasks()):
+            # design and video are one stage: it ends when all its parts are done
             return
         if STAGES.index(self.status) >= STAGES.index(next_status):
             return
         self.status = next_status
         self.save(ignore_permissions=True)
 
-    def design_still_open(self) -> bool:
-        return any(
-            t.content_role in DESIGN_ROLES and t.status not in DONE_TASK_STATUSES
-            for t in self.content_tasks()
+    def end_design_when_its_last_part_is_dropped(self):
+        """Taking the person off the last open design part ends Design, as finishing it would.
+
+        sync_tasks cancels that part's task quietly, so the task can't move the post itself.
+        """
+        if self.is_new() or self.status != "Design" or self.task_mode != PER_PERSON:
+            return
+        if self.flags.skip_task_sync:
+            return
+        tasks = self.content_tasks()
+        wanted = self.wanted_tasks()
+        dropping = {
+            t.content_role
+            for t in tasks
+            if t.content_role in DESIGN_ROLES
+            and t.content_role not in wanted
+            and t.status not in DONE_TASK_STATUSES
+        }
+        if dropping and self.design_done(tasks, dropping):
+            self.status = "Internal Review"
+
+    @staticmethod
+    def design_done(tasks: list, dropping: set | None = None) -> bool:
+        """No design part left open, and at least one was finished.
+
+        When every design part was cancelled nobody did the design, so the post
+        stays in Design for a lead to reassign or move on by hand.
+        """
+        design = [t for t in tasks if t.content_role in DESIGN_ROLES]
+        still_open = any(
+            t.status not in DONE_TASK_STATUSES
+            and t.content_role not in (dropping or ())
+            for t in design
         )
+        return not still_open and any(t.status == "Completed" for t in design)
 
     def notify_next_person(self):
         """Whoever's turn it is now hears about it, in the bell and in Teams or email."""
@@ -626,6 +656,14 @@ def team_of(doc) -> dict[str, list[str]]:
 
 def teams_of(posts: list[str]) -> dict[str, list[str]]:
     """Everyone on each of these posts, in role order, for reminders and alerts."""
+    return {
+        name: list(dict.fromkeys(u for users in team.values() for u in users))
+        for name, team in role_teams_of(posts).items()
+    }
+
+
+def role_teams_of(posts: list[str]) -> dict[str, dict[str, list[str]]]:
+    """Each post's people by role, the main person first, in two queries for any number of posts."""
     if not posts:
         return {}
     main = frappe.get_all(
@@ -636,14 +674,19 @@ def teams_of(posts: list[str]) -> dict[str, list[str]]:
     extra = frappe.get_all(
         "HD Content Post Member",
         filters={"parenttype": "HD Content Post", "parent": ("in", posts)},
-        fields=["parent", "user"],
+        fields=["parent", "role", "user"],
         order_by="idx asc",
     )
-    out = {p.name: [p.get(role) for role in TASK_ROLES] for p in main}
+    out = {p.name: {role: [p.get(role)] for role in TASK_ROLES} for p in main}
     for row in extra:
-        out[row.parent].append(row.user)
+        if row.parent in out and row.role in TASK_ROLES:
+            out[row.parent][row.role].append(row.user)
     return {
-        name: list(dict.fromkeys(u for u in users if u)) for name, users in out.items()
+        name: {
+            role: list(dict.fromkeys(u for u in users if u))
+            for role, users in team.items()
+        }
+        for name, team in out.items()
     }
 
 
