@@ -45,6 +45,13 @@
             :label="__('Assignee')"
             :placeholder="__('Anyone')"
           />
+          <Link
+            v-model="filters.department"
+            doctype="HD Department"
+            :filters="{ is_active: 1 }"
+            :label="__('Department')"
+            :placeholder="__('All departments')"
+          />
         </div>
         <div v-if="hasFilters" class="mt-2 flex justify-end">
           <Button variant="ghost" :label="__('Clear filters')" @click="clear">
@@ -429,8 +436,8 @@ import {
 import { itemKey, type WorkItem } from "./workMeta";
 
 // one place to add a filter: the key here, a Link above, and the API argument
-type FilterKey = "project" | "customer" | "assignee";
-const FILTER_KEYS: FilterKey[] = ["project", "customer", "assignee"];
+type FilterKey = "project" | "customer" | "assignee" | "department";
+const FILTER_KEYS: FilterKey[] = ["project", "customer", "assignee", "department"];
 const ATTENTION_SHOWN = 5;
 
 interface Tile {
