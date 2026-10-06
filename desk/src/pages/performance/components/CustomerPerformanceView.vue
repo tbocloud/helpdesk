@@ -578,7 +578,7 @@ import {
   INK,
   onTimeTone,
   pctText,
-  ROLES as TEAM_ROLES,
+  roles,
   scoreText,
   scoreTone,
   TIMINGS,
@@ -596,11 +596,7 @@ const emit = defineEmits<{
   (e: "person", employee: string): void;
 }>();
 
-const ROLES = TEAM_ROLES.map((r) => ({
-  role: r.role,
-  label: __(r.label),
-  short: __(r.short),
-}));
+const ROLES = roles();
 const TIMING: Record<string, { class: string; icon: unknown }> = {
   "On time": { class: "bg-success-soft text-success", icon: LucideCircleCheck },
   Late: { class: "bg-warning-soft text-warning", icon: LucideClock },

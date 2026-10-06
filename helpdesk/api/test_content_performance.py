@@ -3,7 +3,7 @@
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
-from frappe.utils import add_days, getdate, nowdate
+from frappe.utils import add_days, getdate, now_datetime, nowdate
 
 from helpdesk.api import content_performance, performance
 from helpdesk.test_utils import (
@@ -63,14 +63,19 @@ class TestContentPerformance(FrappeTestCase):
 
     def test_only_the_clients_change_requests_cost_points(self):
         post = make_content_post_due("Reworked", ACME, -1, writer=WRITER[0])
+        # tests skip version history unless asked, and the score is read from it
         # staff sending a post back is part of the work, not a client complaint
         post.status = "Changes Requested"
-        post.save()
+        post.save(ignore_version=False)
         self.assertEqual(content_performance.change_requests([post.name]), {})
 
         post.status = "Client Review"
-        post.save()
-        post.request_changes_from_portal("client@perf-test.example", "Brighter")
+        post.save(ignore_version=False)
+        # what request_changes_from_portal and the ERP decision sync save
+        post.status = "Changes Requested"
+        post.client_feedback = "Brighter"
+        post.client_decided_on = now_datetime()
+        post.save(ignore_version=False)
         self.assertEqual(
             content_performance.change_requests([post.name]), {post.name: 1}
         )

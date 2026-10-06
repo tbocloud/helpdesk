@@ -1,3 +1,4 @@
+import { __ } from "@/translation";
 /** Gray unless the colour says how something went; always next to a number or label. */
 export type Tone = "neutral" | "success" | "warning" | "danger";
 
@@ -65,10 +66,15 @@ export function scoreText(score: number | null | undefined) {
   return score == null ? "—" : String(score);
 }
 
-/** Who does what on a post, in the order the content board lists them. */
-export const ROLES = [
-  { role: "writer", label: "Writer", short: "W" },
-  { role: "designer", label: "Designer", short: "D" },
-  { role: "video_editor", label: "Video editor", short: "V" },
-  { role: "marketer", label: "Digital marketer", short: "M" },
-] as const;
+/**
+ * Who does what on a post, in the order the content board lists them, translated.
+ * Literal __() calls so the translation extractor finds each label.
+ */
+export function roles() {
+  return [
+    { role: "writer", label: __("Writer"), short: __("W") },
+    { role: "designer", label: __("Designer"), short: __("D") },
+    { role: "video_editor", label: __("Video editor"), short: __("V") },
+    { role: "marketer", label: __("Digital marketer"), short: __("M") },
+  ];
+}

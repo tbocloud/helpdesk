@@ -288,7 +288,7 @@
                   </td>
                   <td
                     class="whitespace-nowrap px-4 py-2.5 text-xs text-ink-gray-6"
-                    :title="p.roles.map((r: string) => __(ROLE_LABEL[r])).join(', ')"
+                    :title="p.roles.map((r: string) => ROLE_LABEL[r]).join(', ')"
                   >
                     {{ roleText(p.roles) }}
                   </td>
@@ -444,7 +444,7 @@ import {
   FILL,
   INK,
   onTimeTone,
-  ROLES,
+  roles,
   scoreTone,
   type Tone,
 } from "../performanceMeta";
@@ -458,7 +458,7 @@ const props = defineProps<{ data: any; periodLabel: string }>();
 const emit = defineEmits<{ (e: "select", employee: string): void }>();
 
 const ROLE_LABEL: Record<string, string> = Object.fromEntries(
-  ROLES.map((r) => [r.role, r.label])
+  roles().map((r) => [r.role, r.label])
 );
 const TIMING: Record<string, { class: string; icon: unknown }> = {
   "On time": { class: "bg-success-soft text-success", icon: LucideCircleCheck },
@@ -491,7 +491,7 @@ const firstName = computed(
 const roleText = (roles: string[]) =>
   roles.length === Object.keys(ROLE_LABEL).length
     ? __("All roles")
-    : roles.map((r) => __(ROLE_LABEL[r])).join(", ");
+    : roles.map((r) => ROLE_LABEL[r]).join(", ");
 
 const scoreText = (v: number | null) => (v == null ? "—" : String(v));
 const pctText = (v: number | null) => (v == null ? "—" : `${v}%`);
