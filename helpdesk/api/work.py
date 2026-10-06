@@ -448,7 +448,8 @@ def _attention(buckets: dict) -> list[dict]:
     projects = list({i["project"] for i in items if i.get("project")})
     project_customers = (
         dict(
-            frappe.get_all(
+            # only projects the user may read add their customer
+            frappe.get_list(
                 "Project",
                 filters={"name": ("in", projects)},
                 fields=["name", "customer"],

@@ -34,6 +34,10 @@ const colors = useChartColors();
 
 // busiest at the top
 const ordered = computed(() => [...props.rows].reverse());
+// the axis holds project IDs, since two projects can share a name
+const nameOf = computed(
+  () => new Map(props.rows.map((r) => [r.project, r.project_name]))
+);
 
 const summary = computed(() =>
   [
@@ -49,7 +53,7 @@ function onClick(params: {
 }) {
   const row =
     params.componentType === "yAxis"
-      ? ordered.value.find((r) => r.project_name === params.value)
+      ? ordered.value.find((r) => r.project === params.value)
       : ordered.value[params.dataIndex ?? -1];
   if (row) emit("select", row.project);
 }
@@ -57,9 +61,7 @@ function onClick(params: {
 const options = computed(() => {
   const c = colors.value;
   const rows = ordered.value;
-  const selectedName = rows.find(
-    (r) => r.project === props.selected
-  )?.project_name;
+  const names = nameOf.value;
   return {
     ...baseOptions(c),
     grid: { left: 8, right: 32, top: 4, bottom: 4, containLabel: true },
@@ -83,15 +85,17 @@ const options = computed(() => {
     },
     xAxis: valueAxis(c, { minInterval: 1 }),
     yAxis: categoryAxis(c, {
-      data: rows.map((r) => r.project_name),
+      data: rows.map((r) => r.project),
       axisLabel: {
         color: c.textPrimary,
         fontSize: 12,
         width: 140,
         overflow: "truncate",
         // the project the page is filtered to reads in brand
-        formatter: (name: string) =>
-          name === selectedName ? `{sel|${name}}` : name,
+        formatter: (project: string) => {
+          const name = names.get(project) ?? project;
+          return project === props.selected ? `{sel|${name}}` : name;
+        },
         rich: { sel: { color: c.brand, fontWeight: 600, fontSize: 12 } },
       },
       triggerEvent: true,
