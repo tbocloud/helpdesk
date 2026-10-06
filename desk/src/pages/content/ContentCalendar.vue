@@ -80,7 +80,7 @@
       <Button
         :variant="filters.person === auth.userId ? 'subtle' : 'ghost'"
         :label="__('My posts')"
-        :title="__('Posts where I am the writer, designer or marketer')"
+        :title="__('Posts I am on, in any role')"
         @click="
           filters.person = filters.person === auth.userId ? '' : auth.userId
         "
@@ -588,7 +588,11 @@ const hasFilters = computed(
 function personFilters() {
   const u = filters.person;
   if (!u) return undefined;
-  return TEAM_ROLES.map((r) => [r.field, "=", u]);
+  return [
+    ...TEAM_ROLES.map((r) => [r.field, "=", u]),
+    // or one of several people on a role
+    ["HD Content Post Member", "user", "=", u],
+  ];
 }
 
 function baseFilters() {
@@ -635,6 +639,7 @@ const BOARD_FIELDS = [
   "writer",
   "designer",
   "marketer",
+  "video_editor",
   "published_on",
   "published_url",
   "times_postponed",

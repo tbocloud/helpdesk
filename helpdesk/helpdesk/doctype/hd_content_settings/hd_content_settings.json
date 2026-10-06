@@ -27,6 +27,7 @@
 		"default_task_mode",
 		"writer_days_before",
 		"designer_days_before",
+		"video_editor_days_before",
 		"planning_section",
 		"plan_day",
 		"follow_up_section",
@@ -173,6 +174,14 @@
 			"description": "The marketer's task is due on the publish date; a single task for the post is due with the designer."
 		},
 		{
+			"fieldname": "video_editor_days_before",
+			"fieldtype": "Int",
+			"label": "Video Editor Due (days before publishing)",
+			"default": "1",
+			"non_negative": 1,
+			"description": "When the video editor's task is due."
+		},
+		{
 			"fieldname": "planning_section",
 			"fieldtype": "Section Break",
 			"label": "Monthly Plans"
@@ -210,7 +219,7 @@
 	],
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-10-03 20:30:00.000000",
+	"modified": "2026-10-06 18:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Content Settings",

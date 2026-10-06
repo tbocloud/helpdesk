@@ -78,9 +78,20 @@
           <td
             v-for="role in TEAM_ROLES"
             :key="role.field"
-            class="max-w-[10rem] truncate px-3 py-2 font-mono text-xs text-ink-gray-6"
+            class="max-w-[12rem] px-3 py-2 text-xs text-ink-gray-7"
+            :title="namesOf(post, role.field).join(', ')"
           >
-            {{ post[role.field] || "—" }}
+            <span
+              v-if="!namesOf(post, role.field).length"
+              class="text-ink-gray-4"
+              >—</span
+            >
+            <span
+              v-for="name in namesOf(post, role.field)"
+              :key="name"
+              class="block truncate"
+              >{{ name }}</span
+            >
           </td>
         </tr>
       </tbody>
@@ -90,9 +101,15 @@
 
 <script setup lang="ts">
 import { __ } from "@/translation";
-import { dayjs } from "frappe-ui";
-import { computed } from "vue";
-import { type ContentPost, platformsOf, TEAM_ROLES } from "../constants";
+import { createResource, dayjs } from "frappe-ui";
+import { computed, watch } from "vue";
+import {
+  type ContentPost,
+  platformsOf,
+  type RolePerson,
+  TEAM_ROLES,
+  type TeamRole,
+} from "../constants";
 import StatusPill from "./StatusPill.vue";
 
 const props = defineProps<{
@@ -101,6 +118,23 @@ const props = defineProps<{
   filtersCustomer?: string;
   period?: "day" | "week" | "month";
 }>();
+
+// the list carries each role's main person; this adds everyone else on it
+const team = createResource({
+  url: "helpdesk.api.content_board.get_team_task_status",
+  makeParams: () => ({ posts: props.posts.map((p) => p.name) }),
+});
+watch(
+  () => props.posts,
+  () => props.posts.length && team.reload(),
+  { immediate: true }
+);
+
+function namesOf(post: ContentPost, role: TeamRole): string[] {
+  const people: RolePerson[] | undefined = team.data?.[post.name]?.[role];
+  if (people) return people.map((p) => p.full_name);
+  return post[role] ? [post[role]!] : [];
+}
 const emit = defineEmits<{ (e: "open", name: string): void }>();
 
 const rows = computed(() =>

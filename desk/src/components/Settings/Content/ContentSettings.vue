@@ -178,6 +178,20 @@
             />
           </SettingRow>
           <SettingRow
+            :label="__('Video editor\'s task due')"
+            :description="__('Days before the publish date.')"
+          >
+            <FormControl
+              v-model="form.video_editor_days_before"
+              type="number"
+              class="w-24"
+              min="0"
+              :aria-label="
+                __('Video editor\'s task due, days before publishing')
+              "
+            />
+          </SettingRow>
+          <SettingRow
             :label="__('Plan next month on day')"
             :description="
               __(
@@ -311,6 +325,7 @@ interface ContentSettingsForm {
   default_task_mode: string;
   writer_days_before: number;
   designer_days_before: number;
+  video_editor_days_before: number;
   plan_day: number;
   client_reminder_days: number;
   client_escalate_days: number;
@@ -325,6 +340,7 @@ const NUMBER_FIELDS = [
   "grace_period_minutes",
   "writer_days_before",
   "designer_days_before",
+  "video_editor_days_before",
   "plan_day",
   "client_reminder_days",
   "client_escalate_days",
@@ -357,6 +373,7 @@ const settings = createResource({
       default_task_mode: doc.default_task_mode || "One task per person",
       writer_days_before: doc.writer_days_before ?? 3,
       designer_days_before: doc.designer_days_before ?? 1,
+      video_editor_days_before: doc.video_editor_days_before ?? 1,
       plan_day: doc.plan_day || 20,
       client_reminder_days: doc.client_reminder_days ?? 2,
       client_escalate_days: doc.client_escalate_days ?? 4,

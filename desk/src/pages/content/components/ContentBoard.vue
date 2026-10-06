@@ -217,23 +217,42 @@
                 class="text-2xs uppercase tracking-[0.06em] text-ink-gray-5"
                 >{{ __(role.label) }}</span
               >
+              <!-- everyone on the role, each with how far their task is -->
               <button
+                v-if="!peopleOf(post, role.field).length"
                 type="button"
-                class="flex items-center gap-1.5 rounded text-sm hover:underline"
-                :class="post[role.field] ? 'text-ink-gray-8' : 'text-brand-ink'"
+                class="flex items-center gap-1.5 rounded text-sm text-brand-ink hover:underline"
                 @click="emit('action', post, 'assign', role.field)"
               >
-                <template v-if="post[role.field]">
-                  <Avatar size="xs" :label="post[role.field]" />
-                  <span class="max-w-[12rem] truncate">{{
-                    post[role.field]
+                <LucidePlus class="size-3.5" aria-hidden="true" />{{
+                  __("Assign")
+                }}
+              </button>
+              <button
+                v-else
+                type="button"
+                class="flex flex-col items-start gap-1 rounded text-left text-sm text-ink-gray-8"
+                :title="__('Change who is on this')"
+                @click="emit('action', post, 'assign', role.field)"
+              >
+                <span
+                  v-for="person in peopleOf(post, role.field)"
+                  :key="person.user"
+                  class="flex flex-wrap items-center gap-1.5"
+                >
+                  <Avatar size="xs" :label="person.full_name" />
+                  <span class="max-w-[12rem] truncate hover:underline">{{
+                    person.full_name
                   }}</span>
-                </template>
-                <template v-else>
-                  <LucidePlus class="size-3.5" aria-hidden="true" />{{
-                    __("Assign")
-                  }}
-                </template>
+                  <TaskStatusBadge
+                    v-if="person.status"
+                    :status="person.status"
+                    :title="person.task"
+                  />
+                  <span v-if="isTaskLate(person)" class="text-xs text-danger">{{
+                    __("late")
+                  }}</span>
+                </span>
               </button>
             </div>
           </div>
@@ -312,7 +331,8 @@
 
 <script setup lang="ts">
 import { __ } from "@/translation";
-import { Avatar, Button, dayjs } from "frappe-ui";
+import TaskStatusBadge from "@/pages/tasky/components/TaskStatusBadge.vue";
+import { Avatar, Button, createResource, dayjs } from "frappe-ui";
 import { computed, ref, watch } from "vue";
 import LucideBan from "~icons/lucide/ban";
 import LucideCalendarClock from "~icons/lucide/calendar-clock";
@@ -329,6 +349,7 @@ import {
   isMissed,
   needsApprovalSoon,
   platformsOf,
+  type RolePerson,
   TEAM_ROLES,
   type TeamRole,
 } from "../constants";
@@ -367,6 +388,33 @@ const emit = defineEmits<{
   (e: "add", date?: string): void;
   (e: "action", post: ContentPost, action: EntryAction, role?: TeamRole): void;
 }>();
+
+// everyone on each post's roles, with their task's status; reloaded with the posts
+const team = createResource({
+  url: "helpdesk.api.content_board.get_team_task_status",
+  makeParams: () => ({ posts: props.posts.map((p) => p.name) }),
+});
+watch(
+  () => props.posts,
+  () => props.posts.length && team.reload(),
+  { immediate: true }
+);
+
+/** Everyone on a role, the main person first; just the main person until the team loads. */
+function peopleOf(post: ContentPost, role: TeamRole): RolePerson[] {
+  const people = team.data?.[post.name]?.[role];
+  if (people) return people;
+  return post[role] ? [{ user: post[role]!, full_name: post[role]! }] : [];
+}
+
+function isTaskLate(person: RolePerson) {
+  return (
+    !!person.due &&
+    // an Overdue status already says so
+    !["Completed", "Cancelled", "Overdue"].includes(person.status ?? "") &&
+    dayjs(person.due).isBefore(dayjs(), "day")
+  );
+}
 
 type FilterKey = "all" | "missed" | "upcoming" | "published" | "cancelled";
 const filter = ref<FilterKey>("all");

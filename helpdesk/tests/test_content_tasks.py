@@ -19,6 +19,7 @@ WRITER = ("writer.ct@content-tasks.example", "Faris Writer")
 DESIGNER = ("designer.ct@content-tasks.example", "Jasir Designer")
 MARKETER = ("marketer.ct@content-tasks.example", "Mufliha Marketer")
 OTHER = ("other.ct@content-tasks.example", "Nisha Other")
+EDITOR = ("editor.ct@content-tasks.example", "Vivek Editor")
 
 
 class ContentTaskCase(FrappeTestCase):
@@ -30,12 +31,13 @@ class ContentTaskCase(FrappeTestCase):
         )
         ensure_role()
         create_customer(CUSTOMER)
-        for person in (WRITER, DESIGNER, MARKETER, OTHER):
+        for person in (WRITER, DESIGNER, MARKETER, OTHER, EDITOR):
             make_tasky_user(*person)
         set_content_settings(
             default_task_mode="One task per person",
             writer_days_before=3,
             designer_days_before=1,
+            video_editor_days_before=2,
         )
         frappe.clear_document_cache("HD Content Settings", "HD Content Settings")
         self.project = make_project(f"{CUSTOMER} - Social media").name
@@ -176,6 +178,87 @@ class TestTasksFromPosts(ContentTaskCase):
         cancelled.save(ignore_permissions=True)
         statuses = {t.status for t in self.tasks(cancelled, open_only=False).values()}
         self.assertEqual(statuses, {"Cancelled"})
+
+
+class TestSeveralPeopleAndVideoEditor(ContentTaskCase):
+    def test_several_people_on_a_role_share_its_task(self):
+        post = self.post()
+        post.set_people("designer", [DESIGNER[0], OTHER[0], DESIGNER[0]])
+        post.save(ignore_permissions=True)
+
+        self.assertEqual(post.designer, DESIGNER[0])
+        self.assertEqual(post.people("designer"), [DESIGNER[0], OTHER[0]])
+        tasks = self.tasks(post)
+        # still one task per role, now with both designers on it
+        self.assertEqual(set(tasks), {"Writer", "Designer", "Marketer"})
+        self.assertEqual(
+            set(self.assignees(tasks["Designer"])), {DESIGNER[0], OTHER[0]}
+        )
+
+        # taking the main designer off: the other becomes main and keeps the task
+        post.set_people("designer", [OTHER[0]])
+        post.save(ignore_permissions=True)
+        self.assertEqual((post.designer, post.extra_team), (OTHER[0], []))
+        self.assertEqual(self.assignees(self.tasks(post)["Designer"]), [OTHER[0]])
+
+    def test_video_editor_gets_a_task_and_design_waits_for_both(self):
+        post = self.post(video_editor=EDITOR[0])
+        tasks = self.tasks(post)
+        self.assertEqual(set(tasks), {"Writer", "Designer", "Video Editor", "Marketer"})
+        self.assertEqual(
+            getdate(tasks["Video Editor"].exp_end_date),
+            add_days(getdate(self.publish), -2),
+        )
+        self.assertEqual(self.assignees(tasks["Video Editor"]), [EDITOR[0]])
+
+        post.db_set("status", "Design")
+        designer_task = frappe.get_doc("Task", tasks["Designer"].name)
+        designer_task.status = "Completed"
+        designer_task.save(ignore_permissions=True)
+        post.reload()
+        # the video isn't done yet, so the post stays in Design
+        self.assertEqual(post.status, "Design")
+
+        editor_task = frappe.get_doc("Task", tasks["Video Editor"].name)
+        editor_task.status = "Completed"
+        editor_task.save(ignore_permissions=True)
+        post.reload()
+        self.assertEqual(post.status, "Internal Review")
+
+    def test_one_task_for_the_post_includes_everyone(self):
+        post = self.post(task_mode="One task for the post", video_editor=EDITOR[0])
+        post.set_people("writer", [WRITER[0], OTHER[0]])
+        post.save(ignore_permissions=True)
+        self.assertEqual(
+            set(self.assignees(self.tasks(post)["All"])),
+            {WRITER[0], OTHER[0], DESIGNER[0], MARKETER[0], EDITOR[0]},
+        )
+
+    def test_board_shows_each_person_with_their_task(self):
+        from helpdesk.api import content_board
+
+        post = self.post()
+        content_board.assign(post.name, "writer", [WRITER[0], OTHER[0]])
+        status = content_board.get_team_task_status([post.name])[post.name]
+        self.assertEqual([p["user"] for p in status["writer"]], [WRITER[0], OTHER[0]])
+        self.assertEqual(status["writer"][0]["full_name"], WRITER[1])
+        # both writers share the writer's task
+        self.assertEqual(status["writer"][0]["task"], status["writer"][1]["task"])
+        self.assertEqual(status["writer"][0]["status"], "Open")
+        self.assertEqual(status["video_editor"], [])
+
+    def test_extra_people_can_see_the_post(self):
+        from helpdesk.helpdesk.doctype.hd_content_post.hd_content_post import (
+            has_permission,
+        )
+
+        post = self.post()
+        self.assertFalse(has_permission(post, "read", OTHER[0]))
+        post.set_people("marketer", [MARKETER[0], OTHER[0]])
+        post.save(ignore_permissions=True)
+        self.assertIsNone(has_permission(post, "read", OTHER[0]))
+        frappe.set_user(OTHER[0])
+        self.assertIn(post.name, frappe.get_list("HD Content Post", pluck="name"))
 
 
 class TestContentTeamRole(ContentTaskCase):
