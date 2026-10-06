@@ -128,6 +128,22 @@ class TestDepartments(FrappeTestCase):
                 department=SPARE,
             )
 
+    def test_a_project_keeps_but_cant_move_into_an_inactive_department(self):
+        make_department(USED)
+        project = make_project("Departments Desk Save")
+        project.custom_department = USED
+        project.save(ignore_permissions=True)
+        frappe.db.set_value("HD Department", USED, "is_active", 0)
+
+        # saving through Desk or REST with the department unchanged is fine
+        project.project_name = "Departments Desk Save Renamed"
+        project.save(ignore_permissions=True)
+
+        make_department(SPARE, is_active=0)
+        project.custom_department = SPARE
+        with self.assertRaises(frappe.ValidationError):
+            project.save(ignore_permissions=True)
+
     def test_graphic_design_tasks_go_to_the_graphic_designer(self):
         project = make_project(
             "Departments Festive Campaign",

@@ -305,21 +305,9 @@ def create_project(
     }
 
 
-def _pick_department(department: str | None, current: str | None = None) -> str | None:
-    """The department to save on a project: an active one, or the one it already has."""
-    department = (department or "").strip() or None
-    if not department or department == current:
-        return department
-    is_active = frappe.db.get_value("HD Department", department, "is_active")
-    if is_active is None:
-        frappe.throw(_("Department not found: {0}").format(department))
-    if not is_active:
-        frappe.throw(
-            _("{0} is no longer an active department. Pick another one.").format(
-                department
-            )
-        )
-    return department
+def _pick_department(department: str | None) -> str | None:
+    """The department to save on a project; Project.validate refuses a newly picked inactive one."""
+    return (department or "").strip() or None
 
 
 @frappe.whitelist()
@@ -1545,7 +1533,7 @@ def update_project(
     if project_type is not None:
         doc.project_type = project_type or None
     if department is not None:
-        doc.custom_department = _pick_department(department, doc.custom_department)
+        doc.custom_department = _pick_department(department)
 
     if members is not None:
         members_list = json.loads(members) if isinstance(members, str) else members

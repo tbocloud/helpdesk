@@ -604,6 +604,15 @@ const departmentChips = computed(() => {
   ];
 });
 
+// a department can lose its chip (inactive, last project moved away); don't keep filtering by it
+watch(departmentChips, (chips) => {
+  if (
+    activeDepartment.value !== ALL_DEPARTMENTS &&
+    !chips.some((c) => c.key === activeDepartment.value)
+  )
+    activeDepartment.value = ALL_DEPARTMENTS;
+});
+
 const selectedDepartmentName = computed(() =>
   activeDepartment.value === NO_DEPARTMENT ? "" : activeDepartment.value
 );

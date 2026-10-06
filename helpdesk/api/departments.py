@@ -82,11 +82,15 @@ def move_department(department: str, direction: str) -> list[str]:
     doc = _get_department(department, "write")
     if direction not in ("up", "down"):
         frappe.throw(_("Move a department up or down."))
-    order = frappe.get_all(
-        DEPARTMENT,
-        order_by="sort_order asc, department_name asc",
-        pluck="name",
-        limit_page_length=0,
+    # lock every row first, so two moves at once can't renumber from the same stale order
+    Department = frappe.qb.DocType(DEPARTMENT)
+    order = (
+        frappe.qb.from_(Department)
+        .select(Department.name)
+        .orderby(Department.sort_order)
+        .orderby(Department.department_name)
+        .for_update()
+        .run(pluck=True)
     )
     index = order.index(doc.name)
     target = index - 1 if direction == "up" else index + 1
