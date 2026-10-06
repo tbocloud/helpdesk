@@ -1,0 +1,107 @@
+{
+	"actions": [],
+	"allow_rename": 1,
+	"autoname": "field:department_name",
+	"creation": "2026-10-06 10:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"department_name",
+		"sort_order",
+		"column_break_1",
+		"is_active",
+		"description_section",
+		"description"
+	],
+	"fields": [
+		{
+			"fieldname": "department_name",
+			"fieldtype": "Data",
+			"label": "Department",
+			"reqd": 1,
+			"unique": 1,
+			"in_list_view": 1
+		},
+		{
+			"fieldname": "sort_order",
+			"fieldtype": "Int",
+			"label": "Sort Order",
+			"in_list_view": 1,
+			"description": "Departments are listed from the lowest number up."
+		},
+		{
+			"fieldname": "column_break_1",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "is_active",
+			"fieldtype": "Check",
+			"label": "Active",
+			"default": "1",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"description": "Inactive departments can't be picked for projects; projects already in one keep it."
+		},
+		{
+			"fieldname": "description_section",
+			"fieldtype": "Section Break"
+		},
+		{
+			"fieldname": "description",
+			"fieldtype": "Small Text",
+			"label": "Description"
+		}
+	],
+	"index_web_pages_for_search": 0,
+	"links": [],
+	"modified": "2026-10-06 10:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD Department",
+	"naming_rule": "By fieldname",
+	"owner": "Administrator",
+	"sort_field": "sort_order",
+	"sort_order": "ASC",
+	"states": [],
+	"track_changes": 1,
+	"title_field": "department_name",
+	"search_fields": "department_name",
+	"permissions": [
+		{
+			"read": 1,
+			"role": "System Manager",
+			"report": 1,
+			"print": 1,
+			"email": 1,
+			"create": 1,
+			"write": 1,
+			"delete": 1,
+			"export": 1,
+			"share": 1
+		},
+		{
+			"read": 1,
+			"role": "Agent Manager",
+			"report": 1,
+			"print": 1,
+			"email": 1,
+			"create": 1,
+			"write": 1,
+			"delete": 1,
+			"export": 1,
+			"share": 1
+		},
+		{
+			"read": 1,
+			"role": "Project Manager",
+			"report": 1,
+			"print": 1
+		},
+		{
+			"read": 1,
+			"role": "Agent",
+			"report": 1,
+			"print": 1
+		}
+	]
+}

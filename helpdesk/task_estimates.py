@@ -34,6 +34,16 @@ TYPICAL_DAYS = {
     "Content Calendar": 1,
     "Support": 1,
 }
+# creative and coordination work takes about as long whatever the project type
+CATEGORY_TYPICAL_DAYS = {
+    "Digital Marketing": 2,
+    "Social Media": 1,
+    "Content Writing": 1,
+    "Graphic Design": 1,
+    "Video": 3,
+    "Motion Graphics": 3,
+    "Coordination": 1,
+}
 PRIORITY_FACTOR = {"Urgent": 0.5, "High": 0.75}
 HOURS_PER_DAY = 6
 
@@ -44,7 +54,8 @@ working_days is the calendar span in working days from start to done for one per
 including reviews and waiting; estimated_hours is focused effort. Base it on the task text,
 the project type and the reference durations of finished tasks. ERP configuration and
 reports usually take 1-3 days, data migration and integrations longer; mobile app screens
-and APIs 2-5 days; content posts and captions under a day. Never exceed the maximum given."""
+and APIs 2-5 days; content posts and captions under a day; graphic designs about a day;
+videos and motion graphics 2-4 days. Never exceed the maximum given."""
 
 
 def get_settings():
@@ -160,15 +171,16 @@ def build_prompt(task, project, history: dict, max_days: int) -> str:
 
 def fallback_estimate(task, project_type: str | None, history: dict) -> dict:
     medians = history.get("median_days_by_category") or {}
-    base = medians.get(task.get("custom_category") or "Other") or TYPICAL_DAYS.get(
-        project_type or "", 2
-    )
+    category = task.get("custom_category") or "Other"
+    if medians.get(category):
+        base, source = medians[category], _("similar finished tasks")
+    elif category in CATEGORY_TYPICAL_DAYS:
+        base = CATEGORY_TYPICAL_DAYS[category]
+        source = _("typical time for this kind of task")
+    else:
+        base = TYPICAL_DAYS.get(project_type or "", 2)
+        source = _("typical time for this project type")
     days = max(round(base * PRIORITY_FACTOR.get(task.priority, 1)), 1)
-    source = (
-        _("similar finished tasks")
-        if medians
-        else _("typical time for this project type")
-    )
     return {
         "working_days": days,
         "estimated_hours": days * HOURS_PER_DAY,

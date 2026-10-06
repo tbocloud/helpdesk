@@ -1,0 +1,101 @@
+# Departments and creative roles
+
+TBO is organised in five departments: **ERP**, **Digital**, **Creative**, **GrowthX** and
+**Internal / R&D**. Every project can belong to one, and the Projects page groups projects by
+department. Project members can also hold creative and digital roles, and template tasks in
+the matching categories go to them.
+
+## Where it is in the app
+
+- **Settings → Departments** (System Managers and Agent Managers): the list in display order.
+  Add a department, rename it (its projects move with it), move it up or down, deactivate or
+  activate it, or delete it. A department that projects still use can't be deleted; the
+  message says how many projects use it and suggests moving them or deactivating it instead.
+- **New / Edit project** dialog: a **Department** picker listing active departments in order.
+  A project already in an inactive department keeps it, shown as "(inactive)". A new project
+  starts in the department the Projects page is filtered to.
+- **Projects page**: the status tabs and search stay. Below them, department chips (All
+  departments, each department, No department) show one department alone. Projects are
+  listed in one section per department (name and project count), in department order, then a
+  **No department** section last. Departments with no matching projects are hidden. The
+  status-tab counts follow the department filter, and each chip counts projects in the
+  current status tab. The filter is not kept in the URL, because the page keeps none of
+  its filters there.
+
+## Data model
+
+- **HD Department** (`helpdesk/helpdesk/doctype/hd_department`): `department_name` (Data,
+  unique, also the record name via `field:department_name`, renamable), `sort_order` (Int, new
+  departments go to the end), `is_active` (Check, default 1), `description`. System Manager
+  and Agent Manager have full access; Agent and Project Manager can read.
+- **Project.custom_department**: Link → HD Department, defined in
+  `helpdesk/setup/install.py` `get_custom_fields()` and applied on install and on every
+  migrate. It is a standard filter.
+- **Seeding**: `ensure_default_departments()` (in `hd_department.py`) inserts any of the five
+  defaults that are missing and leaves existing, renamed or deactivated ones alone. It runs from
+  `after_install` and from the patch `helpdesk.patches.v16_0_2.seed_departments` for existing
+  sites. Patches run once, so a default deleted later stays deleted.
+
+## API
+
+`helpdesk/api/departments.py`:
+
+| Method | HTTP | Permission | What it does |
+| --- | --- | --- | --- |
+| `get_departments(include_inactive=False)` | GET | read | Departments in order, each with `project_count` |
+| `add_department(department_name, description=None)` | POST | create | Adds one at the end |
+| `rename_department(department, new_name)` | POST | write | `frappe.rename_doc`; projects follow |
+| `move_department(department, direction)` | POST | write | `up`/`down`; renumbers all to 1..n |
+| `set_department_active(department, is_active)` | POST | write | Activates or deactivates |
+| `delete_department(department)` | POST | delete | Turns Frappe's `LinkExistsError` into a clear message |
+
+`helpdesk/tasky/api.py`: `create_project` and `update_project` take `department` (leaving it out
+of an update keeps the project's department, an empty value clears it). Picking an inactive
+department is refused unless the project already has it. `get_projects` and
+`get_project_detail` return `department`.
+
+## Roles and task categories
+
+Project member roles (`Project User.custom_role`): Project Manager, Functional Consultant,
+Developer, DevOps Engineer, Support Engineer, **Digital Marketing Specialist**, **Social Media
+Executive**, **Content Writer / Copywriter**, **Graphic Designer**, **Videographer cum
+Editor**, **Motion Graphics Artist / Animator** and **Project Coordinator**.
+
+Task categories (Task `custom_category`, HD Task Template Task `category`, and `CATEGORIES` in
+`desk/src/pages/tasky/taskMeta.ts`): Functional, Development, DevOps, Support, **Digital
+Marketing**, **Social Media**, **Content Writing**, **Graphic Design**, **Video**, **Motion
+Graphics**, **Coordination**, Common (last).
+
+`CATEGORY_TO_ROLE` in `helpdesk/tasky/api.py` decides who gets each task when a checklist is
+generated from a template: members with the matching role take turns, and when nobody has that
+role, every member takes turns.
+
+| Category | Role |
+| --- | --- |
+| Digital Marketing | Digital Marketing Specialist |
+| Social Media | Social Media Executive |
+| Content Writing | Content Writer / Copywriter |
+| Graphic Design | Graphic Designer |
+| Video | Videographer cum Editor |
+| Motion Graphics | Motion Graphics Artist / Animator |
+| Coordination | Project Coordinator |
+
+AI task estimates (`helpdesk/task_estimates.py`): when the AI isn't available and there are no
+finished tasks of the same category yet, the new categories use `CATEGORY_TYPICAL_DAYS`
+(Digital Marketing 2, Social Media 1, Content Writing 1, Graphic Design 1, Video 3, Motion
+Graphics 3, Coordination 1 working days) before the per-project-type default. The AI prompt
+also gives rough durations for designs and videos.
+
+## Decisions
+
+- **Project Coordinator has no manager powers.** Only members with the Project Manager
+  project role manage a project (`helpdesk/tasky/permissions.py` `MANAGER_PROJECT_ROLE`, and
+  `get_project_managers` in `helpdesk/work_reminders.py`, and the work-summary query). Giving
+  coordinators those rights would change who can edit projects and approve tasks, so it is left
+  for a separate decision.
+- **Lead rotation stays among Developers** (`LEAD_ROTATION_ROLES` in `helpdesk/tasky/api.py`).
+  Creative projects can still set a lead by hand.
+- **Department is a custom field**, like the other fields helpdesk adds to its own Project,
+  Project User and Task doctypes, so option and field changes reach existing sites on migrate.
+- **Projects without a department** are listed last rather than hidden, so nothing goes missing
+  before existing projects are assigned.

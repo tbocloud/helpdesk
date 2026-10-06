@@ -22,6 +22,20 @@ PENDING_REVIEW_STATUS = "Pending Review"
 TASK_DONE = ("Completed", "Cancelled")
 # the most one completion may log; longer work belongs on a manual timesheet
 MAX_HOURS_PER_COMPLETION = 24
+# a template task goes to a project member with this role (round robin), else to anyone
+CATEGORY_TO_ROLE = {
+    "Functional": "Functional Consultant",
+    "Development": "Developer",
+    "DevOps": "DevOps Engineer",
+    "Support": "Support Engineer",
+    "Digital Marketing": "Digital Marketing Specialist",
+    "Social Media": "Social Media Executive",
+    "Content Writing": "Content Writer / Copywriter",
+    "Graphic Design": "Graphic Designer",
+    "Video": "Videographer cum Editor",
+    "Motion Graphics": "Motion Graphics Artist / Animator",
+    "Coordination": "Project Coordinator",
+}
 
 
 def _resolve_project(project, ptype="read"):
@@ -239,6 +253,7 @@ def create_project(
     project_lead: str | None = None,
     review_before_done: bool = False,
     project_type: str | None = None,
+    department: str | None = None,
 ):
     """Create a new ERPNext Project with optional team members and lead."""
     import json
@@ -261,6 +276,7 @@ def create_project(
             "status": "Open",
             "review_before_done": 1 if review_before_done else 0,
             "project_type": project_type or None,
+            "custom_department": _pick_department(department),
         }
     )
     for m in members_list:
@@ -285,7 +301,13 @@ def create_project(
         "project_name": doc.project_name,
         "customer": doc.customer,
         "status": doc.status,
+        "department": doc.custom_department,
     }
+
+
+def _pick_department(department: str | None) -> str | None:
+    """The department to save on a project; Project.validate refuses a newly picked inactive one."""
+    return (department or "").strip() or None
 
 
 @frappe.whitelist()
@@ -296,13 +318,6 @@ def generate_checklist(project: str, template: str):
 
     if not frappe.db.exists("HD Task Template", template_name):
         frappe.throw(_("Template not found"))
-
-    CATEGORY_TO_ROLE = {
-        "Functional": "Functional Consultant",
-        "Development": "Developer",
-        "DevOps": "DevOps Engineer",
-        "Support": "Support Engineer",
-    }
 
     template_doc = frappe.get_doc("HD Task Template", template_name)
     template_doc.check_permission("read")
@@ -1408,6 +1423,7 @@ def get_project_detail(project: str):
         ),
         "review_before_done": bool(doc.review_before_done),
         "project_type": doc.project_type,
+        "department": doc.custom_department,
     }
 
 
@@ -1448,6 +1464,7 @@ def get_projects():
             "expected_end_date",
             "priority",
             "project_lead",
+            "custom_department as department",
         ],
     )
     lead_names = dict(
@@ -1481,8 +1498,12 @@ def update_project(
     project_lead: str | None = None,
     review_before_done: bool | None = None,
     project_type: str | None = None,
+    department: str | None = None,
 ):
-    """Edit a project's details, members and lead. Project owners only."""
+    """Edit a project's details, members and lead. Project owners only.
+
+    Leaving `department` out keeps the project's department; an empty one clears it.
+    """
     project = _resolve_project(str(project))
     if not is_project_owner(project):
         frappe.throw(
@@ -1511,6 +1532,8 @@ def update_project(
         doc.review_before_done = 1 if review_before_done else 0
     if project_type is not None:
         doc.project_type = project_type or None
+    if department is not None:
+        doc.custom_department = _pick_department(department)
 
     if members is not None:
         members_list = json.loads(members) if isinstance(members, str) else members

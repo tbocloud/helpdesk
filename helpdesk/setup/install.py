@@ -13,6 +13,9 @@ from helpdesk.content_team import ensure_role as ensure_content_team_role
 from helpdesk.helpdesk.doctype.hd_content_occasion.hd_content_occasion import (
     ensure_default_occasions,
 )
+from helpdesk.helpdesk.doctype.hd_department.hd_department import (
+    ensure_default_departments,
+)
 from helpdesk.setup.default_views import add_default_views
 
 from .default_template import create_default_template
@@ -22,6 +25,39 @@ from .ticket_type import create_fallback_ticket_type, create_ootb_ticket_types
 from .welcome_ticket import create_welcome_ticket
 
 FORM_SCRIPT_NAME = "Helpdesk AI Support Actions"
+
+# Project User roles; helpdesk.tasky.api.CATEGORY_TO_ROLE maps task categories to them
+PROJECT_ROLES = (
+    "Project Manager",
+    "Functional Consultant",
+    "Developer",
+    "DevOps Engineer",
+    "Support Engineer",
+    "Digital Marketing Specialist",
+    "Social Media Executive",
+    "Content Writer / Copywriter",
+    "Graphic Designer",
+    "Videographer cum Editor",
+    "Motion Graphics Artist / Animator",
+    "Project Coordinator",
+)
+PROJECT_ROLE_OPTIONS = "\n".join(PROJECT_ROLES)
+# keep in step with HD Task Template Task.category and CATEGORIES in desk/src/pages/tasky/taskMeta.ts
+TASK_CATEGORIES = (
+    "Functional",
+    "Development",
+    "DevOps",
+    "Support",
+    "Digital Marketing",
+    "Social Media",
+    "Content Writing",
+    "Graphic Design",
+    "Video",
+    "Motion Graphics",
+    "Coordination",
+    "Common",
+)
+TASK_CATEGORY_OPTIONS = "\n".join(TASK_CATEGORIES)
 
 
 def after_install():
@@ -48,6 +84,7 @@ def after_install():
     _create_form_script()
     ensure_content_team_role()
     ensure_default_occasions()
+    ensure_default_departments()
     ensure_customization_ticket_type()
     # Always keep this at last, because sql_ddl makes the db commit
     add_fts_index()
@@ -349,7 +386,7 @@ def get_custom_fields():
                 "fieldname": "custom_category",
                 "fieldtype": "Select",
                 "label": "Category",
-                "options": "Functional\nDevelopment\nDevOps\nSupport\nCommon",
+                "options": TASK_CATEGORY_OPTIONS,
                 "insert_after": "task_type",
                 "in_list_view": 1,
                 "in_standard_filter": 1,
@@ -578,12 +615,22 @@ def get_custom_fields():
                 "hidden": 1,
             },
         ],
+        "Project": [
+            {
+                "fieldname": "custom_department",
+                "fieldtype": "Link",
+                "options": "HD Department",
+                "label": "Department",
+                "insert_after": "project_type",
+                "in_standard_filter": 1,
+            },
+        ],
         "Project User": [
             {
                 "fieldname": "custom_role",
                 "fieldtype": "Select",
                 "label": "Role",
-                "options": "Project Manager\nFunctional Consultant\nDeveloper\nDevOps Engineer\nSupport Engineer",
+                "options": PROJECT_ROLE_OPTIONS,
                 "insert_after": "user",
                 # a column, so each member's role is seen and set right in the table
                 "in_list_view": 1,

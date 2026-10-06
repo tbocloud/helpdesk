@@ -68,3 +68,4 @@ helpdesk.patches.v16_0_2.customization_estimates
 helpdesk.patches.v16_0_2.saturday_rota
 helpdesk.patches.v16_0_2.tbo_sla_targets
 helpdesk.patches.v16_0_2.set_video_editor_days_before
+helpdesk.patches.v16_0_2.seed_departments

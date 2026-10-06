@@ -91,6 +91,32 @@
             </TextInput>
           </div>
 
+          <div
+            v-if="departmentChips.length"
+            class="-mx-1 mt-3 flex gap-1.5 overflow-x-auto px-1 pb-1"
+            role="group"
+            :aria-label="__('Filter projects by department')"
+          >
+            <button
+              v-for="chip in departmentChips"
+              :key="chip.key"
+              type="button"
+              :aria-pressed="activeDepartment === chip.key"
+              class="flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+              :class="
+                activeDepartment === chip.key
+                  ? 'border-outline-gray-4 bg-surface-gray-3 text-ink-gray-9'
+                  : 'border-outline-gray-2 text-ink-gray-6 hover:bg-surface-gray-2 hover:text-ink-gray-8'
+              "
+              @click="activeDepartment = chip.key"
+            >
+              {{ chip.label }}
+              <span class="font-mono text-xs tabular-nums text-ink-gray-5">
+                {{ departmentCount(chip.key) }}
+              </span>
+            </button>
+          </div>
+
           <!-- Loading -->
           <div
             v-if="projects.loading && !projects.data"
@@ -149,241 +175,282 @@
             </TaskyState>
           </div>
 
-          <!-- Cards -->
-          <ul
-            v-else
-            role="list"
-            class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
-          >
-            <li
-              v-for="project in visibleProjects"
-              :key="project.name"
-              class="flex flex-col overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base shadow-sm transition-colors hover:border-outline-gray-3"
+          <!-- Cards, one section per department -->
+          <div v-else class="mt-5 flex flex-col gap-8">
+            <section
+              v-for="(group, groupIdx) in groups"
+              :key="group.key"
+              :aria-labelledby="`department-heading-${groupIdx}`"
             >
-              <div class="flex flex-1 flex-col gap-3 p-4">
-                <div class="flex items-center justify-between gap-2">
-                  <TaskStatusBadge kind="project" :status="project.status" />
-                  <span class="truncate font-mono text-xs text-ink-gray-5">{{
-                    project.name
-                  }}</span>
-                </div>
-
-                <div class="min-w-0">
-                  <router-link
-                    :to="{
-                      name: 'TaskyProject',
-                      params: { projectId: project.name },
-                    }"
-                    class="block truncate rounded text-base-semibold text-ink-gray-9 hover:underline"
-                  >
-                    {{ project.project_name || project.name }}
-                  </router-link>
-                  <div
-                    class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink-gray-6"
-                  >
-                    <span
-                      v-if="project.customer"
-                      class="flex min-w-0 items-center gap-1"
-                    >
-                      <LucideBuilding2
-                        class="size-3.5 shrink-0"
-                        aria-hidden="true"
-                      />
-                      <span class="truncate">{{ project.customer }}</span>
-                    </span>
-                    <span
-                      v-if="project.project_lead"
-                      class="flex min-w-0 items-center gap-1"
-                    >
-                      <LucideUserStar
-                        class="size-3.5 shrink-0"
-                        aria-hidden="true"
-                      />
-                      <span class="truncate">{{
-                        __(
-                          "Lead: {0}",
-                          project.project_lead_name || project.project_lead
-                        )
-                      }}</span>
-                    </span>
-                    <span class="flex items-center gap-1 tabular-nums">
-                      <LucideCalendar
-                        class="size-3.5 shrink-0"
-                        aria-hidden="true"
-                      />
-                      {{ formatDateRange(project) }}
-                    </span>
-                  </div>
-                </div>
-
-                <!-- Progress -->
-                <div
-                  v-if="
-                    dashboards[project.name]?.loading &&
-                    !dashboards[project.name]?.data
-                  "
-                  class="flex flex-col gap-2"
-                >
-                  <div
-                    class="h-3 w-1/3 animate-pulse rounded bg-surface-gray-2"
-                  />
-                  <div
-                    class="h-1.5 w-full animate-pulse rounded-full bg-surface-gray-2"
-                  />
-                </div>
-                <div v-else-if="statsFor(project)" class="flex flex-col gap-2">
-                  <div class="flex items-center justify-between text-xs">
-                    <span class="text-ink-gray-5">{{ __("Progress") }}</span>
-                    <span class="font-mono tabular-nums text-ink-gray-7">
-                      {{ statsFor(project).completed }}/{{
-                        statsFor(project).total
-                      }}
-                      <span class="text-ink-gray-5"
-                        >· {{ statsFor(project).completion_pct }}%</span
-                      >
-                    </span>
-                  </div>
-                  <div
-                    class="flex h-1.5 w-full overflow-hidden rounded-full bg-surface-gray-2"
-                    role="img"
-                    :aria-label="progressLabel(project)"
-                  >
-                    <div
-                      v-for="seg in segments(project)"
-                      :key="seg.key"
-                      class="h-full"
-                      :class="seg.bar"
-                      :style="{ width: seg.pct + '%' }"
-                    />
-                  </div>
-                  <div
-                    class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-gray-6"
-                  >
-                    <span
-                      v-for="seg in legend(project)"
-                      :key="seg.key"
-                      class="flex items-center gap-1.5 tabular-nums"
-                    >
-                      <span
-                        class="size-2 rounded-full"
-                        :class="seg.bar"
-                        aria-hidden="true"
-                      />
-                      {{ seg.count }} {{ seg.label }}
-                    </span>
-                    <span
-                      v-if="statsFor(project).overdue"
-                      class="flex items-center gap-1 font-medium text-danger tabular-nums"
-                    >
-                      <LucideAlarmClock class="size-3.5" aria-hidden="true" />
-                      {{ statsFor(project).overdue }} {{ __("overdue") }}
-                    </span>
-                  </div>
-                </div>
-
-                <!-- Phases -->
-                <div v-if="phasesFor(project).length">
-                  <button
-                    type="button"
-                    class="flex items-center gap-1 rounded text-xs text-ink-gray-6 hover:text-ink-gray-8"
-                    :aria-expanded="expandedCards.has(project.name)"
-                    :aria-controls="`phases-${project.name}`"
-                    @click="toggleExpand(project.name)"
-                  >
-                    <component
-                      :is="
-                        expandedCards.has(project.name)
-                          ? LucideChevronDown
-                          : LucideChevronRight
-                      "
-                      class="size-3.5"
-                      aria-hidden="true"
-                    />
-                    {{ __("Phases") }}
-                    <span class="font-mono tabular-nums text-ink-gray-5">{{
-                      phasesFor(project).length
-                    }}</span>
-                  </button>
-                  <div
-                    v-if="expandedCards.has(project.name)"
-                    :id="`phases-${project.name}`"
-                    class="mt-2 flex flex-wrap gap-1.5"
-                  >
-                    <span
-                      v-for="phase in phasesFor(project)"
-                      :key="phase.name"
-                      class="inline-flex items-center gap-1.5 rounded-md bg-surface-gray-2 px-1.5 py-0.5 text-xs text-ink-gray-7"
-                    >
-                      {{ phase.phase_name }}
-                      <span class="font-mono tabular-nums text-ink-gray-5">
-                        {{ phase.completed_count }}/{{ phase.total_count }}
-                      </span>
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div
-                class="flex flex-wrap items-center gap-1 border-t border-outline-gray-2 bg-surface-gray-1 px-2 py-1.5"
+              <h2
+                :id="`department-heading-${groupIdx}`"
+                class="flex items-center gap-2 text-base-semibold text-ink-gray-9"
               >
-                <Button
-                  variant="ghost"
-                  :label="__('Open')"
-                  @click="navigateToProject(project.name)"
+                <LucideFolder
+                  class="size-4 text-ink-gray-5"
+                  aria-hidden="true"
+                />
+                {{ group.label }}
+                <span
+                  class="rounded bg-surface-gray-2 px-1.5 font-mono text-xs tabular-nums text-ink-gray-6"
                 >
-                  <template #prefix
-                    ><LucideLayoutDashboard class="size-4" aria-hidden="true"
-                  /></template>
-                </Button>
-                <Button
-                  variant="ghost"
-                  :label="__('Board')"
-                  @click="navigateToKanban(project.name)"
+                  {{ group.projects.length }}
+                  <span class="sr-only">{{ __("projects") }}</span>
+                </span>
+              </h2>
+              <ul
+                role="list"
+                class="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
+              >
+                <li
+                  v-for="project in group.projects"
+                  :key="project.name"
+                  class="flex flex-col overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base shadow-sm transition-colors hover:border-outline-gray-3"
                 >
-                  <template #prefix
-                    ><LucideKanban class="size-4" aria-hidden="true"
-                  /></template>
-                </Button>
-                <Button
-                  v-if="project.can_edit"
-                  variant="ghost"
-                  :label="__('Edit')"
-                  @click="openEdit(project.name)"
-                >
-                  <template #prefix
-                    ><LucidePencil class="size-4" aria-hidden="true"
-                  /></template>
-                </Button>
-                <Button
-                  v-if="project.can_manage"
-                  variant="ghost"
-                  class="ml-auto"
-                  :label="__('Checklist')"
-                  @click="onGenerateChecklist(project)"
-                >
-                  <template #prefix
-                    ><LucideClipboardList class="size-4" aria-hidden="true"
-                  /></template>
-                </Button>
-                <Button
-                  v-if="project.can_add_tasks"
-                  :class="project.can_manage ? '' : 'ml-auto'"
-                  :label="__('New task')"
-                  @click="openNewTask(project.name)"
-                >
-                  <template #prefix
-                    ><LucidePlus class="size-4" aria-hidden="true"
-                  /></template>
-                </Button>
-              </div>
-            </li>
-          </ul>
+                  <div class="flex flex-1 flex-col gap-3 p-4">
+                    <div class="flex items-center justify-between gap-2">
+                      <TaskStatusBadge
+                        kind="project"
+                        :status="project.status"
+                      />
+                      <span
+                        class="truncate font-mono text-xs text-ink-gray-5"
+                        >{{ project.name }}</span
+                      >
+                    </div>
+
+                    <div class="min-w-0">
+                      <router-link
+                        :to="{
+                          name: 'TaskyProject',
+                          params: { projectId: project.name },
+                        }"
+                        class="block truncate rounded text-base-semibold text-ink-gray-9 hover:underline"
+                      >
+                        {{ project.project_name || project.name }}
+                      </router-link>
+                      <div
+                        class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink-gray-6"
+                      >
+                        <span
+                          v-if="project.customer"
+                          class="flex min-w-0 items-center gap-1"
+                        >
+                          <LucideBuilding2
+                            class="size-3.5 shrink-0"
+                            aria-hidden="true"
+                          />
+                          <span class="truncate">{{ project.customer }}</span>
+                        </span>
+                        <span
+                          v-if="project.project_lead"
+                          class="flex min-w-0 items-center gap-1"
+                        >
+                          <LucideUserStar
+                            class="size-3.5 shrink-0"
+                            aria-hidden="true"
+                          />
+                          <span class="truncate">{{
+                            __(
+                              "Lead: {0}",
+                              project.project_lead_name || project.project_lead
+                            )
+                          }}</span>
+                        </span>
+                        <span class="flex items-center gap-1 tabular-nums">
+                          <LucideCalendar
+                            class="size-3.5 shrink-0"
+                            aria-hidden="true"
+                          />
+                          {{ formatDateRange(project) }}
+                        </span>
+                      </div>
+                    </div>
+
+                    <!-- Progress -->
+                    <div
+                      v-if="
+                        dashboards[project.name]?.loading &&
+                        !dashboards[project.name]?.data
+                      "
+                      class="flex flex-col gap-2"
+                    >
+                      <div
+                        class="h-3 w-1/3 animate-pulse rounded bg-surface-gray-2"
+                      />
+                      <div
+                        class="h-1.5 w-full animate-pulse rounded-full bg-surface-gray-2"
+                      />
+                    </div>
+                    <div
+                      v-else-if="statsFor(project)"
+                      class="flex flex-col gap-2"
+                    >
+                      <div class="flex items-center justify-between text-xs">
+                        <span class="text-ink-gray-5">{{
+                          __("Progress")
+                        }}</span>
+                        <span class="font-mono tabular-nums text-ink-gray-7">
+                          {{ statsFor(project).completed }}/{{
+                            statsFor(project).total
+                          }}
+                          <span class="text-ink-gray-5"
+                            >· {{ statsFor(project).completion_pct }}%</span
+                          >
+                        </span>
+                      </div>
+                      <div
+                        class="flex h-1.5 w-full overflow-hidden rounded-full bg-surface-gray-2"
+                        role="img"
+                        :aria-label="progressLabel(project)"
+                      >
+                        <div
+                          v-for="seg in segments(project)"
+                          :key="seg.key"
+                          class="h-full"
+                          :class="seg.bar"
+                          :style="{ width: seg.pct + '%' }"
+                        />
+                      </div>
+                      <div
+                        class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-gray-6"
+                      >
+                        <span
+                          v-for="seg in legend(project)"
+                          :key="seg.key"
+                          class="flex items-center gap-1.5 tabular-nums"
+                        >
+                          <span
+                            class="size-2 rounded-full"
+                            :class="seg.bar"
+                            aria-hidden="true"
+                          />
+                          {{ seg.count }} {{ seg.label }}
+                        </span>
+                        <span
+                          v-if="statsFor(project).overdue"
+                          class="flex items-center gap-1 font-medium text-danger tabular-nums"
+                        >
+                          <LucideAlarmClock
+                            class="size-3.5"
+                            aria-hidden="true"
+                          />
+                          {{ statsFor(project).overdue }} {{ __("overdue") }}
+                        </span>
+                      </div>
+                    </div>
+
+                    <!-- Phases -->
+                    <div v-if="phasesFor(project).length">
+                      <button
+                        type="button"
+                        class="flex items-center gap-1 rounded text-xs text-ink-gray-6 hover:text-ink-gray-8"
+                        :aria-expanded="expandedCards.has(project.name)"
+                        :aria-controls="`phases-${project.name}`"
+                        @click="toggleExpand(project.name)"
+                      >
+                        <component
+                          :is="
+                            expandedCards.has(project.name)
+                              ? LucideChevronDown
+                              : LucideChevronRight
+                          "
+                          class="size-3.5"
+                          aria-hidden="true"
+                        />
+                        {{ __("Phases") }}
+                        <span class="font-mono tabular-nums text-ink-gray-5">{{
+                          phasesFor(project).length
+                        }}</span>
+                      </button>
+                      <div
+                        v-if="expandedCards.has(project.name)"
+                        :id="`phases-${project.name}`"
+                        class="mt-2 flex flex-wrap gap-1.5"
+                      >
+                        <span
+                          v-for="phase in phasesFor(project)"
+                          :key="phase.name"
+                          class="inline-flex items-center gap-1.5 rounded-md bg-surface-gray-2 px-1.5 py-0.5 text-xs text-ink-gray-7"
+                        >
+                          {{ phase.phase_name }}
+                          <span class="font-mono tabular-nums text-ink-gray-5">
+                            {{ phase.completed_count }}/{{ phase.total_count }}
+                          </span>
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div
+                    class="flex flex-wrap items-center gap-1 border-t border-outline-gray-2 bg-surface-gray-1 px-2 py-1.5"
+                  >
+                    <Button
+                      variant="ghost"
+                      :label="__('Open')"
+                      @click="navigateToProject(project.name)"
+                    >
+                      <template #prefix
+                        ><LucideLayoutDashboard
+                          class="size-4"
+                          aria-hidden="true"
+                      /></template>
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      :label="__('Board')"
+                      @click="navigateToKanban(project.name)"
+                    >
+                      <template #prefix
+                        ><LucideKanban class="size-4" aria-hidden="true"
+                      /></template>
+                    </Button>
+                    <Button
+                      v-if="project.can_edit"
+                      variant="ghost"
+                      :label="__('Edit')"
+                      @click="openEdit(project.name)"
+                    >
+                      <template #prefix
+                        ><LucidePencil class="size-4" aria-hidden="true"
+                      /></template>
+                    </Button>
+                    <Button
+                      v-if="project.can_manage"
+                      variant="ghost"
+                      class="ml-auto"
+                      :label="__('Checklist')"
+                      @click="onGenerateChecklist(project)"
+                    >
+                      <template #prefix
+                        ><LucideClipboardList class="size-4" aria-hidden="true"
+                      /></template>
+                    </Button>
+                    <Button
+                      v-if="project.can_add_tasks"
+                      :class="project.can_manage ? '' : 'ml-auto'"
+                      :label="__('New task')"
+                      @click="openNewTask(project.name)"
+                    >
+                      <template #prefix
+                        ><LucidePlus class="size-4" aria-hidden="true"
+                      /></template>
+                    </Button>
+                  </div>
+                </li>
+              </ul>
+            </section>
+          </div>
         </template>
       </div>
     </div>
 
     <!-- New project -->
-    <ProjectFormDialog v-model:open="showNewForm" @saved="projects.reload()" />
+    <ProjectFormDialog
+      v-model:open="showNewForm"
+      :default-department="selectedDepartmentName"
+      @saved="projects.reload()"
+    />
     <ProjectFormDialog
       v-model:open="showEdit"
       :project-id="editingProject"
@@ -423,6 +490,7 @@ import LucideChevronDown from "~icons/lucide/chevron-down";
 import LucideChevronRight from "~icons/lucide/chevron-right";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideClipboardList from "~icons/lucide/clipboard-list";
+import LucideFolder from "~icons/lucide/folder";
 import LucideFolderKanban from "~icons/lucide/folder-kanban";
 import LucideLayoutDashboard from "~icons/lucide/layout-dashboard";
 import LucidePencil from "~icons/lucide/pencil";
@@ -451,7 +519,13 @@ interface Project {
   customer?: string;
   project_lead?: string;
   project_lead_name?: string;
+  department?: string;
   can_manage?: boolean;
+}
+
+interface Department {
+  name: string;
+  is_active: boolean;
 }
 
 interface Phase {
@@ -471,25 +545,84 @@ const projects = createResource({
 
 const allProjects = computed<Project[]>(() => projects.data ?? []);
 
+// inactive ones too, so projects still in one keep their section
+const departments = createResource({
+  url: "helpdesk.api.departments.get_departments",
+  params: { include_inactive: true },
+  auto: true,
+  transform: (d: Department[]) => d ?? [],
+});
+const departmentList = computed<Department[]>(() => departments.data ?? []);
+
 // --- filters ---
 
 const statusTabs: StatusTab[] = ["Open", "Completed", "Cancelled", "All"];
 const activeStatus = ref<StatusTab>("Open");
 const search = ref("");
 
+const ALL_DEPARTMENTS = "";
+// a key no department name can be: names are trimmed, and this one is a space
+const NO_DEPARTMENT = " ";
+const activeDepartment = ref(ALL_DEPARTMENTS);
+
+function departmentKey(p: Project) {
+  return p.department || NO_DEPARTMENT;
+}
+
 function matchesStatus(p: Project, tab: StatusTab) {
   return tab === "All" || (p.status || "Open") === tab;
 }
 
-function countFor(tab: StatusTab) {
-  return allProjects.value.filter((p) => matchesStatus(p, tab)).length;
+function matchesDepartment(p: Project, key: string) {
+  return key === ALL_DEPARTMENTS || departmentKey(p) === key;
 }
+
+function countFor(tab: StatusTab) {
+  return allProjects.value.filter(
+    (p) => matchesStatus(p, tab) && matchesDepartment(p, activeDepartment.value)
+  ).length;
+}
+
+function departmentCount(key: string) {
+  return allProjects.value.filter(
+    (p) => matchesStatus(p, activeStatus.value) && matchesDepartment(p, key)
+  ).length;
+}
+
+const departmentChips = computed(() => {
+  const used = new Set(allProjects.value.map(departmentKey));
+  const named = departmentList.value
+    .filter((d) => d.is_active || used.has(d.name))
+    .map((d) => ({ key: d.name, label: d.name }));
+  if (!named.length) return [];
+  return [
+    { key: ALL_DEPARTMENTS, label: __("All departments") },
+    ...named,
+    ...(used.has(NO_DEPARTMENT)
+      ? [{ key: NO_DEPARTMENT, label: __("No department") }]
+      : []),
+  ];
+});
+
+// a department can lose its chip (inactive, last project moved away); don't keep filtering by it
+watch(departmentChips, (chips) => {
+  if (
+    activeDepartment.value !== ALL_DEPARTMENTS &&
+    !chips.some((c) => c.key === activeDepartment.value)
+  )
+    activeDepartment.value = ALL_DEPARTMENTS;
+});
+
+const selectedDepartmentName = computed(() =>
+  activeDepartment.value === NO_DEPARTMENT ? "" : activeDepartment.value
+);
 
 const visibleProjects = computed(() => {
   const q = search.value.trim().toLowerCase();
   return allProjects.value.filter(
     (p) =>
       matchesStatus(p, activeStatus.value) &&
+      matchesDepartment(p, activeDepartment.value) &&
       (!q ||
         (p.project_name || "").toLowerCase().includes(q) ||
         p.name.toLowerCase().includes(q) ||
@@ -497,8 +630,39 @@ const visibleProjects = computed(() => {
   );
 });
 
+interface ProjectGroup {
+  key: string;
+  label: string;
+  projects: Project[];
+}
+
+// departments in their set order, empty ones left out, projects without one last
+const groups = computed<ProjectGroup[]>(() => {
+  const byDepartment = new Map<string, Project[]>();
+  for (const p of visibleProjects.value) {
+    const key = departmentKey(p);
+    if (!byDepartment.has(key)) byDepartment.set(key, []);
+    byDepartment.get(key)!.push(p);
+  }
+  const order = departmentList.value.map((d) => d.name);
+  const unlisted = [...byDepartment.keys()]
+    .filter((key) => key !== NO_DEPARTMENT && !order.includes(key))
+    .sort();
+  const named = [...order, ...unlisted]
+    .filter((key) => byDepartment.has(key))
+    .map((key) => ({ key, label: key, projects: byDepartment.get(key)! }));
+  const none = byDepartment.get(NO_DEPARTMENT);
+  return none
+    ? [
+        ...named,
+        { key: NO_DEPARTMENT, label: __("No department"), projects: none },
+      ]
+    : named;
+});
+
 function resetFilters() {
   activeStatus.value = "All";
+  activeDepartment.value = ALL_DEPARTMENTS;
   search.value = "";
 }
 
@@ -528,6 +692,7 @@ watch(
 
 function reloadAll() {
   projects.reload();
+  departments.reload();
   Object.values(dashboards).forEach((d) => d.reload());
 }
 

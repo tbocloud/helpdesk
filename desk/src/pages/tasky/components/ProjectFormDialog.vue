@@ -33,15 +33,24 @@
         :label="__('Customer')"
         :placeholder="__('Select customer')"
       />
-      <FormControl
-        v-model="form.project_type"
-        type="select"
-        :label="__('Project type')"
-        :options="projectTypeOptions"
-        :description="
-          __('The AI uses this to estimate how long new tasks take.')
-        "
-      />
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <FormControl
+          v-model="form.department"
+          type="select"
+          :label="__('Department')"
+          :options="departmentOptions"
+          :description="__('Projects are grouped by department.')"
+        />
+        <FormControl
+          v-model="form.project_type"
+          type="select"
+          :label="__('Project type')"
+          :options="projectTypeOptions"
+          :description="
+            __('The AI uses this to estimate how long new tasks take.')
+          "
+        />
+      </div>
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <TextInput
           v-model="form.expected_start_date"
@@ -99,7 +108,7 @@
           <FormControl
             v-model="member.custom_role"
             type="select"
-            class="!w-48 shrink-0"
+            class="!w-56 shrink-0"
             :options="roleOptions"
             :aria-label="__('Role for member {0}', String(idx + 1))"
           />
@@ -189,10 +198,13 @@ import { computed, reactive, ref, watch } from "vue";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideUserPlus from "~icons/lucide/user-plus";
 import LucideX from "~icons/lucide/x";
+import { PROJECT_ROLES } from "../taskMeta";
 
 const props = defineProps<{
   /** Set to edit an existing project; leave empty to create one. */
   projectId?: string;
+  /** Department a new project starts in, e.g. the one the Projects page is showing. */
+  defaultDepartment?: string;
 }>();
 const open = defineModel<boolean>("open", { default: false });
 const emit = defineEmits<{ saved: [name: string] }>();
@@ -207,6 +219,7 @@ const EMPTY = () => ({
   project_name: "",
   customer: "",
   project_type: "",
+  department: "",
   expected_start_date: "",
   expected_end_date: "",
   status: "Open",
@@ -243,12 +256,30 @@ const projectTypeOptions = computed(() => [
 ]);
 
 const roleOptions = computed(() => [
-  { label: __("Project Manager"), value: "Project Manager" },
-  { label: __("Developer"), value: "Developer" },
-  { label: __("Functional Consultant"), value: "Functional Consultant" },
-  { label: __("DevOps Engineer"), value: "DevOps Engineer" },
-  { label: __("Support Engineer"), value: "Support Engineer" },
+  ...PROJECT_ROLES.map((role) => ({ label: __(role), value: role })),
   { label: __("Member"), value: "" },
+]);
+
+interface Department {
+  name: string;
+  is_active: boolean;
+}
+
+const departments = createResource({
+  url: "helpdesk.api.departments.get_departments",
+  params: { include_inactive: true },
+  transform: (d: Department[]) => d ?? [],
+});
+
+// an inactive department stays listed for the project that already has it
+const departmentOptions = computed(() => [
+  { label: __("No department"), value: "" },
+  ...(departments.data ?? [])
+    .filter((d: Department) => d.is_active || d.name === form.department)
+    .map((d: Department) => ({
+      label: d.is_active ? d.name : __("{0} (inactive)", d.name),
+      value: d.name,
+    })),
 ]);
 
 const leadOptions = computed(() => [
@@ -269,6 +300,7 @@ const detail = createResource({
       project_name: data.project_name || "",
       customer: data.customer || "",
       project_type: data.project_type || "",
+      department: data.department || "",
       expected_start_date: data.expected_start_date || "",
       expected_end_date: data.expected_end_date || "",
       status: data.status || "Open",
@@ -286,8 +318,10 @@ const detail = createResource({
 watch(open, (isOpen) => {
   if (!isOpen) return;
   error.value = "";
+  departments.reload();
   if (isEdit.value) detail.reload();
-  else Object.assign(form, EMPTY());
+  else
+    Object.assign(form, EMPTY(), { department: props.defaultDepartment || "" });
 });
 
 const canSubmit = computed(
@@ -330,6 +364,7 @@ async function submit() {
           expected_end_date: form.expected_end_date,
           customer: form.customer,
           project_type: form.project_type,
+          department: form.department,
           project_lead: form.project_lead || null,
           members,
           review_before_done: form.review_before_done,

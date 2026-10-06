@@ -612,6 +612,26 @@ def make_project(
     return doc
 
 
+def make_department(name: str, **kwargs):
+    """Creates an active HD Department at the end of the list, or returns the existing one."""
+    if frappe.db.exists("HD Department", name):
+        return frappe.get_doc("HD Department", name)
+    return frappe.get_doc(
+        {"doctype": "HD Department", "department_name": name, **kwargs}
+    ).insert(ignore_permissions=True)
+
+
+def make_task_template(template_name: str, tasks: list[dict]):
+    """Creates an HD Task Template; each of `tasks` is a template task row (task_name, category, ...)."""
+    return frappe.get_doc(
+        {
+            "doctype": "HD Task Template",
+            "template_name": template_name,
+            "tasks": [{"sort_order": i, **task} for i, task in enumerate(tasks)],
+        }
+    ).insert(ignore_permissions=True)
+
+
 def make_content_campaign(campaign_name: str, customer: str, **kwargs):
     """Creates an HD Content Campaign for `customer`."""
     return frappe.get_doc(
