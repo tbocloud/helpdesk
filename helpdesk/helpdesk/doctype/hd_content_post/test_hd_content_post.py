@@ -33,11 +33,16 @@ class TestHDContentPost(FrappeTestCase):
         create_customer(OTHER_CUSTOMER)
         make_tasky_user(*WRITER)
 
-    def test_idea_needs_no_date_but_later_stages_do(self):
-        post = make_content_post("Ramadan greeting", CUSTOMER)
-        self.assertFalse(post.publish_on)
+    def test_every_post_needs_a_date(self):
+        # an undated post has no slot on the calendar, so nobody would see it
+        for status in ("Idea", "Drafting"):
+            with self.assertRaises(frappe.ValidationError):
+                make_content_post(
+                    "Ramadan greeting", CUSTOMER, status=status, publish_on=None
+                )
 
-        post.status = "Drafting"
+        post = make_content_post("Ramadan greeting", CUSTOMER)
+        post.publish_on = None
         with self.assertRaises(frappe.ValidationError):
             post.save()
 
@@ -223,10 +228,11 @@ class TestMissedPostAlerts(FrappeTestCase):
         self.assertFalse(self.alerts_for(post))
 
     def test_cancelled_post_needs_no_date(self):
-        post = make_content_post("Scrapped idea", CUSTOMER)
-        post.status = "Cancelled"
-        post.save()
+        post = make_content_post(
+            "Scrapped idea", CUSTOMER, status="Cancelled", publish_on=None
+        )
         self.assertEqual(post.status, "Cancelled")
+        self.assertFalse(post.publish_on)
 
 
 class TestHDContentPostVisibility(FrappeTestCase):

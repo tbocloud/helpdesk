@@ -599,13 +599,29 @@ _("Content Calendar") }}{% endblock %} {% block style %}
   <div class="viewer-body">
     <div class="viewer-bar">
       <span class="grow" id="viewer-caption"></span>
-      <a class="btn sm" id="viewer-original" target="_blank" rel="noopener">{{ _("Open original") }}</a>
+      <a class="btn sm" id="viewer-original" target="_blank" rel="noopener"
+        >{{ _("Open original") }}</a
+      >
       <button type="button" class="btn sm" data-close>{{ _("Close") }}</button>
     </div>
     <div class="viewer-stage">
-      <button type="button" class="viewer-nav prev" id="viewer-prev" aria-label="{{ _('Previous image') }}">‹</button>
-      <img id="viewer-img" alt="">
-      <button type="button" class="viewer-nav next" id="viewer-next" aria-label="{{ _('Next image') }}">›</button>
+      <button
+        type="button"
+        class="viewer-nav prev"
+        id="viewer-prev"
+        aria-label="{{ _('Previous image') }}"
+      >
+        ‹
+      </button>
+      <img id="viewer-img" alt="" />
+      <button
+        type="button"
+        class="viewer-nav next"
+        id="viewer-next"
+        aria-label="{{ _('Next image') }}"
+      >
+        ›
+      </button>
     </div>
   </div>
 </dialog>

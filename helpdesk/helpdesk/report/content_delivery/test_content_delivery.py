@@ -5,10 +5,83 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_to_date, getdate, now_datetime
 
-from helpdesk.helpdesk.report.content_delivery.content_delivery import execute
+from helpdesk.helpdesk.report.content_delivery.content_delivery import (
+    execute,
+    get_totals,
+    health_key,
+    percent,
+    round_half_up,
+)
 from helpdesk.test_utils import create_customer, hold_commits, make_content_post
 
 CUSTOMER = "Al Noor Trading LLC"
+
+
+def report_row(**values) -> dict:
+    """A report row with every count at zero, overridden by `values`."""
+    keys = (
+        "planned",
+        "published",
+        "on_time",
+        "late",
+        "overdue",
+        "upcoming",
+        "awaiting_client",
+        "planning",
+        "review",
+        "ready",
+        "approval_count",
+    )
+    return {
+        **dict.fromkeys(keys, 0),
+        "promised": None,
+        "on_time_pct": None,
+        "approval_hours": 0,
+        "avg_approval_hours": None,
+        **values,
+    }
+
+
+class TestDeliveryMath(FrappeTestCase):
+    """The downloads round and average the way the page does."""
+
+    def test_total_approval_averages_over_approvals_not_customers(self):
+        # 100 posts with one 200 h approval, and 2 posts with two 2 h approvals:
+        # three approvals of 204 h in all, so 68 h, not ~196 h weighted by posts
+        rows = [
+            report_row(planned=100, approval_count=1, approval_hours=200),
+            report_row(planned=2, approval_count=2, approval_hours=4),
+        ]
+        self.assertEqual(get_totals(rows)["avg_approval_hours"], 68.0)
+        self.assertIsNone(get_totals([report_row(planned=3)])["avg_approval_hours"])
+
+    def test_rounds_half_up_like_the_page(self):
+        self.assertEqual(round_half_up(12.5), 13)
+        self.assertEqual(round_half_up(2.5), 3)
+        self.assertEqual(round_half_up(66.66), 67)
+        self.assertEqual(round_half_up(1.25, 1), 1.3)
+        # the page's Math.round((h / n) * 10) / 10 gives 926 here, so must this
+        self.assertEqual(round_half_up(925.9499999999999, 1), 926.0)
+        # whole percents, as the page shows them
+        self.assertEqual(percent(2, 3), 67)
+        self.assertEqual(percent(1, 8), 13)
+        self.assertIsNone(percent(1, 0))
+
+    def test_health_key_does_not_depend_on_the_language(self):
+        self.assertEqual(health_key(report_row(planned=2, upcoming=2)), "nothing-due")
+        self.assertEqual(health_key(report_row(planned=4, overdue=2)), "behind")
+        self.assertEqual(
+            health_key(
+                report_row(
+                    planned=4, overdue=1, published=3, on_time=3, on_time_pct=100
+                )
+            ),
+            "at-risk",
+        )
+        self.assertEqual(
+            health_key(report_row(planned=4, published=4, on_time=4, on_time_pct=100)),
+            "on-track",
+        )
 
 
 class TestContentDelivery(FrappeTestCase):
@@ -126,6 +199,8 @@ class TestContentDelivery(FrappeTestCase):
         self.assertEqual(frappe.response.type, "download")
         self.assertIn(CUSTOMER, frappe.response.filecontent)
         self.assertIn("window.print", frappe.response.filecontent)
+        # styled by the health key, so the colours work in any language
+        self.assertIn("health-nothing-due", frappe.response.filecontent)
 
         # with it: a real PDF
         with (

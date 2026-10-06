@@ -80,9 +80,7 @@
       <Button
         :variant="filters.person === auth.userId ? 'subtle' : 'ghost'"
         :label="__('My posts')"
-        :title="
-          __('Posts where I am the writer, designer, marketer or video editor')
-        "
+        :title="__('Posts where I am the writer, designer or marketer')"
         @click="
           filters.person = filters.person === auth.userId ? '' : auth.userId
         "
@@ -280,6 +278,50 @@
             </span>
           </button>
         </div>
+        <!-- posts saved before a date was required have no slot, so list them here -->
+        <div
+          v-if="undated.data?.length"
+          class="flex flex-col gap-2 rounded-lg border border-outline-gray-2 bg-surface-gray-1 px-4 py-2.5"
+          role="status"
+        >
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <p class="text-sm text-ink-gray-7">
+              <LucideCalendarX
+                class="mr-1 inline size-4 align-text-bottom text-ink-gray-5"
+                aria-hidden="true"
+              />
+              {{
+                undated.data.length === 1
+                  ? __(
+                      "1 post has no posting date, so it isn't on the calendar."
+                    )
+                  : __(
+                      "{0} posts have no posting date, so they aren't on the calendar.",
+                      String(undated.data.length)
+                    )
+              }}
+            </p>
+            <Button
+              size="sm"
+              variant="ghost"
+              :label="showUndated ? __('Hide') : __('Show them')"
+              @click="showUndated = !showUndated"
+            />
+          </div>
+          <ul v-if="showUndated" class="flex flex-wrap gap-1.5">
+            <li v-for="p in undated.data" :key="p.name">
+              <button
+                type="button"
+                class="rounded-md border border-outline-gray-2 bg-surface-base px-2 py-1 text-left text-sm text-ink-gray-8 hover:bg-surface-gray-2"
+                :title="__('Open it and set a posting date')"
+                @click="openPost(p.name)"
+              >
+                {{ p.title }}
+                <span class="text-xs text-ink-gray-5">· {{ p.customer }}</span>
+              </button>
+            </li>
+          </ul>
+        </div>
         <div
           v-if="(view === 'calendar' ? posts : monthPosts).error"
           class="absolute inset-x-4 top-4 z-10 flex items-center justify-between gap-3 rounded-lg bg-danger-soft px-4 py-2.5 text-sm text-danger"
@@ -371,6 +413,7 @@ import LucideMail from "~icons/lucide/mail";
 import LucideSheet from "~icons/lucide/sheet";
 import LucideCalendarSync from "~icons/lucide/calendar-sync";
 import LucideSparkles from "~icons/lucide/sparkles";
+import LucideCalendarX from "~icons/lucide/calendar-x";
 import LucideUser from "~icons/lucide/user";
 import { useAuthStore } from "@/stores/auth";
 import {
@@ -670,7 +713,30 @@ function onRangeChange({
   posts.reload();
 }
 
+// posts saved before a posting date was required; opening one asks for a date
+const showUndated = ref(false);
+const undated = createResource({
+  url: "frappe.client.get_list",
+  makeParams: () => ({
+    doctype: "HD Content Post",
+    fields: ["name", "title", "customer"],
+    filters: {
+      ...baseFilters(),
+      // a cancelled post needs no date, so it never needs fixing
+      status:
+        filters.status && filters.status !== "Cancelled"
+          ? filters.status
+          : ["!=", "Cancelled"],
+      publish_on: ["is", "not set"],
+    },
+    or_filters: personFilters(),
+    order_by: "creation desc",
+    limit_page_length: 100,
+  }),
+});
+
 function refresh() {
+  undated.reload();
   if (view.value === "calendar") {
     if (range.value) posts.reload();
   } else {

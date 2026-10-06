@@ -637,7 +637,12 @@ def hold_commits(test_case):
 
 
 def make_content_post(title: str, customer: str | None = None, **kwargs):
-    """Creates an HD Content Post (an Instagram Idea unless overridden)."""
+    """Creates an HD Content Post: an Instagram Idea a week out unless overridden.
+
+    Every post needs a posting date; pass `publish_on` to choose it.
+    """
+    from frappe.utils import add_to_date, now_datetime
+
     return frappe.get_doc(
         {
             "doctype": "HD Content Post",
@@ -645,6 +650,7 @@ def make_content_post(title: str, customer: str | None = None, **kwargs):
             "customer": customer,
             "channel": "Instagram",
             "status": "Idea",
+            "publish_on": add_to_date(now_datetime(), days=7),
             **kwargs,
         }
     ).insert(ignore_permissions=True)

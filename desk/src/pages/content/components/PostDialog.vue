@@ -92,10 +92,8 @@
           <FormControl
             v-model="form.publish_on"
             type="datetime-local"
-            :label="__('Publish on')"
-            :description="
-              form.status === 'Idea' ? __('Optional while it is an idea') : ''
-            "
+            :label="__('Publish on') + ' *'"
+            required
           />
           <Link
             v-model="form.writer"
@@ -694,11 +692,15 @@ async function save() {
     error.value = __("Select a customer for this post");
     return;
   }
-  saving.value = true;
   if (!platforms.value.length) {
     error.value = __("Pick at least one platform");
     return;
   }
+  if (!form.publish_on && form.status !== "Cancelled") {
+    error.value = __("Set the posting date and time");
+    return;
+  }
+  saving.value = true;
   const values = {
     ...form,
     channel: platforms.value[0],

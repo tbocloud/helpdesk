@@ -4,6 +4,8 @@
 """Per-client delivery of planned content: what shipped, what shipped on time,
 what is late, and how long clients take to approve."""
 
+import math
+
 import frappe
 from frappe import _
 from frappe.utils import (
@@ -127,13 +129,15 @@ def get_rows(filters) -> list[dict]:
     for row in sorted(by_customer.values(), key=lambda r: r["customer"] or ""):
         hours = row.pop("_approval_hours")
         # nothing published means there is no on-time rate, not a rate of 0%
-        row["on_time_pct"] = (
-            round(row["on_time"] / row["published"] * 100, 1)
-            if row["published"]
-            else None
+        row["on_time_pct"] = percent(row["on_time"], row["published"])
+        # count and sum travel with the row, so totals average over approvals, not customers
+        row["approval_count"] = len(hours)
+        row["approval_hours"] = sum(hours)
+        row["avg_approval_hours"] = (
+            round_half_up(sum(hours) / len(hours), 1) if hours else None
         )
-        row["avg_approval_hours"] = round(sum(hours) / len(hours), 1) if hours else None
-        row["health"] = health(row)
+        row["health_key"] = health_key(row)
+        row["health"] = health_label(row["health_key"])
         row.update(
             {stage: row["stages"][stage] for stage in ("planning", "review", "ready")}
         )
@@ -190,16 +194,39 @@ def prorated(per_month: int, start, end) -> int:
     return round(total)
 
 
-def health(row: dict) -> str:
-    """The page's health badge, so the downloads say the same."""
+def health_label(key: str) -> str:
+    """What the badge says; styling (PDF classes, page badges) uses the key,
+    because the label is translated."""
+    return {
+        "nothing-due": _("Nothing due yet"),
+        "behind": _("Behind"),
+        "at-risk": _("At risk"),
+        "on-track": _("On track"),
+    }[key]
+
+
+def health_key(row: dict) -> str:
+    """How a customer's delivery stands; the page shows the same badge."""
     due = row["planned"] - row["upcoming"]
     if not due:
-        return _("Nothing due yet")
+        return "nothing-due"
     if row["overdue"] / due >= 0.5:
-        return _("Behind")
+        return "behind"
     if row["overdue"] or (row["on_time_pct"] or 0) < 80:
-        return _("At risk")
-    return _("On track")
+        return "at-risk"
+    return "on-track"
+
+
+def round_half_up(value: float, digits: int = 0) -> float | int:
+    """Round exactly like the page's Math.round: 12.5 -> 13, where Python's round() gives 12."""
+    scale = 10**digits
+    rounded = math.floor(value * scale + 0.5)
+    return rounded if digits == 0 else rounded / scale
+
+
+def percent(part: int, whole: int) -> int | None:
+    """A whole percent, as the page shows it; None when there is nothing to divide by."""
+    return round_half_up(part / whole * 100) if whole else None
 
 
 def get_chart(rows: list[dict]) -> dict | None:
@@ -233,12 +260,13 @@ def export_xlsx(from_date: str, to_date: str, customer: str | None = None):
         [_("Content delivery report")],
         [period + (f" · {customer}" if customer else "")],
     ]
-    data += [[line] for line in (summary_lines(rows) if rows else [])]
+    totals = get_totals(rows)
+    data += [[line] for line in (summary_lines(totals) if rows else [])]
     data.append([])
     data.append([c["label"] for c in columns])
     data += [[row.get(c["fieldname"]) for c in columns] for row in rows]
     if rows:
-        data.append(total_row(columns, rows))
+        data.append(total_row(columns, totals))
 
     # Excel refuses sheet names over 31 characters; the dates are in the file name
     xlsx = make_xlsx(
@@ -268,46 +296,39 @@ def get_totals(rows: list[dict]) -> dict:
     totals["promised"] = sum(r["promised"] or 0 for r in rows) or None
     totals["customer"] = _("Total")
     totals["health"] = None
-    totals["on_time_pct"] = (
-        round(totals["on_time"] / totals["published"] * 100, 1)
-        if totals["published"]
-        else None
-    )
-    # weighted by each customer's posts, as on the page; a plain average of
-    # averages would overweight small customers
-    timed = [r for r in rows if r["avg_approval_hours"] is not None]
-    weight = sum(r["planned"] for r in timed)
+    totals["on_time_pct"] = percent(totals["on_time"], totals["published"])
+    # the average over every timed approval, not an average of customer averages
+    approvals = sum(r["approval_count"] for r in rows)
     totals["avg_approval_hours"] = (
-        round(sum(r["avg_approval_hours"] * r["planned"] for r in timed) / weight, 1)
-        if weight
+        round_half_up(sum(r["approval_hours"] for r in rows) / approvals, 1)
+        if approvals
         else None
     )
     due = totals["planned"] - totals["upcoming"]
-    totals["delivered_pct"] = (
-        round((totals["on_time"] + totals["late"]) / due * 100) if due else None
-    )
+    totals["delivered_pct"] = percent(totals["on_time"] + totals["late"], due)
     totals["due"] = due
     return totals
 
 
-def total_row(columns: list[dict], rows: list[dict]) -> list:
-    totals = get_totals(rows)
+def total_row(columns: list[dict], totals: dict) -> list:
     return [totals.get(c["fieldname"]) for c in columns]
 
 
-def summary_lines(rows: list[dict]) -> list[str]:
+def pct_text(value) -> str:
+    return "—" if value is None else f"{value}%"
+
+
+def summary_lines(t: dict) -> list[str]:
     """The headline the page shows above the table, as plain sentences."""
-    t = get_totals(rows)
-    pct = lambda v: "—" if v is None else f"{v:g}%"
     return [
         _("{0} delivered: {1} of {2} posts due are published.").format(
-            pct(t["delivered_pct"]), t["published"], t["due"]
+            pct_text(t["delivered_pct"]), t["published"], t["due"]
         ),
         _("Published on time {0}, late {1}, overdue {2}, not due yet {3}.").format(
             t["on_time"], t["late"], t["overdue"], t["upcoming"]
         ),
         _("On time {0}. Awaiting client {1}. Average approval {2}.").format(
-            pct(t["on_time_pct"]),
+            pct_text(t["on_time_pct"]),
             t["awaiting_client"],
             "—" if t["avg_approval_hours"] is None else f"{t['avg_approval_hours']} h",
         ),
@@ -330,6 +351,7 @@ def export_pdf(from_date: str, to_date: str, customer: str | None = None):
     filters = frappe._dict(from_date=from_date, to_date=to_date, customer=customer)
     columns = get_columns()
     rows = get_rows(filters)
+    totals = get_totals(rows)
     can_render_pdf = bool(shutil.which("wkhtmltopdf"))
     html = frappe.render_template(  # the app's own fixed template, not user input - nosemgrep
         "helpdesk/helpdesk/report/content_delivery/content_delivery_pdf.html",
@@ -341,8 +363,9 @@ def export_pdf(from_date: str, to_date: str, customer: str | None = None):
             "customer": customer,
             "columns": [frappe._dict(c) for c in columns],
             "rows": [[row.get(c["fieldname"]) for c in columns] for row in rows],
-            "total": total_row(columns, rows),
-            "summary": summary_lines(rows) if rows else [],
+            "total": total_row(columns, totals),
+            "summary": summary_lines(totals) if rows else [],
+            "health_keys": [row["health_key"] for row in rows],
             "generated_on": format_datetime(now_datetime()),
             "generated_by": frappe.utils.get_fullname(frappe.session.user),
             "auto_print": not can_render_pdf,

@@ -91,7 +91,7 @@
 			"label": "Publish On",
 			"in_list_view": 1,
 			"search_index": 1,
-			"description": "Required once the post moves past Idea (unless it is Cancelled)"
+			"description": "Required unless the post is Cancelled"
 		},
 		{
 			"fieldname": "channel",
@@ -306,7 +306,7 @@
 	],
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-10-03 20:30:00.000000",
+	"modified": "2026-10-06 14:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Content Post",
