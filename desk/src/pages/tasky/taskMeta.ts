@@ -54,12 +54,35 @@ const PRIORITY_ICONS: Record<string, Component> = {
 };
 
 export const TASK_STATUSES = Object.keys(TASK_STATUS);
+// keep in step with Task.custom_category in helpdesk/setup/install.py
 export const CATEGORIES = [
   "Functional",
   "Development",
   "DevOps",
   "Support",
+  "Digital Marketing",
+  "Social Media",
+  "Content Writing",
+  "Graphic Design",
+  "Video",
+  "Motion Graphics",
+  "Coordination",
   "Common",
+];
+// Project User roles; template tasks of a category go to members with the matching role
+export const PROJECT_ROLES = [
+  "Project Manager",
+  "Project Coordinator",
+  "Developer",
+  "Functional Consultant",
+  "DevOps Engineer",
+  "Support Engineer",
+  "Digital Marketing Specialist",
+  "Social Media Executive",
+  "Content Writer / Copywriter",
+  "Graphic Designer",
+  "Videographer cum Editor",
+  "Motion Graphics Artist / Animator",
 ];
 export const PRIORITIES = ["Low", "Medium", "High", "Urgent"];
 

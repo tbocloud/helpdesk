@@ -39,6 +39,8 @@ import CRMSettings from "./CRM/CRMSettings.vue";
 import LucideHandshake from "~icons/lucide/handshake";
 import LucideHardDrive from "~icons/lucide/hard-drive";
 import LucideCalendarDays from "~icons/lucide/calendar-days";
+import LucideBuilding2 from "~icons/lucide/building-2";
+import Departments from "./Departments/Departments.vue";
 
 export const showSettingsModal = ref(false);
 
@@ -108,6 +110,12 @@ export const tabs = computed(() => {
           label: __("Teams"),
           icon: markRaw(LucideUsers),
           component: markRaw(TeamsConfig),
+          condition: () => auth.isAdmin || auth.isManager,
+        },
+        {
+          label: __("Departments"),
+          icon: markRaw(LucideBuilding2),
+          component: markRaw(Departments),
           condition: () => auth.isAdmin || auth.isManager,
         },
         {
@@ -205,6 +213,7 @@ type TabName =
   | "Agents"
   | "Invite Agents"
   | "Teams"
+  | "Departments"
   | "SLA Policies"
   | "Business Holidays"
   | "Assignment Rules"
