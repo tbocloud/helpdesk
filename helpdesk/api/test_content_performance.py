@@ -144,6 +144,25 @@ class TestContentPerformance(FrappeTestCase):
                 self.start, self.end, employee=self.designer
             )
 
+    def test_a_department_narrows_the_ranking_not_who_can_be_opened(self):
+        from unittest.mock import patch
+
+        # the hub's Employee has no department, so give the team one here
+        departments = {WRITER[0]: "Content", DESIGNER[0]: "Design"}
+        team = [
+            frappe._dict(p.copy(), department=departments[p.user_id])
+            for p in performance.visible_employees("Administrator")
+            if p.user_id in departments
+        ]
+        with patch("helpdesk.api.performance.visible_employees", return_value=team):
+            report = content_performance.get_content_performance(
+                self.start, self.end, employee=self.designer, department="Content"
+            )
+        self.assertEqual([r["employee"] for r in report["team"]], [self.writer])
+        # someone from another department still opens, just unranked
+        self.assertEqual(report["detail"]["employee"], self.designer)
+        self.assertIsNone(report["detail"]["rank"])
+
     def test_employee_ranking(self):
         report = content_performance.get_content_performance(
             self.start, self.end, employee=self.designer

@@ -654,11 +654,12 @@ function rolesOf(person: any) {
 function teamOf(post: any) {
   const people = new Map<string, { name: string; held: typeof ROLES }>();
   for (const r of ROLES) {
-    const m = post.team[r.role];
-    if (!m) continue;
-    const entry = people.get(m.user) ?? { name: m.name, held: [] };
-    entry.held.push(r);
-    people.set(m.user, entry);
+    // each role is a list: a role can have more than one person
+    for (const m of post.team[r.role] ?? []) {
+      const entry = people.get(m.user) ?? { name: m.name, held: [] };
+      entry.held.push(r);
+      people.set(m.user, entry);
+    }
   }
   return [...people.values()].map((e) => ({
     name: e.name,

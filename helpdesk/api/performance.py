@@ -25,6 +25,7 @@ EMPLOYEE_EXTRAS = ("department", "designation", "image")
 
 
 def sees_everyone(user: str) -> bool:
+    """Admins, Agent Managers and HR see the whole team."""
     return is_tasky_admin(user) or bool(set(TEAM_ROLES) & set(frappe.get_roles(user)))
 
 
@@ -91,6 +92,7 @@ def employee_details(users: list[str]) -> dict[str, dict]:
 
 
 def resolve_scope(employee: str | None, department: str | None) -> list[dict]:
+    """The visible people, narrowed to one employee or one department."""
     people = visible_employees()
     if employee:
         people = [p for p in people if p.employee == employee]
@@ -104,6 +106,7 @@ def resolve_scope(employee: str | None, department: str | None) -> list[dict]:
 
 
 def check_range(from_date: str, to_date: str):
+    """Parse the period, refusing a reversed one or one longer than a year."""
     start, end = getdate(from_date), getdate(to_date)
     if end < start:
         frappe.throw(_("The end date is before the start date."))

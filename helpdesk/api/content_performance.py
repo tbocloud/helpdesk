@@ -28,6 +28,7 @@ CHANGES_REQUESTED = "Changes Requested"
 
 
 def period_posts(start, end, customer: str | None = None) -> list[dict]:
+    """Posts due in the period (optionally one customer's), leaving out cancelled ones."""
     Post = frappe.qb.DocType("HD Content Post")
     query = (
         frappe.qb.from_(Post)
@@ -79,6 +80,7 @@ def change_requests(post_names: list[str]) -> dict[str, int]:
 
 
 def timing(post, now) -> str:
+    """How a post went: On time, Late, Missed, or Upcoming when not due yet."""
     if post.status == "Published":
         if post.published_on and getdate(post.published_on) > getdate(post.publish_on):
             return "Late"
@@ -87,6 +89,7 @@ def timing(post, now) -> str:
 
 
 def score(timing_: str, changes: int) -> int | None:
+    """A due post's delivery score; None for posts not due yet."""
     base = {"On time": ON_TIME, "Late": LATE, "Missed": MISSED}.get(timing_)
     if base is None:
         return None
@@ -99,20 +102,24 @@ def members(post: dict) -> set[str]:
 
 
 def platforms_of(post) -> list[str]:
+    """Every platform the post goes out on; older posts only have a channel."""
     raw = [p.strip() for p in (post.platforms or "").split(",")]
     return [p for p in raw if p] or ([post.channel] if post.channel else [])
 
 
 def avg(values) -> float | None:
+    """The rounded mean of the values that are set; None when none are."""
     values = [v for v in values if v is not None]
     return round(sum(values) / len(values)) if values else None
 
 
 def pct(part, whole) -> int | None:
+    """A whole percent; None when there is nothing to divide by."""
     return round(part / whole * 100) if whole else None
 
 
 def summarise(posts: list[dict]) -> dict:
+    """The counts, rates and average score shown for a set of scored posts."""
     scored = [p for p in posts if p["score"] is not None]
     delivered = [p for p in posts if p["timing"] in ("On time", "Late")]
     return {
@@ -131,6 +138,7 @@ def summarise(posts: list[dict]) -> dict:
 
 
 def scored_posts(start, end, customer: str | None = None) -> list[dict]:
+    """The period's posts with their timing, change requests, score and team."""
     now = now_datetime()
     raw = period_posts(start, end, customer)
     changes = change_requests([p.name for p in raw])
@@ -168,8 +176,11 @@ def get_content_performance(
 ) -> dict:
     """`for_customer` limits everything, the ranking included, to that customer's posts."""
     start, end = check_range(from_date, to_date)
-    people = resolve_scope(None, department)
-    if employee and employee not in {p.employee for p in people}:
+    # the department narrows the ranking, not who may be opened: someone picked
+    # from another department is still shown, just not ranked against this one
+    everyone = resolve_scope(None, None)
+    people = [p for p in everyone if not department or p.department == department]
+    if employee and employee not in {p.employee for p in everyone}:
         frappe.throw(
             _("You can't view this employee's performance."), frappe.PermissionError
         )
@@ -214,7 +225,7 @@ def get_content_performance(
     selected = employee or (team[0]["employee"] if team else None)
     detail = None
     if selected:
-        person = next(p for p in people if p.employee == selected)
+        person = next(p for p in everyone if p.employee == selected)
         mine = by_user.get(person.user_id, [])
         row = next((r for r in team if r["employee"] == selected), None)
         detail = {
@@ -242,6 +253,7 @@ def get_content_performance(
 
 
 def channel_mix(posts: list[dict]) -> list[dict]:
+    """Posts and average score per platform, busiest first."""
     mix = defaultdict(list)
     for post in posts:
         for platform in post["platforms"]:
@@ -330,6 +342,7 @@ def get_customer_performance(
 
 
 def contributors(posts: list[dict], person_of: dict) -> set[str]:
+    """The users on these posts who are on the viewer's team."""
     return {u for p in posts for u in members(p) if u in person_of}
 
 
@@ -356,6 +369,7 @@ def people_on(posts: list[dict], person_of: dict) -> list[dict]:
 
 
 def team_member(user: str | None, person_of: dict) -> dict | None:
+    """A user's name for the posts table, from the team or else from the user record."""
     if not user:
         return None
     person = person_of.get(user)
@@ -367,6 +381,7 @@ def team_member(user: str | None, person_of: dict) -> dict | None:
 
 
 def format_mix(posts: list[dict]) -> list[dict]:
+    """Posts per format, most used first."""
     counts = defaultdict(int)
     for post in posts:
         counts[post["format"] or _("Other")] += 1
