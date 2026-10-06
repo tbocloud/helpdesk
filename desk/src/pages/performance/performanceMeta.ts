@@ -1,54 +1,39 @@
-export type Tone =
-  | "brand"
-  | "success"
-  | "warning"
-  | "danger"
-  | "info"
-  | "teal"
-  | "pink";
+/** Gray unless the colour says how something went; always next to a number or label. */
+export type Tone = "neutral" | "success" | "warning" | "danger";
 
 export const TRACK: Record<Tone, string> = {
-  brand: "bg-brand-soft",
+  neutral: "bg-surface-gray-2",
   success: "bg-success-soft",
   warning: "bg-warning-soft",
   danger: "bg-danger-soft",
-  info: "bg-info-soft",
-  teal: "bg-teal-soft",
-  pink: "bg-pink-soft",
 };
 export const FILL: Record<Tone, string> = {
-  brand: "bg-brand",
+  neutral: "bg-surface-gray-7",
   success: "bg-success",
   warning: "bg-warning",
   danger: "bg-danger",
-  info: "bg-info",
-  teal: "bg-teal",
-  pink: "bg-pink",
 };
-/** Text colour on a tone's soft background. */
+/** Text colour, on a tone's soft background or on the page. */
 export const INK: Record<Tone, string> = {
-  brand: "text-brand-ink",
+  neutral: "text-ink-gray-8",
   success: "text-success",
   warning: "text-warning",
   danger: "text-danger",
-  info: "text-info",
-  teal: "text-teal",
-  pink: "text-pink",
 };
 
-/** Score colour: green when strong, red when weak, brand in between. */
+/** Score colour: green when on time, amber when late or reworked, red when missed. */
 export function scoreTone(score: number | null | undefined): Tone {
-  if (score == null) return "brand";
+  if (score == null) return "neutral";
   if (score >= 90) return "success";
   if (score < 40) return "danger";
-  return "brand";
+  return "warning";
 }
 
-/** On-time colour: green at 95% and up, red under 80%. */
-export function onTimeTone(pct: number | null | undefined): Tone | null {
-  if (pct == null) return null;
+/** On-time colour: green at 95% and up, amber from 80%, red under that. */
+export function onTimeTone(pct: number | null | undefined): Tone {
+  if (pct == null) return "neutral";
   if (pct >= 95) return "success";
-  if (pct >= 80) return "brand";
+  if (pct >= 80) return "warning";
   return "danger";
 }
 
@@ -79,3 +64,11 @@ export function timingColor(
 export function scoreText(score: number | null | undefined) {
   return score == null ? "—" : String(score);
 }
+
+/** Who does what on a post, in the order the content board lists them. */
+export const ROLES = [
+  { role: "writer", label: "Writer", short: "W" },
+  { role: "designer", label: "Designer", short: "D" },
+  { role: "video_editor", label: "Video editor", short: "V" },
+  { role: "marketer", label: "Digital marketer", short: "M" },
+] as const;

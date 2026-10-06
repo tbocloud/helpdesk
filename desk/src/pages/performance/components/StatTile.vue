@@ -1,17 +1,13 @@
 <template>
   <div
-    class="flex flex-col gap-1 rounded-xl p-4"
-    :class="[
-      hero ? 'sm:col-span-2' : '',
-      color ? TRACK[color] : 'border border-outline-gray-2 bg-surface-base',
-    ]"
+    class="flex flex-col gap-1 rounded-xl border border-outline-gray-2 bg-surface-base p-4"
+    :class="hero ? 'sm:col-span-2' : ''"
   >
     <div class="flex items-center gap-1.5 text-sm text-ink-gray-7">
       <component
         :is="icon"
         v-if="icon"
-        class="size-4"
-        :class="color ? INK[color] : 'text-ink-gray-5'"
+        class="size-4 text-ink-gray-5"
         aria-hidden="true"
       />
       {{ label }}
@@ -20,7 +16,7 @@
       class="font-semibold tabular-nums"
       :class="[
         hero ? 'text-5xl leading-tight' : 'text-2xl',
-        color ? INK[color] : 'text-ink-gray-9',
+        valueTone === 'neutral' ? 'text-ink-gray-9' : INK[valueTone],
       ]"
     >
       {{ value }}
@@ -28,7 +24,7 @@
     <div v-if="meter != null" class="mt-1 flex flex-col gap-1">
       <div
         class="h-2 overflow-hidden rounded-full"
-        :class="color ? 'bg-surface-base' : TRACK[tone]"
+        :class="TRACK[tone]"
         role="meter"
         :aria-valuenow="Math.round(meter)"
         aria-valuemin="0"
@@ -59,10 +55,11 @@ withDefaults(
     hero?: boolean;
     /** 0-100; draws a meter under the value */
     meter?: number | null;
+    /** the meter's colour */
     tone?: Tone;
-    /** gives the whole tile a soft background in this tone */
-    color?: Tone;
+    /** colours the value, only when that says how it went */
+    valueTone?: Tone;
   }>(),
-  { tone: "brand", meter: null, color: undefined }
+  { tone: "neutral", meter: null, valueTone: "neutral" }
 );
 </script>

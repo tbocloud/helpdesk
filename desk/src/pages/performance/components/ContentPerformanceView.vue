@@ -18,7 +18,10 @@
             class="flex items-center gap-1.5 text-xs text-ink-gray-5"
             :title="__('The average post score of everyone shown')"
           >
-            <span class="h-3 w-px bg-ink-gray-7" aria-hidden="true" />
+            <span
+              class="h-3 w-0.5 rounded bg-surface-gray-8"
+              aria-hidden="true"
+            />
             {{ __("Team average") }}
             <b class="font-semibold tabular-nums text-ink-gray-8">{{
               scoreText(data.team_summary.avg_score)
@@ -40,11 +43,7 @@
             @click="emit('select', row.employee)"
           >
             <div class="flex items-start gap-2.5">
-              <PersonBadge
-                :image="row.image"
-                :name="row.employee_name"
-                :tone="toneOf(row.rank)"
-              />
+              <Avatar size="lg" :image="row.image" :label="row.employee_name" />
               <div class="min-w-0 flex-1">
                 <div class="truncate text-sm font-semibold text-ink-gray-9">
                   {{ row.employee_name }}
@@ -54,20 +53,22 @@
                 </div>
               </div>
               <span
-                class="rounded-md px-1.5 py-0.5 font-mono text-xs font-semibold tabular-nums"
-                :class="rankClass(row.rank)"
+                class="rounded-md bg-surface-gray-2 px-1.5 py-0.5 font-mono text-xs font-semibold tabular-nums text-ink-gray-7"
                 >#{{ row.rank }}</span
               >
             </div>
             <div class="flex items-baseline justify-between text-xs">
               <span class="text-ink-gray-6">{{ __("Avg. post score") }}</span>
-              <b class="text-sm font-semibold tabular-nums text-brand-ink">{{
-                scoreText(row.avg_score)
-              }}</b>
+              <b
+                class="text-sm font-semibold tabular-nums"
+                :class="scoreClass(row.avg_score)"
+                >{{ scoreText(row.avg_score) }}</b
+              >
             </div>
             <ScoreBar
               :value="row.avg_score"
               :marker="data.team_summary.avg_score"
+              :tone="scoreTone(row.avg_score)"
             />
             <div class="mt-1 grid grid-cols-2 gap-2 text-xs">
               <div>
@@ -97,11 +98,10 @@
         :aria-label="detail.employee_name"
       >
         <header class="mb-4 flex flex-wrap items-center gap-3">
-          <PersonBadge
+          <Avatar
+            size="3xl"
             :image="detail.image"
-            :name="detail.employee_name"
-            tone="solid"
-            large
+            :label="detail.employee_name"
           />
           <div class="min-w-0 flex-1">
             <h2 class="text-xl font-semibold text-ink-gray-9">
@@ -119,7 +119,7 @@
           </div>
           <span
             v-if="detail.rank"
-            class="rounded-md bg-warning-soft px-2.5 py-1 text-xs font-semibold text-warning"
+            class="rounded-md bg-surface-gray-2 px-2.5 py-1 text-xs font-semibold text-ink-gray-7"
           >
             {{
               __(
@@ -132,14 +132,13 @@
         </header>
         <div class="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
           <Tile
-            tone="brand"
+            :tone="scoreTone(s.avg_score)"
             :label="__('Avg. post score')"
             :value="scoreText(s.avg_score)"
             :sub="vsTeam"
             :sub-tone="vsTeamTone"
           />
           <Tile
-            tone="info"
             :label="__('Posts published')"
             :value="String(s.published)"
             :sub="
@@ -152,25 +151,22 @@
             :sub-tone="s.missed ? 'danger' : 'muted'"
           />
           <Tile
-            tone="teal"
+            :tone="onTimeTone(s.on_time_pct)"
             :label="__('On-time rate')"
             :value="pctText(s.on_time_pct)"
             :sub="__('team {0}', pctText(t.on_time_pct))"
           />
           <Tile
-            tone="warning"
             :label="__('Client change requests')"
             :value="String(s.change_requests)"
             :sub="perPost(s.change_requests, s.posts)"
           />
           <Tile
-            tone="pink"
             :label="__('Postponed')"
             :value="String(s.postponed)"
             :sub="__('of {0} posts', String(s.posts))"
           />
           <Tile
-            tone="success"
             :label="__('Best channel')"
             :value="bestChannel?.channel || '—'"
             :sub="
@@ -419,12 +415,8 @@
                   >{{ c.posts }}</span
                 >
                 <span
-                  class="rounded px-1.5 py-0.5 text-center font-mono text-xs font-semibold tabular-nums"
-                  :class="
-                    c.channel === bestChannel?.channel
-                      ? 'bg-success-soft text-success'
-                      : 'bg-brand-soft text-brand-ink'
-                  "
+                  class="rounded bg-surface-gray-2 px-1.5 py-0.5 text-center font-mono text-xs font-semibold tabular-nums text-ink-gray-7"
+                  :title="__('Average score')"
                   >{{ scoreText(c.avg_score) }}</span
                 >
               </li>
@@ -447,7 +439,15 @@
 <script setup lang="ts">
 import { __ } from "@/translation";
 import { Avatar, dayjs } from "frappe-ui";
-import { channelColor, type Tone } from "../performanceMeta";
+import {
+  channelColor,
+  FILL,
+  INK,
+  onTimeTone,
+  ROLES,
+  scoreTone,
+  type Tone,
+} from "../performanceMeta";
 import { computed, h, ref } from "vue";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideCircleCheck from "~icons/lucide/circle-check";
@@ -457,11 +457,9 @@ import LucideHourglass from "~icons/lucide/hourglass";
 const props = defineProps<{ data: any; periodLabel: string }>();
 const emit = defineEmits<{ (e: "select", employee: string): void }>();
 
-const ROLE_LABEL: Record<string, string> = {
-  writer: "Writer",
-  designer: "Designer",
-  marketer: "Digital marketer",
-};
+const ROLE_LABEL: Record<string, string> = Object.fromEntries(
+  ROLES.map((r) => [r.role, r.label])
+);
 const TIMING: Record<string, { class: string; icon: unknown }> = {
   "On time": { class: "bg-success-soft text-success", icon: LucideCircleCheck },
   Late: { class: "bg-warning-soft text-warning", icon: LucideClock },
@@ -476,33 +474,10 @@ const SORTS = [
   { key: "date", label: __("By date") },
 ] as const;
 
-// --- colours (always alongside a number or label, never on their own) ---
-type CardTone = "brand" | "pink" | "info" | "teal" | "warning";
-const PERSON_TONES: CardTone[] = ["brand", "pink", "info", "teal", "warning"];
-const toneOf = (rank: number) => PERSON_TONES[(rank - 1) % PERSON_TONES.length];
-
-function rankClass(rank: number) {
-  if (rank === 1) return "bg-warning-soft text-warning";
-  if (rank === 2) return "bg-surface-gray-2 text-ink-gray-7";
-  if (rank === 3) return "bg-pink-soft text-pink";
-  return "bg-surface-gray-2 text-ink-gray-6";
-}
-
-function onTimeClass(pct: number | null) {
-  if (pct == null) return "text-ink-gray-5";
-  if (pct >= 95) return "text-success";
-  if (pct >= 80) return "text-brand-ink";
-  return "text-danger";
-}
-
-const scoreTone = (score: number | null): Tone =>
-  score != null && score >= 90 ? "success" : "brand";
+const onTimeClass = (pct: number | null) =>
+  pct == null ? "text-ink-gray-5" : INK[onTimeTone(pct)];
 const scoreClass = (score: number | null) =>
-  score == null
-    ? "text-ink-gray-5"
-    : score >= 90
-    ? "text-success"
-    : "text-brand-ink";
+  score == null ? "text-ink-gray-5" : INK[scoreTone(score)];
 
 const sort = ref<"best" | "date">("best");
 const detail = computed(() => props.data.detail);
@@ -512,7 +487,7 @@ const firstName = computed(
   () => detail.value?.employee_name.trim().split(/\s+/)[0] || ""
 );
 
-// all three roles in full would wrap the row to several lines
+// every role in full would wrap the row to several lines
 const roleText = (roles: string[]) =>
   roles.length === Object.keys(ROLE_LABEL).length
     ? __("All roles")
@@ -612,14 +587,12 @@ const ScoreBar = (p: {
 }) =>
   h("div", { class: "relative h-2 rounded-full bg-surface-gray-2" }, [
     h("div", {
-      class: `h-full rounded-full ${
-        p.tone === "success" ? "bg-success" : "bg-brand"
-      }`,
+      class: `h-full rounded-full ${FILL[p.tone || "neutral"]}`,
       style: { width: `${Math.max(0, Math.min(p.value ?? 0, 100))}%` },
     }),
     p.marker != null
       ? h("span", {
-          class: "absolute -top-1 h-4 w-0.5 rounded bg-ink-gray-8",
+          class: "absolute -top-1 h-4 w-0.5 rounded bg-surface-gray-8",
           style: { left: `calc(${p.marker}% - 1px)` },
           title: __("Team average {0}", String(p.marker)),
           "aria-hidden": "true",
@@ -627,52 +600,6 @@ const ScoreBar = (p: {
       : null,
   ]);
 ScoreBar.props = ["value", "marker", "tone"];
-
-const TONE_CLASSES: Record<string, { soft: string; ink: string }> = {
-  brand: { soft: "bg-brand-soft", ink: "text-brand-ink" },
-  pink: { soft: "bg-pink-soft", ink: "text-pink" },
-  info: { soft: "bg-info-soft", ink: "text-info" },
-  teal: { soft: "bg-teal-soft", ink: "text-teal" },
-  warning: { soft: "bg-warning-soft", ink: "text-warning" },
-  success: { soft: "bg-success-soft", ink: "text-success" },
-};
-
-/** Photo when there is one, else coloured initials. */
-const PersonBadge = (p: {
-  image?: string;
-  name: string;
-  tone: CardTone | "solid";
-  large?: boolean;
-}) => {
-  if (p.image)
-    return h(Avatar, {
-      size: p.large ? "3xl" : "lg",
-      image: p.image,
-      label: p.name,
-    });
-  const initials = p.name
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((w) => w[0])
-    .join("")
-    .toUpperCase();
-  const colours =
-    p.tone === "solid"
-      ? "bg-brand text-brand-on"
-      : `${TONE_CLASSES[p.tone].soft} ${TONE_CLASSES[p.tone].ink}`;
-  return h(
-    "span",
-    {
-      class: `inline-flex shrink-0 items-center justify-center rounded-full font-semibold ${colours} ${
-        p.large ? "size-12 text-base" : "size-8 text-xs"
-      }`,
-      "aria-hidden": "true",
-    },
-    initials
-  );
-};
-PersonBadge.props = ["image", "name", "tone", "large"];
 
 const CompareBar = (p: {
   value: number | null;
@@ -718,42 +645,35 @@ const Tile = (p: {
   value: string;
   sub?: string;
   subTone?: "muted" | "success" | "danger";
-  tone?: string;
+  /** colours the value, only when that says how it went */
+  tone?: Tone;
 }) =>
-  h(
-    "div",
-    {
-      class: `rounded-lg p-3 ${
-        p.tone ? TONE_CLASSES[p.tone].soft : "border border-outline-gray-2"
-      }`,
-    },
-    [
-      h("div", { class: "text-xs text-ink-gray-6" }, p.label),
-      h(
-        "div",
-        {
-          class: `mt-0.5 truncate text-2xl font-semibold tabular-nums ${
-            p.tone ? TONE_CLASSES[p.tone].ink : "text-ink-gray-9"
-          }`,
-        },
-        p.value
-      ),
-      p.sub
-        ? h(
-            "div",
-            {
-              class: `text-xs ${
-                p.subTone === "success"
-                  ? "text-success"
-                  : p.subTone === "danger"
-                  ? "text-danger"
-                  : "text-ink-gray-6"
-              }`,
-            },
-            p.sub
-          )
-        : null,
-    ]
-  );
+  h("div", { class: "rounded-lg border border-outline-gray-2 p-3" }, [
+    h("div", { class: "text-xs text-ink-gray-6" }, p.label),
+    h(
+      "div",
+      {
+        class: `mt-0.5 truncate text-2xl font-semibold tabular-nums ${
+          !p.tone || p.tone === "neutral" ? "text-ink-gray-9" : INK[p.tone]
+        }`,
+      },
+      p.value
+    ),
+    p.sub
+      ? h(
+          "div",
+          {
+            class: `text-xs ${
+              p.subTone === "success"
+                ? "text-success"
+                : p.subTone === "danger"
+                ? "text-danger"
+                : "text-ink-gray-6"
+            }`,
+          },
+          p.sub
+        )
+      : null,
+  ]);
 Tile.props = ["label", "value", "sub", "subTone", "tone"];
 </script>

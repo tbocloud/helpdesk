@@ -14,7 +14,6 @@
           :value="String(sum.customers)"
           :sub="__('with posts due')"
           :icon="LucideBuilding2"
-          color="brand"
         />
         <StatTile
           :label="__('Posts published')"
@@ -22,15 +21,13 @@
           :sub="sum.upcoming ? __('{0} not due yet', String(sum.upcoming)) : ''"
           :icon="LucideSend"
           :meter="pct(sum.published, sum.posts - sum.upcoming)"
-          tone="info"
-          color="info"
         />
         <StatTile
           :label="__('On-time rate')"
           :value="pctText(sum.on_time_pct)"
           :sub="__('of published posts')"
           :icon="LucideCircleCheck"
-          color="success"
+          :value-tone="onTimeTone(sum.on_time_pct)"
         />
         <StatTile
           :label="__('Missed slots')"
@@ -39,7 +36,7 @@
           :icon="LucideCircleAlert"
           :meter="sum.missed ? pct(sum.missed, sum.posts - sum.upcoming) : null"
           tone="danger"
-          color="danger"
+          :value-tone="sum.missed ? 'danger' : 'neutral'"
         />
         <StatTile
           :label="__('Avg. post score')"
@@ -48,14 +45,13 @@
           :icon="LucideGauge"
           :meter="sum.avg_score"
           :tone="scoreTone(sum.avg_score)"
-          color="warning"
+          :value-tone="scoreTone(sum.avg_score)"
         />
         <StatTile
           :label="__('Client change requests')"
           :value="String(sum.change_requests)"
           :sub="perPost(sum.change_requests, sum.posts)"
           :icon="LucideMessageSquareWarning"
-          color="pink"
         />
       </div>
 
@@ -179,9 +175,9 @@
                 <td
                   class="px-4 py-2.5 text-right font-semibold tabular-nums"
                   :class="
-                    onTimeTone(row.on_time_pct)
-                      ? INK[onTimeTone(row.on_time_pct)!]
-                      : 'text-ink-gray-5'
+                    row.on_time_pct == null
+                      ? 'text-ink-gray-5'
+                      : INK[onTimeTone(row.on_time_pct)]
                   "
                 >
                   {{ pctText(row.on_time_pct) }}
@@ -249,14 +245,13 @@
           </header>
           <div class="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
             <Tile
-              tone="brand"
+              :tone="scoreTone(ds.avg_score)"
               :label="__('Avg. post score')"
               :value="scoreText(ds.avg_score)"
               :sub="vsAll"
               :sub-tone="vsAllTone"
             />
             <Tile
-              tone="info"
               :label="__('Posts published')"
               :value="`${ds.published} / ${ds.posts - ds.upcoming}`"
               :sub="
@@ -267,25 +262,22 @@
               :sub-tone="ds.missed ? 'danger' : 'muted'"
             />
             <Tile
-              tone="teal"
+              :tone="onTimeTone(ds.on_time_pct)"
               :label="__('On-time rate')"
               :value="pctText(ds.on_time_pct)"
               :sub="__('all customers {0}', pctText(sum.on_time_pct))"
             />
             <Tile
-              tone="warning"
               :label="__('Client change requests')"
               :value="String(ds.change_requests)"
               :sub="perPost(ds.change_requests, ds.posts)"
             />
             <Tile
-              tone="pink"
               :label="__('Postponed')"
               :value="String(ds.postponed)"
               :sub="__('of {0} posts', String(ds.posts))"
             />
             <Tile
-              tone="success"
               :label="__('Team members')"
               :value="String(detail.people.length)"
               :sub="__('worked on these posts')"
@@ -586,6 +578,7 @@ import {
   INK,
   onTimeTone,
   pctText,
+  ROLES as TEAM_ROLES,
   scoreText,
   scoreTone,
   TIMINGS,
@@ -603,11 +596,11 @@ const emit = defineEmits<{
   (e: "person", employee: string): void;
 }>();
 
-const ROLES = [
-  { role: "writer", label: __("Writer"), short: __("W") },
-  { role: "designer", label: __("Designer"), short: __("D") },
-  { role: "marketer", label: __("Marketer"), short: __("M") },
-];
+const ROLES = TEAM_ROLES.map((r) => ({
+  role: r.role,
+  label: __(r.label),
+  short: __(r.short),
+}));
 const TIMING: Record<string, { class: string; icon: unknown }> = {
   "On time": { class: "bg-success-soft text-success", icon: LucideCircleCheck },
   Late: { class: "bg-warning-soft text-warning", icon: LucideClock },
@@ -684,7 +677,7 @@ const sortedPosts = computed(() => {
 const ScoreBar = (p: { value: number | null; tone?: Tone }) =>
   h("div", { class: "h-2 rounded-full bg-surface-gray-2" }, [
     h("div", {
-      class: `h-full rounded-full ${FILL[p.tone || "brand"]}`,
+      class: `h-full rounded-full ${FILL[p.tone || "neutral"]}`,
       style: { width: `${Math.max(0, Math.min(p.value ?? 0, 100))}%` },
     }),
   ]);
@@ -763,7 +756,9 @@ const MixCard = (p: {
               ),
               h("div", { class: "h-2 rounded-full bg-surface-gray-2" }, [
                 h("div", {
-                  class: `h-full rounded-full ${p.channels ? "" : "bg-brand"}`,
+                  class: `h-full rounded-full ${
+                    p.channels ? "" : "bg-surface-gray-7"
+                  }`,
                   style: {
                     width: `${(r.count / max) * 100}%`,
                     background: p.channels ? channelColor(r.key) : undefined,
@@ -783,7 +778,7 @@ const MixCard = (p: {
                     "span",
                     {
                       class:
-                        "rounded bg-brand-soft px-1.5 py-0.5 text-center font-mono text-xs font-semibold tabular-nums text-brand-ink",
+                        "rounded bg-surface-gray-2 px-1.5 py-0.5 text-center font-mono text-xs font-semibold tabular-nums text-ink-gray-7",
                       title: __("Average score"),
                     },
                     scoreText(r.score)
@@ -803,42 +798,35 @@ const Tile = (p: {
   value: string;
   sub?: string;
   subTone?: "muted" | "success" | "danger";
+  /** colours the value, only when that says how it went */
   tone?: Tone;
 }) =>
-  h(
-    "div",
-    {
-      class: `rounded-lg p-3 ${
-        p.tone ? TRACK[p.tone] : "border border-outline-gray-2"
-      }`,
-    },
-    [
-      h("div", { class: "text-xs text-ink-gray-6" }, p.label),
-      h(
-        "div",
-        {
-          class: `mt-0.5 truncate text-2xl font-semibold tabular-nums ${
-            p.tone ? INK[p.tone] : "text-ink-gray-9"
-          }`,
-        },
-        p.value
-      ),
-      p.sub
-        ? h(
-            "div",
-            {
-              class: `text-xs ${
-                p.subTone === "success"
-                  ? "text-success"
-                  : p.subTone === "danger"
-                  ? "text-danger"
-                  : "text-ink-gray-6"
-              }`,
-            },
-            p.sub
-          )
-        : null,
-    ]
-  );
+  h("div", { class: "rounded-lg border border-outline-gray-2 p-3" }, [
+    h("div", { class: "text-xs text-ink-gray-6" }, p.label),
+    h(
+      "div",
+      {
+        class: `mt-0.5 truncate text-2xl font-semibold tabular-nums ${
+          !p.tone || p.tone === "neutral" ? "text-ink-gray-9" : INK[p.tone]
+        }`,
+      },
+      p.value
+    ),
+    p.sub
+      ? h(
+          "div",
+          {
+            class: `text-xs ${
+              p.subTone === "success"
+                ? "text-success"
+                : p.subTone === "danger"
+                ? "text-danger"
+                : "text-ink-gray-6"
+            }`,
+          },
+          p.sub
+        )
+      : null,
+  ]);
 Tile.props = ["label", "value", "sub", "subTone", "tone"];
 </script>
