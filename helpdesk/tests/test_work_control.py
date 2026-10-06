@@ -23,6 +23,7 @@ from helpdesk.test_utils import (
     make_tasky_user,
     make_ticket,
     make_timesheet,
+    make_work_summary,
 )
 
 CUSTOMER = "Al Noor Trading LLC"
@@ -159,6 +160,93 @@ class TestMyWorkAndOverview(WorkControlCase):
         self.assertIn(soon, names("due_soon"))
         self.assertIn(soon, names("key"))
         self.assertNotIn(overdue, names("due_soon"))
+
+    def test_overview_donut_counts_each_item_once(self):
+        self.make_task("Close GL", add_days(nowdate(), -1), is_key=1)
+        soon = self.make_task("UAT sign-off", add_days(nowdate(), 1), is_key=1)
+        frappe.db.set_value("Task", soon, "status", "Working")
+        self.make_task("Phase 2 scoping", add_days(nowdate(), 30), is_key=1)
+        self.make_task("Write user guide", add_days(nowdate(), 30))
+
+        result = self.as_user(PM, lambda: work.get_overview(project=self.project))
+        self.assertEqual(
+            result["active"],
+            {
+                "total": 4,
+                "overdue": 1,
+                "at_risk": 0,
+                "due_soon": 1,
+                "key": 1,
+                "other": 1,
+            },
+        )
+        # the tiles still count every key item
+        self.assertEqual(result["counts"]["key"], 3)
+
+    def test_tasks_by_project_follow_the_filters(self):
+        other = make_project(f"{OTHER_CUSTOMER} - Support", owner=PM[0]).name
+        frappe.db.set_value("Project", other, "customer", OTHER_CUSTOMER)
+        self.make_task("Close GL", add_days(nowdate(), 2))
+        self.make_task("Train users", add_days(nowdate(), 5), LEAD)
+        done = self.make_task("Chart of accounts", add_days(nowdate(), -3))
+        frappe.db.set_value("Task", done, "status", "Completed")
+        elsewhere = make_task(other, "Route planning", add_days(nowdate(), 4)).name
+        make_assignment("Task", elsewhere, DEV[0])
+
+        def counts(**filters):
+            result = self.as_user(PM, lambda: work.get_overview(**filters))
+            return [
+                (p["project"], p["count"])
+                for p in result["projects"]
+                if p["project"] in (self.project, other)
+            ]
+
+        self.assertEqual(counts(), [(self.project, 2), (other, 1)])
+        self.assertEqual(counts(customer=CUSTOMER), [(self.project, 2)])
+        self.assertEqual(counts(project=other), [(other, 1)])
+        self.assertEqual(
+            sorted(counts(assignee=DEV[0])), sorted([(self.project, 1), (other, 1)])
+        )
+        result = self.as_user(PM, lambda: work.get_overview(project=self.project))
+        self.assertEqual(result["projects"][0]["project_name"], f"{CUSTOMER} - Rollout")
+
+    def test_attention_lists_overdue_work_before_risky_work(self):
+        risky = self.make_task("Train accounts team", add_days(nowdate(), 1))
+        overdue = self.make_task("Close GL", add_days(nowdate(), -3))
+        on_track = self.make_task("Phase 2 scoping", add_days(nowdate(), 30))
+        # overdue and at risk at once, but listed once
+        ticket = make_ticket(
+            subject="Server down", priority="Urgent", customer=CUSTOMER
+        )
+        frappe.db.set_value(
+            "HD Ticket",
+            ticket.name,
+            {"_assign": "[]", "resolution_by": add_to_date(now_datetime(), hours=-2)},
+        )
+        make_work_summary(
+            CUSTOMER,
+            period_start=add_days(nowdate(), -13),
+            period_end=add_days(nowdate(), -7),
+        )
+        latest = make_work_summary(CUSTOMER).name
+
+        result = self.as_user(PM, lambda: work.get_overview(customer=CUSTOMER))
+        names = [i["name"] for i in result["attention"]]
+        self.assertEqual(names.count(str(ticket.name)), 1)
+        self.assertLess(names.index(overdue), names.index(risky))
+        self.assertLess(names.index(str(ticket.name)), names.index(risky))
+        self.assertNotIn(on_track, names)
+        task = next(i for i in result["attention"] if i["name"] == overdue)
+        self.assertEqual(task["customer"], CUSTOMER)
+        self.assertEqual(task["summary"]["name"], latest)
+
+    def test_attention_hides_summaries_the_user_cannot_read(self):
+        overdue = self.make_task("Close GL", add_days(nowdate(), -3))
+        make_work_summary(CUSTOMER)
+
+        result = self.as_user(DEV, lambda: work.get_overview(project=self.project))
+        item = next(i for i in result["attention"] if i["name"] == overdue)
+        self.assertIsNone(item["summary"])
 
 
 class TestTicketToTask(WorkControlCase):
