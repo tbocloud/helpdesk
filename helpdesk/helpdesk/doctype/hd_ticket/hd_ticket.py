@@ -1134,6 +1134,7 @@ class HDTicket(Document):
 
     @staticmethod
     def default_list_data(show_customer_portal_fields=False):
+        # agents scan a row as: what, for whom, where it stands, how urgent, when it's due
         columns = [
             {
                 "label": "ID",
@@ -1148,10 +1149,24 @@ class HDTicket(Document):
                 "width": "25rem",
             },
             {
+                "label": "Customer",
+                "type": "Link",
+                "key": "customer",
+                "options": "HD Customer",
+                "width": "10rem",
+            },
+            {
                 "label": "Status",
                 "type": "Select",
                 "key": "status",
                 "width": "8rem",
+            },
+            {
+                "label": "Priority",
+                "type": "Link",
+                "options": "HD Ticket Priority",
+                "key": "priority",
+                "width": "7rem",
             },
             {
                 "label": "First response",
@@ -1170,20 +1185,6 @@ class HDTicket(Document):
                 "type": "MultipleAvatar",
                 "key": "_assign",
                 "width": "8rem",
-            },
-            {
-                "label": "Customer",
-                "type": "Link",
-                "key": "customer",
-                "options": "HD Customer",
-                "width": "8rem",
-            },
-            {
-                "label": "Priority",
-                "type": "Link",
-                "options": "HD Ticket Priority",
-                "key": "priority",
-                "width": "10rem",
             },
             {
                 "label": "Type",

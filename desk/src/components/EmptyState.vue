@@ -60,6 +60,10 @@
           {{ __(descriptionText) }}
         </span>
       </div>
+      <!-- the overlay ignores the pointer; its actions must not -->
+      <div v-if="$slots.default" class="pointer-events-auto mt-2">
+        <slot />
+      </div>
     </div>
   </div>
 </template>

@@ -1,4 +1,9 @@
 import type { Tone } from "@/components/tone";
+import {
+  ticketFilters,
+  ticketsLink,
+  type TicketFilterKey,
+} from "@/pages/ticket/ticketFilters";
 import type { WorkItem } from "@/pages/work/workMeta";
 import { __ } from "@/translation";
 import { dayjs } from "frappe-ui";
@@ -212,42 +217,12 @@ export function ticketsClear(data: HomeData) {
   return !!t && !t.sla_breached && !t.first_reply_overdue && !t.unassigned;
 }
 
-function nowParam() {
-  return dayjs().format("YYYY-MM-DD HH:mm:ss");
-}
-
-const OPEN_CATEGORIES = ["status_category", "in", ["Open", "Paused"]];
-
-/** The agent tickets list, narrowed by filters in the URL (ListViewBuilder reads `?filters=`). */
-export function ticketsLink(filters: unknown[][] = []): RouteLocationRaw {
-  return filters.length
-    ? { name: "TicketsAgent", query: { filters: JSON.stringify(filters) } }
-    : { name: "TicketsAgent" };
-}
-
-export const ticketLinks = {
-  open: () => ticketsLink([OPEN_CATEGORIES]),
-  newToday: () =>
-    ticketsLink([["creation", ">=", dayjs().format("YYYY-MM-DD")]]),
-  unassigned: () => ticketsLink([OPEN_CATEGORIES, ["_assign", "is", "not set"]]),
-  slaBreached: () =>
-    ticketsLink([
-      ["status_category", "=", "Open"],
-      ["resolution_by", "<", nowParam()],
-    ]),
-  firstReplyOverdue: () =>
-    ticketsLink([
-      ["status_category", "=", "Open"],
-      ["first_responded_on", "is", "not set"],
-      ["response_by", "<", nowParam()],
-    ]),
-  waitingOnCustomer: () =>
-    ticketsLink([
-      ["status_category", "=", "Paused"],
-      ["status", "!=", "Waiting on Task"],
-    ]),
-  rated: () => ticketsLink([["feedback_rating", ">", 0]]),
-};
+export const ticketLinks = Object.fromEntries(
+  (Object.keys(ticketFilters) as TicketFilterKey[]).map((key) => [
+    key,
+    () => ticketsLink(ticketFilters[key]()),
+  ])
+) as Record<TicketFilterKey, () => RouteLocationRaw>;
 
 /** The Overview opened on one of its buckets ("overdue" is its default). */
 export function overviewLink(bucket: string): RouteLocationRaw {

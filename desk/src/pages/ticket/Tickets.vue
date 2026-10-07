@@ -17,7 +17,7 @@
         >
           <Button
             class="rtl:flex-row-reverse"
-            :label="__('Create')"
+            :label="isCustomerPortal ? __('Create') : __('New ticket')"
             theme="gray"
             variant="solid"
           >
@@ -28,6 +28,7 @@
         </RouterLink>
       </template>
     </LayoutHeader>
+    <TicketSummaryStrip v-if="!isCustomerPortal" ref="summaryRef" />
     <ListViewBuilder
       ref="listViewRef"
       :options="options"
@@ -38,7 +39,67 @@
             params: { ticketId: row },
           })
       "
-    />
+    >
+      <template v-if="!isCustomerPortal" #mobile-row="{ row }">
+        <RouterLink
+          :to="{
+            name: 'TicketAgent',
+            params: { ticketId: row.name },
+            query: { view: route.query.view },
+          }"
+          class="flex flex-col gap-1.5 px-4 py-3 hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-outline-gray-4"
+        >
+          <span class="flex items-start justify-between gap-3">
+            <span
+              class="min-w-0 flex-1 truncate text-base text-ink-gray-9"
+              :class="isUnseen(row) ? 'font-semibold' : 'font-medium'"
+            >
+              {{ row.subject }}
+            </span>
+            <component
+              :is="
+                slaCell(
+                  resolutionSla(row, row.resolution_by),
+                  row.resolution_by
+                )
+              "
+              v-if="row.resolution_by || row.resolution_date"
+            />
+          </span>
+          <span
+            class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-gray-6"
+          >
+            <span class="font-mono tabular-nums text-ink-gray-5">
+              #{{ row.name }}
+            </span>
+            <span v-if="row.customer" class="min-w-0 truncate">
+              {{ row.customer }}
+            </span>
+            <span class="flex items-center gap-1.5 text-ink-gray-7">
+              <IndicatorIcon :class="getStatus(row.status)?.parsed_color" />
+              {{ getStatus(row.status)?.label_agent ?? row.status }}
+            </span>
+            <component :is="priorityCell(row.priority)" />
+            <MultipleAvatar
+              v-if="row._assign"
+              :avatars="row._assign"
+              hide-name
+              class="ml-auto"
+            />
+          </span>
+        </RouterLink>
+      </template>
+      <template v-if="hasActiveFilters" #empty-actions>
+        <Button
+          :label="__('Clear filters')"
+          @click="listViewRef?.clearFilters()"
+        >
+          <template #prefix>
+            <LucideX class="size-4" aria-hidden="true" />
+          </template>
+        </Button>
+      </template>
+    </ListViewBuilder>
     <ExportModal
       v-model="showExportModal"
       :rowCount="$refs.listViewRef?.list?.data?.total_count ?? 0"
@@ -60,10 +121,11 @@
 </template>
 
 <script setup lang="ts">
-import { LayoutHeader, ListViewBuilder } from "@/components";
+import { LayoutHeader, ListViewBuilder, MultipleAvatar } from "@/components";
 import { TicketIcon } from "@/components/icons";
 import IndicatorIcon from "@/components/icons/IndicatorIcon.vue";
 import BulkReplyModal from "@/components/ticket-agent/BulkReplyModal.vue";
+import TicketSummaryStrip from "@/components/ticket-agent/TicketSummaryStrip.vue";
 import ExportModal from "@/components/ticket/ExportModal.vue";
 import ViewBreadcrumbs from "@/components/ViewBreadcrumbs.vue";
 import { normalizeFilters } from "@/components/view-controls/filter";
@@ -71,13 +133,28 @@ import ViewModal from "@/components/ViewModal.vue";
 import { currentView, useView } from "@/composables/useView";
 import { useAuthStore } from "@/stores/auth";
 import { globalStore } from "@/stores/globalStore";
+import TaskyBadge from "@/pages/tasky/components/TaskyBadge.vue";
+import { priorityIcon } from "@/pages/tasky/taskMeta";
 import { useTicketStatusStore } from "@/stores/ticketStatus";
 import { __ } from "@/translation";
 import { View } from "@/types";
 import { isCustomerPortal, shortDuration } from "@/utils";
-import { Badge, dayjs, Tooltip, usePageMeta } from "frappe-ui";
-import { computed, h, onMounted, onUnmounted, reactive, ref } from "vue";
+import { Badge, Button, dayjs, Tooltip, usePageMeta } from "frappe-ui";
+import {
+  computed,
+  h,
+  onMounted,
+  onUnmounted,
+  reactive,
+  ref,
+  type Component,
+} from "vue";
 import { useRoute, useRouter } from "vue-router";
+import LucideCheck from "~icons/lucide/check";
+import LucideCircleAlert from "~icons/lucide/circle-alert";
+import LucideClock from "~icons/lucide/clock";
+import LucidePause from "~icons/lucide/pause";
+import LucideX from "~icons/lucide/x";
 
 const router = useRouter();
 const route = useRoute();
@@ -102,6 +179,7 @@ const { $socket } = globalStore();
 const { isManager, userId } = useAuthStore();
 
 const listViewRef = ref(null);
+const summaryRef = ref<InstanceType<typeof TicketSummaryStrip> | null>(null);
 const showExportModal = ref(false);
 
 const { getStatus } = useTicketStatusStore();
@@ -133,17 +211,12 @@ const options = computed(() => ({
   doctype: "HD Ticket",
   columnConfig: {
     subject: {
-      custom: ({ row, item }) => {
-        const seenBy = row._seen ? JSON.parse(row._seen) : [];
-        const isSeen = seenBy.includes(userId || "");
-        return h(
+      custom: ({ row, item }) =>
+        h(
           "span",
-          {
-            class: ["truncate flex-1", !isSeen && "font-semibold"],
-          },
+          { class: ["truncate flex-1", isUnseen(row) && "font-semibold"] },
           item
-        );
-      },
+        ),
     },
     status: {
       custom: ({ item }) => {
@@ -171,11 +244,14 @@ const options = computed(() => ({
       },
     },
     response_by: {
-      custom: ({ row, item }) => handleResponseByField(row, item),
+      custom: ({ row, item }) => slaCell(responseSla(row, item), item),
     },
     resolution_by: {
-      custom: ({ row, item }) => handleResolutionByField(row, item),
+      custom: ({ row, item }) => slaCell(resolutionSla(row, item), item),
     },
+    ...(isCustomerPortal.value
+      ? {}
+      : { priority: { custom: ({ item }) => priorityCell(item) } }),
   },
   isCustomerPortal: isCustomerPortal.value,
   selectable: true,
@@ -195,7 +271,11 @@ const options = computed(() => ({
         ? __(
             "No tickets found for the applied filters. Try adjusting or clearing your filters."
           )
-        : undefined,
+        : isCustomerPortal.value
+        ? undefined
+        : __(
+            "Tickets from email and the customer portal show up here as they arrive."
+          ),
   },
   rowRoute: {
     name: isCustomerPortal.value ? "TicketCustomer" : "TicketAgent",
@@ -204,80 +284,96 @@ const options = computed(() => ({
   hideColumnSetting: false,
 }));
 
-function handleResponseByField(row: any, item: string) {
-  if (!row.first_responded_on && dayjs(item).isBefore(new Date())) {
-    return h(Badge, {
-      label: __("Failed"),
-      theme: "red",
-      variant: "subtle",
-    });
-  }
-  if (row.first_responded_on && dayjs(row.first_responded_on).isBefore(item)) {
-    return h(Badge, {
-      label: __("Fulfilled"),
-      theme: "gray",
-      variant: "subtle",
-    });
-  } else if (dayjs(row.first_responded_on).isAfter(item)) {
-    return h(Badge, {
-      label: __("Failed"),
-      theme: "red",
-      variant: "subtle",
-    });
-  } else {
-    return h(
-      Tooltip,
-      {
-        text: dayjs(item).format("LLLL"),
-      },
-      h(Badge, {
-        label: shortDuration(item),
-        variant: "subtle",
-        theme: "orange",
-      })
-    );
-  }
+function isUnseen(row: any) {
+  const seenBy: string[] = row._seen ? JSON.parse(row._seen) : [];
+  return !seenBy.includes(userId || "");
 }
 
-function handleResolutionByField(row: any, item: string) {
-  const status = getStatus(row.status) || {};
-  if (status.category === "Paused") {
-    return h(Badge, {
-      label: __("Paused"),
-      theme: "blue",
-      variant: "subtle",
-    });
-  }
-  if (row.resolution_date) {
-    const fulfilled = dayjs(row.resolution_date).isBefore(
-      dayjs(row.resolution_by)
-    );
-    return h(Badge, {
-      label: fulfilled ? __("Fulfilled") : __("Failed"),
-      theme: fulfilled ? "gray" : "red",
-      variant: "subtle",
-    });
-  }
-  // In progress but the resolution deadline has already passed.
-  if (dayjs(item).isBefore(dayjs())) {
-    return h(Badge, {
-      label: __("Failed"),
-      theme: "red",
-      variant: "subtle",
-    });
-  }
-  // In progress with a future deadline: show the live countdown.
-  return h(
-    Tooltip,
-    {
-      text: dayjs(item).format("LLLL"),
-    },
-    h(Badge, {
-      label: shortDuration(item),
-      variant: "subtle",
-      theme: "orange",
-    })
-  );
+type SlaState = "failed" | "fulfilled" | "paused" | "due" | "none";
+
+function responseSla(row: any, deadline: string): SlaState {
+  if (!deadline) return "none";
+  if (!row.first_responded_on && dayjs(deadline).isBefore(new Date()))
+    return "failed";
+  if (
+    row.first_responded_on &&
+    dayjs(row.first_responded_on).isBefore(deadline)
+  )
+    return "fulfilled";
+  if (dayjs(row.first_responded_on).isAfter(deadline)) return "failed";
+  return "due";
+}
+
+function resolutionSla(row: any, deadline: string): SlaState {
+  if (getStatus(row.status)?.category === "Paused") return "paused";
+  if (row.resolution_date)
+    return dayjs(row.resolution_date).isBefore(dayjs(row.resolution_by))
+      ? "fulfilled"
+      : "failed";
+  if (!deadline) return "none";
+  return dayjs(deadline).isBefore(dayjs()) ? "failed" : "due";
+}
+
+// same window as SLA_RISK_HOURS in helpdesk/api/work.py ("at risk" tickets)
+const SLA_RISK_HOURS = 4;
+
+const SLA_LABELS: Record<Exclude<SlaState, "due" | "none">, string> = {
+  failed: __("Failed"),
+  fulfilled: __("Fulfilled"),
+  paused: __("Paused"),
+};
+// the customer portal keeps its frappe-ui badge colours
+const PORTAL_THEMES = {
+  failed: "red",
+  fulfilled: "gray",
+  paused: "blue",
+  due: "orange",
+};
+const SLA_BADGES: Record<
+  Exclude<SlaState, "due" | "none">,
+  { tone: "danger" | "neutral"; icon: Component }
+> = {
+  failed: { tone: "danger", icon: LucideCircleAlert },
+  fulfilled: { tone: "neutral", icon: LucideCheck },
+  paused: { tone: "neutral", icon: LucidePause },
+};
+
+function slaCell(state: SlaState, deadline: string) {
+  if (state === "none") return h("span");
+  const label = state === "due" ? shortDuration(deadline) : SLA_LABELS[state];
+  const badge = isCustomerPortal.value
+    ? h(Badge, { label, theme: PORTAL_THEMES[state], variant: "subtle" })
+    : h(
+        TaskyBadge,
+        state === "due"
+          ? {
+              label: __("in {0}", [label]),
+              icon: LucideClock,
+              tone:
+                dayjs(deadline).diff(dayjs(), "hour", true) <= SLA_RISK_HOURS
+                  ? "warning"
+                  : "neutral",
+            }
+          : { label, ...SLA_BADGES[state] }
+      );
+  // a running clock shows the exact deadline on hover
+  return state === "due"
+    ? h(Tooltip, { text: dayjs(deadline).format("LLLL") }, () => badge)
+    : badge;
+}
+
+const PRIORITY_TONES: Record<string, "danger" | "warning"> = {
+  Urgent: "danger",
+  High: "warning",
+};
+
+function priorityCell(priority: string) {
+  if (!priority) return h("span");
+  return h(TaskyBadge, {
+    label: __(priority),
+    icon: priorityIcon(priority),
+    tone: PRIORITY_TONES[priority] ?? "neutral",
+  });
 }
 
 async function exportRows(
@@ -438,6 +534,7 @@ onMounted(() => {
   if (!isCustomerPortal.value) {
     $socket.on("helpdesk:new-ticket", () => {
       listViewRef.value?.reload();
+      summaryRef.value?.reload();
     });
   }
 });
