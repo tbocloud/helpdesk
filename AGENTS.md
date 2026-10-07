@@ -373,6 +373,17 @@ const ticket = createDocumentResource({
 
 ## Agent Working Rules
 
+### 0. Guardrails — read these first
+
+Every change follows **[docs/engineering-guardrails.md](docs/engineering-guardrails.md)**
+(search before create, no duplicates, no dead code, no needless dependencies, minimal change,
+cleanup pass, honest verification) and every UI change also follows
+**[docs/ui-guidelines.md](docs/ui-guidelines.md)** (one purpose and one primary action per
+screen, all states, one accent plus neutrals, no pastel icon tiles or gradients,
+accessibility, responsive, human-designed — never a generic AI dashboard). Report in the
+format those documents give.
+
+
 These rules apply to all agents working in this codebase. Follow them without exception.
 
 ### 1. Site Data — Read Before You Write
