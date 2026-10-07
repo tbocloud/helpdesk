@@ -383,6 +383,15 @@ def get_custom_fields():
         ],
         "Task": [
             {
+                # the description was written by the AI and nobody has edited it since
+                "fieldname": "custom_ai_description",
+                "fieldtype": "Check",
+                "label": "AI Drafted Description",
+                "insert_after": "description",
+                "read_only": 1,
+                "no_copy": 1,
+            },
+            {
                 "fieldname": "custom_category",
                 "fieldtype": "Select",
                 "label": "Category",

@@ -6,6 +6,7 @@
 	"field_order": [
 		"ai_task_estimates",
 		"max_task_days",
+		"ai_task_descriptions",
 		"weekly_off",
 		"saturdays_off",
 		"dev_hours_per_day",
@@ -26,6 +27,13 @@
 			"label": "Longest estimate (working days)",
 			"default": "15",
 			"depends_on": "ai_task_estimates"
+		},
+		{
+			"fieldname": "ai_task_descriptions",
+			"fieldtype": "Check",
+			"label": "Write descriptions for new tasks with AI",
+			"default": "1",
+			"description": "When a task is created without a description, the AI writes one in the background: the goal, the steps and when it is done. A description someone has typed is never replaced."
 		},
 		{
 			"fieldname": "weekly_off",
@@ -66,7 +74,7 @@
 	"index_web_pages_for_search": 0,
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-10-05 12:00:00.000000",
+	"modified": "2026-10-07 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Work Settings",
