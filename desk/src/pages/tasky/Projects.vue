@@ -7,29 +7,40 @@
       <template #right-header>
         <Button
           variant="ghost"
-          :label="__('Refresh')"
+          :aria-label="__('Refresh')"
           :loading="projects.loading && !!projects.data"
           @click="reloadAll"
         >
-          <template #icon><LucideRefreshCw class="size-4" /></template>
+          <template #icon>
+            <LucideRefreshCw class="size-4" aria-hidden="true" />
+          </template>
         </Button>
         <Button
           v-if="authStore.isProjectManager"
           variant="solid"
           :label="__('New project')"
-          @click="openNewProject"
+          @click="showNewForm = true"
         >
-          <template #prefix
-            ><LucidePlus class="size-4" aria-hidden="true"
-          /></template>
+          <template #prefix>
+            <LucidePlus class="size-4" aria-hidden="true" />
+          </template>
         </Button>
       </template>
     </LayoutHeader>
 
     <div class="flex-1 overflow-auto">
       <div class="mx-auto w-full max-w-6xl px-4 py-5 md:px-6">
+        <p class="text-p-sm text-ink-gray-6">
+          {{
+            __(
+              "Every project you're on, by department. Open one to plan its tasks, or go straight to its board."
+            )
+          }}
+        </p>
+
         <TaskyState
-          v-if="projects.error"
+          v-if="projects.error && !projects.data"
+          class="mt-6"
           error
           :icon="LucideCircleAlert"
           :title="__('Couldn\'t load projects')"
@@ -39,28 +50,65 @@
         </TaskyState>
 
         <template v-else>
+          <!-- Summary: the two that count work narrow the cards to what they count -->
+          <div
+            class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3"
+            role="group"
+            :aria-label="__('Project summary')"
+          >
+            <StatTile
+              :label="__('Open projects')"
+              :value="openInScope.length"
+              :icon="LucideFolderOpen"
+              :loading="isLoading"
+            />
+            <StatTile
+              :label="__('Overdue tasks')"
+              :value="overdueTotal"
+              :sub="overdueSub"
+              :icon="LucideAlarmClock"
+              :icon-tone="overdueTotal ? 'danger' : 'neutral'"
+              :value-tone="overdueTotal ? 'danger' : 'neutral'"
+              :loading="isLoading || statsLoading"
+              :pressed="show === 'overdue'"
+              :aria-controls="listId"
+              @click="toggleShow('overdue')"
+            />
+            <StatTile
+              :label="__('Ending in 14 days')"
+              :value="endingSoon.length"
+              :sub="pastEnd.length ? pastEndSub : undefined"
+              :icon="LucideCalendarClock"
+              :loading="isLoading"
+              :pressed="show === 'ending'"
+              :aria-controls="listId"
+              @click="toggleShow('ending')"
+            />
+          </div>
+
           <!-- Filters -->
           <div
-            class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between"
+            class="mt-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between"
           >
             <div
-              class="-mx-1 flex gap-1 overflow-x-auto px-1"
+              class="-mx-1 flex min-w-0 gap-1 overflow-x-auto px-1"
               role="tablist"
               :aria-label="__('Filter projects by status')"
             >
               <button
-                v-for="tab in statusTabs"
+                v-for="tab in STATUS_TABS"
                 :key="tab"
                 type="button"
                 role="tab"
                 :aria-selected="activeStatus === tab"
+                :aria-controls="listId"
                 class="flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
                 :class="
                   activeStatus === tab
                     ? 'bg-surface-gray-3 text-ink-gray-9'
                     : 'text-ink-gray-6 hover:bg-surface-gray-2 hover:text-ink-gray-8'
                 "
-                @click="activeStatus = tab"
+                @click="setStatus(tab)"
               >
                 {{ __(tab) }}
                 <span
@@ -117,353 +165,137 @@
             </button>
           </div>
 
-          <!-- Loading -->
           <div
-            v-if="projects.loading && !projects.data"
-            class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
-            aria-busy="true"
+            v-if="showTile"
+            class="mt-3 flex flex-wrap items-center gap-2 text-sm text-ink-gray-6"
+            role="status"
           >
+            {{ showTile }}
+            <Button
+              variant="ghost"
+              size="sm"
+              :label="__('Show all')"
+              @click="toggleShow(show)"
+            >
+              <template #prefix>
+                <LucideX class="size-3.5" aria-hidden="true" />
+              </template>
+            </Button>
+          </div>
+
+          <div :id="listId" :aria-busy="isLoading">
+            <!-- Loading -->
             <div
-              v-for="i in 6"
-              :key="i"
-              class="flex flex-col gap-4 rounded-xl border border-outline-gray-2 bg-surface-base p-4 shadow-sm"
+              v-if="isLoading"
+              class="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
+              :aria-label="__('Loading')"
             >
-              <div class="h-5 w-16 animate-pulse rounded bg-surface-gray-2" />
-              <div class="h-4 w-3/5 animate-pulse rounded bg-surface-gray-2" />
-              <div class="h-3 w-2/5 animate-pulse rounded bg-surface-gray-2" />
               <div
-                class="h-1.5 w-full animate-pulse rounded-full bg-surface-gray-2"
-              />
-            </div>
-          </div>
-
-          <!-- Empty -->
-          <div
-            v-else-if="!visibleProjects.length"
-            class="mt-4 rounded-xl border border-outline-gray-2 bg-surface-base"
-          >
-            <TaskyState
-              v-if="!allProjects.length"
-              :icon="LucideFolderKanban"
-              :title="__('No projects yet')"
-              :message="
-                authStore.isProjectManager
-                  ? __(
-                      'Create a project to start planning tasks with your team.'
-                    )
-                  : __('Projects you are added to will show up here.')
-              "
-            >
-              <Button
-                v-if="authStore.isProjectManager"
-                variant="solid"
-                :label="__('New project')"
-                @click="openNewProject"
+                v-for="i in 6"
+                :key="i"
+                class="flex flex-col gap-4 rounded-lg border border-outline-gray-2 bg-surface-base p-4"
               >
-                <template #prefix
-                  ><LucidePlus class="size-4" aria-hidden="true"
-                /></template>
-              </Button>
-            </TaskyState>
-            <TaskyState
-              v-else
-              :icon="LucideSearchX"
-              :title="__('No matching projects')"
-              :message="__('Try a different search, or clear the filters.')"
-            >
-              <Button :label="__('Show all projects')" @click="resetFilters" />
-            </TaskyState>
-          </div>
-
-          <!-- Cards, one section per department -->
-          <div v-else class="mt-5 flex flex-col gap-8">
-            <section
-              v-for="(group, groupIdx) in groups"
-              :key="group.key"
-              :aria-labelledby="`department-heading-${groupIdx}`"
-            >
-              <h2
-                :id="`department-heading-${groupIdx}`"
-                class="flex items-center gap-2 text-base-semibold text-ink-gray-9"
-              >
-                <LucideFolder
-                  class="size-4 text-ink-gray-5"
-                  aria-hidden="true"
+                <div
+                  class="h-4 w-3/5 animate-pulse rounded bg-surface-gray-2"
                 />
-                {{ group.label }}
-                <span
-                  class="rounded bg-surface-gray-2 px-1.5 font-mono text-xs tabular-nums text-ink-gray-6"
-                >
-                  {{ group.projects.length }}
-                  <span class="sr-only">{{ __("projects") }}</span>
-                </span>
-              </h2>
-              <ul
-                role="list"
-                class="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
+                <div
+                  class="h-3 w-2/5 animate-pulse rounded bg-surface-gray-2"
+                />
+                <div
+                  class="h-1.5 w-full animate-pulse rounded-full bg-surface-gray-2"
+                />
+              </div>
+            </div>
+
+            <!-- Empty: first use, or filtered to nothing -->
+            <div
+              v-else-if="!visibleProjects.length"
+              class="mt-5 rounded-lg border border-outline-gray-2 bg-surface-base"
+            >
+              <TaskyState
+                v-if="!allProjects.length"
+                :icon="LucideFolderKanban"
+                :title="__('No projects yet')"
+                :message="
+                  authStore.isProjectManager
+                    ? __(
+                        'Create a project to start planning tasks with your team.'
+                      )
+                    : __(
+                        'Projects you are added to will show up here. Ask a project manager to add you.'
+                      )
+                "
               >
-                <li
-                  v-for="project in group.projects"
-                  :key="project.name"
-                  class="flex flex-col overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base shadow-sm transition-colors hover:border-outline-gray-3"
+                <Button
+                  v-if="authStore.isProjectManager"
+                  variant="solid"
+                  :label="__('New project')"
+                  @click="showNewForm = true"
                 >
-                  <div class="flex flex-1 flex-col gap-3 p-4">
-                    <div class="flex items-center justify-between gap-2">
-                      <TaskStatusBadge
-                        kind="project"
-                        :status="project.status"
-                      />
-                      <span
-                        class="truncate font-mono text-xs text-ink-gray-5"
-                        >{{ project.name }}</span
-                      >
-                    </div>
+                  <template #prefix>
+                    <LucidePlus class="size-4" aria-hidden="true" />
+                  </template>
+                </Button>
+              </TaskyState>
+              <TaskyState
+                v-else
+                :icon="LucideSearchX"
+                :title="__('No matching projects')"
+                :message="__('Try a different search, or clear the filters.')"
+              >
+                <Button
+                  :label="__('Show all projects')"
+                  @click="resetFilters"
+                />
+              </TaskyState>
+            </div>
 
-                    <div class="min-w-0">
-                      <router-link
-                        :to="{
-                          name: 'TaskyProject',
-                          params: { projectId: project.name },
-                        }"
-                        class="block truncate rounded text-base-semibold text-ink-gray-9 hover:underline"
-                      >
-                        {{ project.project_name || project.name }}
-                      </router-link>
-                      <div
-                        class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink-gray-6"
-                      >
-                        <span
-                          v-if="project.customer"
-                          class="flex min-w-0 items-center gap-1"
-                        >
-                          <LucideBuilding2
-                            class="size-3.5 shrink-0"
-                            aria-hidden="true"
-                          />
-                          <span class="truncate">{{ project.customer }}</span>
-                        </span>
-                        <span
-                          v-if="project.project_lead"
-                          class="flex min-w-0 items-center gap-1"
-                        >
-                          <LucideUserStar
-                            class="size-3.5 shrink-0"
-                            aria-hidden="true"
-                          />
-                          <span class="truncate">{{
-                            __(
-                              "Lead: {0}",
-                              project.project_lead_name || project.project_lead
-                            )
-                          }}</span>
-                        </span>
-                        <span class="flex items-center gap-1 tabular-nums">
-                          <LucideCalendar
-                            class="size-3.5 shrink-0"
-                            aria-hidden="true"
-                          />
-                          {{ formatDateRange(project) }}
-                        </span>
-                      </div>
-                    </div>
-
-                    <!-- Progress -->
-                    <div
-                      v-if="
-                        dashboards[project.name]?.loading &&
-                        !dashboards[project.name]?.data
-                      "
-                      class="flex flex-col gap-2"
-                    >
-                      <div
-                        class="h-3 w-1/3 animate-pulse rounded bg-surface-gray-2"
-                      />
-                      <div
-                        class="h-1.5 w-full animate-pulse rounded-full bg-surface-gray-2"
-                      />
-                    </div>
-                    <div
-                      v-else-if="statsFor(project)"
-                      class="flex flex-col gap-2"
-                    >
-                      <div class="flex items-center justify-between text-xs">
-                        <span class="text-ink-gray-5">{{
-                          __("Progress")
-                        }}</span>
-                        <span class="font-mono tabular-nums text-ink-gray-7">
-                          {{ statsFor(project).completed }}/{{
-                            statsFor(project).total
-                          }}
-                          <span class="text-ink-gray-5"
-                            >· {{ statsFor(project).completion_pct }}%</span
-                          >
-                        </span>
-                      </div>
-                      <div
-                        class="flex h-1.5 w-full overflow-hidden rounded-full bg-surface-gray-2"
-                        role="img"
-                        :aria-label="progressLabel(project)"
-                      >
-                        <div
-                          v-for="seg in segments(project)"
-                          :key="seg.key"
-                          class="h-full"
-                          :class="seg.bar"
-                          :style="{ width: seg.pct + '%' }"
-                        />
-                      </div>
-                      <div
-                        class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-gray-6"
-                      >
-                        <span
-                          v-for="seg in legend(project)"
-                          :key="seg.key"
-                          class="flex items-center gap-1.5 tabular-nums"
-                        >
-                          <span
-                            class="size-2 rounded-full"
-                            :class="seg.bar"
-                            aria-hidden="true"
-                          />
-                          {{ seg.count }} {{ seg.label }}
-                        </span>
-                        <span
-                          v-if="statsFor(project).overdue"
-                          class="flex items-center gap-1 font-medium text-danger tabular-nums"
-                        >
-                          <LucideAlarmClock
-                            class="size-3.5"
-                            aria-hidden="true"
-                          />
-                          {{ statsFor(project).overdue }} {{ __("overdue") }}
-                        </span>
-                      </div>
-                    </div>
-
-                    <!-- Phases -->
-                    <div v-if="phasesFor(project).length">
-                      <button
-                        type="button"
-                        class="flex items-center gap-1 rounded text-xs text-ink-gray-6 hover:text-ink-gray-8"
-                        :aria-expanded="expandedCards.has(project.name)"
-                        :aria-controls="`phases-${project.name}`"
-                        @click="toggleExpand(project.name)"
-                      >
-                        <component
-                          :is="
-                            expandedCards.has(project.name)
-                              ? LucideChevronDown
-                              : LucideChevronRight
-                          "
-                          class="size-3.5"
-                          aria-hidden="true"
-                        />
-                        {{ __("Phases") }}
-                        <span class="font-mono tabular-nums text-ink-gray-5">{{
-                          phasesFor(project).length
-                        }}</span>
-                      </button>
-                      <div
-                        v-if="expandedCards.has(project.name)"
-                        :id="`phases-${project.name}`"
-                        class="mt-2 flex flex-wrap gap-1.5"
-                      >
-                        <span
-                          v-for="phase in phasesFor(project)"
-                          :key="phase.name"
-                          class="inline-flex items-center gap-1.5 rounded-md bg-surface-gray-2 px-1.5 py-0.5 text-xs text-ink-gray-7"
-                        >
-                          {{ phase.phase_name }}
-                          <span class="font-mono tabular-nums text-ink-gray-5">
-                            {{ phase.completed_count }}/{{ phase.total_count }}
-                          </span>
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div
-                    class="flex flex-wrap items-center gap-1 border-t border-outline-gray-2 bg-surface-gray-1 px-2 py-1.5"
+            <!-- Cards, one section per department -->
+            <div v-else class="mt-5 flex flex-col gap-8">
+              <section
+                v-for="(group, groupIdx) in groups"
+                :key="group.key"
+                :aria-labelledby="`department-heading-${groupIdx}`"
+              >
+                <h2
+                  :id="`department-heading-${groupIdx}`"
+                  class="flex items-center gap-2 text-base-semibold text-ink-gray-9"
+                >
+                  {{ group.label }}
+                  <span class="font-mono text-sm tabular-nums text-ink-gray-5">
+                    {{ group.projects.length }}
+                    <span class="sr-only">{{ __("projects") }}</span>
+                  </span>
+                </h2>
+                <ul
+                  role="list"
+                  class="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
+                >
+                  <li
+                    v-for="project in group.projects"
+                    :key="project.name"
+                    class="flex min-w-0"
                   >
-                    <Button
-                      variant="ghost"
-                      :label="__('Open')"
-                      @click="navigateToProject(project.name)"
-                    >
-                      <template #prefix
-                        ><LucideLayoutDashboard
-                          class="size-4"
-                          aria-hidden="true"
-                      /></template>
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      :label="__('Board')"
-                      @click="navigateToKanban(project.name)"
-                    >
-                      <template #prefix
-                        ><LucideKanban class="size-4" aria-hidden="true"
-                      /></template>
-                    </Button>
-                    <Button
-                      v-if="project.file_count"
-                      variant="ghost"
-                      :aria-label="__('{0} files', String(project.file_count))"
-                      @click="
-                        router.push({
-                          name: 'TaskyFiles',
-                          params: { projectId: project.name },
-                        })
-                      "
-                    >
-                      <template #prefix
-                        ><LucidePaperclip class="size-4" aria-hidden="true"
-                      /></template>
-                      <span class="font-mono tabular-nums">{{
-                        project.file_count
-                      }}</span>
-                    </Button>
-                    <Button
-                      v-if="project.can_edit"
-                      variant="ghost"
-                      :label="__('Edit')"
-                      @click="openEdit(project.name)"
-                    >
-                      <template #prefix
-                        ><LucidePencil class="size-4" aria-hidden="true"
-                      /></template>
-                    </Button>
-                    <Button
-                      v-if="project.can_manage"
-                      variant="ghost"
-                      class="ml-auto"
-                      :label="__('Checklist')"
-                      @click="onGenerateChecklist(project)"
-                    >
-                      <template #prefix
-                        ><LucideClipboardList class="size-4" aria-hidden="true"
-                      /></template>
-                    </Button>
-                    <Button
-                      v-if="project.can_add_tasks"
-                      :class="project.can_manage ? '' : 'ml-auto'"
-                      :label="__('New task')"
-                      @click="openNewTask(project.name)"
-                    >
-                      <template #prefix
-                        ><LucidePlus class="size-4" aria-hidden="true"
-                      /></template>
-                    </Button>
-                  </div>
-                </li>
-              </ul>
-            </section>
+                    <ProjectCard
+                      class="flex-1"
+                      :project="project"
+                      :stats="statsFor(project)"
+                      :phases="phasesFor(project)"
+                      :loading="isStatsLoading(project)"
+                      :failed="!!dashboards[project.name]?.error"
+                      @edit="openEdit(project.name)"
+                      @checklist="openChecklist(project.name)"
+                      @new-task="openNewTask(project.name)"
+                    />
+                  </li>
+                </ul>
+              </section>
+            </div>
           </div>
         </template>
       </div>
     </div>
 
-    <!-- New project -->
     <ProjectFormDialog
       v-model:open="showNewForm"
       :default-department="selectedDepartmentName"
@@ -496,74 +328,56 @@
 
 <script setup lang="ts">
 import LayoutHeader from "@/components/LayoutHeader.vue";
+import StatTile from "@/components/StatTile.vue";
+import TaskyState from "@/components/TaskyState.vue";
 import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
-import { Button, TextInput, createResource, dayjs, toast } from "frappe-ui";
-import { computed, reactive, ref, watch } from "vue";
-import { useRouter } from "vue-router";
+import { watchDebounced } from "@vueuse/core";
+import { Button, TextInput, createResource } from "frappe-ui";
+import { computed, reactive, ref, useId, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
-import LucideBuilding2 from "~icons/lucide/building-2";
-import LucideCalendar from "~icons/lucide/calendar";
-import LucideChevronDown from "~icons/lucide/chevron-down";
-import LucideChevronRight from "~icons/lucide/chevron-right";
+import LucideCalendarClock from "~icons/lucide/calendar-clock";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
-import LucideClipboardList from "~icons/lucide/clipboard-list";
-import LucideFolder from "~icons/lucide/folder";
 import LucideFolderKanban from "~icons/lucide/folder-kanban";
-import LucideLayoutDashboard from "~icons/lucide/layout-dashboard";
-import LucidePaperclip from "~icons/lucide/paperclip";
-import LucidePencil from "~icons/lucide/pencil";
+import LucideFolderOpen from "~icons/lucide/folder-open";
 import LucidePlus from "~icons/lucide/plus";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideSearch from "~icons/lucide/search";
 import LucideSearchX from "~icons/lucide/search-x";
-import LucideKanban from "~icons/lucide/square-kanban";
-import LucideUserStar from "~icons/lucide/user-star";
+import LucideX from "~icons/lucide/x";
 import GenerateChecklistModal from "./components/GenerateChecklistModal.vue";
 import NewTaskDialog from "./components/NewTaskDialog.vue";
+import ProjectCard, {
+  type ProjectPhase,
+  type ProjectStats,
+  type ProjectSummary,
+} from "./components/ProjectCard.vue";
 import ProjectFormDialog from "./components/ProjectFormDialog.vue";
-import TaskStatusBadge from "./components/TaskStatusBadge.vue";
-import TaskyState from "@/components/TaskyState.vue";
+import { daysUntil } from "./taskMeta";
 
+const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
-
-interface Project {
-  name: string;
-  project_name?: string;
-  status?: string;
-  expected_start_date?: string;
-  expected_end_date?: string;
-  priority?: string;
-  customer?: string;
-  project_lead?: string;
-  project_lead_name?: string;
-  department?: string;
-  can_manage?: boolean;
-  file_count?: number;
-}
+const listId = `projects-list-${useId()}`;
 
 interface Department {
   name: string;
   is_active: boolean;
 }
 
-interface Phase {
-  name: string;
-  phase_name: string;
-  completed_count: number;
-  total_count: number;
-}
-
-type StatusTab = "All" | "Open" | "Completed" | "Cancelled";
+const STATUS_TABS = ["Open", "Completed", "Cancelled", "All"] as const;
+type StatusTab = typeof STATUS_TABS[number];
+type Show = "" | "overdue" | "ending";
 
 const projects = createResource({
   url: "helpdesk.tasky.api.get_projects",
   auto: true,
-  transform: (d: Project[]) => d ?? [],
+  transform: (d: ProjectSummary[]) => d ?? [],
 });
 
-const allProjects = computed<Project[]>(() => projects.data ?? []);
+const allProjects = computed<ProjectSummary[]>(() => projects.data ?? []);
+const isLoading = computed(() => projects.loading && !projects.data);
 
 // inactive ones too, so projects still in one keep their section
 const departments = createResource({
@@ -574,39 +388,95 @@ const departments = createResource({
 });
 const departmentList = computed<Department[]>(() => departments.data ?? []);
 
-// --- filters ---
-
-const statusTabs: StatusTab[] = ["Open", "Completed", "Cancelled", "All"];
-const activeStatus = ref<StatusTab>("Open");
-const search = ref("");
+// --- filters, kept in the URL so a view can be shared ---
 
 const ALL_DEPARTMENTS = "";
 // a key no department name can be: names are trimmed, and this one is a space
 const NO_DEPARTMENT = " ";
-const activeDepartment = ref(ALL_DEPARTMENTS);
+// the URL can't carry a lone space, so "no department" travels as this
+const NO_DEPARTMENT_PARAM = "__none__";
 
-function departmentKey(p: Project) {
+function queryValue(key: string) {
+  const value = route.query[key];
+  return typeof value === "string" ? value : "";
+}
+
+const activeStatus = ref<StatusTab>(
+  STATUS_TABS.find((t) => t === queryValue("status")) ?? "Open"
+);
+const activeDepartment = ref(
+  queryValue("department") === NO_DEPARTMENT_PARAM
+    ? NO_DEPARTMENT
+    : queryValue("department")
+);
+const search = ref(queryValue("q"));
+const show = ref<Show>(
+  (["overdue", "ending"] as const).find((s) => s === queryValue("show")) ?? ""
+);
+
+watchDebounced(
+  [activeStatus, activeDepartment, search, show],
+  () => {
+    router.replace({
+      query: {
+        ...route.query,
+        status: activeStatus.value === "Open" ? undefined : activeStatus.value,
+        department:
+          activeDepartment.value === NO_DEPARTMENT
+            ? NO_DEPARTMENT_PARAM
+            : activeDepartment.value || undefined,
+        q: search.value.trim() || undefined,
+        show: show.value || undefined,
+      },
+    });
+  },
+  { debounce: 250 }
+);
+
+function departmentKey(p: ProjectSummary) {
   return p.department || NO_DEPARTMENT;
 }
 
-function matchesStatus(p: Project, tab: StatusTab) {
+function isOpen(p: ProjectSummary) {
+  return (p.status || "Open") === "Open";
+}
+
+function matchesStatus(p: ProjectSummary, tab: StatusTab) {
   return tab === "All" || (p.status || "Open") === tab;
 }
 
-function matchesDepartment(p: Project, key: string) {
+function matchesDepartment(p: ProjectSummary, key: string) {
   return key === ALL_DEPARTMENTS || departmentKey(p) === key;
+}
+
+function matchesShow(p: ProjectSummary) {
+  if (show.value === "overdue") return (statsFor(p)?.overdue ?? 0) > 0;
+  if (show.value === "ending") return isEndingSoon(p);
+  return true;
 }
 
 function countFor(tab: StatusTab) {
   return allProjects.value.filter(
-    (p) => matchesStatus(p, tab) && matchesDepartment(p, activeDepartment.value)
+    (p) =>
+      matchesStatus(p, tab) &&
+      matchesDepartment(p, activeDepartment.value) &&
+      matchesShow(p)
   ).length;
 }
 
 function departmentCount(key: string) {
   return allProjects.value.filter(
-    (p) => matchesStatus(p, activeStatus.value) && matchesDepartment(p, key)
+    (p) =>
+      matchesStatus(p, activeStatus.value) &&
+      matchesDepartment(p, key) &&
+      matchesShow(p)
   ).length;
+}
+
+function setStatus(tab: StatusTab) {
+  activeStatus.value = tab;
+  // the summary filters count open projects only
+  if (tab !== "Open") show.value = "";
 }
 
 const departmentChips = computed(() => {
@@ -627,6 +497,9 @@ const departmentChips = computed(() => {
 // a department can lose its chip (inactive, last project moved away); don't keep filtering by it
 watch(departmentChips, (chips) => {
   if (
+    // a department from the URL waits until both lists are in
+    departments.data &&
+    projects.data &&
     activeDepartment.value !== ALL_DEPARTMENTS &&
     !chips.some((c) => c.key === activeDepartment.value)
   )
@@ -643,6 +516,7 @@ const visibleProjects = computed(() => {
     (p) =>
       matchesStatus(p, activeStatus.value) &&
       matchesDepartment(p, activeDepartment.value) &&
+      matchesShow(p) &&
       (!q ||
         (p.project_name || "").toLowerCase().includes(q) ||
         p.name.toLowerCase().includes(q) ||
@@ -653,12 +527,12 @@ const visibleProjects = computed(() => {
 interface ProjectGroup {
   key: string;
   label: string;
-  projects: Project[];
+  projects: ProjectSummary[];
 }
 
 // departments in their set order, empty ones left out, projects without one last
 const groups = computed<ProjectGroup[]>(() => {
-  const byDepartment = new Map<string, Project[]>();
+  const byDepartment = new Map<string, ProjectSummary[]>();
   for (const p of visibleProjects.value) {
     const key = departmentKey(p);
     if (!byDepartment.has(key)) byDepartment.set(key, []);
@@ -684,9 +558,10 @@ function resetFilters() {
   activeStatus.value = "All";
   activeDepartment.value = ALL_DEPARTMENTS;
   search.value = "";
+  show.value = "";
 }
 
-// --- per-project dashboard stats ---
+// --- per-project task stats ---
 
 const dashboards = reactive<Record<string, ReturnType<typeof createResource>>>(
   {}
@@ -694,7 +569,7 @@ const dashboards = reactive<Record<string, ReturnType<typeof createResource>>>(
 
 watch(
   () => projects.data,
-  (list: Project[] | null) => {
+  (list: ProjectSummary[] | null) => {
     list?.forEach((p) => {
       if (!dashboards[p.name]) {
         dashboards[p.name] = createResource({
@@ -716,110 +591,86 @@ function reloadAll() {
   Object.values(dashboards).forEach((d) => d.reload());
 }
 
-function statsFor(project: Project) {
-  return dashboards[project.name]?.data?.stats;
+function statsFor(project: ProjectSummary): ProjectStats | null {
+  return dashboards[project.name]?.data?.stats ?? null;
 }
 
-function phasesFor(project: Pick<Project, "name">): Phase[] {
+function phasesFor(project: Pick<ProjectSummary, "name">): ProjectPhase[] {
   return dashboards[project.name]?.data?.phases ?? [];
 }
 
-function segments(project: Project) {
-  const s = statsFor(project);
-  const total = s?.total || 1;
-  return [
-    {
-      key: "done",
-      pct: ((s?.completed || 0) / total) * 100,
-      bar: "bg-success",
-    },
-    {
-      key: "active",
-      pct: ((s?.in_progress || 0) / total) * 100,
-      bar: "bg-info",
-    },
-    {
-      key: "review",
-      pct: ((s?.reviewing || 0) / total) * 100,
-      bar: "bg-warning",
-    },
-    {
-      key: "cancelled",
-      pct: ((s?.cancelled || 0) / total) * 100,
-      bar: "bg-surface-gray-5",
-    },
-  ].filter((seg) => seg.pct > 0);
+function isStatsLoading(project: ProjectSummary) {
+  const d = dashboards[project.name];
+  return !d || (d.loading && !d.data);
 }
 
-function legend(project: Project) {
-  const s = statsFor(project);
-  return [
-    {
-      key: "done",
-      count: s?.completed || 0,
-      label: __("done"),
-      bar: "bg-success",
-    },
-    {
-      key: "active",
-      count: s?.in_progress || 0,
-      label: __("in progress"),
-      bar: "bg-info",
-    },
-    {
-      key: "review",
-      count: s?.reviewing || 0,
-      label: __("in review"),
-      bar: "bg-warning",
-    },
-  ].filter((seg) => seg.count > 0);
+// --- summary: open projects under the department filter ---
+
+const openInScope = computed(() =>
+  allProjects.value.filter(
+    (p) => isOpen(p) && matchesDepartment(p, activeDepartment.value)
+  )
+);
+
+const statsLoading = computed(() => openInScope.value.some(isStatsLoading));
+
+const overdueTotal = computed(() =>
+  openInScope.value.reduce((sum, p) => sum + (statsFor(p)?.overdue ?? 0), 0)
+);
+
+const overdueSub = computed(() => {
+  const failed = openInScope.value.filter(
+    (p) => dashboards[p.name]?.error
+  ).length;
+  if (failed)
+    return failed === 1
+      ? __("1 project didn't load")
+      : __("{0} projects didn't load", String(failed));
+  const projectsWith = openInScope.value.filter(
+    (p) => (statsFor(p)?.overdue ?? 0) > 0
+  ).length;
+  if (!projectsWith) return __("Nothing late");
+  return projectsWith === 1
+    ? __("In 1 project")
+    : __("In {0} projects", String(projectsWith));
+});
+
+function isEndingSoon(p: ProjectSummary) {
+  if (!isOpen(p) || !p.expected_end_date) return false;
+  const days = daysUntil(p.expected_end_date);
+  return days >= 0 && days <= 14;
 }
 
-function progressLabel(project: Project) {
-  const s = statsFor(project);
-  return __(
-    "{0} of {1} tasks completed",
-    String(s?.completed || 0),
-    String(s?.total || 0)
-  );
+const endingSoon = computed(() => openInScope.value.filter(isEndingSoon));
+
+const pastEnd = computed(() =>
+  openInScope.value.filter(
+    (p) => p.expected_end_date && daysUntil(p.expected_end_date) < 0
+  )
+);
+
+const pastEndSub = computed(() =>
+  pastEnd.value.length === 1
+    ? __("1 more is past its end date")
+    : __("{0} more are past their end date", String(pastEnd.value.length))
+);
+
+const showTile = computed(() => {
+  if (show.value === "overdue")
+    return __("Showing open projects with overdue tasks.");
+  if (show.value === "ending")
+    return __("Showing open projects ending in the next 14 days.");
+  return "";
+});
+
+function toggleShow(next: Show) {
+  show.value = show.value === next ? "" : next;
+  if (show.value) activeStatus.value = "Open";
 }
 
-function formatDateRange(p: Project) {
-  const fmt = (d: string) => dayjs(d).format("D MMM YYYY");
-  if (p.expected_start_date && p.expected_end_date) {
-    return `${fmt(p.expected_start_date)} – ${fmt(p.expected_end_date)}`;
-  }
-  if (p.expected_start_date) return __("From {0}", fmt(p.expected_start_date));
-  if (p.expected_end_date) return __("Due {0}", fmt(p.expected_end_date));
-  return __("No dates set");
-}
-
-// --- card toggles & navigation ---
-
-const expandedCards = reactive<Set<string>>(new Set());
-
-function toggleExpand(name: string) {
-  if (expandedCards.has(name)) expandedCards.delete(name);
-  else expandedCards.add(name);
-}
-
-function navigateToProject(projectName: string) {
-  router.push({ name: "TaskyProject", params: { projectId: projectName } });
-}
-
-function navigateToKanban(projectName: string) {
-  router.push({ name: "TaskyKanban", params: { projectId: projectName } });
-}
-
-// --- new project ---
+// --- dialogs ---
 
 const showNewForm = ref(false);
-
-function openNewProject() {
-  showNewForm.value = true;
-}
-
-// --- edit project ---
 
 const showEdit = ref(false);
 const editingProject = ref("");
@@ -829,15 +680,13 @@ function openEdit(name: string) {
   showEdit.value = true;
 }
 
-// --- checklist & new task ---
-
 const showChecklistModal = ref(false);
 const selectedProjectId = ref("");
 const showNewTask = ref(false);
 const newTaskProject = ref("");
 
-function onGenerateChecklist(project: Project) {
-  selectedProjectId.value = project.name;
+function openChecklist(name: string) {
+  selectedProjectId.value = name;
   showChecklistModal.value = true;
 }
 
