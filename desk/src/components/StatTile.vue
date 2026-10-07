@@ -9,8 +9,9 @@
         ? { type: 'button', 'aria-pressed': pressed }
         : {}
     "
-    class="flex min-w-0 flex-col gap-1 rounded-xl border p-4 text-left"
+    class="flex min-w-0 flex-col gap-1 rounded-xl border text-left"
     :class="[
+      compact ? 'px-3 py-2.5' : 'p-4',
       hero ? 'sm:col-span-2' : '',
       pressed
         ? 'border-brand bg-brand-soft'
@@ -39,7 +40,7 @@
     <span
       class="font-semibold tabular-nums"
       :class="[
-        hero ? 'text-5xl leading-tight' : 'text-2xl',
+        hero ? 'text-5xl leading-tight' : compact ? 'text-xl' : 'text-2xl',
         valueTone === 'neutral' ? 'text-ink-gray-9' : INK[valueTone],
       ]"
     >
@@ -87,6 +88,8 @@ const props = withDefaults(
     /** colours the icon, only when that carries meaning (e.g. overdue) */
     iconTone?: Tone;
     hero?: boolean;
+    /** tighter padding and a smaller number, for a strip above a list */
+    compact?: boolean;
     /** 0-100; draws a meter under the value */
     meter?: number | null;
     /** the meter's colour */

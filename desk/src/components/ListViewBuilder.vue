@@ -42,6 +42,21 @@
   >
     <LoadingIndicator :scale="8" />
   </div>
+  <!-- Mobile: a page that passes #mobile-row gets one stacked row per record
+       instead of a table squeezed into a phone -->
+  <ul
+    v-else-if="showMobileRows"
+    role="list"
+    class="border-t border-outline-gray-2"
+  >
+    <li
+      v-for="row in rows"
+      :key="row.name"
+      class="border-b border-outline-gray-1 last:border-b-0"
+    >
+      <slot name="mobile-row" :row="row" />
+    </li>
+  </ul>
   <!-- List View -->
   <ListView
     v-else-if="list.data?.data.length > 0"
@@ -119,7 +134,11 @@
     :title="emptyState.title"
     :icon="emptyState.icon"
     :description="emptyState.description"
-  />
+  >
+    <template v-if="$slots['empty-actions']" #default>
+      <slot name="empty-actions" />
+    </template>
+  </EmptyState>
 </template>
 
 <script setup lang="ts">
@@ -167,6 +186,7 @@ import {
   provide,
   reactive,
   ref,
+  useSlots,
   VNode,
   watch,
 } from "vue";
@@ -339,6 +359,15 @@ const options = computed(() => {
 });
 
 const { isMobileView } = useScreenSize();
+const slots = useSlots();
+
+const showMobileRows = computed(
+  () =>
+    isMobileView.value &&
+    !!slots["mobile-row"] &&
+    list.data?.view_type !== "group_by" &&
+    list.data?.data?.length > 0
+);
 
 const defaultEmptyState = {
   icon: "",
@@ -389,6 +418,7 @@ const list = createResource({
 const exposeFunctions = {
   list,
   reload,
+  clearFilters,
   unselectAll: () => {},
 };
 
@@ -649,18 +679,30 @@ function updateColumns(obj) {
   list.reload({ ...defaultParams });
 }
 
+function resetParams() {
+  defaultParams.filters = normalizeFilters(options.value.defaultFilters);
+  defaultParams.order_by = "modified desc";
+  defaultParams.page_length = options.value.default_page_length;
+  pageLengthCount.value = options.value.default_page_length;
+  defaultParams.page_length_count = pageLengthCount.value;
+  defaultParams.columns = [];
+  defaultParams.rows = [];
+  defaultParams.is_default = true;
+}
+
 function reload(reset: boolean = false) {
-  if (reset) {
-    defaultParams.filters = normalizeFilters(options.value.defaultFilters);
-    defaultParams.order_by = "modified desc";
-    defaultParams.page_length = options.value.default_page_length;
-    pageLengthCount.value = options.value.default_page_length;
-    defaultParams.page_length_count = pageLengthCount.value;
-    defaultParams.columns = [];
-    defaultParams.rows = [];
-    defaultParams.is_default = true;
-  }
+  if (reset) resetParams();
   list.reload({ ...defaultParams });
+}
+
+// filters that came from the URL go back to the view's own; filters set here are emptied
+function clearFilters() {
+  if (route.query.filters) {
+    const { filters: _, ...query } = route.query;
+    router.push({ name: route.name, query });
+    return;
+  }
+  applyFilters([]);
 }
 
 function handlePageLength(count: number, loadMore: boolean = false) {
@@ -745,23 +787,33 @@ function handleReload() {
 
 function handleViewChanges() {
   let currentView: View = findCurrentView();
-  if (!currentView) {
+  if (!currentView && (route.query.view || !route.query.filters)) {
     router.push({ name: route.name });
     reload(true);
     return;
   }
-  // normalize so legacy dict-format saved views become list conditions
-  defaultParams.filters = normalizeFilters(currentView.filters);
-  defaultParams.order_by = currentView.order_by || "modified desc";
-  defaultParams.columns = currentView.columns;
-  defaultParams.rows = currentView.rows;
+  if (currentView) {
+    // normalize so legacy dict-format saved views become list conditions
+    defaultParams.filters = normalizeFilters(currentView.filters);
+    defaultParams.order_by = currentView.order_by || "modified desc";
+    defaultParams.columns = currentView.columns;
+    defaultParams.rows = currentView.rows;
+  } else {
+    // no saved view: start from the defaults so ?filters= still applies
+    resetParams();
+  }
 
   if (route.query.filters) {
     try {
       const parsedFilters = normalizeFilters(
         JSON.parse(route.query.filters as string)
       );
-      if (parsedFilters.length > 0) {
+      if (parsedFilters.length > 0 && !route.query.view) {
+        // a link without a view (Home, the tickets summary) means exactly
+        // these conditions, so its count matches the list; the personal
+        // default view still supplies columns and sort
+        defaultParams.filters = parsedFilters;
+      } else if (parsedFilters.length > 0) {
         const overriddenFields = new Set(parsedFilters.map((c) => c[0]));
         defaultParams.filters = [
           ...normalizeFilters(defaultParams.filters).filter(
@@ -799,6 +851,19 @@ watch(
       headerView.value.label = __("List");
       headerView.value.icon = LucideAlignJustify;
     }
+  }
+);
+
+// a summary tile or link can change ?filters= while the list stays mounted.
+// A view switch is left to the view watcher above, and the route name check
+// skips the change made by leaving the page.
+const listRouteName = route.name;
+watch(
+  () => [route.query.view, route.query.filters],
+  ([view, filters], [oldView, oldFilters]) => {
+    if (route.name !== listRouteName) return;
+    if (view !== oldView || filters === oldFilters) return;
+    handleViewChanges();
   }
 );
 
