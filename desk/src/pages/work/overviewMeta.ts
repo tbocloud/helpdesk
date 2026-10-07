@@ -7,7 +7,9 @@ export type Bucket =
   | "key"
   | "review"
   | "waiting_on_task"
-  | "on_hold";
+  | "on_hold"
+  | "unassigned"
+  | "all";
 
 export const BUCKETS: Bucket[] = [
   "overdue",
@@ -17,6 +19,8 @@ export const BUCKETS: Bucket[] = [
   "review",
   "waiting_on_task",
   "on_hold",
+  "unassigned",
+  "all",
 ];
 
 /** The donut's parts, most urgent first; the server counts each item under the first it is in. */
@@ -42,4 +46,8 @@ export interface OverviewData {
   active: ActiveSplit;
   projects: ProjectCount[];
   attention: AttentionItem[];
+  /** Open projects under the filters (with an assignee: the ones they have tasks in). */
+  open_projects: number;
+  /** People with at least one open task or ticket under the filters. */
+  people_busy: number;
 }

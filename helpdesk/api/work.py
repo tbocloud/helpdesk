@@ -340,7 +340,8 @@ def get_overview(
     """Overdue, due-soon, key and waiting work across the projects and tickets the user can see.
 
     Also the Overview's charts: active work split by urgency, open tasks of the
-    busiest projects, and the items that need attention first.
+    busiest projects, the items that need attention first, and the KPI row's
+    open projects and people with open work.
     """
     today = getdate(nowdate())
     soon = add_days(today, DUE_SOON_DAYS)
@@ -398,6 +399,9 @@ def get_overview(
         "review": [
             i for i in items if i["kind"] == "task" and i["status"] == "Pending Review"
         ],
+        "unassigned": [i for i in items if not i["assignees"]],
+        # every open task and ticket, for the Active work tile's list
+        "all": items,
     }
     return {
         "buckets": buckets,
@@ -405,7 +409,25 @@ def get_overview(
         "active": _urgency_split(items, buckets),
         "projects": _tasks_by_project(task_filters),
         "attention": _attention(buckets),
+        "open_projects": _open_project_count(task_filters, tasks if assignee else None),
+        "people_busy": len({a for i in items for a in i["assignees"]}),
     }
+
+
+def _open_project_count(task_filters: dict, assignee_tasks: list | None) -> int:
+    """Open projects the user may read under the overview's filters.
+
+    The task filters already carry the project, customer and department; with an
+    assignee filter it's the projects that person has open tasks in.
+    """
+    filters = {"status": "Open"}
+    if assignee_tasks is not None:
+        projects = {t.project for t in assignee_tasks if t.project}
+        filters["name"] = ("in", list(projects) or [""])
+    elif "project" in task_filters:
+        filters["name"] = task_filters["project"]
+    rows = frappe.get_list("Project", filters=filters, fields=["count(name) as count"])
+    return rows[0].count if rows else 0
 
 
 def _in_department(project_filter, department: str) -> tuple:
@@ -704,7 +726,7 @@ def _team_members(user: str, projects: list[str] | None) -> set[str]:
 @frappe.whitelist()
 @agent_only
 def get_team_workload(project: str | None = None, customer: str | None = None) -> dict:
-    """Per person: their open tasks, what they're working on, counts, done this week."""
+    """Per person: what they're working on, open work counts, what's due and done this week."""
     user = frappe.session.user
     if not can_see_overview(user):
         frappe.throw(
@@ -755,7 +777,6 @@ def get_team_workload(project: str | None = None, customer: str | None = None) -
         person: {
             "user": person,
             "working_on": [],
-            "tasks": [],
             "next_due": None,
             "open": 0,
             "working": 0,
@@ -781,7 +802,6 @@ def get_team_workload(project: str | None = None, customer: str | None = None) -
                 continue
             row["open"] += 1
             row["estimated_hours"] += task.custom_estimated_hours or 0
-            row["tasks"].append(item)
             if task.status == "Working":
                 row["working"] += 1
                 row["working_on"].append(
@@ -829,7 +849,6 @@ def get_team_workload(project: str | None = None, customer: str | None = None) -
     team = []
     for row in rows.values():
         row["full_name"] = full_names.get(row["user"]) or row["user"]
-        row["tasks"].sort(key=_sort_key)
         row["estimated_hours"] = round(row["estimated_hours"], 1)
         team.append(row)
     team.sort(key=lambda r: (-r["overdue"], -r["open"], r["full_name"]))
