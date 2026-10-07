@@ -1,5 +1,5 @@
 <template>
-  <HomeCard
+  <SectionCard
     :title="__('Your day')"
     :to="{ name: 'MyWork' }"
     :link-label="__('My work')"
@@ -90,7 +90,7 @@
         </li>
       </ul>
     </div>
-  </HomeCard>
+  </SectionCard>
 
   <CompleteTaskDialog
     v-model:task="completingTask"
@@ -118,7 +118,7 @@ import LucidePaperclip from "~icons/lucide/paperclip";
 import LucidePlay from "~icons/lucide/play";
 import LucideReply from "~icons/lucide/reply";
 import type { YourDay } from "../homeMeta";
-import HomeCard from "./HomeCard.vue";
+import SectionCard from "@/components/SectionCard.vue";
 import HomeItemRow from "./HomeItemRow.vue";
 
 const props = defineProps<{ day: YourDay }>();

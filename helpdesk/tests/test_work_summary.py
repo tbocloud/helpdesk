@@ -1,8 +1,9 @@
+import json
 from unittest.mock import patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
-from frappe.utils import add_days, add_to_date, now_datetime, nowdate
+from frappe.utils import add_days, add_to_date, getdate, now_datetime, nowdate
 
 from helpdesk import work_summary
 from helpdesk.api import work_summary as api
@@ -244,16 +245,20 @@ class TestSummaryAccess(WorkSummaryCase):
         make_work_summary(OTHER_CUSTOMER)
 
         for user in (PM, LEAD, MANAGER):
-            names = run_as_user(user[0], lambda: api.get_summaries(customer=CUSTOMER))
-            self.assertIn(summary.name, [s.name for s in names])
+            listed = run_as_user(user[0], lambda: api.get_summaries(customer=CUSTOMER))[
+                "summaries"
+            ]
+            self.assertIn(summary.name, [s.name for s in listed])
             self.assertEqual(
                 run_as_user(user[0], lambda: api.get_summary(summary.name))["customer"],
                 CUSTOMER,
             )
 
-        pm_customers = {s.customer for s in run_as_user(PM[0], api.get_summaries)}
+        pm_customers = {
+            s.customer for s in run_as_user(PM[0], api.get_summaries)["summaries"]
+        }
         self.assertNotIn(OTHER_CUSTOMER, pm_customers)
-        self.assertEqual(run_as_user(OUTSIDER[0], api.get_summaries), [])
+        self.assertEqual(run_as_user(OUTSIDER[0], api.get_summaries)["summaries"], [])
         self.assertFalse(
             frappe.has_permission(
                 "HD Work Summary", "read", summary.name, user=OUTSIDER[0]
@@ -276,3 +281,50 @@ class TestSummaryAccess(WorkSummaryCase):
                 self.assertEqual(str(result["period_end"]), nowdate())
                 self.assertIn("tasks", result["stats"])
                 self.assertIn("<p>", result["summary"])
+
+    def test_the_list_says_who_may_generate(self):
+        self.assertTrue(run_as_user(PM[0], api.get_summaries)["can_generate"])
+        self.assertTrue(run_as_user(MANAGER[0], api.get_summaries)["can_generate"])
+        # leading a project is enough to read its summaries, not to generate one
+        self.assertFalse(run_as_user(LEAD[0], api.get_summaries)["can_generate"])
+
+
+class TestSummaryList(WorkSummaryCase):
+    def test_filters_by_week_and_kind_with_key_figures(self):
+        stats = {
+            "tickets": {"opened": 4, "resolved": 3},
+            "tasks": {"completed": 2, "overdue": 1},
+        }
+        this_week = make_work_summary(
+            CUSTOMER, generated_by_ai=1, stats=json.dumps(stats)
+        )
+        last_week = make_work_summary(
+            CUSTOMER,
+            period_start=add_days(nowdate(), -13),
+            period_end=add_days(nowdate(), -7),
+        )
+
+        def listed(**filters):
+            return {
+                s.name: s
+                for s in api.get_summaries(customer=CUSTOMER, **filters)["summaries"]
+            }
+
+        self.assertEqual(set(listed(kind="ai")), {this_week.name})
+        self.assertEqual(set(listed(kind="plain")), {last_week.name})
+        monday = add_days(getdate(nowdate()), -getdate(nowdate()).weekday())
+        self.assertEqual(set(listed(week=str(monday))), {this_week.name})
+
+        everything = listed()
+        self.assertEqual(
+            everything[this_week.name]["highlights"],
+            {
+                "tickets_opened": 4,
+                "tickets_resolved": 3,
+                "tasks_completed": 2,
+                "tasks_overdue": 1,
+            },
+        )
+        # a summary without stats has no figures, rather than zeros
+        self.assertIsNone(everything[last_week.name]["highlights"]["tickets_opened"])
+        self.assertNotIn("stats", everything[this_week.name])

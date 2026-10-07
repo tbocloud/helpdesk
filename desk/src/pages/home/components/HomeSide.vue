@@ -1,5 +1,5 @@
 <template>
-  <HomeCard
+  <SectionCard
     :title="__('Open tickets by customer')"
     :to="ticketLinks.open()"
     :link-label="__('Tickets')"
@@ -26,9 +26,9 @@
     <p v-else class="px-4 py-4 text-p-sm text-ink-gray-6">
       {{ __("No open tickets.") }}
     </p>
-  </HomeCard>
+  </SectionCard>
 
-  <HomeCard
+  <SectionCard
     :title="__('Ending in the next 14 days')"
     :to="{ name: 'TaskyProjects' }"
     :link-label="__('Projects')"
@@ -96,9 +96,9 @@
     <p v-else class="px-4 py-4 text-p-sm text-ink-gray-6">
       {{ __("No project ends in the next 14 days.") }}
     </p>
-  </HomeCard>
+  </SectionCard>
 
-  <HomeCard :title="__('Team load')" :to="{ name: 'TeamWorkload' }">
+  <SectionCard :title="__('Team load')" :to="{ name: 'TeamWorkload' }">
     <ul v-if="company.people.length" role="list">
       <li
         v-for="person in company.people"
@@ -135,7 +135,7 @@
       <span class="text-ink-gray-7">{{ __("Free:") }}</span>
       {{ freeLabel }}
     </p>
-  </HomeCard>
+  </SectionCard>
 </template>
 
 <script setup lang="ts">
@@ -149,7 +149,7 @@ import {
   type Company,
   type EndingProject,
 } from "../homeMeta";
-import HomeCard from "./HomeCard.vue";
+import SectionCard from "@/components/SectionCard.vue";
 
 const props = defineProps<{ company: Company }>();
 

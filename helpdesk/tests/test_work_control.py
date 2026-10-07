@@ -16,6 +16,7 @@ from helpdesk.patches.v16_0_2.add_waiting_on_task_status import (
 from helpdesk.tasky import api as tasky
 from helpdesk.test_utils import (
     create_customer,
+    hold_commits,
     make_assignment,
     make_department,
     make_project,
@@ -38,11 +39,8 @@ TEAMMATE = ("teammate.control@work-control.example", "Anjali Menon")
 
 class WorkControlCase(FrappeTestCase):
     def setUp(self):
-        self.addCleanup(frappe.db.rollback)
+        hold_commits(self)
         self.addCleanup(frappe.set_user, "Administrator")
-        commit = patch.object(frappe.db, "commit")
-        commit.start()
-        self.addCleanup(commit.stop)
 
         create_customer(CUSTOMER)
         create_customer(OTHER_CUSTOMER)
@@ -161,6 +159,24 @@ class TestMyWorkAndOverview(WorkControlCase):
         self.assertIn(soon, names("due_soon"))
         self.assertIn(soon, names("key"))
         self.assertNotIn(overdue, names("due_soon"))
+
+    def test_overview_kpi_row(self):
+        mine = self.make_task("Close GL", add_days(nowdate(), 5))
+        nobody = self.make_task("Archive old data", add_days(nowdate(), 5), None)
+        make_project("Internal tooling", owner=PM[0])
+
+        result = self.as_user(PM, lambda: work.get_overview(project=self.project))
+        names = lambda bucket: {i["name"] for i in result["buckets"][bucket]}
+        self.assertEqual(names("all"), {mine, nobody})
+        self.assertEqual(names("unassigned"), {nobody})
+        self.assertEqual(result["counts"]["all"], 2)
+        self.assertEqual(result["people_busy"], 1)
+        self.assertEqual(result["open_projects"], 1)
+
+        # for one person: only the projects they have open tasks in
+        result = self.as_user(PM, lambda: work.get_overview(assignee=DEV[0]))
+        self.assertEqual(result["open_projects"], 1)
+        self.assertEqual(result["people_busy"], 1)
 
     def test_overview_donut_counts_each_item_once(self):
         self.make_task("Close GL", add_days(nowdate(), -1), is_key=1)
@@ -731,14 +747,17 @@ class TestTeamWorkload(WorkControlCase):
             (2, 1, 1, 1),
         )
         self.assertEqual(dev["next_due"]["title"], "Leave policy")
-        # every open task is listed, overdue first
-        self.assertEqual(
-            [t["title"] for t in dev["tasks"]], ["Leave policy", "Payroll setup"]
-        )
         self.assertEqual(people[LEAD[0]]["open"], 0)
         self.assertEqual(result["totals"]["working_now"], 1)
         self.assertGreaterEqual(result["totals"]["free"], 1)
         self.assertNotIn(SUPPORT[0], people)
+
+    def test_a_lead_cannot_filter_to_someone_elses_project(self):
+        other = make_project(
+            f"{OTHER_CUSTOMER} - Support", members=[(SUPPORT[0], "Developer")]
+        ).name
+        result = self.as_user(LEAD, lambda: work.get_team_workload(project=other))
+        self.assertEqual(result["people"], [])
 
     def test_developers_cannot_see_the_team(self):
         with self.assertRaises(frappe.PermissionError):

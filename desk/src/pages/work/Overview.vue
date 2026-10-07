@@ -20,9 +20,17 @@
 
     <div class="flex-1 overflow-auto">
       <div class="mx-auto w-full max-w-7xl px-4 py-5 md:px-6">
+        <p class="text-p-sm text-ink-gray-6">
+          {{
+            __(
+              "Open tasks and tickets across the projects you run: what's late, what may slip, and who is on it."
+            )
+          }}
+        </p>
+
         <!-- Filters: the grid fits one more filter without layout changes -->
         <div
-          class="grid grid-cols-1 gap-3 sm:grid-cols-[repeat(auto-fit,minmax(12rem,1fr))]"
+          class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-[repeat(auto-fit,minmax(12rem,1fr))]"
           role="group"
           :aria-label="__('Filter overview')"
         >
@@ -73,85 +81,99 @@
         </TaskyState>
 
         <template v-else>
-          <!-- Dashboard: charts on top, tiles around what needs attention.
+          <!-- KPI row: buckets open their list below; the last two go to their page -->
+          <div
+            class="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6"
+            :aria-label="__('Work at a glance')"
+            role="group"
+          >
+            <StatTile
+              v-for="tile in kpiTiles"
+              :key="tile.key"
+              :label="tile.label"
+              :value="counts[tile.key] ?? 0"
+              :icon="tile.icon"
+              :icon-tone="tile.tone"
+              :loading="firstLoad"
+              :pressed="activeBucket === tile.key"
+              :aria-controls="listId"
+              @click="selectBucket(tile.key)"
+            />
+            <StatTile
+              :label="__('Open projects')"
+              :value="data?.open_projects ?? 0"
+              :icon="LucideFolderKanban"
+              :loading="firstLoad"
+              :to="{ name: 'TaskyProjects' }"
+            />
+            <StatTile
+              :label="__('People busy')"
+              :value="data?.people_busy ?? 0"
+              :icon="LucideUsers"
+              :loading="firstLoad"
+              :to="teamRoute"
+            />
+          </div>
+
+          <!-- Dashboard: charts on top, what needs action below.
                Dense flow lets the two-column tablet layout fill its gaps. -->
           <div
-            class="mt-5 grid grid-cols-1 gap-4 md:grid-flow-row-dense md:grid-cols-2 lg:grid-cols-12"
+            class="mt-4 grid grid-cols-1 gap-4 md:grid-flow-row-dense md:grid-cols-2 lg:grid-cols-12"
             :aria-busy="overview.loading"
           >
-            <!-- Active work by urgency -->
-            <section
-              class="flex flex-col gap-3 rounded-xl border border-outline-gray-2 bg-surface-base p-4 lg:col-span-3"
-              :aria-labelledby="`${uid}-active`"
-            >
-              <h2
-                :id="`${uid}-active`"
-                class="text-base-medium text-ink-gray-8"
-              >
-                {{ __("Active work") }}
-              </h2>
-              <div
-                v-if="firstLoad"
-                class="mx-auto size-44 animate-pulse rounded-full bg-surface-gray-2"
-              />
-              <OverviewDonut
-                v-else
-                :split="active"
-                :selected="activeBucket"
-                :labels="urgencyLabels"
-                @select="activeBucket = $event"
-              />
-            </section>
-
-            <!-- Open tasks by project -->
-            <section
-              class="flex min-w-0 flex-col gap-3 rounded-xl border border-outline-gray-2 bg-surface-base p-4 md:col-span-2 lg:col-span-6"
-              :aria-labelledby="`${uid}-projects`"
-            >
-              <header>
-                <h2
-                  :id="`${uid}-projects`"
-                  class="text-base-medium text-ink-gray-8"
-                >
-                  {{ __("Tasks by project") }}
-                </h2>
-                <p class="text-p-sm text-ink-gray-5">
-                  {{
-                    filters.project
-                      ? __("Click the bar again to see every project")
-                      : __(
-                          "Open tasks in the busiest projects; click one to filter"
-                        )
-                  }}
-                </p>
-              </header>
-              <div v-if="firstLoad" class="flex flex-col gap-3 py-1">
+            <SectionCard :title="__('Active work')" class="lg:col-span-3">
+              <div class="p-4">
                 <div
-                  v-for="i in 5"
-                  :key="i"
-                  class="h-4 animate-pulse rounded bg-surface-gray-2"
-                  :style="{ width: `${90 - i * 12}%` }"
+                  v-if="firstLoad"
+                  class="mx-auto size-44 animate-pulse rounded-full bg-surface-gray-2"
+                />
+                <OverviewDonut
+                  v-else
+                  :split="active"
+                  :selected="activeBucket"
+                  :labels="urgencyLabels"
+                  @select="selectBucket"
                 />
               </div>
-              <p
-                v-else-if="!projects.length"
-                class="flex flex-1 items-center justify-center py-10 text-p-sm text-ink-gray-5"
-              >
-                {{ __("No open tasks in any project.") }}
-              </p>
-              <OverviewProjectChart
-                v-else
-                :rows="projects"
-                :selected="filters.project || null"
-                @select="toggleProject"
-              />
-            </section>
+            </SectionCard>
 
-            <!-- Overdue, on hold and waiting for review -->
-            <section
-              class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base lg:col-span-3"
-              :aria-label="__('Work status')"
+            <SectionCard
+              :title="__('Tasks by project')"
+              :description="
+                filters.project
+                  ? __('Click the bar again to see every project')
+                  : __(
+                      'Open tasks in the busiest projects; click one to filter'
+                    )
+              "
+              class="md:col-span-2 lg:col-span-6"
             >
+              <div class="flex h-full flex-col p-4">
+                <div v-if="firstLoad" class="flex flex-col gap-3 py-1">
+                  <div
+                    v-for="i in 5"
+                    :key="i"
+                    class="h-4 animate-pulse rounded bg-surface-gray-2"
+                    :style="{ width: `${90 - i * 12}%` }"
+                  />
+                </div>
+                <p
+                  v-else-if="!projects.length"
+                  class="flex flex-1 items-center justify-center py-10 text-p-sm text-ink-gray-5"
+                >
+                  {{ __("No open tasks in any project.") }}
+                </p>
+                <OverviewProjectChart
+                  v-else
+                  :rows="projects"
+                  :selected="filters.project || null"
+                  @select="toggleProject"
+                />
+              </div>
+            </SectionCard>
+
+            <!-- Overdue, waiting for review and waiting on a task -->
+            <SectionCard :title="__('Work status')" class="lg:col-span-3">
               <ul role="list">
                 <li
                   v-for="row in statusRows"
@@ -168,7 +190,7 @@
                     "
                     :aria-pressed="activeBucket === row.key"
                     :aria-controls="listId"
-                    @click="activeBucket = row.key"
+                    @click="selectBucket(row.key)"
                   >
                     <span class="flex items-center justify-between gap-2">
                       <span
@@ -177,7 +199,11 @@
                         <component
                           :is="row.icon"
                           class="size-4"
-                          :class="row.iconClass"
+                          :class="
+                            row.tone === 'neutral'
+                              ? 'text-ink-gray-5'
+                              : INK[row.tone]
+                          "
                           aria-hidden="true"
                         />
                         {{ row.label }}
@@ -212,71 +238,22 @@
                   </button>
                 </li>
               </ul>
-            </section>
-
-            <!-- At risk, waiting on task -->
-            <div class="grid grid-cols-2 gap-4 lg:col-span-3 lg:grid-cols-1">
-              <button
-                v-for="tile in leftTiles"
-                :key="tile.key"
-                type="button"
-                class="flex min-h-28 flex-col justify-between gap-3 rounded-xl border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
-                :class="tileClass(tile.key)"
-                :aria-pressed="activeBucket === tile.key"
-                :aria-controls="listId"
-                @click="activeBucket = tile.key"
-              >
-                <span class="flex items-center justify-between gap-2">
-                  <span class="text-sm text-ink-gray-7">{{ tile.label }}</span>
-                  <component
-                    :is="tile.icon"
-                    class="size-4 shrink-0"
-                    :class="tile.iconClass"
-                    aria-hidden="true"
-                  />
-                </span>
-                <span
-                  class="text-4xl font-semibold tabular-nums text-ink-gray-9"
-                >
-                  <span
-                    v-if="firstLoad"
-                    class="inline-block h-9 w-10 animate-pulse rounded bg-surface-gray-2"
-                  />
-                  <template v-else>{{ counts[tile.key] ?? 0 }}</template>
-                </span>
-              </button>
-            </div>
+            </SectionCard>
 
             <!-- What needs action first -->
-            <section
-              class="order-last flex min-w-0 flex-col overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base md:col-span-2 lg:order-none lg:col-span-6"
-              :aria-labelledby="`${uid}-attention`"
+            <SectionCard
+              :title="__('Action required')"
+              :description="
+                __(
+                  '{0} overdue · {1} at risk',
+                  String(counts.overdue ?? 0),
+                  String(counts.at_risk ?? 0)
+                )
+              "
+              :icon="LucideTriangleAlert"
+              icon-class="text-danger"
+              class="order-last md:col-span-2 lg:order-none lg:col-span-9"
             >
-              <header
-                class="flex items-start justify-between gap-3 border-b border-outline-gray-2 px-4 py-3"
-              >
-                <div class="min-w-0">
-                  <h2
-                    :id="`${uid}-attention`"
-                    class="flex items-center gap-1.5 text-base-medium text-ink-gray-8"
-                  >
-                    <LucideTriangleAlert
-                      class="size-4 text-danger"
-                      aria-hidden="true"
-                    />
-                    {{ __("Action required") }}
-                  </h2>
-                  <p class="text-p-sm tabular-nums text-ink-gray-5">
-                    {{
-                      __(
-                        "{0} overdue · {1} at risk",
-                        String(counts.overdue ?? 0),
-                        String(counts.at_risk ?? 0)
-                      )
-                    }}
-                  </p>
-                </div>
-              </header>
               <div v-if="firstLoad">
                 <div
                   v-for="i in 3"
@@ -292,52 +269,36 @@
                 </div>
               </div>
               <OverviewAttention v-else :items="attention" />
-            </section>
+            </SectionCard>
 
             <!-- Due soon, key -->
-            <div class="grid grid-cols-2 gap-4 lg:col-span-3 lg:grid-cols-1">
-              <button
-                v-for="tile in rightTiles"
+            <div
+              class="grid grid-cols-2 content-start gap-4 md:col-span-2 lg:col-span-3 lg:grid-cols-1"
+            >
+              <StatTile
+                v-for="tile in sideTiles"
                 :key="tile.key"
-                type="button"
-                class="flex min-h-28 flex-col justify-between gap-3 rounded-xl border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
-                :class="tileClass(tile.key)"
-                :aria-pressed="activeBucket === tile.key"
+                :label="tile.label"
+                :value="counts[tile.key] ?? 0"
+                :sub="progressText(tile.key)"
+                :icon="tile.icon"
+                :icon-tone="tile.tone"
+                :loading="firstLoad"
+                :pressed="activeBucket === tile.key"
                 :aria-controls="listId"
-                @click="activeBucket = tile.key"
-              >
-                <span class="flex items-center justify-between gap-2">
-                  <span class="text-sm text-ink-gray-7">{{ tile.label }}</span>
-                  <component
-                    :is="tile.icon"
-                    class="size-4 shrink-0"
-                    :class="tile.iconClass"
-                    aria-hidden="true"
-                  />
-                </span>
-                <span
-                  class="text-4xl font-semibold tabular-nums text-ink-gray-9"
-                >
-                  <span
-                    v-if="firstLoad"
-                    class="inline-block h-9 w-10 animate-pulse rounded bg-surface-gray-2"
-                  />
-                  <template v-else>{{ counts[tile.key] ?? 0 }}</template>
-                </span>
-              </button>
+                @click="selectBucket(tile.key)"
+              />
             </div>
           </div>
 
-          <!-- List -->
-          <div class="mt-6 flex items-center justify-between gap-2">
-            <h2 class="text-base-medium text-ink-gray-8">
-              {{ activeTile.label }}
-            </h2>
-            <span class="text-sm text-ink-gray-5">{{ activeTile.hint }}</span>
-          </div>
-          <div
+          <!-- The selected bucket's list -->
+          <SectionCard
             :id="listId"
-            class="mt-2 overflow-hidden rounded-lg border border-outline-gray-2 bg-surface-base"
+            ref="listCard"
+            :title="activeTile.label"
+            :count="firstLoad ? undefined : visibleItems.length"
+            :description="activeTile.hint"
+            class="mt-6 scroll-mt-4 overflow-hidden"
             :aria-busy="overview.loading"
           >
             <div
@@ -396,7 +357,7 @@
                 <WorkItemRow :item="item" show-assignees />
               </li>
             </ul>
-          </div>
+          </SectionCard>
         </template>
       </div>
     </div>
@@ -406,21 +367,36 @@
 <script setup lang="ts">
 import { Link } from "@/components";
 import LayoutHeader from "@/components/LayoutHeader.vue";
+import SectionCard from "@/components/SectionCard.vue";
+import StatTile from "@/components/StatTile.vue";
+import { INK, type Tone } from "@/pages/performance/performanceMeta";
 import TaskyState from "@/pages/tasky/components/TaskyState.vue";
 import { __ } from "@/translation";
 import { Button, createResource } from "frappe-ui";
-import { computed, reactive, ref, useId, watch, type Component } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import {
+  computed,
+  nextTick,
+  reactive,
+  ref,
+  useId,
+  watch,
+  type Component,
+} from "vue";
+import { useRoute, useRouter, type RouteLocationRaw } from "vue-router";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
 import LucideCalendarClock from "~icons/lucide/calendar-clock";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideClipboardCheck from "~icons/lucide/clipboard-check";
+import LucideFolderKanban from "~icons/lucide/folder-kanban";
 import LucideHourglass from "~icons/lucide/hourglass";
+import LucideLayers from "~icons/lucide/layers";
 import LucidePause from "~icons/lucide/pause";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideStar from "~icons/lucide/star";
 import LucideTriangleAlert from "~icons/lucide/triangle-alert";
+import LucideUserX from "~icons/lucide/user-x";
+import LucideUsers from "~icons/lucide/users";
 import LucideX from "~icons/lucide/x";
 import OverviewAttention from "./components/OverviewAttention.vue";
 import OverviewDonut from "./components/OverviewDonut.vue";
@@ -451,13 +427,15 @@ interface Tile {
   hint: string;
   empty: string;
   icon: Component;
-  iconClass: string;
+  /** the icon's colour, only where it means something */
+  tone: Tone;
 }
 
 const route = useRoute();
 const router = useRouter();
 const uid = useId();
 const listId = `work-overview-list-${uid}`;
+const listCard = ref<InstanceType<typeof SectionCard> | null>(null);
 
 function queryValue(key: string) {
   const value = route.query[key];
@@ -469,6 +447,20 @@ const activeBucket = ref<Bucket>(
     ? (route.query.bucket as Bucket)
     : "overdue"
 );
+
+// the KPI row sits far above the list, so bring the list into view when it's off screen
+function selectBucket(bucket: Bucket) {
+  activeBucket.value = bucket;
+  nextTick(() => {
+    const el = listCard.value?.$el as HTMLElement | undefined;
+    if (!el || el.getBoundingClientRect().top < window.innerHeight) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
+    el.scrollIntoView({
+      behavior: reduce.matches ? "auto" : "smooth",
+      block: "start",
+    });
+  });
+}
 
 const filters = reactive(
   Object.fromEntries(FILTER_KEYS.map((k) => [k, queryValue(k)])) as Record<
@@ -535,25 +527,57 @@ const attention = computed(() =>
   (data.value?.attention ?? []).slice(0, ATTENTION_SHOWN)
 );
 
+// the Team page has no assignee or department filter; it keeps the rest
+const teamRoute = computed<RouteLocationRaw>(() => ({
+  name: "TeamWorkload",
+  query: {
+    project: filters.project || undefined,
+    customer: filters.customer || undefined,
+  },
+}));
+
 function share(bucket: Bucket) {
   const total = active.value.total;
   return total ? Math.round(((counts.value[bucket] ?? 0) / total) * 100) : 0;
 }
 
-function tileClass(bucket: Bucket) {
-  return activeBucket.value === bucket
-    ? "border-brand bg-brand-soft"
-    : "border-outline-gray-2 bg-surface-base hover:border-outline-gray-3";
+/** "N open · M in progress": in progress is a task someone has started. */
+function progressText(bucket: Bucket) {
+  const items = data.value?.buckets?.[bucket] ?? [];
+  const working = items.filter(
+    (i) => i.kind === "task" && i.status === "Working"
+  ).length;
+  return __(
+    "{0} open · {1} in progress",
+    String(items.length - working),
+    String(working)
+  );
 }
 
 const tiles = computed<Record<Bucket, Tile>>(() => ({
+  all: {
+    key: "all",
+    label: __("Active work"),
+    hint: __("Every open task and ticket, overdue first"),
+    empty: __("No open work."),
+    icon: LucideLayers,
+    tone: "neutral",
+  },
+  unassigned: {
+    key: "unassigned",
+    label: __("Unassigned"),
+    hint: __("Open work nobody is assigned to"),
+    empty: __("Everything open has someone on it."),
+    icon: LucideUserX,
+    tone: "neutral",
+  },
   overdue: {
     key: "overdue",
     label: __("Overdue"),
     hint: __("Past the due date or SLA"),
     empty: __("Nothing is overdue."),
     icon: LucideAlarmClock,
-    iconClass: "text-danger",
+    tone: "danger",
   },
   at_risk: {
     key: "at_risk",
@@ -561,7 +585,7 @@ const tiles = computed<Record<Bucket, Tile>>(() => ({
     hint: __("Likely to slip: not started, rescheduled or blocked"),
     empty: __("Nothing looks likely to slip right now."),
     icon: LucideTriangleAlert,
-    iconClass: "text-warning",
+    tone: "warning",
   },
   due_soon: {
     key: "due_soon",
@@ -569,7 +593,7 @@ const tiles = computed<Record<Bucket, Tile>>(() => ({
     hint: __("Due in the next 3 days"),
     empty: __("Nothing is due in the next 3 days."),
     icon: LucideCalendarClock,
-    iconClass: "text-info",
+    tone: "neutral",
   },
   key: {
     key: "key",
@@ -577,7 +601,7 @@ const tiles = computed<Record<Bucket, Tile>>(() => ({
     hint: __("Key tasks and urgent or high priority tickets"),
     empty: __("No key work is open."),
     icon: LucideStar,
-    iconClass: "text-ink-gray-5",
+    tone: "neutral",
   },
   review: {
     key: "review",
@@ -585,7 +609,7 @@ const tiles = computed<Record<Bucket, Tile>>(() => ({
     hint: __("Tasks waiting for the project lead's approval"),
     empty: __("No tasks are waiting for review."),
     icon: LucideClipboardCheck,
-    iconClass: "text-ink-gray-5",
+    tone: "neutral",
   },
   waiting_on_task: {
     key: "waiting_on_task",
@@ -593,7 +617,7 @@ const tiles = computed<Record<Bucket, Tile>>(() => ({
     hint: __("Tickets blocked by project work"),
     empty: __("No tickets are waiting on a task."),
     icon: LucideHourglass,
-    iconClass: "text-ink-gray-5",
+    tone: "neutral",
   },
   on_hold: {
     key: "on_hold",
@@ -601,20 +625,16 @@ const tiles = computed<Record<Bucket, Tile>>(() => ({
     hint: __("Paused tasks; they don't count as overdue"),
     empty: __("No tasks are on hold."),
     icon: LucidePause,
-    iconClass: "text-warning",
+    tone: "warning",
   },
 }));
 
-// the mockup's layout: a status column by the charts, tiles either side of Action required
-const statusRows = computed(() =>
-  (["overdue", "on_hold", "review"] as Bucket[]).map((k) => tiles.value[k])
-);
-const leftTiles = computed(() =>
-  (["at_risk", "waiting_on_task"] as Bucket[]).map((k) => tiles.value[k])
-);
-const rightTiles = computed(() =>
-  (["due_soon", "key"] as Bucket[]).map((k) => tiles.value[k])
-);
+// each bucket appears once on the page: the KPI row, the status column, or beside Action required
+const pick = (keys: Bucket[]) =>
+  computed(() => keys.map((k) => tiles.value[k]));
+const kpiTiles = pick(["all", "unassigned", "at_risk", "on_hold"]);
+const statusRows = pick(["overdue", "review", "waiting_on_task"]);
+const sideTiles = pick(["due_soon", "key"]);
 
 const urgencyLabels = computed(
   () =>

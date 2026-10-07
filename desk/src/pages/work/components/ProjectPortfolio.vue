@@ -55,33 +55,16 @@
         class="mt-5 grid grid-cols-2 gap-3"
         :class="tiles.length === 4 ? 'lg:grid-cols-4' : 'lg:grid-cols-3'"
       >
-        <div
+        <StatTile
           v-for="tile in tiles"
           :key="tile.key"
-          class="flex flex-col gap-3 rounded-lg border border-outline-gray-2 bg-surface-base p-4"
-        >
-          <div class="flex items-center justify-between gap-2">
-            <span class="text-sm text-ink-gray-6">{{ tile.label }}</span>
-            <component
-              :is="tile.icon"
-              class="size-4 shrink-0"
-              :class="tile.danger ? 'text-danger' : 'text-ink-gray-5'"
-              aria-hidden="true"
-            />
-          </div>
-          <span
-            class="font-mono text-2xl-semibold tabular-nums"
-            :class="
-              tile.danger && tile.value ? 'text-danger' : 'text-ink-gray-9'
-            "
-          >
-            <span
-              v-if="isLoading"
-              class="inline-block h-7 w-8 animate-pulse rounded bg-surface-gray-2"
-            />
-            <template v-else>{{ tile.value }}</template>
-          </span>
-        </div>
+          :label="tile.label"
+          :value="tile.value"
+          :icon="tile.icon"
+          :icon-tone="tile.danger ? 'danger' : 'neutral'"
+          :value-tone="tile.danger && tile.value ? 'danger' : 'neutral'"
+          :loading="isLoading"
+        />
       </div>
 
       <!-- Projects -->
@@ -507,6 +490,7 @@
 
 <script setup lang="ts">
 import { Link, UserAvatar } from "@/components";
+import StatTile from "@/components/StatTile.vue";
 import TaskStatusBadge from "@/pages/tasky/components/TaskStatusBadge.vue";
 import TaskyBadge from "@/pages/tasky/components/TaskyBadge.vue";
 import TaskyState from "@/pages/tasky/components/TaskyState.vue";

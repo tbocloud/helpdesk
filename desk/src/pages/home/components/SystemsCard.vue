@@ -1,5 +1,5 @@
 <template>
-  <HomeCard :title="__('Systems')">
+  <SectionCard :title="__('Systems')">
     <!-- two columns in the wide main column; a hairline grid keeps rows separated -->
     <ul role="list" class="grid gap-px bg-surface-gray-2 md:grid-cols-2">
       <li
@@ -24,7 +24,7 @@
         </TaskyBadge>
       </li>
     </ul>
-  </HomeCard>
+  </SectionCard>
 </template>
 
 <script setup lang="ts">
@@ -38,7 +38,7 @@ import LucideCircleX from "~icons/lucide/circle-x";
 import LucideInfo from "~icons/lucide/info";
 import LucideTriangleAlert from "~icons/lucide/triangle-alert";
 import type { Systems } from "../homeMeta";
-import HomeCard from "./HomeCard.vue";
+import SectionCard from "@/components/SectionCard.vue";
 
 const props = defineProps<{ systems: Systems }>();
 
