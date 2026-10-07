@@ -156,6 +156,7 @@ def get_project_file_text(project: str, file: str) -> dict:
 
 
 def _check_read(project: str) -> str:
+    """The project's name, refusing if it doesn't exist or the user can't read it."""
     project = str(project or "")
     if not frappe.db.exists("Project", project):
         frappe.throw(

@@ -196,6 +196,7 @@ watch(
   { immediate: true }
 );
 
+/** Queue files for upload, flagging any over the site's size limit as an error. */
 function addFiles(files: File[]) {
   for (const file of files) {
     const tooBig = props.maxFileSize && file.size > props.maxFileSize;
@@ -213,18 +214,21 @@ function addFiles(files: File[]) {
   }
 }
 
+/** Queue the files chosen via the file input, then clear it so the same file can be re-picked. */
 function onPick(e: Event) {
   const input = e.target as HTMLInputElement;
   addFiles([...(input.files ?? [])]);
   input.value = "";
 }
 
+/** Queue the files dropped on the dialog. */
 function onDrop(e: DragEvent) {
   dragging.value = false;
   if (uploading.value) return;
   addFiles([...(e.dataTransfer?.files ?? [])]);
 }
 
+/** The upload endpoint URL for this project and the chosen "for" list. */
 function uploadUrl() {
   const params = new URLSearchParams({
     project: props.projectId,
@@ -233,7 +237,7 @@ function uploadUrl() {
   return `/api/method/helpdesk.api.project_files.upload_project_file?${params}`;
 }
 
-// one at a time, so a failed file is reported by name and the rest still upload
+/** Upload the queued files one at a time, so a failed file is reported by name and the rest still upload. */
 async function uploadAll() {
   const ready = queue.value.filter((q) => q.state === "ready");
   if (!ready.length || uploading.value) return;
@@ -267,6 +271,7 @@ async function uploadAll() {
   if (queue.value.every((q) => q.state === "done")) emit("update:open", false);
 }
 
+/** Close the dialog, unless an upload is still in progress. */
 function onOpenChange(value: boolean) {
   if (!value && uploading.value) return;
   emit("update:open", value);

@@ -5,4 +5,6 @@ from frappe.model.document import Document
 
 
 class HDProjectFileUser(Document):
+    """One row of HD Project File's "for" list: a single user a file is for."""
+
     pass

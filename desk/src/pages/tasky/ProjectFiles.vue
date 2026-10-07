@@ -379,17 +379,19 @@ const files = createResource({
 
 watch([() => props.projectId, forMe], () => files.reload());
 
+/** Reload the file list and the project nav's file count badge. */
 function refresh() {
   files.reload();
   nav.value?.reload();
 }
 
+/** Open the upload dialog, optionally pre-filled with files dropped on the page. */
 function openUpload(dropped: File[]) {
   droppedFiles.value = dropped;
   showUpload.value = true;
 }
 
-// dragenter/leave fire for every child element, so count the nesting
+/** dragenter/leave fire for every child element, so count the nesting. */
 function onDragEnter(e: DragEvent) {
   if (!files.data?.can_upload || showUpload.value) return;
   if (!e.dataTransfer?.types.includes("Files")) return;
@@ -397,11 +399,13 @@ function onDragEnter(e: DragEvent) {
   dragging.value = true;
 }
 
+/** Only hide the drop overlay once every nested dragleave has fired. */
 function onDragLeave() {
   dragDepth = Math.max(dragDepth - 1, 0);
   if (!dragDepth) dragging.value = false;
 }
 
+/** Open the upload dialog with the files dropped on the page. */
 function onDrop(e: DragEvent) {
   dragDepth = 0;
   dragging.value = false;
@@ -410,6 +414,7 @@ function onDrop(e: DragEvent) {
   if (dropped.length) openUpload(dropped);
 }
 
+/** Open the "who is it for" dialog, pre-filled with the file's current assignees. */
 function startEditFor(file: ProjectFile) {
   forDraft.value = file.for_users.map((p) => p.user);
   saveFor.reset();

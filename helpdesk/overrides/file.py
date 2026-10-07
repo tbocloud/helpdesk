@@ -55,6 +55,7 @@ class HelpdeskFile(File):
         return super().get_content()
 
     def on_trash(self):
+        """Clean up the HD Project File record (if any) when the File itself is deleted."""
         super().on_trash()
         self.delete_project_file_record()
 

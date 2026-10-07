@@ -56,6 +56,7 @@ const emit = defineEmits<{ "update:modelValue": [value: string[]] }>();
 
 const me = computed(() => useAuthStore().userId);
 
+/** Add or remove `user` from the selected list. */
 function toggle(user: string) {
   emit(
     "update:modelValue",

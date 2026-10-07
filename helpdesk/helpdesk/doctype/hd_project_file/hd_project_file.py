@@ -19,13 +19,16 @@ from helpdesk.tasky.permissions import get_project_team
 
 class HDProjectFile(Document):
     def validate(self):
+        """Check the file is really attached to the project and the "for" list is valid."""
         self.validate_file()
         self.validate_for_users()
 
     def on_update(self):
+        """Tell anyone newly added to the "for" list."""
         self.notify_new_assignees()
 
     def validate_file(self):
+        """Refuse to save unless `file` is attached to this project."""
         attached = frappe.db.get_value(
             "File", self.file, ["attached_to_doctype", "attached_to_name"]
         )
@@ -35,6 +38,7 @@ class HDProjectFile(Document):
             )
 
     def validate_for_users(self):
+        """Drop blank and duplicate rows from `for_users`, and refuse anyone not on the project team."""
         team = set(get_project_team(self.project))
         seen = set()
         rows = []
@@ -52,9 +56,11 @@ class HDProjectFile(Document):
         self.for_users = rows
 
     def assignees(self) -> list[str]:
+        """The users this file is for."""
         return [row.user for row in self.for_users]
 
     def notify_new_assignees(self):
+        """Notify whoever was just added to `for_users`, not people already there."""
         from helpdesk.work_reminders import notify_users
 
         before = self.get_doc_before_save()

@@ -189,6 +189,7 @@ const rendered = computed(() => {
   });
 });
 
+/** Copy the previewed text file's content to the clipboard. */
 async function copyText() {
   try {
     await navigator.clipboard.writeText(text.data?.content ?? "");

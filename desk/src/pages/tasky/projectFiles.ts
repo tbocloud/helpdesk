@@ -27,6 +27,7 @@ export interface ProjectFile {
 
 export type FileKind = "markdown" | "text" | "pdf" | "image" | "other";
 
+/** Classify a file by its extension, for icon and in-app preview choices. */
 export function fileKind(fileName: string): FileKind {
   const ext = (fileName.split(".").pop() || "").toLowerCase();
   if (ext === "md" || ext === "markdown") return "markdown";
@@ -37,6 +38,7 @@ export function fileKind(fileName: string): FileKind {
   return "other";
 }
 
+/** Whether the in-app viewer can open this file, rather than just downloading it. */
 export function canPreview(fileName: string) {
   return fileKind(fileName) !== "other";
 }
@@ -49,10 +51,12 @@ const ICONS: Record<FileKind, Component> = {
   other: LucideFile,
 };
 
+/** The icon component for a file's kind. */
 export function fileIcon(fileName: string): Component {
   return ICONS[fileKind(fileName)];
 }
 
+/** A human-readable file size (B/KB/MB). */
 export function formatBytes(bytes?: number) {
   if (!bytes) return "";
   if (bytes < 1024) return `${bytes} B`;
@@ -60,8 +64,10 @@ export function formatBytes(bytes?: number) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-// Files kept in S3 open through a signed link on another host, where browsers
-// ignore the download attribute; ask the server for a "save" link instead
+/**
+ * Files kept in S3 open through a signed link on another host, where browsers
+ * ignore the download attribute; ask the server for a "save" link instead.
+ */
 export function downloadHref(url: string) {
   return url.includes("helpdesk.storage.s3.download")
     ? `${url}&download=1`
