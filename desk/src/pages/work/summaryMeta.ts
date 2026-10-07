@@ -10,6 +10,20 @@ export interface SummaryListItem {
   creation: string;
 }
 
+/** A few of the week's figures, null when the summary has no stats. */
+export interface SummaryHighlights {
+  tickets_opened: number | null;
+  tickets_resolved: number | null;
+  tasks_completed: number | null;
+  tasks_overdue: number | null;
+}
+
+/** What helpdesk.api.work_summary.get_summaries returns. */
+export interface SummaryList {
+  summaries: (SummaryListItem & { highlights: SummaryHighlights })[];
+  can_generate: boolean;
+}
+
 export interface SummaryTicket {
   name: string;
   subject: string;
