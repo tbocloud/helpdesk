@@ -81,6 +81,10 @@ reviews:
         - One accent colour (brand) for the primary action and the current selection; status
           colours only with an icon or label. Accessible: labels, focus-visible rings, keyboard.
         - Features get a page or dialog in the helpdesk app; don't send users to /app desk forms.
+        - docs/ui-guidelines.md applies: flag pastel icon tiles (soft colour square behind
+          every icon), gradients, decorative colour, missing loading/empty/error states,
+          missing focus-visible rings, and a new component that duplicates an existing one
+          (HomeCard, StatTile, TaskyState, TaskyBadge, LayoutHeader).
         - A Dialog that uses frappe-ui Autocomplete (a popover outside the dialog) breaks Escape
           and outside clicks; prefer Combobox.
 
@@ -89,6 +93,8 @@ knowledge_base:
     enabled: true
     filePatterns:
       - "AGENTS.md"
+      - "docs/engineering-guardrails.md"
+      - "docs/ui-guidelines.md"
 
 chat:
   auto_reply: true
