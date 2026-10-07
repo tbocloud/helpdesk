@@ -10,6 +10,7 @@ import {
   useFileUpload,
 } from "frappe-ui";
 import { h, ref } from "vue";
+import sanitizeHtml from "sanitize-html";
 import zod from "zod";
 import LucideBrushCleaning from "~icons/lucide/brush-cleaning";
 import { Icon } from "frappe-ui/icons";
@@ -958,4 +959,22 @@ export function handleInviteUserSuccess(
   if (emailsStr.trim() !== "") {
     toast.info(`${emailsStr} already present`);
   }
+}
+
+/**
+ * Rich text stored by users or the AI, made safe for v-html: formatting tags and
+ * links stay, scripts, event handlers and styles go.
+ */
+export function sanitizeRichText(html: string | null | undefined): string {
+  return sanitizeHtml(html || "", {
+    allowedTags: sanitizeHtml.defaults.allowedTags.concat(["del", "s", "u"]),
+    allowedAttributes: { a: ["href", "title", "target", "rel"] },
+    allowedSchemes: ["http", "https", "mailto"],
+    transformTags: {
+      a: sanitizeHtml.simpleTransform("a", {
+        target: "_blank",
+        rel: "noopener noreferrer",
+      }),
+    },
+  });
 }

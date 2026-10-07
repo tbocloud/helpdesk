@@ -183,10 +183,10 @@
             </Button>
           </div>
 
-          <div :id="listId" :aria-busy="isLoading">
+          <div :id="listId" :aria-busy="listLoading">
             <!-- Loading -->
             <div
-              v-if="isLoading"
+              v-if="listLoading"
               class="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
               :aria-label="__('Loading')"
             >
@@ -613,6 +613,10 @@ const openInScope = computed(() =>
 );
 
 const statsLoading = computed(() => openInScope.value.some(isStatsLoading));
+// the overdue view depends on each project's stats, so it loads until they're in
+const listLoading = computed(
+  () => isLoading.value || (show.value === "overdue" && statsLoading.value)
+);
 
 const overdueTotal = computed(() =>
   openInScope.value.reduce((sum, p) => sum + (statsFor(p)?.overdue ?? 0), 0)

@@ -622,7 +622,11 @@ function onStep(step: WorkStep, item: WorkItem) {
   busy.value = item.name;
   if (step === "start")
     return start.submit({ task: item.name, status: "Working" });
-  if (step === "approve") return approve({ name: item.name });
+  if (step === "approve") {
+    // another approval is already running; don't leave this row spinning
+    if (!approve({ name: item.name })) busy.value = null;
+    return;
+  }
   // these dialogs need the whole task (timer, hold, dependency), so load it first
   openTask(item, step);
 }

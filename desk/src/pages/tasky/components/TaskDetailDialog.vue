@@ -90,7 +90,7 @@
           <div
             v-if="detail.description"
             class="prose prose-sm max-w-none whitespace-pre-line text-ink-gray-8"
-            v-html="detail.description"
+            v-html="sanitizeRichText(detail.description)"
           />
           <p v-else class="text-p-sm text-ink-gray-5">
             {{ __("No description") }}
@@ -124,7 +124,7 @@
 import MeetingsCard from "@/components/meetings/MeetingsCard.vue";
 import TaskyBadge from "@/components/TaskyBadge.vue";
 import { __ } from "@/translation";
-import { errorText } from "@/utils";
+import { errorText, sanitizeRichText } from "@/utils";
 import { Dialog, createResource, dayjs, toast } from "frappe-ui";
 import { computed, ref, watch, type Ref } from "vue";
 import { useRouter } from "vue-router";

@@ -149,7 +149,7 @@
             <StatTile
               :label="__('Drafts')"
               :value="draftCount"
-              :sub="draftCount ? __('Not submitted yet') : undefined"
+              :sub="drafts ? __('Not submitted yet') : undefined"
               :icon="LucideCircleDashed"
               :loading="listLoading"
             />
@@ -586,8 +586,13 @@ const summaryLoading = computed(() => summary.loading && !summary.data);
 const sheetCount = computed(() =>
   sheets.value.length >= LIST_LIMIT ? `${LIST_LIMIT}+` : sheets.value.length
 );
-const draftCount = computed(
+// counted from the capped list, so it gets the same "+" as the timesheet count
+const drafts = computed(
   () => sheets.value.filter((ts) => ts.status === "Draft").length
+);
+// counted from the capped list, so it gets the same "+" as the timesheet count
+const draftCount = computed(() =>
+  sheets.value.length >= LIST_LIMIT ? `${drafts.value}+` : drafts.value
 );
 
 const periodLabel = computed(() => {
