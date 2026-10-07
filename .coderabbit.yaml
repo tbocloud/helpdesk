@@ -18,6 +18,17 @@ reviews:
     drafts: false
     base_branches:
       - main
+  # comments in this repo explain why, not what (AGENTS.md), so no docstring
+  # coverage check, and no follow-up PRs: findings are fixed in the PR itself
+  # (a bot-opened PR has no task and can't be approved by the bot)
+  pre_merge_checks:
+    docstrings:
+      mode: "off"
+  finishing_touches:
+    docstrings:
+      enabled: false
+    autofix:
+      enabled: false
   path_filters:
     - "!helpdesk/public/**"
     - "!desk/components.d.ts"
