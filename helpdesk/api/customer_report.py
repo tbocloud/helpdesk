@@ -35,13 +35,16 @@ CANCELLED_TIMESHEET = 2
 
 @frappe.whitelist()
 @agent_only
-def get_customer_report(month: str | None = None) -> dict:
-    """`month` as YYYY-MM; last month when empty."""
+def get_customer_report(month: str | None = None, customer: str | None = None) -> dict:
+    """`month` as YYYY-MM; last month when empty. `customer` narrows it to one customer."""
     check_access()
     start, end = month_bounds(month)
     rows = build_rows(start, end)
+    if customer:
+        rows = [r for r in rows if r["customer"] == customer]
     return {
         "month": start.strftime("%Y-%m"),
+        "customer": customer or None,
         "start": str(start),
         "end": str(end),
         "customers": rows,
@@ -51,10 +54,13 @@ def get_customer_report(month: str | None = None) -> dict:
 
 @frappe.whitelist()
 @agent_only
-def download_customer_report(month: str | None = None):
+def download_customer_report(month: str | None = None, customer: str | None = None):
     """The same report as a CSV file."""
-    report = get_customer_report(month)
-    frappe.response["filename"] = f"customer-report-{report['month']}.csv"
+    report = get_customer_report(month, customer)
+    # customer names can hold anything; keep the file name to letters and digits
+    slug = re.sub(r"[^a-z0-9]+", "-", (customer or "").lower()).strip("-")
+    suffix = f"-{slug}" if slug else ""
+    frappe.response["filename"] = f"customer-report-{report['month']}{suffix}.csv"
     frappe.response["filecontent"] = to_csv(report["customers"] + [report["totals"]])
     frappe.response["type"] = "download"
 

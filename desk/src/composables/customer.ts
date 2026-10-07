@@ -1,17 +1,61 @@
+import type { Tone } from "@/components/tone";
 import { __ } from "@/translation";
 import { DocumentResource, Error } from "@/types";
 import { HDCustomer } from "@/types/doctypes";
 import { getErrorMessage } from "@/utils";
 import { call, createDocumentResource } from "frappe-ui";
-import { computed, h, markRaw, reactive, watch } from "vue";
+import {
+  computed,
+  h,
+  markRaw,
+  reactive,
+  watch,
+  type Component,
+} from "vue";
 import { useRouter } from "vue-router";
+import LucideCircleCheck from "~icons/lucide/circle-check";
+import LucideCircleDashed from "~icons/lucide/circle-dashed";
+import LucideCircleX from "~icons/lucide/circle-x";
 import LucideGlobe from "~icons/lucide/globe";
 import LucideMapPin from "~icons/lucide/map-pin";
+import LucideUnplug from "~icons/lucide/unplug";
 import LucideUser from "~icons/lucide/user";
 import LucideUsers from "~icons/lucide/users";
 import { OrganizationsIcon } from "../components/icons";
 
 const customerCache: Record<string, DocumentResource<HDCustomer>> = {};
+
+/** A customer's ERP site connection (HDS Support Connection), as the directory sends it. */
+export interface Connection {
+  status: "Pending" | "Connected" | "Disconnected" | "Error";
+  site_url: string | null;
+}
+
+const CONNECTION_TONE: Record<Connection["status"], Tone> = {
+  Connected: "success",
+  Error: "danger",
+  Disconnected: "warning",
+  Pending: "neutral",
+};
+
+const CONNECTION_ICON: Record<Connection["status"], Component> = {
+  Connected: LucideCircleCheck,
+  Error: LucideCircleX,
+  Disconnected: LucideUnplug,
+  Pending: LucideCircleDashed,
+};
+
+/** TaskyBadge props for a connection: the status in words, a tone and an icon. */
+export function connectionBadge(connection: Connection) {
+  const status = CONNECTION_TONE[connection.status]
+    ? connection.status
+    : "Pending";
+  return {
+    label: __(status),
+    tone: CONNECTION_TONE[status],
+    icon: CONNECTION_ICON[status],
+  };
+}
 
 export function useCustomer(name: string) {
   const router = useRouter();

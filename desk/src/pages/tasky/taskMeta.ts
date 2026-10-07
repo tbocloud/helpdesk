@@ -151,6 +151,38 @@ export function daysUntil(date: string) {
   return dayjs(date).startOf("day").diff(dayjs().startOf("day"), "day");
 }
 
+// an end date further out than this says nothing urgent
+const PROJECT_ENDING_DAYS = 14;
+
+/**
+ * What an open project's end date says about what's left: "3 days past end"
+ * (late) or "Ends in 5 days"; null when it's far off, missing or not open.
+ */
+export function projectEndNote(project: {
+  status?: string | null;
+  expected_end_date?: string | null;
+}): { late: boolean; text: string } | null {
+  const end = project.expected_end_date;
+  if (!end || (project.status || "Open") !== "Open") return null;
+  const days = daysUntil(end);
+  if (days < 0)
+    return {
+      late: true,
+      text:
+        days === -1
+          ? __("1 day past end")
+          : __("{0} days past end", String(-days)),
+    };
+  if (days === 0) return { late: false, text: __("Ends today") };
+  if (days <= PROJECT_ENDING_DAYS)
+    return {
+      late: false,
+      text:
+        days === 1 ? __("Ends tomorrow") : __("Ends in {0} days", String(days)),
+    };
+  return null;
+}
+
 export function shortDate(date?: string | null) {
   return date ? dayjs(date).format("D MMM") : "—";
 }

@@ -1,75 +1,34 @@
 <template>
-  <div v-if="customers?.length" class="flex items-center gap-1.5">
-    <div class="flex items-center">
-      <Tooltip
-        v-for="customer in visibleCustomers"
-        :key="customer.name"
-        :text="customer.name"
-      >
-        <Avatar
-          class="-mr-1.5 cursor-pointer ring-2 ring-[var(--surface-base)] transition hover:z-10 hover:scale-110"
-          shape="circle"
-          size="sm"
-          :image="customer.image"
-          :label="customer.name"
-          @click="goToCustomer(customer.name)"
-        />
-      </Tooltip>
-      <div
-        v-if="remainingCustomers.length"
-        class="relative -mr-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-surface-gray-2 text-2xs font-medium text-ink-gray-6 ring-2 ring-[var(--surface-base)]"
-      >
-        +{{ remainingCustomers.length }}
-      </div>
-    </div>
-    <span
-      class="text-sm text-ink-gray-8 ml-2"
-      :class="customers.length === 1 && 'cursor-pointer'"
-      v-on="
-        customers.length === 1
-          ? { click: () => goToCustomer(customers[0]!.name) }
-          : {}
-      "
-    >
-      {{ label }}
+  <!-- the customers a contact belongs to, each a link to its page -->
+  <span v-if="customers.length" class="flex min-w-0 items-center gap-1.5">
+    <LucideBuilding2
+      class="size-4 shrink-0 text-ink-gray-5"
+      aria-hidden="true"
+    />
+    <span class="sr-only">{{ __("Customers:") }}</span>
+    <span class="flex min-w-0 flex-wrap items-center gap-x-1">
+      <template v-for="(customer, index) in customers" :key="customer.name">
+        <RouterLink
+          :to="{ name: 'Customer', params: { id: customer.name } }"
+          class="rounded text-ink-gray-8 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+        >
+          {{ customer.name }}</RouterLink
+        ><span v-if="index < customers.length - 1" aria-hidden="true">,</span>
+      </template>
     </span>
-  </div>
+  </span>
 </template>
 
 <script setup lang="ts">
 import { __ } from "@/translation";
-import { Avatar, Tooltip } from "frappe-ui";
-import { computed } from "vue";
-import { useRouter } from "vue-router";
+import { RouterLink } from "vue-router";
+import LucideBuilding2 from "~icons/lucide/building-2";
 
 interface Customer {
   name: string;
-  image?: string | null;
 }
 
-const props = defineProps<{
+defineProps<{
   customers: Customer[];
 }>();
-
-const router = useRouter();
-
-const MAX_VISIBLE_AVATARS = 5;
-
-const visibleCustomers = computed(() =>
-  props.customers.slice(0, MAX_VISIBLE_AVATARS)
-);
-
-const remainingCustomers = computed(() =>
-  props.customers.slice(MAX_VISIBLE_AVATARS)
-);
-
-const label = computed(() =>
-  props.customers.length === 1
-    ? props.customers[0].name
-    : __("{0} Customers", [props.customers.length])
-);
-
-function goToCustomer(name: string): void {
-  router.push({ name: "Customer", params: { id: name } });
-}
 </script>
