@@ -808,7 +808,12 @@ function handleViewChanges() {
       const parsedFilters = normalizeFilters(
         JSON.parse(route.query.filters as string)
       );
-      if (parsedFilters.length > 0) {
+      if (parsedFilters.length > 0 && !route.query.view) {
+        // a link without a view (Home, the tickets summary) means exactly
+        // these conditions, so its count matches the list; the personal
+        // default view still supplies columns and sort
+        defaultParams.filters = parsedFilters;
+      } else if (parsedFilters.length > 0) {
         const overriddenFields = new Set(parsedFilters.map((c) => c[0]));
         defaultParams.filters = [
           ...normalizeFilters(defaultParams.filters).filter(

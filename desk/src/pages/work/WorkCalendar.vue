@@ -107,16 +107,15 @@
           </div>
         </div>
 
-        <div
-          v-if="loading && !calendarData"
-          class="flex flex-col gap-2"
-          aria-hidden="true"
-        >
-          <div
-            v-for="i in 4"
-            :key="i"
-            class="h-14 animate-pulse rounded-lg bg-surface-gray-2"
-          />
+        <div v-if="loading && !calendarData">
+          <p role="status" class="sr-only">{{ __("Loading calendar") }}</p>
+          <div class="flex flex-col gap-2" aria-hidden="true">
+            <div
+              v-for="i in 4"
+              :key="i"
+              class="h-14 animate-pulse rounded-lg bg-surface-gray-2"
+            />
+          </div>
         </div>
 
         <TaskyState
@@ -211,11 +210,37 @@
               increment,
               updateActiveView,
               setCalendarDate,
+              onMonthYearChange,
+              selectedMonthDate,
             }"
           >
             <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
-              <h2 class="text-lg-medium tabular-nums text-ink-gray-9">
-                {{ currentMonthYear }}
+              <!-- the month is also the date picker: jump to any month or day -->
+              <h2>
+                <DatePicker
+                  :model-value="selectedMonthDate"
+                  :clearable="false"
+                  @update:model-value="onMonthYearChange"
+                >
+                  <template #target="{ togglePopover }">
+                    <Button
+                      variant="ghost"
+                      class="text-lg-medium tabular-nums text-ink-gray-9"
+                      :label="currentMonthYear"
+                      :aria-label="
+                        __('{0}, pick a date', [String(currentMonthYear)])
+                      "
+                      @click="togglePopover"
+                    >
+                      <template #suffix>
+                        <LucideChevronDown
+                          class="size-4 text-ink-gray-5"
+                          aria-hidden="true"
+                        />
+                      </template>
+                    </Button>
+                  </template>
+                </DatePicker>
               </h2>
               <div class="flex items-center gap-1">
                 <Button
@@ -303,6 +328,7 @@ import {
   Button,
   Calendar,
   CalendarColorMap,
+  DatePicker,
   TabButtons,
   call,
   dayjs,
@@ -310,6 +336,7 @@ import {
 import { computed, ref, watch, type Component } from "vue";
 import { RouterLink, useRouter, type RouteLocationRaw } from "vue-router";
 import LucideCalendarCheck from "~icons/lucide/calendar-check";
+import LucideChevronDown from "~icons/lucide/chevron-down";
 import LucideChevronLeft from "~icons/lucide/chevron-left";
 import LucideChevronRight from "~icons/lucide/chevron-right";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
@@ -510,11 +537,21 @@ const weekLabel = computed(() => {
 const agenda = computed(() => {
   const today = dayjs().format("YYYY-MM-DD");
   const byDay = new Map<string, typeof events.value>();
+  // an event appears on every day of the week it spans (a meeting past midnight)
   for (const event of events.value) {
-    if (event.fromDate < range.value.start || event.fromDate > range.value.end)
-      continue;
-    if (!byDay.has(event.fromDate)) byDay.set(event.fromDate, []);
-    byDay.get(event.fromDate)!.push(event);
+    const first =
+      event.fromDate > range.value.start ? event.fromDate : range.value.start;
+    const last =
+      event.toDate < range.value.end ? event.toDate : range.value.end;
+    for (
+      let day = dayjs(first);
+      !day.isAfter(last, "day");
+      day = day.add(1, "day")
+    ) {
+      const date = day.format("YYYY-MM-DD");
+      if (!byDay.has(date)) byDay.set(date, []);
+      byDay.get(date)!.push(event);
+    }
   }
   return [...byDay.entries()]
     .sort(([a], [b]) => a.localeCompare(b))

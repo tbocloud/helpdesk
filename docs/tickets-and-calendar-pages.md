@@ -19,8 +19,10 @@ change is behind `isCustomerPortal`: the portal has no summary strip, no mobile 
   read (it goes through `get_list`). A tile sets `?filters=` on `/tickets` (dropping `view`,
   since the counts are across all tickets); pressing the active tile removes it. The pressed
   state is read back from the URL (`matchTicketFilter`), ignoring the "now" inside the deadline
-  filters. Counts reload with the list on a new ticket (`helpdesk:new-ticket`). A count that
-  fails shows "—" and "Couldn't count".
+  filters. Counts reload with the list on a new ticket (`helpdesk:new-ticket`); each tile keeps
+  only its latest request's answer, so a slow older reply can't overwrite a newer count. A count
+  that fails shows "—" and "Couldn't count. Select to retry."; selecting that tile counts again
+  instead of filtering.
 - **Filters in one place**: `pages/ticket/ticketFilters.ts` holds the conditions (`open`,
   `newToday`, `unassigned`, `slaBreached`, `firstReplyOverdue`, `waitingOnCustomer`, `rated`) and
   `ticketsLink()`. Home's `ticketLinks` (in `pages/home/homeMeta.ts`) are built from it.
@@ -28,7 +30,10 @@ change is behind `isCustomerPortal`: the portal has no summary strip, no mobile 
   when it changes while the page stays open (a view switch is still handled by the view
   watcher), and it also applies `?filters=` when the user has no saved default view. Before,
   that case reset the list and dropped the filters, so Home's ticket links only worked for
-  people with a default view.
+  people with a default view. **Without `view` in the URL, `?filters=` replaces the filters**
+  (the personal default view still supplies columns and sort), so a link's conditions are
+  exactly what the list shows and a summary tile's count matches its list. With a `view`, the
+  URL conditions are merged into the view's filters, overriding the same fields, as before.
 - **Default columns** (`HDTicket.default_list_data`, agents without a saved default view): ID,
   Subject, Customer, Status, Priority, First response, Resolution, Assigned to, then Type, Team,
   Contact, Rating, Created. Saved views keep their own columns.
@@ -37,7 +42,7 @@ change is behind `isCustomerPortal`: the portal has no summary strip, no mobile 
   Fulfilled (neutral, check), Paused (neutral, pause), or "in 3h" with a clock, amber when due
   within 4 hours (the `SLA_RISK_HOURS` used for "at risk" in `helpdesk/api/work.py`) and
   neutral otherwise; hovering shows the exact deadline. A ticket without that deadline shows
-  nothing. The SLA state logic (`responseSla`, `resolutionSla`) is shared with the portal.
+  nothing, even when it is resolved or paused (no SLA means nothing to fulfil or fail). The SLA state logic (`responseSla`, `resolutionSla`) is shared with the portal.
 - **Phones** (below 640px): `ListViewBuilder` renders a page's `#mobile-row` slot as a stacked
   list instead of the table. Tickets' row: subject (bold when unseen) with the resolution SLA
   badge, then `#id`, customer, status, priority and assignees. Row selection and bulk actions
@@ -55,7 +60,8 @@ change is behind `isCustomerPortal`: the portal has no summary strip, no mobile 
 team)` (unchanged): Teams meetings the user scheduled or is invited to, and their open tasks due
 in the range; project leads and managers can switch to Mine / Team.
 
-- **Header**: the frappe-ui `Calendar`'s `#header` slot renders the month as a heading,
+- **Header**: the frappe-ui `Calendar`'s `#header` slot renders the month as a heading that is
+  also a date picker (jump to any month or day, through the calendar's `onMonthYearChange`),
   previous / Today / next (with accessible names) and a Day / Week / Month switch. Week is the
   default.
 - **Event colours**: frappe-ui's calendar only resolves its own named colours, so the page adds
@@ -68,8 +74,9 @@ in the range; project leads and managers can switch to Mine / Team.
   **Retry**; the refresh button spins while loading.
 - **Phones**: an agenda for one week instead of the grid: previous / Today / next week, days
   with events only (today marked), meetings by start time then the day's tasks, each row opening
-  its ticket or project, with **Join** for meetings that have a link. Rotating into the phone
-  layout starts on this week. Skeleton rows while the first load runs; an empty week shows
-  "Nothing this week".
+  its ticket or project, with **Join** for meetings that have a link. A meeting that spans
+  several days is listed on each of them inside the week. Rotating into the phone layout starts
+  on this week. Skeleton rows (hidden from screen readers, which hear "Loading calendar")
+  while the first load runs; an empty week shows "Nothing this week".
 - There is no "New meeting" here: a meeting is always scheduled from a ticket or task (the
   meeting needs its reference), through `components/meetings/ScheduleMeetingDialog.vue`.

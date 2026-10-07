@@ -12,7 +12,9 @@
       class="w-36 shrink-0 sm:w-auto"
       :label="tile.label"
       :value="failed[tile.key] ? '—' : counts[tile.key] ?? 0"
-      :sub="failed[tile.key] ? __('Couldn\'t count') : undefined"
+      :sub="
+        failed[tile.key] ? __('Couldn\'t count. Select to retry.') : undefined
+      "
       :icon="tile.icon"
       :icon-tone="tile.tone"
       :value-tone="
@@ -20,7 +22,7 @@
       "
       :loading="counts[tile.key] === undefined && !failed[tile.key]"
       :pressed="active === tile.key"
-      @click="toggle(tile.key)"
+      @click="failed[tile.key] ? count(tile.key) : toggle(tile.key)"
     />
   </div>
 </template>
@@ -91,20 +93,29 @@ const active = computed(() => matchTicketFilter(route.query.filters));
 
 // frappe.client.get_count goes through get_list, so each count only includes
 // tickets the agent may read, under the exact filters the tile applies
-function reload() {
-  for (const { key } of TILES) {
-    call("frappe.client.get_count", {
-      doctype: "HD Ticket",
-      filters: ticketFilters[key](),
+// Each tile numbers its requests and keeps only the latest answer (count or
+// failure), so a slow reply from before a reload can't overwrite a newer one.
+const latest: Partial<Record<Key, number>> = {};
+
+function count(key: Key) {
+  const request = (latest[key] = (latest[key] ?? 0) + 1);
+  failed[key] = false;
+  call("frappe.client.get_count", {
+    doctype: "HD Ticket",
+    filters: ticketFilters[key](),
+  })
+    .then((value: number) => {
+      if (request !== latest[key]) return;
+      counts[key] = value;
     })
-      .then((count: number) => {
-        counts[key] = count;
-        failed[key] = false;
-      })
-      .catch(() => {
-        failed[key] = true;
-      });
-  }
+    .catch(() => {
+      if (request !== latest[key]) return;
+      failed[key] = true;
+    });
+}
+
+function reload() {
+  for (const { key } of TILES) count(key);
 }
 
 function toggle(key: Key) {

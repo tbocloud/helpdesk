@@ -63,7 +63,7 @@
                   row.resolution_by
                 )
               "
-              v-if="row.resolution_by || row.resolution_date"
+              v-if="row.resolution_by"
             />
           </span>
           <span
@@ -305,12 +305,13 @@ function responseSla(row: any, deadline: string): SlaState {
 }
 
 function resolutionSla(row: any, deadline: string): SlaState {
+  // no resolution SLA on this ticket: nothing to fulfil or fail
+  if (!deadline) return "none";
   if (getStatus(row.status)?.category === "Paused") return "paused";
   if (row.resolution_date)
-    return dayjs(row.resolution_date).isBefore(dayjs(row.resolution_by))
+    return dayjs(row.resolution_date).isBefore(dayjs(deadline))
       ? "fulfilled"
       : "failed";
-  if (!deadline) return "none";
   return dayjs(deadline).isBefore(dayjs()) ? "failed" : "due";
 }
 
