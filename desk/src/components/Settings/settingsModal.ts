@@ -34,6 +34,8 @@ import SavedReplyIcon from "../icons/SavedReplyIcon.vue";
 import ProfilePage from "./Profile/ProfilePage.vue";
 import Preferences from "./Preferences/Preferences.vue";
 import ContentSettings from "./Content/ContentSettings.vue";
+import TaskSettings from "./Tasks/TaskSettings.vue";
+import LucideListChecks from "~icons/lucide/list-checks";
 import FileStorageSettings from "./FileStorage/FileStorageSettings.vue";
 import CRMSettings from "./CRM/CRMSettings.vue";
 import LucideHandshake from "~icons/lucide/handshake";
@@ -154,6 +156,13 @@ export const tabs = computed(() => {
           condition: () =>
             auth.isAdmin || auth.isManager || auth.isProjectManager,
         },
+        {
+          label: __("Tasks"),
+          icon: markRaw(LucideListChecks),
+          component: markRaw(TaskSettings),
+          // HD Work Settings is writable by System Managers only
+          condition: () => auth.isAdmin,
+        },
       ],
     },
     {
@@ -222,6 +231,7 @@ type TabName =
   | "ERPNext"
   | "Saved Replies"
   | "Content"
+  | "Tasks"
   | "File storage";
 
 export const setActiveSettingsTab = (tabName: TabName) => {

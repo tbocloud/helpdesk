@@ -403,12 +403,14 @@
             </div>
           </dl>
           <div>
-            <div class="mb-1 text-xs text-ink-gray-5">
+            <div class="mb-1 flex items-center gap-2 text-xs text-ink-gray-5">
               {{ __("Description") }}
+              <AiDraftedChip v-if="detail.ai_description" />
             </div>
+            <!-- descriptions typed in the task dialogs are plain text, so keep their line breaks -->
             <div
               v-if="detail.description"
-              class="prose prose-sm max-w-none text-ink-gray-8"
+              class="prose prose-sm max-w-none whitespace-pre-line text-ink-gray-8"
               v-html="detail.description"
             />
             <p v-else class="text-p-sm text-ink-gray-5">
@@ -470,6 +472,7 @@ import LucideSearch from "~icons/lucide/search";
 import LucideSearchX from "~icons/lucide/search-x";
 import LucideUndo2 from "~icons/lucide/undo-2";
 import LucideUserPlus from "~icons/lucide/user-plus";
+import AiDraftedChip from "./components/AiDraftedChip.vue";
 import CompleteTaskDialog from "./components/CompleteTaskDialog.vue";
 import EditTaskDialog from "./components/EditTaskDialog.vue";
 import HandOverTaskDialog from "./components/HandOverTaskDialog.vue";
@@ -512,6 +515,7 @@ interface Task {
   due_date?: string;
   estimated_hours?: number;
   description?: string;
+  ai_description?: boolean;
   hold_reason?: string | null;
   hold_note?: string | null;
   hold_since?: string | null;
