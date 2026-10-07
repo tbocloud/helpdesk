@@ -73,8 +73,9 @@
 </template>
 
 <script setup lang="ts">
+import NativeButton from "@/components/NativeButton";
 import { FILL, INK, TRACK, type Tone } from "@/components/tone";
-import { computed, h, type Component, type FunctionalComponent } from "vue";
+import { computed, type Component } from "vue";
 import { RouterLink, type RouteLocationRaw } from "vue-router";
 import LucideChevronRight from "~icons/lucide/chevron-right";
 
@@ -108,13 +109,6 @@ const props = withDefaults(
     pressed: undefined,
   }
 );
-
-// `:is="'button'"` would resolve to frappe-ui's globally registered Button (Vue
-// prefers a registered component over the native tag), which renders its own
-// label and drops this tile's content; this always renders a real <button>
-const NativeButton: FunctionalComponent = (_, { attrs, slots }) =>
-  h("button", attrs, slots.default?.());
-NativeButton.inheritAttrs = false;
 
 const interactive = computed(() => !!props.to || props.pressed !== undefined);
 </script>
