@@ -23,8 +23,9 @@ filters by project, customer, assignee and department) lives on the **Overview**
 | Systems | Admins (System Manager, Agent Manager) | `systems` |
 
 `company` and `systems` are `null` for people who don't qualify. On screens 1280px and wider
-the customers, projects, team and systems cards sit in a right-hand column; below that they
-follow the main column. The page never scrolls sideways.
+the customers, projects and team cards sit in a right-hand column; below that they follow the
+main column. **Systems** sits in the main column under Needs attention (two columns on wider
+screens), so the side column stays short. The page never scrolls sideways.
 
 ## Header
 

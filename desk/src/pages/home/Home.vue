@@ -107,6 +107,8 @@
                 :groups="data.company.attention_groups"
                 @changed="home.reload()"
               />
+              <!-- in the main column, under the attention list, so the side stays short -->
+              <SystemsCard v-if="data.systems" :systems="data.systems" />
             </div>
             <aside
               v-if="hasSide"
@@ -114,7 +116,6 @@
               :aria-label="__('Customers, projects and team')"
             >
               <HomeSide v-if="data.company" :company="data.company" />
-              <SystemsCard v-if="data.systems" :systems="data.systems" />
             </aside>
           </div>
         </template>
@@ -167,7 +168,7 @@ const home = createResource({
 const data = computed<HomeData | null>(() => home.data ?? null);
 const parts = computed(() => (data.value ? statusParts(data.value) : []));
 const clearOnTickets = computed(() => !!data.value && ticketsClear(data.value));
-const hasSide = computed(() => !!(data.value?.company || data.value?.systems));
+const hasSide = computed(() => !!data.value?.company);
 
 const todayLabel = computed(() => dayjs().format("dddd, D MMMM YYYY"));
 </script>
