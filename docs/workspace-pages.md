@@ -1,7 +1,7 @@
-# Workspace pages: Overview, Team, Summaries
+# Workspace pages: Overview, Team, Summaries, Projects, My Work, Timesheets
 
-Three pages for the people who run projects: what's late, who is doing what, and what each
-customer was told. They follow [ui-guidelines.md](ui-guidelines.md): neutral tiles, colour only
+Pages for the people who run projects (what's late, who is doing what, what each customer was
+told) and for everyone doing the work (their projects, what to do next, the hours logged). They follow [ui-guidelines.md](ui-guidelines.md): neutral tiles, colour only
 where it means something (always with an icon or text), and only figures the server computes.
 No invented trends ("+12% vs last week") and no activity feed.
 
@@ -13,6 +13,12 @@ Shared building blocks, in `desk/src/components/`:
   the By project view and Performance.
 - **`SectionCard`**: the one titled card (title, optional count, description, header actions
   slot, "See all" link). Used by Home, Overview and Team.
+- **`TaskyState`**: the one empty, error and no-access message (icon, title, message, actions).
+- **`TaskyBadge`**: the one small status badge (label, tone, icon).
+- **`tone.ts`**: the one `Tone` type (`neutral`, `info`, `warning`, `success`, `danger`) and
+  its class maps: `INK` (text), `TRACK` and `FILL` (meters and bars), `TONE_CLASSES` (badges).
+
+A failed call's message comes from `errorText(error, fallback)` in `desk/src/utils.ts`.
 
 ## Overview (`/overview`)
 
@@ -73,3 +79,82 @@ week, kind, limit)` returns `{summaries, can_generate}`.
 - **Generate summary** (primary action) only shows when `can_generate`: Agent Managers, or
   project managers of at least one customer's project (the same rule `generate_summary`
   enforces per customer).
+
+## Projects (`/projects`)
+
+`desk/src/pages/tasky/Projects.vue`, one `components/ProjectCard.vue` per project; APIs
+`helpdesk.tasky.api.get_projects` and, per project, `get_project_dashboard` (task stats built
+from the tasks the viewer can see, so a plain member's card counts their own tasks).
+
+- **Header**: "New project" (project managers) is the page's one primary action; Refresh.
+- **Summary tiles**, over open projects under the department filter: Open projects; Overdue
+  tasks (summed from the cards' stats, with how many projects have any, or how many projects'
+  stats didn't load); Ending in 14 days (open projects whose end date is today to 14 days out,
+  with how many more are past their end date). Overdue tasks and Ending in 14 days are toggles
+  that narrow the cards to what they count and switch to the Open tab.
+- **Filters**: status tabs (Open, Completed, Cancelled, All), search, department chips (see
+  [departments.md](departments.md)). Counts on tabs and chips follow the other filters.
+- **URL**: `status` (Open is the default and left out), `department` (`__none__` for No
+  department), `q`, `show` (`overdue` or `ending`).
+- **Card**: name (links to the project), customer and ID; status badge only when not Open;
+  lead and dates, with "N days past end" in red (with an icon) or "Ends in N days" for open
+  projects; one neutral progress bar (green once the project is Completed) with done/total
+  and %, then overdue (red, with an icon), in progress, in review and on hold counts;
+  collapsible phases. Footer: Open, Board and the files count on the left; New task (members
+  who may add tasks) and a menu with Edit project (project owners) and Generate checklist
+  (managers and leads) on the right. A card whose stats fail says so instead of hiding.
+- **Empty states**: no projects yet (with New project for managers) vs nothing matching the
+  filters (Show all projects).
+
+## My Work (`/my-work`)
+
+`desk/src/pages/work/MyWork.vue`; API `helpdesk.api.work.get_my_work(user)`. `?user=` opens a
+team member's work, for leads and managers of their projects (the Team page links here).
+
+- **Groups**, in this order, each with its count, from `dueGroup()` in `workMeta.ts`: Overdue
+  (past the due date or SLA), Today, This week (the next 7 days, as on the Team page), Later
+  (further out, no date, or a ticket whose SLA is paused), On hold, In review. Held and
+  in-review tasks leave the date groups because they wait on someone. Within a group the
+  server's order stays: overdue, then key, then deadline.
+- **Tabs** filter before grouping and stay in the URL as `tab`: All, Overdue, At risk, Key,
+  Tasks, Tickets, Completed (the last 30 days, with hours).
+- **Steps on a task** (`components/WorkItemActions.vue`, in `WorkItemRow`'s `actions` slot):
+  one button for the next step (Approve when the viewer may sign it off; else Start an Open
+  task; Complete a working one; Resume a held one) and a menu with Details, Complete (when
+  Start is the button), Put on hold and Plan. Start and Approve run straight away; Complete,
+  Put on hold, Resume and Plan load the whole task first (timer, hold note, dependency)
+  through `TaskDetailDialog` with `action`, so Plan can't clear a dependency it didn't load.
+  A task waiting on another can't be started or completed, as the server refuses both.
+- **Plan** shows only when `can_plan`: `get_my_work` marks every task with whether the viewer
+  manages its project (owner or lead). The Overview doesn't ask for it, so it doesn't pay for
+  the per-project lookup.
+- **Someone else's work**: a banner names whose work it is, says only they can start, complete
+  or pause it, and links back to your own. Rows offer only Approve and Plan, and the detail
+  dialog only the lead's and manager's steps.
+- **Task details** (`desk/src/pages/tasky/components/TaskDetailDialog.vue`): the one task panel,
+  shared with My Tasks (`/my-tasks`). Hold and dependency notices, status, priority, project,
+  phase, due, estimate, description, pull requests and meetings. Its actions follow `mine`:
+  the assignee may edit, complete, hold or resume, ask for help and hand over; the project's
+  manager or lead may edit, plan, approve and send back.
+
+## Timesheets (`/timesheets`)
+
+`desk/src/pages/tasky/Timesheets.vue`; APIs `helpdesk.tasky.api.get_my_timesheets` (the list,
+the 500 most recently updated), `get_timesheet_summary` (the totals) and
+`export_timesheets_csv` (Download CSV, one row per time log).
+
+- **Scope**: Mine, or Team for leads and managers (the timesheets on projects they lead or
+  manage). Filters: agent (Team), From and To (the day the work was done).
+- **URL**: `scope=team`, `agent`, `from`, `to`.
+- **Summary tiles**: Hours logged in the period, Timesheets (500+ when the list is capped) and
+  Drafts.
+- **By person** (Team) and **By project**: `get_timesheet_summary(team, agent, from_date,
+  to_date)` adds up the time logs themselves, in the chosen dates, from the timesheets the
+  viewer may see; it doesn't use each timesheet's total, so a timesheet across several
+  projects or days splits correctly. Six rows each, then "N more · Xh". The bars are neutral
+  and show each row's share of the period.
+- **List**: a titled card; Timesheet, Person (Team), Status, Hours (right-aligned, tabular)
+  and Updated columns from `md`; below that a two-line row with person, status and date in
+  the second line. Empty states tell "no time logged in these dates" (Clear filters) from
+  "no timesheets yet" (Log time).
+- **Log time** dialog unchanged.

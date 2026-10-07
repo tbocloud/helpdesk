@@ -239,7 +239,7 @@
               class="mt-0.5 size-4 shrink-0"
               aria-hidden="true"
             />
-            {{ errorText(save.error) }}
+            {{ errorText(save.error, __("Couldn't save the template.")) }}
           </div>
 
           <div class="flex items-center gap-2">
@@ -357,6 +357,7 @@
 </template>
 
 <script setup lang="ts">
+import { errorText } from "@/utils";
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import { __ } from "@/translation";
 import {
@@ -377,7 +378,7 @@ import LucidePencil from "~icons/lucide/pencil";
 import LucidePlus from "~icons/lucide/plus";
 import LucideTrash2 from "~icons/lucide/trash-2";
 import LucideX from "~icons/lucide/x";
-import TaskyState from "./components/TaskyState.vue";
+import TaskyState from "@/components/TaskyState.vue";
 import { categoryOptions, priorityOptions } from "./taskMeta";
 
 const editing = ref(false);
@@ -527,9 +528,5 @@ function onSave() {
     save.url = "helpdesk.tasky.api.create_template";
     save.submit(payload);
   }
-}
-
-function errorText(e: any, fallback = __("Couldn't save the template.")) {
-  return e?.messages?.length ? e.messages.join(" ") : e?.message || fallback;
 }
 </script>

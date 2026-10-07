@@ -1,6 +1,6 @@
+import { errorText } from "@/utils";
 import { __ } from "@/translation";
 import { createResource, toast } from "frappe-ui";
-import { errorText } from "./taskMeta";
 
 /** One-click sign-off for a task in Pending Review (project managers and leads). */
 export function useApproveTask(onDone: (task?: Record<string, any>) => void) {

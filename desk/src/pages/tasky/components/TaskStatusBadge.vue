@@ -6,7 +6,7 @@
 import { __ } from "@/translation";
 import { computed } from "vue";
 import { projectStatusMeta, taskStatusMeta } from "../taskMeta";
-import TaskyBadge from "./TaskyBadge.vue";
+import TaskyBadge from "@/components/TaskyBadge.vue";
 
 const props = withDefaults(
   defineProps<{ status?: string; kind?: "task" | "project" }>(),

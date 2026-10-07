@@ -61,8 +61,8 @@
 </template>
 
 <script setup lang="ts">
-import TaskyBadge from "@/pages/tasky/components/TaskyBadge.vue";
-import { errorText } from "@/pages/tasky/taskMeta";
+import { errorText } from "@/utils";
+import TaskyBadge from "@/components/TaskyBadge.vue";
 import { itemKey, type WorkItem } from "@/pages/work/workMeta";
 import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";

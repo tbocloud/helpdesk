@@ -28,8 +28,8 @@
 </template>
 
 <script setup lang="ts">
-import TaskyBadge from "@/pages/tasky/components/TaskyBadge.vue";
-import type { Tone } from "@/pages/tasky/taskMeta";
+import type { Tone } from "@/components/tone";
+import TaskyBadge from "@/components/TaskyBadge.vue";
 import { __ } from "@/translation";
 import { computed, type Component } from "vue";
 import LucideCircle from "~icons/lucide/circle";

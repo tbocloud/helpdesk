@@ -268,10 +268,11 @@
 </template>
 
 <script setup lang="ts">
+import { errorText } from "@/utils";
 import { Link } from "@/components";
 import LayoutHeader from "@/components/LayoutHeader.vue";
-import TaskyBadge from "@/pages/tasky/components/TaskyBadge.vue";
-import TaskyState from "@/pages/tasky/components/TaskyState.vue";
+import TaskyBadge from "@/components/TaskyBadge.vue";
+import TaskyState from "@/components/TaskyState.vue";
 import { __ } from "@/translation";
 import { Button, createResource, dayjs, FormControl } from "frappe-ui";
 import { computed, reactive, ref, watch } from "vue";
@@ -288,7 +289,6 @@ import LucideX from "~icons/lucide/x";
 import GenerateSummaryDialog from "./components/GenerateSummaryDialog.vue";
 import SummaryKindBadge from "./components/SummaryKindBadge.vue";
 import {
-  errorText,
   formatDay,
   formatPeriod,
   type SummaryDetail,

@@ -73,12 +73,7 @@
 </template>
 
 <script setup lang="ts">
-import {
-  FILL,
-  INK,
-  TRACK,
-  type Tone,
-} from "@/pages/performance/performanceMeta";
+import { FILL, INK, TRACK, type Tone } from "@/components/tone";
 import { computed, type Component } from "vue";
 import { RouterLink, type RouteLocationRaw } from "vue-router";
 import LucideChevronRight from "~icons/lucide/chevron-right";

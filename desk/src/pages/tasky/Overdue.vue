@@ -186,7 +186,7 @@ import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import ProjectNav from "./components/ProjectNav.vue";
 import TaskStatusBadge from "./components/TaskStatusBadge.vue";
-import TaskyState from "./components/TaskyState.vue";
+import TaskyState from "@/components/TaskyState.vue";
 import {
   daysUntil,
   isClosed,

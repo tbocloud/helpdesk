@@ -125,9 +125,9 @@
 </template>
 
 <script setup lang="ts">
+import type { Tone } from "@/components/tone";
 import LayoutHeader from "@/components/LayoutHeader.vue";
-import TaskyState from "@/pages/tasky/components/TaskyState.vue";
-import type { Tone } from "@/pages/tasky/taskMeta";
+import TaskyState from "@/components/TaskyState.vue";
 import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
 import { Button, createResource, dayjs } from "frappe-ui";

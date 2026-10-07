@@ -1,26 +1,5 @@
+import type { Tone } from "@/components/tone";
 import { __ } from "@/translation";
-/** Gray unless the colour says how something went; always next to a number or label. */
-export type Tone = "neutral" | "success" | "warning" | "danger";
-
-export const TRACK: Record<Tone, string> = {
-  neutral: "bg-surface-gray-2",
-  success: "bg-success-soft",
-  warning: "bg-warning-soft",
-  danger: "bg-danger-soft",
-};
-export const FILL: Record<Tone, string> = {
-  neutral: "bg-surface-gray-7",
-  success: "bg-success",
-  warning: "bg-warning",
-  danger: "bg-danger",
-};
-/** Text colour, on a tone's soft background or on the page. */
-export const INK: Record<Tone, string> = {
-  neutral: "text-ink-gray-8",
-  success: "text-success",
-  warning: "text-warning",
-  danger: "text-danger",
-};
 
 /** Score colour: green when on time, amber when late or reworked, red when missed. */
 export function scoreTone(score: number | null | undefined): Tone {

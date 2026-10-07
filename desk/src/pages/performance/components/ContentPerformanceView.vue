@@ -437,17 +437,10 @@
 </template>
 
 <script setup lang="ts">
+import { FILL, INK, type Tone } from "@/components/tone";
 import { __ } from "@/translation";
 import { Avatar, dayjs } from "frappe-ui";
-import {
-  channelColor,
-  FILL,
-  INK,
-  onTimeTone,
-  roles,
-  scoreTone,
-  type Tone,
-} from "../performanceMeta";
+import { channelColor, onTimeTone, roles, scoreTone } from "../performanceMeta";
 import { computed, h, ref } from "vue";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideCircleCheck from "~icons/lucide/circle-check";

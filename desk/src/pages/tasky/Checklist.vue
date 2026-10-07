@@ -354,6 +354,7 @@
 </template>
 
 <script setup lang="ts">
+import { errorText } from "@/utils";
 import { useAuthStore } from "@/stores/auth";
 import { loadErrorMessage } from "./taskMeta";
 import { __ } from "@/translation";
@@ -380,13 +381,8 @@ import RequestHelpDialog from "./components/RequestHelpDialog.vue";
 import ResumeTaskDialog from "./components/ResumeTaskDialog.vue";
 import SendBackTaskDialog from "./components/SendBackTaskDialog.vue";
 import TaskPlanDialog from "./components/TaskPlanDialog.vue";
-import TaskyState from "./components/TaskyState.vue";
-import {
-  blockedMessage,
-  blocksMove,
-  errorText,
-  isPendingReview,
-} from "./taskMeta";
+import TaskyState from "@/components/TaskyState.vue";
+import { blockedMessage, blocksMove, isPendingReview } from "./taskMeta";
 import { useApproveTask } from "./useApproveTask";
 
 const props = defineProps<{ projectId: string }>();

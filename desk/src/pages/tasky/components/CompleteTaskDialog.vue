@@ -79,6 +79,7 @@
 </template>
 
 <script setup lang="ts">
+import { errorText } from "@/utils";
 import { __ } from "@/translation";
 import {
   Button,
@@ -94,7 +95,7 @@ import { computed, ref, useId, watch } from "vue";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideTimer from "~icons/lucide/timer";
-import { PENDING_REVIEW, errorText } from "../taskMeta";
+import { PENDING_REVIEW } from "../taskMeta";
 
 /** Same cap as MAX_HOURS_PER_COMPLETION in helpdesk/tasky/api.py. */
 const MAX_HOURS = 24;

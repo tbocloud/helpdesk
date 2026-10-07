@@ -770,6 +770,20 @@ class TestViewTeamMemberWork(WorkControlCase):
         result = self.as_user(LEAD, lambda: work.get_my_work(user=DEV[0]))
         self.assertIn(task, [i["name"] for i in result["items"]])
 
+    def test_plan_is_offered_to_the_projects_lead_not_the_assignee(self):
+        task = self.make_task("Opening stock import", add_days(nowdate(), 4))
+
+        def item(viewer, user=None):
+            items = self.as_user(viewer, lambda: work.get_my_work(user=user))["items"]
+            return next(i for i in items if i["name"] == task)
+
+        self.assertFalse(item(DEV)["can_plan"])
+        self.assertTrue(item(LEAD, user=DEV[0])["can_plan"])
+        # the overview doesn't ask, so it doesn't pay for the lookup
+        overview = self.as_user(PM, lambda: work.get_overview(project=self.project))
+        self.assertTrue(overview["buckets"]["all"])
+        self.assertNotIn("can_plan", overview["buckets"]["all"][0])
+
     def test_developers_only_see_their_own(self):
         with self.assertRaises(frappe.PermissionError):
             self.as_user(DEV, lambda: work.get_my_work(user=LEAD[0]))
@@ -1122,6 +1136,37 @@ class TestTeamTimesheets(WorkControlCase):
         )
         with self.assertRaises(frappe.PermissionError):
             self.as_user(DEV, lambda: tasky.export_timesheets_csv(team=1))
+
+    def test_summary_adds_up_the_time_logs_by_person_and_project(self):
+        def log(project, hours, days_ago=0):
+            when = add_to_date(now_datetime(), days=-days_ago)
+            self.as_user(DEV, lambda: make_timesheet(project, hours, when))
+
+        log(self.project, 2)
+        log(self.project, 1.5, days_ago=10)
+        log(None, 1)
+
+        def summary(user, **filters):
+            return self.as_user(user, lambda: tasky.get_timesheet_summary(**filters))
+
+        # the lead sees the logs on their project, not the developer's other work
+        team = summary(LEAD, team=1)
+        self.assertEqual(team["hours"], 3.5)
+        self.assertEqual(
+            team["people"], [{"user": DEV[0], "full_name": DEV[1], "hours": 3.5}]
+        )
+        self.assertEqual([p["project"] for p in team["projects"]], [self.project])
+        # only the logs in the chosen dates count
+        self.assertEqual(summary(LEAD, team=1, from_date=nowdate())["hours"], 2)
+
+        mine = summary(DEV)
+        self.assertEqual(mine["hours"], 4.5)
+        self.assertEqual(
+            {p["project"]: p["hours"] for p in mine["projects"]},
+            {self.project: 3.5, None: 1},
+        )
+        with self.assertRaises(frappe.PermissionError):
+            summary(DEV, team=1)
 
 
 class TestCompletedWork(WorkControlCase):

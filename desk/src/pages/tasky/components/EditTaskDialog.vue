@@ -184,6 +184,7 @@
 </template>
 
 <script setup lang="ts">
+import { errorText } from "@/utils";
 import { __ } from "@/translation";
 import {
   Button,
@@ -200,7 +201,6 @@ import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideLock from "~icons/lucide/lock";
 import {
   categoryOptions,
-  errorText,
   isAiDrafted,
   isClosed,
   priorityOptions,

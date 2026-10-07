@@ -32,6 +32,8 @@ export interface WorkItem {
   pull_requests?: TaskPullRequest[];
   /** Set on tasks in Pending Review: whether this user may approve them. */
   can_approve?: boolean;
+  /** My Work only: whether this user may plan the task (its project's manager or lead). */
+  can_plan?: boolean;
 }
 
 export function isAtRisk(item: WorkItem) {
@@ -104,4 +106,33 @@ export function itemRoute(item: WorkItem) {
 
 export function itemKey(item: WorkItem) {
   return `${item.kind}:${item.name}`;
+}
+
+/** My Work's groups, in the order the page shows them. */
+export const DUE_GROUPS = [
+  "overdue",
+  "today",
+  "week",
+  "later",
+  "on_hold",
+  "review",
+] as const;
+export type DueGroup = (typeof DUE_GROUPS)[number];
+
+/**
+ * Where an open item sits on My Work. Held and in-review tasks wait on someone,
+ * so they leave the date groups; "week" is the next 7 days, as on the Team page.
+ */
+export function dueGroup(item: WorkItem): DueGroup {
+  if (isHeldTask(item)) return "on_hold";
+  if (item.kind === "task" && item.status === "Pending Review") return "review";
+  if (item.is_overdue) return "overdue";
+  if (!item.deadline) return "later";
+  const days = dayjs(item.deadline)
+    .startOf("day")
+    .diff(dayjs().startOf("day"), "day");
+  // a ticket past its SLA but not overdue is paused, waiting on the customer
+  if (days < 0) return "later";
+  if (days === 0) return "today";
+  return days <= 7 ? "week" : "later";
 }

@@ -560,6 +560,7 @@
 </template>
 
 <script setup lang="ts">
+import { FILL, INK, TRACK, type Tone } from "@/components/tone";
 import { __ } from "@/translation";
 import { Avatar, dayjs } from "frappe-ui";
 import { computed, h, ref } from "vue";
@@ -574,8 +575,6 @@ import LucideSend from "~icons/lucide/send";
 import { useChartColors } from "../chartTheme";
 import {
   channelColor,
-  FILL,
-  INK,
   onTimeTone,
   pctText,
   roles,
@@ -583,8 +582,6 @@ import {
   scoreTone,
   TIMINGS,
   timingColor,
-  TRACK,
-  type Tone,
 } from "../performanceMeta";
 import DeliveryByCustomerChart from "./DeliveryByCustomerChart.vue";
 import DeliveryTrendChart from "./DeliveryTrendChart.vue";

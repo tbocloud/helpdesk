@@ -98,7 +98,9 @@
         class="flex items-start gap-2 rounded-md bg-danger-soft px-3 py-2 text-p-sm text-danger"
       >
         <LucideCircleAlert class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-        {{ errorText(generateTask.error) }}
+        {{
+          errorText(generateTask.error, __("Couldn't generate the checklist."))
+        }}
       </div>
       <div
         v-else-if="generateTask.data"
@@ -126,6 +128,7 @@
 </template>
 
 <script setup lang="ts">
+import { errorText } from "@/utils";
 import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
 import { Button, Dialog, FormControl, createResource } from "frappe-ui";
@@ -176,12 +179,6 @@ const generateTask = createResource({
   },
   onError() {},
 });
-
-function errorText(err: { messages?: string[]; message?: string }) {
-  return err.messages?.length
-    ? err.messages.join(" ")
-    : err.message || __("Couldn't generate the checklist.");
-}
 
 function generate() {
   if (!selectedTemplate.value) return;

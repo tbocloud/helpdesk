@@ -443,6 +443,7 @@
 </template>
 
 <script setup lang="ts">
+import { errorText } from "@/utils";
 import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
 import { Button, Dropdown, createResource, toast } from "frappe-ui";
@@ -477,14 +478,13 @@ import PullRequestChip from "./components/PullRequestChip.vue";
 import SendBackTaskDialog from "./components/SendBackTaskDialog.vue";
 import SlipBadge from "./components/SlipBadge.vue";
 import TaskPlanDialog from "./components/TaskPlanDialog.vue";
-import TaskyState from "./components/TaskyState.vue";
+import TaskyState from "@/components/TaskyState.vue";
 import WaitingOn from "./components/WaitingOn.vue";
 import type { TaskPullRequest } from "./pullRequestMeta";
 import {
   ON_HOLD,
   blockedMessage,
   blocksMove,
-  errorText,
   holdDays,
   holdDurationLabel,
   initials,

@@ -224,6 +224,7 @@
 </template>
 
 <script setup lang="ts">
+import { errorText } from "@/utils";
 import { insertIntoReply } from "@/pages/ticket/modalStates";
 import { __ } from "@/translation";
 import {
@@ -302,13 +303,6 @@ const newEmail = ref("");
 const emailError = ref("");
 const started = ref<CreatedMeeting | null>(null);
 const copied = ref(false);
-
-function errorText(err: any, fallback: string) {
-  if (!err) return "";
-  return err.messages?.length
-    ? err.messages.join(" ")
-    : err.message || fallback;
-}
 
 const defaults = createResource({
   url: "helpdesk.api.meetings.get_meeting_defaults",

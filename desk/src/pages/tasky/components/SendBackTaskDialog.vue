@@ -62,13 +62,13 @@
 </template>
 
 <script setup lang="ts">
+import { errorText } from "@/utils";
 import { __ } from "@/translation";
 import { Button, Dialog, Textarea, createResource, toast } from "frappe-ui";
 import { computed, ref, useId, watch } from "vue";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideInfo from "~icons/lucide/info";
 import LucideUndo2 from "~icons/lucide/undo-2";
-import { errorText } from "../taskMeta";
 
 interface ReviewedTask {
   name: string;

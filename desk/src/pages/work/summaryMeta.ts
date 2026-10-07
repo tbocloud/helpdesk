@@ -96,13 +96,6 @@ export function formatPeriod(start: string, end: string): string {
   return `${formatDay(start)} – ${formatDay(end)}`;
 }
 
-export function errorText(err: any, fallback: string): string {
-  if (!err) return "";
-  return err.messages?.length
-    ? err.messages.join(" ")
-    : err.message || fallback;
-}
-
 export function kindLabel(generatedByAi: SummaryListItem["generated_by_ai"]) {
   return generatedByAi ? __("AI") : __("Plain");
 }

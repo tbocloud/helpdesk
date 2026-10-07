@@ -96,6 +96,7 @@
 </template>
 
 <script setup lang="ts">
+import { errorText } from "@/utils";
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import { __ } from "@/translation";
 import { Button, Calendar, TabButtons, call, dayjs } from "frappe-ui";
@@ -103,7 +104,6 @@ import { computed, ref, watch } from "vue";
 import { useRouter, type RouteLocationRaw } from "vue-router";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideVideo from "~icons/lucide/video";
-import { errorText } from "./summaryMeta";
 
 interface MeetingEvent {
   name: string;

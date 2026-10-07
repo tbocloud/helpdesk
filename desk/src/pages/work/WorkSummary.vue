@@ -105,7 +105,7 @@
               <div
                 v-if="detail.summary"
                 class="text-p-base text-ink-gray-8 [&>*:first-child]:mt-0 [&_li]:pl-1 [&_li]:marker:text-ink-gray-4 [&_p]:my-2 [&_strong]:font-semibold [&_strong]:text-ink-gray-9 [&_ul]:mb-4 [&_ul]:mt-1 [&_ul]:list-disc [&_ul]:space-y-1 [&_ul]:pl-5"
-                v-html="detail.summary"
+                v-html="sanitizeRichText(detail.summary)"
               />
               <p v-else class="text-p-sm text-ink-gray-5">
                 {{ __("This summary has no text.") }}
@@ -121,8 +121,9 @@
 </template>
 
 <script setup lang="ts">
+import { errorText, sanitizeRichText } from "@/utils";
 import LayoutHeader from "@/components/LayoutHeader.vue";
-import TaskyState from "@/pages/tasky/components/TaskyState.vue";
+import TaskyState from "@/components/TaskyState.vue";
 import { __ } from "@/translation";
 import { Button, createResource, dayjs } from "frappe-ui";
 import { computed, watch } from "vue";
@@ -133,12 +134,7 @@ import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import SummaryKindBadge from "./components/SummaryKindBadge.vue";
 import SummaryStatsPanel from "./components/SummaryStatsPanel.vue";
-import {
-  errorText,
-  formatDay,
-  formatPeriod,
-  type SummaryDetail,
-} from "./summaryMeta";
+import { formatDay, formatPeriod, type SummaryDetail } from "./summaryMeta";
 
 const props = defineProps<{ name: string }>();
 

@@ -53,12 +53,13 @@
 </template>
 
 <script setup lang="ts">
+import { errorText } from "@/utils";
 import { Link } from "@/components";
 import { __ } from "@/translation";
 import { Button, createResource, Dialog, toast } from "frappe-ui";
 import { computed, ref, useId, watch } from "vue";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
-import { errorText, type SummaryDetail } from "../summaryMeta";
+import { type SummaryDetail } from "../summaryMeta";
 
 const props = defineProps<{ defaultCustomer?: string }>();
 const emit = defineEmits<{ generated: [summary: SummaryDetail] }>();

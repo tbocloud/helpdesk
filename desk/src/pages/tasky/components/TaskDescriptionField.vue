@@ -68,12 +68,13 @@
 </template>
 
 <script setup lang="ts">
+import { errorText } from "@/utils";
 import { __ } from "@/translation";
 import { Button, Textarea, createResource } from "frappe-ui";
 import { computed, ref, useId } from "vue";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideSparkles from "~icons/lucide/sparkles";
-import { errorText, isAiDrafted } from "../taskMeta";
+import { isAiDrafted } from "../taskMeta";
 import AiDraftedChip from "./AiDraftedChip.vue";
 
 /** What the AI is told about the task; task_name is required, task is set when editing. */

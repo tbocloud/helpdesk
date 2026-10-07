@@ -99,8 +99,8 @@
 </template>
 
 <script setup lang="ts">
+import { errorText } from "@/utils";
 import CompleteTaskDialog from "@/pages/tasky/components/CompleteTaskDialog.vue";
-import { errorText } from "@/pages/tasky/taskMeta";
 import { useApproveTask } from "@/pages/tasky/useApproveTask";
 import { itemKey, type WorkItem } from "@/pages/work/workMeta";
 import { useAuthStore } from "@/stores/auth";

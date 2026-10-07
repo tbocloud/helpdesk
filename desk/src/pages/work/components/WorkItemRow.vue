@@ -6,11 +6,11 @@
     :class="[
       to ? 'hover:bg-surface-gray-1 focus-within:bg-surface-gray-1' : '',
       showAssignees
-        ? actions
-          ? 'md:grid-cols-[1fr_9rem_8rem_14rem]'
+        ? $slots.actions
+          ? 'md:grid-cols-[1fr_9rem_8rem_15rem]'
           : 'md:grid-cols-[1fr_9rem_8rem_9rem]'
-        : actions
-        ? 'md:grid-cols-[1fr_8rem_14rem]'
+        : $slots.actions
+        ? 'md:grid-cols-[1fr_8rem_15rem]'
         : 'md:grid-cols-[1fr_8rem_9rem]',
     ]"
   >
@@ -180,28 +180,24 @@
         {{ deadline.label }}
       </div>
       <!-- above the row's stretched link, so it doesn't open the task -->
-      <Button
-        v-if="action"
-        size="sm"
-        class="relative z-10 shrink-0"
-        :label="action.label"
-        :icon-left="action.icon"
-        :aria-label="`${action.label}: ${item.title}`"
-        @click="emit(action.event, item)"
-      />
+      <div
+        v-if="$slots.actions"
+        class="relative z-10 flex shrink-0 items-center gap-1"
+      >
+        <slot name="actions" />
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import type { Tone } from "@/components/tone";
 import { useUserStore } from "@/stores/user";
 import { __ } from "@/translation";
-import { Avatar, Button, dayjs } from "frappe-ui";
+import { Avatar, dayjs } from "frappe-ui";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
-import LucideCheck from "~icons/lucide/check";
-import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideCircleDot from "~icons/lucide/circle-dot";
 import LucideHourglass from "~icons/lucide/hourglass";
 import LucidePause from "~icons/lucide/pause";
@@ -213,9 +209,8 @@ import MilestoneMark from "@/pages/tasky/components/MilestoneMark.vue";
 import PullRequestChip from "@/pages/tasky/components/PullRequestChip.vue";
 import SlipBadge from "@/pages/tasky/components/SlipBadge.vue";
 import TaskStatusBadge from "@/pages/tasky/components/TaskStatusBadge.vue";
-import TaskyBadge from "@/pages/tasky/components/TaskyBadge.vue";
+import TaskyBadge from "@/components/TaskyBadge.vue";
 import WaitingOn from "@/pages/tasky/components/WaitingOn.vue";
-import type { Tone } from "@/pages/tasky/taskMeta";
 import {
   deadlineInfo,
   isHeldTask,
@@ -226,33 +221,12 @@ import {
 const props = defineProps<{
   item: WorkItem;
   showAssignees?: boolean;
-  /** Offer Complete on open tasks and Approve on tasks waiting for this user's review. */
-  actions?: boolean;
 }>();
 
-const emit = defineEmits<{
-  complete: [item: WorkItem];
-  approve: [item: WorkItem];
+defineSlots<{
+  /** Buttons for the item, kept clickable above the row's link. */
+  actions?: () => unknown;
 }>();
-
-// statuses a task can be completed from here (held or reviewed tasks can't)
-const COMPLETABLE = ["Open", "Working", "Overdue"];
-
-const action = computed(() => {
-  if (!props.actions || props.item.kind !== "task") return null;
-  if (props.item.status === "Pending Review") {
-    return props.item.can_approve
-      ? { label: __("Approve"), icon: LucideCheck, event: "approve" as const }
-      : null;
-  }
-  return COMPLETABLE.includes(props.item.status)
-    ? {
-        label: __("Complete"),
-        icon: LucideCircleCheck,
-        event: "complete" as const,
-      }
-    : null;
-});
 
 const userStore = useUserStore();
 
