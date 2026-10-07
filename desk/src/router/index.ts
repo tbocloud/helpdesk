@@ -184,6 +184,12 @@ const portalRoutes = [
     props: true,
   },
   {
+    path: "/projects/:projectId/files",
+    name: "TaskyFiles",
+    component: () => import("@/pages/tasky/ProjectFiles.vue"),
+    props: true,
+  },
+  {
     path: "/my-tasks",
     name: "TaskyMyTasks",
     component: () => import("@/pages/tasky/MyTasks.vue"),
