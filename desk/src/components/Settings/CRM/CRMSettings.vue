@@ -1,37 +1,28 @@
 <template>
   <SettingsLayoutBase
+    :title="__('CRM')"
     :description="
       __(
         'Connect TBO Support to the TBO CRM site, so every agent also has a CRM user.'
       )
     "
+    :dirty="isDirty"
+    :saving="save.loading"
+    :loading="!form && !settings.error"
+    :error="settings.error"
+    @retry="settings.reload()"
+    @save="save.submit()"
   >
-    <template #title>
-      <div class="flex items-center gap-2">
-        <h1 class="text-lg-semibold text-ink-gray-8">{{ __("CRM") }}</h1>
-        <UnsavedBadge :show="isDirty" />
-      </div>
-    </template>
-    <template #header-actions>
-      <Transition name="fade">
-        <Button
-          v-if="isDirty"
-          variant="solid"
-          :label="__('Save')"
-          :loading="save.loading"
-          @click="save.submit()"
-        />
-      </Transition>
-    </template>
     <template #content>
-      <div v-if="!form" class="flex justify-center py-10">
-        <LoadingIndicator class="w-4" />
-      </div>
-      <div v-else class="flex flex-col gap-8">
-        <section class="flex flex-col gap-4">
-          <h2 class="text-base-semibold text-ink-gray-9">
-            {{ __("Connection") }}
-          </h2>
+      <div v-if="form">
+        <SettingsSection
+          :title="__('Connection')"
+          :description="
+            __(
+              'On the CRM site, open a System Manager user → API Access → Generate Keys. Paste the keys here, never in chat or email.'
+            )
+          "
+        >
           <FormControl
             v-model="form.site_url"
             :label="__('CRM site URL')"
@@ -53,21 +44,19 @@
               autocomplete="new-password"
             />
           </div>
-          <p class="text-p-sm text-ink-gray-6">
-            {{
-              __(
-                "On the CRM site, open a System Manager user → API Access → Generate Keys. Paste the keys here, never in chat or email."
-              )
-            }}
-          </p>
+          <Switch v-model="form.enabled" :label="__('Enabled')" />
           <div class="flex flex-wrap items-center gap-3">
-            <Switch v-model="form.enabled" :label="__('Enabled')" />
             <Button
               :label="__('Test connection')"
               :loading="test.loading"
               :disabled="isDirty"
+              :tooltip="isDirty ? __('Save your changes first') : ''"
               @click="test.submit()"
-            />
+            >
+              <template #prefix>
+                <LucidePlugZap class="size-4" aria-hidden="true" />
+              </template>
+            </Button>
             <span
               v-if="test.data"
               role="status"
@@ -83,14 +72,11 @@
             </span>
           </div>
           <p v-if="isDirty" class="text-p-xs text-ink-gray-5">
-            {{ __("Save before testing.") }}
+            {{ __("Save your changes before testing the connection.") }}
           </p>
-        </section>
+        </SettingsSection>
 
-        <section class="flex flex-col gap-4">
-          <h2 class="text-base-semibold text-ink-gray-9">
-            {{ __("Users") }}
-          </h2>
+        <SettingsSection :title="__('Users')">
           <Switch
             v-model="form.sync_users"
             :label="__('Add helpdesk agents missing in the CRM')"
@@ -126,12 +112,9 @@
             v-model="form.send_welcome_email"
             :label="__('Send new users a welcome email to set their password')"
           />
-        </section>
+        </SettingsSection>
 
-        <section class="flex flex-col gap-4">
-          <h2 class="text-base-semibold text-ink-gray-9">
-            {{ __("Customers") }}
-          </h2>
+        <SettingsSection :title="__('Customers')">
           <Switch
             v-model="form.sync_customers"
             :label="__('Sync customers both ways')"
@@ -146,8 +129,13 @@
               :label="__('Sync now')"
               :loading="sync.loading"
               :disabled="isDirty"
+              :tooltip="isDirty ? __('Save your changes first') : ''"
               @click="sync.submit()"
-            />
+            >
+              <template #prefix>
+                <LucideRefreshCw class="size-4" aria-hidden="true" />
+              </template>
+            </Button>
           </div>
           <p
             v-if="lastResult"
@@ -156,7 +144,7 @@
           >
             {{ lastResult }}
           </p>
-        </section>
+        </SettingsSection>
       </div>
     </template>
   </SettingsLayoutBase>
@@ -164,21 +152,21 @@
 
 <script setup lang="ts">
 import SettingsLayoutBase from "@/components/layouts/SettingsLayoutBase.vue";
-import UnsavedBadge from "@/components/UnsavedBadge.vue";
 import { __ } from "@/translation";
 import {
   Button,
   createResource,
   dayjs,
   FormControl,
-  LoadingIndicator,
   Switch,
   toast,
 } from "frappe-ui";
-import { computed, ref, watch } from "vue";
+import { computed, ref } from "vue";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideCircleCheck from "~icons/lucide/circle-check";
-import { disableSettingModalOutsideClick } from "../settingsModal";
+import LucidePlugZap from "~icons/lucide/plug-zap";
+import LucideRefreshCw from "~icons/lucide/refresh-cw";
+import SettingsSection from "../SettingsSection.vue";
 
 interface CRMForm {
   enabled: boolean;
@@ -239,7 +227,6 @@ const settings = createResource({
 const isDirty = computed(
   () => !!form.value && JSON.stringify(form.value) !== initial.value
 );
-watch(isDirty, (dirty) => (disableSettingModalOutsideClick.value = dirty));
 
 const save = createResource({
   url: "frappe.client.set_value",

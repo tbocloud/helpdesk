@@ -1,55 +1,41 @@
 <template>
-  <SettingsLayoutBase>
-    <template #title>
-      <div class="flex items-center gap-2">
-        <Button
-          variant="ghost"
-          icon-left="chevron-left"
-          :label="savedReplyData.title || __('New Saved Reply')"
-          size="md"
-          @click="goBack()"
-          class="cursor-pointer -ml-4 hover:bg-transparent focus:bg-transparent focus:outline-none focus:ring-0 focus:ring-offset-0 focus-visible:none active:bg-transparent active:outline-none active:ring-0 active:ring-offset-0 active:text-ink-gray-5 font-semibold text-ink-gray-7 text-lg hover:opacity-70 !pr-0"
-        />
-        <UnsavedBadge :show="isDirty" />
-      </div>
-    </template>
+  <SettingsLayoutBase
+    :title="savedReplyData.title || __('New saved reply')"
+    :back-label="__('Back to saved replies')"
+    :dirty="isDirty"
+    :save-label="
+      savedReplyData.name ? __('Save changes') : __('Create saved reply')
+    "
+    :saving="
+      savedRepliesListResource?.insert.loading ||
+      savedRepliesListResource?.setValue.loading ||
+      renameSavedReplyResource.loading
+    "
+    :loading="getSavedReplyData.loading"
+    :error="getSavedReplyData.error"
+    @retry="getSavedReplyData.reload()"
+    @back="goBack()"
+    @save="onSave"
+  >
     <template #header-actions>
-      <div class="flex items-center gap-2">
-        <Button
-          v-if="savedReplyData.name"
-          :label="__('Preview')"
-          size="sm"
-          @click="onShowPreview()"
-          icon-left="lucide-eye"
-          :disabled="
-            Boolean(
-              !savedReplyData.message?.replace(/<[^>]*>/g, '')?.trim()?.length
-            ) || isDirty
-          "
-        />
-        <Button
-          :label="__('Save')"
-          variant="solid"
-          theme="gray"
-          @click="onSave"
-          :loading="
-            savedRepliesListResource?.insert.loading ||
-            savedRepliesListResource?.setValue.loading ||
-            renameSavedReplyResource.loading ||
-            getSavedReplyData.loading
-          "
-          :disabled="Boolean(!isDirty)"
-        />
-      </div>
+      <Button
+        v-if="savedReplyData.name"
+        :label="__('Preview')"
+        :disabled="
+          Boolean(
+            !savedReplyData.message?.replace(/<[^>]*>/g, '')?.trim()?.length
+          ) || isDirty
+        "
+        :tooltip="isDirty ? __('Save your changes first') : ''"
+        @click="onShowPreview()"
+      >
+        <template #prefix>
+          <LucideEye class="size-4" aria-hidden="true" />
+        </template>
+      </Button>
     </template>
     <template #content>
-      <div
-        v-if="getSavedReplyData.loading"
-        class="flex items-center justify-center absolute inset-x-0 top-5.5 bottom-0"
-      >
-        <LoadingIndicator class="w-4" />
-      </div>
-      <div v-else class="flex flex-col gap-5">
+      <div class="flex flex-col gap-5">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
           <div class="space-y-1.5">
             <FormControl
@@ -141,19 +127,18 @@ import {
   ErrorMessage,
   FormControl,
   FormLabel,
-  LoadingIndicator,
   MultiSelect,
   Select,
   toast,
 } from "frappe-ui";
 import { storeToRefs } from "pinia";
-import UnsavedBadge from "@/components/UnsavedBadge.vue";
 import { computed, inject, onUnmounted, ref, watch } from "vue";
 import GlobeIcon from "~icons/lucide/globe";
 import UserIcon from "~icons/lucide/user";
 import UsersIcon from "~icons/lucide/users";
 import { FieldAutocomplete } from "../../../tiptap-extensions";
 import { SavedReply, SavedReplyListResourceSymbol, Team } from "../../../types";
+import LucideEye from "~icons/lucide/eye";
 import SettingsLayoutBase from "../../layouts/SettingsLayoutBase.vue";
 import { disableSettingModalOutsideClick } from "../settingsModal";
 import PreviewDialog from "./components/PreviewDialog.vue";
@@ -284,9 +269,9 @@ const isDirty = ref(false);
 const goBack = () => {
   const confirmDialogInfo = {
     show: true,
-    title: __("Unsaved changes"),
+    title: __("Leave without saving?"),
     message: __(
-      "Are you sure you want to go back? Unsaved changes will be lost."
+      "Your changes on this page haven't been saved and will be lost."
     ),
     onConfirm: goBack,
   };

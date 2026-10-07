@@ -1,60 +1,36 @@
 <template>
-  <SettingsLayoutBase :description="__('Manage general settings of your app.')">
-    <template #title>
-      <div class="flex items-center gap-2">
-        <h1 class="text-lg-semibold text-ink-gray-8">
-          {{ __("General") }}
-        </h1>
-        <UnsavedBadge :show="isDirty" />
-      </div>
-    </template>
-    <template #header-actions>
-      <Transition name="fade">
-        <div v-if="isDirty">
-          <Button
-            :label="__('Save')"
-            variant="solid"
-            @click="saveSettings"
-            :loading="
-              saveSettingsResource.loading ||
-              saveWebsiteSettingsResource.loading
-            "
-          />
-        </div>
-      </Transition>
-    </template>
+  <SettingsLayoutBase
+    :title="__('General')"
+    :description="
+      __('Branding, ticket rules and sign-up for everyone on this helpdesk.')
+    "
+    :dirty="isDirty"
+    :saving="
+      saveSettingsResource.loading || saveWebsiteSettingsResource.loading
+    "
+    :loading="settingsDataResource.loading && !settingsDataResource.data"
+    :error="settingsDataResource.error"
+    @retry="settingsDataResource.reload()"
+    @save="saveSettings"
+  >
     <template #content>
-      <div
-        v-if="settingsDataResource.loading && !settingsDataResource.data"
-        class="flex items-center justify-center absolute inset-x-0 top-5.5 bottom-0"
-      >
-        <LoadingIndicator class="w-4" />
-      </div>
-      <div v-else>
+      <div>
         <Branding />
-        <hr class="my-8" />
         <TicketSettings />
-        <hr class="my-8" />
         <WorkflowKnowledgebaseSettings />
-        <hr class="my-8" />
-        <div>
-          <div class="text-base-semibold text-ink-gray-9">
-            {{ __("User Signup") }}
-          </div>
-          <div class="flex items-center justify-between mt-6">
-            <div class="flex flex-col gap-1">
-              <span class="text-base-medium text-ink-gray-8">{{
-                __("Disable signup")
-              }}</span>
-              <span class="text-p-sm text-ink-gray-6">{{
-                __(
-                  "New users will have to be manually registered by system managers."
-                )
-              }}</span>
-            </div>
-            <Switch v-model="disableSignup" />
-          </div>
-        </div>
+        <SettingsSection :title="__('User sign-up')">
+          <SettingRow
+            v-slot="{ id }"
+            :label="__('Disable signup')"
+            :description="
+              __(
+                'New users will have to be manually registered by system managers.'
+              )
+            "
+          >
+            <Switch :id="id" v-model="disableSignup" />
+          </SettingRow>
+        </SettingsSection>
       </div>
     </template>
   </SettingsLayoutBase>
@@ -62,18 +38,13 @@
 
 <script setup lang="ts">
 import SettingsLayoutBase from "@/components/layouts/SettingsLayoutBase.vue";
-import UnsavedBadge from "@/components/UnsavedBadge.vue";
 import { useConfigStore } from "@/stores/config";
 import { __ } from "@/translation";
 import { HDSettings, HDSettingsSymbol } from "@/types";
-import {
-  Button,
-  createResource,
-  LoadingIndicator,
-  Switch,
-  toast,
-} from "frappe-ui";
+import { createResource, Switch, toast } from "frappe-ui";
 import { computed, provide, ref, watch } from "vue";
+import SettingRow from "../SettingRow.vue";
+import SettingsSection from "../SettingsSection.vue";
 import Branding from "./components/Branding.vue";
 import TicketSettings from "./components/TicketSettings.vue";
 import WorkflowKnowledgebaseSettings from "./components/WorkflowKnowledgebaseSettings.vue";
@@ -273,7 +244,6 @@ watch(
         JSON.stringify(data[key as keyof typeof data]) !==
           JSON.stringify(initial[key])
     );
-    disableSettingModalOutsideClick.value = isDirty.value;
   },
   { deep: true }
 );

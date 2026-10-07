@@ -1,45 +1,26 @@
 <template>
   <SettingsLayoutBase
+    :title="__('Tasks')"
     :description="__('How the AI helps when tasks are created.')"
+    :dirty="isDirty"
+    :saving="save.loading"
+    :loading="!form && !settings.error"
+    :error="settings.error"
+    @retry="settings.reload()"
+    @save="save.submit()"
   >
-    <template #title>
-      <div class="flex items-center gap-2">
-        <h1 class="text-lg-semibold text-ink-gray-8">{{ __("Tasks") }}</h1>
-        <UnsavedBadge :show="isDirty" />
-      </div>
-    </template>
-    <template #header-actions>
-      <Transition name="fade">
-        <Button
-          v-if="isDirty"
-          variant="solid"
-          :label="__('Save')"
-          :loading="save.loading"
-          @click="save.submit()"
-        />
-      </Transition>
-    </template>
     <template #content>
-      <div
-        v-if="!form"
-        class="flex items-center justify-center absolute inset-x-0 top-5.5 bottom-0"
-      >
-        <LoadingIndicator class="w-4" />
-      </div>
-      <div v-else class="flex flex-col">
-        <section>
-          <h2 class="text-base-semibold text-ink-gray-9">{{ __("AI") }}</h2>
-          <p
-            v-if="aiStatus.data?.available === false"
-            class="mt-2 flex items-start gap-2 text-p-sm text-ink-gray-6"
-          >
-            <LucideInfo
-              class="mt-0.5 size-4 shrink-0 text-ink-gray-5"
-              aria-hidden="true"
-            />
-            {{ aiStatus.data.reason }}
-          </p>
+      <div v-if="form">
+        <SettingsSection
+          :title="__('AI')"
+          :description="
+            aiStatus.data?.available === false
+              ? aiStatus.data.reason
+              : undefined
+          "
+        >
           <SettingRow
+            v-slot="{ id }"
             :label="__('Write descriptions for new tasks with AI')"
             :description="
               __(
@@ -47,12 +28,10 @@
               )
             "
           >
-            <Switch
-              v-model="form.ai_task_descriptions"
-              :aria-label="__('Write descriptions for new tasks with AI')"
-            />
+            <Switch :id="id" v-model="form.ai_task_descriptions" />
           </SettingRow>
           <SettingRow
+            v-slot="{ id }"
             :label="__('AI sets the time for new tasks')"
             :description="
               __(
@@ -60,17 +39,16 @@
               )
             "
           >
-            <Switch
-              v-model="form.ai_task_estimates"
-              :aria-label="__('AI sets the time for new tasks')"
-            />
+            <Switch :id="id" v-model="form.ai_task_estimates" />
           </SettingRow>
           <SettingRow
             v-if="form.ai_task_estimates"
+            v-slot="{ id }"
             :label="__('Longest estimate')"
             :description="__('Working days.')"
           >
             <FormControl
+              :id="id"
               v-model="form.max_task_days"
               type="number"
               class="w-24"
@@ -78,7 +56,7 @@
               :aria-label="__('Longest estimate in working days')"
             />
           </SettingRow>
-        </section>
+        </SettingsSection>
       </div>
     </template>
   </SettingsLayoutBase>
@@ -86,20 +64,11 @@
 
 <script setup lang="ts">
 import SettingsLayoutBase from "@/components/layouts/SettingsLayoutBase.vue";
-import UnsavedBadge from "@/components/UnsavedBadge.vue";
 import { __ } from "@/translation";
-import {
-  Button,
-  createResource,
-  FormControl,
-  LoadingIndicator,
-  Switch,
-  toast,
-} from "frappe-ui";
-import { computed, ref, watch } from "vue";
-import LucideInfo from "~icons/lucide/info";
-import SettingRow from "../Content/SettingRow.vue";
-import { disableSettingModalOutsideClick } from "../settingsModal";
+import { createResource, FormControl, Switch, toast } from "frappe-ui";
+import { computed, ref } from "vue";
+import SettingRow from "../SettingRow.vue";
+import SettingsSection from "../SettingsSection.vue";
 
 interface TaskSettingsForm {
   ai_task_descriptions: boolean;
@@ -111,7 +80,7 @@ const DOCTYPE = "HD Work Settings";
 const form = ref<TaskSettingsForm | null>(null);
 const initial = ref("");
 
-createResource({
+const settings = createResource({
   url: "frappe.client.get",
   params: { doctype: DOCTYPE, name: DOCTYPE },
   auto: true,
@@ -134,7 +103,6 @@ const aiStatus = createResource({
 const isDirty = computed(
   () => !!form.value && JSON.stringify(form.value) !== initial.value
 );
-watch(isDirty, (dirty) => (disableSettingModalOutsideClick.value = dirty));
 
 const save = createResource({
   url: "frappe.client.set_value",

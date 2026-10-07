@@ -1,31 +1,13 @@
 <template>
   <SettingsLayoutBase
+    :title="__('Twilio')"
     :description="__('Configure your Twilio settings for Helpdesk.')"
+    :back-label="__('Back to telephony')"
+    :dirty="isDirty.twilio"
+    :saving="twilio.save.loading"
+    @back="goBack"
+    @save="save"
   >
-    <template #title>
-      <div class="flex items-center gap-2">
-        <Button
-          variant="ghost"
-          icon-left="chevron-left"
-          :label="__('Twilio')"
-          size="md"
-          @click="goBack"
-          class="cursor-pointer hover:bg-transparent focus:bg-transparent focus:outline-none focus:ring-0 focus:ring-offset-0 focus-visible:none active:bg-transparent active:outline-none active:ring-0 active:ring-offset-0 active:text-ink-gray-5 font-semibold text-ink-gray-7 text-lg hover:opacity-70 !pr-0 !pl-0 -ml-1.5"
-        />
-        <UnsavedBadge :show="isDirty.twilio" />
-      </div>
-    </template>
-    <template #header-actions>
-      <Button
-        :label="__('Save')"
-        theme="gray"
-        variant="solid"
-        @click="save"
-        v-if="isDirty.twilio"
-        :disabled="!isDirty.twilio"
-        :loading="twilio.save.loading"
-      />
-    </template>
     <template #content>
       <div v-if="twilio?.doc">
         <div>
@@ -126,7 +108,6 @@
 <script setup>
 import Password from "@/components/Password.vue";
 import SettingsLayoutBase from "@/components/layouts/SettingsLayoutBase.vue";
-import UnsavedBadge from "@/components/UnsavedBadge.vue";
 import ConfirmDialog from "@/components/ConfirmDialog.vue";
 import {
   Button,
@@ -191,9 +172,9 @@ const goBack = () => {
     if (!showConfirmDialog.value.show) {
       showConfirmDialog.value = {
         show: true,
-        title: __("Unsaved changes"),
+        title: __("Leave without saving?"),
         message: __(
-          "Are you sure you want to go back? Unsaved changes will be lost."
+          "Your changes on this page haven't been saved and will be lost."
         ),
         onConfirm: () => {
           showConfirmDialog.value.show = false;

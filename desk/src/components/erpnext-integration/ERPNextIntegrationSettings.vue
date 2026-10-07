@@ -1,29 +1,16 @@
 <template>
   <SettingsLayoutBase
+    :title="__('ERPNext')"
     :description="__('Sync customers between Helpdesk and ERPNext.')"
+    :loading="syncInfoResource.loading && !syncInfoResource.data"
+    :error="syncInfoResource.error"
+    @retry="syncInfoResource.reload()"
   >
-    <template #title>
-      <div class="flex items-center gap-2">
-        <h1 class="text-lg-semibold text-ink-gray-8">
-          {{ __("ERPNext") }}
-        </h1>
-        <Badge
-          v-if="installed === false"
-          theme="gray"
-          variant="subtle"
-          :label="__('Not installed')"
-        />
-      </div>
+    <template v-if="installed === false" #badge>
+      <TaskyBadge :label="__('Not installed')" />
     </template>
     <template #content>
-      <!-- Loading State -->
-      <div
-        v-if="syncInfoResource.loading && !syncInfoResource.data"
-        class="flex items-center justify-center absolute inset-x-0 top-5.5 bottom-0"
-      >
-        <LoadingIndicator class="w-4" />
-      </div>
-      <div v-else class="flex flex-col gap-4">
+      <div class="flex flex-col gap-4">
         <!-- ERPNext not installed -->
         <div class="flex items-center justify-between gap-4">
           <div class="flex min-w-0 items-center gap-3">
@@ -72,11 +59,13 @@
         <!-- Enabled & in sync -->
         <div
           v-else-if="erpnextIntegrationEnabled && inSync"
-          class="flex items-center gap-3 rounded-lg bg-surface-green-1 p-3"
+          class="flex items-center gap-3 rounded-lg bg-success-soft p-3"
+          role="status"
         >
-          <div class="grid size-7 shrink-0 place-items-center text-ink-green-6">
-            <LucideCheck class="h-4 w-4" />
-          </div>
+          <LucideCheck
+            class="size-4 shrink-0 text-success"
+            aria-hidden="true"
+          />
           <div class="flex min-w-0 flex-1 flex-col">
             <span class="text-p-sm-medium text-ink-gray-8">
               {{ __("Customers are in sync") }}
@@ -94,11 +83,13 @@
         <!-- Enabled & not in sync -->
         <div
           v-else-if="erpnextIntegrationEnabled"
-          class="flex items-center gap-3 rounded-lg bg-surface-amber-1 p-3"
+          class="flex flex-wrap items-center gap-3 rounded-lg bg-warning-soft p-3"
+          role="status"
         >
-          <div class="grid size-7 shrink-0 place-items-center text-ink-amber-6">
-            <LucideTriangleAlert class="h-4 w-4" />
-          </div>
+          <LucideTriangleAlert
+            class="size-4 shrink-0 text-warning"
+            aria-hidden="true"
+          />
           <div class="flex min-w-0 flex-1 flex-col">
             <span class="text-p-sm-medium text-ink-gray-8">
               {{ __("Sync your existing customers") }}
@@ -112,9 +103,7 @@
             </span>
           </div>
           <Button
-            theme="gray"
-            variant="subtle"
-            class="border border-outline-gray-2 bg-surface-base hover:bg-surface-base hover:border-outline-gray-3 active:bg-surface-gray-2 focus-visible:bg-surface-base focus-visible:ring-2 focus-visible:ring-outline-gray-3"
+            variant="outline"
             :loading="isSyncing || syncAction.loading"
             :disabled="isSyncing || syncAction.loading"
             :label="isSyncing ? __('Syncing…') : __('Sync now')"
@@ -133,17 +122,11 @@
 <script setup lang="ts">
 import { ErpnextIcon } from "@/components/icons";
 import SettingsLayoutBase from "@/components/layouts/SettingsLayoutBase.vue";
+import TaskyBadge from "@/components/TaskyBadge.vue";
 import { globalStore } from "@/stores/globalStore";
 import { __ } from "@/translation";
 import { Error } from "@/types";
-import {
-  Badge,
-  Button,
-  LoadingIndicator,
-  Switch,
-  createResource,
-  toast,
-} from "frappe-ui";
+import { Button, Switch, createResource, toast } from "frappe-ui";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import LucideCheck from "~icons/lucide/check";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";

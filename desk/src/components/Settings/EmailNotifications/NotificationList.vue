@@ -3,49 +3,25 @@
     :title="__('Email Notifications')"
     :description="
       __(
-        'Customize your email notification preferences to stay informed about important updates and activities.'
+        'The emails helpdesk sends to contacts and agents, and what each one says.'
       )
     "
   >
     <template #content>
-      <ul class="isolate -ml-3">
-        <div
-          v-for="(notification, index) in notifications"
-          :key="notification.name"
-        >
-          <li class="flex items-center justify-between p-3 rounded relative">
-            <div class="flex flex-col gap-1">
-              <h2
-                class="text-base-medium text-ink-gray-7 relative z-10 pointer-events-none"
-              >
-                {{ __(notification.label) }}
-              </h2>
-              <p
-                class="text-sm text-ink-gray-5 truncate relative z-10 pointer-events-none"
-              >
-                {{ __(notification.description) }}
-              </p>
-            </div>
-            <FeatherIcon
-              name="chevron-right"
-              class="text-ink-gray-7 size-4 relative z-10 pointer-events-none"
-            />
-            <div
-              class="w-full h-full absolute top-0 left-0 hover:bg-surface-sidebar rounded-[inherit]"
-              @click="
-                () => {
-                  props.onSelect(notification);
-                }
-              "
-            >
-              <span class="sr-only">{{
-                __("customize {0}", notification.name)
-              }}</span>
-            </div>
-          </li>
-          <hr v-if="index < notifications.length - 1" class="mx-2" />
-        </div>
-      </ul>
+      <SettingsList
+        :items="notifications"
+        :label="__('Email notifications')"
+        :empty-icon="LucideMailOpen"
+        :empty-title="__('No email notifications')"
+      >
+        <template #default="{ item: notification }">
+          <SettingsListItem
+            :title="__(notification.label)"
+            :subtitle="__(notification.description)"
+            @open="props.onSelect(notification)"
+          />
+        </template>
+      </SettingsList>
     </template>
   </SettingsLayoutBase>
 </template>
@@ -54,6 +30,9 @@
 import { __ } from "@/translation";
 import type { AtLeastOneNotifcation, Notification } from "./types";
 import SettingsLayoutBase from "@/components/layouts/SettingsLayoutBase.vue";
+import LucideMailOpen from "~icons/lucide/mail-open";
+import SettingsList from "../SettingsList.vue";
+import SettingsListItem from "../SettingsListItem.vue";
 
 const props = defineProps<{
   onSelect: (notification: Notification) => void;

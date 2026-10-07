@@ -1,42 +1,37 @@
 <template>
-  <SettingsLayoutBase>
-    <template #title>
-      <div class="flex items-center gap-2">
-        <Button
-          variant="ghost"
-          icon-left="chevron-left"
-          :label="holidayData?.holiday_list_name || __('New Business Holiday')"
-          size="md"
-          @click="goBack()"
-          class="cursor-pointer -ml-4 hover:bg-transparent focus:bg-transparent focus:outline-none focus:ring-0 focus:ring-offset-0 focus-visible:none active:bg-transparent active:outline-none active:ring-0 active:ring-offset-0 active:text-ink-gray-5 font-semibold text-ink-gray-7 text-lg hover:opacity-70 !pr-0"
-        />
-        <UnsavedBadge :show="isDirty" />
-      </div>
-    </template>
-    <template #header-actions>
-      <Button
-        :label="__('Save')"
-        theme="gray"
-        variant="solid"
-        @click="saveHoliday()"
-        :disabled="Boolean(!isDirty && holidayListActiveScreen.data)"
-        :loading="
-          holidayList?.list.loading ||
-          holidayList?.setValue.loading ||
-          renameHolidayResource.loading ||
-          getHolidayData.loading
-        "
-      />
-    </template>
+  <SettingsLayoutBase
+    :title="holidayData?.holiday_list_name || __('New holiday schedule')"
+    :description="
+      holidayData.loading
+        ? undefined
+        : __(
+            '{0} holidays in this schedule',
+            String(holidayData.holidays.length)
+          )
+    "
+    :back-label="
+      holidayListActiveScreen.previousScreen
+        ? __('Back to SLA policy')
+        : __('Back to business holidays')
+    "
+    :dirty="isDirty"
+    :save-label="
+      holidayListActiveScreen.data ? __('Save changes') : __('Create schedule')
+    "
+    :save-disabled="Boolean(!isDirty && holidayListActiveScreen.data)"
+    :saving="
+      holidayList?.list.loading ||
+      holidayList?.setValue.loading ||
+      renameHolidayResource.loading
+    "
+    :loading="Boolean(holidayData.loading)"
+    :error="getHolidayData.error"
+    @retry="getHolidayData.reload()"
+    @back="goBack()"
+    @save="saveHoliday()"
+  >
     <template #content>
       <div v-if="!holidayData.loading" class="h-full">
-        <div class="flex items-center gap-2 mt-2">
-          <span class="text-sm">
-            There are in total <b>{{ holidayData.holidays.length }}</b> holidays
-            in this list</span
-          >
-        </div>
-        <hr class="mb-8 mt-2" />
         <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
           <div>
             <FormControl
@@ -65,10 +60,10 @@
             maxlength="140"
           />
         </div>
-        <hr class="my-8" />
+        <hr class="my-6 border-outline-gray-2" />
         <div>
           <div class="flex flex-col gap-1">
-            <span class="text-lg-semibold text-ink-gray-8">{{
+            <span class="text-base-semibold text-ink-gray-9">{{
               __("Valid From")
             }}</span>
             <span class="text-p-sm text-ink-gray-6">
@@ -126,10 +121,10 @@
             </div>
           </div>
         </div>
-        <hr class="my-8" />
+        <hr class="my-6 border-outline-gray-2" />
         <div>
           <div class="flex flex-col gap-1">
-            <div class="text-lg-semibold text-ink-gray-8">
+            <div class="text-base-semibold text-ink-gray-9">
               {{ __("Recurring Holidays") }}
             </div>
             <div class="text-p-sm text-ink-gray-6">
@@ -143,11 +138,11 @@
             />
           </div>
         </div>
-        <hr class="my-8" />
+        <hr class="my-6 border-outline-gray-2" />
         <div>
           <div class="flex justify-between items-center">
             <div class="flex justify-between flex-col gap-1">
-              <span class="text-lg-semibold text-ink-gray-8">
+              <span class="text-base-semibold text-ink-gray-9">
                 {{ __("Holidays") }}
               </span>
               <div class="text-p-sm text-ink-gray-6">
@@ -206,9 +201,9 @@
   <AddHolidayModal v-model="dialog" />
   <ConfirmDialog
     v-model="showConfirmDialog"
-    :title="__('Unsaved changes')"
+    :title="__('Leave without saving?')"
     :message="
-      __('Are you sure you want to go back? Unsaved changes will be lost.')
+      __('Your changes on this page haven\'t been saved and will be lost.')
     "
     :onConfirm="goBack"
     :onCancel="() => (showConfirmDialog = false)"
@@ -228,7 +223,6 @@ import {
   createResource,
   DatePicker,
   FormControl,
-  LoadingIndicator,
   TabButtons,
   toast,
 } from "frappe-ui";
@@ -248,7 +242,6 @@ import HolidaysCalendarView from "./HolidaysCalendarView.vue";
 import AddHolidayModal from "./Modals/AddHolidayModal.vue";
 import { __ } from "@/translation";
 import SettingsLayoutBase from "@/components/layouts/SettingsLayoutBase.vue";
-import UnsavedBadge from "@/components/UnsavedBadge.vue";
 import { HolidayListResourceSymbol } from "@/types";
 import { HDServiceHolidayList } from "@/types/doctypes";
 

@@ -1,76 +1,48 @@
 <template>
-  <div
-    class="grid grid-cols-6 items-center gap-4 cursor-pointer hover:bg-surface-sidebar rounded"
+  <SettingsListItem
+    :title="data.name"
+    :subtitle="data.description || undefined"
+    :muted="!data.enabled"
+    @open="slaActiveScreen = { screen: 'view', data: data, fetchData: true }"
   >
-    <div
-      @click="slaActiveScreen = { screen: 'view', data: data, fetchData: true }"
-      class="w-full pl-2 col-span-5 flex flex-col justify-center h-14"
-    >
-      <div class="text-base-medium text-ink-gray-7 flex items-center gap-2">
-        {{ data.name }}
-        <Badge v-if="data.default_sla" color="gray" size="sm">Default</Badge>
-      </div>
-      <div
-        v-if="data.description && data.description.length > 0"
-        class="text-sm w-full text-ink-gray-5 mt-1 truncate"
-      >
-        {{ data.description }}
-      </div>
-    </div>
-    <div class="flex justify-between items-center w-full pr-2">
-      <div>
-        <Switch
-          size="sm"
-          :modelValue="data.enabled"
-          @update:modelValue="onToggle"
-        />
-      </div>
-      <div>
-        <Dropdown placement="right" :options="dropdownOptions">
-          <Button
-            icon="lucide-more-horizontal"
-            variant="ghost"
-            @click="isConfirmingDelete = false"
-          />
-        </Dropdown>
-      </div>
-    </div>
-  </div>
-  <Dialog
-    :title="__('Duplicate SLA Policy')"
-    v-model:open="duplicateDialog.show"
-  >
-    <template #default>
-      <div class="flex flex-col gap-4">
-        <FormControl
-          :label="__('New SLA Policy Name')"
-          type="text"
-          v-model="duplicateDialog.newName"
-        />
-      </div>
+    <template v-if="data.default_sla" #badges>
+      <TaskyBadge :label="__('Default')" />
     </template>
     <template #actions>
-      <div class="flex gap-2 justify-end">
+      <Switch
+        size="sm"
+        :label="__('Enabled')"
+        :model-value="Boolean(data.enabled)"
+        @update:model-value="onToggle"
+      />
+      <Dropdown placement="right" :options="dropdownOptions">
         <Button
-          variant="subtle"
-          :label="__('Close')"
-          @click="duplicateDialog.show = false"
-        />
-        <Button variant="solid" :label="__('Duplicate')" @click="duplicate()" />
-      </div>
+          variant="ghost"
+          :label="__('More actions for {0}', data.name)"
+          @click="isConfirmingDelete = false"
+        >
+          <template #icon>
+            <LucideEllipsis class="size-4" aria-hidden="true" />
+          </template>
+        </Button>
+      </Dropdown>
     </template>
-  </Dialog>
+  </SettingsListItem>
+  <DuplicateDialog
+    v-model:open="duplicateDialog.show"
+    v-model:name="duplicateDialog.newName"
+    :title="__('Duplicate SLA policy')"
+    :label="__('Name of the copy')"
+    @duplicate="duplicate()"
+  />
 </template>
+
 <script setup lang="ts">
-import {
-  Switch,
-  Button,
-  createResource,
-  toast,
-  Dialog,
-  Badge,
-  Dropdown,
-} from "frappe-ui";
+import { Switch, Button, createResource, toast, Dropdown } from "frappe-ui";
+import LucideEllipsis from "~icons/lucide/ellipsis";
+import TaskyBadge from "@/components/TaskyBadge.vue";
+import DuplicateDialog from "../DuplicateDialog.vue";
+import SettingsListItem from "../SettingsListItem.vue";
 import { ref, inject } from "vue";
 import { slaActiveScreen } from "@/stores/sla";
 import { ConfirmDelete } from "@/utils";

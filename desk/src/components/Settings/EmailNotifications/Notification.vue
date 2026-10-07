@@ -1,58 +1,28 @@
 <template>
-  <SettingsLayoutBase>
-    <template #title>
-      <div class="flex items-center">
-        <div
-          class="pl-5 pr-2 relative text-ink-gray-7 hover:opacity-70 min-h-8 flex items-center"
-        >
-          <button
-            type="button"
-            @click="internalOnBack"
-            class="absolute top-0 -left-[0.375rem] w-full h-full"
-          >
-            <span class="sr-only">{{ __("back to email event list") }}</span>
-            <LucideChevronLeft class="w-4.5 h-4.5" />
-          </button>
-          <h1 class="text-2xl-semibold">
-            {{ props.title }}
-          </h1>
-        </div>
-        <UnsavedBadge :show="unsavedChanges" />
-      </div>
-    </template>
+  <SettingsLayoutBase
+    :title="props.title"
+    :description="props.description"
+    :back-label="__('Back to email notifications')"
+    :dirty="unsavedChanges"
+    :saving="props.submitting"
+    :loading="notificationDataResource.loading"
+    :error="notificationDataResource.error"
+    @retry="notificationDataResource.reload()"
+    @back="internalOnBack"
+    @save="props.onSubmit"
+  >
     <template #header-actions>
-      <div
-        :inert="notificationDataResource.loading"
-        class="flex items-center gap-x-4 pt-[0.125rem]"
-        :class="{ invisible: notificationDataResource.loading }"
-      >
-        <Switch
-          size="sm"
-          :label="__('Enabled')"
-          v-model="enabled"
-          @update:model-value="(val) => setUnsavedChanges(val)"
-          :style="{ background: 'transparent', padding: '0px' }"
-          class="flex-row-reverse gap-x-2 pl-0"
-        />
-        <Button
-          type="button"
-          :label="__('Save')"
-          theme="gray"
-          variant="solid"
-          :disabled="!unsavedChanges"
-          :loading="props.submitting"
-          @click="props.onSubmit"
-        />
-      </div>
+      <Switch
+        size="sm"
+        :label="__('Enabled')"
+        v-model="enabled"
+        :disabled="notificationDataResource.loading"
+        @update:model-value="(val) => setUnsavedChanges(val)"
+      />
     </template>
     <template #content>
-      <div
-        class="flex flex-col gap-8 flex-grow pb-8"
-        :class="{
-          'items-center justify-center': notificationDataResource.loading,
-        }"
-      >
-        <template v-if="!notificationDataResource.loading">
+      <div class="flex flex-grow flex-col gap-8">
+        <template v-if="notificationDataResource.data">
           <slot name="formFields"></slot>
           <div class="flex flex-col gap-2">
             <FormControl
@@ -74,6 +44,7 @@
                 <a
                   :href="props.documentationLink"
                   target="_blank"
+                  rel="noopener noreferrer"
                   class="underline font-semibold"
                   >{{ __("here") }}</a
                 >
@@ -86,21 +57,20 @@
                 @click="onResetContent"
                 class="w-fit"
               >
-                {{ __("Reset Content") }}
+                {{ __("Reset to default") }}
               </Button>
             </div>
           </div>
         </template>
-        <LoadingIndicator v-else class="w-4" />
       </div>
     </template>
   </SettingsLayoutBase>
 
   <ConfirmDialog
     v-model="showUnsavedConfirm"
-    :title="__('Unsaved changes')"
+    :title="__('Leave without saving?')"
     :message="
-      __('Are you sure you want to go back? Unsaved changes will be lost.')
+      __('Your changes on this page haven\'t been saved and will be lost.')
     "
     :onConfirm="
       () => {
@@ -127,13 +97,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { ref } from "vue";
 import type { NotificationName } from "./types";
-import { createResource, Switch, LoadingIndicator, Button } from "frappe-ui";
+import { createResource, Switch, Button } from "frappe-ui";
 import ConfirmDialog from "@/components/ConfirmDialog.vue";
 import { disableSettingModalOutsideClick } from "../settingsModal";
 import SettingsLayoutBase from "@/components/layouts/SettingsLayoutBase.vue";
-import UnsavedBadge from "@/components/UnsavedBadge.vue";
 
 const props = defineProps<{
   title: string;
@@ -199,13 +168,6 @@ function internalOnBack() {
   disableSettingModalOutsideClick.value = false;
   props.onBack();
 }
-
-watch(
-  () => unsavedChanges.value,
-  (val) => {
-    disableSettingModalOutsideClick.value = val;
-  }
-);
 
 defineExpose({
   setUnsavedChanges,

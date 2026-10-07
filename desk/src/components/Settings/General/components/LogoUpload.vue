@@ -1,8 +1,8 @@
 <template>
   <div
-    class="flex flex-col sm:flex-row items-center justify-between gap-4 mt-4 w-full"
+    class="flex w-full flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
   >
-    <div class="flex flex-col sm:flex-row items-center gap-3.5">
+    <div class="flex min-w-0 items-center gap-3">
       <div
         class="flex items-center justify-center min-w-16 min-h-16 rounded-lg overflow-hidden border border-outline-gray-1"
       >
@@ -12,7 +12,7 @@
           :image="props.image"
           :label="props.title"
         />
-        <FeatherIcon v-else name="image" class="size-6 text-ink-gray-4" />
+        <LucideImage v-else class="size-6 text-ink-gray-4" aria-hidden="true" />
       </div>
       <div class="flex flex-col gap-1 max-w-sm items-start">
         <span class="text-base-medium text-ink-gray-8">{{ title }}</span>
@@ -57,7 +57,8 @@
 </template>
 
 <script setup lang="ts">
-import { Avatar, Button, FeatherIcon, FileUploader } from "frappe-ui";
+import { Avatar, Button, FileUploader } from "frappe-ui";
+import LucideImage from "~icons/lucide/image";
 import ImageUpIcon from "~icons/lucide/image-up";
 
 const emit = defineEmits(["onUpload", "onRemove"]);

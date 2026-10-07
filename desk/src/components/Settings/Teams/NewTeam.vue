@@ -1,34 +1,16 @@
 <template>
-  <SettingsLayoutBase>
-    <template #title>
-      <div class="flex items-center gap-2">
-        <Button
-          variant="ghost"
-          icon-left="chevron-left"
-          :label="teamData.name || __('New Team')"
-          size="md"
-          @click="goBack()"
-          class="cursor-pointer -ml-4 hover:bg-transparent focus:bg-transparent focus:outline-none focus:ring-0 focus:ring-offset-0 focus-visible:none active:bg-transparent active:outline-none active:ring-0 active:ring-offset-0 active:text-ink-gray-5 font-semibold text-ink-gray-7 text-lg hover:opacity-70 !pr-0"
-        />
-        <UnsavedBadge :show="isDirty" />
-      </div>
-    </template>
+  <SettingsLayoutBase
+    :title="teamData.name || __('New team')"
+    :description="__('Name the team and pick its first members.')"
+    :back-label="__('Back to teams')"
+    :dirty="Boolean(isDirty)"
+    :save-label="__('Create team')"
+    :saving="teamsList.insert.loading"
+    @back="goBack()"
+    @save="saveTeam()"
+  >
     <template #header-actions>
-      <div class="flex items-center gap-4">
-        <div class="flex items-center gap-2 cursor-pointer">
-          <Switch v-model="teamData.enabled" />
-          <span class="text-sm-medium text-ink-gray-7">
-            {{ __("Enabled") }}
-          </span>
-        </div>
-        <Button
-          :label="__('Save')"
-          variant="solid"
-          @click="saveTeam()"
-          :disabled="!isDirty"
-          :loading="teamsList.insert.loading"
-        />
-      </div>
+      <Switch size="sm" :label="__('Enabled')" v-model="teamData.enabled" />
     </template>
     <template #content>
       <div class="flex flex-col gap-4">
@@ -41,7 +23,7 @@
             required
             @change="validateData('name')"
           />
-          <ErrorMessage :message="errors.name" />
+          <ErrorMessage role="alert" :message="errors.name" />
         </div>
         <div class="flex flex-col gap-1.5">
           <FormLabel :label="__('Members')" required size="md" />
@@ -51,7 +33,7 @@
               @change="validateData('agents')"
             />
           </div>
-          <ErrorMessage :message="errors.agents" />
+          <ErrorMessage role="alert" :message="errors.agents" />
         </div>
       </div>
     </template>
@@ -67,14 +49,7 @@
 <script setup lang="ts">
 import { computed, inject, onMounted, ref } from "vue";
 import SettingsLayoutBase from "@/components/layouts/SettingsLayoutBase.vue";
-import {
-  Badge,
-  ErrorMessage,
-  FormControl,
-  FormLabel,
-  Switch,
-  toast,
-} from "frappe-ui";
+import { ErrorMessage, FormControl, FormLabel, Switch, toast } from "frappe-ui";
 import { __ } from "@/translation";
 import AgentSelector from "./components/AgentSelector.vue";
 import { useAgentStore } from "@/stores/agent";
@@ -114,9 +89,9 @@ const errors = ref({
 const goBack = () => {
   const confirmDialogInfo = {
     show: true,
-    title: __("Unsaved changes"),
+    title: __("Leave without saving?"),
     message: __(
-      "Are you sure you want to go back? Unsaved changes will be lost."
+      "Your changes on this page haven't been saved and will be lost."
     ),
     onConfirm: goBack,
   };
@@ -135,7 +110,9 @@ const goBack = () => {
 const saveTeam = () => {
   validateData();
   if (Object.values(errors.value).some((error) => error)) {
-    toast.error(__("Please fill all required fields"));
+    toast.error(
+      __("Add a name and at least one member, then create the team.")
+    );
     return;
   }
   teamsList.insert.submit(
@@ -160,12 +137,12 @@ const validateData = (key?: string) => {
     switch (field) {
       case "name":
         teamData.value.name?.length == 0
-          ? (errors.value.name = "Name is required")
+          ? (errors.value.name = __("Give the team a name."))
           : (errors.value.name = "");
         break;
       case "agents":
         teamData.value.agents.length == 0
-          ? (errors.value.agents = "At least one team member is required")
+          ? (errors.value.agents = __("Add at least one member."))
           : (errors.value.agents = "");
         break;
     }

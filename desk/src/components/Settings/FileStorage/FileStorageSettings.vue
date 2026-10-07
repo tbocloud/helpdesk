@@ -1,53 +1,35 @@
 <template>
   <SettingsLayoutBase
+    :title="__('File storage')"
     :description="
       __(
         'Keep attachments in your own S3 bucket instead of on this server. People still open them from helpdesk, with the same access rules.'
       )
     "
+    :dirty="isDirty"
+    :saving="save.loading"
+    :loading="!form && !settings.error"
+    :error="settings.error"
+    @retry="settings.reload()"
+    @save="save.submit()"
   >
-    <template #title>
-      <div class="flex items-center gap-2">
-        <h1 class="text-lg-semibold text-ink-gray-8">
-          {{ __("File storage") }}
-        </h1>
-        <UnsavedBadge :show="isDirty" />
-      </div>
-    </template>
-    <template #header-actions>
-      <Transition name="fade">
-        <Button
-          v-if="isDirty"
-          variant="solid"
-          :label="__('Save')"
-          :loading="save.loading"
-          @click="save.submit()"
-        />
-      </Transition>
-    </template>
     <template #content>
-      <div
-        v-if="!form"
-        class="flex items-center justify-center absolute inset-x-0 top-5.5 bottom-0"
-      >
-        <LoadingIndicator class="w-4" />
-      </div>
-      <div v-else class="flex flex-col">
-        <SettingRow
-          :label="__('Store files in S3')"
-          :description="
-            __(
-              'New attachments of the document types below go to the bucket. Turn it on after the connection test passes.'
-            )
-          "
-        >
-          <Switch v-model="form.enabled" />
-        </SettingRow>
+      <div v-if="form">
+        <SettingsSection :title="__('Storage')">
+          <SettingRow
+            v-slot="{ id }"
+            :label="__('Store files in S3')"
+            :description="
+              __(
+                'New attachments of the document types below go to the bucket. Turn it on after the connection test passes.'
+              )
+            "
+          >
+            <Switch :id="id" v-model="form.enabled" />
+          </SettingRow>
+        </SettingsSection>
 
-        <hr class="my-8" />
-
-        <section class="flex flex-col gap-4">
-          <h2 class="text-base-semibold text-ink-gray-9">{{ __("Bucket") }}</h2>
+        <SettingsSection :title="__('Bucket')">
           <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <FormControl
               v-model="form.bucket"
@@ -94,7 +76,7 @@
               :label="__('Test connection')"
               :loading="test.loading"
               :disabled="isDirty"
-              :tooltip="isDirty ? __('Save first') : ''"
+              :tooltip="isDirty ? __('Save your changes first') : ''"
               @click="test.submit()"
             >
               <template #prefix
@@ -115,46 +97,19 @@
               {{ lastTest.message }}
             </span>
           </div>
-        </section>
+        </SettingsSection>
 
-        <hr class="my-8" />
-
-        <section class="flex flex-col gap-4">
-          <h2 class="text-base-semibold text-ink-gray-9">
-            {{ __("What goes to S3") }}
-          </h2>
+        <SettingsSection :title="__('What goes to S3')">
           <div class="flex flex-col gap-2">
             <span class="text-base-medium text-ink-gray-8">{{
               __("Attachments of")
             }}</span>
-            <div class="flex flex-wrap items-center gap-2">
-              <span
-                v-for="dt in form.document_types"
-                :key="dt"
-                class="inline-flex h-7 items-center gap-1 rounded-full bg-surface-gray-2 ps-2.5 pe-1 text-sm text-ink-gray-8"
-              >
-                {{ dt }}
-                <button
-                  type="button"
-                  class="grid size-5 place-items-center rounded-full text-ink-gray-5 hover:bg-surface-gray-4 hover:text-ink-gray-8"
-                  :aria-label="__('Remove {0}', dt)"
-                  @click="
-                    form.document_types = form.document_types.filter(
-                      (d) => d !== dt
-                    )
-                  "
-                >
-                  <LucideX class="size-3.5" aria-hidden="true" />
-                </button>
-              </span>
-              <Link
-                v-model="newDoctype"
-                class="w-56"
-                doctype="DocType"
-                :filters="{ istable: 0, issingle: 0 }"
-                :placeholder="__('Add a document type')"
-              />
-            </div>
+            <ChipListInput
+              v-model="form.document_types"
+              doctype="DocType"
+              :filters="{ istable: 0, issingle: 0 }"
+              :placeholder="__('Add a document type')"
+            />
           </div>
           <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <FormControl
@@ -170,6 +125,7 @@
             />
           </div>
           <SettingRow
+            v-slot="{ id }"
             :label="__('Keep a copy on this server')"
             :description="
               form.keep_local_copy
@@ -181,24 +137,27 @@
                   )
             "
           >
-            <Switch v-model="form.keep_local_copy" />
+            <Switch :id="id" v-model="form.keep_local_copy" />
           </SettingRow>
           <SettingRow
+            v-slot="{ id }"
             :label="__('Delete from the bucket when a file is deleted')"
             :description="
               __('Keep this on unless your bucket keeps old versions for you.')
             "
           >
-            <Switch v-model="form.delete_from_bucket" />
+            <Switch :id="id" v-model="form.delete_from_bucket" />
           </SettingRow>
-        </section>
+        </SettingsSection>
 
-        <hr class="my-8" />
-
-        <section class="flex flex-col gap-3">
-          <h2 class="text-base-semibold text-ink-gray-9">
-            {{ __("Existing files") }}
-          </h2>
+        <SettingsSection
+          :title="__('Existing files')"
+          :description="
+            __(
+              'Copies them to the bucket in the background. Files that fail to upload stay on this server and are listed in the Error Log.'
+            )
+          "
+        >
           <p v-if="overview.data" class="text-p-sm text-ink-gray-6">
             <span class="font-mono tabular-nums">{{
               overview.data.in_bucket
@@ -221,40 +180,24 @@
               /></template>
             </Button>
           </div>
-          <p class="text-p-sm text-ink-gray-5">
-            {{
-              __(
-                "Copies them to the bucket in the background. Files that fail to upload stay on this server and are listed in the Error Log."
-              )
-            }}
-          </p>
-        </section>
+        </SettingsSection>
       </div>
     </template>
   </SettingsLayoutBase>
 </template>
 
 <script setup lang="ts">
-import { Link } from "@/components";
 import SettingsLayoutBase from "@/components/layouts/SettingsLayoutBase.vue";
-import UnsavedBadge from "@/components/UnsavedBadge.vue";
 import { __ } from "@/translation";
-import {
-  Button,
-  createResource,
-  FormControl,
-  LoadingIndicator,
-  Switch,
-  toast,
-} from "frappe-ui";
-import { computed, ref, watch } from "vue";
+import { Button, createResource, FormControl, Switch, toast } from "frappe-ui";
+import { computed, ref } from "vue";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideCloudUpload from "~icons/lucide/cloud-upload";
 import LucidePlugZap from "~icons/lucide/plug-zap";
-import LucideX from "~icons/lucide/x";
-import SettingRow from "../Content/SettingRow.vue";
-import { disableSettingModalOutsideClick } from "../settingsModal";
+import ChipListInput from "../ChipListInput.vue";
+import SettingRow from "../SettingRow.vue";
+import SettingsSection from "../SettingsSection.vue";
 
 interface StorageForm {
   enabled: boolean;
@@ -276,7 +219,6 @@ const siteName = window.location.hostname;
 const form = ref<StorageForm | null>(null);
 const initial = ref("");
 const hasSecret = ref(false);
-const newDoctype = ref("");
 const lastTest = ref<{ ok: boolean; message: string } | null>(null);
 
 const settings = createResource({
@@ -318,14 +260,6 @@ const overview = createResource({
 const isDirty = computed(
   () => !!form.value && JSON.stringify(form.value) !== initial.value
 );
-watch(isDirty, (dirty) => (disableSettingModalOutsideClick.value = dirty));
-
-watch(newDoctype, (dt) => {
-  if (!dt || !form.value) return;
-  if (!form.value.document_types.includes(dt))
-    form.value.document_types.push(dt);
-  newDoctype.value = "";
-});
 
 const save = createResource({
   url: "frappe.client.set_value",

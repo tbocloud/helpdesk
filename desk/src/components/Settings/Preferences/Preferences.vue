@@ -1,59 +1,46 @@
 <template>
-  <SettingsLayoutBase :description="__('Manage your personal preferences.')">
-    <template #title>
-      <div class="flex items-center gap-2">
-        <h1 class="text-lg-semibold text-ink-gray-8">
-          {{ __("Preferences") }}
-        </h1>
-        <UnsavedBadge :show="isDirty" />
-      </div>
-    </template>
-    <template #header-actions>
-      <Transition name="fade">
-        <Button
-          v-if="isDirty"
-          variant="solid"
-          :label="__('Save')"
-          :loading="user.save.loading"
-          @click="save"
-        />
-      </Transition>
-    </template>
+  <SettingsLayoutBase
+    :title="__('Preferences')"
+    :description="
+      __(
+        'Your theme, language and timezone. Only you see these; saving reloads the app.'
+      )
+    "
+    :dirty="isDirty"
+    :saving="user.save.loading"
+    :loading="user.get.loading && !user.doc"
+    :error="user.get.error"
+    @retry="user.reload()"
+    @save="save"
+  >
     <template #content>
-      <div class="flex flex-col">
-        <div>
-          <div class="text-base-semibold text-ink-gray-9">
-            {{ __("Appearance") }}
-          </div>
+      <div>
+        <SettingsSection
+          :title="__('Appearance')"
+          :description="__('The theme changes straight away.')"
+        >
           <ThemeSwitcher
             :name="config.brandName"
             :logo="config.brandLogo || HDLogo"
           />
-        </div>
-        <hr class="my-8" />
-        <div>
-          <div class="text-base-semibold text-ink-gray-9">
-            {{ __("Language & Time") }}
-          </div>
-          <div class="mt-6">
-            <LanguageTimezoneSetting :user="user" />
-          </div>
-        </div>
+        </SettingsSection>
+        <SettingsSection :title="__('Language and time')">
+          <LanguageTimezoneSetting :user="user" />
+        </SettingsSection>
       </div>
     </template>
   </SettingsLayoutBase>
 </template>
 
 <script setup lang="ts">
-import { computed, watch } from "vue";
-import { Button, createDocumentResource, toast } from "frappe-ui";
+import { computed } from "vue";
+import { createDocumentResource, toast } from "frappe-ui";
 import SettingsLayoutBase from "@/components/layouts/SettingsLayoutBase.vue";
-import UnsavedBadge from "@/components/UnsavedBadge.vue";
 import HDLogo from "@/assets/logos/HDLogo.vue";
 import { __ } from "@/translation";
 import { useAuthStore } from "@/stores/auth";
 import { useConfigStore } from "@/stores/config";
-import { disableSettingModalOutsideClick } from "../settingsModal";
+import SettingsSection from "../SettingsSection.vue";
 import ThemeSwitcher from "./components/ThemeSwitcher.vue";
 import LanguageTimezoneSetting from "./components/LanguageTimezoneSetting.vue";
 
@@ -81,8 +68,4 @@ function save() {
     },
   });
 }
-
-watch(isDirty, (value) => {
-  disableSettingModalOutsideClick.value = value;
-});
 </script>

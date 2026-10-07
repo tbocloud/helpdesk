@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="flex flex-col gap-1">
-      <span class="text-lg-semibold text-ink-gray-8">{{
+      <span class="text-base-semibold text-ink-gray-9">{{
         __("Assignee Rules")
       }}</span>
       <span class="text-p-sm text-ink-gray-6">

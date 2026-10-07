@@ -1,148 +1,102 @@
 <template>
-  <SettingsLayoutBase>
-    <template #title>
-      <div class="flex items-center gap-2">
-        <h1 class="text-lg-semibold text-ink-gray-8">
-          {{ __("Field Dependencies") }}
-        </h1>
-      </div>
-    </template>
+  <SettingsLayoutBase :title="__('Field Dependencies')">
     <template #description>
-      <p class="text-p-sm max-w-md text-ink-gray-6">
+      <p class="max-w-prose text-p-sm text-ink-gray-6">
         {{
           __(
-            "Create field dependencies to dynamically update options based on user selections. Learn more about field dependencies"
+            "Narrow one ticket field's options by what was picked in another, e.g. sub-categories by category."
           )
         }}
         <a
           href="https://docs.frappe.io/helpdesk/field-dependency"
           target="_blank"
+          rel="noopener noreferrer"
           class="underline"
-          >{{ __("here.") }}</a
+          >{{ __("How field dependencies work") }}</a
         >
       </p>
     </template>
     <template #header-actions>
       <Button
-        :label="__('New')"
-        theme="gray"
         variant="solid"
+        :label="__('New field dependency')"
         @click="$emit('update:step', 'fd')"
-        icon-left="lucide-plus"
-      />
+      >
+        <template #prefix>
+          <LucidePlus class="size-4" aria-hidden="true" />
+        </template>
+      </Button>
     </template>
     <template #content>
-      <div class="grow">
-        <!-- Loading State -->
-        <div
-          v-if="fieldDependenciesList.loading"
-          class="flex items-center justify-center py-4"
-        >
-          <LoadingIndicator :scale="5" />
-        </div>
-
-        <!-- Empty State -->
-        <EmptyState
-          v-if="
-            !fieldDependenciesList.loading &&
-            !fieldDependenciesList.data?.length
-          "
-          variant="badge"
-          :icon="FieldDependencyIcon"
-          title="No field dependency found"
-          description="Add one to get started."
-        />
-
-        <div
-          class="w-full -ml-2"
-          v-if="
-            !fieldDependenciesList.loading &&
-            fieldDependenciesList.data?.length > 0
-          "
-        >
-          <div>
-            <div
-              class="grid grid-cols-11 items-center gap-4 text-sm text-ink-gray-5"
-            >
-              <div class="col-span-7 ml-2">{{ __("Name") }}</div>
-              <div class="col-span-2">{{ __("Created by") }}</div>
-              <div class="col-span-2">{{ __("Enabled") }}</div>
-            </div>
-            <hr class="mt-2 mx-2" />
-            <div
-              v-for="(row, index) in fieldDependenciesList.data"
-              :key="row.name"
-            >
-              <div
-                class="grid grid-cols-11 items-center gap-4 cursor-pointer hover:bg-surface-sidebar rounded h-12.5"
+      <SettingsList
+        :items="fieldDependenciesList.data"
+        :label="__('Field dependencies')"
+        :loading="fieldDependenciesList.list.loading"
+        :error="fieldDependenciesList.list.error"
+        :empty-icon="FieldDependencyIcon"
+        :empty-title="__('No field dependencies yet')"
+        :empty-message="
+          __('Add one to show only the options that fit an earlier choice.')
+        "
+        @retry="fieldDependenciesList.reload()"
+      >
+        <template #default="{ item: row }">
+          <SettingsListItem
+            :title="getFieldDependencyLabel(row.name)"
+            :muted="!row.enabled"
+            @open="$emit('update:step', 'fd', row.name)"
+          >
+            <template #meta>
+              <span
+                class="hidden w-40 shrink-0 items-center gap-1.5 text-sm text-ink-gray-7 md:flex"
               >
-                <div
-                  @click.stop="$emit('update:step', 'fd', row.name)"
-                  class="w-full py-3 pl-2 col-span-7 text-base text-ink-gray-7"
-                >
-                  <span>{{ getFieldDependencyLabel(row.name) }}</span>
-                </div>
-                <div class="col-span-2 flex items-center gap-1">
-                  <Avatar size="sm" :image="row.owner" :label="row.owner" />
-                  <span class="text-base text-ink-gray-7 truncate">{{
-                    row.owner
-                  }}</span>
-                </div>
-                <div
-                  class="flex justify-between items-center w-full pr-2 col-span-2"
-                >
-                  <div>
-                    <Switch
-                      :model-value="Boolean(row.enabled)"
-                      @update:modelValue="(e) => handleSwitchToggle(row, e)"
-                      @click.stop
-                    />
-                  </div>
-                  <div>
-                    <Dropdown placement="right" :options="getOptions(row.name)">
-                      <Button
-                        variant="ghost"
-                        @click.stop="
-                          () => {
-                            isConfirmingDelete = false;
-                          }
-                        "
-                      >
-                        <template #icon>
-                          <LucideMoreHorizontal class="h-4 w-4" />
-                        </template>
-                      </Button>
-                    </Dropdown>
-                  </div>
-                </div>
-              </div>
-              <hr
-                v-if="index !== fieldDependenciesList.data.length - 1"
-                class="mx-2"
+                <Avatar size="sm" :image="row.owner" :label="row.owner" />
+                <span class="truncate" :title="row.owner">{{ row.owner }}</span>
+              </span>
+            </template>
+            <template #actions>
+              <Switch
+                size="sm"
+                :label="__('Enabled')"
+                :model-value="Boolean(row.enabled)"
+                @update:model-value="(e) => handleSwitchToggle(row, e)"
               />
-            </div>
-          </div>
-        </div>
-      </div>
+              <Dropdown placement="right" :options="getOptions(row.name)">
+                <Button
+                  variant="ghost"
+                  :label="
+                    __(
+                      'More actions for {0}',
+                      getFieldDependencyLabel(row.name)
+                    )
+                  "
+                  @click="isConfirmingDelete = false"
+                >
+                  <template #icon>
+                    <LucideEllipsis class="size-4" aria-hidden="true" />
+                  </template>
+                </Button>
+              </Dropdown>
+            </template>
+          </SettingsListItem>
+        </template>
+      </SettingsList>
     </template>
   </SettingsLayoutBase>
 </template>
 
 <script setup lang="ts">
-import {
-  Avatar,
-  Button,
-  Dropdown,
-  LoadingIndicator,
-  Switch,
-  toast,
-} from "frappe-ui";
+import { Avatar, Button, Dropdown, Switch, toast } from "frappe-ui";
+import LucideEllipsis from "~icons/lucide/ellipsis";
+import LucidePlus from "~icons/lucide/plus";
 import { getFieldDependencyLabel, ConfirmDelete } from "@/utils";
 import { onMounted, ref } from "vue";
 import { fieldDependenciesList } from "./fieldDependency";
 import FieldDependencyIcon from "@/components/icons/FieldDependencyIcon.vue";
 import { __ } from "@/translation";
 import SettingsLayoutBase from "@/components/layouts/SettingsLayoutBase.vue";
+import SettingsList from "../SettingsList.vue";
+import SettingsListItem from "../SettingsListItem.vue";
 
 onMounted(() => {
   fieldDependenciesList.reload();

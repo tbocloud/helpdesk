@@ -1,46 +1,28 @@
 <template>
-  <SettingsLayoutBase>
-    <template #title>
-      <div class="flex items-center gap-2">
-        <Button
-          variant="ghost"
-          icon-left="chevron-left"
-          :label="slaData.service_level || __('New SLA Policy')"
-          size="md"
-          @click="goBack()"
-          class="cursor-pointer -ml-4 hover:bg-transparent focus:bg-transparent focus:outline-none focus:ring-0 focus:ring-offset-0 focus-visible:none active:bg-transparent active:outline-none active:ring-0 active:ring-offset-0 active:text-ink-gray-5 font-semibold text-ink-gray-7 text-lg hover:opacity-70 !pr-0"
-        />
-        <UnsavedBadge :show="isDirty" />
-      </div>
-    </template>
+  <SettingsLayoutBase
+    :title="slaData.service_level || __('New SLA policy')"
+    :back-label="__('Back to SLA policies')"
+    :dirty="isDirty"
+    :save-label="
+      slaActiveScreen.data ? __('Save changes') : __('Create policy')
+    "
+    :save-disabled="Boolean(!isDirty && slaActiveScreen.data)"
+    :saving="slaPolicyList.insert.loading || slaPolicyList.setValue.loading"
+    :loading="Boolean(slaData.loading)"
+    :error="getSlaData.error"
+    @retry="getSlaData.submit()"
+    @back="goBack()"
+    @save="saveSla()"
+  >
     <template #header-actions>
-      <div class="flex gap-4 items-center">
-        <div
-          class="flex items-center justify-between gap-2 cursor-pointer"
-          @click="toggleEnabled"
-        >
-          <Switch size="sm" v-model="slaData.enabled" />
-          <span class="text-sm-medium text-ink-gray-7">
-            {{ __("Enabled") }}
-          </span>
-        </div>
-        <Button
-          :label="__('Save')"
-          theme="gray"
-          variant="solid"
-          @click="saveSla()"
-          :disabled="Boolean(!isDirty && slaActiveScreen.data)"
-          :loading="slaData.loading || slaPolicyList.setValue.loading"
-        />
-      </div>
+      <Switch
+        size="sm"
+        :label="__('Enabled')"
+        :model-value="Boolean(slaData.enabled)"
+        @update:model-value="toggleEnabled"
+      />
     </template>
     <template #content>
-      <div
-        v-if="slaData.loading"
-        class="flex items-center justify-center absolute inset-x-0 top-5.5 bottom-0"
-      >
-        <LoadingIndicator class="w-4" />
-      </div>
       <div v-if="!slaData.loading">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
           <div>
@@ -68,10 +50,10 @@
             maxlength="140"
           />
         </div>
-        <hr class="my-8" />
+        <hr class="my-6 border-outline-gray-2" />
         <div>
           <div class="flex flex-col gap-1">
-            <span class="text-lg-semibold text-ink-gray-8">{{
+            <span class="text-base-semibold text-ink-gray-9">{{
               __("Assignment Conditions")
             }}</span>
             <span class="text-p-sm text-ink-gray-6">
@@ -134,10 +116,10 @@
             </div>
           </div>
         </div>
-        <hr class="my-8" />
+        <hr class="my-6 border-outline-gray-2" />
         <div>
           <div class="flex flex-col gap-1">
-            <span class="text-lg-semibold text-ink-gray-8">
+            <span class="text-base-semibold text-ink-gray-9">
               {{ __("Valid From") }}
             </span>
             <span class="text-p-sm text-ink-gray-6">
@@ -181,10 +163,10 @@
             </div>
           </div>
         </div>
-        <hr class="my-8" />
+        <hr class="my-6 border-outline-gray-2" />
         <div>
           <div class="flex flex-col gap-1">
-            <span class="text-lg-semibold text-ink-gray-8">
+            <span class="text-base-semibold text-ink-gray-9">
               {{ __("Response and Resolution") }}
             </span>
             <span class="text-p-sm text-ink-gray-6">
@@ -229,10 +211,10 @@
             </div>
           </div>
         </div>
-        <hr class="my-8" />
+        <hr class="my-6 border-outline-gray-2" />
         <div>
           <div class="flex flex-col gap-1">
-            <span class="text-lg-semibold text-ink-gray-8">
+            <span class="text-base-semibold text-ink-gray-9">
               {{ __("Status Details") }}
             </span>
             <span class="text-p-sm text-ink-gray-6">
@@ -247,7 +229,7 @@
             <SlaStatusList />
           </div>
         </div>
-        <hr class="my-8" />
+        <hr class="my-6 border-outline-gray-2" />
         <SlaHolidays />
       </div>
     </template>
@@ -279,7 +261,6 @@ import {
   DatePicker,
   ErrorMessage,
   FormLabel,
-  LoadingIndicator,
   Popover,
   Switch,
   toast,
@@ -293,7 +274,6 @@ import { disableSettingModalOutsideClick } from "../settingsModal";
 import { useOnboarding } from "frappe-ui/frappe";
 import { __ } from "@/translation";
 import SettingsLayoutBase from "@/components/layouts/SettingsLayoutBase.vue";
-import UnsavedBadge from "@/components/UnsavedBadge.vue";
 import { SlaPolicyListResourceSymbol } from "@/types";
 import { HDServiceLevelAgreement } from "@/types/doctypes";
 
@@ -361,9 +341,9 @@ if (slaActiveScreen.value.data && slaActiveScreen.value.fetchData) {
 const goBack = () => {
   const confirmDialogInfo = {
     show: true,
-    title: __("Unsaved changes"),
+    title: __("Leave without saving?"),
     message: __(
-      "Are you sure you want to go back? Unsaved changes will be lost."
+      "Your changes on this page haven't been saved and will be lost."
     ),
     onConfirm: goBack,
   };

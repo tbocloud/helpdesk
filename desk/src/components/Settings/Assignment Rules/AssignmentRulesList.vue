@@ -1,27 +1,22 @@
 <template>
-  <SettingsLayoutBase>
-    <template #title>
-      <h1 class="text-lg-semibold text-ink-gray-8">
-        {{ __("Assignment Rules") }}
-      </h1>
-    </template>
-    <template #description>
-      <p class="text-p-sm max-w-md text-ink-gray-6">
-        {{
-          __(
-            "Assignment Rules automatically route tickets to the right team members based on predefined conditions."
-          )
-        }}
-      </p>
-    </template>
+  <SettingsLayoutBase
+    :title="__('Assignment Rules')"
+    :description="
+      __(
+        'Assignment Rules automatically route tickets to the right team members based on predefined conditions.'
+      )
+    "
+  >
     <template #header-actions>
       <Button
-        :label="__('New')"
-        theme="gray"
         variant="solid"
+        :label="__('New assignment rule')"
         @click="goToNew()"
-        icon-left="lucide-plus"
-      />
+      >
+        <template #prefix>
+          <LucidePlus class="size-4" aria-hidden="true" />
+        </template>
+      </Button>
     </template>
     <template
       v-if="
@@ -30,27 +25,10 @@
       "
       #header-bottom
     >
-      <div class="relative">
-        <TextInput
-          :model-value="assignmentRuleSearchQuery"
-          @update:model-value="assignmentRuleSearchQuery = $event"
-          :placeholder="__('Search')"
-          type="text"
-          class="focus:ring-0 border-outline-gray-2"
-          :debounce="300"
-        >
-          <template #prefix>
-            <LucideSearch class="size-4" />
-          </template>
-        </TextInput>
-        <Button
-          v-if="assignmentRuleSearchQuery"
-          icon="lucide-x"
-          variant="ghost"
-          @click="assignmentRuleSearchQuery = ''"
-          class="absolute right-1 top-1/2 -translate-y-1/2"
-        />
-      </div>
+      <SettingsSearch
+        v-model="assignmentRuleSearchQuery"
+        :placeholder="__('Search assignment rules')"
+      />
     </template>
     <template #content>
       <AssignmentRulesListView />
@@ -67,6 +45,8 @@ import {
 } from "@/stores/assignmentRules";
 import AssignmentRulesListView from "./AssignmentRulesListView.vue";
 import SettingsLayoutBase from "@/components/layouts/SettingsLayoutBase.vue";
+import LucidePlus from "~icons/lucide/plus";
+import SettingsSearch from "../SettingsSearch.vue";
 import { AssignmentRuleListResourceSymbol } from "@/types";
 
 const assignmentRulesListData = createResource({

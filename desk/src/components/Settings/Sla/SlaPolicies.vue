@@ -1,59 +1,36 @@
 <template>
-  <SettingsLayoutBase>
-    <template #title>
-      <h1 class="text-lg-semibold text-ink-gray-8">
-        {{ __("Service Level Agreements (SLAs)") }}
-      </h1>
-    </template>
+  <SettingsLayoutBase :title="__('SLA Policies')">
     <template #description>
-      <p class="text-p-sm max-w-md text-ink-gray-6">
+      <p class="max-w-prose text-p-sm text-ink-gray-6">
         {{
           __(
-            "SLAs align your team and customers with defined timelines for a reliable experience. Learn more about SLA "
+            "How fast tickets must get a first response and a resolution, by priority and working hours."
           )
         }}
         <a
           href="https://docs.frappe.io/helpdesk/service-level-agreement"
           target="_blank"
+          rel="noopener noreferrer"
           class="underline"
-          >{{ __("here.") }}
-        </a>
+          >{{ __("How SLAs work") }}</a
+        >
       </p>
     </template>
     <template #header-actions>
-      <Button
-        :label="__('New')"
-        theme="gray"
-        variant="solid"
-        @click="goToNew()"
-        icon-left="lucide-plus"
-      />
+      <Button variant="solid" :label="__('New SLA policy')" @click="goToNew()">
+        <template #prefix>
+          <LucidePlus class="size-4" aria-hidden="true" />
+        </template>
+      </Button>
     </template>
     <template
       v-if="slaPolicyList.data?.length > 9 || slaSearchQuery.length"
       #header-bottom
     >
-      <div class="relative">
-        <TextInput
-          :model-value="slaSearchQuery"
-          @update:model-value="slaSearchQuery = $event"
-          :placeholder="__('Search')"
-          type="text"
-          class="focus:ring-0 border-outline-gray-2"
-          :debounce="300"
-        >
-          <template #prefix>
-            <LucideSearch class="size-4" />
-          </template>
-        </TextInput>
-        <Button
-          v-if="slaSearchQuery"
-          icon="lucide-x"
-          variant="ghost"
-          @click="slaSearchQuery = ''"
-          class="absolute right-1 top-1/2 -translate-y-1/2"
-        />
-      </div>
+      <SettingsSearch
+        v-model="slaSearchQuery"
+        :placeholder="__('Search SLA policies')"
+      />
     </template>
     <template #content>
       <SlaPolicyList />
@@ -64,6 +41,8 @@
 <script setup lang="ts">
 import { resetSlaData, slaActiveScreen } from "@/stores/sla";
 import { Button } from "frappe-ui";
+import LucidePlus from "~icons/lucide/plus";
+import SettingsSearch from "../SettingsSearch.vue";
 import SlaPolicyList from "./SlaPolicyList.vue";
 import { inject, Ref, watch } from "vue";
 import SettingsLayoutBase from "@/components/layouts/SettingsLayoutBase.vue";

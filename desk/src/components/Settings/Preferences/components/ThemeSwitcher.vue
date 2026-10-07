@@ -1,8 +1,10 @@
 <template>
-  <div class="flex flex-col gap-4 mt-6">
+  <div class="flex flex-col gap-4">
     <div class="flex flex-col gap-1">
       <slot name="title">
-        <span class="text-base-medium text-ink-gray-8">{{ __("Theme") }}</span>
+        <span :id="labelId" class="text-base-medium text-ink-gray-8">{{
+          __("Theme")
+        }}</span>
       </slot>
       <slot name="description">
         <span class="text-p-sm text-ink-gray-6">
@@ -12,15 +14,22 @@
     </div>
     <div>
       <slot name="content">
-        <div class="flex items-center gap-3" role="radiogroup">
-          <div
+        <div
+          class="grid grid-cols-1 gap-3 sm:grid-cols-3"
+          role="radiogroup"
+          :aria-labelledby="labelId"
+        >
+          <button
             v-for="option in themeOptions"
             :key="option.value"
-            class="flex-1 rounded-lg border cursor-pointer min-h-[42px]"
+            type="button"
+            role="radio"
+            :aria-checked="theme === option.value"
+            class="min-h-[42px] min-w-0 overflow-hidden rounded-lg border text-left"
             :class="
               theme === option.value
-                ? 'border-outline-gray-7'
-                : 'border-outline-elevation-2'
+                ? 'border-brand ring-1 ring-brand'
+                : 'border-outline-gray-2 hover:border-outline-gray-4'
             "
             @click="theme = option.value"
           >
@@ -83,15 +92,16 @@
                 {{ __(option.label) }}
               </div>
               <div
-                class="rounded-full size-3.5"
+                class="size-3.5 rounded-full"
                 :class="
                   theme === option.value
-                    ? 'border-4 border-outline-gray-7'
+                    ? 'border-4 border-brand'
                     : 'border border-outline-gray-4'
                 "
+                aria-hidden="true"
               />
             </div>
-          </div>
+          </button>
         </div>
       </slot>
     </div>
@@ -101,7 +111,9 @@
 <script setup lang="ts">
 import { __ } from "@/translation";
 import { useTheme, type Theme } from "frappe-ui";
-import { computed, type Component } from "vue";
+import { computed, useId, type Component } from "vue";
+
+const labelId = `theme-label-${useId()}`;
 
 type Pane = {
   tone: "light" | "dark";
