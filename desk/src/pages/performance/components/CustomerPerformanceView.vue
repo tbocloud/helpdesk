@@ -588,7 +588,7 @@ import {
 } from "../performanceMeta";
 import DeliveryByCustomerChart from "./DeliveryByCustomerChart.vue";
 import DeliveryTrendChart from "./DeliveryTrendChart.vue";
-import StatTile from "./StatTile.vue";
+import StatTile from "@/components/StatTile.vue";
 
 const props = defineProps<{ data: any; periodLabel: string }>();
 const emit = defineEmits<{

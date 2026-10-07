@@ -1,5 +1,5 @@
 <template>
-  <HomeCard
+  <SectionCard
     :title="__('Needs attention')"
     :to="{ name: 'WorkOverview' }"
     :link-label="__('Overview')"
@@ -57,7 +57,7 @@
         </li>
       </ul>
     </div>
-  </HomeCard>
+  </SectionCard>
 </template>
 
 <script setup lang="ts">
@@ -82,7 +82,7 @@ import {
   type AttentionGroup,
   type AttentionReason,
 } from "../homeMeta";
-import HomeCard from "./HomeCard.vue";
+import SectionCard from "@/components/SectionCard.vue";
 import HomeItemRow from "./HomeItemRow.vue";
 
 defineProps<{ groups: AttentionGroup[] }>();
