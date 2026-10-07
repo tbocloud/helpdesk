@@ -1,6 +1,7 @@
 # UI guidelines: deliberate, human-designed interfaces
 
-The owner's standing rule for every screen in the helpdesk app (`desk/`). Read it together
+The owner's standing rule for every screen people use: the helpdesk app (`desk/`) and the
+server-rendered portals and pages (`helpdesk/www/`, e.g. the content portal). Read it together
 with [engineering-guardrails.md](engineering-guardrails.md), and with the TBO theme in
 `desk/src/theme.css` and `AGENTS.md`.
 
