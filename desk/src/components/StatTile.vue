@@ -1,7 +1,7 @@
 <template>
   <!-- one tile for every count: static, a link (`to`) or a toggle (`pressed`) -->
   <component
-    :is="to ? RouterLink : pressed !== undefined ? 'button' : 'div'"
+    :is="to ? RouterLink : pressed !== undefined ? NativeButton : 'div'"
     v-bind="
       to
         ? { to }
@@ -74,6 +74,7 @@
 </template>
 
 <script setup lang="ts">
+import NativeButton from "@/components/NativeButton";
 import { FILL, INK, TRACK, type Tone } from "@/components/tone";
 import { computed, type Component } from "vue";
 import { RouterLink, type RouteLocationRaw } from "vue-router";
