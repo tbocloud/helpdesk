@@ -390,10 +390,10 @@
 </template>
 
 <script setup lang="ts">
+import type { Tone } from "@/components/tone";
 import { __ } from "@/translation";
 import { onTimeTone } from "@/pages/performance/performanceMeta";
 import TaskStatusBadge from "@/pages/tasky/components/TaskStatusBadge.vue";
-import type { Tone } from "@/pages/tasky/taskMeta";
 import { Avatar, Button, createResource, dayjs } from "frappe-ui";
 import { type Component, computed, markRaw, ref, watch } from "vue";
 import LucideBan from "~icons/lucide/ban";

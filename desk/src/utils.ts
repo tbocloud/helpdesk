@@ -912,6 +912,13 @@ export function hasPermission() {
   return authStore.isAdmin || authStore.isManager;
 }
 
+/** A failed call's server message, or `fallback`; empty when there is no error. */
+export function errorText(err: unknown, fallback: string): string {
+  if (!err) return "";
+  const e = err as { messages?: string[]; message?: string };
+  return e.messages?.length ? e.messages.join(" ") : e.message || fallback;
+}
+
 export function getErrorMessage(
   error: any,
   showToast: boolean = false

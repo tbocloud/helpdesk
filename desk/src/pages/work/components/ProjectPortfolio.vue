@@ -492,8 +492,8 @@
 import { Link, UserAvatar } from "@/components";
 import StatTile from "@/components/StatTile.vue";
 import TaskStatusBadge from "@/pages/tasky/components/TaskStatusBadge.vue";
-import TaskyBadge from "@/pages/tasky/components/TaskyBadge.vue";
-import TaskyState from "@/pages/tasky/components/TaskyState.vue";
+import TaskyBadge from "@/components/TaskyBadge.vue";
+import TaskyState from "@/components/TaskyState.vue";
 import { __ } from "@/translation";
 import { Button, createResource, dayjs } from "frappe-ui";
 import { computed, reactive, watch, type Component } from "vue";

@@ -331,7 +331,7 @@
 
 <script setup lang="ts">
 import { __ } from "@/translation";
-import { dateFormat, dateTooltipFormat, timeAgo } from "@/utils";
+import { dateFormat, dateTooltipFormat, errorText, timeAgo } from "@/utils";
 import { Button, Dialog, createResource, toast } from "frappe-ui";
 import { ref, watch } from "vue";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
@@ -346,7 +346,7 @@ import LucideUsers from "~icons/lucide/users";
 import FileForPicker from "./components/FileForPicker.vue";
 import ProjectFileViewer from "./components/ProjectFileViewer.vue";
 import ProjectNav from "./components/ProjectNav.vue";
-import TaskyState from "./components/TaskyState.vue";
+import TaskyState from "@/components/TaskyState.vue";
 import UploadProjectFilesDialog from "./components/UploadProjectFilesDialog.vue";
 import {
   canPreview,
@@ -355,7 +355,7 @@ import {
   formatBytes,
   type ProjectFile,
 } from "./projectFiles";
-import { errorText, loadErrorMessage } from "./taskMeta";
+import { loadErrorMessage } from "./taskMeta";
 
 const props = defineProps<{ projectId: string }>();
 

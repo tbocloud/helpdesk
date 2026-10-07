@@ -486,7 +486,7 @@ import TaskPlanDialog from "./components/TaskPlanDialog.vue";
 import MeetingsCard from "@/components/meetings/MeetingsCard.vue";
 import TaskPullRequests from "./components/TaskPullRequests.vue";
 import TaskStatusBadge from "./components/TaskStatusBadge.vue";
-import TaskyBadge from "./components/TaskyBadge.vue";
+import TaskyBadge from "@/components/TaskyBadge.vue";
 import WaitingOn from "./components/WaitingOn.vue";
 import type { TaskPullRequest } from "./pullRequestMeta";
 import {

@@ -1,5 +1,5 @@
+import type { Tone } from "@/components/tone";
 import type { WorkItem } from "@/pages/work/workMeta";
-import type { Tone } from "@/pages/tasky/taskMeta";
 import { __ } from "@/translation";
 import { dayjs } from "frappe-ui";
 import type { RouteLocationRaw } from "vue-router";

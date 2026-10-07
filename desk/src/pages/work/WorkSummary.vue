@@ -121,8 +121,9 @@
 </template>
 
 <script setup lang="ts">
+import { errorText } from "@/utils";
 import LayoutHeader from "@/components/LayoutHeader.vue";
-import TaskyState from "@/pages/tasky/components/TaskyState.vue";
+import TaskyState from "@/components/TaskyState.vue";
 import { __ } from "@/translation";
 import { Button, createResource, dayjs } from "frappe-ui";
 import { computed, watch } from "vue";
@@ -133,12 +134,7 @@ import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import SummaryKindBadge from "./components/SummaryKindBadge.vue";
 import SummaryStatsPanel from "./components/SummaryStatsPanel.vue";
-import {
-  errorText,
-  formatDay,
-  formatPeriod,
-  type SummaryDetail,
-} from "./summaryMeta";
+import { formatDay, formatPeriod, type SummaryDetail } from "./summaryMeta";
 
 const props = defineProps<{ name: string }>();
 

@@ -18,13 +18,13 @@
 </template>
 
 <script setup lang="ts">
+import { TONE_CLASSES } from "@/components/tone";
 import { computed } from "vue";
 import {
   prDescription,
   prSignal,
   type TaskPullRequest,
 } from "../pullRequestMeta";
-import { TONE_CLASSES } from "../taskMeta";
 
 const props = defineProps<{
   /** The task's most recently active open PR. */

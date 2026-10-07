@@ -1,3 +1,4 @@
+import type { Tone } from "@/components/tone";
 import { __ } from "@/translation";
 import { dayjs } from "frappe-ui";
 import type { Component } from "vue";
@@ -11,17 +12,6 @@ import LucideSignal from "~icons/lucide/signal";
 import LucideSignalHigh from "~icons/lucide/signal-high";
 import LucideSignalLow from "~icons/lucide/signal-low";
 import LucideSignalMedium from "~icons/lucide/signal-medium";
-
-export type Tone = "neutral" | "info" | "warning" | "success" | "danger";
-
-// Full class strings (not interpolated) so Tailwind's scanner picks them up.
-export const TONE_CLASSES: Record<Tone, string> = {
-  neutral: "bg-surface-gray-2 text-ink-gray-7",
-  info: "bg-info-soft text-info",
-  warning: "bg-warning-soft text-warning",
-  success: "bg-success-soft text-success",
-  danger: "bg-danger-soft text-danger",
-};
 
 export interface StatusMeta {
   label: string;
@@ -224,9 +214,6 @@ export function isAiDrafted(description: string, aiText: string | null) {
   );
 }
 
-export function errorText(e: any, fallback: string) {
-  return e?.messages?.length ? e.messages.join(" ") : e?.message || fallback;
-}
 // A refused project reads like an outage otherwise, so say who can open it
 export function loadErrorMessage(...errors: unknown[]) {
   const denied = errors.some(

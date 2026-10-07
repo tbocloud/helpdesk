@@ -11,7 +11,7 @@
 </template>
 
 <script setup lang="ts">
-import TaskyBadge from "@/pages/tasky/components/TaskyBadge.vue";
+import TaskyBadge from "@/components/TaskyBadge.vue";
 import { __ } from "@/translation";
 import LucideFileText from "~icons/lucide/file-text";
 import LucideSparkles from "~icons/lucide/sparkles";

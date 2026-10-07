@@ -106,6 +106,7 @@
 </template>
 
 <script setup lang="ts">
+import { errorText } from "@/utils";
 import { __ } from "@/translation";
 import {
   Button,
@@ -120,7 +121,6 @@ import {
 import { computed, reactive, ref, useId, watch } from "vue";
 import LucideCalendarClock from "~icons/lucide/calendar-clock";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
-import { errorText } from "../taskMeta";
 
 interface PlannableTask {
   name: string;

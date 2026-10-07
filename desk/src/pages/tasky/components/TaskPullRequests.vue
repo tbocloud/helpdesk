@@ -60,7 +60,7 @@ import {
   type TaskPullRequest,
 } from "../pullRequestMeta";
 import type { StatusMeta } from "../taskMeta";
-import TaskyBadge from "./TaskyBadge.vue";
+import TaskyBadge from "@/components/TaskyBadge.vue";
 
 const props = withDefaults(
   defineProps<{

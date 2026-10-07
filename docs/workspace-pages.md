@@ -13,6 +13,12 @@ Shared building blocks, in `desk/src/components/`:
   the By project view and Performance.
 - **`SectionCard`**: the one titled card (title, optional count, description, header actions
   slot, "See all" link). Used by Home, Overview and Team.
+- **`TaskyState`**: the one empty, error and no-access message (icon, title, message, actions).
+- **`TaskyBadge`**: the one small status badge (label, tone, icon).
+- **`tone.ts`**: the one `Tone` type (`neutral`, `info`, `warning`, `success`, `danger`) and
+  its class maps: `INK` (text), `TRACK` and `FILL` (meters and bars), `TONE_CLASSES` (badges).
+
+A failed call's message comes from `errorText(error, fallback)` in `desk/src/utils.ts`.
 
 ## Overview (`/overview`)
 

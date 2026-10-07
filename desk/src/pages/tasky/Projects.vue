@@ -523,7 +523,7 @@ import GenerateChecklistModal from "./components/GenerateChecklistModal.vue";
 import NewTaskDialog from "./components/NewTaskDialog.vue";
 import ProjectFormDialog from "./components/ProjectFormDialog.vue";
 import TaskStatusBadge from "./components/TaskStatusBadge.vue";
-import TaskyState from "./components/TaskyState.vue";
+import TaskyState from "@/components/TaskyState.vue";
 
 const router = useRouter();
 const authStore = useAuthStore();

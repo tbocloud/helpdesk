@@ -114,6 +114,7 @@
 </template>
 
 <script setup lang="ts">
+import { errorText } from "@/utils";
 import { __ } from "@/translation";
 import { Button, Dialog, createResource, toast } from "frappe-ui";
 import { marked } from "marked";
@@ -130,7 +131,6 @@ import {
   formatBytes,
   type ProjectFile,
 } from "../projectFiles";
-import { errorText } from "../taskMeta";
 
 const props = defineProps<{
   /** The file to show; the dialog is open while this is set. */

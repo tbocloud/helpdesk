@@ -33,7 +33,7 @@
 </template>
 
 <script setup lang="ts">
-import type { Tone } from "@/pages/tasky/taskMeta";
+import type { Tone } from "@/components/tone";
 import { __ } from "@/translation";
 import { computed, type Component } from "vue";
 import { RouterLink, type RouteLocationRaw } from "vue-router";

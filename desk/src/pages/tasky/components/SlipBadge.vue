@@ -13,7 +13,7 @@
 <script setup lang="ts">
 import LucideCalendarClock from "~icons/lucide/calendar-clock";
 import { slipLabel, slipTitle } from "../taskMeta";
-import TaskyBadge from "./TaskyBadge.vue";
+import TaskyBadge from "@/components/TaskyBadge.vue";
 
 defineProps<{
   /** How many times the due date was moved later; render only when ≥ 1. */

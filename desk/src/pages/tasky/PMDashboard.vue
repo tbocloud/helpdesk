@@ -455,6 +455,7 @@
 </template>
 
 <script setup lang="ts">
+import { errorText } from "@/utils";
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import { __ } from "@/translation";
 import { Button, createResource, dayjs, toast } from "frappe-ui";
@@ -478,8 +479,8 @@ import LucideSparkles from "~icons/lucide/sparkles";
 import ProjectNav from "./components/ProjectNav.vue";
 import SlipBadge from "./components/SlipBadge.vue";
 import TaskStatusBadge from "./components/TaskStatusBadge.vue";
-import TaskyState from "./components/TaskyState.vue";
-import { errorText, initials, isClosed, loadErrorMessage } from "./taskMeta";
+import TaskyState from "@/components/TaskyState.vue";
+import { initials, isClosed, loadErrorMessage } from "./taskMeta";
 
 const props = defineProps<{
   projectId?: string;

@@ -81,7 +81,7 @@
             role="alert"
             class="rounded-lg bg-danger-soft px-4 py-2.5 text-sm text-danger"
           >
-            {{ errorText(plans.error) }}
+            {{ errorText(plans.error, __("Couldn't load the plans.")) }}
           </div>
 
           <div
@@ -382,6 +382,7 @@
 </template>
 
 <script setup lang="ts">
+import { errorText } from "@/utils";
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import { __ } from "@/translation";
 import {
@@ -450,10 +451,6 @@ const byMonth = computed(() => {
   }
   return [...groups.values()];
 });
-
-function errorText(error: any) {
-  return error?.messages?.[0] || __("Couldn't load the plans.");
-}
 
 function timeLabel(value?: string) {
   return value ? dayjs(`2000-01-01 ${value}`).format("h:mm A") : "";

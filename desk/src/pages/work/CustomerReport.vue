@@ -181,15 +181,15 @@
 </template>
 
 <script setup lang="ts">
+import { errorText } from "@/utils";
 import LayoutHeader from "@/components/LayoutHeader.vue";
-import TaskyState from "@/pages/tasky/components/TaskyState.vue";
+import TaskyState from "@/components/TaskyState.vue";
 import { __ } from "@/translation";
 import { Button, createResource, dayjs, FormControl } from "frappe-ui";
 import { computed, ref, watch } from "vue";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideFileSpreadsheet from "~icons/lucide/file-spreadsheet";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
-import { errorText } from "./summaryMeta";
 
 interface ReportRow {
   customer: string;

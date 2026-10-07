@@ -194,6 +194,7 @@
 </template>
 
 <script setup lang="ts">
+import type { Tone } from "@/components/tone";
 import { useUserStore } from "@/stores/user";
 import { __ } from "@/translation";
 import { Avatar, Button, dayjs } from "frappe-ui";
@@ -213,9 +214,8 @@ import MilestoneMark from "@/pages/tasky/components/MilestoneMark.vue";
 import PullRequestChip from "@/pages/tasky/components/PullRequestChip.vue";
 import SlipBadge from "@/pages/tasky/components/SlipBadge.vue";
 import TaskStatusBadge from "@/pages/tasky/components/TaskStatusBadge.vue";
-import TaskyBadge from "@/pages/tasky/components/TaskyBadge.vue";
+import TaskyBadge from "@/components/TaskyBadge.vue";
 import WaitingOn from "@/pages/tasky/components/WaitingOn.vue";
-import type { Tone } from "@/pages/tasky/taskMeta";
 import {
   deadlineInfo,
   isHeldTask,

@@ -365,12 +365,12 @@
 </template>
 
 <script setup lang="ts">
+import { INK, type Tone } from "@/components/tone";
 import { Link } from "@/components";
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import SectionCard from "@/components/SectionCard.vue";
 import StatTile from "@/components/StatTile.vue";
-import { INK, type Tone } from "@/pages/performance/performanceMeta";
-import TaskyState from "@/pages/tasky/components/TaskyState.vue";
+import TaskyState from "@/components/TaskyState.vue";
 import { __ } from "@/translation";
 import { Button, createResource } from "frappe-ui";
 import {

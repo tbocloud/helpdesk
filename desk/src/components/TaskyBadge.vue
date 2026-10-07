@@ -9,8 +9,8 @@
 </template>
 
 <script setup lang="ts">
+import { TONE_CLASSES, type Tone } from "@/components/tone";
 import type { Component } from "vue";
-import { TONE_CLASSES, type Tone } from "../taskMeta";
 
 withDefaults(
   defineProps<{

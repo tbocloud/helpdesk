@@ -280,7 +280,7 @@
             class="mt-0.5 size-4 shrink-0"
             aria-hidden="true"
           />
-          {{ errorText(createTs.error) }}
+          {{ errorText(createTs.error, __("Couldn't create the timesheet.")) }}
         </div>
       </form>
       <template #actions="{ close }">
@@ -301,6 +301,7 @@
 </template>
 
 <script setup lang="ts">
+import { errorText } from "@/utils";
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
@@ -323,8 +324,8 @@ import LucideFileClock from "~icons/lucide/file-clock";
 import LucidePlus from "~icons/lucide/plus";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideTimer from "~icons/lucide/timer";
-import TaskyBadge from "./components/TaskyBadge.vue";
-import TaskyState from "./components/TaskyState.vue";
+import TaskyBadge from "@/components/TaskyBadge.vue";
+import TaskyState from "@/components/TaskyState.vue";
 
 const showForm = ref(false);
 
@@ -503,12 +504,6 @@ function onCreate() {
     hours: form.hours || 1,
     notes: form.notes,
   });
-}
-
-function errorText(err: { messages?: string[]; message?: string }) {
-  return err.messages?.length
-    ? err.messages.join(" ")
-    : err.message || __("Couldn't create the timesheet.");
 }
 
 function formatHours(h: number | string | null | undefined) {

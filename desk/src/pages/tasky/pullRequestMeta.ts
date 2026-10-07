@@ -1,3 +1,4 @@
+import type { Tone } from "@/components/tone";
 import { __ } from "@/translation";
 import type { Component } from "vue";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
@@ -8,7 +9,7 @@ import LucideGitMerge from "~icons/lucide/git-merge";
 import LucideGitPullRequest from "~icons/lucide/git-pull-request";
 import LucideGitPullRequestClosed from "~icons/lucide/git-pull-request-closed";
 import LucideGitPullRequestDraft from "~icons/lucide/git-pull-request-draft";
-import type { StatusMeta, Tone } from "./taskMeta";
+import type { StatusMeta } from "./taskMeta";
 
 /** A GitHub pull request linked to a task (HD Pull Request, as the task APIs return it). */
 export interface TaskPullRequest {

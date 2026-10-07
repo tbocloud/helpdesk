@@ -169,6 +169,7 @@
 </template>
 
 <script setup lang="ts">
+import { errorText } from "@/utils";
 import TaskStatusBadge from "@/pages/tasky/components/TaskStatusBadge.vue";
 import { __ } from "@/translation";
 import {
@@ -231,13 +232,6 @@ const form = reactive({
   due_date: "",
   is_key: false,
 });
-
-function errorText(err: any, fallback: string) {
-  if (!err) return "";
-  return err.messages?.length
-    ? err.messages.join(" ")
-    : err.message || fallback;
-}
 
 const context = createResource({
   url: "helpdesk.api.work.get_ticket_task_context",
