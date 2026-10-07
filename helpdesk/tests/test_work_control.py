@@ -770,6 +770,20 @@ class TestViewTeamMemberWork(WorkControlCase):
         result = self.as_user(LEAD, lambda: work.get_my_work(user=DEV[0]))
         self.assertIn(task, [i["name"] for i in result["items"]])
 
+    def test_plan_is_offered_to_the_projects_lead_not_the_assignee(self):
+        task = self.make_task("Opening stock import", add_days(nowdate(), 4))
+
+        def item(viewer, user=None):
+            items = self.as_user(viewer, lambda: work.get_my_work(user=user))["items"]
+            return next(i for i in items if i["name"] == task)
+
+        self.assertFalse(item(DEV)["can_plan"])
+        self.assertTrue(item(LEAD, user=DEV[0])["can_plan"])
+        # the overview doesn't ask, so it doesn't pay for the lookup
+        overview = self.as_user(PM, lambda: work.get_overview(project=self.project))
+        self.assertTrue(overview["buckets"]["all"])
+        self.assertNotIn("can_plan", overview["buckets"]["all"][0])
+
     def test_developers_only_see_their_own(self):
         with self.assertRaises(frappe.PermissionError):
             self.as_user(DEV, lambda: work.get_my_work(user=LEAD[0]))

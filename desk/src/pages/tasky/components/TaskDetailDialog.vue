@@ -172,7 +172,7 @@ export interface TaskRef {
 }
 
 /** A step the opener asks for straight away, skipping the details. */
-export type TaskAction = "plan" | "resume";
+export type TaskAction = "plan" | "resume" | "complete" | "hold";
 
 interface TaskDetail {
   name: string;
@@ -233,7 +233,12 @@ const taskDetail = createResource({
   },
   onSuccess(d: TaskDetail) {
     if (!props.action || d.name !== props.task?.name) return;
-    const target = props.action === "plan" ? planningTask : resumingTask;
+    const target = {
+      plan: planningTask,
+      resume: resumingTask,
+      complete: completingTask,
+      hold: holdingTask,
+    }[props.action];
     close();
     target.value = d;
   },

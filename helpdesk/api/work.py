@@ -197,7 +197,9 @@ def _ticket_item(ticket) -> dict:
     }
 
 
-def _items(tasks, tickets) -> list[dict]:
+def _items(tasks, tickets, with_plan: bool = False) -> list[dict]:
+    """Work items, overdue first. `with_plan` also says on every task whether the
+    viewer may plan it (My Work's Plan step), which costs a lookup per project."""
     names = _project_names(tasks)
     waiting = _open_dependencies(tasks)
     task_items = [_task_item(t, names, waiting) for t in tasks]
@@ -208,12 +210,17 @@ def _items(tasks, tickets) -> list[dict]:
         task_prs = prs.get(item["name"]) or []
         task_prs.sort(key=lambda pr: pr.state not in PR_OPEN_STATES)
         item["pull_requests"] = task_prs[:PRS_PER_ITEM]
-    # who may sign off a task waiting for review: the project's manager or lead
+    # who may plan a task or sign off one waiting for review: the project's manager or lead
     managed = {}
     for item in task_items:
-        if item["status"] == PENDING_REVIEW:
-            if item["project"] not in managed:
-                managed[item["project"]] = can_manage_project(item["project"])
+        in_review = item["status"] == PENDING_REVIEW
+        if not (with_plan or in_review):
+            continue
+        if item["project"] not in managed:
+            managed[item["project"]] = can_manage_project(item["project"])
+        if with_plan:
+            item["can_plan"] = managed[item["project"]]
+        if in_review:
             item["can_approve"] = managed[item["project"]]
     items = task_items + [_ticket_item(t) for t in tickets]
     items.sort(key=_sort_key)
@@ -260,7 +267,7 @@ def get_my_work(user: str | None = None) -> dict:
         fields=TICKET_FIELDS,
         limit_page_length=LIST_LIMIT,
     )
-    items = _items(tasks, tickets)
+    items = _items(tasks, tickets, with_plan=True)
     done = _done_items(user)
     return {
         "items": items,
