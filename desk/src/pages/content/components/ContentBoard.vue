@@ -195,7 +195,7 @@
               <button
                 :id="`entry-${post.name}`"
                 type="button"
-                class="max-w-full truncate rounded text-left text-base font-semibold text-ink-gray-9 hover:underline"
+                class="max-w-full truncate rounded text-left text-base font-semibold text-ink-gray-9 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
                 @click="emit('open', post.name)"
               >
                 {{ post.title }}
@@ -280,7 +280,7 @@
               <button
                 v-if="!peopleOf(post, role.field).length"
                 type="button"
-                class="inline-flex h-6 items-center gap-1 rounded-full bg-warning-soft px-2.5 text-xs font-medium text-warning hover:underline"
+                class="inline-flex h-6 items-center gap-1 rounded-full bg-warning-soft px-2.5 text-xs font-medium text-warning hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
                 :aria-label="__('Assign {0}', __(role.label).toLowerCase())"
                 @click="emit('action', post, 'assign', role.field)"
               >
@@ -292,7 +292,7 @@
               <button
                 v-else
                 type="button"
-                class="flex flex-col items-start gap-1 rounded-lg text-left text-sm text-ink-gray-8"
+                class="flex flex-col items-start gap-1 rounded-lg text-left text-sm text-ink-gray-8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
                 :title="__('Change who is on this')"
                 @click="emit('action', post, 'assign', role.field)"
               >
@@ -332,7 +332,7 @@
             <template v-if="!CLOSED_STATUSES.includes(post.status)">
               <button
                 type="button"
-                class="inline-flex h-7 items-center gap-1.5 rounded-md bg-success px-2.5 text-sm font-medium text-ink-base transition-opacity hover:opacity-90"
+                class="inline-flex h-7 items-center gap-1.5 rounded-md bg-success px-2.5 text-sm font-medium text-ink-base transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
                 @click="emit('action', post, 'publish')"
               >
                 <LucideSend class="size-3.5" aria-hidden="true" />
