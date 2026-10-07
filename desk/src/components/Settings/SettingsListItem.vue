@@ -4,7 +4,7 @@
     :class="onOpen ? 'hover:bg-surface-gray-1' : ''"
   >
     <component
-      :is="onOpen ? 'button' : 'div'"
+      :is="onOpen ? NativeButton : 'div'"
       v-bind="onOpen ? { type: 'button' } : {}"
       class="flex min-w-0 flex-1 items-center gap-3 rounded text-left"
       @click="onOpen?.()"
@@ -43,6 +43,7 @@
 </template>
 
 <script setup lang="ts">
+import NativeButton from "@/components/NativeButton";
 import LucideChevronRight from "~icons/lucide/chevron-right";
 
 defineProps<{
