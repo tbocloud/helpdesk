@@ -241,13 +241,17 @@ def sibling_tasks(
     }
     if exclude:
         filters["name"] = ("!=", exclude)
-    names = frappe.get_list(
-        "Task",
-        filters=filters,
-        pluck="subject",
-        order_by="creation asc",
-        limit_page_length=MAX_SIBLINGS + 1,
-    )
+    try:
+        names = frappe.get_list(
+            "Task",
+            filters=filters,
+            pluck="subject",
+            order_by="creation asc",
+            limit_page_length=MAX_SIBLINGS + 1,
+        )
+    except frappe.PermissionError:
+        # siblings are only context; a user without Task access still gets a draft
+        return []
     return [n for n in names if n and n != subject][:MAX_SIBLINGS]
 
 

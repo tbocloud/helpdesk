@@ -9,6 +9,7 @@ from helpdesk.test_utils import (
     ai_description_answer,
     create_customer,
     hold_commits,
+    make_assignment,
     make_project,
     make_task,
     make_task_template,
@@ -167,7 +168,10 @@ class TestDraftEndpoint(AITaskDescriptionCase):
         )
 
     def test_member_gets_a_draft_and_nothing_is_saved(self):
-        make_task(self.project, "Install the app", custom_phase="Setup")
+        # members read only their own tasks, so the sibling must be theirs to reach the AI
+        sibling = make_task(self.project, "Install the app", custom_phase="Setup")
+        make_assignment("Task", sibling.name, DEV[0])
+        make_task(self.project, "Rotate the vault keys", custom_phase="Setup")
         with patch.object(
             task_descriptions,
             "call_haiku",
@@ -179,6 +183,7 @@ class TestDraftEndpoint(AITaskDescriptionCase):
 
         self.assertEqual(result["description"], "Goal\n- Do it")
         self.assertIn("Install the app", call.call_args.args[1])
+        self.assertNotIn("Rotate the vault keys", call.call_args.args[1])
         self.assertFalse(frappe.db.exists("Task", {"subject": "Enable SSO"}))
 
     def test_outsider_is_refused(self):
