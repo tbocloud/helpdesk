@@ -19,8 +19,8 @@ the matching categories go to them.
   listed in one section per department (name and project count), in department order, then a
   **No department** section last. Departments with no matching projects are hidden. The
   status-tab counts follow the department filter, and each chip counts projects in the
-  current status tab. The filter is not kept in the URL, because the page keeps none of
-  its filters there.
+  current status tab. The filter is kept in the URL as `department` (`__none__` for No
+  department), with the page's other filters (see [workspace-pages.md](workspace-pages.md)).
 - **Overview**: a **Department** filter next to Project, Customer and Assignee (kept in the
   URL like the others). It narrows the page to tasks of that department's projects; tickets
   are left out, as with the Project filter, because tickets belong to customers, not
