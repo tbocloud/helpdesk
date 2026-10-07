@@ -85,6 +85,13 @@
     >
       <component :is="tab.icon" class="size-4" aria-hidden="true" />
       {{ __(tab.label) }}
+      <span
+        v-if="tab.to === 'TaskyFiles' && detail.data?.file_count"
+        class="rounded bg-surface-gray-2 px-1.5 font-mono text-xs tabular-nums text-ink-gray-6"
+        :aria-label="__('{0} files', String(detail.data.file_count))"
+      >
+        {{ detail.data.file_count }}
+      </span>
     </router-link>
   </nav>
 
@@ -120,6 +127,7 @@ import LucideUserX from "~icons/lucide/user-x";
 import LucideKanban from "~icons/lucide/square-kanban";
 import LucideLayoutDashboard from "~icons/lucide/layout-dashboard";
 import LucideListChecks from "~icons/lucide/list-checks";
+import LucidePaperclip from "~icons/lucide/paperclip";
 import LucidePencil from "~icons/lucide/pencil";
 import LucidePlus from "~icons/lucide/plus";
 import NewTaskDialog from "./NewTaskDialog.vue";
@@ -143,6 +151,7 @@ const tabs = [
   { label: "Board", to: "TaskyKanban", icon: LucideKanban },
   { label: "Timeline", to: "TaskyTimeline", icon: LucideCalendarRange },
   { label: "Overdue", to: "TaskyOverdue", icon: LucideAlarmClock },
+  { label: "Files", to: "TaskyFiles", icon: LucidePaperclip },
 ];
 
 const detail = createResource({
@@ -238,5 +247,6 @@ const leadOptions = computed(() => {
 defineExpose({
   canManage: computed(() => !!detail.data?.can_manage),
   openNewTask: () => (showNewTask.value = true),
+  reload: () => detail.reload(),
 });
 </script>

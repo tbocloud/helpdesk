@@ -406,6 +406,24 @@
                       /></template>
                     </Button>
                     <Button
+                      v-if="project.file_count"
+                      variant="ghost"
+                      :aria-label="__('{0} files', String(project.file_count))"
+                      @click="
+                        router.push({
+                          name: 'TaskyFiles',
+                          params: { projectId: project.name },
+                        })
+                      "
+                    >
+                      <template #prefix
+                        ><LucidePaperclip class="size-4" aria-hidden="true"
+                      /></template>
+                      <span class="font-mono tabular-nums">{{
+                        project.file_count
+                      }}</span>
+                    </Button>
+                    <Button
                       v-if="project.can_edit"
                       variant="ghost"
                       :label="__('Edit')"
@@ -493,6 +511,7 @@ import LucideClipboardList from "~icons/lucide/clipboard-list";
 import LucideFolder from "~icons/lucide/folder";
 import LucideFolderKanban from "~icons/lucide/folder-kanban";
 import LucideLayoutDashboard from "~icons/lucide/layout-dashboard";
+import LucidePaperclip from "~icons/lucide/paperclip";
 import LucidePencil from "~icons/lucide/pencil";
 import LucidePlus from "~icons/lucide/plus";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
@@ -521,6 +540,7 @@ interface Project {
   project_lead_name?: string;
   department?: string;
   can_manage?: boolean;
+  file_count?: number;
 }
 
 interface Department {
