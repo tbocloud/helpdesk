@@ -42,11 +42,11 @@
           autofocus
         />
 
-        <Textarea
+        <TaskDescriptionField
           v-model="form.description"
-          :label="__('Description')"
+          v-model:ai-text="aiText"
+          :context="draftContext"
           :placeholder="__('Optional details, acceptance criteria, links…')"
-          :rows="3"
         />
 
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -137,9 +137,10 @@
           </div>
         </dl>
 
-        <Textarea
+        <TaskDescriptionField
           v-model="form.description"
-          :label="__('Description')"
+          v-model:ai-text="aiText"
+          :context="draftContext"
           :placeholder="__('Details, notes, links…')"
           :rows="4"
           autofocus
@@ -190,7 +191,6 @@ import {
   Dialog,
   FormControl,
   TextInput,
-  Textarea,
   createResource,
   toast,
 } from "frappe-ui";
@@ -201,9 +201,13 @@ import LucideLock from "~icons/lucide/lock";
 import {
   categoryOptions,
   errorText,
+  isAiDrafted,
   isClosed,
   priorityOptions,
 } from "../taskMeta";
+import TaskDescriptionField, {
+  type DraftContext,
+} from "./TaskDescriptionField.vue";
 import TaskPullRequests from "./TaskPullRequests.vue";
 
 interface EditableTask {
@@ -247,6 +251,8 @@ const form = reactive({
 });
 // the assignee the task had when the dialog opened; only a change is sent
 const initialAssignee = ref("");
+// the description while it's still the AI's text (from the server or "Write with AI")
+const aiText = ref<string | null>(null);
 
 const detail = createResource({
   url: "helpdesk.tasky.api.get_task_detail",
@@ -371,6 +377,23 @@ const readOnlyRows = computed(() => {
   ];
 });
 
+// the assignee can only change the description, so the AI sees the saved details
+const draftContext = computed<DraftContext>(() => {
+  const t: Record<string, any> = task.value ?? props.task ?? {};
+  const editing = canManage.value;
+  return {
+    task: props.task?.name,
+    task_name: editing ? form.task_name : t.subject || "",
+    project: project.value,
+    category: editing ? form.category : t.category,
+    phase: (editing ? form.phase : t.phase || "").trim(),
+    priority: editing ? form.priority : t.priority,
+    estimated_hours:
+      Number(editing ? form.estimated_hours : t.estimated_hours) || 0,
+    assigned_to: editing ? form.assigned_to : t.assigned_to || "",
+  };
+});
+
 const canSubmit = computed(
   () =>
     loaded.value &&
@@ -404,6 +427,7 @@ function fillForm(t: Record<string, any>) {
   form.estimated_hours = t.estimated_hours || 0;
   form.assigned_to = t.assigned_to || "";
   initialAssignee.value = t.assigned_to || "";
+  aiText.value = t.ai_description ? t.description || "" : null;
 }
 
 watch(
@@ -439,6 +463,7 @@ function submit() {
     updateTask.submit({
       task: props.task.name,
       description: form.description,
+      ai_description: isAiDrafted(form.description, aiText.value),
     });
     return;
   }
@@ -446,6 +471,7 @@ function submit() {
     task: props.task.name,
     task_name: form.task_name.trim(),
     description: form.description,
+    ai_description: isAiDrafted(form.description, aiText.value),
     phase: form.phase.trim(),
     category: form.category,
     priority: form.priority,

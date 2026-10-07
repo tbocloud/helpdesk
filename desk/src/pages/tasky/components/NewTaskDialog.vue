@@ -19,11 +19,11 @@
         autofocus
       />
 
-      <Textarea
+      <TaskDescriptionField
         v-model="form.description"
-        :label="__('Description')"
+        v-model:ai-text="aiText"
+        :context="draftContext"
         :placeholder="__('Optional details, acceptance criteria, links…')"
-        :rows="3"
       />
 
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -152,13 +152,15 @@ import {
   Dialog,
   FormControl,
   TextInput,
-  Textarea,
   createResource,
   toast,
 } from "frappe-ui";
-import { computed, reactive, useId, watch } from "vue";
+import { computed, reactive, ref, useId, watch } from "vue";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
-import { categoryOptions, priorityOptions } from "../taskMeta";
+import { categoryOptions, isAiDrafted, priorityOptions } from "../taskMeta";
+import TaskDescriptionField, {
+  type DraftContext,
+} from "./TaskDescriptionField.vue";
 
 interface Member {
   user: string;
@@ -194,9 +196,23 @@ const form = reactive({
   depends_on_task: "",
 });
 
+// what the AI wrote into the description, so an unedited draft is saved as AI drafted
+const aiText = ref<string | null>(null);
+
+const draftContext = computed<DraftContext>(() => ({
+  task_name: form.task_name,
+  project: props.projectId,
+  category: form.category,
+  phase: form.phase.trim(),
+  priority: form.priority,
+  estimated_hours: Number(form.estimated_hours) || 0,
+  assigned_to: form.assigned_to,
+}));
+
 function resetForm() {
   form.task_name = "";
   form.description = "";
+  aiText.value = null;
   form.phase = props.defaultPhase ?? "";
   form.category = "Functional";
   form.priority = "Medium";
@@ -330,6 +346,7 @@ function submit() {
     is_key: form.is_key,
     is_milestone: form.is_milestone,
     depends_on_task: form.depends_on_task || null,
+    ai_description: isAiDrafted(form.description, aiText.value),
   });
 }
 </script>

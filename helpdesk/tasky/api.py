@@ -92,6 +92,7 @@ def _format_task(task):
         "is_milestone": bool(task.get("is_milestone")),
         "ai_estimated": bool(task.get("ai_estimated")),
         "estimate_note": task.get("estimate_note"),
+        "ai_description": bool(task.get("custom_ai_description")),
         "slip_count": task.get("slip_count") or 0,
         **_dependency_info(task.get("depends_on_task")),
     }
@@ -483,8 +484,12 @@ def add_task(
     is_key: bool = False,
     is_milestone: bool = False,
     depends_on_task: str | None = None,
+    ai_description: bool = False,
 ):
-    """Add a single task to a project, optionally assigned to one of its members."""
+    """Add a single task to a project, optionally assigned to one of its members.
+
+    `ai_description`: the description is an unedited "Write with AI" draft.
+    """
     project = _resolve_project(str(project))
     if not can_add_tasks(project):
         frappe.throw(
@@ -522,6 +527,9 @@ def add_task(
             "is_key": 1 if is_key else 0,
             "is_milestone": 1 if is_milestone else 0,
             "depends_on_task": depends_on_task or None,
+            "custom_ai_description": 1
+            if ai_description and str(description or "").strip()
+            else 0,
         }
     )
     doc.insert()
@@ -917,8 +925,11 @@ def update_task(
     phase: str | None = None,
     estimated_hours: float | str | None = None,
     assigned_to: str | None = None,
+    ai_description: bool | None = None,
 ) -> dict:
     """Edit a task's details. Leads and managers change anything; its assignee only the description.
+
+    `ai_description`: the description sent is an unedited "Write with AI" draft.
 
     Only the fields passed change. Dates, key, milestone and dependency go through
     update_task_plan, which asks why a due date moves later.
@@ -938,6 +949,9 @@ def update_task(
         doc.subject = _required_task_name(task_name)
     if description is not None:
         doc.description = str(description)
+        if ai_description and doc.description.strip():
+            doc.custom_ai_description = 1
+            doc.flags.ai_description = True
     if priority is not None:
         doc.priority = _task_option("priority", str(priority), _("Priority"))
     if category is not None:

@@ -215,6 +215,15 @@ export function blockedMessage(task: { depends_on_subject?: string | null }) {
     : __("Finish the task this one depends on first.");
 }
 
+/** The description is still the AI's text, unedited (`aiText` is what the AI wrote). */
+export function isAiDrafted(description: string, aiText: string | null) {
+  return (
+    aiText !== null &&
+    !!aiText.trim() &&
+    description.trim() === aiText.trim()
+  );
+}
+
 export function errorText(e: any, fallback: string) {
   return e?.messages?.length ? e.messages.join(" ") : e?.message || fallback;
 }

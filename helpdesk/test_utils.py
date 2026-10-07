@@ -1713,6 +1713,11 @@ def ai_chat_answer(reply: str, action: str = "answer", **fields) -> dict:
     }
 
 
+def ai_description_answer(description: str) -> dict:
+    """What call_haiku returns for a task description draft."""
+    return {"response": {"description": description}, "usage": {}, "cost": 0}
+
+
 def make_email_account(email_id: str, **kwargs):
     """Creates an Email Account for `email_id` on a fake server: send-only unless kwargs enable incoming."""
     name = kwargs.pop("email_account_name", email_id)

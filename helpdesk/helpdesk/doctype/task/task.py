@@ -23,6 +23,10 @@ class Task(Document):
         self.route_completion_to_review()
         self.track_slip()
         self.set_completed_on()
+        self.unmark_ai_description_when_edited()
+
+    def after_insert(self):
+        self.queue_ai_description()
 
     def on_update(self):
         self.hand_back_ticket_when_completed()
@@ -52,6 +56,20 @@ class Task(Document):
         if self.status == "Cancelled" and post.status != "Design":
             return
         post.advance_after_task(self.content_role)
+
+    def queue_ai_description(self):
+        """A task created without a description gets one from the AI in the background."""
+        from helpdesk.task_descriptions import queue_description, should_describe
+
+        if should_describe(self):
+            queue_description(self.name)
+
+    def unmark_ai_description_when_edited(self):
+        """Once a person rewrites it, the description is theirs, not the AI's."""
+        if self.is_new() or self.flags.ai_description:
+            return
+        if self.get("custom_ai_description") and self.has_value_changed("description"):
+            self.custom_ai_description = 0
 
     def set_completed_on(self):
         """When it was done; AI estimates learn from how long finished tasks took."""
