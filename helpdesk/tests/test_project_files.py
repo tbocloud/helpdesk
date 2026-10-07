@@ -1,8 +1,11 @@
 # Copyright (c) 2026, Frappe Technologies and Contributors
 # See license.txt
 
+import io
+
 import frappe
 from frappe.tests.utils import FrappeTestCase
+from pypdf import PdfWriter
 
 from helpdesk.api import project_files as api
 from helpdesk.test_utils import (
@@ -78,7 +81,14 @@ class TestProjectFiles(FrappeTestCase):
         self.assertFalse(run_as_user(OUTSIDER[0], doc.is_downloadable))
 
     def test_members_upload_and_outsiders_cannot(self):
-        file = make_project_file(self.project, "brief.pdf", b"%PDF-1.4", user=DEV_A[0])
+        # Frappe parses uploaded PDFs, so the test needs a real one
+        writer = PdfWriter()
+        writer.add_blank_page(width=72, height=72)
+        pdf = io.BytesIO()
+        writer.write(pdf)
+        file = make_project_file(
+            self.project, "brief.pdf", pdf.getvalue(), user=DEV_A[0]
+        )
         self.assertEqual(frappe.db.get_value("File", file, "owner"), DEV_A[0])
         self.assertTrue(frappe.db.exists("HD Project File", {"file": file}))
         with self.assertRaises(frappe.PermissionError):
