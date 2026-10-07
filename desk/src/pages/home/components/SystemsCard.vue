@@ -1,10 +1,11 @@
 <template>
   <HomeCard :title="__('Systems')">
-    <ul role="list">
+    <!-- two columns in the wide main column; a hairline grid keeps rows separated -->
+    <ul role="list" class="grid gap-px bg-surface-gray-2 md:grid-cols-2">
       <li
         v-for="row in rows"
         :key="row.key"
-        class="flex items-start justify-between gap-3 border-b border-outline-gray-1 px-4 py-2.5 last:border-b-0"
+        class="flex items-start justify-between gap-3 bg-surface-base px-4 py-2.5 md:odd:last:col-span-2"
       >
         <span class="min-w-0">
           <span class="block break-words text-sm text-ink-gray-9">
