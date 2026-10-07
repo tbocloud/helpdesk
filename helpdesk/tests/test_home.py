@@ -43,7 +43,9 @@ class TestHome(FrappeTestCase):
             f"{CUSTOMER} - Rollout",
             members=[(LEAD[0], "Developer"), (DEV[0], "Developer")],
         ).name
-        frappe.db.set_value("Project", self.project, "project_lead", LEAD[0])
+        frappe.db.set_value(
+            "Project", self.project, {"project_lead": LEAD[0], "customer": CUSTOMER}
+        )
         self.overdue = make_task(
             self.project, "Import opening stock", add_days(nowdate(), -2)
         ).name
