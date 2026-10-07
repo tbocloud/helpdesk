@@ -297,7 +297,7 @@
 import { errorText } from "@/utils";
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import { useScreenSize } from "@/composables/screen";
-import TaskyState from "@/pages/tasky/components/TaskyState.vue";
+import TaskyState from "@/components/TaskyState.vue";
 import { __ } from "@/translation";
 import {
   Button,

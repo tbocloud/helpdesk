@@ -133,7 +133,7 @@ import ViewModal from "@/components/ViewModal.vue";
 import { currentView, useView } from "@/composables/useView";
 import { useAuthStore } from "@/stores/auth";
 import { globalStore } from "@/stores/globalStore";
-import TaskyBadge from "@/pages/tasky/components/TaskyBadge.vue";
+import TaskyBadge from "@/components/TaskyBadge.vue";
 import { priorityIcon } from "@/pages/tasky/taskMeta";
 import { useTicketStatusStore } from "@/stores/ticketStatus";
 import { __ } from "@/translation";

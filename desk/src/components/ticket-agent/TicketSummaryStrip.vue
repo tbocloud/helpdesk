@@ -27,7 +27,7 @@
 
 <script setup lang="ts">
 import StatTile from "@/components/StatTile.vue";
-import type { Tone } from "@/pages/performance/performanceMeta";
+import type { Tone } from "@/components/tone";
 import {
   matchTicketFilter,
   ticketFilters,
