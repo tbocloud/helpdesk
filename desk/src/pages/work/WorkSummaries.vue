@@ -316,7 +316,22 @@ const router = useRouter();
 
 function queryValue(key: string) {
   const value = route.query[key];
-  return typeof value === "string" ? value : "";
+  if (typeof value !== "string") return "";
+  // a hand-edited link like ?week=foo would fail on the server and show "Invalid Date"
+  return key === "week" && !isCalendarDate(value) ? "" : value;
+}
+
+/** A real YYYY-MM-DD date (no dayjs plugin needed). */
+function isCalendarDate(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return false;
+  const [year, month, day] = match.slice(1).map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
 }
 
 const filters = reactive(

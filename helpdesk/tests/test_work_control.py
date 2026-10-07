@@ -16,6 +16,7 @@ from helpdesk.patches.v16_0_2.add_waiting_on_task_status import (
 from helpdesk.tasky import api as tasky
 from helpdesk.test_utils import (
     create_customer,
+    hold_commits,
     make_assignment,
     make_department,
     make_project,
@@ -38,11 +39,8 @@ TEAMMATE = ("teammate.control@work-control.example", "Anjali Menon")
 
 class WorkControlCase(FrappeTestCase):
     def setUp(self):
-        self.addCleanup(frappe.db.rollback)
+        hold_commits(self)
         self.addCleanup(frappe.set_user, "Administrator")
-        commit = patch.object(frappe.db, "commit")
-        commit.start()
-        self.addCleanup(commit.stop)
 
         create_customer(CUSTOMER)
         create_customer(OTHER_CUSTOMER)
@@ -753,6 +751,13 @@ class TestTeamWorkload(WorkControlCase):
         self.assertEqual(result["totals"]["working_now"], 1)
         self.assertGreaterEqual(result["totals"]["free"], 1)
         self.assertNotIn(SUPPORT[0], people)
+
+    def test_a_lead_cannot_filter_to_someone_elses_project(self):
+        other = make_project(
+            f"{OTHER_CUSTOMER} - Support", members=[(SUPPORT[0], "Developer")]
+        ).name
+        result = self.as_user(LEAD, lambda: work.get_team_workload(project=other))
+        self.assertEqual(result["people"], [])
 
     def test_developers_cannot_see_the_team(self):
         with self.assertRaises(frappe.PermissionError):

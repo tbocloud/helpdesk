@@ -409,21 +409,42 @@ def get_overview(
         "active": _urgency_split(items, buckets),
         "projects": _tasks_by_project(task_filters),
         "attention": _attention(buckets),
-        "open_projects": _open_project_count(task_filters, tasks if assignee else None),
-        "people_busy": len({a for i in items for a in i["assignees"]}),
+        "open_projects": _open_project_count(task_filters, bool(assignee)),
+        "people_busy": _people_busy(
+            task_filters, None if project or department else ticket_filters
+        ),
     }
 
 
-def _open_project_count(task_filters: dict, assignee_tasks: list | None) -> int:
+def _people_busy(task_filters: dict, ticket_filters: dict | None) -> int:
+    """Distinct people with open work under the filters, counted beyond the capped lists."""
+    raw = frappe.get_list(
+        "Task", filters=task_filters, pluck="_assign", limit_page_length=0
+    )
+    if ticket_filters is not None:
+        raw += frappe.get_list(
+            "HD Ticket", filters=ticket_filters, pluck="_assign", limit_page_length=0
+        )
+    return len({user for value in raw for user in _assignees(value)})
+
+
+def _open_project_count(task_filters: dict, by_assignee: bool) -> int:
     """Open projects the user may read under the overview's filters.
 
     The task filters already carry the project, customer and department; with an
-    assignee filter it's the projects that person has open tasks in.
+    assignee filter it's the projects that person has open tasks in (all of them,
+    not only those in the capped task list).
     """
     filters = {"status": "Open"}
-    if assignee_tasks is not None:
-        projects = {t.project for t in assignee_tasks if t.project}
-        filters["name"] = ("in", list(projects) or [""])
+    if by_assignee:
+        projects = frappe.get_list(
+            "Task",
+            filters=task_filters,
+            pluck="project",
+            distinct=True,
+            limit_page_length=0,
+        )
+        filters["name"] = ("in", [p for p in projects if p] or [""])
     elif "project" in task_filters:
         filters["name"] = task_filters["project"]
     rows = frappe.get_list("Project", filters=filters, fields=["count(name) as count"])
@@ -741,6 +762,10 @@ def get_team_workload(project: str | None = None, customer: str | None = None) -
         projects = frappe.get_all(
             "Project", filters={"customer": customer}, pluck="name"
         )
+    if projects is not None and not is_tasky_admin(user):
+        # only projects the viewer manages or leads; others' people can't be opened anyway
+        mine = set(get_managed_projects(user)) | set(get_led_projects(user))
+        projects = [p for p in projects if p in mine]
     people = _team_members(user, projects)
     if projects is not None and not projects:
         people = set()
