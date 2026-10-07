@@ -1,6 +1,6 @@
 <template>
   <Dialog
-    :open="!!task"
+    :open="!!props.task"
     :title="__('Edit task')"
     :message="canManage ? undefined : task?.subject"
     size="xl"
@@ -271,6 +271,8 @@ const assignable = createResource({
   onError() {},
 });
 
+// the loaded task; the dialog's open state follows props.task instead, since closing
+// clears the prop while this copy stays loaded
 const task = computed<Record<string, any> | null>(() => detail.data ?? null);
 const project = computed(
   () => task.value?.project || props.task?.project || props.projectId || ""
