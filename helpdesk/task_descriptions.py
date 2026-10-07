@@ -121,9 +121,9 @@ def enqueue_pending():
 def describe_tasks(tasks: list[str]):
     """Background job: write descriptions for new tasks that still have none."""
     previous_user = frappe.session.user
-    frappe.set_user(
-        automation_user()
-    )  # the hub's own work, credited to TBO AI - nosemgrep
+    # the hub's own work, credited to TBO AI
+    bot = automation_user()
+    frappe.set_user(bot)  # nosemgrep
     try:
         for index, task in enumerate(tasks):
             if index and not frappe.flags.in_test:
@@ -233,24 +233,22 @@ def task_context(task) -> dict:
 def sibling_tasks(
     project: str, phase: str | None, exclude: str | None, subject: str | None
 ) -> list[str]:
-    Task = frappe.qb.DocType("Task")
-    query = (
-        frappe.qb.from_(Task)
-        .select(Task.subject)
-        .where(Task.project == project)
-        .where(Task.status.notin(["Template", "Cancelled"]))
-        .orderby(Task.creation)
-        .limit(MAX_SIBLINGS + 1)
-    )
-    query = (
-        query.where(Task.custom_phase == phase)
-        if phase
-        else query.where(Task.custom_phase.isnull() | (Task.custom_phase == ""))
-    )
+    # get_list, so only tasks the user may read reach the AI
+    filters = {
+        "project": project,
+        "status": ("not in", ["Template", "Cancelled"]),
+        "custom_phase": phase if phase else ("is", "not set"),
+    }
     if exclude:
-        query = query.where(Task.name != exclude)
-    names = [row[0] for row in query.run() if row[0] and row[0] != subject]
-    return names[:MAX_SIBLINGS]
+        filters["name"] = ("!=", exclude)
+    names = frappe.get_list(
+        "Task",
+        filters=filters,
+        pluck="subject",
+        order_by="creation asc",
+        limit_page_length=MAX_SIBLINGS + 1,
+    )
+    return [n for n in names if n and n != subject][:MAX_SIBLINGS]
 
 
 def draft_description(context: dict) -> str:
