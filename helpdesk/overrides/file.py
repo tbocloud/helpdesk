@@ -1,3 +1,4 @@
+import frappe
 from frappe.core.doctype.file.file import File
 
 from helpdesk.storage import s3
@@ -52,6 +53,19 @@ class HelpdeskFile(File):
             self._content = s3.read(self)
             return self._content
         return super().get_content()
+
+    def on_trash(self):
+        super().on_trash()
+        self.delete_project_file_record()
+
+    def delete_project_file_record(self):
+        """A project file's "For" list goes with it (see docs/project-files.md)."""
+        if self.attached_to_doctype != "Project":
+            return
+        for name in frappe.get_all(
+            "HD Project File", filters={"file": self.name}, pluck="name"
+        ):
+            frappe.delete_doc("HD Project File", name, ignore_permissions=True)
 
     def _delete_file_on_disk(self):
         if self.has_bucket_copy:

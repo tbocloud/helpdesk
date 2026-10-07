@@ -222,6 +222,8 @@ ignore_links_on_delete = [
     "HD Ticket Comment",
     # AI cost records are an audit trail; they keep the old ticket number
     "HDS AI Usage Log",
+    # deleting a project deletes its files, and each File takes its HD Project File along
+    "HD Project File",
 ]
 
 # setup wizard

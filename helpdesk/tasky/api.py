@@ -6,6 +6,7 @@ import frappe
 from frappe import _
 from frappe.desk.form import assign_to
 
+from helpdesk.api.project_files import file_counts
 from helpdesk.github_sync import get_pull_requests
 from helpdesk.tasky.permissions import (
     MANAGER_PROJECT_ROLE,
@@ -1424,6 +1425,7 @@ def get_project_detail(project: str):
         "review_before_done": bool(doc.review_before_done),
         "project_type": doc.project_type,
         "department": doc.custom_department,
+        "file_count": file_counts([doc.name]).get(doc.name, 0),
     }
 
 
@@ -1477,7 +1479,9 @@ def get_projects():
             as_list=True,
         )
     )
+    files = file_counts([p.name for p in projects])
     for p in projects:
+        p["file_count"] = files.get(p.name, 0)
         p["can_manage"] = can_manage_project(p["name"])
         p["can_add_tasks"] = can_add_tasks(p["name"])
         p["can_edit"] = is_project_owner(p["name"])

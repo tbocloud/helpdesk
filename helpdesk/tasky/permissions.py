@@ -98,6 +98,19 @@ def is_project_member(project: str, user: str) -> bool:
     )
 
 
+def get_project_team(project: str) -> list[str]:
+    """The project's members plus its lead, in member order."""
+    members = frappe.get_all(
+        "Project User",
+        filters={"parenttype": "Project", "parent": project},
+        pluck="user",
+        order_by="idx asc",
+    )
+    lead = frappe.db.get_value("Project", project, "project_lead")
+    team = list(dict.fromkeys(members + ([lead] if lead else [])))
+    return [u for u in team if u not in ("Administrator", "Guest")]
+
+
 def has_assigned_task(project: str, user: str) -> bool:
     """A developer given a task in a project sees that project, member or not."""
     return bool(

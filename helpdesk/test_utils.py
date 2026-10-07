@@ -612,6 +612,23 @@ def make_project(
     return doc
 
 
+def make_project_file(
+    project: str,
+    file_name: str = "master-prompt.md",
+    content: bytes = b"# Master prompt\n\nBe concise.",
+    for_users: list[str] | None = None,
+    user: str | None = None,
+) -> str:
+    """Adds a file to a project through the project files API, as `user` (default:
+    the session user), and returns the File's name."""
+    from helpdesk.api.project_files import add_project_file
+
+    def add():
+        return add_project_file(project, file_name, content, for_users)["name"]
+
+    return run_as_user(user, add) if user else add()
+
+
 def make_department(name: str, **kwargs):
     """Creates an active HD Department at the end of the list, or returns the existing one."""
     if frappe.db.exists("HD Department", name):
