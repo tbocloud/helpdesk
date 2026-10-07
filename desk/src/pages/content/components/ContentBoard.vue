@@ -1,28 +1,68 @@
 <template>
   <div class="flex flex-col gap-4">
     <section
-      class="grid grid-cols-2 gap-3 lg:grid-cols-4"
+      class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4"
       :aria-label="__('Summary')"
     >
       <div
         v-for="tile in tiles"
-        :key="tile.label"
-        class="rounded-lg border border-outline-gray-2 bg-surface-base px-4 py-3"
+        :key="tile.key"
+        class="flex items-start gap-3 rounded-lg border px-4 py-3"
+        :class="TILE_TONES[tile.tone].tile"
       >
-        <p class="text-xs text-ink-gray-5">{{ tile.label }}</p>
-        <p
-          class="mt-0.5 truncate text-xl font-semibold tabular-nums text-ink-gray-9"
+        <div class="min-w-0 flex-1">
+          <p class="text-sm text-ink-gray-7">{{ tile.label }}</p>
+          <p
+            class="mt-0.5 truncate font-mono text-xl font-semibold tabular-nums text-ink-gray-9"
+          >
+            {{ tile.value }}
+          </p>
+          <p class="truncate text-xs text-ink-gray-6" :title="tile.sub">
+            {{ tile.sub }}
+          </p>
+        </div>
+        <!-- how much of the period is published, as a ring -->
+        <svg
+          v-if="tile.ring !== undefined"
+          viewBox="0 0 36 36"
+          class="size-9 shrink-0 -rotate-90"
+          aria-hidden="true"
         >
-          {{ tile.value }}
-        </p>
-        <p class="truncate text-xs text-ink-gray-5">{{ tile.sub }}</p>
+          <circle
+            cx="18"
+            cy="18"
+            r="15"
+            fill="none"
+            stroke-width="4"
+            style="stroke: var(--outline-gray-2)"
+          />
+          <circle
+            v-if="tile.ring > 0"
+            cx="18"
+            cy="18"
+            r="15"
+            fill="none"
+            stroke-width="4"
+            stroke-linecap="round"
+            style="stroke: var(--success)"
+            :stroke-dasharray="`${(tile.ring / 100) * RING} ${RING}`"
+          />
+        </svg>
+        <span
+          v-else
+          class="grid size-8 shrink-0 place-items-center rounded-full bg-surface-base"
+          :class="TILE_TONES[tile.tone].icon"
+        >
+          <component :is="tile.icon" class="size-4" aria-hidden="true" />
+        </span>
       </div>
     </section>
 
     <div v-if="active.length" class="flex flex-col gap-2">
       <div
-        class="flex h-2 overflow-hidden rounded-full bg-surface-gray-2"
-        aria-hidden="true"
+        class="flex h-2 gap-0.5 overflow-hidden rounded-full bg-surface-gray-2"
+        role="img"
+        :aria-label="barLabel"
       >
         <div
           v-for="b in buckets"
@@ -31,18 +71,19 @@
           :style="{ flex: b.count }"
         />
       </div>
-      <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-gray-6">
+      <div
+        class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-gray-6"
+        aria-hidden="true"
+      >
         <span
           v-for="b in buckets"
           :key="b.key"
           class="flex items-center gap-1.5"
         >
-          <span
-            class="size-2 rounded-sm"
-            :class="b.swatch"
-            aria-hidden="true"
-          />
-          <span class="font-mono tabular-nums">{{ b.count }}</span>
+          <span class="size-2 rounded-full" :class="b.swatch" />
+          <span class="font-mono tabular-nums text-ink-gray-8">{{
+            b.count
+          }}</span>
           {{ b.label }}
         </span>
       </div>
@@ -122,14 +163,14 @@
       :aria-label="dayjs(day.date).format('dddd D MMMM')"
     >
       <div
-        class="flex shrink-0 items-baseline gap-2 sm:w-20 sm:flex-col sm:items-start sm:gap-0 sm:pt-1"
+        class="flex shrink-0 items-baseline gap-2 sm:w-20 sm:flex-col sm:items-start sm:gap-0 sm:pt-2"
       >
         <span
-          class="text-2xl font-semibold tabular-nums"
+          class="font-mono text-2xl font-semibold tabular-nums"
           :class="day.date === today ? 'text-brand-ink' : 'text-ink-gray-9'"
           >{{ dayjs(day.date).format("D") }}</span
         >
-        <span class="text-xs text-ink-gray-5">{{
+        <span class="text-sm text-ink-gray-7">{{
           dayjs(day.date).format("ddd")
         }}</span>
         <span class="text-xs text-ink-gray-5">
@@ -145,103 +186,123 @@
         <article
           v-for="post in day.posts"
           :key="post.name"
-          class="overflow-hidden rounded-lg border bg-surface-base"
-          :class="isMissed(post) ? 'border-danger' : 'border-outline-gray-2'"
+          class="entry overflow-hidden rounded-xl border"
+          :class="`entry-${entryTone(post)}`"
           :aria-labelledby="`entry-${post.name}`"
         >
-          <header class="flex flex-wrap items-start gap-2 px-4 pt-3">
-            <div class="min-w-0 flex-1">
+          <header class="flex flex-wrap items-start gap-x-3 gap-y-2 px-4 pt-3">
+            <div class="min-w-0 flex-1 basis-60">
               <button
                 :id="`entry-${post.name}`"
                 type="button"
-                class="truncate text-left text-base font-medium text-ink-gray-9 hover:underline"
+                class="max-w-full truncate rounded text-left text-base font-semibold text-ink-gray-9 hover:underline"
                 @click="emit('open', post.name)"
               >
                 {{ post.title }}
               </button>
-              <p class="text-xs text-ink-gray-5">
-                {{ platformsOf(post).join(", ") }} · {{ post.format }}
-                <template v-if="!filtersCustomer">
-                  · {{ post.customer }}</template
-                >
+              <p class="text-sm text-ink-gray-6">
+                {{
+                  [post.format, filtersCustomer ? "" : post.customer]
+                    .filter(Boolean)
+                    .join(" · ")
+                }}
               </p>
               <p
                 v-if="needsApprovalSoon(post, now)"
-                class="mt-1 inline-flex items-center gap-1 rounded bg-warning-soft px-1.5 py-0.5 text-xs text-warning"
+                class="mt-1.5 inline-flex items-center gap-1.5 rounded-md bg-danger-soft px-2 py-0.5 text-sm text-danger"
               >
-                <LucideTriangleAlert class="size-3.5" aria-hidden="true" />
-                {{ __("Goes live within 2 days and isn't approved yet") }}
+                <LucideTriangleAlert
+                  class="size-3.5 shrink-0"
+                  aria-hidden="true"
+                />
+                {{ __("Goes live within 2 days and isn't approved yet.") }}
               </p>
             </div>
-            <span class="font-mono text-xs tabular-nums text-ink-gray-5">{{
-              dayjs(post.publish_on).format("h:mm A")
-            }}</span>
-            <StatusPill :post="post" />
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <ul
+                class="flex flex-wrap items-center gap-x-3 gap-y-1"
+                :aria-label="__('Platforms')"
+              >
+                <li
+                  v-for="p in platformsOf(post)"
+                  :key="p"
+                  class="inline-flex items-center gap-1.5 text-sm text-ink-gray-8"
+                >
+                  <ChannelIcon :channel="p" class="size-4 shrink-0" />{{
+                    __(p)
+                  }}
+                </li>
+              </ul>
+              <span
+                class="font-mono text-sm tabular-nums text-ink-gray-8"
+                :aria-label="__('Time')"
+                >{{ dayjs(post.publish_on).format("h:mm A") }}</span
+              >
+              <StatusPill :post="post" />
+            </div>
           </header>
 
-          <div
-            v-if="captionOf(post) || post.brief"
-            class="grid grid-cols-1 gap-3 px-4 pt-2 md:grid-cols-2"
-          >
-            <div>
-              <p class="text-2xs uppercase tracking-[0.06em] text-ink-gray-5">
+          <div class="grid grid-cols-1 gap-3 px-4 pt-3 md:grid-cols-2 md:gap-0">
+            <div class="md:pr-4">
+              <p class="text-2xs uppercase tracking-[0.06em] text-ink-gray-6">
                 {{ __("Post content") }}
               </p>
               <p
                 class="line-clamp-3 whitespace-pre-line text-p-sm"
-                :class="captionOf(post) ? 'text-ink-gray-8' : 'text-ink-gray-4'"
+                :class="captionOf(post) ? 'text-ink-gray-8' : 'text-ink-gray-5'"
               >
                 {{ captionOf(post) || __("Not written yet") }}
               </p>
             </div>
-            <div>
-              <p class="text-2xs uppercase tracking-[0.06em] text-ink-gray-5">
+            <div class="entry-rule md:border-l md:pl-4">
+              <p class="text-2xs uppercase tracking-[0.06em] text-ink-gray-6">
                 {{ __("Brief") }}
               </p>
               <p
                 class="line-clamp-3 whitespace-pre-line text-p-sm"
-                :class="post.brief ? 'text-ink-gray-8' : 'text-ink-gray-4'"
+                :class="post.brief ? 'text-ink-gray-8' : 'text-ink-gray-5'"
               >
                 {{ post.brief || __("No brief yet") }}
               </p>
             </div>
           </div>
 
-          <div class="flex flex-wrap gap-x-6 gap-y-2 px-4 pt-3">
+          <div class="flex flex-wrap gap-x-6 gap-y-3 px-4 pt-3">
             <div
               v-for="role in TEAM_ROLES"
               :key="role.field"
-              class="flex flex-col gap-0.5"
+              class="flex flex-col items-start gap-1"
             >
               <span
-                class="text-2xs uppercase tracking-[0.06em] text-ink-gray-5"
+                class="text-2xs uppercase tracking-[0.06em] text-ink-gray-6"
                 >{{ __(role.label) }}</span
               >
-              <!-- everyone on the role, each with how far their task is -->
               <button
                 v-if="!peopleOf(post, role.field).length"
                 type="button"
-                class="flex items-center gap-1.5 rounded text-sm text-brand-ink hover:underline"
+                class="inline-flex h-6 items-center gap-1 rounded-full bg-warning-soft px-2.5 text-xs font-medium text-warning hover:underline"
+                :aria-label="__('Assign {0}', __(role.label).toLowerCase())"
                 @click="emit('action', post, 'assign', role.field)"
               >
                 <LucidePlus class="size-3.5" aria-hidden="true" />{{
                   __("Assign")
                 }}
               </button>
+              <!-- everyone on the role, each with how far their task is -->
               <button
                 v-else
                 type="button"
-                class="flex flex-col items-start gap-1 rounded text-left text-sm text-ink-gray-8"
+                class="flex flex-col items-start gap-1 rounded-lg text-left text-sm text-ink-gray-8"
                 :title="__('Change who is on this')"
                 @click="emit('action', post, 'assign', role.field)"
               >
                 <span
                   v-for="person in peopleOf(post, role.field)"
                   :key="person.user"
-                  class="flex flex-wrap items-center gap-1.5"
+                  class="inline-flex flex-wrap items-center gap-1.5 rounded-full border border-outline-gray-2 bg-surface-base py-0.5 pl-0.5 pr-1"
                 >
                   <Avatar size="xs" :label="person.full_name" />
-                  <span class="max-w-[12rem] truncate hover:underline">{{
+                  <span class="max-w-[10rem] truncate hover:underline">{{
                     person.full_name
                   }}</span>
                   <TaskStatusBadge
@@ -249,38 +310,37 @@
                     :status="person.status"
                     :title="person.task"
                   />
-                  <span v-if="isTaskLate(person)" class="text-xs text-danger">{{
-                    __("late")
-                  }}</span>
+                  <span
+                    v-if="isTaskLate(person)"
+                    class="pr-1 text-xs text-danger"
+                    >{{ __("late") }}</span
+                  >
                 </span>
               </button>
             </div>
           </div>
 
           <footer
-            class="mt-3 flex flex-wrap items-center gap-2 border-t border-outline-gray-2 px-4 py-2.5"
-            :class="isMissed(post) ? 'bg-danger-soft' : 'bg-surface-gray-1'"
+            class="entry-footer mt-3 flex flex-wrap items-center gap-2 border-t px-4 py-2.5"
           >
             <p
-              class="flex-1 text-p-sm"
-              :class="isMissed(post) ? 'text-danger' : 'text-ink-gray-6'"
+              class="flex-1 basis-48 text-sm"
+              :class="isMissed(post, now) ? 'text-danger' : 'text-ink-gray-7'"
             >
               {{ statusLine(post) }}
             </p>
             <template v-if="!CLOSED_STATUSES.includes(post.status)">
-              <Button
-                size="sm"
-                :variant="isMissed(post) ? 'solid' : 'subtle'"
-                :label="__('Mark published')"
+              <button
+                type="button"
+                class="inline-flex h-7 items-center gap-1.5 rounded-md bg-success px-2.5 text-sm font-medium text-ink-base transition-opacity hover:opacity-90"
                 @click="emit('action', post, 'publish')"
               >
-                <template #prefix
-                  ><LucideSend class="size-3.5" aria-hidden="true"
-                /></template>
-              </Button>
+                <LucideSend class="size-3.5" aria-hidden="true" />
+                {{ __("Mark published") }}
+              </button>
               <Button
                 size="sm"
-                variant="subtle"
+                variant="outline"
                 :label="__('Postpone')"
                 @click="emit('action', post, 'postpone')"
               >
@@ -292,7 +352,7 @@
                 size="sm"
                 variant="ghost"
                 :aria-label="__('Cancel post')"
-                :title="__('Cancel post')"
+                :tooltip="__('Cancel post')"
                 @click="emit('action', post, 'cancel')"
               >
                 <LucideBan class="size-3.5" aria-hidden="true" />
@@ -303,7 +363,7 @@
               :href="post.published_url"
               target="_blank"
               rel="noopener"
-              class="inline-flex items-center gap-1 text-sm text-brand-ink hover:underline"
+              class="inline-flex items-center gap-1 rounded text-sm text-success hover:underline"
             >
               <LucideExternalLink class="size-3.5" aria-hidden="true" />{{
                 __("View post")
@@ -331,12 +391,15 @@
 
 <script setup lang="ts">
 import { __ } from "@/translation";
+import { onTimeTone } from "@/pages/performance/performanceMeta";
 import TaskStatusBadge from "@/pages/tasky/components/TaskStatusBadge.vue";
+import type { Tone } from "@/pages/tasky/taskMeta";
 import { Avatar, Button, createResource, dayjs } from "frappe-ui";
-import { computed, ref, watch } from "vue";
+import { type Component, computed, markRaw, ref, watch } from "vue";
 import LucideBan from "~icons/lucide/ban";
 import LucideCalendarClock from "~icons/lucide/calendar-clock";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
+import LucideClock from "~icons/lucide/clock";
 import LucideExternalLink from "~icons/lucide/external-link";
 import LucidePlus from "~icons/lucide/plus";
 import LucideSend from "~icons/lucide/send";
@@ -353,6 +416,7 @@ import {
   TEAM_ROLES,
   type TeamRole,
 } from "../constants";
+import ChannelIcon from "./ChannelIcon.vue";
 import ChipToggle from "./ChipToggle.vue";
 import StatusPill from "./StatusPill.vue";
 
@@ -372,6 +436,27 @@ const PERIOD_TEXT = {
     sub: __("this month"),
     empty: __("Nothing planned for this month yet."),
   },
+};
+
+// circumference of the progress ring (r = 15)
+const RING = 2 * Math.PI * 15;
+
+// Full class strings so Tailwind's scanner keeps them
+const TILE_TONES: Record<Tone, { tile: string; icon: string }> = {
+  neutral: {
+    tile: "border-outline-gray-2 bg-surface-base",
+    icon: "text-ink-gray-6 border border-outline-gray-2",
+  },
+  info: { tile: "border-outline-gray-2 bg-info-soft", icon: "text-info" },
+  success: {
+    tile: "border-outline-gray-2 bg-success-soft",
+    icon: "text-success",
+  },
+  warning: {
+    tile: "border-outline-gray-2 bg-warning-soft",
+    icon: "text-warning",
+  },
+  danger: { tile: "border-outline-gray-2 bg-danger-soft", icon: "text-danger" },
 };
 
 const props = defineProps<{
@@ -436,6 +521,15 @@ const active = computed(() =>
 const published = computed(() =>
   props.posts.filter((p) => p.status === "Published")
 );
+// same rule as the delivery report: late when it went out after its planned day
+const late = computed(() =>
+  published.value.filter(
+    (p) =>
+      p.published_on &&
+      dayjs(p.published_on).format("YYYY-MM-DD") >
+        dayjs(p.publish_on).format("YYYY-MM-DD")
+  )
+);
 const missed = computed(() =>
   props.posts.filter((p) => isMissed(p, now.value))
 );
@@ -480,10 +574,16 @@ const filterChips = computed(() =>
 const buckets = computed(() =>
   [
     {
-      key: "published",
-      label: __("Published"),
-      count: published.value.length,
+      key: "on-time",
+      label: __("Published on time"),
+      count: published.value.length - late.value.length,
       swatch: "bg-success",
+    },
+    {
+      key: "late",
+      label: __("Published late"),
+      count: late.value.length,
+      swatch: "bg-warning",
     },
     {
       key: "missed",
@@ -499,58 +599,92 @@ const buckets = computed(() =>
     },
   ].filter((b) => b.count)
 );
+const barLabel = computed(() =>
+  buckets.value.map((b) => `${b.count} ${b.label}`).join(", ")
+);
 
-const tiles = computed(() => {
-  const onTime = published.value.filter(
-    (p) =>
-      p.published_on &&
-      dayjs(p.published_on).format("YYYY-MM-DD") <=
-        dayjs(p.publish_on).format("YYYY-MM-DD")
-  ).length;
-  const postponed = props.posts.filter(
+interface Tile {
+  key: string;
+  label: string;
+  value: string;
+  sub: string;
+  tone: Tone;
+  icon?: Component;
+  ring?: number;
+}
+
+const tiles = computed<Tile[]>(() => {
+  const publishedCount = published.value.length;
+  const onTime = publishedCount - late.value.length;
+  const onTimePct = publishedCount
+    ? Math.round((onTime / publishedCount) * 100)
+    : null;
+  const postponedPosts = props.posts.filter(
     (p) => (p.times_postponed || 0) > 0
-  ).length;
+  );
+  const postponements = postponedPosts.reduce(
+    (n, p) => n + (p.times_postponed || 0),
+    0
+  );
   const next = upcoming.value
     .filter((p) => dayjs(p.publish_on).isAfter(dayjs()))
     .sort((a, b) => (a.publish_on! < b.publish_on! ? -1 : 1))[0];
   const planned = active.value.length;
+  const progress = planned ? Math.round((publishedCount / planned) * 100) : 0;
+  const periodSub = PERIOD_TEXT[props.period || "month"].sub;
   return [
     {
+      key: "progress",
       label: PERIOD_TEXT[props.period || "month"].progress,
-      value: planned
-        ? `${Math.round((published.value.length / planned) * 100)}%`
-        : "—",
-      sub: __(
-        "{0} of {1} published",
-        String(published.value.length),
-        String(planned)
-      ),
+      value: planned ? `${progress}%` : "—",
+      sub: __("{0} of {1} published", String(publishedCount), String(planned)),
+      tone: "neutral",
+      ring: progress,
     },
     {
+      key: "on-time",
       label: __("On-time rate"),
-      value: published.value.length
-        ? `${Math.round((onTime / published.value.length) * 100)}%`
-        : "—",
+      value: onTimePct == null ? "—" : `${onTimePct}%`,
       sub: __(
         "{0} of {1} on the planned day",
         String(onTime),
-        String(published.value.length)
+        String(publishedCount)
       ),
+      tone: onTimeTone(onTimePct),
+      icon: markRaw(LucideClock),
     },
     {
+      key: "postponed",
       label: __("Postponed"),
-      value: String(postponed),
-      sub: PERIOD_TEXT[props.period || "month"].sub,
+      value: String(postponedPosts.length),
+      sub:
+        postponements > postponedPosts.length
+          ? `${periodSub} · ${__("{0} moves", String(postponements))}`
+          : periodSub,
+      tone: postponedPosts.length ? "warning" : "neutral",
+      icon: markRaw(LucideCalendarClock),
     },
     {
+      key: "next",
       label: __("Next post"),
       value: next ? dayjs(next.publish_on).format("ddd D MMM, h:mm A") : "—",
       sub: next
         ? `${next.title} · ${platformsOf(next).join(", ")}`
         : __("Nothing scheduled"),
+      tone: next ? "info" : "neutral",
+      icon: markRaw(LucideSend),
     },
   ];
 });
+
+/** The card's tint: what needs chasing first, then how it went. */
+function entryTone(post: ContentPost) {
+  if (isMissed(post, now.value) || needsApprovalSoon(post, now.value))
+    return "danger";
+  if (post.status === "Published") return "success";
+  if (post.status === "Cancelled") return "neutral";
+  return "info";
+}
 
 const days = computed(() => {
   const byDay = new Map<
@@ -596,3 +730,36 @@ function statusLine(post: ContentPost) {
   return __("Goes live {0}", when) + postponed;
 }
 </script>
+
+<style scoped>
+/* Cards take a light wash of their tone; the footer and border carry it a step stronger. */
+.entry {
+  --tone: var(--outline-gray-3);
+  --tone-soft: var(--surface-gray-2);
+  background-color: color-mix(
+    in srgb,
+    var(--tone-soft) 55%,
+    var(--surface-base)
+  );
+  border-color: color-mix(in srgb, var(--tone) 30%, var(--outline-gray-2));
+}
+.entry-info {
+  --tone: var(--info);
+  --tone-soft: var(--info-soft);
+}
+.entry-danger {
+  --tone: var(--danger);
+  --tone-soft: var(--danger-soft);
+}
+.entry-success {
+  --tone: var(--success);
+  --tone-soft: var(--success-soft);
+}
+.entry-footer {
+  background-color: var(--tone-soft);
+  border-color: color-mix(in srgb, var(--tone) 20%, var(--outline-gray-2));
+}
+.entry-rule {
+  border-color: color-mix(in srgb, var(--tone) 20%, var(--outline-gray-2));
+}
+</style>
