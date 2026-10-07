@@ -145,6 +145,17 @@ def make_ticket(
     return ticket
 
 
+def make_assigned_ticket(subject: str, user: str, **values) -> str:
+    """Creates a ticket assigned to `user` only and returns its name as a string.
+
+    `_assign` is set directly so assignment rules can't add someone else; other
+    `values` (e.g. status, status_category) are written the same way, after insert.
+    """
+    name = make_ticket(subject=subject, customer=values.pop("customer", None)).name
+    frappe.db.set_value("HD Ticket", name, {"_assign": json.dumps([user]), **values})
+    return str(name)
+
+
 def create_agent(
     email: str, first_name: str | None = None, last_name: str | None = None
 ):

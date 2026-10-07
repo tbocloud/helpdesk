@@ -1,8 +1,12 @@
-"""Home: the state of the whole business on one screen.
+"""Home: what to do now and whether anything is on fire.
 
-Everyone gets their own open work. People who can see the overview (project
-managers, project leads, admins) also get tickets, work at risk, projects and
-team load; admins also get the health of the systems the hub depends on.
+Everyone gets "your day": their own tasks due today, overdue or at risk, tickets
+waiting for their reply, tasks waiting for their review and files shared with
+them lately. People who can see the overview (project managers, project leads,
+admins) also get the company pulse, what needs attention grouped by reason,
+projects ending soon and team load; admins also get the health of the systems
+the hub depends on. The Overview page does the analysis. See docs/home.md.
+
 Lists go through `frappe.get_list`, so nobody sees records they couldn't open.
 """
 
@@ -12,14 +16,26 @@ import frappe
 from frappe.utils import add_days, get_datetime, getdate, now_datetime, nowdate
 
 from helpdesk.api.work import (
+    ON_HOLD,
+    PENDING_REVIEW,
+    TASK_FIELDS,
+    WAITING_ON_TASK,
     _assignees,
+    _project_names,
+    _sort_key,
+    _task_item,
+    _ticket_item,
     can_see_overview,
     get_my_work,
     get_overview,
     get_project_portfolio,
 )
 from helpdesk.helpdesk.doctype.hd_ticket.hd_ticket import LOW_RATING_STARS
-from helpdesk.tasky.permissions import is_tasky_admin
+from helpdesk.tasky.permissions import (
+    get_led_projects,
+    get_managed_projects,
+    is_tasky_admin,
+)
 from helpdesk.utils import agent_only
 
 LIST_LIMIT = 8
@@ -28,6 +44,30 @@ PEOPLE_LIMIT = 10
 OPEN_TICKET_CATEGORIES = ("in", ["Open", "Paused"])
 OPEN_CHAT_STATUSES = ("in", ["Open", "Pending"])
 RATING_DAYS = 30
+DAY_LIMIT = 6
+GROUP_LIMIT = 5
+# replied this long ago with no answer: the ticket needs a nudge or closing
+WAITING_ON_CUSTOMER_DAYS = 3
+FILES_DAYS = 7
+ENDING_DAYS = 14
+ENDING_LIMIT = 6
+APPROVAL_LIMIT = 50
+FILE_LIMIT = 50
+PROJECT_FILE = "HD Project File"
+OPEN_TICKET_FIELDS = [
+    "name",
+    "subject",
+    "customer",
+    "status",
+    "status_category",
+    "priority",
+    "response_by",
+    "first_responded_on",
+    "resolution_by",
+    "last_agent_response",
+    "modified",
+    "_assign",
+]
 
 
 @frappe.whitelist()
@@ -36,43 +76,157 @@ def get_home() -> dict:
     mine = get_my_work()
     return {
         "mine": {"counts": mine["counts"], "items": mine["items"][:LIST_LIMIT]},
+        "day": _day(mine["items"]),
         "company": _company() if can_see_overview() else None,
         "systems": _systems() if is_tasky_admin() else None,
     }
+
+
+# --- your day ---
+
+
+def _day(items: list[dict]) -> dict:
+    user = frappe.session.user
+    today = str(getdate(nowdate()))
+    # tickets in an "Open" category status wait on the agent, "Paused" ones on someone else
+    reply_statuses = set(
+        frappe.get_all("HD Ticket Status", filters={"category": "Open"}, pluck="name")
+    )
+    tasks = [i for i in items if i["kind"] == "task" and _due_for_me(i, today)]
+    replies = [
+        i for i in items if i["kind"] == "ticket" and i["status"] in reply_statuses
+    ]
+    return {
+        "tasks": _section(tasks),
+        "replies": _section(replies),
+        "approvals": _section(_approvals(user)),
+        "files": _section(_files_for(user)),
+    }
+
+
+def _section(items: list) -> dict:
+    return {"count": len(items), "items": items[:DAY_LIMIT]}
+
+
+def _due_for_me(item: dict, today: str) -> bool:
+    # held tasks don't run late and reviewed ones are waiting on the reviewer
+    if item["status"] in (ON_HOLD, PENDING_REVIEW):
+        return False
+    return bool(item["is_overdue"] or item["deadline"] == today or item["risks"])
+
+
+def _approvals(user: str) -> list[dict]:
+    """Tasks waiting for review in the projects the user manages or leads."""
+    projects = list(set(get_managed_projects(user)) | set(get_led_projects(user)))
+    if not projects:
+        return []
+    tasks = frappe.get_list(
+        "Task",
+        filters={"status": PENDING_REVIEW, "project": ("in", projects)},
+        fields=TASK_FIELDS,
+        order_by="exp_end_date asc",
+        limit_page_length=APPROVAL_LIMIT,
+    )
+    names = _project_names(tasks)
+    return [{**_task_item(t, names), "can_approve": True} for t in tasks]
+
+
+def _files_for(user: str) -> list[dict]:
+    """Files marked for the user in the last FILES_DAYS by someone else, from projects they can read."""
+    record = frappe.qb.DocType(PROJECT_FILE)
+    row = frappe.qb.DocType("HD Project File User")
+    file = frappe.qb.DocType("File")
+    uploader = frappe.qb.DocType("User")
+    rows = (
+        frappe.qb.from_(row)
+        .join(record)
+        .on((record.name == row.parent) & (row.parenttype == PROJECT_FILE))
+        .join(file)
+        .on(file.name == record.file)
+        .left_join(uploader)
+        .on(uploader.name == file.owner)
+        .select(
+            file.name,
+            file.file_name,
+            file.creation,
+            file.owner,
+            record.project,
+            uploader.full_name.as_("uploaded_by_name"),
+        )
+        .where(
+            (row.user == user)
+            & (file.owner != user)
+            & (file.creation >= add_days(now_datetime(), -FILES_DAYS))
+        )
+        .orderby(file.creation, order=frappe.qb.desc)
+        .limit(FILE_LIMIT)
+        .run(as_dict=True)
+    )
+    projects = list({r.project for r in rows if r.project})
+    readable = (
+        dict(
+            frappe.get_list(
+                "Project",
+                filters={"name": ("in", projects)},
+                fields=["name", "project_name"],
+                as_list=True,
+            )
+        )
+        if projects
+        else {}
+    )
+    return [
+        {
+            "name": r.name,
+            "file_name": r.file_name,
+            "project": r.project,
+            "project_name": readable[r.project] or r.project,
+            "uploaded_by_name": r.uploaded_by_name or r.owner,
+            "creation": str(r.creation),
+        }
+        for r in rows
+        if r.project in readable
+    ]
+
+
+# --- company ---
 
 
 def _company() -> dict:
     overview = get_overview()
     portfolio = get_project_portfolio("Open")
     projects = sorted(portfolio["projects"], key=_project_order)
+    open_tickets = _open_tickets()
     return {
-        "tickets": _ticket_summary(),
+        "tickets": _ticket_summary(open_tickets),
         "work": overview["counts"],
         "attention": overview["attention"][:LIST_LIMIT],
+        "attention_groups": _attention_groups(overview["buckets"], open_tickets),
         "projects": [_project(card) for card in projects[:LIST_LIMIT]],
         "project_count": len(projects),
+        "ending_soon": _ending_soon(portfolio["projects"]),
         "people": [_person(p) for p in portfolio["people"] if not p["is_free"]][
             :PEOPLE_LIMIT
         ],
+        "people_busy": portfolio["totals"]["people_active"],
         "people_free": portfolio["totals"]["people_free"],
+        "free_people": [p["full_name"] for p in portfolio["people"] if p["is_free"]][
+            :PEOPLE_LIMIT
+        ],
     }
 
 
-def _ticket_summary() -> dict:
-    now = now_datetime()
-    open_tickets = frappe.get_list(
+def _open_tickets() -> list:
+    return frappe.get_list(
         "HD Ticket",
         filters={"status_category": OPEN_TICKET_CATEGORIES},
-        fields=[
-            "customer",
-            "status_category",
-            "response_by",
-            "first_responded_on",
-            "resolution_by",
-            "_assign",
-        ],
+        fields=OPEN_TICKET_FIELDS,
         limit_page_length=0,
     )
+
+
+def _ticket_summary(open_tickets: list) -> dict:
+    now = now_datetime()
     by_customer = Counter(t.customer or "" for t in open_tickets)
     return {
         "open": len(open_tickets),
@@ -101,12 +255,97 @@ def _ticket_summary() -> dict:
             and t.response_by
             and get_datetime(t.response_by) < now
         ),
+        "waiting_on_customer": len(_waiting_on_customer(open_tickets)),
         "rating": _rating(),
         "by_customer": [
             {"customer": customer or None, "open": count}
             for customer, count in by_customer.most_common(CUSTOMER_LIMIT)
         ],
     }
+
+
+def _waiting_on_customer(open_tickets: list) -> list:
+    """Tickets we answered over WAITING_ON_CUSTOMER_DAYS ago that the customer hasn't, oldest first."""
+    cutoff = add_days(now_datetime(), -WAITING_ON_CUSTOMER_DAYS)
+    waiting = [
+        t
+        for t in open_tickets
+        if t.status_category == "Paused"
+        and t.status != WAITING_ON_TASK
+        and get_datetime(t.last_agent_response or t.modified) < cutoff
+    ]
+    waiting.sort(key=lambda t: get_datetime(t.last_agent_response or t.modified))
+    return waiting
+
+
+def _attention_groups(buckets: dict, open_tickets: list) -> list[dict]:
+    """What needs a manager now, by reason; each item only under its first reason, empty reasons left out."""
+    now = now_datetime()
+    unassigned = sorted(
+        (_ticket_item(t) for t in open_tickets if not _assignees(t._assign)),
+        key=_sort_key,
+    )
+    waiting = []
+    for ticket in _waiting_on_customer(open_tickets):
+        since = get_datetime(ticket.last_agent_response or ticket.modified)
+        waiting.append({**_ticket_item(ticket), "waiting_days": (now - since).days})
+
+    seen = set()
+    groups = []
+    for key, items in (
+        ("overdue", buckets["overdue"]),
+        ("at_risk", buckets["at_risk"]),
+        ("unassigned_tickets", unassigned),
+        ("waiting_on_customer", waiting),
+    ):
+        fresh = [i for i in items if (i["kind"], i["name"]) not in seen]
+        seen.update((i["kind"], i["name"]) for i in fresh)
+        if fresh:
+            groups.append(
+                {"key": key, "count": len(fresh), "items": fresh[:GROUP_LIMIT]}
+            )
+    _add_customers([i for g in groups for i in g["items"]])
+    return groups
+
+
+def _add_customers(items: list[dict]) -> None:
+    """Fill in the customer of task items from their project, in one query."""
+    projects = list({i["project"] for i in items if i.get("project")})
+    customers = (
+        dict(
+            frappe.get_list(
+                "Project",
+                filters={"name": ("in", projects)},
+                fields=["name", "customer"],
+                as_list=True,
+            )
+        )
+        if projects
+        else {}
+    )
+    for item in items:
+        item["customer"] = item.get("customer") or customers.get(item.get("project"))
+
+
+def _ending_soon(cards: list[dict]) -> list[dict]:
+    """Open projects due to end within ENDING_DAYS, or already past their end date, soonest first."""
+    today = getdate(nowdate())
+    horizon = str(add_days(today, ENDING_DAYS))
+    ending = sorted(
+        (
+            c
+            for c in cards
+            if c["expected_end_date"] and c["expected_end_date"] <= horizon
+        ),
+        key=lambda c: c["expected_end_date"],
+    )
+    return [
+        {
+            **_project(card),
+            "days_left": (getdate(card["expected_end_date"]) - today).days,
+        }
+        for card in ending[:ENDING_LIMIT]
+    ]
 
 
 def _rating() -> dict:

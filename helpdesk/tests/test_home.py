@@ -4,11 +4,19 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_days, add_to_date, now_datetime, nowdate
 
-from helpdesk.api.home import get_home
+from helpdesk.api.home import (
+    _attention_groups,
+    _open_tickets,
+    _ticket_summary,
+    get_home,
+)
+from helpdesk.api.work import get_overview
 from helpdesk.test_utils import (
     create_customer,
+    make_assigned_ticket,
     make_assignment,
     make_project,
+    make_project_file,
     make_task,
     make_tasky_user,
     make_ticket,
@@ -35,7 +43,9 @@ class TestHome(FrappeTestCase):
             f"{CUSTOMER} - Rollout",
             members=[(LEAD[0], "Developer"), (DEV[0], "Developer")],
         ).name
-        frappe.db.set_value("Project", self.project, "project_lead", LEAD[0])
+        frappe.db.set_value(
+            "Project", self.project, {"project_lead": LEAD[0], "customer": CUSTOMER}
+        )
         self.overdue = make_task(
             self.project, "Import opening stock", add_days(nowdate(), -2)
         ).name
@@ -91,3 +101,103 @@ class TestHome(FrappeTestCase):
         self.assertIsNotNone(systems)
         for key in ("connections", "mailboxes", "teams", "chat", "ai"):
             self.assertIn(key, systems)
+
+    def test_your_day_has_only_my_work_that_is_due(self):
+        due_today = make_task(self.project, "Post the launch reel", nowdate()).name
+        make_assignment("Task", due_today, LEAD[0])
+        later = make_task(self.project, "Plan next quarter", add_days(nowdate(), 30))
+        make_assignment("Task", later.name, DEV[0])
+        mine = make_assigned_ticket("Login fails", DEV[0], customer=CUSTOMER)
+        theirs = make_assigned_ticket("Report is slow", LEAD[0], customer=CUSTOMER)
+
+        day = self.as_user(DEV)["day"]
+
+        self.assertEqual([i["name"] for i in day["tasks"]["items"]], [self.overdue])
+        replies = [i["name"] for i in day["replies"]["items"]]
+        self.assertIn(mine, replies)
+        self.assertNotIn(theirs, replies)
+        lead_day = self.as_user(LEAD)["day"]
+        self.assertIn(due_today, [i["name"] for i in lead_day["tasks"]["items"]])
+
+    def test_approvals_wait_for_the_project_lead_only(self):
+        frappe.db.set_value("Task", self.overdue, "status", "Pending Review")
+
+        lead_approvals = self.as_user(LEAD)["day"]["approvals"]
+        dev_day = self.as_user(DEV)["day"]
+
+        self.assertEqual([i["name"] for i in lead_approvals["items"]], [self.overdue])
+        self.assertTrue(lead_approvals["items"][0]["can_approve"])
+        self.assertEqual(dev_day["approvals"]["count"], 0)
+        # a task in review is waiting on the reviewer, not on its assignee
+        self.assertEqual(dev_day["tasks"]["count"], 0)
+
+    def test_files_for_me_skip_my_own_uploads(self):
+        make_project_file(self.project, "brief.md", for_users=[DEV[0]], user=LEAD[0])
+
+        dev_files = self.as_user(DEV)["day"]["files"]
+        lead_files = self.as_user(LEAD)["day"]["files"]
+
+        self.assertEqual([f["file_name"] for f in dev_files["items"]], ["brief.md"])
+        self.assertEqual(dev_files["items"][0]["project"], self.project)
+        self.assertEqual(lead_files["count"], 0)
+
+    def test_quiet_day_is_all_zero(self):
+        quiet = ("quiet.home@home-dashboard.example", "Nila Menon")
+        make_tasky_user(*quiet)
+
+        day = self.as_user(quiet)["day"]
+
+        for section in ("tasks", "replies", "approvals", "files"):
+            self.assertEqual(day[section], {"count": 0, "items": []})
+
+    def test_needs_attention_is_grouped_by_reason(self):
+        unassigned = make_ticket(subject="Printer offline", customer=CUSTOMER).name
+        frappe.db.set_value("HD Ticket", unassigned, "_assign", None)
+        waiting = make_assigned_ticket(
+            "Send the GST file",
+            DEV[0],
+            customer=CUSTOMER,
+            status="Replied",
+            status_category="Paused",
+            last_agent_response=add_days(now_datetime(), -5),
+        )
+        frappe.set_user(LEAD[0])
+        # only this test's records, so other tests' tickets can't fill the groups
+        buckets = get_overview(project=self.project)["buckets"]
+        tickets = [t for t in _open_tickets() if t.customer == CUSTOMER]
+
+        groups = {g["key"]: g for g in _attention_groups(buckets, tickets)}
+
+        # nothing is at risk, so that reason is left out
+        self.assertEqual(
+            list(groups), ["overdue", "unassigned_tickets", "waiting_on_customer"]
+        )
+        self.assertEqual(
+            [i["name"] for i in groups["overdue"]["items"]], [self.overdue]
+        )
+        self.assertEqual(groups["overdue"]["items"][0]["customer"], CUSTOMER)
+        self.assertEqual(
+            [i["name"] for i in groups["unassigned_tickets"]["items"]],
+            [str(unassigned)],
+        )
+        waiting_items = groups["waiting_on_customer"]["items"]
+        self.assertEqual([i["name"] for i in waiting_items], [waiting])
+        self.assertGreaterEqual(waiting_items[0]["waiting_days"], 4)
+        self.assertEqual(_ticket_summary(tickets)["waiting_on_customer"], 1)
+
+    def test_lead_home_has_the_new_sections(self):
+        company = self.as_user(LEAD)["company"]
+
+        for key in ("attention_groups", "ending_soon", "people_busy", "free_people"):
+            self.assertIn(key, company)
+        self.assertIn("overdue", [g["key"] for g in company["attention_groups"]])
+
+    def test_projects_ending_soon(self):
+        frappe.db.set_value(
+            "Project", self.project, "expected_end_date", add_days(nowdate(), 5)
+        )
+
+        ending = self.as_user(LEAD)["company"]["ending_soon"]
+
+        project = next(p for p in ending if p["name"] == self.project)
+        self.assertEqual(project["days_left"], 5)
