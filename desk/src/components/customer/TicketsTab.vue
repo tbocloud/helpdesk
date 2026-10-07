@@ -73,7 +73,7 @@
           :style="gridTemplateStyle"
         >
           <component
-            :is="col.sortable ? 'button' : 'div'"
+            :is="col.sortable ? NativeButton : 'div'"
             v-for="col in columns"
             :key="col.key"
             v-bind="col.sortable ? { type: 'button' } : {}"
@@ -179,6 +179,7 @@
 </template>
 
 <script setup lang="ts">
+import NativeButton from "@/components/NativeButton";
 import Link from "@/components/frappe-ui/Link.vue";
 import { IndicatorIcon } from "@/components/icons";
 import { useScreenSize } from "@/composables/screen";
