@@ -35,7 +35,9 @@ building blocks already exist; consolidate them rather than adding more:
 - stat tiles (`StatTile` in performance, the Overview tiles);
 - empty and error states (`TaskyState`);
 - badges (`TaskyBadge`);
-- charts (`desk/src/pages/performance/chartTheme.ts`).
+- charts (`desk/src/pages/performance/chartTheme.ts`);
+- settings pages (`SettingsLayoutBase`, `SettingsSection`, `SettingRow`, `SettingsList`; see
+  [settings-ui.md](settings-ui.md)).
 
 ## 3. Zero duplication, zero dead code, zero needless dependencies
 

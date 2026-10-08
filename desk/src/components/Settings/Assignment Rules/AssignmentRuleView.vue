@@ -1,51 +1,31 @@
 <template>
-  <SettingsLayoutBase>
-    <template #title>
-      <div class="flex items-center gap-2">
-        <Button
-          variant="ghost"
-          icon-left="chevron-left"
-          :label="
-            assignmentRuleData.assignmentRuleName || __('New Assignment Rule')
-          "
-          size="md"
-          @click="goBack()"
-          class="cursor-pointer -ml-4 hover:bg-transparent focus:bg-transparent focus:outline-none focus:ring-0 focus:ring-offset-0 focus-visible:none active:bg-transparent active:outline-none active:ring-0 active:ring-offset-0 active:text-ink-gray-5 font-semibold text-lg hover:opacity-70 !pr-0 !max-w-96 !justify-start"
-        />
-        <UnsavedBadge :show="isDirty" />
-      </div>
-    </template>
+  <SettingsLayoutBase
+    :title="assignmentRuleData.assignmentRuleName || __('New assignment rule')"
+    :back-label="__('Back to assignment rules')"
+    :dirty="isDirty"
+    :save-label="
+      assignmentRulesActiveScreen.data ? __('Save changes') : __('Create rule')
+    "
+    :save-disabled="Boolean(!isDirty && assignmentRulesActiveScreen.data)"
+    :saving="isLoading || createAssignmentRuleResource.loading"
+    :loading="getAssignmentRuleData.loading"
+    :error="getAssignmentRuleData.error"
+    @retry="getAssignmentRuleData.reload()"
+    @back="goBack()"
+    @save="saveAssignmentRule()"
+  >
     <template #header-actions>
-      <div class="flex items-center gap-4">
-        <div
-          class="flex items-center justify-between gap-2"
-          @click="assignmentRuleData.disabled = !assignmentRuleData.disabled"
-        >
-          <Switch size="sm" :model-value="!assignmentRuleData.disabled" />
-          <span class="text-sm text-ink-gray-7">{{ __("Enabled") }}</span>
-        </div>
-        <Button
-          :disabled="Boolean(!isDirty && assignmentRulesActiveScreen.data)"
-          :label="__('Save')"
-          theme="gray"
-          variant="solid"
-          @click="saveAssignmentRule()"
-          :loading="
-            isLoading ||
-            getAssignmentRuleData.loading ||
-            createAssignmentRuleResource.loading
-          "
-        />
-      </div>
+      <Switch
+        size="sm"
+        :label="__('Enabled')"
+        :model-value="!assignmentRuleData.disabled"
+        @update:model-value="
+          (enabled) => (assignmentRuleData.disabled = !enabled)
+        "
+      />
     </template>
     <template #content>
-      <div
-        v-if="getAssignmentRuleData.loading"
-        class="flex items-center justify-center absolute inset-x-0 top-5.5 bottom-0"
-      >
-        <LoadingIndicator class="w-4" />
-      </div>
-      <div v-if="!getAssignmentRuleData.loading">
+      <div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
           <div>
             <FormControl
@@ -124,10 +104,10 @@
             />
           </div>
         </div>
-        <hr class="my-8" />
+        <hr class="my-6 border-outline-gray-2" />
         <div>
           <div class="flex flex-col gap-1">
-            <span class="text-lg-semibold text-ink-gray-8">{{
+            <span class="text-base-semibold text-ink-gray-9">{{
               __("Assignment Condition")
             }}</span>
             <div class="flex items-center justify-between gap-6">
@@ -201,10 +181,10 @@
             />
           </div>
         </div>
-        <hr class="my-8" />
+        <hr class="my-6 border-outline-gray-2" />
         <div>
           <div class="flex flex-col gap-1">
-            <span class="text-lg-semibold text-ink-gray-8">{{
+            <span class="text-base-semibold text-ink-gray-9">{{
               __("Unassignment Condition")
             }}</span>
             <div class="flex items-center justify-between gap-6">
@@ -278,10 +258,10 @@
             />
           </div>
         </div>
-        <hr class="my-8" />
+        <hr class="my-6 border-outline-gray-2" />
         <div>
           <div class="flex flex-col gap-1">
-            <span class="text-lg-semibold text-ink-gray-8">{{
+            <span class="text-base-semibold text-ink-gray-9">{{
               __("Assignment Schedule")
             }}</span>
             <span class="text-p-sm text-ink-gray-6">
@@ -296,7 +276,7 @@
             <AssignmentSchedule />
           </div>
         </div>
-        <hr class="my-8" />
+        <hr class="my-6 border-outline-gray-2" />
         <AssigneeRules />
       </div>
     </template>
@@ -329,7 +309,6 @@ import {
   ErrorMessage,
   FormControl,
   FormLabel,
-  LoadingIndicator,
   Popover,
   Switch,
   toast,
@@ -350,7 +329,6 @@ import { convertToConditions } from "@/utils";
 import { disableSettingModalOutsideClick } from "../settingsModal";
 import { __ } from "@/translation";
 import SettingsLayoutBase from "@/components/layouts/SettingsLayoutBase.vue";
-import UnsavedBadge from "@/components/UnsavedBadge.vue";
 
 const isDirty = ref(false);
 const initialData = ref(null);
@@ -456,9 +434,9 @@ if (!assignmentRulesActiveScreen.value.data) {
 const goBack = () => {
   const confirmDialogInfo = {
     show: true,
-    title: __("Unsaved changes"),
+    title: __("Leave without saving?"),
     message: __(
-      "Are you sure you want to go back? Unsaved changes will be lost."
+      "Your changes on this page haven't been saved and will be lost."
     ),
     onConfirm: goBack,
   };

@@ -1,182 +1,103 @@
 <template>
   <SettingsLayoutBase
     :title="__('Agents')"
-    :description="__('Add, manage agents and assign roles to them.')"
+    :description="
+      __(
+        'Everyone who works on tickets, and whether they are an agent or a manager.'
+      )
+    "
   >
     <template #header-actions>
       <Button
-        @click="() => setActiveSettingsTab('Invite Agents')"
-        label="New"
         variant="solid"
-        class="rtl:flex-row-reverse"
+        :label="__('Invite agents')"
+        @click="() => setActiveSettingsTab('Invite Agents')"
       >
         <template #prefix>
-          <LucidePlus class="h-4 w-4 stroke-1.5" />
+          <LucidePlus class="size-4" aria-hidden="true" />
         </template>
       </Button>
     </template>
     <template #header-bottom>
-      <div class="flex items-center gap-2 justify-between">
-        <div class="relative grow">
-          <TextInput
-            :model-value="search"
-            @update:model-value="search = $event"
-            :placeholder="__('Search')"
-            type="text"
-            class="focus:ring-0 border-outline-gray-2"
-            :debounce="300"
-          >
-            <template #prefix>
-              <LucideSearch class="size-4" />
-            </template>
-          </TextInput>
-          <Button
-            v-if="search"
-            icon="lucide-x"
-            variant="ghost"
-            @click="search = ''"
-            class="absolute end-1 top-1/2 -translate-y-1/2"
-          />
-        </div>
+      <div class="flex items-center gap-2">
+        <SettingsSearch v-model="search" :placeholder="__('Search agents')" />
         <Dropdown :options="dropdownOptions" placement="right">
-          <template #default="{ open }">
-            <Button
-              :label="activeFilter"
-              class="flex items-center justify-between w-fit p-4"
-            >
-              <template #suffix>
-                <FeatherIcon
-                  :name="open ? 'chevron-up' : 'chevron-down'"
-                  class="h-4"
-                />
-              </template>
-            </Button>
-          </template>
-          <template #item-label="{ item }">
-            <button
-              class="group flex text-ink-gray-6 gap-4 w-full justify-between items-center rounded text-base"
-              @click="item.onClick"
-            >
-              <div class="flex items-center justify-between flex-1">
-                <span class="whitespace-nowrap">
-                  {{ item.label }}
-                </span>
-                <FeatherIcon
-                  v-if="activeFilter === item.label"
-                  name="check"
-                  class="size-4 text-ink-gray-7"
-                />
-              </div>
-            </button>
-          </template>
+          <Button :aria-label="__('Show agents: {0}', __(activeFilter))">
+            {{ __(activeFilter) }}
+            <template #suffix>
+              <LucideChevronDown class="size-4" aria-hidden="true" />
+            </template>
+          </Button>
         </Dropdown>
       </div>
     </template>
     <template #content>
-      <div class="grow">
-        <!-- loading state -->
-        <div
-          v-if="agents.loading"
-          class="flex mt-28 justify-between w-full h-full"
-        >
-          <Button
-            :loading="agents.loading"
-            variant="ghost"
-            class="w-full"
-            size="2xl"
-          />
-        </div>
-        <!-- Empty State -->
-        <EmptyState
-          v-if="!agents.loading && !agents.data?.length"
-          variant="badge"
-          :icon="AgentIcon"
-          title="No agent found"
-          :description="
-            activeFilter.length
-              ? 'Change your search terms or filters'
-              : 'Add one to get started.'
-          "
-        />
-        <!-- Agent List -->
-        <div
-          class="w-full"
-          v-if="!agents.loading && Boolean(agents.data?.length)"
-        >
-          <div
-            class="grid grid-cols-8 items-center gap-3 text-sm text-ink-gray-5"
+      <SettingsList
+        :items="agents.data"
+        :label="__('Agents')"
+        row-key="name"
+        :loading="agents.list.loading"
+        :error="agents.list.error"
+        :filtered="Boolean(search) || activeFilter !== 'All'"
+        :has-more="agents.hasNextPage"
+        :empty-icon="AgentIcon"
+        :empty-title="__('No agents yet')"
+        :empty-message="__('Invite the people who will answer tickets.')"
+        @retry="agents.reload()"
+        @more="agents.next()"
+        @clear-filters="clearFilters"
+      >
+        <template #default="{ item: agent }">
+          <SettingsListItem
+            :title="agent.agent_name"
+            :subtitle="agent.name"
+            :muted="!agent.is_active"
           >
-            <div class="col-span-6 text-p-sm">{{ __("Agent name") }}</div>
-          </div>
-          <hr class="mt-2" />
-          <div v-for="(agent, index) in agents.data" :key="agent.agent_name">
-            <div class="flex items-center justify-between h-14 group rounded">
-              <div class="flex items-center gap-x-3 grow">
-                <Avatar
-                  :image="agent.user_image"
-                  :label="agent.agent_name"
-                  size="xl"
-                />
-                <div>
-                  <div class="flex items-center gap-2">
-                    <p class="text-base">
-                      {{ agent.agent_name }}
-                    </p>
-                    <Badge
-                      :label="__('Inactive')"
-                      :theme="'gray'"
-                      :class="!agent.is_active ? 'opacity-100' : 'opacity-0'"
-                      variant="subtle"
-                    />
-                  </div>
-                  <div class="text-base text-ink-gray-6 mt-1">
-                    {{ agent.name }}
-                  </div>
-                </div>
-              </div>
-              <div class="flex items-center gap-2">
-                <Dropdown
-                  v-if="isManager"
-                  class="flex justify-end items-center"
-                  :options="getRoles(agent.name)"
-                  :label="getUserRole(agent.name)"
-                  :button="{
-                    label: getUserRole(agent.name),
-                    iconRight: 'chevron-down',
-                    iconLeft:
-                      getUserRole(agent.name) === 'Agent'
-                        ? 'user'
-                        : getUserRole(agent.name) === 'Manager'
-                        ? 'briefcase'
-                        : null,
-                  }"
-                  placement="right"
-                />
-                <Dropdown
-                  :options="getOptions(agent)"
-                  :key="agent"
-                  class="ms-2"
-                  placement="right"
+            <template #prefix>
+              <Avatar
+                :image="agent.user_image"
+                :label="agent.agent_name"
+                size="lg"
+              />
+            </template>
+            <template v-if="!agent.is_active" #badges>
+              <TaskyBadge :label="__('Inactive')" />
+            </template>
+            <template #actions>
+              <Dropdown
+                v-if="isManager"
+                :options="getRoles(agent.name)"
+                placement="right"
+              >
+                <Button
+                  :aria-label="
+                    __(
+                      'Role of {0}: {1}',
+                      agent.agent_name,
+                      getUserRole(agent.name)
+                    )
+                  "
                 >
-                  <Button icon="lucide-more-horizontal" variant="ghost" />
-                </Dropdown>
-              </div>
-            </div>
-            <hr v-if="index !== agents.data.length - 1" />
-          </div>
-          <!-- Load More Button -->
-          <div class="flex justify-center">
-            <Button
-              v-if="!agents.loading && agents.hasNextPage"
-              class="mt-3.5 p-2"
-              @click="() => agents.next()"
-              :loading="agents.loading"
-              :label="__('Load More')"
-              icon-left="lucide-refresh-cw"
-            />
-          </div>
-        </div>
-      </div>
+                  {{ __(getUserRole(agent.name)) }}
+                  <template #suffix>
+                    <LucideChevronDown class="size-4" aria-hidden="true" />
+                  </template>
+                </Button>
+              </Dropdown>
+              <Dropdown :options="getOptions(agent)" placement="right">
+                <Button
+                  variant="ghost"
+                  :label="__('More actions for {0}', agent.agent_name)"
+                >
+                  <template #icon>
+                    <LucideEllipsis class="size-4" aria-hidden="true" />
+                  </template>
+                </Button>
+              </Dropdown>
+            </template>
+          </SettingsListItem>
+        </template>
+      </SettingsList>
     </template>
   </SettingsLayoutBase>
 </template>
@@ -184,13 +105,20 @@
 <script setup lang="ts">
 import { useAuthStore } from "@/stores/auth";
 import { useUserStore } from "@/stores/user";
-import { Avatar, Button, call, Dropdown, FeatherIcon, toast } from "frappe-ui";
+import { Avatar, Button, call, Dropdown, toast } from "frappe-ui";
 import { h, onUnmounted } from "vue";
 import LucideCheck from "~icons/lucide/check";
+import LucideChevronDown from "~icons/lucide/chevron-down";
+import LucideEllipsis from "~icons/lucide/ellipsis";
+import LucidePlus from "~icons/lucide/plus";
 import { activeFilter, useAgents } from "./agents";
 import AgentIcon from "../icons/AgentIcon.vue";
 import { setActiveSettingsTab } from "./settingsModal";
 import SettingsLayoutBase from "@/components/layouts/SettingsLayoutBase.vue";
+import TaskyBadge from "@/components/TaskyBadge.vue";
+import SettingsList from "./SettingsList.vue";
+import SettingsListItem from "./SettingsListItem.vue";
+import SettingsSearch from "./SettingsSearch.vue";
 import { __ } from "@/translation";
 import { renderOptionIcon } from "@/utils";
 
@@ -281,7 +209,7 @@ function getOptions(agent) {
   let filters = agentStore.filters;
   return [
     {
-      label: "Disable Agent",
+      label: __("Deactivate agent"),
       icon: "lucide-x-circle",
       onClick: async () => {
         await agentStore.updateAgent(agent.name, 0);
@@ -290,7 +218,7 @@ function getOptions(agent) {
       condition: () => agent.is_active,
     },
     {
-      label: "Enable Agent",
+      label: __("Reactivate agent"),
       icon: "lucide-check-circle",
       onClick: async () => {
         await agentStore.updateAgent(agent.name, 1);
@@ -324,6 +252,11 @@ const dropdownOptions = [
     },
   },
 ];
+
+function clearFilters() {
+  search.value = "";
+  dropdownOptions[0].onClick();
+}
 
 onUnmounted(() => {
   agents.filters = {};

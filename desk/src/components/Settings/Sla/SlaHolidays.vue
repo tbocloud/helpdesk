@@ -1,7 +1,7 @@
 <template>
   <div class="flex items-center justify-between">
     <div class="flex flex-col gap-1">
-      <div class="text-lg-semibold text-ink-gray-8">
+      <div class="text-base-semibold text-ink-gray-9">
         {{ __("Work Schedule and Holidays") }}
       </div>
       <div class="text-p-sm text-ink-gray-6 max-w-lg">

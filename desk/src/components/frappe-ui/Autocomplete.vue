@@ -14,7 +14,11 @@
         >
           <div class="w-full">
             <button
+              :id="id"
               type="button"
+              :aria-labelledby="
+                labelledby && id ? `${labelledby} ${id}` : undefined
+              "
               class="flex w-full items-center justify-between focus:outline-none"
               :class="inputClasses"
               @click="() => !disabled && togglePopover()"
@@ -167,6 +171,16 @@ const props = defineProps({
   filterable: {
     type: Boolean,
     default: true,
+  },
+  /** id of the trigger button */
+  id: {
+    type: String,
+    default: undefined,
+  },
+  /** id of a visible label; the trigger is named by it plus its value */
+  labelledby: {
+    type: String,
+    default: undefined,
   },
 });
 const emit = defineEmits(["update:modelValue", "update:query", "change"]);

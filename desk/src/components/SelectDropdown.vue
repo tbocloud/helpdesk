@@ -2,6 +2,8 @@
   <Popover :placement="props.placement">
     <template #target="{ togglePopover }">
       <Button
+        :id="id"
+        :aria-labelledby="labelledby && id ? `${labelledby} ${id}` : undefined"
         class="flex items-center justify-between min-w-36"
         @click="togglePopover()"
         :class="targetClass"
@@ -65,6 +67,10 @@ interface Props {
   bodyClass?: string;
   placement?: string;
   defaultValue?: string;
+  /** id of the trigger button, for a `<label for>` or `labelledby` */
+  id?: string;
+  /** id of a visible label; the trigger is named by it plus its value */
+  labelledby?: string;
 }
 
 const props = withDefaults(defineProps<Props>(), {

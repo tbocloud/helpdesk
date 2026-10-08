@@ -1,4 +1,4 @@
-import { computed, h, markRaw, ref } from "vue";
+import { computed, h, markRaw, ref, type Component, type VNode } from "vue";
 import Agents from "./Agents.vue";
 import EmailConfig from "./EmailConfig.vue";
 import TeamsConfig from "./Teams/TeamsConfig.vue";
@@ -19,9 +19,9 @@ import {
   ERPNextSettingsIcon,
   FieldDependencyIcon,
   PhoneIcon,
+  SlidersIcon,
 } from "@/components/icons";
 import ERPNextIntegrationSettings from "@/components/erpnext-integration/ERPNextIntegrationSettings.vue";
-import { FieldDependencyIcon, PhoneIcon, SlidersIcon } from "@/components/icons";
 import TelephonyPage from "./Telephony/TelephonyPage.vue";
 import { EmailNotifications } from "./EmailNotifications";
 import { __ } from "@/translation";
@@ -48,12 +48,23 @@ export const showSettingsModal = ref(false);
 
 const auth = useAuthStore();
 
+export interface SettingsTab {
+  label: string;
+  icon: Component | VNode;
+  component: Component;
+  condition?: () => boolean;
+}
+
+interface SettingsGroup {
+  label: string;
+  condition?: () => boolean;
+  items: SettingsTab[];
+}
+
 export const tabs = computed(() => {
-  const _tabs = [
+  const _tabs: SettingsGroup[] = [
     {
-      label: __("My settings"),
-      hideLabel: true,
-      noborder: true,
+      label: __("Account"),
       items: [
         {
           label: __("Profile"),
@@ -209,7 +220,7 @@ export const tabs = computed(() => {
 
 export const activeTab = ref(tabs.value[0].items[0]);
 
-export const nextActiveTab = ref(null);
+export const nextActiveTab = ref<SettingsTab | null>(null);
 
 export const disableSettingModalOutsideClick = ref(false);
 
@@ -232,7 +243,8 @@ type TabName =
   | "Saved Replies"
   | "Content"
   | "Tasks"
-  | "File storage";
+  | "File storage"
+  | "CRM";
 
 export const setActiveSettingsTab = (tabName: TabName) => {
   activeTab.value =

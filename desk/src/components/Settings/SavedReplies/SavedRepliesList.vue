@@ -3,206 +3,139 @@
     :title="__('Saved Replies')"
     :description="
       __(
-        'Manage pre-defined responses that can be used to respond to customer queries.'
+        'Ready-made answers agents can drop into a reply: your own, your team\'s or everyone\'s.'
       )
     "
   >
     <template #header-actions>
-      <Button
-        :label="__('New')"
-        theme="gray"
-        variant="solid"
-        @click="goToNew()"
-        icon-left="lucide-plus"
-      />
+      <Button variant="solid" :label="__('New saved reply')" @click="goToNew()">
+        <template #prefix>
+          <LucidePlus class="size-4" aria-hidden="true" />
+        </template>
+      </Button>
     </template>
     <template #header-bottom>
-      <div class="flex items-center gap-2 justify-between">
-        <div class="relative w-full">
-          <TextInput
-            :model-value="savedRepliesSearchQuery"
-            @update:model-value="savedRepliesSearchQuery = $event"
-            :placeholder="__('Search')"
-            type="text"
-            :debounce="300"
-          >
-            <template #prefix>
-              <LucideSearch class="size-4" />
-            </template>
-          </TextInput>
-          <Button
-            v-if="savedRepliesSearchQuery"
-            icon="lucide-x"
-            variant="ghost"
-            @click="savedRepliesSearchQuery = ''"
-            class="absolute right-1 top-1/2 -translate-y-1/2"
-          />
-        </div>
+      <div class="flex items-center gap-2">
+        <SettingsSearch
+          v-model="savedRepliesSearchQuery"
+          :placeholder="__('Search saved replies')"
+        />
         <Dropdown :options="filterOptions" placement="right">
-          <template #default="{ open }">
-            <Button
-              :label="activeFilterLabel"
-              class="flex items-center justify-between w-fit p-4"
-            >
-              <template #suffix>
-                <FeatherIcon
-                  :name="open ? 'chevron-up' : 'chevron-down'"
-                  class="h-4"
-                />
-              </template>
-            </Button>
-          </template>
+          <Button
+            :aria-label="__('Show saved replies: {0}', activeFilterLabel)"
+          >
+            {{ activeFilterLabel }}
+            <template #suffix>
+              <LucideChevronDown class="size-4" aria-hidden="true" />
+            </template>
+          </Button>
         </Dropdown>
       </div>
     </template>
     <template #content>
-      <div
-        v-if="savedRepliesListResource?.list?.loading"
-        class="flex items-center justify-center h-[stretch] absolute w-[stretch] left-0 top-5.5"
-      >
-        <LoadingIndicator class="w-4" />
-      </div>
-      <EmptyState
-        v-if="
-          !savedRepliesListResource?.list?.loading &&
-          !savedRepliesListResource?.data?.length
+      <SettingsList
+        :items="savedRepliesListResource?.data"
+        :label="__('Saved replies')"
+        :loading="savedRepliesListResource?.list?.loading"
+        :error="savedRepliesListResource?.list?.error"
+        :filtered="Boolean(savedRepliesSearchQuery) || activeFilter !== 'All'"
+        :empty-icon="SavedReplyIcon"
+        :empty-title="__('No saved replies yet')"
+        :empty-message="
+          __('Save an answer you give often, then insert it in any reply.')
         "
-        variant="badge"
-        :icon="SavedReplyIcon"
-        :title="__('No saved replies found')"
-        :description="__('Add one to get started.')"
-      />
-      <div
-        v-if="
-          !savedRepliesListResource?.list?.loading &&
-          savedRepliesListResource?.data?.length
-        "
-        class="-ml-2"
+        @retry="savedRepliesListResource?.reload()"
+        @clear-filters="clearFilters"
       >
-        <div
-          class="grid grid-cols-12 items-center gap-3 text-sm text-ink-gray-5 ml-2"
-        >
-          <div class="col-span-7">{{ __("Title") }}</div>
-          <div class="col-span-2">{{ __("Owner") }}</div>
-          <div class="col-span-3">{{ __("Scope") }}</div>
-        </div>
-        <hr class="mt-2 mx-2" />
-        <div
-          v-for="(savedReply, index) in savedRepliesListResource?.data"
-          :key="savedReply.name"
-        >
-          <div
-            class="grid grid-cols-12 items-center gap-4 cursor-pointer hover:bg-surface-sidebar rounded"
+        <template #default="{ item: savedReply }">
+          <SettingsListItem
+            :title="savedReply.title"
+            @open="
+              savedRepliesActiveScreen = {
+                screen: 'view',
+                data: savedReply,
+              }
+            "
           >
-            <div
-              @click="
-                savedRepliesActiveScreen = {
-                  screen: 'view',
-                  data: savedReply,
-                }
-              "
-              class="w-full px-2 flex flex-col justify-center h-12.5 col-span-7 min-w-0"
-            >
-              <div class="text-base-medium text-ink-gray-7 w-full truncate">
-                {{ savedReply.title }}
-              </div>
-            </div>
-            <div
-              class="flex items-center gap-1.5 text-sm text-ink-gray-7 col-span-2 min-w-0"
-            >
-              <Avatar
-                :label="
+            <template #meta>
+              <span
+                class="hidden w-36 shrink-0 items-center gap-1.5 text-sm text-ink-gray-7 md:flex"
+              >
+                <Avatar
+                  :label="
+                    getUser(savedReply.owner)?.full_name || savedReply.owner
+                  "
+                  :image="getUser(savedReply.owner)?.user_image"
+                  size="xs"
+                  class="shrink-0"
+                />
+                <span class="truncate">{{
                   getUser(savedReply.owner)?.full_name || savedReply.owner
-                "
-                :image="getUser(savedReply.owner)?.user_image"
-                size="xs"
-                class="shrink-0"
-              />
-              <span class="truncate">{{
-                getUser(savedReply.owner)?.full_name
-              }}</span>
-            </div>
-            <div
-              class="flex justify-between items-center w-full pr-2 col-span-3"
-            >
-              <div class="flex items-center gap-1 text-sm text-ink-gray-7">
+                }}</span>
+              </span>
+              <span
+                class="flex w-24 shrink-0 items-center gap-1 text-sm text-ink-gray-7"
+              >
                 <component
                   :is="getScopeIcon(savedReply.scope)"
-                  class="size-4"
+                  class="size-4 shrink-0 text-ink-gray-5"
+                  aria-hidden="true"
                 />
-                {{ savedReply.scope }}
-              </div>
+                {{ __(savedReply.scope) }}
+              </span>
+            </template>
+            <template #actions>
               <Dropdown
                 placement="right"
                 :options="dropdownOptions(savedReply)"
               >
                 <Button
-                  icon="lucide-more-horizontal"
                   variant="ghost"
+                  :label="__('More actions for {0}', savedReply.title)"
                   @click="isConfirmingDelete = false"
-                  class="mr-2"
-                />
+                >
+                  <template #icon>
+                    <LucideEllipsis class="size-4" aria-hidden="true" />
+                  </template>
+                </Button>
               </Dropdown>
-            </div>
-          </div>
-          <hr
-            v-if="index !== savedRepliesListResource.data.length - 1"
-            class="mx-2"
-          />
-        </div>
-      </div>
+            </template>
+          </SettingsListItem>
+        </template>
+      </SettingsList>
     </template>
   </SettingsLayoutBase>
-  <Dialog
-    :title="__('Duplicate Saved reply')"
+  <DuplicateDialog
     v-model:open="duplicateDialog.show"
-  >
-    <template #default>
-      <div class="flex flex-col gap-4">
-        <FormControl
-          :label="__('New Saved reply Name')"
-          type="text"
-          v-model="duplicateDialog.newTitle"
-        />
-      </div>
-    </template>
-    <template #actions>
-      <div class="flex gap-2 justify-end">
-        <Button
-          variant="subtle"
-          :label="__('Close')"
-          @click="duplicateDialog.show = false"
-        />
-        <Button variant="solid" :label="__('Duplicate')" @click="duplicate()" />
-      </div>
-    </template>
-  </Dialog>
+    v-model:name="duplicateDialog.newTitle"
+    :title="__('Duplicate saved reply')"
+    :label="__('Title of the copy')"
+    :loading="savedRepliesListResource?.insert.loading"
+    @duplicate="duplicate()"
+  />
 </template>
 
 <script setup lang="ts">
 import { useConfigStore } from "@/stores/config";
 import { __ } from "@/translation";
 import { ConfirmDelete } from "@/utils";
-import {
-  Avatar,
-  Button,
-  call,
-  Dropdown,
-  FeatherIcon,
-  LoadingIndicator,
-  TextInput,
-  toast,
-} from "frappe-ui";
+import { Avatar, Button, call, Dropdown, toast } from "frappe-ui";
 import { storeToRefs } from "pinia";
 import { computed, inject, ref, Ref, watch } from "vue";
-import EmptyState from "@/components/EmptyState.vue";
 import GlobeIcon from "~icons/lucide/globe";
+import LucideChevronDown from "~icons/lucide/chevron-down";
+import LucideEllipsis from "~icons/lucide/ellipsis";
+import LucidePlus from "~icons/lucide/plus";
 import UserIcon from "~icons/lucide/user";
 import UsersIcon from "~icons/lucide/users";
 import { useUserStore } from "../../../stores/user";
 import { SavedReply, SavedReplyListResourceSymbol } from "../../../types";
 import SavedReplyIcon from "../../icons/SavedReplyIcon.vue";
 import SettingsLayoutBase from "../../layouts/SettingsLayoutBase.vue";
+import DuplicateDialog from "../DuplicateDialog.vue";
+import SettingsList from "../SettingsList.vue";
+import SettingsListItem from "../SettingsListItem.vue";
+import SettingsSearch from "../SettingsSearch.vue";
 import { activeFilter } from "./savedReplies";
 
 const { getUser } = useUserStore();
@@ -217,7 +150,6 @@ const duplicateDialog = ref({
   title: "",
   newTitle: "",
 });
-const savedRepliesList = ref([]);
 
 const goToNew = () => {
   savedRepliesActiveScreen.value = {
@@ -330,6 +262,11 @@ const applyFilter = (scope: string) => {
   };
   savedRepliesListResource.list.reload();
 };
+
+function clearFilters() {
+  savedRepliesSearchQuery.value = "";
+  applyFilter("All");
+}
 
 const getScopeIcon = (scope: string) => {
   const icons = [

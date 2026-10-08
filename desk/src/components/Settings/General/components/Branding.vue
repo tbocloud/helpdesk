@@ -1,11 +1,8 @@
 <template>
-  <div v-if="settingsData">
-    <div class="text-base-semibold text-ink-gray-9">
-      {{ __("Branding") }}
-    </div>
+  <SettingsSection v-if="settingsData" :title="__('Branding')">
     <FormControl
       type="text"
-      class="w-full md:w-1/2 mt-6"
+      class="w-full md:w-1/2"
       v-model="settingsData.brandName"
       :label="__('Brand name')"
       :placeholder="__('Enter brand name')"
@@ -35,7 +32,7 @@
       @onRemove="onRemove('HD Settings', 'favicon')"
       :isLoading="isFaviconLoading"
     />
-  </div>
+  </SettingsSection>
   <ConfirmDialog
     v-model="showConfirmDialog.show"
     :title="showConfirmDialog.title"
@@ -47,6 +44,7 @@
 
 <script setup lang="ts">
 import { inject, ref, watch } from "vue";
+import SettingsSection from "../../SettingsSection.vue";
 import LogoUpload from "./LogoUpload.vue";
 import { createResource, toast } from "frappe-ui";
 import { __ } from "@/translation";

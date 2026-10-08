@@ -3,44 +3,29 @@
     :title="__('Business Holidays')"
     :description="
       __(
-        'Set your team’s working days, hours, and holidays using a template or custom schedule.'
+        'Working days, hours and holidays. SLA timers only run inside these hours.'
       )
     "
   >
     <template #header-actions>
       <Button
-        :label="__('New')"
-        theme="gray"
         variant="solid"
+        :label="__('New holiday schedule')"
         @click="goToNew()"
-        icon-left="lucide-plus"
-      />
+      >
+        <template #prefix>
+          <LucidePlus class="size-4" aria-hidden="true" />
+        </template>
+      </Button>
     </template>
     <template
       v-if="holidayList.data?.length > 9 || holidaySearchRef.length"
       #header-bottom
     >
-      <div class="relative">
-        <TextInput
-          :model-value="holidaySearchRef"
-          @update:model-value="holidaySearchRef = $event"
-          :placeholder="__('Search')"
-          type="text"
-          class="focus:ring-0 border-outline-gray-2"
-          :debounce="300"
-        >
-          <template #prefix>
-            <LucideSearch class="size-4" />
-          </template>
-        </TextInput>
-        <Button
-          v-if="holidaySearchRef"
-          icon="lucide-x"
-          variant="ghost"
-          @click="holidaySearchRef = ''"
-          class="absolute right-1 top-1/2 -translate-y-1/2"
-        />
-      </div>
+      <SettingsSearch
+        v-model="holidaySearchRef"
+        :placeholder="__('Search holiday schedules')"
+      />
     </template>
     <template #content>
       <HolidayList />
@@ -53,8 +38,11 @@ import {
   holidayListActiveScreen,
   resetHolidayData,
 } from "@/stores/holidayList";
+import { Button } from "frappe-ui";
+import LucidePlus from "~icons/lucide/plus";
+import SettingsSearch from "../SettingsSearch.vue";
 import HolidayList from "./HolidayList.vue";
-import { inject, Ref, ref, watch } from "vue";
+import { inject, Ref, watch } from "vue";
 import SettingsLayoutBase from "@/components/layouts/SettingsLayoutBase.vue";
 import { HolidayListResourceSymbol } from "@/types";
 

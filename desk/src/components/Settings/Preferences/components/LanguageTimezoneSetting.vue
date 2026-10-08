@@ -1,46 +1,42 @@
 <template>
-  <div class="flex flex-col gap-6">
-    <div class="flex items-center justify-between gap-4">
-      <div class="flex flex-col gap-1">
-        <span class="text-base-medium text-ink-gray-8">
-          {{ __("Language") }}
-        </span>
-        <span class="text-p-sm text-ink-gray-6">
-          {{ __("Change language of the application.") }}
-        </span>
-      </div>
-      <Link
-        :model-value="user.doc?.language"
-        doctype="Language"
-        class="w-40"
-        @update:model-value="updateLanguage"
-      />
-    </div>
-    <div class="flex items-center justify-between gap-4">
-      <div class="flex flex-col gap-1">
-        <span class="text-base-medium text-ink-gray-8">
-          {{ __("Timezone") }}
-        </span>
-        <span class="text-p-sm text-ink-gray-6">
-          {{ __("Change timezone of the application.") }}
-        </span>
-      </div>
-      <Autocomplete
-        :model-value="user.doc?.time_zone"
-        :options="timezoneOptions"
-        :placeholder="__('Select Timezone')"
-        size="sm"
-        class="w-40"
-        @update:model-value="updateTimezone"
-      />
-    </div>
-  </div>
+  <SettingRow
+    v-slot="{ id, labelledby }"
+    :label="__('Language')"
+    :description="__('Change language of the application.')"
+  >
+    <Link
+      :id="id"
+      :labelledby="labelledby"
+      :model-value="user.doc?.language"
+      doctype="Language"
+      class="w-full sm:w-48"
+      :placeholder="__('Select language')"
+      @update:model-value="updateLanguage"
+    />
+  </SettingRow>
+  <SettingRow
+    v-slot="{ id, labelledby }"
+    :label="__('Timezone')"
+    :description="__('Change timezone of the application.')"
+  >
+    <Autocomplete
+      :id="id"
+      :labelledby="labelledby"
+      :model-value="user.doc?.time_zone"
+      :options="timezoneOptions"
+      :placeholder="__('Select Timezone')"
+      size="sm"
+      class="w-full sm:w-48"
+      @update:model-value="updateTimezone"
+    />
+  </SettingRow>
 </template>
 
 <script setup lang="ts">
 import { ref } from "vue";
 import { createResource } from "frappe-ui";
 import { __ } from "@/translation";
+import SettingRow from "../../SettingRow.vue";
 
 const props = defineProps<{ user: any }>();
 

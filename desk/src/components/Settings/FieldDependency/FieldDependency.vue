@@ -1,43 +1,20 @@
 <template>
-  <SettingsLayoutBase>
-    <template #title>
-      <div class="flex items-center gap-2">
-        <Button
-          variant="ghost"
-          icon-left="chevron-left"
-          :label="dependencyLabel"
-          size="md"
-          @click="handleBackNavigation"
-          class="cursor-pointer -ml-4 hover:bg-transparent focus:bg-transparent focus:outline-none focus:ring-0 focus:ring-offset-0 focus-visible:none active:bg-transparent active:outline-none active:ring-0 active:ring-offset-0 active:text-ink-gray-5 font-semibold text-ink-gray-7 text-lg hover:opacity-70 !pr-0"
-        />
-        <UnsavedBadge :show="isDirty" />
-      </div>
-    </template>
+  <SettingsLayoutBase
+    :title="dependencyLabel"
+    :back-label="__('Back to field dependencies')"
+    :dirty="isDirty"
+    :save-label="isNew ? __('Create dependency') : __('Save changes')"
+    :save-disabled="
+      !state.selectedParentField ||
+      !state.selectedChildField ||
+      Object.keys(state.childSelections).length === 0
+    "
+    :saving="createUpdateFieldDependency.loading"
+    @back="handleBackNavigation"
+    @save="handleSubmit"
+  >
     <template #header-actions>
-      <div class="flex gap-4">
-        <!-- Switch -->
-        <div class="flex gap-2 items-center">
-          <Switch v-model="state.enabled" class="!w-fit" />
-          <span class="text-p-base text-ink-gray-6">
-            {{ __("Enabled") }}
-          </span>
-        </div>
-        <!-- Actions -->
-        <div class="flex gap-1">
-          <Button
-            :label="__('Save')"
-            variant="solid"
-            size="sm"
-            :disabled="
-              !state.selectedParentField ||
-              !state.selectedChildField ||
-              Object.keys(state.childSelections).length === 0
-            "
-            :loading="createUpdateFieldDependency.loading"
-            @click="handleSubmit"
-          />
-        </div>
-      </div>
+      <Switch size="sm" :label="__('Enabled')" v-model="state.enabled" />
     </template>
     <template #content>
       <div>
@@ -72,9 +49,9 @@
   </SettingsLayoutBase>
   <ConfirmDialog
     v-model="showConfirmDialog"
-    :title="__('Unsaved changes')"
+    :title="__('Leave without saving?')"
     :message="
-      __('Are you sure you want to go back? Unsaved changes will be lost.')
+      __('Your changes on this page haven\'t been saved and will be lost.')
     "
     :onConfirm="() => $emit('update:step', 'fd-list')"
     :onCancel="() => (showConfirmDialog = false)"
@@ -98,7 +75,6 @@ import FieldDependencyFieldsSelection from "./FieldDependencyFieldsSelection.vue
 import FieldDependencyValueSelection from "./FieldDependencyValueSelection.vue";
 import { __ } from "@/translation";
 import SettingsLayoutBase from "@/components/layouts/SettingsLayoutBase.vue";
-import UnsavedBadge from "@/components/UnsavedBadge.vue";
 
 const props = defineProps({
   fieldDependencyName: {
@@ -111,7 +87,7 @@ const emit = defineEmits(["update:step"]);
 const isNew = computed(() => !props.fieldDependencyName);
 
 const dependencyLabel = computed(() => {
-  if (isNew.value) return __("New Field Dependency");
+  if (isNew.value) return __("New field dependency");
   return getFieldDependencyLabel(props.fieldDependencyName);
 });
 

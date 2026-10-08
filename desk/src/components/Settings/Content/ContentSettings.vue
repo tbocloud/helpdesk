@@ -1,41 +1,23 @@
 <template>
   <SettingsLayoutBase
+    :title="__('Content')"
     :description="
       __(
         'Tasks, monthly plans, client follow-up, missed post alerts and the client portal for the Content Calendar.'
       )
     "
+    :dirty="isDirty"
+    :saving="save.loading"
+    :loading="!form && !settings.error"
+    :error="settings.error"
+    @retry="settings.reload()"
+    @save="save.submit()"
   >
-    <template #title>
-      <div class="flex items-center gap-2">
-        <h1 class="text-lg-semibold text-ink-gray-8">{{ __("Content") }}</h1>
-        <UnsavedBadge :show="isDirty" />
-      </div>
-    </template>
-    <template #header-actions>
-      <Transition name="fade">
-        <Button
-          v-if="isDirty"
-          variant="solid"
-          :label="__('Save')"
-          :loading="save.loading"
-          @click="save.submit()"
-        />
-      </Transition>
-    </template>
     <template #content>
-      <div
-        v-if="!form"
-        class="flex items-center justify-center absolute inset-x-0 top-5.5 bottom-0"
-      >
-        <LoadingIndicator class="w-4" />
-      </div>
-      <div v-else class="flex flex-col">
-        <section>
-          <h2 class="text-base-semibold text-ink-gray-9">
-            {{ __("Missed post alerts") }}
-          </h2>
+      <div v-if="form">
+        <SettingsSection :title="__('Missed post alerts')">
           <SettingRow
+            v-slot="{ id }"
             :label="__('Email when a post is missed')"
             :description="
               __(
@@ -43,16 +25,18 @@
               )
             "
           >
-            <Switch v-model="form.enable_missed_post_alerts" />
+            <Switch :id="id" v-model="form.enable_missed_post_alerts" />
           </SettingRow>
           <template v-if="form.enable_missed_post_alerts">
             <SettingRow
+              v-slot="{ id }"
               :label="__('Grace period')"
               :description="
                 __('Minutes to wait after the publish time before alerting.')
               "
             >
               <FormControl
+                :id="id"
                 v-model="form.grace_period_minutes"
                 type="number"
                 class="w-24"
@@ -61,44 +45,27 @@
               />
             </SettingRow>
             <SettingRow
+              v-slot="{ id }"
               :label="__('Notify the post\'s writer, designer and marketer')"
               :description="__('Along with the people below.')"
             >
-              <Switch v-model="form.notify_post_team" />
+              <Switch :id="id" v-model="form.notify_post_team" />
             </SettingRow>
 
-            <div class="mt-6 flex flex-col gap-2">
+            <div class="flex flex-col gap-2">
               <span class="text-base-medium text-ink-gray-8">{{
                 __("Always notify")
               }}</span>
-              <div class="flex flex-wrap items-center gap-2">
-                <span
-                  v-for="user in form.alert_recipients"
-                  :key="user"
-                  class="inline-flex h-7 items-center gap-1 rounded-full bg-surface-gray-2 ps-2.5 pe-1 text-sm text-ink-gray-8"
-                >
-                  <span class="font-mono text-xs">{{ user }}</span>
-                  <button
-                    type="button"
-                    class="grid size-5 place-items-center rounded-full text-ink-gray-5 hover:bg-surface-gray-4 hover:text-ink-gray-8"
-                    :aria-label="__('Remove {0}', user)"
-                    @click="removeRecipient(user)"
-                  >
-                    <LucideX class="size-3.5" aria-hidden="true" />
-                  </button>
-                </span>
-                <Link
-                  v-model="newRecipient"
-                  class="w-56"
-                  doctype="User"
-                  :filters="{ enabled: 1, user_type: 'System User' }"
-                  :placeholder="__('Add a person')"
-                />
-              </div>
+              <ChipListInput
+                v-model="form.alert_recipients"
+                doctype="User"
+                :filters="{ enabled: 1, user_type: 'System User' }"
+                :placeholder="__('Add a person')"
+                mono
+              />
             </div>
             <FormControl
               v-model="form.alert_emails"
-              class="mt-4"
               type="textarea"
               :rows="2"
               :label="__('Also email')"
@@ -108,7 +75,6 @@
             />
 
             <TemplateFields
-              class="mt-6"
               :title="__('Missed post email')"
               :defaults="defaults.data?.missed_post"
               v-model:subject="form.missed_post_subject"
@@ -116,7 +82,7 @@
             />
             <p
               v-if="settings.data?.last_alert_run_on"
-              class="mt-4 text-p-sm text-ink-gray-5"
+              class="text-p-sm text-ink-gray-5"
             >
               {{
                 __(
@@ -127,21 +93,18 @@
               }}
             </p>
           </template>
-        </section>
+        </SettingsSection>
 
-        <hr class="my-8" />
-
-        <section>
-          <h2 class="text-base-semibold text-ink-gray-9">
-            {{ __("Tasks and monthly plans") }}
-          </h2>
+        <SettingsSection :title="__('Tasks and monthly plans')">
           <SettingRow
+            v-slot="{ id }"
             :label="__('Tasks for a new post')"
             :description="
               __('Used when Add entry or a monthly package doesn\'t choose.')
             "
           >
             <FormControl
+              :id="id"
               v-model="form.default_task_mode"
               type="select"
               class="w-52"
@@ -150,10 +113,12 @@
             />
           </SettingRow>
           <SettingRow
+            v-slot="{ id }"
             :label="__('Writer\'s task due')"
             :description="__('Days before the publish date.')"
           >
             <FormControl
+              :id="id"
               v-model="form.writer_days_before"
               type="number"
               class="w-24"
@@ -162,6 +127,7 @@
             />
           </SettingRow>
           <SettingRow
+            v-slot="{ id }"
             :label="__('Designer\'s task due')"
             :description="
               __(
@@ -170,6 +136,7 @@
             "
           >
             <FormControl
+              :id="id"
               v-model="form.designer_days_before"
               type="number"
               class="w-24"
@@ -178,10 +145,12 @@
             />
           </SettingRow>
           <SettingRow
+            v-slot="{ id }"
             :label="__('Video editor\'s task due')"
             :description="__('Days before the publish date.')"
           >
             <FormControl
+              :id="id"
               v-model="form.video_editor_days_before"
               type="number"
               class="w-24"
@@ -192,6 +161,7 @@
             />
           </SettingRow>
           <SettingRow
+            v-slot="{ id }"
             :label="__('Plan next month on day')"
             :description="
               __(
@@ -200,6 +170,7 @@
             "
           >
             <FormControl
+              :id="id"
               v-model="form.plan_day"
               type="number"
               class="w-24"
@@ -208,15 +179,11 @@
               :aria-label="__('Plan next month on day')"
             />
           </SettingRow>
-        </section>
+        </SettingsSection>
 
-        <hr class="my-8" />
-
-        <section>
-          <h2 class="text-base-semibold text-ink-gray-9">
-            {{ __("Client approval follow-up") }}
-          </h2>
+        <SettingsSection :title="__('Client approval follow-up')">
           <SettingRow
+            v-slot="{ id }"
             :label="__('Remind the client after')"
             :description="
               __(
@@ -225,6 +192,7 @@
             "
           >
             <FormControl
+              :id="id"
               v-model="form.client_reminder_days"
               type="number"
               class="w-24"
@@ -233,6 +201,7 @@
             />
           </SettingRow>
           <SettingRow
+            v-slot="{ id }"
             :label="__('Alert the team after')"
             :description="
               __(
@@ -241,6 +210,7 @@
             "
           >
             <FormControl
+              :id="id"
               v-model="form.client_escalate_days"
               type="number"
               class="w-24"
@@ -248,15 +218,11 @@
               :aria-label="__('Alert the team after, in days')"
             />
           </SettingRow>
-        </section>
+        </SettingsSection>
 
-        <hr class="my-8" />
-
-        <section>
-          <h2 class="text-base-semibold text-ink-gray-9">
-            {{ __("Client portal") }}
-          </h2>
+        <SettingsSection :title="__('Client portal')">
           <SettingRow
+            v-slot="{ id }"
             :label="__('Enable the client portal')"
             :description="
               __(
@@ -264,10 +230,12 @@
               )
             "
           >
-            <Switch v-model="form.enable_client_portal" />
+            <Switch :id="id" v-model="form.enable_client_portal" />
           </SettingRow>
           <template v-if="form.enable_client_portal">
-            <div class="mt-4 flex items-center gap-2 text-p-sm text-ink-gray-6">
+            <div
+              class="flex flex-wrap items-center gap-2 text-p-sm text-ink-gray-6"
+            >
               {{ __("Portal link") }}
               <a
                 class="font-mono text-ink-gray-8 underline"
@@ -278,37 +246,26 @@
               >
             </div>
             <TemplateFields
-              class="mt-6"
               :title="__('Sign-in code email')"
               :defaults="defaults.data?.portal_code"
               v-model:subject="form.portal_code_subject"
               v-model:message="form.portal_code_message"
             />
           </template>
-        </section>
+        </SettingsSection>
       </div>
     </template>
   </SettingsLayoutBase>
 </template>
 
 <script setup lang="ts">
-import { Link } from "@/components";
 import SettingsLayoutBase from "@/components/layouts/SettingsLayoutBase.vue";
-import UnsavedBadge from "@/components/UnsavedBadge.vue";
 import { __ } from "@/translation";
-import {
-  Button,
-  createResource,
-  dayjs,
-  FormControl,
-  LoadingIndicator,
-  Switch,
-  toast,
-} from "frappe-ui";
-import { computed, ref, watch } from "vue";
-import LucideX from "~icons/lucide/x";
-import { disableSettingModalOutsideClick } from "../settingsModal";
-import SettingRow from "./SettingRow.vue";
+import { createResource, dayjs, FormControl, Switch, toast } from "frappe-ui";
+import { computed, ref } from "vue";
+import ChipListInput from "../ChipListInput.vue";
+import SettingRow from "../SettingRow.vue";
+import SettingsSection from "../SettingsSection.vue";
 import TemplateFields from "./TemplateFields.vue";
 
 interface ContentSettingsForm {
@@ -349,7 +306,6 @@ const NUMBER_FIELDS = [
 const DOCTYPE = "HD Content Settings";
 const form = ref<ContentSettingsForm | null>(null);
 const initial = ref("");
-const newRecipient = ref("");
 const portalUrl = `${window.location.origin}/content-portal`;
 
 const settings = createResource({
@@ -390,21 +346,6 @@ const defaults = createResource({
 const isDirty = computed(
   () => !!form.value && JSON.stringify(form.value) !== initial.value
 );
-watch(isDirty, (dirty) => (disableSettingModalOutsideClick.value = dirty));
-
-watch(newRecipient, (user) => {
-  if (!user || !form.value) return;
-  if (!form.value.alert_recipients.includes(user)) {
-    form.value.alert_recipients.push(user);
-  }
-  newRecipient.value = "";
-});
-
-function removeRecipient(user: string) {
-  form.value!.alert_recipients = form.value!.alert_recipients.filter(
-    (u) => u !== user
-  );
-}
 
 const save = createResource({
   url: "frappe.client.set_value",

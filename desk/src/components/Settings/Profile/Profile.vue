@@ -1,134 +1,130 @@
 <template>
   <SettingsLayoutBase
     :title="__('Profile')"
-    :description="__('Manage your profile information.')"
+    :description="__('Your photo, availability, emails and password.')"
   >
     <template #content>
-      <div class="flex items-center justify-between gap-2 pt-1.5 pb-8">
-        <FileUploader
-          :fileTypes="['image/*']"
-          @success="
-            (file) => {
-              updateImage(file.file_url);
-            }
-          "
-        >
-          <template #default="{ openFileSelector, error: _error, uploading }">
-            <div class="flex items-center justify-center gap-4">
-              <div class="group relative flex-shrink-0 size-16">
-                <Avatar
-                  class="!size-16"
-                  :image="user.doc?.user_image"
-                  :label="fullName"
-                />
-                <div
-                  v-if="agentStatusStore.myStatus"
-                  class="absolute bottom-0.5 right-0.5 rounded-full bg-surface-elevation-2 p-1"
-                >
-                  <div
-                    class="size-3.5 rounded-full"
-                    :class="
-                      agentStatusStore.statusColor(agentStatusStore.myStatus)
-                    "
-                  />
-                </div>
-                <Tooltip
-                  :hoverDelay="0"
-                  placement="bottom"
-                  :text="profileTooltipText"
-                >
-                  <div
-                    class="z-1 absolute top-0 left-0 flex h-9 cursor-pointer items-center justify-center rounded-full !size-16"
-                    @click.stop="openFileSelector"
+      <div>
+        <SettingsSection :title="__('Photo')">
+          <FileUploader
+            :fileTypes="['image/*']"
+            @success="
+              (file) => {
+                updateImage(file.file_url);
+              }
+            "
+          >
+            <template #default="{ openFileSelector, uploading }">
+              <div class="flex min-w-0 items-center gap-4">
+                <div class="group relative size-16 shrink-0">
+                  <Avatar
+                    class="!size-16"
+                    :image="user.doc?.user_image"
+                    :label="fullName"
                   />
                   <div
-                    v-if="user.doc?.user_image"
-                    class="z-1 size-4 absolute -top-1 -right-1 flex cursor-pointer items-center justify-center rounded-full bg-surface-base opacity-0 duration-300 ease-in-out group-hover:opacity-100 hover:bg-surface-gray-2 outline outline-black-overlay-50"
-                    @click.stop="updateImage()"
-                    @mouseenter="isHoveringRemove = true"
-                    @mouseleave="isHoveringRemove = false"
+                    v-if="agentStatusStore.myStatus"
+                    class="absolute bottom-0.5 right-0.5 rounded-full bg-surface-elevation-2 p-1"
                   >
-                    <FeatherIcon
-                      name="x"
-                      class="size-3.5 cursor-pointer text-ink-gray-4"
+                    <div
+                      class="size-3.5 rounded-full"
+                      :class="
+                        agentStatusStore.statusColor(agentStatusStore.myStatus)
+                      "
                     />
                   </div>
-                </Tooltip>
-                <div
-                  v-if="uploading"
-                  class="w-full h-full top-0 left-0 absolute bg-surface-gray-10 bg-opacity-20 rounded-full flex items-center justify-center"
-                >
-                  <LoadingIndicator class="size-4" />
+                  <Tooltip
+                    :hoverDelay="0"
+                    placement="bottom"
+                    :text="profileTooltipText"
+                  >
+                    <button
+                      type="button"
+                      class="absolute left-0 top-0 !size-16 rounded-full"
+                      :aria-label="profileTooltipText"
+                      @click.stop="openFileSelector"
+                    />
+                    <button
+                      v-if="user.doc?.user_image"
+                      type="button"
+                      class="absolute -right-1 -top-1 flex size-5 items-center justify-center rounded-full bg-surface-base shadow-sm ring-1 ring-outline-gray-2 duration-300 ease-in-out hover:bg-surface-gray-2 sm:opacity-0 sm:focus-visible:opacity-100 sm:group-hover:opacity-100"
+                      :aria-label="__('Remove Photo')"
+                      @click.stop="updateImage()"
+                      @mouseenter="isHoveringRemove = true"
+                      @mouseleave="isHoveringRemove = false"
+                    >
+                      <LucideX
+                        class="size-3.5 text-ink-gray-6"
+                        aria-hidden="true"
+                      />
+                    </button>
+                  </Tooltip>
+                  <div
+                    v-if="uploading"
+                    class="absolute left-0 top-0 flex h-full w-full items-center justify-center rounded-full bg-surface-gray-10 bg-opacity-20"
+                  >
+                    <LoadingIndicator class="size-4" />
+                  </div>
                 </div>
-              </div>
-              <div class="flex flex-col gap-0.5 min-w-0">
-                <div v-if="!editName" class="flex items-center gap-1">
-                  <span class="text-lg font-semibold text-ink-gray-9 truncate">
+                <div class="flex min-w-0 flex-col gap-0.5">
+                  <span class="truncate text-lg-semibold text-ink-gray-9">
                     {{ user?.doc?.full_name }}
+                  </span>
+                  <span class="truncate font-mono text-p-sm text-ink-gray-6">
+                    {{ userId }}
                   </span>
                 </div>
               </div>
-            </div>
-          </template>
-        </FileUploader>
-      </div>
-      <div>
-        <div class="flex items-center justify-between h-7">
-          <div class="flex gap-2 items-center">
-            <span class="text-base-semibold text-ink-gray-9">
-              {{ __("Account Info & Security") }}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <div v-if="hasAgentRecord" class="flex items-center justify-between mt-6">
-        <div class="flex flex-col gap-1">
-          <span class="text-base-medium text-ink-gray-8">
-            {{ __("Availability") }}
-          </span>
-          <span class="text-p-sm text-ink-gray-6">
-            {{
+            </template>
+          </FileUploader>
+        </SettingsSection>
+        <SettingsSection :title="__('Account and security')">
+          <SettingRow
+            v-slot="{ id }"
+            v-if="hasAgentRecord"
+            :label="__('Availability')"
+            :description="
               __(
-                "Set your availability so your team knows when you're reachable."
+                'Set your availability so your team knows when you\'re reachable.'
               )
-            }}
-          </span>
-        </div>
-        <AvailabilityMenu />
-      </div>
-      <div class="flex items-center justify-between mt-6">
-        <div class="flex flex-col gap-1">
-          <span class="text-base-medium text-ink-gray-8">
-            {{ __("Emails & Signature") }}
-          </span>
-          <span class="text-p-sm text-ink-gray-6">
-            {{
+            "
+          >
+            <AvailabilityMenu :id="id" />
+          </SettingRow>
+          <SettingRow
+            :label="__('Emails and signature')"
+            :description="
               __(
-                "Manage your account emails and email signature for communication."
+                'Manage your account emails and email signature for communication.'
               )
-            }}
-          </span>
-        </div>
-        <Button
-          :label="__('Configure')"
-          @click="emit('updateStep', 'user-email-settings')"
-        />
-      </div>
-      <div class="flex items-center justify-between mt-6">
-        <div class="flex flex-col gap-1">
-          <span class="text-base-medium text-ink-gray-8">
-            {{ __("Password") }}
-          </span>
-          <span class="text-p-sm text-ink-gray-6">{{
-            __("Change your account password for security.")
-          }}</span>
-        </div>
-        <Button
-          icon-left="lucide-lock"
-          :label="__('Change Password')"
-          @click="showChangePasswordModal = true"
-        />
+            "
+          >
+            <Button
+              :label="__('Set up emails')"
+              @click="emit('updateStep', 'user-email-settings')"
+            >
+              <template #suffix>
+                <LucideChevronRight
+                  class="size-4 rtl:rotate-180"
+                  aria-hidden="true"
+                />
+              </template>
+            </Button>
+          </SettingRow>
+          <SettingRow
+            :label="__('Password')"
+            :description="__('Change your account password for security.')"
+          >
+            <Button
+              :label="__('Change password')"
+              @click="showChangePasswordModal = true"
+            >
+              <template #prefix>
+                <LucideLock class="size-4" aria-hidden="true" />
+              </template>
+            </Button>
+          </SettingRow>
+        </SettingsSection>
       </div>
     </template>
   </SettingsLayoutBase>
@@ -147,17 +143,20 @@ import {
   LoadingIndicator,
   toast,
 } from "frappe-ui";
-import { computed, nextTick, ref, useTemplateRef } from "vue";
+import { computed, ref } from "vue";
 
 import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
-import EditIcon from "~icons/lucide/edit";
+import LucideChevronRight from "~icons/lucide/chevron-right";
+import LucideLock from "~icons/lucide/lock";
+import LucideX from "~icons/lucide/x";
 const emit = defineEmits(["updateStep"]);
 
 import AvailabilityMenu from "@/components/AvailabilityMenu.vue";
 import SettingsLayoutBase from "@/components/layouts/SettingsLayoutBase.vue";
-import { useAvailability } from "@/composables/useAvailability";
 import { useAgentStatusStore } from "@/stores/agentStatus";
+import SettingRow from "../SettingRow.vue";
+import SettingsSection from "../SettingsSection.vue";
 import ChangePasswordModal from "./components/ChangePasswordModal.vue";
 
 const agentStatusStore = useAgentStatusStore();
@@ -167,14 +166,12 @@ const { userId, hasAgentRecord } = useAuthStore();
 const user = createDocumentResource({ doctype: "User", name: userId });
 
 const isHoveringRemove = ref(false);
-const editName = ref(false);
 
 const profileTooltipText = computed(() => {
   if (isHoveringRemove.value) return __("Remove Photo");
   return user.doc?.user_image ? __("Change Photo") : __("Upload Photo");
 });
 
-const fullNameRef = useTemplateRef("fullNameRef");
 const fullName = computed({
   get: () => user.doc?.full_name ?? "",
   set: (val) => {
@@ -185,22 +182,9 @@ const fullName = computed({
   },
 });
 
-function editFullName() {
-  editName.value = true;
-  nextTick(() => fullNameRef.value?.el?.focus());
-}
-
-const isNameDirty = computed(() => {
-  return (
-    user.doc?.first_name !== user.originalDoc?.first_name ||
-    user.doc?.last_name !== user.originalDoc?.last_name
-  );
-});
-
 function save() {
   user.save.submit(null, {
     onSuccess: () => {
-      editName.value = false;
       toast.success(__("Profile updated successfully."));
     },
     onError: (err: { message: string; messages: string[] }) => {

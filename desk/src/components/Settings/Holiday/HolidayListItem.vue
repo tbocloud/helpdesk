@@ -1,66 +1,38 @@
 <template>
-  <div
-    class="flex items-center cursor-pointer hover:bg-surface-sidebar rounded"
+  <SettingsListItem
+    :title="data.name"
+    :subtitle="data.description || undefined"
+    @open="holidayListActiveScreen = { screen: 'view', data: data }"
   >
-    <div
-      class="w-full pl-2 flex flex-col justify-center h-14"
-      @click="holidayListActiveScreen = { screen: 'view', data: data }"
-    >
-      <div class="text-base-medium text-ink-gray-7">{{ data.name }}</div>
-      <div
-        v-if="data.description && data.description.length > 0"
-        class="text-sm text-ink-gray-5 mt-1 truncate"
-      >
-        {{ data.description }}
-      </div>
-    </div>
-    <div class="flex justify-between items-center pr-2">
-      <div>
-        <Dropdown placement="right" :options="dropdownOptions">
-          <Button
-            icon="lucide-more-horizontal"
-            variant="ghost"
-            @click="isConfirmingDelete = false"
-          />
-        </Dropdown>
-      </div>
-    </div>
-  </div>
-  <Dialog
-    :title="__('Duplicate Holiday List')"
-    v-model:open="duplicateDialog.show"
-  >
-    <template #default>
-      <div class="flex flex-col gap-4">
-        <FormControl
-          :label="__('New Holiday List Name')"
-          type="text"
-          v-model="duplicateDialog.newName"
-          maxlength="100"
-        />
-      </div>
-    </template>
     <template #actions>
-      <div class="flex gap-2 justify-end">
+      <Dropdown placement="right" :options="dropdownOptions">
         <Button
-          variant="subtle"
-          :label="__('Close')"
-          @click="duplicateDialog.show = false"
-        />
-        <Button variant="solid" :label="__('Duplicate')" @click="duplicate()" />
-      </div>
+          variant="ghost"
+          :label="__('More actions for {0}', data.name)"
+          @click="isConfirmingDelete = false"
+        >
+          <template #icon>
+            <LucideEllipsis class="size-4" aria-hidden="true" />
+          </template>
+        </Button>
+      </Dropdown>
     </template>
-  </Dialog>
+  </SettingsListItem>
+  <DuplicateDialog
+    v-model:open="duplicateDialog.show"
+    v-model:name="duplicateDialog.newName"
+    :title="__('Duplicate holiday schedule')"
+    :label="__('Name of the copy')"
+    :maxlength="100"
+    @duplicate="duplicate()"
+  />
 </template>
+
 <script setup lang="ts">
-import {
-  Button,
-  Dialog,
-  createResource,
-  Dropdown,
-  FormControl,
-  toast,
-} from "frappe-ui";
+import { Button, createResource, Dropdown, toast } from "frappe-ui";
+import LucideEllipsis from "~icons/lucide/ellipsis";
+import DuplicateDialog from "../DuplicateDialog.vue";
+import SettingsListItem from "../SettingsListItem.vue";
 import { inject, ref } from "vue";
 import { holidayListActiveScreen } from "@/stores/holidayList";
 import { ConfirmDelete } from "@/utils";

@@ -1,103 +1,108 @@
 <template>
   <SettingsLayoutBase
     :title="__('Invite Agents')"
-    :description="__('Easily invite new agents, managers, or admins.')"
+    :description="
+      __(
+        'Send an invite by email. People join with the role you pick and can sign in once they accept.'
+      )
+    "
   >
     <template #content>
-      <form @submit.prevent="onSubmit" class="flex flex-col gap-5">
-        <FormControl
-          type="textarea"
-          :required="true"
-          :label="__('Invite by email')"
-          placeholder="user1@example.com, user2@example.com, ..."
-          v-model="emails"
-          :debounce="100"
-          :description="__('Comma separated emails to invite.')"
-        />
-        <div class="space-y-1.5">
-          <label class="block text-base text-ink-gray-5">
-            {{ __("Role") }}
-            <span class="text-ink-red-6 select-none" aria-hidden="true">*</span>
-          </label>
-          <Select :options="roleOptions" v-model="role" required class="w-full">
-            <template #suffix>
-              <LucideChevronDown
-                class="size-4 shrink-0 text-ink-gray-4 ml-auto"
-              />
-            </template>
-          </Select>
-          <p class="text-p-xs text-ink-gray-5">{{ roleDescription }}</p>
-        </div>
-        <Button
-          type="submit"
-          variant="solid"
-          class="w-fit mt-1"
-          :disabled="cancelInviteResource.loading"
-          :loading="inviteByEmailResource.loading"
-          >{{ __("Send Invites") }}</Button
-        >
-      </form>
-      <template v-if="pendingInvitesResource.data?.length">
-        <h2 class="mt-8 text-base-semibold">
-          {{ __("Pending Invites") }}
-        </h2>
-        <ul class="flex flex-col gap-[0.375rem] mt-3">
-          <li
-            v-for="invite in pendingInvitesResource.data"
-            :key="invite.name"
-            class="flex items-center justify-between px-3 py-1 rounded-lg bg-surface-gray-2"
-          >
-            <div class="text-base">
-              <span class="text-ink-gray-8">
-                {{ invite.email }}
-              </span>
-              <span class="text-ink-gray-5">
-                ({{ rolesToLabel(invite.roles) }})
-              </span>
-            </div>
-            <div>
-              <Tooltip
-                :disabled="
-                  inviteByEmailResource.loading || cancelInviteResource.loading
-                "
-                :text="__('Cancel Invitation')"
+      <div>
+        <SettingsSection :title="__('New invites')">
+          <form @submit.prevent="onSubmit" class="flex flex-col gap-5">
+            <FormControl
+              type="textarea"
+              :required="true"
+              :label="__('Invite by email')"
+              placeholder="user1@example.com, user2@example.com, ..."
+              v-model="emails"
+              :debounce="100"
+              :description="__('Comma separated emails to invite.')"
+            />
+            <div class="space-y-1.5">
+              <label
+                :for="roleSelectId"
+                class="block text-base text-ink-gray-6"
               >
-                <div>
+                {{ __("Role") }}
+                <span class="select-none text-danger" aria-hidden="true"
+                  >*</span
+                >
+              </label>
+              <Select
+                :id="roleSelectId"
+                :options="roleOptions"
+                v-model="role"
+                required
+                class="w-full"
+              >
+                <template #suffix>
+                  <LucideChevronDown
+                    class="ml-auto size-4 shrink-0 text-ink-gray-4"
+                    aria-hidden="true"
+                  />
+                </template>
+              </Select>
+              <p class="text-p-xs text-ink-gray-5">{{ roleDescription }}</p>
+            </div>
+            <Button
+              type="submit"
+              variant="solid"
+              class="w-fit"
+              :disabled="cancelInviteResource.loading"
+              :loading="inviteByEmailResource.loading"
+              :label="__('Send invites')"
+            />
+          </form>
+        </SettingsSection>
+        <SettingsSection
+          v-if="pendingInvitesResource.data?.length"
+          :title="__('Pending invites')"
+          :description="__('Invites that haven\'t been accepted yet.')"
+        >
+          <SettingsList
+            :items="pendingInvitesResource.data"
+            :label="__('Pending invites')"
+            :empty-icon="LucideMail"
+            :empty-title="__('No pending invites')"
+          >
+            <template #default="{ item: invite }">
+              <SettingsListItem
+                :title="invite.email"
+                :subtitle="rolesToLabel(invite.roles)"
+              >
+                <template #actions>
                   <Button
-                    icon="lucide-x"
                     variant="ghost"
+                    :tooltip="__('Cancel invitation')"
+                    :label="__('Cancel invitation for {0}', invite.email)"
+                    :disabled="
+                      inviteByEmailResource.loading ||
+                      (cancelInviteResource.loading &&
+                        cancelInviteResource.params.name !== invite.name)
+                    "
                     :loading="
                       cancelInviteResource.loading &&
                       invite.name === cancelInviteResource.params.name
                     "
                     @click="
-                      () => {
-                        if (
-                          inviteByEmailResource.loading ||
-                          cancelInviteResource.loading
-                        ) {
-                          return;
-                        }
-                        cancelInviteResource.submit({
-                          name: invite.name,
-                          app_name: 'helpdesk',
-                        });
-                      }
+                      cancelInviteResource.submit({
+                        name: invite.name,
+                        app_name: 'helpdesk',
+                      })
                     "
-                    v-bind="{
-                      ...((cancelInviteResource.loading &&
-                        cancelInviteResource.params.name !== invite.name) ||
-                      inviteByEmailResource.loading
-                        ? { 'aria-disabled': true, class: 'opacity-25' }
-                        : {}),
-                    }"
-                  />
-                </div>
-              </Tooltip>
-            </div>
-          </li>
-        </ul>
-      </template>
+                  >
+                    <template #icon>
+                      <LucideX class="size-4" aria-hidden="true" />
+                    </template>
+                  </Button>
+                </template>
+              </SettingsListItem>
+            </template>
+          </SettingsList>
+        </SettingsSection>
+      </div>
     </template>
   </SettingsLayoutBase>
 </template>
@@ -108,17 +113,15 @@ import { useAuthStore } from "@/stores/auth";
 import { capture } from "@/telemetry";
 import { __ } from "@/translation";
 import { handleInviteUserSuccess } from "@/utils";
-import {
-  Button,
-  FormControl,
-  Select,
-  Tooltip,
-  createResource,
-  toast,
-} from "frappe-ui";
+import { Button, FormControl, Select, createResource, toast } from "frappe-ui";
 import { useOnboarding } from "frappe-ui/frappe";
-import { computed, ref } from "vue";
+import { computed, ref, useId } from "vue";
 import LucideChevronDown from "~icons/lucide/chevron-down";
+import LucideMail from "~icons/lucide/mail";
+import LucideX from "~icons/lucide/x";
+import SettingsList from "./SettingsList.vue";
+import SettingsListItem from "./SettingsListItem.vue";
+import SettingsSection from "./SettingsSection.vue";
 
 const authStore = useAuthStore();
 const { isAdmin, isManager } = authStore;
@@ -127,6 +130,7 @@ const { isAdmin, isManager } = authStore;
 const { updateOnboardingStep } = useOnboarding("helpdesk");
 
 const emails = ref("");
+const roleSelectId = `invite-role-${useId()}`;
 
 type Role = "Agent" | "Agent Manager" | "System Manager";
 type RoleOption = {

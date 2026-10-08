@@ -1,19 +1,27 @@
 <template>
   <SettingsLayoutBase
-    :title="__('Setup Email')"
+    :title="__('Add email account')"
     :description="
       __('Choose the email service provider you want to configure.')
     "
+    :back-label="__('Back to email accounts')"
+    :save-label="__('Add account')"
+    :save-disabled="!selectedService"
+    :saving="addEmailRes.loading"
+    @back="emit('update:step', 'email-list')"
+    @save="createEmailAccount"
   >
     <template #content>
-      <div class="flex h-full flex-col gap-4">
-        <div class="flex flex-col gap-4 overflow-y-auto p-0.5">
+      <div class="flex flex-col gap-4">
+        <div class="flex flex-col gap-4 p-0.5">
           <!-- email service provider selection -->
           <div class="flex flex-wrap items-center gap-4">
-            <div
+            <button
               v-for="s in services"
               :key="s.name"
-              class="min-w-3 flex flex-col items-center gap-1"
+              type="button"
+              class="min-w-3 flex flex-col items-center gap-1 rounded-md p-1"
+              :aria-pressed="selectedService?.name === s?.name"
               @click="handleSelect(s)"
             >
               <EmailProviderIcon
@@ -21,7 +29,7 @@
                 :logo="s.icon"
                 :selected="selectedService?.name === s?.name"
               />
-            </div>
+            </button>
           </div>
           <div v-if="selectedService" class="flex flex-col gap-4">
             <!-- email service provider info -->
@@ -30,15 +38,17 @@
                 class="flex items-center gap-2 rounded-md p-2 ring-1 ring-outline-elevation-2"
               >
                 <CircleAlert
-                  class="h-6 w-5 w-min-5 w-max-5 min-h-5 max-w-5 text-ink-blue-5"
+                  class="size-5 shrink-0 text-info"
+                  aria-hidden="true"
                 />
                 <div class="text-wrap text-xs text-ink-gray-7">
                   {{ selectedService.info }}
                   <a
                     :href="selectedService.link"
                     target="_blank"
-                    class="text-ink-blue-5 underline"
-                    >here</a
+                    rel="noopener noreferrer"
+                    class="text-info underline"
+                    >{{ __("here") }}</a
                   >
                   .
                 </div>
@@ -135,26 +145,14 @@
                   </p>
                 </div>
               </div>
-              <ErrorMessage v-if="error" class="ml-1" :message="error" />
+              <ErrorMessage
+                v-if="error"
+                role="alert"
+                class="ml-1"
+                :message="error"
+              />
             </div>
           </div>
-        </div>
-
-        <!-- action button -->
-        <div class="mt-auto flex justify-between -mb-8">
-          <Button
-            :label="__('Back')"
-            theme="gray"
-            variant="outline"
-            :disabled="addEmailRes.loading"
-            @click="emit('update:step', 'email-list')"
-          />
-          <Button
-            :label="__('Create')"
-            variant="solid"
-            :loading="addEmailRes.loading"
-            @click="createEmailAccount"
-          />
         </div>
       </div>
     </template>

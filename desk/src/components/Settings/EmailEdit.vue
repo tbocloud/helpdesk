@@ -1,11 +1,29 @@
 <template>
   <SettingsLayoutBase
-    :title="__('Edit Email')"
-    :description="__('Edit your email account')"
+    :title="accountData.email_account_name || __('Email account')"
+    :description="accountData.email_id"
+    :back-label="__('Back to email accounts')"
+    :save-label="__('Save changes')"
+    :save-disabled="false"
+    :saving="loading"
+    @back="emit('update:step', 'email-list')"
+    @save="updateAccount"
   >
+    <template v-if="accountData.enable_incoming" #header-actions>
+      <Button
+        :label="__('Pull emails now')"
+        :loading="loadingPull"
+        :disabled="loading"
+        @click="pullEmails"
+      >
+        <template #prefix>
+          <LucideRefreshCw class="size-4" aria-hidden="true" />
+        </template>
+      </Button>
+    </template>
     <template #content>
-      <div class="flex h-full flex-col gap-4">
-        <div class="overflow-y-auto flex flex-col gap-4 p-0.5">
+      <div class="flex flex-col gap-4">
+        <div class="flex flex-col gap-4 p-0.5">
           <div class="w-fit">
             <EmailProviderIcon
               :logo="emailIcon[state.service || accountData.service]"
@@ -16,24 +34,24 @@
           <div
             class="flex items-center gap-2 rounded-md p-2 ring-1 ring-outline-elevation-2"
           >
-            <CircleAlert
-              class="h-6 w-5 w-min-5 w-max-5 min-h-5 max-w-5 text-ink-blue-5"
-            />
+            <CircleAlert class="size-5 shrink-0 text-info" aria-hidden="true" />
             <div class="text-wrap text-xs text-ink-gray-7 flex flex-col gap-1">
               <span>
                 {{ info.description }}
                 <a
                   :href="info.link"
                   target="_blank"
-                  class="text-ink-blue-5 underline"
-                  >here</a
+                  rel="noopener noreferrer"
+                  class="text-info underline"
+                  >{{ __("here") }}</a
                 >.
               </span>
               <span v-if="deskEditUrl" class="flex items-center gap-1">
                 <a
                   :href="deskEditUrl"
                   target="_blank"
-                  class="text-ink-blue-5 underline"
+                  rel="noopener noreferrer"
+                  class="text-info underline"
                 >
                   {{ __("Open in Desk") }}
                 </a>
@@ -126,33 +144,11 @@
                 <p class="text-p-sm text-ink-gray-4">{{ field.description }}</p>
               </div>
             </div>
-            <ErrorMessage v-if="error" class="ml-1" :message="error" />
-          </div>
-        </div>
-
-        <!-- action buttons -->
-        <div class="mt-auto flex justify-between -mb-8">
-          <Button
-            :label="__('Back')"
-            theme="gray"
-            variant="outline"
-            :disabled="loading"
-            @click="emit('update:step', 'email-list')"
-          />
-          <div class="flex gap-2">
-            <Button
-              :label="__('Update Account')"
-              variant="solid"
-              @click="updateAccount"
-              :loading="loading"
-            />
-            <Button
-              v-if="accountData.enable_incoming"
-              :label="__('Pull Emails')"
-              variant="subtle"
-              @click="pullEmails"
-              :loading="loadingPull"
-              :disabled="loading"
+            <ErrorMessage
+              v-if="error"
+              role="alert"
+              class="ml-1"
+              :message="error"
             />
           </div>
         </div>
@@ -167,6 +163,7 @@ import { useStorage } from "@vueuse/core";
 import { call, toast } from "frappe-ui";
 import { computed, h, reactive, ref, watch } from "vue";
 import CircleAlert from "~icons/lucide/circle-alert";
+import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import EmailProviderIcon from "./EmailProviderIcon.vue";
 import { Link } from "@/components";
 import {
