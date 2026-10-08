@@ -1,17 +1,9 @@
 <template>
-  <section
+  <PanelSection
     v-if="replay.data?.available"
-    class="px-5 py-4"
-    :aria-labelledby="headingId"
+    :title="__('Session replay')"
+    :icon="LucideClapperboard"
   >
-    <h2
-      :id="headingId"
-      class="mb-2.5 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.06em] text-ink-gray-5"
-    >
-      <LucideClapperboard class="size-3.5" aria-hidden="true" />
-      {{ __("Session replay") }}
-    </h2>
-
     <Button
       v-if="replay.data.replay_url"
       class="mb-3 w-full"
@@ -100,7 +92,7 @@
       v-model:open="playerOpen"
       :replay-url="replay.data.replay_url"
     />
-  </section>
+  </PanelSection>
 </template>
 
 <script setup lang="ts">
@@ -112,6 +104,7 @@ import LucideChevronRight from "~icons/lucide/chevron-right";
 import LucideClapperboard from "~icons/lucide/clapperboard";
 import LucidePlay from "~icons/lucide/play";
 import LucideTriangleAlert from "~icons/lucide/triangle-alert";
+import PanelSection from "./PanelSection.vue";
 import SessionReplayDialog from "./SessionReplayDialog.vue";
 
 interface SessionDiagnostics {
@@ -143,8 +136,7 @@ const props = defineProps<{
   ticketId: string;
 }>();
 
-const headingId = `session-replay-${useId()}`;
-const timelineId = `${headingId}-timeline`;
+const timelineId = `session-replay-${useId()}-timeline`;
 const playerOpen = ref(false);
 const timelineOpen = useStorage("sessionReplayTimelineOpen", true);
 

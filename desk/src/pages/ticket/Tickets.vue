@@ -167,21 +167,12 @@ import { currentView, useView } from "@/composables/useView";
 import { useAuthStore } from "@/stores/auth";
 import { globalStore } from "@/stores/globalStore";
 import TaskyBadge from "@/components/TaskyBadge.vue";
-import { priorityIcon } from "@/pages/tasky/taskMeta";
 import { useTicketStatusStore } from "@/stores/ticketStatus";
 import { __ } from "@/translation";
 import { View } from "@/types";
-import { isCustomerPortal, shortDuration, timeAgo } from "@/utils";
+import { isCustomerPortal, timeAgo } from "@/utils";
 import { Badge, Button, dayjs, Tooltip, usePageMeta } from "frappe-ui";
-import {
-  computed,
-  h,
-  onMounted,
-  onUnmounted,
-  reactive,
-  ref,
-  type Component,
-} from "vue";
+import { computed, h, onMounted, onUnmounted, reactive, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
   firstReplyFact,
@@ -189,11 +180,14 @@ import {
   useCustomerStatus,
   type Fact,
 } from "./customerStatus";
-import LucideCheck from "~icons/lucide/check";
-import LucideCircleAlert from "~icons/lucide/circle-alert";
-import LucideClock from "~icons/lucide/clock";
-import LucidePause from "~icons/lucide/pause";
 import LucideX from "~icons/lucide/x";
+import {
+  priorityBadge,
+  resolutionSla as resolutionState,
+  responseSla,
+  slaBadge,
+  type SlaState,
+} from "./ticketMeta";
 
 const router = useRouter();
 const route = useRoute();
@@ -336,65 +330,17 @@ function isUnseen(row: any) {
   return !seenBy.includes(userId || "");
 }
 
-type SlaState = "failed" | "fulfilled" | "paused" | "due" | "none";
-
-function responseSla(row: any, deadline: string): SlaState {
-  if (!deadline) return "none";
-  if (!row.first_responded_on && dayjs(deadline).isBefore(new Date()))
-    return "failed";
-  if (
-    row.first_responded_on &&
-    dayjs(row.first_responded_on).isBefore(deadline)
-  )
-    return "fulfilled";
-  if (dayjs(row.first_responded_on).isAfter(deadline)) return "failed";
-  return "due";
-}
-
 function resolutionSla(row: any, deadline: string): SlaState {
-  // no resolution SLA on this ticket: nothing to fulfil or fail
-  if (!deadline) return "none";
-  if (getStatus(row.status)?.category === "Paused") return "paused";
-  if (row.resolution_date)
-    return dayjs(row.resolution_date).isBefore(dayjs(deadline))
-      ? "fulfilled"
-      : "failed";
-  return dayjs(deadline).isBefore(dayjs()) ? "failed" : "due";
+  return resolutionState(
+    row,
+    deadline,
+    getStatus(row.status)?.category === "Paused"
+  );
 }
-
-// same window as SLA_RISK_HOURS in helpdesk/api/work.py ("at risk" tickets)
-const SLA_RISK_HOURS = 4;
-
-const SLA_LABELS: Record<Exclude<SlaState, "due" | "none">, string> = {
-  failed: __("Failed"),
-  fulfilled: __("Fulfilled"),
-  paused: __("Paused"),
-};
-const SLA_BADGES: Record<
-  Exclude<SlaState, "due" | "none">,
-  { tone: "danger" | "neutral"; icon: Component }
-> = {
-  failed: { tone: "danger", icon: LucideCircleAlert },
-  fulfilled: { tone: "neutral", icon: LucideCheck },
-  paused: { tone: "neutral", icon: LucidePause },
-};
 
 function slaCell(state: SlaState, deadline: string) {
   if (state === "none") return h("span");
-  const label = state === "due" ? shortDuration(deadline) : SLA_LABELS[state];
-  const badge = h(
-    TaskyBadge,
-    state === "due"
-      ? {
-          label: __("in {0}", [label]),
-          icon: LucideClock,
-          tone:
-            dayjs(deadline).diff(dayjs(), "hour", true) <= SLA_RISK_HOURS
-              ? "warning"
-              : "neutral",
-        }
-      : { label, ...SLA_BADGES[state] }
-  );
+  const badge = h(TaskyBadge, slaBadge(state, deadline));
   // a running clock shows the exact deadline on hover
   return state === "due"
     ? h(Tooltip, { text: dayjs(deadline).format("LLLL") }, () => badge)
@@ -410,18 +356,9 @@ function factCell(fact: Fact | null) {
     : badge;
 }
 
-const PRIORITY_TONES: Record<string, "danger" | "warning"> = {
-  Urgent: "danger",
-  High: "warning",
-};
-
 function priorityCell(priority: string) {
-  if (!priority) return h("span");
-  return h(TaskyBadge, {
-    label: __(priority),
-    icon: priorityIcon(priority),
-    tone: PRIORITY_TONES[priority] ?? "neutral",
-  });
+  const badge = priorityBadge(priority);
+  return badge ? h(TaskyBadge, badge) : h("span");
 }
 
 async function exportRows(

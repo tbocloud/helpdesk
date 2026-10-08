@@ -1,26 +1,13 @@
 <template>
-  <section v-if="visible" class="px-5 py-4" :aria-labelledby="headingId">
-    <div class="mb-2.5 flex items-center justify-between gap-2">
-      <h2
-        :id="headingId"
-        class="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.06em] text-ink-gray-5"
-      >
-        <LucideWrench class="size-3.5" aria-hidden="true" />
-        {{ __("Customization estimate") }}
-      </h2>
-      <span
-        v-if="estimate.status"
-        class="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs"
-        :class="STATUS[estimate.status]?.classes"
-      >
-        <component
-          :is="STATUS[estimate.status]?.icon"
-          class="size-3.5"
-          aria-hidden="true"
-        />
-        {{ STATUS[estimate.status]?.label }}
-      </span>
-    </div>
+  <PanelSection
+    v-if="visible"
+    :title="__('Customization estimate')"
+    :icon="LucideWrench"
+    :level="3"
+  >
+    <template v-if="STATUS[estimate.status]" #actions>
+      <TaskyBadge v-bind="STATUS[estimate.status]" />
+    </template>
 
     <div aria-live="polite" class="flex flex-col gap-3">
       <!-- Approved: the next step is the task -->
@@ -40,7 +27,7 @@
         <Button
           variant="solid"
           :label="__('Create task')"
-          @click="taskOpen = true"
+          @click="showCreateTask = true"
         >
           <template #prefix
             ><LucideListPlus class="size-4" aria-hidden="true"
@@ -160,14 +147,7 @@
         </form>
       </template>
     </div>
-
-    <CreateTaskDialog
-      v-model:open="taskOpen"
-      :ticket-id="ticketId"
-      :ticket-subject="ticketSubject"
-      @created="onTaskCreated"
-    />
-  </section>
+  </PanelSection>
 </template>
 
 <script setup lang="ts">
@@ -187,7 +167,11 @@ import LucideClock from "~icons/lucide/clock";
 import LucideListPlus from "~icons/lucide/list-plus";
 import LucideSparkles from "~icons/lucide/sparkles";
 import LucideWrench from "~icons/lucide/wrench";
-import CreateTaskDialog from "./CreateTaskDialog.vue";
+import TaskyBadge from "@/components/TaskyBadge.vue";
+import type { Tone } from "@/components/tone";
+import { showCreateTask } from "@/pages/ticket/modalStates";
+import type { Component } from "vue";
+import PanelSection from "./PanelSection.vue";
 
 interface Estimate {
   is_customization: boolean;
@@ -202,33 +186,24 @@ interface Estimate {
   can_manage: boolean;
 }
 
-const props = defineProps<{ ticketId: string; ticketSubject?: string }>();
+const props = defineProps<{ ticketId: string }>();
 const emit = defineEmits<{ changed: [] }>();
 
-const STATUS = {
-  Estimated: {
-    label: __("AI estimate"),
-    classes: "bg-info-soft text-info",
-    icon: LucideSparkles,
-  },
+const STATUS: Record<string, { label: string; tone: Tone; icon: Component }> = {
+  Estimated: { label: __("AI estimate"), tone: "info", icon: LucideSparkles },
   Sent: {
     label: __("Waiting for approval"),
-    classes: "bg-warning-soft text-warning",
+    tone: "warning",
     icon: LucideClock,
   },
   Approved: {
     label: __("Approved"),
-    classes: "bg-success-soft text-success",
+    tone: "success",
     icon: LucideCircleCheck,
   },
-  Declined: {
-    label: __("Declined"),
-    classes: "bg-danger-soft text-danger",
-    icon: LucideCircleX,
-  },
-} as Record<string, { label: string; classes: string; icon: unknown }>;
+  Declined: { label: __("Declined"), tone: "danger", icon: LucideCircleX },
+};
 
-const headingId = `estimate-${useId()}`;
 const formId = `estimate-form-${useId()}`;
 
 const resource = createResource({
@@ -290,7 +265,6 @@ const canSend = computed(
 const sending = ref(false);
 const deciding = ref<"" | "approve" | "decline">("");
 const error = ref("");
-const taskOpen = ref(false);
 
 function formatDay(date: string | null) {
   return date ? dayjs(date).format("ddd D MMM") : "—";
@@ -334,9 +308,5 @@ async function decide(approve: boolean) {
   } finally {
     deciding.value = "";
   }
-}
-
-function onTaskCreated() {
-  emit("changed");
 }
 </script>

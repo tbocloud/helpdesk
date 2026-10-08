@@ -1,14 +1,18 @@
 <template>
   <div v-if="ticket.doc?.name" class="flex-1">
-    <TicketHeader :viewers="viewers" />
+    <TicketHeader
+      :viewers="viewers"
+      :details-open="detailsOpen"
+      @toggle-details="detailsOpen = !detailsOpen"
+    />
     <div class="h-full flex overflow-hidden">
-      <div class="flex-1 flex flex-col overflow-hidden">
+      <div class="flex min-w-0 flex-1 flex-col overflow-hidden">
         <!-- Tabs & Communication Area -->
         <TicketActivityPanel />
       </div>
 
-      <!-- Sidepanel with Resizer -->
-      <TicketSidebar />
+      <!-- Side panel: inline with a resizer from lg, a sheet below -->
+      <TicketSidebar v-model:open="detailsOpen" />
     </div>
     <SetContactPhoneModal
       v-if="ticket.doc.contact"
@@ -24,31 +28,28 @@
     <LoadingIndicator class="w-6 text-ink-gray-4" />
   </div>
 
-  <div v-else class="grid h-full place-items-center px-4 py-20 text-center">
-    <div class="space-y-2">
-      <div class="flex justify-center items-center mx-auto">
-        <TicketIcon class="size-10 text-ink-gray-4" />
-      </div>
-      <div class="text-lg-medium text-ink-gray-8">
-        {{ __("Ticket not found") }}
-      </div>
-      <div class="text-center text-p-base text-ink-gray-6 mt-1">
-        {{
-          __("You don't have access to this ticket, or it no longer exists.")
-        }}
-      </div>
+  <div v-else class="grid h-full place-items-center">
+    <TaskyState
+      :icon="TicketIcon"
+      :title="__('Ticket not found')"
+      :message="
+        __('You don\'t have access to this ticket, or it no longer exists.')
+      "
+    >
       <Button :route="{ name: 'TicketsAgent' }" variant="subtle">
-        <template #prefix
-          ><FeatherIcon name="arrow-left" class="size-4"
-        /></template>
+        <template #prefix>
+          <LucideArrowLeft class="size-4" aria-hidden="true" />
+        </template>
         {{ __("Back to Tickets") }}
       </Button>
-    </div>
+    </TaskyState>
   </div>
 </template>
 
 <script setup lang="ts">
 import TicketIcon from "@/components/icons/TicketIcon.vue";
+import TaskyState from "@/components/TaskyState.vue";
+import LucideArrowLeft from "~icons/lucide/arrow-left";
 import TicketActivityPanel from "@/components/ticket-agent/TicketActivityPanel.vue";
 import TicketHeader from "@/components/ticket-agent/TicketHeader.vue";
 import TicketSidebar from "@/components/ticket-agent/TicketSidebar.vue";
@@ -94,6 +95,7 @@ const props = defineProps({
 });
 const route = useRoute();
 const showPhoneModal = ref(false);
+const detailsOpen = ref(false);
 
 const ticketComposable = computed(() => useTicket(props.ticketId));
 const ticket = computed(() => ticketComposable.value.ticket);
@@ -226,13 +228,3 @@ usePageMeta(() => {
   };
 });
 </script>
-
-<style>
-.breadcrumbs button {
-  background-color: inherit !important;
-  &:hover,
-  &:focus {
-    background-color: inherit !important;
-  }
-}
-</style>

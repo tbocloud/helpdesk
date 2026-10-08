@@ -60,16 +60,11 @@
       </div>
     </div>
 
+    <!-- the customer is set in Details and named in the header -->
     <dl class="mt-3">
       <div class="flex items-center justify-between gap-3 text-sm leading-6">
-        <dt class="text-ink-gray-6">{{ __("Customer") }}</dt>
-        <dd class="min-w-0 truncate text-ink-gray-9">
-          {{ ticket.doc?.customer || "—" }}
-        </dd>
-      </div>
-      <div class="flex items-center justify-between gap-3 text-sm leading-6">
-        <dt class="text-ink-gray-6">{{ __("Open tickets") }}</dt>
-        <dd class="tabular-nums text-ink-gray-9">
+        <dt class="text-ink-gray-6">{{ __("Their open tickets") }}</dt>
+        <dd class="font-mono tabular-nums text-ink-gray-9">
           {{ openTicketCount }}
         </dd>
       </div>

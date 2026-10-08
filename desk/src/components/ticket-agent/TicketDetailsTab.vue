@@ -1,179 +1,149 @@
 <template>
-  <div class="flex h-full min-h-0 flex-1 flex-col bg-surface-base">
-    <div class="shrink-0">
-      <!-- Contact card -->
-      <section
-        class="border-b border-outline-gray-1 px-5 py-4"
-        :aria-label="__('Contact')"
-      >
-        <TicketContact />
-      </section>
-
-      <!-- Core fields -->
-      <section
-        class="border-b border-outline-gray-1 px-5 py-4"
-        aria-labelledby="ticket-details-heading"
-      >
-        <h2
-          id="ticket-details-heading"
-          class="mb-2.5 text-2xs font-semibold uppercase tracking-[0.06em] text-ink-gray-5"
-        >
-          {{ __("Details") }}
-        </h2>
-        <div class="flex flex-col gap-0.5">
-          <template v-for="field in flatCoreFields" :key="field.fieldname">
-            <div
-              v-if="field.visible"
-              class="grid min-h-8 grid-cols-[96px_minmax(0,1fr)] items-center gap-2"
-            >
-              <span
-                :id="`ticket-field-label-${field.fieldname}`"
-                class="truncate text-xs font-medium text-ink-gray-6"
-              >
-                {{ __(field.label) }}
-                <span v-if="field.required" class="text-ink-red-6">*</span>
-              </span>
-              <Link
-                :ref="(el) => setFieldRef(field.fieldname, el)"
-                class="form-control-core min-w-0"
-                :id="field.fieldname"
-                :page-length="10"
-                :placeholder="field.placeholder"
-                :doctype="field.doctype"
-                :modelValue="field.value"
-                :required="field.required"
-                @update:model-value="
-                  (val: string) => handleFieldUpdate(field.fieldname, val, true)
-                "
-              />
-            </div>
-          </template>
-
-          <!-- Assignee -->
+  <!-- ordered by how often an agent needs it: the essentials first, AI last and collapsible -->
+  <div
+    class="flex h-full min-h-0 flex-1 flex-col divide-y divide-outline-gray-1 overflow-y-auto bg-surface-base"
+  >
+    <PanelSection :title="__('Details')">
+      <div class="flex flex-col gap-0.5">
+        <template v-for="field in flatCoreFields" :key="field.fieldname">
           <div
+            v-if="field.visible"
             class="grid min-h-8 grid-cols-[96px_minmax(0,1fr)] items-center gap-2"
           >
-            <span class="truncate text-xs font-medium text-ink-gray-6">
-              {{ __("Assignee") }}
+            <span
+              :id="`ticket-field-label-${field.fieldname}`"
+              class="truncate text-xs font-medium text-ink-gray-6"
+            >
+              {{ __(field.label) }}
+              <span v-if="field.required" class="text-danger">*</span>
             </span>
-            <AssignTo hide-label quiet class="min-w-0" />
+            <Link
+              :ref="(el) => setFieldRef(field.fieldname, el)"
+              class="form-control-core min-w-0"
+              :id="field.fieldname"
+              :page-length="10"
+              :placeholder="field.placeholder"
+              :doctype="field.doctype"
+              :modelValue="field.value"
+              :required="field.required"
+              @update:model-value="
+                (val: string) => handleFieldUpdate(field.fieldname, val, true)
+              "
+            />
           </div>
-        </div>
-      </section>
-    </div>
+        </template>
 
-    <!-- Scrollable sections: Possible duplicates, Meetings, AI suggested reply, Session replay, Ticket Info, Recent / Similar Tickets -->
-    <div class="flex-1 min-h-0 overflow-y-auto divide-y divide-outline-gray-1">
-      <DuplicateTicketsCard v-if="ticketId" :ticket-id="ticketId" />
-      <MeetingsCard
-        v-if="ticketId"
-        reference-doctype="HD Ticket"
-        :reference-name="ticketId"
-      />
-      <CustomizationEstimateCard
-        v-if="ticketId"
+        <div
+          class="grid min-h-8 grid-cols-[96px_minmax(0,1fr)] items-center gap-2"
+        >
+          <span class="truncate text-xs font-medium text-ink-gray-6">
+            {{ __("Assignee") }}
+          </span>
+          <AssignTo hide-label quiet class="min-w-0" />
+        </div>
+      </div>
+    </PanelSection>
+
+    <PanelSection :title="__('Contact')">
+      <TicketContact />
+    </PanelSection>
+
+    <TicketSlaSection />
+
+    <template v-if="ticketId">
+      <TicketLinkedWork
         :ticket-id="ticketId"
         :ticket-subject="ticket.doc?.subject"
-        @changed="ticket.reload()"
       />
-      <AiSuggestedReplyCard v-if="ticketId" :ticket-id="ticketId" />
-      <SessionReplayCard v-if="ticketId" :ticket-id="ticketId" />
+      <MeetingsCard reference-doctype="HD Ticket" :reference-name="ticketId" />
+      <SessionReplayCard :ticket-id="ticketId" />
 
-      <!-- Ticket Info (custom fields) -->
-      <div v-if="Boolean(customFields.length)">
-        <Section label="Ticket Info" v-model:opened="openedSections.ticketInfo">
-          <template #header="{ opened, toggle }">
-            <div class="sticky top-0 z-10 bg-surface-base px-5 pt-4 pb-2.5">
-              <button
-                type="button"
-                class="-mx-1 flex w-[calc(100%+0.5rem)] items-center justify-between gap-2.5 rounded px-1 text-2xs font-semibold uppercase tracking-[0.06em] text-ink-gray-5 hover:text-ink-gray-8"
-                :aria-expanded="opened"
-                @click="toggle"
-              >
-                <span class="select-none">{{ __("Ticket Info") }}</span>
-                <LucideChevronRight
-                  class="size-4 transition-transform"
-                  :class="{ 'rotate-90': opened }"
-                  aria-hidden="true"
-                />
-              </button>
-            </div>
-          </template>
-          <div
-            class="space-y-1.5 px-5 pb-4"
-            v-if="Boolean(customFields.length)"
-          >
-            <template v-for="field in customFields">
-              <TicketField
-                v-if="field.visible"
-                :key="field.fieldname"
-                :field="field"
-                :value="field.value"
-                @change="
-                  ({ fieldname, value }) => handleFieldUpdate(fieldname, value)
-                "
-              />
-            </template>
-          </div>
-        </Section>
-      </div>
-
-      <!-- Recent / Similar Tickets -->
-      <template v-if="showRecentSimilarTickets">
-        <div v-for="section in sections" :key="section.label">
-          <Section
-            :label="section.label"
-            :hideLabel="section.hideLabel"
-            v-model:opened="openedSections[section.key]"
-          >
-            <template #header="{ opened, toggle }">
-              <div class="sticky top-0 z-10 bg-surface-base px-5 pt-4 pb-2.5">
-                <Tooltip :text="section.tooltipMessage">
-                  <button
-                    type="button"
-                    class="-mx-1 flex w-[calc(100%+0.5rem)] items-center justify-between gap-2.5 rounded px-1 text-2xs font-semibold uppercase tracking-[0.06em] text-ink-gray-5 hover:text-ink-gray-8"
-                    :aria-expanded="opened"
-                    @click="toggle"
-                  >
-                    <span class="select-none">{{ __(section.label) }}</span>
-                    <LucideChevronRight
-                      class="size-4 transition-transform"
-                      :class="{ 'rotate-90': opened }"
-                      aria-hidden="true"
-                    />
-                  </button>
-                </Tooltip>
-              </div>
-            </template>
-            <ul class="px-5 pb-4">
-              <li v-for="t in section.tickets" :key="t.name">
-                <button
-                  type="button"
-                  class="-mx-2 block w-[calc(100%+1rem)] rounded-md px-2 py-2 text-start transition-colors hover:bg-surface-gray-2"
-                  @click="openTicket(t.name)"
-                >
-                  <p class="mb-1 truncate text-sm font-medium text-ink-gray-9">
-                    {{ t.subject }}
-                  </p>
-                  <div class="flex items-center justify-between gap-2">
-                    <p class="shrink-0 text-xs text-ink-gray-5">
-                      {{ formatDate(t.creation as string) + " · " }}
-                      <span class="font-mono">{{ "#" + t.name }}</span>
-                    </p>
-                    <span
-                      class="shrink-0 rounded-sm px-2 py-0.5 text-xs"
-                      :class="getStatusColor(t.status as string)"
-                    >
-                      {{ t.status }}
-                    </span>
-                  </div>
-                </button>
-              </li>
-            </ul>
-          </Section>
+      <PanelSection
+        v-model:opened="openedSections.ai"
+        :title="__('AI assist')"
+        :icon="LucideSparkles"
+        collapsible
+        flush
+      >
+        <div class="ai-cards divide-y divide-outline-gray-1">
+          <AiTriageCard />
+          <AiSuggestedReplyCard :ticket-id="ticketId" />
+          <DuplicateTicketsCard :ticket-id="ticketId" />
+          <CustomizationEstimateCard
+            :ticket-id="ticketId"
+            @changed="ticket.reload()"
+          />
         </div>
-      </template>
-    </div>
+        <p class="ai-empty px-5 pb-4 pt-2.5 text-p-xs text-ink-gray-5">
+          {{
+            __(
+              "Nothing from AI for this ticket yet. Triage, reply drafts, duplicates and estimates show up here."
+            )
+          }}
+        </p>
+      </PanelSection>
+    </template>
+
+    <!-- Ticket Info (custom fields) -->
+    <PanelSection
+      v-if="customFields.length"
+      v-model:opened="openedSections.ticketInfo"
+      :title="__('Ticket Info')"
+      collapsible
+    >
+      <div class="space-y-1.5">
+        <template v-for="field in customFields">
+          <TicketField
+            v-if="field.visible"
+            :key="field.fieldname"
+            :field="field"
+            :value="field.value"
+            @change="
+              ({ fieldname, value }) => handleFieldUpdate(fieldname, value)
+            "
+          />
+        </template>
+      </div>
+    </PanelSection>
+
+    <!-- Recent / Similar Tickets -->
+    <PanelSection
+      v-for="section in sections"
+      :key="section.key"
+      v-model:opened="openedSections[section.key]"
+      :title="__(section.label)"
+      :count="section.tickets.length"
+      collapsible
+    >
+      <p class="mb-1 text-p-xs text-ink-gray-5">
+        {{ __(section.description) }}
+      </p>
+      <ul>
+        <li v-for="t in section.tickets" :key="t.name">
+          <button
+            type="button"
+            class="-mx-2 block w-[calc(100%+1rem)] rounded-md px-2 py-2 text-start transition-colors hover:bg-surface-gray-2"
+            @click="openTicket(t.name)"
+          >
+            <p class="mb-1 truncate text-sm font-medium text-ink-gray-9">
+              {{ t.subject }}
+            </p>
+            <div class="flex items-center justify-between gap-2">
+              <p class="shrink-0 text-xs text-ink-gray-5">
+                {{ formatDate(t.creation as string) + " · " }}
+                <span class="font-mono">{{ "#" + t.name }}</span>
+              </p>
+              <span
+                class="shrink-0 rounded-sm px-2 py-0.5 text-xs"
+                :class="getStatusColor(t.status as string)"
+              >
+                {{ t.status }}
+              </span>
+            </div>
+          </button>
+        </li>
+      </ul>
+    </PanelSection>
   </div>
 </template>
 
@@ -194,18 +164,21 @@ import {
 } from "@/types";
 import { __ } from "@/translation";
 import { useStorage } from "@vueuse/core";
-import { dayjs, Tooltip } from "frappe-ui";
+import { dayjs } from "frappe-ui";
 import { computed, inject, ref } from "vue";
-import LucideChevronRight from "~icons/lucide/chevron-right";
-import Section from "../Section.vue";
+import LucideSparkles from "~icons/lucide/sparkles";
 import TicketField from "../TicketField.vue";
 import MeetingsCard from "@/components/meetings/MeetingsCard.vue";
 import AiSuggestedReplyCard from "./AiSuggestedReplyCard.vue";
+import AiTriageCard from "./AiTriageCard.vue";
 import CustomizationEstimateCard from "./CustomizationEstimateCard.vue";
 import AssignTo from "./AssignTo.vue";
 import DuplicateTicketsCard from "./DuplicateTicketsCard.vue";
+import PanelSection from "./PanelSection.vue";
 import SessionReplayCard from "./SessionReplayCard.vue";
 import TicketContact from "./TicketContact.vue";
+import TicketLinkedWork from "./TicketLinkedWork.vue";
+import TicketSlaSection from "./TicketSlaSection.vue";
 
 const ticket = inject(TicketSymbol)!;
 const assignees = inject(AssigneeSymbol)!;
@@ -298,6 +271,7 @@ const openedSections = useStorage(
     ticketInfo: false,
     recentTickets: false,
     similarTickets: false,
+    ai: true,
   },
   localStorage,
   { mergeDefaults: true }
@@ -315,8 +289,7 @@ const sections = computed(() => {
     _sections.push({
       key: "recentTickets" as const,
       label: "Recent Tickets",
-      tooltipMessage: "Tickets recently raised by this contact/customer",
-      hideLabel: false,
+      description: "Tickets recently raised by this contact/customer",
       tickets: recentTickets,
     });
   }
@@ -324,8 +297,7 @@ const sections = computed(() => {
     _sections.push({
       key: "similarTickets" as const,
       label: "Similar Tickets",
-      tooltipMessage: "Tickets with similar queries",
-      hideLabel: false,
+      description: "Tickets with similar queries",
       tickets: similarTickets,
     });
   }
@@ -404,14 +376,6 @@ const setFieldRef = (fieldname: string, el: any) => {
   }
 };
 
-const showRecentSimilarTickets = computed(() => {
-  return (
-    !recentSimilarTickets.value.loading &&
-    (recentSimilarTickets.value?.data?.recent_tickets?.length ||
-      recentSimilarTickets.value?.data?.similar_tickets?.length)
-  );
-});
-
 useShortcut("t", () => {
   fieldRefs.value?.ticket_type?.$el?.querySelector("button")?.click();
 });
@@ -426,6 +390,11 @@ useShortcut({ key: "t", shift: true }, () => {
 </script>
 
 <style scoped>
+/* each AI card hides itself when it has nothing; the note shows only when all do */
+.ai-cards:has(> section) + .ai-empty {
+  display: none;
+}
+
 /* Core fields read as quiet selects: no chrome until hovered or focused */
 :deep(.form-control-core button) {
   @apply h-[30px] w-full gap-2 rounded-md border border-transparent bg-transparent px-2 py-0 text-sm font-medium text-ink-gray-9 transition-colors hover:bg-surface-gray-2 dark:[color-scheme:dark];

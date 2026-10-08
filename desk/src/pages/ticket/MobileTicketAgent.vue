@@ -55,38 +55,8 @@
             class="[&_[role='tab']]:px-0 [&_[role='tablist']]:px-5 [&_[role='tablist']]:gap-7.5"
           >
             <template #tab-panel="{ tab }">
-              <div v-if="tab.name === 'details'">
-                <!-- ticket contact info -->
-                <TicketAgentContact
-                  v-if="contact.data"
-                  :contact="contact.data"
-                  :ticketId="ticket.doc?.name"
-                  @email:open="communicationAreaRef.toggleEmailBox()"
-                />
-                <!-- feedback component -->
-                <TicketFeedback
-                  v-if="ticket.doc?.feedback_rating"
-                  class="border-b px-6 py-3 text-base text-gray-600"
-                  :ticket="ticket.doc"
-                />
-                <!-- SLA Section -->
-                <h3 class="px-6 pt-3 text-base-semibold">
-                  {{ __("SLA") }}
-                </h3>
-                <TicketAgentDetails :ticket="ticket.doc" />
-                <!-- Ticket Fields -->
-                <h3 class="px-6 pt-3 text-base-semibold">
-                  {{ __("Details") }}
-                </h3>
-                <TicketAgentFields
-                  :ticket="ticketWithFields"
-                  @update="
-                    ({ field, value }) =>
-                      ticket.setValue.submit({ [field]: value })
-                  "
-                  class="!border-0"
-                />
-              </div>
+              <!-- the same side panel as on desktop, as a tab -->
+              <TicketDetailsTab v-if="tab.name === 'details'" />
 
               <!-- Rest Activities -->
               <TicketAgentActivities
@@ -203,13 +173,9 @@ import { TicketAgentActivities } from "@/components/ticket";
 
 import CustomActions from "@/components/CustomActions.vue";
 import AssignTo from "@/components/ticket-agent/AssignTo.vue";
+import TicketDetailsTab from "@/components/ticket-agent/TicketDetailsTab.vue";
 import SetContactPhoneModal from "@/components/ticket/SetContactPhoneModal.vue";
-import TicketAgentDetails from "@/components/ticket/TicketAgentDetails.vue";
-import TicketAgentFields from "@/components/ticket/TicketAgentFields.vue";
-import {
-  parseField,
-  setupCustomizations,
-} from "@/composables/formCustomisation";
+import { setupCustomizations } from "@/composables/formCustomisation";
 import { useScreenSize } from "@/composables/screen";
 import { useActiveTabManager } from "@/composables/useActiveTabManager";
 import {
@@ -217,23 +183,20 @@ import {
   revalidateTicket,
   useTicket,
 } from "@/composables/useTicket";
+import { useTicketActivities } from "@/composables/useTicketActivities";
 import { globalStore } from "@/stores/globalStore";
-import { getMeta } from "@/stores/meta";
 import { useTelephonyStore } from "@/stores/telephony";
 import { useTicketStatusStore } from "@/stores/ticketStatus";
-import { useUserStore } from "@/stores/user";
 import {
   ActivitiesSymbol,
   AssigneeSymbol,
   Customizations,
   CustomizationSymbol,
-  FeedbackActivity,
   RecentSimilarTicketsSymbol,
   Resource,
   TabObject,
   TicketContactSymbol,
   TicketSymbol,
-  TicketTab,
 } from "@/types";
 import { HDTicketStatus } from "@/types/doctypes";
 import { storeToRefs } from "pinia";
@@ -243,7 +206,6 @@ const telephonyStore = useTelephonyStore();
 const { isCallingEnabled } = storeToRefs(telephonyStore);
 
 const ticketStatusStore = useTicketStatusStore();
-const { getUser } = useUserStore();
 const router = useRouter();
 const { $dialog } = globalStore();
 
@@ -269,7 +231,6 @@ const props = defineProps({
 
 const ticketComposable = computed(() => useTicket(props.ticketId));
 const ticket = computed(() => ticketComposable.value.ticket);
-const assignees = computed(() => ticketComposable.value.assignees);
 const contact = computed(() => ticketComposable.value.contact);
 const activities = computed(() => ticketComposable.value.activities);
 
@@ -278,9 +239,6 @@ const customizations: Resource<Customizations> = createResource({
   cache: ["HD Ticket", "customizations"],
   auto: true,
 });
-
-// Build fields from getMeta + customizations (same as TicketDetailsTab)
-const { getField, getFields } = getMeta("HD Ticket");
 
 function updateField(name: string, value: string) {
   ticket.value.setValue.submit({ [name]: value });
@@ -325,55 +283,6 @@ const mobileCustomActions = computed(() => {
 
   return [{ group: "Actions", hideLabel: true, items }];
 });
-
-const ticketFields = computed(() => {
-  if (!customizations.data || !ticket.value.doc) return [];
-  const fieldsMeta = getFields();
-  if (!fieldsMeta || fieldsMeta.length === 0) return [];
-
-  const coreFieldNames = [
-    "ticket_type",
-    "agent_group",
-    "priority",
-    "customer",
-    "subject",
-    "status",
-  ];
-  let custom_fields = customizations.data?.custom_fields || [];
-  custom_fields = custom_fields.filter(
-    (f) => !coreFieldNames.includes(f.fieldname)
-  );
-
-  return custom_fields
-    .map((f) => {
-      let fieldMeta = getField(f.fieldname);
-      if (!fieldMeta) return null;
-      fieldMeta = parseField(fieldMeta, ticket.value.doc);
-      return {
-        label: fieldMeta?.label || f.fieldname,
-        fieldname: f.fieldname,
-        fieldtype: fieldMeta?.fieldtype,
-        options: fieldMeta?.options || "",
-        placeholder:
-          f.placeholder || `Enter ${fieldMeta?.label || f.fieldname}`,
-        readonly: Boolean(fieldMeta.read_only),
-        disabled: Boolean(fieldMeta.read_only),
-        url_method: f.url_method || "",
-        required: f.required || fieldMeta?.reqd || false,
-        visible:
-          fieldMeta.display_via_depends_on &&
-          !fieldMeta.hidden &&
-          (!!ticket.value.doc[f.fieldname] || !fieldMeta.read_only),
-      };
-    })
-    .filter(Boolean);
-});
-
-// Merged ticket doc with computed fields for TicketAgentFields
-const ticketWithFields = computed(() => ({
-  ...ticket.value.doc,
-  fields: ticketFields.value,
-}));
 
 provide(TicketSymbol, ticket);
 provide(
@@ -474,145 +383,10 @@ const tabs: ComputedRef<TabObject[]> = computed(() => {
 
 const { tabIndex, changeTabTo } = useActiveTabManager(tabs);
 
-const _activities = computed(() => {
-  if (!activities.value?.data) {
-    return [];
-  }
-
-  const emailProps = activities.value.data.communications.map(
-    (email, idx: number) => {
-      return {
-        subject: email.subject,
-        content: email.content,
-        sender: { name: email.user.email, full_name: email.user.name },
-        to: email.recipients,
-        type: "email",
-        key: email.creation,
-        cc: email.cc,
-        bcc: email.bcc,
-        creation: email.communication_date || email.creation,
-        attachments: email.attachments,
-        name: email.name,
-        deliveryStatus: email.delivery_status,
-        aiDrafted: !!email.custom_ai_drafted,
-        isFirstEmail: idx === 0,
-      };
-    }
-  );
-
-  const commentProps = activities.value.data.comments.map((comment) => {
-    return {
-      name: comment.name,
-      type: "comment",
-      key: comment.creation,
-      commentedBy: comment.commented_by,
-      commenter: comment.user.name,
-      creation: comment.creation,
-      content: comment.content,
-      attachments: comment.attachments,
-    };
-  });
-
-  activities.value.data.history.map((h) => {
-    if (h.action && h.owner && h.action.includes(h.owner)) {
-      h.action = h.action.replace(h.owner, "themselves");
-    }
-    return h;
-  });
-
-  const historyProps = [
-    ...activities.value.data.history,
-    ...activities.value.data.views,
-  ].map((h) => {
-    return {
-      type: "history",
-      key: h.creation,
-      content: h.action ? h.action : __("viewed this"),
-      creation: h.creation,
-      user: h.user.name + " ",
-    };
-  });
-
-  const callProps = activities.value.data.calls.map((call) => {
-    return {
-      ...call,
-      type: "call",
-      name: call.name,
-      key: call.creation,
-      call_type: call.type,
-      content: `${call.caller || "Unknown"} made a call to ${
-        call.receiver || "Unknown"
-      }`,
-      duration: call.duration ? call.duration + "s" : "0s",
-    };
-  });
-
-  const sorted = [
-    ...emailProps,
-    ...commentProps,
-    ...historyProps,
-    ...callProps,
-  ].sort(
-    (a, b) => new Date(a.creation).getTime() - new Date(b.creation).getTime()
-  );
-
-  const data = [];
-  let i = 0;
-
-  while (i < sorted.length) {
-    const currentActivity = sorted[i];
-    if (currentActivity.type === "history") {
-      currentActivity.relatedActivities = [currentActivity];
-      for (let j = i + 1; j < sorted.length + 1; j++) {
-        const nextActivity = sorted[j];
-
-        if (
-          nextActivity &&
-          nextActivity.user === currentActivity.user &&
-          nextActivity.content !== "viewed this" &&
-          !nextActivity.content.includes("assigned") &&
-          !nextActivity.content.includes("unassigned")
-        ) {
-          currentActivity.relatedActivities.push(nextActivity);
-        } else {
-          data.push(currentActivity);
-          i = j - 1;
-          break;
-        }
-      }
-    } else {
-      data.push(currentActivity);
-    }
-    i++;
-  }
-
-  if (ticket.value.doc?.feedback_rating === 0) {
-    return data;
-  }
-  const feedbackActivity: FeedbackActivity[] = [
-    {
-      type: "feedback",
-      key: "feedback-activity",
-      feedback_rating: ticket.value?.doc?.feedback_rating,
-      feedback_extra: ticket.value?.doc?.feedback_extra,
-      feedback: ticket.value?.doc?.feedback,
-      sender: {
-        name: ticket.value?.doc?.raised_by,
-        full_name: ticket.value?.doc?.contact,
-      },
-    },
-  ];
-  data.push(...feedbackActivity);
-
-  return data;
-});
-
-function filterActivities(eventType: TicketTab) {
-  if (eventType === "activity") {
-    return _activities.value;
-  }
-  return _activities.value.filter((activity) => activity.type === eventType);
-}
+const { filterActivities } = useTicketActivities(
+  activities,
+  computed(() => ticket.value?.doc)
+);
 
 onMounted(() => {
   document.title = props.ticketId;

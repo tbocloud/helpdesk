@@ -11,11 +11,11 @@
             />
           </template>
         </Breadcrumbs>
-        <TicketSLA @edit-subject="showSubjectDialog = true" />
+        <TicketTitle @edit-subject="showSubjectDialog = true" />
       </div>
     </template>
     <template #right-header>
-      <div class="flex gap-2 items-center">
+      <div class="flex items-center gap-2">
         <MultipleAvatar
           :avatars="JSON.stringify(viewers)"
           size="md"
@@ -45,35 +45,17 @@
             </Dropdown>
           </div>
         </div>
-        <Button
-          v-if="meetingsEnabled.data"
-          variant="subtle"
-          :label="__('Meeting')"
-          :aria-label="__('Schedule Teams meeting')"
-          @click="showScheduleMeeting = true"
-        >
-          <template #prefix>
-            <LucideVideo class="size-4" aria-hidden="true" />
-          </template>
-        </Button>
-        <Button
-          variant="subtle"
-          :label="__('Create task')"
-          @click="showCreateTask = true"
-        >
-          <template #prefix>
-            <LucideListPlus class="size-4" aria-hidden="true" />
-          </template>
-        </Button>
-        <!-- Status -->
+        <!-- Status (S) -->
         <Dropdown :options="statusDropdown" placement="right">
           <template #default="{ open }">
-            <Button :label="ticket.doc.status" ref="statusRef" variant="solid">
+            <Button
+              ref="statusRef"
+              :label="ticket.doc.status"
+              :aria-label="__('Status: {0}. Change status', ticket.doc.status)"
+              aria-keyshortcuts="s"
+            >
               <template #prefix>
-                <span
-                  class="size-1.5 rounded-full bg-current"
-                  aria-hidden="true"
-                />
+                <IndicatorIcon :class="statusColor" />
               </template>
               <template #suffix>
                 <LucideChevronDown
@@ -85,13 +67,34 @@
             </Button>
           </template>
         </Dropdown>
-        <!-- Core Actions + Custom Actions -->
-        <Dropdown
-          v-if="groupedActions[0]?.items?.length >= 1"
-          :options="groupedActions"
-          placement="right"
+        <!-- the side panel is a sheet below lg -->
+        <Button
+          class="lg:hidden"
+          :label="__('Details')"
+          :aria-expanded="detailsOpen"
+          @click="emit('toggle-details')"
         >
-          <Button icon="lucide-more-horizontal" />
+          <template #prefix>
+            <LucidePanelRight class="size-4" aria-hidden="true" />
+          </template>
+        </Button>
+        <!-- Primary action (R) -->
+        <Button
+          variant="solid"
+          :label="__('Reply')"
+          aria-keyshortcuts="r"
+          @click="openReplyBox()"
+        >
+          <template #prefix>
+            <LucideReply class="size-4" aria-hidden="true" />
+          </template>
+        </Button>
+        <!-- Secondary, core and custom actions -->
+        <Dropdown :options="groupedActions" placement="right">
+          <Button
+            icon="lucide-more-horizontal"
+            :aria-label="__('More actions')"
+          />
         </Dropdown>
       </div>
     </template>
@@ -103,13 +106,6 @@
     @update="ticket.reload()"
   />
   <TicketSubjectModal v-model="showSubjectDialog" />
-  <CreateTaskDialog
-    v-if="ticket.doc?.name"
-    v-model:open="showCreateTask"
-    :ticket-id="String(ticket.doc.name)"
-    :ticket-subject="ticket.doc.subject"
-    @created="onTaskCreated"
-  />
   <ScheduleMeetingDialog
     v-if="ticket.doc?.name && showScheduleMeeting"
     v-model:open="showScheduleMeeting"
@@ -168,12 +164,14 @@ import {
   meetingsEnabled,
 } from "@/components/meetings/meetingsBus";
 import ScheduleMeetingDialog from "@/components/meetings/ScheduleMeetingDialog.vue";
+import { openReplyBox, showCreateTask } from "@/pages/ticket/modalStates";
 import LucideMerge from "~icons/lucide/merge";
+import LucidePanelRight from "~icons/lucide/panel-right";
+import LucideReply from "~icons/lucide/reply";
 import { IndicatorIcon } from "../icons";
-import CreateTaskDialog from "./CreateTaskDialog.vue";
 import TicketNavigation from "./TicketNavigation.vue";
-import TicketSLA from "./TicketSLA.vue";
 import TicketSubjectModal from "./TicketSubjectModal.vue";
+import TicketTitle from "./TicketTitle.vue";
 const { isAdmin } = useAuthStore();
 const { $dialog } = globalStore();
 
@@ -182,7 +180,14 @@ defineProps({
     type: Array as PropType<string[]>,
     required: true,
   },
+  /** The side panel sheet is open (below lg, where it isn't inline). */
+  detailsOpen: {
+    type: Boolean,
+    default: false,
+  },
 });
+
+const emit = defineEmits<{ "toggle-details": [] }>();
 
 const route = useRoute();
 const router = useRouter();
@@ -193,18 +198,11 @@ const ticket = inject(TicketSymbol)!;
 const customizations = inject(CustomizationSymbol)!;
 const activities = inject(ActivitiesSymbol)!;
 const showSubjectDialog = ref(false);
-const showCreateTask = ref(false);
 const showScheduleMeeting = ref(false);
 
 // the Meetings card lists it, and the internal note shows in the activity
 function onMeetingScheduled() {
   meetingsChanged.value++;
-  activities.value?.reload();
-}
-
-// the ticket moves to Waiting on Task and gets a comment, so refresh both
-function onTaskCreated() {
-  ticket.value.reload();
   activities.value?.reload();
 }
 
@@ -311,8 +309,26 @@ const showMergeOption = computed(() => {
     ticketCount.data > 1
   );
 });
+const statusColor = computed(
+  () => ticketStatusStore.getStatus(ticket.value.doc.status)?.parsed_color
+);
+
 const defaultActions = computed(() => {
-  let items = [];
+  let items: any[] = [
+    {
+      label: __("Create task"),
+      icon: LucideListPlus,
+      onClick: () => (showCreateTask.value = true),
+    },
+  ];
+
+  if (meetingsEnabled.data) {
+    items.push({
+      label: __("Schedule Teams meeting"),
+      icon: LucideVideo,
+      onClick: () => (showScheduleMeeting.value = true),
+    });
+  }
 
   if (showMergeOption.value) {
     items.push({

@@ -1,13 +1,10 @@
 <template>
-  <section v-if="visible" class="px-5 py-4" :aria-labelledby="headingId">
-    <h2
-      :id="headingId"
-      class="mb-2.5 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.06em] text-ink-gray-5"
-    >
-      <LucideSparkles class="size-3.5" aria-hidden="true" />
-      {{ __("AI suggested reply") }}
-    </h2>
-
+  <PanelSection
+    v-if="visible"
+    :title="__('Suggested reply')"
+    :icon="LucideReply"
+    :level="3"
+  >
     <div aria-live="polite">
       <!-- Drafting -->
       <template v-if="status === 'Pending'">
@@ -49,7 +46,7 @@
           :id="previewId"
           class="suggested-reply text-p-sm text-ink-gray-8"
           :class="{ 'max-h-[6.5rem] overflow-hidden': !expanded }"
-          v-html="suggestion.reply"
+          v-html="replyHtml"
         />
         <button
           type="button"
@@ -167,14 +164,14 @@
       <LucideCircleAlert class="size-3.5 shrink-0" aria-hidden="true" />
       {{ regenerateError }}
     </p>
-  </section>
+  </PanelSection>
 </template>
 
 <script setup lang="ts">
 import { insertIntoReply } from "@/pages/ticket/modalStates";
 import { globalStore } from "@/stores/globalStore";
 import { __ } from "@/translation";
-import { timeAgo } from "@/utils";
+import { sanitizeRichText, timeAgo } from "@/utils";
 import { Button, FormControl, createResource } from "frappe-ui";
 import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from "vue";
 import LucideChevronDown from "~icons/lucide/chevron-down";
@@ -183,7 +180,7 @@ import LucideInfo from "~icons/lucide/info";
 import LucideLoaderCircle from "~icons/lucide/loader-circle";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideReply from "~icons/lucide/reply";
-import LucideSparkles from "~icons/lucide/sparkles";
+import PanelSection from "./PanelSection.vue";
 
 type SuggestionStatus = "" | "Pending" | "Ready" | "Failed";
 
@@ -211,8 +208,7 @@ const props = defineProps<{
   ticketId: string;
 }>();
 
-const headingId = `ai-suggestion-${useId()}`;
-const previewId = `${headingId}-preview`;
+const previewId = `ai-suggestion-${useId()}-preview`;
 const expanded = ref(false);
 const regenerateOpen = ref(false);
 const instructions = ref("");
@@ -236,6 +232,9 @@ const suggestion = computed<Suggestion>(
     }
 );
 const status = computed(() => suggestion.value.status);
+// model output: render only safe markup ("Use this reply" inserts the raw draft
+// into the editor, which parses it into its own schema)
+const replyHtml = computed(() => sanitizeRichText(suggestion.value.reply));
 const visible = computed(() =>
   ["Pending", "Ready", "Failed"].includes(status.value)
 );
