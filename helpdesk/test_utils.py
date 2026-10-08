@@ -2046,3 +2046,37 @@ def fake_pdf_renderer():
     writer.write(pdf)
     stack.enter_context(patch("frappe.utils.pdf.get_pdf", return_value=pdf.getvalue()))
     return stack
+
+
+def make_copilot_settings(templates: dict[str, str] | None = None, **values):
+    """Saves HDS Copilot Settings with `values`; `templates` maps a stage to its message text."""
+    settings = frappe.get_single("HDS Copilot Settings")
+    settings.update(values)
+    for stage, message in (templates or {}).items():
+        row = next((r for r in settings.message_templates if r.stage == stage), None)
+        if row:
+            row.message = message
+        else:
+            settings.append("message_templates", {"stage": stage, "message": message})
+    settings.save(ignore_permissions=True)
+    return settings
+
+
+def make_site_registry(
+    customer: str,
+    connection: str | None = None,
+    environment: str = "Production",
+    apps: list[dict] | None = None,
+    **kwargs,
+):
+    """Creates an HDS Site Registry row for `customer`; `apps` rows are `{app, repository, branch, deployed_commit}`."""
+    return frappe.get_doc(
+        {
+            "doctype": "HDS Site Registry",
+            "customer_name": customer,
+            "connection": connection,
+            "environment": environment,
+            "apps": apps or [],
+            **kwargs,
+        }
+    ).insert(ignore_permissions=True)

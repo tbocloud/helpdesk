@@ -1,0 +1,138 @@
+{
+	"actions": [],
+	"autoname": "TBO-SITE-.YYYY.-.#####",
+	"creation": "2026-10-08 12:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"customer_name",
+		"environment",
+		"connection",
+		"column_break_site",
+		"site_url",
+		"press_site",
+		"press_release_group",
+		"shared_group",
+		"apps_section",
+		"apps",
+		"last_synced"
+	],
+	"fields": [
+		{
+			"fieldname": "customer_name",
+			"fieldtype": "Link",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"label": "Customer",
+			"options": "HD Customer",
+			"reqd": 1
+		},
+		{
+			"default": "Production",
+			"fieldname": "environment",
+			"fieldtype": "Select",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"label": "Environment",
+			"options": "Production\nUAT\nSandbox",
+			"reqd": 1
+		},
+		{
+			"description": "The customer-site connection this site is reached through",
+			"fieldname": "connection",
+			"fieldtype": "Link",
+			"in_list_view": 1,
+			"label": "Connection",
+			"options": "HDS Support Connection"
+		},
+		{
+			"fieldname": "column_break_site",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "site_url",
+			"fieldtype": "Data",
+			"label": "Site URL",
+			"options": "URL"
+		},
+		{
+			"description": "Filled when Press deployment is connected (Phase 2)",
+			"fieldname": "press_site",
+			"fieldtype": "Data",
+			"label": "Press Site"
+		},
+		{
+			"fieldname": "press_release_group",
+			"fieldtype": "Data",
+			"label": "Press Release Group"
+		},
+		{
+			"default": "0",
+			"description": "Other customers' sites move with this group's builds",
+			"fieldname": "shared_group",
+			"fieldtype": "Check",
+			"label": "Shared Release Group"
+		},
+		{
+			"fieldname": "apps_section",
+			"fieldtype": "Section Break",
+			"label": "Apps"
+		},
+		{
+			"fieldname": "apps",
+			"fieldtype": "Table",
+			"label": "Apps",
+			"options": "HDS Site App"
+		},
+		{
+			"fieldname": "last_synced",
+			"fieldtype": "Datetime",
+			"label": "Last Synced",
+			"read_only": 1
+		}
+	],
+	"links": [],
+	"modified": "2026-10-08 12:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HDS Site Registry",
+	"naming_rule": "Expression (old style)",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "System Manager",
+			"share": 1,
+			"write": 1
+		},
+		{
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "Agent Manager",
+			"share": 1
+		},
+		{
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "Agent",
+			"share": 1
+		}
+	],
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": [],
+	"title_field": "customer_name",
+	"track_changes": 1
+}

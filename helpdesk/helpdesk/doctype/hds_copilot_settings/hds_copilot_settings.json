@@ -1,0 +1,102 @@
+{
+	"actions": [],
+	"creation": "2026-10-08 12:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"enabled",
+		"handover_project",
+		"column_break_limits",
+		"lease_minutes",
+		"max_lease_losses",
+		"min_confidence",
+		"templates_section",
+		"message_templates"
+	],
+	"fields": [
+		{
+			"default": "0",
+			"description": "A Copilot run starts for every new ticket of a customer with \"Copilot enabled\"",
+			"fieldname": "enabled",
+			"fieldtype": "Check",
+			"label": "Enabled"
+		},
+		{
+			"description": "Tasks for hand-overs go here when the customer has no project of their own",
+			"fieldname": "handover_project",
+			"fieldtype": "Link",
+			"label": "Hand-over Project",
+			"options": "Project"
+		},
+		{
+			"fieldname": "column_break_limits",
+			"fieldtype": "Column Break"
+		},
+		{
+			"default": "5",
+			"description": "A worker keeps a run alive by heartbeat; after this long without one the run is given back to the queue",
+			"fieldname": "lease_minutes",
+			"fieldtype": "Int",
+			"label": "Lease Minutes"
+		},
+		{
+			"default": "3",
+			"description": "After this many lost leases the run fails and a person is told",
+			"fieldname": "max_lease_losses",
+			"fieldtype": "Int",
+			"label": "Max Lease Losses"
+		},
+		{
+			"default": "0.6",
+			"description": "An investigation below this confidence (0 to 1) is treated as unclear",
+			"fieldname": "min_confidence",
+			"fieldtype": "Float",
+			"label": "Min Confidence"
+		},
+		{
+			"fieldname": "templates_section",
+			"fieldtype": "Section Break",
+			"label": "Messages to the Customer"
+		},
+		{
+			"description": "One row per stage; a missing or empty row uses the built-in text",
+			"fieldname": "message_templates",
+			"fieldtype": "Table",
+			"label": "Stage Messages",
+			"options": "HDS Copilot Message Template"
+		}
+	],
+	"issingle": 1,
+	"links": [],
+	"modified": "2026-10-08 12:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HDS Copilot Settings",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "System Manager",
+			"share": 1,
+			"write": 1
+		},
+		{
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "Agent Manager",
+			"share": 1
+		}
+	],
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": []
+}

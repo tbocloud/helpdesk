@@ -445,6 +445,29 @@ def get_custom_fields():
                 "read_only": 1,
             },
         ],
+        "HD Customer": [
+            {
+                "fieldname": "custom_copilot_section",
+                "fieldtype": "Section Break",
+                "label": "TBO Copilot",
+                "insert_after": "country",
+            },
+            {
+                "fieldname": "custom_copilot_enabled",
+                "fieldtype": "Check",
+                "label": "Copilot Enabled",
+                "insert_after": "custom_copilot_section",
+                "description": "A Copilot run starts for every new ticket of this customer",
+            },
+            {
+                "fieldname": "custom_assigned_developer",
+                "fieldtype": "Link",
+                "options": "User",
+                "label": "Assigned Developer",
+                "insert_after": "custom_copilot_enabled",
+                "description": "Gets the task when Copilot hands a ticket over to a person",
+            },
+        ],
         "HD Ticket": [
             {
                 "fieldname": "custom_qcs_connection",

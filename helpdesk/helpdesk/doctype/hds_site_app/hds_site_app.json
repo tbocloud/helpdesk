@@ -1,0 +1,66 @@
+{
+	"actions": [],
+	"creation": "2026-10-08 12:00:00.000000",
+	"doctype": "DocType",
+	"editable_grid": 1,
+	"engine": "InnoDB",
+	"field_order": [
+		"app",
+		"repository",
+		"branch",
+		"deployed_commit",
+		"drift_status"
+	],
+	"fields": [
+		{
+			"columns": 2,
+			"fieldname": "app",
+			"fieldtype": "Data",
+			"in_list_view": 1,
+			"label": "App",
+			"reqd": 1
+		},
+		{
+			"columns": 3,
+			"description": "GitHub org/repo",
+			"fieldname": "repository",
+			"fieldtype": "Data",
+			"in_list_view": 1,
+			"label": "Repository"
+		},
+		{
+			"columns": 2,
+			"fieldname": "branch",
+			"fieldtype": "Data",
+			"in_list_view": 1,
+			"label": "Branch"
+		},
+		{
+			"columns": 2,
+			"fieldname": "deployed_commit",
+			"fieldtype": "Data",
+			"in_list_view": 1,
+			"label": "Deployed Commit"
+		},
+		{
+			"columns": 1,
+			"default": "Unknown",
+			"fieldname": "drift_status",
+			"fieldtype": "Select",
+			"in_list_view": 1,
+			"label": "Drift",
+			"options": "Unknown\nIn sync\nDrift"
+		}
+	],
+	"istable": 1,
+	"links": [],
+	"modified": "2026-10-08 12:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HDS Site App",
+	"owner": "Administrator",
+	"permissions": [],
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": []
+}
