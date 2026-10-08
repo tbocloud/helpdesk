@@ -16,6 +16,9 @@ from helpdesk.helpdesk.doctype.hd_content_occasion.hd_content_occasion import (
 from helpdesk.helpdesk.doctype.hd_department.hd_department import (
     ensure_default_departments,
 )
+from helpdesk.helpdesk.doctype.hd_signoff_template.hd_signoff_template import (
+    ensure_default_signoff_templates,
+)
 from helpdesk.setup.default_views import add_default_views
 
 from .default_template import create_default_template
@@ -85,6 +88,7 @@ def after_install():
     ensure_content_team_role()
     ensure_default_occasions()
     ensure_default_departments()
+    ensure_default_signoff_templates()
     ensure_customization_ticket_type()
     # Always keep this at last, because sql_ddl makes the db commit
     add_fts_index()
@@ -632,6 +636,16 @@ def get_custom_fields():
                 "label": "Department",
                 "insert_after": "project_type",
                 "in_standard_filter": 1,
+            },
+            {
+                # set when every training sign-off of the project is signed (docs/project-signoff.md)
+                "fieldname": "custom_signoff_letter",
+                "fieldtype": "Link",
+                "options": "File",
+                "label": "Training Completion Letter",
+                "insert_after": "custom_department",
+                "read_only": 1,
+                "no_copy": 1,
             },
         ],
         "Project User": [

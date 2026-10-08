@@ -1,0 +1,87 @@
+{% extends "helpdesk/templates/signoff/letter_base.html" %} {% block doc_type
+%}{{ _("Training sign-off") }}<br />{{ doc.name|e }}{% endblock %} {% block body
+%}
+<h1>{{ _("{0} training: sign-off").format(doc.module_title)|e }}</h1>
+<p class="lede">{{ lede|e }}</p>
+
+<table class="facts">
+  <tr>
+    <th>{{ _("Customer") }}</th>
+    <td>{{ customer_name|e }}</td>
+  </tr>
+  <tr>
+    <th>{{ _("Project") }}</th>
+    <td>{{ (doc.project_name or doc.project)|e }}</td>
+  </tr>
+  <tr>
+    <th>{{ _("Module") }}</th>
+    <td>{{ doc.module_title|e }}</td>
+  </tr>
+  {% if training_date %}
+  <tr>
+    <th>{{ _("Training date") }}</th>
+    <td>{{ training_date|e }}</td>
+  </tr>
+  {% endif %} {% if trainer_name %}
+  <tr>
+    <th>{{ _("Trainer") }}</th>
+    <td>{{ trainer_name|e }}</td>
+  </tr>
+  {% endif %}
+</table>
+
+{% for section, rows in sections.items() %}
+<h2>{{ section|e }}</h2>
+<table class="list">
+  <tbody>
+    {% for row in rows %}
+    <tr>
+      <td class="num">{{ row.idx }}</td>
+      <td>
+        {{ row.question|e }} {% if row.customer_comment %}
+        <div class="comment">
+          {{ _("Comment") }}: {{ row.customer_comment|e }}
+        </div>
+        {% endif %}
+      </td>
+      <td class="answer">{{ _(row.response)|e }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endfor %}
+
+<div class="signature">
+  <p>{{ confirmation|e }}</p>
+  <table class="facts" style="margin: 0">
+    <tr>
+      <th>{{ _("Signed by") }}</th>
+      <td>{{ doc.signer_name|e }}</td>
+    </tr>
+    <tr>
+      <th>{{ _("Designation") }}</th>
+      <td>{{ doc.signer_designation|e }}</td>
+    </tr>
+    <tr>
+      <th>{{ _("Email") }}</th>
+      <td>{{ doc.signer_email|e }}</td>
+    </tr>
+    <tr>
+      <th>{{ _("Date and time") }}</th>
+      <td>{{ signed_on|e }}</td>
+    </tr>
+    <tr>
+      <th>{{ _("Verified by") }}</th>
+      <td>
+        {{ _("Secure link and a one-time code emailed to the signatory") }}
+      </td>
+    </tr>
+  </table>
+</div>
+
+<p class="foot">
+  {{ _("Audit reference") }}: <span class="mono">{{ doc.audit_ref|e }}</span
+  ><br />
+  {{ _("Signed from IP address {0}.").format(doc.signer_ip or "-")|e }}
+</p>
+{% endblock %}

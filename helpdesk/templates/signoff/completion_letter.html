@@ -1,0 +1,53 @@
+{% extends "helpdesk/templates/signoff/letter_base.html" %} {% block doc_type
+%}{{ _("Project completion") }}{% endblock %} {% block body %}
+<h1>{{ _("Training completion: {0}").format(project_name)|e }}</h1>
+<p class="lede">{{ lede|e }}</p>
+
+<table class="facts">
+  <tr>
+    <th>{{ _("Customer") }}</th>
+    <td>{{ customer_name|e }}</td>
+  </tr>
+  <tr>
+    <th>{{ _("Project") }}</th>
+    <td>{{ project_name|e }}</td>
+  </tr>
+  <tr>
+    <th>{{ _("Modules signed off") }}</th>
+    <td>{{ signoffs|length }}</td>
+  </tr>
+</table>
+
+<table class="list">
+  <thead>
+    <tr>
+      <th>{{ _("Module") }}</th>
+      <th>{{ _("Training date") }}</th>
+      <th>{{ _("Trainer") }}</th>
+      <th>{{ _("Signed by") }}</th>
+      <th>{{ _("Signed on") }}</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for s in signoffs %}
+    <tr>
+      <td>
+        {{ s.module_title|e }}
+        <div class="comment mono">
+          {{ s.name|e }} · {{ (s.audit_ref or "")[:16]|e }}
+        </div>
+      </td>
+      <td>{{ (s.training_date or "-")|e }}</td>
+      <td>{{ (s.trainer_name or "-")|e }}</td>
+      <td>
+        {{ s.signer_name|e }}
+        <div class="comment">{{ (s.signer_designation or "")|e }}</div>
+      </td>
+      <td>{{ s.signed_on|e }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<p class="foot">{{ foot|e }}</p>
+{% endblock %}

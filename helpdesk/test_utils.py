@@ -1899,3 +1899,92 @@ def make_attachment(doctype: str, name: str, file_name: str, content: bytes, pri
             "content": content,
         }
     ).insert(ignore_permissions=True)
+
+
+def make_signoff_template(template_name: str, questions: list[tuple[str, str]]):
+    """An active HD Signoff Template; `questions` is a list of (section, question)."""
+    if frappe.db.exists("HD Signoff Template", template_name):
+        frappe.delete_doc("HD Signoff Template", template_name, force=True)
+    return frappe.get_doc(
+        {
+            "doctype": "HD Signoff Template",
+            "template_name": template_name,
+            "module": template_name,
+            "is_active": 1,
+            "items": [{"section": s, "question": q} for s, q in questions],
+        }
+    ).insert(ignore_permissions=True)
+
+
+def make_signoff(
+    project: str, contact: str, trainer: str, template: str | None = None, **values
+):
+    """A Draft HD Project Signoff for `project`, signed by the customer contact `contact`.
+
+    Without a template, pass the questions as `items`.
+    """
+    return frappe.get_doc(
+        {
+            "doctype": "HD Project Signoff",
+            "project": project,
+            "template": template,
+            "module_title": values.pop("module_title", template or "Accounts"),
+            "trainer": trainer,
+            "signatory_contact": contact,
+            **values,
+        }
+    ).insert(ignore_permissions=True)
+
+
+def open_signoff_link(signoff) -> str:
+    """Issues and saves a customer link for the sign-off; returns the raw token the email would carry."""
+    token = signoff.issue_link()
+    signoff.save(ignore_permissions=True)
+    return token
+
+
+def signoff_session(signoff, email: str | None = None):
+    """Patches the sign-off page so its calls run in a verified session for `signoff`.
+
+    The session's email is the signatory's unless `email` says otherwise.
+    """
+    from helpdesk.api import signoff_portal
+
+    session = {
+        "signoff": signoff.name,
+        "token_hash": signoff.link_token_hash,
+        "email": email or signoff.signatory_email,
+    }
+    return patch.object(signoff_portal, "get_session", return_value=session)
+
+
+def fake_request(test_case, cookies: dict | None = None):
+    """Gives frappe.local a request carrying `cookies`, put back after the test."""
+    from types import SimpleNamespace
+
+    previous = getattr(frappe.local, "request", None)
+    frappe.local.request = SimpleNamespace(cookies=cookies or {}, headers={})
+    test_case.addCleanup(setattr, frappe.local, "request", previous)
+
+
+def fake_pdf_renderer():
+    """Patches PDF rendering so signing works without wkhtmltopdf; use it as a context manager."""
+    import io
+    from contextlib import ExitStack
+
+    from pypdf import PdfWriter
+
+    stack = ExitStack()
+    stack.enter_context(
+        patch(
+            "helpdesk.helpdesk.doctype.hd_project_signoff.hd_project_signoff.shutil.which",
+            return_value="/usr/bin/wkhtmltopdf",
+        )
+    )
+    # File parses uploaded PDFs, so the fake must be a real one
+    writer = PdfWriter()
+    writer.add_blank_page(width=595, height=842)
+    pdf = io.BytesIO()
+    writer.write(pdf)
+    stack.enter_context(patch("frappe.utils.pdf.get_pdf", return_value=pdf.getvalue()))
+    return stack

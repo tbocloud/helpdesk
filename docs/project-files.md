@@ -93,6 +93,10 @@ rules above and then deletes with `ignore_permissions`.
   File untouched and lets the list be queried with a join.
 - Files attached to a project without an HD Project File (e.g. uploaded from `/app`) still
   show in the list with an empty "For"; changing who they are for creates the record.
+- Training sign-offs save their signed PDFs and the project completion letter on the
+  project the same way ([project-signoff.md](project-signoff.md)), so they show here with an
+  empty "For". A signed PDF is linked from its sign-off, so it can't be deleted while the
+  sign-off exists.
 - Deleting a File removes its HD Project File (`HelpdeskFile.on_trash` in
   `helpdesk/overrides/file.py`). Deleting a project deletes its attachments, and with them
   their records; `HD Project File` is in `ignore_links_on_delete` so its link to the project

@@ -43,6 +43,8 @@ import LucideHardDrive from "~icons/lucide/hard-drive";
 import LucideCalendarDays from "~icons/lucide/calendar-days";
 import LucideBuilding2 from "~icons/lucide/building-2";
 import Departments from "./Departments/Departments.vue";
+import SignoffTemplates from "./Signoff/SignoffTemplates.vue";
+import LucideClipboardCheck from "~icons/lucide/clipboard-check";
 
 export const showSettingsModal = ref(false);
 
@@ -168,6 +170,13 @@ export const tabs = computed(() => {
             auth.isAdmin || auth.isManager || auth.isProjectManager,
         },
         {
+          label: __("Sign-off templates"),
+          icon: markRaw(LucideClipboardCheck),
+          component: markRaw(SignoffTemplates),
+          // project managers, which includes admins (tasky is_project_manager)
+          condition: () => auth.isProjectManager,
+        },
+        {
           label: __("Tasks"),
           icon: markRaw(LucideListChecks),
           component: markRaw(TaskSettings),
@@ -243,6 +252,7 @@ type TabName =
   | "Saved Replies"
   | "Content"
   | "Tasks"
+  | "Sign-off templates"
   | "File storage"
   | "CRM";
 

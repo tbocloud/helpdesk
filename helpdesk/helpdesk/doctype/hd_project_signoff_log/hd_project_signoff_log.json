@@ -1,0 +1,73 @@
+{
+	"actions": [],
+	"creation": "2026-10-08 10:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"event",
+		"item",
+		"detail",
+		"by_email",
+		"by_name",
+		"at",
+		"ip_address"
+	],
+	"fields": [
+		{
+			"fieldname": "event",
+			"fieldtype": "Data",
+			"label": "Event",
+			"reqd": 1,
+			"in_list_view": 1,
+			"columns": 2
+		},
+		{
+			"fieldname": "item",
+			"fieldtype": "Data",
+			"label": "Item",
+			"description": "The question row this entry is about, if any."
+		},
+		{
+			"fieldname": "detail",
+			"fieldtype": "Small Text",
+			"label": "Detail",
+			"in_list_view": 1,
+			"columns": 4
+		},
+		{
+			"fieldname": "by_email",
+			"fieldtype": "Data",
+			"label": "By",
+			"in_list_view": 1,
+			"columns": 2
+		},
+		{
+			"fieldname": "by_name",
+			"fieldtype": "Data",
+			"label": "By Name"
+		},
+		{
+			"fieldname": "at",
+			"fieldtype": "Datetime",
+			"label": "At",
+			"in_list_view": 1,
+			"columns": 2
+		},
+		{
+			"fieldname": "ip_address",
+			"fieldtype": "Data",
+			"label": "IP Address"
+		}
+	],
+	"istable": 1,
+	"links": [],
+	"modified": "2026-10-08 10:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD Project Signoff Log",
+	"owner": "Administrator",
+	"permissions": [],
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": []
+}

@@ -35,6 +35,29 @@ class Task(Document):
         self.request_review()
         self.unblock_dependents()
         self.advance_content_post()
+        self.clarify_signoff_item()
+
+    def clarify_signoff_item(self):
+        """Completing a sign-off's clarification task returns its item to the customer."""
+        from helpdesk.helpdesk.doctype.hd_project_signoff.hd_project_signoff import (
+            NEEDS_FOLLOW_UP,
+        )
+
+        if self.flags.from_signoff or self.status != "Completed":
+            return
+        if not self.status_changed():
+            return
+        item = frappe.db.get_value(
+            "HD Project Signoff Item",
+            {"clarification_task": self.name, "response": ("in", NEEDS_FOLLOW_UP)},
+            ["name", "parent"],
+            as_dict=True,
+        )
+        if not item:
+            return
+        frappe.get_doc("HD Project Signoff", item.parent).clarify(
+            item.name, from_task=True
+        )
 
     def advance_content_post(self):
         """Finishing a content task moves its post to the next stage."""
