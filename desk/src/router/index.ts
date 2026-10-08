@@ -190,6 +190,18 @@ const portalRoutes = [
     props: true,
   },
   {
+    path: "/projects/:projectId/signoff",
+    name: "TaskySignoffs",
+    component: () => import("@/pages/tasky/ProjectSignoffs.vue"),
+    props: true,
+  },
+  {
+    path: "/projects/:projectId/signoff/:signoffId",
+    name: "TaskySignoff",
+    component: () => import("@/pages/tasky/ProjectSignoff.vue"),
+    props: true,
+  },
+  {
     path: "/my-tasks",
     name: "TaskyMyTasks",
     component: () => import("@/pages/tasky/MyTasks.vue"),

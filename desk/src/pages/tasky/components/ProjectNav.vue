@@ -77,11 +77,11 @@
       :to="{ name: tab.to, params: { projectId } }"
       class="-mb-px flex h-10 shrink-0 items-center gap-1.5 border-b-2 px-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-outline-gray-4"
       :class="
-        route.name === tab.to
+        isCurrent(tab)
           ? 'border-brand text-ink-gray-9'
           : 'border-transparent text-ink-gray-5 hover:text-ink-gray-8'
       "
-      :aria-current="route.name === tab.to ? 'page' : undefined"
+      :aria-current="isCurrent(tab) ? 'page' : undefined"
     >
       <component :is="tab.icon" class="size-4" aria-hidden="true" />
       {{ __(tab.label) }}
@@ -121,6 +121,7 @@ import LucideAlarmClock from "~icons/lucide/alarm-clock";
 import LucideCalendarRange from "~icons/lucide/calendar-range";
 import LucideChevronDown from "~icons/lucide/chevron-down";
 import LucideChevronRight from "~icons/lucide/chevron-right";
+import LucideClipboardCheck from "~icons/lucide/clipboard-check";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideUserStar from "~icons/lucide/user-star";
 import LucideUserX from "~icons/lucide/user-x";
@@ -152,7 +153,19 @@ const tabs = [
   { label: "Timeline", to: "TaskyTimeline", icon: LucideCalendarRange },
   { label: "Overdue", to: "TaskyOverdue", icon: LucideAlarmClock },
   { label: "Files", to: "TaskyFiles", icon: LucidePaperclip },
+  {
+    label: "Sign-off",
+    to: "TaskySignoffs",
+    icon: LucideClipboardCheck,
+    // a single sign-off stays under this tab
+    also: ["TaskySignoff"],
+  },
 ];
+
+function isCurrent(tab: { to: string; also?: string[] }) {
+  const name = String(route.name);
+  return name === tab.to || !!tab.also?.includes(name);
+}
 
 const detail = createResource({
   url: "helpdesk.tasky.api.get_project_detail",
