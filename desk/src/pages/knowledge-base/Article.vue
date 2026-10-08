@@ -256,17 +256,20 @@
         <template v-if="isCustomerPortal && !editable">
           <ArticleFeedback :feedback="feedback" :article-id="articleId" />
           <SectionCard
-            v-if="related.loading || related.error || relatedArticles.length"
-            :title="__('Related articles')"
-            :to="
-              article.data.category_id
-                ? {
-                    name: 'Articles',
-                    params: { categoryId: article.data.category_id },
-                  }
-                : undefined
+            v-if="
+              relatedForThisArticle &&
+              (related.loading || related.error || relatedArticles.length)
             "
-            :link-label="__('All in {0}', [article.data.category_name])"
+            :title="__('Related articles')"
+            :to="{
+              name: 'Articles',
+              params: { categoryId: article.data.category_id },
+            }"
+            :link-label="
+              article.data.category_name
+                ? __('All in {0}', [article.data.category_name])
+                : __('All in this topic')
+            "
           >
             <ArticleList
               :articles="relatedArticles"
@@ -520,6 +523,13 @@ const related = createResource({
   url: "helpdesk.api.knowledge_base.get_category_articles",
   makeParams: () => ({ category: article.data?.category_id }),
 });
+// only the current article's topic: an article without one shows no card, and a
+// previous article's list never shows under the next one
+const relatedForThisArticle = computed(
+  () =>
+    !!article.data?.category_id &&
+    related.params?.category === article.data.category_id
+);
 const relatedArticles = computed(() =>
   (related.data || [])
     .filter((a: Article) => a.name !== props.articleId)

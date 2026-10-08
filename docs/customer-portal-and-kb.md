@@ -61,7 +61,9 @@ customer sees:
 
 - **Header**: breadcrumbs, custom actions, and **Close ticket** as a secondary button (replying
   is the page's main action). Closing asks first ("Close this ticket?"), or opens the rating
-  dialog when feedback is mandatory and the team has replied.
+  dialog when feedback is mandatory and the team has replied. Closing isn't optimistic: the
+  button shows a loading state, the ticket reads Closed only once the server saves it, and a
+  failed close keeps it open and says why.
 - **Summary** (`TicketCustomerSummary.vue`): the subject as the page heading; status badge,
   `#id` and when it was opened; then **what happens next**, one sentence by stage:
   - open, no reply yet, reply deadline ahead: "We'll reply within 3h", with the exact time;
@@ -116,7 +118,8 @@ customer sees:
 
 - **Search** first: "How can we help?", a labelled search field, and results inline below it
   (the same `SearchArticles`; the old popover, `SearchPopover.vue`, is removed, as results in a
-  popover were cramped on phones). The query is kept in the URL as `q`.
+  popover were cramped on phones). The query is kept in the URL as `q`, both ways: typing
+  updates the URL, and a changed `q` (back, forward, a link) updates the field.
 - **Browse by topic**: one neutral card per category with its article count
   (`CategoryFolderContainer.vue`, `CategoryFolder.vue`); loading skeleton, an error with Retry, and
   "No articles published yet".
@@ -130,7 +133,8 @@ customer sees:
 
 ### Topic (`/kb-public/:categoryId`)
 
-`pages/knowledge-base/Articles.vue`: the topic name and article count, then the articles as rows
+`pages/knowledge-base/Articles.vue`: the topic name (a skeleton while it loads, "Topic" if the
+lookup fails or is empty) and article count, then the articles as rows
 (title, excerpt, author, last update), with loading, error and empty states, and a link back to
 all topics.
 
@@ -147,7 +151,9 @@ all topics.
   `aria-pressed` (they were clickable icons before), "Raise a ticket" when it didn't help; a
   failed save reverts the choice and says so.
 - **Related articles**: up to five other published articles in the same topic
-  (`get_category_articles`), with a link to the whole topic.
+  (`get_category_articles`), with a link to the whole topic. Only for an article in a topic: an
+  article without one shows no card, and the list is only shown when it was fetched for the
+  current article's topic.
 - Loading shows a skeleton; an article that can't be loaded says so with Retry and a link to the
   knowledge base (a draft opened by a customer still returns to the knowledge base, unchanged).
 

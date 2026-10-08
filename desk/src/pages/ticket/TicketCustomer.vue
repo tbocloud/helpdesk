@@ -13,6 +13,8 @@
         <Button
           v-if="!isClosed"
           :label="__('Close ticket')"
+          :loading="setValue.loading"
+          :disabled="setValue.loading"
           @click="handleClose()"
         >
           <template #prefix>
@@ -362,11 +364,12 @@ function showConfirmationDialog() {
         label: __("Close ticket"),
         variant: "solid",
         onClick(close: Function) {
-          ticket.data.status = "Closed";
+          // not optimistic: the ticket shows Closed only once the server agrees
           setValue.submit(
             { fieldname: "status", value: "Closed" },
             {
               onSuccess: () => {
+                ticket.data.status = "Closed";
                 toast.success(__("Ticket closed successfully."));
               },
             }
@@ -392,6 +395,11 @@ const setValue = createResource({
   onSuccess: () => {
     showFeedbackDialog.value = false;
     ticket.reload();
+  },
+  onError: (error) => {
+    toast.error(
+      errorText(error, __("The ticket wasn't closed. Please try again."))
+    );
   },
 });
 

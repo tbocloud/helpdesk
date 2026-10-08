@@ -114,8 +114,16 @@ const router = useRouter();
 // the search lives in the URL, so a result can be shared or come back to
 const query = ref((route.query.q as string) || "");
 watch(query, (q) => {
+  if (q === ((route.query.q as string) || "")) return;
   router.replace({ query: { ...route.query, q: q || undefined } });
 });
+// back/forward or a link that changes ?q= while the page stays open
+watch(
+  () => route.query.q,
+  (q) => {
+    query.value = (q as string) || "";
+  }
+);
 
 const featured = createResource({
   url: "helpdesk.api.knowledge_base.get_featured_articles",

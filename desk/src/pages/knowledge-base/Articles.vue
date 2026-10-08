@@ -9,7 +9,7 @@
       <div class="flex flex-col gap-1">
         <h1 class="text-2xl font-semibold text-ink-gray-9">
           <span
-            v-if="!categoryTitle"
+            v-if="categoryName.loading"
             class="inline-block h-7 w-48 animate-pulse rounded bg-surface-gray-2 align-middle"
           />
           <template v-else>{{ categoryTitle }}</template>
@@ -83,7 +83,10 @@ onMounted(() => {
   });
 });
 
-const categoryTitle = computed(() => categoryName.data || "");
+// a failed or empty lookup still names the page
+const categoryTitle = computed(() =>
+  categoryName.loading ? "" : categoryName.data || __("Topic")
+);
 
 const breadcrumbs = computed(() => [
   {
