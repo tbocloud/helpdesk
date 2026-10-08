@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>{{ title|e }}</title>
+    <style>
+      /* wkhtmltopdf's WebKit is old: tables, no flex or grid */
+      @page {
+        size: A4;
+        margin: 16mm 14mm;
+      }
+      body {
+        font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+        color: #1f2430;
+        font-size: 11px;
+        line-height: 1.45;
+        margin: 0;
+      }
+      .letterhead {
+        width: 100%;
+        border-bottom: 2px solid #1f2430;
+        padding-bottom: 8px;
+        margin-bottom: 18px;
+      }
+      .letterhead td {
+        vertical-align: middle;
+      }
+      .letterhead img {
+        max-height: 36px;
+        max-width: 180px;
+      }
+      .brand {
+        font-size: 16px;
+        font-weight: 600;
+      }
+      .doc-type {
+        text-align: right;
+        color: #5d6472;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+      h1 {
+        font-size: 18px;
+        margin: 0 0 4px;
+      }
+      .lede {
+        color: #5d6472;
+        margin: 0 0 16px;
+      }
+      table.facts {
+        border-collapse: collapse;
+        margin-bottom: 18px;
+      }
+      table.facts th {
+        text-align: left;
+        font-weight: 500;
+        color: #5d6472;
+        padding: 2px 16px 2px 0;
+        white-space: nowrap;
+      }
+      table.facts td {
+        padding: 2px 0;
+      }
+      h2 {
+        font-size: 12px;
+        margin: 16px 0 6px;
+        padding-bottom: 3px;
+        border-bottom: 1px solid #c9cdd6;
+      }
+      table.list {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      table.list th {
+        text-align: left;
+        font-weight: 600;
+        color: #5d6472;
+        border-bottom: 1.5px solid #c9cdd6;
+        padding: 4px 6px;
+      }
+      table.list td {
+        border-bottom: 1px solid #e4e6eb;
+        padding: 5px 6px;
+        vertical-align: top;
+      }
+      table.list tr {
+        page-break-inside: avoid;
+      }
+      .num {
+        width: 24px;
+        color: #8a90a0;
+        font-variant-numeric: tabular-nums;
+      }
+      .answer {
+        width: 70px;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      .comment {
+        color: #5d6472;
+        margin-top: 2px;
+      }
+      .signature {
+        margin-top: 22px;
+        padding: 12px 14px;
+        border: 1px solid #c9cdd6;
+        page-break-inside: avoid;
+      }
+      .signature p {
+        margin: 0 0 6px;
+      }
+      .mono {
+        font-family: "SF Mono", Menlo, Consolas, monospace;
+        font-size: 9.5px;
+        word-break: break-all;
+      }
+      .foot {
+        margin-top: 18px;
+        color: #8a90a0;
+        font-size: 9.5px;
+      }
+    </style>
+  </head>
+  <body>
+    <table class="letterhead">
+      <tr>
+        <td>
+          {% if brand.logo %}<img
+            src="{{ brand.logo }}"
+            alt="{{ brand.name|e }}"
+          />{% else %}<span class="brand">{{ brand.name|e }}</span>{% endif %}
+        </td>
+        <td class="doc-type">{% block doc_type %}{% endblock %}</td>
+      </tr>
+    </table>
+    {% block body %}{% endblock %}
+  </body>
+</html>
