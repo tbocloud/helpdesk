@@ -9,8 +9,8 @@ changes are the summary strip, row readability, states and the phone layouts. Sh
 
 `desk/src/pages/ticket/Tickets.vue` on top of the shared `components/ListViewBuilder.vue`.
 **The customer portal (`/my-tickets`) renders the same `Tickets.vue`**, so every agent-only
-change is behind `isCustomerPortal`: the portal has no summary strip, no mobile rows, its
-"Create" label, and its original SLA badge colours.
+change is behind `isCustomerPortal`: the portal has no summary strip, and its status, SLA cells,
+phone rows and empty state are its own (see [customer-portal-and-kb.md](customer-portal-and-kb.md)).
 
 - **Summary strip** (`components/ticket-agent/TicketSummaryStrip.vue`): five compact
   `StatTile` toggles: Open, Unassigned, First reply overdue, SLA breached, Waiting on customer.
@@ -42,7 +42,7 @@ change is behind `isCustomerPortal`: the portal has no summary strip, no mobile 
   Fulfilled (neutral, check), Paused (neutral, pause), or "in 3h" with a clock, amber when due
   within 4 hours (the `SLA_RISK_HOURS` used for "at risk" in `helpdesk/api/work.py`) and
   neutral otherwise; hovering shows the exact deadline. A ticket without that deadline shows
-  nothing, even when it is resolved or paused (no SLA means nothing to fulfil or fail). The SLA state logic (`responseSla`, `resolutionSla`) is shared with the portal.
+  nothing, even when it is resolved or paused (no SLA means nothing to fulfil or fail). The portal reads the same deadlines through `customerStatus.ts` instead ("Overdue", never "Failed").
 - **Phones** (below 640px): `ListViewBuilder` renders a page's `#mobile-row` slot as a stacked
   list instead of the table. Tickets' row: subject (bold when unseen) with the resolution SLA
   badge, then `#id`, customer, status, priority and assignees. Row selection and bulk actions
@@ -52,7 +52,7 @@ change is behind `isCustomerPortal`: the portal has no summary strip, no mobile 
   `#empty-actions` slot), and the view-specific message. Clear filters removes `?filters=` (back
   to the view's own filters) or, when the filters were set on the page, empties them.
   `EmptyState` takes a default slot for such actions.
-- The primary action reads **New ticket** for agents.
+- The primary action reads **New ticket** for agents and customers.
 
 ## Calendar (`/calendar`)
 

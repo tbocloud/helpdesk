@@ -1,36 +1,52 @@
 <template>
-  <div
-    class="border flex-1 px-3 pt-2.5 mb-4 border-transparent bg-surface-base rounded-md shadow text-base leading-6 transition-all duration-300 ease-in-out"
+  <!-- the support team's messages sit on the panel surface; the customer's own on gray -->
+  <article
+    class="rounded-lg border px-4 pb-3 pt-3 text-base leading-6"
+    :class="
+      fromSupport
+        ? 'border-outline-gray-2 bg-surface-base'
+        : 'border-transparent bg-surface-gray-1'
+    "
   >
-    <div class="mb-4 flex items-center justify-between text-base">
-      <div class="flex items-center gap-0.5">
-        <UserAvatar v-bind="user" size="lg" expand strong :hide-avatar="true" />
-        <LucideDot class="text-ink-gray-4 size-4" />
-        <Tooltip :text="dateFormat(date, dateTooltipFormat)">
-          <span class="text-ink-gray-5">
-            {{ timeAgo(date) }}
-          </span>
-        </Tooltip>
-      </div>
-    </div>
+    <header class="mb-2 flex min-w-0 items-center gap-2">
+      <Avatar size="sm" :label="user?.name" :image="user?.image" />
+      <span class="min-w-0 truncate text-sm font-medium text-ink-gray-8">
+        {{ isYou ? __("You") : user?.name }}
+      </span>
+      <TaskyBadge v-if="fromSupport" :label="brandName" />
+      <Tooltip :text="dateFormat(date, dateTooltipFormat)">
+        <time
+          :datetime="date"
+          class="ml-auto shrink-0 text-sm tabular-nums text-ink-gray-5"
+        >
+          {{ timeAgo(date) }}
+        </time>
+      </Tooltip>
+    </header>
 
     <EmailContent :content="sanitize(content)" />
-    <div class="flex flex-wrap gap-2 mb-2">
-      <AttachmentItem
-        v-for="a in attachments"
-        :key="a.file_url"
-        :label="a.file_name"
-        :url="a.file_url"
-      />
-    </div>
-  </div>
+    <ul
+      v-if="attachments.length"
+      class="mt-2 flex flex-wrap gap-2"
+      :aria-label="__('Attachments')"
+    >
+      <li v-for="a in attachments" :key="a.file_url">
+        <AttachmentItem :label="a.file_name" :url="a.file_url" />
+      </li>
+    </ul>
+  </article>
 </template>
 
 <script setup lang="ts">
-import { AttachmentItem, UserAvatar } from "@/components";
+import { AttachmentItem } from "@/components";
+import EmailContent from "@/components/EmailContent.vue";
+import TaskyBadge from "@/components/TaskyBadge.vue";
+import { useConfigStore } from "@/stores/config";
+import { __ } from "@/translation";
 import { UserInfo } from "@/types";
 import { dateFormat, dateTooltipFormat, timeAgo } from "@/utils";
-import { dayjs, Tooltip } from "frappe-ui";
+import { Avatar, Tooltip } from "frappe-ui";
+import { storeToRefs } from "pinia";
 import sanitizeHtml from "sanitize-html";
 
 interface Attachment {
@@ -42,17 +58,22 @@ interface P {
   content: string;
   date: string;
   user: UserInfo;
-  cc?: string;
-  bcc?: string;
+  /** sent by the support team (an agent's reply) rather than the customer */
+  fromSupport?: boolean;
+  /** sent by the person viewing the ticket */
+  isYou?: boolean;
   attachments?: Attachment[];
 }
 
 withDefaults(defineProps<P>(), {
-  cc: () => "",
-  bcc: () => "",
+  fromSupport: false,
+  isYou: false,
   attachments: () => [],
 });
 
+const { brandName } = storeToRefs(useConfigStore());
+
+// emails carry images and video, so this keeps them (sanitizeRichText would drop them)
 function sanitize(html: string) {
   return sanitizeHtml(html, {
     allowedTags: sanitizeHtml.defaults.allowedTags.concat(["img", "video"]),

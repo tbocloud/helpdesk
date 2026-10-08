@@ -3,12 +3,12 @@
     <LayoutHeader>
       <template #left-header>
         <div class="text-lg-medium text-ink-gray-9">
-          {{ __("Knowledge Base") }}
+          {{ __("Knowledge base") }}
         </div>
       </template>
       <template #right-header>
         <Dropdown :options="headerOptions">
-          <Button :label="__('Create')" variant="solid">
+          <Button :label="__('New')" variant="solid">
             <template #prefix>
               <LucidePlus class="h-4 w-4" />
             </template>
@@ -56,11 +56,10 @@ import {
 import { capture } from "@/telemetry";
 import { Error } from "@/types";
 import { copyToClipboard } from "@/utils";
+import TaskyBadge from "@/components/TaskyBadge.vue";
 import {
-  Badge,
   Button,
   Dropdown,
-  FeatherIcon,
   createResource,
   toast,
   usePageMeta,
@@ -70,6 +69,8 @@ import { __ } from "@/translation";
 import { useRouter } from "vue-router";
 import LucideMerge from "~icons/lucide/merge";
 import LucideBookOpen from "~icons/lucide/book-open";
+import LucideFileText from "~icons/lucide/file-text";
+import { articleStatus } from "./articleStatus";
 
 const router = useRouter();
 const { $dialog } = globalStore();
@@ -397,23 +398,18 @@ const options = computed(() => {
     },
     columnConfig: {
       title: {
-        prefix: () => {
-          return h(FeatherIcon, {
-            name: "file-text",
-            class: "h-4 w-4 flex-shrink-0 text-ink-gray-6",
-          });
-        },
+        prefix: () =>
+          h(LucideFileText, {
+            class: "size-4 shrink-0 text-ink-gray-5",
+            "aria-hidden": "true",
+          }),
       },
       status: {
-        custom: ({ item }) => {
-          return h(Badge, {
-            ...statusMap[item],
-          });
-        },
+        custom: ({ item }) => h(TaskyBadge, articleStatus(item)),
       },
     },
     emptyState: {
-      title: "No articles found",
+      title: __("No articles found"),
       icon: h(LucideBookOpen, {
         class: "h-10 w-10",
       }),
@@ -421,7 +417,7 @@ const options = computed(() => {
         ? __(
             "No articles found for the applied filters. Try adjusting or clearing your filters."
           )
-        : __("No articles found in the following category."),
+        : __("Write the first article with New → Article."),
     },
     rowRoute: {
       name: "Article",
@@ -434,28 +430,13 @@ const options = computed(() => {
   };
 });
 
-const statusMap = {
-  Published: {
-    label: __("Published"),
-    theme: "green",
-  },
-  Draft: {
-    label: __("Draft"),
-    theme: "orange",
-  },
-  Archived: {
-    label: __("Archived"),
-    theme: "gray",
-  },
-};
-
 onMounted(() => {
   capture("kb_agent_page_viewed");
 });
 
 usePageMeta(() => {
   return {
-    title: __("Knowledge Base"),
+    title: __("Knowledge base"),
   };
 });
 </script>

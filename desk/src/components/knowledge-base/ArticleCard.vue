@@ -1,44 +1,60 @@
 <template>
-  <router-link
-    class="flex flex-col gap-3 border border-outline-elevation-2 rounded p-4 pb-2 cursor-pointer h-30 hover:bg-surface-gray-2 transition-all"
-    :to="{
-      name: 'ArticlePublic',
-      params: {
-        articleId: article.name,
-      },
-    }"
+  <!-- one article as a row: title, an optional excerpt, and where/when it's from -->
+  <RouterLink
+    class="flex min-w-0 items-start gap-3 px-4 py-3 hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-outline-gray-4"
+    :to="{ name: 'ArticlePublic', params: { articleId: article.name } }"
   >
-    <!-- Title and sub content -->
-    <div class="flex gap-3 flex-1">
-      <div class="flex flex-col gap-1.5 w-full">
-        <h5 class="text-base-medium text-ink-gray-8 truncate">
-          {{ article.title }}
-        </h5>
-        <div class="text-p-sm text-ink-gray-5 line-clamp-2">
-          {{ article.content }}
-        </div>
-      </div>
-    </div>
-    <!-- Avatar and published date -->
-    <div class="flex justify-between items-center">
-      <div class="flex gap-2 items-center">
-        <Avatar :label="article.author.name" :image="article.author.image" />
-        <span class="text-sm text-ink-gray-5 flex-1 truncate">{{
-          article.author.name
-        }}</span>
-      </div>
-      <span class="text-sm text-ink-gray-5">{{
-        dayjs.tz(article.modified).fromNow()
-      }}</span>
-    </div>
-  </router-link>
+    <LucideFileText
+      class="mt-0.5 size-4 shrink-0 text-ink-gray-5"
+      aria-hidden="true"
+    />
+    <span class="flex min-w-0 flex-1 flex-col gap-1">
+      <span class="text-base font-medium text-ink-gray-9">
+        {{ article.title }}
+      </span>
+      <span
+        v-if="article.content"
+        class="line-clamp-2 text-p-sm text-ink-gray-6"
+      >
+        {{ article.content }}
+      </span>
+      <span
+        v-if="meta.length"
+        class="flex flex-wrap items-center gap-x-1.5 text-sm text-ink-gray-5"
+      >
+        <template v-for="(part, i) in meta" :key="part">
+          <span v-if="i" aria-hidden="true">·</span>
+          <span>{{ part }}</span>
+        </template>
+      </span>
+    </span>
+  </RouterLink>
 </template>
 
 <script setup lang="ts">
-import { Avatar, dayjs } from "frappe-ui";
-import { Article } from "@/types";
+import { __ } from "@/translation";
+import { timeAgo } from "@/utils";
+import { computed } from "vue";
+import LucideFileText from "~icons/lucide/file-text";
 
-const props = defineProps<{
-  article: Article;
-}>();
+export interface ArticleSummary {
+  name: string;
+  title: string;
+  /** plain-text excerpt */
+  content?: string;
+  category_name?: string | null;
+  author?: { name: string } | null;
+  modified?: string;
+}
+
+const props = defineProps<{ article: ArticleSummary }>();
+
+const meta = computed(() =>
+  [
+    props.article.category_name,
+    props.article.author?.name && __("By {0}", [props.article.author.name]),
+    props.article.modified &&
+      __("Updated {0}", [timeAgo(props.article.modified)]),
+  ].filter(Boolean)
+);
 </script>

@@ -17,7 +17,7 @@
         >
           <Button
             class="rtl:flex-row-reverse"
-            :label="isCustomerPortal ? __('Create') : __('New ticket')"
+            :label="__('New ticket')"
             theme="gray"
             variant="solid"
           >
@@ -89,6 +89,30 @@
           </span>
         </RouterLink>
       </template>
+      <template v-else #mobile-row="{ row }">
+        <RouterLink
+          :to="{ name: 'TicketCustomer', params: { ticketId: row.name } }"
+          class="flex flex-col gap-1.5 px-4 py-3 hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-outline-gray-4"
+        >
+          <span
+            class="min-w-0 truncate text-base text-ink-gray-9"
+            :class="isUnseen(row) ? 'font-semibold' : 'font-medium'"
+          >
+            {{ row.subject }}
+          </span>
+          <span
+            class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-gray-6"
+          >
+            <TaskyBadge v-bind="customerStatus.badge(row.status)" />
+            <span class="font-mono tabular-nums text-ink-gray-5">
+              #{{ row.name }}
+            </span>
+            <span class="ml-auto shrink-0">
+              {{ __("Updated {0}", [timeAgo(row.modified)]) }}
+            </span>
+          </span>
+        </RouterLink>
+      </template>
       <template v-if="hasActiveFilters" #empty-actions>
         <Button
           :label="__('Clear filters')"
@@ -98,6 +122,15 @@
             <LucideX class="size-4" aria-hidden="true" />
           </template>
         </Button>
+      </template>
+      <template v-else-if="isCustomerPortal" #empty-actions>
+        <RouterLink class="inline-flex" :to="{ name: 'TicketNew' }">
+          <Button :label="__('New ticket')" variant="solid">
+            <template #prefix>
+              <LucidePlus class="size-4" aria-hidden="true" />
+            </template>
+          </Button>
+        </RouterLink>
       </template>
     </ListViewBuilder>
     <ExportModal
@@ -138,7 +171,7 @@ import { priorityIcon } from "@/pages/tasky/taskMeta";
 import { useTicketStatusStore } from "@/stores/ticketStatus";
 import { __ } from "@/translation";
 import { View } from "@/types";
-import { isCustomerPortal, shortDuration } from "@/utils";
+import { isCustomerPortal, shortDuration, timeAgo } from "@/utils";
 import { Badge, Button, dayjs, Tooltip, usePageMeta } from "frappe-ui";
 import {
   computed,
@@ -150,6 +183,12 @@ import {
   type Component,
 } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import {
+  firstReplyFact,
+  resolutionFact,
+  useCustomerStatus,
+  type Fact,
+} from "./customerStatus";
 import LucideCheck from "~icons/lucide/check";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideClock from "~icons/lucide/clock";
@@ -183,6 +222,7 @@ const summaryRef = ref<InstanceType<typeof TicketSummaryStrip> | null>(null);
 const showExportModal = ref(false);
 
 const { getStatus } = useTicketStatusStore();
+const customerStatus = useCustomerStatus();
 
 const listSelections = ref(new Set());
 
@@ -220,10 +260,11 @@ const options = computed(() => ({
     },
     status: {
       custom: ({ item }) => {
+        if (isCustomerPortal.value) {
+          return h(TaskyBadge, customerStatus.badge(item));
+        }
         const status = getStatus(item);
-        const label = isCustomerPortal.value
-          ? status?.["label_customer"]
-          : status?.["label_agent"];
+        const label = status?.["label_agent"];
         return h(
           "div",
           { class: "flex items-center gap-1.5 justify-start w-full" },
@@ -244,10 +285,16 @@ const options = computed(() => ({
       },
     },
     response_by: {
-      custom: ({ row, item }) => slaCell(responseSla(row, item), item),
+      custom: ({ row, item }) =>
+        isCustomerPortal.value
+          ? factCell(firstReplyFact(row))
+          : slaCell(responseSla(row, item), item),
     },
     resolution_by: {
-      custom: ({ row, item }) => slaCell(resolutionSla(row, item), item),
+      custom: ({ row, item }) =>
+        isCustomerPortal.value
+          ? factCell(resolutionFact(row, customerStatus.stage(row.status)))
+          : slaCell(resolutionSla(row, item), item),
     },
     ...(isCustomerPortal.value
       ? {}
@@ -272,7 +319,7 @@ const options = computed(() => ({
             "No tickets found for the applied filters. Try adjusting or clearing your filters."
           )
         : isCustomerPortal.value
-        ? undefined
+        ? __("Raise a ticket and follow every reply from our team here.")
         : __(
             "Tickets from email and the customer portal show up here as they arrive."
           ),
@@ -323,13 +370,6 @@ const SLA_LABELS: Record<Exclude<SlaState, "due" | "none">, string> = {
   fulfilled: __("Fulfilled"),
   paused: __("Paused"),
 };
-// the customer portal keeps its frappe-ui badge colours
-const PORTAL_THEMES = {
-  failed: "red",
-  fulfilled: "gray",
-  paused: "blue",
-  due: "orange",
-};
 const SLA_BADGES: Record<
   Exclude<SlaState, "due" | "none">,
   { tone: "danger" | "neutral"; icon: Component }
@@ -342,24 +382,31 @@ const SLA_BADGES: Record<
 function slaCell(state: SlaState, deadline: string) {
   if (state === "none") return h("span");
   const label = state === "due" ? shortDuration(deadline) : SLA_LABELS[state];
-  const badge = isCustomerPortal.value
-    ? h(Badge, { label, theme: PORTAL_THEMES[state], variant: "subtle" })
-    : h(
-        TaskyBadge,
-        state === "due"
-          ? {
-              label: __("in {0}", [label]),
-              icon: LucideClock,
-              tone:
-                dayjs(deadline).diff(dayjs(), "hour", true) <= SLA_RISK_HOURS
-                  ? "warning"
-                  : "neutral",
-            }
-          : { label, ...SLA_BADGES[state] }
-      );
+  const badge = h(
+    TaskyBadge,
+    state === "due"
+      ? {
+          label: __("in {0}", [label]),
+          icon: LucideClock,
+          tone:
+            dayjs(deadline).diff(dayjs(), "hour", true) <= SLA_RISK_HOURS
+              ? "warning"
+              : "neutral",
+        }
+      : { label, ...SLA_BADGES[state] }
+  );
   // a running clock shows the exact deadline on hover
   return state === "due"
     ? h(Tooltip, { text: dayjs(deadline).format("LLLL") }, () => badge)
+    : badge;
+}
+
+// the customer's view of the same deadlines: "Overdue", never "Failed"
+function factCell(fact: Fact | null) {
+  if (!fact) return h("span");
+  const badge = h(TaskyBadge, fact);
+  return fact.at
+    ? h(Tooltip, { text: dayjs(fact.at).format("LLLL") }, () => badge)
     : badge;
 }
 

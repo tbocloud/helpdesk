@@ -6,9 +6,11 @@
       </template>
       <template #right-header> </template>
     </LayoutHeader>
-    <div class="pt-6 mx-auto w-full max-w-4xl px-5">
-      <div class="flex flex-col gap-3 rounded-lg border w-full p-4">
-        <div class="flex justify-between items-center mb-3">
+    <div class="pt-6 mx-auto w-full max-w-4xl px-4 md:px-5">
+      <div
+        class="flex flex-col gap-3 rounded-lg border border-outline-gray-2 bg-surface-base w-full p-4"
+      >
+        <div class="flex flex-wrap justify-between items-center gap-3 mb-3">
           <!-- Author Info -->
           <div class="flex gap-1 items-center flex-1 mr-7 max-w-fit">
             <UserAvatar :name="user.name" :expand="true" />
@@ -26,8 +28,9 @@
           <div class="flex gap-2">
             <Button :label="__('Discard')" @click="handleArticleDiscard" />
             <Button
-              :label="__('Create')"
+              :label="__('Create article')"
               variant="solid"
+              :loading="newArticle.loading"
               @click="handleCreateArticle"
             />
           </div>
@@ -167,7 +170,7 @@ function resetState() {
 const breadcrumbs = computed(() => {
   const options: Array<{ label: string; route?: { name: string } }> = [
     {
-      label: __("Knowledge Base"),
+      label: __("Knowledge base"),
       route: { name: "AgentKnowledgeBase" },
     },
   ];

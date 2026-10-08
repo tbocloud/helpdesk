@@ -1,5 +1,6 @@
 import LucideContact2 from "~icons/lucide/contact-2";
 import LucideTicket from "~icons/lucide/ticket";
+import LucideBookOpen from "~icons/lucide/book-open";
 import { OrganizationsIcon } from "../icons";
 import LucideHome from "~icons/lucide/home";
 import LucideFolderKanban from "~icons/lucide/folder-kanban";
@@ -113,6 +114,12 @@ export const agentPortalSidebarOptions = [
     section: "Directory",
     projectManagerOnly: true,
   },
+  {
+    label: __("Knowledge base"),
+    icon: LucideBookOpen,
+    to: "AgentKnowledgeBase",
+    section: "Directory",
+  },
 ];
 
 export const customerPortalSidebarOptions = [
@@ -120,5 +127,10 @@ export const customerPortalSidebarOptions = [
     label: __("Tickets"),
     icon: LucideTicket,
     to: "TicketsCustomer",
+  },
+  {
+    label: __("Knowledge base"),
+    icon: LucideBookOpen,
+    to: "CustomerKnowledgeBase",
   },
 ];

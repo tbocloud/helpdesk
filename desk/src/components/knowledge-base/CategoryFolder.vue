@@ -1,34 +1,34 @@
 <template>
-  <router-link
-    class="flex flex-col gap-2 rounded-lg border p-3 border-outline-elevation-2 cursor-pointer hover:shadow-xl"
-    :to="{
-      name: 'Articles',
-      params: {
-        categoryId: category.name,
-      },
-    }"
+  <RouterLink
+    class="flex h-full min-w-0 items-center gap-3 rounded-lg border border-outline-gray-2 bg-surface-base px-4 py-3 transition-colors hover:border-outline-gray-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+    :to="{ name: 'Articles', params: { categoryId: category.name } }"
   >
-    <div>
-      <FeatherIcon name="folder" class="h-6 w-6 text-ink-gray-4 -ml-[2px]" />
-    </div>
-    <div class="gap-1 flex flex-col">
-      <p class="text-base-medium text-ink-gray-8 truncate">
-        {{ category?.category_name }}
-      </p>
-      <span class="truncate text-xs md:text-sm text-ink-gray-5">
-        {{ category?.article_count }}
-        {{ category?.article_count % 2 === 1 ? "article" : "articles" }}
+    <LucideFolder class="size-4 shrink-0 text-ink-gray-5" aria-hidden="true" />
+    <span class="flex min-w-0 flex-1 flex-col">
+      <span class="truncate text-base font-medium text-ink-gray-9">
+        {{ category.category_name }}
       </span>
-    </div>
-  </router-link>
+      <span class="text-sm tabular-nums text-ink-gray-6">
+        {{
+          category.article_count === 1
+            ? __("1 article")
+            : __("{0} articles", [category.article_count])
+        }}
+      </span>
+    </span>
+    <LucideChevronRight
+      class="size-4 shrink-0 text-ink-gray-4"
+      aria-hidden="true"
+    />
+  </RouterLink>
 </template>
 
 <script setup lang="ts">
-import { FeatherIcon } from "frappe-ui";
-const props = defineProps({
-  category: {
-    required: true,
-    type: Object,
-  },
-});
+import { __ } from "@/translation";
+import LucideChevronRight from "~icons/lucide/chevron-right";
+import LucideFolder from "~icons/lucide/folder";
+
+defineProps<{
+  category: { name: string; category_name: string; article_count: number };
+}>();
 </script>
