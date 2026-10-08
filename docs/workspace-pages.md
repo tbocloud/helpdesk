@@ -142,6 +142,18 @@ team member's work, for leads and managers of their projects (the Team page link
   the assignee may edit, complete, hold or resume, ask for help and hand over; the project's
   manager or lead may edit, plan, approve and send back.
 
+## The board timer
+
+A task's timer runs only while it is In progress and has `custom_timer_start`; banked time sits
+in `custom_timer_elapsed`. The server is the only record: the board derives each card's timer
+from those fields (`taskTimer()` in `taskMeta.ts`) and replaces its local state on every load.
+Pause calls `stop_timer` (banks the time, the task stays In progress) and Resume calls
+`start_timer`, which only works on a task In progress; resuming a card that left In progress
+moves it back there like a drop. Nothing else starts a paused timer, and starting one task never
+touches another's: there is no one-running-task rule. Before this, Pause only changed the
+board's local state, so the server timer kept running and the next load (moving or editing
+another task, or coming back to the board) showed the paused task running again.
+
 ## Timesheets (`/timesheets`)
 
 `desk/src/pages/tasky/Timesheets.vue`; APIs `helpdesk.tasky.api.get_my_timesheets` (the list,

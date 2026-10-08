@@ -1633,17 +1633,28 @@ def _change_lead(doc, user):
 # === Timer ===
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def start_timer(task: str):
-    """Start the timer on a task."""
-    frappe.has_permission("Task", "write", str(task), throw=True)
-    frappe.db.set_value("Task", str(task), "custom_timer_start", frappe.utils.now())
+    """Resume the paused timer of a task in progress.
+
+    Only this task's timer, and only when asked: pausing (stop_timer) keeps the
+    task in Working with its time banked, and nothing else starts it again.
+    """
+    task_id = str(task)
+    frappe.has_permission("Task", "write", task_id, throw=True)
+    status, running = frappe.db.get_value(
+        "Task", task_id, ["status", "custom_timer_start"]
+    )
+    if status != "Working":
+        frappe.throw(_("Start the task first; its timer runs while it's in progress."))
+    if not running:
+        frappe.db.set_value("Task", task_id, "custom_timer_start", frappe.utils.now())
     return {"ok": 1}
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def stop_timer(task: str):
-    """Stop the timer and persist elapsed."""
+    """Pause the timer: bank the time so far; the task stays in progress."""
     task_id = str(task)
     frappe.has_permission("Task", "write", task_id, throw=True)
     timer_start = frappe.db.get_value("Task", task_id, "custom_timer_start")
