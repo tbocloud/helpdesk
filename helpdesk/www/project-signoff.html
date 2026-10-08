@@ -1,0 +1,792 @@
+{% extends "helpdesk/templates/portal_base.html" %} {% block title %}{{
+_("Training sign-off") }} · {{ brand_name }}{% endblock %} {% block head %}
+<!-- the link's token is in the URL; never send it on to another site -->
+<meta name="referrer" content="no-referrer" />
+{% endblock %} {% block style %}
+<style>
+  .wrap {
+    max-width: 760px;
+  }
+  .brandbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 20px;
+    font-size: 13px;
+    color: var(--ink-6);
+  }
+  .brandbar b {
+    color: var(--ink-9);
+    font-weight: 600;
+  }
+  .brandbar .grow + .link-btn {
+    min-height: 44px;
+  }
+  .eyebrow {
+    margin: 0;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--ink-5);
+  }
+  .page-title {
+    margin: 2px 0 4px;
+    font-size: 24px;
+    font-weight: 600;
+    line-height: 1.25;
+    color: var(--ink-9);
+  }
+  .facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 24px;
+    margin: 12px 0 0;
+    font-size: 13px;
+  }
+  .facts div {
+    display: flex;
+    gap: 6px;
+    min-width: 0;
+  }
+  .facts dt {
+    color: var(--ink-5);
+  }
+  .facts dd {
+    margin: 0;
+    color: var(--ink-8);
+  }
+
+  .progress {
+    margin: 20px 0 16px;
+    padding: 16px;
+  }
+  .progress-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 12px;
+    margin-bottom: 10px;
+  }
+  .progress-head strong {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--ink-9);
+  }
+  .bar {
+    height: 6px;
+    border-radius: 999px;
+    background: var(--surface-3);
+    overflow: hidden;
+  }
+  .bar span {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    background: var(--ink-6);
+    transition: width 0.25s;
+  }
+  .bar.complete span {
+    background: var(--success);
+  }
+
+  .section {
+    margin-bottom: 16px;
+    overflow: hidden;
+  }
+  .section h2 {
+    margin: 0;
+    padding: 12px 16px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ink-9);
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-2);
+  }
+  .items {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .item {
+    padding: 16px;
+    border-top: 1px solid var(--border);
+  }
+  .item:first-child {
+    border-top: 0;
+  }
+  .item fieldset {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    min-width: 0;
+  }
+  .item legend {
+    display: flex;
+    gap: 8px;
+    padding: 0;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--ink-9);
+  }
+  .item legend .n {
+    flex-shrink: 0;
+    min-width: 20px;
+    color: var(--ink-5);
+  }
+  .help {
+    margin: 4px 0 0 28px;
+    font-size: 13px;
+    color: var(--ink-6);
+  }
+  .note {
+    margin: 10px 0 0 28px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: var(--info-soft);
+    color: var(--ink-8);
+    font-size: 13px;
+    overflow-wrap: anywhere;
+  }
+  .note .icon {
+    color: var(--info);
+    vertical-align: -3px;
+  }
+  .choices {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 12px 0 0 28px;
+  }
+  .choice {
+    position: relative;
+  }
+  .choice input {
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+  }
+  .choice span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 44px;
+    padding: 0 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border-strong);
+    background: var(--surface);
+    color: var(--ink-7);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .choice span:hover {
+    background: var(--surface-2);
+  }
+  .choice input:focus-visible + span {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
+  }
+  .choice input:disabled + span {
+    cursor: default;
+  }
+  .choice input:disabled:not(:checked) + span {
+    opacity: 0.5;
+  }
+  .choice.done input:checked + span {
+    background: var(--success-soft);
+    border-color: var(--success);
+    color: var(--success);
+  }
+  .choice.unclear input:checked + span {
+    background: var(--warning-soft);
+    border-color: var(--warning);
+    color: var(--warning);
+  }
+  .choice.escalate input:checked + span {
+    background: var(--danger-soft);
+    border-color: var(--danger);
+    color: var(--danger);
+  }
+  .followup,
+  .comment-box {
+    margin: 12px 0 0 28px;
+  }
+  .followup label,
+  .comment-box label,
+  .sign label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--ink-7);
+  }
+  .followup textarea,
+  .comment-box textarea {
+    min-height: 80px;
+  }
+  .followup .row {
+    margin-top: 8px;
+  }
+  .said {
+    margin: 10px 0 0 28px;
+    font-size: 13px;
+    color: var(--ink-7);
+    overflow-wrap: anywhere;
+    white-space: pre-line;
+  }
+  .said b {
+    font-weight: 500;
+    color: var(--ink-6);
+  }
+  .item-status {
+    margin: 10px 0 0 28px;
+  }
+  /* a ghost button: its text lines up with the question */
+  .add-comment {
+    margin: 4px 0 0 16px;
+    min-height: 44px;
+  }
+
+  .sign {
+    padding: 20px;
+    margin-top: 8px;
+  }
+  .sign h2,
+  .done-card h2 {
+    margin: 0 0 4px;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--ink-9);
+  }
+  .sign p {
+    margin: 0 0 16px;
+  }
+  .grid2 {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .sign .check {
+    display: flex;
+    margin: 16px 0;
+    align-items: flex-start;
+    font-size: 14px;
+    color: var(--ink-8);
+  }
+  .sign .check input {
+    margin-top: 3px;
+  }
+  .sign .btn.primary,
+  .done-card .btn {
+    height: 44px;
+    padding: 0 18px;
+  }
+  .locked {
+    padding: 16px;
+    margin-top: 8px;
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    color: var(--ink-7);
+  }
+  .done-card {
+    padding: 20px;
+    margin: 20px 0 16px;
+    border-color: var(--success);
+  }
+  .done-card .head {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    margin-bottom: 14px;
+  }
+  .done-card .head .icon {
+    width: 20px;
+    height: 20px;
+    color: var(--success);
+  }
+  .done-card p {
+    margin: 0;
+  }
+
+  @media (max-width: 560px) {
+    .page-title {
+      font-size: 20px;
+    }
+    .grid2 {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .help,
+    .note,
+    .choices,
+    .followup,
+    .comment-box,
+    .said,
+    .item-status {
+      margin-left: 0;
+    }
+    .add-comment {
+      margin-left: -12px;
+    }
+    .choice {
+      flex: 1 1 auto;
+    }
+    .choice span {
+      width: 100%;
+      justify-content: center;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .bar span {
+      transition: none;
+    }
+  }
+</style>
+{% endblock %} {% block content %}
+<main class="wrap" id="app"></main>
+<p class="sr-only" id="live" role="status" aria-live="polite"></p>
+{% endblock %} {% block script %}
+<script id="page-data" type="application/json">
+  {{ page_data }}
+</script>
+<script>
+  (function () {
+    const DATA = JSON.parse(document.getElementById("page-data").textContent);
+    const app = document.getElementById("app");
+    const live = document.getElementById("live");
+    const BRAND = {{ brand_name|tojson }};
+    const { esc, toast } = portalKit;
+    const call = portalKit.api("/api/method/helpdesk.api.signoff_portal.", DATA.csrf_token);
+    const icon = portalKit.iconSet({
+      check: '<path d="M20 6 9 17l-5-5"/>',
+      help: '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>',
+      alert: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+      lock: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+      download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/>',
+      info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
+      badge: '<path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z"/><path d="m9 12 2 2 4-4"/>',
+    });
+
+    const T = {
+      done: {{ _("Done")|tojson }},
+      unclear: {{ _("Not clear")|tojson }},
+      escalate: {{ _("Escalate")|tojson }},
+      saved: {{ _("Saved")|tojson }},
+    };
+    // the server's response values, and how each one looks
+    const CHOICES = [
+      { value: "Done", cls: "done", label: T.done, icon: "check" },
+      { value: "Not clear", cls: "unclear", label: T.unclear, icon: "help" },
+      { value: "Escalated", cls: "escalate", label: T.escalate, icon: "alert" },
+    ];
+
+    let view = DATA.signoff || null;
+    // a Not clear / Escalate choice being written up, not sent yet: { item, response }
+    let drafting = null;
+    // items whose optional comment box is open
+    const commenting = new Set();
+
+    function say(text) {
+      live.textContent = "";
+      setTimeout(() => (live.textContent = text), 50);
+    }
+
+    function brandBar(extra) {
+      return `<div class="brandbar"><b>${esc(BRAND)}</b><span class="grow">{{ _("Training sign-off") }}</span>${extra || ""}</div>`;
+    }
+
+    // ------------------------------------------------------------ states --
+    if (DATA.state === "expired" || DATA.state === "invalid") {
+      const expired = DATA.state === "expired";
+      app.innerHTML = `${brandBar()}<div class="card auth">
+        <h1>${expired ? {{ _("This link has expired")|tojson }} : {{ _("This link isn't valid")|tojson }}}</h1>
+        <p class="muted">${
+          expired
+            ? {{ _("Sign-off links work for 30 days. Ask your trainer to send you a new one.")|tojson }}
+            : {{ _("It may have been replaced by a newer link. Open the most recent email from us, or ask your trainer to send a new one.")|tojson }}
+        }</p></div>`;
+      return;
+    }
+    if (DATA.state === "code") {
+      renderCode();
+      return;
+    }
+    render();
+
+    // -------------------------------------------------------------- code --
+    function renderCode(sentMessage) {
+      const sent = !!sentMessage;
+      app.innerHTML = `${brandBar()}
+        <form class="card auth" id="f-code" novalidate>
+          <p class="eyebrow">${esc(DATA.project_name)}</p>
+          <h1>${esc(DATA.module_title)}</h1>
+          <p class="muted">${
+            sent
+              ? esc(sentMessage)
+              : esc({{ _("To keep this sign-off secure, we'll email a 6-digit code to {0}.")|tojson }}.replace("{0}", DATA.email))
+          }</p>
+          ${
+            sent
+              ? `<label for="in-code">{{ _("6-digit code") }}</label>
+                 <input class="input code-input mono" id="in-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" required aria-describedby="m-code">`
+              : ""
+          }
+          <p class="msg" id="m-code" role="alert"></p>
+          <button class="btn primary" type="submit">${sent ? {{ _("Open the sign-off")|tojson }} : {{ _("Email me a code")|tojson }}}</button>
+          ${sent ? `<div class="link-row"><span></span><button type="button" class="link-btn" id="b-resend">{{ _("Send a new code") }}</button></div>` : ""}
+        </form>`;
+      const form = document.getElementById("f-code");
+      const msg = document.getElementById("m-code");
+      const submit = form.querySelector("button[type=submit]");
+      const input = document.getElementById("in-code");
+      (input || submit).focus();
+
+      function showError(text) {
+        msg.className = "msg err";
+        msg.textContent = text;
+      }
+
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        if (!sent) {
+          submit.disabled = true;
+          try {
+            const r = await call("request_code", { token: DATA.token });
+            if (r.success) return renderCode(r.message);
+            showError(r.message);
+          } catch (err) {
+            showError(err.message);
+          }
+          submit.disabled = false;
+          return;
+        }
+        const code = input.value.trim();
+        if (!/^\d{6}$/.test(code)) return showError({{ _("Enter the 6 digits from the email.")|tojson }});
+        submit.disabled = true;
+        try {
+          const r = await call("verify_code", { token: DATA.token, code });
+          if (r.success) return location.reload();
+          showError(r.message);
+        } catch (err) {
+          showError(err.message);
+        }
+        submit.disabled = false;
+      });
+
+      const resend = document.getElementById("b-resend");
+      if (resend) {
+        resend.addEventListener("click", async () => {
+          resend.disabled = true;
+          try {
+            const r = await call("request_code", { token: DATA.token });
+            msg.className = r.success ? "msg ok" : "msg err";
+            msg.textContent = r.success ? {{ _("A new code is on its way.")|tojson }} : r.message;
+          } catch (err) {
+            showError(err.message);
+          }
+          resend.disabled = false;
+        });
+      }
+    }
+
+    // -------------------------------------------------------------- page --
+    function render() {
+      const focusId = document.activeElement && document.activeElement.id;
+      const c = view.counts;
+      const signed = view.signed;
+      const pct = c.total ? Math.round((c.done / c.total) * 100) : 0;
+      const followUp = c.not_clear + c.escalated;
+
+      let html = brandBar(`<button type="button" class="link-btn" id="b-logout">{{ _("Sign out") }}</button>`);
+      html += `<header>
+        <p class="eyebrow">${esc(view.project_name)} · ${esc(view.customer_name)}</p>
+        <h1 class="page-title">${esc(view.module_title)}</h1>
+        <dl class="facts">
+          ${view.trainer_name ? `<div><dt>{{ _("Trainer") }}</dt><dd>${esc(view.trainer_name)}</dd></div>` : ""}
+          ${view.training_date ? `<div><dt>{{ _("Training date") }}</dt><dd class="num">${esc(view.training_date)}</dd></div>` : ""}
+          <div><dt>{{ _("Signatory") }}</dt><dd>${esc(view.signatory_name)}</dd></div>
+        </dl>
+      </header>`;
+
+      if (signed) {
+        html += `<section class="card done-card" aria-labelledby="h-signed">
+          <div class="head">${icon("badge")}<div>
+            <h2 id="h-signed">{{ _("Training signed off") }}</h2>
+            <p class="muted">${esc({{ _("Signed by {0}, {1} on {2}. Thank you.")|tojson }}.replace("{0}", signed.name).replace("{1}", signed.designation).replace("{2}", signed.on))}</p>
+          </div></div>
+          ${signed.has_pdf ? `<a class="btn" href="/api/method/helpdesk.api.signoff_portal.download_pdf?token=${encodeURIComponent(DATA.token)}">${icon("download")} {{ _("Download the signed record") }}</a>` : ""}
+        </section>`;
+      } else {
+        html += `<section class="card progress" aria-labelledby="h-progress">
+          <div class="progress-head">
+            <strong id="h-progress" class="num">${esc({{ _("{0} of {1} confirmed")|tojson }}.replace("{0}", c.done).replace("{1}", c.total))}</strong>
+            <span class="muted">${
+              followUp
+                ? esc((followUp === 1 ? {{ _("1 item is with your trainer")|tojson }} : {{ _("{0} items are with your trainer")|tojson }}).replace("{0}", followUp))
+                : c.done === c.total
+                ? {{ _("Everything is confirmed. Sign off below.")|tojson }}
+                : {{ _("Mark each item once you're comfortable with it.")|tojson }}
+            }</span>
+          </div>
+          <div class="bar ${c.done === c.total ? "complete" : ""}" role="progressbar" aria-valuemin="0" aria-valuemax="${c.total}" aria-valuenow="${c.done}" aria-label="{{ _('Items confirmed') }}"><span style="width:${pct}%"></span></div>
+        </section>`;
+      }
+
+      // sections, in the order the questions come
+      const sections = [];
+      view.items.forEach((item, i) => {
+        const key = item.section || {{ _("General")|tojson }};
+        let s = sections.find((x) => x.key === key);
+        if (!s) sections.push((s = { key, items: [] }));
+        s.items.push({ ...item, n: i + 1 });
+      });
+      sections.forEach((s, si) => {
+        html += `<section class="card section" aria-labelledby="sec-${si}">
+          <h2 id="sec-${si}">${esc(s.key)}</h2>
+          <ol class="items">${s.items.map(renderItem).join("")}</ol>
+        </section>`;
+      });
+
+      if (!signed) html += renderSign(c);
+      app.innerHTML = html;
+      bind();
+      const back = focusId && document.getElementById(focusId);
+      if (back) back.focus();
+    }
+
+    function renderItem(item) {
+      const signed = !!view.signed;
+      const id = esc(item.name);
+      const draft = drafting && drafting.item === item.name ? drafting : null;
+      const current = draft ? draft.response : item.response;
+      const followUp = item.response === "Not clear" || item.response === "Escalated";
+
+      const choices = CHOICES.map(
+        (ch) => `<label class="choice ${ch.cls}">
+          <input type="radio" name="r-${id}" id="r-${id}-${ch.cls}" value="${esc(ch.value)}" data-item="${id}" ${current === ch.value ? "checked" : ""} ${signed ? "disabled" : ""}>
+          <span>${icon(ch.icon)} ${esc(ch.label)}</span>
+        </label>`
+      ).join("");
+
+      let below = "";
+      if (item.clarified && item.response === "Pending") {
+        below += `<p class="note">${icon("info")} ${
+          item.clarification_note
+            ? esc({{ _("Your trainer followed up: {0}")|tojson }}.replace("{0}", item.clarification_note))
+            : {{ _("Your trainer has followed up on this.")|tojson }}
+        } {{ _("Please answer it again.") }}</p>`;
+      }
+      if (draft) {
+        const escalate = draft.response === "Escalated";
+        below += `<form class="followup" data-followup="${id}">
+          <label for="fu-${id}">${escalate ? {{ _("What should we escalate? It goes to your trainer and our project managers.")|tojson }} : {{ _("What needs explaining? Your trainer will follow up.")|tojson }}}</label>
+          <textarea class="input" id="fu-${id}" required maxlength="1000">${esc(draft.comment || "")}</textarea>
+          <div class="row">
+            <button type="submit" class="btn primary">${escalate ? {{ _("Escalate")|tojson }} : {{ _("Send to your trainer")|tojson }}}</button>
+            <button type="button" class="btn ghost" data-cancel="${id}">{{ _("Cancel") }}</button>
+          </div>
+        </form>`;
+      } else if (followUp) {
+        below += `<p class="said"><b>{{ _("You said:") }}</b> ${esc(item.customer_comment)}</p>
+          <p class="item-status"><span class="pill ${item.response === "Escalated" ? "danger" : "warning"}">${icon(item.response === "Escalated" ? "alert" : "help")} ${
+            item.response === "Escalated" ? {{ _("Escalated: our team will contact you")|tojson }} : {{ _("With your trainer")|tojson }}
+          }</span></p>`;
+      } else if (item.response === "Done") {
+        if (commenting.has(item.name) && !signed) {
+          below += `<div class="comment-box">
+            <label for="cm-${id}">{{ _("Comment (optional)") }}</label>
+            <textarea class="input" id="cm-${id}" data-comment="${id}" maxlength="1000">${esc(item.customer_comment || "")}</textarea>
+          </div>`;
+        } else if (item.customer_comment) {
+          below += `<p class="said"><b>{{ _("Your comment:") }}</b> ${esc(item.customer_comment)}</p>`;
+        }
+        if (!signed && !commenting.has(item.name)) {
+          below += `<button type="button" class="btn ghost add-comment" data-add-comment="${id}">${
+            item.customer_comment ? {{ _("Edit comment")|tojson }} : {{ _("Add a comment")|tojson }}
+          }</button>`;
+        }
+      }
+
+      return `<li class="item" id="item-${id}">
+        <fieldset>
+          <legend><span class="n num">${item.n}.</span><span>${esc(item.question)}</span></legend>
+          ${item.help_text ? `<p class="help">${esc(item.help_text)}</p>` : ""}
+          <div class="choices">${choices}</div>
+          ${below}
+        </fieldset>
+      </li>`;
+    }
+
+    function renderSign(c) {
+      if (c.done !== c.total) {
+        const left = c.total - c.done;
+        return `<div class="card locked">${icon("lock")}<p style="margin:0">${esc(
+          (left === 1
+            ? {{ _("Sign-off opens once every item is Done. 1 item left.")|tojson }}
+            : {{ _("Sign-off opens once every item is Done. {0} items left.")|tojson }}
+          ).replace("{0}", left)
+        )}</p></div>`;
+      }
+      return `<form class="card sign" id="f-sign" novalidate aria-labelledby="h-sign">
+        <h2 id="h-sign">{{ _("Sign off the training") }}</h2>
+        <p class="muted">{{ _("Your name, designation and the time of signing are recorded with this sign-off, and a PDF copy is emailed to you.") }}</p>
+        <div class="grid2">
+          <div><label for="in-name">{{ _("Full name") }}</label><input class="input" id="in-name" autocomplete="name" maxlength="140" required value="${esc(view.signatory_name || "")}"></div>
+          <div><label for="in-designation">{{ _("Designation") }}</label><input class="input" id="in-designation" autocomplete="organization-title" maxlength="140" required></div>
+        </div>
+        <label class="check"><input type="checkbox" id="in-confirm" required> <span>{{ _("I confirm that the training listed above has been completed to our satisfaction.") }}</span></label>
+        <p class="msg err" id="m-sign" role="alert"></p>
+        <button class="btn primary" type="submit">{{ _("Sign off training") }}</button>
+      </form>`;
+    }
+
+    // ----------------------------------------------------------- actions --
+    async function save(item, response, comment) {
+      const r = await call("save_response", { token: DATA.token, item, response, comment: comment || "" });
+      view = r;
+      return r;
+    }
+
+    function itemOf(name) {
+      return view.items.find((i) => i.name === name);
+    }
+
+    function bind() {
+      const logout = document.getElementById("b-logout");
+      if (logout) {
+        logout.addEventListener("click", async () => {
+          try {
+            await call("logout", {});
+          } finally {
+            location.reload();
+          }
+        });
+      }
+
+      app.querySelectorAll("input[type=radio][data-item]").forEach((input) => {
+        input.addEventListener("change", async () => {
+          const name = input.dataset.item;
+          const item = itemOf(name);
+          if (input.value === "Done") {
+            drafting = null;
+            app.querySelectorAll(`input[data-item="${CSS.escape(name)}"]`).forEach((el) => (el.disabled = true));
+            try {
+              await save(name, "Done", item.response === "Done" ? item.customer_comment : "");
+              say(T.saved);
+            } catch (err) {
+              toast(err.message);
+            }
+            render();
+            return;
+          }
+          // Not clear / Escalate need a few words first
+          drafting = { item: name, response: input.value, comment: item.response === input.value ? item.customer_comment : "" };
+          render();
+          const box = document.getElementById(`fu-${name}`);
+          if (box) box.focus();
+        });
+      });
+
+      app.querySelectorAll("[data-cancel]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const name = btn.dataset.cancel;
+          drafting = null;
+          render();
+          const checked = app.querySelector(`input[data-item="${CSS.escape(name)}"]:checked`);
+          (checked || app.querySelector(`input[data-item="${CSS.escape(name)}"]`)).focus();
+        });
+      });
+
+      app.querySelectorAll("form[data-followup]").forEach((form) => {
+        const name = form.dataset.followup;
+        const box = form.querySelector("textarea");
+        box.addEventListener("input", () => drafting && (drafting.comment = box.value));
+        form.addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const text = box.value.trim();
+          if (!text) {
+            toast({{ _("Tell your trainer what needs explaining.")|tojson }});
+            box.focus();
+            return;
+          }
+          const submit = form.querySelector("button[type=submit]");
+          submit.disabled = true;
+          try {
+            await save(name, drafting.response, text);
+            drafting = null;
+            say({{ _("Sent to your trainer")|tojson }});
+            toast({{ _("Sent. Your trainer will follow up.")|tojson }});
+            render();
+          } catch (err) {
+            toast(err.message);
+            submit.disabled = false;
+          }
+        });
+      });
+
+      app.querySelectorAll("[data-add-comment]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const name = btn.dataset.addComment;
+          commenting.add(name);
+          render();
+          const box = document.getElementById(`cm-${name}`);
+          if (box) box.focus();
+        });
+      });
+
+      // autosave: the comment on a Done item saves when you leave the box
+      app.querySelectorAll("textarea[data-comment]").forEach((box) => {
+        box.addEventListener("blur", async () => {
+          const name = box.dataset.comment;
+          const item = itemOf(name);
+          commenting.delete(name);
+          if ((item.customer_comment || "") === box.value.trim()) return render();
+          try {
+            await save(name, "Done", box.value.trim());
+            say(T.saved);
+          } catch (err) {
+            toast(err.message);
+          }
+          render();
+        });
+      });
+
+      const signForm = document.getElementById("f-sign");
+      if (signForm) {
+        signForm.addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const msg = document.getElementById("m-sign");
+          const name = document.getElementById("in-name").value.trim();
+          const designation = document.getElementById("in-designation").value.trim();
+          const confirm = document.getElementById("in-confirm").checked;
+          if (!name || !designation) {
+            msg.textContent = {{ _("Enter your full name and designation.")|tojson }};
+            document.getElementById(name ? "in-designation" : "in-name").focus();
+            return;
+          }
+          if (!confirm) {
+            msg.textContent = {{ _("Tick the confirmation to sign.")|tojson }};
+            document.getElementById("in-confirm").focus();
+            return;
+          }
+          const submit = signForm.querySelector("button[type=submit]");
+          submit.disabled = true;
+          submit.textContent = {{ _("Signing…")|tojson }};
+          try {
+            view = await call("sign", { token: DATA.token, full_name: name, designation, confirm: 1 });
+            render();
+            window.scrollTo({ top: 0 });
+            say({{ _("Training signed off")|tojson }});
+          } catch (err) {
+            msg.textContent = err.message;
+            submit.disabled = false;
+            submit.textContent = {{ _("Sign off training")|tojson }};
+          }
+        });
+      }
+    }
+  })();
+</script>
+{% endblock %}
