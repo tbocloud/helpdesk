@@ -410,6 +410,16 @@
           />
           <TextInput v-model="form.notes" :label="__('Notes')" />
         </div>
+        <FormControl
+          v-model="form.billable"
+          type="checkbox"
+          :label="__('Billable')"
+          :description="
+            __(
+              'Counts against the customer\'s support hours. Turn off for internal work.'
+            )
+          "
+        />
         <div
           v-if="createTs.error"
           role="alert"
@@ -696,6 +706,7 @@ const form = reactive({
   task: "",
   hours: 1,
   notes: "",
+  billable: true,
 });
 
 const projectList = createResource({
@@ -756,6 +767,7 @@ function resetForm() {
   form.task = "";
   form.hours = 1;
   form.notes = "";
+  form.billable = true;
 }
 
 function openForm() {
@@ -771,6 +783,7 @@ function onCreate() {
     task: form.task || null,
     hours: form.hours || 1,
     notes: form.notes,
+    billable: form.billable ? 1 : 0,
   });
 }
 

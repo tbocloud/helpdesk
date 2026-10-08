@@ -648,6 +648,18 @@ def get_custom_fields():
                 "no_copy": 1,
             },
         ],
+        "Timesheet Detail": [
+            {
+                # only billable time uses up a customer's support hours
+                # (docs/support-contracts.md); existing time logs count as billable
+                "fieldname": "custom_billable",
+                "fieldtype": "Check",
+                "label": "Billable",
+                "default": "1",
+                "insert_after": "completed",
+                "in_list_view": 1,
+            },
+        ],
         "Project User": [
             {
                 "fieldname": "custom_role",

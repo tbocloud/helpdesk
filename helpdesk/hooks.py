@@ -88,6 +88,7 @@ scheduler_events = {
         "helpdesk.work_calendar.sync_saturdays_off",
         "helpdesk.helpdesk.doctype.hd_github_delivery.hd_github_delivery.clear_old_deliveries",
         "helpdesk.helpdesk.doctype.hd_chatwoot_event.hd_chatwoot_event.clear_old_events",
+        "helpdesk.support_contracts.send_support_hours_alerts",
     ],
     "hourly": [
         "helpdesk.triage.fail_stuck_triages",

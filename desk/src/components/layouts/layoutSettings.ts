@@ -13,6 +13,7 @@ import LucideNewspaper from "~icons/lucide/newspaper";
 import LucideUsers from "~icons/lucide/users";
 import LucideFileSpreadsheet from "~icons/lucide/file-spreadsheet";
 import LucideCalendarClock from "~icons/lucide/calendar-clock";
+import LucideHourglass from "~icons/lucide/hourglass";
 import { __ } from "@/translation";
 
 export const agentPortalSidebarOptions = [
@@ -47,6 +48,13 @@ export const agentPortalSidebarOptions = [
     label: __("Customer report"),
     icon: LucideFileSpreadsheet,
     to: "CustomerReport",
+    section: "Workspace",
+    customerReportOnly: true,
+  },
+  {
+    label: __("Support hours"),
+    icon: LucideHourglass,
+    to: "SupportHours",
     section: "Workspace",
     customerReportOnly: true,
   },

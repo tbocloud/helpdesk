@@ -27,6 +27,12 @@ project managers only (`canSeeCustomerReport`; the server checks the same).
   (Show all customers) and "Nothing in <month>".
 - **Download CSV** is the page's primary action.
 
+## Support hours (`/support-hours`)
+
+`desk/src/pages/work/SupportHours.vue`, beside the Customer report and for the same people:
+every support contract running today, most used first, with filters and a CSV for billing. See
+[support-contracts.md](support-contracts.md).
+
 ## Customers (`/customers`) and Contacts (`/contacts`)
 
 `desk/src/pages/customer/Customers.vue` and `desk/src/pages/contact/Contacts.vue`, both built on
@@ -77,7 +83,7 @@ a view); search covers name, domain, email and phone instead.
   rating (all time, with how many). The period select offers the last 7, 30 or 90 days; each
   tile says in words how it compares with the days before ("+12% on the 30 days before"),
   with no colour. Shown on phones too.
-- **Tabs** (hash in the URL: none, `#contacts`, `#projects`): Tickets (unchanged list with
+- **Tabs** (hash in the URL: none, `#contacts`, `#projects`, `#support-hours`): Tickets (unchanged list with
   search, status, priority and contact filters; rows are links that open the ticket in a new
   tab, sortable headers are buttons), Contacts (cards; invite, set primary, manager role,
   remove), Projects (`components/customer/CustomerProjectsTab.vue`: the customer's projects the
@@ -85,7 +91,10 @@ a view); search covers name, domain, email and phone instead.
   `pages/tasky/taskMeta.ts`, which the Projects page cards use too, and "Open in Projects").
   It loads the 100 most recently updated; the tab count is the real total from
   `frappe.desk.reportview.get_count` ("100+" until that answers), and when there are more the
-  tab says so and points to Projects.
+  tab says so and points to Projects. Support hours
+  (`components/customer/CustomerSupportHoursTab.vue`, no count): the customer's support
+  contract, this period's hours used and left, where they went and past periods; managers
+  create and edit contracts there. See [support-contracts.md](support-contracts.md).
 
 ## Contact page (`/contacts/:id`)
 

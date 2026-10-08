@@ -103,6 +103,7 @@
               />
               {{ tab.label }}
               <span
+                v-if="tab.count !== undefined"
                 class="rounded px-1 font-mono text-xs tabular-nums"
                 :class="
                   selected
@@ -128,6 +129,10 @@
                 v-else-if="tab.hash === 'projects'"
                 :projects="projects"
                 :total="projectCount.data ?? undefined"
+              />
+              <CustomerSupportHoursTab
+                v-else-if="tab.hash === 'support-hours'"
+                :customer="props.id"
               />
             </div>
           </template>
@@ -158,6 +163,7 @@
 <script setup lang="ts">
 import CustomerContactTab from "@/components/customer/CustomerContactTab.vue";
 import CustomerProjectsTab from "@/components/customer/CustomerProjectsTab.vue";
+import CustomerSupportHoursTab from "@/components/customer/CustomerSupportHoursTab.vue";
 import EditCustomerDialog from "@/components/customer/EditCustomerDialog.vue";
 import TicketsTab from "@/components/customer/TicketsTab.vue";
 import TicketStats from "@/components/customer/TicketStats.vue";
@@ -188,6 +194,7 @@ import LucideCircleX from "~icons/lucide/circle-x";
 import LucideEllipsis from "~icons/lucide/ellipsis";
 import LucideFolderKanban from "~icons/lucide/folder-kanban";
 import LucideGlobe from "~icons/lucide/globe";
+import LucideHourglass from "~icons/lucide/hourglass";
 import LucideMail from "~icons/lucide/mail";
 import LucideMapPin from "~icons/lucide/map-pin";
 import LucidePhone from "~icons/lucide/phone";
@@ -271,6 +278,12 @@ const tabs = computed(() => [
         ? `${PROJECT_LIMIT}+`
         : projects.data?.length ?? 0),
     icon: markRaw(LucideFolderKanban),
+  },
+  {
+    label: __("Support hours"),
+    hash: "support-hours",
+    count: undefined,
+    icon: markRaw(LucideHourglass),
   },
 ]);
 

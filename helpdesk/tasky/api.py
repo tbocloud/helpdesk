@@ -2064,7 +2064,15 @@ def export_timesheets_csv(
         frappe.get_all(
             "Timesheet Detail",
             filters=_time_log_filters(sheets, from_date, to_date),
-            fields=["parent", "from_time", "hours", "project", "task", "description"],
+            fields=[
+                "parent",
+                "from_time",
+                "hours",
+                "project",
+                "task",
+                "description",
+                "custom_billable",
+            ],
             order_by="from_time asc",
         )
         if sheets
@@ -2086,6 +2094,7 @@ def export_timesheets_csv(
             _("Task"),
             _("Hours"),
             _("Notes"),
+            _("Billable"),
         ]
     )
     for log in logs:
@@ -2101,6 +2110,7 @@ def export_timesheets_csv(
                 tasks.get(log.task, log.task or ""),
                 log.hours,
                 frappe.utils.strip_html(log.description or ""),
+                _("Yes") if log.custom_billable else _("No"),
             ]
         )
     period = "-".join(d for d in (from_date, to_date) if d) or "all"
@@ -2249,8 +2259,9 @@ def create_timesheet(
     task: str | None = None,
     hours: float | str = 0,
     notes: str = "",
+    billable: bool | int | str = True,
 ):
-    """Manually create a timesheet."""
+    """Manually create a timesheet. Non-billable time doesn't use up a customer's support hours."""
     if task:
         frappe.has_permission("Task", "read", task, throw=True)
     if project:
@@ -2269,6 +2280,7 @@ def create_timesheet(
                     "from_time": from_time,
                     "hours": float(hours) or 0,
                     "description": notes,
+                    "custom_billable": int(frappe.utils.sbool(billable)),
                 }
             ],
         }

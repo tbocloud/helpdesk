@@ -11,7 +11,9 @@
 		"saturdays_off",
 		"dev_hours_per_day",
 		"brief_section",
-		"morning_brief"
+		"morning_brief",
+		"support_hours_section",
+		"support_hours_email_customer"
 	],
 	"fields": [
 		{
@@ -69,12 +71,24 @@
 			"options": "\n2nd and 4th\n1st and 3rd\nAll",
 			"depends_on": "eval:doc.weekly_off=='Sunday'",
 			"description": "When Saturday is a working day: which Saturdays of the month are off. They're skipped in task and estimate dates and added to every SLA's holiday list for the coming year."
+		},
+		{
+			"fieldname": "support_hours_section",
+			"fieldtype": "Section Break",
+			"label": "Support Hours"
+		},
+		{
+			"fieldname": "support_hours_email_customer",
+			"fieldtype": "Check",
+			"label": "Email the customer when their support hours run low",
+			"default": "0",
+			"description": "The customer's contacts get the same alerts as the team: once when a period reaches the contract's alert level and once when its hours are used up."
 		}
 	],
 	"index_web_pages_for_search": 0,
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-10-07 12:00:00.000000",
+	"modified": "2026-10-08 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Work Settings",

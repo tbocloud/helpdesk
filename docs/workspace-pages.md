@@ -221,8 +221,10 @@ the 500 most recently updated), `get_timesheet_summary` (the totals) and
   viewer may see; it doesn't use each timesheet's total, so a timesheet across several
   projects or days splits correctly. Six rows each, then "N more · Xh". The bars are neutral
   and show each row's share of the period.
+- **Download CSV** has a Billable column.
 - **List**: a titled card; Timesheet, Person (Team), Status, Hours (right-aligned, tabular)
   and Updated columns from `md`; below that a two-line row with person, status and date in
   the second line. Empty states tell "no time logged in these dates" (Clear filters) from
   "no timesheets yet" (Log time).
-- **Log time** dialog unchanged.
+- **Log time** dialog: a Billable checkbox, on by default. Non-billable time doesn't use up a
+  customer's support hours ([support-contracts.md](support-contracts.md)).

@@ -1772,8 +1772,17 @@ def make_pull_request(task: str, number: int, state: str = "Open", **kwargs):
     ).insert(ignore_permissions=True)
 
 
-def make_timesheet(project: str, hours: float, from_time, task: str | None = None):
-    """Creates a draft Timesheet with one time log of `hours` on `project` (and `task`)."""
+def make_timesheet(
+    project: str | None,
+    hours: float,
+    from_time,
+    task: str | None = None,
+    billable: int = 1,
+):
+    """Creates a draft Timesheet with one time log of `hours` on `project` (and `task`).
+
+    `billable=0` logs internal time that doesn't use up a customer's support hours.
+    """
     return frappe.get_doc(
         {
             "doctype": "Timesheet",
@@ -1783,8 +1792,29 @@ def make_timesheet(project: str, hours: float, from_time, task: str | None = Non
                     "task": task,
                     "hours": hours,
                     "from_time": from_time,
+                    "custom_billable": billable,
                 }
             ],
+        }
+    ).insert(ignore_permissions=True)
+
+
+def make_support_contract(customer: str, start_date, end_date, **kwargs):
+    """Creates an Active HD Support Contract for `customer`: 10 hours a month,
+    alert at 80%, no roll-over, unless overridden."""
+    return frappe.get_doc(
+        {
+            "doctype": "HD Support Contract",
+            "contract_name": f"{customer} AMC",
+            "customer": customer,
+            "contract_type": "AMC",
+            "status": "Active",
+            "start_date": start_date,
+            "end_date": end_date,
+            "billing_period": "Monthly",
+            "hours_per_period": 10,
+            "alert_threshold": 80,
+            **kwargs,
         }
     ).insert(ignore_permissions=True)
 
