@@ -258,6 +258,17 @@ export function loadErrorMessage(...errors: unknown[]) {
     : __("Check your connection and try again.");
 }
 
+/** Who gave the task out, or "" when nobody did or the assignee took it themselves. */
+export function assignedByName(task: {
+  assigned_by?: string | null;
+  assigned_by_name?: string | null;
+  assignees?: string[];
+}) {
+  const by = task.assigned_by;
+  if (!by || task.assignees?.includes(by)) return "";
+  return task.assigned_by_name || by;
+}
+
 export interface TaskTimer {
   running: boolean;
   paused: boolean;

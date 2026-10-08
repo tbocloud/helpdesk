@@ -71,6 +71,12 @@
               >
             </span>
           </template>
+          <template v-if="assignedBy">
+            <span aria-hidden="true">·</span>
+            <span class="truncate">{{
+              __("Assigned by {0}", assignedBy)
+            }}</span>
+          </template>
           <template v-if="item.kind === 'task' && item.waiting_on">
             <span aria-hidden="true">·</span>
             <WaitingOn :subject="item.waiting_on" />
@@ -211,6 +217,7 @@ import SlipBadge from "@/pages/tasky/components/SlipBadge.vue";
 import TaskStatusBadge from "@/pages/tasky/components/TaskStatusBadge.vue";
 import TaskyBadge from "@/components/TaskyBadge.vue";
 import WaitingOn from "@/pages/tasky/components/WaitingOn.vue";
+import { assignedByName } from "@/pages/tasky/taskMeta";
 import {
   deadlineInfo,
   isHeldTask,
@@ -257,6 +264,10 @@ const context = computed(() =>
   props.item.kind === "ticket"
     ? props.item.customer
     : props.item.project_name || props.item.project
+);
+
+const assignedBy = computed(() =>
+  props.item.kind === "task" ? assignedByName(props.item) : ""
 );
 
 const reference = computed(() =>

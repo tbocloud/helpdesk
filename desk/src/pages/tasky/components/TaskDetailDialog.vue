@@ -118,6 +118,7 @@
   />
   <TaskPlanDialog v-model:task="planningTask" @saved="changed" />
   <SendBackTaskDialog v-model:task="sendingBackTask" @sent="changed" />
+  <MoveTaskDialog v-model:task="movingTask" @moved="changed" />
 </template>
 
 <script setup lang="ts">
@@ -133,6 +134,7 @@ import LucideCalendarClock from "~icons/lucide/calendar-clock";
 import LucideCheckCheck from "~icons/lucide/check-check";
 import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideFlag from "~icons/lucide/flag";
+import LucideFolderInput from "~icons/lucide/folder-input";
 import LucideLock from "~icons/lucide/lock";
 import LucidePause from "~icons/lucide/pause";
 import LucidePencil from "~icons/lucide/pencil";
@@ -141,6 +143,7 @@ import LucideUndo2 from "~icons/lucide/undo-2";
 import LucideUserPlus from "~icons/lucide/user-plus";
 import type { TaskPullRequest } from "../pullRequestMeta";
 import {
+  assignedByName,
   holdDays,
   holdDurationLabel,
   isClosed,
@@ -156,6 +159,7 @@ import CompleteTaskDialog from "./CompleteTaskDialog.vue";
 import EditTaskDialog from "./EditTaskDialog.vue";
 import HandOverTaskDialog from "./HandOverTaskDialog.vue";
 import HoldTaskDialog from "./HoldTaskDialog.vue";
+import MoveTaskDialog from "./MoveTaskDialog.vue";
 import RequestHelpDialog from "./RequestHelpDialog.vue";
 import ResumeTaskDialog from "./ResumeTaskDialog.vue";
 import SendBackTaskDialog from "./SendBackTaskDialog.vue";
@@ -197,6 +201,12 @@ interface TaskDetail {
   pull_requests?: TaskPullRequest[];
   custom_timer_start?: string | null;
   custom_timer_elapsed?: number;
+  assigned_to?: string | null;
+  assigned_to_name?: string | null;
+  assignees?: string[];
+  assigned_by?: string | null;
+  assigned_by_name?: string | null;
+  can_move?: boolean;
 }
 
 const props = withDefaults(
@@ -312,6 +322,11 @@ const detailRows = computed(() => {
     },
     { label: __("Phase"), value: d.phase || "—" },
     {
+      label: __("Assigned to"),
+      value: d.assigned_to_name || d.assigned_to || __("Unassigned"),
+    },
+    { label: __("Assigned by"), value: assignedByName(d) || "—" },
+    {
       label: __("Due"),
       value: d.due_date ? dayjs(d.due_date).format("D MMM YYYY") : "—",
     },
@@ -330,6 +345,7 @@ const sendingBackTask = ref<TaskDetail | null>(null);
 const completingTask = ref<TaskDetail | null>(null);
 const helpingTask = ref<TaskDetail | null>(null);
 const handingOverTask = ref<TaskDetail | null>(null);
+const movingTask = ref<TaskDetail | null>(null);
 
 const { approve } = useApproveTask(() => {
   close();
@@ -410,6 +426,15 @@ const dialogActions = computed(() => {
       icon: LucideArrowRight,
       tooltip: __("Hand over to a teammate"),
       onClick: () => handOff(handingOverTask),
+    });
+  }
+  // the assigner and the project's manager or lead; never the assignee alone
+  if (d.can_move) {
+    actions.push({
+      label: __("Move to project…"),
+      icon: LucideFolderInput,
+      tooltip: __("Move to another project"),
+      onClick: () => handOff(movingTask),
     });
   }
   if (project.value) {

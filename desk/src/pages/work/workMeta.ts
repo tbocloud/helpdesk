@@ -34,6 +34,9 @@ export interface WorkItem {
   can_approve?: boolean;
   /** My Work only: whether this user may plan the task (its project's manager or lead). */
   can_plan?: boolean;
+  /** Tasks: who gave it to its assignee. */
+  assigned_by?: string | null;
+  assigned_by_name?: string | null;
 }
 
 export function isAtRisk(item: WorkItem) {

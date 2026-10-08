@@ -138,11 +138,50 @@ team member's work, for leads and managers of their projects (the Team page link
   dialog only the lead's and manager's steps.
 - **Task details** (`desk/src/pages/tasky/components/TaskDetailDialog.vue`): the one task panel,
   shared with My Tasks (`/my-tasks`). Hold and dependency notices, status, priority, project,
-  phase, due, estimate, description, pull requests and meetings. Its actions follow `mine`:
-  the assignee may edit, complete, hold or resume, ask for help and hand over; the project's
-  manager or lead may edit, plan, approve and send back.
+  phase, assigned to, assigned by, due, estimate, description, pull requests and meetings. Its
+  actions follow `mine`: the assignee may edit, complete, hold or resume, ask for help and hand
+  over; the project's manager or lead may edit, plan, approve and send back. "Move to
+  project…" shows when the task says `can_move` (see [Moving a task](#moving-a-task-to-another-project)).
+- **Rows** say "Assigned by Arun" next to the project when someone other than the assignee gave
+  the task out.
 
-## The board timer
+## Tasks: assigned by, moving, the timer
+
+### Assigned by
+
+Every task payload (`get_task_detail`, `get_kanban_tasks`, `get_my_tasks`, and the task items
+of `get_my_work` and `get_overview`) carries `assigned_by` and `assigned_by_name`, added in
+bulk by `add_assigners()` in `helpdesk/tasky/api.py` (a few queries per list, no per-task
+lookups). The source is `get_assigners()` in `helpdesk/tasky/permissions.py`: the current
+assignee's latest ToDo that wasn't cancelled (`assign_to` records `assigned_by`), else whoever
+created the task. The UI (`assignedByName()` in `taskMeta.ts`) shows it as muted "Assigned by
+…" text on board cards and My Work rows, as a row in the task details and in Edit task, and
+hides it when the assignee took the task themselves.
+
+### Moving a task to another project
+
+`helpdesk.tasky.api.move_task_to_project(task, project)` (POST). The name `move_task` was
+already the board's column move, so this one says where it moves to.
+
+- **Who:** whoever assigned it (from `get_assigners`), the source project's managers and lead,
+  and admins (`can_move_task` in `permissions.py`). Never the assignee: someone who assigned
+  the task to themselves counts as its assignee, not its assigner. The mover must also be able
+  to read the task.
+- **Where:** an open project the mover can add tasks to (`can_add_tasks`), not the one it's in.
+- **What changes:** the project; the phase is cleared unless the new project has a task in a
+  phase of the same name (phases are task fields, not a list on the project); `depends_on_task`
+  is cleared, and tasks in the old project that waited on it stop waiting (a task only waits
+  on tasks in its own project). The assignee keeps the task. When the mover manages the new
+  project, assignees outside its team join it as Developers (`_add_member_for_assignment`);
+  otherwise they're returned in `not_on_team` and the dialog warns. Closed tasks can't move.
+- **Record:** an Info comment ("Moved from X to Y by Z.", plus what was cleared) and a
+  notification to the assignee. The response adds `phase_cleared`, `dependency_cleared`,
+  `dependents_released` and `not_on_team` to the task.
+- **UI:** "Move to project…" in the board card's menu and the task details' actions, shown when
+  the task's `can_move` is true; `components/MoveTaskDialog.vue` picks the project with a
+  Combobox (open projects the user can add tasks to) and explains what will be cleared.
+
+### The board timer
 
 A task's timer runs only while it is In progress and has `custom_timer_start`; banked time sits
 in `custom_timer_elapsed`. The server is the only record: the board derives each card's timer

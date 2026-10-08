@@ -77,6 +77,12 @@
             <p v-if="assigneeIsNew" class="text-p-xs text-ink-gray-5">
               {{ __("They'll be added to the project as a Developer.") }}
             </p>
+            <p
+              v-else-if="assignedBy && form.assigned_to === initialAssignee"
+              class="text-p-xs text-ink-gray-5"
+            >
+              {{ __("Assigned by {0}", assignedBy) }}
+            </p>
           </div>
 
           <FormControl
@@ -200,6 +206,7 @@ import LucideCalendarClock from "~icons/lucide/calendar-clock";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideLock from "~icons/lucide/lock";
 import {
+  assignedByName,
   categoryOptions,
   isAiDrafted,
   isClosed,
@@ -361,12 +368,17 @@ function personName(user?: string | null) {
   );
 }
 
+const assignedBy = computed(() =>
+  task.value ? assignedByName(task.value) : ""
+);
+
 const readOnlyRows = computed(() => {
   const t = task.value;
   if (!t) return [];
   return [
     { label: __("Task name"), value: t.subject, wide: true },
     { label: __("Assignee"), value: personName(t.assigned_to) },
+    { label: __("Assigned by"), value: assignedBy.value || "—" },
     { label: __("Priority"), value: __(t.priority || "Medium") },
     { label: __("Category"), value: t.category ? __(t.category) : "—" },
     { label: __("Phase"), value: t.phase || "—" },

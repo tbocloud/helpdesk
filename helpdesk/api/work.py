@@ -20,6 +20,7 @@ from frappe.utils import (
 
 from helpdesk.github_sync import OPEN_STATES as PR_OPEN_STATES
 from helpdesk.github_sync import get_pull_requests
+from helpdesk.tasky.api import add_assigners
 from helpdesk.tasky.permissions import (
     can_add_tasks,
     can_manage_project,
@@ -202,7 +203,7 @@ def _items(tasks, tickets, with_plan: bool = False) -> list[dict]:
     viewer may plan it (My Work's Plan step), which costs a lookup per project."""
     names = _project_names(tasks)
     waiting = _open_dependencies(tasks)
-    task_items = [_task_item(t, names, waiting) for t in tasks]
+    task_items = add_assigners([_task_item(t, names, waiting) for t in tasks])
     # a task's pull requests mark it as Git work: open ones first, then the
     # latest merged or closed, newest activity first within each
     prs = get_pull_requests([t.name for t in tasks])

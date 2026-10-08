@@ -6,12 +6,16 @@ import frappe
 from frappe import _
 from frappe.desk.form import assign_to
 
+from helpdesk.api.content_board import user_full_names
 from helpdesk.api.project_files import file_counts
 from helpdesk.github_sync import get_pull_requests
 from helpdesk.tasky.permissions import (
     MANAGER_PROJECT_ROLE,
     can_add_tasks,
     can_manage_project,
+    can_move_task,
+    get_assigners,
+    is_assigner,
     is_project_owner,
     is_tasky_admin,
 )
@@ -108,6 +112,35 @@ def _dependency_info(depends_on: str | None) -> dict:
         "depends_on_subject": dep.subject if dep else None,
         "blocked": bool(dep) and dep.status not in ("Completed", "Cancelled"),
     }
+
+
+def add_assigners(tasks: list[dict]) -> list[dict]:
+    """Add who assigned each task (`assigned_by`, `assigned_by_name`) and whether
+    the viewer may move it to another project (`can_move`).
+
+    Takes formatted tasks (name, project, status, assignees); a few queries for
+    the whole list, plus one permission lookup per project.
+    """
+    user = frappe.session.user
+    assigners = get_assigners(
+        {t["name"]: t["assignees"][0] for t in tasks if t.get("assignees")}
+    )
+    names = user_full_names(set(assigners.values()))
+    manages = {}
+    for t in tasks:
+        by = assigners.get(t["name"])
+        t["assigned_by"] = by
+        t["assigned_by_name"] = names.get(by, by) if by else None
+        project = t.get("project")
+        if not project or t.get("status") in TASK_DONE:
+            t["can_move"] = False
+            continue
+        if project not in manages:
+            manages[project] = can_manage_project(project)
+        t["can_move"] = manages[project] or is_assigner(
+            by, t.get("assignees") or [], user
+        )
+    return tasks
 
 
 @frappe.whitelist()
@@ -588,9 +621,12 @@ def get_my_tasks(
             as_list=True,
         )
     )
-    return [
-        {**_format_task(t), "project_name": project_names.get(t.project)} for t in tasks
-    ]
+    return add_assigners(
+        [
+            {**_format_task(t), "project_name": project_names.get(t.project)}
+            for t in tasks
+        ]
+    )
 
 
 @frappe.whitelist()
@@ -599,7 +635,7 @@ def get_task_detail(task: str):
     doc = frappe.get_doc("Task", str(task))
     doc.check_permission("read")
     return {
-        **_format_task(_task_dict(doc)),
+        **add_assigners([_format_task(_task_dict(doc))])[0],
         "pull_requests": get_pull_requests([doc.name]).get(doc.name, []),
     }
 
@@ -1098,6 +1134,138 @@ def send_back_task(task: str, note: str) -> dict:
     return _format_task(_task_dict(doc))
 
 
+@frappe.whitelist(methods=["POST"])
+def move_task_to_project(task: str, project: str) -> dict:
+    """Move a task made in the wrong project to another one.
+
+    Whoever assigned it, the project's managers and lead, and admins may move it;
+    its assignee may not. The target must be an open project the mover can add
+    tasks to. A phase the target doesn't have and dependencies (which stay within
+    one project) are cleared; the assignee keeps the task and is told.
+    """
+    from helpdesk.work_reminders import notify_users
+
+    doc = frappe.get_doc("Task", str(task))
+    doc.check_permission("read")
+    assignees = doc.assignees()
+    assigner = (
+        get_assigners({doc.name: assignees[0]}).get(doc.name) if assignees else None
+    )
+    if not can_move_task(doc.project, assigner, assignees):
+        frappe.throw(
+            _(
+                "Only the person who assigned this task, or the project's manager or lead, can move it."
+            ),
+            frappe.PermissionError,
+        )
+    if doc.status in TASK_DONE:
+        frappe.throw(_("Closed tasks stay in their project."))
+    target = _move_target(doc, str(project))
+
+    source = doc.project
+    moved = _move_to_project(doc, target)
+    # the checks above are the decision: an assigner who doesn't manage either
+    # project has no write permission on a task assigned to someone else
+    doc.save(ignore_permissions=True)
+    moved["dependents_released"] = _release_dependents(doc.name)
+    moved["not_on_team"] = _join_target_team(target, assignees)
+
+    mover = _full_name(frappe.session.user)
+    target_name = _project_label(target)
+    doc.add_comment(
+        "Info", frappe.utils.escape_html(_move_note(source, target_name, mover, moved))
+    )
+    notify_users(
+        [u for u in assignees if u != frappe.session.user],
+        "Task",
+        doc.name,
+        _("{0} moved {1} to {2}").format(mover, doc.subject, target_name),
+    )
+    return {**add_assigners([_format_task(_task_dict(doc))])[0], **moved}
+
+
+def _move_target(doc, project: str) -> str:
+    """The project to move to: another open one the caller may add tasks to."""
+    target = _resolve_project(project)
+    if target == doc.project:
+        frappe.throw(_("The task is already in this project."))
+    if not can_add_tasks(target):
+        frappe.throw(
+            _("You can only move it to a project you can add tasks to."),
+            frappe.PermissionError,
+        )
+    if frappe.db.get_value("Project", target, "status") != "Open":
+        frappe.throw(_("Pick an open project."))
+    return target
+
+
+def _move_to_project(doc, target: str) -> dict:
+    """Point the task at `target`, dropping what only made sense in the old project."""
+    phase = doc.custom_phase or ""
+    keeps_phase = not phase or bool(
+        frappe.db.exists("Task", {"project": target, "custom_phase": phase})
+    )
+    cleared = {
+        "phase_cleared": "" if keeps_phase else phase,
+        "dependency_cleared": doc.depends_on_task or "",
+    }
+    doc.project = target
+    if not keeps_phase:
+        doc.custom_phase = ""
+    # a task only waits on tasks in its own project
+    doc.depends_on_task = None
+    return cleared
+
+
+def _release_dependents(task: str) -> int:
+    """Tasks left behind that waited on the moved one stop waiting on it."""
+    table = frappe.qb.DocType("Task")
+    dependents = (
+        frappe.qb.from_(table)
+        .select(table.name)
+        .where(table.depends_on_task == task)
+        .run(pluck=True)
+    )
+    for name in dependents:
+        frappe.db.set_value("Task", name, "depends_on_task", None)
+    return len(dependents)
+
+
+def _join_target_team(target: str, assignees: list[str]) -> list[str]:
+    """The assignees join the new project's team when the mover may add people
+    (its managers and lead); otherwise the ones still outside it are returned."""
+    outside = [u for u in assignees if not _is_on_team(target, u)]
+    if not outside or not can_manage_project(target):
+        return outside
+    joined = [u for u in outside if _is_assignable(u)]
+    for user in joined:
+        _add_member_for_assignment(target, user)
+    return [u for u in outside if u not in joined]
+
+
+def _project_label(project: str) -> str:
+    return frappe.db.get_value("Project", project, "project_name") or project
+
+
+def _move_note(source: str, target_name: str, mover: str, moved: dict) -> str:
+    note = _("Moved from {0} to {1} by {2}.").format(
+        _project_label(source), target_name, mover
+    )
+    if moved["phase_cleared"]:
+        note += " " + _("Phase {0} cleared: the new project has no such phase.").format(
+            moved["phase_cleared"]
+        )
+    if moved["dependency_cleared"]:
+        note += " " + _("It no longer waits on {0}.").format(
+            moved["dependency_cleared"]
+        )
+    if moved["dependents_released"]:
+        note += " " + _("{0} task(s) in the old project no longer wait on it.").format(
+            moved["dependents_released"]
+        )
+    return note
+
+
 @frappe.whitelist()
 def get_project_dashboard(project: str):
     """Get aggregate stats and phase data for the PM dashboard.
@@ -1255,6 +1423,7 @@ def get_kanban_tasks(project: str):
         fields=[
             "name",
             "subject",
+            "project",
             "custom_category",
             "custom_phase",
             "status",
@@ -1286,14 +1455,12 @@ def get_kanban_tasks(project: str):
         "Completed": [],
         "Cancelled": [],
     }
-    for t in tasks:
+    for t in add_assigners([_format_task(t) for t in tasks]):
         status = t.get("status") or "Open"
         if status not in columns:
             status = "Open"
-        prs = open_prs.get(t.name)
-        columns[status].append(
-            {**_format_task(t), "pull_request": prs[0] if prs else None}
-        )
+        prs = open_prs.get(t["name"])
+        columns[status].append({**t, "pull_request": prs[0] if prs else None})
 
     return {"columns": columns}
 

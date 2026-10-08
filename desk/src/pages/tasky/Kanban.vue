@@ -222,6 +222,13 @@
                   </Dropdown>
                 </div>
 
+                <p
+                  v-if="assignedByName(task)"
+                  class="mt-1 truncate pl-5 text-xs text-ink-gray-5"
+                >
+                  {{ __("Assigned by {0}", assignedByName(task)) }}
+                </p>
+
                 <div
                   v-if="task.blocked && col.key !== 'Completed'"
                   class="mt-2 flex min-w-0"
@@ -435,6 +442,7 @@
       v-model:task="sendingBackTask"
       @sent="kanban.reload()"
     />
+    <MoveTaskDialog v-model:task="movingTask" @moved="kanban.reload()" />
 
     <CompleteTaskDialog
       v-model:task="completingTask"
@@ -458,6 +466,7 @@ import LucideCheckCheck from "~icons/lucide/check-check";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideCirclePause from "~icons/lucide/circle-pause";
+import LucideFolderInput from "~icons/lucide/folder-input";
 import LucideGripVertical from "~icons/lucide/grip-vertical";
 import LucideInfo from "~icons/lucide/info";
 import LucideMoreHorizontal from "~icons/lucide/more-horizontal";
@@ -473,6 +482,7 @@ import EditTaskDialog from "./components/EditTaskDialog.vue";
 import HandOverTaskDialog from "./components/HandOverTaskDialog.vue";
 import HoldTaskDialog from "./components/HoldTaskDialog.vue";
 import MilestoneMark from "./components/MilestoneMark.vue";
+import MoveTaskDialog from "./components/MoveTaskDialog.vue";
 import ProjectNav from "./components/ProjectNav.vue";
 import RequestHelpDialog from "./components/RequestHelpDialog.vue";
 import ResumeTaskDialog from "./components/ResumeTaskDialog.vue";
@@ -485,6 +495,7 @@ import WaitingOn from "./components/WaitingOn.vue";
 import type { TaskPullRequest } from "./pullRequestMeta";
 import {
   ON_HOLD,
+  assignedByName,
   blockedMessage,
   blocksMove,
   holdDays,
@@ -533,6 +544,10 @@ interface Task {
   assigned_to?: string;
   assigned_to_name?: string;
   assignees?: string[];
+  assigned_by?: string | null;
+  assigned_by_name?: string | null;
+  can_move?: boolean;
+  project?: string;
   due_date?: string;
   estimated_hours?: number;
   custom_timer_start?: string;
@@ -580,6 +595,7 @@ const editingTask = ref<Task | null>(null);
 const sendingBackTask = ref<Task | null>(null);
 const helpingTask = ref<Task | null>(null);
 const handingOverTask = ref<Task | null>(null);
+const movingTask = ref<Task | null>(null);
 
 const { approve, resource: approveResource } = useApproveTask(() =>
   kanban.reload()
@@ -612,6 +628,13 @@ function cardActions(task: Task) {
       onClick: () => (handingOverTask.value = task),
     });
   }
+  // whoever assigned it, or the project's manager or lead (the server decides)
+  if (task.can_move)
+    actions.push({
+      label: __("Move to project…"),
+      icon: LucideFolderInput,
+      onClick: () => (movingTask.value = task),
+    });
   if (!canManage.value || isClosed(task)) return actions;
   actions.push({
     label: __("Plan"),
