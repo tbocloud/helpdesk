@@ -7,6 +7,7 @@ import json
 
 import anthropic
 import frappe
+import requests
 from frappe import _
 
 # Default model constants (can be overridden in HDS Hub Settings)
@@ -142,6 +143,60 @@ def get_provider_config(layer="triage"):
     return provider, base_url, api_key
 
 
+def get_fallback_config():
+    """(provider, base_url, api_key, model) of the fallback provider, or None when none is set up.
+
+    The fallback answers one-shot jobs (triage, suggested replies, drafts) when the
+    main provider refuses the key, runs out of credit, rate-limits or fails.
+    """
+    from frappe.utils.password import get_decrypted_password
+
+    settings = get_hub_settings()
+    provider = getattr(settings, "fallback_provider", None)
+    if not provider:
+        return None
+    api_key = get_decrypted_password(
+        "HDS Hub Settings", "HDS Hub Settings", "fallback_api_key", raise_exception=False
+    )
+    if not api_key:
+        return None
+    base_url = (getattr(settings, "fallback_base_url", None) or "").rstrip("/") or None
+    if provider != "Anthropic" and not base_url:
+        return None
+    model = getattr(settings, "fallback_triage_model", None) or get_models()[0]
+    return provider, base_url, api_key, model
+
+
+# Answers from the main provider that mean "try the fallback": a refused or
+# expired key, no credit, rate limits, timeouts and server errors. A 400 is
+# our own request's fault and would fail the same way on the fallback.
+FALLBACK_STATUSES = {401, 402, 403, 408, 429}
+
+
+def is_provider_failure(exc: Exception) -> bool:
+    """Whether an exception from a model call is the provider failing, not our request."""
+    if isinstance(exc, (requests.ConnectionError, requests.Timeout, anthropic.APIConnectionError)):
+        return True
+    status = None
+    if isinstance(exc, requests.HTTPError) and exc.response is not None:
+        status = exc.response.status_code
+    elif isinstance(exc, anthropic.APIStatusError):
+        status = exc.status_code
+    return status is not None and (status in FALLBACK_STATUSES or status >= 500)
+
+
+def _note_fallback(exc: Exception) -> None:
+    """Record once an hour that the main provider is failing, so someone looks at it."""
+    cache = frappe.cache()
+    if cache.get_value("hds_ai_fallback_noted"):
+        return
+    cache.set_value("hds_ai_fallback_noted", 1, expires_in_sec=3600)
+    frappe.log_error(
+        title="AI main provider failed; the fallback provider answered",
+        message=f"{type(exc).__name__}: {str(exc)[:500]}",
+    )
+
+
 def get_client(layer="investigation"):
     """Get an Anthropic-SDK client (native or a compatible endpoint) for a layer.
 
@@ -264,8 +319,46 @@ def parse_json_answer(text: str) -> dict:
     return {"raw_response": text, "parse_error": True}
 
 
+def _complete(provider, base_url, api_key, model, system_prompt, user_message, ticket_name=None):
+    """One completion on the given provider. Returns (text, usage)."""
+    if provider == "OpenAI Compatible":
+        return _openai_chat(base_url, api_key, model, system_prompt, user_message)
+
+    client = (
+        anthropic.Anthropic(api_key=api_key, base_url=base_url)
+        if base_url
+        else anthropic.Anthropic(api_key=api_key)
+    )
+    # thinking models (e.g. Kimi) spend part of the budget thinking and can
+    # run out before writing the answer; give them room, then more once
+    for max_tokens in TRIAGE_TOKEN_BUDGETS:
+        response = client.messages.create(
+            model=model,
+            max_tokens=max_tokens,
+            system=[
+                {
+                    "type": "text",
+                    "text": system_prompt,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
+            messages=[{"role": "user", "content": user_message}],
+        )
+        # thinking-capable models may put a thinking block first
+        text = "".join(
+            block.text
+            for block in response.content
+            if getattr(block, "type", "text") == "text"
+        )
+        usage = response.usage
+        if text.strip() or getattr(response, "stop_reason", None) != "max_tokens":
+            break
+        log_usage(model, usage, ticket_name=ticket_name)
+    return text, usage
+
+
 def call_haiku(system_prompt, user_message, ticket_name=None):
-    """Call Haiku for triage. Returns parsed JSON response.
+    """Call the triage model; on a provider failure, the fallback provider. Returns parsed JSON.
 
     Args:
             system_prompt: The system prompt with triage instructions
@@ -273,45 +366,28 @@ def call_haiku(system_prompt, user_message, ticket_name=None):
             ticket_name: Optional ticket name for usage logging
 
     Returns:
-            dict with keys: response (parsed JSON), usage (token counts), cost (USD)
+            dict with keys: response (parsed JSON), usage (token counts), cost (USD),
+            model (the model that answered)
     """
-    haiku_model, _ = get_models()
-    provider, base_url, api_key = get_provider_config()
-
-    if provider == "OpenAI Compatible":
-        text, usage = _openai_chat(
-            base_url, api_key, haiku_model, system_prompt, user_message
-        )
-    else:
+    model, _ = get_models()
+    fallback = get_fallback_config()
+    try:
         # the triage layer's own provider, not the investigation one
-        client = get_client(layer="triage")
-        # thinking models (e.g. Kimi) spend part of the budget thinking and can
-        # run out before writing the answer; give them room, then more once
-        for max_tokens in TRIAGE_TOKEN_BUDGETS:
-            response = client.messages.create(
-                model=haiku_model,
-                max_tokens=max_tokens,
-                system=[
-                    {
-                        "type": "text",
-                        "text": system_prompt,
-                        "cache_control": {"type": "ephemeral"},
-                    }
-                ],
-                messages=[{"role": "user", "content": user_message}],
-            )
-            # thinking-capable models may put a thinking block first
-            text = "".join(
-                block.text
-                for block in response.content
-                if getattr(block, "type", "text") == "text"
-            )
-            usage = response.usage
-            if text.strip() or getattr(response, "stop_reason", None) != "max_tokens":
-                break
-            log_usage(haiku_model, usage, ticket_name=ticket_name)
+        provider, base_url, api_key = get_provider_config(layer="triage")
+        text, usage = _complete(
+            provider, base_url, api_key, model, system_prompt, user_message, ticket_name
+        )
+    except Exception as exc:
+        unconfigured = isinstance(exc, frappe.ValidationError)
+        if not fallback or not (unconfigured or is_provider_failure(exc)):
+            raise
+        _note_fallback(exc)
+        provider, base_url, api_key, model = fallback
+        text, usage = _complete(
+            provider, base_url, api_key, model, system_prompt, user_message, ticket_name
+        )
 
-    log_usage(haiku_model, usage, ticket_name=ticket_name)
+    log_usage(model, usage, ticket_name=ticket_name)
 
     parsed = parse_json_answer(text)
 
@@ -323,7 +399,8 @@ def call_haiku(system_prompt, user_message, ticket_name=None):
             "cache_read_tokens": getattr(usage, "cache_read_input_tokens", 0),
             "cache_write_tokens": getattr(usage, "cache_creation_input_tokens", 0),
         },
-        "cost": estimate_cost(haiku_model, usage),
+        "cost": estimate_cost(model, usage),
+        "model": model,
     }
 
 

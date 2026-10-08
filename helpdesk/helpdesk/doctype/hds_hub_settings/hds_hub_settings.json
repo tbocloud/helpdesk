@@ -14,6 +14,12 @@
 		"column_break_api",
 		"default_triage_model",
 		"default_investigation_model",
+		"fallback_section",
+		"fallback_provider",
+		"fallback_base_url",
+		"column_break_fallback",
+		"fallback_api_key",
+		"fallback_triage_model",
 		"limits_section",
 		"max_tool_calls_per_session",
 		"max_session_time_seconds",
@@ -96,6 +102,44 @@
 			"fieldname": "default_investigation_model",
 			"fieldtype": "Data",
 			"label": "Investigation Model"
+		},
+		{
+			"fieldname": "fallback_section",
+			"fieldtype": "Section Break",
+			"label": "Fallback Provider",
+			"collapsible": 1,
+			"description": "Used when the main provider refuses the key, is out of credit, rate-limits or fails. Triage, suggested replies and other one-shot jobs switch to it automatically; the usage log shows which model answered."
+		},
+		{
+			"fieldname": "fallback_provider",
+			"fieldtype": "Select",
+			"label": "Fallback Provider",
+			"options": "\nAnthropic\nAnthropic Compatible\nOpenAI Compatible",
+			"description": "Blank = no fallback."
+		},
+		{
+			"fieldname": "fallback_base_url",
+			"fieldtype": "Data",
+			"label": "Fallback Base URL",
+			"depends_on": "eval:doc.fallback_provider && doc.fallback_provider != 'Anthropic'",
+			"description": "e.g. https://api.openai.com/v1"
+		},
+		{
+			"fieldname": "column_break_fallback",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "fallback_api_key",
+			"fieldtype": "Password",
+			"label": "Fallback API Key",
+			"depends_on": "fallback_provider"
+		},
+		{
+			"fieldname": "fallback_triage_model",
+			"fieldtype": "Data",
+			"label": "Fallback Triage Model",
+			"depends_on": "fallback_provider",
+			"description": "Blank = the Triage Model above."
 		},
 		{
 			"fieldname": "limits_section",
