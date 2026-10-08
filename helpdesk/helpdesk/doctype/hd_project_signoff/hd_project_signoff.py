@@ -28,6 +28,7 @@ from frappe.utils import (
     get_datetime,
     get_fullname,
     get_url,
+    getdate,
     now_datetime,
     nowdate,
 )
@@ -146,7 +147,8 @@ class HDProjectSignoff(Document):
             row.response = row.response or PENDING
             if row.question:
                 rows.append(row)
-        if not rows:
+        # a draft made without a template starts empty; it needs questions before it is sent
+        if not rows and self.status != DRAFT:
             frappe.throw(_("Add at least one question for the customer to answer."))
         self.items = rows
 
@@ -275,6 +277,10 @@ class HDProjectSignoff(Document):
             frappe.throw(
                 _("This sign-off is signed. Reopen it to send the link again.")
             )
+        if not self.items:
+            frappe.throw(
+                _("Add at least one question before sending it to the customer.")
+            )
         token = secrets.token_urlsafe(32)
         self.link_token_hash = self.hash_token(token)
         self.link_expires_on = add_days(now_datetime(), LINK_TTL_DAYS)
@@ -401,12 +407,22 @@ class HDProjectSignoff(Document):
         escalate = row.response == ESCALATED
         task = self.open_clarification_task(row)
         if task:
-            if escalate and task.priority != "Urgent":
-                task.priority = "Urgent"
-                task.save(ignore_permissions=True)
+            if escalate:
+                self.escalate_task(task)
         else:
             row.clarification_task = self.create_clarification_task(row, escalate).name
         self.notify_follow_up(row, escalate)
+
+    def escalate_task(self, task):
+        """An escalated item's open task becomes Urgent and due tomorrow at the latest."""
+        tomorrow = add_days(nowdate(), 1)
+        changed = task.priority != "Urgent"
+        task.priority = "Urgent"
+        if not task.exp_end_date or getdate(task.exp_end_date) > getdate(tomorrow):
+            task.exp_end_date = tomorrow
+            changed = True
+        if changed:
+            task.save(ignore_permissions=True)
 
     def open_clarification_task(self, row):
         if not row.clarification_task:

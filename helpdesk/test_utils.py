@@ -1969,7 +1969,10 @@ def fake_request(test_case, cookies: dict | None = None):
 
 def fake_pdf_renderer():
     """Patches PDF rendering so signing works without wkhtmltopdf; use it as a context manager."""
+    import io
     from contextlib import ExitStack
+
+    from pypdf import PdfWriter
 
     stack = ExitStack()
     stack.enter_context(
@@ -1978,7 +1981,10 @@ def fake_pdf_renderer():
             return_value="/usr/bin/wkhtmltopdf",
         )
     )
-    stack.enter_context(
-        patch("frappe.utils.pdf.get_pdf", return_value=b"%PDF-1.4 test")
-    )
+    # File parses uploaded PDFs, so the fake must be a real one
+    writer = PdfWriter()
+    writer.add_blank_page(width=595, height=842)
+    pdf = io.BytesIO()
+    writer.write(pdf)
+    stack.enter_context(patch("frappe.utils.pdf.get_pdf", return_value=pdf.getvalue()))
     return stack

@@ -48,9 +48,12 @@ Item responses: **Pending**, **Done**, **Not clear**, **Escalated**.
 1. **Create** (Project → Sign-off → New sign-off; project managers, the project lead,
    admins): template (or empty), module title, training date, trainer (from the project
    team), and who signs for the customer (a contact of the project's customer, with an
-   email). A project without a customer can't have sign-offs.
+   email). A project without a customer can't have sign-offs. A sign-off made without a
+   template starts with no questions; it saves as a draft but can't be sent until it has
+   at least one.
 2. **Edit** (Draft or Reopened): details and questions (add, remove, reorder, reword). A
-   reworded question that had an answer goes back to Pending.
+   reworded question is treated as new: its answer, comment, answer time, clarification
+   task and clarification details are cleared and it goes back to Pending.
 3. **Send to customer**: a new link is emailed to the signatory. **Resend** sends a new link
    and the old one stops working. **Revoke** stops the link at once.
 4. **Customer**: opens the link, asks for a code, enters it, and answers. Done saves at once.
@@ -61,8 +64,9 @@ Item responses: **Pending**, **Done**, **Not clear**, **Escalated**.
    - a notification (bell, plus email or Teams per HD Notification) to the trainer and the
      project lead; Escalate also to the project's managers (owner and members with the
      "Project Manager" project role) and Agent Managers, and to the team chat channel.
-   Changing Not clear to Escalated on an item with an open task makes that task Urgent and
-   notifies the managers; it doesn't create a second task.
+   Changing Not clear to Escalated on an item with an open task makes that task Urgent,
+   brings its due date forward to tomorrow when it was later, and notifies the managers; it
+   doesn't create a second task.
    Done items can carry an optional comment (saved when the box loses focus).
 5. **Mark clarified** (the trainer, the lead, managers, admins), with an optional note shown
    to the customer: the item returns to **Pending**, its task is completed, and the
@@ -99,7 +103,8 @@ base template and helpers (`helpdesk/templates/portal_base.html`). Its endpoints
   sets `<meta name="referrer" content="no-referrer">` so the token never leaks to another
   site. An unknown, replaced or revoked token gets the same "isn't valid" answer.
 - **Email code**: 6 digits from `secrets`, sent only to the sign-off's signatory email, kept
-  in Redis for 10 minutes, compared in constant time, at most 5 wrong tries (then a new code
+  in Redis for 10 minutes (stored only after the email is handed over, so a failed send
+  leaves no code and no resend wait), compared in constant time, at most 5 wrong tries (then a new code
   is needed), and a new code at most once a minute. `request_code` is rate-limited to 5 an
   hour and `verify_code` to 15 per 10 minutes, per IP and token.
 - **Session**: a correct code starts a session in Redis (2 hours) behind an HttpOnly,
@@ -217,10 +222,12 @@ warehouses, Stock movements, Receipts and deliveries, Stock reports) and **HR & 
 `helpdesk/tests/test_project_signoff.py` (helpers `make_signoff_template`, `make_signoff`,
 `open_signoff_link`, `signoff_session`, `fake_request`, `fake_pdf_renderer` in
 `helpdesk/test_utils.py`; `hold_commits`; `frappe.sendmail` mocked): template copy and
-seeding, signatory must be a customer contact, token hashed and replaced, code flow (wrong
+seeding, an empty draft saves but can't be sent, rewording a question clears its answer,
+signatory must be a customer contact, token hashed and replaced, code flow (wrong
 code, used once, attempts limit, expiry), expired and revoked links, session bound to its
 sign-off, token and email, customer view hides internals, Not clear creates the trainer's
-task and notifies, Escalate is urgent and reaches managers, Mark clarified returns the item
+task and notifies, Escalate is urgent and reaches managers, escalating an open task makes
+it urgent and due tomorrow, Mark clarified returns the item
 and emails a new link, completing the task clarifies, signing needs all Done and the
 signatory, signing saves the PDF on the project and locks, reopen needs a reason and is
 logged, the completion letter once every sign-off is signed, and permissions (members view,

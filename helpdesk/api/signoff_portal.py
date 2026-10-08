@@ -179,11 +179,7 @@ def request_code(token: str) -> dict:
                 ),
             }
     code = f"{secrets.randbelow(1_000_000):06d}"
-    frappe.cache.set_value(
-        key,
-        {"otp": code, "sent_at": str(now_datetime()), "attempts": 0},
-        expires_in_sec=OTP_TTL_SECONDS,
-    )
+    # sent first: a failed send must not leave a code (and a resend wait) the customer never got
     frappe.sendmail(
         recipients=[doc.signatory_email],
         subject=_("Your code for the {0} sign-off: {1}").format(doc.module_title, code),
@@ -193,6 +189,11 @@ def request_code(token: str) -> dict:
         ).format(code, OTP_TTL_SECONDS // 60)
         + "</p>",
         now=True,
+    )
+    frappe.cache.set_value(
+        key,
+        {"otp": code, "sent_at": str(now_datetime()), "attempts": 0},
+        expires_in_sec=OTP_TTL_SECONDS,
     )
     return {
         "success": True,

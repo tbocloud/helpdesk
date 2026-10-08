@@ -6,7 +6,7 @@
     :back-label="__('Back to sign-off templates')"
     :dirty="dirty"
     :save-label="template ? __('Save changes') : __('Create template')"
-    :save-disabled="!canSave || (!!template && !dirty)"
+    :save-disabled="!!template && !dirty"
     :saving="saving"
     :loading="!!template && !loaded && !detail.error"
     :error="detail.error"

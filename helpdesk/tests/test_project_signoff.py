@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
-from frappe.utils import add_days, now_datetime
+from frappe.utils import add_days, getdate, now_datetime, nowdate
 
 from helpdesk.api import project_signoff as api
 from helpdesk.api import signoff_portal as portal
@@ -266,6 +266,51 @@ class TestProjectSignoff(FrappeTestCase):
         task = frappe.get_doc("Task", doc.items[0].clarification_task)
         self.assertEqual(task.priority, "Urgent")
         self.assertTrue(get_reminder_messages(PM[0], doc.name))
+
+    def test_escalating_an_open_task_makes_it_urgent_and_due_tomorrow(self):
+        doc, token = self.sent()
+        item = doc.items[0].name
+        self.answer(doc, token, item, "Not clear", "Which invoice type?")
+        doc.reload()
+        task = doc.items[0].clarification_task
+        self.assertEqual(frappe.db.get_value("Task", task, "priority"), "High")
+
+        self.answer(doc, token, item, "Escalated", "Still unclear after the call")
+        doc.reload()
+        self.assertEqual(doc.items[0].clarification_task, task)
+        self.assertEqual(
+            frappe.db.get_value("Task", task, ["priority", "exp_end_date"]),
+            ("Urgent", getdate(add_days(nowdate(), 1))),
+        )
+
+    def test_a_draft_without_questions_saves_but_cannot_be_sent(self):
+        doc = make_signoff(self.project, self.contact, TRAINER[0], module_title="HR")
+        self.assertEqual(len(doc.items), 0)
+        with self.assertRaises(frappe.ValidationError):
+            open_signoff_link(doc)
+
+    def test_rewording_a_question_clears_its_answer(self):
+        doc, token = self.sent()
+        self.answer(doc, token, doc.items[0].name, "Not clear", "Which invoice type?")
+        doc.reload()
+        # editable again, as after a reopen
+        doc.db_set("status", "Reopened")
+        items = [
+            {"name": r.name, "section": r.section, "question": r.question}
+            for r in doc.items
+        ]
+        items[0]["question"] = "I can make a Sales Invoice with a discount."
+        run_as_user(
+            PM[0],
+            lambda: api.update_signoff(
+                doc.name, "Accounts", self.contact, TRAINER[0], items
+            ),
+        )
+        row = frappe.get_doc(doc.doctype, doc.name).items[0]
+        self.assertEqual(
+            (row.response, row.customer_comment, row.clarification_task),
+            ("Pending", None, None),
+        )
 
     def test_marking_clarified_returns_the_item_and_emails_a_new_link(self):
         doc, token = self.sent()

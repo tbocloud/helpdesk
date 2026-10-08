@@ -257,6 +257,26 @@
           </SectionCard>
 
           <!-- questions -->
+          <TaskyState
+            v-if="!s.items.length"
+            :icon="LucideClipboardList"
+            :title="__('No questions yet')"
+            :message="
+              s.can_edit
+                ? __(
+                    'Add the questions the customer should confirm, then send it.'
+                  )
+                : __(
+                    'The project lead or manager adds the questions before sending it.'
+                  )
+            "
+          >
+            <Button
+              v-if="s.can_edit"
+              :label="__('Add questions')"
+              @click="showEdit = true"
+            />
+          </TaskyState>
           <SectionCard
             v-for="group in groups"
             :key="group.section"
@@ -564,6 +584,7 @@ import { useRouter } from "vue-router";
 import LucideArrowLeft from "~icons/lucide/arrow-left";
 import LucideBadgeCheck from "~icons/lucide/badge-check";
 import LucideCircle from "~icons/lucide/circle";
+import LucideClipboardList from "~icons/lucide/clipboard-list";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideCircleHelp from "~icons/lucide/circle-help";
 import LucideDownload from "~icons/lucide/download";

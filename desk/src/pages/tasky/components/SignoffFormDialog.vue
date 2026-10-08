@@ -147,7 +147,6 @@
           :form="formId"
           :label="editing ? __('Save changes') : __('Create sign-off')"
           :loading="saving"
-          :disabled="!canSubmit"
         />
       </div>
     </template>
@@ -273,8 +272,7 @@ const canSubmit = computed(
     !!form.module_title.trim() &&
     !!form.trainer &&
     !!form.signatory_contact &&
-    (!editing.value ||
-      (form.items.length > 0 && form.items.every((i) => i.question.trim())))
+    (!editing.value || form.items.every((i) => i.question.trim()))
 );
 
 const saving = ref(false);

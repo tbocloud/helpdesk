@@ -24,6 +24,16 @@ from helpdesk.tasky.permissions import (
 )
 
 SIGNOFF = "HD Project Signoff"
+# what a reworded question loses
+RESET_ANSWER = {
+    "response": "Pending",
+    "customer_comment": None,
+    "responded_on": None,
+    "clarification_task": None,
+    "clarified_on": None,
+    "clarified_by": None,
+    "clarification_note": None,
+}
 TEMPLATE = "HD Signoff Template"
 
 
@@ -469,9 +479,9 @@ def _merge_items(doc, items: str | list) -> list:
         }
         row = existing.get(cstr(r.get("name")))
         if row:
-            # a reworded question is a new question: its old answer no longer applies
+            # a reworded question is a new question: its old answer and follow-up no longer apply
             if row.question != values["question"]:
-                values["response"] = "Pending"
+                values.update(RESET_ANSWER)
             row.update(values)
             merged.append(row)
         else:
