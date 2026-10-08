@@ -304,12 +304,38 @@ def pull_client_tickets() -> int:
     return sum(pull_connection(conn.name, conn.customer_name) for conn in connections)
 
 
+# A pull can take a minute on a slow site; a lock older than this is stale
+PULL_LOCK_SECONDS = 300
+
+
 def pull_connection(connection: str, customer_name: str | None = None) -> int:
-    """Import one customer site's Pending tickets; also used right after the site pings us."""
+    """Import one customer site's Pending tickets; also used right after the site pings us.
+
+    Only one pull per site runs at a time: the site's ping and the scheduled
+    pull can start in the same minute, and without the lock both passed the
+    "already imported" check and every ticket was imported twice.
+    """
+    if frappe.session.user == "Guest":
+        # queued by the customer site's ping, which is a guest request; the
+        # import must run as the hub's own user or every permission check fails
+        frappe.set_user(automation_user())
     if customer_name is None:
         customer_name = frappe.db.get_value(
             "HDS Support Connection", connection, "customer_name"
         )
+    lock_key = f"hds_pull_lock:{connection}"
+    # site-prefixed like delete_value() below, so the release matches (as in triage.py)
+    if not frappe.cache.set(
+        frappe.cache.make_key(lock_key), 1, nx=True, ex=PULL_LOCK_SECONDS
+    ):
+        return 0
+    try:
+        return _pull_connection(connection, customer_name)
+    finally:
+        frappe.cache.delete_value(lock_key)
+
+
+def _pull_connection(connection: str, customer_name: str | None) -> int:
     try:
         mcp = MCPClient(connection)
         tickets = _pending_tickets(mcp)

@@ -6,6 +6,8 @@ How TBO Support keeps a customer's own ticket (the `Support Ticket` on their ERP
 
 Every minute (`pull_client_tickets`), and at once when a customer site pings `ticket_raised`, the hub reads the site's Pending tickets over MCP, creates the HD Ticket with its files, and writes the hub number and `Open` back onto the customer's ticket.
 
+Only one pull per site runs at a time (a Redis lock per connection, 5 minutes at most): the site's ping and the scheduled pull can start in the same minute, and without the lock both passed the "already imported" check and every ticket was imported twice. A pull queued by the ping arrives as a guest request and runs as the hub's automation user.
+
 ## Writing back
 
 - A write the customer site refuses (writes switched off there, a label its status field does not accept) is an error, never a success. `_push_back` raises, the ticket is retried next run, and the failure is logged **once an hour** per ticket, not every run.
