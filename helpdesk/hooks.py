@@ -56,6 +56,7 @@ scheduler_events = {
             "helpdesk.tasks.sync_conversations",
             "helpdesk.content_sync.sync_content_approvals",
             "helpdesk.helpdesk.doctype.hd_meeting.hd_meeting.send_reminders",
+            "helpdesk.copilot.runs.expire_stale_leases",
         ],
         # every 10 minutes: new hub errors to the team's chat channel
         "*/10 * * * *": [
@@ -168,7 +169,10 @@ doc_events = {
         "before_insert": "helpdesk.extends.notification_log.before_insert",
     },
     "HD Ticket": {
-        "after_insert": "helpdesk.triage.auto_triage_ticket",
+        "after_insert": [
+            "helpdesk.triage.auto_triage_ticket",
+            "helpdesk.copilot.runs.on_ticket_insert",
+        ],
         "on_update": [
             "helpdesk.chatwoot_bridge.on_ticket_update",
             "helpdesk.kb_drafts.on_ticket_update",
@@ -263,4 +267,5 @@ default_log_clearing_doctypes = {
     "HDS AI Usage Log": 90,
     "HDS Site Login Log": 180,
     "HDS Remote Audit Log": 365,
+    "HDS Copilot Event": 90,
 }

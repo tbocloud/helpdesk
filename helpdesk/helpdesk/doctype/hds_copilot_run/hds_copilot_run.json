@@ -1,0 +1,284 @@
+{
+	"actions": [],
+	"autoname": "TBO-RUN-.YYYY.-.#####",
+	"creation": "2026-10-08 13:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"ticket",
+		"customer",
+		"connection",
+		"registry",
+		"kind",
+		"state",
+		"column_break_lease",
+		"worker_id",
+		"lease_token_hash",
+		"lease_expires",
+		"lease_losses",
+		"investigation_section",
+		"root_cause_category",
+		"confidence",
+		"summary",
+		"customer_message",
+		"column_break_result",
+		"handed_over_to",
+		"task",
+		"failure_reason",
+		"cost_usd",
+		"details_section",
+		"investigation",
+		"evidence",
+		"proposal",
+		"timeline_section",
+		"queued_at",
+		"claimed_at",
+		"column_break_timeline",
+		"investigated_at",
+		"finished_at"
+	],
+	"fields": [
+		{
+			"fieldname": "ticket",
+			"fieldtype": "Link",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"label": "Ticket",
+			"options": "HD Ticket",
+			"reqd": 1
+		},
+		{
+			"fetch_from": "ticket.customer",
+			"fieldname": "customer",
+			"fieldtype": "Link",
+			"in_list_view": 1,
+			"label": "Customer",
+			"options": "HD Customer",
+			"read_only": 1
+		},
+		{
+			"fieldname": "connection",
+			"fieldtype": "Link",
+			"label": "Connection",
+			"options": "HDS Support Connection"
+		},
+		{
+			"fieldname": "registry",
+			"fieldtype": "Link",
+			"label": "Site",
+			"options": "HDS Site Registry"
+		},
+		{
+			"default": "investigate",
+			"fieldname": "kind",
+			"fieldtype": "Select",
+			"in_list_view": 1,
+			"label": "Kind",
+			"options": "investigate\nfollowup\ncode\nconfig\ndata\nrevert"
+		},
+		{
+			"default": "Queued",
+			"fieldname": "state",
+			"fieldtype": "Select",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"label": "State",
+			"options": "Queued\nInvestigating\nExplaining\nAnswered\nPreparing Fix\nAwaiting Approval\nApproved\nMerging\nMerged\nDeploying\nVerifying\nResolved\nClosed\nRejected\nEscalated\nHanded Over\nFailed\nCancelled"
+		},
+		{
+			"fieldname": "column_break_lease",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "worker_id",
+			"fieldtype": "Data",
+			"label": "Worker",
+			"read_only": 1
+		},
+		{
+			"fieldname": "lease_token_hash",
+			"fieldtype": "Data",
+			"hidden": 1,
+			"label": "Lease Token Hash",
+			"read_only": 1
+		},
+		{
+			"fieldname": "lease_expires",
+			"fieldtype": "Datetime",
+			"label": "Lease Expires",
+			"read_only": 1
+		},
+		{
+			"default": "0",
+			"fieldname": "lease_losses",
+			"fieldtype": "Int",
+			"label": "Lease Losses",
+			"read_only": 1
+		},
+		{
+			"fieldname": "investigation_section",
+			"fieldtype": "Section Break",
+			"label": "Investigation"
+		},
+		{
+			"fieldname": "root_cause_category",
+			"fieldtype": "Select",
+			"in_list_view": 1,
+			"label": "Root Cause",
+			"options": "\nquestion\nnot_allowed_request\ncustomer_mistake\nwrong_setting\nbug\ndata_damaged_by_bug\ncore_issue\nunclear",
+			"read_only": 1
+		},
+		{
+			"fieldname": "confidence",
+			"fieldtype": "Float",
+			"label": "Confidence",
+			"read_only": 1
+		},
+		{
+			"fieldname": "summary",
+			"fieldtype": "Small Text",
+			"label": "Summary",
+			"read_only": 1
+		},
+		{
+			"fieldname": "customer_message",
+			"fieldtype": "Small Text",
+			"label": "Message for the Customer",
+			"read_only": 1
+		},
+		{
+			"fieldname": "column_break_result",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "handed_over_to",
+			"fieldtype": "Link",
+			"label": "Handed Over To",
+			"options": "User",
+			"read_only": 1
+		},
+		{
+			"fieldname": "task",
+			"fieldtype": "Link",
+			"label": "Task",
+			"options": "Task",
+			"read_only": 1
+		},
+		{
+			"fieldname": "failure_reason",
+			"fieldtype": "Small Text",
+			"label": "Failure Reason",
+			"read_only": 1
+		},
+		{
+			"fieldname": "cost_usd",
+			"fieldtype": "Currency",
+			"label": "Cost (USD)",
+			"read_only": 1
+		},
+		{
+			"collapsible": 1,
+			"fieldname": "details_section",
+			"fieldtype": "Section Break",
+			"label": "Details"
+		},
+		{
+			"fieldname": "investigation",
+			"fieldtype": "Code",
+			"label": "Investigation",
+			"options": "JSON",
+			"read_only": 1
+		},
+		{
+			"fieldname": "evidence",
+			"fieldtype": "Code",
+			"label": "Evidence",
+			"options": "JSON",
+			"read_only": 1
+		},
+		{
+			"fieldname": "proposal",
+			"fieldtype": "Code",
+			"label": "Proposal",
+			"options": "JSON",
+			"read_only": 1
+		},
+		{
+			"fieldname": "timeline_section",
+			"fieldtype": "Section Break",
+			"label": "Timeline"
+		},
+		{
+			"fieldname": "queued_at",
+			"fieldtype": "Datetime",
+			"label": "Queued At",
+			"read_only": 1
+		},
+		{
+			"fieldname": "claimed_at",
+			"fieldtype": "Datetime",
+			"label": "Claimed At",
+			"read_only": 1
+		},
+		{
+			"fieldname": "column_break_timeline",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "investigated_at",
+			"fieldtype": "Datetime",
+			"label": "Investigated At",
+			"read_only": 1
+		},
+		{
+			"fieldname": "finished_at",
+			"fieldtype": "Datetime",
+			"label": "Finished At",
+			"read_only": 1
+		}
+	],
+	"links": [],
+	"modified": "2026-10-08 13:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HDS Copilot Run",
+	"naming_rule": "Expression (old style)",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "System Manager",
+			"share": 1,
+			"write": 1
+		},
+		{
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "Agent Manager",
+			"share": 1
+		},
+		{
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "Agent",
+			"share": 1
+		}
+	],
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": [],
+	"title_field": "ticket",
+	"track_changes": 1
+}
