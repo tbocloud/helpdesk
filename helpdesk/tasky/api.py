@@ -5,6 +5,7 @@ import json
 import frappe
 from frappe import _
 from frappe.desk.form import assign_to
+from frappe.query_builder import Order
 
 from helpdesk.api.content_board import user_full_names
 from helpdesk.api.project_files import file_counts
@@ -25,6 +26,8 @@ LEAD_ROTATION_ROLES = ("Developer",)
 ON_HOLD = "On Hold"
 PENDING_REVIEW_STATUS = "Pending Review"
 TASK_DONE = ("Completed", "Cancelled")
+# how many projects Recent projects keeps per person
+RECENT_PROJECTS = 8
 # the most one completion may log; longer work belongs on a manual timesheet
 MAX_HOURS_PER_COMPLETION = 24
 # a template task goes to a project member with this role (round robin), else to anyone
@@ -1668,6 +1671,77 @@ def get_projects():
         p["can_edit"] = is_project_owner(p["name"])
         p["project_lead_name"] = lead_names.get(p.project_lead)
     return projects
+
+
+@frappe.whitelist(methods=["POST"])
+def record_project_view(project: str) -> None:
+    """Remember that the user opened a project, for Recent projects.
+
+    Kept in Frappe's View Log (one row per person and project, its `modified`
+    the last visit), so it follows the user across devices; only the latest
+    RECENT_PROJECTS are kept.
+    """
+    project = _resolve_project(str(project))
+    user = frappe.session.user
+    existing = frappe.db.get_value(
+        "View Log",
+        {"viewed_by": user, "reference_doctype": "Project", "reference_name": project},
+    )
+    if existing:
+        frappe.db.set_value(
+            "View Log", existing, "modified", frappe.utils.now(), update_modified=False
+        )
+    else:
+        frappe.get_doc(
+            {
+                "doctype": "View Log",
+                "viewed_by": user,
+                "reference_doctype": "Project",
+                "reference_name": project,
+            }
+        ).insert(ignore_permissions=True)
+    _trim_recent_projects(user)
+
+
+def _recent_project_logs(user: str) -> list:
+    log = frappe.qb.DocType("View Log")
+    return (
+        frappe.qb.from_(log)
+        .select(log.name, log.reference_name)
+        .where((log.viewed_by == user) & (log.reference_doctype == "Project"))
+        .orderby(log.modified, order=Order.desc)
+        .run(as_dict=True)
+    )
+
+
+def _trim_recent_projects(user: str):
+    old = [row.name for row in _recent_project_logs(user)[RECENT_PROJECTS:]]
+    if old:
+        frappe.db.delete("View Log", {"name": ("in", old)})
+
+
+@frappe.whitelist()
+def get_recent_projects() -> list[dict]:
+    """The projects the user opened lately, newest first: only those they can
+    still read, so deleted projects and ones they left drop out."""
+    names = list(
+        dict.fromkeys(
+            row.reference_name
+            for row in _recent_project_logs(frappe.session.user)[:RECENT_PROJECTS]
+        )
+    )
+    if not names:
+        return []
+    projects = {
+        p.name: p
+        for p in frappe.get_list(
+            "Project",
+            filters={"name": ("in", names)},
+            fields=["name", "project_name", "customer", "status"],
+            limit_page_length=RECENT_PROJECTS,
+        )
+    }
+    return [projects[name] for name in names if name in projects]
 
 
 @frappe.whitelist()

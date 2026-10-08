@@ -239,6 +239,61 @@ class TestMoveTask(TaskMovesCase):
         self.assertFalse(as_assignee["can_move"])
 
 
+class TestRecentProjects(TaskMovesCase):
+    def recent(self, user=DEV):
+        return [p.name for p in run_as_user(user, api.get_recent_projects)]
+
+    def open_project(self, project, user=DEV):
+        run_as_user(user, lambda: api.record_project_view(project=project))
+
+    def test_opened_projects_are_listed_newest_first(self):
+        self.open_project(self.source)
+        self.open_project(self.target)
+        self.open_project(self.source)
+
+        self.assertEqual(self.recent(), [self.source, self.target])
+        self.assertEqual(self.recent(ASSIGNER), [])
+
+    def test_only_the_latest_are_kept(self):
+        projects = [
+            make_project(f"Rollout {i}", members=[(DEV, "Developer")], owner=PM).name
+            for i in range(api.RECENT_PROJECTS + 2)
+        ]
+        for i, project in enumerate(projects):
+            self.open_project(project)
+            # opened a minute apart, newest last, all before the next visit
+            frappe.db.set_value(
+                "View Log",
+                {"viewed_by": DEV, "reference_name": project},
+                "modified",
+                add_to_date(now_datetime(), minutes=i - len(projects)),
+                update_modified=False,
+            )
+
+        self.assertEqual(self.recent(), projects[::-1][: api.RECENT_PROJECTS])
+        self.assertEqual(
+            frappe.db.count(
+                "View Log", {"viewed_by": DEV, "reference_doctype": "Project"}
+            ),
+            api.RECENT_PROJECTS,
+        )
+
+    def test_projects_the_user_can_no_longer_read_or_that_are_gone_drop_out(self):
+        left = make_project("Al Noor - Audit", members=[(DEV, "Developer")], owner=PM)
+        gone = make_project("Al Noor - Trial", members=[(DEV, "Developer")], owner=PM)
+        for project in (self.source, left.name, gone.name):
+            self.open_project(project)
+
+        frappe.db.delete("Project User", {"parent": left.name, "user": DEV})
+        frappe.delete_doc("Project", gone.name, ignore_permissions=True, force=True)
+
+        self.assertEqual(self.recent(), [self.source])
+
+    def test_a_project_the_user_cannot_read_is_not_recorded(self):
+        with self.assertRaises(frappe.PermissionError):
+            self.open_project(self.source, user=OUTSIDER)
+
+
 class TestPausedTimerStaysPaused(TaskMovesCase):
     def test_a_paused_task_stays_paused_when_another_task_starts(self):
         first = self.task("Configure payroll")

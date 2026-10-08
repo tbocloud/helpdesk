@@ -38,6 +38,46 @@
           }}
         </p>
 
+        <!-- a shortcut back to what you were working on; nothing to show until you open one -->
+        <nav
+          v-if="recentProjects.length"
+          class="mt-4"
+          :aria-labelledby="`${listId}-recent`"
+        >
+          <h2
+            :id="`${listId}-recent`"
+            class="flex items-center gap-1.5 text-sm font-medium text-ink-gray-7"
+          >
+            <LucideHistory class="size-4 text-ink-gray-5" aria-hidden="true" />
+            {{ __("Recent") }}
+          </h2>
+          <ul
+            role="list"
+            class="-mx-1 mt-2 flex gap-2 overflow-x-auto px-1 pb-1"
+          >
+            <li
+              v-for="project in recentProjects"
+              :key="project.name"
+              class="shrink-0"
+            >
+              <router-link
+                :to="{
+                  name: 'TaskyProject',
+                  params: { projectId: project.name },
+                }"
+                class="flex w-48 flex-col rounded-lg border border-outline-gray-2 bg-surface-base px-3 py-2 transition-colors hover:border-outline-gray-3 hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+              >
+                <span class="truncate text-sm text-ink-gray-9">
+                  {{ project.project_name || project.name }}
+                </span>
+                <span class="truncate text-xs text-ink-gray-5">
+                  {{ recentSubtitle(project) }}
+                </span>
+              </router-link>
+            </li>
+          </ul>
+        </nav>
+
         <TaskyState
           v-if="projects.error && !projects.data"
           class="mt-6"
@@ -341,6 +381,7 @@ import LucideCalendarClock from "~icons/lucide/calendar-clock";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideFolderKanban from "~icons/lucide/folder-kanban";
 import LucideFolderOpen from "~icons/lucide/folder-open";
+import LucideHistory from "~icons/lucide/history";
 import LucidePlus from "~icons/lucide/plus";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideSearch from "~icons/lucide/search";
@@ -377,6 +418,27 @@ const projects = createResource({
 });
 
 const allProjects = computed<ProjectSummary[]>(() => projects.data ?? []);
+
+interface RecentProject {
+  name: string;
+  project_name?: string;
+  customer?: string | null;
+  status?: string;
+}
+
+// recorded by ProjectNav when a project opens; a failure just leaves the row out
+const recent = createResource({
+  url: "helpdesk.tasky.api.get_recent_projects",
+  auto: true,
+  onError() {},
+});
+const recentProjects = computed<RecentProject[]>(() => recent.data ?? []);
+
+function recentSubtitle(project: RecentProject) {
+  const where = project.customer || project.name;
+  const status = project.status || "Open";
+  return status === "Open" ? where : `${where} · ${__(status)}`;
+}
 const isLoading = computed(() => projects.loading && !projects.data);
 
 // inactive ones too, so projects still in one keep their section
@@ -587,6 +649,7 @@ watch(
 
 function reloadAll() {
   projects.reload();
+  recent.reload();
   departments.reload();
   Object.values(dashboards).forEach((d) => d.reload());
 }

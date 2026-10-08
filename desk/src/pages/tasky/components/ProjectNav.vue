@@ -111,6 +111,11 @@
   />
 </template>
 
+<script lang="ts">
+// the project last recorded as opened, so moving between its tabs doesn't record it again
+let lastRecorded = "";
+</script>
+
 <script setup lang="ts">
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import { __ } from "@/translation";
@@ -180,6 +185,19 @@ watch(
     if (id) detail.reload();
   },
   { immediate: true }
+);
+
+// once the project has loaded (so it can be read), it goes to the top of Recent
+// projects; Recent is a convenience, so a failure stays silent
+watch(
+  () => detail.data?.name as string | undefined,
+  (name) => {
+    if (!name || name === lastRecorded) return;
+    lastRecorded = name;
+    call("helpdesk.tasky.api.record_project_view", { project: name }).catch(
+      () => (lastRecorded = "")
+    );
+  }
 );
 
 // --- project lead: one developer per project, rotated by the project's manager ---

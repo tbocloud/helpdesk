@@ -92,6 +92,9 @@ week, kind, limit)` returns `{summaries, can_generate}`.
 from the tasks the viewer can see, so a plain member's card counts their own tasks).
 
 - **Header**: "New project" (project managers) is the page's one primary action; Refresh.
+- **Recent**: a row of links to the projects the user opened last (up to 8, newest first),
+  above the summary tiles; hidden until they open one, and left out if it fails to load. See
+  [Recent projects](#recent-projects).
 - **Summary tiles**, over open projects under the department filter: Open projects; Overdue
   tasks (summed from the cards' stats, with how many projects have any, or how many projects'
   stats didn't load); Ending in 14 days (open projects whose end date is today to 14 days out,
@@ -180,6 +183,15 @@ already the board's column move, so this one says where it moves to.
 - **UI:** "Move to project…" in the board card's menu and the task details' actions, shown when
   the task's `can_move` is true; `components/MoveTaskDialog.vue` picks the project with a
   Combobox (open projects the user can add tasks to) and explains what will be cleared.
+
+### Recent projects
+
+`record_project_view(project)` (POST) runs when a project page (any tab) loads, from
+`ProjectNav`; it records the visit in Frappe's View Log (one row per person and project, its
+`modified` the last visit), so the list follows the user across devices, and keeps only the
+latest 8. `get_recent_projects()` returns them newest first through `frappe.get_list`, so a
+project the user can no longer read drops out, and deleted projects take their View Log rows
+with them.
 
 ### The board timer
 
