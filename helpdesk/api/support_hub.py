@@ -18,6 +18,7 @@ def get_triage(ticket: str | int):
     """Get triage results for a ticket."""
     ticket = str(ticket)
     ticket_doc = frappe.get_doc("HD Ticket", ticket)
+    ticket_doc.check_permission("read")
     triage_data = (
         json.loads(ticket_doc.custom_triage_data or "{}")
         if ticket_doc.custom_triage_data

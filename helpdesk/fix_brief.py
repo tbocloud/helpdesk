@@ -208,8 +208,21 @@ def _done_section(ticket) -> str:
 
 
 def _reference(ticket) -> str:
-    """How a pull request names this ticket, as inline code."""
-    return "`" + f"Refs ticket #{ticket.name}" + "`"
+    """How a pull request names this work, as inline code.
+
+    GitHub sync links a pull request to its task by a TASK- reference, and the
+    task-reference check refuses a pull request without one, so the brief
+    names the ticket's task when it has one.
+    """
+    task = frappe.db.get_value(
+        "Task", {"hd_ticket": ticket.name}, "name", order_by="creation desc"
+    )
+    if task:
+        return "`" + f"Closes {task}" + "`"
+    return (
+        "`" + f"Refs ticket #{ticket.name}" + "` "
+        "(create a task from the ticket first, so the pull request can say `Closes TASK-...`)"
+    )
 
 
 def _table(rows) -> str:

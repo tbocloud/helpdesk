@@ -501,9 +501,21 @@ def get_custom_fields():
                 "no_copy": 1,
             },
             {
+                # the status push remembers what the customer's ticket was last
+                # told, so unchanged tickets are not rewritten every five minutes
+                "fieldname": "custom_client_push_hash",
+                "fieldtype": "Data",
+                "label": "Client Push Hash",
+                "insert_after": "custom_sync_state",
+                "hidden": 1,
+                "read_only": 1,
+                "no_copy": 1,
+            },
+            {
                 "fieldname": "custom_triage_status",
                 "fieldtype": "Select",
-                "options": "Pending\nCompleted\nFailed",
+                # triage.py writes every one of these through db.set_value
+                "options": "Pending\nIn Progress\nCompleted\nSkipped\nFailed",
                 "label": "Triage Status",
                 "insert_after": "custom_conv_state",
             },
