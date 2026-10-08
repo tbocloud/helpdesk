@@ -111,6 +111,40 @@ class TestStatusPushOnlyOnChange(FrappeTestCase):
         self.assertEqual(len(self.pushed_values(mcp)), 2)
 
 
+class TestOnePullAtATime(FrappeTestCase):
+    def setUp(self):
+        hold_commits(self)
+        self.addCleanup(frappe.set_user, "Administrator")
+        customer = create_customer("Pull Lock Co")
+        self.conn = make_support_connection(customer.name).name
+        self.lock = frappe.cache.make_key(f"hds_pull_lock:{self.conn}")
+        self.addCleanup(frappe.cache.delete, self.lock)
+
+    def test_a_second_pull_of_the_same_site_is_skipped(self):
+        frappe.cache.set(self.lock, 1, ex=60)
+        mcp = MagicMock()
+        with patch.object(ticket_puller, "MCPClient", return_value=mcp):
+            self.assertEqual(ticket_puller.pull_connection(self.conn), 0)
+        mcp.call_tool.assert_not_called()
+
+    def test_the_lock_is_released_after_a_pull(self):
+        mcp = MagicMock()
+        mcp.call_tool.return_value = ok([])
+        with patch.object(ticket_puller, "MCPClient", return_value=mcp):
+            ticket_puller.pull_connection(self.conn)
+        self.assertIsNone(frappe.cache.get(self.lock))
+
+    def test_a_ping_triggered_pull_runs_as_the_automation_user(self):
+        from helpdesk.automation import automation_user
+
+        frappe.set_user("Guest")
+        mcp = MagicMock()
+        mcp.call_tool.return_value = ok([])
+        with patch.object(ticket_puller, "MCPClient", return_value=mcp):
+            ticket_puller.pull_connection(self.conn)
+        self.assertEqual(frappe.session.user, automation_user())
+
+
 class TestConversationSync(FrappeTestCase):
     def setUp(self):
         hold_commits(self)
