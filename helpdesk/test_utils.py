@@ -2080,3 +2080,138 @@ def make_site_registry(
             **kwargs,
         }
     ).insert(ignore_permissions=True)
+
+
+def make_copilot_run(ticket: str, state: str = "Queued", **values):
+    """Creates an HDS Copilot Run for `ticket` directly in `state` (no events, no stage push)."""
+    return frappe.get_doc(
+        {
+            "doctype": "HDS Copilot Run",
+            "ticket": ticket,
+            "customer": frappe.db.get_value("HD Ticket", ticket, "customer"),
+            "kind": "investigate",
+            "state": state,
+            "queued_at": frappe.utils.now_datetime(),
+            **values,
+        }
+    ).insert(ignore_permissions=True)
+
+
+# what the fake worker reports for each root cause (demo text, not AI)
+FAKE_INVESTIGATIONS = {
+    "question": {
+        "summary": "A how-to question about printing a Delivery Note in two languages.",
+        "customer_message": "You can print the Delivery Note in Arabic and English: open it, choose Print, and pick the format \"Delivery Note (AR/EN)\". If it is not in the list, tell us and we will enable it for you.",
+        "proposal": {"type": "answer"},
+    },
+    "not_allowed_request": {
+        "summary": "The customer asks to delete a submitted invoice; ERPNext keeps submitted accounting documents.",
+        "customer_message": "A submitted invoice cannot be deleted, because the books must keep every posted entry. The right way is Cancel, then Amend: the cancelled invoice stays in the history and the amended copy carries the corrections.",
+        "proposal": {"type": "answer"},
+    },
+    "customer_mistake": {
+        "summary": "The total is right: a 10% discount was typed on the item row (Version history shows the user's change).",
+        "customer_message": "The total is correct for what was entered: the item row has a 10% discount, added on the day the invoice was made. If the discount was not meant, cancel and amend the invoice and remove it. We can add a warning when a discount is entered, if you like.",
+        "proposal": {"type": "answer"},
+    },
+    "wrong_setting": {
+        "summary": "The notification's email account is disabled, so invoice emails are never queued.",
+        "customer_message": "",
+        "proposal": {"type": "config", "text": "Enable outgoing on the email account used by the Sales Invoice notification"},
+    },
+    "bug": {
+        "summary": "The custom app's Sales Invoice validate hook reads tax_id[0] and fails when the customer has no tax ID.",
+        "customer_message": "",
+        "proposal": {"type": "code", "text": "Guard the tax_id read in sales_invoice.py and add a regression test"},
+    },
+    "data_damaged_by_bug": {
+        "summary": "Stock for HT-PUMP-200 is wrong since the update: the repost after the custom valuation hook was skipped.",
+        "customer_message": "",
+        "proposal": {"type": "code+data", "text": "Fix the hook, then repost the item's ledger entries since the update"},
+    },
+    "core_issue": {
+        "summary": "The Accounts Receivable report times out on a large party ledger: a known ERPNext limit, not the custom app.",
+        "customer_message": "",
+        "proposal": {"type": "handover", "text": "A person decides between a report workaround and an upstream fix"},
+    },
+    "unclear": {
+        "summary": "Not enough to go on: no page, time or record is named.",
+        "customer_message": "To find the cause we need a little more: which page is slow, at what time of day, and does it happen for one user or everyone?",
+        "proposal": {"type": "question"},
+        "questions": ["Which page is slow?", "At what time of day?", "One user or everyone?"],
+    },
+}
+
+
+def fake_investigation(category: str = "question", confidence: float = 0.9, **extra) -> dict:
+    """A worker result for `category`, as `submit_result` expects it."""
+    canned = FAKE_INVESTIGATIONS[category]
+    result = {
+        "kind": "investigation",
+        "root_cause_category": category,
+        "confidence": confidence,
+        "summary": canned["summary"],
+        "evidence": [{"type": "error_log", "ref": "Error Log/abc123", "note": "IndexError in sales_invoice.py"}],
+        "proposal": canned.get("proposal", {}),
+        "customer_message": canned.get("customer_message", ""),
+        "questions": canned.get("questions", []),
+        "cost": {"tokens": 1200, "usd": 0.01},
+    }
+    result.update(extra)
+    return result
+
+
+class FakeWorker:
+    """Plays the Copilot worker against the worker API, as the current user (who holds the role)."""
+
+    def __init__(self, worker_id: str = "fake-worker"):
+        self.worker_id = worker_id
+        self.run = None
+        self.token = None
+        self.context = None
+
+    def claim(self) -> dict:
+        from helpdesk.api.copilot_worker import claim_job
+
+        job = claim_job(self.worker_id)
+        if job:
+            self.run, self.token, self.context = job["run"], job["lease_token"], job["context"]
+        return job
+
+    def heartbeat(self, stage: str = "") -> dict:
+        from helpdesk.api.copilot_worker import heartbeat
+
+        return heartbeat(self.run, self.token, stage)
+
+    def events(self, events: list[dict]) -> dict:
+        from helpdesk.api.copilot_worker import post_events
+
+        return post_events(self.run, self.token, events)
+
+    def report(self, category: str = "question", confidence: float = 0.9, **extra) -> dict:
+        from helpdesk.api.copilot_worker import submit_result
+
+        return submit_result(self.run, self.token, fake_investigation(category, confidence, **extra))
+
+    def fail(self, reason: str = "the sandbox did not start") -> dict:
+        from helpdesk.api.copilot_worker import submit_result
+
+        return submit_result(self.run, self.token, {"kind": "failure", "reason": reason})
+
+
+def run_fake_worker(category: str = "question", abandon: bool = False, ticket: str | None = None) -> dict:
+    """`bench execute` demo: claims the oldest queued run (or starts one for `ticket`) and reports `category`.
+
+    With `abandon` it claims and stops, so the lease expiry can be watched.
+    """
+    from helpdesk.copilot.runs import AGENT, start_run
+
+    if ticket:
+        start_run(str(ticket), actor=AGENT)
+    worker = FakeWorker()
+    if not worker.claim():
+        return {"claimed": None}
+    if abandon:
+        return {"claimed": worker.run, "abandoned": True}
+    worker.events([{"seq": 1, "type": "tool_call", "payload": {"tool": "get_error_log", "ms": 120}}])
+    return {"claimed": worker.run, **worker.report(category)}

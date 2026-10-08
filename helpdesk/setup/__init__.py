@@ -5,6 +5,7 @@ import os
 import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
+from helpdesk.api.copilot_worker import ensure_role as ensure_worker_role
 from helpdesk.content_team import ensure_role as ensure_content_team_role
 from helpdesk.setup.install import get_custom_fields
 
@@ -16,6 +17,7 @@ def after_migrate():
     create_custom_fields(get_custom_fields())
     _create_form_script()
     ensure_content_team_role()
+    ensure_worker_role()
 
 
 def _create_form_script():
