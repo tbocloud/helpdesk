@@ -127,6 +127,7 @@
               <CustomerProjectsTab
                 v-else-if="tab.hash === 'projects'"
                 :projects="projects"
+                :total="projectCount.data ?? undefined"
               />
             </div>
           </template>
@@ -174,6 +175,7 @@ import {
   Breadcrumbs,
   Button,
   createListResource,
+  createResource,
   dayjs,
   Dropdown,
   Tabs,
@@ -204,7 +206,9 @@ const { ticketsListResource, ticketsCountResource } = getTicketListResource();
 const { doc: customer, handleDelete } = useCustomer(props.id);
 provide(CustomerResourceSymbol, customer);
 
-// every project of this customer the viewer may see; the tab orders them
+// the customer's projects the viewer may see, the latest PROJECT_LIMIT of them;
+// the tab orders them and says when there are more
+const PROJECT_LIMIT = 100;
 const projects = createListResource({
   doctype: "Project",
   filters: { customer: props.id },
@@ -216,7 +220,13 @@ const projects = createListResource({
     "project_lead",
   ],
   orderBy: "modified desc",
-  pageLength: 100,
+  pageLength: PROJECT_LIMIT,
+  auto: true,
+});
+// the real total, permission-aware like the list
+const projectCount = createResource({
+  url: "frappe.desk.reportview.get_count",
+  makeParams: () => ({ doctype: "Project", filters: { customer: props.id } }),
   auto: true,
 });
 
@@ -255,7 +265,11 @@ const tabs = computed(() => [
   {
     label: __("Projects"),
     hash: "projects",
-    count: projects.data?.length ?? 0,
+    count:
+      projectCount.data ??
+      (projects.data && projects.hasNextPage
+        ? `${PROJECT_LIMIT}+`
+        : projects.data?.length ?? 0),
     icon: markRaw(LucideFolderKanban),
   },
 ]);

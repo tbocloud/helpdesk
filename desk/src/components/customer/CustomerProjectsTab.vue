@@ -46,8 +46,15 @@
       "
     />
 
+    <p
+      v-if="moreNote && sorted.length"
+      class="mb-3 text-p-sm tabular-nums text-ink-gray-6"
+      role="status"
+    >
+      {{ moreNote }}
+    </p>
     <ul
-      v-else
+      v-if="sorted.length"
       role="list"
       class="overflow-hidden rounded-lg border border-outline-gray-2"
     >
@@ -129,9 +136,28 @@ const props = defineProps<{
     data?: ProjectRow[] | null;
     loading: boolean;
     error?: unknown;
+    hasNextPage?: boolean;
     reload: () => void;
   };
+  /** every project the viewer may see, when known; the list holds only the latest */
+  total?: number;
 }>();
+
+const moreNote = computed(() => {
+  const shown = props.projects.data?.length ?? 0;
+  if (props.total !== undefined && props.total > shown)
+    return __(
+      "Showing the {0} most recently updated of {1}. Open in Projects to see them all.",
+      String(shown),
+      String(props.total)
+    );
+  if (props.total === undefined && props.projects.hasNextPage && shown)
+    return __(
+      "Showing the {0} most recently updated; there are more. Open in Projects to see them all.",
+      String(shown)
+    );
+  return "";
+});
 
 const customer = inject(CustomerResourceSymbol)!;
 const { getUser } = useUserStore();

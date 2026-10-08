@@ -66,6 +66,7 @@ class TestDirectory(FrappeTestCase):
         self.assertEqual(row["name"], CUSTOMER)
         self.assertEqual(row["open_tickets"], 2)
         self.assertEqual(row["active_projects"], 2)
+        self.assertEqual(row["connection"]["status"], "Connected")
 
     def test_projects_the_agent_cannot_see_are_not_counted(self):
         project = make_project(f"{CUSTOMER} Hidden").name
@@ -75,8 +76,8 @@ class TestDirectory(FrappeTestCase):
             AGENT, lambda: directory.get_customer_directory(search="Directory Traders")
         )
 
+        self.assertEqual(result["rows"][0]["name"], CUSTOMER)
         self.assertEqual(result["rows"][0]["active_projects"], 0)
-        self.assertEqual(row["connection"]["status"], "Connected")
 
     def test_customer_search_matches_domain(self):
         result = run_as_user(
@@ -113,8 +114,11 @@ class TestDirectory(FrappeTestCase):
             AGENT, lambda: directory.get_contact_directory(search="directory.example")
         )
 
+        # creating the users may add contacts of their own for the same emails,
+        # so look up the two this test made rather than counting rows
         rows = {r["name"]: r for r in result["rows"]}
-        self.assertEqual(result["total"], 2)
+        self.assertIn(self.contact, rows)
+        self.assertIn(self.invited, rows)
         self.assertEqual(rows[self.contact]["customers"], [CUSTOMER])
         self.assertEqual(rows[self.contact]["open_tickets"], 1)
         self.assertEqual(rows[self.contact]["portal"], "active")

@@ -36,6 +36,8 @@ and `get_contact_directory(search, sort, start)`, agents only.
 
 - **One page per call**: 50 rows plus `has_more` and `total`; "Show more" appends the next
   page. Search and sort live in the URL as `q` and `sort` (`name`, the default, or `newest`).
+  Each request carries its search, sort, offset and a generation number, and only the latest
+  request's answer is used, so a slow "Show more" for an old search can't mix into new results.
 - **Counts respect permissions**: every read is a `frappe.get_list`, so open tickets and
   projects only count what the viewer may see (a plain agent sees the projects they are on).
 - **Customer row**: logo, name, domain; Open tickets (Open and Paused), Active projects (not
@@ -81,6 +83,9 @@ a view); search covers name, domain, email and phone instead.
   remove), Projects (`components/customer/CustomerProjectsTab.vue`: the customer's projects the
   viewer may see, open first, with the end-date note from `projectEndNote()` in
   `pages/tasky/taskMeta.ts`, which the Projects page cards use too, and "Open in Projects").
+  It loads the 100 most recently updated; the tab count is the real total from
+  `frappe.desk.reportview.get_count` ("100+" until that answers), and when there are more the
+  tab says so and points to Projects.
 
 ## Contact page (`/contacts/:id`)
 
