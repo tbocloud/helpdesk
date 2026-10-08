@@ -679,10 +679,13 @@ def create_task_from_ticket(
     due_date: str | None = None,
     is_key: bool = False,
     estimated_hours: float | str | None = None,
+    pause_ticket: bool = True,
 ) -> dict:
     """Turn a ticket that needs project work into a task; the ticket waits until it's done.
 
     An approved customization estimate fills in the due date and hours when they aren't given.
+    With pause_ticket off the ticket stays as it is, so its SLA keeps running while
+    the task is worked on (Copilot runs track their own progress on the ticket).
     """
     from helpdesk.tasky.api import (
         _assign_user,
@@ -742,7 +745,7 @@ def create_task_from_ticket(
     _estimate_if_undated(task)
     task.reload()
 
-    if frappe.db.exists("HD Ticket Status", WAITING_ON_TASK):
+    if pause_ticket and frappe.db.exists("HD Ticket Status", WAITING_ON_TASK):
         ticket_doc.status = WAITING_ON_TASK
         ticket_doc.save()
     frappe.get_doc(

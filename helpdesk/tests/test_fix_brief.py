@@ -62,3 +62,21 @@ class TestFixBrief(FrappeTestCase):
         outsider = create_user("fix-brief-outsider@example.com").name
         with self.assertRaises(frappe.PermissionError):
             run_as_user(outsider, lambda: get_fix_brief(ticket.name))
+
+
+class TestBriefTaskReference(FrappeTestCase):
+    def setUp(self):
+        self.addCleanup(frappe.db.rollback)
+
+    def test_brief_names_the_ticket_task_so_a_pull_request_links(self):
+        from helpdesk.test_utils import make_project, make_task
+
+        ticket = make_ticket(subject="Report shows wrong totals")
+        project = make_project("Brief Reference Project").name
+        task = make_task(project, "Fix the totals", hd_ticket=ticket.name)
+
+        markdown = get_fix_brief(ticket.name)["markdown"]
+
+        self.assertIn(f"Closes {task.name}", markdown)
+        self.assertNotIn("Refs ticket #", markdown)
+

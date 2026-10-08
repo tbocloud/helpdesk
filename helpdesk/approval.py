@@ -81,7 +81,7 @@ def approve_actions(action_request_name, approved_indices=None):
             action_request_name: HDS Support Action Request name
             approved_indices: list of row indices to approve (0-based). If None, approve all.
     """
-    ar = frappe.get_doc("HDS Support Action Request", action_request_name)
+    ar = _lock_action_request(action_request_name)
 
     if ar.status not in ("Pending Approval",):
         frappe.throw(_("Action request is not pending approval"))
@@ -107,9 +107,17 @@ def approve_actions(action_request_name, approved_indices=None):
     return ar.status
 
 
+def _lock_action_request(action_request_name):
+    """Load the request under a row lock, so two decisions cannot both pass the status check."""
+    frappe.db.get_value(
+        "HDS Support Action Request", action_request_name, "status", for_update=True
+    )
+    return frappe.get_doc("HDS Support Action Request", action_request_name)
+
+
 def reject_actions(action_request_name):
     """Reject all actions in an action request."""
-    ar = frappe.get_doc("HDS Support Action Request", action_request_name)
+    ar = _lock_action_request(action_request_name)
 
     if ar.status not in ("Pending Approval",):
         frappe.throw(_("Action request is not pending approval"))
@@ -131,7 +139,7 @@ def execute_approved_actions(action_request_name):
     Returns:
             dict with results per action
     """
-    ar = frappe.get_doc("HDS Support Action Request", action_request_name)
+    ar = _lock_action_request(action_request_name)
 
     if ar.status not in ("Approved", "Partially Approved"):
         frappe.throw(_("Action request is not approved"))
@@ -140,6 +148,11 @@ def execute_approved_actions(action_request_name):
     session = frappe.get_doc("HDS AI Support Session", ar.session)
     if not session.connection:
         frappe.throw(_("No connection found for this session"))
+
+    # Claim the request before the first remote write. MCPClient commits
+    # after every call it audits, which would release the row lock above
+    # mid-way; the persisted status keeps a second run out.
+    ar.db_set("status", "Executing", commit=True)
 
     mcp = MCPClient(session.connection)
 
