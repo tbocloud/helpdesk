@@ -1,3 +1,4 @@
+import type { Tone } from "@/components/tone";
 import { __ } from "@/translation";
 import type {
   DocumentResource,
@@ -17,8 +18,41 @@ import {
   toast,
 } from "frappe-ui";
 import { useOnboarding } from "frappe-ui/frappe";
-import { computed, ComputedRef, h, markRaw, reactive, ref, watch } from "vue";
+import {
+  computed,
+  ComputedRef,
+  h,
+  markRaw,
+  reactive,
+  ref,
+  watch,
+  type Component,
+} from "vue";
 import { useRouter } from "vue-router";
+import LucideCircleCheck from "~icons/lucide/circle-check";
+import LucideClock from "~icons/lucide/clock";
+import LucideMail from "~icons/lucide/mail";
+
+/** A contact's helpdesk portal access, as helpdesk.api.directory sends it. */
+export type PortalStatus = "active" | "invited" | "expired";
+
+/** TaskyBadge props per portal status, shared by the list and the contact page. */
+export const PORTAL_BADGE: Record<
+  PortalStatus,
+  { label: string; tone: Tone; icon: Component }
+> = {
+  active: {
+    label: __("Portal access"),
+    tone: "success",
+    icon: markRaw(LucideCircleCheck),
+  },
+  invited: { label: __("Invited"), tone: "info", icon: markRaw(LucideMail) },
+  expired: {
+    label: __("Invite expired"),
+    tone: "warning",
+    icon: markRaw(LucideClock),
+  },
+};
 
 export type TextInputTypes =
   | "date"

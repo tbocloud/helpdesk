@@ -10,8 +10,12 @@ Shared building blocks, in `desk/src/components/`:
 - **`StatTile`**: the one stat tile. Static, a link (`to`, shows a chevron) or a toggle
   (`pressed`, a button with `aria-pressed`). `loading` shows a skeleton; `iconTone` and
   `valueTone` colour the icon or number only when that carries meaning; `compact` tightens it
-  for a strip above a list. Used by Overview, Team, the By project view, Performance and the
-  tickets summary strip ([tickets-and-calendar-pages.md](tickets-and-calendar-pages.md)).
+  for a strip above a list. Used by Overview, Team, the By project view, Performance, the
+  tickets summary strip ([tickets-and-calendar-pages.md](tickets-and-calendar-pages.md)), and
+  the customer report and the customer and contact pages ([customer-pages.md](customer-pages.md)).
+- **`DirectoryList`**: the Customers and Contacts list (link rows, bulk delete, paging and
+  every state), with `useDirectory()` keeping search and sort in the URL
+  ([customer-pages.md](customer-pages.md)).
 - **`SectionCard`**: the one titled card (title, optional count, description, header actions
   slot, "See all" link). Used by Home, Overview and Team.
 - **`TaskyState`**: the one empty, error and no-access message (icon, title, message, actions).

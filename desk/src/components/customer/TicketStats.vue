@@ -1,107 +1,153 @@
 <template>
-  <div class="p-5 pt-0 pb-2">
-    <div
-      v-if="!analytics.loading && analytics.data"
-      class="grid grid-cols-4 gap-2.5 min-h-[130px]"
-    >
-      <div
-        v-for="(chartData, key) in analytics.data"
-        class="h-full w-full rounded border border-outline-gray-1"
-      >
-        <BarChartCard
-          v-if="key === 'feedback_received'"
-          :title="__('Avg. Feedback Received')"
-          :data="chartData"
-          bar-color="#E79913"
-          measure="average"
-          :timelineFilter="false"
-          :dt="props.dt"
-          :dn="props.dn"
-          orientation="horizontal"
-          :negativeIsBetter="false"
-        >
-          <template #text="{ text }">
-            <div class="flex flex-col gap-2">
-              <div class="flex items-center gap-2">
-                <LucideStar class="size-4 fill-ink-amber-5 text-ink-amber-5" />
-                <span class="text-3xl-medium text-ink-gray-8">
-                  {{ text }}
-                </span>
-              </div>
-              <span class="text-sm text-ink-gray-5">
-                {{ (chartData as any).total ?? 0 }} {{ __("reviews") }}
-              </span>
-            </div>
-          </template>
-        </BarChartCard>
-        <BarChartCard
-          v-if="key === 'sla_violations'"
-          :title="__('Failed SLAs')"
-          :data="chartData"
-          api-url="helpdesk.api.ticket_stats.get_sla_violations"
-          :dt="props.dt"
-          :dn="props.dn"
-          orientation="horizontal"
-          bar-color="#E03636"
-        />
-        <LineChartCard
-          v-if="key === 'avg_first_response_time'"
-          :title="__('Avg. First Response Time')"
-          :data="chartData"
-          :chart-color="{
-            lineColor: '#E03636',
-            gradientColor: { start: '#ee9d9f', end: 'rgba(251,232,233,0)' },
-          }"
-          api-url="helpdesk.api.ticket_stats.get_avg_first_response_time"
-          :dt="props.dt"
-          :dn="props.dn"
-          orientation="horizontal"
-        />
-        <LineChartCard
-          v-if="key === 'avg_resolution_time'"
-          :title="__('Avg. Resolution Time')"
-          :data="chartData"
-          :chart-color="{
-            lineColor: '#7263E8',
-            gradientColor: { start: '#a093ee', end: 'rgba(239, 237, 252,0)' },
-          }"
-          api-url="helpdesk.api.ticket_stats.get_avg_resolution_time"
-          :dt="props.dt"
-          :dn="props.dn"
-          orientation="horizontal"
-        />
-      </div>
+  <!-- ticket figures for one customer or contact, over a chosen period -->
+  <section class="px-5 pb-4" :aria-labelledby="headingId">
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <h2 :id="headingId" class="text-base-medium text-ink-gray-9">
+        {{ __("Support figures") }}
+      </h2>
+      <FormControl
+        v-model="period"
+        type="select"
+        class="w-36"
+        :options="PERIODS"
+        :aria-label="__('Period for the figures')"
+      />
     </div>
-    <SkeletonLoader
-      v-else-if="analytics.loading"
-      :variants="['number-cards']"
-      :loading="true"
-      orientation="horizontal"
-      :number-cards-count="4"
-      number-cards-grid-class="grid grid-cols-4 gap-2.5"
-      height="130px"
-    />
-  </div>
+
+    <div
+      v-if="stats.error && !stats.data"
+      class="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-outline-gray-2 px-4 py-3 text-p-sm text-ink-gray-6"
+      role="alert"
+    >
+      {{ errorText(stats.error, __("Couldn't load the ticket figures.")) }}
+      <Button size="sm" :label="__('Retry')" @click="stats.reload()" />
+    </div>
+
+    <div v-else class="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <StatTile
+        compact
+        :label="__('Avg. first response')"
+        :value="duration(data?.avg_first_response_time)"
+        :sub="change(data?.avg_first_response_time)"
+        :icon="LucideReply"
+        :loading="loading"
+      />
+      <StatTile
+        compact
+        :label="__('Avg. resolution')"
+        :value="duration(data?.avg_resolution_time)"
+        :sub="change(data?.avg_resolution_time)"
+        :icon="LucideCircleCheckBig"
+        :loading="loading"
+      />
+      <StatTile
+        compact
+        :label="__('SLAs failed')"
+        :value="data?.sla_violations.total ?? '–'"
+        :sub="change(data?.sla_violations)"
+        :icon="LucideAlarmClockOff"
+        :icon-tone="data?.sla_violations.total ? 'danger' : 'neutral'"
+        :value-tone="data?.sla_violations.total ? 'danger' : 'neutral'"
+        :loading="loading"
+      />
+      <StatTile
+        compact
+        :label="__('Rating')"
+        :value="rating"
+        :sub="ratingSub"
+        :icon="LucideStar"
+        :loading="loading"
+      />
+    </div>
+  </section>
 </template>
 
 <script setup lang="ts">
-import { createResource } from "frappe-ui";
-import BarChartCard from "../BarChartCard.vue";
-import LineChartCard from "../LineChartCard.vue";
-import SkeletonLoader from "../SkeletonLoader.vue";
+import StatTile from "@/components/StatTile.vue";
+import { __ } from "@/translation";
+import { errorText, formatTime } from "@/utils";
+import { Button, createResource, FormControl } from "frappe-ui";
+import { computed, ref, useId, watch } from "vue";
+import LucideAlarmClockOff from "~icons/lucide/alarm-clock-off";
+import LucideCircleCheckBig from "~icons/lucide/circle-check-big";
+import LucideReply from "~icons/lucide/reply";
+import LucideStar from "~icons/lucide/star";
+
+interface Metric {
+  /** null: nothing in the previous period to compare with */
+  percentage_change: number | null;
+  average?: number;
+  total?: number;
+}
+
+interface Stats {
+  feedback_received: { average: number; total: number };
+  sla_violations: Metric & { total: number };
+  avg_first_response_time: Metric & { average: number };
+  avg_resolution_time: Metric & { average: number };
+}
 
 const props = defineProps<{
   dt: "HD Customer" | "Contact";
   dn: string;
 }>();
 
-const analytics = createResource({
+// values are helpdesk.api.ticket_stats' period keys, which count days back from today
+const PERIODS = [
+  { value: "last week", label: __("Last 7 days"), days: 7 },
+  { value: "last month", label: __("Last 30 days"), days: 30 },
+  { value: "last 3 months", label: __("Last 90 days"), days: 90 },
+];
+
+const headingId = `ticket-stats-${useId()}`;
+const period = ref("last month");
+
+const stats = createResource({
   url: "helpdesk.api.ticket_stats.get_ticket_stats",
   method: "GET",
-  makeParams: () => ({
-    dt: props.dt,
-    dn: props.dn,
-  }),
+  makeParams: () => ({ dt: props.dt, dn: props.dn, period: period.value }),
   auto: true,
+});
+watch(period, () => stats.reload());
+
+const data = computed<Stats | null>(() => stats.data ?? null);
+const loading = computed(() => stats.loading && !stats.data);
+const days = computed(
+  () => PERIODS.find((p) => p.value === period.value)?.days ?? 30
+);
+
+function duration(metric?: Metric) {
+  if (!metric?.average) return "–";
+  return (
+    formatTime(metric.average, {
+      day: true,
+      hour: true,
+      minute: true,
+      maxUnits: 2,
+    }) || __("Under 1m")
+  );
+}
+
+/** How this period compares with the one before it, in words; no colour. */
+function change(metric?: Metric) {
+  if (!metric) return undefined;
+  const pc = metric.percentage_change;
+  if (pc === null) return __("None in the {0} days before", String(days.value));
+  if (pc === 0) return __("Same as the {0} days before", String(days.value));
+  const value = `${pc > 0 ? "+" : ""}${Math.round(pc)}%`;
+  return __("{0} on the {1} days before", value, String(days.value));
+}
+
+const rating = computed(() => {
+  const feedback = data.value?.feedback_received;
+  return feedback?.total ? `${feedback.average}/5` : "–";
+});
+
+const ratingSub = computed(() => {
+  const total = data.value?.feedback_received.total ?? 0;
+  if (!total) return __("No ratings yet");
+  return total === 1
+    ? __("1 rating, all time")
+    : __("{0} ratings, all time", String(total));
 });
 </script>

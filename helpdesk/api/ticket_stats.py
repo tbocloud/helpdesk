@@ -90,16 +90,6 @@ def get_feedback_received(
     }
 
 
-@frappe.whitelist()
-@agent_only
-def get_sla_violations(
-    dt: str,
-    dn: str,
-    period: str = "last month",
-) -> dict:
-    return _get_sla_violations(_resolve_scope(dt), dn, period)
-
-
 def _get_sla_violations(
     scope: Scope,
     value: str,
@@ -203,26 +193,6 @@ def _get_sla_violations(
         "total": current_total,
         "percentage_change": calculate_percentage_change(current_total, previous_total),
     }
-
-
-@frappe.whitelist()
-@agent_only
-def get_avg_first_response_time(
-    dt: str,
-    dn: str,
-    period: str = "last month",
-) -> dict:
-    return get_avg_time_metric(period, "first_response_time", _resolve_scope(dt), dn)
-
-
-@frappe.whitelist()
-@agent_only
-def get_avg_resolution_time(
-    dt: str,
-    dn: str,
-    period: str = "last month",
-) -> dict:
-    return get_avg_time_metric(period, "resolution_time", _resolve_scope(dt), dn)
 
 
 @frappe.whitelist()

@@ -103,6 +103,24 @@ class TestCustomerReport(FrappeTestCase):
         self.assertIn(f"{CUSTOMER},", csv_text)
         self.assertIn("Total,", csv_text)
 
+    def test_one_customer(self):
+        create_customer("Other Report Customer")
+        self.ticket("Ours", opening_date="2026-08-05")
+        theirs = make_ticket(subject="Theirs", customer="Other Report Customer").name
+        frappe.db.set_value("HD Ticket", theirs, "opening_date", "2026-08-06")
+        frappe.set_user(MANAGER[0])
+
+        report = customer_report.get_customer_report(MONTH, CUSTOMER)
+        customer_report.download_customer_report(MONTH, CUSTOMER)
+
+        self.assertEqual([r["customer"] for r in report["customers"]], [CUSTOMER])
+        self.assertEqual(report["totals"]["tickets_opened"], 1)
+        self.assertEqual(
+            frappe.response["filename"],
+            f"customer-report-{MONTH}-report-traders-llc.csv",
+        )
+        self.assertNotIn("Other Report Customer", frappe.response["filecontent"])
+
     def test_only_managers_can_see_it(self):
         frappe.set_user(AGENT[0])
         with self.assertRaises(frappe.PermissionError):

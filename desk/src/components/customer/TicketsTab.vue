@@ -1,16 +1,17 @@
 <template>
-  <div class="flex flex-col focus-visible:border-none" tabindex="0">
+  <div class="flex flex-col">
     <!-- Filter bar: sticks below the tablist while the page scrolls -->
     <div
       class="sticky top-[46px] z-[5] -mt-5 flex items-center justify-between gap-3 bg-surface-base pt-5 pb-3"
     >
       <FormControl
         v-model="search"
-        :placeholder="__('Search by ID or Subject')"
+        :placeholder="__('Search by ID or subject')"
+        :aria-label="__('Search tickets')"
         class="w-full md:w-56"
       >
         <template #prefix>
-          <LucideSearch class="h-4 w-4 text-ink-gray-4" />
+          <LucideSearch class="size-4 text-ink-gray-5" aria-hidden="true" />
         </template>
       </FormControl>
 
@@ -28,7 +29,7 @@
     </div>
 
     <!-- Table -->
-    <div class="min-h-0 flex flex-1 flex-col" tabindex="0">
+    <div class="flex min-h-0 flex-1 flex-col">
       <!-- Loading -->
       <template
         v-if="ticketsListResource.loading && !ticketsListResource.data?.length"
@@ -39,19 +40,29 @@
           <LoadingIndicator :scale="10" />
         </div>
       </template>
-      <!-- Empty -->
-      <div
-        v-else-if="!Boolean(ticketsListResource.data?.length)"
-        class="flex flex-col items-center justify-center gap-3 py-16 text-center h-full flex-1"
+      <TaskyState
+        v-else-if="ticketsListResource.error && !ticketsListResource.data"
+        :icon="LucideCircleAlert"
+        :title="__('Couldn\'t load the tickets')"
+        :message="errorText(ticketsListResource.error, __('Try again.'))"
+        error
       >
-        <LucideTicket class="h-10 w-10 text-ink-gray-4" />
-        <div>
-          <!-- make font larger -->
-          <p class="text-lg-medium text-ink-gray-7">
-            {{ __("No tickets found") }}
-          </p>
-        </div>
-      </div>
+        <Button :label="__('Retry')" @click="ticketsListResource.reload()" />
+      </TaskyState>
+      <TaskyState
+        v-else-if="!ticketsListResource.data?.length && isFiltered"
+        :icon="LucideSearchX"
+        :title="__('No tickets match these filters')"
+        :message="__('Try another search, or clear the filters.')"
+      >
+        <Button :label="__('Clear filters')" @click="clearFilters" />
+      </TaskyState>
+      <TaskyState
+        v-else-if="!ticketsListResource.data?.length"
+        :icon="LucideTicket"
+        :title="__('No tickets yet')"
+        :message="__('Tickets raised by or for them show up here.')"
+      />
       <!-- Main Content -->
       <template v-else>
         <!-- Headers -->
@@ -61,24 +72,30 @@
           class="sticky top-[106px] z-[5] grid items-center border-b bg-surface-base px-1 py-2 text-xs-medium text-ink-gray-5"
           :style="gridTemplateStyle"
         >
-          <div
+          <component
+            :is="col.sortable ? NativeButton : 'div'"
             v-for="col in columns"
             :key="col.key"
-            class="group flex items-center gap-1 select-none text-ink-gray-5"
+            v-bind="col.sortable ? { type: 'button' } : {}"
+            class="group flex select-none items-center gap-1 rounded text-left text-ink-gray-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
             :class="col.sortable ? 'hover:text-ink-gray-8' : ''"
+            :aria-label="
+              col.sortable ? __('Sort by {0}', col.label) : undefined
+            "
             @click="handleSortClick(col)"
           >
             {{ col.label }}
             <LucideArrowUpDown
               v-if="col.sortable"
-              class="h-3 w-3 transition-opacity"
+              class="size-3 transition-opacity"
               :class="
                 sort.field === col.key
-                  ? 'opacity-100 text-ink-gray-7'
-                  : 'opacity-0 group-hover:opacity-60'
+                  ? 'text-ink-gray-7 opacity-100'
+                  : 'opacity-0 group-hover:opacity-60 group-focus-visible:opacity-60'
               "
+              aria-hidden="true"
             />
-          </div>
+          </component>
         </div>
         <!-- Rows -->
         <div class="pb-6" :class="isMobileView ? '' : 'overflow-x-hidden'">
@@ -86,13 +103,20 @@
             v-for="(ticket, i) in ticketsListResource.data"
             :key="ticket.name"
           >
-            <div
-              class="grid items-center py-3 px-1 text-sm text-ink-gray-8 cursor-pointer hover:bg-surface-gray-1 rounded transition-colors"
+            <!-- opens in a new tab, so this page stays put -->
+            <RouterLink
+              :to="{
+                name: 'TicketAgent',
+                params: { ticketId: String(ticket.name) },
+              }"
+              target="_blank"
+              class="grid items-center rounded px-1 py-3 text-sm text-ink-gray-8 transition-colors hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-outline-gray-4"
               :style="gridTemplateStyle"
-              @click="goToTicket(ticket.name)"
             >
               <!-- ID -->
-              <div class="text-ink-gray-6 font-base">{{ ticket.name }}</div>
+              <div class="font-mono tabular-nums text-ink-gray-6">
+                {{ ticket.name }}
+              </div>
 
               <!-- Subject -->
               <div class="truncate font-medium max-w-[90%]">
@@ -129,7 +153,7 @@
               >
                 <MultipleAvatar :avatars="ticket._assign" size="xs" />
               </div>
-            </div>
+            </RouterLink>
             <hr class="mx-1" v-if="i !== ticketRowsCount - 1" />
           </template>
           <!-- Load More -->
@@ -155,6 +179,7 @@
 </template>
 
 <script setup lang="ts">
+import NativeButton from "@/components/NativeButton";
 import Link from "@/components/frappe-ui/Link.vue";
 import { IndicatorIcon } from "@/components/icons";
 import { useScreenSize } from "@/composables/screen";
@@ -163,10 +188,15 @@ import { __ } from "@/translation";
 import type { ListResource, Resource } from "@/types";
 import type { HDTicket } from "@/types/doctypes";
 import { watchDebounced } from "@vueuse/core";
-import { dayjsLocal, FormControl, LoadingIndicator } from "frappe-ui";
+import TaskyState from "@/components/TaskyState.vue";
+import { errorText } from "@/utils";
+import { Button, dayjsLocal, FormControl, LoadingIndicator } from "frappe-ui";
 import { computed, onBeforeUnmount, reactive, ref } from "vue";
-import { useRouter } from "vue-router";
+import { RouterLink } from "vue-router";
+import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideSearch from "~icons/lucide/search";
+import LucideSearchX from "~icons/lucide/search-x";
+import LucideTicket from "~icons/lucide/ticket";
 import MultipleAvatar from "../MultipleAvatar.vue";
 
 type TicketFilterField = {
@@ -185,7 +215,6 @@ const props = defineProps<{
 
 const { ticketsListResource, ticketsCountResource, baseFilter } = props;
 
-const router = useRouter();
 const { isMobileView } = useScreenSize();
 
 const search = ref("");
@@ -271,13 +300,14 @@ const ticketRowsCount = computed(() => ticketsListResource.data?.length ?? 0);
 
 const { getStatus } = useTicketStatusStore();
 
-const goToTicket = (ticket: string) => {
-  const route = router.resolve({
-    name: "TicketAgent",
-    params: { ticketId: String(ticket) },
-  });
-  window.open(route.href, "_blank");
-};
+const isFiltered = computed(
+  () => !!search.value.trim() || Object.values(filters).some(Boolean)
+);
+
+function clearFilters() {
+  search.value = "";
+  for (const key of Object.keys(filters)) filters[key] = "";
+}
 
 watchDebounced(
   [search, () => sort.field, () => sort.order, () => ({ ...filters })],

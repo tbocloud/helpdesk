@@ -262,7 +262,7 @@ import LucidePaperclip from "~icons/lucide/paperclip";
 import LucidePencil from "~icons/lucide/pencil";
 import LucidePlus from "~icons/lucide/plus";
 import LucideKanban from "~icons/lucide/square-kanban";
-import { daysUntil } from "../taskMeta";
+import { projectEndNote } from "../taskMeta";
 import TaskStatusBadge from "./TaskStatusBadge.vue";
 
 export interface ProjectSummary {
@@ -317,8 +317,6 @@ const headingId = `project-card-${useId()}`;
 const phasesId = `project-phases-${useId()}`;
 const showPhases = ref(false);
 
-const isOpen = computed(() => (props.project.status || "Open") === "Open");
-
 const dateRange = computed(() => {
   const p = props.project;
   const fmt = (d: string) => dayjs(d).format("D MMM YYYY");
@@ -329,28 +327,7 @@ const dateRange = computed(() => {
   return __("No dates set");
 });
 
-// only an open project's end date says anything about what's left
-const endNote = computed(() => {
-  const end = props.project.expected_end_date;
-  if (!end || !isOpen.value) return null;
-  const days = daysUntil(end);
-  if (days < 0)
-    return {
-      late: true,
-      text:
-        days === -1
-          ? __("1 day past end")
-          : __("{0} days past end", String(-days)),
-    };
-  if (days === 0) return { late: false, text: __("Ends today") };
-  if (days <= 14)
-    return {
-      late: false,
-      text:
-        days === 1 ? __("Ends tomorrow") : __("Ends in {0} days", String(days)),
-    };
-  return null;
-});
+const endNote = computed(() => projectEndNote(props.project));
 
 const barTone = computed<Tone>(() =>
   props.project.status === "Completed" ? "success" : "neutral"

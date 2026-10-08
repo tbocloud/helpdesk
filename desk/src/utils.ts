@@ -889,25 +889,6 @@ export function shortDuration(target: string | Date): string {
   return `${Math.floor(seconds / MINUTE)}m`;
 }
 
-export function buildPercentageChange(
-  value: number | null,
-  negativeIsBetter: boolean = true
-) {
-  // No change (or no comparison): stay neutral — never green/red, no up/down arrow.
-  if (value === null || value === undefined || value === 0) {
-    return { icon: "", value: "0", color: "text-ink-gray-5" };
-  }
-  const isPositive = value > 0;
-  const isGood = negativeIsBetter ? !isPositive : isPositive;
-  // Cap the magnitude at 100% so large swings (e.g. +3186%) stay readable.
-  const capped = Math.min(Math.abs(value), 100);
-  return {
-    icon: isPositive ? "lucide-arrow-up-right" : "lucide-arrow-down-left",
-    value: isPositive ? `+${capped}` : `-${capped}`,
-    color: isGood ? "text-ink-green-6" : "text-ink-red-6",
-  };
-}
-
 export function hasPermission() {
   const authStore = useAuthStore();
   return authStore.isAdmin || authStore.isManager;

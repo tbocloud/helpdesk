@@ -7,10 +7,36 @@
         <Breadcrumbs :items="breadcrumbs" class="-ml-[2px]" />
       </template>
     </LayoutHeader>
-    <div
-      class="gap-5 flex flex-col flex-1 min-h-0"
-      v-if="!contact.loading && contact.doc"
+    <TaskyState
+      v-if="contact.get.error && !contact.doc"
+      :icon="LucideCircleAlert"
+      :title="__('Couldn\'t open this contact')"
+      :message="
+        errorText(
+          contact.get.error,
+          __('It may have been deleted, or you may not have access.')
+        )
+      "
+      error
     >
+      <Button :label="__('Retry')" @click="contact.reload()" />
+      <Button
+        :label="__('All contacts')"
+        @click="router.push({ name: 'ContactList' })"
+      />
+    </TaskyState>
+    <div
+      v-else-if="!contact.doc"
+      class="flex items-center gap-3 px-5 pt-5"
+      :aria-label="__('Loading')"
+    >
+      <span class="size-[52px] animate-pulse rounded-full bg-surface-gray-2" />
+      <div class="flex flex-col gap-2">
+        <span class="h-5 w-48 animate-pulse rounded bg-surface-gray-2" />
+        <span class="h-3.5 w-64 animate-pulse rounded bg-surface-gray-2" />
+      </div>
+    </div>
+    <div v-else class="flex min-h-0 flex-1 flex-col gap-4">
       <!-- ContactInfo -->
       <PageInfo
         :avatar="{
@@ -22,29 +48,25 @@
         :badge="invitationBadge"
       >
         <template #actions>
-          <div class="flex gap-2 items-center">
-            <Button
-              variant="subtle"
-              @click="showEditDialog = true"
-              v-if="hasPermission()"
-            >
-              <div class="flex gap-1 items-center">
-                <LucideSquarePen class="h-4 w-4" />
-                <span>{{ __("Edit") }}</span>
-              </div>
+          <template v-if="hasPermission()">
+            <Button variant="subtle" @click="showEditDialog = true">
+              <template #prefix>
+                <LucideSquarePen class="size-4" aria-hidden="true" />
+              </template>
+              {{ __("Edit") }}
             </Button>
-            <Dropdown
-              :options="dropdownActions"
-              placement="right"
-              v-if="hasPermission()"
-            >
-              <Button icon="more-horizontal" variant="subtle" />
+            <Dropdown :options="dropdownActions" placement="right">
+              <Button variant="subtle" :aria-label="__('More actions')">
+                <template #icon>
+                  <LucideEllipsis class="size-4" aria-hidden="true" />
+                </template>
+              </Button>
             </Dropdown>
-          </div>
+          </template>
         </template>
       </PageInfo>
-      <div class="overflow-y-auto overscroll-y-contain flex-1 flex flex-col">
-        <TicketStats :dt="'Contact'" :dn="id" v-if="!isMobileView" />
+      <div class="flex flex-1 flex-col overflow-y-auto overscroll-y-contain">
+        <TicketStats dt="Contact" :dn="id" />
         <Tabs
           v-model="activeTab"
           :tabs="tabs"
@@ -52,25 +74,32 @@
         >
           <template #tab-item="{ tab, selected }: any">
             <button
-              class="group flex items-center gap-2 border-b border-transparent py-2 text-base text-ink-gray-5 duration-300 ease-in-out hover:text-ink-gray-9"
-              :class="{ 'text-ink-gray-9': selected }"
+              class="flex items-center gap-2 border-b border-transparent py-2 text-base transition-colors hover:text-ink-gray-9"
+              :class="selected ? 'text-ink-gray-9' : 'text-ink-gray-5'"
             >
-              <component :is="tab.icon" v-if="tab.icon" class="h-5" />
-              {{ __(tab.label) }}
-              <Badge
-                class="group-hover:bg-surface-gray-10 !bg-surface-gray-2 !text-ink-gray-7"
-                variant="solid"
-                theme="gray"
-                size="sm"
+              <component
+                :is="tab.icon"
+                v-if="tab.icon"
+                class="size-4"
+                aria-hidden="true"
+              />
+              {{ tab.label }}
+              <span
+                class="rounded px-1 font-mono text-xs tabular-nums"
+                :class="
+                  selected
+                    ? 'bg-surface-gray-3 text-ink-gray-8'
+                    : 'text-ink-gray-5'
+                "
               >
                 {{ tab.count }}
-              </Badge>
+              </span>
             </button>
           </template>
           <template #tab-panel="{ tab }">
-            <div class="p-5 flex flex-col flex-1 min-h-0">
+            <div class="flex min-h-0 flex-1 flex-col p-5">
               <TicketsTab
-                v-if="tab.label === __('Tickets')"
+                v-if="tab.hash === 'tickets'"
                 :ticketsListResource="ticketsListResource"
                 :ticketsCountResource="ticketsCountResource"
                 :baseFilter="{ contact: props.id }"
@@ -87,10 +116,10 @@
                   : undefined
               "
               />
-              <div v-if="tab.label === __('Feedback')">
-                <!-- Feedback tab content -->
-                <ContactFeedback :name="props.id" />
-              </div>
+              <ContactFeedback
+                v-else-if="tab.hash === 'feedback'"
+                :name="props.id"
+              />
             </div>
           </template>
         </Tabs>
@@ -127,15 +156,16 @@ import TicketHashIcon from "@/components/icons/TicketHashIcon.vue";
 import EditContactDialog from "@/components/contact/EditContactDialog.vue";
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import PageInfo from "@/components/PageInfo.vue";
+import TaskyState from "@/components/TaskyState.vue";
 import {
+  PORTAL_BADGE,
   useContact,
   useContactFeedback,
   useContactInvite,
   useContactResetPassword,
 } from "@/composables/contact";
-import { useScreenSize } from "@/composables/screen";
 import { __ } from "@/translation";
-import { hasPermission } from "@/utils";
+import { errorText, hasPermission } from "@/utils";
 import {
   Breadcrumbs,
   Button,
@@ -146,9 +176,12 @@ import {
 } from "frappe-ui";
 import { computed, h, markRaw, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import LucideCircleAlert from "~icons/lucide/circle-alert";
+import LucideEllipsis from "~icons/lucide/ellipsis";
 import LucideMail from "~icons/lucide/mail";
 import LucideMapPin from "~icons/lucide/map-pin";
 import LucidePhone from "~icons/lucide/phone";
+import LucideSquarePen from "~icons/lucide/square-pen";
 import LucideTrash2 from "~icons/lucide/trash-2";
 import { getTicketListResource } from "../../stores/docTickets";
 
@@ -158,7 +191,6 @@ const props = defineProps<{
 
 const route = useRoute();
 const router = useRouter();
-const { isMobileView } = useScreenSize();
 
 const {
   doc: contact,
@@ -250,14 +282,12 @@ const invitationBadge = computed(() => {
   if (!inv?.name) return null;
   if (inv.status === "Expired") {
     return {
-      label: __("Invitation Expired"),
-      theme: "red" as const,
+      ...PORTAL_BADGE.expired,
       tooltip: __("Invitation expired. Resend to invite again."),
     };
   }
   return {
-    label: __("Invited"),
-    theme: "orange" as const,
+    ...PORTAL_BADGE.invited,
     tooltip: __("Invite sent. Waiting for the user to accept."),
   };
 });
@@ -343,11 +373,7 @@ onMounted(() => {
   ticketsCountResource.fetch();
 });
 
-usePageMeta(() => {
-  return {
-    title: `Contact: ${props.id}`,
-  };
-});
+usePageMeta(() => ({ title: __("Contact: {0}", props.id) }));
 </script>
 
 <style scoped>
@@ -365,6 +391,5 @@ usePageMeta(() => {
   position: sticky;
   top: 0;
   z-index: 10;
-  background-color: white;
 }
 </style>
