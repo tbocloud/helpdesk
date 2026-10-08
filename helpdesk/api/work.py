@@ -198,19 +198,23 @@ def _ticket_item(ticket) -> dict:
     }
 
 
+def _attach_pull_requests(items: list[dict]) -> None:
+    """A task's pull requests mark it as Git work: open ones first, then the
+    latest merged or closed, newest activity first within each."""
+    prs = get_pull_requests([i["name"] for i in items])
+    for item in items:
+        task_prs = prs.get(item["name"]) or []
+        task_prs.sort(key=lambda pr: pr.state not in PR_OPEN_STATES)
+        item["pull_requests"] = task_prs[:PRS_PER_ITEM]
+
+
 def _items(tasks, tickets, with_plan: bool = False) -> list[dict]:
     """Work items, overdue first. `with_plan` also says on every task whether the
     viewer may plan it (My Work's Plan step), which costs a lookup per project."""
     names = _project_names(tasks)
     waiting = _open_dependencies(tasks)
     task_items = add_assigners([_task_item(t, names, waiting) for t in tasks])
-    # a task's pull requests mark it as Git work: open ones first, then the
-    # latest merged or closed, newest activity first within each
-    prs = get_pull_requests([t.name for t in tasks])
-    for item in task_items:
-        task_prs = prs.get(item["name"]) or []
-        task_prs.sort(key=lambda pr: pr.state not in PR_OPEN_STATES)
-        item["pull_requests"] = task_prs[:PRS_PER_ITEM]
+    _attach_pull_requests(task_items)
     # who may plan a task or sign off one waiting for review: the project's manager or lead
     managed = {}
     for item in task_items:
@@ -617,13 +621,51 @@ def get_ticket_task_context(ticket: str | int) -> dict:
     for p in projects:
         p["members"] = members.get(p.name, [])
 
-    linked = frappe.get_all(
+    return {
+        "customer": customer,
+        "projects": projects,
+        "linked_tasks": _linked_tasks(ticket),
+    }
+
+
+def _linked_tasks(ticket: str) -> list:
+    """Tasks raised from this ticket, newest first; the ticket's readers may list them."""
+    return frappe.get_all(
         "Task",
         filters={"hd_ticket": ticket},
-        fields=["name", "subject", "status", "project", "exp_end_date"],
+        fields=["name", "subject", "status", "project", "exp_end_date", "_assign"],
         order_by="creation desc",
     )
-    return {"customer": customer, "projects": projects, "linked_tasks": linked}
+
+
+@frappe.whitelist()
+@agent_only
+def get_ticket_linked_work(ticket: str | int) -> list[dict]:
+    """The ticket page's Linked work: tasks raised from it, with their pull requests.
+
+    `can_open` says whether the viewer may open the task itself, and `mine`
+    whether they are on it, so the task details offer the right steps.
+    """
+    ticket = str(ticket)
+    frappe.has_permission("HD Ticket", "read", ticket, throw=True)
+    tasks = _linked_tasks(ticket)
+    names = _project_names(tasks)
+    user = frappe.session.user
+    items = []
+    for task in tasks:
+        assignees = _assignees(task.pop("_assign"))
+        can_open = frappe.has_permission("Task", "read", task.name)
+        items.append(
+            {
+                **task,
+                "project_name": names.get(task.project) or task.project,
+                "assignees": assignees,
+                "mine": user in assignees,
+                "can_open": bool(can_open),
+            }
+        )
+    _attach_pull_requests(items)
+    return items
 
 
 @frappe.whitelist()

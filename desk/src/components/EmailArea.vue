@@ -2,7 +2,8 @@
   <div
     :id="`communication-${name}`"
     v-bind="$attrs"
-    class="grow cursor-pointer overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base text-base leading-6 shadow-[0_1px_2px_rgb(16_18_24/0.04),0_1px_3px_rgb(16_18_24/0.06)] transition-colors"
+    class="grow cursor-pointer overflow-hidden rounded-xl border border-outline-gray-2 text-base leading-6 shadow-[0_1px_2px_rgb(16_18_24/0.04),0_1px_3px_rgb(16_18_24/0.06)] transition-colors"
+    :class="direction === 'Sent' ? 'bg-surface-gray-1' : 'bg-surface-base'"
   >
     <div
       class="flex items-center justify-between gap-2"
@@ -12,6 +13,10 @@
       <div v-if="isMobileView" class="flex items-center gap-2 text-sm">
         <div class="leading-tight">
           <p>{{ sender.full_name || "Guest" }}</p>
+          <p class="flex items-center gap-1 text-xs text-ink-gray-6">
+            <component :is="origin.icon" class="size-3.5" aria-hidden="true" />
+            {{ origin.label }}
+          </p>
           <Tooltip :text="dateFormat(creation, dateTooltipFormat)">
             <p class="text-xs md:text-sm text-ink-gray-5">
               {{ timeAgo(creation) }}
@@ -35,8 +40,8 @@
         <span
           class="inline-flex h-5 items-center gap-1 rounded-md px-1.5 text-xs font-medium text-ink-gray-6 ring-1 ring-inset ring-outline-gray-3"
         >
-          <LucideMail class="size-3.5" aria-hidden="true" />
-          {{ __("Email") }}
+          <component :is="origin.icon" class="size-3.5" aria-hidden="true" />
+          {{ origin.label }}
         </span>
         <span
           v-if="aiDrafted"
@@ -97,9 +102,6 @@
         </div>
       </div>
     </div>
-    <!-- <div class="text-sm leading-5 text-ink-gray-5">
-      {{ subject }}
-    </div> -->
     <div class="text-p-sm text-ink-gray-5">
       <template
         v-for="(val, label) in { To: to, cc: cc, bcc: bcc }"
@@ -138,7 +140,10 @@ import { dateFormat, dateTooltipFormat, timeAgo } from "@/utils";
 import { Dropdown } from "frappe-ui";
 import { storeToRefs } from "pinia";
 import { computed, inject, ref } from "vue";
+import { __ } from "@/translation";
 import LucideMail from "~icons/lucide/mail";
+import LucideSend from "~icons/lucide/send";
+import LucideUserRound from "~icons/lucide/user-round";
 import LucideSparkles from "~icons/lucide/sparkles";
 import LucideSplit from "~icons/lucide/split";
 import { ReplyAllIcon, ReplyIcon } from "./icons";
@@ -167,7 +172,16 @@ const {
   name,
   deliveryStatus,
   aiDrafted,
+  direction,
 } = props.activity;
+
+// who wrote it, in words: colour alone wouldn't tell the two apart
+const origin =
+  direction === "Sent"
+    ? { label: __("Agent reply"), icon: LucideSend }
+    : direction === "Received"
+    ? { label: __("Customer"), icon: LucideUserRound }
+    : { label: __("Email"), icon: LucideMail };
 
 const emit = defineEmits(["reply"]);
 const ticket = inject(TicketSymbol)!;
@@ -255,56 +269,6 @@ const replyAll = () => {
     bcc: _bcc.filter(Boolean),
   });
 };
-
-// TODO: Implement reply functionality using this way instead of emit drillup
-// function reply(email, reply_all = false) {
-//   emailBox.toggleEmailBox();
-//   let editor = emailBox.editor;
-//   let message = email.content;
-//   let recipients = sender.name;
-//   editor.toEmails = [email.sender];
-//   editor.cc = editor.bcc = false;
-//   editor.ccEmails = [];
-//   editor.bccEmails = [];
-//   console.log(recipients);
-
-//   if (!email.subject.startsWith("Re:")) {
-//     editor.subject = `Re: ${email.subject}`;
-//   } else {
-//     editor.subject = email.subject;
-//   }
-
-//   if (reply_all) {
-//     let cc = email.cc?.split(",").map((r) => r.trim());
-//     let bcc = email.bcc?.split(",").map((r) => r.trim());
-
-//     if (cc?.length) {
-//       recipients = recipients.filter((r) => !cc?.includes(r));
-//       cc.push(...recipients);
-//     } else {
-//       cc = recipients;
-//     }
-
-//     editor.cc = cc ? true : false;
-//     editor.bcc = bcc ? true : false;
-
-//     editor.ccEmails = cc;
-//     editor.bccEmails = bcc;
-//   }
-
-//   let repliedMessage = `<blockquote>${message}</blockquote>`;
-
-//   editor.editor
-//     .chain()
-//     .clearContent()
-//     .insertContent("<p>.</p>")
-//     .updateAttributes("paragraph", { class: "reply-to-content" })
-//     .insertContent(repliedMessage)
-//     .focus("all")
-//     .insertContentAt(0, { type: "paragraph" })
-//     .focus("start")
-//     .run();
-// }
 </script>
 
 <style>

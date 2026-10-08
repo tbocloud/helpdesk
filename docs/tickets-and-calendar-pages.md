@@ -42,7 +42,11 @@ phone rows and empty state are its own (see [customer-portal-and-kb.md](customer
   Fulfilled (neutral, check), Paused (neutral, pause), or "in 3h" with a clock, amber when due
   within 4 hours (the `SLA_RISK_HOURS` used for "at risk" in `helpdesk/api/work.py`) and
   neutral otherwise; hovering shows the exact deadline. A ticket without that deadline shows
-  nothing, even when it is resolved or paused (no SLA means nothing to fulfil or fail). The portal reads the same deadlines through `customerStatus.ts` instead ("Overdue", never "Failed").
+  nothing, even when it is resolved or paused (no SLA means nothing to fulfil or fail). The SLA
+  state logic (`responseSla`, `resolutionSla`) and the agent badges (`slaBadge`,
+  `priorityBadge`) live in `pages/ticket/ticketMeta.ts`, which the agent ticket page
+  ([ticket-agent-page.md](ticket-agent-page.md)) uses too. The portal reads the same deadlines
+  through `customerStatus.ts` instead ("Overdue", never "Failed").
 - **Phones** (below 640px): `ListViewBuilder` renders a page's `#mobile-row` slot as a stacked
   list instead of the table. Tickets' row: subject (bold when unseen) with the resolution SLA
   badge, then `#id`, customer, status, priority and assignees. Row selection and bulk actions

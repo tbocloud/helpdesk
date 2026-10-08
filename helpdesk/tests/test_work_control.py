@@ -360,6 +360,29 @@ class TestTicketToTask(WorkControlCase):
         self.assertEqual({m["user"] for m in project["members"]}, {LEAD[0], DEV[0]})
         self.assertEqual(len(context["linked_tasks"]), 1)
 
+    def test_linked_work_lists_the_tickets_tasks_with_their_pull_requests(self):
+        ticket = self.make_ticket()
+        task = self.as_user(
+            SUPPORT,
+            lambda: work.create_task_from_ticket(
+                ticket=ticket.name, project=self.project, assigned_to=DEV[0]
+            ),
+        )["task"]["name"]
+        make_pull_request(task, 7, state="Merged")
+        make_pull_request(task, 8)
+        make_assignment("HD Ticket", ticket.name, DEV[0])
+
+        [item] = self.as_user(DEV, lambda: work.get_ticket_linked_work(ticket.name))
+        self.assertEqual(item["name"], task)
+        self.assertEqual(
+            item["project_name"],
+            frappe.db.get_value("Project", self.project, "project_name"),
+        )
+        self.assertTrue(item["mine"])
+        self.assertTrue(item["can_open"])
+        # open pull requests first
+        self.assertEqual([pr["number"] for pr in item["pull_requests"]], [8, 7])
+
 
 class TestReminders(WorkControlCase):
     def test_task_stages_reach_the_right_people_once(self):

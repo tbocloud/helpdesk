@@ -492,6 +492,8 @@ export interface EmailActivity extends BaseActivity {
   subject: string;
   to: string;
   isFirstEmail: boolean;
+  /** Communication.sent_or_received: "Sent" by an agent, "Received" from the customer. */
+  direction?: "Sent" | "Received";
 }
 
 export interface CommentActivity extends BaseActivity {

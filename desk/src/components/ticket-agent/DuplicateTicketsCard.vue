@@ -1,16 +1,11 @@
 <template>
-  <section
+  <PanelSection
     v-if="duplicates.length"
-    class="px-5 py-4"
-    :aria-labelledby="headingId"
+    :title="__('Possible duplicates')"
+    :icon="LucideCopy"
+    :count="duplicates.length"
+    :level="3"
   >
-    <h2
-      :id="headingId"
-      class="mb-2.5 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.06em] text-ink-gray-5"
-    >
-      <LucideCopy class="size-3.5" aria-hidden="true" />
-      {{ __("Possible duplicates") }}
-    </h2>
     <p class="mb-2 text-p-xs text-ink-gray-6">
       {{
         __(
@@ -79,16 +74,17 @@
         </div>
       </template>
     </Dialog>
-  </section>
+  </PanelSection>
 </template>
 
 <script setup lang="ts">
 import { __ } from "@/translation";
 import { Button, createResource, dayjs, Dialog, toast } from "frappe-ui";
-import { computed, inject, ref, useId, watch } from "vue";
+import { computed, inject, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import LucideCopy from "~icons/lucide/copy";
 import LucideMerge from "~icons/lucide/merge";
+import PanelSection from "./PanelSection.vue";
 
 interface Duplicate {
   name: string;
@@ -103,7 +99,6 @@ interface Duplicate {
 const props = defineProps<{ ticketId: string }>();
 const refreshTicket = inject<() => void>("refreshTicket", () => {});
 const router = useRouter();
-const headingId = `duplicates-${useId()}`;
 const pending = ref<Duplicate | null>(null);
 
 const resource = createResource({

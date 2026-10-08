@@ -42,10 +42,28 @@
           }
         "
       />
-      <!-- <div v-else class="flex items-center justify-center flex-col flex-1">
-        <Button :loading="true" variant="ghost" size="2xl" />
-        <p class="text-2xl-medium text-ink-gray-5">Loading...</p>
-      </div> -->
+      <TaskyState
+        v-else-if="activities.error"
+        :icon="LucideCircleAlert"
+        :title="__('Couldn\'t load the conversation')"
+        :message="errorText(activities.error, __('Check your connection.'))"
+        error
+      >
+        <Button :label="__('Retry')" @click="activities.reload()" />
+      </TaskyState>
+      <div
+        v-else
+        class="flex flex-col gap-4 px-5 py-6"
+        aria-busy="true"
+        :aria-label="__('Loading conversation')"
+      >
+        <div
+          v-for="i in 3"
+          :key="i"
+          class="h-24 animate-pulse rounded-xl bg-surface-gray-2"
+          aria-hidden="true"
+        />
+      </div>
     </template>
   </Tabs>
   <!-- Comm Area -->
@@ -73,23 +91,21 @@ import {
   EmailIcon,
   PhoneIcon,
 } from "@/components/icons";
+import TaskyState from "@/components/TaskyState.vue";
 import { useActiveTabManager } from "@/composables/useActiveTabManager";
+import { useTicketActivities } from "@/composables/useTicketActivities";
 import { useTelephonyStore } from "@/stores/telephony";
-import {
-  ActivitiesSymbol,
-  FeedbackActivity,
-  TabObject,
-  TicketSymbol,
-  TicketTab,
-} from "@/types";
+import { ActivitiesSymbol, TabObject, TicketSymbol, TicketTab } from "@/types";
 import { __ } from "@/translation";
+import { errorText } from "@/utils";
 import { Button, Tabs } from "frappe-ui";
 import { storeToRefs } from "pinia";
 import { computed, ComputedRef, inject, ref } from "vue";
+import LucideCircleAlert from "~icons/lucide/circle-alert";
 import { TicketAgentActivities } from "../ticket";
 
-const ticket = inject(TicketSymbol);
-const activities = inject(ActivitiesSymbol);
+const ticket = inject(TicketSymbol)!;
+const activities = inject(ActivitiesSymbol)!;
 
 const ticketAgentActivitiesRef = ref<InstanceType<
   typeof TicketAgentActivities
@@ -131,157 +147,12 @@ const tabs: ComputedRef<TabObject[]> = computed(() => {
 
 const { tabIndex, changeTabTo } = useActiveTabManager(tabs);
 
-// TODO: refactor for pagination
-// can be done once we sort out the backend
-// sender mail will be  user using portal
-const _activities = computed(() => {
-  if (!activities.value?.data) {
-    return [];
-  }
-  const emailProps = activities.value?.data?.communications.map(
-    (email, idx: number) => {
-      return {
-        subject: email.subject,
-        content: email.content,
-        sender: {
-          name: email.user.email,
-          full_name: email.user.name,
-        },
-        to: email.recipients,
-        type: "email",
-        key: email.creation,
-        cc: email.cc,
-        bcc: email.bcc,
-        creation: email.communication_date || email.creation,
-        attachments: email.attachments,
-        name: email.name,
-        deliveryStatus: email.delivery_status,
-        aiDrafted: !!email.custom_ai_drafted,
-        isFirstEmail: idx === 0,
-      };
-    }
-  );
-
-  const commentProps = activities.value.data.comments.map((comment) => {
-    return {
-      name: comment.name,
-      type: "comment",
-      key: comment.creation,
-      commentedBy: comment.commented_by,
-      commenter: comment.user.name,
-      creation: comment.creation,
-      content: comment.content,
-      attachments: comment.attachments,
-    };
-  });
-
-  activities.value.data.history.map((h) => {
-    // }
-    h.action;
-    h.owner;
-    // if h.actions includes h.owner, replace it with 'themselves'
-    if (h.action && h.owner && h.action.includes(h.owner)) {
-      h.action = h.action.replace(h.owner, "themselves");
-    }
-    return h;
-  });
-
-  const historyProps = [
-    ...activities.value.data.history,
-    ...activities.value.data.views,
-  ].map((h) => {
-    return {
-      type: "history",
-      key: h.creation,
-      content: h.action ? h.action : "viewed this",
-      creation: h.creation,
-      user: h.user.name + " ",
-    };
-  });
-
-  const callProps = activities.value.data.calls.map((call) => {
-    return {
-      ...call,
-      type: "call",
-      name: call.name,
-      key: call.creation,
-      call_type: call.type,
-      content: `${call.caller || "Unknown"} made a call to ${
-        call.receiver || "Unknown"
-      }`,
-      duration: call.duration ? call.duration + "s" : "0s",
-    };
-  });
-
-  const sorted = [
-    ...emailProps,
-    ...commentProps,
-    ...historyProps,
-    ...callProps,
-  ].sort((a, b) => new Date(a.creation) - new Date(b.creation));
-  const data = [];
-  let i = 0;
-
-  while (i < sorted.length) {
-    const currentActivity = sorted[i];
-
-    if (currentActivity.type === "history") {
-      currentActivity.relatedActivities = [currentActivity];
-      for (let j = i + 1; j < sorted.length + 1; j++) {
-        const nextActivity = sorted[j];
-
-        if (
-          nextActivity &&
-          nextActivity.user === currentActivity.user &&
-          nextActivity.content !== "viewed this" &&
-          !nextActivity.content.includes("assigned") &&
-          !nextActivity.content.includes("unassigned")
-        ) {
-          currentActivity.relatedActivities.push(nextActivity);
-        } else {
-          data.push(currentActivity);
-          i = j - 1;
-          break;
-        }
-      }
-    } else {
-      data.push(currentActivity);
-    }
-    i++;
-  }
-  // add feedback data at the last always
-  // name is email
-  // full_name is name
-
-  if (ticket.value.doc.feedback_rating === 0) {
-    return data;
-  }
-  let feedbackActivity: FeedbackActivity[] = [
-    {
-      type: "feedback",
-      key: "feedback-activity",
-      feedback_rating: ticket.value?.doc.feedback_rating,
-      feedback_extra: ticket.value?.doc.feedback_extra,
-      feedback: ticket.value?.doc.feedback,
-      sender: {
-        name: ticket.value?.doc.raised_by,
-        full_name: ticket.value?.doc.contact,
-      },
-    },
-  ];
-  data.push(...feedbackActivity);
-
-  return data;
-});
+const { filterActivities } = useTicketActivities(
+  activities,
+  computed(() => ticket.value?.doc)
+);
 
 function countFor(eventType: TicketTab) {
   return filterActivities(eventType).length;
-}
-
-function filterActivities(eventType: TicketTab) {
-  if (eventType === "activity") {
-    return _activities.value;
-  }
-  return _activities.value.filter((activity) => activity.type === eventType);
 }
 </script>
