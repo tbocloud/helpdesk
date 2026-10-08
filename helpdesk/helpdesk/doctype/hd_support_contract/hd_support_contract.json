@@ -1,0 +1,239 @@
+{
+	"actions": [],
+	"autoname": "format:SC-{#####}",
+	"creation": "2026-10-08 12:00:00.000000",
+	"description": "Support hours a customer bought per period (AMC, support block, retainer). Usage is the billable time logged on the customer's projects and ticket tasks. See docs/support-contracts.md.",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"contract_name",
+		"customer",
+		"contract_type",
+		"column_break_1",
+		"status",
+		"account_manager",
+		"period_section",
+		"start_date",
+		"end_date",
+		"billing_period",
+		"column_break_2",
+		"hours_per_period",
+		"rollover_unused",
+		"alert_threshold",
+		"billing_section",
+		"rate_per_extra_hour",
+		"column_break_3",
+		"currency",
+		"notes_section",
+		"notes",
+		"alerted_period_start",
+		"alerted_stage"
+	],
+	"fields": [
+		{
+			"fieldname": "contract_name",
+			"fieldtype": "Data",
+			"label": "Contract Name",
+			"reqd": 1,
+			"in_list_view": 1,
+			"description": "What TBO and the customer call it, e.g. ERPNext AMC 2026-27."
+		},
+		{
+			"fieldname": "customer",
+			"fieldtype": "Link",
+			"label": "Customer",
+			"options": "HD Customer",
+			"reqd": 1,
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"search_index": 1
+		},
+		{
+			"fieldname": "contract_type",
+			"fieldtype": "Select",
+			"label": "Contract Type",
+			"options": "AMC\nSupport block\nRetainer",
+			"default": "AMC",
+			"reqd": 1,
+			"in_standard_filter": 1
+		},
+		{
+			"fieldname": "column_break_1",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "status",
+			"fieldtype": "Select",
+			"label": "Status",
+			"options": "Active\nExpired\nCancelled",
+			"default": "Active",
+			"reqd": 1,
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"description": "Set to Expired by the daily job once the end date has passed."
+		},
+		{
+			"fieldname": "account_manager",
+			"fieldtype": "Link",
+			"label": "Account Manager",
+			"options": "User",
+			"description": "Told when the hours run low, with the customer's project managers and leads and the Agent Managers."
+		},
+		{
+			"fieldname": "period_section",
+			"fieldtype": "Section Break",
+			"label": "Hours"
+		},
+		{
+			"fieldname": "start_date",
+			"fieldtype": "Date",
+			"label": "Start Date",
+			"reqd": 1
+		},
+		{
+			"fieldname": "end_date",
+			"fieldtype": "Date",
+			"label": "End Date",
+			"reqd": 1
+		},
+		{
+			"fieldname": "billing_period",
+			"fieldtype": "Select",
+			"label": "Billing Period",
+			"options": "Monthly\nQuarterly\nYearly\nOne-off block",
+			"default": "Monthly",
+			"reqd": 1,
+			"description": "Periods start on the start date: a monthly contract from the 15th runs the 15th to the 14th. A one-off block is one period from start to end."
+		},
+		{
+			"fieldname": "column_break_2",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "hours_per_period",
+			"fieldtype": "Float",
+			"label": "Hours per Period",
+			"reqd": 1,
+			"non_negative": 1
+		},
+		{
+			"fieldname": "rollover_unused",
+			"fieldtype": "Check",
+			"label": "Roll Over Unused Hours",
+			"default": "0",
+			"description": "Hours left at the end of a period are added to the next one.",
+			"depends_on": "eval:doc.billing_period!='One-off block'"
+		},
+		{
+			"fieldname": "alert_threshold",
+			"fieldtype": "Int",
+			"label": "Alert at (% used)",
+			"default": "80",
+			"reqd": 1,
+			"non_negative": 1
+		},
+		{
+			"fieldname": "billing_section",
+			"fieldtype": "Section Break",
+			"label": "Billing",
+			"collapsible": 1
+		},
+		{
+			"fieldname": "rate_per_extra_hour",
+			"fieldtype": "Currency",
+			"label": "Rate per Extra Hour",
+			"options": "currency",
+			"non_negative": 1
+		},
+		{
+			"fieldname": "column_break_3",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "currency",
+			"fieldtype": "Link",
+			"label": "Currency",
+			"options": "Currency"
+		},
+		{
+			"fieldname": "notes_section",
+			"fieldtype": "Section Break"
+		},
+		{
+			"fieldname": "notes",
+			"fieldtype": "Small Text",
+			"label": "Notes"
+		},
+		{
+			"fieldname": "alerted_period_start",
+			"fieldtype": "Date",
+			"label": "Alerted Period Start",
+			"read_only": 1,
+			"hidden": 1,
+			"no_copy": 1,
+			"description": "The period the last usage alert was sent for."
+		},
+		{
+			"fieldname": "alerted_stage",
+			"fieldtype": "Select",
+			"label": "Alerted Stage",
+			"options": "\nThreshold\nOverage",
+			"read_only": 1,
+			"hidden": 1,
+			"no_copy": 1
+		}
+	],
+	"index_web_pages_for_search": 0,
+	"links": [],
+	"modified": "2026-10-08 12:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD Support Contract",
+	"naming_rule": "Expression",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"role": "System Manager",
+			"read": 1,
+			"write": 1,
+			"create": 1,
+			"delete": 1,
+			"report": 1,
+			"print": 1,
+			"email": 1,
+			"export": 1,
+			"share": 1
+		},
+		{
+			"role": "Agent Manager",
+			"read": 1,
+			"write": 1,
+			"create": 1,
+			"delete": 1,
+			"report": 1,
+			"print": 1,
+			"email": 1,
+			"export": 1,
+			"share": 1
+		},
+		{
+			"role": "Project Manager",
+			"read": 1,
+			"write": 1,
+			"create": 1,
+			"delete": 1,
+			"report": 1,
+			"print": 1,
+			"email": 1,
+			"export": 1,
+			"share": 1
+		}
+	],
+	"search_fields": "customer,contract_name",
+	"show_title_field_in_link": 1,
+	"sort_field": "creation",
+	"sort_order": "DESC",
+	"states": [],
+	"title_field": "contract_name",
+	"track_changes": 1
+}

@@ -1,7 +1,9 @@
 <template>
   <SettingsLayoutBase
     :title="__('Tasks')"
-    :description="__('How the AI helps when tasks are created.')"
+    :description="
+      __('How the AI helps when tasks are created, and support hours alerts.')
+    "
     :dirty="isDirty"
     :saving="save.loading"
     :loading="!form && !settings.error"
@@ -57,6 +59,26 @@
             />
           </SettingRow>
         </SettingsSection>
+        <SettingsSection
+          :title="__('Support hours')"
+          :description="
+            __(
+              'The team is always told when a customer\'s support contract reaches its alert level and when its hours are used up.'
+            )
+          "
+        >
+          <SettingRow
+            v-slot="{ id }"
+            :label="__('Email the customer too')"
+            :description="
+              __(
+                'The customer\'s contacts get the same two emails each period, with the hours used and left.'
+              )
+            "
+          >
+            <Switch :id="id" v-model="form.support_hours_email_customer" />
+          </SettingRow>
+        </SettingsSection>
       </div>
     </template>
   </SettingsLayoutBase>
@@ -74,6 +96,7 @@ interface TaskSettingsForm {
   ai_task_descriptions: boolean;
   ai_task_estimates: boolean;
   max_task_days: number;
+  support_hours_email_customer: boolean;
 }
 
 const DOCTYPE = "HD Work Settings";
@@ -89,6 +112,7 @@ const settings = createResource({
       ai_task_descriptions: Boolean(doc.ai_task_descriptions),
       ai_task_estimates: Boolean(doc.ai_task_estimates),
       max_task_days: doc.max_task_days || 15,
+      support_hours_email_customer: Boolean(doc.support_hours_email_customer),
     };
     initial.value = JSON.stringify(form.value);
   },
@@ -115,6 +139,7 @@ const save = createResource({
         ai_task_descriptions: f.ai_task_descriptions ? 1 : 0,
         ai_task_estimates: f.ai_task_estimates ? 1 : 0,
         max_task_days: Math.max(Number(f.max_task_days) || 15, 1),
+        support_hours_email_customer: f.support_hours_email_customer ? 1 : 0,
       },
     };
   },

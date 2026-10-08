@@ -24,7 +24,7 @@ from frappe.utils import (
 )
 
 from helpdesk.tasky.permissions import is_project_manager
-from helpdesk.utils import agent_only
+from helpdesk.utils import agent_only, csv_safe
 
 NO_CUSTOMER = ""
 RESOLVED = "Resolved"
@@ -280,6 +280,9 @@ def to_csv(rows: list[dict]) -> str:
     for r in rows:
         values = {**r, "customer": r["customer"] or _("No customer")}
         writer.writerow(
-            ["" if values[key] is None else values[key] for key, _label in CSV_COLUMNS]
+            [
+                "" if values[key] is None else csv_safe(values[key])
+                for key, _label in CSV_COLUMNS
+            ]
         )
     return out.getvalue()

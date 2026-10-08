@@ -248,6 +248,13 @@ const portalRoutes = [
     beforeEnter: () => useAuthStore().canSeeCustomerReport || { name: "Home" },
   },
   {
+    path: "/support-hours",
+    name: "SupportHours",
+    component: () => import("@/pages/work/SupportHours.vue"),
+    // the same people the server lets in (helpdesk.api.support_contracts)
+    beforeEnter: () => useAuthStore().canSeeCustomerReport || { name: "Home" },
+  },
+  {
     path: "/work-summary/:name",
     name: "WorkSummary",
     component: () => import("@/pages/work/WorkSummary.vue"),

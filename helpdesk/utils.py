@@ -421,3 +421,14 @@ def strip_chat_placeholders(addresses: str | None) -> str:
         if address.strip() and not is_chat_placeholder_email(address)
     ]
     return ", ".join(kept)
+
+
+CSV_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def csv_safe(value):
+    """A CSV cell that a spreadsheet won't run as a formula: text starting with
+    =, +, -, @, a tab or a carriage return gets a leading quote. Numbers stay as they are."""
+    if isinstance(value, str) and value.startswith(CSV_FORMULA_PREFIXES):
+        return f"'{value}"
+    return value
