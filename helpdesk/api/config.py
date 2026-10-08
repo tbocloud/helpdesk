@@ -18,6 +18,8 @@ def get_config():
         "disable_saved_replies_global_scope",
         "enable_comment_reactions",
         "show_customer_portal_permission_notice",
+        # the status an agent's reply sets: the portal shows it as "waiting on you"
+        "update_status_to",
     ]
     res = frappe.get_value(doctype="HD Settings", fieldname=fields, as_dict=True)
 

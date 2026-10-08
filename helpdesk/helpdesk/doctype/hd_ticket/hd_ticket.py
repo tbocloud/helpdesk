@@ -1240,6 +1240,13 @@ class HDTicket(Document):
                 "key": "status",
                 "width": "11rem",
             },
+            # customers follow a ticket by when it last moved
+            {
+                "label": "Last updated",
+                "type": "Datetime",
+                "key": "modified",
+                "width": "8rem",
+            },
             {
                 "label": "Priority",
                 "type": "Link",

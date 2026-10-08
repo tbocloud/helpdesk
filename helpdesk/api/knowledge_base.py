@@ -2,7 +2,7 @@ import frappe
 from bs4 import BeautifulSoup
 from frappe import _
 from frappe.rate_limiter import rate_limit
-from frappe.utils import get_user_info_for_avatar
+from frappe.utils import cint, get_user_info_for_avatar
 
 from helpdesk.utils import is_agent
 
@@ -115,6 +115,45 @@ def get_category_articles(category: str):
         article["content"] = str(soup.text)[:100]
 
     return articles
+
+
+@frappe.whitelist()
+def get_featured_articles(limit: int = 5) -> dict:
+    """The help centre home's Popular (most viewed) and Recently updated lists, published only."""
+    limit = min(max(cint(limit), 1), 20)
+    fields = ["name", "title", "category", "views", "modified"]
+    published = {"status": "Published"}
+    # get_list, not qb.get_query: on v15 the query builder skips permissions
+    popular = frappe.get_list(
+        "HD Article",
+        filters={**published, "views": [">", 0]},
+        fields=fields,
+        order_by="views desc",
+        limit=limit,
+    )
+    recent = frappe.get_list(
+        "HD Article",
+        filters=published,
+        fields=fields,
+        order_by="modified desc",
+        limit=limit,
+    )
+    category_ids = list({a.category for a in popular + recent if a.category})
+    category_names = (
+        dict(
+            frappe.get_all(
+                "HD Article Category",
+                filters={"name": ["in", category_ids]},
+                fields=["name", "category_name"],
+                as_list=True,
+            )
+        )
+        if category_ids
+        else {}
+    )
+    for article in popular + recent:
+        article["category_name"] = category_names.get(article.category)
+    return {"popular": popular, "recent": recent}
 
 
 @frappe.whitelist()

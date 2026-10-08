@@ -1,33 +1,52 @@
 <template>
-  <div
-    class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5"
-    v-if="!categories.loading && categories.data?.length > 0"
+  <ul
+    v-if="categories.loading && !categories.data"
+    class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"
+    aria-busy="true"
+    :aria-label="__('Loading topics')"
   >
-    <CategoryFolder
-      v-for="category in categories.data"
-      :key="category.name"
-      :category="category"
+    <li
+      v-for="i in 6"
+      :key="i"
+      class="h-[62px] animate-pulse rounded-lg bg-surface-gray-2"
     />
-  </div>
-  <div
-    v-if="!categories.loading && categories.data?.length < 1"
-    class="absolute left-0 top-0 w-full h-screen flex flex-col items-center justify-center"
+  </ul>
+  <TaskyState
+    v-else-if="categories.error"
+    :icon="LucideCircleAlert"
+    :title="__('Topics didn\'t load')"
+    :message="
+      errorText(categories.error, __('Check your connection and try again.'))
+    "
+    error
   >
-    <EmptyState
-      :title="__('No categories available')"
-      :description="__('There are no categories published at the moment.')"
-      :icon="iconVNode"
-    />
-  </div>
+    <Button :label="__('Retry')" @click="categories.reload()" />
+  </TaskyState>
+  <TaskyState
+    v-else-if="!categories.data?.length"
+    :icon="LucideBookOpen"
+    :title="__('No articles published yet')"
+    :message="
+      __('When our team publishes guides, you\'ll find them here by topic.')
+    "
+  />
+  <ul v-else class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    <li v-for="category in categories.data" :key="category.name">
+      <CategoryFolder :category="category" />
+    </li>
+  </ul>
 </template>
 
 <script setup lang="ts">
-import { onMounted, h } from "vue";
+import TaskyState from "@/components/TaskyState.vue";
 import { categories } from "@/stores/knowledgeBase";
-import CategoryFolder from "./CategoryFolder.vue";
-import EmptyState from "../EmptyState.vue";
+import { __ } from "@/translation";
+import { errorText } from "@/utils";
+import { Button } from "frappe-ui";
+import { onMounted } from "vue";
 import LucideBookOpen from "~icons/lucide/book-open";
-const iconVNode = h(LucideBookOpen);
+import LucideCircleAlert from "~icons/lucide/circle-alert";
+import CategoryFolder from "./CategoryFolder.vue";
 
 onMounted(() => {
   categories.fetch();

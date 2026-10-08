@@ -9,28 +9,25 @@
           v-if="ticket.data._customActions"
           :actions="ticket.data._customActions"
         />
+        <!-- secondary: replying is the page's main action -->
         <Button
-          v-if="ticket.data.status !== 'Closed'"
-          :label="__('Close')"
-          theme="gray"
-          variant="solid"
+          v-if="!isClosed"
+          :label="__('Close ticket')"
           @click="handleClose()"
         >
           <template #prefix>
-            <LucideCheck class="size-4" />
+            <LucideCheck class="size-4" aria-hidden="true" />
           </template>
         </Button>
       </template>
     </LayoutHeader>
-    <div class="flex overflow-hidden h-full w-full">
-      <!-- Main Ticket Comm -->
-      <section class="flex flex-col flex-1 w-full md:max-w-[calc(100%-382px)]">
+    <div class="flex h-full w-full overflow-hidden">
+      <section class="flex min-w-0 flex-1 flex-col">
         <div
-          class="px-6 md:px-10 mt-6"
           v-if="outsideHourSettings.data?.show && !isDismissed"
+          class="px-4 pt-4 md:px-10"
         >
           <Alert
-            v-if="outsideHourSettings.data?.show"
             :title="outsideHourSettings.data?.msg"
             theme="yellow"
             class="text-p-sm [&_.size-4]:relative [&>.size-4]:top-[3.5px] [&_button>:first-child]:top-[2.25px] border border-outline-amber-2"
@@ -43,35 +40,41 @@
           :ticket-id="String(ticketId)"
           @decided="ticket.reload()"
         />
-        <!-- Mobile: Activity / Details tabs -->
+        <!-- Mobile: Conversation / Details tabs -->
         <Tabs
           v-if="isMobileView"
           v-model="activeTab"
           :tabs="tabs"
-          class="[&_[role='tablist']]:px-5"
+          class="min-h-0 flex-1 [&_[role='tablist']]:px-4"
         >
           <template #tab-panel="{ tab }">
-            <TicketCustomerTemplateFields v-if="tab.name === 'details'" />
-            <TicketConversation v-else :show-header="false" class="grow" />
+            <TicketCustomerSidebar v-if="tab.name === 'details'" inline />
+            <div v-else class="h-full overflow-y-auto">
+              <TicketCustomerSummary :is-closed="isClosed" @reply="openReply" />
+              <TicketConversation :show-header="false" />
+            </div>
           </template>
         </Tabs>
 
-        <!-- Desktop: conversation -->
-        <TicketConversation v-else class="grow" />
+        <!-- Desktop: summary and conversation scroll together -->
+        <div v-else class="min-h-0 flex-1 overflow-y-auto">
+          <TicketCustomerSummary :is-closed="isClosed" @reply="openReply" />
+          <TicketConversation />
+        </div>
 
         <div
           v-if="!isMobileView || activeTab === 0"
-          class="w-full p-5"
+          class="w-full border-t border-outline-gray-2 px-4 py-3 md:px-10"
           @keydown.ctrl.enter.capture.stop="sendEmail"
           @keydown.meta.enter.capture.stop="sendEmail"
         >
           <TicketTextEditor
-            v-if="showEditor"
+            v-if="!isClosed"
             ref="editor"
             v-model:attachments="attachments"
             v-model:content="editorContent"
             v-model:expand="isExpanded"
-            :placeholder="__('Type a message')"
+            :placeholder="__('Write a reply')"
             autofocus
             @clear="() => (isExpanded = false)"
             :uploadFunction="
@@ -80,8 +83,7 @@
           >
             <template #bottom-right>
               <Button
-                :label="__('Send')"
-                theme="gray"
+                :label="__('Send reply')"
                 variant="solid"
                 :disabled="$refs.editor?.editor?.isEmpty || send.loading"
                 :loading="send.loading"
@@ -89,12 +91,32 @@
               />
             </template>
           </TicketTextEditor>
+          <p v-else class="text-p-sm text-ink-gray-6">
+            {{ __("This ticket is closed, so it can't take new replies.") }}
+            <RouterLink
+              :to="{ name: 'TicketNew' }"
+              class="rounded font-medium text-ink-gray-8 underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+            >
+              {{ __("Raise a new ticket") }}
+            </RouterLink>
+          </p>
         </div>
       </section>
-      <!-- Ticket Sidebar only for desktop view-->
-      <TicketCustomerSidebar v-if="!isMobileView" @open="isExpanded = true" />
+      <TicketCustomerSidebar v-if="!isMobileView" />
     </div>
     <TicketFeedback v-model:open="showFeedbackDialog" />
+  </div>
+  <!-- first load: the layout is known, so a skeleton instead of a spinner -->
+  <div
+    v-else-if="ticket.loading"
+    class="flex flex-col gap-4 px-4 pt-16 md:px-10"
+    aria-busy="true"
+    :aria-label="__('Loading ticket')"
+  >
+    <div class="h-6 w-2/3 animate-pulse rounded bg-surface-gray-2" />
+    <div class="h-4 w-1/3 animate-pulse rounded bg-surface-gray-2" />
+    <div class="h-20 w-full animate-pulse rounded-lg bg-surface-gray-2" />
+    <div class="h-32 w-full animate-pulse rounded-lg bg-surface-gray-2" />
   </div>
 </template>
 
@@ -107,8 +129,12 @@ import { useScreenSize } from "@/composables/screen";
 import { useConfigStore } from "@/stores/config";
 import { globalStore } from "@/stores/globalStore";
 import { useTicketStatusStore } from "@/stores/ticketStatus";
-import { isContentEmpty, isCustomerPortal, uploadFunction } from "@/utils";
-import LucideWarning from "~icons/lucide/triangle-alert";
+import {
+  errorText,
+  isContentEmpty,
+  isCustomerPortal,
+  uploadFunction,
+} from "@/utils";
 import { ActivityIcon, DetailsIcon } from "@/components/icons";
 import {
   Alert,
@@ -132,7 +158,7 @@ import { useRouter } from "vue-router";
 import { ITicket } from "./symbols";
 import EstimateApprovalBanner from "./EstimateApprovalBanner.vue";
 import TicketConversation from "./TicketConversation.vue";
-import TicketCustomerTemplateFields from "./TicketCustomerTemplateFields.vue";
+import TicketCustomerSummary from "./TicketCustomerSummary.vue";
 import TicketFeedback from "./TicketFeedback.vue";
 const TicketTextEditor = defineAsyncComponent(
   () => import("./TicketTextEditor.vue")
@@ -185,7 +211,7 @@ const isDismissed = ref(false);
 
 const activeTab = ref(0);
 const tabs = computed(() => [
-  { name: "activity", label: __("Activity"), icon: ActivityIcon },
+  { name: "activity", label: __("Conversation"), icon: ActivityIcon },
   { name: "details", label: __("Details"), icon: DetailsIcon },
 ]);
 
@@ -275,7 +301,18 @@ const send = createResource({
     isExpanded.value = false;
     ticket.reload();
   },
+  onError: (error) => {
+    // the draft stays in the editor, so sending again is the way forward
+    toast.error(
+      errorText(error, __("Your reply wasn't sent. Please try again."))
+    );
+  },
 });
+
+function openReply() {
+  if (isMobileView.value) activeTab.value = 0;
+  isExpanded.value = true;
+}
 
 function updateField(name, value, callback = () => {}) {
   updateTicket(name, value);
@@ -316,11 +353,13 @@ function handleClose() {
 
 function showConfirmationDialog() {
   $dialog({
-    title: __("Close Ticket"),
-    message: __("Are you sure you want to close this ticket?"),
+    title: __("Close this ticket?"),
+    message: __(
+      "Close it when your question is answered. A closed ticket can't take new replies."
+    ),
     actions: [
       {
-        label: __("Confirm"),
+        label: __("Close ticket"),
         variant: "solid",
         onClick(close: Function) {
           ticket.data.status = "Closed";
@@ -365,7 +404,7 @@ const breadcrumbs = computed(() => {
   return items;
 });
 
-const showEditor = computed(() => ticket.data.status !== "Closed");
+const isClosed = computed(() => ticket.data.status === "Closed");
 
 // this handles whether the ticket was raised and then was closed without any reply from the agent.
 const { isFeedbackMandatory } = useConfigStore();

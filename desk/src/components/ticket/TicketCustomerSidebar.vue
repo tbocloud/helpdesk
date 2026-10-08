@@ -1,272 +1,179 @@
 <template>
-  <div class="flex w-[382px] flex-col border-l gap-4">
-    <!-- Ticket ID -->
-    <div class="flex items-center justify-between border-b px-5 py-3">
-      <span class="cursor-copy text-lg-semibold">Ticket details</span>
-    </div>
-    <!-- user info and sla info -->
-    <div class="flex flex-col gap-4 pt-0 px-5 py-3 border-b">
-      <!-- user info -->
-      <div class="flex gap-2">
-        <Avatar
-          size="2xl"
-          :image="ticket.data.contact.image"
-          :label="ticket.data.contact.name"
-        />
-        <div class="flex items-center justify-between">
-          <Tooltip :text="ticket.data.contact.name">
-            <div class="w-[242px] truncate text-3xl-medium">
-              {{ ticket.data.contact.name }}
-            </div>
-          </Tooltip>
-          <div
-            class="flex gap-1.5"
-            v-if="
-              !ticket.data.feedback_rating && ticket.data.status !== 'Closed'
-            "
-          >
-            <Tooltip :text="ticket.data.contact.email_id">
-              <Button class="h-7 w-7" @click="emit('open')">
-                <template #icon>
-                  <EmailIcon class="h-4 w-4" />
-                </template>
-              </Button>
+  <!-- the customer's ticket facts: a side panel on desktop, the Details tab on phones -->
+  <aside
+    class="flex min-w-0 flex-col overflow-y-auto"
+    :class="
+      inline
+        ? 'w-full'
+        : 'w-[340px] shrink-0 border-l border-outline-gray-2 bg-surface-base'
+    "
+    :aria-label="__('Ticket details')"
+  >
+    <section class="flex flex-col gap-3 px-5 py-4">
+      <h2 class="text-base-medium text-ink-gray-9">
+        {{ __("Ticket details") }}
+      </h2>
+      <dl
+        class="grid grid-cols-[7.5rem_minmax(0,1fr)] items-center gap-x-3 gap-y-3 text-sm"
+      >
+        <dt class="text-ink-gray-5">{{ __("Ticket") }}</dt>
+        <dd class="font-mono tabular-nums text-ink-gray-8">
+          #{{ ticket.data.name }}
+        </dd>
+
+        <dt class="text-ink-gray-5">{{ __("Status") }}</dt>
+        <dd>
+          <TaskyBadge v-bind="customerStatus.badge(ticket.data.status)" />
+        </dd>
+
+        <dt class="text-ink-gray-5">{{ __("Raised by") }}</dt>
+        <dd class="min-w-0 truncate text-ink-gray-8" :title="contactLabel">
+          {{ contactLabel }}
+        </dd>
+
+        <template v-for="fact in slaFacts" :key="fact.label">
+          <dt class="text-ink-gray-5">{{ fact.label }}</dt>
+          <dd class="flex min-w-0 flex-col items-start gap-1">
+            <Tooltip
+              :text="
+                fact.value.at
+                  ? dateFormat(fact.value.at, dateTooltipFormat)
+                  : ''
+              "
+            >
+              <TaskyBadge v-bind="fact.value" />
             </Tooltip>
-          </div>
-        </div>
-      </div>
+          </dd>
+        </template>
 
-      <!-- Ticket Info -->
-      <div
-        class="flex items-center text-base leading-5"
-        v-for="field in ticketBasicInfo"
-      >
-        <span class="w-[126px] text-sm text-ink-gray-5">{{ field.label }}</span>
-        <span
-          class="text-base text-ink-gray-8 flex-1"
-          :class="!field.value && 'text-ink-gray-4'"
-        >
-          {{ field.value || "—" }}
-        </span>
-      </div>
-
-      <!-- sla info -->
-      <div
-        v-for="data in slaData"
-        :key="data.label"
-        class="flex items-center text-base"
-      >
-        <div class="w-[126px] text-ink-gray-5 text-sm">{{ data.title }}</div>
-        <div
-          class="break-words text-base text-ink-gray-8 flex items-center gap-2"
-        >
-          <Tooltip :text="dateFormat(data.value, dateTooltipFormat)">
-            <Badge :label="data.label" :theme="data.theme" variant="subtle" />
-          </Tooltip>
-          <!-- SLA explanation icon -->
-          <Tooltip
-            v-if="
-              dayjs(data.value).diff(dayjs(), 'day', true) > 4 &&
-              data.title === 'Resolution'
-            "
-            :text="
-              __(
-                'This date is calculated based on configured SLAs, working hours, and holidays.'
-              )
-            "
+        <template v-for="field in fields" :key="field.fieldname">
+          <dt class="text-ink-gray-5">{{ field.label }}</dt>
+          <dd
+            class="min-w-0 break-words"
+            :class="field.value ? 'text-ink-gray-8' : 'text-ink-gray-4'"
           >
-            <lucide-circle-question-mark
-              class="h-4 w-4 text-ink-gray-6 cursor-pointer"
-            />
-          </Tooltip>
-        </div>
-      </div>
-    </div>
-    <!-- feedback component -->
-    <TicketFeedback
-      v-if="ticket.data.feedback_rating"
-      class="border-b text-base text-ink-gray-5"
-      :ticket="ticket.data"
-    />
-    <div class="flex flex-col gap-4 pt-0 px-5 py-3 overflow-y-scroll">
-      <div
-        class="flex items-center text-base leading-5"
-        v-for="field in ticketAdditionalInfo"
-        :key="field.fieldname"
-      >
-        <span class="w-[126px] text-sm text-ink-gray-5">{{ field.label }}</span>
-        <span
-          class="text-base text-ink-gray-8 flex-1"
-          :class="!field.value && 'text-ink-gray-4'"
-        >
-          <template
-            v-if="
-              field.value &&
-              (field.fieldtype === 'Date' || field.fieldtype === 'Datetime') &&
-              dayjs(field.value).isValid()
-            "
-          >
-            {{ dateFormat(field.value, dateTooltipFormat) }}
-          </template>
-          <template v-else>
             {{ field.value || "—" }}
-          </template>
-        </span>
-      </div>
-    </div>
-  </div>
+          </dd>
+        </template>
+      </dl>
+      <p v-if="longResolution" class="text-p-xs text-ink-gray-5">
+        {{
+          __(
+            "Dates follow our working hours and holidays, so they can be a few days out."
+          )
+        }}
+      </p>
+    </section>
+
+    <section
+      v-if="ticket.data.feedback_rating"
+      class="flex flex-col gap-3 border-t border-outline-gray-2 px-5 py-4"
+    >
+      <h2 class="text-base-medium text-ink-gray-9">
+        {{ __("Your rating") }}
+      </h2>
+      <dl
+        class="grid grid-cols-[7.5rem_minmax(0,1fr)] items-start gap-x-3 gap-y-3 text-sm"
+      >
+        <dt class="text-ink-gray-5">{{ __("Rating") }}</dt>
+        <dd><StarRating :rating="ticket.data.feedback_rating" /></dd>
+        <template v-if="ticket.data.feedback">
+          <dt class="text-ink-gray-5">{{ __("Feedback") }}</dt>
+          <dd class="text-ink-gray-8">{{ ticket.data.feedback }}</dd>
+        </template>
+        <template v-if="ticket.data.feedback_extra">
+          <dt class="text-ink-gray-5">{{ __("Comment") }}</dt>
+          <dd class="whitespace-pre-line break-words text-ink-gray-8">
+            {{ ticket.data.feedback_extra }}
+          </dd>
+        </template>
+      </dl>
+    </section>
+  </aside>
 </template>
 
 <script setup lang="ts">
+import StarRating from "@/components/StarRating.vue";
+import TaskyBadge from "@/components/TaskyBadge.vue";
+import {
+  firstReplyFact,
+  resolutionFact,
+  useCustomerStatus,
+  type Fact,
+} from "@/pages/ticket/customerStatus";
 import { ITicket } from "@/pages/ticket/symbols";
+import { __ } from "@/translation";
 import { Field } from "@/types";
-import { dateFormat, dateTooltipFormat, formatTime } from "@/utils";
-import { Avatar, dayjs, Tooltip } from "frappe-ui";
+import { dateFormat, dateTooltipFormat } from "@/utils";
+import { dayjs, Tooltip } from "frappe-ui";
 import { computed, inject } from "vue";
 
-const emit = defineEmits(["open"]);
+withDefaults(defineProps<{ inline?: boolean }>(), { inline: false });
 
 const ticket = inject(ITicket);
+const customerStatus = useCustomerStatus();
 
-const slaData = computed(() => {
-  const firstResponse = firstResponseData();
-  const resolution = resolutionData();
-  return [
-    {
-      title: "First Response",
-      value: ticket.data.first_responded_on || ticket.data.response_by,
-      label: firstResponse.label,
-      theme: firstResponse.color,
-    },
-    {
-      title: "Resolution",
-      value: ticket.data.resolution_date || ticket.data.resolution_by,
-      label: resolution.label,
-      theme: resolution.color,
-    },
-  ];
+const contactLabel = computed(
+  () => ticket.data.contact?.name || ticket.data.raised_by
+);
+
+const slaFacts = computed(() => {
+  const facts: { label: string; value: Fact }[] = [];
+  const firstReply = firstReplyFact(ticket.data);
+  if (firstReply) facts.push({ label: __("First reply"), value: firstReply });
+  const resolution = resolutionFact(
+    ticket.data,
+    customerStatus.stage(ticket.data.status)
+  );
+  if (resolution) facts.push({ label: __("Resolution"), value: resolution });
+  return facts;
 });
 
-function firstResponseData() {
-  let firstResponse = null;
-  if (
-    !ticket.data.first_responded_on &&
-    dayjs().isBefore(dayjs(ticket.data.response_by))
-  ) {
-    firstResponse = {
-      label: `Due in ${formatTime(
-        dayjs(ticket.data.response_by).diff(dayjs(), "s")
-      )}`,
-      color: "orange",
-    };
-  } else if (
-    dayjs(ticket.data.first_responded_on).isBefore(
-      dayjs(ticket.data.response_by)
-    )
-  ) {
-    firstResponse = {
-      label: `Fulfilled in ${formatTime(
-        dayjs(ticket.data.first_responded_on).diff(
-          dayjs(ticket.data.creation),
-          "s"
-        )
-      )}`,
-      color: "green",
-    };
-  } else {
-    firstResponse = {
-      label: "Failed",
-      color: "red",
-    };
-  }
-  return firstResponse;
-}
-
-function resolutionData() {
-  let resolution = null;
-  if (
+// a resolution date days away surprises people; say why
+const longResolution = computed(
+  () =>
     !ticket.data.resolution_date &&
-    dayjs().isBefore(ticket.data.resolution_by)
-  ) {
-    resolution = {
-      label: `Due in ${formatTime(
-        dayjs(ticket.data.resolution_by).diff(dayjs(), "s")
-      )}`,
-      color: "orange",
-    };
-  } else if (ticket.data.agreement_status === "Fulfilled") {
-    resolution = {
-      label: `Fulfilled in ${formatTime(
-        dayjs(ticket.data.resolution_time, "s")
-      )}`,
-      color: "green",
-    };
-  } else {
-    resolution = {
-      label: "Failed",
-      color: "red",
-    };
+    ticket.data.resolution_by &&
+    dayjs(ticket.data.resolution_by).diff(dayjs(), "day", true) > 4
+);
+
+function display(field: Field, value: unknown) {
+  if (!value) return value;
+  if (field.fieldtype === "Date" || field.fieldtype === "Datetime") {
+    return dayjs(value as string).isValid()
+      ? dateFormat(
+          value,
+          field.fieldtype === "Date" ? "D MMM YYYY" : dateTooltipFormat
+        )
+      : value;
   }
-  return resolution;
+  return value;
 }
 
-const ticketBasicInfo = computed(() => [
+// priority, team and the template's fields the customer may see
+const fields = computed(() => [
   {
-    label: "Ticket ID",
-    value: ticket.data.name,
+    fieldname: "priority",
+    label: __("Priority"),
+    value: ticket.data.priority,
   },
   {
-    label: "Status",
-    value: ticket.data.status,
-    bold: true,
+    fieldname: "agent_group",
+    label: __("Team"),
+    value: ticket.data.agent_group,
   },
-]);
-
-const ticketAdditionalInfo = computed(() => {
-  const fields = [
-    {
-      fieldname: "subject",
-      label: "Subject",
-      value: ticket.data.subject,
-    },
-    {
-      fieldname: "team",
-      label: "Team",
-      value: ticket.data.agent_group || "-",
-    },
-    {
-      fieldname: "priority",
-      label: "Priority",
-      value: ticket.data.priority,
-    },
-  ];
-  const custom_fields = ticket.data.template.fields
+  ...(ticket.data.template?.fields || [])
     .filter(
       (field: Field) =>
         !field.hide_from_customer &&
-        ["subject", "team", "priority"].indexOf(field.fieldname) === -1
+        !["subject", "team", "agent_group", "priority"].includes(
+          field.fieldname
+        )
     )
-    .map((field: Field) => {
-      const option = {
-        label: field.label,
-        value: ticket.data[field.fieldname],
-      };
-      if (field.fieldtype === "Date") {
-        option.value = dayjs(option.value).format(
-          window.date_format.toUpperCase()
-        );
-      }
-      if (field.fieldtype === "Datetime") {
-        // window.time_format
-        option.value = dayjs(option.value).format(
-          `${window.date_format.toUpperCase()} ${window.time_format}`
-        );
-      }
-      return option;
-    });
-
-  return [...fields, ...custom_fields];
-});
+    .map((field: Field) => ({
+      fieldname: field.fieldname,
+      label: field.label,
+      value: display(field, ticket.data[field.fieldname]),
+    })),
+]);
 </script>
-
-<style scoped></style>

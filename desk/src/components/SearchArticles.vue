@@ -1,83 +1,92 @@
 <template>
-  <div
-    v-if="Boolean(articles.data?.length) && query.length > 2"
-    class="rounded border p-4 text-base"
+  <!-- knowledge-base answers for what the customer is typing (ticket deflection) -->
+  <section
+    v-if="query.length > 2 && articles.data?.length"
+    class="rounded-lg border border-outline-gray-2 bg-surface-base"
+    aria-live="polite"
+    :aria-label="__('Suggested articles')"
   >
-    <div class="mb-2 font-medium pl-2" v-if="!hideViewAll">
-      These articles may already cover what you are looking for
+    <div
+      v-if="!hideViewAll"
+      class="flex items-center justify-between gap-3 px-4 pb-1 pt-3"
+    >
+      <h2 class="text-sm font-medium text-ink-gray-8">
+        {{ __("These articles may already answer it") }}
+      </h2>
       <RouterLink
-        class="group cursor-pointer space-x-1 hover:text-ink-gray-9"
-        :to="{
-          name: 'CustomerKnowledgeBase',
-        }"
+        :to="{ name: 'CustomerKnowledgeBase' }"
         target="_blank"
+        class="shrink-0 rounded text-sm text-ink-gray-6 hover:text-ink-gray-8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
       >
-        <span class="text-xs underline">(View All)</span>
+        {{ __("Browse all") }}
+        <span class="sr-only">{{ __("(opens in a new tab)") }}</span>
       </RouterLink>
     </div>
-    <dl
-      class="mx-auto w-full flex flex-col gap-2"
-      v-if="articles.data.length > 0"
-    >
-      <div
-        v-for="a in articles.data"
-        :key="a.id"
-        class="rounded-md border-2 p-2 border-hidden hover:bg-surface-gray-2"
-      >
+    <ul class="flex flex-col py-1.5">
+      <li v-for="a in articles.data" :key="a.id">
         <RouterLink
-          class="group cursor-pointer hover:text-ink-gray-9 flex flex-col gap-1"
+          class="flex flex-col gap-0.5 px-4 py-2 hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-outline-gray-4"
           :to="{
             name: 'ArticlePublic',
-            params: {
-              articleId: a.name.split('#')[0],
-            },
-            hash: `#${a.name.split('#')[1]}`,
+            params: { articleId: a.name.split('#')[0] },
+            hash: a.name.includes('#') ? `#${a.name.split('#')[1]}` : '',
           }"
-          @click="handleSearchArticleClick(a)"
           target="_blank"
+          @click="handleSearchArticleClick(a)"
         >
-          <dt class="font-base">{{ a.subject }} - {{ a.headings }}</dt>
+          <span class="text-base font-medium text-ink-gray-9">
+            {{ a.subject }}
+            <span v-if="a.headings" class="font-normal text-ink-gray-6">
+              · {{ a.headings }}
+            </span>
+            <span class="sr-only">{{ __("(opens in a new tab)") }}</span>
+          </span>
           <!-- eslint-disable-next-line vue/no-v-html -->
-          <dd
-            class="font-base text-p-sm text-ink-gray-5 line-clamp-1"
-            v-html="a.description"
-          ></dd>
+          <span
+            class="line-clamp-2 text-p-sm text-ink-gray-6"
+            v-html="sanitizeRichText(a.description)"
+          />
         </RouterLink>
-      </div>
-    </dl>
-  </div>
-  <div
-    v-else-if="
-      !articles.loading && articles.data?.length === 0 && query.length > 2
-    "
-    class="flex flex-col items-center justify-center h-[240px] gap-2 rounded border"
+      </li>
+    </ul>
+  </section>
+  <p
+    v-else-if="query.length > 2 && articles.loading"
+    class="flex items-center gap-2 px-1 text-p-sm text-ink-gray-6"
+    aria-live="polite"
   >
-    <LucideSearch class="size-8 text-ink-gray-3" />
-    <div class="flex items-center flex-col justify-center">
-      <p class="font-base">No answers found</p>
-      <span class="font-base text-p-sm text-ink-gray-5 text-center"
-        >Rephrase the question and try again with some keywords</span
-      >
-    </div>
-  </div>
-  <div
-    v-else-if="articles.loading"
-    class="flex flex-col items-center justify-center h-[240px] gap-2 rounded border"
+    <LoadingIndicator class="size-4" />
+    {{ __("Looking for articles that may help…") }}
+  </p>
+  <p
+    v-else-if="query.length > 2 && articles.error"
+    class="px-1 text-p-sm text-ink-gray-6"
+    role="status"
   >
-    <LucideSearch class="size-8 text-ink-gray-3" />
-    <div class="flex items-center flex-col justify-center">
-      <p class="font-base">Searching...</p>
-      <span class="font-base text-p-sm text-ink-gray-5 text-center"
-        >Please wait while we search for the answers</span
-      >
-    </div>
-  </div>
+    {{ __("Article suggestions aren't available right now.") }}
+  </p>
+  <p
+    v-else-if="query.length > 2 && articles.data?.length === 0"
+    class="flex items-center gap-2 px-1 text-p-sm text-ink-gray-6"
+    aria-live="polite"
+  >
+    <LucideSearch class="size-4 shrink-0 text-ink-gray-5" aria-hidden="true" />
+    {{
+      hideViewAll
+        ? __("No articles match that. Try other words.")
+        : __("No articles match yet. Describe the problem and we'll help.")
+    }}
+  </p>
 </template>
 
 <script setup lang="ts">
 import { capture } from "@/telemetry";
-import { createResource } from "frappe-ui";
+import { __ } from "@/translation";
+import { sanitizeRichText } from "@/utils";
+import { createResource, LoadingIndicator } from "frappe-ui";
 import { watch } from "vue";
+import LucideSearch from "~icons/lucide/search";
+
 interface P {
   query: string;
   hideViewAll?: boolean;

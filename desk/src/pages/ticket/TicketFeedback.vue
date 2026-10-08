@@ -1,12 +1,12 @@
 <template>
   <Dialog
     :open="open"
-    :title="__('Rate this ticket')"
+    :title="__('How did we do?')"
     :actions="[
       {
-        disabled: !preset,
-        label: __('Submit'),
-        theme: 'gray',
+        disabled: !preset || setValue.loading,
+        loading: setValue.loading,
+        label: __('Close and send rating'),
         variant: 'solid',
         onClick: () =>
           setValue.submit({
@@ -42,8 +42,8 @@
               v-for="o in options.data"
               :key="o.name"
               :label="o.label"
-              :theme="preset === o.name ? 'blue' : 'gray'"
-              variant="subtle"
+              :variant="preset === o.name ? 'solid' : 'subtle'"
+              :aria-pressed="preset === o.name"
               @click="preset = o.name"
             />
           </div>
@@ -62,7 +62,8 @@
 </template>
 
 <script setup lang="ts">
-import { createListResource, createResource, Rating } from "frappe-ui";
+import { errorText } from "@/utils";
+import { createListResource, createResource, Rating, toast } from "frappe-ui";
 import { inject, ref } from "vue";
 import { ITicket } from "./symbols";
 import { __ } from "@/translation";
@@ -100,6 +101,11 @@ const setValue = createResource({
   onSuccess: () => {
     emit("update:open", false);
     ticket.reload();
+  },
+  onError: (error) => {
+    toast.error(
+      errorText(error, __("Your rating wasn't saved. Please try again."))
+    );
   },
 });
 function onSelectRating(r: number) {

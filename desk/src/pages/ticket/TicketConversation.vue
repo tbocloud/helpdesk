@@ -1,52 +1,35 @@
 <template>
-  <div
-    v-if="showHeader"
-    class="mx-6 md:mx-10 md:my-2 flex items-center justify-between text-lg-medium mb-4 !mt-6 md:h-8 md:text-2xl md:font-semibold md:text-ink-gray-8"
-  >
-    Activity
-  </div>
-  <div class="overflow-auto px-5 md:px-10 grow">
-    <div
-      v-for="(c, i) in communications"
-      :id="c.name"
-      :key="c.name"
-      class="flex items-between justify-center gap-4 relative"
-      :class="i === 0 && 'mt-4'"
+  <section class="px-4 pb-4 md:px-10" :aria-labelledby="headingId">
+    <h2
+      :id="headingId"
+      class="mb-3 mt-6 text-base-medium text-ink-gray-9"
+      :class="!showHeader && 'sr-only'"
     >
-      <div
-        class="w-full activity grid grid-cols-[30px_minmax(auto,_1fr)] gap-2 sm:gap-4 h-full"
-      >
-        <div
-          class="relative flex justify-center after:absolute after:left-[50%] after:top-3 after:-z-10 after:border-l after:border-outline-gray-modals"
-          :class="[
-            i != communications.length - 1 ? 'after:h-full' : 'after:h-5',
-          ]"
-        >
-          <Avatar
-            size="lg"
-            :label="c.user.name"
-            :image="c.user.image"
-            class="mt-1.5 relative"
-          />
-        </div>
+      {{ __("Conversation") }}
+    </h2>
+    <ol v-if="communications.length" class="flex flex-col gap-3">
+      <li v-for="c in communications" :id="c.name" :key="c.name">
         <TicketCommunication
           :content="c.content"
           :date="c.creation"
           :user="c.user"
-          :sender-image="c.sender"
-          :cc="c.cc || ''"
-          :bcc="c.bcc || ''"
+          :from-support="c.sent_or_received === 'Sent'"
+          :is-you="c.sender === authStore.userId"
           :attachments="c.attachments"
         />
-      </div>
-    </div>
-  </div>
+      </li>
+    </ol>
+    <p v-else class="py-6 text-p-sm text-ink-gray-6">
+      {{ __("No messages yet. Write below and we'll get back to you.") }}
+    </p>
+  </section>
 </template>
 
 <script setup lang="ts">
+import { useAuthStore } from "@/stores/auth";
+import { __ } from "@/translation";
 import { isElementInViewport } from "@/utils";
-import { Avatar } from "frappe-ui";
-import { computed, inject, nextTick, watch } from "vue";
+import { computed, inject, nextTick, useId, watch } from "vue";
 import { useRoute } from "vue-router";
 import TicketCommunication from "./TicketCommunication.vue";
 import { ITicket } from "./symbols";
@@ -62,17 +45,19 @@ const props = withDefaults(defineProps<P>(), {
 });
 const route = useRoute();
 const ticket = inject(ITicket);
-const communications = computed(() => {
-  const _communications = ticket.data.communications || [];
-  return _communications.sort(
-    (a, b) => new Date(a.creation) - new Date(b.creation)
-  );
-});
+const authStore = useAuthStore();
+const headingId = `ticket-conversation-${useId()}`;
+
+const communications = computed(() =>
+  [...(ticket.data.communications || [])].sort(
+    (a, b) => new Date(a.creation).getTime() - new Date(b.creation).getTime()
+  )
+);
 
 function scroll(id: string) {
   const e = document.getElementById(id);
-  if (!isElementInViewport(e)) {
-    e.scrollIntoViewIfNeeded();
+  if (e && !isElementInViewport(e)) {
+    e.scrollIntoView({ block: "nearest" });
   }
 }
 

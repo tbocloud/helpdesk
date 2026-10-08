@@ -1339,15 +1339,25 @@ def make_portal_contact(customer: str, email: str):
     return contact
 
 
-def make_article(title: str, content: str, status: str = "Published"):
-    """Creates an HD Article with `title` and HTML `content` (Published unless `status` says otherwise)."""
+def make_article(
+    title: str, content: str, status: str = "Published", category: str | None = None
+):
+    """Creates an HD Article with `title` and HTML `content` (Published unless `status` says otherwise), optionally in `category`."""
     return frappe.get_doc(
         {
             "doctype": "HD Article",
             "title": title,
             "content": content,
             "status": status,
+            "category": category,
         }
+    ).insert(ignore_permissions=True)
+
+
+def make_article_category(category_name: str):
+    """Creates an HD Article Category named `category_name`."""
+    return frappe.get_doc(
+        {"doctype": "HD Article Category", "category_name": category_name}
     ).insert(ignore_permissions=True)
 
 
