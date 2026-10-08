@@ -165,7 +165,7 @@ import {
 import { __ } from "@/translation";
 import { useStorage } from "@vueuse/core";
 import { dayjs } from "frappe-ui";
-import { computed, inject, ref } from "vue";
+import { computed, inject, nextTick, ref } from "vue";
 import LucideSparkles from "~icons/lucide/sparkles";
 import TicketField from "../TicketField.vue";
 import MeetingsCard from "@/components/meetings/MeetingsCard.vue";
@@ -376,17 +376,21 @@ const setFieldRef = (fieldname: string, el: any) => {
   }
 };
 
-useShortcut("t", () => {
-  fieldRefs.value?.ticket_type?.$el?.querySelector("button")?.click();
-});
+// below lg the panel is a closed sheet: open it before clicking a field inside
+const openTicketDetails = inject<() => Promise<void>>(
+  "openTicketDetails",
+  async () => {}
+);
 
-useShortcut("p", () => {
-  fieldRefs.value?.priority?.$el?.querySelector("button")?.click();
-});
+async function openField(fieldname: string) {
+  await openTicketDetails();
+  await nextTick();
+  fieldRefs.value?.[fieldname]?.$el?.querySelector("button")?.click();
+}
 
-useShortcut({ key: "t", shift: true }, () => {
-  fieldRefs.value?.agent_group?.$el?.querySelector("button")?.click();
-});
+useShortcut("t", () => openField("ticket_type"));
+useShortcut("p", () => openField("priority"));
+useShortcut({ key: "t", shift: true }, () => openField("agent_group"));
 </script>
 
 <style scoped>

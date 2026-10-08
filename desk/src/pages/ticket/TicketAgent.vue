@@ -12,7 +12,7 @@
       </div>
 
       <!-- Side panel: inline with a resizer from lg, a sheet below -->
-      <TicketSidebar v-model:open="detailsOpen" />
+      <TicketSidebar v-model:open="detailsOpen" :sheet="isSheet" />
     </div>
     <SetContactPhoneModal
       v-if="ticket.doc.contact"
@@ -79,7 +79,16 @@ import {
   toast,
   usePageMeta,
 } from "frappe-ui";
-import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from "vue";
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  provide,
+  ref,
+  watch,
+} from "vue";
+import { useMediaQuery } from "@vueuse/core";
 import { useRoute } from "vue-router";
 import { showCommentBox, showEmailBox } from "./modalStates";
 
@@ -96,6 +105,13 @@ const props = defineProps({
 const route = useRoute();
 const showPhoneModal = ref(false);
 const detailsOpen = ref(false);
+// below lg the side panel is a sheet, opened from the header or by a field shortcut
+const isSheet = useMediaQuery("(max-width: 1023.98px)");
+provide("openTicketDetails", async () => {
+  if (!isSheet.value || detailsOpen.value) return;
+  detailsOpen.value = true;
+  await nextTick();
+});
 
 const ticketComposable = computed(() => useTicket(props.ticketId));
 const ticket = computed(() => ticketComposable.value.ticket);

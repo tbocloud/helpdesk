@@ -49,7 +49,8 @@ into the app header).
 - **States**: skeleton cards while the activity loads, an error with **Retry** if it fails, and
   the per-tab empty text.
 - **Composer** (`CommunicationArea.vue`, sticky under the timeline): a segmented Reply / Comment
-  switch with their shortcuts (R / C) shown as keys. Reply shows "To: …"; Comment says "Only agents
+  switch with their shortcuts (R / C) shown as keys; the buttons are 44px tall on phones and
+  compact from `md`. Reply shows "To: …"; Comment says "Only agents
   see comments" and the editor sits on the note colour. ⌘⏎ sends, Esc closes, as before. The AI
   suggested reply's "Use this reply" and the header's Reply open the email composer
   (`openReplyBox()` in `modalStates.ts`).
@@ -88,9 +89,13 @@ sections inside the AI group.
    Each card hides itself when it has nothing; when all do, the group says so.
 8. **Ticket Info** (custom fields) and **Recent / Similar tickets**, collapsible, as before.
 
-**Below `lg`** the panel is a sheet from the right (max 24rem) over a dim backdrop, opened by the
-header's Details button; Esc, the close button or the backdrop close it, and focus returns to
-where it was. From `lg` it is inline with the resizer.
+**Below `lg`** the panel is a modal sheet from the right (max 24rem, `role="dialog"`,
+`aria-modal`) over a dim backdrop, opened by the header's Details button. While it is open, Tab
+stays inside it and focus that lands on the page behind comes back (field popovers render in
+`#popovers`, outside the page, so they work as usual); Esc anywhere (unless a dialog or menu above
+it takes it), the close button or the backdrop close it, and focus returns to the opener. The
+T / P / ⇧T shortcuts open the sheet first (`openTicketDetails`, provided by `TicketAgent.vue`),
+wait a tick, then open the field. From `lg` it is inline with the resizer.
 
 **Phones**: the Details tab renders the same `TicketDetailsTab`, so the phone page has every
 section above (before, it rendered contact and feedback components that were never registered,

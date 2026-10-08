@@ -13,7 +13,7 @@
             v-for="mode in modes"
             :key="mode.key"
             type="button"
-            class="flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+            class="flex h-11 min-w-11 items-center gap-1.5 rounded-md px-3 md:h-7 md:min-w-0 md:px-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
             :class="
               mode.active
                 ? 'bg-surface-base text-ink-gray-9 shadow-sm'
