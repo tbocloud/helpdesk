@@ -5,6 +5,11 @@
         <slot name="target" v-bind="{ open: openPopover, togglePopover }">
           <div class="w-full -ml-0.5">
             <button
+              :id="id"
+              type="button"
+              :aria-labelledby="
+                labelledby && id ? `${labelledby} ${id}` : undefined
+              "
               class="flex w-full items-center justify-between focus:outline-none"
               :class="inputClasses"
               @click="
@@ -160,6 +165,16 @@ const props = defineProps({
   filterable: {
     type: Boolean,
     default: true,
+  },
+  /** id of the trigger button */
+  id: {
+    type: String,
+    default: undefined,
+  },
+  /** id of a visible label; the trigger is named by it plus its value */
+  labelledby: {
+    type: String,
+    default: undefined,
   },
 });
 const emit = defineEmits(["update:modelValue", "update:query", "change"]);

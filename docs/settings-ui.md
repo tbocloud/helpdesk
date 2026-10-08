@@ -53,8 +53,11 @@ settings header) and the scrolling content area.
   `actions` slot). Sections in one parent are separated by a hairline; the first has none.
   Replaces the old `<hr class="my-8">` + heading markup.
 - **`SettingRow.vue`**: one setting with its label and help text on the left and the control
-  on the right; stacked on small screens. Its slot gives an `id` to bind on the control so the
-  visible label names it (`v-slot="{ id }"` → `<Switch :id="id" />`).
+  on the right; stacked on small screens. Every control must be named by the visible label:
+  its slot gives `id` and `labelledby`. Controls that take an id (Switch, FormControl, frappe-ui
+  Select such as `AvailabilityMenu`) bind `:id="id"`. Popover triggers (`SelectDropdown`,
+  `Link`, both `Autocomplete`s) take `:id="id" :labelledby="labelledby"`, so the trigger is
+  named by the label plus its current value. A Button with its own text needs neither.
 - **`ChipListInput.vue`**: picked records as removable chips plus a Link picker to add more
   (File storage's document types, Content's alert recipients).
 - Plain fields use frappe-ui `FormControl` with `label` (above the field) and `description`.

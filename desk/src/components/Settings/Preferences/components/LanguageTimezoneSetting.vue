@@ -1,9 +1,12 @@
 <template>
   <SettingRow
+    v-slot="{ id, labelledby }"
     :label="__('Language')"
     :description="__('Change language of the application.')"
   >
     <Link
+      :id="id"
+      :labelledby="labelledby"
       :model-value="user.doc?.language"
       doctype="Language"
       class="w-full sm:w-48"
@@ -12,10 +15,13 @@
     />
   </SettingRow>
   <SettingRow
+    v-slot="{ id, labelledby }"
     :label="__('Timezone')"
     :description="__('Change timezone of the application.')"
   >
     <Autocomplete
+      :id="id"
+      :labelledby="labelledby"
       :model-value="user.doc?.time_zone"
       :options="timezoneOptions"
       :placeholder="__('Select Timezone')"

@@ -80,6 +80,7 @@
         </SettingsSection>
         <SettingsSection :title="__('Account and security')">
           <SettingRow
+            v-slot="{ id }"
             v-if="hasAgentRecord"
             :label="__('Availability')"
             :description="
@@ -88,7 +89,7 @@
               )
             "
           >
-            <AvailabilityMenu />
+            <AvailabilityMenu :id="id" />
           </SettingRow>
           <SettingRow
             :label="__('Emails and signature')"

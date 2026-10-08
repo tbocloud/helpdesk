@@ -57,6 +57,7 @@
       <Switch :id="id" v-model="settingsData.disableSavedRepliesGlobalScope" />
     </SettingRow>
     <SettingRow
+      v-slot="{ id, labelledby }"
       :label="__('Auto update status')"
       :description="
         __(
@@ -65,6 +66,8 @@
       "
     >
       <SelectDropdown
+        :id="id"
+        :labelledby="labelledby"
         :options="autoUpdateTicketStatusList"
         :model-value="settingsData.updateStatusTo"
         @update:model-value="
@@ -100,10 +103,13 @@
       />
     </SettingRow>
     <SettingRow
+      v-slot="{ id, labelledby }"
       :label="__('Default ticket type')"
       :description="__('Select what type all tickets get by default.')"
     >
       <SelectDropdown
+        :id="id"
+        :labelledby="labelledby"
         :options="ticketTypeList.data"
         v-model="settingsData.defaultTicketType"
         target-class="max-w-40"

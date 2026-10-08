@@ -15,10 +15,13 @@
     <template #content>
       <div class="flex flex-col gap-6">
         <SettingRow
+          v-slot="{ id, labelledby }"
           :label="__('Default medium')"
           :description="__('Default calling medium for logged in user')"
         >
           <SelectDropdown
+            :id="id"
+            :labelledby="labelledby"
             :options="telephonyProviders"
             :modelValue="telephonyAgent.doc?.default_medium"
             @update:modelValue="telephonyAgent.doc.default_medium = $event"

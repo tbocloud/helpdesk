@@ -13,6 +13,8 @@
       :placeholder="attrs.placeholder"
       :filterable="false"
       :disabled="attrs.disabled"
+      :id="id"
+      :labelledby="labelledby"
     >
       <template #target="{ open, togglePopover }">
         <slot name="target" v-bind="{ open, togglePopover }" />
@@ -109,6 +111,14 @@ const props = defineProps({
   showDescription: {
     type: Boolean,
     default: false,
+  },
+  id: {
+    type: String,
+    default: undefined,
+  },
+  labelledby: {
+    type: String,
+    default: undefined,
   },
 });
 
