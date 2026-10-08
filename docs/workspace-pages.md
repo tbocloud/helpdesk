@@ -92,6 +92,9 @@ week, kind, limit)` returns `{summaries, can_generate}`.
 from the tasks the viewer can see, so a plain member's card counts their own tasks).
 
 - **Header**: "New project" (project managers) is the page's one primary action; Refresh.
+- **Recent**: a row of links to the projects the user opened last (up to 8, newest first),
+  above the summary tiles; hidden until they open one, and left out if it fails to load. See
+  [Recent projects](#recent-projects).
 - **Summary tiles**, over open projects under the department filter: Open projects; Overdue
   tasks (summed from the cards' stats, with how many projects have any, or how many projects'
   stats didn't load); Ending in 14 days (open projects whose end date is today to 14 days out,
@@ -138,9 +141,69 @@ team member's work, for leads and managers of their projects (the Team page link
   dialog only the lead's and manager's steps.
 - **Task details** (`desk/src/pages/tasky/components/TaskDetailDialog.vue`): the one task panel,
   shared with My Tasks (`/my-tasks`). Hold and dependency notices, status, priority, project,
-  phase, due, estimate, description, pull requests and meetings. Its actions follow `mine`:
-  the assignee may edit, complete, hold or resume, ask for help and hand over; the project's
-  manager or lead may edit, plan, approve and send back.
+  phase, assigned to, assigned by, due, estimate, description, pull requests and meetings. Its
+  actions follow `mine`: the assignee may edit, complete, hold or resume, ask for help and hand
+  over; the project's manager or lead may edit, plan, approve and send back. "Move to
+  project…" shows when the task says `can_move` (see [Moving a task](#moving-a-task-to-another-project)).
+- **Rows** say "Assigned by Arun" next to the project when someone other than the assignee gave
+  the task out.
+
+## Tasks: assigned by, moving, the timer
+
+### Assigned by
+
+Every task payload (`get_task_detail`, `get_kanban_tasks`, `get_my_tasks`, and the task items
+of `get_my_work` and `get_overview`) carries `assigned_by` and `assigned_by_name`, added in
+bulk by `add_assigners()` in `helpdesk/tasky/api.py` (a few queries per list, no per-task
+lookups). The source is `get_assigners()` in `helpdesk/tasky/permissions.py`: the current
+assignee's latest ToDo that wasn't cancelled (`assign_to` records `assigned_by`), else whoever
+created the task. The UI (`assignedByName()` in `taskMeta.ts`) shows it as muted "Assigned by
+…" text on board cards and My Work rows, as a row in the task details and in Edit task, and
+hides it when the assignee took the task themselves.
+
+### Moving a task to another project
+
+`helpdesk.tasky.api.move_task_to_project(task, project)` (POST). The name `move_task` was
+already the board's column move, so this one says where it moves to.
+
+- **Who:** whoever assigned it (from `get_assigners`), the source project's managers and lead,
+  and admins (`can_move_task` in `permissions.py`). Never the assignee: someone who assigned
+  the task to themselves counts as its assignee, not its assigner. The mover must also be able
+  to read the task.
+- **Where:** an open project the mover can add tasks to (`can_add_tasks`), not the one it's in.
+- **What changes:** the project; the phase is cleared unless the new project has a task in a
+  phase of the same name (phases are task fields, not a list on the project); `depends_on_task`
+  is cleared, and tasks in the old project that waited on it stop waiting (a task only waits
+  on tasks in its own project). The assignee keeps the task. When the mover manages the new
+  project, assignees outside its team join it as Developers (`_add_member_for_assignment`);
+  otherwise they're returned in `not_on_team` and the dialog warns. Closed tasks can't move.
+- **Record:** an Info comment ("Moved from X to Y by Z.", plus what was cleared) and a
+  notification to the assignee. The response adds `phase_cleared`, `dependency_cleared`,
+  `dependents_released` and `not_on_team` to the task.
+- **UI:** "Move to project…" in the board card's menu and the task details' actions, shown when
+  the task's `can_move` is true; `components/MoveTaskDialog.vue` picks the project with a
+  Combobox (open projects the user can add tasks to) and explains what will be cleared.
+
+### Recent projects
+
+`record_project_view(project)` (POST) runs when a project page (any tab) loads, from
+`ProjectNav`; it records the visit in Frappe's View Log (one row per person and project, its
+`modified` the last visit), so the list follows the user across devices, and keeps only the
+latest 8. `get_recent_projects()` returns them newest first through `frappe.get_list`, so a
+project the user can no longer read drops out, and deleted projects take their View Log rows
+with them.
+
+### The board timer
+
+A task's timer runs only while it is In progress and has `custom_timer_start`; banked time sits
+in `custom_timer_elapsed`. The server is the only record: the board derives each card's timer
+from those fields (`taskTimer()` in `taskMeta.ts`) and replaces its local state on every load.
+Pause calls `stop_timer` (banks the time, the task stays In progress) and Resume calls
+`start_timer`, which only works on a task In progress; resuming a card that left In progress
+moves it back there like a drop. Nothing else starts a paused timer, and starting one task never
+touches another's: there is no one-running-task rule. Before this, Pause only changed the
+board's local state, so the server timer kept running and the next load (moving or editing
+another task, or coming back to the board) showed the paused task running again.
 
 ## Timesheets (`/timesheets`)
 

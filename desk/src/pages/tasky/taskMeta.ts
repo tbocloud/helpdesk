@@ -1,6 +1,6 @@
 import type { Tone } from "@/components/tone";
 import { __ } from "@/translation";
-import { dayjs } from "frappe-ui";
+import { dayjs, dayjsLocal } from "frappe-ui";
 import type { Component } from "vue";
 import LucideCircle from "~icons/lucide/circle";
 import LucideCircleCheck from "~icons/lucide/circle-check";
@@ -256,4 +256,49 @@ export function loadErrorMessage(...errors: unknown[]) {
         "You're not on this project. Ask its project manager to add you as a member."
       )
     : __("Check your connection and try again.");
+}
+
+/** Who gave the task out, or "" when nobody did or the assignee took it themselves. */
+export function assignedByName(task: {
+  assigned_by?: string | null;
+  assigned_by_name?: string | null;
+  assignees?: string[];
+}) {
+  const by = task.assigned_by;
+  if (!by || task.assignees?.includes(by)) return "";
+  return task.assigned_by_name || by;
+}
+
+export interface TaskTimer {
+  running: boolean;
+  paused: boolean;
+  /** Seconds tracked: the banked time plus the running stretch. */
+  elapsed: number;
+}
+
+/**
+ * A task's timer, from the server's fields alone. It runs only while the task is
+ * in progress with a start time; otherwise banked time shows as paused. Pausing
+ * and resuming go through the server, so reloading the board (after working on
+ * another task, or coming back to it) never restarts a paused timer.
+ */
+export function taskTimer(
+  task: {
+    status?: string;
+    custom_timer_start?: string | null;
+    custom_timer_elapsed?: number | null;
+  },
+  now = dayjs()
+): TaskTimer | null {
+  const banked = Math.round((Number(task.custom_timer_elapsed) || 0) * 3600);
+  if (task.status === "Working" && task.custom_timer_start) {
+    // the start is stored in the server's time zone
+    const since = now.diff(dayjsLocal(task.custom_timer_start), "second");
+    return {
+      running: true,
+      paused: false,
+      elapsed: banked + Math.max(since, 0),
+    };
+  }
+  return banked > 0 ? { running: false, paused: true, elapsed: banked } : null;
 }

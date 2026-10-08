@@ -127,6 +127,62 @@ def is_assigned(doc, user: str) -> bool:
         return False
 
 
+def get_assigners(assignees: dict[str, str]) -> dict[str, str]:
+    """Who gave each task to its assignee: {task: assignee} in, {task: assigner} out.
+
+    The assignee's latest ToDo that wasn't cancelled names who assigned it; when
+    it doesn't (an assignment made outside assign_to), whoever created the task
+    did. Two queries for any number of tasks.
+    """
+    if not assignees:
+        return {}
+    todo = frappe.qb.DocType("ToDo")
+    rows = (
+        frappe.qb.from_(todo)
+        .select(todo.reference_name, todo.allocated_to, todo.assigned_by)
+        .where(
+            (todo.reference_type == "Task")
+            & todo.reference_name.isin(list(assignees))
+            & (todo.status != "Cancelled")
+        )
+        .orderby(todo.creation)
+        .run(as_dict=True)
+    )
+    found = {}
+    for row in rows:
+        # oldest first, so the latest assignment wins
+        if row.assigned_by and row.allocated_to == assignees.get(row.reference_name):
+            found[row.reference_name] = row.assigned_by
+    missing = [name for name in assignees if name not in found]
+    if missing:
+        task = frappe.qb.DocType("Task")
+        found.update(
+            frappe.qb.from_(task)
+            .select(task.name, task.owner)
+            .where(task.name.isin(missing))
+            .run()
+        )
+    return found
+
+
+def is_assigner(assigner: str | None, assignees: list[str], user: str) -> bool:
+    """`user` gave the task to someone else. Someone who took the task themselves
+    is its assignee, not its assigner."""
+    return bool(assigner) and assigner == user and user not in assignees
+
+
+def can_move_task(
+    project: str | None,
+    assigner: str | None,
+    assignees: list[str],
+    user: str | None = None,
+) -> bool:
+    """Who may move a task to another project: admins, the project's managers and
+    lead, and whoever assigned it. Never the assignee on their own say."""
+    user = user or frappe.session.user
+    return can_manage_project(project, user) or is_assigner(assigner, assignees, user)
+
+
 def _managed_projects_subquery(user: str) -> str:
     u = frappe.db.escape(user)
     role = frappe.db.escape(MANAGER_PROJECT_ROLE)

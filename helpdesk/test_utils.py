@@ -790,6 +790,24 @@ def make_task(project: str, subject: str, exp_end_date=None, **kwargs):
     ).insert(ignore_permissions=True)
 
 
+def make_assigned_task(
+    project: str, subject: str, assignee: str, assigned_by: str, **kwargs
+) -> str:
+    """Creates an open Task in `project`, due in five days, that `assigned_by`
+    creates and gives to `assignee` (so the ToDo names them as the assigner);
+    returns its name."""
+    from frappe.utils import add_days, nowdate
+
+    kwargs.setdefault("description", f"{subject}: agreed with the customer.")
+
+    def create():
+        task = make_task(project, subject, add_days(nowdate(), 5), **kwargs).name
+        make_assignment("Task", task, assignee)
+        return task
+
+    return run_as_user(assigned_by, create)
+
+
 def make_employee(user: str, employee_name: str | None = None):
     """Creates an active Employee linked to `user` (the hub doesn't need one per agent)."""
     return frappe.get_doc(

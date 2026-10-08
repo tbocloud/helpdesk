@@ -222,6 +222,13 @@
                   </Dropdown>
                 </div>
 
+                <p
+                  v-if="assignedByName(task)"
+                  class="mt-1 truncate pl-5 text-xs text-ink-gray-5"
+                >
+                  {{ __("Assigned by {0}", assignedByName(task)) }}
+                </p>
+
                 <div
                   v-if="task.blocked && col.key !== 'Completed'"
                   class="mt-2 flex min-w-0"
@@ -274,8 +281,9 @@
                   }}</span>
                   <button
                     type="button"
-                    class="ml-auto flex size-6 items-center justify-center rounded transition-colors hover:bg-surface-base"
-                    :aria-label="__('Pause timer')"
+                    class="ml-auto flex size-6 items-center justify-center rounded transition-colors hover:bg-surface-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4 disabled:opacity-50"
+                    :aria-label="__('Pause the timer on {0}', task.subject)"
+                    :disabled="savingTimer === task.name"
                     @click.stop="togglePause(task)"
                   >
                     <LucidePause class="size-3.5" aria-hidden="true" />
@@ -292,8 +300,9 @@
                   }}</span>
                   <button
                     type="button"
-                    class="ml-auto flex size-6 items-center justify-center rounded transition-colors hover:bg-surface-base"
-                    :aria-label="__('Resume timer')"
+                    class="ml-auto flex size-6 items-center justify-center rounded transition-colors hover:bg-surface-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4 disabled:opacity-50"
+                    :aria-label="__('Resume the timer on {0}', task.subject)"
+                    :disabled="savingTimer === task.name"
                     @click.stop="togglePause(task)"
                   >
                     <LucidePlay class="size-3.5" aria-hidden="true" />
@@ -433,6 +442,7 @@
       v-model:task="sendingBackTask"
       @sent="kanban.reload()"
     />
+    <MoveTaskDialog v-model:task="movingTask" @moved="kanban.reload()" />
 
     <CompleteTaskDialog
       v-model:task="completingTask"
@@ -446,7 +456,7 @@
 import { errorText } from "@/utils";
 import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
-import { Button, Dropdown, createResource, toast } from "frappe-ui";
+import { Button, Dropdown, call, createResource, toast } from "frappe-ui";
 import { computed, onUnmounted, ref, watch } from "vue";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
 import LucideArrowRight from "~icons/lucide/arrow-right";
@@ -456,6 +466,7 @@ import LucideCheckCheck from "~icons/lucide/check-check";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideCirclePause from "~icons/lucide/circle-pause";
+import LucideFolderInput from "~icons/lucide/folder-input";
 import LucideGripVertical from "~icons/lucide/grip-vertical";
 import LucideInfo from "~icons/lucide/info";
 import LucideMoreHorizontal from "~icons/lucide/more-horizontal";
@@ -471,6 +482,7 @@ import EditTaskDialog from "./components/EditTaskDialog.vue";
 import HandOverTaskDialog from "./components/HandOverTaskDialog.vue";
 import HoldTaskDialog from "./components/HoldTaskDialog.vue";
 import MilestoneMark from "./components/MilestoneMark.vue";
+import MoveTaskDialog from "./components/MoveTaskDialog.vue";
 import ProjectNav from "./components/ProjectNav.vue";
 import RequestHelpDialog from "./components/RequestHelpDialog.vue";
 import ResumeTaskDialog from "./components/ResumeTaskDialog.vue";
@@ -483,6 +495,7 @@ import WaitingOn from "./components/WaitingOn.vue";
 import type { TaskPullRequest } from "./pullRequestMeta";
 import {
   ON_HOLD,
+  assignedByName,
   blockedMessage,
   blocksMove,
   holdDays,
@@ -496,6 +509,8 @@ import {
   priorityIcon,
   shortDate,
   taskStatusMeta,
+  taskTimer,
+  type TaskTimer,
 } from "./taskMeta";
 import { useApproveTask } from "./useApproveTask";
 
@@ -529,6 +544,10 @@ interface Task {
   assigned_to?: string;
   assigned_to_name?: string;
   assignees?: string[];
+  assigned_by?: string | null;
+  assigned_by_name?: string | null;
+  can_move?: boolean;
+  project?: string;
   due_date?: string;
   estimated_hours?: number;
   custom_timer_start?: string;
@@ -576,6 +595,7 @@ const editingTask = ref<Task | null>(null);
 const sendingBackTask = ref<Task | null>(null);
 const helpingTask = ref<Task | null>(null);
 const handingOverTask = ref<Task | null>(null);
+const movingTask = ref<Task | null>(null);
 
 const { approve, resource: approveResource } = useApproveTask(() =>
   kanban.reload()
@@ -608,6 +628,13 @@ function cardActions(task: Task) {
       onClick: () => (handingOverTask.value = task),
     });
   }
+  // whoever assigned it, or the project's manager or lead (the server decides)
+  if (task.can_move)
+    actions.push({
+      label: __("Move to project…"),
+      icon: LucideFolderInput,
+      onClick: () => (movingTask.value = task),
+    });
   if (!canManage.value || isClosed(task)) return actions;
   actions.push({
     label: __("Plan"),
@@ -659,12 +686,7 @@ const completingTrackedHours = computed(() => {
   return timer ? timer.elapsed / 3600 : null;
 });
 
-interface TimerState {
-  running: boolean;
-  paused: boolean;
-  elapsed: number;
-}
-const timers = ref<Record<string, TimerState>>({});
+const timers = ref<Record<string, TaskTimer>>({});
 let tickInterval: ReturnType<typeof setInterval> | null = null;
 
 (function startTick() {
@@ -688,29 +710,15 @@ watch(
   { immediate: true }
 );
 
-function restoreTimers(cols: Record<string, any[]>) {
-  if (!cols) return;
-  for (const col of Object.values(cols)) {
-    for (const task of col || []) {
-      if (task.status === "Working" && task.custom_timer_start) {
-        const start = new Date(task.custom_timer_start).getTime();
-        const now = Date.now();
-        const elapsed = Math.floor((now - start) / 1000);
-        const pausedElapsed = (task.custom_timer_elapsed || 0) * 3600;
-        timers.value[task.name] = {
-          running: true,
-          paused: false,
-          elapsed: elapsed + pausedElapsed,
-        };
-      } else if (task.custom_timer_elapsed > 0) {
-        timers.value[task.name] = {
-          running: false,
-          paused: true,
-          elapsed: (task.custom_timer_elapsed || 0) * 3600,
-        };
-      }
-    }
+// The server is the one record of every timer: each load replaces the local state,
+// so a timer paused on the server can't come back running from a stale copy.
+function restoreTimers(cols: Record<string, Task[]>) {
+  const next: Record<string, TaskTimer> = {};
+  for (const task of Object.values(cols ?? {}).flat()) {
+    const timer = taskTimer(task);
+    if (timer) next[task.name] = timer;
   }
+  timers.value = next;
 }
 
 const PAUSE_STATUSES = ["Open", "Pending Review"];
@@ -743,13 +751,40 @@ function finalizeTimer(task: Task): number {
   return Math.round(hours * 100) / 100;
 }
 
-function togglePause(task: Task) {
+const savingTimer = ref<string | null>(null);
+
+// Pause and resume are saved on the server, which keeps the task in progress;
+// resuming a task that has left In progress moves it back there, like a drop.
+async function togglePause(task: Task) {
   const t = timers.value[task.name];
-  if (!t) return;
-  if (t.paused) {
-    startOrResumeTimer(task);
-  } else {
-    pauseTimer(task);
+  if (!t || savingTimer.value) return;
+  if (t.paused && task.status !== "Working") {
+    changeStatus(task, "Working");
+    return;
+  }
+  const pausing = !t.paused;
+  savingTimer.value = task.name;
+  if (pausing) pauseTimer(task);
+  else startOrResumeTimer(task);
+  try {
+    await call(
+      pausing
+        ? "helpdesk.tasky.api.stop_timer"
+        : "helpdesk.tasky.api.start_timer",
+      { task: task.name }
+    );
+  } catch (e) {
+    toast.error(
+      errorText(
+        e,
+        pausing
+          ? __("Couldn't pause the timer.")
+          : __("Couldn't resume the timer.")
+      )
+    );
+  } finally {
+    savingTimer.value = null;
+    kanban.reload();
   }
 }
 
@@ -792,7 +827,11 @@ function onDrop(e: DragEvent, newStatus: string) {
     task = arr.find((t) => t.name === taskName);
     if (task) break;
   }
-  if (!task || task.status === newStatus || task.status === "Completed") return;
+  if (task) changeStatus(task, newStatus);
+}
+
+function changeStatus(task: Task, newStatus: string) {
+  if (task.status === newStatus || task.status === "Completed") return;
 
   // the server refuses these moves while the dependency is open; don't move the card at all
   if (blocksMove(task, newStatus)) {
