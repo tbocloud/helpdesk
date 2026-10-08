@@ -24,7 +24,7 @@ from helpdesk.support_contracts import (
     usage_breakdown,
 )
 from helpdesk.tasky.permissions import is_project_manager
-from helpdesk.utils import agent_only
+from helpdesk.utils import agent_only, csv_safe
 
 # what the Support hours page filters on
 STAGES = ("warning", "over")
@@ -205,5 +205,5 @@ def to_csv(rows: list[dict]) -> str:
             "rate_per_extra_hour": row["rate_per_extra_hour"] or "",
             "currency": row["currency"] or "",
         }
-        writer.writerow([values[key] for key, _label in CSV_COLUMNS])
+        writer.writerow([csv_safe(values[key]) for key, _label in CSV_COLUMNS])
     return out.getvalue()

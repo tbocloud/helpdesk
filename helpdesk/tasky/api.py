@@ -20,6 +20,7 @@ from helpdesk.tasky.permissions import (
     is_project_owner,
     is_tasky_admin,
 )
+from helpdesk.utils import csv_safe
 
 # member roles a project lead is rotated among
 LEAD_ROTATION_ROLES = ("Developer",)
@@ -2099,20 +2100,19 @@ def export_timesheets_csv(
     )
     for log in logs:
         ts = sheets[log.parent]
-        writer.writerow(
-            [
-                frappe.utils.getdate(log.from_time) if log.from_time else "",
-                _full_name(ts.owner),
-                ts.name,
-                ts.title,
-                _(ts.status),
-                projects.get(log.project, log.project or ""),
-                tasks.get(log.task, log.task or ""),
-                log.hours,
-                frappe.utils.strip_html(log.description or ""),
-                _("Yes") if log.custom_billable else _("No"),
-            ]
-        )
+        cells = [
+            frappe.utils.getdate(log.from_time) if log.from_time else "",
+            _full_name(ts.owner),
+            ts.name,
+            ts.title,
+            _(ts.status),
+            projects.get(log.project, log.project or ""),
+            tasks.get(log.task, log.task or ""),
+            log.hours,
+            frappe.utils.strip_html(log.description or ""),
+            _("Yes") if log.custom_billable else _("No"),
+        ]
+        writer.writerow([csv_safe(cell) for cell in cells])
     period = "-".join(d for d in (from_date, to_date) if d) or "all"
     frappe.response.filename = f"timesheets-{period}.csv"
     frappe.response.filecontent = out.getvalue()

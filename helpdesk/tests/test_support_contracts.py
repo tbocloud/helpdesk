@@ -21,6 +21,7 @@ from helpdesk.test_utils import (
     make_timesheet,
     run_as_user,
 )
+from helpdesk.utils import csv_safe
 
 MANAGER = ("manager@support-hours.example", "Meera Nair")
 ACCOUNT_MANAGER = ("accounts@support-hours.example", "Joseph Mathew")
@@ -287,3 +288,21 @@ class TestSupportContracts(FrappeTestCase):
         )
         self.assertIn(OTHER_CUSTOMER, [r["customer"] for r in warning["rows"]])
         self.assertNotIn(CUSTOMER, [r["customer"] for r in warning["rows"]])
+
+    def test_csv_neutralises_formulas_in_names(self):
+        self.contract.db_set("contract_name", '=HYPERLINK("http://evil.example")')
+
+        lines = api.to_csv(api.support_hours_rows()).splitlines()
+
+        row = next(line for line in lines if line.startswith(CUSTOMER))
+        self.assertIn("'=HYPERLINK", row)
+        self.assertNotIn(",=HYPERLINK", row)
+
+
+class TestCsvSafe(FrappeTestCase):
+    def test_formula_cells_get_a_leading_quote(self):
+        for value in ("=1+1", "+1", "-1", "@SUM(A1)", "\tx", "\rx"):
+            self.assertEqual(csv_safe(value), f"'{value}")
+        self.assertEqual(csv_safe("Hours Traders LLC"), "Hours Traders LLC")
+        # numbers, including negative ones, stay numbers
+        self.assertEqual(csv_safe(-2.5), -2.5)
