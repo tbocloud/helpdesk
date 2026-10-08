@@ -125,7 +125,10 @@ All agent-only. Managers are Agent Managers, System Managers and project manager
   and `total` follow the type filter.
 - `download_support_hours(contract_type=None, stage=None)`: the same rows as CSV (customer,
   contract, type, billing period, current period, hours included, rolled over, used, left,
-  extra hours, % used, rate per extra hour, currency).
+  extra hours, % used, rate per extra hour, currency). Text cells pass through `csv_safe`
+  (`helpdesk/utils.py`), so a name starting with =, +, -, @, a tab or a carriage return gets a
+  leading quote and a spreadsheet won't run it as a formula; the customer report and
+  timesheets CSVs use it too.
 
 ## UI
 
