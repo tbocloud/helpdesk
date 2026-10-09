@@ -56,6 +56,9 @@ function taskDeadline(item: WorkItem): DeadlineInfo {
   const days = dayjs(item.deadline)
     .startOf("day")
     .diff(dayjs().startOf("day"), "day");
+  // due today and already worked longer than its estimate (server: is_task_overdue)
+  if (item.is_overdue && days === 0)
+    return { label: __("Overdue · past its estimate"), overdue: true };
   if (item.is_overdue || days < 0) {
     const late = Math.max(-days, 1);
     return {

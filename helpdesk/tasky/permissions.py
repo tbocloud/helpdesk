@@ -18,8 +18,11 @@ returns False to deny or None to defer to role permissions.
 import json
 
 import frappe
+from frappe import _
 
 ADMIN_ROLES = ("System Manager", "Agent Manager")
+# each team keeps out of the other's department (by department name, see departments.md)
+HIDDEN_DEPARTMENTS = {"DM Employee": "ERP", "ERP Employee": "Digital"}
 PROJECT_MANAGER_ROLE = "Project Manager"
 # Value of Project User.custom_role that makes a member a manager of that project
 MANAGER_PROJECT_ROLE = "Project Manager"
@@ -36,6 +39,49 @@ def is_project_manager(user: str | None = None) -> bool:
     """Whether the user may create projects and templates."""
     user = user or frappe.session.user
     return is_tasky_admin(user) or PROJECT_MANAGER_ROLE in frappe.get_roles(user)
+
+
+def hidden_departments(user: str | None = None) -> list[str]:
+    """Departments whose projects and tasks this user never sees: ERP for DM Employees,
+    Digital for ERP Employees. System Managers and Agent Managers see every department."""
+    user = user or frappe.session.user
+    if is_tasky_admin(user):
+        return []
+    roles = set(frappe.get_roles(user))
+    return sorted({dept for role, dept in HIDDEN_DEPARTMENTS.items() if role in roles})
+
+
+def _departments_sql(departments: list[str]) -> str:
+    return ", ".join(frappe.db.escape(d) for d in departments)
+
+
+def is_hidden_project(project: str | None, user: str | None = None) -> bool:
+    hidden = hidden_departments(user)
+    if not hidden or not project:
+        return False
+    return frappe.db.get_value("Project", project, "custom_department") in hidden
+
+
+def check_assignment_department(todo, method=None):
+    """Refuse giving a task to someone whose team keeps out of its project's department.
+
+    Assigning shares the task with them, which would let them open it even though it's
+    hidden from all their lists; so the assignment itself is refused.
+    """
+    if (
+        todo.reference_type != "Task"
+        or not todo.allocated_to
+        or todo.status == "Cancelled"
+    ):
+        return
+    project = frappe.db.get_value("Task", todo.reference_name, "project")
+    if is_hidden_project(project, todo.allocated_to):
+        frappe.throw(
+            _("{0} can't be given tasks in the {1} department.").format(
+                frappe.utils.get_fullname(todo.allocated_to),
+                frappe.db.get_value("Project", project, "custom_department"),
+            )
+        )
 
 
 def get_managed_projects(user: str) -> list[str]:
@@ -203,11 +249,15 @@ def project_query(user: str | None = None) -> str | None:
         return None
     u = frappe.db.escape(user)
     assigned = frappe.db.escape(f'%"{user}"%')
-    return (
+    condition = (
         f"(`tabProject`.`owner` = {u} or `tabProject`.`project_lead` = {u} or `tabProject`.`name` in "
         f"(select `parent` from `tabProject User` where `parenttype` = 'Project' and `user` = {u}) "
         f"or `tabProject`.`name` in (select `project` from `tabTask` where `_assign` like {assigned}))"
     )
+    hidden = hidden_departments(user)
+    if hidden:
+        condition += f" and ifnull(`tabProject`.`custom_department`, '') not in ({_departments_sql(hidden)})"
+    return condition
 
 
 def task_query(user: str | None = None) -> str | None:
@@ -218,10 +268,17 @@ def task_query(user: str | None = None) -> str | None:
     assigned = frappe.db.escape(f'%"{user}"%')
     # a task someone added for a teammate stays visible to them
     owner = frappe.db.escape(user)
-    return (
+    condition = (
         f"(`tabTask`.`project` in ({_managed_projects_subquery(user)}) "
         f"or `tabTask`.`_assign` like {assigned} or `tabTask`.`owner` = {owner})"
     )
+    hidden = hidden_departments(user)
+    if hidden:
+        condition += (
+            f" and ifnull(`tabTask`.`project`, '') not in (select `name` from `tabProject` "
+            f"where `custom_department` in ({_departments_sql(hidden)}))"
+        )
+    return condition
 
 
 def timesheet_query(user: str | None = None) -> str | None:
@@ -244,6 +301,8 @@ def project_has_permission(
     user = user or frappe.session.user
     if ptype == "create" or is_tasky_admin(user):
         return None
+    if doc.get("custom_department") in hidden_departments(user):
+        return False
     if is_project_owner(doc.name, user):
         return None
     if ptype in ("read", "print", "email", "report") and (
@@ -259,7 +318,11 @@ def task_has_permission(
     doc, ptype: str | None = None, user: str | None = None
 ) -> bool | None:
     user = user or frappe.session.user
-    if is_tasky_admin(user) or can_manage_project(doc.project, user):
+    if is_tasky_admin(user):
+        return None
+    if is_hidden_project(doc.project, user):
+        return False
+    if can_manage_project(doc.project, user):
         return None
     if ptype == "create":
         return None if can_add_tasks(doc.project, user) else False

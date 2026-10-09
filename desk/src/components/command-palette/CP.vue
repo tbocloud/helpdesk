@@ -58,6 +58,7 @@
 <script setup>
 import { useDevice } from "@/composables";
 import { useShortcut } from "@/composables/shortcuts";
+import { useAuthStore } from "@/stores/auth";
 import { isCustomerPortal } from "@/utils";
 import {
   Combobox,
@@ -75,6 +76,7 @@ import LucideBookOpen from "~icons/lucide/book-open";
 import LucideTicket from "~icons/lucide/ticket";
 import CPGroup from "./CPGroup.vue";
 const router = useRouter();
+const authStore = useAuthStore();
 const { isMac } = useDevice();
 
 // Reactive data
@@ -93,22 +95,23 @@ const navigationItems = computed(() => {
         params: { ticketId: query.value.slice(1) },
       },
     });
-  } else {
+  } else if (authStore.isAdmin) {
     items.push({
       title: __("Tickets"),
       icon: () => h(LucideTicket),
       route: { name: "TicketsAgent" },
     });
   }
-  items.push({
-    title: __("Knowledge Base"),
-    icon: () => h(LucideBookOpen),
-    route: {
-      name: isCustomerPortal.value
-        ? "CustomerKnowledgeBase"
-        : "AgentKnowledgeBase",
-    },
-  });
+  if (!authStore.isDepartmentEmployee)
+    items.push({
+      title: __("Knowledge Base"),
+      icon: () => h(LucideBookOpen),
+      route: {
+        name: isCustomerPortal.value
+          ? "CustomerKnowledgeBase"
+          : "AgentKnowledgeBase",
+      },
+    });
 
   return {
     title: __("Jump to"),

@@ -11,6 +11,7 @@ from helpdesk.automation import acting_user
 WAITING_ON_TASK = "Waiting on Task"
 ON_HOLD = "On Hold"
 PENDING_REVIEW = "Pending Review"
+TASK_COMPLETED = "Task Completed"
 DONE = ("Completed", "Cancelled")
 # a task can't enter these while the task it depends on is still open
 NEEDS_DEPENDENCY_DONE = ("Working", PENDING_REVIEW, "Completed")
@@ -36,6 +37,44 @@ class Task(Document):
         self.unblock_dependents()
         self.advance_content_post()
         self.clarify_signoff_item()
+        self.tell_assigner_it_is_done()
+
+    def tell_assigner_it_is_done(self):
+        """Whoever gave out the task hears when it's completed, in the helpdesk with a chime.
+
+        Not when they completed (or approved) it themselves or took it themselves, and not
+        when a published or cancelled content post closes its tasks all at once.
+        """
+        from helpdesk.tasky.permissions import get_assigners
+        from helpdesk.work_reminders import notify_users
+
+        if (
+            self.status != "Completed"
+            or not self.status_changed()
+            or self.flags.from_content_post
+        ):
+            return
+        assignees = self.assignees()
+        assigner = get_assigners({self.name: assignees[0] if assignees else None}).get(
+            self.name
+        )
+        done_by = frappe.session.user
+        if not assigner or assigner == done_by or assigner in assignees:
+            return
+        # on review projects a lead's approval completes it; the assignees did the work
+        workers = assignees if assignees and done_by not in assignees else [done_by]
+        notify_users(
+            [assigner],
+            "Task",
+            self.name,
+            _("{0} completed {1}").format(
+                ", ".join(frappe.utils.get_fullname(u) for u in workers), self.subject
+            ),
+            notification_type=TASK_COMPLETED,
+            user_from=workers[0],
+            # a task reopened and completed again is news again
+            once=False,
+        )
 
     def clarify_signoff_item(self):
         """Completing a sign-off's clarification task returns its item to the customer."""

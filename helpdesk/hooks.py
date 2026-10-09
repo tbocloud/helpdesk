@@ -133,6 +133,10 @@ user_invitation = {
 }
 
 doc_events = {
+    "ToDo": {
+        # nobody is given a task in a department their team keeps out of
+        "validate": "helpdesk.tasky.permissions.check_assignment_department",
+    },
     "File": {
         "after_insert": "helpdesk.storage.s3.after_insert",
     },

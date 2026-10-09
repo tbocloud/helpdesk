@@ -432,7 +432,8 @@ function dueLabel(task: Task) {
     return days === -1
       ? __("1 day overdue")
       : __("{0} days overdue", String(-days));
-  if (days === 0) return __("Due today");
+  if (days === 0)
+    return isOverdue(task) ? __("Past its estimate") : __("Due today");
   if (days === 1) return __("Due tomorrow");
   if (days < 7) return __("Due {0}", due.format("ddd"));
   return due.format("D MMM");

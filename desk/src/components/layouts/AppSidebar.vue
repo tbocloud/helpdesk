@@ -114,7 +114,11 @@
 </template>
 
 <script setup lang="ts">
-import { CONTENT_TEAM_ROUTES } from "@/pages/content/contentTeam";
+import {
+  ERP_EMPLOYEE_HIDDEN_ROUTES,
+  CONTENT_TEAM_ROUTES,
+  DEPARTMENT_EMPLOYEE_HIDDEN_ROUTES,
+} from "@/pages/content/contentTeam";
 import CP from "@/components/command-palette/CP.vue";
 import UserMenu from "@/components/UserMenu.vue";
 import { useDevice } from "@/composables";
@@ -216,6 +220,15 @@ const navItems = computed(() => {
     : agentPortalSidebarOptions;
   return options
     .filter((item) => isCallingEnabled.value || item.label !== __("Call Logs"))
+    .filter((item) => !item.adminOnly || authStore.isAdmin)
+    .filter(
+      (item) => !authStore.isErpOnly || !ERP_EMPLOYEE_HIDDEN_ROUTES.has(item.to)
+    )
+    .filter(
+      (item) =>
+        !authStore.isDepartmentEmployee ||
+        !DEPARTMENT_EMPLOYEE_HIDDEN_ROUTES.has(item.to)
+    )
     .filter((item) => !item.projectManagerOnly || authStore.isProjectManager)
     .filter((item) => !item.overviewOnly || authStore.canSeeOverview)
     .filter(

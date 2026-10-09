@@ -130,7 +130,8 @@ class TestContentPortal(FrappeTestCase):
             content_portal.approve(post.name)
 
         post.reload()
-        self.assertEqual(post.status, "Approved")
+        # the Digital Marketing Head approves it next
+        self.assertEqual(post.status, "Head Review")
         self.assertTrue(post.client_decided_on)
         self.assertTrue(
             frappe.db.exists(
@@ -157,6 +158,7 @@ class TestContentPortal(FrappeTestCase):
             result = content_portal.approve_many([waiting.name, approved.name])
 
         self.assertEqual(result["approved"], [waiting.name])
+        self.assertEqual(result["statuses"], {waiting.name: "Head Review"})
 
     def test_cannot_touch_other_customers_or_internal_posts(self):
         other = self.post("Not yours", customer=OTHER_CUSTOMER)

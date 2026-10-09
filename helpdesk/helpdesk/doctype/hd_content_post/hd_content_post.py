@@ -9,6 +9,7 @@ from frappe.utils import (
     add_days,
     add_to_date,
     escape_html,
+    flt,
     format_datetime,
     formatdate,
     get_datetime,
@@ -17,10 +18,20 @@ from frappe.utils import (
     now_datetime,
 )
 
+from helpdesk.content_team import (
+    can_edit_content,
+    head_approvers,
+    is_dm_head,
+    is_erp_only,
+)
+from helpdesk.utils import add_assignment, remove_assignment
 from helpdesk.work_reminders import notify_users
 
 # Posts in these statuses are ready to go; anything else close to its date needs attention
 READY_STATUSES = ("Approved", "Scheduled", "Published")
+CLIENT_REVIEW = "Client Review"
+# the client said yes; the Digital Marketing Head approves it before it can go out
+HEAD_REVIEW = "Head Review"
 # Posts in these statuses are done with, so they never need a reminder or a missed alert
 CLOSED_STATUSES = ("Published", "Cancelled")
 REMINDER_WINDOW_HOURS = 48
@@ -62,10 +73,10 @@ NEXT_PERSON = {
 
 class HDContentPost(Document):
     def validate(self):
+        self.guard_editing()
+        self.guard_head_review()
         self.clean_team()
         self.sync_platforms()
-        self.set_customer_from_campaign()
-        self.validate_campaign_customer()
         self.validate_publish_on()
         self.validate_published()
         self.set_published_on()
@@ -155,7 +166,7 @@ class HDContentPost(Document):
         )
 
     def wanted_tasks(self) -> dict:
-        """{role: {"users": [...], "due": date}} for the tasks this post should have."""
+        """{role: {"users": [...], "due": date, "hours": float}} for the tasks this post should have."""
         publish = getdate(self.publish_on) if self.publish_on else None
         settings = frappe.get_cached_doc("HD Content Settings")
 
@@ -171,15 +182,39 @@ class HDContentPost(Document):
         if self.task_mode == PER_PERSON:
             # one task per role; several people on a role share it
             return {
-                label: {"users": self.people(field), "due": due(days[field])}
+                label: {
+                    "users": self.people(field),
+                    "due": due(days[field]),
+                    "hours": self.role_hours(field),
+                    "cleared": self.hours_cleared([field]),
+                }
                 for field, label in TASK_ROLES.items()
                 if self.people(field)
             }
         if self.task_mode == ONE_TASK:
             users = self.everyone()
             if users:
-                return {SHARED_ROLE: {"users": users, "due": due(days["designer"])}}
+                return {
+                    SHARED_ROLE: {
+                        "users": users,
+                        "due": due(days["designer"]),
+                        # the shared task covers every role's part
+                        "hours": sum(self.role_hours(f) for f in TASK_ROLES),
+                        "cleared": self.hours_cleared(list(TASK_ROLES)),
+                    }
+                }
         return {}
+
+    def hours_cleared(self, roles: list[str]) -> bool:
+        """These roles had hours before this save and have none now."""
+        before = self.get_doc_before_save()
+        if not before or any(self.role_hours(r) for r in roles):
+            return False
+        return any(flt(before.get(f"{r}_hours")) for r in roles)
+
+    def role_hours(self, role: str) -> float:
+        """The hours estimated for a role's part of the post (0 when not given)."""
+        return flt(self.get(f"{role}_hours"))
 
     def task_subject(self, role: str) -> str:
         what = _("Content") if role == SHARED_ROLE else _(role)
@@ -189,13 +224,7 @@ class HDContentPost(Document):
         return text[:140]
 
     def content_project(self) -> str | None:
-        """The campaign's project, or the customer's open Content Calendar project."""
-        if self.campaign:
-            project = frappe.db.get_value(
-                "HD Content Campaign", self.campaign, "project"
-            )
-            if project:
-                return project
+        """The customer's open Content Calendar project."""
         if not self.customer:
             return None
         return frappe.db.get_value(
@@ -221,13 +250,15 @@ class HDContentPost(Document):
                 "description": escape_html(self.brief or ""),
                 "content_post": self.name,
                 "content_role": role,
+                # left empty, the task's hours are estimated by AI instead
+                "custom_estimated_hours": plan["hours"] or None,
             }
         ).insert(ignore_permissions=True)
         for user in plan["users"]:
             self.give_task(task, user)
 
     def plan_task(self, task, plan: dict) -> bool:
-        """Set the task's due date and subject from the post; True if anything changed."""
+        """Set the task's due date, subject and hours from the post; True if anything changed."""
         changed = False
         if plan["due"] and getdate(task.exp_end_date or "1900-01-01") != getdate(
             plan["due"]
@@ -238,12 +269,20 @@ class HDContentPost(Document):
         if task.subject != subject:
             task.subject = subject
             changed = True
+        # no hours on the post keeps whatever the task has (e.g. an AI estimate),
+        # unless the post's hours were just cleared
+        if plan["hours"] and flt(task.get("custom_estimated_hours")) != plan["hours"]:
+            task.custom_estimated_hours = plan["hours"]
+            changed = True
+        elif plan.get("cleared") and flt(task.get("custom_estimated_hours")):
+            task.custom_estimated_hours = 0
+            changed = True
         return changed
 
     def reassign_task(self, task, users: list):
         current = set(task.assignees())
         for user in current - set(users):
-            assign_to._remove("Task", task.name, user, ignore_permissions=True)
+            remove_assignment("Task", task.name, user, ignore_permissions=True)
         for user in set(users) - current:
             self.give_task(task, user)
 
@@ -263,8 +302,8 @@ class HDContentPost(Document):
                 }
             ).insert(ignore_permissions=True)
             return
-        # the post's rules decided who does it; _add skips the caller's Task permission
-        assign_to._add(
+        # the post's rules decided who does it, so the caller's Task permission is skipped
+        add_assignment(
             {"doctype": "Task", "name": task.name, "assign_to": [user]},
             ignore_permissions=True,
         )
@@ -346,6 +385,10 @@ class HDContentPost(Document):
         ]
         if self.status == "Internal Review":
             users.append(self.owner)
+        message = _("{0} ({1}) is now {2}: your turn.")
+        if self.status == HEAD_REVIEW:
+            users.extend(head_approvers())
+            message = _("{0} ({1}) was approved by the client and needs your approval.")
         users = [u for u in dict.fromkeys(users) if u and u != frappe.session.user]
         if not users:
             return
@@ -353,19 +396,136 @@ class HDContentPost(Document):
             users,
             "HD Content Post",
             self.name,
-            _("{0} ({1}) is now {2}: your turn.").format(
+            message.format(
                 self.title, self.customer or self.platforms_label, _(self.status)
             ),
             link=self.board_path(),
         )
 
     def start_client_review(self):
-        """Entering Client Review starts the clock for the client reminder and team alert."""
-        if self.status != "Client Review" or not self.has_value_changed("status"):
+        """Entering Client Review starts the clock for the client reminder and team alert,
+        and a new round for the head (their last decision was on an older version)."""
+        if self.status != CLIENT_REVIEW or not self.has_value_changed("status"):
             return
         self.client_review_since = now_datetime()
         self.client_reminded_on = None
         self.client_escalated_on = None
+        self.head_decided_by = None
+        self.head_decided_on = None
+        self.head_feedback = None
+
+    # --- the Digital Marketing Head's approval, after the client's ---
+
+    def guard_editing(self):
+        """Only DM Coordinators, managers and System Managers add or change entries.
+
+        Everyone else can attach files (that never saves the post). Changes the app
+        makes on someone's behalf pass `ignore_permissions`: the client's portal and ERP
+        decisions, the head's approval, and a finished task moving the post on.
+        """
+        if (
+            self.flags.ignore_permissions
+            or frappe.flags.in_install
+            or frappe.flags.in_migrate
+        ):
+            return
+        if not can_edit_content():
+            frappe.throw(
+                _(
+                    "Only a DM Coordinator can add or change content entries. You can attach files to them."
+                ),
+                frappe.PermissionError,
+            )
+
+    def guard_head_review(self):
+        """Once a post has been to the client, it goes out only after the client and then
+        the Digital Marketing Head approve it.
+
+        Setting Approved while the post is in Client Review records the client's yes and
+        lands in Head Review (the portal and the client's ERP land there too). Any other
+        way into Approved, Scheduled or Published for such a post is refused, so it can't
+        skip either approval. Only a head moves a post on from Head Review; cancelling
+        stays open to everyone. Posts that never went to the client are unchanged.
+        """
+        before = self.get_doc_before_save()
+        previous = before.status if before else None
+        if self.status == previous:
+            return
+        if previous == HEAD_REVIEW:
+            self.record_head_decision()
+            return
+        if self.status == HEAD_REVIEW:
+            if previous != CLIENT_REVIEW:
+                frappe.throw(
+                    _(
+                        "A post goes to the Digital Marketing Head only once the client approves it."
+                    )
+                )
+            return
+        if self.status not in READY_STATUSES or previous in READY_STATUSES:
+            return
+        if previous != CLIENT_REVIEW and not self.client_review_since:
+            return
+        if previous == CLIENT_REVIEW and self.status == "Approved":
+            self.status = HEAD_REVIEW
+            return
+        frappe.throw(
+            _(
+                "{0} went to the client, so the client and then the Digital Marketing Head approve it before it can be {1}. Send it to Client Review."
+            ).format(self.title, _(self.status))
+        )
+
+    def record_head_decision(self):
+        """Leaving Head Review: only a head decides (or anyone cancels), and it's stamped."""
+        if self.status == "Cancelled":
+            return
+        if not is_dm_head():
+            frappe.throw(
+                _(
+                    "Only the Digital Marketing Head can approve this post or send it back."
+                )
+            )
+        if self.status == "Changes Requested" and not (
+            self.head_feedback and self.has_value_changed("head_feedback")
+        ):
+            frappe.throw(_("Say what needs to change when sending the post back."))
+        self.head_decided_by = frappe.session.user
+        self.head_decided_on = now_datetime()
+
+    def approve_as_head(self):
+        """The head's yes: the post is Approved and the marketer hears it's their turn."""
+        self.ensure_in_head_review()
+        self.status = "Approved"
+        self.save(ignore_permissions=True)
+        self.add_comment("Info", _("Approved by the Digital Marketing Head."))
+
+    def send_back_as_head(self, reason: str):
+        """The head's no: back to Changes Requested with why, for the team to fix."""
+        reason = (reason or "").strip()
+        if not reason:
+            frappe.throw(_("Say what needs to change when sending the post back."))
+        self.ensure_in_head_review()
+        self.status = "Changes Requested"
+        self.head_feedback = reason
+        self.save(ignore_permissions=True)
+        self.add_comment(
+            "Info",
+            _("Sent back by the Digital Marketing Head: {0}").format(
+                escape_html(reason)
+            ),
+        )
+
+    def ensure_in_head_review(self):
+        if self.status != HEAD_REVIEW:
+            frappe.throw(
+                _("{0} isn't waiting for the Digital Marketing Head").format(self.title)
+            )
+        if not is_dm_head():
+            frappe.throw(
+                _(
+                    "Only the Digital Marketing Head can approve this post or send it back."
+                )
+            )
 
     def board_path(self) -> str:
         return f"/content?post={self.name}"
@@ -378,7 +538,9 @@ class HDContentPost(Document):
         ):
             # an edit that only touched channel (old screens, the Desk form) moves the main platform
             platforms = [self.channel] + [p for p in platforms if p != self.channel]
-        valid = self.meta.get_field("channel").options.split("\n")
+        valid = set(
+            frappe.qb.get_query("HD Content Platform", fields=["name"]).run(pluck=True)
+        )
         platforms = [p for p in platforms if p in valid] or [self.channel]
         self.channel = platforms[0]
         self.platforms = ", ".join(platforms)
@@ -392,25 +554,6 @@ class HDContentPost(Document):
     @property
     def platforms_label(self) -> str:
         return ", ".join(self.platform_list())
-
-    def set_customer_from_campaign(self):
-        if self.campaign and not self.customer:
-            self.customer = frappe.db.get_value(
-                "HD Content Campaign", self.campaign, "customer"
-            )
-
-    def validate_campaign_customer(self):
-        if not self.campaign:
-            return
-        campaign_customer = frappe.db.get_value(
-            "HD Content Campaign", self.campaign, "customer"
-        )
-        if campaign_customer and campaign_customer != self.customer:
-            frappe.throw(
-                _("Campaign {0} belongs to {1}, not {2}").format(
-                    self.campaign, campaign_customer, self.customer
-                )
-            )
 
     def validate_publish_on(self):
         # a post without a date has no slot on the calendar, so nobody would see it
@@ -486,7 +629,7 @@ class HDContentPost(Document):
 
     def approve_from_portal(self, email: str):
         self.ensure_awaiting_client()
-        self.status = "Approved"
+        self.status = HEAD_REVIEW
         self.client_decided_on = now_datetime()
         self.save(ignore_permissions=True)
         self.add_comment(
@@ -542,8 +685,12 @@ def send_due_reminders():
         ],
     )
     teams = teams_of([p.name for p in posts])
+    heads = head_approvers()
     for post in posts:
         users = [*teams[post.name], post.owner]
+        # waiting on the head's approval, so they hear it too
+        if post.status == HEAD_REVIEW:
+            users.extend(heads)
         # same path as other reminders: the bell plus Teams or email, once per day and stage;
         # notify_users drops empty slots, Administrator and Guest, and duplicates
         notify_users(
@@ -706,9 +853,11 @@ def _user_emails(users) -> set[str]:
 
 
 def _is_content_lead(user: str) -> bool:
+    """Sees every post: project managers, the DM Coordinators and System Managers, who
+    edit them all, and the Digital Marketing Head, who approves them all."""
     from helpdesk.tasky.permissions import is_project_manager
 
-    return is_project_manager(user)
+    return is_project_manager(user) or can_edit_content(user) or is_dm_head(user)
 
 
 def _member_customers_sql(user: str) -> str:
@@ -728,6 +877,9 @@ def permission_query(user: str | None = None) -> str | None:
     user = user or frappe.session.user
     if _is_content_lead(user):
         return None
+    # the content calendar is the Digital team's; ERP Employees don't see it
+    if is_erp_only(user):
+        return "1 = 0"
     u = frappe.db.escape(user)
     table = "`tabHD Content Post`"
     return (
@@ -745,6 +897,8 @@ def has_permission(
     user = user or frappe.session.user
     if ptype == "create" or _is_content_lead(user):
         return None
+    if is_erp_only(user):
+        return False
     on_team = any(user in people for people in team_of(doc).values())
     if on_team or user == doc.owner or doc.customer in member_customers(user):
         return None
