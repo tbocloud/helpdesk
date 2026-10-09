@@ -438,6 +438,15 @@ class TestTaskCompletedNotice(WorkControlCase):
         self.assertEqual((notice.user_to, notice.user_from), (PM[0], DEV[0]))
         self.assertEqual(notice.message, f"{DEV[1]} completed Bank reconciliation")
 
+    def test_the_completing_assignees_assigner_hears(self):
+        task = self.assigned_by_pm()
+        self.as_user(LEAD, lambda: make_assignment("Task", task, SUPPORT[0]))
+
+        self.complete(task, user=SUPPORT)
+
+        [notice] = get_task_completed_notices(task)
+        self.assertEqual((notice.user_to, notice.user_from), (LEAD[0], SUPPORT[0]))
+
     def test_completed_again_after_reopening_is_news_again(self):
         task = self.assigned_by_pm()
         self.complete(task)
@@ -611,6 +620,20 @@ class TestMyBoard(WorkControlCase):
         cards = self.board()
         self.assertIn(recent, cards)
         self.assertNotIn(old, cards)
+
+    def test_underscore_in_your_id_is_not_a_wildcard(self):
+        jane = make_tasky_user("jane_doe@work-control.example", "Jane Doe")
+        other = make_tasky_user("janeXdoe@work-control.example", "Jane Xavier")
+        # jane leads the project, so she can read the other Jane's task
+        frappe.db.set_value("Project", self.project, "project_lead", jane)
+        mine = self.make_task("Close GL", add_days(nowdate(), 2), assignee=None)
+        theirs = self.make_task("Train users", add_days(nowdate(), 2), assignee=None)
+        make_assignment("Task", mine, jane)
+        make_assignment("Task", theirs, other)
+
+        cards = self.board(user=(jane, "Jane Doe"))
+        self.assertIn(mine, cards)
+        self.assertNotIn(theirs, cards)
 
 
 class TestTicketToTask(WorkControlCase):

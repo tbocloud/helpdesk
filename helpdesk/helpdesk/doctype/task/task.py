@@ -55,11 +55,13 @@ class Task(Document):
         ):
             return
         assignees = self.assignees()
-        assigner = get_assigners({self.name: assignees[0] if assignees else None}).get(
-            self.name
-        )
         done_by = frappe.session.user
-        if not assigner or assigner == done_by or assigner in assignees:
+        # the completing assignee's assigner; on a lead's approval, the first assignee's
+        worker = (
+            done_by if done_by in assignees else (assignees[0] if assignees else None)
+        )
+        assigner = get_assigners({self.name: worker}).get(self.name)
+        if not assigner or assigner in (done_by, worker):
             return
         # on review projects a lead's approval completes it; the assignees did the work
         workers = assignees if assignees and done_by not in assignees else [done_by]

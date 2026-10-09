@@ -1477,6 +1477,9 @@ def get_kanban_tasks(project: str | None = None):
         ],
         order_by="custom_phase asc, subject asc",
     )
+    if not project:
+        # LIKE reads `_` and `%` in the user ID as wildcards, so keep exact matches only
+        tasks = [t for t in tasks if user in json.loads(t._assign or "[]")]
 
     # one query for the whole board; a card shows its most recently active open PR
     open_prs = get_pull_requests([t.name for t in tasks], open_only=True)

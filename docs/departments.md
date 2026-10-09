@@ -66,6 +66,22 @@ Managers and Agent Managers see every department.
   Settings → Departments turns its wall off until `HIDDEN_DEPARTMENTS` is updated. Projects with
   no department aren't walled, so set each project's department for the walls to apply.
 
+## Tickets list: System Managers only
+
+Separately from the walls, the Tickets list is for System Managers (`authStore.isAdmin`, the
+`is_admin` flag from `helpdesk/api/auth.py`: System Manager or Administrator). Every other
+agent is affected, including Agent Managers, not only DM and ERP Employees:
+
+- the **Tickets** sidebar item is `adminOnly` (`layoutSettings.ts`, filtered in `AppSidebar.vue`);
+- the `TicketsAgent` (`/tickets`) and `TicketAgentNew` routes send everyone else to Home
+  (`beforeEnter` in `desk/src/router/index.ts`);
+- the command palette's **Tickets** entry is shown only to them (`CP.vue`). Typing `#<id>`
+  still jumps to a ticket.
+
+This only hides the pages. A single ticket (`/tickets/:ticketId`) still opens for any agent who
+can read it (DM and ERP Employees excepted, as above), and ticket permissions on the server
+are unchanged.
+
 ## Data model
 
 - **HD Department** (`helpdesk/helpdesk/doctype/hd_department`): `department_name` (Data,
