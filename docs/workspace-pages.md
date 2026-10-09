@@ -453,6 +453,69 @@ dashboard (count and milestones) and the ticket page's Linked work (`is_overdue`
 `get_ticket_linked_work`). Reminders and the weekly AI summaries still go by due date only.
 Overdue is worked out when the page loads, so an open page turns red on its next refresh.
 
+### Activity
+
+The task details show the task's history, newest first, with a box to add a comment.
+`helpdesk.tasky.api.get_task_activity(task)` returns `{"items": [...], "can_comment": bool}`;
+the logic is `TaskActivity` in `helpdesk/task_activity.py`.
+
+- **Who may see it:** anyone who can read the task (`check_permission("read")`, so own-tasks-only,
+  department walls and the ERP rules apply). Anyone who can read it may also comment;
+  `can_comment` is true for every signed-in viewer. Someone who can't read the task gets a
+  PermissionError from both endpoints.
+- **Every item** has `kind`, `at` (`YYYY-MM-DD HH:MM:SS`, site time as stored), `by` (user or
+  null) and `by_name` (full name or null). Items are sorted by `at` (to the microsecond, so one
+  save keeps its order) and capped at 300; each source is read newest first, at most 300 rows.
+  All names come from one bulk User query (`user_full_names`) over `by` and the `to` of
+  `assigned` / `unassigned` items (elsewhere `to` is a status, date or hours, not a person).
+- **Kinds and where they come from:**
+  - `created` — the Task's `owner` and `creation`; `origin` is `{type, name}` with type
+    `ticket` (`hd_ticket`), `content_post` (`content_post`), `recurring`
+    (`custom_recurring_task`) or null.
+  - `assigned` — one per ToDo on the task, any status: `to`, `to_name`, `by` = `assigned_by`
+    (else the ToDo's owner), `at` = its creation. `note` is the ToDo description as plain text,
+    or null when it is Frappe's own "Assignment for Task …" filler or just the task's subject
+    (what a monthly content plan writes).
+  - `unassigned` — for each cancelled ToDo: `to`, `to_name`, `by` = `modified_by`, `at` =
+    `modified`. Closed ToDos (the task was completed) are not an unassignment. When `by` is
+    the person removed (a hand-over removes the giver's own ToDo) it reads "X left it".
+  - `status` (`from`, `to` as raw values, e.g. `Working`), `due` (`from`, `to` as
+    `YYYY-MM-DD`, `reason` null; a stored value that isn't a date passes through as is) and
+    `estimate` (`from`, `to` as floats) — from the task's Version history (`status`,
+    `exp_end_date`, `custom_estimated_hours` in `changed`); `by` is the Version's owner.
+    Only Versions whose data mentions one of those fields are read (filtered in SQL), so saves
+    that change other fields don't use up the 300-row cap. That filter only narrows rows down (a
+    field name can also appear inside an unrelated value, e.g. a description), so rows are read
+    300 at a time until 300 real changes are found or the history runs out
+    (`TaskActivity.change_items`). Versions store dates in the site's
+    display format (e.g. `05-10-2026` on a `dd-mm-yyyy` site), so `due` values are parsed with
+    `parse_date`, which tries the site's format first (`getdate` would read them month first).
+    The UI shows only the new status; a value it doesn't know (`Overdue`, `Template`, or a
+    status stored translated) is shown as stored with a neutral icon, not as Open.
+  - `note` — the app's own Info comments (on hold, resumed, due date moved with its reason,
+    sent for review, approved, sent back, handed over, reassigned, moved project, help asked…)
+    as plain text (html stripped and unescaped).
+  - `comment` — people's comments (Comment type `Comment`): `text` as plain text with line
+    breaks kept, and `name` (the Comment).
+  - `time` — one per time log (Timesheet Detail) on this task whose timesheet isn't cancelled:
+    `hours`, `date` (the log's `from_time` day), `by` = the timesheet's owner, `at` = when the
+    log was saved. **Decision:** everyone who can read the task sees who logged how many hours
+    on which day for this task; the log's description and other tasks' time are not shown.
+- **One change, one item:** a status or due date change that a note already explains is
+  dropped and the note kept: same user, within 10 seconds, and the note starts with "Due date
+  moved" (explains due), "On hold" or "Resumed" (status and due), or "Sent for review",
+  "Approved", "Sent back", "Handed over", "Reassigned" (status). So moving a due date later
+  through Plan shows one "Due date moved from … to …. Reason: …" note, not also a bare date
+  change. Moving it earlier writes no note, so it shows as a `due` item.
+- **Not shown:** the `Assigned` / `Assignment Completed` comments Frappe writes (the ToDo rows
+  replace them), and other comment types (likes, attachments, edits).
+- **Adding a comment:** `add_task_comment(task, content)` (POST only) needs read permission,
+  strips the text, refuses an empty one ("Write a comment first.") or one over 5000 characters,
+  stores it as a `Comment` with the html escaped and line breaks as `<br>` (`comment_email` /
+  `comment_by` the session user), and returns the new `comment` item.
+- **Tests** (`helpdesk/tests/test_task_activity.py`) turn version history on with
+  `record_versions()`, since Frappe skips it in tests unless a save asks.
+
 ## Timesheets (`/timesheets`)
 
 `desk/src/pages/tasky/Timesheets.vue`; APIs `helpdesk.tasky.api.get_my_timesheets` (the list,

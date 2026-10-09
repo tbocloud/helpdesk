@@ -6,6 +6,7 @@ import frappe
 from frappe import _
 from frappe.query_builder import Order
 
+from helpdesk import task_activity
 from helpdesk.api.content_board import user_full_names
 from helpdesk.api.project_files import file_counts
 from helpdesk.github_sync import get_pull_requests
@@ -705,6 +706,18 @@ def get_task_detail(task: str):
         **add_assigners([_format_task(_task_dict(doc))])[0],
         "pull_requests": get_pull_requests([doc.name]).get(doc.name, []),
     }
+
+
+@frappe.whitelist()
+def get_task_activity(task: str) -> dict:
+    """The task's history (created, assignments, changes, notes, comments, time), newest first."""
+    return task_activity.get_activity(task)
+
+
+@frappe.whitelist(methods=["POST"])
+def add_task_comment(task: str, content: str) -> dict:
+    """Comment on a task (anyone who can see it may); returns the new activity item."""
+    return task_activity.add_comment(task, content)
 
 
 @frappe.whitelist()

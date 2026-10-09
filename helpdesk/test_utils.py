@@ -1043,6 +1043,54 @@ def call_team_dashboard(user: str, today, method: str = "get_team_dashboard", **
         )
 
 
+def record_versions(test_case):
+    """Turns version history on for every save in the test, including saves inside the
+    APIs. Tests skip it unless a save asks, and a task's activity is read from it."""
+    from frappe.model.document import Document
+
+    save = Document._save
+
+    def save_with_version(self, ignore_permissions=None, ignore_version=None):
+        keep = False if ignore_version is None else ignore_version
+        return save(self, ignore_permissions, keep)
+
+    recording = patch.object(Document, "_save", save_with_version)
+    recording.start()
+    test_case.addCleanup(recording.stop)
+
+
+def save_task_as(user: str, task: str, **values):
+    """Sets `values` on the Task and saves it as `user`, the way the task form does."""
+
+    def save():
+        doc = frappe.get_doc("Task", task)
+        doc.update(values)
+        doc.save()
+
+    run_as_user(user, save)
+
+
+def use_date_format(test_case, date_format: str):
+    """Sets the site's date format (e.g. "dd-mm-yyyy") for the test and restores it after.
+    Version history stores dates in this format."""
+    previous = frappe.db.get_default("date_format")
+
+    def apply(value):
+        frappe.db.set_default("date_format", value)
+        frappe.local.user_date_format = None
+
+    apply(date_format)
+    test_case.addCleanup(apply, previous)
+
+
+def get_task_activity_as(user: str, task: str, kind: str | None = None) -> list[dict]:
+    """The task's activity items as `user` sees them, newest first; only `kind` if given."""
+    items = call_as_user(user, "helpdesk.tasky.api.get_task_activity", task=task)[
+        "items"
+    ]
+    return [i for i in items if not kind or i["kind"] == kind]
+
+
 def make_employee(user: str, employee_name: str | None = None):
     """Creates an active Employee linked to `user` (the hub doesn't need one per agent)."""
     return frappe.get_doc(
