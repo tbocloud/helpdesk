@@ -156,6 +156,18 @@ def make_assigned_ticket(subject: str, user: str, **values) -> str:
     return str(name)
 
 
+def make_customer_ticket(customer: str, subject: str, **values) -> str:
+    """Creates a ticket for `customer` and returns its name as a string.
+
+    `values` (e.g. creation, status_category, agreement_status, feedback_rating)
+    are written directly after insert, so SLA and status hooks can't change them.
+    """
+    name = make_ticket(subject=subject, customer=customer).name
+    if values:
+        frappe.db.set_value("HD Ticket", name, values, update_modified=False)
+    return str(name)
+
+
 def create_agent(
     email: str, first_name: str | None = None, last_name: str | None = None
 ):
@@ -621,6 +633,15 @@ def make_project(
         # insert always records the session user as owner
         doc.db_set("owner", owner, update_modified=False)
     return doc
+
+
+def make_customer_project(
+    customer: str, project_name: str, members: list[tuple[str, str]] | None = None
+) -> str:
+    """Creates an open Project for `customer` (see make_project) and returns its name."""
+    project = make_project(project_name, members=members).name
+    frappe.db.set_value("Project", project, "customer", customer)
+    return project
 
 
 def make_project_file(

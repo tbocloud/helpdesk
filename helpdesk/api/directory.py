@@ -8,11 +8,26 @@ import frappe
 from frappe import _
 
 from helpdesk.api.home import OPEN_TICKET_CATEGORIES
+from helpdesk.customer_health import AT_RISK, HEALTHY, WATCH, all_health, brief
+from helpdesk.customer_health import sort_key as health_order
 from helpdesk.utils import agent_only
 
 PAGE_LENGTH = 50
 CLOSED_PROJECT_STATUSES = ("not in", ["Completed", "Cancelled"])
-CUSTOMER_SORTS = {"name": "customer_name asc", "newest": "creation desc"}
+CUSTOMER_SORTS = {
+    "name": "customer_name asc",
+    "newest": "creation desc",
+    # worst first, ordered in Python from the cached health (see by_health)
+    "health": "customer_name asc",
+}
+# the Customers list's health filter; `attention` is at risk or watch
+HEALTH_FILTERS = {
+    AT_RISK: {AT_RISK},
+    WATCH: {WATCH},
+    HEALTHY: {HEALTHY},
+    "attention": {AT_RISK, WATCH},
+}
+CUSTOMER_FIELDS = ["name", "customer_name", "domain", "image", "creation"]
 CONTACT_SORTS = {"name": "full_name asc", "newest": "creation desc"}
 OPEN_INVITATION = ("in", ["Pending", "Expired"])
 
@@ -20,30 +35,73 @@ OPEN_INVITATION = ("in", ["Pending", "Expired"])
 @frappe.whitelist(methods=["GET"])
 @agent_only
 def get_customer_directory(
-    search: str = "", sort: str = "name", start: int = 0
+    search: str = "", sort: str = "name", start: int = 0, health: str = ""
 ) -> dict:
-    """A page of customers with their open tickets, active projects and ERP connection."""
+    """A page of customers with their health, open tickets, active projects and ERP connection.
+
+    `health` narrows to one status, or to `attention` (at risk or watch).
+    """
     or_filters = search_filters(search, ["customer_name", "domain"])
-    customers, has_more = page(
-        "HD Customer",
-        fields=["name", "customer_name", "domain", "image", "creation"],
-        or_filters=or_filters,
-        order_by=sort_order(sort, CUSTOMER_SORTS),
-        start=start,
-    )
+    order_by = sort_order(sort, CUSTOMER_SORTS)
+    if health and health not in HEALTH_FILTERS:
+        frappe.throw(
+            _("Filter health by one of: {0}").format(", ".join(HEALTH_FILTERS))
+        )
+    healths = all_health()
+    if sort == "health" or health:
+        customers, has_more, total = by_health(
+            healths, or_filters, order_by, sort == "health", health, start
+        )
+    else:
+        customers, has_more = page(
+            "HD Customer",
+            fields=CUSTOMER_FIELDS,
+            or_filters=or_filters,
+            order_by=order_by,
+            start=start,
+        )
+        total = count("HD Customer", or_filters)
     names = [c.name for c in customers]
     tickets = open_ticket_counts("customer", names)
     projects = active_project_counts(names)
     connections = connection_status(names)
     for c in customers:
+        c["health"] = brief(healths.get(c.name))
         c["open_tickets"] = tickets.get(c.name, 0)
         c["active_projects"] = projects.get(c.name, 0)
         c["connection"] = connections.get(c.name)
-    return {
-        "rows": customers,
-        "has_more": has_more,
-        "total": count("HD Customer", or_filters),
-    }
+    return {"rows": customers, "has_more": has_more, "total": total}
+
+
+def by_health(
+    healths: dict,
+    or_filters: list | None,
+    order_by: str,
+    worst_first: bool,
+    health: str,
+    start: int,
+) -> tuple[list[dict], bool, int]:
+    """A page of the customers the viewer may read, narrowed and ordered by health.
+
+    Health isn't a column, so this reads every matching customer (one query, no
+    counts) and pages in Python.
+    """
+    rows = frappe.get_list(
+        "HD Customer",
+        fields=CUSTOMER_FIELDS,
+        or_filters=or_filters,
+        order_by=order_by,
+        limit_page_length=0,
+    )
+    if health:
+        wanted = HEALTH_FILTERS[health]
+        rows = [r for r in rows if (healths.get(r.name) or {}).get("status") in wanted]
+    if worst_first:
+        # a stable sort keeps the name order among customers in the same health
+        rows.sort(key=lambda r: health_order(healths.get(r.name)))
+    start = max(int(start or 0), 0)
+    end = start + PAGE_LENGTH
+    return rows[start:end], len(rows) > end, len(rows)
 
 
 @frappe.whitelist(methods=["GET"])
@@ -149,8 +207,14 @@ def active_project_counts(customers: list[str]) -> dict[str, int]:
     return {r.customer: r.count for r in rows}
 
 
-def connection_status(customers: list[str]) -> dict[str, dict]:
-    """Each customer's ERP connection: its status and site, the latest one if several."""
+def connection_status(
+    customers: list[str], ignore_permissions: bool = False
+) -> dict[str, dict]:
+    """Each customer's ERP connection: its status and site, the latest one if several.
+
+    Customer health reads every customer's with `ignore_permissions`, as it is
+    computed once for everyone (helpdesk/customer_health.py).
+    """
     if not customers:
         return {}
     rows = frappe.get_list(
@@ -158,6 +222,7 @@ def connection_status(customers: list[str]) -> dict[str, dict]:
         filters={"customer_name": ("in", customers)},
         fields=["customer_name", "connection_status", "site_url"],
         order_by="modified desc",
+        ignore_permissions=ignore_permissions,
     )
     result: dict[str, dict] = {}
     for r in rows:

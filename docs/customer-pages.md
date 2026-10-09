@@ -41,12 +41,16 @@ every support contract running today, most used first, with filters and a CSV fo
 and `get_contact_directory(search, sort, start)`, agents only.
 
 - **One page per call**: 50 rows plus `has_more` and `total`; "Show more" appends the next
-  page. Search and sort live in the URL as `q` and `sort` (`name`, the default, or `newest`).
+  page. Search and sort live in the URL as `q` and `sort` (`name`, the default, or `newest`;
+  customers also `health`, worst first). Customers also filter by `health` (at risk, watch,
+  healthy, or at risk or watch); see [customer-health.md](customer-health.md).
   Each request carries its search, sort, offset and a generation number, and only the latest
   request's answer is used, so a slow "Show more" for an old search can't mix into new results.
 - **Counts respect permissions**: every read is a `frappe.get_list`, so open tickets and
   projects only count what the viewer may see (a plain agent sees the projects they are on).
-- **Customer row**: logo, name, domain; Open tickets (Open and Paused), Active projects (not
+- **Customer row**: logo, name, domain; Health (badge and reasons; on phones the badge sits
+  on the right, with the ERP badge under it only when the connection is failing); Open
+  tickets (Open and Paused), Active projects (not
   Completed or Cancelled) and ERP connection (the latest `HDS Support Connection` for the
   customer: Connected, Error, Disconnected or Pending, as a badge with an icon; "None"
   otherwise).
@@ -73,9 +77,9 @@ a view); search covers name, domain, email and phone instead.
 
 `desk/src/pages/customer/Customer.vue`.
 
-- **Header** (`components/PageInfo.vue`, shared with the contact page): logo, name, domain,
-  email, phone, country and the ERP connection (badge, site host and when it was last
-  checked). A connection in Error shows its last error under the header. Edit and the menu
+- **Header** (`components/PageInfo.vue`, shared with the contact page): logo, name, the
+  health badge (a link to the Health tab), domain, email, phone, country and the ERP
+  connection (badge, site host and when it was last checked). A connection in Error shows its last error under the header. Edit and the menu
   with Delete customer stay for Agent Managers and admins.
 - **Support figures** (`components/customer/TicketStats.vue`, shared with the contact page):
   four `compact` `StatTile`s from `helpdesk.api.ticket_stats.get_ticket_stats(dt, dn, period)`: average
@@ -83,7 +87,10 @@ a view); search covers name, domain, email and phone instead.
   rating (all time, with how many). The period select offers the last 7, 30 or 90 days; each
   tile says in words how it compares with the days before ("+12% on the 30 days before"),
   with no colour. Shown on phones too.
-- **Tabs** (hash in the URL: none, `#contacts`, `#projects`, `#support-hours`): Tickets (unchanged list with
+- **Tabs** (hash in the URL: none, `#contacts`, `#projects`, `#support-hours`, `#health`):
+  Health (`components/customer/CustomerHealthTab.vue`) lists every health signal with its
+  value, rule and a link to the records; see [customer-health.md](customer-health.md).
+  Tickets (unchanged list with
   search, status, priority and contact filters; rows are links that open the ticket in a new
   tab, sortable headers are buttons), Contacts (cards; invite, set primary, manager role,
   remove), Projects (`components/customer/CustomerProjectsTab.vue`: the customer's projects the
