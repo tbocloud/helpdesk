@@ -592,6 +592,7 @@ interface Task {
   assigned_by_name?: string | null;
   can_move?: boolean;
   custom_recurring_task?: string | null;
+  content_post?: string | null;
   project?: string;
   project_name?: string | null;
   due_date?: string;

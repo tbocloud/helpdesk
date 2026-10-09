@@ -238,6 +238,7 @@ interface TaskDetail {
   assigned_by_name?: string | null;
   can_move?: boolean;
   custom_recurring_task?: string | null;
+  content_post?: string | null;
 }
 
 const props = withDefaults(

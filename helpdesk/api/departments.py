@@ -5,7 +5,11 @@ import frappe
 from frappe import _
 from frappe.query_builder.functions import Count
 
-from helpdesk.tasky.permissions import hidden_departments
+from helpdesk.tasky.permissions import (
+    HIDDEN_DEPARTMENTS,
+    hidden_departments,
+    is_tasky_admin,
+)
 
 DEPARTMENT = "HD Department"
 
@@ -160,3 +164,62 @@ def _clean_name(name: str) -> str:
 def _check_name_free(name: str):
     if frappe.db.exists(DEPARTMENT, name):
         frappe.throw(_("There is already a department called {0}.").format(name))
+
+
+# --- department walls: which agents are kept out of the other team's department ---
+
+
+@frappe.whitelist()
+def get_department_walls(users: list[str] | str) -> dict[str, list[str]]:
+    """Each agent's wall roles (DM Employee, ERP Employee), for Settings → Agents."""
+    _check_can_set_walls()
+    users = frappe.parse_json(users) if isinstance(users, str) else users or []
+    if not users:
+        return {}
+    has_role = frappe.qb.DocType("Has Role")
+    walls = {user: [] for user in users}
+    for user, role in (
+        frappe.qb.from_(has_role)
+        .select(has_role.parent, has_role.role)
+        .where(
+            (has_role.parenttype == "User")
+            & has_role.parent.isin(users)
+            & has_role.role.isin(list(HIDDEN_DEPARTMENTS))
+        )
+        .orderby(has_role.role)
+        .run()
+    ):
+        walls[user].append(role)
+    return walls
+
+
+@frappe.whitelist(methods=["POST"])
+def set_department_wall(user: str, role: str | None = None) -> list[str]:
+    """Give an agent one wall role, or none (empty role); their other roles stay."""
+    from helpdesk.content_team import ensure_role
+
+    _check_can_set_walls()
+    role = role or None
+    if role and role not in HIDDEN_DEPARTMENTS:
+        frappe.throw(_("Pick DM Employee, ERP Employee or no wall."))
+    if not frappe.db.exists("HD Agent", user):
+        frappe.throw(_("{0} is not an agent.").format(user), frappe.DoesNotExistError)
+    ensure_role()
+    doc = frappe.get_doc("User", user)
+    doc.set(
+        "roles",
+        [r for r in doc.roles if r.role not in HIDDEN_DEPARTMENTS or r.role == role],
+    )
+    if role and role not in {r.role for r in doc.roles}:
+        doc.append("roles", {"role": role})
+    # Agent Managers may not have write access on User; the check above decides
+    doc.save(ignore_permissions=True)
+    return [role] if role else []
+
+
+def _check_can_set_walls():
+    if not is_tasky_admin():
+        frappe.throw(
+            _("Only System Managers and Agent Managers can set department walls."),
+            frappe.PermissionError,
+        )

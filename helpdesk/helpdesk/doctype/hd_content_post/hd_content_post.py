@@ -111,6 +111,32 @@ class HDContentPost(Document):
         ]
         self.set("extra_team", others + [{"role": role, "user": u} for u in users[1:]])
 
+    def part_fields(self, content_role: str) -> list[str]:
+        """The roles behind one task: its role, or every role for the shared task."""
+        return [
+            field
+            for field, label in TASK_ROLES.items()
+            if content_role in (label, SHARED_ROLE)
+        ]
+
+    def people_on_part(self, content_role: str) -> set[str]:
+        return {u for f in self.part_fields(content_role) for u in self.people(f)}
+
+    def task_people(self, users: list[str]) -> list[str]:
+        """Who gets a task among `users`: ERP Employees never see the content calendar,
+        so one left on a post's team gets no task rather than failing the save."""
+        return [u for u in users if not is_erp_only(u)]
+
+    def replace_on_part(self, content_role: str, leaving: list[str], newcomer: str):
+        """Put `newcomer` in place of `leaving` on the roles behind one task (a hand-over
+        of that task). The caller checks some of `leaving` are on it."""
+        for field in self.part_fields(content_role):
+            people = self.people(field)
+            if set(leaving) & set(people):
+                self.set_people(
+                    field, [newcomer if u in leaving else u for u in people]
+                )
+
     def clean_team(self):
         """No one twice on a role, and a role with anyone on it has a main person."""
         for role in TASK_ROLES:
@@ -183,16 +209,16 @@ class HDContentPost(Document):
             # one task per role; several people on a role share it
             return {
                 label: {
-                    "users": self.people(field),
+                    "users": self.task_people(self.people(field)),
                     "due": due(days[field]),
                     "hours": self.role_hours(field),
                     "cleared": self.hours_cleared([field]),
                 }
                 for field, label in TASK_ROLES.items()
-                if self.people(field)
+                if self.task_people(self.people(field))
             }
         if self.task_mode == ONE_TASK:
-            users = self.everyone()
+            users = self.task_people(self.everyone())
             if users:
                 return {
                     SHARED_ROLE: {
@@ -389,7 +415,10 @@ class HDContentPost(Document):
         if self.status == HEAD_REVIEW:
             users.extend(head_approvers())
             message = _("{0} ({1}) was approved by the client and needs your approval.")
-        users = [u for u in dict.fromkeys(users) if u and u != frappe.session.user]
+        # ERP Employees can't read the post, so they don't hear its title or customer
+        users = self.task_people(
+            [u for u in dict.fromkeys(users) if u and u != frappe.session.user]
+        )
         if not users:
             return
         notify_users(

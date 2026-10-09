@@ -1091,6 +1091,63 @@ def run_as_user(user: str, fn):
         frappe.set_user("Administrator")
 
 
+def call_as_user(as_user: str, method: str, **kwargs):
+    """Calls the whitelisted `method` (a dotted path) through `frappe.call` as `as_user`,
+    then switches back to Administrator. `as_user` leaves `user` free for the method."""
+    return run_as_user(as_user, lambda: frappe.call(method, **kwargs))
+
+
+def hand_over_task_as(
+    user: str, task: str, teammate: str, reason: str = "Moving to the Galom go-live"
+):
+    """`user` hands `task` over to `teammate` through the whitelisted hand_over_task."""
+    return call_as_user(
+        user,
+        "helpdesk.tasky.api.hand_over_task",
+        task=task,
+        teammate=teammate,
+        reason=reason,
+    )
+
+
+def get_content_task(post: str, role: str) -> str | None:
+    """The Task a content post made for one role ("Writer", "Designer", …)."""
+    return frappe.db.get_value(
+        "Task", {"content_post": post, "content_role": role}, "name"
+    )
+
+
+def get_department_walls_as(as_user: str, user: str) -> list[str]:
+    """`user`'s department wall roles, as Settings → Agents asks for them as `as_user`."""
+    return call_as_user(
+        as_user, "helpdesk.api.departments.get_department_walls", users=[user]
+    )[user]
+
+
+def set_department_wall_as(as_user: str, user: str, role: str):
+    """`as_user` sets `user`'s department wall ("" for none) from Settings → Agents."""
+    return call_as_user(
+        as_user,
+        "helpdesk.api.departments.set_department_wall",
+        user=user,
+        role=role,
+    )
+
+
+def get_visible_tasks(user: str, project: str | None = None) -> set[str]:
+    """Names of the Tasks `user` may list (through `frappe.get_list`, so `task_query`
+    and the department walls apply), in `project` when given."""
+    filters = {"project": project} if project else {}
+    return set(
+        run_as_user(
+            user,
+            lambda: frappe.get_list(
+                "Task", filters=filters, pluck="name", limit_page_length=0
+            ),
+        )
+    )
+
+
 def get_task_completed_notices(task: str) -> list:
     """The Task Completed HD Notifications sent about `task` (user_to, user_from, message)."""
     return frappe.get_all(
