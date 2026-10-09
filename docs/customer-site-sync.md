@@ -8,6 +8,10 @@ Every minute (`pull_client_tickets`), and at once when a customer site pings `ti
 
 Only one pull per site runs at a time (a Redis lock per connection, 5 minutes at most): the site's ping and the scheduled pull can start in the same minute, and without the lock both passed the "already imported" check and every ticket was imported twice. A pull queued by the ping arrives as a guest request and runs as the hub's automation user.
 
+## Two ways to write on the customer's ticket
+
+A client that advertises `hub_api_v1` (reported at pairing and by the daily health check, kept in the connection's **Client Capabilities**) is written to through its own `hub_api`: `update_ticket` for the number, priority and the hub's status label (the client maps the label to its own list and keeps the original in `status_label`), `post_reply` for agent replies (one comment per Communication, whatever the retries), and `get_ticket_changes` for the customer's **Confirm / Reopen** answers, read per connection from the cursor **Client Changes Read Up To** and applied through Copilot (`helpdesk.copilot.customer.decide_resolution`), once per answer. Copilot's stage messages go the same way (`add_update`). An older client is written to with the MCP write tools as before, so nothing changes for it until it is updated. Reads (pending tickets, comments, files) always use MCP.
+
 ## Writing back
 
 - A write the customer site refuses (writes switched off there, a label its status field does not accept) is an error, never a success. `_push_back` raises, the ticket is retried next run, and the failure is logged **once an hour** per ticket, not every run.
