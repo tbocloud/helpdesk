@@ -178,7 +178,10 @@ doc_events = {
         ],
     },
     "Communication": {
-        "after_insert": "helpdesk.chatwoot_bridge.on_communication_insert",
+        "after_insert": [
+            "helpdesk.chatwoot_bridge.on_communication_insert",
+            "helpdesk.copilot.customer.on_communication_insert",
+        ],
     },
 }
 

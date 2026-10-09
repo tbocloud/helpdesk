@@ -501,7 +501,9 @@ def _assign_user(task_doc, user, ignore_permissions=False):
         return
     user = str(user).strip()
     if frappe.db.exists("User", user):
-        assign_to._add(
+        # Frappe 16 keeps the internal _add next to the whitelisted add; 15 has only add
+        add = getattr(assign_to, "_add", None) or assign_to.add
+        add(
             {"doctype": "Task", "name": task_doc.name, "assign_to": [user]},
             ignore_permissions=ignore_permissions,
         )

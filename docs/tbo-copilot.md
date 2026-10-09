@@ -65,3 +65,22 @@ POST only, for users with the role **Copilot Worker** (created on migrate, no de
 The context holds the ticket, its triage fields, the customer, the registered site and its apps, the last 20 messages, the file list and earlier runs; never credentials. Events are kept 90 days.
 
 **Trying it without a worker:** `bench --site <site> execute helpdesk.test_utils.run_fake_worker --kwargs "{'category': 'bug'}"` claims the oldest queued run and reports that root cause with demo text (`abandon: True` claims and stops, to watch the lease expire; `ticket: '0042'` starts a run for that ticket first).
+
+## After the worker reports (`helpdesk/copilot/router.py`, `customer.py`)
+
+| Root cause | Run | The customer sees | What else happens |
+|---|---|---|---|
+| question, not_allowed_request, customer_mistake | Explaining → Answered when the agent sends | Working on it → **Resolved** ("please confirm, or reopen") | the worker's `customer_message` lands in the agent's suggested-reply card; nothing goes out by itself |
+| unclear (or confidence below the setting) | Explaining → Answered when the agent sends | Working on it → **Waiting for you** | the questions land in the card; the customer's reply (email, portal or their site) starts a **follow-up run** |
+| wrong_setting, bug, data_damaged_by_bug | Preparing Fix | **Working on it** | continues in the next phases (sandbox, pull request, approval) |
+| core_issue | Handed Over | **With our team** | a Task for the customer's **Assigned developer** in the customer's open Project (else the hand-over project); without a project the Agent Managers are told |
+
+Every diagnosis is an internal note on the ticket (category, confidence, summary, evidence, proposal), credited to the hub's automation user.
+
+**Stages on the customer's site.** A stage is delivered once per run, stage and text: to a connected site whose client advertises `hub_api_v1` as an update row on its Support Ticket (the raiser is notified there), and as an internal note on the hub ticket; `custom_copilot_stage` mirrors it. An older client gets no stage (its status is still pushed as before). The texts come from HDS Copilot Settings. A site that cannot be reached is logged once an hour per ticket; the stage still shows on the hub.
+
+**Confirm and reopen.** On the customer portal the ticket page shows "Is this solved?" while the stage is Resolved (`helpdesk.api.copilot.get_resolution` / `decide_resolution`); on a connected site the customer presses the same buttons on their own ticket and the sync relays the answer. Confirmed closes the ticket (through the controller) and the run. Reopened needs a note, reopens the ticket, escalates the run, creates the hand-over Task and tells the developer (or the managers); the customer sees **With our team**.
+
+**The agent's Copilot button** (HD Form Script "Helpdesk Copilot Actions", installed with the AI one by `helpdesk/setup/form_scripts.py`): start a run, see the state, root cause, diagnosis, evidence and latest events, cancel it, start again. API: `helpdesk.api.copilot.start_run`, `get_run`, `cancel_run` (agents).
+
+**Connections** record `client_version` and `client_capabilities` from registration and the daily health check (`helpdesk/client_api.py`: `call`, `hub_api`, `supports`).

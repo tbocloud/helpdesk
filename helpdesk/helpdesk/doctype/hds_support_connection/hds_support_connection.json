@@ -25,6 +25,8 @@
 		"last_health_check",
 		"column_break_health",
 		"mcp_client_installed",
+		"client_version",
+		"client_capabilities",
 		"last_error"
 	],
 	"fields": [
@@ -132,6 +134,19 @@
 			"read_only": 1
 		},
 		{
+			"fieldname": "client_version",
+			"fieldtype": "Data",
+			"label": "Client Version",
+			"read_only": 1
+		},
+		{
+			"fieldname": "client_capabilities",
+			"fieldtype": "Small Text",
+			"label": "Client Capabilities",
+			"read_only": 1,
+			"description": "What the client on the customer site said it can do (JSON list), e.g. hub_api_v1 for stages and replies on its own ticket"
+		},
+		{
 			"fieldname": "last_error",
 			"fieldtype": "Small Text",
 			"label": "Last Error",
@@ -161,7 +176,7 @@
 		}
 	],
 	"links": [],
-	"modified": "2026-09-30 11:00:00.000000",
+	"modified": "2026-10-09 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Support Connection",

@@ -42,6 +42,11 @@
           :ticket-id="String(ticketId)"
           @decided="ticket.reload()"
         />
+        <!-- Copilot says the ticket is resolved: the customer confirms or reopens -->
+        <CopilotResolutionBanner
+          :ticket-id="String(ticketId)"
+          @decided="ticket.reload()"
+        />
         <!-- Mobile: Conversation / Details tabs -->
         <Tabs
           v-if="isMobileView"
@@ -159,6 +164,7 @@ import {
 import { useRouter } from "vue-router";
 import { ITicket } from "./symbols";
 import EstimateApprovalBanner from "./EstimateApprovalBanner.vue";
+import CopilotResolutionBanner from "./CopilotResolutionBanner.vue";
 import TicketConversation from "./TicketConversation.vue";
 import TicketCustomerSummary from "./TicketCustomerSummary.vue";
 import TicketFeedback from "./TicketFeedback.vue";
