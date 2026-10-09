@@ -1,6 +1,7 @@
 # TBO CRM integration
 
-Status: users and customers both ways are implemented (missing records only).
+Status: users and customers both ways are implemented (missing records only), and billable
+time becomes draft Sales Invoices in the CRM site's ERPNext.
 This document is the source of truth for the feature and changes with it.
 
 ## What it connects
@@ -48,6 +49,19 @@ or an ERPNext **Customer** (not disabled) when that site runs ERPNext too; both 
 
 Code: `helpdesk/integrations/crm/customers.py`.
 
+## Invoicing (implemented)
+
+Billable time becomes a **draft Sales Invoice in ERPNext on the CRM site**, over the same
+connection. Settings → CRM → **Invoicing** picks the company, service item, optional taxes
+template, income account and cost center from lists read live from that site
+(`get_invoicing_options`), plus a default hourly rate and currency; they are checked against
+the site when saved. The invoice's customer is the ERPNext Customer with the HD Customer's
+name (matched like the customer sync). Details: [timesheet-invoicing.md](timesheet-invoicing.md).
+
+The CRM API user therefore also needs to read Company, Item, Sales Taxes and Charges
+Template, Account, Cost Center and Customer, and to create, read and delete draft Sales
+Invoices (System Manager or Accounts Manager on that site).
+
 ## When it runs
 
 Every hour (users, then customers), soon after an agent is added, re-activated or
@@ -55,7 +69,8 @@ deactivated (HD Agent hook, queued once), and with **Sync now** in Settings → 
 failing record is listed in Last Sync Result and the rest continue; the hourly job logs
 connection errors instead of raising.
 
-Tests: `helpdesk/tests/test_crm_user_sync.py` (with `test_utils.FakeCRM`).
+Tests: `helpdesk/tests/test_crm_user_sync.py` and `helpdesk/tests/test_timesheet_invoicing.py`
+(with `test_utils.FakeCRM`).
 
 ## Possible next steps
 
@@ -68,4 +83,5 @@ Tests: `helpdesk/tests/test_crm_user_sync.py` (with `test_utils.FakeCRM`).
 - Keys are entered only in Settings → CRM, never sent in chat or email; rotate any key
   that was.
 - The CRM API user needs System Manager (to create users) on the CRM site.
-- The hub only creates, enables and (for users it created) disables records; it never deletes.
+- The hub only creates, enables and (for users it created) disables records. The one
+  deletion is a draft Sales Invoice it created itself, when recording it in the hub failed.

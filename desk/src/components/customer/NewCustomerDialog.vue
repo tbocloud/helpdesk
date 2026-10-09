@@ -24,7 +24,7 @@
             v-model="state.name"
           />
 
-          <div class="grid grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <FormControl
               type="select"
               :label="__('Customer Type')"
@@ -61,7 +61,7 @@
           <h3 class="text-base-medium text-ink-gray-8">
             {{ __("Primary Contact") }}
           </h3>
-          <div class="grid grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <FormControl
               type="text"
               :label="__('First Name')"

@@ -12,7 +12,7 @@
           />
           <button
             type="button"
-            class="absolute inset-0 flex cursor-pointer items-center justify-center bg-black/40 text-white opacity-0 outline-none transition focus:outline-none focus-visible:outline-none group-hover:opacity-100"
+            class="absolute inset-0 flex cursor-pointer items-center justify-center bg-black/40 text-white opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
             :class="roundedClass"
             :aria-label="__('Replace image')"
             @click.prevent="openFileSelector()"
@@ -21,7 +21,7 @@
           </button>
           <button
             type="button"
-            class="absolute -right-2.5 -top-2.5 flex size-4.5 cursor-pointer items-center justify-center rounded-full bg-surface-base text-ink-gray-4 opacity-0 outline outline-black-overlay-50 duration-300 ease-in-out focus:outline-none focus-visible:outline-none hover:bg-surface-gray-2 group-hover:opacity-100"
+            class="absolute -right-2.5 -top-2.5 flex size-4.5 cursor-pointer items-center justify-center rounded-full bg-surface-base text-ink-gray-4 opacity-0 outline outline-black-overlay-50 duration-300 ease-in-out hover:bg-surface-gray-2 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
             :aria-label="__('Remove image')"
             @click.prevent="image = ''"
           >

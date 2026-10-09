@@ -25,7 +25,10 @@
                 @update:modelValue="exotel.doc.record_call = $event ? 1 : 0"
               />
             </div>
-            <div class="grid grid-cols-2 gap-4 mt-4" v-if="exotel.doc.enabled">
+            <div
+              class="grid grid-cols-1 gap-4 mt-4 sm:grid-cols-2"
+              v-if="exotel.doc.enabled"
+            >
               <div
                 class="flex flex-col gap-2"
                 v-if="telephonyAgent.doc && exotel.doc?.enabled"

@@ -21,7 +21,7 @@ of truth for how it works; keep it current with the code.
 | `hours_per_period` | More than 0. For a block, the hours in the block. |
 | `rollover_unused` | Unused hours are added to the next period. Cleared for a block. |
 | `alert_threshold` | % used that triggers the first alert, 1 to 100 (default 80). |
-| `rate_per_extra_hour`, `currency` | Optional, for invoicing extra hours later. Nothing bills yet. |
+| `rate_per_extra_hour`, `currency` | Optional. The rate an invoice draft bills this contract's hours at; without it, the default rate in Settings → CRM → Invoicing ([timesheet-invoicing.md](timesheet-invoicing.md)). |
 | `notes` | Free text. |
 | `alerted_period_start`, `alerted_stage` | Hidden: the period and stage (Threshold / Overage) the last alert was sent for. |
 
@@ -158,6 +158,10 @@ danger at 100%, and always with the numbers and an icon.
   overlapping contract, "Create contract" / "Save changes").
 - **States**: loading skeleton, error with Retry, no access ("You can't see these support
   hours"), no contract (New contract for managers).
+- **Invoicing** (Agent Managers and System Managers): **Create invoice draft** and the
+  customer's **Invoices**, also for customers without a contract. Only the hours beyond the
+  contract's included hours are billed by default. See
+  [timesheet-invoicing.md](timesheet-invoicing.md).
 
 ### Support hours page (`/support-hours`)
 
@@ -173,6 +177,12 @@ same people (`canSeeCustomerReport`: Agent Managers and project managers; the se
 - **Download CSV** is the primary action and follows the filters.
 - States: loading skeleton, error with Retry, nothing matching the filters (Show all
   contracts), no contracts running (Open customers).
+- **Invoicing** (Agent Managers and System Managers): an **Invoice** button per contract
+  opens the invoice draft dialog for its customer, and an **Invoices** section lists every
+  draft created from the hub. See [timesheet-invoicing.md](timesheet-invoicing.md).
+
+Billed time logs carry `custom_billed_invoice`; they still count as used hours here (the
+work was done), so invoicing doesn't change any usage figure on this page.
 
 ## Tests
 

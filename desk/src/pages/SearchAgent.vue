@@ -135,7 +135,7 @@
                   class="text-ink-gray-6"
                 >
                   <span class="text-ink-gray-5">{{ __("Searched for:") }}</span>
-                  <span class="ml-1 font-medium text-primary">
+                  <span class="ml-1 font-medium text-ink-gray-9">
                     {{ searchResponse.summary.corrected_query }}
                   </span>
                 </p>

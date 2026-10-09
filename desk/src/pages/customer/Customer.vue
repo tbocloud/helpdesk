@@ -92,7 +92,7 @@
         >
           <template #tab-item="{ tab, selected }">
             <button
-              class="flex items-center gap-2 border-b border-transparent py-2 text-base transition-colors hover:text-ink-gray-9"
+              class="flex shrink-0 items-center gap-2 whitespace-nowrap border-b border-transparent py-2 text-base transition-colors hover:text-ink-gray-9"
               :class="selected ? 'text-ink-gray-9' : 'text-ink-gray-5'"
             >
               <component

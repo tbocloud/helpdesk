@@ -1902,12 +1902,23 @@ class FakeCRM:
         users: list[dict] | None = None,
         failing: tuple = (),
         organizations: list[str] | None = None,
+        erp_customers: list[str] | None = None,
     ):
         self.users = {u["name"]: {"roles": [], "enabled": 1, **u} for u in users or []}
         self.failing = set(failing)
         self.role_calls: list[tuple[tuple, str]] = []
         self.orgs = [{"name": o, "organization_name": o} for o in organizations or []]
-        self.erp = []
+        self.erp = list(erp_customers or [])
+        # ERPNext on the CRM site, for invoicing: one company and its records
+        self.company_rows = [{"name": FAKE_COMPANY, "default_currency": "INR"}]
+        self.item_rows = [{"name": FAKE_ITEM, "item_name": "Support hours"}]
+        self.company_records = {
+            "taxes_templates": [{"name": FAKE_TAXES, "title": "GST 18%"}],
+            "income_accounts": [{"name": "Service Income - TBO"}],
+            "cost_centers": [{"name": "Main - TBO"}],
+        }
+        self.invoices: dict[str, dict] = {}
+        self.fail_invoices = False
 
     def logged_user(self):
         return "api@crm.example"
@@ -1956,6 +1967,97 @@ class FakeCRM:
         self.role_calls.append((tuple(emails), role))
         for email in emails:
             self.users[email]["roles"].append({"role": role})
+
+    def customers(self):
+        return [{"name": c, "customer_name": c} for c in self.erp]
+
+    def companies(self):
+        return list(self.company_rows)
+
+    def service_items(self):
+        return list(self.item_rows)
+
+    def taxes_templates(self, company):
+        return (
+            self.company_records["taxes_templates"] if company == FAKE_COMPANY else []
+        )
+
+    def income_accounts(self, company):
+        return (
+            self.company_records["income_accounts"] if company == FAKE_COMPANY else []
+        )
+
+    def cost_centers(self, company):
+        return self.company_records["cost_centers"] if company == FAKE_COMPANY else []
+
+    def template_taxes(self, template):
+        return [
+            {"charge_type": "On Net Total", "account_head": "GST - TBO", "rate": 18}
+        ]
+
+    def create_sales_invoice(self, invoice):
+        from helpdesk.integrations.crm.client import CRMError
+
+        if self.fail_invoices:
+            raise CRMError("CRM said no")
+        name = f"ACC-SINV-2026-{len(self.invoices) + 1:05d}"
+        self.invoices[name] = {**invoice, "name": name, "docstatus": 0}
+        return dict(self.invoices[name])
+
+    def delete_sales_invoice(self, name):
+        self.invoices.pop(name, None)
+
+    def get_doc(self, doctype, name):
+        return self.invoices.get(name) if doctype == "Sales Invoice" else None
+
+    def sales_invoices(self, names):
+        return [
+            {"status": "Draft", **self.invoices[n]} for n in names if n in self.invoices
+        ]
+
+
+FAKE_COMPANY = "TBO India Pvt Ltd"
+FAKE_ITEM = "Support Hours"
+FAKE_TAXES = "GST 18% - TBO"
+
+
+def enable_invoicing(**values):
+    """Turns invoicing on in HD CRM Settings with FakeCRM's company and item and a
+    default rate of 1000 INR an hour, without checking them (pair with a patched FakeCRM).
+    Adds the INR Currency when the test site has none."""
+    if not frappe.db.exists("Currency", "INR"):
+        frappe.get_doc(
+            {"doctype": "Currency", "currency_name": "INR", "enabled": 1, "symbol": "₹"}
+        ).insert(ignore_permissions=True)
+    frappe.db.set_single_value(
+        "HD CRM Settings",
+        {
+            "site_url": "https://crm.example",
+            "api_key": "test-key",
+            "invoice_company": FAKE_COMPANY,
+            "invoice_item": FAKE_ITEM,
+            "invoice_taxes_template": None,
+            "invoice_income_account": None,
+            "invoice_cost_center": None,
+            "invoice_hourly_rate": 1000,
+            "invoice_currency": "INR",
+            **values,
+        },
+    )
+    frappe.clear_document_cache("HD CRM Settings", "HD CRM Settings")
+
+
+def get_billed_invoices(names: list[str]) -> dict[str, str | None]:
+    """{time log: the HD Customer Invoice it is billed on} for Timesheet Detail names."""
+    return dict(
+        frappe.get_all(
+            "Timesheet Detail",
+            filters={"name": ("in", names)},
+            fields=["name", "custom_billed_invoice"],
+            as_list=True,
+            limit_page_length=0,
+        )
+    )
 
 
 class FakeS3:

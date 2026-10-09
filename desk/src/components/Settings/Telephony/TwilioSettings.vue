@@ -24,7 +24,10 @@
               @update:modelValue="twilio.doc.record_calls = $event ? 1 : 0"
             />
           </div>
-          <div class="grid grid-cols-2 gap-4 mt-4" v-if="twilio.doc.enabled">
+          <div
+            class="grid grid-cols-1 gap-4 mt-4 sm:grid-cols-2"
+            v-if="twilio.doc.enabled"
+          >
             <div class="flex flex-col gap-2">
               <FormControl
                 label="Account SID"
