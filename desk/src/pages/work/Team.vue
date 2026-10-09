@@ -51,7 +51,11 @@
               "
               @click="setView(option.key)"
             >
-              <component :is="option.icon" class="size-4" aria-hidden="true" />
+              <component
+                :is="option.icon"
+                class="hidden size-4 sm:block"
+                aria-hidden="true"
+              />
               {{ option.label }}
             </button>
           </div>
@@ -91,6 +95,12 @@
         <ProjectPortfolio
           v-if="view === 'project'"
           ref="portfolioView"
+          class="mt-5"
+        />
+
+        <CapacityPlanner
+          v-else-if="view === 'capacity'"
+          ref="capacityView"
           class="mt-5"
         />
 
@@ -464,10 +474,12 @@ import LucideCircleDot from "~icons/lucide/circle-dot";
 import LucideCoffee from "~icons/lucide/coffee";
 import LucideEye from "~icons/lucide/eye";
 import LucideFolderKanban from "~icons/lucide/folder-kanban";
+import LucideGauge from "~icons/lucide/gauge";
 import LucidePause from "~icons/lucide/pause";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideUsers from "~icons/lucide/users";
 import LucideX from "~icons/lucide/x";
+import CapacityPlanner from "./components/CapacityPlanner.vue";
 import ProjectPortfolio from "./components/ProjectPortfolio.vue";
 
 interface TaskRef {
@@ -558,20 +570,22 @@ function queryValue(key: string) {
   return typeof value === "string" ? value : "";
 }
 
-type View = "person" | "project";
+type View = "person" | "project" | "capacity";
 
 const VIEWS: { key: View; label: string; icon: Component }[] = [
   { key: "person", label: __("By person"), icon: LucideUsers },
   { key: "project", label: __("By project"), icon: LucideFolderKanban },
+  { key: "capacity", label: __("Capacity"), icon: LucideGauge },
 ];
 
-const view = computed<View>(() =>
-  queryValue("view") === "project" ? "project" : "person"
-);
+const view = computed<View>(() => {
+  const value = queryValue("view") as View;
+  return VIEWS.some((v) => v.key === value) ? value : "person";
+});
 
 function setView(next: View) {
   router.replace({
-    query: { ...route.query, view: next === "project" ? next : undefined },
+    query: { ...route.query, view: next === "person" ? undefined : next },
   });
 }
 
@@ -601,14 +615,24 @@ const sort = computed<Sort>({
 });
 
 const portfolioView = ref<InstanceType<typeof ProjectPortfolio> | null>(null);
+const capacityView = ref<InstanceType<typeof CapacityPlanner> | null>(null);
+
+// the other views load their own data
+const otherView = computed(() =>
+  view.value === "project"
+    ? portfolioView.value
+    : view.value === "capacity"
+    ? capacityView.value
+    : null
+);
 
 const refreshing = computed(() =>
-  view.value === "project" ? !!portfolioView.value?.loading : workload.loading
+  view.value === "person" ? workload.loading : !!otherView.value?.loading
 );
 
 function refresh() {
-  if (view.value === "project") portfolioView.value?.reload();
-  else workload.reload();
+  if (view.value === "person") workload.reload();
+  else otherView.value?.reload();
 }
 
 const filters = reactive({

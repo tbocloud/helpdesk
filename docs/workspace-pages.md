@@ -51,9 +51,12 @@ assignee, department)`. Project managers and project leads only.
 ## Team (`/team`)
 
 `desk/src/pages/work/Team.vue`; API `helpdesk.api.work.get_team_workload(project, customer)`
-for By person, `get_project_portfolio` for By project (`components/ProjectPortfolio.vue`).
+for By person, `get_project_portfolio` for By project (`components/ProjectPortfolio.vue`),
+`helpdesk.api.capacity.get_capacity` for Capacity (`components/CapacityPlanner.vue`, see
+[Capacity](#capacity-teamviewcapacity)).
 
-- **By person / By project** switch, kept in the URL as `view`.
+- **By person / By project / Capacity** switch, kept in the URL as `view` (`project`,
+  `capacity`; By person is the default and left out).
 - **Summary tiles**: People, Working now and Free (with their share of the team), Overdue and
   Waiting review (with how many people), Done this week (the last 7 days). A tile narrows the
   people table to those it counts; the narrowing is `show` in the URL.
@@ -65,6 +68,57 @@ for By person, `get_project_portfolio` for By project (`components/ProjectPortfo
   people on their projects. The table no longer expands inline, so the API no longer sends each
   person's task list.
 - Below `xl` each row becomes a card with labelled values.
+
+### Capacity (`/team?view=capacity`)
+
+Planning, not time tracking: "can we take this on, and who has room?" It never shows the
+hours someone spent, only how much open work is planned against the time they have. API
+`helpdesk.api.capacity.get_capacity(weeks, department, project)`; project managers and project
+leads only (`can_see_overview`), over the same people as By person (`_team_members`: everyone
+for admins, else the people on the projects they manage or lead). A lead can't filter to a
+project they don't run (it returns no one).
+
+- **Window**: 1, 2 or 4 calendar weeks (`weeks`, 2 by default), from today to the Sunday of
+  the last week. When this week has no working day left (a Sunday, or a Saturday off), it
+  starts next Monday.
+- **Available hours** per working day are HD Work Settings' `dev_hours_per_day` (focused
+  hours, 6 by default; `hours_per_day()` in `api/customization.py`). Working days skip the
+  weekly off, the Saturdays off rule (`work_calendar.py`) and the holidays in the default
+  SLA's holiday list. The hub keeps no leave records, so leave isn't counted.
+- **Planned hours** come from open tasks assigned to the person with status Open, Working,
+  Overdue or Waiting on Task (On Hold and Pending Review wait on someone else). Each task's
+  remaining hours = `custom_estimated_hours` (else the standard estimate from
+  `task_estimates.fallback_estimate`, marked "~" and counted in a note) minus the hours
+  already logged on it in draft or submitted timesheets, floored at 0. A task shared by
+  several people is split evenly between them.
+- **Load-spreading rule** (`task_allocation`): the remaining hours spread evenly over the
+  working days from the task's start (today, or its planned start if later) to its due date.
+  Only the share that falls in the window counts, so a task due in six weeks takes its
+  proportional bite now. An overdue task is owed in full from the first working day on, a
+  full day's hours at a time. A task with no due date gets one from the standard estimate's
+  working days, as a new task would. A due date on a day off puts it all on the next working
+  day.
+- **Flags** (`load_flag`): Overloaded above 100% of the available hours, Busy from 80% to
+  100%, Available under 80%; each a badge with an icon and text. A week or day with no working
+  time says "No working days".
+- **Tiles**: Team load (planned of available hours), then Overloaded, Busy and Available
+  people; a flag tile narrows the list (`load` in the URL).
+- **People**: name (opens their My Work, `?user=`), flag, a meter and "planned / available h"
+  per week (neutral fill, red with an icon only when over), the window's total. Sort
+  (`sort`): most loaded first (the server's order), most free hours, name. Expanding a row
+  (`components/CapacityDetail.vue`) shows a bar per working day, hours by project and the
+  biggest tasks. Work on projects the viewer doesn't run counts toward the person's load but
+  shows only as hours under "Other projects", without task names.
+- **Who's free next week** (or this week with a 1-week window; "next week" goes by the
+  server's `today`, not the browser's clock): people under 80% that week,
+  most free hours first. Typing hours of new work (the "what if") lists who has that many free
+  hours in the whole window, with their load before and after.
+- **By department / By project**: the window's planned hours by the department of each task's
+  project, and per project with how many people. In both, work on projects the viewer doesn't
+  run is one "Other projects" row, so a lead never sees another project's department.
+- **Filters** in the URL: `department` (that department's projects' people) and `project`
+  (shared with By person). With a filter, a person's load is still all their planned work,
+  since their time is one pool.
 
 ## Summaries (`/work-summaries`)
 
