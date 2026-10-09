@@ -212,6 +212,10 @@ def _apply(doc, values: dict | str):
             doc.set(field, values[field])
     if isinstance(values.get("weekdays"), list):
         doc.weekdays = ",".join(cstr(day) for day in values["weekdays"])
+    # frappe.new_doc fills an empty Time field with the current time; a rule saved
+    # without a due time must stay without one
+    if doc.is_new() and not values.get("due_time"):
+        doc.due_time = None
     doc.due_time = doc.due_time or None
     doc.assignee = doc.assignee or None
 

@@ -2084,6 +2084,8 @@ def make_recurring_task(project: str, subject: str, **values):
             "frequency": "Monthly",
             "month_day": 1,
             "start_date": nowdate(),
+            # new_doc would fill the Time field with the current time
+            "due_time": None,
             **values,
         }
     )
