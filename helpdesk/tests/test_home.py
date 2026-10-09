@@ -17,9 +17,11 @@ from helpdesk.test_utils import (
     make_assignment,
     make_project,
     make_project_file,
+    make_project_folder,
     make_task,
     make_tasky_user,
     make_ticket,
+    mark_project_item,
 )
 
 LEAD = ("lead.home@home-dashboard.example", "Asha Kurian")
@@ -140,6 +142,18 @@ class TestHome(FrappeTestCase):
         self.assertEqual([f["file_name"] for f in dev_files["items"]], ["brief.md"])
         self.assertEqual(dev_files["items"][0]["project"], self.project)
         self.assertEqual(lead_files["count"], 0)
+
+    def test_files_for_me_skip_files_in_a_superseded_folder(self):
+        old = make_project_folder(self.project, "Spec v1", user=LEAD[0])
+        make_project_file(
+            self.project, "spec.md", for_users=[DEV[0]], user=LEAD[0], folder=old
+        )
+        make_project_file(self.project, "brief.md", for_users=[DEV[0]], user=LEAD[0])
+        mark_project_item(LEAD[0], self.project, "folder", old)
+
+        dev_files = self.as_user(DEV)["day"]["files"]
+
+        self.assertEqual([f["file_name"] for f in dev_files["items"]], ["brief.md"])
 
     def test_quiet_day_is_all_zero(self):
         quiet = ("quiet.home@home-dashboard.example", "Nila Menon")

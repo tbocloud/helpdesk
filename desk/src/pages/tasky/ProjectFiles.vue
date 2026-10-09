@@ -120,7 +120,7 @@
                 </template>
               </Button>
               <Dropdown
-                v-if="currentFolder?.can_change"
+                v-if="currentFolder"
                 :options="folderMenu(currentFolder, false)"
                 align="end"
               >
@@ -161,6 +161,26 @@
             v-if="currentFolder && !stale"
             class="-mt-2 mb-4 flex flex-col gap-1.5"
           >
+            <div
+              v-if="supersededVia(currentFolder)"
+              class="flex flex-wrap items-center gap-2"
+            >
+              <TaskyBadge
+                :icon="LucideArchive"
+                :label="
+                  supersededVia(currentFolder) === 'own'
+                    ? __('Superseded')
+                    : __('In a superseded folder')
+                "
+              />
+              <span class="text-p-sm text-ink-gray-6">
+                {{ __("Everything here is an older version.") }}
+              </span>
+              <SupersededNote
+                :item="currentFolder"
+                :to="replacementRoute(currentFolder)"
+              />
+            </div>
             <p
               v-if="currentFolder.description"
               class="text-p-sm text-ink-gray-6"
@@ -169,6 +189,32 @@
             </p>
             <PeopleChips :people="currentFolder.for_users" />
           </div>
+
+          <!-- superseded versions are hidden by default, so the current set is clear -->
+          <p
+            v-if="files.data && !stale && (hiddenCount || showSuperseded)"
+            class="mb-3 flex flex-wrap items-center gap-x-1.5 text-xs text-ink-gray-6"
+          >
+            <LucideArchive class="size-3.5" aria-hidden="true" />
+            <span v-if="showSuperseded">
+              {{ __("Showing superseded files and folders") }}
+            </span>
+            <span v-else class="tabular-nums">
+              {{
+                hiddenCount === 1
+                  ? __("1 superseded hidden")
+                  : __("{0} superseded hidden", String(hiddenCount))
+              }}
+            </span>
+            <span aria-hidden="true">·</span>
+            <button
+              type="button"
+              class="rounded font-medium text-ink-gray-8 underline decoration-outline-gray-3 underline-offset-2 hover:decoration-ink-gray-6 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+              @click="setShowSuperseded(!showSuperseded)"
+            >
+              {{ showSuperseded ? __("Hide superseded") : __("Show") }}
+            </button>
+          </p>
 
           <!-- Loading -->
           <div
@@ -232,10 +278,24 @@
                   <div class="flex min-w-0 flex-wrap items-center gap-2">
                     <RouterLink
                       :to="folderRoute(folder.name)"
-                      class="min-w-0 truncate rounded text-base-medium text-ink-gray-9 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+                      class="min-w-0 truncate rounded text-base-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+                      :class="
+                        supersededVia(folder)
+                          ? 'text-ink-gray-6'
+                          : 'text-ink-gray-9'
+                      "
                     >
                       {{ folder.folder_name }}
                     </RouterLink>
+                    <TaskyBadge
+                      v-if="supersededVia(folder)"
+                      :icon="LucideArchive"
+                      :label="
+                        supersededVia(folder) === 'own'
+                          ? __('Superseded')
+                          : __('In a superseded folder')
+                      "
+                    />
                     <TaskyBadge
                       v-if="folder.is_for_me"
                       tone="info"
@@ -249,6 +309,10 @@
                       :label="__('In a folder for you')"
                     />
                   </div>
+                  <SupersededNote
+                    :item="folder"
+                    :to="replacementRoute(folder)"
+                  />
                   <div
                     class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-ink-gray-6"
                   >
@@ -268,6 +332,22 @@
                   </div>
                   <PeopleChips :people="folder.for_users" />
                 </div>
+                <Button
+                  v-if="folder.comment_count"
+                  variant="ghost"
+                  class="min-h-11 md:min-h-0"
+                  :aria-label="
+                    commentsLabel(folder.comment_count, folder.folder_name)
+                  "
+                  @click="commenting = folderRef(folder)"
+                >
+                  <template #prefix>
+                    <LucideMessageSquare class="size-4" aria-hidden="true" />
+                  </template>
+                  <span class="font-mono tabular-nums">{{
+                    folder.comment_count
+                  }}</span>
+                </Button>
                 <Dropdown :options="folderMenu(folder, true)" align="end">
                   <Button
                     variant="ghost"
@@ -285,7 +365,27 @@
             </ul>
 
             <TaskyState
-              v-if="forMe && !files.data.files.length"
+              v-if="
+                hiddenCount &&
+                !files.data.files.length &&
+                (forMe || !subfolders.length)
+              "
+              :icon="LucideArchive"
+              :title="__('Only superseded versions here')"
+              :message="
+                __(
+                  'Older versions are hidden so the current ones stand out. Show them to see what was replaced.'
+                )
+              "
+            >
+              <Button
+                :label="__('Show superseded')"
+                @click="setShowSuperseded(true)"
+              />
+            </TaskyState>
+
+            <TaskyState
+              v-else-if="forMe && !files.data.files.length"
               :icon="LucideUserCheck"
               :title="__('Nothing is marked for you')"
               :message="
@@ -394,7 +494,12 @@
                     <button
                       v-if="canPreview(file.file_name)"
                       type="button"
-                      class="min-w-0 truncate rounded text-left text-base-medium text-ink-gray-9 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+                      class="min-w-0 truncate rounded text-left text-base-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+                      :class="
+                        supersededVia(file)
+                          ? 'text-ink-gray-6'
+                          : 'text-ink-gray-9'
+                      "
                       @click="viewing = file"
                     >
                       {{ file.file_name }}
@@ -403,10 +508,24 @@
                       v-else
                       :href="downloadHref(file.file_url)"
                       :download="file.file_name"
-                      class="min-w-0 truncate rounded text-base-medium text-ink-gray-9 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+                      class="min-w-0 truncate rounded text-base-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+                      :class="
+                        supersededVia(file)
+                          ? 'text-ink-gray-6'
+                          : 'text-ink-gray-9'
+                      "
                     >
                       {{ file.file_name }}
                     </a>
+                    <TaskyBadge
+                      v-if="supersededVia(file)"
+                      :icon="LucideArchive"
+                      :label="
+                        supersededVia(file) === 'own'
+                          ? __('Superseded')
+                          : __('In a superseded folder')
+                      "
+                    />
                     <TaskyBadge
                       v-if="file.is_for_me"
                       tone="info"
@@ -450,10 +569,27 @@
                       >{{ timeAgo(file.creation) }}</time
                     >
                   </div>
+                  <SupersededNote :item="file" :to="replacementRoute(file)" />
                   <PeopleChips :people="file.for_users" />
                 </div>
 
                 <div class="flex shrink-0 items-center gap-0.5">
+                  <Button
+                    v-if="file.comment_count"
+                    variant="ghost"
+                    class="min-h-11 md:min-h-0"
+                    :aria-label="
+                      commentsLabel(file.comment_count, file.file_name)
+                    "
+                    @click="commenting = fileRef(file)"
+                  >
+                    <template #prefix>
+                      <LucideMessageSquare class="size-4" aria-hidden="true" />
+                    </template>
+                    <span class="font-mono tabular-nums">{{
+                      file.comment_count
+                    }}</span>
+                  </Button>
                   <Button
                     v-if="canPreview(file.file_name)"
                     variant="ghost"
@@ -475,11 +611,7 @@
                   >
                     <LucideDownload class="size-4" aria-hidden="true" />
                   </a>
-                  <Dropdown
-                    v-if="fileMenu(file).length"
-                    :options="fileMenu(file)"
-                    align="end"
-                  >
+                  <Dropdown :options="fileMenu(file)" align="end">
                     <Button
                       variant="ghost"
                       class="min-h-11 min-w-11 md:min-h-0 md:min-w-0"
@@ -527,6 +659,18 @@
       :folders="files.data?.folders ?? []"
       :max-depth="maxDepth"
       @moved="files.reload()"
+    />
+
+    <SupersedeDialog
+      v-model:item="superseding"
+      :project-id="projectId"
+      @saved="files.reload()"
+    />
+
+    <ItemCommentsDialog
+      v-model:item="commenting"
+      :project-id="projectId"
+      @changed="files.reload()"
     />
 
     <!-- who a file or folder is for -->
@@ -630,6 +774,8 @@ import {
 } from "frappe-ui";
 import { computed, ref, watch, type Component } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
+import LucideArchive from "~icons/lucide/archive";
+import LucideArchiveRestore from "~icons/lucide/archive-restore";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideDownload from "~icons/lucide/download";
 import LucideEllipsis from "~icons/lucide/ellipsis";
@@ -640,6 +786,7 @@ import LucideFolderInput from "~icons/lucide/folder-input";
 import LucideFolderOpen from "~icons/lucide/folder-open";
 import LucideFolderPlus from "~icons/lucide/folder-plus";
 import LucideLoaderCircle from "~icons/lucide/loader-circle";
+import LucideMessageSquare from "~icons/lucide/message-square";
 import LucidePaperclip from "~icons/lucide/paperclip";
 import LucidePencil from "~icons/lucide/pencil";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
@@ -648,11 +795,14 @@ import LucideUpload from "~icons/lucide/upload";
 import LucideUserCheck from "~icons/lucide/user-check";
 import LucideUsers from "~icons/lucide/users";
 import FileForPicker from "./components/FileForPicker.vue";
+import ItemCommentsDialog from "./components/ItemCommentsDialog.vue";
 import MoveToFolderDialog from "./components/MoveToFolderDialog.vue";
 import PeopleChips from "./components/PeopleChips.vue";
 import ProjectFileViewer from "./components/ProjectFileViewer.vue";
 import ProjectFolderDialog from "./components/ProjectFolderDialog.vue";
 import ProjectNav from "./components/ProjectNav.vue";
+import SupersedeDialog from "./components/SupersedeDialog.vue";
+import SupersededNote from "./components/SupersededNote.vue";
 import TaskyBadge from "@/components/TaskyBadge.vue";
 import TaskyState from "@/components/TaskyState.vue";
 import UploadProjectFilesDialog from "./components/UploadProjectFilesDialog.vue";
@@ -663,6 +813,8 @@ import {
   formatBytes,
   fromDataTransfer,
   subtree,
+  supersededVia,
+  type ItemRef,
   type MoveItem,
   type OpenFolder,
   type ProjectFile,
@@ -693,6 +845,8 @@ const droppedFiles = ref<UploadItem[]>([]);
 const showFolderDialog = ref(false);
 const renaming = ref<ProjectFolder | null>(null);
 const deletingFolder = ref<ProjectFolder | null>(null);
+const superseding = ref<ItemRef | null>(null);
+const commenting = ref<ItemRef | null>(null);
 const dragging = ref(false);
 let dragDepth = 0;
 
@@ -701,18 +855,24 @@ const folderId = computed(() =>
   typeof route.query.folder === "string" ? route.query.folder : ""
 );
 
+// superseded files and folders are hidden unless ?superseded=1, so the current set is clear
+const showSuperseded = computed(() => route.query.superseded === "1");
+
 const files = createResource({
   url: "helpdesk.api.project_files.list_project_files",
   makeParams: () => ({
     project: props.projectId,
     folder: forMe.value ? null : folderId.value || null,
     for_me: forMe.value,
+    show_superseded: showSuperseded.value,
   }),
   auto: true,
   onError() {},
 });
 
-watch([() => props.projectId, forMe, folderId], () => files.reload());
+watch([() => props.projectId, forMe, folderId, showSuperseded], () =>
+  files.reload()
+);
 
 // the data on screen is for another folder while the new one loads
 const stale = computed(
@@ -727,8 +887,13 @@ const canUpload = computed(() => !!files.data?.can_upload);
 const maxDepth = computed<number>(() => files.data?.max_depth ?? 5);
 const subfolders = computed<ProjectFolder[]>(() =>
   (files.data?.folders ?? []).filter(
-    (f: ProjectFolder) => (f.parent_folder ?? "") === folderId.value
+    (f: ProjectFolder) =>
+      (f.parent_folder ?? "") === folderId.value &&
+      !(files.data.hiding_superseded && supersededVia(f))
   )
+);
+const hiddenCount = computed<number>(() =>
+  stale.value ? 0 : files.data?.superseded_hidden ?? 0
 );
 const canAddFolderHere = computed(
   () =>
@@ -816,8 +981,14 @@ function folderMenu(folder: ProjectFolder, withOpen: boolean): MenuItem[] {
       icon: LucideFolderOpen,
       onClick: () => openFolder(folder.name),
     });
+  items.push({
+    label: __("Comments"),
+    icon: LucideMessageSquare,
+    onClick: () => (commenting.value = folderRef(folder)),
+  });
   if (!folder.can_change) return items;
   items.push(
+    statusMenuItem(folder, folderRef(folder)),
     {
       label: __("Rename"),
       icon: LucidePencil,
@@ -851,8 +1022,15 @@ function folderMenu(folder: ProjectFolder, withOpen: boolean): MenuItem[] {
 }
 
 function fileMenu(file: ProjectFile): MenuItem[] {
-  if (!file.can_edit_for) return [];
+  const comments: MenuItem = {
+    label: __("Comments"),
+    icon: LucideMessageSquare,
+    onClick: () => (commenting.value = fileRef(file)),
+  };
+  if (!file.can_edit_for) return [comments];
   const items: MenuItem[] = [
+    comments,
+    statusMenuItem(file, fileRef(file)),
     {
       label: __("Change who it's for"),
       icon: LucideUsers,
@@ -878,6 +1056,92 @@ function fileMenu(file: ProjectFile): MenuItem[] {
     });
   return items;
 }
+
+function commentsLabel(count: number, label: string) {
+  return count === 1
+    ? __("1 comment on {0}", label)
+    : __("{0} comments on {1}", String(count), label);
+}
+
+function fileRef(file: ProjectFile): ItemRef {
+  return { kind: "file", name: file.name, label: file.file_name };
+}
+
+function folderRef(folder: ProjectFolder): ItemRef {
+  return { kind: "folder", name: folder.name, label: folder.folder_name };
+}
+
+// --- Active / Superseded, the same for files and folders ---
+
+function statusMenuItem(
+  item: ProjectFile | ProjectFolder,
+  target: ItemRef
+): MenuItem {
+  return item.status === "Superseded"
+    ? {
+        label: __("Mark as active"),
+        icon: LucideArchiveRestore,
+        onClick: () => markActive(target),
+      }
+    : {
+        label: __("Mark as superseded…"),
+        icon: LucideArchive,
+        onClick: () => (superseding.value = target),
+      };
+}
+
+async function markActive(item: ItemRef) {
+  try {
+    await call("helpdesk.api.project_files.set_project_item_status", {
+      project: props.projectId,
+      kind: item.kind,
+      item: item.name,
+      status: "Active",
+    });
+    toast.success(__("{0} is active again", item.label));
+    files.reload();
+  } catch (e) {
+    toast.error(errorText(e, __("Couldn't mark {0} as active.", item.label)));
+  }
+}
+
+function setShowSuperseded(show: boolean) {
+  const query = { ...route.query };
+  if (show) query.superseded = "1";
+  else delete query.superseded;
+  router.replace({ query });
+}
+
+/** Where the replacement of a superseded file or folder is. */
+function replacementRoute(item: ProjectFile | ProjectFolder) {
+  const target = item.superseded_by;
+  if (!target) return folderRoute(null);
+  return folderRoute(
+    "folder_name" in item ? target.name : target.folder ?? null
+  );
+}
+
+// a notification about a comment links here with ?comments=<file or folder>
+watch(
+  () => [files.data, route.query.comments] as const,
+  ([data, wanted]) => {
+    if (!data || typeof wanted !== "string" || stale.value) return;
+    const file = data.files.find((f: ProjectFile) => f.name === wanted);
+    const folder = data.folders.find((f: ProjectFolder) => f.name === wanted);
+    const query = { ...route.query };
+    if (file || folder) {
+      commenting.value = file ? fileRef(file) : folderRef(folder!);
+    } else if (!showSuperseded.value) {
+      // superseded since the link was sent: keep `comments` and look again with them shown
+      query.superseded = "1";
+      router.replace({ query });
+      return;
+    }
+    delete query.comments;
+    router.replace({ query });
+  },
+  { immediate: true }
+);
 
 function fileMoveItem(file: ProjectFile): MoveItem {
   return {
