@@ -6,6 +6,8 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.utils import getdate
 
+from helpdesk.tasky.permissions import hidden_departments
+
 
 class Project(Document):
     def validate(self):
@@ -38,6 +40,12 @@ class Project(Document):
         department = self.get("custom_department")
         if not department or not self.has_value_changed("custom_department"):
             return
+        # nobody puts a project where their own team can't see it (they'd lose it)
+        if department in hidden_departments():
+            frappe.throw(
+                _("You can't put a project in the {0} department.").format(department),
+                frappe.PermissionError,
+            )
         if not frappe.db.get_value("HD Department", department, "is_active"):
             frappe.throw(
                 _("{0} is no longer an active department. Pick another one.").format(

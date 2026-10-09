@@ -518,6 +518,33 @@ class TestDepartmentWalls(WorkControlCase):
                 ),
             )
 
+    def test_nobody_puts_a_project_on_the_other_side(self):
+        # ignore_permissions skips the role check, so only the department rule decides
+        def create(department):
+            return frappe.get_doc(
+                {
+                    "doctype": "Project",
+                    "project_name": f"DM side {department}",
+                    "custom_department": department,
+                }
+            ).insert(ignore_permissions=True)
+
+        with self.assertRaises(frappe.PermissionError):
+            self.as_user((self.dm,), lambda: create("ERP"))
+        own = self.as_user((self.dm,), lambda: create("Digital"))
+
+        def move():
+            doc = frappe.get_doc("Project", own.name)
+            doc.custom_department = "ERP"
+            doc.save(ignore_permissions=True)
+
+        with self.assertRaises(frappe.PermissionError):
+            self.as_user((self.dm,), move)
+        # a System Manager may still file it anywhere
+        doc = frappe.get_doc("Project", own.name)
+        doc.custom_department = "ERP"
+        doc.save()
+
     def test_nobody_is_given_a_task_on_the_other_side(self):
         with self.assertRaises(frappe.ValidationError):
             make_assignment("Task", self.erp["task"], self.dm)
