@@ -563,6 +563,8 @@ _("Content Calendar") }}{% endblock %} {% block style %}
       const STATUS = {
         "Client Review": { label: {{ _('Awaiting your review')|tojson }}, tone: "warning", icon: "clock" },
         "Changes Requested": { label: {{ _('Changes requested')|tojson }}, tone: "danger", icon: "pencil" },
+        // the client approved; the agency's Digital Marketing Head gives it a last look
+        "Head Review": { label: {{ _('Approved · final check')|tojson }}, tone: "info", icon: "check" },
         "Approved": { label: {{ _('Approved')|tojson }}, tone: "info", icon: "check" },
         "Scheduled": { label: {{ _('Scheduled')|tojson }}, tone: "info", icon: "calendar" },
         "Published": { label: {{ _('Published')|tojson }}, tone: "success", icon: "send" },
@@ -571,7 +573,7 @@ _("Content Calendar") }}{% endblock %} {% block style %}
         { key: "all", label: {{ _('All')|tojson }}, match: () => true },
         { key: "review", label: {{ _('Awaiting review')|tojson }}, match: (p) => p.status === "Client Review" },
         { key: "changes", label: {{ _('Changes requested')|tojson }}, match: (p) => p.status === "Changes Requested" },
-        { key: "approved", label: {{ _('Approved')|tojson }}, match: (p) => p.status === "Approved" || p.status === "Scheduled" },
+        { key: "approved", label: {{ _('Approved')|tojson }}, match: (p) => ["Head Review", "Approved", "Scheduled"].includes(p.status) },
         { key: "published", label: {{ _('Published')|tojson }}, match: (p) => p.status === "Published" },
       ];
       const posts = DATA.posts;
@@ -631,7 +633,7 @@ _("Content Calendar") }}{% endblock %} {% block style %}
 
           <section class="tiles" aria-label={{ _('Summary')|tojson }}>
             <div class="card tile"><p class="k">{{ _("Planned") }}</p><p class="v num">${scoped.length}</p><p class="s">${esc(monthLabel(month))}</p></div>
-            <div class="card tile"><p class="k">{{ _("Approved") }}</p><p class="v num">${count((p) => ["Approved", "Scheduled"].includes(p.status))}</p><p class="s">{{ _("ready to go out") }}</p></div>
+            <div class="card tile"><p class="k">{{ _("Approved") }}</p><p class="v num">${count((p) => ["Head Review", "Approved", "Scheduled"].includes(p.status))}</p><p class="s">{{ _("ready to go out") }}</p></div>
             <div class="card tile"><p class="k">{{ _("Published") }}</p><p class="v num">${count((p) => p.status === "Published")}</p><p class="s">{{ _("already live") }}</p></div>
             <div class="card tile"><p class="k">{{ _("Next post") }}</p><p class="v" style="font-size:15px;padding-top:4px;">${next ? esc(dayLabel(next.publish_on)) : "—"}</p><p class="s">${next ? esc(next.title) : {{ _('Nothing scheduled')|tojson }}}</p></div>
           </section>
@@ -789,7 +791,7 @@ _("Content Calendar") }}{% endblock %} {% block style %}
           e.currentTarget.disabled = true;
           try {
             const r = await call("approve_many", { posts: [...selected] });
-            r.approved.forEach((name) => { byName(name).status = "Approved"; });
+            r.approved.forEach((name) => { byName(name).status = r.statuses[name]; });
             selected.clear();
             toast(r.approved.length === 1 ? {{ _('1 post approved')|tojson }} : r.approved.length + " {{ _('posts approved') }}");
           } catch (err) {

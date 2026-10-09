@@ -1,8 +1,12 @@
 <template>
   <div class="flex flex-col gap-1.5">
-    <label v-if="label" :for="inputId" class="text-xs text-ink-gray-5">{{
-      label
-    }}</label>
+    <label
+      v-if="label"
+      :for="inputId"
+      class="text-xs text-ink-gray-5"
+      :class="{ 'sr-only': hideLabel }"
+      >{{ label }}</label
+    >
     <ul
       v-if="modelValue.length"
       class="flex flex-wrap gap-1.5"
@@ -68,8 +72,14 @@ import LucideChevronDown from "~icons/lucide/chevron-down";
 import LucideX from "~icons/lucide/x";
 
 const props = withDefaults(
-  defineProps<{ modelValue: string[]; label?: string; placeholder?: string }>(),
-  { label: "", placeholder: "" }
+  defineProps<{
+    modelValue: string[];
+    label?: string;
+    placeholder?: string;
+    // the label is shown by the parent; keep it here for screen readers only
+    hideLabel?: boolean;
+  }>(),
+  { label: "", placeholder: "", hideLabel: false }
 );
 const emit = defineEmits<{ (e: "update:modelValue", value: string[]): void }>();
 

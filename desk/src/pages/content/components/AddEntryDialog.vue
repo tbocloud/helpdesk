@@ -26,12 +26,11 @@
             :label="__('Customer') + ' *'"
             :placeholder="__('Select customer')"
           />
-          <Link
+          <FormControl
             v-model="form.campaign"
-            doctype="HD Content Campaign"
-            :filters="form.customer ? { customer: form.customer } : undefined"
             :label="__('Campaign (optional)')"
-            :placeholder="__('Select campaign')"
+            :placeholder="__('e.g. Diwali 2026')"
+            maxlength="140"
           />
           <FormControl
             v-model="form.date"
@@ -47,6 +46,14 @@
             :label="__('Posting time') + ' *'"
             required
           />
+          <FormControl
+            v-model="form.special_day"
+            class="sm:col-span-2"
+            :label="__('Special day (optional)')"
+            :placeholder="__('e.g. Diwali, Brand anniversary')"
+            :description="__('Highlighted on the calendar.')"
+            maxlength="140"
+          />
         </div>
 
         <fieldset class="flex flex-col gap-1.5">
@@ -55,11 +62,21 @@
           </legend>
           <div class="flex flex-wrap gap-1.5">
             <ChipToggle
-              v-for="channel in CHANNELS"
+              v-for="channel in platforms"
               :key="channel"
               :label="channel"
               :pressed="form.channels.includes(channel)"
               @toggle="toggleChannel(channel)"
+            >
+              <template #icon>
+                <ChannelIcon :channel="channel" class="size-4 shrink-0" />
+              </template>
+            </ChipToggle>
+            <AddOptionChip
+              kind="platform"
+              :label="__('Add platform')"
+              :placeholder="__('e.g. Threads')"
+              @added="addChannel"
             />
           </div>
           <div
@@ -93,12 +110,22 @@
           </legend>
           <div class="flex flex-wrap gap-1.5" role="radiogroup">
             <ChipToggle
-              v-for="format in FORMATS"
+              v-for="format in postTypes"
               :key="format"
               :label="format"
               role="radio"
               :pressed="form.format === format"
               @toggle="form.format = format"
+            >
+              <template #icon>
+                <PostTypeIcon :post-type="format" class="size-4 shrink-0" />
+              </template>
+            </ChipToggle>
+            <AddOptionChip
+              kind="postType"
+              :label="__('Add post type')"
+              :placeholder="__('e.g. Infographic')"
+              @added="(name) => (form.format = name)"
             />
           </div>
         </fieldset>
@@ -106,7 +133,7 @@
         <FormControl
           ref="titleInput"
           v-model="form.title"
-          :label="__('Campaign or topic')"
+          :label="__('Copy')"
           :placeholder="__('e.g. Diwali offer carousel')"
           required
         />
@@ -114,7 +141,7 @@
         <div class="flex flex-col gap-1.5">
           <div class="flex items-center justify-between">
             <label for="entry-caption" class="text-xs text-ink-gray-5">{{
-              __("Post content")
+              __("Sub Copy")
             }}</label>
             <span
               class="font-mono text-xs tabular-nums"
@@ -139,7 +166,7 @@
           v-model="form.brief"
           type="textarea"
           :rows="2"
-          :label="__('Brief for the creative team')"
+          :label="__('Description')"
           :placeholder="__('What should the design or video look like?')"
         />
         <FormControl
@@ -153,12 +180,12 @@
             __("Team · filled in from this customer's last post")
           }}</span>
           <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <PeoplePicker
+            <RoleHoursField
               v-for="role in TEAM_ROLES"
               :key="role.field"
-              v-model="team[role.field]"
+              v-model:people="team[role.field]"
+              v-model:hours="hours[role.field]"
               :label="__(role.label)"
-              :placeholder="__('Assign')"
             />
           </div>
         </div>
@@ -213,27 +240,31 @@ import {
   toast,
 } from "frappe-ui";
 import { computed, nextTick, reactive, ref, watch } from "vue";
-import {
-  CHANNELS,
-  FORMATS,
-  TEAM_ROLES,
-  type TeamRole,
-  textToHtml,
-} from "../constants";
+import { TEAM_ROLES, type TeamRole, textToHtml } from "../constants";
+import { useContentOptions } from "../contentOptions";
+import AddOptionChip from "./AddOptionChip.vue";
+import ChannelIcon from "./ChannelIcon.vue";
 import ChipToggle from "./ChipToggle.vue";
-import PeoplePicker from "./PeoplePicker.vue";
+import PostTypeIcon from "./PostTypeIcon.vue";
+import RoleHoursField from "./RoleHoursField.vue";
 
 // off by default: several platforms make one post unless asked otherwise
 const separate = ref(false);
 const CAPTION_LIMIT = 2200;
 
-const props = defineProps<{ customer?: string; date?: string }>();
+const props = defineProps<{
+  customer?: string;
+  date?: string;
+  // set when adding from an occasion chip
+  specialDay?: string;
+}>();
 const open = defineModel<boolean>("open", { default: false });
 const emit = defineEmits<{ (e: "saved"): void }>();
 
 const EMPTY = {
   customer: "",
   campaign: "",
+  special_day: "",
   date: "",
   time: "10:00",
   channels: ["Instagram"] as string[],
@@ -252,6 +283,15 @@ const emptyTeam = (): Record<TeamRole, string[]> => ({
   marketer: [],
 });
 const team = reactive(emptyTeam());
+// each role's estimated hours; empty leaves the task's estimate to AI
+const emptyHours = (): Record<TeamRole, number | string | null> => ({
+  writer: null,
+  designer: null,
+  video_editor: null,
+  marketer: null,
+});
+const hours = reactive(emptyHours());
+const { platforms, postTypes } = useContentOptions();
 
 const TASK_MODES = [
   { label: __("One task per person"), value: "One task per person" },
@@ -283,8 +323,10 @@ watch(open, (isOpen) => {
     channels: [...EMPTY.channels],
     customer: props.customer || "",
     date: props.date || "",
+    special_day: props.specialDay || "",
   });
   Object.assign(team, emptyTeam());
+  Object.assign(hours, emptyHours());
   loadTeam(form.customer);
 });
 
@@ -308,6 +350,11 @@ async function loadTeam(customer: string) {
   }
 }
 
+function addChannel(channel: string) {
+  if (!form.channels.includes(channel))
+    form.channels = [...form.channels, channel];
+}
+
 function toggleChannel(channel: string) {
   form.channels = form.channels.includes(channel)
     ? form.channels.filter((c) => c !== channel)
@@ -319,8 +366,7 @@ async function save(addNext: boolean) {
   if (!form.customer) return (error.value = __("Select a customer"));
   if (!form.date) return (error.value = __("Pick the posting date"));
   if (!form.time) return (error.value = __("Pick the posting time"));
-  if (!form.title.trim())
-    return (error.value = __("Name the campaign or topic"));
+  if (!form.title.trim()) return (error.value = __("Write the copy"));
   if (!form.channels.length)
     return (error.value = __("Pick at least one platform"));
 
@@ -331,7 +377,8 @@ async function save(addNext: boolean) {
       separate: separate.value ? 1 : 0,
       values: {
         customer: form.customer,
-        campaign: form.campaign,
+        campaign: form.campaign.trim(),
+        special_day: form.special_day.trim(),
         title: form.title.trim(),
         format: form.format,
         status: "Drafting",
@@ -340,6 +387,9 @@ async function save(addNext: boolean) {
         brief: form.brief,
         hashtags: form.hashtags,
         task_mode: form.task_mode,
+        ...Object.fromEntries(
+          TEAM_ROLES.map((r) => [`${r.field}_hours`, hours[r.field] || null])
+        ),
       },
       team,
     });
@@ -353,7 +403,7 @@ async function save(addNext: boolean) {
       open.value = false;
       return;
     }
-    // keep customer, date, platforms and team; clear what is specific to one post
+    // keep customer, date, platforms, team and hours; clear what is specific to one post
     Object.assign(form, { title: "", caption: "", brief: "", hashtags: "" });
     await nextTick();
     titleInput.value?.$el?.querySelector("input")?.focus();

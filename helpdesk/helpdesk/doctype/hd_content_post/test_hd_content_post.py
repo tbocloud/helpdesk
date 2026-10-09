@@ -5,17 +5,24 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_to_date, now_datetime
 
+from helpdesk.api import content_board
 from helpdesk.helpdesk.doctype.hd_content_post.hd_content_post import (
     send_due_reminders,
     send_missed_post_alerts,
 )
+from helpdesk.patches.v16_0_2 import content_campaign_as_text
 from helpdesk.test_utils import (
+    attach_file,
     create_customer,
+    get_reminder_messages,
     hold_commits,
     make_content_campaign,
     make_content_post,
+    make_content_user,
+    make_dm_head,
     make_project,
     make_tasky_user,
+    run_as_user,
     set_content_settings,
 )
 
@@ -53,13 +60,25 @@ class TestHDContentPost(FrappeTestCase):
         post.save()
         self.assertEqual(post.status, "Drafting")
 
-    def test_customer_comes_from_campaign_and_must_match(self):
-        campaign = make_content_campaign("Summer Sale", CUSTOMER)
-        post = make_content_post("Summer sale teaser", campaign=campaign.name)
+    def test_campaign_is_free_text(self):
+        post = make_content_post(
+            "Summer sale teaser", CUSTOMER, campaign="Summer Sale 2026"
+        )
+        self.assertEqual(post.campaign, "Summer Sale 2026")
         self.assertEqual(post.customer, CUSTOMER)
 
-        with self.assertRaises(frappe.ValidationError):
-            make_content_post("Wrong client", OTHER_CUSTOMER, campaign=campaign.name)
+    def test_old_campaign_ids_become_their_names(self):
+        campaign = make_content_campaign("Summer Sale", CUSTOMER)
+        post = make_content_post("Summer sale teaser", CUSTOMER)
+        # a post saved while campaign was still a link holds the campaign's ID
+        frappe.db.set_value("HD Content Post", post.name, "campaign", campaign.name)
+
+        content_campaign_as_text.execute()
+
+        self.assertEqual(
+            frappe.db.get_value("HD Content Post", post.name, "campaign"),
+            "Summer Sale",
+        )
 
     def test_publishing_needs_url_and_stamps_time(self):
         post = make_content_post(
@@ -116,6 +135,293 @@ class TestHDContentPost(FrappeTestCase):
         self.assertIn(due.name, notified)
         self.assertNotIn(ready.name, notified)
         self.assertNotIn(later.name, notified)
+
+
+HEAD = ("dm.head@content-smoke.example", "Shabna Rahim")
+COORDINATOR = ("dm.coordinator@content-smoke.example", "Riya Thomas")
+EMPLOYEE = ("dm.employee@content-smoke.example", "Arun Babu")
+MARKETER = ("marketer@content-smoke.example", "Ajmal Kp")
+
+
+class TestHeadApproval(FrappeTestCase):
+    """After the client approves, the Digital Marketing Head approves before a post goes out."""
+
+    def setUp(self):
+        hold_commits(self)
+        self.addCleanup(frappe.set_user, "Administrator")
+        create_customer(CUSTOMER)
+        make_tasky_user(*WRITER)
+        make_tasky_user(*MARKETER)
+        # the head also edits entries here, so the status select is theirs to use too
+        make_dm_head(*HEAD, "DM Coordinator")
+        make_content_user(*COORDINATOR, "DM Coordinator")
+        self.post = make_content_post(
+            "Onam offer",
+            CUSTOMER,
+            status="Client Review",
+            writer=WRITER[0],
+            marketer=MARKETER[0],
+        )
+
+    def set_status(self, status, user=COORDINATOR, **values):
+        def run():
+            doc = frappe.get_doc("HD Content Post", self.post.name)
+            doc.update({"status": status, **values})
+            doc.save()
+            return doc
+
+        return run_as_user(user[0], run)
+
+    def notified(self, user):
+        return get_reminder_messages(user[0], self.post.name)
+
+    def head_review(self):
+        frappe.set_user("Guest")
+        try:
+            frappe.get_doc("HD Content Post", self.post.name).approve_from_portal(
+                "client@alnoor.example"
+            )
+        finally:
+            frappe.set_user("Administrator")
+
+    def test_the_clients_yes_goes_to_the_head(self):
+        self.head_review()
+
+        self.post.reload()
+        self.assertEqual(self.post.status, "Head Review")
+        self.assertTrue(self.post.client_decided_on)
+        self.assertTrue(
+            any("needs your approval" in m for m in self.notified(HEAD)),
+        )
+        # the marketer's turn comes after the head
+        self.assertEqual(self.notified(MARKETER), [])
+
+    def test_staff_recording_the_clients_yes_still_goes_to_the_head(self):
+        self.assertEqual(self.set_status("Approved").status, "Head Review")
+
+    def test_a_post_with_the_client_cannot_be_scheduled_or_published(self):
+        for status, extra in (
+            ("Scheduled", {}),
+            ("Published", {"published_url": "https://instagram.com/p/onam"}),
+        ):
+            with self.assertRaises(frappe.ValidationError, msg=status):
+                self.set_status(status, **extra)
+
+    def test_changes_requested_cannot_skip_the_client_and_the_head(self):
+        self.head_review()
+        run_as_user(
+            HEAD[0],
+            lambda: content_board.head_send_back(self.post.name, "Use the new logo"),
+        )
+
+        for user in (COORDINATOR, HEAD):
+            with self.assertRaises(frappe.ValidationError, msg=user[0]):
+                self.set_status("Approved", user=user)
+        # back to the client, then the head, as the first time
+        self.set_status("Client Review")
+        self.assertEqual(self.set_status("Approved").status, "Head Review")
+
+    def test_with_no_head_yet_the_system_managers_hear(self):
+        frappe.db.set_value("User", HEAD[0], "enabled", 0)
+        manager = make_tasky_user(
+            "sysmgr@content-smoke.example", "Rahul Sys", roles=("System Manager",)
+        )
+
+        self.head_review()
+
+        self.assertTrue(
+            any(
+                "needs your approval" in m
+                for m in get_reminder_messages(manager, self.post.name)
+            )
+        )
+
+    def test_only_the_head_moves_it_on(self):
+        self.head_review()
+
+        for status, extra in (
+            ("Approved", {}),
+            ("Scheduled", {}),
+            ("Published", {"published_url": "https://instagram.com/p/onam"}),
+            ("Internal Review", {}),
+        ):
+            with self.assertRaises(frappe.ValidationError, msg=status):
+                self.set_status(status, **extra)
+        with self.assertRaises(frappe.ValidationError):
+            run_as_user(
+                COORDINATOR[0], lambda: content_board.head_approve(self.post.name)
+            )
+
+        # cancelling stays open to the team
+        self.assertEqual(self.set_status("Cancelled").status, "Cancelled")
+
+    def test_head_approves_and_the_marketer_hears(self):
+        self.head_review()
+
+        run_as_user(HEAD[0], lambda: content_board.head_approve(self.post.name))
+
+        self.post.reload()
+        self.assertEqual(self.post.status, "Approved")
+        self.assertEqual(self.post.head_decided_by, HEAD[0])
+        self.assertTrue(self.post.head_decided_on)
+        self.assertTrue(any("your turn" in m for m in self.notified(MARKETER)))
+
+    def test_head_sends_back_with_a_reason(self):
+        self.head_review()
+        decided = frappe.db.get_value(
+            "HD Content Post", self.post.name, "client_decided_on"
+        )
+
+        with self.assertRaises(frappe.ValidationError):
+            run_as_user(
+                HEAD[0], lambda: content_board.head_send_back(self.post.name, " ")
+            )
+        # the status select alone can't send it back without a reason
+        with self.assertRaises(frappe.ValidationError):
+            self.set_status("Changes Requested", user=HEAD)
+        run_as_user(
+            HEAD[0],
+            lambda: content_board.head_send_back(self.post.name, "Use the new logo"),
+        )
+
+        self.post.reload()
+        self.assertEqual(self.post.status, "Changes Requested")
+        self.assertEqual(self.post.head_feedback, "Use the new logo")
+        self.assertEqual(self.post.head_decided_by, HEAD[0])
+        # the client's decision time is theirs; the head's is kept apart
+        self.assertEqual(self.post.client_decided_on, decided)
+        self.assertTrue(any("your turn" in m for m in self.notified(WRITER)))
+
+    def test_a_new_client_round_clears_the_heads_last_decision(self):
+        self.head_review()
+        run_as_user(
+            HEAD[0],
+            lambda: content_board.head_send_back(self.post.name, "Use the new logo"),
+        )
+
+        doc = self.set_status("Client Review")
+
+        self.assertEqual(
+            (doc.head_decided_by, doc.head_decided_on, doc.head_feedback),
+            (None, None, None),
+        )
+
+    def test_head_review_only_after_the_client(self):
+        self.post.db_set("status", "Drafting")
+        with self.assertRaises(frappe.ValidationError):
+            self.set_status("Head Review")
+        with self.assertRaises(frappe.ValidationError):
+            make_content_post("New post", CUSTOMER, status="Head Review")
+
+    def test_posts_that_never_went_to_the_client_are_unchanged(self):
+        self.post = make_content_post(
+            "Internal promo", CUSTOMER, status="Internal Review", writer=WRITER[0]
+        )
+
+        self.assertEqual(self.set_status("Approved").status, "Approved")
+
+    def test_a_system_manager_can_act_so_nothing_gets_stuck(self):
+        self.head_review()
+
+        content_board.head_approve(self.post.name)
+
+        self.assertEqual(
+            frappe.db.get_value("HD Content Post", self.post.name, "status"),
+            "Approved",
+        )
+
+    def test_head_hears_about_posts_due_soon_still_waiting_on_them(self):
+        self.head_review()
+        self.post.db_set("publish_on", add_to_date(now_datetime(), hours=20))
+
+        send_due_reminders()
+
+        self.assertTrue(any("still in Head Review" in m for m in self.notified(HEAD)))
+
+
+class TestWhoEditsEntries(FrappeTestCase):
+    """DM Coordinators, managers and System Managers edit entries; the rest attach files."""
+
+    def setUp(self):
+        hold_commits(self)
+        self.addCleanup(frappe.set_user, "Administrator")
+        create_customer(CUSTOMER)
+        make_tasky_user(*WRITER)
+        make_content_user(*COORDINATOR, "DM Coordinator")
+        make_content_user(*EMPLOYEE, "DM Employee")
+        self.post = make_content_post(
+            "Onam offer", CUSTOMER, status="Drafting", writer=WRITER[0]
+        )
+
+    def rename(self, user):
+        def run():
+            doc = frappe.get_doc("HD Content Post", self.post.name)
+            doc.title = "Onam mega offer"
+            doc.save()
+
+        run_as_user(user[0], run)
+
+    def test_only_editors_change_an_entry(self):
+        for user in (WRITER, EMPLOYEE):
+            with self.assertRaises(frappe.PermissionError, msg=user[0]):
+                self.rename(user)
+            with self.assertRaises(frappe.PermissionError, msg=user[0]):
+                run_as_user(
+                    user[0],
+                    lambda: content_board.add_entries(
+                        {
+                            "customer": CUSTOMER,
+                            "title": "Diwali",
+                            "publish_on": str(add_to_date(now_datetime(), days=3)),
+                        },
+                        ["Instagram"],
+                    ),
+                )
+
+        self.rename(COORDINATOR)
+        self.assertEqual(
+            frappe.db.get_value("HD Content Post", self.post.name, "title"),
+            "Onam mega offer",
+        )
+
+    def test_managers_still_edit(self):
+        manager = make_tasky_user(
+            "pm@content-smoke.example", "Leena V", roles=("Project Manager",)
+        )
+        self.rename((manager,))
+
+    def test_anyone_on_it_attaches_files_and_removes_only_their_own(self):
+        mine = run_as_user(
+            WRITER[0], lambda: attach_file("HD Content Post", self.post.name)
+        )
+        theirs = run_as_user(
+            COORDINATOR[0],
+            lambda: attach_file("HD Content Post", self.post.name, "logo.png"),
+        )
+
+        with self.assertRaises(frappe.PermissionError):
+            run_as_user(WRITER[0], lambda: frappe.delete_doc("File", theirs.name))
+        run_as_user(WRITER[0], lambda: frappe.delete_doc("File", mine.name))
+        self.assertFalse(frappe.db.exists("File", mine.name))
+
+    def test_the_app_still_moves_entries_for_them(self):
+        # a client's yes and a head's approval are made on their behalf
+        self.post.db_set("status", "Client Review")
+        frappe.set_user("Guest")
+        try:
+            frappe.get_doc("HD Content Post", self.post.name).approve_from_portal(
+                "client@alnoor.example"
+            )
+        finally:
+            frappe.set_user("Administrator")
+        make_dm_head(*HEAD)  # head only, not an editor
+
+        run_as_user(HEAD[0], lambda: content_board.head_approve(self.post.name))
+
+        self.assertEqual(
+            frappe.db.get_value("HD Content Post", self.post.name, "status"),
+            "Approved",
+        )
 
 
 class TestMissedPostAlerts(FrappeTestCase):

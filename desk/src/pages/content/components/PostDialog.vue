@@ -42,135 +42,179 @@
             </div>
           </div>
         </div>
-        <FormControl
-          v-model="form.title"
-          :label="__('Title')"
-          :placeholder="__('e.g. Diwali offer carousel')"
-          required
-        />
-        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Link
-            v-model="form.customer"
-            doctype="HD Customer"
-            :label="__('Customer') + ' *'"
-            :placeholder="__('Select customer')"
-          />
-          <Link
-            v-model="form.campaign"
-            doctype="HD Content Campaign"
-            :filters="form.customer ? { customer: form.customer } : undefined"
-            :label="__('Campaign (optional)')"
-            :placeholder="__('Select campaign')"
-          />
-          <fieldset class="flex flex-col gap-1.5 sm:col-span-2">
-            <legend class="mb-1.5 text-xs text-ink-gray-5">
-              {{ __("Platforms") }} ·
-              <span>{{ __("this one post goes out on each") }}</span>
-            </legend>
-            <div class="flex flex-wrap gap-1.5">
-              <ChipToggle
-                v-for="channel in CHANNELS"
-                :key="channel"
-                :label="channel"
-                :pressed="platforms.includes(channel)"
-                @toggle="togglePlatform(channel)"
-              />
-            </div>
-          </fieldset>
-          <FormControl
-            v-model="form.format"
-            type="select"
-            :label="__('Format')"
-            :options="FORMATS"
-          />
-          <FormControl
-            v-model="form.status"
-            type="select"
-            :label="__('Status')"
-            :options="STATUSES"
-          />
-          <FormControl
-            v-model="form.publish_on"
-            type="datetime-local"
-            :label="__('Publish on') + ' *'"
-            required
-          />
-          <PeoplePicker
-            v-for="role in TEAM_ROLES"
-            :key="role.field"
-            v-model="team[role.field]"
-            :label="__(role.label)"
-            :placeholder="__('Assign')"
-          />
-        </div>
-        <div class="flex flex-col gap-1.5">
-          <div class="flex items-center justify-between gap-2">
-            <label for="post-caption" class="text-xs text-ink-gray-5">{{
-              __("Caption")
-            }}</label>
-            <div class="flex items-center gap-2">
-              <button
-                v-if="undoAi"
-                type="button"
-                class="text-xs text-ink-gray-5 underline-offset-2 hover:text-ink-gray-8 hover:underline"
-                @click="revertAi"
-              >
-                {{ __("Undo") }}
-              </button>
-              <button
-                type="button"
-                class="inline-flex h-7 items-center gap-1.5 rounded-md bg-brand-soft px-2.5 text-sm font-medium text-brand-ink transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
-                :disabled="drafting"
-                :aria-busy="drafting"
-                @click="draftWithAi"
-              >
-                <LucideLoaderCircle
-                  v-if="drafting"
-                  class="size-4 animate-spin"
-                  aria-hidden="true"
+        <!-- only editors change the entry; anyone who can open it adds files below -->
+        <fieldset
+          :disabled="!canEdit"
+          class="flex min-w-0 flex-col gap-4 disabled:opacity-80"
+        >
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Link
+              v-model="form.customer"
+              doctype="HD Customer"
+              :label="__('Customer') + ' *'"
+              :placeholder="__('Select customer')"
+            />
+            <FormControl
+              v-model="form.campaign"
+              :label="__('Campaign (optional)')"
+              :placeholder="__('e.g. Diwali 2026')"
+              maxlength="140"
+            />
+            <fieldset class="flex flex-col gap-1.5 sm:col-span-2">
+              <legend class="mb-1.5 text-xs text-ink-gray-5">
+                {{ __("Platforms") }} ·
+                <span>{{ __("this one post goes out on each") }}</span>
+              </legend>
+              <div class="flex flex-wrap gap-1.5">
+                <ChipToggle
+                  v-for="channel in platformOptions"
+                  :key="channel"
+                  :label="channel"
+                  :pressed="platforms.includes(channel)"
+                  @toggle="togglePlatform(channel)"
+                >
+                  <template #icon>
+                    <ChannelIcon :channel="channel" class="size-4 shrink-0" />
+                  </template>
+                </ChipToggle>
+                <AddOptionChip
+                  kind="platform"
+                  :label="__('Add platform')"
+                  :placeholder="__('e.g. Threads')"
+                  @added="addPlatform"
                 />
-                <LucideSparkles v-else class="size-4" aria-hidden="true" />
-                {{
-                  form.caption.trim()
-                    ? __("Improve with AI")
-                    : __("Draft with AI")
-                }}
-              </button>
-            </div>
+              </div>
+            </fieldset>
+            <fieldset class="flex flex-col gap-1.5 sm:col-span-2">
+              <legend class="mb-1.5 text-xs text-ink-gray-5">
+                {{ __("Post type") }}
+              </legend>
+              <div class="flex flex-wrap gap-1.5" role="radiogroup">
+                <ChipToggle
+                  v-for="format in postTypes"
+                  :key="format"
+                  :label="format"
+                  role="radio"
+                  :pressed="form.format === format"
+                  @toggle="form.format = format"
+                >
+                  <template #icon>
+                    <PostTypeIcon :post-type="format" class="size-4 shrink-0" />
+                  </template>
+                </ChipToggle>
+                <AddOptionChip
+                  kind="postType"
+                  :label="__('Add post type')"
+                  :placeholder="__('e.g. Infographic')"
+                  @added="(name) => (form.format = name)"
+                />
+              </div>
+            </fieldset>
+            <FormControl
+              v-model="form.status"
+              type="select"
+              :label="__('Status')"
+              :options="STATUSES"
+            />
+            <FormControl
+              v-model="form.publish_on"
+              type="datetime-local"
+              :label="__('Publish on') + ' *'"
+              required
+            />
+            <FormControl
+              v-model="form.special_day"
+              class="sm:col-span-2"
+              :label="__('Special day (optional)')"
+              :placeholder="__('e.g. Diwali, Brand anniversary')"
+              :description="__('Highlighted on the calendar.')"
+              maxlength="140"
+            />
           </div>
           <FormControl
-            v-model="aiBrief"
-            :placeholder="
-              __(
-                'Brief for AI (optional), e.g. 20% off until 5 Nov, family audience'
-              )
-            "
-            :aria-label="__('Brief for AI')"
+            v-model="form.title"
+            :label="__('Copy')"
+            :placeholder="__('e.g. Diwali offer carousel')"
+            required
+          />
+          <div class="flex flex-col gap-1.5">
+            <div class="flex items-center justify-between gap-2">
+              <label for="post-caption" class="text-xs text-ink-gray-5">{{
+                __("Sub Copy")
+              }}</label>
+              <div class="flex items-center gap-2">
+                <button
+                  v-if="undoAi"
+                  type="button"
+                  class="text-xs text-ink-gray-5 underline-offset-2 hover:text-ink-gray-8 hover:underline"
+                  @click="revertAi"
+                >
+                  {{ __("Undo") }}
+                </button>
+                <button
+                  type="button"
+                  class="inline-flex h-7 items-center gap-1.5 rounded-md bg-brand-soft px-2.5 text-sm font-medium text-brand-ink transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
+                  :disabled="drafting"
+                  :aria-busy="drafting"
+                  @click="draftWithAi"
+                >
+                  <LucideLoaderCircle
+                    v-if="drafting"
+                    class="size-4 animate-spin"
+                    aria-hidden="true"
+                  />
+                  <LucideSparkles v-else class="size-4" aria-hidden="true" />
+                  {{
+                    form.caption.trim()
+                      ? __("Improve with AI")
+                      : __("Draft with AI")
+                  }}
+                </button>
+              </div>
+            </div>
+            <FormControl
+              v-model="aiBrief"
+              :placeholder="
+                __(
+                  'Brief for AI (optional), e.g. 20% off until 5 Nov, family audience'
+                )
+              "
+              :aria-label="__('Brief for AI')"
+            />
+            <FormControl
+              id="post-caption"
+              v-model="form.caption"
+              type="textarea"
+              :rows="6"
+              :placeholder="__('Write the caption…')"
+            />
+            <p v-if="aiError" class="text-xs text-danger" role="alert">
+              {{ aiError }}
+            </p>
+          </div>
+          <FormControl
+            v-model="form.brief"
+            type="textarea"
+            :rows="2"
+            :label="__('Description')"
+            :placeholder="__('What should the design or video look like?')"
+            :description="__('Internal only. The client never sees this.')"
           />
           <FormControl
-            id="post-caption"
-            v-model="form.caption"
-            type="textarea"
-            :rows="6"
-            :placeholder="__('Write the caption…')"
+            v-model="form.hashtags"
+            :label="__('Hashtags')"
+            :placeholder="__('#diwali #offers')"
           />
-          <p v-if="aiError" class="text-xs text-danger" role="alert">
-            {{ aiError }}
-          </p>
-        </div>
-        <FormControl
-          v-model="form.hashtags"
-          :label="__('Hashtags')"
-          :placeholder="__('#diwali #offers')"
-        />
-        <FormControl
-          v-model="form.brief"
-          type="textarea"
-          :rows="2"
-          :label="__('Brief for the creative team')"
-          :placeholder="__('What should the design or video look like?')"
-          :description="__('Internal only. The client never sees this.')"
-        />
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <RoleHoursField
+              v-for="role in TEAM_ROLES"
+              :key="role.field"
+              v-model:people="team[role.field]"
+              v-model:hours="form[`${role.field}_hours`]"
+              :label="__(role.label)"
+            />
+          </div>
+        </fieldset>
         <div
           class="flex flex-col gap-1.5 rounded-lg transition-colors"
           :class="dragging ? 'bg-brand-soft ring-2 ring-brand' : ''"
@@ -274,6 +318,7 @@
                     <LucideDownload class="size-3.5" aria-hidden="true" />
                   </a>
                   <button
+                    v-if="canRemove(img)"
                     type="button"
                     class="grid size-6 place-items-center rounded-md bg-surface-base/90 text-ink-gray-7 shadow-sm hover:text-danger"
                     :aria-label="__('Remove {0}', img.file_name)"
@@ -319,6 +364,7 @@
                   <LucideDownload class="size-3.5" aria-hidden="true" />
                 </a>
                 <button
+                  v-if="canRemove(f)"
                   type="button"
                   class="grid size-6 place-items-center rounded-md text-ink-gray-5 hover:bg-surface-gray-2 hover:text-danger"
                   :title="__('Remove')"
@@ -334,6 +380,7 @@
         <FormControl
           v-if="form.status === 'Published'"
           v-model="form.published_url"
+          :disabled="!canEdit"
           type="url"
           :label="__('Published URL')"
           :placeholder="__('https://instagram.com/p/…')"
@@ -351,8 +398,12 @@
           :link="`/app/hd-content-post/${post?.name}`"
         />
         <div class="flex-1" />
-        <Button :label="__('Cancel')" @click="open = false" />
         <Button
+          :label="canEdit ? __('Cancel') : __('Close')"
+          @click="open = false"
+        />
+        <Button
+          v-if="canEdit"
           variant="solid"
           type="submit"
           form="content-post-form"
@@ -390,8 +441,6 @@ import LucideLoaderCircle from "~icons/lucide/loader-circle";
 import LucideMessageSquareWarning from "~icons/lucide/message-square-warning";
 import LucideSparkles from "~icons/lucide/sparkles";
 import {
-  CHANNELS,
-  FORMATS,
   STATUSES,
   htmlToText,
   platformsOf,
@@ -399,8 +448,12 @@ import {
   type TeamRole,
   textToHtml,
 } from "../constants";
-import PeoplePicker from "./PeoplePicker.vue";
+import { useContentOptions } from "../contentOptions";
+import AddOptionChip from "./AddOptionChip.vue";
+import ChannelIcon from "./ChannelIcon.vue";
 import ChipToggle from "./ChipToggle.vue";
+import PostTypeIcon from "./PostTypeIcon.vue";
+import RoleHoursField from "./RoleHoursField.vue";
 
 interface PostRef {
   name?: string;
@@ -416,6 +469,7 @@ const EMPTY = {
   title: "",
   customer: "",
   campaign: "",
+  special_day: "",
   channel: "Instagram",
   format: "Post",
   status: "Idea",
@@ -424,6 +478,11 @@ const EMPTY = {
   hashtags: "",
   brief: "",
   published_url: "",
+  // each role's estimated hours; empty leaves the task's estimate to AI
+  writer_hours: null as number | string | null,
+  designer_hours: null as number | string | null,
+  video_editor_hours: null as number | string | null,
+  marketer_hours: null as number | string | null,
 };
 
 const form = reactive({ ...EMPTY });
@@ -437,6 +496,12 @@ const emptyTeam = (): Record<TeamRole, string[]> => ({
 const team = reactive(emptyTeam());
 // every platform the post goes out on; the first is saved as its channel
 const platforms = ref<string[]>([EMPTY.channel]);
+const { platforms: platformOptions, postTypes } = useContentOptions();
+
+function addPlatform(channel: string) {
+  if (!platforms.value.includes(channel))
+    platforms.value = [...platforms.value, channel];
+}
 
 function togglePlatform(channel: string) {
   platforms.value = platforms.value.includes(channel)
@@ -448,11 +513,15 @@ const approval = reactive({
   client_feedback: "",
   client_approval_ref: "",
   sent_for_approval_on: "",
+  // cleared each time the post goes back to the client, so set means this round
+  head_feedback: "",
 });
 const loading = ref(false);
 const saving = ref(false);
 const error = ref("");
 const isNew = computed(() => !props.post?.name);
+// DM Coordinators, managers and System Managers; others view and attach files
+const canEdit = computed(() => authStore.canEditContent);
 
 // datetime-local wants "YYYY-MM-DDTHH:mm"; Frappe stores "YYYY-MM-DD HH:mm:ss"
 const toInput = (v?: string) => (v ? dayjs(v).format("YYYY-MM-DDTHH:mm") : "");
@@ -469,6 +538,7 @@ watch(open, async (isOpen) => {
     client_feedback: "",
     client_approval_ref: "",
     sent_for_approval_on: "",
+    head_feedback: "",
   });
   aiBrief.value = "";
   aiError.value = "";
@@ -481,6 +551,9 @@ watch(open, async (isOpen) => {
       name: props.post!.name,
     });
     for (const key of Object.keys(EMPTY)) form[key] = doc[key] ?? "";
+    // 0 hours shows as an empty box, the same as never estimated
+    for (const role of TEAM_ROLES)
+      form[`${role.field}_hours`] = doc[`${role.field}_hours`] || null;
     for (const role of TEAM_ROLES)
       team[role.field] = [
         doc[role.field],
@@ -514,7 +587,7 @@ const attachments = createResource({
       attached_to_name: props.post?.name,
       is_folder: 0,
     },
-    fields: ["name", "file_name", "file_url", "file_size"],
+    fields: ["name", "file_name", "file_url", "file_size", "owner"],
     order_by: "creation asc",
   }),
 });
@@ -596,6 +669,11 @@ watch(open, (isOpen) => {
   if (isOpen && !isNew.value) attachments.reload();
 });
 
+// people who only attach files remove just the ones they added (the server checks too)
+function canRemove(file: { owner?: string }) {
+  return canEdit.value || file.owner === authStore.userId;
+}
+
 async function removeFile(name: string) {
   try {
     await call("frappe.client.delete", { doctype: "File", name });
@@ -616,7 +694,7 @@ async function draftWithAi() {
   aiError.value = "";
   if (!form.title.trim() && !aiBrief.value.trim() && !form.caption.trim()) {
     aiError.value = __(
-      "Add a title or a short brief so the AI knows what to write about."
+      "Add the copy or a short brief so the AI knows what to write about."
     );
     return;
   }
@@ -651,6 +729,24 @@ function revertAi() {
 
 const approvalNote = computed(() => {
   if (isNew.value) return null;
+  if (form.status === "Changes Requested" && approval.head_feedback) {
+    return {
+      icon: LucideMessageSquareWarning,
+      tone: "bg-warning-soft text-warning",
+      title: __("The Digital Marketing Head asked for changes"),
+      body: approval.head_feedback,
+    };
+  }
+  if (form.status === "Head Review") {
+    return {
+      icon: LucideClock,
+      tone: "bg-info-soft text-info",
+      title: __("Client approved · waiting for the Digital Marketing Head"),
+      body: authStore.isDmHead
+        ? __("Approve it or send it back from the post's card on the board.")
+        : __("Only the Digital Marketing Head can approve it or send it back."),
+    };
+  }
   if (form.status === "Changes Requested" && approval.client_feedback) {
     return {
       icon: LucideMessageSquareWarning,
@@ -687,13 +783,20 @@ const approvalNote = computed(() => {
       body: "",
     };
   }
+  if (!canEdit.value)
+    return {
+      icon: LucidePaperclip,
+      tone: "bg-surface-gray-2 text-ink-gray-7",
+      title: __("You can view this entry and add files to it"),
+      body: __("Only a DM Coordinator can change the entry itself."),
+    };
   return null;
 });
 
 async function save() {
   error.value = "";
-  // The server fills customer from the campaign, so only one of them is needed
-  if (!form.customer && !form.campaign) {
+  if (!canEdit.value) return;
+  if (!form.customer) {
     error.value = __("Select a customer for this post");
     return;
   }
@@ -708,6 +811,8 @@ async function save() {
   saving.value = true;
   const values = {
     ...form,
+    campaign: form.campaign.trim(),
+    special_day: form.special_day.trim(),
     channel: platforms.value[0],
     platforms: platforms.value.join(", "),
     publish_on: toServer(form.publish_on),

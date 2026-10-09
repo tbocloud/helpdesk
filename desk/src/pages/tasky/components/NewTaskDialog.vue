@@ -47,8 +47,10 @@
             :loading="!membersLoaded || assignable.loading"
             :model-value="form.assigned_to || UNASSIGNED"
             @update:model-value="
-              (v: string | null) =>
-                (form.assigned_to = v && v !== UNASSIGNED ? v : '')
+              (v: string | null) => {
+                assigneeTouched = true;
+                form.assigned_to = v && v !== UNASSIGNED ? v : '';
+              }
             "
           />
           <p v-if="assigneeIsNew" class="text-p-xs text-ink-gray-5">
@@ -145,6 +147,7 @@
 </template>
 
 <script setup lang="ts">
+import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
 import {
   Button,
@@ -196,6 +199,10 @@ const form = reactive({
   depends_on_task: "",
 });
 
+const auth = useAuthStore();
+// once the person picks an assignee (even Unassigned), the default never overrides it
+const assigneeTouched = ref(false);
+
 // what the AI wrote into the description, so an unedited draft is saved as AI drafted
 const aiText = ref<string | null>(null);
 
@@ -219,6 +226,7 @@ function resetForm() {
   form.estimated_hours = 0;
   form.due_date = "";
   form.assigned_to = "";
+  assigneeTouched.value = false;
   form.is_key = false;
   form.is_milestone = false;
   form.depends_on_task = "";
@@ -285,6 +293,18 @@ const assigneeOptions = computed(() => {
       ? [{ group: __("Other agents"), options: others.map(toOption) }]
       : []),
   ];
+});
+
+// the person creating the task is its assignee by default when they're on the project
+// team; someone outside it would be added as a Developer, so they pick that themselves
+watch([assignableUsers, memberIds], () => {
+  if (assigneeTouched.value || form.assigned_to || !props.open) return;
+  const me = auth.userId;
+  if (
+    memberIds.value.has(me) &&
+    assignableUsers.value.some((u) => u.name === me)
+  )
+    form.assigned_to = me;
 });
 
 const assigneeIsNew = computed(

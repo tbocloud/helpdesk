@@ -33,6 +33,8 @@ MAX_POSTS = 500
 CLIENT_STATUSES = (
     "Client Review",
     "Changes Requested",
+    # the client approved; the Digital Marketing Head's final check is still to come
+    "Head Review",
     "Approved",
     "Scheduled",
     "Published",
@@ -352,13 +354,15 @@ def approve_many(posts: str | list):
     if len(posts) > MAX_POSTS:
         frappe.throw(_("Approve at most {0} posts at a time.").format(MAX_POSTS))
     approved = []
+    statuses = {}
     for post in posts:
         session, doc = require_post(post)
         if doc.status != "Client Review":
             continue
         doc.approve_from_portal(session["email"])
         approved.append(doc.name)
-    return {"success": True, "approved": approved}
+        statuses[doc.name] = doc.status
+    return {"success": True, "approved": approved, "statuses": statuses}
 
 
 @frappe.whitelist(  # portal clients have no user; the one-time-code session is checked inside - nosemgrep

@@ -5,6 +5,8 @@ import frappe
 from frappe import _
 from frappe.query_builder.functions import Count
 
+from helpdesk.tasky.permissions import hidden_departments
+
 DEPARTMENT = "HD Department"
 
 
@@ -27,6 +29,10 @@ def get_departments(include_inactive: bool = False) -> list[dict]:
     )
     if not frappe.utils.sbool(include_inactive):
         query = query.where(department.is_active == 1)
+    # each team keeps out of the other's department (tasky.permissions.hidden_departments)
+    hidden = hidden_departments()
+    if hidden:
+        query = query.where(department.name.notin(hidden))
     rows = query.run(as_dict=True)
     counts = _project_counts()
     for row in rows:

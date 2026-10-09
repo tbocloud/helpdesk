@@ -3,7 +3,11 @@ import { canViewPersona, personaInterrupt } from "@/persona";
 import { useAuthStore } from "@/stores/auth";
 import { useUserStore } from "@/stores/user";
 import { isCustomerPortal } from "@/utils";
-import { CONTENT_TEAM_ROUTES } from "@/pages/content/contentTeam";
+import {
+  ERP_EMPLOYEE_HIDDEN_ROUTES,
+  CONTENT_TEAM_ROUTES,
+  DEPARTMENT_EMPLOYEE_HIDDEN_ROUTES,
+} from "@/pages/content/contentTeam";
 import { createRouter, createWebHistory } from "vue-router";
 const { isMobileView } = useScreenSize();
 
@@ -39,6 +43,8 @@ const portalRoutes = [
     path: "/tickets",
     name: "TicketsAgent",
     component: () => import("@/pages/ticket/Tickets.vue"),
+    // only System Managers work the ticket list
+    beforeEnter: () => useAuthStore().isAdmin || { name: "Home" },
   },
   {
     path: "/tickets/:ticketId",
@@ -52,6 +58,7 @@ const portalRoutes = [
     name: "TicketAgentNew",
     component: () => import("@/pages/ticket/TicketNew.vue"),
     props: true,
+    beforeEnter: () => useAuthStore().isAdmin || { name: "Home" },
     meta: {
       onSuccessRoute: "TicketAgent",
       parent: "TicketsAgent",
@@ -206,6 +213,11 @@ const portalRoutes = [
     name: "TaskySignoff",
     component: () => import("@/pages/tasky/ProjectSignoff.vue"),
     props: true,
+  },
+  {
+    path: "/my-board",
+    name: "MyBoard",
+    component: () => import("@/pages/tasky/Kanban.vue"),
   },
   {
     path: "/my-tasks",
@@ -396,6 +408,18 @@ router.beforeEach(async (to, _, next) => {
   ) {
     // writers and designers land on the content calendar, not tickets
     next({ name: "ContentCalendar" });
+  } else if (
+    authStore.isDepartmentEmployee &&
+    DEPARTMENT_EMPLOYEE_HIDDEN_ROUTES.has(String(to.name))
+  ) {
+    // DM and ERP Employees work on projects and content, not support
+    next({ name: "Home" });
+  } else if (
+    authStore.isErpOnly &&
+    ERP_EMPLOYEE_HIDDEN_ROUTES.has(String(to.name))
+  ) {
+    // the content calendar is the Digital team's
+    next({ name: "Home" });
   } else if (to.name === "TicketAgent" && !authStore.isAgent) {
     const ticketId = to.params.ticketId;
     next({

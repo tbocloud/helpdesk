@@ -71,3 +71,5 @@ helpdesk.patches.v16_0_2.set_video_editor_days_before
 helpdesk.patches.v16_0_2.seed_departments
 helpdesk.patches.v16_0_2.enable_ai_task_descriptions
 helpdesk.patches.v16_0_2.seed_signoff_templates
+helpdesk.patches.v16_0_2.seed_content_options
+helpdesk.patches.v16_0_2.content_campaign_as_text

@@ -86,7 +86,7 @@ nothing in them are left out. Each group carries its full `count` and at most 5 
 
 | Reason | Source |
 | --- | --- |
-| `overdue` | Overview's overdue bucket (tasks past their due date, tickets past their SLA) |
+| `overdue` | Overview's overdue bucket (tasks past their due date or, due today, past their estimated hours — see workspace-pages.md "When a task is overdue"; tickets past their SLA) |
 | `at_risk` | Overview's at-risk bucket (not started close to the deadline, rescheduled often, waiting on an open dependency, SLA due within 4h, high priority unassigned) |
 | `unassigned_tickets` | Open or paused tickets with no assignee, overdue and key first |
 | `waiting_on_customer` | Paused tickets (not Waiting on Task) whose last agent reply (or last change) is over 3 days old, oldest first; rows say "We replied N days ago" |

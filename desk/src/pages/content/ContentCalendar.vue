@@ -35,7 +35,12 @@
             ><LucideChartColumn class="size-4" aria-hidden="true"
           /></template>
         </Button>
-        <Button variant="solid" :label="__('Add entry')" @click="openAdd()">
+        <Button
+          v-if="auth.canEditContent"
+          variant="solid"
+          :label="__('Add entry')"
+          @click="openAdd()"
+        >
           <template #prefix
             ><LucidePlus class="size-4" aria-hidden="true"
           /></template>
@@ -56,7 +61,7 @@
         <FormControl
           v-model="filters.channel"
           type="select"
-          :options="[{ label: __('All channels'), value: '' }, ...CHANNELS]"
+          :options="[{ label: __('All channels'), value: '' }, ...platforms]"
           :aria-label="__('Channel')"
         />
       </div>
@@ -227,7 +232,8 @@
                 dayjs(o.date).format('D MMMM')
               )
             "
-            @click="openAdd(o.date)"
+            :disabled="!auth.canEditContent"
+            @click="openAdd(o.date, o.occasion)"
           >
             <LucideSparkles
               class="size-3.5 text-ink-gray-5"
@@ -257,6 +263,7 @@
             "
             :aria-pressed="period === 'day' && d.date === anchor"
             :aria-label="d.ariaLabel"
+            :title="d.special ? __('Special day: {0}', d.special) : undefined"
             @click="openDay(d.date)"
           >
             <span class="text-2xs uppercase tracking-[0.06em]">{{
@@ -268,6 +275,11 @@
               >{{ d.day }}</span
             >
             <span class="flex h-4 items-center gap-1 text-xs tabular-nums">
+              <LucideStar
+                v-if="d.special"
+                class="size-3 fill-current text-warning"
+                aria-hidden="true"
+              />
               <span
                 v-if="d.missed"
                 class="size-1.5 rounded-full bg-danger"
@@ -373,6 +385,7 @@
       v-model:open="addOpen"
       :customer="filters.customer"
       :date="addDate"
+      :special-day="addSpecialDay"
       @saved="refresh"
     />
     <EntryActionDialog
@@ -413,11 +426,11 @@ import LucideMail from "~icons/lucide/mail";
 import LucideSheet from "~icons/lucide/sheet";
 import LucideCalendarSync from "~icons/lucide/calendar-sync";
 import LucideSparkles from "~icons/lucide/sparkles";
+import LucideStar from "~icons/lucide/star";
 import LucideCalendarX from "~icons/lucide/calendar-x";
 import LucideUser from "~icons/lucide/user";
 import { useAuthStore } from "@/stores/auth";
 import {
-  CHANNELS,
   type ContentOccasion,
   type ContentPost,
   type EntryAction,
@@ -428,6 +441,7 @@ import {
   TEAM_ROLES,
   type TeamRole,
 } from "./constants";
+import { useContentOptions } from "./contentOptions";
 import AddEntryDialog from "./components/AddEntryDialog.vue";
 import ContentBoard from "./components/ContentBoard.vue";
 import ContentSheet from "./components/ContentSheet.vue";
@@ -435,14 +449,15 @@ import EntryActionDialog from "./components/EntryActionDialog.vue";
 import PostDialog from "./components/PostDialog.vue";
 import SharePortalDialog from "./components/SharePortalDialog.vue";
 
-const calendarConfig = {
+// dragging a post reschedules it, which only editors may do
+const calendarConfig = computed(() => ({
   defaultMode: "Month",
   disableModes: ["Day"],
-  isEditMode: true,
+  isEditMode: useAuthStore().canEditContent,
   enableShortcuts: false,
   timeFormat: "12h",
   eventIcons: {},
-};
+}));
 
 const legend = [
   { label: __("Planning"), swatch: "bg-info" },
@@ -510,15 +525,19 @@ const weekDays = computed(() => {
       (p) => dayjs(p.publish_on).format("YYYY-MM-DD") === date
     );
     const missed = onDay.some((p) => isMissed(p));
+    const special = onDay.find((p) => p.special_day)?.special_day;
     return {
       date,
       weekday: day.format("ddd"),
       day: day.format("D"),
       count: onDay.length,
       missed,
+      special,
       ariaLabel: `${day.format("dddd D MMMM")}: ${onDay.length} ${
         onDay.length === 1 ? __("post") : __("posts")
-      }${missed ? `, ${__("some missed")}` : ""}`,
+      }${missed ? `, ${__("some missed")}` : ""}${
+        special ? `, ${__("special day: {0}", special)}` : ""
+      }`,
     };
   });
 });
@@ -616,6 +635,7 @@ const FIELDS = [
   "channel",
   "platforms",
   "customer",
+  "special_day",
   "publish_on",
 ];
 
@@ -644,6 +664,10 @@ const BOARD_FIELDS = [
   "designer",
   "marketer",
   "video_editor",
+  "writer_hours",
+  "designer_hours",
+  "video_editor_hours",
+  "marketer_hours",
   "published_on",
   "published_url",
   "times_postponed",
@@ -674,6 +698,7 @@ const monthPosts = createResource({
 });
 
 const auth = useAuthStore();
+const { platforms } = useContentOptions();
 
 // festivals and national days in the period; a customer's package picks its regions
 const occasions = createResource({
@@ -697,7 +722,10 @@ const events = computed(() =>
     const start = dayjs(p.publish_on);
     return {
       id: p.name,
-      title: `${platformsOf(p).join(", ")} · ${p.title}`,
+      // ★ marks a special-day post on the month and week grid
+      title: `${p.special_day ? `★ ${p.special_day} · ` : ""}${platformsOf(
+        p
+      ).join(", ")} · ${p.title}`,
       participant: `${p.status} · ${p.customer}`,
       fromDate: start.format("YYYY-MM-DD"),
       toDate: start.format("YYYY-MM-DD"),
@@ -804,9 +832,13 @@ if (typeof route.query.post === "string") openPost(route.query.post);
 
 const addOpen = ref(false);
 const addDate = ref("");
+const addSpecialDay = ref("");
 
-function openAdd(date?: string) {
+// an occasion chip fills in its name as the entry's special day
+function openAdd(date?: string, specialDay?: string) {
+  if (!auth.canEditContent) return;
   addDate.value = date || "";
+  addSpecialDay.value = specialDay || "";
   addOpen.value = true;
 }
 

@@ -27,6 +27,8 @@ STAGES = {
     "Internal Review": "review",
     "Client Review": "review",
     "Changes Requested": "review",
+    # the client approved; the Digital Marketing Head hasn't yet
+    "Head Review": "review",
     "Approved": "ready",
     "Scheduled": "ready",
     "Published": "published",

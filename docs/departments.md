@@ -27,6 +27,61 @@ the matching categories go to them.
   departments. It combines with the other filters (e.g. a customer's projects in one
   department). API: `helpdesk.api.work.get_overview(department=...)`.
 
+## Department walls: DM Employee and ERP Employee
+
+Two roles (created on install and migrate by `content_team.ensure_role()`, given to agents) keep
+each team out of the other's department:
+
+| Role | Never sees |
+| --- | --- |
+| **DM Employee** | the **ERP** department |
+| **ERP Employee** | the **Digital** department, the content calendar and the work Calendar |
+
+Creative, GrowthX, Internal / R&D and projects with no department stay visible to both. System
+Managers and Agent Managers see every department.
+
+- **What's hidden** (`hidden_departments()` in `helpdesk/tasky/permissions.py`, mapping
+  `HIDDEN_DEPARTMENTS`): that department's projects and their tasks, in every list
+  (`project_query`, `task_query`: Projects, My Work, Overview, Calendar, Desk) and when opened
+  directly (`project_has_permission`, `task_has_permission`), and its chip in the department
+  filters (`get_departments`).
+- **No assignments across the wall:** a ToDo `validate` hook (`check_assignment_department`)
+  refuses giving a task in a hidden department to that person ("… can't be given tasks in the ERP
+  department."), from any screen, the Desk or templates. This is needed because Frappe shares a
+  task with its assignee, and a share would let them open it even though it's hidden from their
+  lists.
+- **Content calendar for ERP Employees** (`content_team.is_erp_only()`, unless they also edit
+  content): HD Content Post `permission_query` returns no posts and `has_permission` refuses
+  them; the sidebar hides Content and Calendar, and the router sends `ContentCalendar`,
+  `ContentReport`, `ContentPlans` and `WorkCalendar` to Home (`ERP_EMPLOYEE_HIDDEN_ROUTES` in
+  `pages/content/contentTeam.ts`, `authStore.isErpOnly`).
+- **Support pages hidden from both** (`content_team.is_department_employee()`, false for System
+  Managers and Agent Managers; `authStore.isDepartmentEmployee`): Support hours, Tickets,
+  Customers, Contacts, Templates, Knowledge base and Customer report leave the sidebar, and their
+  routes (`DEPARTMENT_EMPLOYEE_HIDDEN_ROUTES` in `pages/content/contentTeam.ts`, including single
+  tickets, customers, contacts and articles) send them to Home; the command palette drops
+  Knowledge Base. Tickets are also hidden on the server: `sees_no_tickets()` gives them the same
+  ticket visibility as the Content Team (only tickets they raised themselves).
+- The walls go by department **name** ("ERP", "Digital"). Renaming either department in
+  Settings → Departments turns its wall off until `HIDDEN_DEPARTMENTS` is updated. Projects with
+  no department aren't walled, so set each project's department for the walls to apply.
+
+## Admin-only Tickets list
+
+Separately from the walls, the Tickets list is for System Managers (`authStore.isAdmin`, the
+`is_admin` flag from `helpdesk/api/auth.py`: System Manager or Administrator). Every other
+agent is affected, including Agent Managers, not only DM and ERP Employees:
+
+- the **Tickets** sidebar item is `adminOnly` (`layoutSettings.ts`, filtered in `AppSidebar.vue`);
+- the `TicketsAgent` (`/tickets`) and `TicketAgentNew` routes send everyone else to Home
+  (`beforeEnter` in `desk/src/router/index.ts`);
+- the command palette's **Tickets** entry is shown only to them (`CP.vue`). Typing `#<id>`
+  still jumps to a ticket.
+
+This only hides the pages. A single ticket (`/tickets/:ticketId`) still opens for any agent who
+can read it (DM and ERP Employees excepted, as above), and ticket permissions on the server
+are unchanged.
+
 ## Data model
 
 - **HD Department** (`helpdesk/helpdesk/doctype/hd_department`): `department_name` (Data,

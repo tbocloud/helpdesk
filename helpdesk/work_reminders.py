@@ -45,12 +45,17 @@ def notify_users(
     subject: str,
     escalate: bool = False,
     link: str | None = None,
+    notification_type: str = "Reminder",
+    user_from: str | None = None,
+    once: bool = True,
 ):
     """Reminder in the helpdesk notification panel, plus an email or chat message
     (see HDNotification); `escalate` also posts it to the team's chat channel.
-    `link` replaces the usual page, e.g. a pull request on GitHub.
+    `link` replaces the usual page, e.g. a pull request on GitHub. Another
+    `notification_type` (e.g. Task Completed) stays in the panel only.
 
-    Sent once per person, document and subject, so a daily run doesn't repeat itself.
+    Sent once per person, document and subject, so a daily run doesn't repeat itself;
+    `once=False` sends it again, for events that can happen more than once.
     """
     from helpdesk.chat_notifications import post_escalation
 
@@ -60,12 +65,22 @@ def notify_users(
     users = sorted({u for u in users if u and u not in SKIP})
     if not users:
         return
-    already = set(
+    # a task can still be assigned to someone whose account was deleted or disabled;
+    # their reminder would fail and stop the rest of the run, so they're skipped
+    users = frappe.qb.get_query(
+        "User",
+        fields=["name"],
+        filters={"name": ("in", users), "enabled": 1},
+        order_by="name asc",
+    ).run(pluck=True)
+    if not users:
+        return
+    already = once and set(
         frappe.get_all(
             "HD Notification",
             filters={
                 "user_to": ("in", users),
-                "notification_type": "Reminder",
+                "notification_type": notification_type,
                 "reference_doctype": doctype,
                 "reference_name": str(name),
                 "message": subject,
@@ -74,13 +89,13 @@ def notify_users(
         )
     )
     for user in users:
-        if user in already:
+        if already and user in already:
             continue
         frappe.get_doc(
             {
                 "doctype": "HD Notification",
-                "notification_type": "Reminder",
-                "user_from": automation_user(),
+                "notification_type": notification_type,
+                "user_from": user_from or automation_user(),
                 "user_to": user,
                 "reference_doctype": doctype,
                 "reference_name": str(name),

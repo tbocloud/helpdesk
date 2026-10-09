@@ -55,6 +55,21 @@ class HDNotification(Document):
 
     def after_insert(self):
         self.deliver()
+        self.announce()
+
+    def announce(self):
+        """Tell the recipient's open helpdesk tabs, so the bell updates without a reload
+        (and chimes for a completed task)."""
+        frappe.publish_realtime(
+            "helpdesk:new-notification",
+            {
+                "name": self.name,
+                "notification_type": self.notification_type,
+                "message": self.message,
+            },
+            user=self.user_to,
+            after_commit=True,
+        )
 
     def deliver(self):
         """Chat instead of email when HD Chat Settings is on (sent after commit, in the background)."""
