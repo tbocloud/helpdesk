@@ -13,6 +13,7 @@
 		"state",
 		"column_break_lease",
 		"worker_id",
+		"worker_user",
 		"lease_token_hash",
 		"lease_expires",
 		"lease_losses",
@@ -93,6 +94,14 @@
 			"fieldname": "worker_id",
 			"fieldtype": "Data",
 			"label": "Worker",
+			"read_only": 1
+		},
+		{
+			"description": "The Copilot Worker user that holds the lease; the run token acts as this user",
+			"fieldname": "worker_user",
+			"fieldtype": "Link",
+			"label": "Worker User",
+			"options": "User",
 			"read_only": 1
 		},
 		{
@@ -238,7 +247,7 @@
 		}
 	],
 	"links": [],
-	"modified": "2026-10-08 13:00:00.000000",
+	"modified": "2026-10-09 16:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Copilot Run",

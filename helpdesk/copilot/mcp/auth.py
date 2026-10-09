@@ -70,4 +70,27 @@ def is_agent_user(user: str) -> bool:
 
 
 def worker_caller(run_token: str) -> Caller:
-    frappe.throw(_("Run tokens are not accepted by this server yet."), frappe.AuthenticationError)
+    """`<run>:<lease token>` from claim_job: valid only while that run's lease is live.
+
+    The request then runs as the run's worker user, scoped to that run and its
+    worker tools; the agent inside the sandbox never holds the worker's API key.
+    """
+    from helpdesk.api.copilot_worker import WORKER_ROLE
+    from helpdesk.copilot import runs
+
+    run, _sep, token = (run_token or "").strip().partition(":")
+    if not run or not token or not frappe.db.exists("HDS Copilot Run", run):
+        frappe.throw(_("This run token is not valid."), frappe.AuthenticationError)
+    try:
+        doc = runs.check_lease(run, token)
+    except frappe.PermissionError as e:
+        frappe.throw(str(e) or _("This run token is not valid."), frappe.AuthenticationError)
+    user = doc.worker_user
+    if (
+        not user
+        or WORKER_ROLE not in frappe.get_roles(user)
+        or not frappe.db.get_value("User", user, "enabled")
+    ):
+        frappe.throw(_("The worker of this run may not use the MCP server."), frappe.AuthenticationError)
+    frappe.set_user(user)  # runs only after the lease token matched - nosemgrep
+    return Caller(user=user, kind=WORKER, run=doc.name)

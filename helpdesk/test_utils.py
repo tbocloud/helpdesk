@@ -2381,3 +2381,18 @@ def fake_http_request(test_case, method: str = "POST", body: bytes | str = b"", 
         method=method, headers=headers or {}, cookies={}, get_data=lambda *a, **k: data
     )
     test_case.addCleanup(setattr, frappe.local, "request", previous)
+
+
+def restrict_tickets_to_teams(test_case):
+    """Turns on "agents see only their team's tickets" (tickets without a team hidden too) for one test.
+
+    Switched back off on cleanup: the setting is cached, so a rollback alone
+    would leave later tests restricted.
+    """
+    values = {"restrict_tickets_by_agent_group": 1, "do_not_restrict_tickets_without_an_agent_group": 0}
+    frappe.db.set_single_value("HD Settings", values)
+    test_case.addCleanup(
+        frappe.db.set_single_value,
+        "HD Settings",
+        {"restrict_tickets_by_agent_group": 0, "do_not_restrict_tickets_without_an_agent_group": 1},
+    )

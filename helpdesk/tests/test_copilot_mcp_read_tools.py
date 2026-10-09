@@ -26,6 +26,7 @@ from helpdesk.test_utils import (
     make_ticket,
     make_ticket_communication,
     mcp_tool_result,
+    restrict_tickets_to_teams,
 )
 
 AGENT = "mcp-read-agent@example.com"
@@ -86,10 +87,7 @@ class TestTickets(ReadToolCase):
         # not assigned to our agent: an assignee may read a ticket outside their team
         other = make_ticket(subject="Another team's ticket", customer=self.customer).name
         frappe.db.set_value("HD Ticket", other, "agent_group", team.name)
-        frappe.db.set_single_value(
-            "HD Settings",
-            {"restrict_tickets_by_agent_group": 1, "do_not_restrict_tickets_without_an_agent_group": 0},
-        )
+        restrict_tickets_to_teams(self)
         frappe.set_user(AGENT)
         is_error, text = self.call("get_ticket", ticket=other)
         self.assertTrue(is_error)

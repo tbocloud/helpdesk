@@ -108,3 +108,21 @@ TBO staff use tickets, tasks and the knowledge base from the TBO Copilot desktop
 Ticket numbers may be written as people write them (`236`, `#236`, `HD-0236`).
 
 **TBO Copilot desktop:** Settings → MCP → Add → HTTP endpoint, the URL above and the header `Authorization: token <key>:<secret>`, then Test connection. The tools appear as `mcp_<server id>_<tool>`; the app asks before each call in Ask mode and hides MCP tools in Plan and Goal mode. The header is stored in plain text in `~/.agents/servers/<id>.json`, so use your own key, never an admin's.
+
+| Write tool | What it does (never sends anything to a customer) |
+|---|---|
+| `add_ticket_comment` | An internal note as the person, with the comment box's guard (ticket read + agent). Text is shown as text, never run as HTML |
+| `draft_ticket_reply` | Saves the text in the ticket's suggested-reply card for the person to edit and send, with Regenerate's guard (ticket write, open ticket) |
+| `update_task_status` | Open, Working, Cancelled through the task board's API; On Hold needs one of the task's hold reasons; Completed needs the hours worked (it may become Pending Review); a held task is resumed first |
+| `create_kb_article_draft` | A Draft HD Article in General as the person (their own create permission), Markdown content, optionally linked to a ticket they can read; never published |
+
+**The worker's run token.** `claim_job` returns a lease token and records the claiming user as the run's `worker_user`. The run's agent sends `X-Copilot-Run-Token: <run>:<lease token>` (and no Authorization header, which Frappe would check as a key). The request then runs as that worker user, sees only the worker tools, and is scoped to that run; the token stops working when the lease ends (a result, a cancel, an expiry). The agent never holds the worker user's API key.
+
+| Worker tool | Does |
+|---|---|
+| `get_run_context` | The run's context (as `claim_job` gives it) |
+| `post_event` | An event for the run; a repeated `seq` is ignored |
+| `submit_investigation` | The root cause, confidence, evidence, proposal; routed as `submit_result` does, and the lease ends |
+| `customer_erp_read` | One read tool on the ticket's customer site through the hub (`MCPClient`, logged in HDS Remote Audit Log too): `get_doc`, `get_list`, `get_count`, `get_meta`, `get_error_log`, `execute_report`, `get_installed_apps`, `get_site_info`, `get_code_identity`, `get_customizations`, `get_deploy_status`, `get_version_history`. Never a write tool; results over 64,000 characters are cut |
+
+**Permission fixes in the support hub API.** `get_connections` lists all connections only to managers (Administrator, System Manager, Agent Manager); other agents see the connections of customers whose tickets they can read. `get_session_detail` needs read access to the session's ticket. `start_investigation` needs read access to the ticket, and an agent may only investigate the ticket's own customer site (managers may choose another).

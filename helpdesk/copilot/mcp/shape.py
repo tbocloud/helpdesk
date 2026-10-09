@@ -8,6 +8,7 @@ import re
 import frappe
 from frappe import _
 from frappe.core.utils import html2text
+from frappe.utils import escape_html
 
 UNTRUSTED_OPEN = "<untrusted_ticket_content>"
 UNTRUSTED_CLOSE = "</untrusted_ticket_content>"
@@ -56,3 +57,9 @@ def assignees(value) -> list[str]:
         return frappe.parse_json(value or "[]") or []
     except Exception:
         return []
+
+
+def paragraphs_html(text: str) -> str:
+    """Plain text from the model as HTML paragraphs; any HTML in it is shown, not run."""
+    paragraphs = [p.strip() for p in str(text or "").split("\n\n") if p.strip()]
+    return "".join("<p>{0}</p>".format(escape_html(p).replace("\n", "<br>")) for p in paragraphs)

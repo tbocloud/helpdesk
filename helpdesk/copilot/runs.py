@@ -201,6 +201,7 @@ def claim(worker_id: str, capabilities: str = ""):
             WORKER,
             note=f"claimed by {worker_id}",
             worker_id=worker_id,
+            worker_user=frappe.session.user,
             lease_token_hash=_hash(token),
             lease_expires=add_to_date(now_datetime(), minutes=lease_minutes()),
             claimed_at=now_datetime(),

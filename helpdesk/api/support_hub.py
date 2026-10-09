@@ -52,9 +52,18 @@ def run_triage_now(ticket: str | int):
 @frappe.whitelist()
 @agent_only
 def start_investigation(ticket: str | int, connection: str, agent_notes: str = ""):
-    """Start an AI investigation session."""
+    """Start an AI investigation session on a ticket the agent can read, on its customer's site."""
     from helpdesk.session_manager import start_investigation as _start
 
+    doc = frappe.get_doc("HD Ticket", str(ticket))
+    doc.check_permission("read")
+    site_customer = frappe.db.get_value("HDS Support Connection", connection, "customer_name")
+    if site_customer != doc.customer and not _is_hub_manager():
+        # another customer's site would put their data on this ticket
+        frappe.throw(
+            _("This connection belongs to another customer than the ticket's."),
+            frappe.PermissionError,
+        )
     session_name = _start(str(ticket), str(connection), agent_notes)
     return {"session": session_name, "status": "started"}
 
@@ -86,8 +95,10 @@ def get_sessions(ticket: str | int):
 @frappe.whitelist()
 @agent_only
 def get_session_detail(session: str):
-    """Get full session details including MCP call logs."""
+    """Get full session details including MCP call logs, for agents who can read its ticket."""
     doc = frappe.get_doc("HDS AI Support Session", session)
+    if doc.ticket:
+        frappe.has_permission("HD Ticket", "read", doc.ticket, throw=True)
     return doc.as_dict()
 
 
@@ -130,13 +141,32 @@ def get_pending_actions(ticket: str | int):
 
 @frappe.whitelist()
 @agent_only
-def get_connections():
-    """Get all support connections."""
+def get_connections() -> list:
+    """Support connections: all of them for managers; for other agents, those of
+    the customers whose tickets they can read."""
+    filters = {}
+    if not _is_hub_manager():
+        customers = {
+            row.customer
+            for row in frappe.get_list(
+                "HD Ticket",
+                filters={"customer": ["is", "set"]},
+                fields=["customer"],
+                distinct=True,
+                limit_page_length=0,
+            )
+        }
+        filters["customer_name"] = ["in", sorted(customers) or [""]]
     return frappe.get_list(
         "HDS Support Connection",
+        filters=filters,
         fields=["name", "customer_name", "site_url", "connection_status"],
         order_by="customer_name asc",
     )
+
+
+def _is_hub_manager() -> bool:
+    return bool({"Administrator", "System Manager", "Agent Manager"} & set(frappe.get_roles()))
 
 
 @frappe.whitelist()

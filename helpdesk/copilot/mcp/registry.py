@@ -17,7 +17,11 @@ from helpdesk.copilot.mcp.auth import WORKER
 READ, WRITE, WORKER_TOOL = "read", "write", "worker"
 TOOLS: dict[str, dict] = {}
 # imported on first use, so every entry point (endpoint, tests, bench execute) sees all tools
-TOOL_MODULES = ("helpdesk.copilot.mcp.tools_read",)
+TOOL_MODULES = (
+    "helpdesk.copilot.mcp.tools_read",
+    "helpdesk.copilot.mcp.tools_write",
+    "helpdesk.copilot.mcp.tools_worker",
+)
 MAX_RESULT_CHARS = 100_000
 SAVEPOINT = "copilot_mcp_tool"
 
