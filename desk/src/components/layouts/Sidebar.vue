@@ -1,11 +1,10 @@
 <template>
   <AppSidebar :profile-settings="profileSettings">
     <template #footer="{ isCollapsed }">
-      <!-- The Sidebar container already has p-2; the extra px-2 only fits when
-      expanded. Collapsed, it would squeeze the banners' icon buttons to 0. -->
       <div
+        v-if="hasBanner"
         class="flex flex-col gap-2"
-        :class="isCollapsed ? 'items-center' : 'px-2'"
+        :class="isCollapsed && 'items-center'"
       >
         <TrialBanner
           v-if="isFCSite && !isCustomerPortal"
@@ -21,17 +20,27 @@
           :isSidebarCollapsed="isCollapsed"
         />
       </div>
+    </template>
+    <template #footer-items>
       <SidebarItem
         v-if="isOnboardingStepsCompleted && !isCustomerPortal"
         :label="__('Help & docs')"
-        :icon="HelpIcon"
         :on-click="
           () => {
             showHelpModal = minimize ? true : !showHelpModal;
             minimize = !showHelpModal;
           }
         "
-      />
+      >
+        <template #prefix>
+          <span class="tbo-nav-icon">
+            <LucideCircleHelp class="size-3.5" aria-hidden="true" />
+          </span>
+        </template>
+        <span class="tbo-nav-label ms-1 truncate text-base">
+          {{ __("Help & docs") }}
+        </span>
+      </SidebarItem>
     </template>
   </AppSidebar>
 
@@ -86,13 +95,13 @@ import {
   useOnboarding,
 } from "frappe-ui/frappe";
 
-import { HelpIcon } from "frappe-ui/icons";
 import { computed, h, markRaw, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import AppSidebar from "./AppSidebar.vue";
 
 import { useShortcut } from "@/composables/shortcuts";
 import { __ } from "@/translation";
+import LucideCircleHelp from "~icons/lucide/circle-help";
 import FileText from "~icons/lucide/file-text";
 import Globe from "~icons/lucide/globe";
 import LucideKeyboard from "~icons/lucide/keyboard";
@@ -214,6 +223,13 @@ const showPermissionNoticeBanner = computed(() => {
     configStore.showCustomerPortalPermissionNotice
   );
 });
+
+const hasBanner = computed(
+  () =>
+    (isFCSite.value && !isCustomerPortal.value) ||
+    showOnboardingBanner.value ||
+    showPermissionNoticeBanner.value
+);
 
 const showOnboardingBanner = computed(() => {
   return (

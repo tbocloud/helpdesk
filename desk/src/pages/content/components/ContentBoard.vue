@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-col gap-4">
+  <div class="flex flex-col gap-3">
     <section
       class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4"
       :aria-label="__('Summary')"
@@ -7,30 +7,44 @@
       <div
         v-for="tile in tiles"
         :key="tile.key"
-        class="flex items-start gap-3 rounded-lg border px-4 py-3"
-        :class="TILE_TONES[tile.tone].tile"
+        class="flex items-center gap-3 rounded-xl border px-4 py-3"
+        :class="
+          tile.warn
+            ? 'stat-warning bg-warning-soft'
+            : 'border-outline-gray-2 bg-surface-base'
+        "
       >
         <div class="min-w-0 flex-1">
-          <p class="text-sm text-ink-gray-7">{{ tile.label }}</p>
           <p
-            class="mt-0.5 truncate font-mono text-xl font-semibold tabular-nums text-ink-gray-9"
+            class="text-sm"
+            :class="tile.warn ? 'text-warning' : 'text-ink-gray-7'"
+          >
+            {{ tile.label }}
+          </p>
+          <p
+            class="truncate font-mono text-[20px] font-semibold tabular-nums leading-snug"
+            :class="tile.warn ? 'text-warning' : 'text-ink-gray-9'"
           >
             {{ tile.value }}
           </p>
-          <p class="truncate text-xs text-ink-gray-6" :title="tile.sub">
+          <p
+            class="truncate text-xs"
+            :class="tile.warn ? 'text-warning' : 'text-ink-gray-6'"
+            :title="tile.sub"
+          >
             {{ tile.sub }}
           </p>
         </div>
         <!-- how much of the period is published, as a ring -->
         <svg
           v-if="tile.ring !== undefined"
-          viewBox="0 0 36 36"
-          class="size-9 shrink-0 -rotate-90"
+          viewBox="0 0 38 38"
+          class="size-8 shrink-0 -rotate-90"
           aria-hidden="true"
         >
           <circle
-            cx="18"
-            cy="18"
+            cx="19"
+            cy="19"
             r="15"
             fill="none"
             stroke-width="4"
@@ -38,29 +52,46 @@
           />
           <circle
             v-if="tile.ring > 0"
-            cx="18"
-            cy="18"
+            cx="19"
+            cy="19"
             r="15"
             fill="none"
             stroke-width="4"
             stroke-linecap="round"
-            style="stroke: var(--success)"
+            style="stroke: var(--brand)"
             :stroke-dasharray="`${(tile.ring / 100) * RING} ${RING}`"
           />
+          <!-- at 0% a dot marks where progress starts -->
+          <circle v-else cx="34" cy="19" r="2.5" style="fill: var(--brand)" />
         </svg>
         <span
           v-else
-          class="grid size-8 shrink-0 place-items-center rounded-full bg-surface-base"
-          :class="TILE_TONES[tile.tone].icon"
+          class="grid size-8 shrink-0 place-items-center rounded-[10px]"
+          :class="tile.iconClass"
         >
           <component :is="tile.icon" class="size-4" aria-hidden="true" />
         </span>
       </div>
     </section>
 
-    <div v-if="active.length" class="flex flex-col gap-2">
+    <div v-if="active.length" class="flex flex-col gap-1.5">
+      <!-- a segment per post while they fit; past that, one block per bucket -->
       <div
-        class="flex h-2 gap-0.5 overflow-hidden rounded-full bg-surface-gray-2"
+        v-if="segments.length <= MAX_SEGMENTS"
+        class="flex h-1 gap-1"
+        role="img"
+        :aria-label="barLabel"
+      >
+        <div
+          v-for="(swatch, i) in segments"
+          :key="i"
+          class="flex-1 rounded-full"
+          :class="swatch"
+        />
+      </div>
+      <div
+        v-else
+        class="flex h-1 gap-0.5 overflow-hidden rounded-full bg-surface-gray-2"
         role="img"
         :aria-label="barLabel"
       >
@@ -72,7 +103,7 @@
         />
       </div>
       <div
-        class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-gray-6"
+        class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-gray-7"
         aria-hidden="true"
       >
         <span
@@ -80,8 +111,8 @@
           :key="b.key"
           class="flex items-center gap-1.5"
         >
-          <span class="size-2 rounded-full" :class="b.swatch" />
-          <span class="font-mono tabular-nums text-ink-gray-8">{{
+          <span class="size-1.5 rounded-full" :class="b.swatch" />
+          <span class="font-mono font-semibold tabular-nums text-ink-gray-9">{{
             b.count
           }}</span>
           {{ b.label }}
@@ -91,38 +122,67 @@
 
     <div
       v-if="missed.length"
-      class="flex flex-wrap items-center gap-3 rounded-lg bg-danger-soft px-4 py-2.5 text-sm text-danger"
+      class="action-banner flex flex-wrap items-center gap-2.5 rounded-xl border bg-danger-soft px-3 py-2 text-sm text-danger"
       role="status"
     >
-      <LucideCircleAlert class="size-4 shrink-0" aria-hidden="true" />
-      <span class="flex-1">
+      <span
+        class="grid size-6 shrink-0 place-items-center rounded-[6px] bg-surface-base"
+      >
+        <LucideCircleAlert class="size-3.5" aria-hidden="true" />
+      </span>
+      <span class="min-w-0 flex-1 basis-56">
         <b class="font-semibold">{{
           missed.length === 1
             ? __("1 post needs action.")
             : __("{0} posts need action.", String(missed.length))
         }}</b>
-        {{ __("Not published on the planned date. Publish or postpone it.") }}
+        {{
+          missed.length === 1
+            ? __("Not published on the planned date. Publish or postpone it.")
+            : __("Not published on the planned date. Publish or postpone them.")
+        }}
       </span>
-      <Button
+      <button
         v-if="filter !== 'missed'"
-        size="sm"
-        :label="missed.length === 1 ? __('Show it') : __('Show them')"
+        type="button"
+        class="action-banner-btn inline-flex h-7 shrink-0 items-center rounded-[8px] border bg-surface-base px-3 text-sm font-medium text-danger transition-colors hover:bg-danger-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
         @click="filter = 'missed'"
-      />
+      >
+        {{ missed.length === 1 ? __("Show it") : __("Show them") }}
+      </button>
     </div>
 
     <div
-      class="flex flex-wrap items-center gap-1.5"
+      class="flex flex-wrap items-center gap-2"
       role="group"
       :aria-label="__('Filter entries')"
     >
-      <ChipToggle
+      <button
         v-for="f in filterChips"
         :key="f.key"
-        :label="`${f.label} ${f.count}`"
-        :pressed="filter === f.key"
-        @toggle="filter = f.key"
-      />
+        type="button"
+        :aria-pressed="filter === f.key"
+        class="inline-flex h-8 items-center gap-1.5 rounded-full border pl-3 pr-1 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+        :class="
+          filter === f.key
+            ? 'border-brand bg-brand-soft text-brand-ink'
+            : 'border-outline-gray-2 bg-surface-base text-ink-gray-8 hover:bg-surface-gray-2'
+        "
+        @click="filter = f.key"
+      >
+        {{ f.label }}
+        <span
+          class="grid h-5 min-w-[1.25rem] place-items-center rounded-full px-1.5 font-mono text-xs tabular-nums"
+          :class="
+            filter === f.key
+              ? 'bg-brand text-brand-on'
+              : f.key === 'missed'
+              ? 'bg-danger-soft text-danger'
+              : 'bg-surface-gray-2 text-ink-gray-7'
+          "
+          >{{ f.count }}</span
+        >
+      </button>
     </div>
 
     <div v-if="loading && !posts.length" class="flex flex-col gap-3">
@@ -160,256 +220,248 @@
     <section
       v-for="day in days"
       :key="day.date"
-      class="flex flex-col gap-3 sm:flex-row"
+      class="flex flex-col gap-2 sm:flex-row sm:gap-4"
       :aria-label="dayjs(day.date).format('dddd D MMMM')"
     >
       <div
-        class="flex shrink-0 items-baseline gap-2 sm:w-20 sm:flex-col sm:items-start sm:gap-0 sm:pt-2"
+        class="flex shrink-0 flex-wrap items-center gap-2 sm:w-[64px] sm:flex-col sm:items-stretch"
       >
-        <span
-          class="font-mono text-2xl font-semibold tabular-nums"
-          :class="day.date === today ? 'text-brand-ink' : 'text-ink-gray-9'"
-          >{{ dayjs(day.date).format("D") }}</span
+        <!-- a calendar page: month band, date, weekday -->
+        <div
+          class="w-[64px] shrink-0 overflow-hidden rounded-[10px] border bg-surface-base pb-1 text-center shadow-sm"
+          :class="day.date === today ? 'border-brand' : 'border-outline-gray-2'"
+          aria-hidden="true"
         >
-        <span class="text-sm text-ink-gray-7">{{
-          dayjs(day.date).format("ddd")
-        }}</span>
-        <span class="text-xs text-ink-gray-5">
-          {{
-            day.total === 1
-              ? __("1 entry")
-              : __("{0} entries", String(day.total))
-          }}
-        </span>
-        <SpecialDayBadge
-          v-for="name in day.specialDays"
-          :key="name"
-          :name="name"
-          class="sm:mt-1.5"
-        />
+          <div
+            class="grid h-6 place-items-center bg-brand text-[11px] font-bold uppercase tracking-[0.1em] text-brand-on"
+          >
+            {{ dayjs(day.date).format("MMM") }}
+          </div>
+          <div
+            class="font-mono text-[22px] font-medium tabular-nums leading-tight"
+            :class="day.date === today ? 'text-brand-ink' : 'text-ink-gray-9'"
+          >
+            {{ dayjs(day.date).format("D") }}
+          </div>
+          <div
+            class="text-[11px] font-semibold uppercase tracking-wide text-ink-gray-6"
+          >
+            {{ dayjs(day.date).format("ddd") }}
+          </div>
+        </div>
+        <div class="flex flex-col gap-1.5 sm:items-start">
+          <span class="text-[13px] text-ink-gray-6">
+            <template v-if="day.date === today">{{ __("Today") }} · </template>
+            {{
+              day.total === 1
+                ? __("1 entry")
+                : __("{0} entries", String(day.total))
+            }}
+          </span>
+          <SpecialDayBadge
+            v-for="name in day.specialDays"
+            :key="name"
+            :name="name"
+          />
+        </div>
       </div>
 
       <div class="flex min-w-0 flex-1 flex-col gap-3">
         <article
           v-for="post in day.posts"
           :key="post.name"
-          class="entry overflow-hidden rounded-xl border"
+          class="entry overflow-hidden rounded-[16px] border"
           :class="`entry-${entryTone(post)}`"
           :aria-labelledby="`client-${post.name} entry-${post.name}`"
         >
           <header class="flex flex-wrap items-start gap-x-3 gap-y-2 px-4 pt-3">
-            <div class="min-w-0 flex-1 basis-60">
-              <!-- the client leads, shown even when filtered, so every card says whose it is -->
-              <p
-                v-if="post.customer"
-                :id="`client-${post.name}`"
-                class="flex min-w-0 items-center gap-1.5 text-lg font-semibold text-ink-gray-9"
+            <div class="flex min-w-0 flex-1 basis-72 gap-3">
+              <span
+                class="grid size-10 shrink-0 place-items-center rounded-[10px] border border-outline-gray-2 bg-surface-base text-ink-gray-7 shadow-sm"
+                aria-hidden="true"
               >
-                <LucideBuilding2
-                  class="size-4 shrink-0 text-ink-gray-6"
-                  aria-hidden="true"
-                />
-                <span class="truncate">{{ post.customer }}</span>
-              </p>
-              <p
-                class="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 text-sm text-ink-gray-6"
-              >
-                <button
-                  :id="`entry-${post.name}`"
-                  type="button"
-                  class="min-w-0 max-w-full truncate rounded text-left text-base font-medium text-ink-gray-8 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
-                  @click="emit('open', post.name)"
+                <LucideBuilding2 class="size-[18px]" />
+              </span>
+              <div class="min-w-0 flex-1">
+                <!-- the client leads, shown even when filtered, so every card says whose it is -->
+                <p
+                  v-if="post.customer"
+                  :id="`client-${post.name}`"
+                  class="truncate text-lg font-semibold text-ink-gray-9"
                 >
-                  {{ post.title }}
-                </button>
-                <template v-if="post.format">
-                  <span aria-hidden="true">·</span>
-                  {{ post.format }}
-                </template>
-              </p>
-              <SpecialDayBadge
-                v-if="post.special_day"
-                :name="post.special_day"
-                class="mt-1.5"
-              />
-              <p
-                v-if="needsApprovalSoon(post, now)"
-                class="mt-1.5 inline-flex items-center gap-1.5 rounded-md bg-danger-soft px-2 py-0.5 text-sm text-danger"
-              >
-                <LucideTriangleAlert
-                  class="size-3.5 shrink-0"
-                  aria-hidden="true"
+                  {{ post.customer }}
+                </p>
+                <p
+                  class="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1"
+                >
+                  <button
+                    :id="`entry-${post.name}`"
+                    type="button"
+                    class="min-w-0 max-w-full truncate rounded text-left text-base text-ink-gray-7 hover:text-ink-gray-9 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+                    @click="emit('open', post.name)"
+                  >
+                    {{ post.title }}
+                  </button>
+                  <span
+                    v-if="post.format"
+                    class="inline-flex h-5 items-center rounded-[6px] border border-outline-gray-2 bg-surface-base px-1.5 text-xs text-ink-gray-7"
+                    >{{ post.format }}</span
+                  >
+                </p>
+                <SpecialDayBadge
+                  v-if="post.special_day"
+                  :name="post.special_day"
+                  class="mt-1.5"
                 />
-                {{ __("Goes live within 2 days and isn't approved yet.") }}
-              </p>
+                <p
+                  v-if="needsApprovalSoon(post, now)"
+                  class="mt-1.5 inline-flex items-center gap-1.5 rounded-md bg-danger-soft px-2 py-0.5 text-sm text-danger"
+                >
+                  <LucideTriangleAlert
+                    class="size-3.5 shrink-0"
+                    aria-hidden="true"
+                  />
+                  {{ __("Goes live within 2 days and isn't approved yet.") }}
+                </p>
+              </div>
             </div>
-            <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <div class="flex flex-wrap items-center gap-2">
               <ul
-                class="flex flex-wrap items-center gap-x-3 gap-y-1"
+                class="flex flex-wrap items-center gap-2"
                 :aria-label="__('Platforms')"
               >
                 <li
                   v-for="p in platformsOf(post)"
                   :key="p"
-                  class="inline-flex items-center gap-1.5 text-sm text-ink-gray-8"
+                  class="inline-flex h-7 items-center gap-1.5 rounded-full border border-outline-gray-2 bg-surface-base px-2.5 text-sm text-ink-gray-8"
                 >
-                  <ChannelIcon :channel="p" class="size-4 shrink-0" />{{
+                  <ChannelIcon :channel="p" class="size-[15px] shrink-0" />{{
                     __(p)
                   }}
                 </li>
               </ul>
               <span
-                class="font-mono text-sm tabular-nums text-ink-gray-8"
-                :aria-label="__('Time')"
-                >{{ dayjs(post.publish_on).format("h:mm A") }}</span
+                class="inline-flex h-7 items-center gap-1.5 rounded-full border border-outline-gray-2 bg-surface-base px-2.5 font-mono text-sm tabular-nums text-ink-gray-8"
               >
-              <StatusPill :post="post" />
-              <Button
-                size="sm"
-                variant="ghost"
-                :tooltip="
+                <LucideClock
+                  class="size-3.5 shrink-0 text-ink-gray-5"
+                  aria-hidden="true"
+                /><span class="sr-only">{{ __("Time:") }}</span
+                ><time :datetime="post.publish_on">{{
+                  dayjs(post.publish_on).format("h:mm A")
+                }}</time></span
+              >
+              <StatusPill :post="post" size="md" />
+              <Tooltip
+                :text="
                   auth.canEditContent
                     ? __('Edit entry')
                     : __('Open to add files')
                 "
-                :aria-label="
-                  auth.canEditContent
-                    ? __('Edit {0}', post.title)
-                    : __('Open {0} to add files', post.title)
-                "
-                @click="emit('open', post.name)"
               >
-                <LucidePencil
-                  v-if="auth.canEditContent"
-                  class="size-4"
-                  aria-hidden="true"
-                />
-                <LucidePaperclip v-else class="size-4" aria-hidden="true" />
-              </Button>
+                <button
+                  type="button"
+                  class="grid size-7 place-items-center rounded-full border border-outline-gray-2 bg-surface-base text-ink-gray-7 transition-colors hover:bg-surface-gray-2 hover:text-ink-gray-9 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+                  :aria-label="
+                    auth.canEditContent
+                      ? __('Edit {0}', post.title)
+                      : __('Open {0} to add files', post.title)
+                  "
+                  @click="emit('open', post.name)"
+                >
+                  <LucidePencil
+                    v-if="auth.canEditContent"
+                    class="size-3.5"
+                    aria-hidden="true"
+                  />
+                  <LucidePaperclip v-else class="size-3.5" aria-hidden="true" />
+                </button>
+              </Tooltip>
             </div>
           </header>
 
-          <div class="grid grid-cols-1 gap-3 px-4 pt-3 md:grid-cols-2 md:gap-0">
-            <div class="md:pr-4">
-              <p class="text-2xs uppercase tracking-[0.06em] text-ink-gray-6">
-                {{ __("Sub Copy") }}
-              </p>
+          <div
+            class="grid grid-cols-1 gap-2 px-4 pt-2.5 md:grid-cols-[1.65fr_1fr]"
+          >
+            <div
+              class="min-w-0 rounded-xl border border-outline-gray-2 bg-surface-base px-3 py-2"
+            >
+              <p class="text-[13px] text-ink-gray-6">{{ __("Sub copy") }}</p>
               <p
-                class="line-clamp-3 whitespace-pre-line text-p-sm"
-                :class="captionOf(post) ? 'text-ink-gray-8' : 'text-ink-gray-5'"
+                class="mt-0.5 line-clamp-2 whitespace-pre-line text-sm leading-snug"
+                :class="
+                  captionOf(post) ? 'text-ink-gray-9' : 'italic text-ink-gray-5'
+                "
               >
                 {{ captionOf(post) || __("Not written yet") }}
               </p>
             </div>
-            <div class="entry-rule md:border-l md:pl-4">
-              <p class="text-2xs uppercase tracking-[0.06em] text-ink-gray-6">
-                {{ __("Description") }}
-              </p>
+            <div
+              class="min-w-0 rounded-xl border border-outline-gray-2 bg-surface-base px-3 py-2"
+            >
+              <p class="text-[13px] text-ink-gray-6">{{ __("Description") }}</p>
               <p
-                class="line-clamp-3 whitespace-pre-line text-p-sm"
-                :class="post.brief ? 'text-ink-gray-8' : 'text-ink-gray-5'"
+                class="mt-0.5 line-clamp-2 whitespace-pre-line text-sm leading-snug"
+                :class="
+                  post.brief ? 'text-ink-gray-9' : 'italic text-ink-gray-5'
+                "
               >
                 {{ post.brief || __("No description yet") }}
               </p>
             </div>
           </div>
 
-          <div class="flex flex-wrap gap-x-6 gap-y-3 px-4 pt-3">
-            <div
+          <div
+            class="grid grid-cols-1 gap-2 px-4 pt-2 min-[420px]:grid-cols-2 lg:grid-cols-4"
+          >
+            <RoleBox
               v-for="role in TEAM_ROLES"
               :key="role.field"
-              class="flex flex-col items-start gap-1"
-            >
-              <span
-                class="text-2xs uppercase tracking-[0.06em] text-ink-gray-6"
-                >{{ __(role.label) }}</span
-              >
-              <span
-                v-if="
-                  !peopleOf(post, role.field).length && !auth.canEditContent
-                "
-                class="text-sm text-ink-gray-5"
-                >{{ __("Not assigned") }}</span
-              >
-              <button
-                v-else-if="!peopleOf(post, role.field).length"
-                type="button"
-                class="inline-flex h-6 items-center gap-1 rounded-full bg-warning-soft px-2.5 text-xs font-medium text-warning hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
-                :aria-label="__('Assign {0}', __(role.label).toLowerCase())"
-                @click="emit('action', post, 'assign', role.field)"
-              >
-                <LucidePlus class="size-3.5" aria-hidden="true" />{{
-                  __("Assign")
-                }}
-              </button>
-              <!-- everyone on the role, each with how far their task is -->
-              <button
-                v-else
-                type="button"
-                class="flex flex-col items-start gap-1 rounded-lg text-left text-sm text-ink-gray-8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
-                :title="
-                  auth.canEditContent ? __('Change who is on this') : undefined
-                "
-                :disabled="!auth.canEditContent"
-                @click="emit('action', post, 'assign', role.field)"
-              >
-                <span
-                  v-for="person in peopleOf(post, role.field)"
-                  :key="person.user"
-                  class="inline-flex flex-wrap items-center gap-1.5 rounded-full border border-outline-gray-2 bg-surface-base py-0.5 pl-0.5 pr-1"
-                >
-                  <Avatar size="xs" :label="person.full_name" />
-                  <span class="max-w-[10rem] truncate hover:underline">{{
-                    person.full_name
-                  }}</span>
-                  <TaskStatusBadge
-                    v-if="person.status"
-                    :status="person.status"
-                    :title="person.task"
-                  />
-                  <span
-                    v-if="isTaskLate(person)"
-                    class="pr-1 text-xs text-danger"
-                    >{{ __("late") }}</span
-                  >
-                </span>
-              </button>
-            </div>
+              :label="role.label"
+              :role="role.field"
+              :people="peopleOf(post, role.field)"
+              :can-edit="auth.canEditContent"
+              @assign="emit('action', post, 'assign', role.field)"
+            />
           </div>
 
           <footer
-            class="entry-footer mt-3 flex flex-wrap items-center gap-2 border-t px-4 py-2.5"
+            class="entry-footer mt-3 flex flex-wrap items-center gap-2 border-t px-4 py-2"
           >
             <p
-              class="flex-1 basis-48 text-sm"
+              class="flex flex-1 basis-48 items-center gap-2 text-base"
               :class="isMissed(post, now) ? 'text-danger' : 'text-ink-gray-7'"
             >
+              <component
+                :is="statusIcon(post)"
+                class="size-[15px] shrink-0"
+                aria-hidden="true"
+              />
               {{ statusLine(post) }}
             </p>
             <template v-if="!CLOSED_STATUSES.includes(post.status)">
               <!-- waiting on the head: only they move it on, so no Mark published -->
               <template v-if="post.status === HEAD_REVIEW">
                 <template v-if="auth.isDmHead">
-                  <Button
-                    size="sm"
-                    variant="solid"
-                    :label="__('Approve')"
+                  <button
+                    type="button"
+                    :class="PRIMARY_BTN"
                     @click="emit('action', post, 'head_approve')"
                   >
-                    <template #prefix
-                      ><LucideCheck class="size-3.5" aria-hidden="true"
-                    /></template>
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    :label="__('Send back')"
+                    <LucideCheck class="size-4" aria-hidden="true" />
+                    {{ __("Approve") }}
+                  </button>
+                  <button
+                    type="button"
+                    :class="OUTLINE_BTN"
                     @click="emit('action', post, 'head_send_back')"
                   >
-                    <template #prefix
-                      ><LucideUndo2 class="size-3.5" aria-hidden="true"
-                    /></template>
-                  </Button>
+                    <LucideUndo2
+                      class="size-4 text-ink-gray-6"
+                      aria-hidden="true"
+                    />
+                    {{ __("Send back") }}
+                  </button>
                 </template>
               </template>
               <!-- a post with the client can't be published until they and the head approve -->
@@ -418,40 +470,41 @@
                   post.status !== 'Client Review' && auth.canEditContent
                 "
                 type="button"
-                class="inline-flex h-7 items-center gap-1.5 rounded-md bg-success px-2.5 text-sm font-medium text-ink-base transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+                :class="PRIMARY_BTN"
                 @click="emit('action', post, 'publish')"
               >
-                <LucideSend class="size-3.5" aria-hidden="true" />
+                <LucideSend class="size-4" aria-hidden="true" />
                 {{ __("Mark published") }}
               </button>
-              <Button
+              <button
                 v-if="auth.canEditContent"
-                size="sm"
-                variant="outline"
-                :label="__('Postpone')"
+                type="button"
+                :class="OUTLINE_BTN"
                 @click="emit('action', post, 'postpone')"
               >
-                <template #prefix
-                  ><LucideCalendarClock class="size-3.5" aria-hidden="true"
-                /></template>
-              </Button>
-              <Button
-                v-if="auth.canEditContent"
-                size="sm"
-                variant="ghost"
-                :aria-label="__('Cancel post')"
-                :tooltip="__('Cancel post')"
-                @click="emit('action', post, 'cancel')"
-              >
-                <LucideBan class="size-3.5" aria-hidden="true" />
-              </Button>
+                <LucideCalendarClock
+                  class="size-4 text-ink-gray-6"
+                  aria-hidden="true"
+                />
+                {{ __("Postpone") }}
+              </button>
+              <Tooltip v-if="auth.canEditContent" :text="__('Cancel post')">
+                <button
+                  type="button"
+                  class="grid size-8 place-items-center rounded-full border border-outline-gray-2 bg-surface-base text-ink-gray-6 transition-colors hover:bg-surface-gray-2 hover:text-ink-gray-9 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+                  :aria-label="__('Cancel post')"
+                  @click="emit('action', post, 'cancel')"
+                >
+                  <LucideBan class="size-4" aria-hidden="true" />
+                </button>
+              </Tooltip>
             </template>
             <a
               v-else-if="post.status === 'Published' && post.published_url"
               :href="post.published_url"
               target="_blank"
               rel="noopener"
-              class="inline-flex items-center gap-1 rounded text-sm text-success hover:underline"
+              class="inline-flex items-center gap-1 rounded text-sm text-success hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
             >
               <LucideExternalLink class="size-3.5" aria-hidden="true" />{{
                 __("View post")
@@ -478,11 +531,8 @@
 </template>
 
 <script setup lang="ts">
-import type { Tone } from "@/components/tone";
 import { __ } from "@/translation";
-import { onTimeTone } from "@/pages/performance/performanceMeta";
-import TaskStatusBadge from "@/pages/tasky/components/TaskStatusBadge.vue";
-import { Avatar, Button, createResource, dayjs } from "frappe-ui";
+import { Button, createResource, dayjs, Tooltip } from "frappe-ui";
 import { type Component, computed, markRaw, ref, watch } from "vue";
 import LucideBan from "~icons/lucide/ban";
 import LucideCalendarClock from "~icons/lucide/calendar-clock";
@@ -512,7 +562,7 @@ import {
   type TeamRole,
 } from "../constants";
 import ChannelIcon from "./ChannelIcon.vue";
-import ChipToggle from "./ChipToggle.vue";
+import RoleBox from "./RoleBox.vue";
 import SpecialDayBadge from "./SpecialDayBadge.vue";
 import StatusPill from "./StatusPill.vue";
 
@@ -536,26 +586,16 @@ const PERIOD_TEXT = {
   },
 };
 
+const PRIMARY_BTN =
+  "inline-flex h-8 items-center gap-1.5 rounded-[10px] bg-brand px-3 text-sm font-semibold text-brand-on shadow-sm transition-colors hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2";
+const OUTLINE_BTN =
+  "inline-flex h-8 items-center gap-1.5 rounded-[10px] border border-outline-gray-2 bg-surface-base px-3 text-sm font-medium text-ink-gray-8 transition-colors hover:bg-surface-gray-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4";
+
 // circumference of the progress ring (r = 15)
 const RING = 2 * Math.PI * 15;
 
-// Full class strings so Tailwind's scanner keeps them
-const TILE_TONES: Record<Tone, { tile: string; icon: string }> = {
-  neutral: {
-    tile: "border-outline-gray-2 bg-surface-base",
-    icon: "text-ink-gray-6 border border-outline-gray-2",
-  },
-  info: { tile: "border-outline-gray-2 bg-info-soft", icon: "text-info" },
-  success: {
-    tile: "border-outline-gray-2 bg-success-soft",
-    icon: "text-success",
-  },
-  warning: {
-    tile: "border-outline-gray-2 bg-warning-soft",
-    icon: "text-warning",
-  },
-  danger: { tile: "border-outline-gray-2 bg-danger-soft", icon: "text-danger" },
-};
+// past this many posts the bar's segments get too thin to read
+const MAX_SEGMENTS = 40;
 
 const props = defineProps<{
   posts: ContentPost[];
@@ -588,15 +628,6 @@ function peopleOf(post: ContentPost, role: TeamRole): RolePerson[] {
   const people = team.data?.[post.name]?.[role];
   if (people) return people;
   return post[role] ? [{ user: post[role]!, full_name: post[role]! }] : [];
-}
-
-function isTaskLate(person: RolePerson) {
-  return (
-    !!person.due &&
-    // an Overdue status already says so
-    !["Completed", "Cancelled", "Overdue"].includes(person.status ?? "") &&
-    dayjs(person.due).isBefore(dayjs(), "day")
-  );
 }
 
 type FilterKey = "all" | "missed" | "upcoming" | "published" | "cancelled";
@@ -697,6 +728,10 @@ const buckets = computed(() =>
     },
   ].filter((b) => b.count)
 );
+// one swatch per post, in the buckets' order
+const segments = computed(() =>
+  buckets.value.flatMap((b) => Array<string>(b.count).fill(b.swatch))
+);
 const barLabel = computed(() =>
   buckets.value.map((b) => `${b.count} ${b.label}`).join(", ")
 );
@@ -706,7 +741,9 @@ interface Tile {
   label: string;
   value: string;
   sub: string;
-  tone: Tone;
+  // Postponed above 0 tints the whole tile
+  warn?: boolean;
+  iconClass?: string;
   icon?: Component;
   ring?: number;
 }
@@ -736,7 +773,6 @@ const tiles = computed<Tile[]>(() => {
       label: PERIOD_TEXT[props.period || "month"].progress,
       value: planned ? `${progress}%` : "—",
       sub: __("{0} of {1} published", String(publishedCount), String(planned)),
-      tone: "neutral",
       ring: progress,
     },
     {
@@ -748,7 +784,7 @@ const tiles = computed<Tile[]>(() => {
         String(onTime),
         String(publishedCount)
       ),
-      tone: onTimeTone(onTimePct),
+      iconClass: "bg-info-soft text-info",
       icon: markRaw(LucideClock),
     },
     {
@@ -759,17 +795,22 @@ const tiles = computed<Tile[]>(() => {
         postponements > postponedPosts.length
           ? `${periodSub} · ${__("{0} moves", String(postponements))}`
           : periodSub,
-      tone: postponedPosts.length ? "warning" : "neutral",
+      warn: postponedPosts.length > 0,
+      iconClass: postponedPosts.length
+        ? "bg-surface-base text-warning"
+        : "bg-surface-gray-2 text-ink-gray-6",
       icon: markRaw(LucideCalendarClock),
     },
     {
       key: "next",
       label: __("Next post"),
-      value: next ? dayjs(next.publish_on).format("ddd D MMM, h:mm A") : "—",
+      value: next ? dayjs(next.publish_on).format("ddd D MMM") : "—",
       sub: next
-        ? `${next.title} · ${platformsOf(next).join(", ")}`
+        ? `${dayjs(next.publish_on).format("h:mm A")} · ${
+            next.title
+          } · ${platformsOf(next).join(", ")}`
         : __("Nothing scheduled"),
-      tone: next ? "info" : "neutral",
+      iconClass: "bg-brand-soft text-brand",
       icon: markRaw(LucideSend),
     },
   ];
@@ -812,6 +853,13 @@ const days = computed(() => {
 
 function captionOf(post: ContentPost) {
   return htmlToText(post.caption);
+}
+
+function statusIcon(post: ContentPost): Component {
+  if (post.status === "Published") return LucideSend;
+  if (post.status === "Cancelled") return LucideBan;
+  if (isMissed(post, now.value)) return LucideCircleAlert;
+  return LucideClock;
 }
 
 function statusLine(post: ContentPost) {
@@ -866,7 +914,11 @@ function statusLine(post: ContentPost) {
   background-color: var(--tone-soft);
   border-color: color-mix(in srgb, var(--tone) 20%, var(--outline-gray-2));
 }
-.entry-rule {
-  border-color: color-mix(in srgb, var(--tone) 20%, var(--outline-gray-2));
+.stat-warning {
+  border-color: color-mix(in srgb, var(--warning) 35%, var(--outline-gray-2));
+}
+.action-banner,
+.action-banner-btn {
+  border-color: color-mix(in srgb, var(--danger) 30%, var(--outline-gray-2));
 }
 </style>

@@ -1,27 +1,49 @@
 <template>
-  <Sidebar
-    v-model:collapsed="collapsed"
-    :disable-collapse="mobile"
-    class="border-e border-outline-gray-1"
-  >
-    <div class="flex h-full flex-col p-2">
+  <Sidebar v-model:collapsed="collapsed" :disable-collapse="mobile">
+    <div class="flex h-full flex-col" :class="isCollapsed ? 'p-2' : 'p-3'">
       <UserMenu :options="profileSettings" :is-collapsed="isCollapsed" />
+
+      <button
+        v-if="showSearchCard"
+        type="button"
+        class="mt-3 flex h-10 w-full shrink-0 items-center gap-2.5 rounded-[12px] border border-outline-gray-2 bg-surface-base px-2 text-start transition-colors hover:bg-surface-gray-1"
+        @click="showCommandPalette = true"
+      >
+        <span
+          class="grid size-6 shrink-0 place-items-center rounded-[6px] bg-surface-gray-2 text-ink-gray-6"
+        >
+          <LucideSearch class="size-3.5" aria-hidden="true" />
+        </span>
+        <span class="flex-1 truncate text-base text-ink-gray-6">
+          {{ __("Search") }}
+        </span>
+        <kbd
+          class="flex items-center gap-0.5 rounded-[4px] bg-surface-gray-2 px-1.5 py-0.5 text-2xs text-ink-gray-6"
+        >
+          <component
+            :is="device.modifierIcon"
+            class="size-3"
+            aria-hidden="true"
+          />
+          K
+        </kbd>
+      </button>
 
       <ScrollArea class="mt-2 min-h-0 flex-1 -mx-2" viewport-class="px-2">
         <template v-for="(section, index) in sections" :key="index">
           <template v-if="section.label && !section.collapsible">
             <div
               v-if="!isCollapsed"
-              class="select-none px-2.5 pb-1.5 pt-3.5 text-2xs font-semibold uppercase tracking-[0.06em] text-ink-gray-5"
+              class="mb-1 mt-4 select-none px-3 text-2xs font-semibold uppercase tracking-[0.08em] text-ink-gray-5"
             >
               {{ section.label }}
             </div>
-            <div v-else class="mx-2 my-2 border-t border-outline-gray-2" />
+            <div v-else class="mx-1 my-2 border-t border-outline-gray-2" />
           </template>
           <SidebarLabel
             v-else-if="section.label"
             divider
-            class="my-1 select-none"
+            class="mt-3 mb-1 select-none"
             :class="section.collapsible && !isCollapsed && 'cursor-pointer'"
             @click="section.collapsible && toggleSection(section.label)"
           >
@@ -46,24 +68,29 @@
               @click="item.onClick && item.onClick()"
             >
               <template #prefix>
-                <span
-                  class="tbo-nav-icon relative grid size-4 shrink-0 place-items-center text-ink-gray-6"
-                >
-                  <component :is="item.icon" class="size-4" />
+                <span class="tbo-nav-icon relative">
+                  <component
+                    :is="item.icon"
+                    class="size-3.5"
+                    aria-hidden="true"
+                  />
                   <span
                     v-if="
                       item.key === 'notifications' && item.badge && isCollapsed
                     "
-                    class="absolute -right-0.5 -top-0.5 size-1.5 rounded-full bg-surface-blue-5"
+                    class="absolute -end-1 -top-1 size-2 rounded-full bg-brand ring-2 ring-[color:var(--surface-sidebar)]"
                   />
                 </span>
               </template>
+              <span class="tbo-nav-label ms-1 truncate text-base">
+                {{ __(item.label) }}
+              </span>
               <template #suffix>
                 <kbd
                   v-if="item.shortcut"
-                  class="me-2 flex items-center gap-0.5 rounded border border-outline-gray-2 px-1 text-2xs font-medium text-ink-gray-5"
+                  class="me-2 flex items-center gap-0.5 rounded-[4px] bg-surface-gray-2 px-1.5 py-0.5 text-2xs text-ink-gray-6"
                 >
-                  <component :is="device.modifierIcon" class="h-3 w-3" />
+                  <component :is="device.modifierIcon" class="size-3" />
                   K
                 </kbd>
                 <span
@@ -89,6 +116,7 @@
                           ? 'opacity-100'
                           : 'opacity-0 group-hover/sidebar-item:opacity-100'
                       "
+                      :aria-label="__('View options')"
                       @click.stop
                     />
                   </template>
@@ -99,9 +127,37 @@
         </template>
       </ScrollArea>
 
-      <div class="mt-auto flex flex-col gap-2">
+      <div class="mt-auto flex flex-col gap-2 pt-2">
         <slot name="footer" :is-collapsed="isCollapsed" />
-        <SidebarCollapseToggle v-if="!mobile" />
+        <div
+          v-if="!mobile || $slots['footer-items']"
+          class="flex flex-col gap-0.5 border-t border-outline-gray-2 pt-2"
+        >
+          <slot name="footer-items" :is-collapsed="isCollapsed" />
+          <SidebarItem
+            v-if="!mobile"
+            :label="isCollapsed ? __('Expand') : __('Collapse')"
+            @click="collapsed = !collapsed"
+          >
+            <template #prefix>
+              <span class="tbo-nav-icon">
+                <LucidePanelLeftOpen
+                  v-if="isCollapsed"
+                  class="size-3.5"
+                  aria-hidden="true"
+                />
+                <LucidePanelLeftClose
+                  v-else
+                  class="size-3.5"
+                  aria-hidden="true"
+                />
+              </span>
+            </template>
+            <span class="ms-1 truncate text-base text-ink-gray-5">
+              {{ isCollapsed ? __("Expand") : __("Collapse") }}
+            </span>
+          </SidebarItem>
+        </div>
       </div>
     </div>
   </Sidebar>
@@ -136,7 +192,6 @@ import {
   Dropdown,
   ScrollArea,
   Sidebar,
-  SidebarCollapseToggle,
   SidebarItem,
   SidebarLabel,
 } from "frappe-ui";
@@ -145,6 +200,8 @@ import { computed, reactive, ref, watch } from "vue";
 import type { RouteLocationRaw } from "vue-router";
 import { useRoute, useRouter } from "vue-router";
 import LucideBell from "~icons/lucide/bell";
+import LucidePanelLeftClose from "~icons/lucide/panel-left-close";
+import LucidePanelLeftOpen from "~icons/lucide/panel-left-open";
 import LucideSearch from "~icons/lucide/search";
 import {
   agentPortalSidebarOptions,
@@ -251,6 +308,10 @@ const navItems = computed(() => {
     }));
 });
 
+const showSearchCard = computed(
+  () => !props.mobile && !isCustomerPortal.value && !isCollapsed.value
+);
+
 const searchItem = computed(() => ({
   label: __("Search"),
   icon: LucideSearch,
@@ -286,9 +347,12 @@ const sections = computed(() => {
   if (isCustomerPortal.value) {
     return [{ label: "", items: navItems.value, collapsible: false }];
   }
-  const top = props.mobile
-    ? [notificationItem.value]
-    : [searchItem.value, notificationItem.value];
+  // Expanded desktop shows search as its own card above the nav; collapsed it
+  // falls back to a rail item so it keeps its tooltip.
+  const top =
+    props.mobile || showSearchCard.value
+      ? [notificationItem.value]
+      : [searchItem.value, notificationItem.value];
   const result = [{ label: "", items: top, collapsible: false }];
   for (const label of ["Workspace", "Directory"]) {
     const items = navItems.value.filter((item) => item.section === label);

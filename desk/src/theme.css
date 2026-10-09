@@ -13,7 +13,8 @@
  */
 
 :root:root {
-  --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    sans-serif;
   --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
   --brand: oklch(0.513 0.223 282);
@@ -179,7 +180,7 @@ kbd {
   }
 }
 
-/* Sidebar: active item sits on the panel surface with a hairline, icon in brand. */
+/* Settings dialog nav (outside the app sidebar) keeps the base item look. */
 [data-slot="sidebar-item"] {
   height: 2rem;
   border-radius: 8px;
@@ -187,10 +188,68 @@ kbd {
 [data-slot="sidebar-item"][data-state="active"] {
   background-color: var(--surface-base);
   color: var(--ink-gray-9);
-  box-shadow: 0 1px 2px rgb(16 18 24 / 0.06), inset 0 0 0 1px var(--outline-gray-2);
+  box-shadow: 0 1px 2px rgb(16 18 24 / 0.06),
+    inset 0 0 0 1px var(--outline-gray-2);
 }
 [data-slot="sidebar-item"][data-state="active"] .tbo-nav-icon {
   color: var(--brand);
+}
+
+/*
+ * Sidebar nav: 38px rows, each icon in a 24px bordered tile. The active row
+ * is a raised white card with its tile filled in brand.
+ */
+[data-slot="sidebar"] [data-slot="sidebar-item"] {
+  height: 2.375rem;
+  border-radius: 12px;
+  border: 1px solid transparent;
+}
+[data-slot="sidebar"][data-state="expanded"]
+  [data-slot="sidebar-item"]
+  > :is(a, button) {
+  padding-inline-start: 0.4375rem;
+}
+[data-slot="sidebar"] [data-slot="sidebar-item"][data-state="inactive"]:hover {
+  background-color: var(--surface-base);
+}
+[data-slot="sidebar"] [data-slot="sidebar-item"][data-state="active"] {
+  background-color: var(--surface-base);
+  border-color: var(--outline-gray-2);
+  color: var(--ink-gray-9);
+  box-shadow: 0 1px 2px rgb(16 18 24 / 0.06);
+}
+/* frappe-ui strips the inner control's outline; ring the whole row instead. */
+[data-slot="sidebar"]
+  [data-slot="sidebar-item"]:has(> :is(a, button):focus-visible) {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+}
+[data-slot="sidebar"] .tbo-nav-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 6px;
+  border: 1px solid var(--outline-gray-2);
+  background-color: var(--surface-base);
+  color: var(--ink-gray-6);
+}
+[data-slot="sidebar"] .tbo-nav-label {
+  color: var(--ink-gray-8);
+}
+[data-slot="sidebar"]
+  [data-slot="sidebar-item"][data-state="active"]
+  .tbo-nav-icon {
+  background-color: var(--brand);
+  border-color: transparent;
+  color: var(--on-brand);
+}
+[data-slot="sidebar"]
+  [data-slot="sidebar-item"][data-state="active"]
+  .tbo-nav-label {
+  color: var(--ink-gray-9);
+  font-weight: 600;
 }
 
 /* Tabs: the sliding indicator carries the brand colour. */
