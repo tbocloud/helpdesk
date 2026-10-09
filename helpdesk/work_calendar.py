@@ -50,6 +50,30 @@ def saturdays_off_between(start, end, rule: set[int] | None = None) -> list:
     return found
 
 
+def company_holidays(start, end) -> set:
+    """Holidays between `start` and `end` on the default SLA's holiday list, the hub's
+    calendar (it also carries the Saturdays off, see sync_saturdays_off)."""
+    holiday_list = frappe.db.get_value(
+        "HD Service Level Agreement",
+        {"default_sla": 1, "enabled": 1},
+        "holiday_list",
+    )
+    if not holiday_list:
+        return set()
+    holiday = frappe.qb.DocType("HD Holiday")
+    rows = (
+        frappe.qb.from_(holiday)
+        .select(holiday.holiday_date)
+        .where(
+            (holiday.parenttype == "HD Service Holiday List")
+            & (holiday.parent == holiday_list)
+            & holiday.holiday_date.between(getdate(start), getdate(end))
+        )
+        .run(pluck=True)
+    )
+    return {getdate(day) for day in rows}
+
+
 def sync_saturdays_off():
     """Daily and on settings change: the next year's Saturdays off in every SLA holiday list."""
     today = getdate(nowdate())

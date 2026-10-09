@@ -89,6 +89,7 @@ scheduler_events = {
         "helpdesk.helpdesk.doctype.hd_github_delivery.hd_github_delivery.clear_old_deliveries",
         "helpdesk.helpdesk.doctype.hd_chatwoot_event.hd_chatwoot_event.clear_old_events",
         "helpdesk.support_contracts.send_support_hours_alerts",
+        "helpdesk.helpdesk.doctype.hd_recurring_task.hd_recurring_task.create_recurring_tasks",
     ],
     "hourly": [
         "helpdesk.triage.fail_stuck_triages",

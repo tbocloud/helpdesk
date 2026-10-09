@@ -66,11 +66,14 @@ def weekly_off_days() -> set[int]:
     return WEEKDAYS.get(get_settings().weekly_off or "Sunday", {6})
 
 
-def is_working_day(day) -> bool:
+def is_working_day(day, saturday_rule: set[int] | None = None) -> bool:
+    """`saturday_rule` saves reading HD Work Settings again when checking many days."""
     from helpdesk.work_calendar import is_saturday_off
 
     day = getdate(day)
-    return day.weekday() not in weekly_off_days() and not is_saturday_off(day)
+    return day.weekday() not in weekly_off_days() and not is_saturday_off(
+        day, saturday_rule
+    )
 
 
 def add_working_days(start, days: int):

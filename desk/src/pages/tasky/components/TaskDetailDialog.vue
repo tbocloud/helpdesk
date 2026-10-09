@@ -96,6 +96,19 @@
             {{ __("No description") }}
           </p>
         </div>
+        <p
+          v-if="detail.custom_recurring_task && project"
+          class="flex items-center gap-1.5 text-p-sm text-ink-gray-6"
+        >
+          <LucideRepeat class="size-4 shrink-0" aria-hidden="true" />
+          <span>{{ __("Created by a recurring schedule.") }}</span>
+          <router-link
+            :to="{ name: 'TaskyRecurring', params: { projectId: project } }"
+            class="rounded text-ink-gray-8 underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+            @click="close"
+            >{{ __("See the schedule") }}</router-link
+          >
+        </p>
         <TaskPullRequests :pull-requests="detail.pull_requests" />
         <MeetingsCard
           reference-doctype="Task"
@@ -119,6 +132,13 @@
   <TaskPlanDialog v-model:task="planningTask" @saved="changed" />
   <SendBackTaskDialog v-model:task="sendingBackTask" @sent="changed" />
   <MoveTaskDialog v-model:task="movingTask" @moved="changed" />
+  <RecurringTaskDialog
+    v-if="recurringFrom?.project"
+    :open="!!recurringFrom"
+    :project-id="recurringFrom.project"
+    :from-task="recurringFrom.name"
+    @update:open="(v: boolean) => !v && (recurringFrom = null)"
+  />
 </template>
 
 <script setup lang="ts">
@@ -139,6 +159,7 @@ import LucideLock from "~icons/lucide/lock";
 import LucidePause from "~icons/lucide/pause";
 import LucidePencil from "~icons/lucide/pencil";
 import LucidePlay from "~icons/lucide/play";
+import LucideRepeat from "~icons/lucide/repeat";
 import LucideUndo2 from "~icons/lucide/undo-2";
 import LucideUserPlus from "~icons/lucide/user-plus";
 import type { TaskPullRequest } from "../pullRequestMeta";
@@ -160,6 +181,7 @@ import EditTaskDialog from "./EditTaskDialog.vue";
 import HandOverTaskDialog from "./HandOverTaskDialog.vue";
 import HoldTaskDialog from "./HoldTaskDialog.vue";
 import MoveTaskDialog from "./MoveTaskDialog.vue";
+import RecurringTaskDialog from "./RecurringTaskDialog.vue";
 import RequestHelpDialog from "./RequestHelpDialog.vue";
 import ResumeTaskDialog from "./ResumeTaskDialog.vue";
 import SendBackTaskDialog from "./SendBackTaskDialog.vue";
@@ -207,6 +229,7 @@ interface TaskDetail {
   assigned_by?: string | null;
   assigned_by_name?: string | null;
   can_move?: boolean;
+  custom_recurring_task?: string | null;
 }
 
 const props = withDefaults(
@@ -346,6 +369,7 @@ const completingTask = ref<TaskDetail | null>(null);
 const helpingTask = ref<TaskDetail | null>(null);
 const handingOverTask = ref<TaskDetail | null>(null);
 const movingTask = ref<TaskDetail | null>(null);
+const recurringFrom = ref<TaskDetail | null>(null);
 
 const { approve } = useApproveTask(() => {
   close();
@@ -380,6 +404,15 @@ const dialogActions = computed(() => {
           onClick: () => approve(d),
         }
       );
+    }
+    // a task a schedule created already repeats
+    if (!d.custom_recurring_task) {
+      actions.push({
+        label: __("Make recurring…"),
+        icon: LucideRepeat,
+        tooltip: __("Make recurring"),
+        onClick: () => handOff(recurringFrom),
+      });
     }
     if (open) {
       actions.push({

@@ -444,6 +444,27 @@ def get_custom_fields():
                 "insert_after": "custom_timer_start",
                 "read_only": 1,
             },
+            {
+                # the schedule that created this task (docs/recurring-tasks.md)
+                "fieldname": "custom_recurring_task",
+                "fieldtype": "Link",
+                "options": "HD Recurring Task",
+                "label": "Recurring Task",
+                "insert_after": "custom_timer_elapsed",
+                "read_only": 1,
+                "no_copy": 1,
+                "search_index": 1,
+            },
+            {
+                # the date the schedule fell on: with the schedule, it keeps the daily
+                # job from creating the same occurrence twice, even after the due date moves
+                "fieldname": "custom_recurrence_date",
+                "fieldtype": "Date",
+                "label": "Recurrence Date",
+                "insert_after": "custom_recurring_task",
+                "read_only": 1,
+                "no_copy": 1,
+            },
         ],
         "HD Ticket": [
             {

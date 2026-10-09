@@ -2111,3 +2111,73 @@ def fake_pdf_renderer():
     writer.write(pdf)
     stack.enter_context(patch("frappe.utils.pdf.get_pdf", return_value=pdf.getvalue()))
     return stack
+
+
+def recurrence_rule(**values):
+    """A recurring-task rule as plain values, for the date math in helpdesk.recurrence:
+    monthly on the start date's day from 1 Jan 2026, never ending, no lead time and
+    no moving off non-working days unless overridden."""
+    return frappe._dict(
+        {
+            "frequency": "Monthly",
+            "interval": 1,
+            "weekdays": None,
+            "month_day": None,
+            "last_day_of_month": 0,
+            "start_date": "2026-01-01",
+            "ends": "Never",
+            "end_date": None,
+            "max_occurrences": None,
+            "lead_days": 0,
+            "due_time": None,
+            "skip_non_working_days": 0,
+            **values,
+        }
+    )
+
+
+def make_recurring_task(project: str, subject: str, **values):
+    """Creates an active HD Recurring Task in `project`: monthly on the 1st from today,
+    unassigned, unless overridden."""
+    from frappe.utils import nowdate
+
+    doc = frappe.new_doc("HD Recurring Task")
+    doc.update(
+        {
+            "project": project,
+            "subject": subject,
+            "frequency": "Monthly",
+            "month_day": 1,
+            "start_date": nowdate(),
+            # new_doc would fill the Time field with the current time
+            "due_time": None,
+            **values,
+        }
+    )
+    return doc.insert(ignore_permissions=True)
+
+
+def add_company_holiday(holiday_date, description: str = "Company holiday (test)"):
+    """Adds a holiday to the default SLA's holiday list, the hub calendar recurring
+    tasks move their due dates off (widening the list's dates to fit it)."""
+    holiday_list = frappe.db.get_value(
+        "HD Service Level Agreement",
+        {"default_sla": 1, "enabled": 1},
+        "holiday_list",
+    )
+    doc = frappe.get_doc("HD Service Holiday List", holiday_list)
+    day = getdate(holiday_date)
+    doc.from_date = min(getdate(doc.from_date), day)
+    doc.to_date = max(getdate(doc.to_date), day)
+    doc.append("holidays", {"holiday_date": day, "description": description})
+    doc.save(ignore_permissions=True)
+
+
+def get_recurring_tasks_created(recurring_task: str) -> list[dict]:
+    """The Tasks a recurring task created, oldest occurrence first."""
+    return frappe.get_all(
+        "Task",
+        filters={"custom_recurring_task": recurring_task},
+        fields=["name", "subject", "exp_end_date", "custom_recurrence_date", "_assign"],
+        order_by="custom_recurrence_date asc",
+    )

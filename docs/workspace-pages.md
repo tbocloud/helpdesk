@@ -247,6 +247,13 @@ latest 8. `get_recent_projects()` returns them newest first through `frappe.get_
 project the user can no longer read drops out, and deleted projects take their View Log rows
 with them.
 
+### Recurring tasks
+
+A project's **Recurring** tab lists the schedules that create repeating tasks (monthly
+backup check, GST filing reminder, weekly status report); "Make recurring…" in a board
+card's menu and the task panel starts one from a task. See
+[recurring-tasks.md](recurring-tasks.md).
+
 ### The board timer
 
 A task's timer runs only while it is In progress and has `custom_timer_start`; banked time sits

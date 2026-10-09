@@ -490,21 +490,31 @@ def estimate_undated_tasks(project: str) -> dict:
     return {"queued": len(tasks)}
 
 
-def _assign_user(task_doc, user, ignore_permissions=False):
+def _assign_user(
+    task_doc,
+    user,
+    ignore_permissions=False,
+    assigned_by: str | None = None,
+    note: str | None = None,
+):
     """Assign an inserted Task to a user.
 
     Goes through a ToDo, which is what sets `_assign`; Frappe drops `_assign`
     when it is set on a document before insert. `ignore_permissions` is for
     callers that already checked the user may raise this task (ticket -> task).
+    A background job passes `assigned_by` (else the session user is the assigner)
+    and may pass `note`, which the assignment notification shows.
     """
     if not user:
         return
     user = str(user).strip()
     if frappe.db.exists("User", user):
-        assign_to._add(
-            {"doctype": "Task", "name": task_doc.name, "assign_to": [user]},
-            ignore_permissions=ignore_permissions,
-        )
+        args = {"doctype": "Task", "name": task_doc.name, "assign_to": [user]}
+        if assigned_by:
+            args["assigned_by"] = assigned_by
+        if note:
+            args["description"] = note
+        assign_to._add(args, ignore_permissions=ignore_permissions)
 
 
 @frappe.whitelist()
@@ -1444,6 +1454,7 @@ def get_kanban_tasks(project: str):
             "_assign",
             "custom_timer_start",
             "custom_timer_elapsed",
+            "custom_recurring_task",
         ],
         order_by="custom_phase asc, subject asc",
     )
