@@ -5,6 +5,7 @@
 
 import frappe
 from frappe.utils import now_datetime
+from helpdesk import client_api
 
 from helpdesk.mcp_client import MCPClient
 
@@ -34,6 +35,8 @@ def health_check_connections():
                 },
                 update_modified=False,
             )
+            if is_healthy:
+                client_api.refresh_capabilities(conn.name)
 
         except Exception as e:
             frappe.db.set_value(

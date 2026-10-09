@@ -9,6 +9,7 @@ import frappe
 from frappe import _
 from frappe.rate_limiter import rate_limit
 
+from helpdesk import client_api
 from helpdesk.utils import agent_manager_only, agent_only
 
 
@@ -405,49 +406,11 @@ def reject_action_request(action_request: str):
 
 
 def _call_client(conn, connection_name, path: str, payload: dict | None = None) -> dict:
-    """Helper: POST to a customer site endpoint with Token auth from the Connection."""
-    import requests
-    from frappe.utils.password import get_decrypted_password
-
-    if not conn.api_key:
-        frappe.throw(_("API Key is missing on this connection."))
-    api_secret = get_decrypted_password(
-        "HDS Support Connection", connection_name, "api_secret", raise_exception=False
-    )
-    if not api_secret:
-        frappe.throw(_("API Secret is missing on this connection."))
-
-    url = f"{conn.site_url}{path}"
-    try:
-        response = requests.post(
-            url,
-            headers={"Authorization": f"Token {conn.api_key}:{api_secret}"},
-            json=payload or {},
-            timeout=30,
-        )
-    except requests.Timeout:
-        frappe.throw(
-            _("Customer site unreachable (timeout): {0}").format(conn.site_url)
-        )
-    except requests.ConnectionError as e:
-        frappe.throw(
-            _("Cannot connect to {0}: {1}").format(conn.site_url, str(e)[:150])
-        )
-
-    if response.status_code == 401:
-        frappe.throw(
-            _(
-                "Authentication failed on {0}. Verify the API Key/Secret belong to {1} on the customer site."
-            ).format(conn.site_url, conn.support_user or LEGACY_SUPPORT_USER)
-        )
-    if response.status_code != 200:
-        frappe.throw(
-            _("Customer site refused request: {0}").format(response.text[:400])
-        )
-    return response.json().get("message", {})
+    """POST to a customer site endpoint with Token auth from the Connection (see helpdesk.client_api)."""
+    return client_api.call(conn, path, payload)
 
 
-LEGACY_SUPPORT_USER = "support@quarkcs.com"
+LEGACY_SUPPORT_USER = client_api.LEGACY_SUPPORT_USER
 PAIRING_CODE_HOURS = 24
 PAIRING_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no 0/O or 1/I to misread
 
@@ -495,6 +458,8 @@ def _register(conn) -> dict:
     conn.support_user = (
         result.get("support_user") or conn.support_user or LEGACY_SUPPORT_USER
     )
+    # a newer client says what it can do (hub_api); an older one says nothing
+    client_api.apply_capabilities(conn, result)
     conn.save(ignore_permissions=True)
 
     _log_login_attempt(conn.name, None, "Success", "", event_type="Register")

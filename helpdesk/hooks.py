@@ -179,7 +179,10 @@ doc_events = {
         ],
     },
     "Communication": {
-        "after_insert": "helpdesk.chatwoot_bridge.on_communication_insert",
+        "after_insert": [
+            "helpdesk.chatwoot_bridge.on_communication_insert",
+            "helpdesk.copilot.customer.on_communication_insert",
+        ],
     },
     # customer health (helpdesk/customer_health.py) is cached for 10 minutes; a
     # manager's change to these shows at once, tickets and tasks within the 10

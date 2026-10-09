@@ -41,15 +41,18 @@ TRANSITIONS = {
     ("Answered", "Closed"): {CUSTOMER, AGENT, SYSTEM},
     ("Answered", "Escalated"): {CUSTOMER, AGENT},
     ("Preparing Fix", "Escalated"): {CUSTOMER, AGENT},
-    ("Preparing Fix", "Closed"): {AGENT, SYSTEM},
+    ("Preparing Fix", "Closed"): {CUSTOMER, AGENT, SYSTEM},
     ("Handed Over", "Escalated"): {CUSTOMER, AGENT},
     ("Handed Over", "Closed"): {CUSTOMER, AGENT, SYSTEM},
+    ("Escalated", "Closed"): {CUSTOMER, AGENT, SYSTEM},
 }
 CANCELLABLE = ("Queued", "Investigating", "Explaining", "Answered", "Preparing Fix", "Handed Over")
 
 # the stage the customer sees when a run enters a state; the router sets the others
 STAGE_FOR_STATE = {
     "Investigating": "Working on it",
+    "Explaining": "Working on it",
+    "Preparing Fix": "Working on it",
     "Handed Over": "With our team",
     "Escalated": "With our team",
     "Failed": "With our team",
@@ -88,7 +91,9 @@ def start_run(ticket: str, kind: str = "investigate", actor: str = SYSTEM):
         }
     ).insert(ignore_permissions=True)
     add_event(run, "state_change", {"from": None, "to": "Queued"}, actor)
-    update_ticket(run, stage="Received")
+    update_ticket(run)
+    if kind == "investigate":
+        send_stage(run, "Received")  # a follow-up keeps "Waiting for you" until a worker picks it up
     publish_run(run)
     return run
 
@@ -116,7 +121,7 @@ def transition(run, to: str, actor: str, note: str = "", **fields):
 
 def _move(doc, to: str, actor: str, note: str = "", **fields):
     allowed = TRANSITIONS.get((doc.state, to), set())
-    cancel = to == "Cancelled" and actor == AGENT and doc.state in CANCELLABLE
+    cancel = to == "Cancelled" and actor in (AGENT, SYSTEM) and doc.state in CANCELLABLE
     if actor not in allowed and not cancel:
         frappe.throw(
             _("A Copilot run cannot go from {0} to {1} ({2})").format(doc.state, to, actor)
@@ -132,7 +137,9 @@ def _move(doc, to: str, actor: str, note: str = "", **fields):
         doc.finished_at = now_datetime()
     doc.save(ignore_permissions=True)
     add_event(doc, "state_change", {"from": previous, "to": to, "note": note}, actor)
-    update_ticket(doc, stage=STAGE_FOR_STATE.get(to))
+    update_ticket(doc)
+    if STAGE_FOR_STATE.get(to):
+        send_stage(doc, STAGE_FOR_STATE[to])
     publish_run(doc)
     return doc
 
@@ -276,6 +283,13 @@ def tell_people(run, subject: str):
         else []
     )
     notify_users(enabled, "HD Ticket", run.ticket, subject, escalate=True)
+
+
+def send_stage(run, stage: str, context: dict | None = None) -> bool:
+    """The customer's stage, delivered by helpdesk.copilot.customer (imported late: it imports this module)."""
+    from helpdesk.copilot.customer import send_stage as deliver
+
+    return deliver(run, stage, context)
 
 
 def update_ticket(run, stage: str | None = None, root_cause: str | None = None):

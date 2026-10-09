@@ -514,7 +514,9 @@ def _assign_user(
             args["assigned_by"] = assigned_by
         if note:
             args["description"] = note
-        assign_to._add(args, ignore_permissions=ignore_permissions)
+        # Frappe 16 keeps the internal _add next to the whitelisted add; 15 has only add
+        add = getattr(assign_to, "_add", None) or assign_to.add
+        add(args, ignore_permissions=ignore_permissions)
 
 
 @frappe.whitelist()

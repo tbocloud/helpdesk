@@ -9,7 +9,7 @@ import frappe
 from frappe import _
 from frappe.utils import flt, now_datetime
 
-from helpdesk.copilot import runs
+from helpdesk.copilot import customer, runs
 from helpdesk.copilot import settings as copilot_settings
 
 CATEGORIES = (
@@ -105,5 +105,21 @@ def route(run, result: dict):
         cost_usd=investigation["cost"]["usd"],
         investigated_at=now_datetime(),
     )
-    runs.update_ticket(doc, stage=STAGE_FOR_CATEGORY[effective], root_cause=effective)
+    runs.update_ticket(doc, root_cause=effective)
+    customer.note_diagnosis(doc, investigation)
+    if doc.state == "Explaining":
+        customer.draft_explanation(doc, explanation_text(investigation, effective))
+    elif doc.state == "Handed Over":
+        customer.hand_over(doc, investigation["summary"] or _("Copilot found an issue in the core system"))
+    customer.send_stage(doc, STAGE_FOR_CATEGORY[effective])
     return doc
+
+
+def explanation_text(investigation: dict, category: str) -> str:
+    """What the agent is offered to send: the worker's message, or its questions as a list."""
+    text = (investigation.get("customer_message") or "").strip()
+    questions = [q for q in investigation.get("questions") or [] if q.strip()]
+    if category == "unclear" and questions:
+        asked = "\n".join(f"- {q.strip()}" for q in questions)
+        text = f"{text}\n\n{asked}" if text else _("To find the cause we need a little more:") + "\n\n" + asked
+    return text or investigation.get("summary") or ""
