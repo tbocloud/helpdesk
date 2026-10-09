@@ -957,6 +957,15 @@ def make_task(project: str, subject: str, exp_end_date=None, **kwargs):
     ).insert(ignore_permissions=True)
 
 
+def make_task_in_status(project: str, subject: str, status: str, **values) -> str:
+    """Creates a Task in `project` and sets its status and any other `values`
+    (e.g. slip_count) straight in the database, skipping the hold, review and
+    slip hooks; returns its name. For tests that need a project in every state."""
+    task = make_task(project, subject).name
+    frappe.db.set_value("Task", task, {"status": status, **values})
+    return task
+
+
 def start_task_timer(task: str, hours_ago: float, estimated_hours: float = 0):
     """Puts `task` in Working with its timer started `hours_ago`, as if the assignee began
     it then, and sets its estimated hours."""
@@ -998,6 +1007,40 @@ def make_planned_task(
     task = make_task(project, subject, due, custom_estimated_hours=hours, **kwargs).name
     make_assignment("Task", task, assignee)
     return task
+
+
+def make_done_task(
+    project: str, subject: str, assignee: str, completed_on, due=None, **kwargs
+) -> str:
+    """Creates a Task in `project` assigned to `assignee`, due on `due`, and marks it
+    Completed on `completed_on`; returns its name. For team dashboard tests."""
+    task = make_task(project, subject, due, **kwargs).name
+    make_assignment("Task", task, assignee)
+    frappe.db.set_value(
+        "Task", task, {"status": "Completed", "completed_on": completed_on}
+    )
+    return task
+
+
+def log_hours(user: str, project: str, hours: float, day) -> str:
+    """Creates a draft Timesheet of `hours` on `project` on `day`, logged by `user`
+    (its owner); returns its name."""
+    sheet = make_timesheet(project, hours, f"{day} 10:00:00").name
+    frappe.db.set_value("Timesheet", sheet, "owner", user, update_modified=False)
+    return sheet
+
+
+def call_team_dashboard(user: str, today, method: str = "get_team_dashboard", **kwargs):
+    """Calls a helpdesk.api.team_dashboard endpoint as `user` with today fixed, so
+    only the test's records fall in the period, and nothing cached carries over."""
+    from helpdesk.team_dashboard import clear_cache
+
+    clear_cache()
+    with patch("helpdesk.api.team_dashboard.nowdate", return_value=str(today)):
+        return run_as_user(
+            user,
+            lambda: frappe.call(f"helpdesk.api.team_dashboard.{method}", **kwargs),
+        )
 
 
 def make_employee(user: str, employee_name: str | None = None):

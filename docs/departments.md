@@ -164,6 +164,12 @@ finished tasks of the same category yet, the new categories use `CATEGORY_TYPICA
 Graphics 3, Coordination 1 working days) before the per-project-type default. The AI prompt
 also gives rough durations for designs and videos.
 
+## Department heads
+
+`DEPARTMENT_HEADS` in `helpdesk/tasky/permissions.py` maps a role to the department its holders
+head: **Digital Marketing Head → Digital**. Heads are told when their department's Scoreboard
+champion is chosen ([team-dashboard.md](team-dashboard.md)).
+
 ## Decisions
 
 - **Project Coordinator has no manager powers.** Only members with the Project Manager

@@ -16,6 +16,7 @@ import LucideUsers from "~icons/lucide/users";
 import LucideFileSpreadsheet from "~icons/lucide/file-spreadsheet";
 import LucideCalendarClock from "~icons/lucide/calendar-clock";
 import LucideHourglass from "~icons/lucide/hourglass";
+import LucideTrophy from "~icons/lucide/trophy";
 import { __ } from "@/translation";
 
 export const agentPortalSidebarOptions = [
@@ -31,6 +32,13 @@ export const agentPortalSidebarOptions = [
     to: "WorkOverview",
     section: "Workspace",
     overviewOnly: true,
+  },
+  // everyone: their own numbers and the champions; the server decides the rest
+  {
+    label: __("Scoreboard"),
+    icon: LucideTrophy,
+    to: "TeamDashboard",
+    section: "Workspace",
   },
   {
     label: __("Team"),

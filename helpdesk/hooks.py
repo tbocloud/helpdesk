@@ -73,6 +73,10 @@ scheduler_events = {
         "0 11 * * *": [
             "helpdesk.content_follow_up.send_client_follow_ups",
         ],
+        # 00:30: champions of every period that ended yesterday (team dashboard)
+        "30 0 * * *": [
+            "helpdesk.team_dashboard.close_periods",
+        ],
         # Monday 08:00: last week's summary per customer
         "0 8 * * 1": [
             "helpdesk.work_summary.send_weekly_summaries",

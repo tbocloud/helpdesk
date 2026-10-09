@@ -31,6 +31,8 @@ ADMIN_ROLES = ("System Manager", "Agent Manager")
 CONTENT_DEPARTMENT = "Digital"
 # each team keeps out of the other's department (by department name, see departments.md)
 HIDDEN_DEPARTMENTS = {"DM Employee": "ERP", "ERP Employee": CONTENT_DEPARTMENT}
+# role -> the department its holders head (told when its champion is chosen)
+DEPARTMENT_HEADS = {DM_HEAD_ROLE: CONTENT_DEPARTMENT}
 PROJECT_MANAGER_ROLE = "Project Manager"
 # Value of Project User.custom_role that makes a member a manager of that project
 MANAGER_PROJECT_ROLE = "Project Manager"
@@ -59,6 +61,18 @@ def hidden_departments(user: str | None = None) -> list[str]:
         return []
     roles = set(frappe.get_roles(user))
     return sorted({dept for role, dept in HIDDEN_DEPARTMENTS.items() if role in roles})
+
+
+def department_heads(department: str | None) -> list[str]:
+    """Who heads a department; for the whole team (None), the Agent Managers."""
+    from helpdesk.content_team import _users_with_role
+
+    roles = (
+        [role for role, dept in DEPARTMENT_HEADS.items() if dept == department]
+        if department
+        else ["Agent Manager"]
+    )
+    return sorted({user for role in roles for user in _users_with_role(role)})
 
 
 def _departments_sql(departments: list[str]) -> str:
