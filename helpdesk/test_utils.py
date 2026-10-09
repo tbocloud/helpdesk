@@ -1048,6 +1048,20 @@ def run_as_user(user: str, fn):
         frappe.set_user("Administrator")
 
 
+def get_visible_tasks(user: str, project: str | None = None) -> set[str]:
+    """Names of the Tasks `user` may list (through `frappe.get_list`, so `task_query`
+    and the department walls apply), in `project` when given."""
+    filters = {"project": project} if project else {}
+    return set(
+        run_as_user(
+            user,
+            lambda: frappe.get_list(
+                "Task", filters=filters, pluck="name", limit_page_length=0
+            ),
+        )
+    )
+
+
 def get_task_completed_notices(task: str) -> list:
     """The Task Completed HD Notifications sent about `task` (user_to, user_from, message)."""
     return frappe.get_all(

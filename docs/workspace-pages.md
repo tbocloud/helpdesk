@@ -25,6 +25,43 @@ Shared building blocks, in `desk/src/components/`:
 
 A failed call's message comes from `errorText(error, fallback)` in `desk/src/utils.ts`.
 
+## Who sees which tasks
+
+Inside a project, people who run it see every task; everyone else sees only their own.
+One rule on the server, `task_query` (lists) and `task_has_permission` (a task opened
+directly) in `helpdesk/tasky/permissions.py`, so every page that lists tasks through
+`frappe.get_list` follows it: the project Dashboard, Checklist, Board, Timeline, Overdue
+and Recurring tabs, My board, My Work, My tasks, the Overview, Team, the work Calendar,
+Home, the project cards' stats, the timesheet task pickers and task details.
+
+| Who | Sees in a project |
+| --- | --- |
+| System Managers, Agent Managers | Every task of every project |
+| The project's owner, its members with the Project Manager project role, its lead | Every task of that project (`can_manage_project`) |
+| A Project Manager (role) who is on the project's team | Every task of that project, but no manager powers |
+| Digital Marketing Head, DM Coordinators | Every task of content calendar projects and of Digital projects |
+| Everyone else (developers, functional consultants, content people) | Only their own tasks: assigned to them, given out by them (they assigned it to someone), or created by them, assigned or not |
+
+`sees_all_tasks(project)` answers the first four rows for one project, and
+`get_project_detail` returns it as `sees_all_tasks`. "Assigned to" and "given out by" come
+from the task's ToDos (`allocated_to`, `assigned_by`), matched exactly: a LIKE on `_assign`
+would read `_` in a user ID as a wildcard. A finished assignment (Closed ToDo) still counts,
+so people keep seeing the tasks they completed; a withdrawn one (Cancelled) doesn't. The
+department walls ([departments.md](departments.md)) apply on top of every row except admins.
+
+- **What a member sees of the project**: the project itself stays visible (members, lead,
+  files). On the task tabs a line under the tab bar says they see their own tasks
+  (`ProjectNav`, when `sees_all_tasks` is false). The Dashboard's tiles, phases and
+  milestones count only their tasks and its progress reads "Your progress"; the Team list
+  hides its per-person open-task counts, which would be partial.
+- **Recurring tab**: members see the schedules assigned to them or that they set up
+  ([recurring-tasks.md](recurring-tasks.md)).
+- **Deliberate exceptions**: "Waiting on" shows the blocking task's ID and subject even when
+  the viewer can't open it, so they know what they wait for. A ticket's Linked work lists
+  the tasks raised from that ticket to whoever can read the ticket. The content calendar
+  shows each post's team and how far each person's part is (`get_team_task_status`); the
+  tasks themselves follow the rule.
+
 ## Overview (`/overview`)
 
 `desk/src/pages/work/Overview.vue`; API `helpdesk.api.work.get_overview(project, customer,
@@ -252,6 +289,28 @@ On Hold) clears all four in `end_hold`.
   hold by …", on board cards, checklist rows, My Tasks rows and work rows (`WorkItemRow`), so
   the reason is readable without hovering. The full note, and "Put on hold by … · date", are
   in the task details and the Resume dialog.
+
+### Handing a task over
+
+`helpdesk.tasky.api.hand_over_task(task, teammate, reason)` (POST), "Hand over" in the board
+card's menu, the checklist row's menu and the task details (`HandOverTaskDialog`).
+
+- **Who:** the task's assignee, for their own share of it, or the project's managers and
+  lead, for the whole task (`_get_own_task`). Open tasks only, with the timer stopped.
+- **To whom:** an active agent on the project's team; managers and leads may pick anyone
+  (they join the team). A content post's task may go to any active agent, since content
+  people work on the content calendar without joining its project (`TeammatePicker`
+  `anyone`); the department walls still refuse the other team.
+- **What changes:** the hander's ToDo is cancelled and the teammate's names the task's
+  original assigner (`get_assigners`) as `assigned_by`, not the hander. So "Assigned by"
+  keeps showing who gave the work out, and the task leaves the hander's lists unless they
+  gave it out or created it. Other people sharing the task keep it. On a content post's task
+  the post's role (or every role, for the post's shared task) gets the teammate in the
+  hander's place (`HDContentPost.replace_on_part`, saved without re-syncing its tasks), so
+  the post's next save doesn't give the task back.
+- **Record and notices:** comments "Reassigned from … to … by …" and "Handed over by …:
+  reason"; the teammate is notified ("… handed you a task"), and the project lead (or its
+  managers when it has no lead) and the original assigner hear who took it and why.
 
 ### Moving a task to another project
 

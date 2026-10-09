@@ -3,7 +3,7 @@
     :title="__('Agents')"
     :description="
       __(
-        'Everyone who works on tickets, and whether they are an agent or a manager.'
+        'Everyone who works here: agent or manager, and their department wall (ERP or Digital team), set from each agent\'s menu.'
       )
     "
   >
@@ -60,8 +60,13 @@
                 size="lg"
               />
             </template>
-            <template v-if="!agent.is_active" #badges>
-              <TaskyBadge :label="__('Inactive')" />
+            <template #badges>
+              <TaskyBadge v-if="!agent.is_active" :label="__('Inactive')" />
+              <TaskyBadge
+                v-if="wallLabel(agent.name)"
+                :label="wallLabel(agent.name)"
+                :icon="LucideBrickWall"
+              />
             </template>
             <template #actions>
               <Dropdown
@@ -105,8 +110,17 @@
 <script setup lang="ts">
 import { useAuthStore } from "@/stores/auth";
 import { useUserStore } from "@/stores/user";
-import { Avatar, Button, call, Dropdown, toast } from "frappe-ui";
-import { h, onUnmounted } from "vue";
+import { errorText } from "@/utils";
+import {
+  Avatar,
+  Button,
+  call,
+  createResource,
+  Dropdown,
+  toast,
+} from "frappe-ui";
+import { h, onUnmounted, watch } from "vue";
+import LucideBrickWall from "~icons/lucide/brick-wall";
 import LucideCheck from "~icons/lucide/check";
 import LucideChevronDown from "~icons/lucide/chevron-down";
 import LucideEllipsis from "~icons/lucide/ellipsis";
@@ -207,7 +221,7 @@ function updateRole(agent: string, newRole: string) {
 
 function getOptions(agent) {
   let filters = agentStore.filters;
-  return [
+  const agentOptions = [
     {
       label: __("Deactivate agent"),
       icon: "lucide-x-circle",
@@ -227,6 +241,66 @@ function getOptions(agent) {
       condition: () => !agent.is_active,
     },
   ];
+  if (!isManager) return agentOptions;
+  const current = walls.data?.[agent.name] ?? [];
+  return [
+    { group: __("Agent"), hideLabel: true, options: agentOptions },
+    {
+      group: __("Department wall"),
+      options: WALLS.map((wall) => ({
+        label: wall.label,
+        selected: wall.role
+          ? current.length === 1 && current[0] === wall.role
+          : !current.length,
+        onClick: () => setWall(agent.name, wall.role),
+      })),
+    },
+  ];
+}
+
+// --- department walls (docs/departments.md): keep an agent out of the other team's work ---
+
+const WALLS = [
+  { role: "", label: __("No wall: every department") },
+  { role: "ERP Employee", label: __("ERP team: no Digital or content") },
+  { role: "DM Employee", label: __("Digital team: no ERP") },
+];
+
+const walls = createResource({
+  url: "helpdesk.api.departments.get_department_walls",
+  // the badge is a convenience; the menu still sets the wall if this fails
+  onError() {},
+});
+
+watch(
+  () => (agents.data ?? []).map((a) => a.name).join(","),
+  (names) => {
+    if (isManager && names) walls.submit({ users: names.split(",") });
+  },
+  { immediate: true }
+);
+
+function wallLabel(agent: string) {
+  const roles: string[] = walls.data?.[agent] ?? [];
+  if (roles.length > 1) return __("ERP and Digital walls");
+  if (roles[0] === "ERP Employee") return __("ERP team");
+  if (roles[0] === "DM Employee") return __("Digital team");
+  return "";
+}
+
+function setWall(agent: string, role: string) {
+  call("helpdesk.api.departments.set_department_wall", { user: agent, role })
+    .then((roles: string[]) => {
+      walls.setData({ ...(walls.data ?? {}), [agent]: roles });
+      toast.success(
+        role
+          ? __("{0} is now on the {1}", agent, wallLabel(agent))
+          : __("{0} now sees every department", agent)
+      );
+    })
+    .catch((e) =>
+      toast.error(errorText(e, __("Couldn't change the department wall.")))
+    );
 }
 
 const dropdownOptions = [

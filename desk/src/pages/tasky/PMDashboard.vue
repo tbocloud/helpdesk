@@ -93,7 +93,7 @@
               </div>
               <div class="text-right">
                 <div class="text-xs text-ink-gray-5">
-                  {{ __("Overall progress") }}
+                  {{ progressLabel }}
                 </div>
                 <div class="text-2xl-semibold tabular-nums text-ink-gray-9">
                   <span
@@ -110,7 +110,7 @@
               :aria-valuenow="progressPercent"
               aria-valuemin="0"
               aria-valuemax="100"
-              :aria-label="__('Overall progress')"
+              :aria-label="progressLabel"
             >
               <div
                 class="h-full rounded-full bg-surface-gray-7 transition-[width] duration-500"
@@ -436,7 +436,9 @@
                         {{ member.user }}
                       </div>
                     </div>
+                    <!-- with only your own tasks loaded, the count would be partial -->
                     <span
+                      v-if="seesAllTasks"
                       class="shrink-0 font-mono text-xs tabular-nums text-ink-gray-6"
                       :title="__('Open tasks assigned')"
                     >
@@ -499,6 +501,14 @@ const projectDetail = createResource({
   makeParams: () => ({ project: props.projectId }),
   onError() {},
 });
+
+// members who don't run the project get stats of their own tasks only (task_query)
+const seesAllTasks = computed(() => !!projectDetail.data?.sees_all_tasks);
+const progressLabel = computed(() =>
+  !projectDetail.data || seesAllTasks.value
+    ? __("Overall progress")
+    : __("Your progress")
+);
 
 function reload() {
   dashboard.reload();

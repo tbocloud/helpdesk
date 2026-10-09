@@ -52,7 +52,9 @@ Managers and Agent Managers see every department.
   lists.
 - **Content calendar for ERP Employees** (`content_team.is_erp_only()`, unless they also edit
   content): HD Content Post `permission_query` returns no posts and `has_permission` refuses
-  them; the sidebar hides Content and Calendar, and the router sends `ContentCalendar`,
+  them; a content post's tasks (`Task.content_post` set) are left out of `task_query` and
+  refused by `task_has_permission`, whatever their project's department; the sidebar hides
+  Content and Calendar, and the router sends `ContentCalendar`,
   `ContentReport`, `ContentPlans` and `WorkCalendar` to Home (`ERP_EMPLOYEE_HIDDEN_ROUTES` in
   `pages/content/contentTeam.ts`, `authStore.isErpOnly`).
 - **Support pages hidden from both** (`content_team.is_department_employee()`, false for System
@@ -62,6 +64,17 @@ Managers and Agent Managers see every department.
   tickets, customers, contacts and articles) send them to Home; the command palette drops
   Knowledge Base. Tickets are also hidden on the server: `sees_no_tickets()` gives them the same
   ticket visibility as the Content Team (only tickets they raised themselves).
+- **Inside a project they can see**, DM and ERP Employees, like every member who doesn't run
+  it, see only their own tasks (assigned to them, given out by them or created by them); the
+  Digital Marketing Head and DM Coordinators see every task of content calendar and Digital
+  projects. The full matrix is in [workspace-pages.md](workspace-pages.md#who-sees-which-tasks).
+- **Setting the walls: Settings → Agents.** Each agent row shows an "ERP team" or "Digital
+  team" badge, and System Managers and Agent Managers set it from the agent's menu
+  (Department wall: No wall, ERP team, Digital team). Picking one gives the user that role and
+  takes the other away; their other roles stay. API in `helpdesk/api/departments.py`:
+  `get_department_walls(users)` and `set_department_wall(user, role)` (POST; `role` is
+  `ERP Employee`, `DM Employee` or empty). Someone with both roles shows "ERP and Digital
+  walls" until a choice is made.
 - The walls go by department **name** ("ERP", "Digital"). Renaming either department in
   Settings → Departments turns its wall off until `HIDDEN_DEPARTMENTS` is updated. Projects with
   no department aren't walled, so set each project's department for the walls to apply.
@@ -108,6 +121,8 @@ are unchanged.
 | `move_department(department, direction)` | POST | write | `up`/`down`; locks the rows (`FOR UPDATE`) and renumbers all to 1..n |
 | `set_department_active(department, is_active)` | POST | write | Activates or deactivates |
 | `delete_department(department)` | POST | delete | Turns Frappe's `LinkExistsError` into a clear message |
+| `get_department_walls(users)` | GET | System / Agent Manager | `{user: [wall roles]}` for Settings → Agents |
+| `set_department_wall(user, role=None)` | POST | System / Agent Manager | Gives the agent DM Employee, ERP Employee or neither |
 
 `helpdesk/tasky/api.py`: `create_project` and `update_project` take `department` (leaving it out
 of an update keeps the project's department, an empty value clears it). `Project.validate`

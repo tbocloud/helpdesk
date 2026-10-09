@@ -111,6 +111,18 @@ class HDContentPost(Document):
         ]
         self.set("extra_team", others + [{"role": role, "user": u} for u in users[1:]])
 
+    def replace_on_part(self, content_role: str, leaving: list[str], newcomer: str):
+        """Put `newcomer` in place of `leaving` on the roles behind one task: its role,
+        or every role for the post's shared task (a hand-over of that task)."""
+        for field, label in TASK_ROLES.items():
+            if content_role not in (label, SHARED_ROLE):
+                continue
+            people = self.people(field)
+            if set(leaving) & set(people):
+                self.set_people(
+                    field, [newcomer if u in leaving else u for u in people]
+                )
+
     def clean_team(self):
         """No one twice on a role, and a role with anyone on it has a main person."""
         for role in TASK_ROLES:

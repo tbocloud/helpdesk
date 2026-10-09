@@ -1,6 +1,7 @@
 """Recurring tasks of a project (Project -> Recurring tab).
 
-Everyone who can read the project sees its schedules. Admins and the project's
+Whoever sees every task of the project sees all its schedules; other members see
+the ones that make their tasks or that they set up. Admins and the project's
 managers and lead create, change, pause and delete them. The doctype gives role
 access to System Manager only; every call checks here. See docs/recurring-tasks.md.
 """
@@ -15,7 +16,11 @@ from helpdesk.helpdesk.doctype.hd_recurring_task.hd_recurring_task import (
     HDRecurringTask,
 )
 from helpdesk.recurrence import ENDS, FREQUENCIES, WEEKDAYS, describe, time_label
-from helpdesk.tasky.permissions import can_manage_project, get_project_team
+from helpdesk.tasky.permissions import (
+    can_manage_project,
+    get_project_team,
+    sees_all_tasks,
+)
 
 # what the dialog may set; the progress fields are the daily job's
 EDITABLE = (
@@ -63,6 +68,10 @@ def get_recurring_tasks(project: str) -> dict:
         filters={"project": project},
         order_by="is_active desc, next_due_date asc, creation asc",
     ).run(as_dict=True)
+    if not sees_all_tasks(project):
+        # like the tasks themselves: a member sees only the work that is theirs
+        user = frappe.session.user
+        rules = [r for r in rules if user in (r.assignee, r.owner)]
     last_tasks = _readable_tasks([r.last_task for r in rules if r.last_task])
     closed = _project_closed(project)
     return {

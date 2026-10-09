@@ -18,6 +18,7 @@
         :project="project"
         :label="__('Hand over to')"
         :exclude="task?.assignees"
+        :anyone="!!task?.content_post"
       />
 
       <Textarea
@@ -35,7 +36,7 @@
         />
         {{
           __(
-            "The task moves to them now and leaves your list. The project lead is told why and can move it back."
+            "The task moves to them now and leaves your lists, unless you gave it out or created it. The project lead and whoever gave you the task are told why; the lead can move it back."
           )
         }}
       </p>
@@ -84,6 +85,8 @@ interface HandOverTask {
   subject?: string;
   project?: string | null;
   assignees?: string[];
+  /** Set on a content post's task, which may go to anyone, not only the team. */
+  content_post?: string | null;
 }
 
 const props = defineProps<{

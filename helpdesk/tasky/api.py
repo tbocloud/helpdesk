@@ -18,6 +18,7 @@ from helpdesk.tasky.permissions import (
     is_assigner,
     is_project_owner,
     is_tasky_admin,
+    sees_all_tasks,
 )
 from helpdesk.utils import add_assignment, csv_safe, remove_assignment
 
@@ -834,9 +835,13 @@ def request_help(
     }
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def hand_over_task(task: str, teammate: str, reason: str) -> dict:
-    """The assignee passes their task to a teammate and says why; the lead is told."""
+    """The assignee passes their task to a teammate and says why.
+
+    Whoever gave it out stays its assigner, so it leaves the hander's lists (unless
+    they gave it out or created it); the teammate, the lead and the assigner are told.
+    """
     from helpdesk.work_reminders import notify_users
 
     doc = _get_own_task(task)
@@ -850,31 +855,56 @@ def hand_over_task(task: str, teammate: str, reason: str) -> dict:
     if doc.custom_timer_start:
         frappe.throw(_("Stop the timer first, so your time on it is saved."))
 
-    _reassign(doc, previous, teammate, ignore_permissions=True)
+    giver = frappe.session.user
+    # an assignee hands over only their own share; a lead hands over the whole task
+    leaving = [giver] if giver in previous else previous
+    assigner = get_assigners({doc.name: leaving[0]}).get(doc.name) if leaving else None
+    _reassign(
+        doc,
+        leaving,
+        teammate,
+        ignore_permissions=True,
+        assigned_by=assigner or giver,
+    )
+    if doc.get("content_post"):
+        _hand_over_content_part(doc, leaving, teammate)
     doc.add_comment(
-        "Info", frappe.utils.escape_html(_("Handed over: {0}").format(reason))
+        "Info",
+        frappe.utils.escape_html(
+            _("Handed over by {0}: {1}").format(_full_name(giver), reason)
+        ),
     )
 
-    giver = _full_name(frappe.session.user)
+    giver_name = _full_name(giver)
     notify_users(
         [teammate],
         "Task",
         doc.name,
-        _("{0} handed you a task: {1}").format(giver, doc.subject),
+        _("{0} handed you a task: {1}").format(giver_name, doc.subject),
     )
     notify_users(
         [
             u
-            for u in doc.leads_or_managers()
-            if u not in (frappe.session.user, teammate)
+            for u in dict.fromkeys([*doc.leads_or_managers(), assigner])
+            if u and u not in (giver, teammate)
         ],
         "Task",
         doc.name,
         _("{0} handed {1} to {2}: {3}").format(
-            giver, doc.subject, _full_name(teammate), reason
+            giver_name, doc.subject, _full_name(teammate), reason
         ),
     )
     return _format_task(_task_dict(doc))
+
+
+def _hand_over_content_part(doc, leaving: list[str], teammate: str):
+    """Put the teammate in the hander's place on the content post, so the post's next
+    save doesn't hand the task back. The task is already reassigned, so the post
+    skips its task sync; the hander can't edit posts, hence ignore_permissions."""
+    post = frappe.get_doc("HD Content Post", doc.content_post)
+    post.replace_on_part(doc.content_role, leaving, teammate)
+    post.flags.skip_task_sync = True
+    post.save(ignore_permissions=True)
 
 
 def _get_own_task(task: str):
@@ -895,13 +925,18 @@ def _get_own_task(task: str):
 
 
 def _teammate(doc, user: str) -> str:
-    """An active agent on the task's project; leads and managers may pick anyone."""
+    """An active agent on the task's project; leads and managers may pick anyone, and
+    a content post's task may go to anyone (the department walls still apply)."""
     user = str(user or "").strip()
     if not user:
         frappe.throw(_("Pick a teammate."))
     if not _is_assignable(user):
         frappe.throw(_("{0} is not an active agent.").format(user))
-    if not _is_on_team(doc.project, user) and not can_manage_project(doc.project):
+    if (
+        not doc.get("content_post")
+        and not _is_on_team(doc.project, user)
+        and not can_manage_project(doc.project)
+    ):
         frappe.throw(
             _(
                 "Pick someone on the project team. The project lead can add other people."
@@ -1102,7 +1137,11 @@ def _estimated_hours(value: float | str) -> float:
 
 
 def _reassign(
-    doc, previous: list[str], new_assignee: str, ignore_permissions: bool = False
+    doc,
+    previous: list[str],
+    new_assignee: str,
+    ignore_permissions: bool = False,
+    assigned_by: str | None = None,
 ):
     """Hand the task to `new_assignee` ("" = nobody) through ToDos.
 
@@ -1110,6 +1149,7 @@ def _reassign(
     ToDo and sends the new one Frappe's assignment notification.
     `ignore_permissions` is for an assignee handing their own task over: once
     their ToDo is cancelled they can no longer read it to assign the next person.
+    `assigned_by` keeps the original assigner on a hand-over (else the session user).
     """
     new = [new_assignee] if new_assignee else []
     if set(previous) == set(new):
@@ -1117,6 +1157,8 @@ def _reassign(
     if (
         new_assignee
         and doc.project
+        # a content post's people work on the content calendar without joining its team
+        and not doc.get("content_post")
         and not _is_project_member(doc.project, new_assignee)
     ):
         _add_member_for_assignment(doc.project, new_assignee)
@@ -1125,7 +1167,12 @@ def _reassign(
             # the caller manages the project or hands over their own task (checked by the caller)
             remove_assignment("Task", doc.name, user, ignore_permissions=True)
     if new_assignee and new_assignee not in previous:
-        _assign_user(doc, new_assignee, ignore_permissions=ignore_permissions)
+        _assign_user(
+            doc,
+            new_assignee,
+            ignore_permissions=ignore_permissions,
+            assigned_by=assigned_by,
+        )
 
     doc.add_comment(
         "Info",
@@ -1448,6 +1495,7 @@ def get_phase_tasks(project: str, phase: str):
             "slip_count",
             "depends_on_task",
             "_assign",
+            "content_post",
         ],
         order_by="subject asc",
     )
@@ -1497,6 +1545,8 @@ def get_kanban_tasks(project: str | None = None):
             "custom_timer_start",
             "custom_timer_elapsed",
             "custom_recurring_task",
+            # a content post's task may be handed to anyone (TeammatePicker)
+            "content_post",
         ],
         order_by="custom_phase asc, subject asc",
     )
@@ -1669,6 +1719,8 @@ def get_project_detail(project: str):
             else []
         ),
         "can_manage": can_manage_project(doc.name),
+        # False: the project's task pages show only the viewer's own tasks
+        "sees_all_tasks": sees_all_tasks(doc.name),
         "can_add_tasks": can_add_tasks(doc.name),
         "can_change_lead": is_project_owner(doc.name),
         "project_lead": doc.project_lead,
