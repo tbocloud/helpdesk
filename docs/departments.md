@@ -66,7 +66,7 @@ Managers and Agent Managers see every department.
   Settings → Departments turns its wall off until `HIDDEN_DEPARTMENTS` is updated. Projects with
   no department aren't walled, so set each project's department for the walls to apply.
 
-## Tickets list: System Managers only
+## Admin-only Tickets list
 
 Separately from the walls, the Tickets list is for System Managers (`authStore.isAdmin`, the
 `is_admin` flag from `helpdesk/api/auth.py`: System Manager or Administrator). Every other
