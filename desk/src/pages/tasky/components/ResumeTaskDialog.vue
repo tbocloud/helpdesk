@@ -26,6 +26,12 @@
         <p v-if="task?.hold_note" class="pl-6 text-p-sm text-ink-gray-7">
           {{ task.hold_note }}
         </p>
+        <p
+          v-if="task && holdByLabel(task)"
+          class="pl-6 text-p-sm tabular-nums text-ink-gray-5"
+        >
+          {{ holdByLabel(task) }}
+        </p>
       </div>
 
       <div v-if="canExtend" class="flex flex-col gap-1.5">
@@ -90,7 +96,7 @@ import { computed, ref, useId, watch } from "vue";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucidePause from "~icons/lucide/pause";
 import LucidePlay from "~icons/lucide/play";
-import { holdDays, holdDurationLabel } from "../taskMeta";
+import { holdByLabel, holdDays, holdDurationLabel } from "../taskMeta";
 
 interface HeldTask {
   name: string;
@@ -99,6 +105,7 @@ interface HeldTask {
   hold_reason?: string | null;
   hold_note?: string | null;
   hold_since?: string | null;
+  hold_by_name?: string | null;
 }
 
 const props = defineProps<{

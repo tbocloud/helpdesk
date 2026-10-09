@@ -44,6 +44,12 @@
           <p v-if="detail.hold_note" class="pl-6 text-p-sm text-ink-gray-7">
             {{ detail.hold_note }}
           </p>
+          <p
+            v-if="holdByLabel(detail)"
+            class="pl-6 text-p-sm tabular-nums text-ink-gray-5"
+          >
+            {{ holdByLabel(detail) }}
+          </p>
         </div>
         <div
           v-if="detail.blocked && !isClosed(detail)"
@@ -165,6 +171,7 @@ import LucideUserPlus from "~icons/lucide/user-plus";
 import type { TaskPullRequest } from "../pullRequestMeta";
 import {
   assignedByName,
+  holdByLabel,
   holdDays,
   holdDurationLabel,
   isClosed,
@@ -214,6 +221,7 @@ interface TaskDetail {
   hold_reason?: string | null;
   hold_note?: string | null;
   hold_since?: string | null;
+  hold_by_name?: string | null;
   is_key?: boolean;
   is_milestone?: boolean;
   slip_count?: number;

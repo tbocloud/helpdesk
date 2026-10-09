@@ -151,6 +151,21 @@ export function holdDurationLabel(days: number) {
   return __("On hold {0} days", String(days));
 }
 
+/** "Put on hold by Anjali Menon · 7 Oct 2026"; empty when it isn't known who held it. */
+export function holdByLabel(task: {
+  hold_by_name?: string | null;
+  hold_since?: string | null;
+}) {
+  if (!task.hold_by_name) return "";
+  return task.hold_since
+    ? __(
+        "Put on hold by {0} · {1}",
+        task.hold_by_name,
+        dayjs(task.hold_since).format("D MMM YYYY")
+      )
+    : __("Put on hold by {0}", task.hold_by_name);
+}
+
 // Due dates are date-only, so a task is overdue from the day after it's due, or on
 // its due day once it has been worked longer than its estimate (server: is_task_overdue).
 // A task on hold is never overdue: its due date moves out when it resumes.

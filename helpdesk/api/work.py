@@ -21,7 +21,12 @@ from frappe.utils import (
 
 from helpdesk.github_sync import OPEN_STATES as PR_OPEN_STATES
 from helpdesk.github_sync import get_pull_requests
-from helpdesk.tasky.api import add_assigners
+from helpdesk.tasky.api import (
+    TASK_HOLD_FIELDS,
+    add_assigners,
+    hold_by_name,
+    hold_by_names,
+)
 from helpdesk.tasky.permissions import (
     can_add_tasks,
     can_manage_project,
@@ -61,8 +66,7 @@ TASK_FIELDS = [
     "exp_end_date",
     "is_key",
     "hd_ticket",
-    "hold_reason",
-    "hold_since",
+    *TASK_HOLD_FIELDS,
     "is_milestone",
     "slip_count",
     "depends_on_task",
@@ -165,8 +169,13 @@ def _task_risks(task, deadline, today, waiting_on: str | None) -> list[str]:
 
 
 def _task_item(
-    task, project_names: dict, open_dependencies: dict | None = None
+    task,
+    project_names: dict,
+    open_dependencies: dict | None = None,
+    hold_names: dict | None = None,
 ) -> dict:
+    """One task as a work item; lists pass `hold_names` (hold_by_names) so held
+    tasks don't look up User one by one."""
     deadline = getdate(task.exp_end_date) if task.exp_end_date else None
     on_hold = task.status == ON_HOLD
     today = getdate(nowdate())
@@ -185,6 +194,8 @@ def _task_item(
         "is_overdue": is_overdue,
         "hd_ticket": task.hd_ticket,
         "hold_reason": task.hold_reason if on_hold else None,
+        "hold_note": task.hold_note if on_hold else None,
+        "hold_by_name": hold_by_name(task.hold_by, hold_names) if on_hold else None,
         "hold_days": (
             (today - getdate(task.hold_since)).days
             if on_hold and task.hold_since
@@ -247,7 +258,8 @@ def _items(tasks, tickets, with_plan: bool = False) -> list[dict]:
     viewer may plan it (My Work's Plan step), which costs a lookup per project."""
     names = _project_names(tasks)
     waiting = _open_dependencies(tasks)
-    task_items = add_assigners([_task_item(t, names, waiting) for t in tasks])
+    holders = hold_by_names(tasks)
+    task_items = add_assigners([_task_item(t, names, waiting, holders) for t in tasks])
     _attach_pull_requests(task_items)
     # who may plan a task or sign off one waiting for review: the project's manager or lead
     managed = {}
@@ -896,6 +908,7 @@ def get_team_workload(project: str | None = None, customer: str | None = None) -
         )
     )
     names = _project_names(tasks)
+    holders = hold_by_names(tasks)
 
     rows = {
         person: {
@@ -916,7 +929,7 @@ def get_team_workload(project: str | None = None, customer: str | None = None) -
         for person in people
     }
     for task in tasks:
-        item = _task_item(task, names)
+        item = _task_item(task, names, hold_names=holders)
         for person in item["assignees"]:
             row = rows.get(person)
             if not row:
