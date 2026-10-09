@@ -45,6 +45,10 @@ Managers and Agent Managers see every department.
   (`project_query`, `task_query`: Projects, My Work, Overview, Calendar, Desk) and when opened
   directly (`project_has_permission`, `task_has_permission`), and its chip in the department
   filters (`get_departments`).
+- **No projects across the wall:** `Project.validate_department` refuses creating a project in,
+  or moving one into, a department hidden from the person saving it ("You can't put a project in
+  the ERP department."), so nobody files a project where they'd lose sight of it. System Managers
+  and Agent Managers can file projects anywhere.
 - **No assignments across the wall:** a ToDo `validate` hook (`check_assignment_department`)
   refuses giving a task in a hidden department to that person ("… can't be given tasks in the ERP
   department."), from any screen, the Desk or templates. It also refuses giving an ERP Employee a
