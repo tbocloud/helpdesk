@@ -44,6 +44,21 @@ const PRIORITY_ICONS: Record<string, Component> = {
 };
 
 export const TASK_STATUSES = Object.keys(TASK_STATUS);
+
+// The dashboard tiles the checklist can filter by (`?status=<key>`). The server
+// decides which tasks each key covers (`stat_tasks` from get_project_dashboard);
+// these are only the tile label and the link's name, untranslated like TASK_STATUS.
+export const CHECKLIST_FILTERS: Record<
+  string,
+  { label: string; action: string }
+> = {
+  completed: { label: "Completed", action: "Show completed tasks" },
+  in_progress: { label: "In progress", action: "Show tasks in progress" },
+  reviewing: { label: "Waiting review", action: "Show tasks waiting review" },
+  on_hold: { label: "On hold", action: "Show on hold tasks" },
+  rescheduled: { label: "Rescheduled", action: "Show rescheduled tasks" },
+  cancelled: { label: "Cancelled", action: "Show cancelled tasks" },
+};
 // keep in step with Task.custom_category in helpdesk/setup/install.py
 export const CATEGORIES = [
   "Functional",

@@ -48,6 +48,29 @@ CATEGORY_TO_ROLE = {
 }
 
 
+def _is_overdue(task, today) -> bool:
+    """The Overdue page's rule, for a task row fetched with its timer fields."""
+    # helpdesk.api.work imports this module, so it's imported here, not at the top
+    from helpdesk.api.work import is_task_overdue
+
+    deadline = frappe.utils.getdate(task.exp_end_date) if task.exp_end_date else None
+    return is_task_overdue(task, deadline, today)
+
+
+# what each project dashboard tile counts; the counts and the checklist's
+# `?status=` filter both come from these, so a tile's number is its list's length
+DASHBOARD_STAT_RULES = {
+    "completed": lambda t, today: t.status == "Completed",
+    "in_progress": lambda t, today: t.status == "Working",
+    "pending": lambda t, today: t.status == "Open",
+    "reviewing": lambda t, today: t.status == PENDING_REVIEW_STATUS,
+    "on_hold": lambda t, today: t.status == ON_HOLD,
+    "rescheduled": lambda t, today: (t.slip_count or 0) > 0,
+    "cancelled": lambda t, today: t.status == "Cancelled",
+    "overdue": _is_overdue,
+}
+
+
 def _resolve_project(project, ptype="read"):
     """Find project by name or project_name and check the user may `ptype` it."""
     name = (
@@ -1343,21 +1366,14 @@ def get_project_dashboard(project: str):
         order_by="custom_phase asc, subject asc",
     )
 
-    # helpdesk.api.work imports this module, so it's imported here, not at the top
-    from helpdesk.api.work import is_task_overdue
-
     today = frappe.utils.getdate(frappe.utils.today())
 
-    def due(task):
-        return frappe.utils.getdate(task.exp_end_date) if task.exp_end_date else None
-
-    def count(status):
-        return sum(1 for t in tasks if t.status == status)
-
+    stat_tasks = {
+        key: [t.name for t in tasks if rule(t, today)]
+        for key, rule in DASHBOARD_STAT_RULES.items()
+    }
     total_tasks = len(tasks)
-    completed = count("Completed")
-    cancelled = count("Cancelled")
-    overdue = sum(1 for t in tasks if is_task_overdue(t, due(t), today))
+    completed = len(stat_tasks["completed"])
     progress_pct = round((completed / total_tasks * 100), 1) if total_tasks > 0 else 0
 
     # phases in order of their first task's creation
@@ -1393,7 +1409,7 @@ def get_project_dashboard(project: str):
                 "status": t.status,
                 "due_date": t.exp_end_date,
                 "slip_count": t.slip_count or 0,
-                "is_overdue": is_task_overdue(t, due(t), today),
+                "is_overdue": _is_overdue(t, today),
             }
             for t in tasks
             if t.is_milestone
@@ -1405,17 +1421,12 @@ def get_project_dashboard(project: str):
         "phases": phases,
         "milestones": milestones,
         "tasks": _format_tasks(tasks),
+        # the task names behind each count, for the checklist's tile filter
+        "stat_tasks": stat_tasks,
         "stats": {
             "total": total_tasks,
-            "completed": completed,
-            "in_progress": count("Working"),
-            "pending": count("Open"),
-            "reviewing": count("Pending Review"),
-            "on_hold": count(ON_HOLD),
-            "rescheduled": sum(1 for t in tasks if t.slip_count),
-            "cancelled": cancelled,
-            "blocked": cancelled,
-            "overdue": overdue,
+            **{key: len(names) for key, names in stat_tasks.items()},
+            "blocked": len(stat_tasks["cancelled"]),
             "completion_pct": progress_pct,
         },
     }

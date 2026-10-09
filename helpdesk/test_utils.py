@@ -957,6 +957,15 @@ def make_task(project: str, subject: str, exp_end_date=None, **kwargs):
     ).insert(ignore_permissions=True)
 
 
+def make_task_in_status(project: str, subject: str, status: str, **values) -> str:
+    """Creates a Task in `project` and sets its status and any other `values`
+    (e.g. slip_count) straight in the database, skipping the hold, review and
+    slip hooks; returns its name. For tests that need a project in every state."""
+    task = make_task(project, subject).name
+    frappe.db.set_value("Task", task, {"status": status, **values})
+    return task
+
+
 def start_task_timer(task: str, hours_ago: float, estimated_hours: float = 0):
     """Puts `task` in Working with its timer started `hours_ago`, as if the assignee began
     it then, and sets its estimated hours."""

@@ -52,6 +52,87 @@
           </div>
         </div>
 
+        <!-- Filtered by a dashboard tile -->
+        <template v-else-if="filterKey">
+          <div
+            class="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-outline-gray-2 bg-surface-gray-1 py-1.5 pl-3 pr-1.5 text-sm text-ink-gray-7"
+          >
+            <LucideListFilter
+              class="size-4 shrink-0 text-ink-gray-5"
+              aria-hidden="true"
+            />
+            <span>
+              {{ __("Showing:") }}
+              <span class="font-medium text-ink-gray-9">{{
+                __(CHECKLIST_FILTERS[filterKey].label)
+              }}</span>
+            </span>
+            <span aria-hidden="true">·</span>
+            <span class="tabular-nums" role="status">{{
+              filteredCountLabel
+            }}</span>
+            <span aria-hidden="true">·</span>
+            <Button
+              variant="ghost"
+              class="min-h-11 md:min-h-0"
+              :label="__('Clear filter')"
+              @click="clearFilter"
+            />
+          </div>
+
+          <div
+            v-if="!filteredGroups.length"
+            class="rounded-xl border border-outline-gray-2 bg-surface-base"
+          >
+            <TaskyState
+              :icon="LucideListFilter"
+              :title="__('No tasks match this filter')"
+              :message="
+                __('Clear the filter to see every task in this project.')
+              "
+            >
+              <Button :label="__('Clear filter')" @click="clearFilter" />
+            </TaskyState>
+          </div>
+
+          <div v-else class="flex flex-col gap-3">
+            <section
+              v-for="group in filteredGroups"
+              :key="group.phase"
+              class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base shadow-sm"
+            >
+              <h2 class="flex items-center gap-3 px-4 py-3">
+                <LucideInbox
+                  v-if="!group.phase"
+                  class="size-4 shrink-0 text-ink-gray-5"
+                  aria-hidden="true"
+                />
+                <span
+                  class="min-w-0 flex-1 truncate text-base-medium text-ink-gray-9"
+                  >{{ group.phase || __("No phase") }}</span
+                >
+                <span class="font-mono text-xs tabular-nums text-ink-gray-6">
+                  {{ group.tasks.length }}
+                </span>
+              </h2>
+              <ul role="list" class="border-t border-outline-gray-2">
+                <li
+                  v-for="task in group.tasks"
+                  :key="task.name"
+                  class="border-b border-outline-gray-1 last:border-b-0"
+                >
+                  <ChecklistRow
+                    :task="task"
+                    :can-manage="canManage"
+                    :can-edit="canEdit(task)"
+                    v-on="rowEvents(task)"
+                  />
+                </li>
+              </ul>
+            </section>
+          </div>
+        </template>
+
         <!-- Empty -->
         <div
           v-else-if="!phaseList.length && !unphasedTasks.length"
@@ -248,15 +329,7 @@
                       :task="task"
                       :can-manage="canManage"
                       :can-edit="canEdit(task)"
-                      @toggle="onToggleTask(task)"
-                      @hold="holdingTask = task"
-                      @resume="resumingTask = task"
-                      @plan="planningTask = task"
-                      @edit="editingTask = task"
-                      @approve="approve(task)"
-                      @send-back="sendingBackTask = task"
-                      @ask-help="helpingTask = task"
-                      @hand-over="handingOverTask = task"
+                      v-on="rowEvents(task)"
                     />
                   </li>
                 </ul>
@@ -298,15 +371,7 @@
                     :task="task"
                     :can-manage="canManage"
                     :can-edit="canEdit(task)"
-                    @toggle="onToggleTask(task)"
-                    @hold="holdingTask = task"
-                    @resume="resumingTask = task"
-                    @plan="planningTask = task"
-                    @edit="editingTask = task"
-                    @approve="approve(task)"
-                    @send-back="sendingBackTask = task"
-                    @ask-help="helpingTask = task"
-                    @hand-over="handingOverTask = task"
+                    v-on="rowEvents(task)"
                   />
                 </li>
               </ul>
@@ -362,6 +427,7 @@ import { loadErrorMessage } from "./taskMeta";
 import { __ } from "@/translation";
 import { Button, createResource, toast } from "frappe-ui";
 import { computed, reactive, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
 import LucideChevronDown from "~icons/lucide/chevron-down";
 import LucideChevronRight from "~icons/lucide/chevron-right";
@@ -370,6 +436,7 @@ import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideClipboardList from "~icons/lucide/clipboard-list";
 import LucideInbox from "~icons/lucide/inbox";
 import LucideListChecks from "~icons/lucide/list-checks";
+import LucideListFilter from "~icons/lucide/list-filter";
 import LucidePause from "~icons/lucide/pause";
 import LucidePlus from "~icons/lucide/plus";
 import ChecklistRow from "./components/ChecklistRow.vue";
@@ -384,10 +451,17 @@ import ResumeTaskDialog from "./components/ResumeTaskDialog.vue";
 import SendBackTaskDialog from "./components/SendBackTaskDialog.vue";
 import TaskPlanDialog from "./components/TaskPlanDialog.vue";
 import TaskyState from "@/components/TaskyState.vue";
-import { blockedMessage, blocksMove, isPendingReview } from "./taskMeta";
+import {
+  blockedMessage,
+  blocksMove,
+  CHECKLIST_FILTERS,
+  isPendingReview,
+} from "./taskMeta";
 import { useApproveTask } from "./useApproveTask";
 
 const props = defineProps<{ projectId: string }>();
+const route = useRoute();
+const router = useRouter();
 
 interface Phase {
   name: string;
@@ -472,6 +546,63 @@ const handingOverTask = ref<Record<string, any> | null>(null);
 const { approve } = useApproveTask(reloadAll);
 
 const completingTask = ref<Record<string, any> | null>(null);
+
+function rowEvents(task: Record<string, any>) {
+  return {
+    toggle: () => onToggleTask(task),
+    hold: () => (holdingTask.value = task),
+    resume: () => (resumingTask.value = task),
+    plan: () => (planningTask.value = task),
+    edit: () => (editingTask.value = task),
+    approve: () => approve(task),
+    sendBack: () => (sendingBackTask.value = task),
+    askHelp: () => (helpingTask.value = task),
+    handOver: () => (handingOverTask.value = task),
+  };
+}
+
+// `?status=` from a dashboard tile; an unknown key shows the whole checklist
+const filterKey = computed(() => {
+  const key = route.query.status;
+  return typeof key === "string" &&
+    Object.prototype.hasOwnProperty.call(CHECKLIST_FILTERS, key)
+    ? key
+    : null;
+});
+
+// the server lists the tasks behind each tile, so this is exactly what it counted
+const filteredTasks = computed<Record<string, any>[]>(() => {
+  if (!filterKey.value) return [];
+  const names = new Set<string>(
+    phases.data?.stat_tasks?.[filterKey.value] ?? []
+  );
+  return (phases.data?.tasks ?? []).filter((t: Record<string, any>) =>
+    names.has(t.name)
+  );
+});
+
+// phases in the checklist's order, leaving out those with no matching task
+const filteredGroups = computed(() => {
+  const order = [...phaseNames.value, ""];
+  return order
+    .map((phase) => ({
+      phase,
+      tasks: filteredTasks.value.filter((t) => (t.phase || "") === phase),
+    }))
+    .filter((group) => group.tasks.length);
+});
+
+const filteredCountLabel = computed(() =>
+  filteredTasks.value.length === 1
+    ? __("1 task")
+    : __("{0} tasks", String(filteredTasks.value.length))
+);
+
+function clearFilter() {
+  const query = { ...route.query };
+  delete query.status;
+  router.push({ query });
+}
 
 function togglePhase(phaseName: string) {
   if (expandedPhases.has(phaseName)) {
