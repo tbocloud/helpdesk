@@ -12,6 +12,7 @@ from frappe import _
 from frappe.utils import (
     add_days,
     add_to_date,
+    flt,
     get_datetime,
     getdate,
     now_datetime,
@@ -50,6 +51,7 @@ URGENCY_ORDER = ("overdue", "at_risk", "due_soon", "key")
 TOP_PROJECTS = 7
 ATTENTION_LIMIT = 8
 
+TIMER_FIELDS = ["custom_estimated_hours", "custom_timer_start", "custom_timer_elapsed"]
 TASK_FIELDS = [
     "name",
     "subject",
@@ -65,6 +67,8 @@ TASK_FIELDS = [
     "slip_count",
     "depends_on_task",
     "_assign",
+    # a task due today is overdue once it has run past its estimate
+    *TIMER_FIELDS,
 ]
 TICKET_FIELDS = [
     "name",
@@ -117,6 +121,35 @@ def _open_dependencies(tasks) -> dict:
     )
 
 
+def is_task_overdue(task, deadline, today) -> bool:
+    """Past its due date, or due today and already worked longer than its estimate.
+
+    The due date moves out by the days on hold, so a paused task is never late.
+    """
+    if not deadline or task.status in (ON_HOLD, "Completed", "Cancelled"):
+        return False
+    if deadline < today:
+        return True
+    return deadline == today and _over_estimate(task)
+
+
+def _over_estimate(task) -> bool:
+    """The task's timer (banked time plus the running stretch) has passed its estimated hours.
+
+    The timer starts when the task moves to Working and stops while it's paused, so
+    the clock runs from when the work started, not from when the task was created.
+    """
+    estimate = flt(task.get("custom_estimated_hours"))
+    if not estimate:
+        return False
+    worked = flt(task.get("custom_timer_elapsed"))
+    if task.status == "Working" and task.get("custom_timer_start"):
+        # the start is stored in the site's time zone, as now_datetime() is
+        running = now_datetime() - get_datetime(task.custom_timer_start)
+        worked += max(running.total_seconds(), 0) / 3600
+    return worked > estimate
+
+
 def _task_risks(task, deadline, today, waiting_on: str | None) -> list[str]:
     if task.status in (ON_HOLD, "Pending Review") or not deadline or deadline < today:
         return []
@@ -138,6 +171,7 @@ def _task_item(
     on_hold = task.status == ON_HOLD
     today = getdate(nowdate())
     waiting_on = (open_dependencies or {}).get(task.depends_on_task)
+    is_overdue = is_task_overdue(task, deadline, today)
     return {
         "kind": "task",
         "name": task.name,
@@ -148,8 +182,7 @@ def _task_item(
         "priority": task.priority,
         "deadline": str(deadline) if deadline else None,
         "is_key": bool(task.is_key),
-        # the due date moves out by the days on hold, so a paused task isn't late
-        "is_overdue": bool(deadline and deadline < today and not on_hold),
+        "is_overdue": is_overdue,
         "hd_ticket": task.hd_ticket,
         "hold_reason": task.hold_reason if on_hold else None,
         "hold_days": (
@@ -160,7 +193,8 @@ def _task_item(
         "is_milestone": bool(task.is_milestone),
         "slip_count": task.slip_count or 0,
         "waiting_on": waiting_on,
-        "risks": _task_risks(task, deadline, today, waiting_on),
+        # overdue work is already flagged; risks are for work that may still slip
+        "risks": [] if is_overdue else _task_risks(task, deadline, today, waiting_on),
         "assignees": _assignees(task._assign),
     }
 
@@ -633,7 +667,15 @@ def _linked_tasks(ticket: str) -> list:
     return frappe.get_all(
         "Task",
         filters={"hd_ticket": ticket},
-        fields=["name", "subject", "status", "project", "exp_end_date", "_assign"],
+        fields=[
+            "name",
+            "subject",
+            "status",
+            "project",
+            "exp_end_date",
+            "_assign",
+            *TIMER_FIELDS,
+        ],
         order_by="creation desc",
     )
 
@@ -651,13 +693,20 @@ def get_ticket_linked_work(ticket: str | int) -> list[dict]:
     tasks = _linked_tasks(ticket)
     names = _project_names(tasks)
     user = frappe.session.user
+    today = getdate(nowdate())
     items = []
     for task in tasks:
         assignees = _assignees(task.pop("_assign"))
         can_open = frappe.has_permission("Task", "read", task.name)
+        deadline = getdate(task.exp_end_date) if task.exp_end_date else None
+        is_overdue = is_task_overdue(task, deadline, today)
+        # the timer only decides overdue; the ticket page doesn't show it
+        for field in TIMER_FIELDS:
+            task.pop(field, None)
         items.append(
             {
                 **task,
+                "is_overdue": is_overdue,
                 "project_name": names.get(task.project) or task.project,
                 "assignees": assignees,
                 "mine": user in assignees,
@@ -830,7 +879,7 @@ def get_team_workload(project: str | None = None, customer: str | None = None) -
         "Task",
         filters=task_filters,
         or_filters={"status": ("!=", "Completed"), "completed_on": (">=", week_ago)},
-        fields=[*TASK_FIELDS, "completed_on", "custom_estimated_hours"],
+        fields=[*TASK_FIELDS, "completed_on"],
         limit_page_length=0,
     )
     ticket_filters = {"status_category": ("in", ["Open", "Paused"])}
@@ -951,6 +1000,7 @@ PORTFOLIO_TASK_FIELDS = [
     "exp_end_date",
     "is_milestone",
     "_assign",
+    *TIMER_FIELDS,
 ]
 PROJECT_FIELDS = [
     "name",
@@ -1113,7 +1163,7 @@ def _portfolio_card(project, tasks: list, roles: dict, today) -> dict:
             continue
         counts["open"] += 1
         deadline = getdate(task.exp_end_date) if task.exp_end_date else None
-        is_overdue = bool(deadline and deadline < today and task.status != ON_HOLD)
+        is_overdue = is_task_overdue(task, deadline, today)
         counts["overdue"] += is_overdue
         if task.status == "Working":
             counts["working"] += 1

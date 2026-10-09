@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import frappe
 from frappe.core.doctype.communication.test_communication import create_email_account
-from frappe.utils import add_to_date, getdate
+from frappe.utils import add_to_date, getdate, now_datetime
 
 from helpdesk.api.settings.field_dependency import create_update_field_dependency
 from helpdesk.integrations.erpnext.utils import create_customer_field
@@ -645,6 +645,39 @@ def make_tasky_user(email: str, full_name: str, roles: tuple[str, ...] = ()):
     return email
 
 
+def make_dm_head(email: str, full_name: str, *roles: str):
+    """Creates an agent with the Digital Marketing Head role, who approves posts after the
+    client, plus any other `roles` (e.g. "DM Coordinator")."""
+    from helpdesk.content_team import DM_HEAD_ROLE, ensure_role
+
+    ensure_role()
+    return make_tasky_user(email, full_name, roles=(DM_HEAD_ROLE, *roles))
+
+
+def make_content_user(email: str, full_name: str, role: str):
+    """Creates an agent with a content role, e.g. "DM Coordinator" (edits entries) or
+    "DM Employee" (only attaches files)."""
+    from helpdesk.content_team import ensure_role
+
+    ensure_role()
+    return make_tasky_user(email, full_name, roles=(role,))
+
+
+def attach_file(doctype: str, name: str, file_name: str = "draft.png"):
+    """Attaches a small private file to a document as the current user, the way the
+    upload button does (it needs write permission on the document)."""
+    return frappe.get_doc(
+        {
+            "doctype": "File",
+            "file_name": file_name,
+            "attached_to_doctype": doctype,
+            "attached_to_name": name,
+            "is_private": 1,
+            "content": b"x",
+        }
+    ).insert()
+
+
 def make_project(
     project_name: str,
     members: list[tuple[str, str]] | None = None,
@@ -798,6 +831,14 @@ def make_content_campaign(campaign_name: str, customer: str, **kwargs):
     ).insert(ignore_permissions=True)
 
 
+def make_content_option(doctype: str, name: str, **kwargs):
+    """Creates an HD Content Platform or HD Content Post Type named `name`, as the team would."""
+    field = "platform_name" if doctype == "HD Content Platform" else "post_type_name"
+    return frappe.get_doc({"doctype": doctype, field: name, **kwargs}).insert(
+        ignore_permissions=True
+    )
+
+
 def hold_commits(test_case):
     """Rolls back everything a test wrote, even where Frappe commits mid-test.
 
@@ -894,9 +935,9 @@ def make_ai_support_session(ticket: str, connection: str | None = None, **kwargs
 
 def make_assignment(doctype: str, name: str, user: str):
     """Assigns a document to `user` the normal way (ToDo), which is what sets `_assign`."""
-    from frappe.desk.form import assign_to
+    from helpdesk.utils import add_assignment
 
-    assign_to._add(
+    add_assignment(
         {"doctype": doctype, "name": str(name), "assign_to": [user]},
         ignore_permissions=True,
     )
@@ -923,6 +964,21 @@ def make_task_in_status(project: str, subject: str, status: str, **values) -> st
     task = make_task(project, subject).name
     frappe.db.set_value("Task", task, {"status": status, **values})
     return task
+
+
+def start_task_timer(task: str, hours_ago: float, estimated_hours: float = 0):
+    """Puts `task` in Working with its timer started `hours_ago`, as if the assignee began
+    it then, and sets its estimated hours."""
+    frappe.db.set_value(
+        "Task",
+        task,
+        {
+            "status": "Working",
+            "custom_timer_start": add_to_date(now_datetime(), hours=-hours_ago),
+            "custom_timer_elapsed": 0,
+            "custom_estimated_hours": estimated_hours,
+        },
+    )
 
 
 def make_assigned_task(
@@ -999,6 +1055,15 @@ def run_as_user(user: str, fn):
         return fn()
     finally:
         frappe.set_user("Administrator")
+
+
+def get_task_completed_notices(task: str) -> list:
+    """The Task Completed HD Notifications sent about `task` (user_to, user_from, message)."""
+    return frappe.get_all(
+        "HD Notification",
+        filters={"reference_name": task, "notification_type": "Task Completed"},
+        fields=["user_to", "user_from", "message"],
+    )
 
 
 def get_reminder_messages(user: str, reference_name) -> list[str]:

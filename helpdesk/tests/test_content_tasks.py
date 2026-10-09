@@ -181,6 +181,72 @@ class TestTasksFromPosts(ContentTaskCase):
         self.assertEqual(statuses, {"Cancelled"})
 
 
+class TestEstimatedHours(ContentTaskCase):
+    def hours(self, post):
+        return {
+            role: frappe.db.get_value("Task", t.name, "custom_estimated_hours")
+            for role, t in self.tasks(post).items()
+        }
+
+    def test_each_role_task_gets_its_hours(self):
+        post = self.post(writer_hours=2, designer_hours=3.5)
+
+        hours = self.hours(post)
+        self.assertEqual(hours["Writer"], 2)
+        self.assertEqual(hours["Designer"], 3.5)
+
+    def test_changing_the_hours_updates_the_task(self):
+        post = self.post(writer_hours=2)
+
+        post.writer_hours = 4
+        post.save(ignore_permissions=True)
+
+        self.assertEqual(self.hours(post)["Writer"], 4)
+
+    def test_no_hours_keeps_the_tasks_own_estimate(self):
+        post = self.post()
+        task = self.tasks(post)["Writer"].name
+        frappe.db.set_value("Task", task, "custom_estimated_hours", 1.5)
+
+        post.publish_on = add_to_date(self.publish, days=1)
+        post.save(ignore_permissions=True)
+
+        self.assertEqual(
+            frappe.db.get_value("Task", task, "custom_estimated_hours"), 1.5
+        )
+
+    def test_assigning_can_set_the_roles_hours(self):
+        from helpdesk.api import content_board
+
+        post = self.post(writer_hours=2)
+
+        content_board.assign(post.name, "writer", [WRITER[0]], hours=3)
+        self.assertEqual(self.hours(post)["Writer"], 3)
+
+        # no hours given leaves the estimate as it was
+        content_board.assign(post.name, "writer", [WRITER[0], OTHER[0]])
+        post.reload()
+        self.assertEqual(post.writer_hours, 3)
+
+    def test_clearing_the_hours_clears_the_tasks_estimate(self):
+        post = self.post(writer_hours=3)
+
+        post.writer_hours = 0
+        post.save(ignore_permissions=True)
+
+        self.assertEqual(self.hours(post)["Writer"], 0)
+
+    def test_shared_task_adds_up_every_role(self):
+        post = self.post(
+            task_mode="One task for the post",
+            writer_hours=2,
+            designer_hours=3,
+            marketer_hours=0.5,
+        )
+
+        self.assertEqual(self.hours(post), {"All": 5.5})
+
+
 class TestSeveralPeopleAndVideoEditor(ContentTaskCase):
     def test_several_people_on_a_role_share_its_task(self):
         post = self.post()

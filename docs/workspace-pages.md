@@ -179,8 +179,9 @@ from the tasks the viewer can see, so a plain member's card counts their own tas
 - **What each counts** is `DASHBOARD_STAT_RULES` in `helpdesk/tasky/api.py`, over the tasks the
   viewer can see: Completed, In progress (Working), Waiting review (Pending Review), On hold
   and Cancelled by status; Rescheduled is any task whose due date was ever moved later
-  (`slip_count > 0`, whatever its status now); Overdue is a due date before today on a task
-  that isn't Completed, Cancelled or On hold. The API returns the counts in `stats` and the
+  (`slip_count > 0`, whatever its status now); Overdue is `is_task_overdue` in
+  `helpdesk/api/work.py`, the Overdue page's rule (past its due date, or due today and already
+  worked past its estimate, and not Completed, Cancelled or On hold). The API returns the counts in `stats` and the
   task names behind each in `stat_tasks`, both built from the same rules, so a tile's number is
   always its list's length.
 - **Where a tile goes**: Total tasks opens the Checklist unfiltered; Overdue opens the Overdue
@@ -229,6 +230,18 @@ team member's work, for leads and managers of their projects (the Team page link
   project…" shows when the task says `can_move` (see [Moving a task](#moving-a-task-to-another-project)).
 - **Rows** say "Assigned by Arun" next to the project when someone other than the assignee gave
   the task out.
+
+## Board (`/my-board`)
+
+The sidebar's **Board** (after My Work, for everyone including the Content Team) is the project
+board (`pages/tasky/Kanban.vue`, route `MyBoard`, no `projectId`) showing the current user's own
+tasks from every project they're assigned in, by status: Open, In progress, In review, On hold,
+Completed, Cancelled. `get_kanban_tasks()` without `project` returns tasks whose `_assign` holds
+the user (through `frappe.get_list`, so permissions and department walls apply), with finished
+and cancelled ones only if changed in the last 30 days. Each card names its project. Dragging,
+the timer, hold/resume, complete, edit, ask for help and hand over work as on a project board,
+each using the task's own project; project-level actions (New task, Plan, Approve/Send back,
+Make recurring) stay on the project's board.
 
 ## Tasks: assigned by, moving, the timer
 
@@ -293,6 +306,53 @@ moves it back there like a drop. Nothing else starts a paused timer, and startin
 touches another's: there is no one-running-task rule. Before this, Pause only changed the
 board's local state, so the server timer kept running and the next load (moving or editing
 another task, or coming back to the board) showed the paused task running again.
+
+### Telling the assigner a task is done
+
+When a task becomes **Completed**, whoever assigned it (the same person the "Assigned by" label
+shows, from `get_assigners()`) gets a **Task Completed** notification: "Fathima Rizwana completed
+Bank reconciliation", credited to the assignees who did the work (when a lead's review approval
+completes it) or else to whoever completed it, linking to the task's project (My Work when it has none).
+`Task.tell_assigner_it_is_done()` sends it through `notify_users(…, notification_type="Task
+Completed", user_from=…, once=False)`, so completing a reopened task notifies again. It isn't sent
+when the assigner completed (or, on review projects, approved) it themselves, when the assignee
+took the task themselves, or when a published or cancelled content post closes its tasks
+(`flags.from_content_post`). On projects with review before done, the notice goes out when the
+lead approves, not when the assignee sends it for review.
+
+It stays inside the helpdesk: no email or chat (`HDNotification.deliver` only sends those for
+Mention and Reminder). Every new HD Notification is pushed to its recipient's open tabs
+(`announce()` publishes `helpdesk:new-notification` to that user after commit), so the bell's
+count updates without a reload. For Task Completed the notification store
+(`stores/notification.ts`) also plays a short two-note chime (`composables/notificationSound.ts`,
+made with the Web Audio API, no sound file) and shows the message as a toast. Browsers only play
+sound after the person has used the page; if audio is blocked the chime is skipped and the bell
+and toast still show. The panel shows the completer's avatar and the message
+(`isTextOnly()` in `Notifications.vue` and `MobileNotifications.vue`).
+
+### When a task is overdue
+
+One rule everywhere, on the server (`is_task_overdue` in `helpdesk/api/work.py`) and in the
+browser (`isOverdue()` / `isOverEstimate()` in `taskMeta.ts`). A task that isn't Completed,
+Cancelled or On Hold is overdue when:
+
+- its due date (`exp_end_date`) has passed, or
+- **it is due today and has been worked longer than its estimate**: the timer's banked time plus
+  its running stretch (`custom_timer_elapsed` + now − `custom_timer_start`) exceeds
+  `custom_estimated_hours`. E.g. due today with 2 hours, moved to In progress at 10:00 and still
+  open at 12:01: overdue.
+
+The hours clock is the board timer, so it starts when the task moves to In progress (not when it
+was created or assigned), stops while the timer is paused, and counts plain clock hours (nights
+too, while the timer runs). Tasks due on a later day only go overdue when their date passes; a
+task with no estimate only by date. An overdue task carries no "at risk" reasons, so it's counted once (overdue), not in both buckets.
+My tasks and the phase checklist load the timer fields for this. Where it shows: My Work
+(Overdue group and tab; the label
+reads "Overdue · past its estimate"), Overview buckets, Team and Projects counts, the morning
+brief, the project board, My tasks and the Overdue page ("Past its estimate"), the project
+dashboard (count and milestones) and the ticket page's Linked work (`is_overdue` from
+`get_ticket_linked_work`). Reminders and the weekly AI summaries still go by due date only.
+Overdue is worked out when the page loads, so an open page turns red on its next refresh.
 
 ## Timesheets (`/timesheets`)
 

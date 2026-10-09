@@ -151,15 +151,37 @@ export function holdDurationLabel(days: number) {
   return __("On hold {0} days", String(days));
 }
 
-// Due dates are date-only, so a task is overdue from the day after it's due.
+// Due dates are date-only, so a task is overdue from the day after it's due, or on
+// its due day once it has been worked longer than its estimate (server: is_task_overdue).
 // A task on hold is never overdue: its due date moves out when it resumes.
-export function isOverdue(task: { status?: string; due_date?: string | null }) {
-  return (
-    !!task.due_date &&
-    !isClosed(task) &&
-    !isOnHold(task) &&
-    dayjs(task.due_date).isBefore(dayjs(), "day")
-  );
+export function isOverdue(
+  task: {
+    status?: string;
+    due_date?: string | null;
+    estimated_hours?: number | null;
+    custom_timer_start?: string | null;
+    custom_timer_elapsed?: number | null;
+  },
+  now = dayjs()
+) {
+  if (!task.due_date || isClosed(task) || isOnHold(task)) return false;
+  const due = dayjs(task.due_date);
+  if (due.isBefore(now, "day")) return true;
+  return due.isSame(now, "day") && isOverEstimate(task, now);
+}
+
+/**
+ * The task's timer has passed its estimated hours. The timer starts when the task
+ * moves to Working and stops while paused, so the clock runs from when work began.
+ */
+export function isOverEstimate(
+  task: Parameters<typeof taskTimer>[0] & { estimated_hours?: number | null },
+  now = dayjs()
+) {
+  const estimate = Number(task.estimated_hours) || 0;
+  if (!estimate) return false;
+  const timer = taskTimer(task, now);
+  return !!timer && timer.elapsed > estimate * 3600;
 }
 
 export function daysUntil(date: string) {
@@ -255,9 +277,7 @@ export function blockedMessage(task: { depends_on_subject?: string | null }) {
 /** The description is still the AI's text, unedited (`aiText` is what the AI wrote). */
 export function isAiDrafted(description: string, aiText: string | null) {
   return (
-    aiText !== null &&
-    !!aiText.trim() &&
-    description.trim() === aiText.trim()
+    aiText !== null && !!aiText.trim() && description.trim() === aiText.trim()
   );
 }
 

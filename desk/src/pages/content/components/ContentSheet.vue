@@ -7,7 +7,7 @@
         <tr>
           <th scope="col" class="px-3 py-2 font-medium">{{ __("Date") }}</th>
           <th scope="col" class="px-3 py-2 font-medium">
-            {{ __("Campaign or topic") }}
+            {{ __("Copy") }}
           </th>
           <th v-if="!filtersCustomer" scope="col" class="px-3 py-2 font-medium">
             {{ __("Customer") }}
@@ -63,6 +63,11 @@
             >
               {{ post.title }}
             </button>
+            <SpecialDayBadge
+              v-if="post.special_day"
+              :name="post.special_day"
+              class="ml-1.5 align-middle"
+            />
           </td>
           <td
             v-if="!filtersCustomer"
@@ -110,6 +115,7 @@ import {
   TEAM_ROLES,
   type TeamRole,
 } from "../constants";
+import SpecialDayBadge from "./SpecialDayBadge.vue";
 import StatusPill from "./StatusPill.vue";
 
 const props = defineProps<{

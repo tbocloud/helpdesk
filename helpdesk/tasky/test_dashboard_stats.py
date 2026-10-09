@@ -7,7 +7,12 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_days, nowdate
 
-from helpdesk.test_utils import hold_commits, make_project, make_task_in_status
+from helpdesk.test_utils import (
+    hold_commits,
+    make_project,
+    make_task_in_status,
+    start_task_timer,
+)
 
 DASHBOARD = "helpdesk.tasky.api.get_project_dashboard"
 
@@ -32,20 +37,25 @@ class TestDashboardStatTasks(FrappeTestCase):
                 ("cancelled", "Legacy data cleanup", "Cancelled", {}),
             ]
         }
+        # due today and already worked past its estimate: late, as on the Overdue page
+        self.tasks["over_estimate"] = make_task_in_status(
+            self.project, "Payroll setup", "Working", exp_end_date=nowdate()
+        )
+        start_task_timer(self.tasks["over_estimate"], hours_ago=3, estimated_hours=1)
 
     def test_each_filter_lists_exactly_what_its_tile_counts(self):
         dashboard = frappe.call(DASHBOARD, project=self.project)
         t = self.tasks
         expected = {
             "completed": {t["done"], t["done_slipped"]},
-            "in_progress": {t["working"], t["slipped"]},
+            "in_progress": {t["working"], t["slipped"], t["over_estimate"]},
             "pending": {t["open"], t["late_open"]},
             "reviewing": {t["review"]},
             "on_hold": {t["held"]},
             "rescheduled": {t["slipped"], t["done_slipped"]},
             "cancelled": {t["cancelled"]},
             # a held or finished task isn't late
-            "overdue": {t["late_open"]},
+            "overdue": {t["late_open"], t["over_estimate"]},
         }
 
         self.assertEqual(set(dashboard["stat_tasks"]), set(expected))

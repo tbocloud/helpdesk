@@ -4,7 +4,6 @@ import json
 
 import frappe
 from frappe import _
-from frappe.desk.form import assign_to
 from frappe.query_builder import Order
 
 from helpdesk.api.content_board import user_full_names
@@ -20,7 +19,7 @@ from helpdesk.tasky.permissions import (
     is_project_owner,
     is_tasky_admin,
 )
-from helpdesk.utils import csv_safe
+from helpdesk.utils import add_assignment, csv_safe, remove_assignment
 
 # member roles a project lead is rotated among
 LEAD_ROTATION_ROLES = ("Developer",)
@@ -48,12 +47,12 @@ CATEGORY_TO_ROLE = {
 
 
 def _is_overdue(task, today) -> bool:
-    """Past its due date and still waiting on someone (a held task isn't late)."""
-    return bool(
-        task.exp_end_date
-        and frappe.utils.getdate(task.exp_end_date) < today
-        and task.status not in (*TASK_DONE, ON_HOLD)
-    )
+    """The Overdue page's rule, for a task row fetched with its timer fields."""
+    # helpdesk.api.work imports this module, so it's imported here, not at the top
+    from helpdesk.api.work import is_task_overdue
+
+    deadline = frappe.utils.getdate(task.exp_end_date) if task.exp_end_date else None
+    return is_task_overdue(task, deadline, today)
 
 
 # what each project dashboard tile counts; the counts and the checklist's
@@ -537,7 +536,7 @@ def _assign_user(
             args["assigned_by"] = assigned_by
         if note:
             args["description"] = note
-        assign_to._add(args, ignore_permissions=ignore_permissions)
+        add_assignment(args, ignore_permissions=ignore_permissions)
 
 
 @frappe.whitelist()
@@ -638,6 +637,9 @@ def get_my_tasks(
             "priority",
             "exp_end_date",
             "custom_estimated_hours",
+            # due today and past its estimate is overdue too (isOverdue in taskMeta.ts)
+            "custom_timer_start",
+            "custom_timer_elapsed",
             "is_key",
             "hd_ticket",
             "hold_reason",
@@ -1118,7 +1120,7 @@ def _reassign(
     for user in previous:
         if user not in new:
             # the caller manages the project or hands over their own task (checked by the caller)
-            assign_to._remove("Task", doc.name, user, ignore_permissions=True)
+            remove_assignment("Task", doc.name, user, ignore_permissions=True)
     if new_assignee and new_assignee not in previous:
         _assign_user(doc, new_assignee, ignore_permissions=ignore_permissions)
 
@@ -1324,6 +1326,8 @@ def get_project_dashboard(project: str):
             "priority",
             "exp_end_date",
             "custom_estimated_hours",
+            "custom_timer_start",
+            "custom_timer_elapsed",
             "is_key",
             "hd_ticket",
             "hold_reason",
@@ -1420,6 +1424,9 @@ def get_phase_tasks(project: str, phase: str):
             "priority",
             "exp_end_date",
             "custom_estimated_hours",
+            # due today and past its estimate is overdue too (isOverdue in taskMeta.ts)
+            "custom_timer_start",
+            "custom_timer_elapsed",
             "is_key",
             "hd_ticket",
             "hold_reason",
@@ -1435,12 +1442,28 @@ def get_phase_tasks(project: str, phase: str):
 
 
 @frappe.whitelist()
-def get_kanban_tasks(project: str):
-    """Get tasks grouped by status for kanban board."""
-    project = _resolve_project(str(project))
+def get_kanban_tasks(project: str | None = None):
+    """Tasks grouped by status for the board: one project's, or without `project` the
+    current user's own tasks across every project (the sidebar's Board)."""
+    if project:
+        filters = {"project": _resolve_project(str(project))}
+        or_filters = None
+    else:
+        user = frappe.session.user
+        filters = {
+            "_assign": ("like", f'%"{user}"%'),
+            "status": ("!=", "Template"),
+        }
+        # finished work stays a month, so the done columns don't grow forever
+        month_ago = frappe.utils.add_days(frappe.utils.nowdate(), -30)
+        or_filters = {
+            "status": ("not in", ["Completed", "Cancelled"]),
+            "modified": (">=", month_ago),
+        }
     tasks = frappe.get_list(
         "Task",
-        filters={"project": project},
+        filters=filters,
+        or_filters=or_filters,
         fields=[
             "name",
             "subject",
@@ -1465,6 +1488,9 @@ def get_kanban_tasks(project: str):
         ],
         order_by="custom_phase asc, subject asc",
     )
+    if not project:
+        # LIKE reads `_` and `%` in the user ID as wildcards, so keep exact matches only
+        tasks = [t for t in tasks if user in json.loads(t._assign or "[]")]
 
     # one query for the whole board; a card shows its most recently active open PR
     open_prs = get_pull_requests([t.name for t in tasks], open_only=True)
@@ -1477,7 +1503,21 @@ def get_kanban_tasks(project: str):
         "Completed": [],
         "Cancelled": [],
     }
+    # across projects each card says which one it belongs to
+    project_names = (
+        {}
+        if project
+        else dict(
+            frappe.get_all(
+                "Project",
+                filters={"name": ("in", list({t.project for t in tasks if t.project}))},
+                fields=["name", "project_name"],
+                as_list=True,
+            )
+        )
+    )
     for t in add_assigners([_format_task(t) for t in tasks]):
+        t["project_name"] = project_names.get(t.get("project"))
         status = t.get("status") or "Open"
         if status not in columns:
             status = "Open"

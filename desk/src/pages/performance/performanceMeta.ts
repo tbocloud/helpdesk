@@ -17,8 +17,11 @@ export function onTimeTone(pct: number | null | undefined): Tone {
   return "danger";
 }
 
+// platforms the team added ("Google Business") have no token, so fall back to gray
 export const channelColor = (channel: string) =>
-  `var(--channel-${channel.toLowerCase()}, var(--ink-gray-7))`;
+  `var(--channel-${channel
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")}, var(--ink-gray-7))`;
 
 export function pctText(pct: number | null | undefined) {
   return pct == null ? "—" : `${pct}%`;

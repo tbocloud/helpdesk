@@ -5,6 +5,7 @@ import { OrganizationsIcon } from "../icons";
 import LucideHome from "~icons/lucide/home";
 import LucideFolderKanban from "~icons/lucide/folder-kanban";
 import LucideListTodo from "~icons/lucide/list-todo";
+import LucideSquareKanban from "~icons/lucide/square-kanban";
 import LucideLayoutDashboard from "~icons/lucide/layout-dashboard";
 import LucideClipboardList from "~icons/lucide/clipboard-list";
 import LucideClock from "~icons/lucide/clock";
@@ -65,6 +66,7 @@ export const agentPortalSidebarOptions = [
     to: "TicketsAgent",
     section: "Workspace",
     countKey: "tickets",
+    adminOnly: true,
   },
   {
     label: __("Projects"),
@@ -78,6 +80,13 @@ export const agentPortalSidebarOptions = [
     to: "MyWork",
     section: "Workspace",
     countKey: "my_work",
+  },
+  {
+    // the person's own tasks from every project, as a board
+    label: __("Board"),
+    icon: LucideSquareKanban,
+    to: "MyBoard",
+    section: "Workspace",
   },
   {
     label: __("Calendar"),

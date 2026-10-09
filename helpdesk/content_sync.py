@@ -19,7 +19,11 @@ APPROVAL_DOCTYPE = "Content Approval"
 IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".gif", ".webp")
 MAX_IMAGES = 6
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
-DECISION_TO_STATUS = {"Approved": "Approved", "Changes Requested": "Changes Requested"}
+# the client's approval goes to the Digital Marketing Head before the post is Approved
+DECISION_TO_STATUS = {
+    "Approved": "Head Review",
+    "Changes Requested": "Changes Requested",
+}
 
 
 def get_client_connection(customer: str | None) -> str | None:
@@ -107,7 +111,11 @@ def apply_decision(post_name: str, decision: dict):
     post.client_feedback = decision.get("client_comment") or post.client_feedback
     post.client_decided_on = decision.get("decided_on") or now_datetime()
     post.save(ignore_permissions=True)
-    verb = _("approved") if status == "Approved" else _("requested changes")
+    verb = (
+        _("approved")
+        if decision.get("status") == "Approved"
+        else _("requested changes")
+    )
     note = f": {decision['client_comment']}" if decision.get("client_comment") else ""
     post.add_comment(
         "Info",

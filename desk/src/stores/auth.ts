@@ -45,6 +45,22 @@ export const useAuthStore = defineStore("auth", () => {
   const isContentTeam: ComputedRef<boolean> = computed(
     () => !!user__.value.is_content_team
   );
+  // approves content posts after the client does (System Managers can too)
+  const isDmHead: ComputedRef<boolean> = computed(
+    () => !!user__.value.is_dm_head
+  );
+  // DM Coordinators, managers and System Managers; everyone else only attaches files
+  const canEditContent: ComputedRef<boolean> = computed(
+    () => !!user__.value.can_edit_content
+  );
+  // ERP Employees: no content calendar, and no Digital department (server side)
+  const isErpOnly: ComputedRef<boolean> = computed(
+    () => !!user__.value.is_erp_only
+  );
+  // DM / ERP Employees: no tickets, customers, contacts, templates, KB or reports
+  const isDepartmentEmployee: ComputedRef<boolean> = computed(
+    () => !!user__.value.is_department_employee
+  );
   const canSeeCustomerReport: ComputedRef<boolean> = computed(
     () => !!(user__.value.is_manager || user__.value.is_project_manager)
   );
@@ -116,6 +132,10 @@ export const useAuthStore = defineStore("auth", () => {
     canSeeOverview,
     canSeeCustomerReport,
     isContentTeam,
+    isDmHead,
+    canEditContent,
+    isErpOnly,
+    isDepartmentEmployee,
     telephonyInstalled,
     isLoggedIn,
     login,

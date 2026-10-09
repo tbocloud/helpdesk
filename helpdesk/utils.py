@@ -6,6 +6,7 @@ import frappe
 import phonenumbers
 from bs4 import BeautifulSoup
 from frappe import _
+from frappe.desk.form import assign_to
 from frappe.model.document import Document
 from frappe.query_builder import Order
 from frappe.realtime import get_website_room
@@ -17,6 +18,22 @@ from phonenumbers import PhoneNumberFormat as PNF
 from pypika.functions import Replace
 
 from helpdesk.consts import CHAT_PLACEHOLDER_DOMAIN
+
+
+def add_assignment(args: dict, ignore_permissions: bool = False):
+    """Assign a document, skipping the caller's permission check when asked.
+
+    Frappe v15 split assign_to.add into a whitelisted add and an internal _add; benches
+    on an older v15 only have add, which takes the same arguments.
+    """
+    add = getattr(assign_to, "_add", assign_to.add)
+    return add(args, ignore_permissions=ignore_permissions)
+
+
+def remove_assignment(doctype: str, name: str, user: str, ignore_permissions=False):
+    """Take `user` off a document's assignment; _remove or, on an older v15, remove."""
+    remove = getattr(assign_to, "_remove", assign_to.remove)
+    return remove(doctype, name, user, ignore_permissions=ignore_permissions)
 
 
 def check_permissions(doctype, parent, doc=None):

@@ -697,7 +697,7 @@ const stages = computed(() => [
   {
     key: "review",
     label: __("In review"),
-    hint: __("Internal or client review, or changes asked"),
+    hint: __("Internal, client or head review, or changes asked"),
     count: total.value.stages.review,
     icon: LucideEye,
     bg: "bg-warning-soft",

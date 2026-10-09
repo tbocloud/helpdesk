@@ -1,6 +1,23 @@
 <template>
   <div class="flex h-full flex-col">
+    <!-- without a project it's the person's own board, across all their projects -->
+    <LayoutHeader v-if="!projectId">
+      <template #left-header>
+        <div class="text-lg-medium text-ink-gray-9">{{ __("My board") }}</div>
+      </template>
+      <template #right-header>
+        <Button
+          variant="ghost"
+          :label="__('Refresh')"
+          :loading="kanban.loading && !!kanban.data"
+          @click="kanban.reload()"
+        >
+          <template #icon><LucideRefreshCw class="size-4" /></template>
+        </Button>
+      </template>
+    </LayoutHeader>
     <ProjectNav
+      v-else
       ref="nav"
       :project-id="projectId"
       :phases="phaseNames"
@@ -64,9 +81,13 @@
             aria-hidden="true"
           />
           {{
-            __(
-              "This board is empty. Add a task, or generate one from a template on the Checklist tab."
-            )
+            projectId
+              ? __(
+                  "This board is empty. Add a task, or generate one from a template on the Checklist tab."
+                )
+              : __(
+                  "No tasks assigned to you. Tasks given to you in any project show up here."
+                )
           }}
         </p>
 
@@ -222,6 +243,12 @@
                   </Dropdown>
                 </div>
 
+                <p
+                  v-if="!projectId && task.project"
+                  class="mt-1 truncate pl-5 text-xs font-medium text-ink-gray-7"
+                >
+                  {{ task.project_name || task.project }}
+                </p>
                 <p
                   v-if="assignedByName(task)"
                   class="mt-1 truncate pl-5 text-xs text-ink-gray-5"
@@ -418,24 +445,24 @@
     <ResumeTaskDialog v-model:task="resumingTask" @resumed="onHoldChanged" />
     <RequestHelpDialog
       v-model:task="helpingTask"
-      :project-id="projectId"
+      :project-id="projectId || helpingTask?.project || ''"
       @requested="kanban.reload()"
     />
     <HandOverTaskDialog
       v-model:task="handingOverTask"
-      :project-id="projectId"
+      :project-id="projectId || handingOverTask?.project || ''"
       @handed-over="kanban.reload()"
     />
     <EditTaskDialog
       v-model:task="editingTask"
-      :project-id="projectId"
-      :phases="phaseNames"
+      :project-id="projectId || editingTask?.project || ''"
+      :phases="phasesOf(editingTask?.project)"
       @saved="kanban.reload()"
       @plan="(t) => (planningTask = t as Task)"
     />
     <TaskPlanDialog
       v-model:task="planningTask"
-      :project-id="projectId"
+      :project-id="projectId || planningTask?.project || ''"
       @saved="kanban.reload()"
     />
     <SendBackTaskDialog
@@ -491,6 +518,7 @@ import HandOverTaskDialog from "./components/HandOverTaskDialog.vue";
 import HoldTaskDialog from "./components/HoldTaskDialog.vue";
 import MilestoneMark from "./components/MilestoneMark.vue";
 import MoveTaskDialog from "./components/MoveTaskDialog.vue";
+import LayoutHeader from "@/components/LayoutHeader.vue";
 import ProjectNav from "./components/ProjectNav.vue";
 import RecurringTaskDialog from "./components/RecurringTaskDialog.vue";
 import RequestHelpDialog from "./components/RequestHelpDialog.vue";
@@ -523,7 +551,8 @@ import {
 } from "./taskMeta";
 import { useApproveTask } from "./useApproveTask";
 
-const props = defineProps<{ projectId: string }>();
+// no project: the current user's own tasks across every project (sidebar's Board)
+const props = defineProps<{ projectId?: string }>();
 
 const nav = ref<InstanceType<typeof ProjectNav> | null>(null);
 const canManage = computed(() => !!nav.value?.canManage);
@@ -558,6 +587,7 @@ interface Task {
   can_move?: boolean;
   custom_recurring_task?: string | null;
   project?: string;
+  project_name?: string | null;
   due_date?: string;
   estimated_hours?: number;
   custom_timer_start?: string;
@@ -691,12 +721,16 @@ const totalTasks = computed(() =>
   )
 );
 
-const phaseNames = computed(() =>
-  Object.values(columnTasks.value)
+const phaseNames = computed(() => phasesOf(props.projectId));
+
+// phases already used in a project, offered when editing one of its tasks
+function phasesOf(project?: string) {
+  return Object.values(columnTasks.value)
     .flat()
+    .filter((t) => !project || !t.project || t.project === project)
     .map((t) => t.phase || "")
-    .filter(Boolean)
-);
+    .filter(Boolean);
+}
 
 const completingTask = ref<Task | null>(null);
 // what the card's timer shows, so the dialog offers the same hours
@@ -723,9 +757,7 @@ onUnmounted(() => {
 
 watch(
   () => props.projectId,
-  () => {
-    if (props.projectId) kanban.reload();
-  },
+  () => kanban.reload(),
   { immediate: true }
 );
 

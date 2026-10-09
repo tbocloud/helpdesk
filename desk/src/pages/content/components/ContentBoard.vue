@@ -147,6 +147,7 @@
         }}
       </p>
       <Button
+        v-if="auth.canEditContent"
         :label="day ? __('Add entry for this day') : __('Add entry')"
         @click="emit('add', day || undefined)"
       >
@@ -180,6 +181,12 @@
               : __("{0} entries", String(day.total))
           }}
         </span>
+        <SpecialDayBadge
+          v-for="name in day.specialDays"
+          :key="name"
+          :name="name"
+          class="sm:mt-1.5"
+        />
       </div>
 
       <div class="flex min-w-0 flex-1 flex-col gap-3">
@@ -188,25 +195,43 @@
           :key="post.name"
           class="entry overflow-hidden rounded-xl border"
           :class="`entry-${entryTone(post)}`"
-          :aria-labelledby="`entry-${post.name}`"
+          :aria-labelledby="`client-${post.name} entry-${post.name}`"
         >
           <header class="flex flex-wrap items-start gap-x-3 gap-y-2 px-4 pt-3">
             <div class="min-w-0 flex-1 basis-60">
-              <button
-                :id="`entry-${post.name}`"
-                type="button"
-                class="max-w-full truncate rounded text-left text-base font-semibold text-ink-gray-9 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
-                @click="emit('open', post.name)"
+              <!-- the client leads, shown even when filtered, so every card says whose it is -->
+              <p
+                v-if="post.customer"
+                :id="`client-${post.name}`"
+                class="flex min-w-0 items-center gap-1.5 text-lg font-semibold text-ink-gray-9"
               >
-                {{ post.title }}
-              </button>
-              <p class="text-sm text-ink-gray-6">
-                {{
-                  [post.format, filtersCustomer ? "" : post.customer]
-                    .filter(Boolean)
-                    .join(" · ")
-                }}
+                <LucideBuilding2
+                  class="size-4 shrink-0 text-ink-gray-6"
+                  aria-hidden="true"
+                />
+                <span class="truncate">{{ post.customer }}</span>
               </p>
+              <p
+                class="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 text-sm text-ink-gray-6"
+              >
+                <button
+                  :id="`entry-${post.name}`"
+                  type="button"
+                  class="min-w-0 max-w-full truncate rounded text-left text-base font-medium text-ink-gray-8 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+                  @click="emit('open', post.name)"
+                >
+                  {{ post.title }}
+                </button>
+                <template v-if="post.format">
+                  <span aria-hidden="true">·</span>
+                  {{ post.format }}
+                </template>
+              </p>
+              <SpecialDayBadge
+                v-if="post.special_day"
+                :name="post.special_day"
+                class="mt-1.5"
+              />
               <p
                 v-if="needsApprovalSoon(post, now)"
                 class="mt-1.5 inline-flex items-center gap-1.5 rounded-md bg-danger-soft px-2 py-0.5 text-sm text-danger"
@@ -239,13 +264,35 @@
                 >{{ dayjs(post.publish_on).format("h:mm A") }}</span
               >
               <StatusPill :post="post" />
+              <Button
+                size="sm"
+                variant="ghost"
+                :tooltip="
+                  auth.canEditContent
+                    ? __('Edit entry')
+                    : __('Open to add files')
+                "
+                :aria-label="
+                  auth.canEditContent
+                    ? __('Edit {0}', post.title)
+                    : __('Open {0} to add files', post.title)
+                "
+                @click="emit('open', post.name)"
+              >
+                <LucidePencil
+                  v-if="auth.canEditContent"
+                  class="size-4"
+                  aria-hidden="true"
+                />
+                <LucidePaperclip v-else class="size-4" aria-hidden="true" />
+              </Button>
             </div>
           </header>
 
           <div class="grid grid-cols-1 gap-3 px-4 pt-3 md:grid-cols-2 md:gap-0">
             <div class="md:pr-4">
               <p class="text-2xs uppercase tracking-[0.06em] text-ink-gray-6">
-                {{ __("Post content") }}
+                {{ __("Sub Copy") }}
               </p>
               <p
                 class="line-clamp-3 whitespace-pre-line text-p-sm"
@@ -256,13 +303,13 @@
             </div>
             <div class="entry-rule md:border-l md:pl-4">
               <p class="text-2xs uppercase tracking-[0.06em] text-ink-gray-6">
-                {{ __("Brief") }}
+                {{ __("Description") }}
               </p>
               <p
                 class="line-clamp-3 whitespace-pre-line text-p-sm"
                 :class="post.brief ? 'text-ink-gray-8' : 'text-ink-gray-5'"
               >
-                {{ post.brief || __("No brief yet") }}
+                {{ post.brief || __("No description yet") }}
               </p>
             </div>
           </div>
@@ -277,8 +324,15 @@
                 class="text-2xs uppercase tracking-[0.06em] text-ink-gray-6"
                 >{{ __(role.label) }}</span
               >
+              <span
+                v-if="
+                  !peopleOf(post, role.field).length && !auth.canEditContent
+                "
+                class="text-sm text-ink-gray-5"
+                >{{ __("Not assigned") }}</span
+              >
               <button
-                v-if="!peopleOf(post, role.field).length"
+                v-else-if="!peopleOf(post, role.field).length"
                 type="button"
                 class="inline-flex h-6 items-center gap-1 rounded-full bg-warning-soft px-2.5 text-xs font-medium text-warning hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
                 :aria-label="__('Assign {0}', __(role.label).toLowerCase())"
@@ -293,7 +347,10 @@
                 v-else
                 type="button"
                 class="flex flex-col items-start gap-1 rounded-lg text-left text-sm text-ink-gray-8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
-                :title="__('Change who is on this')"
+                :title="
+                  auth.canEditContent ? __('Change who is on this') : undefined
+                "
+                :disabled="!auth.canEditContent"
                 @click="emit('action', post, 'assign', role.field)"
               >
                 <span
@@ -330,7 +387,36 @@
               {{ statusLine(post) }}
             </p>
             <template v-if="!CLOSED_STATUSES.includes(post.status)">
+              <!-- waiting on the head: only they move it on, so no Mark published -->
+              <template v-if="post.status === HEAD_REVIEW">
+                <template v-if="auth.isDmHead">
+                  <Button
+                    size="sm"
+                    variant="solid"
+                    :label="__('Approve')"
+                    @click="emit('action', post, 'head_approve')"
+                  >
+                    <template #prefix
+                      ><LucideCheck class="size-3.5" aria-hidden="true"
+                    /></template>
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    :label="__('Send back')"
+                    @click="emit('action', post, 'head_send_back')"
+                  >
+                    <template #prefix
+                      ><LucideUndo2 class="size-3.5" aria-hidden="true"
+                    /></template>
+                  </Button>
+                </template>
+              </template>
+              <!-- a post with the client can't be published until they and the head approve -->
               <button
+                v-else-if="
+                  post.status !== 'Client Review' && auth.canEditContent
+                "
                 type="button"
                 class="inline-flex h-7 items-center gap-1.5 rounded-md bg-success px-2.5 text-sm font-medium text-ink-base transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
                 @click="emit('action', post, 'publish')"
@@ -339,6 +425,7 @@
                 {{ __("Mark published") }}
               </button>
               <Button
+                v-if="auth.canEditContent"
                 size="sm"
                 variant="outline"
                 :label="__('Postpone')"
@@ -349,6 +436,7 @@
                 /></template>
               </Button>
               <Button
+                v-if="auth.canEditContent"
                 size="sm"
                 variant="ghost"
                 :aria-label="__('Cancel post')"
@@ -372,7 +460,7 @@
           </footer>
         </article>
 
-        <div>
+        <div v-if="auth.canEditContent">
           <Button
             size="sm"
             variant="ghost"
@@ -403,10 +491,17 @@ import LucideClock from "~icons/lucide/clock";
 import LucideExternalLink from "~icons/lucide/external-link";
 import LucidePlus from "~icons/lucide/plus";
 import LucideSend from "~icons/lucide/send";
+import LucideBuilding2 from "~icons/lucide/building-2";
+import LucidePaperclip from "~icons/lucide/paperclip";
+import LucidePencil from "~icons/lucide/pencil";
 import LucideTriangleAlert from "~icons/lucide/triangle-alert";
+import { useAuthStore } from "@/stores/auth";
+import LucideCheck from "~icons/lucide/check";
+import LucideUndo2 from "~icons/lucide/undo-2";
 import {
   CLOSED_STATUSES,
   type ContentPost,
+  HEAD_REVIEW,
   type EntryAction,
   htmlToText,
   isMissed,
@@ -418,7 +513,10 @@ import {
 } from "../constants";
 import ChannelIcon from "./ChannelIcon.vue";
 import ChipToggle from "./ChipToggle.vue";
+import SpecialDayBadge from "./SpecialDayBadge.vue";
 import StatusPill from "./StatusPill.vue";
+
+const auth = useAuthStore();
 
 const PERIOD_TEXT = {
   day: {
@@ -705,6 +803,10 @@ const days = computed(() => {
     .map((d) => ({
       ...d,
       posts: d.posts.sort((a, b) => (a.publish_on! < b.publish_on! ? -1 : 1)),
+      // each special day once, so the day heading names them
+      specialDays: [
+        ...new Set(d.posts.map((p) => p.special_day).filter(Boolean)),
+      ] as string[],
     }));
 });
 
@@ -721,6 +823,11 @@ function statusLine(post: ContentPost) {
   }
   if (post.status === "Cancelled") return __("Cancelled");
   if (isMissed(post, now.value)) return __("Not published. Was due {0}.", when);
+  if (post.status === HEAD_REVIEW)
+    return __(
+      "Client approved · waiting for the Digital Marketing Head. Goes live {0}.",
+      when
+    );
   const postponed = post.times_postponed
     ? " · " +
       (post.times_postponed === 1
