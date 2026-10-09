@@ -57,7 +57,8 @@ Managers and Agent Managers see every department.
 - **Content calendar for ERP Employees** (`content_team.is_erp_only()`, unless they also edit
   content): HD Content Post `permission_query` returns no posts and `has_permission` refuses
   them; a content post's tasks (`Task.content_post` set) are left out of `task_query` and
-  refused by `task_has_permission`, whatever their project's department; the sidebar hides
+  refused by `task_has_permission`, whatever their project's department; one left on a post's
+  team gets no task and no "your turn" notice from it (`HDContentPost.task_people`); the sidebar hides
   Content and Calendar, and the router sends `ContentCalendar`,
   `ContentReport`, `ContentPlans` and `WorkCalendar` to Home (`ERP_EMPLOYEE_HIDDEN_ROUTES` in
   `pages/content/contentTeam.ts`, `authStore.isErpOnly`).

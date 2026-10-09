@@ -415,7 +415,10 @@ class HDContentPost(Document):
         if self.status == HEAD_REVIEW:
             users.extend(head_approvers())
             message = _("{0} ({1}) was approved by the client and needs your approval.")
-        users = [u for u in dict.fromkeys(users) if u and u != frappe.session.user]
+        # ERP Employees can't read the post, so they don't hear its title or customer
+        users = self.task_people(
+            [u for u in dict.fromkeys(users) if u and u != frappe.session.user]
+        )
         if not users:
             return
         notify_users(

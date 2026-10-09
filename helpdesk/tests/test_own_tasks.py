@@ -333,6 +333,21 @@ class TestContentTeams(FrappeTestCase):
         )
         self.assertIsNone(get_content_task(post.name, "Writer"))
 
+    def test_an_erp_person_on_a_posts_team_hears_nothing_about_it(self):
+        post = make_content_post(
+            "Onam offer reel",
+            CUSTOMER,
+            status="Design",
+            publish_on=add_days(now_datetime(), 12),
+            writer=self.erp,
+            designer=self.designer,
+        )
+        post.status = "Changes Requested"
+        post.save(ignore_permissions=True)
+
+        self.assertEqual(get_reminder_messages(self.erp, post.name), [])
+        self.assertTrue(get_reminder_messages(self.designer, post.name))
+
     def test_a_content_task_is_handed_to_anyone_and_the_post_follows(self):
         # the designer isn't on the content calendar project's team
         task = get_content_task(self.post.name, "Writer")
