@@ -808,6 +808,16 @@ def make_assigned_task(
     return run_as_user(assigned_by, create)
 
 
+def make_planned_task(
+    project: str, subject: str, assignee: str, hours: float, due, **kwargs
+) -> str:
+    """Creates an open Task in `project` estimated at `hours` and due on `due`, assigned
+    to `assignee`; returns its name. For capacity planning tests."""
+    task = make_task(project, subject, due, custom_estimated_hours=hours, **kwargs).name
+    make_assignment("Task", task, assignee)
+    return task
+
+
 def make_employee(user: str, employee_name: str | None = None):
     """Creates an active Employee linked to `user` (the hub doesn't need one per agent)."""
     return frappe.get_doc(
