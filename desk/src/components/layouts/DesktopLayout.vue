@@ -1,10 +1,13 @@
 <template>
-  <div class="flex h-screen w-screen">
+  <div class="flex h-screen w-full overflow-hidden bg-surface-sidebar">
     <Sidebar />
-    <div class="flex-1 flex flex-col h-full overflow-auto relative">
+    <!-- The page sits on a raised panel inset from the shell; it scrolls on its own. -->
+    <main
+      class="relative my-2.5 me-2.5 flex min-w-0 flex-1 flex-col overflow-auto rounded-2xl border border-outline-gray-2 bg-surface-base shadow-sm"
+    >
       <AppHeader />
       <slot />
-    </div>
+    </main>
     <Notifications />
     <CommandPalette />
   </div>

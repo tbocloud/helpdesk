@@ -1,109 +1,182 @@
 <template>
   <div class="flex h-full flex-col">
     <LayoutHeader>
-      <template #left-header>
-        <div class="text-lg-medium text-ink-gray-9">
+      <header
+        class="flex w-full items-center justify-between gap-3 px-4 py-2.5 md:px-6 md:py-3"
+      >
+        <h1 class="min-w-0 truncate text-3xl font-semibold text-ink-gray-9">
           {{ __("Content Calendar") }}
+        </h1>
+        <div class="flex shrink-0 items-center gap-1 sm:gap-2">
+          <button
+            type="button"
+            :class="HEADER_BTN"
+            :title="__('Send portal email')"
+            @click="shareOpen = true"
+          >
+            <span :class="HEADER_TILE" aria-hidden="true">
+              <LucideMail class="size-[15px]" />
+            </span>
+            <span class="sr-only lg:not-sr-only">{{
+              __("Send portal email")
+            }}</span>
+          </button>
+          <router-link
+            v-if="auth.isAdmin || auth.isManager || auth.isProjectManager"
+            :to="{ name: 'ContentPlans' }"
+            :class="HEADER_BTN"
+            :title="__('Monthly plans')"
+          >
+            <span :class="HEADER_TILE" aria-hidden="true">
+              <LucideCalendarSync class="size-[15px]" />
+            </span>
+            <span class="sr-only lg:not-sr-only">{{
+              __("Monthly plans")
+            }}</span>
+          </router-link>
+          <router-link
+            :to="{ name: 'ContentReport' }"
+            :class="HEADER_BTN"
+            :title="__('Delivery report')"
+          >
+            <span :class="HEADER_TILE" aria-hidden="true">
+              <LucideChartColumn class="size-[15px]" />
+            </span>
+            <span class="sr-only lg:not-sr-only">{{
+              __("Delivery report")
+            }}</span>
+          </router-link>
+          <button
+            v-if="auth.canEditContent"
+            type="button"
+            class="inline-flex h-8 items-center gap-1.5 rounded-[10px] bg-brand px-3 text-sm font-semibold text-brand-on shadow-sm transition-colors hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 sm:px-4"
+            @click="openAdd()"
+          >
+            <LucidePlus class="size-4" aria-hidden="true" />
+            <span class="sr-only sm:not-sr-only">{{ __("Add entry") }}</span>
+          </button>
         </div>
-      </template>
-      <template #right-header>
-        <Button
-          variant="ghost"
-          :label="__('Send portal email')"
-          @click="shareOpen = true"
-        >
-          <template #prefix
-            ><LucideMail class="size-4" aria-hidden="true"
-          /></template>
-        </Button>
-        <Button
-          v-if="auth.isAdmin || auth.isManager || auth.isProjectManager"
-          variant="ghost"
-          :label="__('Monthly plans')"
-          :route="{ name: 'ContentPlans' }"
-        >
-          <template #prefix
-            ><LucideCalendarSync class="size-4" aria-hidden="true"
-          /></template>
-        </Button>
-        <Button
-          variant="ghost"
-          :label="__('Delivery report')"
-          :route="{ name: 'ContentReport' }"
-        >
-          <template #prefix
-            ><LucideChartColumn class="size-4" aria-hidden="true"
-          /></template>
-        </Button>
-        <Button
-          v-if="auth.canEditContent"
-          variant="solid"
-          :label="__('Add entry')"
-          @click="openAdd()"
-        >
-          <template #prefix
-            ><LucidePlus class="size-4" aria-hidden="true"
-          /></template>
-        </Button>
-      </template>
+      </header>
     </LayoutHeader>
 
     <div
-      class="flex flex-wrap items-center gap-2 border-b border-outline-gray-2 px-4 py-2.5 md:px-5"
+      class="flex flex-wrap items-center gap-2 border-b border-outline-gray-2 px-4 py-2 md:px-6"
     >
       <Link
         v-model="filters.customer"
         doctype="HD Customer"
-        class="w-full sm:w-56"
+        class="w-full sm:w-auto"
         :placeholder="__('All customers')"
-      />
-      <div class="w-40">
-        <FormControl
-          v-model="filters.channel"
-          type="select"
-          :options="[{ label: __('All channels'), value: '' }, ...platforms]"
-          :aria-label="__('Channel')"
-        />
-      </div>
-      <div class="w-44">
-        <FormControl
-          v-model="filters.status"
-          type="select"
-          :options="[{ label: __('All statuses'), value: '' }, ...STATUSES]"
-          :aria-label="__('Status')"
-        />
-      </div>
-      <div class="w-full sm:w-56">
-        <Link
-          v-model="filters.person"
-          doctype="User"
-          :filters="{ enabled: 1, user_type: 'System User' }"
-          :placeholder="__('Everyone')"
-          :aria-label="__('Person')"
-        />
-      </div>
-      <Button
-        :variant="filters.person === auth.userId ? 'subtle' : 'ghost'"
-        :label="__('My posts')"
-        :title="__('Posts I am on, in any role')"
-        @click="
-          filters.person = filters.person === auth.userId ? '' : auth.userId
-        "
       >
-        <template #prefix
-          ><LucideUser class="size-4" aria-hidden="true"
-        /></template>
-      </Button>
-      <Button
+        <template #target="{ togglePopover }">
+          <button
+            type="button"
+            :class="[CONTROL, 'w-full sm:w-auto']"
+            aria-haspopup="listbox"
+            :aria-label="
+              __('Customer: {0}', filters.customer || __('All customers'))
+            "
+            @click="togglePopover()"
+          >
+            <span :class="CONTROL_TILE" aria-hidden="true">
+              <LucideBuilding2 class="size-3.5" />
+            </span>
+            <span
+              class="min-w-0 flex-1 truncate text-left"
+              :class="filters.customer ? 'text-ink-gray-9' : 'text-ink-gray-6'"
+              >{{ filters.customer || __("All customers") }}</span
+            >
+            <LucideChevronDown
+              class="size-3.5 shrink-0 text-ink-gray-5"
+              aria-hidden="true"
+            />
+          </button>
+        </template>
+      </Link>
+      <Select
+        v-model="filters.channel"
+        :class="[CONTROL_SELECT, 'flex-1 sm:flex-none']"
+        :options="[{ label: __('All channels'), value: '' }, ...platforms]"
+        :aria-label="__('Channel')"
+      >
+        <template #trigger="{ displayValue }">
+          <span :class="CONTROL_TILE" aria-hidden="true">
+            <LucideShare2 class="size-3.5" />
+          </span>
+          <span
+            class="min-w-0 flex-1 truncate text-left"
+            :class="filters.channel ? 'text-ink-gray-9' : 'text-ink-gray-6'"
+            >{{ displayValue || __("All channels") }}</span
+          >
+          <LucideChevronDown
+            class="size-3.5 shrink-0 text-ink-gray-5"
+            aria-hidden="true"
+          />
+        </template>
+      </Select>
+      <Select
+        v-model="filters.status"
+        :class="[CONTROL_SELECT, 'flex-1 sm:flex-none']"
+        :options="[{ label: __('All statuses'), value: '' }, ...STATUSES]"
+        :aria-label="__('Status')"
+      >
+        <template #trigger="{ displayValue }">
+          <span :class="CONTROL_TILE" aria-hidden="true">
+            <LucideCircleDot class="size-3.5" />
+          </span>
+          <span
+            class="min-w-0 flex-1 truncate text-left"
+            :class="filters.status ? 'text-ink-gray-9' : 'text-ink-gray-6'"
+            >{{ displayValue || __("All statuses") }}</span
+          >
+          <LucideChevronDown
+            class="size-3.5 shrink-0 text-ink-gray-5"
+            aria-hidden="true"
+          />
+        </template>
+      </Select>
+      <Link
+        v-model="filters.person"
+        doctype="User"
+        class="w-full sm:w-auto"
+        :filters="{ enabled: 1, user_type: 'System User' }"
+        :placeholder="__('Everyone')"
+      >
+        <template #target="{ togglePopover }">
+          <button
+            type="button"
+            :class="[CONTROL, 'w-full sm:w-auto']"
+            aria-haspopup="listbox"
+            :aria-label="__('Person: {0}', personLabel || __('Everyone'))"
+            @click="togglePopover()"
+          >
+            <span :class="CONTROL_TILE" aria-hidden="true">
+              <LucideUsers class="size-3.5" />
+            </span>
+            <span
+              class="min-w-0 flex-1 truncate text-left"
+              :class="filters.person ? 'text-ink-gray-9' : 'text-ink-gray-6'"
+              >{{ personLabel || __("Everyone") }}</span
+            >
+            <LucideChevronDown
+              class="size-3.5 shrink-0 text-ink-gray-5"
+              aria-hidden="true"
+            />
+          </button>
+        </template>
+      </Link>
+      <button
         v-if="hasFilters"
-        variant="ghost"
-        :label="__('Clear')"
+        type="button"
+        class="inline-flex h-8 items-center rounded-[10px] px-2.5 text-sm font-medium text-ink-gray-6 hover:bg-surface-gray-2 hover:text-ink-gray-8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-3"
         @click="clearFilters"
-      />
-      <div class="flex-1" />
+      >
+        {{ __("Clear") }}
+      </button>
+      <div class="hidden flex-1 sm:block" />
       <div
         v-if="view === 'calendar'"
-        class="hidden items-center gap-3 text-xs text-ink-gray-5 lg:flex"
+        class="hidden items-center gap-3 text-xs text-ink-gray-6 lg:flex"
         aria-hidden="true"
       >
         <span
@@ -114,97 +187,133 @@
           <span class="size-2 rounded-sm" :class="s.swatch" />{{ s.label }}
         </span>
       </div>
+      <button
+        type="button"
+        class="inline-flex h-8 items-center gap-1.5 rounded-[10px] border pl-1 pr-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-3"
+        :class="
+          myPostsOn
+            ? 'border-brand bg-brand-soft text-brand-ink'
+            : 'border-dashed border-outline-gray-3 bg-surface-base text-ink-gray-8 hover:bg-surface-gray-1'
+        "
+        :aria-pressed="myPostsOn"
+        :title="__('Posts I am on, in any role')"
+        @click="filters.person = myPostsOn ? '' : auth.userId"
+      >
+        <span
+          class="grid size-[22px] place-items-center rounded-[6px]"
+          :class="
+            myPostsOn ? 'bg-brand text-brand-on' : 'bg-brand-soft text-brand'
+          "
+          aria-hidden="true"
+        >
+          <LucideUser class="size-3.5" />
+        </span>
+        {{ __("My posts") }}
+      </button>
     </div>
 
     <div class="flex min-h-0 flex-1">
-      <div class="relative flex min-w-0 flex-1 flex-col gap-3 p-3 md:p-4">
+      <div
+        class="relative flex min-w-0 flex-1 flex-col gap-3 px-4 pb-4 pt-3 md:px-6"
+      >
         <div class="flex flex-wrap items-center gap-2">
           <div
-            class="inline-flex rounded-lg bg-surface-gray-2 p-0.5"
-            role="tablist"
+            class="inline-flex h-8 items-center rounded-[10px] bg-surface-gray-2 p-0.5"
+            role="group"
             :aria-label="__('View')"
           >
             <button
               v-for="v in VIEWS"
               :key="v.key"
               type="button"
-              role="tab"
-              :aria-selected="view === v.key"
-              class="inline-flex h-7 items-center gap-1.5 rounded-md px-3 text-sm"
-              :class="
-                view === v.key
-                  ? 'bg-surface-base text-ink-gray-9 shadow-sm'
-                  : 'text-ink-gray-6 hover:text-ink-gray-8'
-              "
+              :aria-pressed="view === v.key"
+              :class="[SEGMENT, view === v.key ? SEGMENT_ON : SEGMENT_OFF]"
               @click="view = v.key"
             >
-              <component :is="v.icon" class="size-4" aria-hidden="true" />
-              {{ v.label }}
+              <component
+                :is="v.icon"
+                class="size-4"
+                :class="view === v.key ? 'text-brand' : ''"
+                aria-hidden="true"
+              />
+              <span class="sr-only sm:not-sr-only">{{ v.label }}</span>
             </button>
           </div>
           <template v-if="view !== 'calendar'">
-            <div class="flex items-center gap-1">
-              <Button
-                :label="__('Today')"
+            <div class="flex items-center gap-2">
+              <button
+                type="button"
+                class="inline-flex h-8 items-center rounded-[10px] bg-surface-gray-2 px-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-3"
+                :class="
+                  includesToday
+                    ? 'cursor-default text-ink-gray-5'
+                    : 'text-ink-gray-8 hover:bg-surface-gray-3'
+                "
                 :disabled="includesToday"
-                :tooltip="__('Go to today (T)')"
+                :title="__('Go to today (T)')"
                 @click="anchor = today"
-              />
-              <Button
-                variant="ghost"
-                :aria-label="__('Previous {0}', periodNoun)"
-                :tooltip="__('Previous {0} (←)', periodNoun)"
-                @click="shiftPeriod(-1)"
               >
-                <LucideChevronLeft class="size-4" aria-hidden="true" />
-              </Button>
-              <Button
-                variant="ghost"
-                :aria-label="__('Next {0}', periodNoun)"
-                :tooltip="__('Next {0} (→)', periodNoun)"
-                @click="shiftPeriod(1)"
+                {{ __("Today") }}
+              </button>
+              <div
+                class="inline-flex h-8 items-center divide-x divide-outline-gray-2 overflow-hidden rounded-[10px] border border-outline-gray-2 bg-surface-base"
               >
-                <LucideChevronRight class="size-4" aria-hidden="true" />
-              </Button>
-              <!-- the label opens the browser's date picker -->
-              <label
-                class="relative inline-flex h-8 cursor-pointer items-center gap-1 rounded-md px-2 text-base font-medium text-ink-gray-9 hover:bg-surface-gray-2 focus-within:ring-2 focus-within:ring-outline-gray-3"
-                :title="__('Pick a date')"
-                @click.prevent="openDatePicker"
-              >
-                {{ periodLabel }}
-                <LucideChevronDown
-                  class="size-4 text-ink-gray-5"
-                  aria-hidden="true"
-                />
+                <button
+                  type="button"
+                  :class="STEP_BTN"
+                  :aria-label="__('Previous {0}', periodNoun)"
+                  :title="__('Previous {0} (←)', periodNoun)"
+                  @click="shiftPeriod(-1)"
+                >
+                  <LucideChevronLeft class="size-4" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  :class="STEP_BTN"
+                  :aria-label="__('Next {0}', periodNoun)"
+                  :title="__('Next {0} (→)', periodNoun)"
+                  @click="shiftPeriod(1)"
+                >
+                  <LucideChevronRight class="size-4" aria-hidden="true" />
+                </button>
+              </div>
+              <!-- the button opens the browser's date picker, anchored to the hidden input -->
+              <span class="relative inline-flex">
+                <button
+                  type="button"
+                  class="inline-flex h-8 items-center gap-1 rounded-[10px] px-2 text-lg font-semibold text-ink-gray-9 hover:bg-surface-gray-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-3"
+                  :title="__('Pick a date')"
+                  :aria-label="__('Pick a date, showing {0}', periodLabel)"
+                  @click="openDatePicker"
+                >
+                  {{ periodLabel }}
+                  <LucideChevronDown
+                    class="size-4 text-ink-gray-5"
+                    aria-hidden="true"
+                  />
+                </button>
                 <input
                   ref="dateInput"
                   v-model="anchor"
                   type="date"
-                  class="absolute inset-0 opacity-0 pointer-events-none"
-                  :aria-label="__('Go to date')"
+                  class="pointer-events-none absolute inset-0 opacity-0"
+                  aria-hidden="true"
                   tabindex="-1"
                 />
-              </label>
+              </span>
             </div>
             <div class="flex-1" />
             <div
-              class="inline-flex rounded-lg bg-surface-gray-2 p-0.5"
-              role="tablist"
+              class="inline-flex h-8 items-center rounded-[10px] bg-surface-gray-2 p-0.5"
+              role="group"
               :aria-label="__('Period')"
             >
               <button
                 v-for="p in PERIODS"
                 :key="p.key"
                 type="button"
-                role="tab"
-                :aria-selected="period === p.key"
-                class="h-7 rounded-md px-3 text-sm"
-                :class="
-                  period === p.key
-                    ? 'bg-surface-base text-ink-gray-9 shadow-sm'
-                    : 'text-ink-gray-6 hover:text-ink-gray-8'
-                "
+                :aria-pressed="period === p.key"
+                :class="[SEGMENT, period === p.key ? SEGMENT_ON : SEGMENT_OFF]"
                 @click="period = p.key"
               >
                 {{ p.label }}
@@ -214,16 +323,18 @@
         </div>
         <div
           v-if="view !== 'calendar' && occasionsInRange.length"
-          class="flex flex-wrap items-center gap-1.5"
+          class="flex flex-wrap items-center gap-2"
           role="group"
           :aria-label="__('Occasions')"
         >
-          <span class="text-xs text-ink-gray-5">{{ __("Occasions") }}</span>
+          <span class="mr-0.5 text-sm font-medium text-ink-gray-6">{{
+            __("Occasions")
+          }}</span>
           <button
             v-for="o in occasionsInRange"
             :key="`${o.date}-${o.occasion}`"
             type="button"
-            class="inline-flex h-7 items-center gap-1.5 rounded-full border border-outline-gray-2 bg-surface-base px-2.5 text-xs text-ink-gray-7 hover:bg-surface-gray-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-3"
+            class="inline-flex h-8 items-center gap-2 rounded-full border border-outline-gray-2 bg-surface-base pl-1 pr-3 text-sm text-ink-gray-8 hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-3 disabled:cursor-default disabled:hover:bg-surface-base"
             :title="o.idea || ''"
             :aria-label="
               __(
@@ -235,11 +346,13 @@
             :disabled="!auth.canEditContent"
             @click="openAdd(o.date, o.occasion)"
           >
-            <LucideSparkles
-              class="size-3.5 text-ink-gray-5"
+            <span
+              class="grid size-6 place-items-center rounded-full bg-warning-soft text-warning"
               aria-hidden="true"
-            />
-            <span class="font-mono tabular-nums">{{
+            >
+              <LucideSparkles class="size-3" />
+            </span>
+            <span class="font-mono tabular-nums text-ink-gray-6">{{
               dayjs(o.date).format("D MMM")
             }}</span>
             {{ o.occasion }}
@@ -247,7 +360,7 @@
         </div>
         <div
           v-if="view !== 'calendar' && period !== 'month'"
-          class="grid grid-cols-7 gap-1.5"
+          class="grid grid-cols-7 gap-1 sm:gap-2"
           role="group"
           :aria-label="__('Days of the week')"
         >
@@ -255,76 +368,100 @@
             v-for="d in weekDays"
             :key="d.date"
             type="button"
-            class="flex flex-col items-center gap-0.5 rounded-lg border px-1 py-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-3"
+            class="flex min-h-[54px] min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl px-0.5 py-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 sm:h-[54px]"
             :class="
-              period === 'day' && d.date === anchor
-                ? 'border-brand bg-brand-soft text-brand-ink'
-                : 'border-outline-gray-2 bg-surface-base text-ink-gray-7 hover:bg-surface-gray-2'
+              d.selected
+                ? 'border-2 border-brand bg-brand-soft'
+                : 'border border-outline-gray-2 bg-surface-base hover:bg-surface-gray-1'
             "
-            :aria-pressed="period === 'day' && d.date === anchor"
+            :aria-pressed="d.selected"
             :aria-label="d.ariaLabel"
             :title="d.special ? __('Special day: {0}', d.special) : undefined"
             @click="openDay(d.date)"
           >
-            <span class="text-2xs uppercase tracking-[0.06em]">{{
-              d.weekday
-            }}</span>
             <span
-              class="grid size-7 place-items-center rounded-full text-base font-semibold tabular-nums"
-              :class="d.date === today ? 'bg-brand text-brand-on' : ''"
+              class="text-2xs font-semibold uppercase leading-none tracking-[0.08em]"
+              :class="d.selected ? 'text-brand-ink' : 'text-ink-gray-6'"
+              >{{ d.weekday }}</span
+            >
+            <span
+              class="grid h-5 min-w-[1.5rem] place-items-center rounded-[6px] px-1 font-mono text-base font-medium leading-none tabular-nums"
+              :class="
+                d.selected
+                  ? 'bg-brand text-brand-on'
+                  : d.isToday
+                  ? 'font-semibold text-brand-ink'
+                  : 'text-ink-gray-9'
+              "
               >{{ d.day }}</span
             >
-            <span class="flex h-4 items-center gap-1 text-xs tabular-nums">
-              <LucideStar
-                v-if="d.special"
-                class="size-3 fill-current text-warning"
-                aria-hidden="true"
-              />
+            <span
+              class="flex min-h-4 flex-wrap items-center justify-center gap-1 text-2xs tabular-nums"
+            >
               <span
-                v-if="d.missed"
-                class="size-1.5 rounded-full bg-danger"
-                aria-hidden="true"
-              />
-              <span v-if="d.count" class="font-mono">{{ d.count }}</span>
+                v-if="d.count && d.missed"
+                class="inline-flex h-4 items-center gap-1 rounded-full bg-danger-soft px-1.5 font-mono font-medium text-danger"
+              >
+                <span
+                  class="size-[5px] rounded-full bg-danger"
+                  aria-hidden="true"
+                />{{ d.count }}
+              </span>
+              <span
+                v-else-if="d.count"
+                class="inline-flex h-4 items-center rounded-full bg-surface-gray-2 px-1.5 font-mono font-medium text-ink-gray-7"
+                >{{ d.count }}</span
+              >
               <span v-else class="text-ink-gray-4">–</span>
+              <span
+                v-if="d.special"
+                class="grid size-4 place-items-center rounded-full bg-warning-soft text-warning"
+              >
+                <LucideStar class="size-2 fill-current" aria-hidden="true" />
+              </span>
             </span>
           </button>
         </div>
         <!-- posts saved before a date was required have no slot, so list them here -->
         <div
           v-if="undated.data?.length"
-          class="flex flex-col gap-2 rounded-lg border border-outline-gray-2 bg-surface-gray-1 px-4 py-2.5"
+          class="flex flex-col gap-2 rounded-xl border border-outline-gray-2 bg-surface-gray-1 px-3 py-1.5"
           role="status"
         >
-          <div class="flex flex-wrap items-center justify-between gap-2">
-            <p class="text-sm text-ink-gray-7">
-              <LucideCalendarX
-                class="mr-1 inline size-4 align-text-bottom text-ink-gray-5"
-                aria-hidden="true"
-              />
-              {{
-                undated.data.length === 1
-                  ? __(
-                      "1 post has no posting date, so it isn't on the calendar."
-                    )
-                  : __(
-                      "{0} posts have no posting date, so they aren't on the calendar.",
-                      String(undated.data.length)
-                    )
-              }}
+          <div class="flex flex-wrap items-center gap-3">
+            <span
+              class="grid size-6 shrink-0 place-items-center rounded-[6px] border border-outline-gray-2 bg-surface-base text-ink-gray-6"
+              aria-hidden="true"
+            >
+              <LucideCalendarX class="size-3.5" />
+            </span>
+            <p class="min-w-0 flex-1 text-sm text-ink-gray-8">
+              {{ undatedText[0]
+              }}<strong class="font-semibold text-ink-gray-9">{{
+                undatedCount
+              }}</strong
+              >{{ undatedText[1] }}
             </p>
-            <Button
-              size="sm"
-              variant="ghost"
-              :label="showUndated ? __('Hide') : __('Show them')"
+            <button
+              type="button"
+              class="inline-flex h-7 items-center rounded-[8px] border border-outline-gray-2 bg-surface-base px-2.5 text-sm font-medium text-ink-gray-8 hover:bg-surface-gray-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-3"
+              :aria-expanded="showUndated"
               @click="showUndated = !showUndated"
-            />
+            >
+              {{
+                showUndated
+                  ? __("Hide")
+                  : undated.data.length === 1
+                  ? __("Show it")
+                  : __("Show them")
+              }}
+            </button>
           </div>
           <ul v-if="showUndated" class="flex flex-wrap gap-1.5">
             <li v-for="p in undated.data" :key="p.name">
               <button
                 type="button"
-                class="rounded-md border border-outline-gray-2 bg-surface-base px-2 py-1 text-left text-sm text-ink-gray-8 hover:bg-surface-gray-2"
+                class="rounded-lg border border-outline-gray-2 bg-surface-base px-2.5 py-1 text-left text-sm text-ink-gray-8 hover:bg-surface-gray-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-3"
                 :title="__('Open it and set a posting date')"
                 @click="openPost(p.name)"
               >
@@ -336,13 +473,18 @@
         </div>
         <div
           v-if="(view === 'calendar' ? posts : monthPosts).error"
-          class="absolute inset-x-4 top-4 z-10 flex items-center justify-between gap-3 rounded-lg bg-danger-soft px-4 py-2.5 text-sm text-danger"
+          class="absolute inset-x-4 top-4 z-10 flex items-center justify-between gap-3 rounded-xl bg-danger-soft px-4 py-2.5 text-base text-danger md:inset-x-8"
           role="alert"
         >
           {{ __("Couldn't load posts.") }}
           <Button size="sm" :label="__('Retry')" @click="refresh()" />
         </div>
-        <div v-if="view !== 'calendar'" class="min-h-0 flex-1 overflow-y-auto">
+        <!-- relative, so absolutely placed bits inside (screen-reader-only labels) are clipped
+             by this list's scroll instead of stretching the whole page -->
+        <div
+          v-if="view !== 'calendar'"
+          class="relative min-h-0 flex-1 overflow-y-auto"
+        >
           <ContentBoard
             v-if="view === 'board'"
             :posts="visiblePosts"
@@ -409,27 +551,32 @@ import {
   call,
   createResource,
   dayjs,
-  FormControl,
+  Select,
   toast,
 } from "frappe-ui";
 import { useEventListener, useStorage } from "@vueuse/core";
 import { computed, markRaw, reactive, ref, watch } from "vue";
 import { useRoute } from "vue-router";
+import LucideBuilding2 from "~icons/lucide/building-2";
 import LucideCalendarDays from "~icons/lucide/calendar-days";
 import LucideChartColumn from "~icons/lucide/chart-column";
 import LucideChevronDown from "~icons/lucide/chevron-down";
 import LucideChevronLeft from "~icons/lucide/chevron-left";
 import LucideChevronRight from "~icons/lucide/chevron-right";
+import LucideCircleDot from "~icons/lucide/circle-dot";
 import LucideLayoutList from "~icons/lucide/layout-list";
 import LucidePlus from "~icons/lucide/plus";
 import LucideMail from "~icons/lucide/mail";
+import LucideShare2 from "~icons/lucide/share-2";
 import LucideSheet from "~icons/lucide/sheet";
 import LucideCalendarSync from "~icons/lucide/calendar-sync";
 import LucideSparkles from "~icons/lucide/sparkles";
 import LucideStar from "~icons/lucide/star";
 import LucideCalendarX from "~icons/lucide/calendar-x";
 import LucideUser from "~icons/lucide/user";
+import LucideUsers from "~icons/lucide/users";
 import { useAuthStore } from "@/stores/auth";
+import { useUserStore } from "@/stores/user";
 import {
   type ContentOccasion,
   type ContentPost,
@@ -458,6 +605,25 @@ const calendarConfig = computed(() => ({
   timeFormat: "12h",
   eventIcons: {},
 }));
+
+// shared looks for the header, filter bar and toolbar controls
+const HEADER_BTN =
+  "inline-flex h-8 items-center gap-1.5 rounded-[10px] px-1 text-sm font-medium text-ink-gray-8 transition-colors hover:bg-surface-gray-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-3 lg:pr-3";
+const HEADER_TILE =
+  "grid size-6 place-items-center rounded-[7px] bg-surface-gray-2 text-ink-gray-7";
+const CONTROL =
+  "inline-flex h-8 min-w-[130px] items-center gap-1.5 rounded-[10px] border border-outline-gray-2 bg-surface-base pl-1 pr-2 text-sm transition-colors hover:border-outline-gray-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-3";
+// the Select trigger brings its own size and padding, so these win over it
+const CONTROL_SELECT =
+  "!h-8 !min-h-8 min-w-[130px] !gap-1.5 !rounded-[10px] !border-outline-gray-2 !bg-surface-base !pl-1 !pr-2 !text-sm hover:!border-outline-gray-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-3";
+const CONTROL_TILE =
+  "grid size-5 shrink-0 place-items-center rounded-[5px] border border-outline-gray-2 text-ink-gray-6";
+const SEGMENT =
+  "inline-flex h-7 items-center gap-1.5 rounded-[8px] px-2.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-3";
+const SEGMENT_ON = "bg-surface-base font-semibold text-ink-gray-9 shadow-sm";
+const SEGMENT_OFF = "font-medium text-ink-gray-6 hover:text-ink-gray-8";
+const STEP_BTN =
+  "grid h-full w-8 place-items-center text-ink-gray-7 hover:bg-surface-gray-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-outline-gray-3";
 
 const legend = [
   { label: __("Planning"), swatch: "bg-info" },
@@ -526,6 +692,7 @@ const weekDays = computed(() => {
     );
     const missed = onDay.some((p) => isMissed(p));
     const special = onDay.find((p) => p.special_day)?.special_day;
+    const isToday = date === today;
     return {
       date,
       weekday: day.format("ddd"),
@@ -533,11 +700,13 @@ const weekDays = computed(() => {
       count: onDay.length,
       missed,
       special,
-      ariaLabel: `${day.format("dddd D MMMM")}: ${onDay.length} ${
-        onDay.length === 1 ? __("post") : __("posts")
-      }${missed ? `, ${__("some missed")}` : ""}${
-        special ? `, ${__("special day: {0}", special)}` : ""
-      }`,
+      isToday,
+      selected: period.value === "day" && date === anchor.value,
+      ariaLabel: `${day.format("dddd D MMMM")}${
+        isToday ? `, ${__("today")}` : ""
+      }: ${onDay.length} ${onDay.length === 1 ? __("post") : __("posts")}${
+        missed ? `, ${__("some missed")}` : ""
+      }${special ? `, ${__("special day: {0}", special)}` : ""}`,
     };
   });
 });
@@ -563,7 +732,9 @@ useEventListener(window, "keydown", (e: KeyboardEvent) => {
   if (view.value === "calendar" || e.metaKey || e.ctrlKey || e.altKey) return;
   const target = e.target as HTMLElement | null;
   if (
-    target?.closest("input, textarea, select, [contenteditable], [role=dialog]")
+    target?.closest(
+      "input, textarea, select, [contenteditable], [role=dialog], [role=combobox], [role=listbox]"
+    )
   )
     return;
   if (e.key === "ArrowLeft") shiftPeriod(-1);
@@ -598,6 +769,16 @@ function shiftPeriod(by: number) {
 
 const filters = reactive({ customer: "", channel: "", status: "", person: "" });
 const range = ref<{ start: string; end: string } | null>(null);
+const myPostsOn = computed(() => filters.person === auth.userId);
+const userStore = useUserStore();
+const personLabel = computed(() => {
+  if (!filters.person) return "";
+  const users: { name: string; full_name?: string }[] =
+    userStore.users.data ?? [];
+  return (
+    users.find((u) => u.name === filters.person)?.full_name || filters.person
+  );
+});
 const hasFilters = computed(
   () =>
     !!(filters.customer || filters.channel || filters.status || filters.person)
@@ -770,6 +951,27 @@ const undated = createResource({
     order_by: "creation desc",
     limit_page_length: 100,
   }),
+});
+
+// the count and its noun are set in bold, so split the translated sentence around them
+const COUNT_MARK = "\u0000";
+const undatedCount = computed(() => {
+  const n = undated.data?.length ?? 0;
+  return n === 1 ? __("1 post") : __("{0} posts", n);
+});
+const undatedText = computed(() => {
+  const n = undated.data?.length ?? 0;
+  const sentence =
+    n === 1
+      ? __("{0} has no posting date, so it isn't on the calendar.", COUNT_MARK)
+      : __(
+          "{0} have no posting date, so they aren't on the calendar.",
+          COUNT_MARK
+        );
+  // a translation may drop or repeat the placeholder: show the count once, keep all its text
+  const parts = sentence.split(COUNT_MARK);
+  if (parts.length === 1) return ["", ` ${sentence}`];
+  return [parts[0], parts.slice(1).join("")];
 });
 
 function refresh() {
