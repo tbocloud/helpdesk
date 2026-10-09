@@ -114,6 +114,8 @@ function onInput(e: Event) {
 }
 
 function onKeydown(e: KeyboardEvent) {
+  // Enter confirms an IME composition (CJK input); it isn't a pick or a submit
+  if (e.isComposing || e.keyCode === 229) return;
   if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
     e.preventDefault();
     emit("submit");

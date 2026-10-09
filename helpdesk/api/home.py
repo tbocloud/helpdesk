@@ -38,6 +38,7 @@ from helpdesk.customer_health import (
     readable,
     sort_key,
 )
+from helpdesk.helpdesk.doctype.hd_project_folder.hd_project_folder import FolderTree
 from helpdesk.helpdesk.doctype.hd_ticket.hd_ticket import LOW_RATING_STARS
 from helpdesk.tasky.permissions import (
     get_led_projects,
@@ -161,6 +162,7 @@ def _files_for(user: str) -> list[dict]:
             file.creation,
             file.owner,
             record.project,
+            record.folder,
             uploader.full_name.as_("uploaded_by_name"),
         )
         .where(
@@ -186,6 +188,8 @@ def _files_for(user: str) -> list[dict]:
         if projects
         else {}
     )
+    # a file keeps its own status inside a superseded folder; "For me" hides it too
+    trees = {p: FolderTree(p) for p in readable}
     return [
         {
             "name": r.name,
@@ -196,7 +200,7 @@ def _files_for(user: str) -> list[dict]:
             "creation": str(r.creation),
         }
         for r in rows
-        if r.project in readable
+        if r.project in readable and not trees[r.project].is_superseded(r.folder)
     ]
 
 

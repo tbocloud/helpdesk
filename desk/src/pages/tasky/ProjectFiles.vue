@@ -1128,9 +1128,15 @@ watch(
     if (!data || typeof wanted !== "string" || stale.value) return;
     const file = data.files.find((f: ProjectFile) => f.name === wanted);
     const folder = data.folders.find((f: ProjectFolder) => f.name === wanted);
-    if (file || folder)
-      commenting.value = file ? fileRef(file) : folderRef(folder!);
     const query = { ...route.query };
+    if (file || folder) {
+      commenting.value = file ? fileRef(file) : folderRef(folder!);
+    } else if (!showSuperseded.value) {
+      // superseded since the link was sent: keep `comments` and look again with them shown
+      query.superseded = "1";
+      router.replace({ query });
+      return;
+    }
     delete query.comments;
     router.replace({ query });
   },

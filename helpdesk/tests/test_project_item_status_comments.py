@@ -288,9 +288,9 @@ class TestProjectItemStatusAndComments(FrappeTestCase):
             self.comment(DEV_B, "file", file, content="   ")
 
     def test_comment_on_a_file_added_outside_the_app(self):
-        file = make_attachment("Project", self.project, "brief.pdf", b"%PDF-1.4").name
+        file = make_attachment("Project", self.project, "brief.txt", b"brief").name
         self.comment(DEV_B, "file", file)
-        self.assertEqual(self.listed_files(DEV_A)["brief.pdf"]["comment_count"], 1)
+        self.assertEqual(self.listed_files(DEV_A)["brief.txt"]["comment_count"], 1)
 
     def test_authors_edit_and_delete_their_own_and_managers_delete_any(self):
         file = make_project_file(self.project, user=DEV_A[0])

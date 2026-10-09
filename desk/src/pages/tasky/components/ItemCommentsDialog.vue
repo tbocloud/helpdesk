@@ -155,8 +155,10 @@
                   theme="red"
                   :label="__('Delete comment')"
                   :loading="remove.loading"
+                  :disabled="remove.loading"
                   @click="
-                    remove.submit({ project: projectId, comment: c.name })
+                    !remove.loading &&
+                      remove.submit({ project: projectId, comment: c.name })
                   "
                 />
               </div>
