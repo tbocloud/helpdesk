@@ -53,12 +53,11 @@ def weekday_names(numbers: list[int]) -> str:
 
 
 def rule_dates(rule) -> Iterator[date]:
-    """Every date the rule falls on, from its start date, until it ends (or forever)."""
+    """Every date the rule falls on, from its start date, until its end date (or
+    forever). "After N tasks" is counted in occurrences(), on tasks, not dates."""
     end = getdate(rule.end_date) if rule.ends == ON_DATE and rule.end_date else None
-    for count, day in enumerate(_dates_from_start(rule)):
+    for day in _dates_from_start(rule):
         if end and day > end:
-            return
-        if rule.ends == AFTER and count >= cint(rule.max_occurrences):
             return
         yield day
 
@@ -116,34 +115,55 @@ def due_date(day: date, rule, is_working: Callable[[date], bool]) -> date | None
 
 
 def occurrences(
-    rule, is_working: Callable[[date], bool], until: date
+    rule,
+    is_working: Callable[[date], bool],
+    until: date,
+    after: date | None = None,
+    created: int | None = 0,
 ) -> Iterator[Occurrence]:
-    """Occurrences in order, for the dates the rule falls on up to `until`.
+    """Occurrences in order, for the dates the rule falls on after `after` up to `until`.
 
     The bound matters: a rule that never ends, or a daily one whose days are all off,
-    would otherwise run forever.
+    would otherwise run forever. "After N tasks" counts tasks: `created` have been
+    made, so at most N - created more are yielded. Dates dropped as non-working and
+    dates up to `after` (created, or skipped as past) don't count. `created=None`
+    ignores the limit (finding the dates already past).
     """
     lead = timedelta(days=max(cint(rule.lead_days), 0))
+    left = (
+        cint(rule.max_occurrences) - cint(created)
+        if rule.ends == AFTER and created is not None
+        else None
+    )
     for day in rule_dates(rule):
-        if day > until:
+        if day > until or (left is not None and left <= 0):
             return
+        if after and day <= after:
+            continue
         due = due_date(day, rule, is_working)
         if due:
+            if left is not None:
+                left -= 1
             yield Occurrence(day, due, due - lead)
 
 
 def upcoming(
-    rule, is_working: Callable[[date], bool], after: date | None, count: int
+    rule,
+    is_working: Callable[[date], bool],
+    after: date | None,
+    count: int,
+    created: int = 0,
 ) -> list[Occurrence]:
     """The next `count` occurrences falling after `after` (from the start when None),
-    looking at most ten years ahead."""
+    with `created` tasks already made, looking at most ten years ahead."""
     base = max(getdate(after or rule.start_date), getdate(rule.start_date))
     found = []
-    for occurrence in occurrences(rule, is_working, base + timedelta(days=3660)):
-        if after is None or occurrence.on > after:
-            found.append(occurrence)
-            if len(found) >= count:
-                break
+    for occurrence in occurrences(
+        rule, is_working, base + timedelta(days=3660), after, created
+    ):
+        found.append(occurrence)
+        if len(found) >= count:
+            break
     return found
 
 

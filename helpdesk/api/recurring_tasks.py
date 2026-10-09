@@ -90,15 +90,24 @@ def get_recurring_task_form(project: str, task: str | None = None) -> dict:
 
 
 @frappe.whitelist()
-def preview_recurring_task(project: str, values: dict | str) -> dict:
+def preview_recurring_task(
+    project: str, values: dict | str, name: str | None = None
+) -> dict:
     """The schedule in words and its next due dates, for the dialog's live preview.
 
+    With `name` (editing), the tasks it already created count towards "after N".
     A rule that can't produce dates yet answers with `error` instead of failing,
     so the preview can say what to fix while the person is still typing.
+    Nothing is saved.
     """
     project = _check_manage(project)
-    doc = frappe.new_doc(RECURRING_TASK)
-    doc.project = project
+    if name:
+        doc = _get_rule(name, manage=True)
+        if doc.project != project:
+            frappe.throw(_("This recurring task belongs to another project."))
+    else:
+        doc = frappe.new_doc(RECURRING_TASK)
+        doc.project = project
     _apply(doc, values)
     try:
         upcoming = doc.preview(PREVIEW_COUNT)

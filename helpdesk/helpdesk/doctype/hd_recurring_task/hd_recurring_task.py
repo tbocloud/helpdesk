@@ -189,7 +189,8 @@ class HDRecurringTask(Document):
         today = getdate(nowdate())
         past = [
             occurrence.on
-            for occurrence in occurrences(self, self.is_working(), today)
+            # every date, however many tasks "after N" allows: skipped dates don't count
+            for occurrence in occurrences(self, self.is_working(), today, created=None)
             if occurrence.due < today
         ]
         if past and (
@@ -199,7 +200,9 @@ class HDRecurringTask(Document):
 
     def next_occurrences(self, count: int) -> list:
         after = getdate(self.last_occurrence) if self.last_occurrence else None
-        return upcoming(self, self.is_working(), after, count)
+        return upcoming(
+            self, self.is_working(), after, count, cint(self.occurrences_created)
+        )
 
     def set_next_due(self):
         upcoming_ = self.next_occurrences(1)
@@ -277,10 +280,13 @@ class HDRecurringTask(Document):
         return [
             occurrence
             for occurrence in occurrences(
-                self, self.is_working(), add_days(today, cint(self.lead_days))
+                self,
+                self.is_working(),
+                add_days(today, cint(self.lead_days)),
+                after,
+                cint(self.occurrences_created),
             )
             if occurrence.create_on <= today
-            and (after is None or occurrence.on > after)
         ]
 
     def create_task(self, occurrence, missed: list) -> str | None:

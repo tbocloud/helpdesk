@@ -438,7 +438,24 @@ function fill(values: Partial<RecurringValues>) {
   }
   // a weekly rule always has days; a monthly one being switched to weekly may not
   if (!form.weekdays?.length) form.weekdays = base.weekdays;
+  filled.value = JSON.stringify(form);
 }
+
+// what the form held when last filled: anything else is the person's own edits
+const filled = ref("");
+const edited = computed(() => JSON.stringify(form) !== filled.value);
+
+function ruleValues(): Partial<RecurringValues> {
+  return props.rule
+    ? { ...props.rule, weekdays: [...props.rule.weekdays] }
+    : {};
+}
+
+// the server works the dates out, so the preview and the daily job never disagree
+const preview = createResource({
+  url: "helpdesk.api.recurring_tasks.preview_recurring_task",
+  onError() {},
+});
 
 const options = createResource({
   url: "helpdesk.api.recurring_tasks.get_recurring_task_form",
@@ -447,21 +464,56 @@ const options = createResource({
     task: props.rule ? null : props.fromTask || null,
   }),
   onSuccess(data: FormOptions) {
-    if (!props.rule && data.prefill) fill(data.prefill);
+    // only for the task still being made recurring, and never over the person's edits
+    const forTask = options.params?.task ?? null;
+    if (
+      !props.rule &&
+      data.prefill &&
+      forTask === (props.fromTask || null) &&
+      !edited.value
+    )
+      fill(data.prefill);
   },
 });
 
+// what the dialog is for: a new schedule, a task to make recurring, or a rule to edit
+const source = computed(() =>
+  JSON.stringify([
+    props.projectId,
+    props.rule?.name ?? null,
+    props.fromTask ?? null,
+  ])
+);
+
 watch(
-  () => props.open,
-  (open) => {
+  [() => props.open, source],
+  ([open], previous) => {
     if (!open) return;
-    errorMessage.value = "";
-    fill(
-      props.rule ? { ...props.rule, weekdays: [...props.rule.weekdays] } : {}
-    );
-    options.reload();
+    const [wasOpen, previousSource] = previous ?? [false, ""];
+    // reopened, or switched to another rule or task while open: start over
+    if (!wasOpen || source.value !== previousSource) {
+      errorMessage.value = "";
+      preview.reset();
+      fill(ruleValues());
+      options.reload();
+    }
   },
   { immediate: true }
+);
+
+// the rule reloaded while open (e.g. the list refreshed): take it, unless edited
+watch(
+  () => props.rule,
+  (rule, previous) => {
+    if (
+      props.open &&
+      rule &&
+      previous &&
+      rule.name === previous.name &&
+      !edited.value
+    )
+      fill(ruleValues());
+  }
 );
 
 const data = computed(() => options.data as FormOptions | undefined);
@@ -549,12 +601,6 @@ function values(): RecurringValues {
   };
 }
 
-// the server works the dates out, so the preview and the daily job never disagree
-const preview = createResource({
-  url: "helpdesk.api.recurring_tasks.preview_recurring_task",
-  onError() {},
-});
-
 const scheduleKey = computed(() =>
   JSON.stringify([
     form.frequency,
@@ -576,7 +622,11 @@ watchDebounced(
   [scheduleKey, () => props.open, () => !!options.data],
   ([, open, loaded]) => {
     if (open && loaded)
-      preview.submit({ project: props.projectId, values: values() });
+      preview.submit({
+        project: props.projectId,
+        name: props.rule?.name ?? null,
+        values: values(),
+      });
   },
   { debounce: 300, immediate: true }
 );

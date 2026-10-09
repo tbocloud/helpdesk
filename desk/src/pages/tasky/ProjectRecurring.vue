@@ -273,7 +273,11 @@
       <template #default>
         <p class="text-p-base text-ink-gray-8">
           {{
-            deleting?.occurrences_created
+            deleting?.occurrences_created === 1
+              ? __(
+                  "No new tasks will be created. The 1 task it already created stays in the project."
+                )
+              : deleting?.occurrences_created
               ? __(
                   "No new tasks will be created. The {0} tasks it already created stay in the project.",
                   String(deleting.occurrences_created)

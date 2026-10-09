@@ -128,6 +128,24 @@ class TestRecurrenceDates(FrappeTestCase):
         on_date = recurrence_rule(month_day=1, ends="On date", end_date="2026-02-15")
         self.assertEqual(dates_of(on_date, 10), [date(2026, 1, 1), date(2026, 2, 1)])
 
+    def test_after_n_counts_tasks_not_dropped_days(self):
+        weekdays = lambda day: day.weekday() < 5  # noqa: E731
+        # Friday 9 October: the weekend is left out and doesn't use up the 10
+        rule = recurrence_rule(
+            frequency="Daily",
+            start_date="2026-10-09",
+            skip_non_working_days=1,
+            ends="After",
+            max_occurrences=10,
+        )
+        dates = dates_of(rule, 20, weekdays)
+        self.assertEqual(len(dates), 10)
+        self.assertEqual(dates[-1], date(2026, 10, 22))
+        # with 4 already created, 6 are left
+        self.assertEqual(
+            len(recurrence.upcoming(rule, weekdays, None, 20, created=4)), 6
+        )
+
     def test_lead_time_sets_the_creation_day(self):
         rule = recurrence_rule(month_day=15, lead_days=3, start_date="2026-10-01")
         first = next(recurrence.occurrences(rule, EVERY_DAY, UNTIL))
@@ -340,6 +358,28 @@ class TestRecurringTasks(FrappeTestCase):
         self.assertTrue(rule.is_active)
         self.assertIsNone(rule.inactive_reason)
         self.assertEqual(getdate(rule.next_due_date), date(2026, 10, 23))
+
+    def test_after_n_ignores_dates_skipped_as_past(self):
+        # started five Fridays ago: those are skipped and don't count
+        with self.freeze_time("2026-10-09 08:00:00"):
+            rule = self.rule(
+                frequency="Weekly",
+                weekdays="Friday",
+                start_date="2026-09-04",
+                ends="After",
+                max_occurrences=3,
+            )
+        self.assertEqual(getdate(rule.next_due_date), date(2026, 10, 9))
+        for day in ("2026-10-09", "2026-10-16", "2026-10-23", "2026-10-30"):
+            self.run_on(day, rule)
+        rule.reload()
+        created = get_recurring_tasks_created(rule.name)
+        self.assertEqual(
+            [getdate(t.custom_recurrence_date) for t in created],
+            [date(2026, 10, 9), date(2026, 10, 16), date(2026, 10, 23)],
+        )
+        self.assertEqual(rule.occurrences_created, 3)
+        self.assertFalse(rule.is_active)
 
     def test_closed_project_stops_the_schedule(self):
         with self.freeze_time("2026-10-09 10:00:00"):

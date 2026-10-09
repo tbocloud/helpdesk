@@ -29,7 +29,7 @@ task ahead of its due date, assigns it and links it back to the schedule.
 | On (`weekdays`) | Weekly only: one or more days, stored as "Monday,Friday". Defaults to the start date's weekday. |
 | Day of the month (`month_day`) or Last day (`last_day_of_month`) | Monthly, quarterly and yearly. The 29th to 31st fall on the last day of shorter months (31 → 30 April, 28 or 29 February). Defaults to the start date's day. |
 | Starts on (`start_date`) | The first date the rule can fall on. Quarterly counts quarters from this month; yearly repeats in this month. Weekly with an interval counts weeks from this week. |
-| Ends (`ends`) | Never; On a date (`end_date`, the last date it can fall on); or After a number of tasks (`max_occurrences`, counted from the start date, dates skipped as past included). |
+| Ends (`ends`) | Never; On a date (`end_date`, the last date it can fall on); or After a number of tasks (`max_occurrences`): N tasks created. Dates left out as non-working (daily) and dates skipped as already past don't count; the job compares against `occurrences_created`, so "every working day, after 10" makes 10 tasks. |
 | Create it N days before it's due (`lead_days`) | The task is created on the due date minus N calendar days (0 to 365). |
 | Due time (`due_time`) | Optional; see Decisions. |
 | Move due dates off non-working days (`skip_non_working_days`, on by default) | Weekly, monthly, quarterly and yearly: a due date on a non-working day moves to the next working day. Daily: non-working days are left out (moving them would put two tasks on the same day). |
@@ -141,7 +141,8 @@ team when it is set or changed.
   null) and `has_last_task`.
 - `get_recurring_task_form(project, task=None)` → `{team, categories, priorities,
   frequencies, ends, prefill}`.
-- `preview_recurring_task(project, values)` → `{schedule, dates: [{on, due, create_on}],
+- `preview_recurring_task(project, values, name=None)` (with `name` when editing, so the
+  tasks already created count towards "after N"; nothing is saved) → `{schedule, dates: [{on, due, create_on}],
   error}`.
 - POST: `save_recurring_task(project, values, name=None)`,
   `set_recurring_task_active(name, active)`, `delete_recurring_task(name)`.
@@ -154,13 +155,14 @@ team when it is set or changed.
 
 - date math without the database: day 31 in short months, last day in a leap year, yearly
   on 29 February, weekly on several days every other week, daily and quarterly intervals,
-  every other month, both end conditions, lead time, moving and dropping non-working days,
+  every other month, both end conditions, "after N" counting tasks rather than days left
+  out, lead time, moving and dropping non-working days,
   a rule whose days are never worked, the schedule in words;
 - the real calendar: the 2nd Saturday and a holiday move the due date, the 3rd Saturday is
   worked;
 - the job: created lead days ahead with every value, assigned with the creator as assigner;
   reruns and a lost `last_occurrence` never duplicate; missed runs create only the latest
-  with a note; a new schedule skips past dates; ends after N then restarts when extended;
+  with a note; a new schedule skips past dates; ends after N then restarts when extended; dates skipped as past don't use up "after N";
   a closed project stops it and blocks resuming; resuming skips the paused dates; deleting
   keeps the tasks;
 - validation and API: assignee must be on the team, a schedule without dates is refused, the
