@@ -22,7 +22,7 @@
           </label>
           <select
             id="settings-page-select"
-            class="h-8 w-full rounded border border-outline-gray-2 bg-surface-base py-0 ps-2 text-base text-ink-gray-8"
+            class="h-11 w-full rounded border border-outline-gray-2 bg-surface-base py-0 ps-2 text-base text-ink-gray-8"
             :value="activeTab?.label"
             @change="onSelect($event.target as HTMLSelectElement)"
           >

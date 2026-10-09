@@ -47,10 +47,12 @@
                 :key="e.name"
                 class="grid grid-cols-[4fr_4fr_0.3fr] gap-2 group items-center px-4 py-2.5 text-base border-b border-outline-elevation-2 last:border-b-0"
               >
-                <span class="text-ink-gray-8 font-medium truncate">
+                <span class="min-w-0 truncate font-medium text-ink-gray-8">
                   {{ e.email_account }}
                 </span>
-                <span class="text-ink-gray-6 truncate">{{ e.email_id }}</span>
+                <span class="min-w-0 truncate text-ink-gray-6">{{
+                  e.email_id
+                }}</span>
                 <div
                   class="transition-opacity sm:opacity-0 sm:focus-within:opacity-100 sm:group-hover:opacity-100"
                 >

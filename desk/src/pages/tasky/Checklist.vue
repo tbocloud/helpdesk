@@ -15,6 +15,7 @@
           <template #prefix
             ><LucideClipboardList class="size-4" aria-hidden="true"
           /></template>
+          <span class="hidden md:inline">{{ __("Generate checklist") }}</span>
         </Button>
       </template>
     </ProjectNav>

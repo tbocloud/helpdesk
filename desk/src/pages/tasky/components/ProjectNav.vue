@@ -26,6 +26,8 @@
     </template>
     <template #right-header>
       <slot name="actions" />
+      <!-- below md the secondary actions show only their icons (the label stays
+           as the accessible name), so the header fits beside the breadcrumb -->
       <Button
         v-if="detail.data?.can_change_lead"
         variant="ghost"
@@ -35,13 +37,16 @@
         <template #prefix
           ><LucidePencil class="size-4" aria-hidden="true"
         /></template>
+        <span class="hidden md:inline">{{ __("Edit project") }}</span>
       </Button>
       <Dropdown v-if="detail.data?.can_change_lead" :options="leadOptions">
-        <Button :loading="changingLead">
+        <Button :loading="changingLead" :label="leadLabel">
           <template #prefix
             ><LucideUserStar class="size-4" aria-hidden="true"
           /></template>
-          {{ leadLabel }}
+          <span class="hidden max-w-48 truncate md:inline">{{
+            leadLabel
+          }}</span>
           <template #suffix
             ><LucideChevronDown class="size-4" aria-hidden="true"
           /></template>

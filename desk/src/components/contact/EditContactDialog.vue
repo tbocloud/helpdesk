@@ -29,7 +29,7 @@
           />
 
           <!-- First + Last name -->
-          <div class="grid grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <FormControl
               :label="__('First Name')"
               type="text"

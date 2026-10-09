@@ -29,7 +29,7 @@
         />
 
         <template v-if="action === 'postpone'">
-          <div class="grid grid-cols-2 gap-3">
+          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <FormControl
               v-model="date"
               type="date"

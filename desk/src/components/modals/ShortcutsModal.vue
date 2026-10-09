@@ -1,7 +1,9 @@
 <template>
   <Dialog v-model:open="open" :title="__('Keyboard Shortcuts')" size="4xl">
     <template #default>
-      <div class="w-full grid grid-cols-2 gap-10 py-1 shortcutsModal">
+      <div
+        class="w-full grid grid-cols-1 gap-4 py-1 md:grid-cols-2 md:gap-10 shortcutsModal"
+      >
         <div
           v-for="group in shortcutGroups"
           :key="group.title"
