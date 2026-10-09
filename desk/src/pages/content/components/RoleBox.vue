@@ -40,14 +40,16 @@
     </span>
   </div>
 
-  <!-- everyone on the role, each with how far their task is -->
-  <button
+  <!-- everyone on the role, each with how far their task is; a button only for
+       editors, so people who can't reassign get plain text, not a disabled control -->
+  <component
+    :is="canEdit ? 'button' : 'div'"
     v-else
-    type="button"
-    class="flex min-h-[52px] min-w-0 flex-col justify-center gap-2.5 rounded-xl border border-outline-gray-2 bg-surface-base px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4 enabled:hover:bg-surface-gray-1 disabled:cursor-default"
+    :type="canEdit ? 'button' : undefined"
+    class="flex min-h-[52px] min-w-0 flex-col justify-center gap-2.5 rounded-xl border border-outline-gray-2 bg-surface-base px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+    :class="canEdit ? 'hover:bg-surface-gray-1' : ''"
     :title="canEdit ? __('Change who is on this') : undefined"
-    :disabled="!canEdit"
-    @click="emit('assign')"
+    @click="canEdit && emit('assign')"
   >
     <span
       v-for="(person, i) in people"
@@ -93,7 +95,11 @@
         </span>
       </span>
     </span>
-  </button>
+    <!-- the names stay in the accessible name; this says what pressing it does -->
+    <span v-if="canEdit" class="sr-only">{{
+      __("Change who is on this")
+    }}</span>
+  </component>
 </template>
 
 <script setup lang="ts">

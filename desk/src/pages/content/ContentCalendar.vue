@@ -968,8 +968,10 @@ const undatedText = computed(() => {
           "{0} have no posting date, so they aren't on the calendar.",
           COUNT_MARK
         );
-  const [before, after = ""] = sentence.split(COUNT_MARK);
-  return [before, after];
+  // a translation may drop or repeat the placeholder: show the count once, keep all its text
+  const parts = sentence.split(COUNT_MARK);
+  if (parts.length === 1) return ["", ` ${sentence}`];
+  return [parts[0], parts.slice(1).join("")];
 });
 
 function refresh() {

@@ -83,10 +83,11 @@ const stage = computed(() => {
       iconClass: "text-success",
       icon: LucideSend,
     };
+  // ready but not out yet, so not styled like Published
   if (status === "Scheduled")
     return {
-      classes: "bg-success-soft text-success",
-      iconClass: "text-brand-ink",
+      classes: "bg-surface-gray-2 text-ink-gray-7",
+      iconClass: "text-ink-gray-7",
       icon: LucideCalendar,
     };
   if (status === "Changes Requested")
