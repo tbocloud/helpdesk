@@ -15,10 +15,12 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from helpdesk.test_utils import (
+    create_customer,
     make_diagnostics,
     make_download_response,
     make_puller_mcp,
     make_replay,
+    make_support_connection,
     make_ticket,
 )
 
@@ -70,11 +72,16 @@ class TestPendingTickets(FrappeTestCase):
 
 
 class TestCreateHDTicket(FrappeTestCase):
+    def setUp(self):
+        self.addCleanup(frappe.db.rollback)
+        # the connection is a real link on the ticket from the insert on
+        self.connection = make_support_connection(create_customer("Puller Co").name).name
+
     def test_creates_hd_ticket_from_pulled_payload(self):
         from helpdesk.ticket_puller import _create_hd_ticket
 
         hd_name = _create_hd_ticket(
-            connection_name="QCS-CONN-TEST",
+            connection_name=self.connection,
             customer=None,
             ticket={
                 "name": "SUP-2026-00001",
@@ -87,13 +94,13 @@ class TestCreateHDTicket(FrappeTestCase):
         hd = frappe.get_doc("HD Ticket", hd_name)
         self.assertEqual(hd.subject, "Printer offline")
         self.assertEqual(hd.custom_client_ticket, "SUP-2026-00001")
-        self.assertEqual(hd.custom_qcs_connection, "QCS-CONN-TEST")
+        self.assertEqual(hd.custom_qcs_connection, self.connection)
 
     def test_already_imported_guard(self):
         from helpdesk.ticket_puller import _already_imported, _create_hd_ticket
 
         _create_hd_ticket(
-            connection_name="QCS-CONN-DUPE",
+            connection_name=self.connection,
             customer=None,
             ticket={
                 "name": "SUP-2026-00099",
@@ -102,8 +109,8 @@ class TestCreateHDTicket(FrappeTestCase):
             },
         )
 
-        self.assertTrue(_already_imported("QCS-CONN-DUPE", "SUP-2026-00099"))
-        self.assertFalse(_already_imported("QCS-CONN-DUPE", "SUP-2026-00100"))
+        self.assertTrue(_already_imported(self.connection, "SUP-2026-00099"))
+        self.assertFalse(_already_imported(self.connection, "SUP-2026-00100"))
 
 
 class TestAttachRecording(FrappeTestCase):
