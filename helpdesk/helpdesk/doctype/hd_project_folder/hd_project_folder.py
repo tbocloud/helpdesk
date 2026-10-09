@@ -8,7 +8,9 @@ Names are unique among a folder's siblings. A folder's "For" list is
 independent of its files' own lists, and reaches down the tree: someone a folder
 is for sees the files in its subfolders under "For me" and hears about files
 added anywhere below it. Deleting a folder moves its files and subfolders up to
-its parent; it never deletes them. See docs/project-files.md.
+its parent; it never deletes them. A superseded folder (an old version) makes
+everything below it look superseded in the list, without changing their own
+status. See docs/project-files.md.
 """
 
 import frappe
@@ -16,7 +18,12 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.utils import get_fullname
 
-from helpdesk.helpdesk.doctype.hd_project_file.hd_project_file import ProjectShare
+from helpdesk.helpdesk.doctype.hd_project_file.hd_project_file import (
+    SUPERSEDED,
+    ProjectItem,
+    ProjectShare,
+    folder_link,
+)
 
 PROJECT_FILE = "HD Project File"
 PROJECT_FOLDER = "HD Project Folder"
@@ -25,18 +32,33 @@ PROJECT_FILE_USER = "HD Project File User"
 MAX_DEPTH = 5
 
 
-class HDProjectFolder(ProjectShare, Document):
+class HDProjectFolder(ProjectShare, ProjectItem, Document):
     def validate(self):
         self.validate_folder_name()
         self.validate_parent_folder()
         self.validate_unique_name()
         self.validate_for_users()
+        self.validate_status()
 
     def on_update(self):
         self.notify_new_assignees()
+        self.notify_superseded()
 
     def on_trash(self):
         self.move_contents_to_parent()
+        self.clear_replaced_by_links()
+
+    def item_id(self) -> str:
+        return self.name
+
+    def location(self) -> str | None:
+        return self.parent_folder
+
+    def replacement_location(self) -> str | None:
+        return self.superseded_by
+
+    def added_by(self) -> str:
+        return self.owner
 
     def validate_folder_name(self):
         self.folder_name = " ".join((self.folder_name or "").split())
@@ -132,11 +154,6 @@ class HDProjectFolder(ProjectShare, Document):
         )
 
 
-def folder_link(project: str, folder: str | None) -> str:
-    path = f"/projects/{project}/files"
-    return f"{path}?folder={folder}" if folder else path
-
-
 class FolderTree:
     """A project's folders in memory, for paths, depth and inherited "For"."""
 
@@ -147,7 +164,7 @@ class FolderTree:
             for r in frappe.get_all(
                 PROJECT_FOLDER,
                 filters={"project": project},
-                fields=["name", "folder_name", "parent_folder"],
+                fields=["name", "folder_name", "parent_folder", "status"],
                 order_by="folder_name asc",
                 limit_page_length=0,
             )
@@ -164,6 +181,10 @@ class FolderTree:
             result.append(name)
             name = self.rows[name].parent_folder
         return result
+
+    def is_superseded(self, name: str | None) -> bool:
+        """The folder or one above it is superseded."""
+        return any(self.rows[n].status == SUPERSEDED for n in self.chain(name))
 
     def depth(self, name: str | None) -> int:
         return len(self.chain(name))

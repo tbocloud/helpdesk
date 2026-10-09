@@ -141,7 +141,8 @@ def _approvals(user: str) -> list[dict]:
 
 
 def _files_for(user: str) -> list[dict]:
-    """Files marked for the user in the last FILES_DAYS by someone else, from projects they can read."""
+    """Current (not superseded) files marked for the user in the last FILES_DAYS by
+    someone else, from projects they can read."""
     record = frappe.qb.DocType(PROJECT_FILE)
     row = frappe.qb.DocType("HD Project File User")
     file = frappe.qb.DocType("File")
@@ -164,6 +165,7 @@ def _files_for(user: str) -> list[dict]:
         )
         .where(
             (row.user == user)
+            & (record.status != "Superseded")
             & (file.owner != user)
             & (file.creation >= add_days(now_datetime(), -FILES_DAYS))
         )

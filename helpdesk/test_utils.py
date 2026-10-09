@@ -715,6 +715,57 @@ def make_project_folder(
     return run_as_user(user, create) if user else create()
 
 
+def call_project_files(user: str, method: str, **kwargs):
+    """Calls helpdesk.api.project_files.<method> as `user` through frappe.call, so
+    arguments the method doesn't take are dropped as they are for a request."""
+    return run_as_user(
+        user, lambda: frappe.call(f"helpdesk.api.project_files.{method}", **kwargs)
+    )
+
+
+def mark_project_item(
+    user: str,
+    project: str,
+    kind: str,
+    item: str,
+    status: str = "Superseded",
+    superseded_by: str | None = None,
+    note: str | None = None,
+) -> dict:
+    """Sets a project file's or folder's status (Superseded by default) as `user`.
+    `kind` is "file" (item = the File) or "folder"."""
+    return call_project_files(
+        user,
+        "set_project_item_status",
+        project=project,
+        kind=kind,
+        item=item,
+        status=status,
+        superseded_by=superseded_by,
+        note=note,
+    )
+
+
+def make_project_item_comment(
+    user: str,
+    project: str,
+    kind: str,
+    item: str,
+    content: str = "Is this the latest version?",
+    mentions: list[str] | None = None,
+) -> str:
+    """Comments on a project file or folder as `user` and returns the Comment's name."""
+    return call_project_files(
+        user,
+        "add_item_comment",
+        project=project,
+        kind=kind,
+        item=item,
+        content=content,
+        mentions=mentions,
+    )["name"]
+
+
 def make_department(name: str, **kwargs):
     """Creates an active HD Department at the end of the list, or returns the existing one."""
     if frappe.db.exists("HD Department", name):

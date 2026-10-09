@@ -10,7 +10,40 @@ export interface Person {
   full_name: string;
 }
 
-export interface ProjectFile {
+export type ItemStatus = "Active" | "Superseded";
+export type ItemKind = "file" | "folder";
+
+/** Active / Superseded, shared by files and folders. */
+interface StatusFields {
+  status: ItemStatus;
+  /** What replaces it, when someone said so. */
+  superseded_by: { name: string; label: string; folder?: string | null } | null;
+  status_note: string;
+  status_changed_by_name: string;
+  status_changed_on: string | null;
+  comment_count: number;
+}
+
+/** A file or folder that status changes and comments are about. */
+export interface ItemRef {
+  kind: ItemKind;
+  /** The File's name for a file, the folder's name for a folder. */
+  name: string;
+  label: string;
+}
+
+export interface ItemComment {
+  name: string;
+  text: string;
+  author: string;
+  author_name: string;
+  creation: string;
+  edited: boolean;
+  can_edit: boolean;
+  can_delete: boolean;
+}
+
+export interface ProjectFile extends StatusFields {
   name: string;
   project_file: string | null;
   file_name: string;
@@ -27,6 +60,8 @@ export interface ProjectFile {
   is_for_me: boolean;
   /** In a folder (or below one) that is for the current user. */
   shared_via_folder: boolean;
+  /** Its folder or one above it is superseded (display only). */
+  in_superseded_folder: boolean;
   can_delete: boolean;
   can_edit_for: boolean;
 }
@@ -36,7 +71,7 @@ export interface FolderCrumb {
   folder_name: string;
 }
 
-export interface ProjectFolder {
+export interface ProjectFolder extends StatusFields {
   name: string;
   folder_name: string;
   /** null at the top level. */
@@ -55,6 +90,8 @@ export interface ProjectFolder {
   is_for_me: boolean;
   /** A folder above it is for the current user. */
   for_me_via_parent: boolean;
+  /** A folder above it is superseded (display only). */
+  superseded_via_parent: boolean;
   /** Rename, move, change who it's for, delete. */
   can_change: boolean;
 }
@@ -73,6 +110,54 @@ export interface MoveItem {
   current: string | null;
   /** For a folder: its levels, itself included. */
   height?: number;
+}
+
+/** Why an item shows as superseded: its own status, a folder above it, or not at all. */
+export function supersededVia(
+  item: ProjectFile | ProjectFolder
+): "own" | "folder" | null {
+  if (item.status === "Superseded") return "own";
+  const inherited =
+    "in_superseded_folder" in item
+      ? item.in_superseded_folder
+      : item.superseded_via_parent;
+  return inherited ? "folder" : null;
+}
+
+// "@Full Name" of anyone on the team, longest names first so "@Ann Lee" isn't read as "@Ann"
+function mentionPattern(team: Person[]) {
+  const names = [...new Set(team.map((p) => p.full_name).filter(Boolean))]
+    .sort((a, b) => b.length - a.length)
+    .map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  return names.length
+    ? new RegExp(`@(${names.join("|")})(?![\\p{L}\\p{N}])`, "gu")
+    : null;
+}
+
+/** The people on the team @mentioned in a comment. */
+export function mentionedUsers(text: string, team: Person[]): string[] {
+  const pattern = mentionPattern(team);
+  if (!pattern) return [];
+  const names = new Set([...text.matchAll(pattern)].map((m) => m[1]));
+  return team.filter((p) => names.has(p.full_name)).map((p) => p.user);
+}
+
+/** A comment split into plain text and @mentions, for showing mentions apart. */
+export function mentionSegments(
+  text: string,
+  team: Person[]
+): { text: string; mention: boolean }[] {
+  const pattern = mentionPattern(team);
+  const parts: { text: string; mention: boolean }[] = [];
+  let last = 0;
+  for (const m of pattern ? text.matchAll(pattern) : []) {
+    const at = m.index ?? 0;
+    if (at > last) parts.push({ text: text.slice(last, at), mention: false });
+    parts.push({ text: m[0], mention: true });
+    last = at + m[0].length;
+  }
+  if (last < text.length) parts.push({ text: text.slice(last), mention: false });
+  return parts;
 }
 
 /** The folder and everything below it, from the flat list. */
