@@ -128,6 +128,7 @@ import LucideChevronDown from "~icons/lucide/chevron-down";
 import LucideChevronRight from "~icons/lucide/chevron-right";
 import LucideClipboardCheck from "~icons/lucide/clipboard-check";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
+import LucideRepeat from "~icons/lucide/repeat";
 import LucideUserStar from "~icons/lucide/user-star";
 import LucideUserX from "~icons/lucide/user-x";
 import LucideKanban from "~icons/lucide/square-kanban";
@@ -157,6 +158,7 @@ const tabs = [
   { label: "Board", to: "TaskyKanban", icon: LucideKanban },
   { label: "Timeline", to: "TaskyTimeline", icon: LucideCalendarRange },
   { label: "Overdue", to: "TaskyOverdue", icon: LucideAlarmClock },
+  { label: "Recurring", to: "TaskyRecurring", icon: LucideRepeat },
   { label: "Files", to: "TaskyFiles", icon: LucidePaperclip },
   {
     label: "Sign-off",

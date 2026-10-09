@@ -1,0 +1,298 @@
+{
+	"actions": [],
+	"autoname": "RT-.#####",
+	"creation": "2026-10-09 10:00:00.000000",
+	"description": "Work that repeats on a schedule; a daily job creates its task for each occurrence.",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"project",
+		"project_name",
+		"subject",
+		"column_break_task",
+		"is_active",
+		"inactive_reason",
+		"task_section",
+		"description",
+		"category",
+		"priority",
+		"column_break_details",
+		"estimated_hours",
+		"assignee",
+		"is_key",
+		"schedule_section",
+		"frequency",
+		"interval",
+		"weekdays",
+		"month_day",
+		"last_day_of_month",
+		"start_date",
+		"column_break_schedule",
+		"ends",
+		"end_date",
+		"max_occurrences",
+		"lead_days",
+		"due_time",
+		"skip_non_working_days",
+		"progress_section",
+		"next_due_date",
+		"next_create_on",
+		"occurrences_created",
+		"column_break_progress",
+		"last_occurrence",
+		"last_task"
+	],
+	"fields": [
+		{
+			"fieldname": "project",
+			"fieldtype": "Link",
+			"label": "Project",
+			"options": "Project",
+			"reqd": 1,
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"search_index": 1,
+			"set_only_once": 1
+		},
+		{
+			"fieldname": "project_name",
+			"fieldtype": "Data",
+			"label": "Project Name",
+			"fetch_from": "project.project_name",
+			"read_only": 1
+		},
+		{
+			"fieldname": "subject",
+			"fieldtype": "Data",
+			"label": "Subject",
+			"reqd": 1,
+			"in_list_view": 1
+		},
+		{
+			"fieldname": "column_break_task",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "is_active",
+			"fieldtype": "Check",
+			"label": "Active",
+			"default": "1",
+			"in_list_view": 1,
+			"in_standard_filter": 1
+		},
+		{
+			"fieldname": "inactive_reason",
+			"fieldtype": "Small Text",
+			"label": "Why It Stopped",
+			"read_only": 1,
+			"no_copy": 1,
+			"depends_on": "eval:!doc.is_active"
+		},
+		{
+			"fieldname": "task_section",
+			"fieldtype": "Section Break",
+			"label": "Task"
+		},
+		{
+			"fieldname": "description",
+			"fieldtype": "Text Editor",
+			"label": "Description"
+		},
+		{
+			"fieldname": "category",
+			"fieldtype": "Data",
+			"label": "Category",
+			"description": "One of the Task categories"
+		},
+		{
+			"fieldname": "priority",
+			"fieldtype": "Select",
+			"label": "Priority",
+			"options": "Low\nMedium\nHigh\nUrgent",
+			"default": "Medium"
+		},
+		{
+			"fieldname": "column_break_details",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "estimated_hours",
+			"fieldtype": "Float",
+			"label": "Estimated Hours"
+		},
+		{
+			"fieldname": "assignee",
+			"fieldtype": "Link",
+			"label": "Assignee",
+			"options": "User",
+			"description": "A member of the project's team"
+		},
+		{
+			"fieldname": "is_key",
+			"fieldtype": "Check",
+			"label": "Key Task"
+		},
+		{
+			"fieldname": "schedule_section",
+			"fieldtype": "Section Break",
+			"label": "Schedule"
+		},
+		{
+			"fieldname": "frequency",
+			"fieldtype": "Select",
+			"label": "Repeat",
+			"options": "Daily\nWeekly\nMonthly\nQuarterly\nYearly",
+			"default": "Monthly",
+			"reqd": 1
+		},
+		{
+			"fieldname": "interval",
+			"fieldtype": "Int",
+			"label": "Every",
+			"default": "1",
+			"description": "Every N days, weeks, months, quarters or years"
+		},
+		{
+			"fieldname": "weekdays",
+			"fieldtype": "Small Text",
+			"label": "Weekdays",
+			"description": "Weekly: day names separated by commas, e.g. Monday,Friday",
+			"depends_on": "eval:doc.frequency=='Weekly'"
+		},
+		{
+			"fieldname": "month_day",
+			"fieldtype": "Int",
+			"label": "Day of Month",
+			"depends_on": "eval:['Monthly','Quarterly','Yearly'].includes(doc.frequency) && !doc.last_day_of_month"
+		},
+		{
+			"fieldname": "last_day_of_month",
+			"fieldtype": "Check",
+			"label": "Last Day of the Month",
+			"depends_on": "eval:['Monthly','Quarterly','Yearly'].includes(doc.frequency)"
+		},
+		{
+			"fieldname": "start_date",
+			"fieldtype": "Date",
+			"label": "Starts On",
+			"reqd": 1
+		},
+		{
+			"fieldname": "column_break_schedule",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "ends",
+			"fieldtype": "Select",
+			"label": "Ends",
+			"options": "Never\nOn date\nAfter",
+			"default": "Never"
+		},
+		{
+			"fieldname": "end_date",
+			"fieldtype": "Date",
+			"label": "End Date",
+			"depends_on": "eval:doc.ends=='On date'"
+		},
+		{
+			"fieldname": "max_occurrences",
+			"fieldtype": "Int",
+			"label": "After (Tasks)",
+			"depends_on": "eval:doc.ends=='After'"
+		},
+		{
+			"fieldname": "lead_days",
+			"fieldtype": "Int",
+			"label": "Create Days Before Due",
+			"default": "0"
+		},
+		{
+			"fieldname": "due_time",
+			"fieldtype": "Time",
+			"label": "Due Time",
+			"description": "Shown in the schedule and the assignment notification; task due dates are dates"
+		},
+		{
+			"fieldname": "skip_non_working_days",
+			"fieldtype": "Check",
+			"label": "Move Off Non-working Days",
+			"default": "1",
+			"description": "Weekly off, Saturdays off and the default SLA's holidays"
+		},
+		{
+			"fieldname": "progress_section",
+			"fieldtype": "Section Break",
+			"label": "Progress"
+		},
+		{
+			"fieldname": "next_due_date",
+			"fieldtype": "Date",
+			"label": "Next Due",
+			"read_only": 1,
+			"no_copy": 1,
+			"in_list_view": 1
+		},
+		{
+			"fieldname": "next_create_on",
+			"fieldtype": "Date",
+			"label": "Next Created On",
+			"read_only": 1,
+			"no_copy": 1
+		},
+		{
+			"fieldname": "occurrences_created",
+			"fieldtype": "Int",
+			"label": "Tasks Created",
+			"read_only": 1,
+			"no_copy": 1,
+			"default": "0"
+		},
+		{
+			"fieldname": "column_break_progress",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "last_occurrence",
+			"fieldtype": "Date",
+			"label": "Last Occurrence",
+			"read_only": 1,
+			"no_copy": 1,
+			"description": "The latest date handled: its task created, or skipped because it was already past"
+		},
+		{
+			"fieldname": "last_task",
+			"fieldtype": "Link",
+			"label": "Last Task",
+			"options": "Task",
+			"read_only": 1,
+			"no_copy": 1
+		}
+	],
+	"index_web_pages_for_search": 0,
+	"links": [],
+	"modified": "2026-10-09 10:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD Recurring Task",
+	"naming_rule": "Expression (old style)",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"role": "System Manager",
+			"read": 1,
+			"write": 1,
+			"create": 1,
+			"delete": 1,
+			"report": 1,
+			"print": 1,
+			"email": 1,
+			"export": 1,
+			"share": 1
+		}
+	],
+	"sort_field": "creation",
+	"sort_order": "DESC",
+	"states": [],
+	"title_field": "subject",
+	"track_changes": 1
+}

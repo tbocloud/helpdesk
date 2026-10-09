@@ -443,6 +443,13 @@
       @sent="kanban.reload()"
     />
     <MoveTaskDialog v-model:task="movingTask" @moved="kanban.reload()" />
+    <RecurringTaskDialog
+      v-if="canManage"
+      :open="!!recurringFrom"
+      :project-id="projectId"
+      :from-task="recurringFrom?.name"
+      @update:open="(v: boolean) => !v && (recurringFrom = null)"
+    />
 
     <CompleteTaskDialog
       v-model:task="completingTask"
@@ -474,6 +481,7 @@ import LucidePause from "~icons/lucide/pause";
 import LucidePencil from "~icons/lucide/pencil";
 import LucidePlay from "~icons/lucide/play";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
+import LucideRepeat from "~icons/lucide/repeat";
 import LucideStar from "~icons/lucide/star";
 import LucideUndo2 from "~icons/lucide/undo-2";
 import LucideUserPlus from "~icons/lucide/user-plus";
@@ -484,6 +492,7 @@ import HoldTaskDialog from "./components/HoldTaskDialog.vue";
 import MilestoneMark from "./components/MilestoneMark.vue";
 import MoveTaskDialog from "./components/MoveTaskDialog.vue";
 import ProjectNav from "./components/ProjectNav.vue";
+import RecurringTaskDialog from "./components/RecurringTaskDialog.vue";
 import RequestHelpDialog from "./components/RequestHelpDialog.vue";
 import ResumeTaskDialog from "./components/ResumeTaskDialog.vue";
 import PullRequestChip from "./components/PullRequestChip.vue";
@@ -547,6 +556,7 @@ interface Task {
   assigned_by?: string | null;
   assigned_by_name?: string | null;
   can_move?: boolean;
+  custom_recurring_task?: string | null;
   project?: string;
   due_date?: string;
   estimated_hours?: number;
@@ -596,6 +606,7 @@ const sendingBackTask = ref<Task | null>(null);
 const helpingTask = ref<Task | null>(null);
 const handingOverTask = ref<Task | null>(null);
 const movingTask = ref<Task | null>(null);
+const recurringFrom = ref<Task | null>(null);
 
 const { approve, resource: approveResource } = useApproveTask(() =>
   kanban.reload()
@@ -635,7 +646,15 @@ function cardActions(task: Task) {
       icon: LucideFolderInput,
       onClick: () => (movingTask.value = task),
     });
-  if (!canManage.value || isClosed(task)) return actions;
+  if (!canManage.value) return actions;
+  // a task a schedule created already repeats
+  if (!task.custom_recurring_task)
+    actions.push({
+      label: __("Make recurring…"),
+      icon: LucideRepeat,
+      onClick: () => (recurringFrom.value = task),
+    });
+  if (isClosed(task)) return actions;
   actions.push({
     label: __("Plan"),
     icon: LucideCalendarClock,
