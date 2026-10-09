@@ -235,6 +235,12 @@ const portalRoutes = [
     component: () => import("@/pages/work/Overview.vue"),
     beforeEnter: () => useAuthStore().canSeeOverview || { name: "Home" },
   },
+  // everyone may open it: their own numbers and the champions, more for heads
+  {
+    path: "/team-dashboard",
+    name: "TeamDashboard",
+    component: () => import("@/pages/work/TeamDashboard.vue"),
+  },
   // everyone may open it; the server decides whose numbers they see
   {
     path: "/performance",

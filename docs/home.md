@@ -2,7 +2,9 @@
 
 Home answers "what should I do now, and is anything on fire?". Analysis (charts, buckets,
 filters by project, customer, assignee and department) lives on the **Overview**
-(`/helpdesk/overview`); Home links into it instead of repeating it.
+(`/helpdesk/overview`); Home links into it instead of repeating it. Who delivered most and
+who is champion is on the **Scoreboard** (`/helpdesk/team-dashboard`, see
+[team-dashboard.md](team-dashboard.md)).
 
 - Page: `desk/src/pages/home/Home.vue` (route `Home`, `/helpdesk/home`), with its parts in
   `desk/src/pages/home/components/` and types, link builders and the status sentence in

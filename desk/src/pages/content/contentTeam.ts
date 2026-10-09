@@ -35,6 +35,7 @@ export const CONTENT_TEAM_ROUTES = new Set([
   "ContentCalendar",
   "ContentReport",
   "Performance",
+  "TeamDashboard",
   "TaskyProjects",
   "TaskyProject",
   "TaskyChecklist",
