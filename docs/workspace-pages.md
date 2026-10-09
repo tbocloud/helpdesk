@@ -339,7 +339,10 @@ card's menu, the checklist row's menu and the task details (`HandOverTaskDialog`
   (they join the team). A content post's task may go to any active agent, since content
   people work on the content calendar without joining its project (`TeammatePicker`
   `anyone`); the department walls still refuse the other team, and an ERP Employee is refused
-  a content task before anything changes. Tasks outside a project can't be handed over.
+  a content task before anything changes. Tasks outside a project can't be handed over. A
+  content post's task follows the post's team, so only someone on the post's part for it (its
+  role, or any role for the shared task) can hand it over; anyone else given the task directly
+  is asked to have a DM Coordinator change the post's team.
 - **What changes:** the hander's ToDo is cancelled and the teammate's names the task's
   original assigner (`get_assigners`) as `assigned_by`, not the hander. So "Assigned by"
   keeps showing who gave the work out, and the task leaves the hander's lists unless they
@@ -349,7 +352,8 @@ card's menu, the checklist row's menu and the task details (`HandOverTaskDialog`
   the post's next save doesn't give the task back.
 - **Record and notices:** comments "Reassigned from … to … by …" and "Handed over by …:
   reason"; the teammate is notified ("… handed you a task"), and the project lead (or its
-  managers when it has no lead) and the original assigner hear who took it and why.
+  managers when it has no lead) and the original assigner hear who took it and why, each
+  only while they may still read the task.
 
 ### Moving a task to another project
 

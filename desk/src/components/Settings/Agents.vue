@@ -261,7 +261,7 @@ const walls = createResource({
   // shown in the menu instead, with Retry
   onError() {},
 });
-// the agent whose wall is being saved; their choices wait so saves can't cross
+// the agent whose wall is being saved; every choice waits so saves can't cross
 const savingWall = ref("");
 
 function loadWalls() {
@@ -292,7 +292,8 @@ function wallOptions(agent: string) {
       (wall.role
         ? current.length === 1 && current[0] === wall.role
         : !current.length),
-    disabled: !current || savingWall.value === agent,
+    // one save at a time, so no pick is dropped while another agent's is saving
+    disabled: !current || !!savingWall.value,
     onClick: () => setWall(agent, wall.role),
   }));
 }

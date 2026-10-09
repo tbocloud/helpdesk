@@ -883,6 +883,7 @@ def hand_over_task(task: str, teammate: str, reason: str) -> dict:
     # an assignee hands over only their own share; a lead hands over the whole task
     leaving = [giver] if giver in previous else previous
     assigner = get_assigners({doc.name: leaving[0]}).get(doc.name) if leaving else None
+    post = _content_post_for_hand_over(doc, leaving)
     _reassign(
         doc,
         leaving,
@@ -890,8 +891,8 @@ def hand_over_task(task: str, teammate: str, reason: str) -> dict:
         ignore_permissions=True,
         assigned_by=assigner or giver,
     )
-    if doc.get("content_post"):
-        _hand_over_content_part(doc, leaving, teammate)
+    if post:
+        _hand_over_content_part(post, doc.content_role, leaving, teammate)
     doc.add_comment(
         "Info",
         frappe.utils.escape_html(
@@ -911,6 +912,8 @@ def hand_over_task(task: str, teammate: str, reason: str) -> dict:
             u
             for u in dict.fromkeys([*doc.leads_or_managers(), assigner])
             if u and u not in (giver, teammate)
+            # the reason and subject go only to people who may still read the task
+            and frappe.has_permission("Task", "read", doc=doc, user=u)
         ],
         "Task",
         doc.name,
@@ -921,12 +924,26 @@ def hand_over_task(task: str, teammate: str, reason: str) -> dict:
     return _format_task(_task_dict(doc))
 
 
-def _hand_over_content_part(doc, leaving: list[str], teammate: str):
+def _content_post_for_hand_over(doc, leaving: list[str]):
+    """A content task's post, checked before anything changes: the post decides who
+    has the task, so whoever hands it over must be on the part it stands for."""
+    if not doc.get("content_post"):
+        return None
+    post = frappe.get_doc("HD Content Post", doc.content_post)
+    if not set(leaving) & post.people_on_part(doc.content_role):
+        frappe.throw(
+            _(
+                "This task follows the content post's team, which you aren't on. Ask a DM Coordinator to change the post's team."
+            )
+        )
+    return post
+
+
+def _hand_over_content_part(post, content_role: str, leaving: list[str], teammate: str):
     """Put the teammate in the hander's place on the content post, so the post's next
     save doesn't hand the task back. The task is already reassigned, so the post
     skips its task sync; the hander can't edit posts, hence ignore_permissions."""
-    post = frappe.get_doc("HD Content Post", doc.content_post)
-    post.replace_on_part(doc.content_role, leaving, teammate)
+    post.replace_on_part(content_role, leaving, teammate)
     post.flags.skip_task_sync = True
     post.save(ignore_permissions=True)
 

@@ -491,11 +491,11 @@ const projectDetail = createResource({
 
 // members who don't run the project get stats of their own tasks only (task_query)
 const seesAllTasks = computed(() => !!projectDetail.data?.sees_all_tasks);
-const progressLabel = computed(() =>
-  !projectDetail.data || seesAllTasks.value
-    ? __("Overall progress")
-    : __("Your progress")
-);
+// until the project detail says whose tasks these are (or if it fails), claim neither
+const progressLabel = computed(() => {
+  if (!projectDetail.data) return __("Progress");
+  return seesAllTasks.value ? __("Overall progress") : __("Your progress");
+});
 
 function reload() {
   dashboard.reload();

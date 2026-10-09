@@ -513,8 +513,7 @@ class TestRecurringTasks(FrappeTestCase):
         # the manager sees the task; someone off the project sees nothing
         listing = run_as_user(PM[0], lambda: api.get_recurring_tasks(self.project))
         self.assertTrue(listing["can_manage"])
-        self.assertEqual(
-            listing["rules"][0]["last_task"]["name"], rule.reload().last_task
-        )
+        row = next(r for r in listing["rules"] if r["name"] == saved["name"])
+        self.assertEqual(row["last_task"]["name"], rule.reload().last_task)
         with self.assertRaises(frappe.PermissionError):
             run_as_user(OUTSIDER[0], lambda: api.get_recurring_tasks(self.project))

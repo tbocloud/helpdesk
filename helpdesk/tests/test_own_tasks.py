@@ -297,20 +297,41 @@ class TestContentTeams(FrappeTestCase):
                 reason="Busy with the Onam shoot",
             )
 
-        # an assignment from before the wall still doesn't open the task
-        todo = frappe.get_doc(
+        # an assignment from before the wall (written straight to the table, as the
+        # wall now refuses it) still doesn't open the task
+        frappe.get_doc(
             {
                 "doctype": "ToDo",
                 "allocated_to": self.erp,
                 "reference_type": "Task",
                 "reference_name": task.name,
                 "description": task.subject,
+                "status": "Open",
             }
-        )
-        todo.flags.ignore_validate = True
-        todo.insert(ignore_permissions=True)
+        ).db_insert()
         self.assertNotIn(task.name, get_visible_tasks(self.erp))
         self.assertFalse(frappe.has_permission("Task", "read", doc=task, user=self.erp))
+
+    def test_only_people_on_the_posts_part_hand_its_task_over(self):
+        # given the writer's task directly, without being on the post's writer role
+        task = get_content_task(self.post.name, "Writer")
+        make_assignment("Task", task, self.designer)
+        marketer = make_content_user(
+            "mufliha.k@own-tasks.example", "Mufliha K", DM_EMPLOYEE_ROLE
+        )
+        with self.assertRaises(frappe.ValidationError):
+            hand_over_task_as(self.designer, task, marketer, "Shooting the Onam reel")
+        self.assertIn(self.designer, frappe.get_doc("Task", task).assignees())
+
+    def test_an_erp_person_on_a_posts_team_gets_no_task(self):
+        post = make_content_post(
+            "Vishu greetings",
+            CUSTOMER,
+            status="Drafting",
+            publish_on=add_days(now_datetime(), 12),
+            writer=self.erp,
+        )
+        self.assertIsNone(get_content_task(post.name, "Writer"))
 
     def test_a_content_task_is_handed_to_anyone_and_the_post_follows(self):
         # the designer isn't on the content calendar project's team
