@@ -8,7 +8,7 @@
     <template #tab-item="{ tab, selected }">
       <button
         type="button"
-        class="flex h-10 items-center gap-2 text-sm font-medium transition-colors"
+        class="flex h-10 shrink-0 items-center gap-2 whitespace-nowrap text-sm font-medium transition-colors"
         :class="
           selected ? 'text-ink-gray-9' : 'text-ink-gray-5 hover:text-ink-gray-9'
         "

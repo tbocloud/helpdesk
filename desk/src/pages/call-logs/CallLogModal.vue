@@ -19,7 +19,7 @@
           </div>
         </div>
         <div class="flex flex-col gap-4">
-          <div class="grid grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div class="flex flex-col gap-1.5">
               <FormLabel :label="__('Type')" required size="md" />
               <Select
@@ -39,7 +39,7 @@
               <ErrorMessage :message="errors.to" />
             </div>
           </div>
-          <div class="grid grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div class="flex flex-col gap-1.5">
               <FormLabel :label="__('From')" required size="md" />
               <FormControl
@@ -59,7 +59,7 @@
               <ErrorMessage :message="errors.status" />
             </div>
           </div>
-          <div class="grid grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div class="flex flex-col gap-1.5">
               <FormLabel :label="__('Duration')" required size="md" />
               <FormControl

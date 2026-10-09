@@ -9,12 +9,14 @@
       <template #actions>
         <Button
           v-if="canManage"
+          class="min-h-11 min-w-11 md:min-h-0 md:min-w-0"
           :label="__('Generate checklist')"
           @click="showChecklistModal = true"
         >
           <template #prefix
             ><LucideClipboardList class="size-4" aria-hidden="true"
           /></template>
+          <span class="hidden md:inline">{{ __("Generate checklist") }}</span>
         </Button>
       </template>
     </ProjectNav>

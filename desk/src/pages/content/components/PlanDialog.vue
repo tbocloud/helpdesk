@@ -36,7 +36,7 @@
           <div
             v-for="(row, i) in form.items"
             :key="i"
-            class="grid grid-cols-[1fr_1fr_5.5rem_auto] items-end gap-2"
+            class="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_4rem_auto] items-end gap-2 sm:grid-cols-[1fr_1fr_5.5rem_auto]"
           >
             <FormControl
               v-model="row.channel"

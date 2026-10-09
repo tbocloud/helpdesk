@@ -125,13 +125,13 @@ body {
     font-weight: 700;
     height: 12px;
     line-height: 0.3;
-    background: #e8eaed;
+    background: var(--surface-gray-3);
     width: 23px;
     justify-content: center;
     border-radius: 5px;
 }
 .replied-content .collapse:hover {
-  background: #dadce0;
+  background: var(--surface-gray-4);
 }
 .replied-content .collapse + input {
   display: none;
