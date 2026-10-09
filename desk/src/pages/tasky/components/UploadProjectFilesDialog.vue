@@ -312,7 +312,8 @@ function uploadUrl(folder: string | null) {
     project: props.projectId,
     for_users: JSON.stringify(forUsers.value),
   });
-  if (folder) params.set("folder", folder);
+  // not "folder": FileUploadHandler posts its own `folder` form field ("Home")
+  if (folder) params.set("project_folder", folder);
   return `/api/method/helpdesk.api.project_files.upload_project_file?${params}`;
 }
 

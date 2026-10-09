@@ -217,8 +217,10 @@ folder refuses one that isn't on that project (`PermissionError`).
   `description`, `created_by`, `created_by_name`, `creation`, `file_count`, `folder_count`,
   `for_users`, `is_for_me`, `for_me_via_parent`, `can_change`. `folder` is the open one plus
   its `path`. A folder that no longer exists is a `DoesNotExistError`.
-- `upload_project_file(project, for_users=None, folder=None)` (POST, multipart field
-  `file`): saves one file, in `folder` when given. `for_users` is a JSON list of users. Uses
+- `upload_project_file(project, for_users=None, project_folder=None)` (POST, multipart field
+  `file`): saves one file, in `project_folder` when given (not `folder`: frappe-ui's
+  FileUploadHandler always posts its own `folder` field, "Home", which would override it).
+  `for_users` is a JSON list of users. Uses
   `add_project_file(project, file_name, content, for_users, folder)`, which tests call
   directly.
 - `set_project_file_for(project, file, for_users)` (POST): replaces the "For" list.

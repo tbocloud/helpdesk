@@ -102,17 +102,22 @@ def list_project_files(
 
 @frappe.whitelist(methods=["POST"])
 def upload_project_file(
-    project: str, for_users: str | list | None = None, folder: str | None = None
+    project: str,
+    for_users: str | list | None = None,
+    project_folder: str | None = None,
 ) -> dict:
     """Attach the uploaded file (multipart field "file") to the project, privately,
-    in `folder` when given. People are told about files in folders once the
-    whole upload is done (notify_folder_upload), not per file."""
+    in `project_folder` when given. People are told about files in folders once the
+    whole upload is done (notify_folder_upload), not per file.
+
+    Not called `folder`: frappe-ui's FileUploadHandler always posts a `folder` form
+    field (the File doctype's "Home" folder), which would override ours."""
     request = getattr(frappe.local, "request", None)
     upload = request.files.get("file") if request else None
     if not upload:
         frappe.throw(_("Choose a file to upload."))
     return add_project_file(
-        project, upload.filename, upload.stream.read(), for_users, folder
+        project, upload.filename, upload.stream.read(), for_users, project_folder
     )
 
 

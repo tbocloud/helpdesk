@@ -91,6 +91,32 @@ class TestProjectFolders(FrappeTestCase):
         self.assertEqual(listed[briefs]["folder_name"], "Client briefs")
         self.assertEqual(listed[briefs]["description"], "Signed briefs only")
 
+    def test_upload_lands_in_the_project_folder_despite_frappe_uis_folder_field(self):
+        """frappe-ui's FileUploadHandler always posts folder="Home" (the File doctype's
+        folder); the endpoint must take the project folder from `project_folder`."""
+        from io import BytesIO
+        from types import SimpleNamespace
+
+        from werkzeug.datastructures import FileStorage
+
+        folder = make_project_folder(self.project, "00-COMMON", user=PM[0])
+        upload = FileStorage(stream=BytesIO(b"# Common"), filename="common.md")
+        frappe.local.request = SimpleNamespace(files={"file": upload})
+        self.addCleanup(setattr, frappe.local, "request", None)
+
+        saved = frappe.call(
+            "helpdesk.api.project_files.upload_project_file",
+            project=self.project,
+            project_folder=folder,
+            folder="Home",
+            is_private=1,
+        )
+
+        self.assertEqual(
+            frappe.db.get_value("HD Project File", {"file": saved["name"]}, "folder"),
+            folder,
+        )
+
     def test_folders_nest_up_to_the_depth_limit(self):
         parent = None
         chain = []
