@@ -47,7 +47,9 @@ Managers and Agent Managers see every department.
   filters (`get_departments`).
 - **No assignments across the wall:** a ToDo `validate` hook (`check_assignment_department`)
   refuses giving a task in a hidden department to that person ("… can't be given tasks in the ERP
-  department."), from any screen, the Desk or templates. This is needed because Frappe shares a
+  department."), from any screen, the Desk or templates. It also refuses giving an ERP Employee a
+  content post's task ("… can't be given content calendar tasks.",
+  `check_can_take_content_task`, which hand-over checks before changing anything). This is needed because Frappe shares a
   task with its assignee, and a share would let them open it even though it's hidden from their
   lists.
 - **Content calendar for ERP Employees** (`content_team.is_erp_only()`, unless they also edit

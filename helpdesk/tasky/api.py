@@ -14,6 +14,7 @@ from helpdesk.tasky.permissions import (
     can_add_tasks,
     can_manage_project,
     can_move_task,
+    check_can_take_content_task,
     get_assigners,
     is_assigner,
     is_project_owner,
@@ -932,6 +933,9 @@ def _teammate(doc, user: str) -> str:
         frappe.throw(_("Pick a teammate."))
     if not _is_assignable(user):
         frappe.throw(_("{0} is not an active agent.").format(user))
+    if doc.get("content_post"):
+        # before anything is reassigned or anyone notified
+        check_can_take_content_task(user)
     if (
         not doc.get("content_post")
         and not _is_on_team(doc.project, user)

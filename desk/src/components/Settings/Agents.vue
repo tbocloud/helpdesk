@@ -119,7 +119,7 @@ import {
   Dropdown,
   toast,
 } from "frappe-ui";
-import { h, onUnmounted, watch } from "vue";
+import { h, onUnmounted, ref, watch } from "vue";
 import LucideBrickWall from "~icons/lucide/brick-wall";
 import LucideCheck from "~icons/lucide/check";
 import LucideChevronDown from "~icons/lucide/chevron-down";
@@ -242,19 +242,9 @@ function getOptions(agent) {
     },
   ];
   if (!isManager) return agentOptions;
-  const current = walls.data?.[agent.name] ?? [];
   return [
     { group: __("Agent"), hideLabel: true, options: agentOptions },
-    {
-      group: __("Department wall"),
-      options: WALLS.map((wall) => ({
-        label: wall.label,
-        selected: wall.role
-          ? current.length === 1 && current[0] === wall.role
-          : !current.length,
-        onClick: () => setWall(agent.name, wall.role),
-      })),
-    },
+    { group: __("Department wall"), options: wallOptions(agent.name) },
   ];
 }
 
@@ -268,17 +258,44 @@ const WALLS = [
 
 const walls = createResource({
   url: "helpdesk.api.departments.get_department_walls",
-  // the badge is a convenience; the menu still sets the wall if this fails
+  // shown in the menu instead, with Retry
   onError() {},
 });
+// the agent whose wall is being saved; their choices wait so saves can't cross
+const savingWall = ref("");
 
-watch(
-  () => (agents.data ?? []).map((a) => a.name).join(","),
-  (names) => {
-    if (isManager && names) walls.submit({ users: names.split(",") });
-  },
-  { immediate: true }
-);
+function loadWalls() {
+  const names = (agents.data ?? []).map((a) => a.name);
+  if (isManager && names.length) walls.submit({ users: names });
+}
+
+watch(() => (agents.data ?? []).map((a) => a.name).join(","), loadWalls, {
+  immediate: true,
+});
+
+function wallOptions(agent: string) {
+  const current: string[] | undefined = walls.data?.[agent];
+  if (!current && walls.error && !walls.loading) {
+    return [
+      {
+        label: __("Couldn't load the walls. Retry"),
+        icon: "lucide-refresh-cw",
+        onClick: loadWalls,
+      },
+    ];
+  }
+  return WALLS.map((wall) => ({
+    label: wall.label,
+    // nothing is marked until the agent's roles have loaded
+    selected:
+      !!current &&
+      (wall.role
+        ? current.length === 1 && current[0] === wall.role
+        : !current.length),
+    disabled: !current || savingWall.value === agent,
+    onClick: () => setWall(agent, wall.role),
+  }));
+}
 
 function wallLabel(agent: string) {
   const roles: string[] = walls.data?.[agent] ?? [];
@@ -289,6 +306,8 @@ function wallLabel(agent: string) {
 }
 
 function setWall(agent: string, role: string) {
+  if (savingWall.value) return;
+  savingWall.value = agent;
   call("helpdesk.api.departments.set_department_wall", { user: agent, role })
     .then((roles: string[]) => {
       walls.setData({ ...(walls.data ?? {}), [agent]: roles });
@@ -300,7 +319,8 @@ function setWall(agent: string, role: string) {
     })
     .catch((e) =>
       toast.error(errorText(e, __("Couldn't change the department wall.")))
-    );
+    )
+    .finally(() => (savingWall.value = ""));
 }
 
 const dropdownOptions = [

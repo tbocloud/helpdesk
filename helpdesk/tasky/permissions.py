@@ -72,6 +72,17 @@ def is_hidden_project(project: str | None, user: str | None = None) -> bool:
     return frappe.db.get_value("Project", project, "custom_department") in hidden
 
 
+def check_can_take_content_task(user: str):
+    """ERP Employees never see the content calendar, so they can't be given its tasks,
+    whatever the department of the post's project."""
+    if is_erp_only(user):
+        frappe.throw(
+            _("{0} can't be given content calendar tasks.").format(
+                frappe.utils.get_fullname(user)
+            )
+        )
+
+
 def check_assignment_department(todo, method=None):
     """Refuse giving a task to someone whose team keeps out of its project's department.
 
@@ -84,7 +95,11 @@ def check_assignment_department(todo, method=None):
         or todo.status == "Cancelled"
     ):
         return
-    project = frappe.db.get_value("Task", todo.reference_name, "project")
+    project, content_post = frappe.db.get_value(
+        "Task", todo.reference_name, ["project", "content_post"]
+    ) or (None, None)
+    if content_post:
+        check_can_take_content_task(todo.allocated_to)
     if is_hidden_project(project, todo.allocated_to):
         frappe.throw(
             _("{0} can't be given tasks in the {1} department.").format(

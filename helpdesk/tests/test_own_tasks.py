@@ -9,11 +9,16 @@ from frappe.utils import add_days, now_datetime
 
 from helpdesk.content_team import DM_EMPLOYEE_ROLE, ERP_EMPLOYEE_ROLE
 from helpdesk.test_utils import (
+    call_as_user,
     create_customer,
+    get_content_task,
+    get_department_walls_as,
     get_reminder_messages,
     get_visible_tasks,
+    hand_over_task_as,
     hold_commits,
     make_assigned_task,
+    make_assignment,
     make_content_post,
     make_content_user,
     make_project,
@@ -21,6 +26,7 @@ from helpdesk.test_utils import (
     make_tasky_user,
     run_as_user,
     set_content_settings,
+    set_department_wall_as,
 )
 
 CUSTOMER = "Galom International Trading"
@@ -33,14 +39,6 @@ PM_MEMBER = ("deepa.menon@own-tasks.example", "Deepa Menon")
 # `_` is a LIKE wildcard: this ID must not match nikhilxdas
 UNDERSCORE = ("nikhil_das@own-tasks.example", "Nikhil Das")
 LOOKALIKE = ("nikhilxdas@own-tasks.example", "Nikhil Xavier Das")
-
-
-def call(user, method, **kwargs):
-    return run_as_user(user, lambda: frappe.call(method, **kwargs))
-
-
-def names(tasks) -> set[str]:
-    return {t["name"] for t in tasks}
 
 
 class OwnTasksCase(FrappeTestCase):
@@ -93,51 +91,57 @@ class TestWhoSeesWhichTasks(OwnTasksCase):
         user = CONSULTANT[0]
         self.assertEqual(get_visible_tasks(user, self.project), self.own)
 
-        board = call(user, "helpdesk.tasky.api.get_kanban_tasks", project=self.project)[
-            "columns"
-        ]
+        board = call_as_user(
+            user, "helpdesk.tasky.api.get_kanban_tasks", project=self.project
+        )["columns"]
         self.assertEqual(
             {t["name"] for column in board.values() for t in column}, self.own
         )
-        checklist = call(
+        checklist = call_as_user(
             user,
             "helpdesk.tasky.api.get_phase_tasks",
             project=self.project,
             phase="Setup",
         )
-        self.assertEqual(names(checklist), self.own)
-        dashboard = call(
+        self.assertEqual({t["name"] for t in checklist}, self.own)
+        dashboard = call_as_user(
             user, "helpdesk.tasky.api.get_project_dashboard", project=self.project
         )
-        self.assertEqual(names(dashboard["tasks"]), self.own)
+        self.assertEqual({t["name"] for t in dashboard["tasks"]}, self.own)
         self.assertEqual(dashboard["stats"]["total"], 3)
-        picker = call(
+        picker = call_as_user(
             user, "helpdesk.tasky.api.get_project_tasks", project=self.project
         )
-        self.assertNotIn(self.other, names(picker))
-        detail = call(
+        self.assertNotIn(self.other, {t["name"] for t in picker})
+        detail = call_as_user(
             user, "helpdesk.tasky.api.get_project_detail", project=self.project
         )
         self.assertFalse(detail["sees_all_tasks"])
 
     def test_opening_someone_elses_task_directly_is_refused(self):
-        def read(task):
-            return frappe.has_permission("Task", "read", doc=task, user=CONSULTANT[0])
-
-        self.assertFalse(read(self.other))
-        self.assertTrue(read(self.given))
-        self.assertTrue(read(self.noted))
+        for task, allowed in (
+            (self.other, False),
+            (self.given, True),
+            (self.noted, True),
+        ):
+            with self.subTest(task=task):
+                self.assertEqual(
+                    frappe.has_permission("Task", "read", doc=task, user=CONSULTANT[0]),
+                    allowed,
+                )
         with self.assertRaises(frappe.PermissionError):
-            call(CONSULTANT[0], "helpdesk.tasky.api.get_task_detail", task=self.other)
+            call_as_user(
+                CONSULTANT[0], "helpdesk.tasky.api.get_task_detail", task=self.other
+            )
 
     def test_the_overview_of_a_lead_elsewhere_keeps_to_their_own_tasks_here(self):
         elsewhere = make_project("TBO Internal - Website", owner=PM[0]).name
         frappe.db.set_value("Project", elsewhere, "project_lead", CONSULTANT[0])
 
-        overview = call(
+        overview = call_as_user(
             CONSULTANT[0], "helpdesk.api.work.get_overview", project=self.project
         )
-        listed = names(overview["buckets"]["all"])
+        listed = {t["name"] for t in overview["buckets"]["all"]}
         self.assertIn(self.mine, listed)
         self.assertNotIn(self.other, listed)
 
@@ -145,13 +149,13 @@ class TestWhoSeesWhichTasks(OwnTasksCase):
         for user in (PM[0], LEAD[0], PM_MEMBER[0]):
             with self.subTest(user=user):
                 self.assertIn(self.other, get_visible_tasks(user, self.project))
-                detail = call(
+                detail = call_as_user(
                     user, "helpdesk.tasky.api.get_project_detail", project=self.project
                 )
                 self.assertTrue(detail["sees_all_tasks"])
         # seeing everything gives a Project Manager on the team no manager powers
         self.assertFalse(
-            call(
+            call_as_user(
                 PM_MEMBER[0],
                 "helpdesk.tasky.api.get_project_detail",
                 project=self.project,
@@ -186,17 +190,8 @@ class TestWhoSeesWhichTasks(OwnTasksCase):
 
 
 class TestHandingOver(OwnTasksCase):
-    def hand_over(self, user, task, teammate, reason="Moving to the Galom go-live"):
-        return call(
-            user,
-            "helpdesk.tasky.api.hand_over_task",
-            task=task,
-            teammate=teammate,
-            reason=reason,
-        )
-
     def test_the_assignee_hands_over_and_loses_sight_of_it(self):
-        self.hand_over(CONSULTANT[0], self.mine, DEV[0])
+        hand_over_task_as(CONSULTANT[0], self.mine, DEV[0])
 
         doc = frappe.get_doc("Task", self.mine)
         self.assertEqual(doc.assignees(), [DEV[0]])
@@ -236,11 +231,11 @@ class TestHandingOver(OwnTasksCase):
     def test_only_the_assignee_or_the_projects_managers_hand_over(self):
         # sees every task, but neither has it nor runs the project
         with self.assertRaises(frappe.PermissionError):
-            self.hand_over(PM_MEMBER[0], self.other, CONSULTANT[0])
+            hand_over_task_as(PM_MEMBER[0], self.other, CONSULTANT[0])
         with self.assertRaises(frappe.PermissionError):
-            self.hand_over(CONSULTANT[0], self.given, LEAD[0])
+            hand_over_task_as(CONSULTANT[0], self.given, LEAD[0])
 
-        self.hand_over(LEAD[0], self.other, CONSULTANT[0])
+        hand_over_task_as(LEAD[0], self.other, CONSULTANT[0])
         self.assertEqual(
             frappe.get_doc("Task", self.other).assignees(), [CONSULTANT[0]]
         )
@@ -281,22 +276,29 @@ class TestContentTeams(FrappeTestCase):
             designer=self.designer,
         )
 
-    def task_of(self, role):
-        return frappe.db.get_value(
-            "Task", {"content_post": self.post.name, "content_role": role}, "name"
-        )
-
     def test_content_people_see_only_their_own_part(self):
         visible = get_visible_tasks(self.writer, self.project)
-        self.assertIn(self.task_of("Writer"), visible)
-        self.assertNotIn(self.task_of("Designer"), visible)
+        self.assertIn(get_content_task(self.post.name, "Writer"), visible)
+        self.assertNotIn(get_content_task(self.post.name, "Designer"), visible)
 
     def test_erp_people_never_see_content_tasks(self):
-        # a content task ERP was put on (the project has no department to wall it)
+        # the project has no department, so only the content calendar wall stops this
         task = make_task(
             self.project, "Onam offer: caption", content_post=self.post.name
         )
-        frappe.get_doc(
+        with self.assertRaises(frappe.ValidationError):
+            make_assignment("Task", task.name, self.erp)
+        with self.assertRaises(frappe.ValidationError):
+            call_as_user(
+                self.writer,
+                "helpdesk.tasky.api.hand_over_task",
+                task=get_content_task(self.post.name, "Writer"),
+                teammate=self.erp,
+                reason="Busy with the Onam shoot",
+            )
+
+        # an assignment from before the wall still doesn't open the task
+        todo = frappe.get_doc(
             {
                 "doctype": "ToDo",
                 "allocated_to": self.erp,
@@ -304,14 +306,16 @@ class TestContentTeams(FrappeTestCase):
                 "reference_name": task.name,
                 "description": task.subject,
             }
-        ).insert(ignore_permissions=True)
+        )
+        todo.flags.ignore_validate = True
+        todo.insert(ignore_permissions=True)
         self.assertNotIn(task.name, get_visible_tasks(self.erp))
         self.assertFalse(frappe.has_permission("Task", "read", doc=task, user=self.erp))
 
     def test_a_content_task_is_handed_to_anyone_and_the_post_follows(self):
         # the designer isn't on the content calendar project's team
-        task = self.task_of("Writer")
-        call(
+        task = get_content_task(self.post.name, "Writer")
+        call_as_user(
             self.writer,
             "helpdesk.tasky.api.hand_over_task",
             task=task,
@@ -337,33 +341,22 @@ class TestDepartmentWallSettings(FrappeTestCase):
             "sreeja.pillai@own-tasks.example", "Sreeja Pillai", roles=("Agent Manager",)
         )
 
-    def walls(self):
-        return call(
-            self.manager,
-            "helpdesk.api.departments.get_department_walls",
-            users=[self.agent],
-        )[self.agent]
-
-    def set_wall(self, role, user=None):
-        return call(
-            user or self.manager,
-            "helpdesk.api.departments.set_department_wall",
-            user=self.agent,
-            role=role,
-        )
-
     def test_an_agent_manager_sets_one_wall_at_a_time(self):
-        self.assertEqual(self.walls(), [])
-        self.set_wall(ERP_EMPLOYEE_ROLE)
-        self.assertEqual(self.walls(), [ERP_EMPLOYEE_ROLE])
-        self.set_wall(DM_EMPLOYEE_ROLE)
-        self.assertEqual(self.walls(), [DM_EMPLOYEE_ROLE])
-        self.set_wall("")
-        self.assertEqual(self.walls(), [])
+        self.assertEqual(get_department_walls_as(self.manager, self.agent), [])
+        set_department_wall_as(self.manager, self.agent, ERP_EMPLOYEE_ROLE)
+        self.assertEqual(
+            get_department_walls_as(self.manager, self.agent), [ERP_EMPLOYEE_ROLE]
+        )
+        set_department_wall_as(self.manager, self.agent, DM_EMPLOYEE_ROLE)
+        self.assertEqual(
+            get_department_walls_as(self.manager, self.agent), [DM_EMPLOYEE_ROLE]
+        )
+        set_department_wall_as(self.manager, self.agent, "")
+        self.assertEqual(get_department_walls_as(self.manager, self.agent), [])
         self.assertIn("Agent", frappe.get_roles(self.agent))
 
     def test_only_managers_set_walls_and_only_wall_roles(self):
         with self.assertRaises(frappe.PermissionError):
-            self.set_wall(ERP_EMPLOYEE_ROLE, user=self.agent)
+            set_department_wall_as(self.agent, self.agent, ERP_EMPLOYEE_ROLE)
         with self.assertRaises(frappe.ValidationError):
-            self.set_wall("System Manager")
+            set_department_wall_as(self.manager, self.agent, "System Manager")

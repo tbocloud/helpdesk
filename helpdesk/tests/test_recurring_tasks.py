@@ -487,13 +487,18 @@ class TestRecurringTasks(FrappeTestCase):
             self.assertEqual(saved["weekdays"], ["Friday"])
             rule = frappe.get_doc("HD Recurring Task", saved["name"])
             rule.create_due_tasks()
+            theirs = run_as_user(
+                LEAD[0],
+                lambda: api.save_recurring_task(
+                    self.project,
+                    {**values, "subject": "Backup check", "assignee": MEMBER[0]},
+                ),
+            )
 
-        # a member sees the schedules, but not the lead's task, and changes nothing
+        # a member sees only their own schedules, like their tasks, and changes nothing
         listing = run_as_user(MEMBER[0], lambda: api.get_recurring_tasks(self.project))
         self.assertFalse(listing["can_manage"])
-        row = next(r for r in listing["rules"] if r["name"] == saved["name"])
-        self.assertTrue(row["has_last_task"])
-        self.assertIsNone(row["last_task"])
+        self.assertEqual([r["name"] for r in listing["rules"]], [theirs["name"]])
         with self.assertRaises(frappe.PermissionError):
             run_as_user(
                 MEMBER[0], lambda: api.save_recurring_task(self.project, values)

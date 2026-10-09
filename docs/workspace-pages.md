@@ -300,7 +300,8 @@ card's menu, the checklist row's menu and the task details (`HandOverTaskDialog`
 - **To whom:** an active agent on the project's team; managers and leads may pick anyone
   (they join the team). A content post's task may go to any active agent, since content
   people work on the content calendar without joining its project (`TeammatePicker`
-  `anyone`); the department walls still refuse the other team.
+  `anyone`); the department walls still refuse the other team, and an ERP Employee is refused
+  a content task before anything changes. Tasks outside a project can't be handed over.
 - **What changes:** the hander's ToDo is cancelled and the teammate's names the task's
   original assigner (`get_assigners`) as `assigned_by`, not the hander. So "Assigned by"
   keeps showing who gave the work out, and the task leaves the hander's lists unless they
