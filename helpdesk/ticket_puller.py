@@ -381,7 +381,9 @@ def _pull_connection(connection: str, customer_name: str | None) -> int:
                     )
             frappe.db.commit()  # keep each imported ticket even if a later one fails - nosemgrep
 
-            _write_ticket(conn, mcp, ticket["name"], {"ticket_id": hd_name, "status": "Open"})
+            _write_ticket(
+                conn, mcp, ticket["name"], {"ticket_id": hd_name, "status": "Open"}
+            )
             created += 1
         except Exception:
             frappe.db.rollback()
@@ -435,7 +437,9 @@ def _status_payload(row, raw: bool = False) -> dict:
 def _write_ticket(conn, mcp, client_ticket: str, values: dict) -> None:
     """The hub's view of a ticket on the customer site: through hub_api when the client has it, else MCP."""
     if client_api.supports(conn, client_api.HUB_API):
-        client_api.hub_api(conn, "update_ticket", {"name": client_ticket, "values": values})
+        client_api.hub_api(
+            conn, "update_ticket", {"name": client_ticket, "values": values}
+        )
     else:
         _push_back(mcp, client_ticket, values)
 
@@ -718,7 +722,9 @@ def sync_conversations() -> int:
                 )
     # every hub_api site, open tickets or not: a customer may reopen a closed ticket
     for conn_name in _hub_api_connections():
-        synced += _pull_client_changes(frappe.get_doc("HDS Support Connection", conn_name))
+        synced += _pull_client_changes(
+            frappe.get_doc("HDS Support Connection", conn_name)
+        )
     return synced
 
 
@@ -741,7 +747,8 @@ def _follow_up_on_comment(ticket: str) -> None:
         on_customer_comment(ticket)
     except Exception:
         frappe.log_error(
-            title=f"Copilot follow-up not started for {ticket}", message=frappe.get_traceback()
+            title=f"Copilot follow-up not started for {ticket}",
+            message=frappe.get_traceback(),
         )
 
 
@@ -768,13 +775,18 @@ def _pull_client_changes(conn) -> int:
             continue
         ticket = frappe.db.get_value(
             "HD Ticket",
-            {"custom_qcs_connection": conn.name, "custom_client_ticket": change.get("name")},
+            {
+                "custom_qcs_connection": conn.name,
+                "custom_client_ticket": change.get("name"),
+            },
             "name",
         )
         if not ticket:
             continue
         marker = f"{confirmation}@{change.get('confirmed_at')}"
-        state = _load_conv_state(frappe.db.get_value("HD Ticket", ticket, "custom_sync_state"))
+        state = _load_conv_state(
+            frappe.db.get_value("HD Ticket", ticket, "custom_sync_state")
+        )
         if state.get("confirmation") == marker:
             continue  # already applied
         try:

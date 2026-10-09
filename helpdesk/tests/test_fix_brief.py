@@ -79,4 +79,3 @@ class TestBriefTaskReference(FrappeTestCase):
 
         self.assertIn(f"Closes {task.name}", markdown)
         self.assertNotIn("Refs ticket #", markdown)
-

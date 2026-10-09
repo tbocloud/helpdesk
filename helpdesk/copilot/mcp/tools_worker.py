@@ -81,18 +81,31 @@ def customer_erp_read(caller, tool: str, arguments: dict | None = None) -> dict:
 
     if tool not in CUSTOMER_READ_TOOLS:
         frappe.throw(
-            _("{0} is not a read tool Copilot may use. Allowed: {1}").format(tool, ", ".join(CUSTOMER_READ_TOOLS)),
+            _("{0} is not a read tool Copilot may use. Allowed: {1}").format(
+                tool, ", ".join(CUSTOMER_READ_TOOLS)
+            ),
             frappe.ValidationError,
         )
     run = _run(caller)
     if not run.connection:
-        frappe.throw(_("No customer site is connected for this ticket."), frappe.ValidationError)
-    result = MCPClient(run.connection).call_tool(tool, arguments or {}, session_id=run.name)
+        frappe.throw(
+            _("No customer site is connected for this ticket."), frappe.ValidationError
+        )
+    result = MCPClient(run.connection).call_tool(
+        tool, arguments or {}, session_id=run.name
+    )
     text = ((result.get("content") or [{}])[0] or {}).get("text") or ""
     if result.get("isError"):
-        frappe.throw(_("The customer site refused {0}: {1}").format(tool, clip(text, 400)), frappe.ValidationError)
+        frappe.throw(
+            _("The customer site refused {0}: {1}").format(tool, clip(text, 400)),
+            frappe.ValidationError,
+        )
     if len(text) > MAX_SITE_RESULT_CHARS:
-        return {"tool": tool, "cut_at_characters": MAX_SITE_RESULT_CHARS, "result": text[:MAX_SITE_RESULT_CHARS]}
+        return {
+            "tool": tool,
+            "cut_at_characters": MAX_SITE_RESULT_CHARS,
+            "result": text[:MAX_SITE_RESULT_CHARS],
+        }
     try:
         return {"tool": tool, "result": json.loads(text)}
     except ValueError:

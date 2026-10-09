@@ -156,7 +156,10 @@ def get_fallback_config():
     if not provider:
         return None
     api_key = get_decrypted_password(
-        "HDS Hub Settings", "HDS Hub Settings", "fallback_api_key", raise_exception=False
+        "HDS Hub Settings",
+        "HDS Hub Settings",
+        "fallback_api_key",
+        raise_exception=False,
     )
     if not api_key:
         return None
@@ -175,7 +178,9 @@ FALLBACK_STATUSES = {401, 402, 403, 408, 429}
 
 def is_provider_failure(exc: Exception) -> bool:
     """Whether an exception from a model call is the provider failing, not our request."""
-    if isinstance(exc, (requests.ConnectionError, requests.Timeout, anthropic.APIConnectionError)):
+    if isinstance(
+        exc, (requests.ConnectionError, requests.Timeout, anthropic.APIConnectionError)
+    ):
         return True
     status = None
     if isinstance(exc, requests.HTTPError) and exc.response is not None:
@@ -319,7 +324,9 @@ def parse_json_answer(text: str) -> dict:
     return {"raw_response": text, "parse_error": True}
 
 
-def _complete(provider, base_url, api_key, model, system_prompt, user_message, ticket_name=None):
+def _complete(
+    provider, base_url, api_key, model, system_prompt, user_message, ticket_name=None
+):
     """One completion on the given provider. Returns (text, usage)."""
     if provider == "OpenAI Compatible":
         return _openai_chat(base_url, api_key, model, system_prompt, user_message)

@@ -20,11 +20,16 @@ class TestTaskFromTicketPause(FrappeTestCase):
         ticket = make_ticket(subject="Needs work")
         result = create_task_from_ticket(ticket.name, self.project)
         self.assertEqual(result["ticket_status"], WAITING_ON_TASK)
-        self.assertEqual(frappe.db.get_value("Task", result["task"]["name"], "hd_ticket"), ticket.name)
+        self.assertEqual(
+            frappe.db.get_value("Task", result["task"]["name"], "hd_ticket"),
+            ticket.name,
+        )
 
     def test_the_ticket_keeps_running_when_asked(self):
         ticket = make_ticket(subject="Copilot run")
         before = ticket.status
         result = create_task_from_ticket(ticket.name, self.project, pause_ticket=False)
         self.assertEqual(result["ticket_status"], before)
-        self.assertEqual(frappe.db.get_value("HD Ticket", ticket.name, "status"), before)
+        self.assertEqual(
+            frappe.db.get_value("HD Ticket", ticket.name, "status"), before
+        )

@@ -32,7 +32,12 @@ class TestApprovalLock(FrappeTestCase):
                 {
                     "tool_name": "set_value",
                     "description": "fix the rate",
-                    "arguments": {"doctype": "Item", "name": "X", "fieldname": "rate", "value": 1},
+                    "arguments": {
+                        "doctype": "Item",
+                        "name": "X",
+                        "fieldname": "rate",
+                        "value": 1,
+                    },
                 }
             ],
         )
@@ -50,7 +55,11 @@ class TestApprovalLock(FrappeTestCase):
 
         def call_tool(tool, args):
             # by the time the first remote write runs, the request is already claimed
-            seen.append(frappe.db.get_value("HDS Support Action Request", self.request, "status"))
+            seen.append(
+                frappe.db.get_value(
+                    "HDS Support Action Request", self.request, "status"
+                )
+            )
             return {"content": [{"type": "text", "text": "ok"}], "isError": False}
 
         mcp = MagicMock()

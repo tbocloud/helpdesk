@@ -17,11 +17,18 @@ from werkzeug.wrappers import Response
 
 from helpdesk.copilot import settings as copilot_settings
 from helpdesk.copilot.mcp import auth, server
-from helpdesk.copilot.mcp.protocol import AUTH_REQUIRED, FORBIDDEN, PARSE_ERROR, make_error
+from helpdesk.copilot.mcp.protocol import (
+    AUTH_REQUIRED,
+    FORBIDDEN,
+    PARSE_ERROR,
+    make_error,
+)
 from helpdesk.copilot.mcp.registry import message_of
 
 
-@frappe.whitelist(allow_guest=True, methods=["POST", "GET", "DELETE"])  # the MCP server checks every caller itself - nosemgrep
+@frappe.whitelist(
+    allow_guest=True, methods=["POST", "GET", "DELETE"]
+)  # the MCP server checks every caller itself - nosemgrep
 def handle() -> Response:
     if frappe.request.method != "POST":
         # no event stream and no sessions to end: everything is a POST
@@ -38,7 +45,12 @@ def handle() -> Response:
     except frappe.PermissionError as e:
         return _json(make_error(first_id, FORBIDDEN, message_of(e)), 403)
     if not copilot_settings.get_settings().mcp_enabled:
-        return _json(make_error(first_id, FORBIDDEN, "The TBO Support MCP server is switched off"), 503)
+        return _json(
+            make_error(
+                first_id, FORBIDDEN, "The TBO Support MCP server is switched off"
+            ),
+            503,
+        )
     reply = server.dispatch(caller, payload)
     if reply is None:
         return Response(status=202)

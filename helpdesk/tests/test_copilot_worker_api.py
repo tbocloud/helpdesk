@@ -28,13 +28,21 @@ class TestWorkerApi(FrappeTestCase):
         self.addCleanup(frappe.set_user, "Administrator")
         make_copilot_settings(enabled=1)
         customer = create_customer("Worker API Co").name
-        frappe.db.set_value("HDS Copilot Run", {"state": "Queued"}, "state", "Cancelled")
+        frappe.db.set_value(
+            "HDS Copilot Run", {"state": "Queued"}, "state", "Cancelled"
+        )
         self.ticket = make_ticket(subject="Worker API", customer=customer)
-        self.run = make_copilot_run(self.ticket.name, queued_at=add_to_date(now_datetime(), minutes=-1))
+        self.run = make_copilot_run(
+            self.ticket.name, queued_at=add_to_date(now_datetime(), minutes=-1)
+        )
 
     def test_endpoints_accept_post_only(self):
         for fn in (api.claim_job, api.heartbeat, api.post_events, api.submit_result):
-            self.assertEqual(frappe.allowed_http_methods_for_whitelisted_func.get(fn), ["POST"], fn.__name__)
+            self.assertEqual(
+                frappe.allowed_http_methods_for_whitelisted_func.get(fn),
+                ["POST"],
+                fn.__name__,
+            )
 
     def test_only_a_copilot_worker_may_call(self):
         user = create_user("not.a.worker@example.com")
@@ -48,11 +56,22 @@ class TestWorkerApi(FrappeTestCase):
         self.assertEqual(job["run"], self.run.name)
         self.assertEqual(job["context"]["ticket"]["subject"], "Worker API")
         self.assertEqual(worker.heartbeat("investigate")["action"], "continue")
-        self.assertEqual(worker.events([{"seq": 1, "type": "tool_call", "payload": {"tool": "get_doc"}}]), {"acked": [1]})
-        self.assertEqual(worker.events([{"seq": 1, "type": "tool_call"}]), {"acked": [1]})
-        self.assertEqual(frappe.db.count("HDS Copilot Event", {"run": self.run.name, "seq": 1}), 1)
+        self.assertEqual(
+            worker.events(
+                [{"seq": 1, "type": "tool_call", "payload": {"tool": "get_doc"}}]
+            ),
+            {"acked": [1]},
+        )
+        self.assertEqual(
+            worker.events([{"seq": 1, "type": "tool_call"}]), {"acked": [1]}
+        )
+        self.assertEqual(
+            frappe.db.count("HDS Copilot Event", {"run": self.run.name, "seq": 1}), 1
+        )
         result = worker.report("bug")
-        self.assertEqual((result["state"], result["root_cause"]), ("Preparing Fix", "bug"))
+        self.assertEqual(
+            (result["state"], result["root_cause"]), ("Preparing Fix", "bug")
+        )
         with self.assertRaises(frappe.PermissionError):
             worker.heartbeat()
 
@@ -68,7 +87,10 @@ class TestWorkerApi(FrappeTestCase):
             result = worker.fail("the sandbox did not start")
         self.assertEqual(result["state"], "Failed")
         tell.assert_called_once()
-        self.assertEqual(frappe.db.get_value("HDS Copilot Run", self.run.name, "failure_reason"), "the sandbox did not start")
+        self.assertEqual(
+            frappe.db.get_value("HDS Copilot Run", self.run.name, "failure_reason"),
+            "the sandbox did not start",
+        )
 
     def test_an_empty_queue_gives_nothing(self):
         runs.transition(self.run, "Cancelled", runs.AGENT)

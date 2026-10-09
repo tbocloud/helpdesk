@@ -21,7 +21,10 @@ from helpdesk.test_utils import (
 
 
 def ok(payload=None):
-    return {"content": [{"type": "text", "text": json.dumps(payload or {})}], "isError": False}
+    return {
+        "content": [{"type": "text", "text": json.dumps(payload or {})}],
+        "isError": False,
+    }
 
 
 def refused(message="Write operations are disabled"):
@@ -62,7 +65,9 @@ class TestStatusPushOnlyOnChange(FrappeTestCase):
         customer = create_customer("Sync Fix Co")
         self.conn = make_support_connection(customer.name).name
         self.ticket = make_ticket(subject="Push on change")
-        self.ticket.db_set({"custom_client_ticket": "SUP-0101", "custom_qcs_connection": self.conn})
+        self.ticket.db_set(
+            {"custom_client_ticket": "SUP-0101", "custom_qcs_connection": self.conn}
+        )
 
     def push(self, mcp):
         with patch.object(ticket_puller, "MCPClient", return_value=mcp):
@@ -81,7 +86,11 @@ class TestStatusPushOnlyOnChange(FrappeTestCase):
 
         self.push(mcp)
         self.assertEqual(len(self.pushed_values(mcp)), 1)
-        self.assertTrue(frappe.db.get_value("HD Ticket", self.ticket.name, "custom_client_push_hash"))
+        self.assertTrue(
+            frappe.db.get_value(
+                "HD Ticket", self.ticket.name, "custom_client_push_hash"
+            )
+        )
 
         self.push(mcp)
         self.assertEqual(len(self.pushed_values(mcp)), 1)
@@ -104,7 +113,11 @@ class TestStatusPushOnlyOnChange(FrappeTestCase):
         mcp = MagicMock()
         mcp.call_tool.return_value = refused()
         self.push(mcp)
-        self.assertFalse(frappe.db.get_value("HD Ticket", self.ticket.name, "custom_client_push_hash"))
+        self.assertFalse(
+            frappe.db.get_value(
+                "HD Ticket", self.ticket.name, "custom_client_push_hash"
+            )
+        )
 
         mcp.call_tool.return_value = ok()
         self.push(mcp)
@@ -151,7 +164,9 @@ class TestConversationSync(FrappeTestCase):
         customer = create_customer("Reply Sync Co")
         self.conn = make_support_connection(customer.name).name
         self.ticket = make_ticket(subject="Reply sync")
-        self.ticket.db_set({"custom_client_ticket": "SUP-0202", "custom_qcs_connection": self.conn})
+        self.ticket.db_set(
+            {"custom_client_ticket": "SUP-0202", "custom_qcs_connection": self.conn}
+        )
 
     def mcp_with(self, create_doc_result, close_requested=False):
         def call_tool(tool, args):
@@ -170,11 +185,16 @@ class TestConversationSync(FrappeTestCase):
             ticket_puller.sync_conversations()
 
     def synced_replies(self):
-        state = json.loads(frappe.db.get_value("HD Ticket", self.ticket.name, "custom_sync_state") or "{}")
+        state = json.loads(
+            frappe.db.get_value("HD Ticket", self.ticket.name, "custom_sync_state")
+            or "{}"
+        )
         return state.get("hub", [])
 
     def test_a_refused_reply_is_not_marked_as_sent(self):
-        reply = make_ticket_communication(self.ticket.name, "We fixed it", sent_or_received="Sent")
+        reply = make_ticket_communication(
+            self.ticket.name, "We fixed it", sent_or_received="Sent"
+        )
 
         # the sync rolls back on failure, which in a test would undo the fixtures above
         with patch.object(frappe.db, "rollback"):

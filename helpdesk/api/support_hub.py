@@ -57,7 +57,9 @@ def start_investigation(ticket: str | int, connection: str, agent_notes: str = "
 
     doc = frappe.get_doc("HD Ticket", str(ticket))
     doc.check_permission("read")
-    site_customer = frappe.db.get_value("HDS Support Connection", connection, "customer_name")
+    site_customer = frappe.db.get_value(
+        "HDS Support Connection", connection, "customer_name"
+    )
     if site_customer != doc.customer and not _is_hub_manager():
         # another customer's site would put their data on this ticket
         frappe.throw(
@@ -166,7 +168,9 @@ def get_connections() -> list:
 
 
 def _is_hub_manager() -> bool:
-    return bool({"Administrator", "System Manager", "Agent Manager"} & set(frappe.get_roles()))
+    return bool(
+        {"Administrator", "System Manager", "Agent Manager"} & set(frappe.get_roles())
+    )
 
 
 @frappe.whitelist()

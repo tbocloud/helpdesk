@@ -154,7 +154,9 @@ class TestBuildTimeline(FrappeTestCase):
 
 class TestLoadReplay(FrappeTestCase):
     def setUp(self):
-        hold_commits(self)  # the code under test commits; keep the fixtures out of the site
+        hold_commits(
+            self
+        )  # the code under test commits; keep the fixtures out of the site
         self.ticket = make_ticket(subject="Cannot save Sales Invoice")
 
     def test_reads_attached_files(self):
@@ -193,7 +195,9 @@ class TestLoadReplay(FrappeTestCase):
 
 class TestGetSessionReplay(FrappeTestCase):
     def setUp(self):
-        hold_commits(self)  # the code under test commits; keep the fixtures out of the site
+        hold_commits(
+            self
+        )  # the code under test commits; keep the fixtures out of the site
         self.ticket = make_ticket(subject="Cannot save Sales Invoice")
         self.files = make_session_files(self.ticket.name)
 
@@ -261,7 +265,9 @@ class TestGetSessionReplay(FrappeTestCase):
 
 class TestTriageWithSessionReplay(FrappeTestCase):
     def setUp(self):
-        hold_commits(self)  # the code under test commits; keep the fixtures out of the site
+        hold_commits(
+            self
+        )  # the code under test commits; keep the fixtures out of the site
         self.ticket = make_ticket(
             subject="Cannot save Sales Invoice",
             description="Save fails with an error.",
@@ -359,7 +365,9 @@ class TestTriageWithSessionReplay(FrappeTestCase):
 
 class TestProductionFixes(FrappeTestCase):
     def setUp(self):
-        hold_commits(self)  # the code under test commits; keep the fixtures out of the site
+        hold_commits(
+            self
+        )  # the code under test commits; keep the fixtures out of the site
 
     def test_values_filled_in_by_the_page_are_not_typing(self):
         events = make_replay_events()
@@ -414,7 +422,9 @@ class TestProductionFixes(FrappeTestCase):
 
 class TestStuckTriageAndSyncState(FrappeTestCase):
     def setUp(self):
-        hold_commits(self)  # the code under test commits; keep the fixtures out of the site
+        hold_commits(
+            self
+        )  # the code under test commits; keep the fixtures out of the site
 
     def test_triage_left_in_progress_is_marked_failed(self):
         from frappe.utils import add_to_date, now_datetime

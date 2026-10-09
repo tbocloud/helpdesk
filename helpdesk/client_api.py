@@ -97,6 +97,9 @@ def refresh_capabilities(connection: str) -> None:
         return
     if apply_capabilities(conn, info):
         conn.db_set(
-            {"client_capabilities": conn.client_capabilities, "client_version": conn.client_version},
+            {
+                "client_capabilities": conn.client_capabilities,
+                "client_version": conn.client_version,
+            },
             update_modified=False,
         )

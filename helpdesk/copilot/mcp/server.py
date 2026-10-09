@@ -28,7 +28,9 @@ def dispatch(caller, payload):
     if isinstance(payload, list):
         if not payload:
             return make_error(None, INVALID_REQUEST, "Empty batch")
-        replies = [r for r in (handle_message(caller, m) for m in payload) if r is not None]
+        replies = [
+            r for r in (handle_message(caller, m) for m in payload) if r is not None
+        ]
         return replies or None
     return handle_message(caller, payload)
 
@@ -52,14 +54,22 @@ def handle_message(caller, message):
     if method == "tools/call":
         if not isinstance(params, dict) or not params.get("name"):
             return make_error(req_id, INVALID_PARAMS, "tools/call needs a tool name")
-        return make_response(req_id, registry.call(caller, params["name"], params.get("arguments")))
+        return make_response(
+            req_id, registry.call(caller, params["name"], params.get("arguments"))
+        )
     return make_error(req_id, METHOD_NOT_FOUND, f"Unknown method: {method}")
 
 
 def initialize_result(params: dict) -> dict:
     return {
-        "protocolVersion": negotiate_version(params.get("protocolVersion") if isinstance(params, dict) else None),
+        "protocolVersion": negotiate_version(
+            params.get("protocolVersion") if isinstance(params, dict) else None
+        ),
         "capabilities": {"tools": {"listChanged": False}},
-        "serverInfo": {"name": SERVER_NAME, "title": SERVER_TITLE, "version": SERVER_VERSION},
+        "serverInfo": {
+            "name": SERVER_NAME,
+            "title": SERVER_TITLE,
+            "version": SERVER_VERSION,
+        },
         "instructions": INSTRUCTIONS,
     }

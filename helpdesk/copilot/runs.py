@@ -28,7 +28,14 @@ MAX_PAYLOAD_BYTES = 16 * 1024
 WORKER, SYSTEM, AGENT, CUSTOMER = "worker", "system", "agent", "customer"
 
 # nobody waits on Copilot in these states, so a new run may start for the ticket
-SETTLED_STATES = ("Answered", "Closed", "Failed", "Cancelled", "Escalated", "Handed Over")
+SETTLED_STATES = (
+    "Answered",
+    "Closed",
+    "Failed",
+    "Cancelled",
+    "Escalated",
+    "Handed Over",
+)
 FINISHED_STATES = ("Closed", "Failed", "Cancelled")
 
 TRANSITIONS = {
@@ -47,7 +54,14 @@ TRANSITIONS = {
     ("Handed Over", "Closed"): {CUSTOMER, AGENT, SYSTEM},
     ("Escalated", "Closed"): {CUSTOMER, AGENT, SYSTEM},
 }
-CANCELLABLE = ("Queued", "Investigating", "Explaining", "Answered", "Preparing Fix", "Handed Over")
+CANCELLABLE = (
+    "Queued",
+    "Investigating",
+    "Explaining",
+    "Answered",
+    "Preparing Fix",
+    "Handed Over",
+)
 
 # the stage the customer sees when a run enters a state; the router sets the others
 STAGE_FOR_STATE = {
@@ -63,7 +77,9 @@ STAGE_FOR_STATE = {
 def active_run(ticket: str):
     """The run of a ticket that Copilot is still working on, if any."""
     name = frappe.db.get_value(
-        "HDS Copilot Run", {"ticket": ticket, "state": ["not in", SETTLED_STATES]}, "name"
+        "HDS Copilot Run",
+        {"ticket": ticket, "state": ["not in", SETTLED_STATES]},
+        "name",
     )
     return frappe.get_doc("HDS Copilot Run", name) if name else None
 
@@ -72,9 +88,13 @@ COMMIT_RE = re.compile(r"^[0-9a-f]{7,40}$")
 APP_RE = re.compile(r"^[A-Za-z0-9_.-]{1,140}$")
 
 
-def clean_base(base_app: str | None, base_commit: str | None) -> tuple[str | None, str | None]:
+def clean_base(
+    base_app: str | None, base_commit: str | None
+) -> tuple[str | None, str | None]:
     """The app and commit a run should read instead of the deployed code, checked; (None, None) if not given."""
-    base_app, base_commit = (base_app or "").strip() or None, (base_commit or "").strip().lower() or None
+    base_app, base_commit = (base_app or "").strip() or None, (
+        base_commit or ""
+    ).strip().lower() or None
     if base_commit and not COMMIT_RE.match(base_commit):
         frappe.throw(_("The base commit must be 7 to 40 hexadecimal characters."))
     if base_app and not APP_RE.match(base_app):
@@ -112,7 +132,8 @@ def start_run(
             "doctype": "HDS Copilot Run",
             "ticket": ticket,
             "customer": info.customer,
-            "connection": info.custom_qcs_connection or get_client_connection(info.customer),
+            "connection": info.custom_qcs_connection
+            or get_client_connection(info.customer),
             "registry": registry.name if registry else None,
             "kind": kind,
             "state": "Queued",
@@ -125,7 +146,9 @@ def start_run(
     add_event(run, "state_change", {"from": None, "to": "Queued"}, actor)
     update_ticket(run)
     if kind == "investigate":
-        send_stage(run, "Received")  # a follow-up keeps "Waiting for you" until a worker picks it up
+        send_stage(
+            run, "Received"
+        )  # a follow-up keeps "Waiting for you" until a worker picks it up
     publish_run(run)
     return run
 
@@ -140,7 +163,8 @@ def on_ticket_insert(doc, method=None):
         start_run(doc.name)
     except Exception:
         frappe.log_error(
-            title=f"Copilot run not started for {doc.name}", message=frappe.get_traceback()
+            title=f"Copilot run not started for {doc.name}",
+            message=frappe.get_traceback(),
         )
 
 
@@ -156,7 +180,9 @@ def _move(doc, to: str, actor: str, note: str = "", **fields):
     cancel = to == "Cancelled" and actor in (AGENT, SYSTEM) and doc.state in CANCELLABLE
     if actor not in allowed and not cancel:
         frappe.throw(
-            _("A Copilot run cannot go from {0} to {1} ({2})").format(doc.state, to, actor)
+            _("A Copilot run cannot go from {0} to {1} ({2})").format(
+                doc.state, to, actor
+            )
         )
     previous = doc.state
     doc.state = to
@@ -176,10 +202,20 @@ def _move(doc, to: str, actor: str, note: str = "", **fields):
     return doc
 
 
-def add_event(run, event_type: str, payload: dict | None = None, actor: str = SYSTEM, seq: int | None = None) -> bool:
+def add_event(
+    run,
+    event_type: str,
+    payload: dict | None = None,
+    actor: str = SYSTEM,
+    seq: int | None = None,
+) -> bool:
     """Writes an event; a worker's `seq` makes it idempotent (a repeat is ignored and returns False)."""
     name = run if isinstance(run, str) else run.name
-    key = f"{name}:w:{seq}" if seq is not None else f"{name}:h:{frappe.generate_hash(length=10)}"
+    key = (
+        f"{name}:w:{seq}"
+        if seq is not None
+        else f"{name}:h:{frappe.generate_hash(length=10)}"
+    )
     if seq is not None and frappe.db.exists("HDS Copilot Event", {"event_key": key}):
         return False
     text = json.dumps(payload or {}, default=str)
@@ -224,7 +260,10 @@ def claim(worker_id: str, capabilities: str = ""):
         pluck="name",
     )
     for name in candidates:
-        if frappe.db.get_value("HDS Copilot Run", name, "state", for_update=True) != "Queued":
+        if (
+            frappe.db.get_value("HDS Copilot Run", name, "state", for_update=True)
+            != "Queued"
+        ):
             continue  # another worker got it first
         token = frappe.generate_hash(length=32)
         doc = _move(
@@ -241,7 +280,11 @@ def claim(worker_id: str, capabilities: str = ""):
         add_event(
             doc,
             "lease",
-            {"worker_id": worker_id, "capabilities": capabilities, "expires": str(doc.lease_expires)},
+            {
+                "worker_id": worker_id,
+                "capabilities": capabilities,
+                "expires": str(doc.lease_expires),
+            },
             WORKER,
         )
         return doc, token
@@ -252,21 +295,30 @@ def check_lease(run, token: str):
     """The run as a document when `token` is its live lease; PermissionError otherwise."""
     doc = frappe.get_doc("HDS Copilot Run", run) if isinstance(run, str) else run
     if not token or not doc.lease_token_hash or _hash(token) != doc.lease_token_hash:
-        frappe.throw(_("This lease is not valid for run {0}").format(doc.name), frappe.PermissionError)
+        frappe.throw(
+            _("This lease is not valid for run {0}").format(doc.name),
+            frappe.PermissionError,
+        )
     if doc.state != "Investigating":
         frappe.throw(
             _("Run {0} is {1}; the lease has ended").format(doc.name, doc.state),
             frappe.PermissionError,
         )
     if get_datetime(doc.lease_expires) < now_datetime():
-        frappe.throw(_("The lease on run {0} expired").format(doc.name), frappe.PermissionError)
+        frappe.throw(
+            _("The lease on run {0} expired").format(doc.name), frappe.PermissionError
+        )
     return doc
 
 
 def heartbeat(run: str, token: str) -> dict:
     """Extends the lease; tells a worker whose run was cancelled to stop."""
     doc = frappe.get_doc("HDS Copilot Run", run)
-    if doc.state == "Cancelled" and doc.lease_token_hash and _hash(token) == doc.lease_token_hash:
+    if (
+        doc.state == "Cancelled"
+        and doc.lease_token_hash
+        and _hash(token) == doc.lease_token_hash
+    ):
         return {"ok": True, "action": "cancel"}
     doc = check_lease(doc, token)
     expires = add_to_date(now_datetime(), minutes=lease_minutes())
@@ -285,7 +337,10 @@ def expire_stale_leases():
     for name in stale:
         frappe.db.get_value("HDS Copilot Run", name, "state", for_update=True)
         doc = frappe.get_doc("HDS Copilot Run", name)
-        if doc.state != "Investigating" or get_datetime(doc.lease_expires) >= now_datetime():
+        if (
+            doc.state != "Investigating"
+            or get_datetime(doc.lease_expires) >= now_datetime()
+        ):
             continue  # a heartbeat or a result arrived meanwhile
         losses = (doc.lease_losses or 0) + 1
         if losses >= limit:
@@ -297,9 +352,21 @@ def expire_stale_leases():
                 lease_losses=losses,
                 failure_reason=f"The worker stopped reporting {losses} times",
             )
-            tell_people(doc, _("Copilot gave up on ticket {0}: the worker kept stopping").format(doc.ticket))
+            tell_people(
+                doc,
+                _("Copilot gave up on ticket {0}: the worker kept stopping").format(
+                    doc.ticket
+                ),
+            )
         else:
-            _move(doc, "Queued", SYSTEM, note="lease expired", lease_losses=losses, worker_id=None)
+            _move(
+                doc,
+                "Queued",
+                SYSTEM,
+                note="lease expired",
+                lease_losses=losses,
+                worker_id=None,
+            )
         frappe.db.commit()  # one run at a time; a failure on the next must not undo this - nosemgrep
 
 
@@ -308,10 +375,14 @@ def tell_people(run, subject: str):
     from helpdesk.work_reminders import notify_users
 
     managers = frappe.get_all(
-        "Has Role", filters={"role": "Agent Manager", "parenttype": "User"}, pluck="parent"
+        "Has Role",
+        filters={"role": "Agent Manager", "parenttype": "User"},
+        pluck="parent",
     )
     enabled = (
-        frappe.get_all("User", filters={"name": ["in", managers], "enabled": 1}, pluck="name")
+        frappe.get_all(
+            "User", filters={"name": ["in", managers], "enabled": 1}, pluck="name"
+        )
         if managers
         else []
     )
@@ -350,7 +421,9 @@ def run_context(run) -> dict:
     Never credentials: the worker reaches the customer site only through the hub.
     """
     ticket = frappe.get_doc("HD Ticket", run.ticket)
-    registry = frappe.get_doc("HDS Site Registry", run.registry) if run.registry else None
+    registry = (
+        frappe.get_doc("HDS Site Registry", run.registry) if run.registry else None
+    )
     customer = (
         frappe.db.get_value(
             "HD Customer",
@@ -382,7 +455,14 @@ def run_context(run) -> dict:
         },
         "triage": {
             key: ticket.get(f"custom_triage_{key}")
-            for key in ("status", "category", "priority", "complexity", "summary", "recommended_track")
+            for key in (
+                "status",
+                "category",
+                "priority",
+                "complexity",
+                "summary",
+                "recommended_track",
+            )
         },
         "customer": customer,
         "site": {
@@ -397,7 +477,10 @@ def run_context(run) -> dict:
         "conversation": _conversation(ticket.name),
         "files": frappe.get_all(
             "File",
-            filters={"attached_to_doctype": "HD Ticket", "attached_to_name": ticket.name},
+            filters={
+                "attached_to_doctype": "HD Ticket",
+                "attached_to_name": ticket.name,
+            },
             fields=["file_name", "file_url", "is_private", "file_size"],
         ),
         "previous_runs": frappe.get_all(
@@ -427,7 +510,12 @@ def _conversation(ticket: str, limit: int = 20) -> list[dict]:
         )
     ]
     messages += [
-        {"kind": "comment", "sender": c.commented_by, "content": c.content, "at": str(c.creation)}
+        {
+            "kind": "comment",
+            "sender": c.commented_by,
+            "content": c.content,
+            "at": str(c.creation),
+        }
         for c in frappe.get_all(
             "HD Ticket Comment",
             filters={"reference_ticket": ticket},

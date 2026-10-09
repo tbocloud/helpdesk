@@ -17,7 +17,13 @@ from helpdesk.copilot.mcp.shape import paragraphs_html, ticket_name
 
 TASK_STATUSES = ["Open", "Working", "On Hold", "Completed", "Cancelled"]
 # the options of Task.hold_reason (test_copilot_mcp_write_tools checks they still match)
-HOLD_REASONS = ["Laptop / system issue", "Leave", "Waiting on customer", "Waiting on another task", "Other"]
+HOLD_REASONS = [
+    "Laptop / system issue",
+    "Leave",
+    "Waiting on customer",
+    "Waiting on another task",
+    "Other",
+]
 
 
 def add_ticket_comment(caller, ticket: str, text: str) -> dict:
@@ -32,7 +38,11 @@ def add_ticket_comment(caller, ticket: str, text: str) -> dict:
         limit=1,
         pluck="name",
     )
-    return {"ticket": name, "comment": created[0] if created else None, "visible_to_customer": False}
+    return {
+        "ticket": name,
+        "comment": created[0] if created else None,
+        "visible_to_customer": False,
+    }
 
 
 def draft_ticket_reply(caller, ticket: str, text: str) -> dict:
@@ -42,21 +52,38 @@ def draft_ticket_reply(caller, ticket: str, text: str) -> dict:
     # the guard of regenerate_suggestion: an agent who may write the ticket, and an open ticket
     frappe.has_permission("HD Ticket", "write", name, throw=True)
     if not is_open_ticket(name):
-        frappe.throw(_("Ticket {0} is closed; there is nothing to draft.").format(name), frappe.ValidationError)
-    full_name = frappe.db.get_value("User", frappe.session.user, "full_name") or frappe.session.user
+        frappe.throw(
+            _("Ticket {0} is closed; there is nothing to draft.").format(name),
+            frappe.ValidationError,
+        )
+    full_name = (
+        frappe.db.get_value("User", frappe.session.user, "full_name")
+        or frappe.session.user
+    )
     store_suggestion(
         name,
         {
             "reply": paragraphs_html(text),
-            "note": _("Drafted by {0} in TBO Copilot: read it, edit it, then send it.").format(full_name),
+            "note": _(
+                "Drafted by {0} in TBO Copilot: read it, edit it, then send it."
+            ).format(full_name),
         },
         [],
     )
-    return {"ticket": name, "saved_in": "the suggested-reply card", "sent_to_customer": False}
+    return {
+        "ticket": name,
+        "saved_in": "the suggested-reply card",
+        "sent_to_customer": False,
+    }
 
 
 def update_task_status(
-    caller, task: str, status: str, reason: str = "", hours_worked: float | None = None, notes: str = ""
+    caller,
+    task: str,
+    status: str,
+    reason: str = "",
+    hours_worked: float | None = None,
+    notes: str = "",
 ) -> dict:
     from helpdesk.tasky.api import complete_task, hold_task, resume_task
     from helpdesk.tasky.api import update_task_status as set_status
@@ -66,7 +93,9 @@ def update_task_status(
         frappe.throw(_("Task {0} not found").format(task), frappe.DoesNotExistError)
     if status == "On Hold":
         if not reason:
-            frappe.throw(_("Say why the task is on hold (reason)."), frappe.ValidationError)
+            frappe.throw(
+                _("Say why the task is on hold (reason)."), frappe.ValidationError
+            )
         hold_task(task, reason, notes)
     elif status == "Completed":
         # Completed may become Pending Review when the project wants approval
@@ -95,10 +124,19 @@ def create_kb_article_draft(caller, title: str, content: str, ticket: str = "") 
         values["source_ticket"] = name
     # as the caller, with their own create permission; never published here
     doc = frappe.get_doc(values).insert()
-    return {"article": doc.name, "title": doc.title, "status": doc.status, "published": False}
+    return {
+        "article": doc.name,
+        "title": doc.title,
+        "status": doc.status,
+        "published": False,
+    }
 
 
-TICKET = {"type": "string", "maxLength": 140, "description": "Ticket number, for example 0236"}
+TICKET = {
+    "type": "string",
+    "maxLength": 140,
+    "description": "Ticket number, for example 0236",
+}
 
 register_tool(
     "add_ticket_comment",
@@ -124,7 +162,11 @@ register_tool(
     properties={
         "task": {"type": "string", "maxLength": 140},
         "status": {"type": "string", "enum": TASK_STATUSES},
-        "reason": {"type": "string", "enum": HOLD_REASONS, "description": "Why the task is on hold"},
+        "reason": {
+            "type": "string",
+            "enum": HOLD_REASONS,
+            "description": "Why the task is on hold",
+        },
         "hours_worked": {"type": "number"},
         "notes": {"type": "string", "maxLength": 2000},
     },

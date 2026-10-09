@@ -20,7 +20,9 @@ def ticket_name(raw) -> str:
     if value.upper().startswith("HD-"):
         value = value[3:]
     if not value:
-        frappe.throw(_("Give a ticket number, for example 0236."), frappe.ValidationError)
+        frappe.throw(
+            _("Give a ticket number, for example 0236."), frappe.ValidationError
+        )
     if value.isdigit():
         padded = value.zfill(4)
         if frappe.db.exists("HD Ticket", padded):
@@ -40,7 +42,11 @@ def plain(html_or_text, limit: int) -> str:
     """HTML as plain text without the empty lines, cut at `limit` characters."""
     if not html_or_text:
         return ""
-    text = html2text(str(html_or_text), wrap=False) if "<" in str(html_or_text) else str(html_or_text)
+    text = (
+        html2text(str(html_or_text), wrap=False)
+        if "<" in str(html_or_text)
+        else str(html_or_text)
+    )
     text = re.sub(r"\n{3,}", "\n\n", text).strip()
     return clip(text, limit)
 
@@ -62,4 +68,6 @@ def assignees(value) -> list[str]:
 def paragraphs_html(text: str) -> str:
     """Plain text from the model as HTML paragraphs; any HTML in it is shown, not run."""
     paragraphs = [p.strip() for p in str(text or "").split("\n\n") if p.strip()]
-    return "".join("<p>{0}</p>".format(escape_html(p).replace("\n", "<br>")) for p in paragraphs)
+    return "".join(
+        "<p>{0}</p>".format(escape_html(p).replace("\n", "<br>")) for p in paragraphs
+    )

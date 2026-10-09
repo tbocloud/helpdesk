@@ -9,7 +9,12 @@ from frappe.tests.utils import FrappeTestCase
 from helpdesk.copilot import audit
 from helpdesk.copilot.mcp import registry
 from helpdesk.copilot.mcp.auth import Caller
-from helpdesk.test_utils import create_agent, hold_commits, make_assigned_ticket, make_copilot_settings
+from helpdesk.test_utils import (
+    create_agent,
+    hold_commits,
+    make_assigned_ticket,
+    make_copilot_settings,
+)
 
 AGENT = "mcp-log-agent@example.com"
 
@@ -38,7 +43,10 @@ class TestCallLog(FrappeTestCase):
         make_copilot_settings(mcp_calls_per_minute=100)
         registry.call(self.caller, "get_fix_brief", {"ticket": str(int(self.ticket))})
         log = self.last_log()
-        self.assertEqual((log.tool, log.status, log.ticket, log.kind), ("get_fix_brief", "OK", self.ticket, "MCP person"))
+        self.assertEqual(
+            (log.tool, log.status, log.ticket, log.kind),
+            ("get_fix_brief", "OK", self.ticket, "MCP person"),
+        )
         # the log keeps the ticket as stored, whatever way the caller wrote it
         self.assertIn(str(int(self.ticket)), log.arguments)
 

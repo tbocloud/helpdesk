@@ -58,7 +58,8 @@ def seed_default_templates(settings) -> None:
     for stage in STAGES:
         if stage not in present:
             settings.append(
-                "message_templates", {"stage": stage, "message": DEFAULT_TEMPLATES[stage]}
+                "message_templates",
+                {"stage": stage, "message": DEFAULT_TEMPLATES[stage]},
             )
 
 

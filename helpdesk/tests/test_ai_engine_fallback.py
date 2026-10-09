@@ -40,7 +40,9 @@ class TestAiEngineFallback(FrappeTestCase):
     def chat(self, primary_failure=None):
         calls = []
 
-        def fake_chat(base_url, api_key, model, system_prompt, user_message, timeout=120):
+        def fake_chat(
+            base_url, api_key, model, system_prompt, user_message, timeout=120
+        ):
             calls.append((base_url, api_key, model))
             if base_url == PRIMARY and primary_failure:
                 raise primary_failure

@@ -36,7 +36,13 @@ STAGE_FOR_CATEGORY = {
     category: ("With our team" if state == "Handed Over" else "Working on it")
     for category, state in STATE_FOR_CATEGORY.items()
 }
-LIMITS = {"summary": 4000, "customer_message": 4000, "evidence": 50, "questions": 10, "text": 2000}
+LIMITS = {
+    "summary": 4000,
+    "customer_message": 4000,
+    "evidence": 50,
+    "questions": 10,
+    "text": 2000,
+}
 
 
 def validate_investigation(result: dict) -> dict:
@@ -56,9 +62,15 @@ def validate_investigation(result: dict) -> dict:
     questions = result.get("questions") or []
     proposal = result.get("proposal") or {}
     if not isinstance(evidence, list) or len(evidence) > LIMITS["evidence"]:
-        frappe.throw(_("Evidence must be a list of at most {0} items").format(LIMITS["evidence"]))
+        frappe.throw(
+            _("Evidence must be a list of at most {0} items").format(LIMITS["evidence"])
+        )
     if not isinstance(questions, list) or len(questions) > LIMITS["questions"]:
-        frappe.throw(_("Questions must be a list of at most {0} items").format(LIMITS["questions"]))
+        frappe.throw(
+            _("Questions must be a list of at most {0} items").format(
+                LIMITS["questions"]
+            )
+        )
     if not isinstance(proposal, dict):
         frappe.throw(_("The proposal must be an object"))
     cost = result.get("cost") if isinstance(result.get("cost"), dict) else {}
@@ -66,9 +78,13 @@ def validate_investigation(result: dict) -> dict:
         "root_cause_category": category,
         "confidence": confidence,
         "summary": _text(result.get("summary"), LIMITS["summary"]),
-        "customer_message": _text(result.get("customer_message"), LIMITS["customer_message"]),
+        "customer_message": _text(
+            result.get("customer_message"), LIMITS["customer_message"]
+        ),
         "evidence": [_item(e) for e in evidence],
-        "proposal": {str(k)[:40]: _text(v, LIMITS["text"]) for k, v in proposal.items()},
+        "proposal": {
+            str(k)[:40]: _text(v, LIMITS["text"]) for k, v in proposal.items()
+        },
         "questions": [_text(q, LIMITS["text"]) for q in questions],
         "cost": _cost(cost),
     }
@@ -76,7 +92,9 @@ def validate_investigation(result: dict) -> dict:
 
 def _cost(cost: dict) -> dict:
     """Tokens and money as the worker measured them; `tokens` is the total when only in/out are given."""
-    tokens_in, tokens_out = max(int(flt(cost.get("tokens_in"))), 0), max(int(flt(cost.get("tokens_out"))), 0)
+    tokens_in, tokens_out = max(int(flt(cost.get("tokens_in"))), 0), max(
+        int(flt(cost.get("tokens_out"))), 0
+    )
     return {
         "tokens": max(int(flt(cost.get("tokens"))), 0) or tokens_in + tokens_out,
         "tokens_in": tokens_in,
@@ -106,7 +124,8 @@ def route(run, result: dict):
         run,
         STATE_FOR_CATEGORY[effective],
         runs.SYSTEM,
-        note=f"root cause: {effective}" + ("" if effective == category else f" (reported {category})"),
+        note=f"root cause: {effective}"
+        + ("" if effective == category else f" (reported {category})"),
         root_cause_category=effective,
         confidence=investigation["confidence"],
         summary=investigation["summary"],
@@ -125,7 +144,10 @@ def route(run, result: dict):
     if doc.state == "Explaining":
         customer.draft_explanation(doc, explanation_text(investigation, effective))
     elif doc.state == "Handed Over":
-        customer.hand_over(doc, investigation["summary"] or _("Copilot found an issue in the core system"))
+        customer.hand_over(
+            doc,
+            investigation["summary"] or _("Copilot found an issue in the core system"),
+        )
     customer.send_stage(doc, STAGE_FOR_CATEGORY[effective])
     return doc
 
@@ -136,5 +158,9 @@ def explanation_text(investigation: dict, category: str) -> str:
     questions = [q for q in investigation.get("questions") or [] if q.strip()]
     if category == "unclear" and questions:
         asked = "\n".join(f"- {q.strip()}" for q in questions)
-        text = f"{text}\n\n{asked}" if text else _("To find the cause we need a little more:") + "\n\n" + asked
+        text = (
+            f"{text}\n\n{asked}"
+            if text
+            else _("To find the cause we need a little more:") + "\n\n" + asked
+        )
     return text or investigation.get("summary") or ""

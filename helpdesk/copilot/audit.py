@@ -21,19 +21,26 @@ def rate_key(user: str) -> str:
 
 def check_rate_limit(user: str) -> None:
     """At most `mcp_calls_per_minute` tool calls per person per minute (the throttle_drafts pattern)."""
-    limit = cint(copilot_settings.get_settings().mcp_calls_per_minute) or copilot_settings.DEFAULT_MCP_CALLS_PER_MINUTE
+    limit = (
+        cint(copilot_settings.get_settings().mcp_calls_per_minute)
+        or copilot_settings.DEFAULT_MCP_CALLS_PER_MINUTE
+    )
     key = rate_key(user)
     count = cint(frappe.cache.incr(key))
     if count == 1:
         frappe.cache.expire(key, RATE_WINDOW_SECONDS)
     if count > limit:
         frappe.throw(
-            _("Rate limited: more than {0} tool calls a minute. Wait a minute and try again.").format(limit),
+            _(
+                "Rate limited: more than {0} tool calls a minute. Wait a minute and try again."
+            ).format(limit),
             frappe.RateLimitExceededError,
         )
 
 
-def log_call(caller, tool: str, arguments: dict, status: str, ms: int, result: str) -> None:
+def log_call(
+    caller, tool: str, arguments: dict, status: str, ms: int, result: str
+) -> None:
     """One HDS Copilot Call Log row, written in the request (committed with it)."""
     doc = frappe.get_doc(
         {

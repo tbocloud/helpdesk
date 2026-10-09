@@ -35,7 +35,9 @@ class WriteCase(FrappeTestCase):
         make_copilot_settings(mcp_enabled=1, mcp_calls_per_minute=1000)
         create_agent(AGENT)
         self.customer = create_customer("MCP Write Co").name
-        self.ticket = make_assigned_ticket("Needs a reply", AGENT, customer=self.customer)
+        self.ticket = make_assigned_ticket(
+            "Needs a reply", AGENT, customer=self.customer
+        )
         frappe.set_user(AGENT)
         self.caller = Caller(AGENT)
 
@@ -44,16 +46,25 @@ class WriteCase(FrappeTestCase):
         return result["isError"], mcp_tool_result(result)
 
     def communications(self):
-        return frappe.db.count("Communication", {"reference_doctype": "HD Ticket", "reference_name": self.ticket})
+        return frappe.db.count(
+            "Communication",
+            {"reference_doctype": "HD Ticket", "reference_name": self.ticket},
+        )
 
 
 class TestTicketWrites(WriteCase):
     def test_a_note_is_internal_and_shown_as_text(self):
         before = self.communications()
-        is_error, data = self.call("add_ticket_comment", ticket=self.ticket, text="Check row 2\n\n<script>x()</script>")
+        is_error, data = self.call(
+            "add_ticket_comment",
+            ticket=self.ticket,
+            text="Check row 2\n\n<script>x()</script>",
+        )
         self.assertFalse(is_error, data)
         self.assertFalse(data["visible_to_customer"])
-        content, by = frappe.db.get_value("HD Ticket Comment", data["comment"], ["content", "commented_by"])
+        content, by = frappe.db.get_value(
+            "HD Ticket Comment", data["comment"], ["content", "commented_by"]
+        )
         self.assertEqual(by, AGENT)
         self.assertIn("<p>Check row 2</p>", content)
         self.assertIn("&lt;script&gt;", content)
@@ -61,11 +72,21 @@ class TestTicketWrites(WriteCase):
 
     def test_a_draft_fills_the_card_and_sends_nothing(self):
         before = self.communications()
-        is_error, data = self.call("draft_ticket_reply", ticket=self.ticket, text="Hello,\n\nThe total is right.")
+        is_error, data = self.call(
+            "draft_ticket_reply",
+            ticket=self.ticket,
+            text="Hello,\n\nThe total is right.",
+        )
         self.assertFalse(is_error, data)
         self.assertFalse(data["sent_to_customer"])
         status, reply, note = frappe.db.get_value(
-            "HD Ticket", self.ticket, ["custom_ai_suggestion_status", "custom_ai_suggested_reply", "custom_ai_suggestion_note"]
+            "HD Ticket",
+            self.ticket,
+            [
+                "custom_ai_suggestion_status",
+                "custom_ai_suggested_reply",
+                "custom_ai_suggestion_note",
+            ],
         )
         self.assertEqual(status, "Ready")
         self.assertIn("The total is right.", reply)
@@ -73,7 +94,11 @@ class TestTicketWrites(WriteCase):
         self.assertEqual(self.communications(), before)
 
     def test_no_draft_on_a_closed_ticket(self):
-        frappe.db.set_value("HD Ticket", self.ticket, {"status": "Closed", "status_category": "Resolved"})
+        frappe.db.set_value(
+            "HD Ticket",
+            self.ticket,
+            {"status": "Closed", "status_category": "Resolved"},
+        )
         is_error, text = self.call("draft_ticket_reply", ticket=self.ticket, text="Hi")
         self.assertTrue(is_error)
         self.assertIn("closed", text)
@@ -83,15 +108,22 @@ class TestTicketWrites(WriteCase):
 
         self.addCleanup(clear_doctype_map, "Assignment Rule", "HD Ticket")
         frappe.set_user("Administrator")
-        team = make_team("MCP Write Team", members=[create_agent("mcp-write-member@example.com").name])
-        other = make_ticket(subject="Another team's ticket", customer=self.customer).name
+        team = make_team(
+            "MCP Write Team",
+            members=[create_agent("mcp-write-member@example.com").name],
+        )
+        other = make_ticket(
+            subject="Another team's ticket", customer=self.customer
+        ).name
         frappe.db.set_value("HD Ticket", other, "agent_group", team.name)
         restrict_tickets_to_teams(self)
         frappe.set_user(AGENT)
         for tool in ("add_ticket_comment", "draft_ticket_reply"):
             is_error, text = self.call(tool, ticket=other, text="hello")
             self.assertTrue(is_error, tool)
-        self.assertFalse(frappe.db.exists("HD Ticket Comment", {"reference_ticket": other}))
+        self.assertFalse(
+            frappe.db.exists("HD Ticket Comment", {"reference_ticket": other})
+        )
 
 
 class TestTasksAndArticles(WriteCase):
@@ -111,7 +143,13 @@ class TestTasksAndArticles(WriteCase):
         is_error, text = self.call("update_task_status", task=task, status="On Hold")
         self.assertTrue(is_error)
         self.assertIn("reason", text)
-        is_error, data = self.call("update_task_status", task=task, status="On Hold", reason="Waiting on customer", notes="Asked for the invoice")
+        is_error, data = self.call(
+            "update_task_status",
+            task=task,
+            status="On Hold",
+            reason="Waiting on customer",
+            notes="Asked for the invoice",
+        )
         self.assertEqual(data["status"], "On Hold")
         is_error, data = self.call("update_task_status", task=task, status="Working")
         self.assertFalse(is_error, data)
@@ -120,7 +158,13 @@ class TestTasksAndArticles(WriteCase):
     def test_the_hold_reasons_match_the_task_field(self):
         from helpdesk.copilot.mcp.tools_write import HOLD_REASONS
 
-        options = [o for o in (frappe.get_meta("Task").get_field("hold_reason").options or "").split("\n") if o]
+        options = [
+            o
+            for o in (
+                frappe.get_meta("Task").get_field("hold_reason").options or ""
+            ).split("\n")
+            if o
+        ]
         self.assertEqual(HOLD_REASONS, options)
 
     def test_someone_elses_task_is_refused(self):
@@ -143,7 +187,9 @@ class TestTasksAndArticles(WriteCase):
         self.assertFalse(is_error, data)
         self.assertFalse(data["published"])
         status, source, content, owner = frappe.db.get_value(
-            "HD Article", data["article"], ["status", "source_ticket", "content", "owner"]
+            "HD Article",
+            data["article"],
+            ["status", "source_ticket", "content", "owner"],
         )
         self.assertEqual((status, source, owner), ("Draft", self.ticket, AGENT))
         self.assertIn("<h1", content)

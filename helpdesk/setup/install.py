@@ -3,7 +3,6 @@ from datetime import datetime
 import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 from frappe.permissions import add_permission, update_permission_property
-from helpdesk.setup.form_scripts import install_form_scripts
 
 from helpdesk.api.customization import (
     ensure_ticket_type as ensure_customization_ticket_type,
@@ -20,13 +19,13 @@ from helpdesk.helpdesk.doctype.hd_signoff_template.hd_signoff_template import (
     ensure_default_signoff_templates,
 )
 from helpdesk.setup.default_views import add_default_views
+from helpdesk.setup.form_scripts import install_form_scripts
 
 from .default_template import create_default_template
 from .file import create_helpdesk_folder
 from .ticket_feedback import create_ticket_feedback_options
 from .ticket_type import create_fallback_ticket_type, create_ootb_ticket_types
 from .welcome_ticket import create_welcome_ticket
-
 
 # Project User roles; helpdesk.tasky.api.CATEGORY_TO_ROLE maps task categories to them
 PROJECT_ROLES = (
@@ -952,5 +951,3 @@ def add_index_if_not_exists(table, column, index_name):
             table=table, index_name=index_name, column=column
         )
     )
-
-

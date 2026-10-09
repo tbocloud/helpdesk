@@ -32,12 +32,18 @@ class HubPermissionCase(FrappeTestCase):
         create_agent(AGENT)
         self.ours = create_customer("Hub Perm Ours").name
         self.theirs = create_customer("Hub Perm Theirs").name
-        self.our_conn = make_support_connection(self.ours, site_url="https://ours.example.com").name
-        self.their_conn = make_support_connection(self.theirs, site_url="https://theirs.example.com").name
+        self.our_conn = make_support_connection(
+            self.ours, site_url="https://ours.example.com"
+        ).name
+        self.their_conn = make_support_connection(
+            self.theirs, site_url="https://theirs.example.com"
+        ).name
         self.ticket = make_ticket(subject="Our ticket", customer=self.ours).name
 
     def restrict(self, ticket):
-        team = make_team("Hub Perm Team", members=[create_agent("hub-perm-member@example.com").name])
+        team = make_team(
+            "Hub Perm Team", members=[create_agent("hub-perm-member@example.com").name]
+        )
         frappe.db.set_value("HD Ticket", ticket, "agent_group", team.name)
         restrict_tickets_to_teams(self)
 
@@ -47,7 +53,9 @@ class TestConnections(HubPermissionCase):
         frappe.set_user(AGENT)
         names = {c.name for c in support_hub.get_connections()}
         self.assertIn(self.our_conn, names)
-        self.assertNotIn(self.their_conn, names)  # no ticket of theirs the agent can read
+        self.assertNotIn(
+            self.their_conn, names
+        )  # no ticket of theirs the agent can read
 
     def test_a_manager_sees_all(self):
         names = {c.name for c in support_hub.get_connections()}
@@ -68,7 +76,10 @@ class TestSessionsAndInvestigations(HubPermissionCase):
         with self.assertRaises(frappe.PermissionError):
             support_hub.start_investigation(self.ticket, self.their_conn)
         start.assert_not_called()
-        self.assertEqual(support_hub.start_investigation(self.ticket, self.our_conn)["session"], "SESSION-1")
+        self.assertEqual(
+            support_hub.start_investigation(self.ticket, self.our_conn)["session"],
+            "SESSION-1",
+        )
 
     @patch("helpdesk.session_manager.start_investigation", return_value="SESSION-1")
     def test_an_investigation_needs_a_readable_ticket(self, start):

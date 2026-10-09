@@ -2302,7 +2302,9 @@ def make_copilot_settings(templates: dict[str, str] | None = None, **values):
     settings.save(ignore_permissions=True)
     # the cached settings outlive the test's rollback and would steer the site afterwards
     frappe.db.after_rollback.add(
-        lambda: frappe.clear_document_cache("HDS Copilot Settings", "HDS Copilot Settings")
+        lambda: frappe.clear_document_cache(
+            "HDS Copilot Settings", "HDS Copilot Settings"
+        )
     )
     return settings
 
@@ -2346,7 +2348,7 @@ def make_copilot_run(ticket: str, state: str = "Queued", **values):
 FAKE_INVESTIGATIONS = {
     "question": {
         "summary": "A how-to question about printing a Delivery Note in two languages.",
-        "customer_message": "You can print the Delivery Note in Arabic and English: open it, choose Print, and pick the format \"Delivery Note (AR/EN)\". If it is not in the list, tell us and we will enable it for you.",
+        "customer_message": 'You can print the Delivery Note in Arabic and English: open it, choose Print, and pick the format "Delivery Note (AR/EN)". If it is not in the list, tell us and we will enable it for you.',
         "proposal": {"type": "answer"},
     },
     "not_allowed_request": {
@@ -2362,33 +2364,51 @@ FAKE_INVESTIGATIONS = {
     "wrong_setting": {
         "summary": "The notification's email account is disabled, so invoice emails are never queued.",
         "customer_message": "",
-        "proposal": {"type": "config", "text": "Enable outgoing on the email account used by the Sales Invoice notification"},
+        "proposal": {
+            "type": "config",
+            "text": "Enable outgoing on the email account used by the Sales Invoice notification",
+        },
     },
     "bug": {
         "summary": "The custom app's Sales Invoice validate hook reads tax_id[0] and fails when the customer has no tax ID.",
         "customer_message": "",
-        "proposal": {"type": "code", "text": "Guard the tax_id read in sales_invoice.py and add a regression test"},
+        "proposal": {
+            "type": "code",
+            "text": "Guard the tax_id read in sales_invoice.py and add a regression test",
+        },
     },
     "data_damaged_by_bug": {
         "summary": "Stock for HT-PUMP-200 is wrong since the update: the repost after the custom valuation hook was skipped.",
         "customer_message": "",
-        "proposal": {"type": "code+data", "text": "Fix the hook, then repost the item's ledger entries since the update"},
+        "proposal": {
+            "type": "code+data",
+            "text": "Fix the hook, then repost the item's ledger entries since the update",
+        },
     },
     "core_issue": {
         "summary": "The Accounts Receivable report times out on a large party ledger: a known ERPNext limit, not the custom app.",
         "customer_message": "",
-        "proposal": {"type": "handover", "text": "A person decides between a report workaround and an upstream fix"},
+        "proposal": {
+            "type": "handover",
+            "text": "A person decides between a report workaround and an upstream fix",
+        },
     },
     "unclear": {
         "summary": "Not enough to go on: no page, time or record is named.",
         "customer_message": "To find the cause we need a little more: which page is slow, at what time of day, and does it happen for one user or everyone?",
         "proposal": {"type": "question"},
-        "questions": ["Which page is slow?", "At what time of day?", "One user or everyone?"],
+        "questions": [
+            "Which page is slow?",
+            "At what time of day?",
+            "One user or everyone?",
+        ],
     },
 }
 
 
-def fake_investigation(category: str = "question", confidence: float = 0.9, **extra) -> dict:
+def fake_investigation(
+    category: str = "question", confidence: float = 0.9, **extra
+) -> dict:
     """A worker result for `category`, as `submit_result` expects it."""
     canned = FAKE_INVESTIGATIONS[category]
     result = {
@@ -2396,7 +2416,13 @@ def fake_investigation(category: str = "question", confidence: float = 0.9, **ex
         "root_cause_category": category,
         "confidence": confidence,
         "summary": canned["summary"],
-        "evidence": [{"type": "error_log", "ref": "Error Log/abc123", "note": "IndexError in sales_invoice.py"}],
+        "evidence": [
+            {
+                "type": "error_log",
+                "ref": "Error Log/abc123",
+                "note": "IndexError in sales_invoice.py",
+            }
+        ],
         "proposal": canned.get("proposal", {}),
         "customer_message": canned.get("customer_message", ""),
         "questions": canned.get("questions", []),
@@ -2420,7 +2446,11 @@ class FakeWorker:
 
         job = claim_job(self.worker_id)
         if job:
-            self.run, self.token, self.context = job["run"], job["lease_token"], job["context"]
+            self.run, self.token, self.context = (
+                job["run"],
+                job["lease_token"],
+                job["context"],
+            )
         return job
 
     def heartbeat(self, stage: str = "") -> dict:
@@ -2433,18 +2463,26 @@ class FakeWorker:
 
         return post_events(self.run, self.token, events)
 
-    def report(self, category: str = "question", confidence: float = 0.9, **extra) -> dict:
+    def report(
+        self, category: str = "question", confidence: float = 0.9, **extra
+    ) -> dict:
         from helpdesk.api.copilot_worker import submit_result
 
-        return submit_result(self.run, self.token, fake_investigation(category, confidence, **extra))
+        return submit_result(
+            self.run, self.token, fake_investigation(category, confidence, **extra)
+        )
 
     def fail(self, reason: str = "the sandbox did not start") -> dict:
         from helpdesk.api.copilot_worker import submit_result
 
-        return submit_result(self.run, self.token, {"kind": "failure", "reason": reason})
+        return submit_result(
+            self.run, self.token, {"kind": "failure", "reason": reason}
+        )
 
 
-def run_fake_worker(category: str = "question", abandon: bool = False, ticket: str | None = None) -> dict:
+def run_fake_worker(
+    category: str = "question", abandon: bool = False, ticket: str | None = None
+) -> dict:
     """`bench execute` demo: claims the oldest queued run (or starts one for `ticket`) and reports `category`.
 
     With `abandon` it claims and stops, so the lease expiry can be watched.
@@ -2458,11 +2496,21 @@ def run_fake_worker(category: str = "question", abandon: bool = False, ticket: s
         return {"claimed": None}
     if abandon:
         return {"claimed": worker.run, "abandoned": True}
-    worker.events([{"seq": 1, "type": "tool_call", "payload": {"tool": "get_error_log", "ms": 120}}])
+    worker.events(
+        [
+            {
+                "seq": 1,
+                "type": "tool_call",
+                "payload": {"tool": "get_error_log", "ms": 120},
+            }
+        ]
+    )
     return {"claimed": worker.run, **worker.report(category)}
 
 
-def mcp_message(method: str, params: dict | None = None, req_id: int | None = 1) -> dict:
+def mcp_message(
+    method: str, params: dict | None = None, req_id: int | None = 1
+) -> dict:
     """A JSON-RPC 2.0 message for the hub's MCP server; `req_id=None` makes it a notification."""
     message = {"jsonrpc": "2.0", "method": method}
     if params is not None:
@@ -2481,7 +2529,12 @@ def mcp_tool_result(result: dict):
         return text
 
 
-def fake_http_request(test_case, method: str = "POST", body: bytes | str = b"", headers: dict | None = None):
+def fake_http_request(
+    test_case,
+    method: str = "POST",
+    body: bytes | str = b"",
+    headers: dict | None = None,
+):
     """Gives frappe.local a request with `method`, `body` and `headers`, put back after the test."""
     from types import SimpleNamespace
 
@@ -2499,10 +2552,16 @@ def restrict_tickets_to_teams(test_case):
     Switched back off on cleanup: the setting is cached, so a rollback alone
     would leave later tests restricted.
     """
-    values = {"restrict_tickets_by_agent_group": 1, "do_not_restrict_tickets_without_an_agent_group": 0}
+    values = {
+        "restrict_tickets_by_agent_group": 1,
+        "do_not_restrict_tickets_without_an_agent_group": 0,
+    }
     frappe.db.set_single_value("HD Settings", values)
     test_case.addCleanup(
         frappe.db.set_single_value,
         "HD Settings",
-        {"restrict_tickets_by_agent_group": 0, "do_not_restrict_tickets_without_an_agent_group": 1},
+        {
+            "restrict_tickets_by_agent_group": 0,
+            "do_not_restrict_tickets_without_an_agent_group": 1,
+        },
     )

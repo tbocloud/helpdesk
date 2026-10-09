@@ -49,7 +49,13 @@ class TestSiteRegistry(FrappeTestCase):
     def test_apps_are_handed_over_as_plain_dicts(self):
         reg = make_site_registry(
             self.customer,
-            apps=[{"app": "hydrotech", "repository": "teambackoffice/hydrotech", "branch": "main"}],
+            apps=[
+                {
+                    "app": "hydrotech",
+                    "repository": "teambackoffice/hydrotech",
+                    "branch": "main",
+                }
+            ],
             site_url="https://erp.hydrotech.example/",
         )
         self.assertEqual(reg.site_url, "https://erp.hydrotech.example")

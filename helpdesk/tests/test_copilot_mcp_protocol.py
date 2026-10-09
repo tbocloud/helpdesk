@@ -47,19 +47,27 @@ class TestDispatch(FrappeTestCase):
 
     def test_notifications_get_no_reply(self):
         self.assertIsNone(self.reply("notifications/initialized", req_id=None))
-        self.assertIsNone(self.reply("notifications/cancelled", {"requestId": 3}, req_id=None))
+        self.assertIsNone(
+            self.reply("notifications/cancelled", {"requestId": 3}, req_id=None)
+        )
 
     def test_a_batch_answers_its_requests_only(self):
         replies = server.dispatch(
             self.caller,
-            [mcp_message("notifications/initialized", req_id=None), mcp_message("ping", req_id=7)],
+            [
+                mcp_message("notifications/initialized", req_id=None),
+                mcp_message("ping", req_id=7),
+            ],
         )
         self.assertEqual([r["id"] for r in replies], [7])
         self.assertEqual(server.dispatch(self.caller, [])["error"]["code"], -32600)
 
     def test_unknown_and_malformed_messages(self):
         self.assertEqual(self.reply("resources/list")["error"]["code"], -32601)
-        self.assertEqual(server.dispatch(self.caller, {"method": "ping", "id": 1})["error"]["code"], -32600)
+        self.assertEqual(
+            server.dispatch(self.caller, {"method": "ping", "id": 1})["error"]["code"],
+            -32600,
+        )
         self.assertEqual(self.reply("tools/call", {})["error"]["code"], -32602)
 
     def test_people_see_the_read_tools_and_no_worker_tools(self):
@@ -68,7 +76,9 @@ class TestDispatch(FrappeTestCase):
         self.assertIn("my_work", tools)
         self.assertTrue(tools["get_ticket"]["annotations"]["readOnlyHint"])
         self.assertFalse(tools["get_ticket"]["inputSchema"]["additionalProperties"])
-        worker_tools = {n for n, t in registry.TOOLS.items() if t["kind"] == registry.WORKER_TOOL}
+        worker_tools = {
+            n for n, t in registry.TOOLS.items() if t["kind"] == registry.WORKER_TOOL
+        }
         self.assertFalse(worker_tools & set(tools))
         for tool in tools.values():
             # the desktop shows 120 characters of a description in its tool catalog
@@ -84,7 +94,12 @@ class TestEndpoint(FrappeTestCase):
 
     def post(self, body, user=AGENT, headers=None):
         headers = {"Authorization": "token key:secret"} if headers is None else headers
-        fake_http_request(self, "POST", json.dumps(body) if not isinstance(body, bytes) else body, headers)
+        fake_http_request(
+            self,
+            "POST",
+            json.dumps(body) if not isinstance(body, bytes) else body,
+            headers,
+        )
         frappe.set_user(user)  # what Frappe's own key check leaves behind
         return copilot_mcp.handle()
 
@@ -92,10 +107,17 @@ class TestEndpoint(FrappeTestCase):
         response = self.post(mcp_message("ping", req_id=5))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.content_type, "application/json")
-        self.assertEqual(json.loads(response.get_data()), {"jsonrpc": "2.0", "id": 5, "result": {}})
+        self.assertEqual(
+            json.loads(response.get_data()), {"jsonrpc": "2.0", "id": 5, "result": {}}
+        )
 
     def test_a_notification_gets_202(self):
-        self.assertEqual(self.post(mcp_message("notifications/initialized", req_id=None)).status_code, 202)
+        self.assertEqual(
+            self.post(
+                mcp_message("notifications/initialized", req_id=None)
+            ).status_code,
+            202,
+        )
 
     def test_get_and_delete_are_not_offered(self):
         for method in ("GET", "DELETE"):
@@ -111,7 +133,9 @@ class TestEndpoint(FrappeTestCase):
         response = self.post(mcp_message("ping"), user="Guest", headers={})
         self.assertEqual(response.status_code, 401)
         self.assertEqual(json.loads(response.get_data())["error"]["code"], -32001)
-        self.assertEqual(self.post(mcp_message("ping"), user="Administrator").status_code, 403)
+        self.assertEqual(
+            self.post(mcp_message("ping"), user="Administrator").status_code, 403
+        )
 
     def test_switched_off(self):
         make_copilot_settings(mcp_enabled=0)

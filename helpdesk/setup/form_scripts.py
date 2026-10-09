@@ -17,7 +17,9 @@ def install_form_scripts():
 
 
 def _install(name: str, file_name: str):
-    js_path = os.path.join(os.path.dirname(__file__), "..", "hd_form_scripts", file_name)
+    js_path = os.path.join(
+        os.path.dirname(__file__), "..", "hd_form_scripts", file_name
+    )
     if not os.path.exists(js_path):
         frappe.log_error("HD Form Script JS not found", js_path)
         return

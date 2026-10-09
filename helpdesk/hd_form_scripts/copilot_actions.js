@@ -11,7 +11,9 @@ function setupForm({ doc, call, toast, $dialog }) {
     variant: "subtle",
     onClick: async function () {
       try {
-        var info = await call("helpdesk.api.copilot.get_run", { ticket: doc.name });
+        var info = await call("helpdesk.api.copilot.get_run", {
+          ticket: doc.name,
+        });
         if (!info || !info.run) {
           showCopilotStartDialog(doc, call, toast, $dialog);
         } else {
@@ -29,7 +31,13 @@ function setupForm({ doc, call, toast, $dialog }) {
 
 function copilotEscape(text) {
   return String(text == null ? "" : text).replace(/[&<>"']/g, function (c) {
-    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    return {
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+    }[c];
   });
 }
 
@@ -71,11 +79,17 @@ function showCopilotRunDialog(info, doc, call, toast, $dialog) {
   var rows = [
     ["Run", info.run + " (" + info.kind + ")"],
     ["State", info.state],
-    ["Customer sees", info.shadow ? "Nothing (shadow mode)" : info.stage || "-"],
+    [
+      "Customer sees",
+      info.shadow ? "Nothing (shadow mode)" : info.stage || "-",
+    ],
     [
       "Root cause",
       info.root_cause
-        ? info.root_cause + " (" + Math.round((info.confidence || 0) * 100) + "% sure)"
+        ? info.root_cause +
+          " (" +
+          Math.round((info.confidence || 0) * 100) +
+          "% sure)"
         : "-",
     ],
     ["Worker", info.worker_id || "-"],
@@ -83,15 +97,24 @@ function showCopilotRunDialog(info, doc, call, toast, $dialog) {
     ["Handed over to", info.handed_over_to || "-"],
   ];
   if (info.base_commit) {
-    rows.push(["Code read at", (info.base_app || "app") + " @ " + String(info.base_commit).slice(0, 12)]);
+    rows.push([
+      "Code read at",
+      (info.base_app || "app") + " @ " + String(info.base_commit).slice(0, 12),
+    ]);
   }
   if (info.model_used) {
     rows.push([
       "Model",
-      info.model_used + " (" + (info.tokens_in || 0) + " tokens in, " + (info.tokens_out || 0) + " out)",
+      info.model_used +
+        " (" +
+        (info.tokens_in || 0) +
+        " tokens in, " +
+        (info.tokens_out || 0) +
+        " out)",
     ]);
   }
-  var html = '<div style="padding:8px"><table style="width:100%;font-size:13px">';
+  var html =
+    '<div style="padding:8px"><table style="width:100%;font-size:13px">';
   for (var i = 0; i < rows.length; i++) {
     html +=
       '<tr><td style="color:#6b7280;padding:2px 8px 2px 0;white-space:nowrap">' +
@@ -103,7 +126,9 @@ function showCopilotRunDialog(info, doc, call, toast, $dialog) {
   html += "</table>";
   if (info.summary) {
     html +=
-      '<div style="margin-top:8px"><b>Diagnosis</b><div>' + copilotEscape(info.summary) + "</div></div>";
+      '<div style="margin-top:8px"><b>Diagnosis</b><div>' +
+      copilotEscape(info.summary) +
+      "</div></div>";
   }
   if (info.review && info.review.verdict) {
     html +=
@@ -116,7 +141,9 @@ function showCopilotRunDialog(info, doc, call, toast, $dialog) {
       copilotEscape(info.review.by_name || info.review.by || "") +
       (info.review.at ? ", " + copilotEscape(info.review.at) : "") +
       (info.review.note
-        ? '<div style="white-space:pre-line;color:#4b5563">' + copilotEscape(info.review.note) + "</div>"
+        ? '<div style="white-space:pre-line;color:#4b5563">' +
+          copilotEscape(info.review.note) +
+          "</div>"
         : "") +
       "</div>";
   }
@@ -133,7 +160,8 @@ function showCopilotRunDialog(info, doc, call, toast, $dialog) {
       "</div>";
   }
   if (info.evidence && info.evidence.length) {
-    html += '<div style="margin-top:8px"><b>Evidence</b><ul style="margin:4px 0 0 16px">';
+    html +=
+      '<div style="margin-top:8px"><b>Evidence</b><ul style="margin:4px 0 0 16px">';
     for (var j = 0; j < info.evidence.length; j++) {
       var e = info.evidence[j];
       html +=
@@ -168,7 +196,8 @@ function showCopilotRunDialog(info, doc, call, toast, $dialog) {
   var actions = [];
   if (info.can_review) {
     actions.push({
-      label: info.review && info.review.verdict ? "Change rating" : "Rate diagnosis",
+      label:
+        info.review && info.review.verdict ? "Change rating" : "Rate diagnosis",
       variant: "subtle",
       onClick: function (_ref) {
         _ref.close();
@@ -220,11 +249,18 @@ function showCopilotReviewDialog(info, doc, call, toast, $dialog) {
   for (var i = 0; i < (info.categories || []).length; i++) {
     var c = info.categories[i];
     options +=
-      '<option value="' + copilotEscape(c) + '"' + (review.root_cause === c && review.verdict !== "Right" ? " selected" : "") + ">" +
+      '<option value="' +
+      copilotEscape(c) +
+      '"' +
+      (review.root_cause === c && review.verdict !== "Right"
+        ? " selected"
+        : "") +
+      ">" +
       copilotEscape(c) +
       "</option>";
   }
-  var field = "width:100%;padding:6px;border:1px solid #d1d5db;border-radius:4px;font-size:13px";
+  var field =
+    "width:100%;padding:6px;border:1px solid #d1d5db;border-radius:4px;font-size:13px";
   var html =
     '<div style="padding:8px;font-size:13px">' +
     "<div>Copilot said <b>" +
@@ -232,11 +268,21 @@ function showCopilotReviewDialog(info, doc, call, toast, $dialog) {
     "</b> (" +
     Math.round((info.confidence || 0) * 100) +
     "% sure).</div>" +
-    (info.summary ? '<div style="margin-top:4px;color:#4b5563">' + copilotEscape(info.summary) + "</div>" : "") +
+    (info.summary
+      ? '<div style="margin-top:4px;color:#4b5563">' +
+        copilotEscape(info.summary) +
+        "</div>"
+      : "") +
     '<div style="margin-top:12px"><label for="copilot-review-cause">The root cause you found (needed for Wrong)</label>' +
-    '<select id="copilot-review-cause" style="' + field + '">' + options + "</select></div>" +
+    '<select id="copilot-review-cause" style="' +
+    field +
+    '">' +
+    options +
+    "</select></div>" +
     '<div style="margin-top:8px"><label for="copilot-review-note">Note (optional)</label>' +
-    '<textarea id="copilot-review-note" rows="3" style="' + field + '" placeholder="What Copilot missed or got right">' +
+    '<textarea id="copilot-review-note" rows="3" style="' +
+    field +
+    '" placeholder="What Copilot missed or got right">' +
     copilotEscape(review.note || "") +
     "</textarea></div></div>";
 
@@ -268,10 +314,32 @@ function showCopilotReviewDialog(info, doc, call, toast, $dialog) {
     title: "Rate Copilot's diagnosis - Ticket #" + doc.name,
     html: html,
     actions: [
-      { label: "Right", variant: "solid", onClick: function (_ref) { save("Right", _ref); } },
-      { label: "Partly", onClick: function (_ref) { save("Partly", _ref); } },
-      { label: "Wrong", theme: "red", onClick: function (_ref) { save("Wrong", _ref); } },
-      { label: "Cancel", onClick: function (_ref) { _ref.close(); } },
+      {
+        label: "Right",
+        variant: "solid",
+        onClick: function (_ref) {
+          save("Right", _ref);
+        },
+      },
+      {
+        label: "Partly",
+        onClick: function (_ref) {
+          save("Partly", _ref);
+        },
+      },
+      {
+        label: "Wrong",
+        theme: "red",
+        onClick: function (_ref) {
+          save("Wrong", _ref);
+        },
+      },
+      {
+        label: "Cancel",
+        onClick: function (_ref) {
+          _ref.close();
+        },
+      },
     ],
   });
 }

@@ -30,7 +30,12 @@ from helpdesk.test_utils import (
 )
 
 WORKER_USER = "mcp-worker@example.com"
-WORKER_TOOLS = {"get_run_context", "post_event", "submit_investigation", "customer_erp_read"}
+WORKER_TOOLS = {
+    "get_run_context",
+    "post_event",
+    "submit_investigation",
+    "customer_erp_read",
+}
 
 
 def site_result(payload, is_error=False):
@@ -49,7 +54,9 @@ class WorkerCase(FrappeTestCase):
         self.conn = make_support_connection(customer).name
         ticket = make_ticket(subject="Worker ticket", customer=customer)
         ticket.db_set("custom_qcs_connection", self.conn)
-        frappe.db.set_value("HDS Copilot Run", {"state": "Queued"}, "state", "Cancelled")
+        frappe.db.set_value(
+            "HDS Copilot Run", {"state": "Queued"}, "state", "Cancelled"
+        )
         self.run = runs.start_run(ticket.name).name
         frappe.set_user(WORKER_USER)
         job = claim_job("w1")
@@ -64,7 +71,10 @@ class WorkerCase(FrappeTestCase):
 
 class TestRunToken(WorkerCase):
     def test_the_token_acts_as_the_worker_for_its_run(self):
-        self.assertEqual((self.caller.kind, self.caller.run, self.caller.user), (WORKER, self.run, WORKER_USER))
+        self.assertEqual(
+            (self.caller.kind, self.caller.run, self.caller.user),
+            (WORKER, self.run, WORKER_USER),
+        )
         self.assertEqual(frappe.session.user, WORKER_USER)
 
     def test_bad_tokens_are_refused(self):
@@ -80,16 +90,23 @@ class TestRunToken(WorkerCase):
 
     def test_the_endpoint_takes_the_token_header(self):
         fake_http_request(
-            self, "POST", json.dumps(mcp_message("tools/list")), {"X-Copilot-Run-Token": self.token}
+            self,
+            "POST",
+            json.dumps(mcp_message("tools/list")),
+            {"X-Copilot-Run-Token": self.token},
         )
-        frappe.set_user("Guest")  # no Authorization header: Frappe leaves the request as Guest
+        frappe.set_user(
+            "Guest"
+        )  # no Authorization header: Frappe leaves the request as Guest
         reply = json.loads(copilot_mcp.handle().get_data())
         self.assertEqual({t["name"] for t in reply["result"]["tools"]}, WORKER_TOOLS)
 
 
 class TestToolsKeptApart(WorkerCase):
     def test_worker_and_people_tools_are_kept_apart(self):
-        self.assertEqual({t["name"] for t in registry.definitions_for(self.caller)}, WORKER_TOOLS)
+        self.assertEqual(
+            {t["name"] for t in registry.definitions_for(self.caller)}, WORKER_TOOLS
+        )
         is_error, text = self.call("get_ticket", ticket="0001")
         self.assertTrue(is_error)
         self.assertIn("Unknown tool", text)
@@ -105,15 +122,24 @@ class TestWorkerTools(WorkerCase):
         self.assertFalse(is_error, context)
         self.assertEqual(context["ticket"]["subject"], "Worker ticket")
         self.assertNotIn("api_key", json.dumps(context))
-        self.assertEqual(self.call("post_event", seq=1, type="tool_call", payload={"tool": "get_doc"})[1]["stored"], True)
-        self.assertEqual(self.call("post_event", seq=1, type="tool_call")[1]["stored"], False)
+        self.assertEqual(
+            self.call(
+                "post_event", seq=1, type="tool_call", payload={"tool": "get_doc"}
+            )[1]["stored"],
+            True,
+        )
+        self.assertEqual(
+            self.call("post_event", seq=1, type="tool_call")[1]["stored"], False
+        )
 
     @patch("helpdesk.mcp_client.MCPClient")
     def test_customer_erp_read_goes_through_the_hub_and_only_reads(self, client):
         site = MagicMock()
         client.return_value = site
         site.call_tool.return_value = site_result([{"name": "ACC-SINV-2026-00042"}])
-        is_error, data = self.call("customer_erp_read", tool="get_list", arguments={"doctype": "Sales Invoice"})
+        is_error, data = self.call(
+            "customer_erp_read", tool="get_list", arguments={"doctype": "Sales Invoice"}
+        )
         self.assertFalse(is_error, data)
         self.assertEqual(data["result"], [{"name": "ACC-SINV-2026-00042"}])
         client.assert_called_with(self.conn)
@@ -124,13 +150,21 @@ class TestWorkerTools(WorkerCase):
         self.assertTrue(is_error)
         site.call_tool.assert_not_called()
 
-        site.call_tool.return_value = site_result("Doctype Sales Invoice is blocked", is_error=True)
-        is_error, text = self.call("customer_erp_read", tool="get_doc", arguments={"doctype": "Sales Invoice", "name": "x"})
+        site.call_tool.return_value = site_result(
+            "Doctype Sales Invoice is blocked", is_error=True
+        )
+        is_error, text = self.call(
+            "customer_erp_read",
+            tool="get_doc",
+            arguments={"doctype": "Sales Invoice", "name": "x"},
+        )
         self.assertTrue(is_error)
         self.assertIn("refused", text)
 
         site.call_tool.return_value = site_result("x" * (MAX_SITE_RESULT_CHARS + 10))
-        is_error, data = self.call("customer_erp_read", tool="get_error_log", arguments={})
+        is_error, data = self.call(
+            "customer_erp_read", tool="get_error_log", arguments={}
+        )
         self.assertEqual(data["cut_at_characters"], MAX_SITE_RESULT_CHARS)
 
     def test_no_site_no_read(self):

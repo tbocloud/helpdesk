@@ -22,9 +22,9 @@ def ensure_role():
     """Created on migrate; API-only, so no desk access."""
     if frappe.db.exists("Role", WORKER_ROLE):
         return
-    frappe.get_doc({"doctype": "Role", "role_name": WORKER_ROLE, "desk_access": 0}).insert(
-        ignore_permissions=True
-    )
+    frappe.get_doc(
+        {"doctype": "Role", "role_name": WORKER_ROLE, "desk_access": 0}
+    ).insert(ignore_permissions=True)
 
 
 def worker_only():
@@ -82,7 +82,13 @@ def post_events(run: str, lease_token: str, events: list | str) -> dict:
         if not isinstance(event, dict) or "seq" not in event:
             frappe.throw(_("Each event needs a seq"))
         seq = int(event["seq"])
-        runs.add_event(doc, str(event.get("type") or "note"), event.get("payload") or {}, runs.WORKER, seq=seq)
+        runs.add_event(
+            doc,
+            str(event.get("type") or "note"),
+            event.get("payload") or {},
+            runs.WORKER,
+            seq=seq,
+        )
         acked.append(seq)
     return {"acked": acked}
 
@@ -98,8 +104,15 @@ def submit_result(run: str, lease_token: str, result: dict | str) -> dict:
         doc = router.route(doc, result)
     elif kind == "failure":
         reason = str(result.get("reason") or "")[:2000]
-        doc = runs.transition(doc, "Failed", runs.WORKER, note="worker failed", failure_reason=reason)
-        runs.tell_people(doc, _("Copilot could not investigate ticket {0}: {1}").format(doc.ticket, reason[:200]))
+        doc = runs.transition(
+            doc, "Failed", runs.WORKER, note="worker failed", failure_reason=reason
+        )
+        runs.tell_people(
+            doc,
+            _("Copilot could not investigate ticket {0}: {1}").format(
+                doc.ticket, reason[:200]
+            ),
+        )
     else:
         frappe.throw(_("Unknown result kind: {0}").format(kind))
     return {"run": doc.name, "state": doc.state, "root_cause": doc.root_cause_category}

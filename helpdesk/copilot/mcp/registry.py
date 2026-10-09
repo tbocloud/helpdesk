@@ -3,6 +3,7 @@
 
 """The MCP server's tools: who sees which, and how one call runs, is logged and is limited."""
 
+import contextlib
 import importlib
 import json
 import time
@@ -118,7 +119,9 @@ def call(caller, name: str, arguments) -> dict:
         status, is_error, text = "Refused", True, message_of(e)
     except Exception as e:
         _undo()
-        frappe.log_error(title=f"Copilot MCP tool failed: {name}", message=frappe.get_traceback())
+        frappe.log_error(
+            title=f"Copilot MCP tool failed: {name}", message=frappe.get_traceback()
+        )
         status, is_error, text = "Error", True, f"{name} failed: {message_of(e)}"
     finally:
         frappe.local.message_log = []
@@ -134,10 +137,9 @@ def call(caller, name: str, arguments) -> dict:
 
 
 def _undo():
-    try:
+    # a tool that called a customer site committed already (MCPClient): nothing to undo
+    with contextlib.suppress(Exception):
         frappe.db.rollback(save_point=SAVEPOINT)
-    except Exception:
-        pass  # a tool that called a customer site committed already (MCPClient), nothing to undo
 
 
 def check_arguments(schema: dict, arguments) -> dict:
@@ -149,10 +151,16 @@ def check_arguments(schema: dict, arguments) -> dict:
     properties = schema["properties"]
     unknown = sorted(set(arguments) - set(properties))
     if unknown:
-        frappe.throw(_("Unknown argument: {0}").format(", ".join(unknown)), frappe.ValidationError)
+        frappe.throw(
+            _("Unknown argument: {0}").format(", ".join(unknown)),
+            frappe.ValidationError,
+        )
     missing = [key for key in schema["required"] if arguments.get(key) in (None, "")]
     if missing:
-        frappe.throw(_("Missing argument: {0}").format(", ".join(missing)), frappe.ValidationError)
+        frappe.throw(
+            _("Missing argument: {0}").format(", ".join(missing)),
+            frappe.ValidationError,
+        )
     checked = {}
     for key, value in arguments.items():
         if value is None:
@@ -164,12 +172,21 @@ def check_arguments(schema: dict, arguments) -> dict:
 def _check_value(key: str, spec: dict, value):
     kind = spec.get("type")
     if kind == "integer":
-        if isinstance(value, bool) or not isinstance(value, int | float) or int(value) != value:
-            frappe.throw(_("{0} must be a whole number").format(key), frappe.ValidationError)
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, int | float)
+            or int(value) != value
+        ):
+            frappe.throw(
+                _("{0} must be a whole number").format(key), frappe.ValidationError
+            )
         value = int(value)
         low, high = spec.get("minimum"), spec.get("maximum")
         if (low is not None and value < low) or (high is not None and value > high):
-            frappe.throw(_("{0} must be between {1} and {2}").format(key, low, high), frappe.ValidationError)
+            frappe.throw(
+                _("{0} must be between {1} and {2}").format(key, low, high),
+                frappe.ValidationError,
+            )
         return value
     if kind == "number":
         if isinstance(value, bool) or not isinstance(value, int | float):
@@ -186,12 +203,19 @@ def _check_value(key: str, spec: dict, value):
                 frappe.ValidationError,
             )
     if spec.get("enum") and value not in spec["enum"]:
-        frappe.throw(_("{0} must be one of: {1}").format(key, ", ".join(spec["enum"])), frappe.ValidationError)
+        frappe.throw(
+            _("{0} must be one of: {1}").format(key, ", ".join(spec["enum"])),
+            frappe.ValidationError,
+        )
     return value
 
 
 def to_text(result) -> str:
-    text = result if isinstance(result, str) else json.dumps(result, ensure_ascii=False, default=str)
+    text = (
+        result
+        if isinstance(result, str)
+        else json.dumps(result, ensure_ascii=False, default=str)
+    )
     if len(text) > MAX_RESULT_CHARS:
         text = text[:MAX_RESULT_CHARS] + f"... (cut at {MAX_RESULT_CHARS} characters)"
     return text

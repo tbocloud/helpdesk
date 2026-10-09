@@ -9,7 +9,13 @@ from frappe import _
 from helpdesk.copilot.mcp.registry import READ, register_tool
 from helpdesk.copilot.mcp.shape import assignees, clip, plain, ticket_name, untrusted
 
-TICKET = {"ticket": {"type": "string", "maxLength": 140, "description": "Ticket number, for example 0236"}}
+TICKET = {
+    "ticket": {
+        "type": "string",
+        "maxLength": 140,
+        "description": "Ticket number, for example 0236",
+    }
+}
 MESSAGES_KEPT, NOTES_KEPT = 15, 15
 MAX_ITEMS = 50
 
@@ -19,12 +25,26 @@ def my_work(caller, limit: int = 30) -> dict:
 
     work = get_my_work()
     keep = (
-        "kind", "name", "title", "project_name", "customer", "status", "priority",
-        "deadline", "is_overdue", "is_key", "hd_ticket", "hold_reason", "risks",
+        "kind",
+        "name",
+        "title",
+        "project_name",
+        "customer",
+        "status",
+        "priority",
+        "deadline",
+        "is_overdue",
+        "is_key",
+        "hd_ticket",
+        "hold_reason",
+        "risks",
     )
     return {
         "counts": work.get("counts"),
-        "items": [{k: item.get(k) for k in keep if item.get(k) not in (None, "", [])} for item in work["items"][:limit]],
+        "items": [
+            {k: item.get(k) for k in keep if item.get(k) not in (None, "", [])}
+            for item in work["items"][:limit]
+        ],
         "done_in_last_30_days": len(work.get("done") or []),
     }
 
@@ -34,7 +54,9 @@ def get_ticket(caller, ticket: str) -> dict:
 
     name = ticket_name(ticket)
     doc = get_one(name)
-    messages = sorted(doc.get("communications") or [], key=lambda m: str(m.get("creation")))
+    messages = sorted(
+        doc.get("communications") or [], key=lambda m: str(m.get("creation"))
+    )
     notes = sorted(doc.get("comments") or [], key=lambda c: str(c.get("creation")))
     return {
         "ticket": doc.get("name"),
@@ -58,7 +80,9 @@ def get_ticket(caller, ticket: str) -> dict:
         "description": untrusted(plain(doc.get("description"), 6000)),
         "messages": [
             {
-                "direction": "from customer" if m.get("sent_or_received") == "Received" else "to customer",
+                "direction": "from customer"
+                if m.get("sent_or_received") == "Received"
+                else "to customer",
                 "from": m.get("sender"),
                 "at": m.get("creation"),
                 "text": untrusted(plain(m.get("content"), 2500)),
@@ -66,7 +90,11 @@ def get_ticket(caller, ticket: str) -> dict:
             for m in messages[-MESSAGES_KEPT:]
         ],
         "internal_notes": [
-            {"by": c.get("commented_by"), "at": c.get("creation"), "text": untrusted(plain(c.get("content"), 1500))}
+            {
+                "by": c.get("commented_by"),
+                "at": c.get("creation"),
+                "text": untrusted(plain(c.get("content"), 1500)),
+            }
             for c in notes[-NOTES_KEPT:]
         ],
         "older_left_out": {
@@ -86,7 +114,14 @@ def _triage(ticket: str) -> dict | None:
         return {"status": triage.get("status") or "Not run"}
     return {
         key: triage.get(key)
-        for key in ("status", "category", "priority", "complexity", "summary", "recommended_track")
+        for key in (
+            "status",
+            "category",
+            "priority",
+            "complexity",
+            "summary",
+            "recommended_track",
+        )
     }
 
 
@@ -124,7 +159,9 @@ def search_tickets(
     found = None
     if query:
         if len(query) < 2:
-            frappe.throw(_("Search words need at least 2 characters."), frappe.ValidationError)
+            frappe.throw(
+                _("Search words need at least 2 characters."), frappe.ValidationError
+            )
         found = _search_ticket_names(query)
         if not found:
             return {"tickets": [], "count": 0}
@@ -132,7 +169,15 @@ def search_tickets(
     rows = frappe.get_list(
         "HD Ticket",
         filters=filters,
-        fields=["name", "subject", "status", "priority", "customer", "modified", "_assign"],
+        fields=[
+            "name",
+            "subject",
+            "status",
+            "priority",
+            "customer",
+            "modified",
+            "_assign",
+        ],
         order_by="modified desc",
         limit_page_length=limit,
     )
@@ -179,9 +224,25 @@ def get_task(caller, task: str) -> dict:
 
     detail = get_task_detail(task)
     keep = (
-        "name", "subject", "status", "priority", "project", "category", "phase", "due_date", "exp_end_date",
-        "assigned_to", "assignees", "assigned_by", "estimated_hours", "actual_hours", "hold_reason",
-        "blocked", "depends_on_subject", "hd_ticket", "pull_requests",
+        "name",
+        "subject",
+        "status",
+        "priority",
+        "project",
+        "category",
+        "phase",
+        "due_date",
+        "exp_end_date",
+        "assigned_to",
+        "assignees",
+        "assigned_by",
+        "estimated_hours",
+        "actual_hours",
+        "hold_reason",
+        "blocked",
+        "depends_on_subject",
+        "hd_ticket",
+        "pull_requests",
     )
     result = {k: detail.get(k) for k in keep if detail.get(k) not in (None, "", [])}
     result["description"] = plain(detail.get("description"), 4000)
@@ -191,9 +252,21 @@ def get_task(caller, task: str) -> dict:
 def list_projects(caller) -> dict:
     from helpdesk.tasky.api import get_projects
 
-    keep = ("name", "project_name", "status", "customer", "percent_complete", "expected_end_date")
+    keep = (
+        "name",
+        "project_name",
+        "status",
+        "customer",
+        "percent_complete",
+        "expected_end_date",
+    )
     projects = get_projects() or []
-    return {"projects": [{k: p.get(k) for k in keep if p.get(k) not in (None, "")} for p in projects[:200]]}
+    return {
+        "projects": [
+            {k: p.get(k) for k in keep if p.get(k) not in (None, "")}
+            for p in projects[:200]
+        ]
+    }
 
 
 def list_project_tasks(caller, project: str, status: str = "") -> dict:
@@ -222,7 +295,9 @@ def search_knowledge_base(caller, query: str) -> dict:
     from helpdesk.api.article import search
 
     if len(query) < 2:
-        frappe.throw(_("Search words need at least 2 characters."), frappe.ValidationError)
+        frappe.throw(
+            _("Search words need at least 2 characters."), frappe.ValidationError
+        )
     return {
         "articles": [
             {
@@ -254,7 +329,10 @@ def get_fix_brief(caller, ticket: str) -> dict:
     from helpdesk.api.fix_brief import get_fix_brief as build
 
     brief = build(ticket_name(ticket))
-    return {"filename": brief.get("filename"), "markdown": clip(brief.get("markdown"), 30000)}
+    return {
+        "filename": brief.get("filename"),
+        "markdown": clip(brief.get("markdown"), 30000),
+    }
 
 
 def get_possible_duplicates(caller, ticket: str) -> dict:
@@ -280,7 +358,10 @@ def get_calendar(caller, start: str, end: str, team: bool = False) -> dict:
     from helpdesk.api.calendar import get_calendar as calendar
 
     data = calendar(start, end, 1 if team else 0)
-    return {"meetings": (data.get("meetings") or [])[:100], "tasks": (data.get("tasks") or [])[:100]}
+    return {
+        "meetings": (data.get("meetings") or [])[:100],
+        "tasks": (data.get("tasks") or [])[:100],
+    }
 
 
 def get_copilot_run(caller, ticket: str) -> dict:
@@ -310,7 +391,11 @@ register_tool(
     description="Find tickets by words and/or status, priority, customer, assigned to me; newest first.",
     handler=search_tickets,
     properties={
-        "query": {"type": "string", "maxLength": 200, "description": "Words to find in tickets, their emails and notes"},
+        "query": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Words to find in tickets, their emails and notes",
+        },
         "status": {"type": "string", "maxLength": 60},
         "priority": {"type": "string", "maxLength": 60},
         "customer": {"type": "string", "maxLength": 140},
@@ -323,7 +408,13 @@ register_tool(
     kind=READ,
     description="One task: status, project, assignees, due date, hours, hold, linked ticket and pull requests.",
     handler=get_task,
-    properties={"task": {"type": "string", "maxLength": 140, "description": "Task name, for example TASK-2026-00012"}},
+    properties={
+        "task": {
+            "type": "string",
+            "maxLength": 140,
+            "description": "Task name, for example TASK-2026-00012",
+        }
+    },
     required=["task"],
 )
 register_tool(

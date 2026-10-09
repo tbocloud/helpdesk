@@ -34,9 +34,14 @@ def identify() -> Caller:
     )
 
 
-def identify_from(authorization: str | None, run_token: str | None, session_user: str | None) -> Caller:
+def identify_from(
+    authorization: str | None, run_token: str | None, session_user: str | None
+) -> Caller:
     if authorization and run_token:
-        frappe.throw(_("Send either an API key or a run token, not both."), frappe.AuthenticationError)
+        frappe.throw(
+            _("Send either an API key or a run token, not both."),
+            frappe.AuthenticationError,
+        )
     if run_token:
         return worker_caller(run_token)
     if not authorization:
@@ -59,14 +64,18 @@ def person_caller(user: str | None) -> Caller:
     if not frappe.db.get_value("User", user, "enabled"):
         frappe.throw(_("This user is disabled."), frappe.AuthenticationError)
     if not is_agent_user(user):
-        frappe.throw(_("Only TBO Support agents may use the MCP server."), frappe.PermissionError)
+        frappe.throw(
+            _("Only TBO Support agents may use the MCP server."), frappe.PermissionError
+        )
     return Caller(user=user)
 
 
 def is_agent_user(user: str) -> bool:
     """`user` is an agent: helpdesk.utils.is_agent asks about the session user's admin rights instead."""
     roles = set(frappe.get_roles(user))
-    return bool(roles & {"Agent", "Agent Manager"}) or bool(frappe.db.exists("HD Agent", {"name": user}))
+    return bool(roles & {"Agent", "Agent Manager"}) or bool(
+        frappe.db.exists("HD Agent", {"name": user})
+    )
 
 
 def worker_caller(run_token: str) -> Caller:
@@ -84,13 +93,18 @@ def worker_caller(run_token: str) -> Caller:
     try:
         doc = runs.check_lease(run, token)
     except frappe.PermissionError as e:
-        frappe.throw(str(e) or _("This run token is not valid."), frappe.AuthenticationError)
+        frappe.throw(
+            str(e) or _("This run token is not valid."), frappe.AuthenticationError
+        )
     user = doc.worker_user
     if (
         not user
         or WORKER_ROLE not in frappe.get_roles(user)
         or not frappe.db.get_value("User", user, "enabled")
     ):
-        frappe.throw(_("The worker of this run may not use the MCP server."), frappe.AuthenticationError)
+        frappe.throw(
+            _("The worker of this run may not use the MCP server."),
+            frappe.AuthenticationError,
+        )
     frappe.set_user(user)  # runs only after the lease token matched - nosemgrep
     return Caller(user=user, kind=WORKER, run=doc.name)

@@ -16,7 +16,7 @@ from contextlib import contextmanager
 
 import frappe
 from frappe import _
-from frappe.utils import escape_html, now_datetime
+from frappe.utils import escape_html
 
 from helpdesk import client_api
 from helpdesk.automation import automation_user
@@ -44,7 +44,9 @@ def render(stage: str, context: dict | None = None) -> str:
     try:
         return template.format_map(_Blank(context or {})).strip()
     except (ValueError, IndexError):
-        return template.strip()  # an edited template with a stray brace still reaches the customer
+        return (
+            template.strip()
+        )  # an edited template with a stray brace still reaches the customer
 
 
 def latest_run(ticket: str):
@@ -68,23 +70,37 @@ def send_stage(run, stage: str, context: dict | None = None) -> bool:
     text = render(stage, context)
     if _last_stage(run) == (stage, text):
         return False
-    number = frappe.db.count("HDS Copilot Event", {"run": run.name, "event_type": "stage"}) + 1
+    number = (
+        frappe.db.count("HDS Copilot Event", {"run": run.name, "event_type": "stage"})
+        + 1
+    )
     hub_ref = f"{run.name}:{stage}:{number}"
     if run.get("shadow"):
         runs.add_event(
             run,
             "stage",
-            {"stage": stage, "message": text, "hub_ref": hub_ref, "pushed": False, "shadow": True},
+            {
+                "stage": stage,
+                "message": text,
+                "hub_ref": hub_ref,
+                "pushed": False,
+                "shadow": True,
+            },
             runs.SYSTEM,
         )
         return False
     pushed = _push_stage(run, hub_ref, stage, text)
-    note = _("Copilot → customer: <b>{0}</b> — {1}").format(escape_html(_(stage)), escape_html(text))
+    note = _("Copilot → customer: <b>{0}</b> — {1}").format(
+        escape_html(_(stage)), escape_html(text)
+    )
     if not pushed:
         note += " <i>({0})</i>".format(_("not delivered to the customer's site"))
     comment(run.ticket, note)
     runs.add_event(
-        run, "stage", {"stage": stage, "message": text, "hub_ref": hub_ref, "pushed": pushed}, runs.SYSTEM
+        run,
+        "stage",
+        {"stage": stage, "message": text, "hub_ref": hub_ref, "pushed": pushed},
+        runs.SYSTEM,
     )
     runs.update_ticket(run, stage=stage)
     return True
@@ -106,7 +122,10 @@ def _last_stage(run) -> tuple | None:
 
 def _push_stage(run, hub_ref: str, stage: str, text: str) -> bool:
     info = frappe.db.get_value(
-        "HD Ticket", run.ticket, ["custom_qcs_connection", "custom_client_ticket"], as_dict=True
+        "HD Ticket",
+        run.ticket,
+        ["custom_qcs_connection", "custom_client_ticket"],
+        as_dict=True,
     )
     if not (info and info.custom_qcs_connection and info.custom_client_ticket):
         return False
@@ -201,11 +220,17 @@ def draft_explanation(run, text: str):
         run.ticket,
         {
             "reply": as_html(text),
-            "note": _("From Copilot run {0} ({1}): read it, edit if needed, send.").format(
-                run.name, run.root_cause_category
-            ),
+            "note": _(
+                "From Copilot run {0} ({1}): read it, edit if needed, send."
+            ).format(run.name, run.root_cause_category),
         },
-        [{"kind": "investigation", "name": run.name, "title": _("Copilot run {0}").format(run.name)}],
+        [
+            {
+                "kind": "investigation",
+                "name": run.name,
+                "title": _("Copilot run {0}").format(run.name),
+            }
+        ],
     )
 
 
@@ -227,7 +252,12 @@ def hand_over(run, reason: str) -> str | None:
     is all the team gets.
     """
     if run.get("shadow"):
-        runs.add_event(run, "hand_over_skipped", {"note": "shadow mode", "reason": reason[:500]}, runs.SYSTEM)
+        runs.add_event(
+            run,
+            "hand_over_skipped",
+            {"note": "shadow mode", "reason": reason[:500]},
+            runs.SYSTEM,
+        )
         return None
     ticket = frappe.get_doc("HD Ticket", run.ticket)
     developer = (
@@ -249,7 +279,10 @@ def hand_over(run, reason: str) -> str | None:
 def project_for(customer: str | None) -> str | None:
     project = (
         frappe.db.get_value(
-            "Project", {"customer": customer, "status": "Open"}, "name", order_by="modified desc"
+            "Project",
+            {"customer": customer, "status": "Open"},
+            "name",
+            order_by="modified desc",
         )
         if customer
         else None
@@ -257,13 +290,16 @@ def project_for(customer: str | None) -> str | None:
     return project or copilot_settings.get_settings().handover_project
 
 
-def _create_task(ticket, project: str, developer: str | None, run, reason: str) -> str | None:
+def _create_task(
+    ticket, project: str, developer: str | None, run, reason: str
+) -> str | None:
     from helpdesk.api.work import create_task_from_ticket
     from helpdesk.tasky.api import _is_project_member
 
     assignee = developer if developer and _is_project_member(project, developer) else ""
     description = "<p>{0}</p><p>{1}</p>".format(
-        escape_html(reason), _("Copilot run {0}; see the diagnosis on the ticket.").format(run.name)
+        escape_html(reason),
+        _("Copilot run {0}; see the diagnosis on the ticket.").format(run.name),
     )
     with as_automation_user():
         if not frappe.has_permission("HD Ticket", "write", ticket.name):
@@ -275,7 +311,9 @@ def _create_task(ticket, project: str, developer: str | None, run, reason: str) 
         result = create_task_from_ticket(
             ticket.name,
             project,
-            task_name=_("Copilot hand-over: {0}").format(ticket.subject or ticket.name)[:140],
+            task_name=_("Copilot hand-over: {0}").format(ticket.subject or ticket.name)[
+                :140
+            ],
             description=description,
             assigned_to=assignee,
             pause_ticket=False,
@@ -329,7 +367,11 @@ def on_agent_reply(run):
     if waiting:
         send_stage(run, "Waiting for you")
     else:
-        send_stage(run, "Resolved", {"resolution": RESOLUTION_TEXT.get(run.root_cause_category, "")})
+        send_stage(
+            run,
+            "Resolved",
+            {"resolution": RESOLUTION_TEXT.get(run.root_cause_category, "")},
+        )
 
 
 def on_customer_message(run):
@@ -349,31 +391,59 @@ def on_customer_comment(ticket: str):
 # --- confirm and reopen -------------------------------------------------------
 
 
-def decide_resolution(ticket: str, confirmed: bool, note: str = "", actor: str = runs.CUSTOMER) -> dict:
+def decide_resolution(
+    ticket: str, confirmed: bool, note: str = "", actor: str = runs.CUSTOMER
+) -> dict:
     """Confirmed closes the ticket and the run; Reopened sends the ticket to a person."""
     doc = frappe.get_doc("HD Ticket", ticket)
     run = latest_run(ticket)
     note = (note or "").strip()[:1000]
     if confirmed:
-        frappe.db.set_value("HD Ticket", ticket, "custom_customer_confirmation", "Confirmed", update_modified=False)
+        frappe.db.set_value(
+            "HD Ticket",
+            ticket,
+            "custom_customer_confirmation",
+            "Confirmed",
+            update_modified=False,
+        )
         if run:
             _close_run(run, actor, note)
         with as_automation_user():  # the hub closes on the customer's behalf; no feedback form
             _close_ticket(ticket)
-        comment(ticket, _("The customer confirmed the fix.") + (f" <i>{escape_html(note)}</i>" if note else ""))
-        return {"confirmation": "Confirmed", "run": run.name if run else None, "task": None}
+        comment(
+            ticket,
+            _("The customer confirmed the fix.")
+            + (f" <i>{escape_html(note)}</i>" if note else ""),
+        )
+        return {
+            "confirmation": "Confirmed",
+            "run": run.name if run else None,
+            "task": None,
+        }
 
     if not note:
         frappe.throw(_("Please say what is still wrong."))
-    frappe.db.set_value("HD Ticket", ticket, "custom_customer_confirmation", "Reopened", update_modified=False)
+    frappe.db.set_value(
+        "HD Ticket",
+        ticket,
+        "custom_customer_confirmation",
+        "Reopened",
+        update_modified=False,
+    )
     with as_automation_user():
         _reopen_ticket(doc)
-    comment(ticket, _("The customer reopened the ticket:") + f" <i>{escape_html(note)}</i>")
+    comment(
+        ticket, _("The customer reopened the ticket:") + f" <i>{escape_html(note)}</i>"
+    )
     task = None
     if run:
         if (run.state, "Escalated") in runs.TRANSITIONS:
-            run = runs.transition(run, "Escalated", actor, note=f"reopened: {note}"[:140])
-        task = hand_over(run, _("The customer says it is still broken: {0}").format(note))
+            run = runs.transition(
+                run, "Escalated", actor, note=f"reopened: {note}"[:140]
+            )
+        task = hand_over(
+            run, _("The customer says it is still broken: {0}").format(note)
+        )
         send_stage(run, "With our team")
     return {"confirmation": "Reopened", "run": run.name if run else None, "task": task}
 
@@ -382,7 +452,9 @@ def _close_run(run, actor: str, note: str):
     if (run.state, "Closed") in runs.TRANSITIONS:
         runs.transition(run, "Closed", actor, note=f"confirmed: {note}"[:140])
     elif run.state in runs.CANCELLABLE:
-        runs.transition(run, "Cancelled", runs.SYSTEM, note="the customer says the ticket is solved")
+        runs.transition(
+            run, "Cancelled", runs.SYSTEM, note="the customer says the ticket is solved"
+        )
 
 
 def _reopen_ticket(doc):

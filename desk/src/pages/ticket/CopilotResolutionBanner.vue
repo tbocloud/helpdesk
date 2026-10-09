@@ -7,7 +7,10 @@
     <h2 :id="headingId" class="text-base font-medium text-ink-gray-9">
       {{ __("Is this solved?") }}
     </h2>
-    <p v-if="info.message" class="whitespace-pre-line text-p-sm text-ink-gray-7">
+    <p
+      v-if="info.message"
+      class="whitespace-pre-line text-p-sm text-ink-gray-7"
+    >
       {{ info.message }}
     </p>
     <FormControl
@@ -39,7 +42,11 @@
           :disabled="!!deciding || !note.trim()"
           @click="decide(false)"
         />
-        <Button :label="__('Back')" :disabled="!!deciding" @click="reopening = false" />
+        <Button
+          :label="__('Back')"
+          :disabled="!!deciding"
+          @click="reopening = false"
+        />
       </template>
     </div>
   </section>
@@ -80,7 +87,9 @@ async function decide(confirmed: boolean) {
     );
     emit("decided");
   } catch (e: any) {
-    toast.error(e?.messages?.[0] || __("Couldn't save your answer. Try again."));
+    toast.error(
+      e?.messages?.[0] || __("Couldn't save your answer. Try again.")
+    );
   } finally {
     deciding.value = "";
   }

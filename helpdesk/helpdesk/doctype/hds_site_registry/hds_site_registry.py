@@ -31,5 +31,7 @@ class HDSSiteRegistry(Document):
         other = frappe.db.get_value("HDS Site Registry", filters)
         if other:
             frappe.throw(
-                _("{0} is already the Production site of {1}").format(other, self.customer_name)
+                _("{0} is already the Production site of {1}").format(
+                    other, self.customer_name
+                )
             )

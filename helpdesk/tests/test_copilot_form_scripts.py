@@ -18,5 +18,10 @@ class TestFormScripts(FrappeTestCase):
         install_form_scripts()
         for name in FORM_SCRIPTS:
             doc = frappe.get_doc("HD Form Script", name)
-            self.assertEqual((doc.dt, doc.apply_to, doc.enabled), ("HD Ticket", "Form", 1), name)
-        self.assertIn("helpdesk.api.copilot.get_run", frappe.db.get_value("HD Form Script", "Helpdesk Copilot Actions", "script"))
+            self.assertEqual(
+                (doc.dt, doc.apply_to, doc.enabled), ("HD Ticket", "Form", 1), name
+            )
+        self.assertIn(
+            "helpdesk.api.copilot.get_run",
+            frappe.db.get_value("HD Form Script", "Helpdesk Copilot Actions", "script"),
+        )
