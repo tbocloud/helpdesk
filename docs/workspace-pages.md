@@ -168,6 +168,34 @@ from the tasks the viewer can see, so a plain member's card counts their own tas
 - **Empty states**: no projects yet (with New project for managers) vs nothing matching the
   filters (Show all projects).
 
+### Project dashboard tiles (`/projects/:id`)
+
+`desk/src/pages/tasky/PMDashboard.vue`; API `helpdesk.tasky.api.get_project_dashboard`.
+
+- **Eight tiles** (the shared `StatTile`, each a link named "Show on hold tasks: 2" and so on;
+  two columns on a phone, four from `sm`): Total tasks, Completed, In progress, Waiting
+  review, Overdue, On hold, Rescheduled, Cancelled. Waiting review (info), Overdue (danger),
+  On hold and Rescheduled (warning) are coloured only when above zero.
+- **What each counts** is `DASHBOARD_STAT_RULES` in `helpdesk/tasky/api.py`, over the tasks the
+  viewer can see: Completed, In progress (Working), Waiting review (Pending Review), On hold
+  and Cancelled by status; Rescheduled is any task whose due date was ever moved later
+  (`slip_count > 0`, whatever its status now); Overdue is a due date before today on a task
+  that isn't Completed, Cancelled or On hold. The API returns the counts in `stats` and the
+  task names behind each in `stat_tasks`, both built from the same rules, so a tile's number is
+  always its list's length.
+- **Where a tile goes**: Total tasks opens the Checklist unfiltered; Overdue opens the Overdue
+  page; every other tile opens the Checklist with `?status=<key>` (`completed`, `in_progress`,
+  `reviewing`, `on_hold`, `rescheduled`, `cancelled`). A tile at 0 still links, to the
+  filtered empty state.
+- **Checklist filter** (`desk/src/pages/tasky/Checklist.vue`): with a known `status` key it
+  shows the dashboard's `stat_tasks` for that key instead of the collapsible phases. A bar
+  reads "Showing: On hold · 2 tasks · Clear filter" (Clear removes `status` from the URL).
+  Rows stay grouped by phase in the checklist's order, with No phase last, and phases with no
+  match are left out. Nothing matching shows "No tasks match this filter" with Clear filter.
+  An unknown key is ignored. The labels live in `CHECKLIST_FILTERS` in `taskMeta.ts`. The
+  Checklist rather than the Board is the target because it lists every status (including
+  Completed and Cancelled) and Rescheduled isn't a status column.
+
 ## My Work (`/my-work`)
 
 `desk/src/pages/work/MyWork.vue`; API `helpdesk.api.work.get_my_work(user)`. `?user=` opens a

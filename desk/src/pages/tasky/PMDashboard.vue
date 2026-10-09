@@ -143,39 +143,19 @@
           </div>
 
           <!-- Stats -->
-          <div
-            class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-8"
-          >
-            <component
-              :is="card.to ? 'router-link' : 'div'"
+          <div class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <StatTile
               v-for="card in statCards"
-              :key="card.label"
+              :key="card.key"
+              :label="card.label"
+              :value="card.value"
+              :icon="card.icon"
+              :icon-tone="card.tone"
+              :value-tone="card.tone"
+              :loading="!dashboard.data"
               :to="card.to"
-              class="flex flex-col gap-3 rounded-lg border border-outline-gray-2 bg-surface-base p-4 transition-colors"
-              :class="card.to ? 'hover:border-outline-gray-3' : ''"
-            >
-              <div class="flex items-center justify-between gap-2">
-                <span class="text-sm text-ink-gray-6">{{ card.label }}</span>
-                <component
-                  :is="card.icon"
-                  class="size-4"
-                  :class="
-                    card.alert ? TONE_TEXT[card.alert] : 'text-ink-gray-5'
-                  "
-                  aria-hidden="true"
-                />
-              </div>
-              <span
-                class="text-2xl-semibold tabular-nums"
-                :class="card.alert ? TONE_TEXT[card.alert] : 'text-ink-gray-9'"
-              >
-                <span
-                  v-if="!dashboard.data"
-                  class="inline-block h-7 w-8 animate-pulse rounded bg-surface-gray-2"
-                />
-                <template v-else>{{ card.value }}</template>
-              </span>
-            </component>
+              :aria-label="`${card.action}: ${card.value}`"
+            />
           </div>
 
           <!-- Milestones -->
@@ -479,8 +459,15 @@ import LucideSparkles from "~icons/lucide/sparkles";
 import ProjectNav from "./components/ProjectNav.vue";
 import SlipBadge from "./components/SlipBadge.vue";
 import TaskStatusBadge from "./components/TaskStatusBadge.vue";
+import StatTile from "@/components/StatTile.vue";
 import TaskyState from "@/components/TaskyState.vue";
-import { initials, isClosed, loadErrorMessage } from "./taskMeta";
+import type { Tone } from "@/components/tone";
+import {
+  CHECKLIST_FILTERS,
+  initials,
+  isClosed,
+  loadErrorMessage,
+} from "./taskMeta";
 
 const props = defineProps<{
   projectId?: string;
@@ -545,71 +532,75 @@ const dateRange = computed(() => {
   return "";
 });
 
-// Full class strings so Tailwind's scanner picks them up.
-const TONE_TEXT = {
-  danger: "text-danger",
-  warning: "text-warning",
-  info: "text-info",
-} as const;
-
 interface StatCard {
+  key: string;
   label: string;
+  /** the link's accessible name, e.g. "Show on hold tasks" */
+  action: string;
   icon: Component;
   value: number;
-  alert?: keyof typeof TONE_TEXT;
-  to?: RouteLocationRaw;
+  tone: Tone;
+  to: RouteLocationRaw;
 }
 
+const STAT_ICONS: Record<string, Component> = {
+  completed: LucideCircleCheck,
+  in_progress: LucideCircleDot,
+  reviewing: LucideEye,
+  on_hold: LucidePause,
+  rescheduled: LucideCalendarClock,
+  cancelled: LucideCircleX,
+};
+
+// colour only where a non-zero count needs someone's attention
+const ALERT_TONES: Record<string, Tone> = {
+  reviewing: "info",
+  overdue: "danger",
+  on_hold: "warning",
+  rescheduled: "warning",
+};
+
+// each tile opens exactly the tasks it counts: Total the whole checklist,
+// Overdue its own page, the rest the checklist filtered by the same key
 const statCards = computed<StatCard[]>(() => {
   const stats = dashboard.data?.stats ?? {};
-  const overdueRoute = {
-    name: "TaskyOverdue",
-    params: { projectId: props.projectId },
-  };
+  const params = { projectId: props.projectId };
+  const tone = (key: string): Tone =>
+    (stats[key] ?? 0) > 0 && ALERT_TONES[key] ? ALERT_TONES[key] : "neutral";
+  const filterCard = (key: string): StatCard => ({
+    key,
+    label: __(CHECKLIST_FILTERS[key].label),
+    action: __(CHECKLIST_FILTERS[key].action),
+    icon: STAT_ICONS[key],
+    value: stats[key] ?? 0,
+    tone: tone(key),
+    to: { name: "TaskyChecklist", params, query: { status: key } },
+  });
   return [
-    { label: __("Total tasks"), icon: LucideListTodo, value: stats.total ?? 0 },
     {
-      label: __("Completed"),
-      icon: LucideCircleCheck,
-      value: stats.completed ?? 0,
+      key: "total",
+      label: __("Total tasks"),
+      action: __("Show all tasks"),
+      icon: LucideListTodo,
+      value: stats.total ?? 0,
+      tone: "neutral",
+      to: { name: "TaskyChecklist", params },
     },
+    filterCard("completed"),
+    filterCard("in_progress"),
+    filterCard("reviewing"),
     {
-      label: __("In progress"),
-      icon: LucideCircleDot,
-      value: stats.in_progress ?? 0,
-    },
-    {
-      label: __("Waiting review"),
-      icon: LucideEye,
-      value: stats.reviewing ?? 0,
-      alert: (stats.reviewing ?? 0) > 0 ? "info" : undefined,
-      to: { name: "TaskyKanban", params: { projectId: props.projectId } },
-    },
-    {
+      key: "overdue",
       label: __("Overdue"),
+      action: __("Show overdue tasks"),
       icon: LucideAlarmClock,
       value: stats.overdue ?? 0,
-      alert: (stats.overdue ?? 0) > 0 ? "danger" : undefined,
-      to: overdueRoute,
+      tone: tone("overdue"),
+      to: { name: "TaskyOverdue", params },
     },
-    {
-      label: __("On hold"),
-      icon: LucidePause,
-      value: stats.on_hold ?? 0,
-      alert: (stats.on_hold ?? 0) > 0 ? "warning" : undefined,
-      to: { name: "TaskyKanban", params: { projectId: props.projectId } },
-    },
-    {
-      label: __("Rescheduled"),
-      icon: LucideCalendarClock,
-      value: stats.rescheduled ?? 0,
-      alert: (stats.rescheduled ?? 0) > 0 ? "warning" : undefined,
-    },
-    {
-      label: __("Cancelled"),
-      icon: LucideCircleX,
-      value: stats.cancelled ?? 0,
-    },
+    filterCard("on_hold"),
+    filterCard("rescheduled"),
+    filterCard("cancelled"),
   ];
 });
 
