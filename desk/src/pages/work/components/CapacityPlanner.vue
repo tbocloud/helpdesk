@@ -628,11 +628,11 @@ function weekLabel(index: number) {
 }
 
 // "Who's free next week": the week after this one, or this week when it's all we plan
+// from the server's today, not the browser's clock
 const roomWeekIndex = computed(() => {
   const weeks = data.value?.weeks ?? [];
-  const thisSunday = dayjs()
-    .day(0)
-    .add(dayjs().day() === 0 ? 0 : 7, "day");
+  const today = dayjs(data.value?.today);
+  const thisSunday = today.add((7 - today.day()) % 7, "day");
   const next = weeks.findIndex((w) =>
     dayjs(w.start).isAfter(thisSunday, "day")
   );
@@ -641,7 +641,7 @@ const roomWeekIndex = computed(() => {
 
 const isNextWeek = computed(() => {
   const week = data.value?.weeks[roomWeekIndex.value];
-  return !!week && dayjs(week.start).isAfter(dayjs(), "day");
+  return !!week && dayjs(week.start).isAfter(dayjs(data.value?.today), "day");
 });
 
 const extraHours = ref<number | "">("");
@@ -724,8 +724,10 @@ const groups = computed(() => [
     key: "department",
     title: __("By department"),
     rows: (data.value?.by_department ?? []).map((row) => ({
-      key: row.department ?? "",
-      label: row.department ?? __("No department"),
+      key: row.other ? "__other__" : row.department ?? "",
+      label: row.other
+        ? __("Other projects")
+        : row.department ?? __("No department"),
       muted: !row.department,
       hours: row.hours,
       people: 0,

@@ -185,7 +185,26 @@ class TestGetCapacity(CapacityCase):
         self.assertEqual(len(result["weeks"]), 1)
         self.assertIn(DEV, [p["user"] for p in result["people"]])
         self.assertIn(
-            {"department": self.department, "hours": 6}, result["by_department"]
+            {"department": self.department, "hours": 6, "other": False},
+            result["by_department"],
+        )
+
+    def test_a_lead_sees_other_projects_work_without_its_department(self):
+        other_department = make_department("Capacity Digital").name
+        frappe.db.set_value(
+            "Project", self.other, "custom_department", other_department
+        )
+        make_planned_task(self.project, "Bank reconciliation", DEV, 6, day(13))
+        make_planned_task(self.other, "Support backlog", DEV, 4, day(13))
+
+        rows = self.capacity_as(LEAD)["by_department"]
+        self.assertNotIn(other_department, [r["department"] for r in rows])
+        self.assertEqual(
+            rows,
+            [
+                {"department": self.department, "hours": 6, "other": False},
+                {"department": None, "hours": 4, "other": True},
+            ],
         )
 
     def test_a_lead_cannot_filter_to_someone_elses_project(self):

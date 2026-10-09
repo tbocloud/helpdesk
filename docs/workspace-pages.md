@@ -109,12 +109,13 @@ project they don't run (it returns no one).
   (`components/CapacityDetail.vue`) shows a bar per working day, hours by project and the
   biggest tasks. Work on projects the viewer doesn't run counts toward the person's load but
   shows only as hours under "Other projects", without task names.
-- **Who's free next week** (or this week with a 1-week window): people under 80% that week,
+- **Who's free next week** (or this week with a 1-week window; "next week" goes by the
+  server's `today`, not the browser's clock): people under 80% that week,
   most free hours first. Typing hours of new work (the "what if") lists who has that many free
   hours in the whole window, with their load before and after.
 - **By department / By project**: the window's planned hours by the department of each task's
-  project, and per project with how many people; projects the viewer doesn't run are one
-  "Other projects" row.
+  project, and per project with how many people. In both, work on projects the viewer doesn't
+  run is one "Other projects" row, so a lead never sees another project's department.
 - **Filters** in the URL: `department` (that department's projects' people) and `project`
   (shared with By person). With a filter, a person's load is still all their planned work,
   since their time is one pool.

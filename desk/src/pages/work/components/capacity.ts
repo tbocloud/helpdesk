@@ -37,13 +37,20 @@ export interface PersonCapacity extends Load {
 }
 
 export interface Capacity {
+  /** the server's today */
+  today: string;
   start: string;
   end: string;
   hours_per_day: number;
   weeks: { start: string; end: string }[];
   people: PersonCapacity[];
   totals: Load & { people: number; flags: Record<Flag, number> };
-  by_department: { department: string | null; hours: number }[];
+  /** other: work on projects the viewer doesn't run */
+  by_department: {
+    department: string | null;
+    hours: number;
+    other: boolean;
+  }[];
   by_project: {
     project: string | null;
     project_name: string | null;

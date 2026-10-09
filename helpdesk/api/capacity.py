@@ -108,6 +108,8 @@ def get_capacity(
     _add_contributions(rows, shares, infos, visible)
     rows.sort(key=lambda r: (-(r["utilisation"] or 0), r["full_name"]))
     return {
+        # the server's today, so the page doesn't go by the browser's clock
+        "today": nowdate(),
         "start": str(start),
         "end": str(end),
         "hours_per_day": per_day,
@@ -117,7 +119,7 @@ def get_capacity(
         ],
         "people": rows,
         "totals": _totals(rows),
-        "by_department": _by_department(shares, infos),
+        "by_department": _by_department(shares, infos, visible),
         "by_project": _by_project(shares, infos, visible),
     }
 
@@ -390,10 +392,15 @@ def _totals(rows: list) -> dict:
     }
 
 
-def _by_department(shares: list, infos: dict) -> list[dict]:
-    """Planned hours by the department of each task's project, in department order."""
+def _by_department(shares: list, infos: dict, visible) -> list[dict]:
+    """Planned hours by the department of each task's project, in department order.
+    Work on projects the viewer doesn't run is one "other" row, last."""
     hours = {}
+    other = 0
     for _person, task, value, _typical in shares:
+        if not _is_visible(task.project, visible):
+            other += value
+            continue
         department = (infos.get(task.project) or {}).get("custom_department")
         hours[department] = hours.get(department, 0) + value
     order = {
@@ -402,12 +409,15 @@ def _by_department(shares: list, infos: dict) -> list[dict]:
             frappe.get_all("HD Department", order_by="sort_order asc", pluck="name")
         )
     }
-    return [
-        {"department": name, "hours": round(value, 1)}
+    rows = [
+        {"department": name, "hours": round(value, 1), "other": False}
         for name, value in sorted(
             hours.items(), key=lambda item: order.get(item[0], len(order))
         )
     ]
+    if other:
+        rows.append({"department": None, "hours": round(other, 1), "other": True})
+    return rows
 
 
 def _by_project(shares: list, infos: dict, visible) -> list[dict]:
