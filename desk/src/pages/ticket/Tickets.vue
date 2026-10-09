@@ -57,12 +57,7 @@
               {{ row.subject }}
             </span>
             <component
-              :is="
-                slaCell(
-                  resolutionSla(row, row.resolution_by),
-                  row.resolution_by
-                )
-              "
+              :is="slaCell(row, 'resolution', row.resolution_by)"
               v-if="row.resolution_by"
             />
           </span>
@@ -170,8 +165,14 @@ import TaskyBadge from "@/components/TaskyBadge.vue";
 import { useTicketStatusStore } from "@/stores/ticketStatus";
 import { __ } from "@/translation";
 import { View } from "@/types";
-import { isCustomerPortal, timeAgo } from "@/utils";
-import { Badge, Button, dayjs, Tooltip, usePageMeta } from "frappe-ui";
+import { useSlaTimeLeft } from "@/composables/useSlaTimeLeft";
+import {
+  dateFormat,
+  dateTooltipFormat,
+  isCustomerPortal,
+  timeAgo,
+} from "@/utils";
+import { Badge, Button, Tooltip, usePageMeta } from "frappe-ui";
 import { computed, h, onMounted, onUnmounted, reactive, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
@@ -183,10 +184,10 @@ import {
 import LucideX from "~icons/lucide/x";
 import {
   priorityBadge,
-  resolutionSla as resolutionState,
+  resolutionSla,
   responseSla,
   slaBadge,
-  type SlaState,
+  slaHint,
 } from "./ticketMeta";
 
 const router = useRouter();
@@ -282,13 +283,13 @@ const options = computed(() => ({
       custom: ({ row, item }) =>
         isCustomerPortal.value
           ? factCell(firstReplyFact(row))
-          : slaCell(responseSla(row, item), item),
+          : slaCell(row, "response", item),
     },
     resolution_by: {
       custom: ({ row, item }) =>
         isCustomerPortal.value
           ? factCell(resolutionFact(row, customerStatus.stage(row.status)))
-          : slaCell(resolutionSla(row, item), item),
+          : slaCell(row, "resolution", item),
     },
     ...(isCustomerPortal.value
       ? {}
@@ -330,21 +331,34 @@ function isUnseen(row: any) {
   return !seenBy.includes(userId || "");
 }
 
-function resolutionSla(row: any, deadline: string): SlaState {
-  return resolutionState(
-    row,
-    deadline,
-    getStatus(row.status)?.category === "Paused"
-  );
-}
+// the visible rows' working time left, in one request per page and refreshed every minute
+const slaClock = useSlaTimeLeft(() =>
+  isCustomerPortal.value ? [] : listViewRef.value?.list?.data?.data ?? []
+);
 
-function slaCell(state: SlaState, deadline: string) {
-  if (state === "none") return h("span");
-  const badge = h(TaskyBadge, slaBadge(state, deadline));
-  // a running clock shows the exact deadline on hover
-  return state === "due"
-    ? h(Tooltip, { text: dayjs(deadline).format("LLLL") }, () => badge)
-    : badge;
+function slaCell(row: any, clock: "response" | "resolution", deadline: string) {
+  const now = slaClock.now.value;
+  const state =
+    clock === "response"
+      ? responseSla(row, deadline, now)
+      : resolutionSla(
+          row,
+          deadline,
+          getStatus(row.status)?.category === "Paused",
+          now
+        );
+  const workingLeft = slaClock.workingLeft(row.name, clock);
+  const badge = slaBadge(state, deadline, workingLeft, now);
+  if (!badge) return h("span");
+  if (state !== "due") return h(TaskyBadge, badge);
+  // a running clock: the exact deadline and the working time left, on hover and for screen readers
+  const hint = slaHint(deadline, workingLeft);
+  return h(Tooltip, { text: hint }, () =>
+    h(TaskyBadge, { tone: badge.tone, icon: badge.icon }, () => [
+      badge.label,
+      h("span", { class: "sr-only" }, `, ${hint}`),
+    ])
+  );
 }
 
 // the customer's view of the same deadlines: "Overdue", never "Failed"
@@ -352,7 +366,7 @@ function factCell(fact: Fact | null) {
   if (!fact) return h("span");
   const badge = h(TaskyBadge, fact);
   return fact.at
-    ? h(Tooltip, { text: dayjs(fact.at).format("LLLL") }, () => badge)
+    ? h(Tooltip, { text: dateFormat(fact.at, dateTooltipFormat) }, () => badge)
     : badge;
 }
 

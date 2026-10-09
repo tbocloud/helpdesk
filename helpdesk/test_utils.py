@@ -263,6 +263,40 @@ def remove_holidays():
     holiday_list.save()
 
 
+def make_sla_calendar(
+    sla_name: str,
+    workdays: list[str],
+    holidays: list = (),
+    start_time: str = "10:00:00",
+    end_time: str = "18:00:00",
+):
+    """An SLA whose clock runs on `workdays` from `start_time` to `end_time`, skipping
+    `holidays` (kept in its own holiday list). It has no condition, so no ticket picks it up
+    by itself: point a ticket at it by setting `sla`."""
+    dates = [getdate(day) for day in holidays] or [getdate()]
+    holiday_list = frappe.get_doc(
+        {
+            "doctype": "HD Service Holiday List",
+            "holiday_list_name": f"{sla_name} Holidays",
+            "from_date": min(dates),
+            "to_date": max(dates),
+            "holidays": [
+                {"holiday_date": day, "description": "Test holiday"} for day in holidays
+            ],
+        }
+    ).insert(ignore_permissions=True)
+    sla = make_sla(sla_name).reload()
+    sla.holiday_list = holiday_list.name
+    sla.support_and_resolution = []
+    for day in workdays:
+        sla.append(
+            "support_and_resolution",
+            {"workday": day, "start_time": start_time, "end_time": end_time},
+        )
+    sla.save(ignore_permissions=True)
+    return sla
+
+
 def create_field_dependency():
     parent_field = "ticket_type"
     child_field = "priority"

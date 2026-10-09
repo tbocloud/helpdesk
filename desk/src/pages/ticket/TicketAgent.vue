@@ -56,6 +56,10 @@ import TicketSidebar from "@/components/ticket-agent/TicketSidebar.vue";
 import SetContactPhoneModal from "@/components/ticket/SetContactPhoneModal.vue";
 import { useActiveViewers } from "@/composables/realtime";
 import {
+  SlaTimeLeftSymbol,
+  useSlaTimeLeft,
+} from "@/composables/useSlaTimeLeft";
+import {
   reloadTicket,
   revalidateTicket,
   useTicket,
@@ -122,6 +126,10 @@ const customizations: Resource<Customizations> = createResource({
 });
 
 provide(TicketSymbol, ticket);
+provide(
+  SlaTimeLeftSymbol,
+  useSlaTimeLeft(() => (ticket.value.doc ? [ticket.value.doc] : []))
+);
 
 provide(
   AssigneeSymbol,

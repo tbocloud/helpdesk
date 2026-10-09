@@ -35,6 +35,7 @@
         >
           <TaskyBadge :tone="sla.badge.tone" :icon="sla.badge.icon">
             {{ sla.label }}: {{ sla.badge.label }}
+            <span class="sr-only">, {{ sla.tooltip }}</span>
           </TaskyBadge>
         </Tooltip>
         <span class="inline-flex items-center gap-1 text-xs text-ink-gray-5">
@@ -80,11 +81,13 @@
 import { EmailIcon, GlobeIcon } from "@/components/icons";
 import TaskyBadge from "@/components/TaskyBadge.vue";
 import { useShortcut } from "@/composables/shortcuts";
+import { SlaTimeLeftSymbol } from "@/composables/useSlaTimeLeft";
 import {
   priorityBadge,
   resolutionSla,
   responseSla,
   slaBadge,
+  slaHint,
   statusBadge,
   type BadgeMeta,
   type SlaState,
@@ -92,7 +95,7 @@ import {
 import { __ } from "@/translation";
 import { AssigneeSymbol, TicketContactSymbol, TicketSymbol } from "@/types";
 import { copyToClipboard } from "@/utils";
-import { dayjs, Tooltip } from "frappe-ui";
+import { Tooltip } from "frappe-ui";
 import { computed, inject } from "vue";
 
 const emit = defineEmits<{ (e: "edit-subject"): void }>();
@@ -100,6 +103,7 @@ const emit = defineEmits<{ (e: "edit-subject"): void }>();
 const ticket = inject(TicketSymbol)!;
 const assignees = inject(AssigneeSymbol)!;
 const contact = inject(TicketContactSymbol)!;
+const slaClock = inject(SlaTimeLeftSymbol)!;
 
 const status = computed(() =>
   statusBadge(ticket.value.doc.status, ticket.value.doc.status_category)
@@ -126,32 +130,35 @@ interface SlaChip {
 
 const slaChips = computed(() => {
   const doc = ticket.value.doc;
+  const now = slaClock.now.value;
   const chips: SlaChip[] = [];
   const add = (
-    key: string,
+    key: "response" | "resolution",
     label: string,
     state: SlaState,
     deadline?: string
   ) => {
-    const badge = slaBadge(state, deadline);
+    const workingLeft =
+      state === "due" ? slaClock.workingLeft(doc.name, key) : null;
+    const badge = slaBadge(state, deadline, workingLeft, now);
     if (!badge || !deadline) return;
-    chips.push({
-      key,
-      label,
-      badge,
-      tooltip: __("Due {0}", dayjs(deadline).format("LLLL")),
-    });
+    chips.push({ key, label, badge, tooltip: slaHint(deadline, workingLeft) });
   };
   add(
     "response",
     __("First response"),
-    responseSla(doc, doc.response_by),
+    responseSla(doc, doc.response_by, now),
     doc.response_by
   );
   add(
     "resolution",
     __("Resolution"),
-    resolutionSla(doc, doc.resolution_by, doc.status_category === "Paused"),
+    resolutionSla(
+      doc,
+      doc.resolution_by,
+      doc.status_category === "Paused",
+      now
+    ),
     doc.resolution_by
   );
   return chips;

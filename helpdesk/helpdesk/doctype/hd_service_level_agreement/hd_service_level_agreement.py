@@ -477,12 +477,15 @@ class HDServiceLevelAgreement(Document):
         return total_seconds
 
     def get_holidays(self):
+        # read once per document: the SLA time-left endpoint counts many tickets with one SLA
+        cached = getattr(self, "_holiday_dates", None)
+        if cached is not None:
+            return cached
         res = []
-        if not self.holiday_list:
-            return res
-        holiday_list = frappe.get_doc("HD Service Holiday List", self.holiday_list)
-        for row in holiday_list.holidays:
-            res.append(row.holiday_date)
+        if self.holiday_list:
+            holiday_list = frappe.get_doc("HD Service Holiday List", self.holiday_list)
+            res = [row.holiday_date for row in holiday_list.holidays]
+        self._holiday_dates = res
         return res
 
     def get_priorities(self):
