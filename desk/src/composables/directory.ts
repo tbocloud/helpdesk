@@ -4,13 +4,22 @@ import { createResource } from "frappe-ui";
 import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
+interface SortOption {
+  value: string;
+  label: string;
+}
+
 /** The sorts helpdesk.api.directory accepts. */
-export const DIRECTORY_SORTS = [
+export const DIRECTORY_SORTS: readonly SortOption[] = [
   { value: "name", label: __("Name") },
   { value: "newest", label: __("Newest first") },
-] as const;
-type Sort = (typeof DIRECTORY_SORTS)[number]["value"];
-const DEFAULT_SORT: Sort = "name";
+];
+/** Customers can also be sorted by health, at risk first. */
+export const CUSTOMER_SORTS: readonly SortOption[] = [
+  ...DIRECTORY_SORTS,
+  { value: "health", label: __("Health, worst first") },
+];
+const DEFAULT_SORT = "name";
 
 /** "1 open ticket" / "3 open tickets", for the two-line rows on small screens. */
 export function openTicketsLabel(count: number) {
@@ -23,7 +32,8 @@ interface DirectoryRequest {
   /** bumps with every request; only the latest one's answer is used */
   id: number;
   search: string;
-  sort: Sort;
+  sort: string;
+  filter: string;
   start: number;
 }
 
@@ -33,11 +43,24 @@ interface DirectoryPage<T> {
   total: number;
 }
 
+interface DirectoryOptions {
+  /** the sorts this list offers; DIRECTORY_SORTS by default */
+  sorts?: readonly SortOption[];
+  /** one more filter, kept in the URL and sent to the API under this name */
+  filterKey?: string;
+}
+
 /**
- * One of the directory lists (helpdesk.api.directory): search and sort kept in
- * the URL as `q` and `sort`, and "Show more" adding the next page.
+ * One of the directory lists (helpdesk.api.directory): search, sort and the
+ * optional filter kept in the URL as `q`, `sort` and `filterKey`, and "Show
+ * more" adding the next page.
  */
-export function useDirectory<T extends { name: string }>(url: string) {
+export function useDirectory<T extends { name: string }>(
+  url: string,
+  options: DirectoryOptions = {}
+) {
+  const sorts = options.sorts ?? DIRECTORY_SORTS;
+  const filterKey = options.filterKey;
   const route = useRoute();
   const router = useRouter();
 
@@ -45,10 +68,10 @@ export function useDirectory<T extends { name: string }>(url: string) {
     typeof route.query[key] === "string" ? (route.query[key] as string) : "";
 
   const search = ref(queryValue("q"));
-  const sort = ref<Sort>(
-    DIRECTORY_SORTS.find((s) => s.value === queryValue("sort"))?.value ??
-      DEFAULT_SORT
+  const sort = ref<string>(
+    sorts.find((s) => s.value === queryValue("sort"))?.value ?? DEFAULT_SORT
   );
+  const filter = ref(filterKey ? queryValue(filterKey) : "");
   const rows = ref<T[]>([]) as { value: T[] };
   const total = ref<number>();
   const hasMore = ref(false);
@@ -67,6 +90,7 @@ export function useDirectory<T extends { name: string }>(url: string) {
       id: ++generation,
       search: search.value.trim(),
       sort: sort.value,
+      filter: filter.value,
       start,
     };
     current = request;
@@ -76,11 +100,17 @@ export function useDirectory<T extends { name: string }>(url: string) {
       current === request &&
       request.id === generation &&
       request.search === search.value.trim() &&
-      request.sort === sort.value;
+      request.sort === sort.value &&
+      request.filter === filter.value;
 
     resource
       .fetch(
-        { search: request.search, sort: request.sort, start: request.start },
+        {
+          search: request.search,
+          sort: request.sort,
+          start: request.start,
+          ...(filterKey ? { [filterKey]: request.filter } : {}),
+        },
         {
           onSuccess(data: DirectoryPage<T>) {
             if (!isCurrent()) return;
@@ -109,13 +139,14 @@ export function useDirectory<T extends { name: string }>(url: string) {
   }
 
   watchDebounced(
-    [search, sort],
+    [search, sort, filter],
     () => {
       router.replace({
         query: {
           ...route.query,
           q: search.value.trim() || undefined,
           sort: sort.value === DEFAULT_SORT ? undefined : sort.value,
+          ...(filterKey ? { [filterKey]: filter.value || undefined } : {}),
         },
       });
       reload();
@@ -128,6 +159,7 @@ export function useDirectory<T extends { name: string }>(url: string) {
   return {
     search,
     sort,
+    filter,
     rows,
     total,
     hasMore,

@@ -1,4 +1,5 @@
 import type { Tone } from "@/components/tone";
+import type { HealthBrief } from "@/composables/customerHealth";
 import {
   ticketFilters,
   ticketsLink,
@@ -78,12 +79,20 @@ export interface Person {
   projects: string[];
 }
 
+export interface CustomerHealthSummary {
+  /** customers at risk or to watch that the user may read */
+  count: number;
+  at_risk: number;
+  items: ({ customer: string } & HealthBrief)[];
+}
+
 export interface Company {
   tickets: TicketSummary;
   work: Record<string, number>;
   attention_groups: AttentionGroup[];
   project_count: number;
   ending_soon: EndingProject[];
+  customer_health: CustomerHealthSummary;
   people: Person[];
   people_busy: number;
   people_free: number | null;

@@ -30,6 +30,14 @@ from helpdesk.api.work import (
     get_overview,
     get_project_portfolio,
 )
+from helpdesk.customer_health import (
+    AT_RISK,
+    WATCH,
+    all_health,
+    brief,
+    readable,
+    sort_key,
+)
 from helpdesk.helpdesk.doctype.hd_ticket.hd_ticket import LOW_RATING_STARS
 from helpdesk.tasky.permissions import (
     get_led_projects,
@@ -51,6 +59,7 @@ WAITING_ON_CUSTOMER_DAYS = 3
 FILES_DAYS = 7
 ENDING_DAYS = 14
 ENDING_LIMIT = 6
+HEALTH_LIMIT = 5
 APPROVAL_LIMIT = 50
 FILE_LIMIT = 50
 PROJECT_FILE = "HD Project File"
@@ -205,6 +214,7 @@ def _company() -> dict:
         "projects": [_project(card) for card in projects[:LIST_LIMIT]],
         "project_count": len(projects),
         "ending_soon": _ending_soon(portfolio["projects"]),
+        "customer_health": _customer_health(),
         "people": [_person(p) for p in portfolio["people"] if not p["is_free"]][
             :PEOPLE_LIMIT
         ],
@@ -346,6 +356,18 @@ def _ending_soon(cards: list[dict]) -> list[dict]:
         }
         for card in ending[:ENDING_LIMIT]
     ]
+
+
+def _customer_health() -> dict:
+    """The customers at risk or to watch that the user may read, worst first, at most HEALTH_LIMIT."""
+    healths = all_health()
+    flagged = [c for c, h in healths.items() if h["status"] in (AT_RISK, WATCH)]
+    names = sorted(readable(flagged), key=lambda c: (sort_key(healths[c]), c))
+    return {
+        "count": len(names),
+        "at_risk": sum(1 for c in names if healths[c]["status"] == AT_RISK),
+        "items": [{"customer": c, **brief(healths[c])} for c in names[:HEALTH_LIMIT]],
+    }
 
 
 def _rating() -> dict:

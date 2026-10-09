@@ -31,15 +31,15 @@
           <p class="max-w-xl text-p-sm text-ink-gray-6">
             {{
               __(
-                "The companies and people you support. Open one for its tickets, contacts, projects and ERP connection."
+                "The companies and people you support, and how each one is doing. Open one for its tickets, contacts, projects and health."
               )
             }}
           </p>
-          <div class="flex gap-2">
+          <div class="flex flex-wrap gap-2">
             <TextInput
               v-model="search"
               type="search"
-              class="min-w-0 flex-1 sm:w-64 sm:flex-none"
+              class="min-w-0 basis-full sm:w-64 sm:basis-auto"
               :placeholder="__('Search name or domain')"
               :aria-label="__('Search customers')"
             >
@@ -51,10 +51,17 @@
               </template>
             </TextInput>
             <FormControl
+              v-model="health"
+              type="select"
+              class="min-w-0 flex-1 sm:w-40 sm:flex-none"
+              :options="HEALTH_FILTERS"
+              :aria-label="__('Filter by health')"
+            />
+            <FormControl
               v-model="sort"
               type="select"
-              class="w-36 shrink-0"
-              :options="DIRECTORY_SORTS"
+              class="min-w-0 flex-1 sm:w-44 sm:flex-none"
+              :options="CUSTOMER_SORTS"
               :aria-label="__('Sort customers')"
             />
           </div>
@@ -119,6 +126,26 @@
                 </div>
               </div>
             </div>
+            <span class="flex min-w-0 flex-col items-end gap-1 md:items-start">
+              <TaskyBadge
+                v-if="row.health"
+                v-bind="healthBadge((row.health as HealthBrief).status)"
+              />
+              <span v-else class="text-sm text-ink-gray-4">-</span>
+              <span
+                v-if="(row.health as HealthBrief | null)?.reasons.length"
+                class="hidden w-full truncate text-xs text-ink-gray-5 md:block"
+                :title="(row.health as HealthBrief).reasons.join(', ')"
+              >
+                {{ (row.health as HealthBrief).reasons.join(", ") }}
+              </span>
+              <!-- phones: the connection only when it's failing -->
+              <TaskyBadge
+                v-if="failing(row.connection as Connection | null)"
+                class="md:hidden"
+                v-bind="connectionBadge(row.connection as Connection)"
+              />
+            </span>
             <span
               class="hidden text-right font-mono text-sm tabular-nums md:block"
               :class="row.open_tickets ? 'text-ink-gray-8' : 'text-ink-gray-4'"
@@ -133,12 +160,12 @@
             >
               {{ row.active_projects }}
             </span>
-            <span class="flex justify-end md:justify-start">
+            <span class="hidden md:flex">
               <TaskyBadge
                 v-if="row.connection"
                 v-bind="connectionBadge(row.connection as Connection)"
               />
-              <span v-else class="hidden text-sm text-ink-gray-4 md:inline">
+              <span v-else class="text-sm text-ink-gray-4">
                 {{ __("None") }}
               </span>
             </span>
@@ -152,6 +179,18 @@
               :message="__('Check the spelling, or search by their domain.')"
             >
               <Button :label="__('Clear search')" @click="search = ''" />
+            </TaskyState>
+            <TaskyState
+              v-else-if="health"
+              :icon="LucideSearchX"
+              :title="__('No customers with this health')"
+              :message="
+                __(
+                  'Health is worked out every few minutes from tickets, project work, support hours, sign-offs and the ERP connection.'
+                )
+              "
+            >
+              <Button :label="__('Show all customers')" @click="health = ''" />
             </TaskyState>
             <TaskyState
               v-else
@@ -191,7 +230,12 @@ import TaskyBadge from "@/components/TaskyBadge.vue";
 import TaskyState from "@/components/TaskyState.vue";
 import { connectionBadge, type Connection } from "@/composables/customer";
 import {
-  DIRECTORY_SORTS,
+  HEALTH_FILTERS,
+  healthBadge,
+  type HealthBrief,
+} from "@/composables/customerHealth";
+import {
+  CUSTOMER_SORTS,
   openTicketsLabel,
   useDirectory,
 } from "@/composables/directory";
@@ -212,20 +256,23 @@ interface CustomerRow {
   open_tickets: number;
   active_projects: number;
   connection: Connection | null;
+  health: HealthBrief | null;
 }
 
 const COLUMNS: DirectoryColumn[] = [
   { key: "customer", label: __("Customer") },
+  { key: "health", label: __("Health") },
   { key: "open_tickets", label: __("Open tickets"), align: "right" },
   { key: "active_projects", label: __("Active projects"), align: "right" },
   { key: "connection", label: __("ERP connection") },
 ];
 const GRID =
-  "grid-cols-[minmax(0,1fr)_auto] md:grid-cols-[minmax(0,1fr)_7rem_7rem_9rem]";
+  "grid-cols-[minmax(0,1fr)_auto] md:grid-cols-[minmax(0,1fr)_11rem_6rem_6rem_8rem]";
 
 const {
   search,
   sort,
+  filter: health,
   rows,
   total,
   hasMore,
@@ -234,8 +281,17 @@ const {
   searching,
   reload,
   more,
-} = useDirectory<CustomerRow>("helpdesk.api.directory.get_customer_directory");
+} = useDirectory<CustomerRow>("helpdesk.api.directory.get_customer_directory", {
+  sorts: CUSTOMER_SORTS,
+  filterKey: "health",
+});
 const showNewCustomer = ref(false);
+
+function failing(connection: Connection | null) {
+  return (
+    connection?.status === "Error" || connection?.status === "Disconnected"
+  );
+}
 
 function projectsLabel(count: number) {
   return count === 1

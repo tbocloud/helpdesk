@@ -176,6 +176,25 @@ doc_events = {
     "Communication": {
         "after_insert": "helpdesk.chatwoot_bridge.on_communication_insert",
     },
+    # customer health (helpdesk/customer_health.py) is cached for 10 minutes; a
+    # manager's change to these shows at once, tickets and tasks within the 10
+    "HD Customer": {
+        "after_insert": "helpdesk.customer_health.clear_health_cache",
+        "after_rename": "helpdesk.customer_health.clear_health_cache",
+        "on_trash": "helpdesk.customer_health.clear_health_cache",
+    },
+    "HD Support Contract": {
+        "on_update": "helpdesk.customer_health.clear_health_cache",
+        "on_trash": "helpdesk.customer_health.clear_health_cache",
+    },
+    "HD Project Signoff": {
+        "on_update": "helpdesk.customer_health.clear_health_cache",
+        "on_trash": "helpdesk.customer_health.clear_health_cache",
+    },
+    "HDS Support Connection": {
+        "on_update": "helpdesk.customer_health.clear_health_cache",
+        "on_trash": "helpdesk.customer_health.clear_health_cache",
+    },
 }
 
 # For List View

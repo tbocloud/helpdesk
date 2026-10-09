@@ -19,6 +19,7 @@ filters by project, customer, assignee and department) lives on the **Overview**
 | Your day | Everyone | `day` |
 | Pulse strip | People who can see the Overview (`can_see_overview`: admins, project managers, anyone leading a project) | `company` |
 | Needs attention | Same | `company.attention_groups` |
+| Customers at risk | Same, only when a customer they may read is at risk or on watch | `company.customer_health` |
 | Open tickets by customer, Ending in the next 14 days, Team load | Same | `company.tickets.by_customer`, `company.ending_soon`, `company.people` / `free_people` |
 | Systems | Admins (System Manager, Agent Manager) | `systems` |
 
@@ -97,6 +98,10 @@ through `frappe.desk.form.assign_to.add`, the same endpoint as the ticket page.
 
 ## Side column
 
+- **Customers at risk** (`company.customer_health`): first, and only when a customer is at
+  risk or on watch: "N at risk, M to watch", the 5 worst with their health badge and reasons
+  (each opens the customer's Health tab), and a link to the Customers list filtered to at risk
+  or watch, worst first. See [customer-health.md](customer-health.md).
 - **Open tickets by customer**: the 6 customers with the most open tickets.
 - **Ending in the next 14 days** (`company.ending_soon`): open projects from
   `get_project_portfolio("Open")` whose expected end date is within 14 days or already

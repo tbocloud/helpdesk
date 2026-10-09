@@ -1,4 +1,48 @@
 <template>
+  <!-- only when a customer needs attention, so a calm week adds nothing -->
+  <SectionCard
+    v-if="company.customer_health.count"
+    :title="__('Customers at risk')"
+    :count="company.customer_health.count"
+    :description="healthDescription"
+    :to="{
+      name: 'CustomerList',
+      query: { health: 'attention', sort: 'health' },
+    }"
+    :link-label="
+      company.customer_health.count > company.customer_health.items.length
+        ? __('See all {0}', String(company.customer_health.count))
+        : __('Customers')
+    "
+  >
+    <ul role="list">
+      <li
+        v-for="row in company.customer_health.items"
+        :key="row.customer"
+        class="border-b border-outline-gray-1 last:border-b-0"
+      >
+        <RouterLink
+          :to="{
+            name: 'Customer',
+            params: { id: row.customer },
+            hash: '#health',
+          }"
+          class="flex flex-col gap-1 px-4 py-2.5 hover:bg-surface-gray-1 focus-visible:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-outline-gray-4"
+        >
+          <span class="flex items-start justify-between gap-2">
+            <span class="min-w-0 break-words text-sm text-ink-gray-9">
+              {{ row.customer }}
+            </span>
+            <TaskyBadge v-bind="healthBadge(row.status)" />
+          </span>
+          <span class="break-words text-p-xs text-ink-gray-5">
+            {{ row.reasons.join(", ") }}
+          </span>
+        </RouterLink>
+      </li>
+    </ul>
+  </SectionCard>
+
   <SectionCard
     :title="__('Open tickets by customer')"
     :to="ticketLinks.open()"
@@ -150,8 +194,16 @@ import {
   type EndingProject,
 } from "../homeMeta";
 import SectionCard from "@/components/SectionCard.vue";
+import TaskyBadge from "@/components/TaskyBadge.vue";
+import { healthBadge } from "@/composables/customerHealth";
 
 const props = defineProps<{ company: Company }>();
+
+const healthDescription = computed(() => {
+  const { count, at_risk } = props.company.customer_health;
+  const watch = count - at_risk;
+  return __("{0} at risk, {1} to watch", String(at_risk), String(watch));
+});
 
 function late(project: EndingProject) {
   return project.days_left < 0;

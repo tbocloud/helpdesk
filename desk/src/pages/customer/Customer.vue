@@ -134,6 +134,14 @@
                 v-else-if="tab.hash === 'support-hours'"
                 :customer="props.id"
               />
+              <CustomerHealthTab
+                v-else-if="tab.hash === 'health'"
+                :customer="props.id"
+                :health="health.data ?? null"
+                :loading="health.loading"
+                :error="health.error"
+                @retry="health.reload()"
+              />
             </div>
           </template>
         </Tabs>
@@ -162,6 +170,7 @@
 
 <script setup lang="ts">
 import CustomerContactTab from "@/components/customer/CustomerContactTab.vue";
+import CustomerHealthTab from "@/components/customer/CustomerHealthTab.vue";
 import CustomerProjectsTab from "@/components/customer/CustomerProjectsTab.vue";
 import CustomerSupportHoursTab from "@/components/customer/CustomerSupportHoursTab.vue";
 import EditCustomerDialog from "@/components/customer/EditCustomerDialog.vue";
@@ -174,6 +183,7 @@ import PageInfo from "@/components/PageInfo.vue";
 import TaskyBadge from "@/components/TaskyBadge.vue";
 import TaskyState from "@/components/TaskyState.vue";
 import { connectionBadge, useCustomer } from "@/composables/customer";
+import { healthBadge, type CustomerHealth } from "@/composables/customerHealth";
 import { __ } from "@/translation";
 import { CustomerResourceSymbol } from "@/types";
 import { errorText, hasPermission } from "@/utils";
@@ -188,12 +198,13 @@ import {
   usePageMeta,
 } from "frappe-ui";
 import { computed, h, markRaw, onMounted, provide, ref } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { RouterLink, useRoute, useRouter } from "vue-router";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideCircleX from "~icons/lucide/circle-x";
 import LucideEllipsis from "~icons/lucide/ellipsis";
 import LucideFolderKanban from "~icons/lucide/folder-kanban";
 import LucideGlobe from "~icons/lucide/globe";
+import LucideHeartPulse from "~icons/lucide/heart-pulse";
 import LucideHourglass from "~icons/lucide/hourglass";
 import LucideMail from "~icons/lucide/mail";
 import LucideMapPin from "~icons/lucide/map-pin";
@@ -254,6 +265,14 @@ const connections = createListResource({
 });
 const connection = computed(() => connections.data?.[0] ?? null);
 
+// the header badge and the Health tab (docs/customer-health.md)
+const health = createResource({
+  url: "helpdesk.api.customer_health.get_customer_health",
+  method: "GET",
+  makeParams: () => ({ customer: props.id }),
+  auto: true,
+});
+
 const tabs = computed(() => [
   {
     label: __("Tickets"),
@@ -284,6 +303,12 @@ const tabs = computed(() => [
     hash: "support-hours",
     count: undefined,
     icon: markRaw(LucideHourglass),
+  },
+  {
+    label: __("Health"),
+    hash: "health",
+    count: undefined,
+    icon: markRaw(LucideHeartPulse),
   },
 ]);
 
@@ -376,7 +401,30 @@ const connectionInfo = computed(() => {
   );
 });
 
+// the status links to the Health tab, which says why
+const healthInfo = computed(() => {
+  const data = health.data as CustomerHealth | null | undefined;
+  if (!data) return null;
+  const badge = healthBadge(data.status);
+  return markRaw(
+    h(
+      RouterLink,
+      {
+        to: { hash: "#health" },
+        class:
+          "rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4",
+        "aria-label": __("Health: {0}. See why", badge.label),
+      },
+      () => h(TaskyBadge, badge)
+    )
+  );
+});
+
 const customerInfo = computed(() => [
+  {
+    component: healthInfo.value,
+    condition: !!healthInfo.value,
+  },
   {
     icon: markRaw(LucideGlobe),
     value: customer.doc.domain,
