@@ -1000,6 +1000,40 @@ def make_planned_task(
     return task
 
 
+def make_done_task(
+    project: str, subject: str, assignee: str, completed_on, due=None, **kwargs
+) -> str:
+    """Creates a Task in `project` assigned to `assignee`, due on `due`, and marks it
+    Completed on `completed_on`; returns its name. For team dashboard tests."""
+    task = make_task(project, subject, due, **kwargs).name
+    make_assignment("Task", task, assignee)
+    frappe.db.set_value(
+        "Task", task, {"status": "Completed", "completed_on": completed_on}
+    )
+    return task
+
+
+def log_hours(user: str, project: str, hours: float, day) -> str:
+    """Creates a draft Timesheet of `hours` on `project` on `day`, logged by `user`
+    (its owner); returns its name."""
+    sheet = make_timesheet(project, hours, f"{day} 10:00:00").name
+    frappe.db.set_value("Timesheet", sheet, "owner", user, update_modified=False)
+    return sheet
+
+
+def call_team_dashboard(user: str, today, method: str = "get_team_dashboard", **kwargs):
+    """Calls a helpdesk.api.team_dashboard endpoint as `user` with today fixed, so
+    only the test's records fall in the period, and nothing cached carries over."""
+    from helpdesk.team_dashboard import clear_cache
+
+    clear_cache()
+    with patch("helpdesk.api.team_dashboard.nowdate", return_value=str(today)):
+        return run_as_user(
+            user,
+            lambda: frappe.call(f"helpdesk.api.team_dashboard.{method}", **kwargs),
+        )
+
+
 def make_employee(user: str, employee_name: str | None = None):
     """Creates an active Employee linked to `user` (the hub doesn't need one per agent)."""
     return frappe.get_doc(

@@ -1,4 +1,4 @@
-# Workspace pages: Overview, Team, Summaries, Projects, My Work, Timesheets
+# Workspace pages: Overview, Scoreboard, Team, Summaries, Projects, My Work, Timesheets
 
 Pages for the people who run projects (what's late, who is doing what, what each customer was
 told) and for everyone doing the work (their projects, what to do next, the hours logged). They follow [ui-guidelines.md](ui-guidelines.md): neutral tiles, colour only
@@ -47,6 +47,15 @@ assignee, department)`. Project managers and project leads only.
   from the bucket's items.
 - The bucket and filters live in the URL (`bucket`, `project`, `customer`, `assignee`,
   `department`).
+
+## Scoreboard (`/team-dashboard`)
+
+`desk/src/pages/work/TeamDashboard.vue`; API `helpdesk.api.team_dashboard.get_team_dashboard`.
+Who finished what in a period (today to this year), on-time rates, hours, overdue work, and the
+champion per department and for the whole team, with an AI analysis, open to every agent. Its
+comparisons ("↑ 3 vs last week") are computed by the server from the same records for the
+previous period up to the same point, not invented. Everything else is in
+[team-dashboard.md](team-dashboard.md).
 
 ## Team (`/team`)
 
