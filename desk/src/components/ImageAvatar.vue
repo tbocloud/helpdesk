@@ -12,7 +12,7 @@
           />
           <button
             type="button"
-            class="absolute inset-0 flex cursor-pointer items-center justify-center bg-black/40 text-white opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100"
+            class="absolute inset-0 flex cursor-pointer items-center justify-center bg-black/40 text-white opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
             :class="roundedClass"
             :aria-label="__('Replace image')"
             @click.prevent="openFileSelector()"
