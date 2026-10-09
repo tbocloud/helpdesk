@@ -11,6 +11,7 @@ Event, updates the ticket's Copilot fields and tells open ticket pages.
 
 import hashlib
 import json
+import re
 
 import frappe
 from frappe import _
@@ -67,10 +68,38 @@ def active_run(ticket: str):
     return frappe.get_doc("HDS Copilot Run", name) if name else None
 
 
-def start_run(ticket: str, kind: str = "investigate", actor: str = SYSTEM):
-    """Queues a run for a ticket; when one is already active, that one is returned instead."""
+COMMIT_RE = re.compile(r"^[0-9a-f]{7,40}$")
+APP_RE = re.compile(r"^[A-Za-z0-9_.-]{1,140}$")
+
+
+def clean_base(base_app: str | None, base_commit: str | None) -> tuple[str | None, str | None]:
+    """The app and commit a run should read instead of the deployed code, checked; (None, None) if not given."""
+    base_app, base_commit = (base_app or "").strip() or None, (base_commit or "").strip().lower() or None
+    if base_commit and not COMMIT_RE.match(base_commit):
+        frappe.throw(_("The base commit must be 7 to 40 hexadecimal characters."))
+    if base_app and not APP_RE.match(base_app):
+        frappe.throw(_("The base app must be an app name such as service_pro."))
+    if base_app and not base_commit:
+        frappe.throw(_("A base app needs a base commit."))
+    return base_app, base_commit
+
+
+def start_run(
+    ticket: str,
+    kind: str = "investigate",
+    actor: str = SYSTEM,
+    base_commit: str | None = None,
+    base_app: str | None = None,
+):
+    """Queues a run for a ticket; when one is already active, that one is returned instead.
+
+    `base_app` and `base_commit` make the worker read that app at that commit
+    instead of the deployed code (evaluation runs). A run started in shadow
+    mode stays a shadow run, whatever the setting says later.
+    """
     from helpdesk.content_sync import get_client_connection
 
+    base_app, base_commit = clean_base(base_app, base_commit)
     existing = active_run(ticket)
     if existing:
         return existing
@@ -87,6 +116,9 @@ def start_run(ticket: str, kind: str = "investigate", actor: str = SYSTEM):
             "registry": registry.name if registry else None,
             "kind": kind,
             "state": "Queued",
+            "shadow": int(copilot_settings.is_shadow()),
+            "base_app": base_app,
+            "base_commit": base_commit,
             "queued_at": now_datetime(),
         }
     ).insert(ignore_permissions=True)
@@ -332,6 +364,10 @@ def run_context(run) -> dict:
     return {
         "run": run.name,
         "kind": run.kind,
+        "shadow": bool(run.shadow),
+        # read this app at this commit instead of the deployed code (evaluation runs)
+        "base_app": run.base_app,
+        "base_commit": run.base_commit,
         "ticket": {
             "name": ticket.name,
             "subject": ticket.subject,

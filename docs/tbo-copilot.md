@@ -9,13 +9,14 @@ Code: `helpdesk/copilot/` (one module per concern), `helpdesk/api/copilot*.py` (
 | Field | Meaning |
 |---|---|
 | Enabled | A Copilot run starts for every new ticket of a customer with **Copilot enabled** (HD Customer) |
+| Shadow mode | On by default. Copilot investigates and notes its diagnosis for the team only: the customer sees no stages and no portal question, no hand-over Task is created, and agents rate each diagnosis (see **Shadow mode** below). Switch it off only when the ratings show Copilot is right often enough |
 | Hand-over project | Tasks for hand-overs go here when the customer has no project of their own |
 | Lease minutes | A worker keeps a run alive by heartbeat; after this long without one the run is given back to the queue (default 5) |
 | Max lease losses | After this many lost leases the run fails and a person is told (default 3) |
 | Min confidence | An investigation below this confidence (0 to 1) is treated as unclear (default 0.6) |
 | Messages to the customer | One row per stage (Received, Working on it, Fix scheduled, Resolved, With our team, Waiting for you); an empty or missing row uses the built-in text in `helpdesk/copilot/settings.py`. Placeholders: `{date}`, `{resolution}` |
 
-`helpdesk/copilot/settings.py`: `get_settings()`, `is_enabled()`, `template_for(stage)`.
+`helpdesk/copilot/settings.py`: `get_settings()`, `is_enabled()`, `is_shadow()`, `template_for(stage)`.
 
 On HD Customer: **Copilot enabled** opts the customer in; **Assigned developer** receives the task when Copilot hands a ticket over to a person.
 
@@ -47,6 +48,8 @@ A run is Copilot's work on one ticket. It starts when a ticket of a customer wit
 
 Later phases add Awaiting Approval, Approved, Merging, Merged, Deploying, Verifying, Resolved and Rejected.
 
+A run started while **Shadow mode** is on is a shadow run (`shadow`) for its whole life, whatever the setting says later. `base_app` and `base_commit` (set with `start_run(..., base_commit=, base_app=)`) make the worker read that app at that commit instead of the deployed code; the evaluation uses them to put Copilot in front of the code as it was before a known fix.
+
 **Leases.** A claim gives the worker a token for **Lease minutes**; `heartbeat` extends it, and every later call must carry it. The cron `*/5` (`expire_stale_leases`) sends a run whose lease ran out back to the queue, or fails it after **Max lease losses**. A cancelled run keeps its token so the worker's next heartbeat is answered with `cancel`.
 
 **Router** (`helpdesk/copilot/router.py`). `submit_result` with `kind: investigation` is validated (`root_cause_category` among the eight, `confidence` 0–1, bounded strings and lists) and routed by the table above; a confidence below **Min confidence** is treated as `unclear`, with the reported category kept in the run's investigation JSON.
@@ -60,9 +63,9 @@ POST only, for users with the role **Copilot Worker** (created on migrate, no de
 | `claim_job(worker_id, free_slots=1, capabilities="")` | the oldest queued run: `{run, lease_token, lease_expires, context}`, or `{}` |
 | `heartbeat(run, lease_token, stage="")` | keeps the lease; `{ok, action: continue or cancel}` |
 | `post_events(run, lease_token, events)` | stores `[{seq, type, payload}]`; a repeated `seq` is ignored; payloads over 16 KB are cut and marked |
-| `submit_result(run, lease_token, result)` | `{kind: investigation, root_cause_category, confidence, summary, evidence[], proposal{}, customer_message, questions[], cost{tokens, usd}}` or `{kind: failure, reason}` |
+| `submit_result(run, lease_token, result)` | `{kind: investigation, root_cause_category, confidence, summary, evidence[], proposal{}, customer_message, questions[], cost{tokens_in, tokens_out, usd, model}}` or `{kind: failure, reason}`; the run keeps the tokens and the model |
 
-The context holds the ticket, its triage fields, the customer, the registered site and its apps, the last 20 messages, the file list and earlier runs; never credentials. Events are kept 90 days.
+The context holds the ticket, its triage fields, the customer, the registered site and its apps, the last 20 messages, the file list and earlier runs, whether the run is a shadow run, and the base app and commit when set; never credentials. Events are kept 90 days.
 
 **Trying it without a worker:** `bench --site <site> execute helpdesk.test_utils.run_fake_worker --kwargs "{'category': 'bug'}"` claims the oldest queued run and reports that root cause with demo text (`abandon: True` claims and stops, to watch the lease expire; `ticket: '0042'` starts a run for that ticket first).
 
@@ -81,7 +84,15 @@ Every diagnosis is an internal note on the ticket (category, confidence, summary
 
 **Confirm and reopen.** On the customer portal the ticket page shows "Is this solved?" while the stage is Resolved (`helpdesk.api.copilot.get_resolution` / `decide_resolution`); on a connected site the customer presses the same buttons on their own ticket and the sync relays the answer. Confirmed closes the ticket (through the controller) and the run. Reopened needs a note, reopens the ticket, escalates the run, creates the hand-over Task and tells the developer (or the managers); the customer sees **With our team**.
 
-**The agent's Copilot button** (HD Form Script "Helpdesk Copilot Actions", installed with the AI one by `helpdesk/setup/form_scripts.py`): start a run, see the state, root cause, diagnosis, evidence and latest events, cancel it, start again. API: `helpdesk.api.copilot.start_run`, `get_run`, `cancel_run` (agents).
+**Shadow mode.** A shadow run does everything above for the team and nothing for the customer:
+- stages are recorded as events only (`shadow: true`, `pushed: false`), with no note on the ticket and no `custom_copilot_stage`, so the customer's site, the portal question and follow-up runs stay untouched;
+- the diagnosis note is marked "(shadow)" and asks the agent to rate it;
+- explanations and questions still land in the suggested-reply card, where the agent decides;
+- a core issue is not handed over (an event `hand_over_skipped` records it).
+
+**Rating a diagnosis.** On a run with a diagnosis, the agent presses **Rate diagnosis** in the Copilot dialog and chooses **Right**, **Partly** or **Wrong**; Wrong needs the root cause the agent found, and a note is optional (`helpdesk.api.copilot.review_diagnosis(ticket, verdict, root_cause, note)`, agents with read access to the ticket). The run keeps the latest rating (`review_verdict`, `reviewed_root_cause`, `review_note`, `reviewed_by`, `reviewed_at`); every rating is also an event. The ratings measure Copilot before shadow mode is switched off.
+
+**The agent's Copilot button** (HD Form Script "Helpdesk Copilot Actions", installed with the AI one by `helpdesk/setup/form_scripts.py`): start a run, see the state, root cause, diagnosis, evidence, model and tokens and latest events, rate the diagnosis, cancel it, start again. API: `helpdesk.api.copilot.start_run`, `get_run`, `review_diagnosis`, `cancel_run` (agents).
 
 **Connections** record `client_version` and `client_capabilities` from registration and the daily health check (`helpdesk/client_api.py`: `call`, `hub_api`, `supports`).
 

@@ -37,6 +37,11 @@ def is_enabled() -> bool:
     return bool(get_settings().enabled)
 
 
+def is_shadow() -> bool:
+    """Shadow mode: Copilot's findings stay with the team; the customer hears nothing from Copilot."""
+    return bool(get_settings().shadow_mode)
+
+
 def template_for(stage: str) -> str:
     """The message text for a stage: the configured row, else the built-in text."""
     if stage not in STAGES:

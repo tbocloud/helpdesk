@@ -61,12 +61,23 @@ def send_stage(run, stage: str, context: dict | None = None) -> bool:
     Connected sites with hub_api get an update row (the raiser is notified
     there); every delivery is noted on the hub ticket and mirrored in
     `custom_copilot_stage`, whether or not the site could be reached.
+
+    A shadow run tells the customer nothing: the event alone records what
+    they would have seen.
     """
     text = render(stage, context)
     if _last_stage(run) == (stage, text):
         return False
     number = frappe.db.count("HDS Copilot Event", {"run": run.name, "event_type": "stage"}) + 1
     hub_ref = f"{run.name}:{stage}:{number}"
+    if run.get("shadow"):
+        runs.add_event(
+            run,
+            "stage",
+            {"stage": stage, "message": text, "hub_ref": hub_ref, "pushed": False, "shadow": True},
+            runs.SYSTEM,
+        )
+        return False
     pushed = _push_stage(run, hub_ref, stage, text)
     note = _("Copilot → customer: <b>{0}</b> — {1}").format(escape_html(_(stage)), escape_html(text))
     if not pushed:
@@ -144,9 +155,10 @@ def comment(ticket: str, html: str):
 
 def note_diagnosis(run, investigation: dict):
     """The diagnosis as an internal note: category, confidence, summary, evidence, proposal."""
+    shadow = bool(run.get("shadow"))
     parts = [
         "<b>{0}</b> ({1}, {2}%)".format(
-            _("Copilot diagnosis"),
+            _("Copilot diagnosis (shadow)") if shadow else _("Copilot diagnosis"),
             escape_html(run.root_cause_category or ""),
             int(round((investigation.get("confidence") or 0) * 100)),
         ),
@@ -167,6 +179,15 @@ def note_diagnosis(run, investigation: dict):
             "<div><b>{0}:</b> {1}</div>".format(
                 _("Proposal"),
                 escape_html(" ".join(str(v) for v in proposal.values() if v)),
+            )
+        )
+    if shadow:
+        parts.append(
+            "<div><i>{0}</i></div>".format(
+                _(
+                    "Shadow mode: the customer was told nothing. Rate this diagnosis in the "
+                    "Copilot dialog: Right, Partly or Wrong."
+                )
             )
         )
     comment(run.ticket, "".join(parts))
@@ -202,8 +223,12 @@ def hand_over(run, reason: str) -> str | None:
     """A Task for the customer's developer in the customer's project (else the hand-over project).
 
     Without a project, or a developer, the Agent Managers are told instead.
-    Returns the task name.
+    Returns the task name. A shadow run hands nothing over: the diagnosis note
+    is all the team gets.
     """
+    if run.get("shadow"):
+        runs.add_event(run, "hand_over_skipped", {"note": "shadow mode", "reason": reason[:500]}, runs.SYSTEM)
+        return None
     ticket = frappe.get_doc("HD Ticket", run.ticket)
     developer = (
         frappe.db.get_value("HD Customer", ticket.customer, "custom_assigned_developer")

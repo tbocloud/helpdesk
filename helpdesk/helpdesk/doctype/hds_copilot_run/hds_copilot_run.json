@@ -11,6 +11,9 @@
 		"registry",
 		"kind",
 		"state",
+		"shadow",
+		"base_app",
+		"base_commit",
 		"column_break_lease",
 		"worker_id",
 		"worker_user",
@@ -27,10 +30,20 @@
 		"task",
 		"failure_reason",
 		"cost_usd",
+		"tokens_in",
+		"tokens_out",
+		"model_used",
 		"details_section",
 		"investigation",
 		"evidence",
 		"proposal",
+		"review_section",
+		"review_verdict",
+		"reviewed_root_cause",
+		"review_note",
+		"column_break_review",
+		"reviewed_by",
+		"reviewed_at",
 		"timeline_section",
 		"queued_at",
 		"claimed_at",
@@ -85,6 +98,27 @@
 			"in_standard_filter": 1,
 			"label": "State",
 			"options": "Queued\nInvestigating\nExplaining\nAnswered\nPreparing Fix\nAwaiting Approval\nApproved\nMerging\nMerged\nDeploying\nVerifying\nResolved\nClosed\nRejected\nEscalated\nHanded Over\nFailed\nCancelled"
+		},
+		{
+			"default": "0",
+			"description": "Started in shadow mode: nothing reached the customer.",
+			"fieldname": "shadow",
+			"fieldtype": "Check",
+			"label": "Shadow",
+			"read_only": 1
+		},
+		{
+			"description": "Investigate this app at this commit instead of the deployed one (evaluation runs).",
+			"fieldname": "base_app",
+			"fieldtype": "Data",
+			"label": "Base App",
+			"read_only": 1
+		},
+		{
+			"fieldname": "base_commit",
+			"fieldtype": "Data",
+			"label": "Base Commit",
+			"read_only": 1
 		},
 		{
 			"fieldname": "column_break_lease",
@@ -186,6 +220,24 @@
 			"read_only": 1
 		},
 		{
+			"fieldname": "tokens_in",
+			"fieldtype": "Int",
+			"label": "Tokens In",
+			"read_only": 1
+		},
+		{
+			"fieldname": "tokens_out",
+			"fieldtype": "Int",
+			"label": "Tokens Out",
+			"read_only": 1
+		},
+		{
+			"fieldname": "model_used",
+			"fieldtype": "Data",
+			"label": "Model Used",
+			"read_only": 1
+		},
+		{
 			"collapsible": 1,
 			"fieldname": "details_section",
 			"fieldtype": "Section Break",
@@ -210,6 +262,49 @@
 			"fieldtype": "Code",
 			"label": "Proposal",
 			"options": "JSON",
+			"read_only": 1
+		},
+		{
+			"fieldname": "review_section",
+			"fieldtype": "Section Break",
+			"label": "Team Review"
+		},
+		{
+			"fieldname": "review_verdict",
+			"fieldtype": "Select",
+			"label": "Review Verdict",
+			"options": "\nRight\nPartly\nWrong",
+			"read_only": 1
+		},
+		{
+			"description": "The root cause the reviewer found, when the diagnosis was wrong or partly right.",
+			"fieldname": "reviewed_root_cause",
+			"fieldtype": "Select",
+			"label": "Reviewed Root Cause",
+			"options": "\nquestion\nnot_allowed_request\ncustomer_mistake\nwrong_setting\nbug\ndata_damaged_by_bug\ncore_issue\nunclear",
+			"read_only": 1
+		},
+		{
+			"fieldname": "review_note",
+			"fieldtype": "Small Text",
+			"label": "Review Note",
+			"read_only": 1
+		},
+		{
+			"fieldname": "column_break_review",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "reviewed_by",
+			"fieldtype": "Link",
+			"label": "Reviewed By",
+			"options": "User",
+			"read_only": 1
+		},
+		{
+			"fieldname": "reviewed_at",
+			"fieldtype": "Datetime",
+			"label": "Reviewed At",
 			"read_only": 1
 		},
 		{
@@ -247,7 +342,7 @@
 		}
 	],
 	"links": [],
-	"modified": "2026-10-09 16:00:00.000000",
+	"modified": "2026-10-09 13:06:11.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Copilot Run",

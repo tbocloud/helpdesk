@@ -70,7 +70,19 @@ def validate_investigation(result: dict) -> dict:
         "evidence": [_item(e) for e in evidence],
         "proposal": {str(k)[:40]: _text(v, LIMITS["text"]) for k, v in proposal.items()},
         "questions": [_text(q, LIMITS["text"]) for q in questions],
-        "cost": {"tokens": int(flt(cost.get("tokens"))), "usd": flt(cost.get("usd"))},
+        "cost": _cost(cost),
+    }
+
+
+def _cost(cost: dict) -> dict:
+    """Tokens and money as the worker measured them; `tokens` is the total when only in/out are given."""
+    tokens_in, tokens_out = max(int(flt(cost.get("tokens_in"))), 0), max(int(flt(cost.get("tokens_out"))), 0)
+    return {
+        "tokens": max(int(flt(cost.get("tokens"))), 0) or tokens_in + tokens_out,
+        "tokens_in": tokens_in,
+        "tokens_out": tokens_out,
+        "usd": max(flt(cost.get("usd")), 0),
+        "model": _text(cost.get("model"), 140),
     }
 
 
@@ -103,6 +115,9 @@ def route(run, result: dict):
         evidence=json.dumps(investigation["evidence"], indent=1),
         proposal=json.dumps(investigation["proposal"], indent=1),
         cost_usd=investigation["cost"]["usd"],
+        tokens_in=investigation["cost"]["tokens_in"],
+        tokens_out=investigation["cost"]["tokens_out"],
+        model_used=investigation["cost"]["model"] or None,
         investigated_at=now_datetime(),
     )
     runs.update_ticket(doc, root_cause=effective)

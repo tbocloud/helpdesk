@@ -2286,7 +2286,11 @@ def get_recurring_tasks_created(recurring_task: str) -> list[dict]:
 
 
 def make_copilot_settings(templates: dict[str, str] | None = None, **values):
-    """Saves HDS Copilot Settings with `values`; `templates` maps a stage to its message text."""
+    """Saves HDS Copilot Settings with `values`; `templates` maps a stage to its message text.
+
+    Shadow mode is off unless asked for, so a test sees what a live customer would.
+    """
+    values.setdefault("shadow_mode", 0)
     settings = frappe.get_single("HDS Copilot Settings")
     settings.update(values)
     for stage, message in (templates or {}).items():
@@ -2296,6 +2300,10 @@ def make_copilot_settings(templates: dict[str, str] | None = None, **values):
         else:
             settings.append("message_templates", {"stage": stage, "message": message})
     settings.save(ignore_permissions=True)
+    # the cached settings outlive the test's rollback and would steer the site afterwards
+    frappe.db.after_rollback.add(
+        lambda: frappe.clear_document_cache("HDS Copilot Settings", "HDS Copilot Settings")
+    )
     return settings
 
 

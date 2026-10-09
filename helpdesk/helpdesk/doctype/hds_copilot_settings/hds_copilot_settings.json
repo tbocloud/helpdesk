@@ -6,6 +6,7 @@
 	"field_order": [
 		"enabled",
 		"handover_project",
+		"shadow_mode",
 		"column_break_limits",
 		"lease_minutes",
 		"max_lease_losses",
@@ -31,6 +32,13 @@
 			"fieldtype": "Link",
 			"label": "Hand-over Project",
 			"options": "Project"
+		},
+		{
+			"default": "1",
+			"description": "Copilot investigates and notes its diagnosis for the team only: the customer sees no stages, no hand-over tasks are created, and agents rate each diagnosis. Switch off only after the ratings show Copilot is right often enough.",
+			"fieldname": "shadow_mode",
+			"fieldtype": "Check",
+			"label": "Shadow mode"
 		},
 		{
 			"fieldname": "column_break_limits",
@@ -95,7 +103,7 @@
 	],
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-10-09 14:00:00.000000",
+	"modified": "2026-10-09 13:06:11.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Copilot Settings",
