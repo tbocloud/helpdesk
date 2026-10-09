@@ -120,18 +120,12 @@ def _create_hd_ticket(connection_name: str, customer: str, ticket: dict) -> str:
             "customer": customer,
             "raised_by": ticket.get("raised_by"),
             "via_customer_portal": 1,
-        }
-    ).insert(ignore_permissions=True)
-
-    frappe.db.set_value(
-        "HD Ticket",
-        hd.name,
-        {
+            # on the document from the start, so the after_insert hooks (triage,
+            # Copilot's first stage to the customer) see where it came from
             "custom_qcs_connection": connection_name,
             "custom_client_ticket": ticket.get("name"),
-        },
-        update_modified=False,
-    )
+        }
+    ).insert(ignore_permissions=True)
 
     return hd.name
 
