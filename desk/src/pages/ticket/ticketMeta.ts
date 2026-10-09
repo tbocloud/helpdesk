@@ -87,18 +87,19 @@ export function deadlineLabel(
 
 /** "30 working min left", "1.5 working h left", "19 working h left". */
 export function workingTimeLeft(seconds: number): string {
-  const minutes = Math.max(Math.ceil(seconds / 60), 0);
-  if (minutes < 60) return __("{0} working min left", [minutes]);
+  // the unit comes from the seconds, and both units round down, so 3599 s is "59 working
+  // min left" and 3600 s "1 working h left"; a last part-minute still reads as 1 minute
+  if (seconds < 3600) {
+    const minutes = seconds > 0 ? Math.max(Math.floor(seconds / 60), 1) : 0;
+    return __("{0} working min left", [minutes]);
+  }
   const hours = seconds / 3600;
   const shown = hours < 10 ? Math.floor(hours * 10) / 10 : Math.floor(hours);
   return __("{0} working h left", [shown]);
 }
 
 /** The exact deadline and, while its clock runs, the working time left: for tooltips and screen readers. */
-export function slaHint(
-  deadline: string,
-  workingLeft?: number | null
-): string {
+export function slaHint(deadline: string, workingLeft?: number | null): string {
   const due = __("Due {0}", [dateFormat(deadline, dateTooltipFormat)]);
   return workingLeft == null ? due : `${due} · ${workingTimeLeft(workingLeft)}`;
 }
@@ -131,7 +132,8 @@ export function slaBadge(
   now: Dayjs = dayjsLocal()
 ): BadgeMeta | null {
   if (state === "none" || !deadline) return null;
-  if (state !== "due") return { label: SLA_LABELS[state], ...SLA_BADGES[state] };
+  if (state !== "due")
+    return { label: SLA_LABELS[state], ...SLA_BADGES[state] };
   return {
     label: deadlineLabel(deadline, now),
     icon: LucideClock,

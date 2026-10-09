@@ -1,5 +1,5 @@
 import { useIntervalFn } from "@vueuse/core";
-import { createResource, dayjsLocal } from "frappe-ui";
+import { call, dayjsLocal } from "frappe-ui";
 import {
   computed,
   shallowRef,
@@ -29,12 +29,9 @@ const REFRESH_MS = 60_000;
  */
 export function useSlaTimeLeft(tickets: MaybeRefOrGetter<SlaTicket[]>) {
   const now = shallowRef(dayjsLocal());
-  const resource = createResource({
-    url: "helpdesk.api.ticket.get_sla_time_left",
-    // no toast every minute: the badges still show each deadline, and only the amber
-    // warning waits for the next count that succeeds
-    onError() {},
-  });
+  const timeLeft = shallowRef<TimeLeft>({});
+  // only the latest request may set the counts: an older one finishing last is dropped
+  let generation = 0;
 
   const names = computed(() =>
     toValue(tickets)
@@ -49,16 +46,30 @@ export function useSlaTimeLeft(tickets: MaybeRefOrGetter<SlaTicket[]>) {
       .join(",")
   );
 
-  function refresh() {
+  async function refresh() {
     now.value = dayjsLocal();
-    if (names.value.length) resource.submit({ tickets: names.value });
+    const current = ++generation;
+    if (!names.value.length) {
+      timeLeft.value = {};
+      return;
+    }
+    try {
+      const result = await call("helpdesk.api.ticket.get_sla_time_left", {
+        tickets: names.value,
+      });
+      if (current === generation) timeLeft.value = result ?? {};
+    } catch {
+      // no toast every minute: the badges still show each deadline, and drop back to
+      // neutral rather than keep a stale count until a later refresh succeeds
+      if (current === generation) timeLeft.value = {};
+    }
   }
 
   watch(key, refresh, { immediate: true });
   useIntervalFn(refresh, REFRESH_MS);
 
   function workingLeft(name: string | number, clock: Clock): number | null {
-    return (resource.data as TimeLeft | null)?.[String(name)]?.[clock] ?? null;
+    return timeLeft.value[String(name)]?.[clock] ?? null;
   }
 
   return { now, workingLeft };

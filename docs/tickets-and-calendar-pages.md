@@ -61,7 +61,8 @@ phone rows and empty state are its own (see [customer-portal-and-kb.md](customer
   one request per page (again when the rows or their deadlines change), and refreshes every 60
   seconds together with the "now" the labels and Failed states use. The server counts each
   ticket on its own SLA's calendar (see [ticket-agent-page.md](ticket-agent-page.md#api)). Until
-  the count arrives, or if it fails (no toast; it retries on the next minute), the badges show
+  the count arrives, or if it fails (no toast; the old count is dropped and it retries on the
+  next minute; only the latest request may set the counts), the badges show
   the deadline in neutral. Deadlines are read in the site's time zone (`dayjsLocal`, as the task
   timers do since #76) and shown in the agent's time zone, which defaults to the site's.
 - **Summary strip and tones agree**: "SLA breached" and "First reply overdue" count tickets
