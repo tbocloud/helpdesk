@@ -212,6 +212,11 @@ class TestTeamDashboard(FrappeTestCase):
         data = call_team_dashboard(SANA, TODAY, period="week")
         self.assertNotIn("ERP", data["access"]["departments"])
         self.assertNotIn("ERP", [d["department"] for d in data["departments"]])
+        people = {p["user"]: p for p in data["people"]}
+        self.assertEqual(people.get(ANU, {}).get("tasks", 0), 0)
+        # the whole team's stored history and analysis include ERP
+        self.assertEqual(data["history"], [])
+        self.assertEqual(data["analysis"], {"status": "none"})
         self.assertRaises(
             frappe.PermissionError,
             call_team_dashboard,

@@ -7,8 +7,8 @@ workload and capacity) and **Performance** (content delivery by customer and emp
 already exist.
 
 - Page: `desk/src/pages/work/TeamDashboard.vue` (route `TeamDashboard`,
-  `/helpdesk/team-dashboard`), sidebar item right after Overview, open to every agent and to
-  the Content Team. Parts in `desk/src/pages/work/components/` (`ChampionCard`,
+  `/helpdesk/team-dashboard`), sidebar item right after Overview, open to every agent
+  (`agent_only`; Content Team members who aren't agents don't get it). Parts in `desk/src/pages/work/components/` (`ChampionCard`,
   `ScoreBreakdown`, `TeamDepartmentList`, `TeamPeopleList`, `TeamProjectList`,
   `TeamAnalysis`, `TeamTrendChart`); types and labels in `teamDashboardMeta.ts`.
 - Numbers and scoring: `helpdesk/team_dashboard.py`. Who sees what and the page's API:
@@ -94,7 +94,9 @@ team competes ("only then will there be competition").
   (`is_tasky_admin`); everyone else gets a permission error.
 - Departments hidden from someone's team (`hidden_departments` in
   `helpdesk/tasky/permissions.py`, e.g. ERP for DM Employees) stay hidden here too: not
-  listed, not counted in their totals, and refused when asked for. This keeps the
+  listed, not counted in their totals, and refused when asked for. The whole team's stored
+  champions history and analysis cover every department, so such a viewer gets them only per
+  department. This keeps the
   department walls from the content calendar work; the Scoreboard doesn't open them.
 
 Both rules live in `viewer_access` and `scope_department` in `helpdesk/api/team_dashboard.py`.

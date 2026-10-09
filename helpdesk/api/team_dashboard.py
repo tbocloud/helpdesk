@@ -45,6 +45,9 @@ def get_team_dashboard(period: str = "week", department: str | None = None) -> d
     members = department_members(department, access)
     for person in sorted(set().union(*members.values()) - {r["user"] for r in ranked}):
         ranked.extend(td.rank({person: td.blank()}, period))
+    # the whole team's stored champions and analysis cover every department, so
+    # someone with a department hidden from them sees only per-department ones
+    whole_team_hidden = not department and bool(access.hidden)
     return {
         "period": {
             "key": period,
@@ -60,14 +63,18 @@ def get_team_dashboard(period: str = "week", department: str | None = None) -> d
         "department": department,
         "summary": summary(data, prev, keep),
         "trend": td.trend(data, keep, start, end, period),
-        "history": history(department, today),
+        "history": [] if whole_team_hidden else history(department, today),
         "champion": champion_card(td.champion_of(ranked)),
         "people": people_rows(ranked, by_department, members),
         "departments": department_rows(
             data, prev, by_department, members, access, department, period
         ),
         "projects": project_rows(data, keep, department, access),
-        "analysis": current_analysis(period, start, department),
+        "analysis": (
+            {"status": "none"}
+            if whole_team_hidden
+            else current_analysis(period, start, department)
+        ),
     }
 
 
