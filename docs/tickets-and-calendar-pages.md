@@ -39,14 +39,34 @@ phone rows and empty state are its own (see [customer-portal-and-kb.md](customer
   Contact, Rating, Created. Saved views keep their own columns.
 - **Cells** (agents): Priority is a `TaskyBadge` with the signal icon (Urgent red, High amber,
   others neutral). First response and Resolution are `TaskyBadge`s: Failed (red, alert icon),
-  Fulfilled (neutral, check), Paused (neutral, pause), or "in 3h" with a clock, amber when due
-  within 4 hours (the `SLA_RISK_HOURS` used for "at risk" in `helpdesk/api/work.py`) and
-  neutral otherwise; hovering shows the exact deadline. A ticket without that deadline shows
-  nothing, even when it is resolved or paused (no SLA means nothing to fulfil or fail). The SLA
-  state logic (`responseSla`, `resolutionSla`) and the agent badges (`slaBadge`,
-  `priorityBadge`) live in `pages/ticket/ticketMeta.ts`, which the agent ticket page
-  ([ticket-agent-page.md](ticket-agent-page.md)) uses too. The portal reads the same deadlines
-  through `customerStatus.ts` instead ("Overdue", never "Failed").
+  Fulfilled (neutral, check), Paused (neutral, pause), or, while the clock runs, **when the
+  deadline falls** with a clock: "10:30 AM" today, "Tomorrow 10:30 AM", "Tue 2:30 PM" within six
+  days, "13 Oct, 2:30 PM" later (`deadlineLabel`). It turns amber with at most **one working
+  hour** left (`SLA_RISK_WORKING_SECONDS`) and is neutral otherwise. Hovering (and a screen
+  reader) gives the exact deadline and the working time left: "Due Fri, Oct 9, 2026 10:30 AM ·
+  30 working min left". A ticket without that deadline shows nothing, even when it is resolved
+  or paused (no SLA means nothing to fulfil or fail). The SLA state logic (`responseSla`,
+  `resolutionSla`), the deadline wording (`deadlineLabel`, `workingTimeLeft`, `slaHint`) and the
+  agent badges (`slaBadge`, `priorityBadge`) live in `pages/ticket/ticketMeta.ts`, which the
+  agent ticket page ([ticket-agent-page.md](ticket-agent-page.md)) uses too. The portal reads
+  the same deadlines through `customerStatus.ts` instead ("Overdue", never "Failed").
+- **Why a time, not "in 3h"**: `response_by` and `resolution_by` are computed in working time
+  (the SLA's working days and hours, its holiday list with the 2nd/4th Saturdays off, plus hold
+  time). A calendar countdown overstated what was left: "in 2h 14m" at 08:17 for a 10:30
+  deadline when the desk opens at 10:00 (30 working minutes), or "in 4 days 6h" for a 24
+  working-hour SLA over a weekend. The badge says when the deadline is, and the amber warning
+  and tooltip count working time.
+- **Working time left**: `composables/useSlaTimeLeft.ts` asks
+  `helpdesk.api.ticket.get_sla_time_left(tickets)` for the visible rows that have a deadline, in
+  one request per page (again when the rows or their deadlines change), and refreshes every 60
+  seconds together with the "now" the labels and Failed states use. The server counts each
+  ticket on its own SLA's calendar (see [ticket-agent-page.md](ticket-agent-page.md#api)). Until
+  the count arrives, or if it fails (no toast; it retries on the next minute), the badges show
+  the deadline in neutral. Deadlines are read in the site's time zone (`dayjsLocal`, as the task
+  timers do since #76) and shown in the agent's time zone, which defaults to the site's.
+- **Summary strip and tones agree**: "SLA breached" and "First reply overdue" count tickets
+  whose deadline has passed, which is exactly when a cell shows Failed; neither uses an "at
+  risk" window, so the working-time warning changes no count.
 - **Phones** (below 640px): `ListViewBuilder` renders a page's `#mobile-row` slot as a stacked
   list instead of the table. Tickets' row: subject (bold when unseen) with the resolution SLA
   badge, then `#id`, customer, status, priority and assignees. Row selection and bulk actions

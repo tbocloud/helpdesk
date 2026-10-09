@@ -24,9 +24,17 @@ into the app header).
   - status by category: Open neutral (dot), Paused amber (pause), Resolved green (check);
   - priority: Urgent red, High amber, others neutral, always with the signal icon;
   - SLA, one badge each for First response and Resolution, only when the ticket has that
-    deadline: "in 3h" with a clock (amber within `SLA_RISK_HOURS` = 4, the same window as
-    "at risk" in `helpdesk/api/work.py`), Failed (red, alert), Fulfilled, Paused. Hovering shows
-    the exact deadline.
+    deadline: while the clock runs, when the deadline falls ("First response: 10:30 AM",
+    "Resolution: Tomorrow 10:30 AM", "Tue 2:30 PM", "13 Oct, 2:30 PM") with a clock, amber with
+    at most one working hour left; Failed (red, alert), Fulfilled, Paused. Hovering, and the
+    badge's screen-reader text, give the exact deadline and the working time left ("19 working
+    h left"). Deadlines are set in working time, so a calendar countdown ("in 2h") overstated the
+    time across nights, weekends and holidays; see
+    [tickets-and-calendar-pages.md](tickets-and-calendar-pages.md) for the wording rule.
+  - The working time left comes from `useSlaTimeLeft` (one request for this ticket, refreshed
+    every 60 seconds and when a deadline changes). The page provides it (`SlaTimeLeftSymbol`, in
+    `TicketAgent.vue` and `MobileTicketAgent.vue`), so the header and the SLA panel share one
+    count.
 - **Actions**, right to left in importance: viewers, previous/next ticket (⇧< / ⇧>), the custom
   actions from HD Form Script, the **status** menu (S; neutral, with the status's colour dot),
   **Details** (below `lg` only, opens the side panel sheet), **Reply** (the one primary action,
@@ -67,8 +75,9 @@ sections inside the AI group.
 2. **Contact**: name, email, email/call buttons (with telephony), open the contact, and how many
    unresolved tickets the contact (or sender) has.
 3. **SLA** (`TicketSlaSection.vue`, when the ticket has a deadline): the policy, First response and
-   Resolution badges with "Due …" / "Responded …" / "Resolved …" times, and "Paused since" while
-   paused. The header has the countdowns; this has the exact times.
+   Resolution badges with "Due … · 30 working min left" / "Responded …" / "Resolved …" times, and
+   "Paused since" while paused. The header says when each deadline falls; this has the exact
+   times and the working time left.
 4. **Linked work** (`TicketLinkedWork.vue`): tasks raised from this ticket with their status, project,
    due date (red with an icon when overdue) and pull requests (`PullRequestChip`, open first, at most
    three). A task opens in `TaskDetailDialog` when the viewer may read it (`mine` decides which steps
@@ -108,6 +117,19 @@ so contact never showed).
   `exp_end_date`, `assignees`, `mine`, `can_open` (`frappe.has_permission("Task", "read")`) and
   `pull_requests` (shared `_attach_pull_requests` with My Work and the Overview). The task list
   itself is `_linked_tasks`, which `get_ticket_task_context` (the Create task dialog) uses too.
+- `helpdesk.api.ticket.get_sla_time_left(tickets)`: agents only; at most 500 names
+  (`MAX_SLA_TICKETS`; a list page is 20 to 100 rows, and the list sends at most the first 500
+  after several "Load more", so rows past that keep a neutral badge), else a validation
+  error. Reads the tickets through
+  `frappe.get_list`, so tickets the agent may not read are left out of the answer. Returns
+  `{name: {response, resolution}}` in working seconds, counted from now to the deadline on the
+  ticket's own SLA calendar with `HDServiceLevelAgreement.calc_elapsed_time` (the same working
+  days and hours and holiday list that set the deadline; hold time is already in
+  `resolution_by`). A value is null when that clock isn't running (no SLA or deadline, already
+  responded or resolved, or the ticket is paused) and 0 once the deadline has passed. Each SLA
+  document is loaded once per request and reads its holiday list once (`get_holidays` keeps it
+  on the document). Tests: `helpdesk/tests/test_sla_time_left.py`, with
+  `test_utils.make_sla_calendar`.
 - Everything else is unchanged: the ticket document, `get_ticket_activities`, assignees, contact,
   `get_suggestion`, `get_possible_duplicates`, `get_estimate`, session replay and meetings.
 

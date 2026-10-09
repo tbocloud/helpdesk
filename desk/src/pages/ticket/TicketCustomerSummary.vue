@@ -59,8 +59,8 @@
 import TaskyBadge from "@/components/TaskyBadge.vue";
 import { INK, type Tone } from "@/components/tone";
 import { __ } from "@/translation";
-import { dateFormat, dateTooltipFormat, shortDuration, timeAgo } from "@/utils";
-import { Button, dayjs, Tooltip } from "frappe-ui";
+import { dateFormat, dateTooltipFormat, timeAgo } from "@/utils";
+import { Button, dayjsLocal, Tooltip } from "frappe-ui";
 import { computed, inject, useId, type Component } from "vue";
 import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideClock from "~icons/lucide/clock";
@@ -69,6 +69,7 @@ import LucideLock from "~icons/lucide/lock";
 import LucideMessageSquareReply from "~icons/lucide/message-square-reply";
 import LucideReply from "~icons/lucide/reply";
 import { useCustomerStatus } from "./customerStatus";
+import { deadlineLabel } from "./ticketMeta";
 import { ITicket } from "./symbols";
 
 const props = defineProps<{ isClosed: boolean }>();
@@ -82,7 +83,7 @@ const status = computed(() => customerStatus.badge(ticket.data.status));
 const stage = computed(() => customerStatus.stage(ticket.data.status));
 
 function at(date: string) {
-  return dayjs(date).format("ddd D MMM, h:mm A");
+  return dayjsLocal(date).format("ddd D MMM, h:mm A");
 }
 
 const next = computed<{
@@ -133,13 +134,14 @@ const next = computed<{
     };
   }
   // open: say when the reply or fix is due, but never that a deadline was missed
-  const now = dayjs();
-  if (!t.first_responded_on && t.response_by && now.isBefore(t.response_by)) {
+  const ahead = (deadline?: string) =>
+    !!deadline && dayjsLocal().isBefore(dayjsLocal(deadline));
+  if (!t.first_responded_on && ahead(t.response_by)) {
+    // the time, not "within 3h": the deadline counts working hours only
     return {
-      title: __("We'll reply within {0}", [shortDuration(t.response_by)]),
+      title: __("We'll reply by {0}", [deadlineLabel(t.response_by)]),
       message: __(
-        "Our team has your ticket. Expect a first reply by {0}. You'll get it by email and here.",
-        [at(t.response_by)]
+        "Our team has your ticket. You'll get the reply by email and here."
       ),
       tone: "info",
       icon: LucideClock,
@@ -155,7 +157,7 @@ const next = computed<{
       icon: LucideClock,
     };
   }
-  if (t.resolution_by && now.isBefore(t.resolution_by)) {
+  if (ahead(t.resolution_by)) {
     return {
       title: __("We're working on it"),
       message: __(

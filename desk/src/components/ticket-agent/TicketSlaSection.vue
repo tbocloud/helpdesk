@@ -36,10 +36,13 @@
 
 <script setup lang="ts">
 import TaskyBadge from "@/components/TaskyBadge.vue";
+import { SlaTimeLeftSymbol } from "@/composables/useSlaTimeLeft";
 import {
   resolutionSla,
   responseSla,
   slaBadge,
+  slaHint,
+  type SlaState,
 } from "@/pages/ticket/ticketMeta";
 import { __ } from "@/translation";
 import { TicketSymbol } from "@/types";
@@ -48,38 +51,56 @@ import { computed, inject } from "vue";
 import LucideTimer from "~icons/lucide/timer";
 import PanelSection from "./PanelSection.vue";
 
-// the header shows the countdowns; this says when exactly, and against which policy
+// the header shows when each deadline falls; this gives the exact time, the working time
+// left and the policy
 const ticket = inject(TicketSymbol)!;
+const slaClock = inject(SlaTimeLeftSymbol)!;
 const doc = computed(() => ticket.value.doc ?? {});
 
 const at = (date: string) => dateFormat(date, dateTooltipFormat);
 
 const rows = computed(() => {
   const d = doc.value;
+  const now = slaClock.now.value;
   const paused = d.status_category === "Paused";
+  const row = (
+    key: "response" | "resolution",
+    label: string,
+    state: SlaState,
+    deadline: string,
+    met?: string
+  ) => {
+    const workingLeft =
+      state === "due" ? slaClock.workingLeft(d.name, key) : null;
+    return {
+      key,
+      label,
+      badge: slaBadge(state, deadline, workingLeft, now),
+      detail: met || slaHint(deadline, workingLeft),
+    };
+  };
   const result = [];
   if (d.response_by) {
-    result.push({
-      key: "response",
-      label: __("First response"),
-      badge: slaBadge(responseSla(d, d.response_by), d.response_by),
-      detail: d.first_responded_on
-        ? __("Responded {0}", at(d.first_responded_on))
-        : __("Due {0}", at(d.response_by)),
-    });
+    result.push(
+      row(
+        "response",
+        __("First response"),
+        responseSla(d, d.response_by, now),
+        d.response_by,
+        d.first_responded_on && __("Responded {0}", [at(d.first_responded_on)])
+      )
+    );
   }
   if (d.resolution_by) {
-    result.push({
-      key: "resolution",
-      label: __("Resolution"),
-      badge: slaBadge(
-        resolutionSla(d, d.resolution_by, paused),
-        d.resolution_by
-      ),
-      detail: d.resolution_date
-        ? __("Resolved {0}", at(d.resolution_date))
-        : __("Due {0}", at(d.resolution_by)),
-    });
+    result.push(
+      row(
+        "resolution",
+        __("Resolution"),
+        resolutionSla(d, d.resolution_by, paused, now),
+        d.resolution_by,
+        d.resolution_date && __("Resolved {0}", [at(d.resolution_date)])
+      )
+    );
   }
   return result;
 });

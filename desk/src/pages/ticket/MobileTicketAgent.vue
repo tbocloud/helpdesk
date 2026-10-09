@@ -179,6 +179,10 @@ import { setupCustomizations } from "@/composables/formCustomisation";
 import { useScreenSize } from "@/composables/screen";
 import { useActiveTabManager } from "@/composables/useActiveTabManager";
 import {
+  SlaTimeLeftSymbol,
+  useSlaTimeLeft,
+} from "@/composables/useSlaTimeLeft";
+import {
   reloadTicket,
   revalidateTicket,
   useTicket,
@@ -285,6 +289,10 @@ const mobileCustomActions = computed(() => {
 });
 
 provide(TicketSymbol, ticket);
+provide(
+  SlaTimeLeftSymbol,
+  useSlaTimeLeft(() => (ticket.value.doc ? [ticket.value.doc] : []))
+);
 provide(
   AssigneeSymbol,
   computed(() => ticketComposable.value.assignees)

@@ -1,7 +1,11 @@
 import frappe
 from frappe import _
+from frappe.utils import now_datetime
 
 from helpdesk.utils import agent_only, is_admin
+
+# a list page is 20 to 100 rows; "Load more" can pile up a few pages
+MAX_SLA_TICKETS = 500
 
 
 @frappe.whitelist()
@@ -77,3 +81,70 @@ def delete_ticket(name: str):
             exc=frappe.PermissionError,
         )
     frappe.delete_doc("HD Ticket", name, force=True, ignore_permissions=True)
+
+
+@frappe.whitelist()
+@agent_only
+def get_sla_time_left(tickets: list[str]) -> dict[str, dict[str, int | None]]:
+    """Working seconds left before each ticket's first response and resolution deadlines.
+
+    Deadlines are set in working time (the SLA's working days and hours, holidays and hold
+    time), so the time left is counted on the ticket's own SLA calendar too: a calendar
+    countdown overstates it across nights, weekends and holidays. A value is None when that
+    clock isn't running (no deadline, already met, or the ticket is paused) and 0 once the
+    deadline has passed. Tickets the user can't read are left out.
+    """
+    if len(tickets) > MAX_SLA_TICKETS:
+        frappe.throw(
+            _("Ask for at most {0} tickets at a time.").format(MAX_SLA_TICKETS)
+        )
+    if not tickets:
+        return {}
+
+    rows = frappe.get_list(
+        "HD Ticket",
+        filters={"name": ("in", tickets)},
+        fields=[
+            "name",
+            "sla",
+            "status_category",
+            "response_by",
+            "first_responded_on",
+            "resolution_by",
+            "resolution_date",
+        ],
+        limit_page_length=len(tickets),
+    )
+    now = now_datetime()
+    calendars = {}
+    result = {}
+    for row in rows:
+        sla = _sla_calendar(row.sla, calendars)
+        running = bool(sla) and row.status_category == "Open"
+        result[str(row.name)] = {
+            "response": _working_seconds_left(
+                sla, row.response_by, running and not row.first_responded_on, now
+            ),
+            "resolution": _working_seconds_left(
+                sla, row.resolution_by, running and not row.resolution_date, now
+            ),
+        }
+    return result
+
+
+def _sla_calendar(name: str | None, calendars: dict):
+    """The SLA document, loaded once per request so its holiday list is read once."""
+    if not name:
+        return None
+    if name not in calendars:
+        exists = frappe.db.exists("HD Service Level Agreement", name)
+        calendars[name] = (
+            frappe.get_doc("HD Service Level Agreement", name) if exists else None
+        )
+    return calendars[name]
+
+
+def _working_seconds_left(sla, deadline, running: bool, now) -> int | None:
+    if not running or not deadline:
+        return None
+    return int(sla.calc_elapsed_time(now, deadline))

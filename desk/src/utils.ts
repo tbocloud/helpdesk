@@ -4,7 +4,6 @@ import { useClipboard } from "@vueuse/core";
 import {
   FeatherIcon,
   call,
-  dayjs,
   dayjsLocal,
   toast,
   useFileUpload,
@@ -835,40 +834,6 @@ if (typeof window !== "undefined") {
     attributes: true,
     attributeFilter: ["data-theme"],
   });
-}
-
-const MINUTE = 60;
-const HOUR = 60 * MINUTE;
-const DAY = 24 * HOUR;
-const MONTH = 30 * DAY;
-const YEAR = 365 * DAY;
-
-/**
- * Compact relative duration between `target` and now, ignoring direction.
- * Examples: `1y`, `4 days 4h`, `2h 20m`, `5m`.
- */
-export function shortDuration(target: string | Date): string {
-  const seconds = Math.abs(dayjs(target).diff(dayjs(), "second"));
-  if (seconds >= YEAR) {
-    const years = Math.floor(seconds / YEAR);
-    return `${years} ${years === 1 ? "year" : "years"}`;
-  }
-  if (seconds >= MONTH) {
-    const months = Math.floor(seconds / MONTH);
-    return `${months} ${months === 1 ? "month" : "months"}`;
-  }
-  if (seconds >= DAY) {
-    const days = Math.floor(seconds / DAY);
-    const hours = Math.floor((seconds % DAY) / HOUR);
-    const dayLabel = `${days} ${days === 1 ? "day" : "days"}`;
-    return hours ? `${dayLabel} ${hours}h` : dayLabel;
-  }
-  if (seconds >= HOUR) {
-    const hours = Math.floor(seconds / HOUR);
-    const minutes = Math.floor((seconds % HOUR) / MINUTE);
-    return minutes ? `${hours}h ${minutes}m` : `${hours}h`;
-  }
-  return `${Math.floor(seconds / MINUTE)}m`;
 }
 
 export function hasPermission() {

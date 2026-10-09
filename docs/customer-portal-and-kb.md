@@ -35,7 +35,10 @@ customer sees:
   for `TaskyBadge`: open is info with a dot, awaiting is amber with a reply icon, paused is neutral
   with an hourglass, resolved is green with a check.
 - `firstReplyFact(ticket)` and `resolutionFact(ticket, stage)`: the SLA deadlines as the
-  customer sees them. "Replied in 2h 10m" (green), "Due in 3h" (neutral, clock), "Overdue" (red,
+  customer sees them. "Replied in 2h 10m" (green), "Reply by 10:30 AM" / "Resolve by Tue 2:30 PM"
+  (neutral, clock; the agents' `deadlineLabel` wording, because deadlines count working hours
+  and a countdown such as "Due in 3h" overstated the time; customers see the deadline only, no
+  working-time figures), "Overdue" (red,
   alert icon; agents see "Failed"), "Resolved", or "Paused" while the ticket waits on the
   customer or other work. Nothing shows when the ticket has no such deadline.
 
@@ -66,7 +69,8 @@ customer sees:
   failed close keeps it open and says why.
 - **Summary** (`TicketCustomerSummary.vue`): the subject as the page heading; status badge,
   `#id` and when it was opened; then **what happens next**, one sentence by stage:
-  - open, no reply yet, reply deadline ahead: "We'll reply within 3h", with the exact time;
+  - open, no reply yet, reply deadline ahead: "We'll reply by 10:30 AM" (or "Tomorrow 10:30 AM",
+    "Tue 2:30 PM", …);
   - open, no reply yet, deadline passed: "Our team has your ticket" (no "late" message);
   - open, replied: "We're working on it", with the resolution target when there is one;
   - awaiting: "We're waiting for your reply", with a **Reply** button that opens the composer;
