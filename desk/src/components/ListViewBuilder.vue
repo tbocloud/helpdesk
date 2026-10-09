@@ -1,10 +1,9 @@
 <template>
   <!-- View Controls -->
+  <!-- always in the flow: absolutely placed (as upstream did for empty lists) it lands on
+       whatever sits above the list, like the tickets summary strip -->
   <div
-    :class="[
-      'flex items-center justify-between gap-2 px-5 pb-4 pt-3 ',
-      list?.data?.data?.length > 0 ? 'relative' : 'absolute w-[stretch]',
-    ]"
+    class="relative flex items-center justify-between gap-2 px-5 pb-4 pt-3"
     v-if="showViewControls"
   >
     <QuickFilters v-if="!isMobileView" />
