@@ -214,7 +214,7 @@ the timer, hold/resume, complete, edit, ask for help and hand over work as on a 
 each using the task's own project; project-level actions (New task, Plan, Approve/Send back,
 Make recurring) stay on the project's board.
 
-## Tasks: assigned by, moving, the timer
+## Tasks: assigned by, on hold, moving, the timer
 
 ### Assigned by
 
@@ -226,6 +226,30 @@ assignee's latest ToDo that wasn't cancelled (`assign_to` records `assigned_by`)
 created the task. The UI (`assignedByName()` in `taskMeta.ts`) shows it as muted "Assigned by
 …" text on board cards and My Work rows, as a row in the task details and in Edit task, and
 hides it when the assignee took the task themselves.
+
+### On hold: why, and who
+
+`helpdesk.tasky.api.hold_task(task, reason, note)` puts a task on hold through the Task
+controller (`start_hold`), which stores `hold_reason`, `hold_note`, `hold_since` and
+`hold_by` (the user who held it; read-only). Resuming (`resume_task`, or a board move out of
+On Hold) clears all four in `end_hold`.
+
+- **Reason "Other" needs a note.** `start_hold` refuses an Other hold with a blank note, since
+  "Other" alone tells the lead nothing. `HoldTaskDialog.vue` labels the note "Why is it on
+  hold?", marks it required, shows an inline error after the field is left empty, and keeps
+  Put on hold disabled until it's filled. The note stays optional for the other reasons.
+  GitHub's automatic hold (a PR closed without merging) always writes a note, as Other.
+- **Payloads.** Task lists select the hold fields from one list, `TASK_HOLD_FIELDS` in
+  `helpdesk/tasky/api.py` (`get_kanban_tasks`, `get_my_tasks`, `get_phase_tasks`,
+  `get_project_dashboard`, and `TASK_FIELDS` in `helpdesk/api/work.py`). `_format_task` adds
+  `hold_by_name` through `frappe.utils.get_fullname`, which is cached per request, so a board
+  doesn't query User per card. Work items (`get_my_work`, `get_overview`, team pages) carry
+  `hold_note` and `hold_by_name` only while the task is on hold.
+- **UI.** The warning pill still shows the reason and days held; under it,
+  `components/HoldNote.vue` shows the note as neutral text (clamped to two lines) and "Put on
+  hold by …", on board cards, checklist rows, My Tasks rows and work rows (`WorkItemRow`), so
+  the reason is readable without hovering. The full note, and "Put on hold by … · date", are
+  in the task details and the Resume dialog.
 
 ### Moving a task to another project
 

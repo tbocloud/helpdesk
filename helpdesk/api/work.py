@@ -21,7 +21,7 @@ from frappe.utils import (
 
 from helpdesk.github_sync import OPEN_STATES as PR_OPEN_STATES
 from helpdesk.github_sync import get_pull_requests
-from helpdesk.tasky.api import add_assigners
+from helpdesk.tasky.api import TASK_HOLD_FIELDS, add_assigners
 from helpdesk.tasky.permissions import (
     can_add_tasks,
     can_manage_project,
@@ -61,8 +61,7 @@ TASK_FIELDS = [
     "exp_end_date",
     "is_key",
     "hd_ticket",
-    "hold_reason",
-    "hold_since",
+    *TASK_HOLD_FIELDS,
     "is_milestone",
     "slip_count",
     "depends_on_task",
@@ -185,6 +184,12 @@ def _task_item(
         "is_overdue": is_overdue,
         "hd_ticket": task.hd_ticket,
         "hold_reason": task.hold_reason if on_hold else None,
+        "hold_note": task.hold_note if on_hold else None,
+        "hold_by_name": (
+            frappe.utils.get_fullname(task.hold_by)
+            if on_hold and task.hold_by
+            else None
+        ),
         "hold_days": (
             (today - getdate(task.hold_since)).days
             if on_hold and task.hold_since

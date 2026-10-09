@@ -880,6 +880,48 @@ class TestTaskHold(WorkControlCase):
         self.assertIn(task, {i["name"] for i in result["buckets"]["on_hold"]})
         self.assertNotIn(task, {i["name"] for i in result["buckets"]["overdue"]})
 
+    def test_board_shows_why_and_who_put_the_task_on_hold(self):
+        task = self.make_task("Configure GST reports", add_days(nowdate(), 3))
+        self.hold(task)
+
+        board = self.as_user(
+            DEV,
+            lambda: frappe.call(
+                "helpdesk.tasky.api.get_kanban_tasks", project=self.project
+            ),
+        )
+        card = next(t for t in board["columns"]["On Hold"] if t["name"] == task)
+        self.assertEqual(card["hold_note"], "Laptop sent for repair")
+        self.assertEqual(card["hold_by"], DEV[0])
+        self.assertEqual(card["hold_by_name"], DEV[1])
+
+    def test_other_needs_a_note(self):
+        task = self.make_task("Set up branch warehouses", add_days(nowdate(), 3))
+        for note in ("", "   "):
+            with self.assertRaises(frappe.ValidationError):
+                self.as_user(
+                    DEV,
+                    lambda note=note: frappe.call(
+                        "helpdesk.tasky.api.hold_task",
+                        task=task,
+                        reason="Other",
+                        note=note,
+                    ),
+                )
+        self.assertEqual(frappe.db.get_value("Task", task, "status"), "Open")
+
+    def test_resume_clears_who_put_it_on_hold(self):
+        task = self.make_task("Opening stock upload", add_days(nowdate(), 3))
+        self.hold(task)
+
+        self.as_user(
+            DEV, lambda: frappe.call("helpdesk.tasky.api.resume_task", task=task)
+        )
+
+        hold_by, hold_note = frappe.db.get_value("Task", task, ["hold_by", "hold_note"])
+        self.assertIsNone(hold_by)
+        self.assertIsNone(hold_note)
+
 
 class TestReminderDelivery(WorkControlCase):
     def test_reminder_opens_the_project_and_is_emailed(self):

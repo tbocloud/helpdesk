@@ -250,6 +250,12 @@
                           <WaitingOn :subject="task.depends_on_subject" />
                         </template>
                       </div>
+                      <HoldNote
+                        v-if="isOnHold(task)"
+                        :note="task.hold_note"
+                        :by-name="task.hold_by_name"
+                        class="mt-0.5"
+                      />
                     </div>
                   </div>
 
@@ -326,6 +332,7 @@ import LucidePause from "~icons/lucide/pause";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideSearch from "~icons/lucide/search";
 import LucideSearchX from "~icons/lucide/search-x";
+import HoldNote from "./components/HoldNote.vue";
 import MilestoneMark from "./components/MilestoneMark.vue";
 import SlipBadge from "./components/SlipBadge.vue";
 import TaskDetailDialog from "./components/TaskDetailDialog.vue";
@@ -353,7 +360,9 @@ interface Task {
   project_name?: string;
   due_date?: string;
   hold_reason?: string | null;
+  hold_note?: string | null;
   hold_since?: string | null;
+  hold_by_name?: string | null;
   is_milestone?: boolean;
   slip_count?: number;
   depends_on_subject?: string | null;
