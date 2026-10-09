@@ -16,6 +16,7 @@ from frappe.tests.utils import FrappeTestCase
 
 from helpdesk.test_utils import (
     create_customer,
+    hold_commits,
     make_diagnostics,
     make_download_response,
     make_puller_mcp,
@@ -73,7 +74,7 @@ class TestPendingTickets(FrappeTestCase):
 
 class TestCreateHDTicket(FrappeTestCase):
     def setUp(self):
-        self.addCleanup(frappe.db.rollback)
+        hold_commits(self)  # the code under test commits; keep the fixtures out of the site
         # the connection is a real link on the ticket from the insert on
         self.connection = make_support_connection(create_customer("Puller Co").name).name
 
@@ -124,7 +125,7 @@ class TestAttachSessionFiles(FrappeTestCase):
     """The recorder's replay + diagnostics come through quietly, as private files."""
 
     def setUp(self):
-        self.addCleanup(frappe.db.rollback)
+        hold_commits(self)  # the code under test commits; keep the fixtures out of the site
         self.ticket = make_ticket(subject="Cannot save Sales Invoice")
 
     @patch("helpdesk.ticket_puller.requests.get")
@@ -250,9 +251,7 @@ class TestSchedulerWiring(FrappeTestCase):
 
 class TestConnectionHealth(FrappeTestCase):
     def setUp(self):
-        from helpdesk.test_utils import create_customer, make_support_connection
-
-        self.addCleanup(frappe.db.rollback)
+        hold_commits(self)  # the code under test commits; keep the fixtures out of the site
         create_customer("Harbour Foods LLC")
         self.conn = make_support_connection(
             "Harbour Foods LLC", connection_status="Error", last_error="503 at midnight"

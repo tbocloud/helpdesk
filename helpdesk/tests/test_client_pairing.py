@@ -5,7 +5,7 @@ from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_to_date, now_datetime
 
 from helpdesk.api import support_hub as api
-from helpdesk.test_utils import create_customer, make_support_connection
+from helpdesk.test_utils import create_customer, hold_commits, make_support_connection
 
 CUSTOMER = "Harbour Foods LLC"
 SITE = "https://erp.harbourfoods.example"
@@ -13,7 +13,8 @@ SITE = "https://erp.harbourfoods.example"
 
 class TestClientPairing(FrappeTestCase):
     def setUp(self):
-        self.addCleanup(frappe.db.rollback)
+        # pairing commits by design; without this each run left its connection on the site
+        hold_commits(self)
         self.addCleanup(frappe.set_user, "Administrator")
         create_customer(CUSTOMER)
         self.conn = make_support_connection(
