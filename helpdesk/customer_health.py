@@ -87,7 +87,9 @@ CACHE_SECONDS = 600
 
 def all_health() -> dict[str, dict]:
     """{customer: health} for every customer, from the cache when it's fresh."""
-    cached = frappe.cache.get_value(CACHE_KEY)
+    # expires=True: otherwise a miss is kept as None in the request's local
+    # cache and every later call in the same request recomputes
+    cached = frappe.cache.get_value(CACHE_KEY, expires=True)
     if cached is None:
         cached = compute_all_health()
         frappe.cache.set_value(CACHE_KEY, cached, expires_in_sec=CACHE_SECONDS)

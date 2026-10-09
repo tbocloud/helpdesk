@@ -334,7 +334,9 @@ class TestCustomerHealth(FrappeTestCase):
 
         self.assertEqual(listed(health="at_risk"), ([SICK], 1))
         self.assertEqual(listed(health="watch"), ([FINE], 1))
-        self.assertEqual(listed(health="attention"), ([SICK, FINE], 2))
+        # a filter alone keeps the chosen sort (name); sort=health puts the worst first
+        self.assertEqual(listed(health="attention"), ([FINE, SICK], 2))
+        self.assertEqual(listed(health="attention", sort="health"), ([SICK, FINE], 2))
         self.assertEqual(listed(sort="health"), ([SICK, FINE, QUIET], 3))
         # name order (the default) is unchanged, with each row's health
         rows = run_as_user(
@@ -353,12 +355,12 @@ class TestCustomerHealth(FrappeTestCase):
             first = health.all_health()
             self.assertEqual(health.all_health(), first)
         self.assertEqual(compute.call_count, 1)
-        self.assertIsNotNone(frappe.cache.get_value(health.CACHE_KEY))
+        self.assertIsNotNone(frappe.cache.get_value(health.CACHE_KEY, expires=True))
 
         make_support_connection(SICK, connection_status="Error")
-        self.assertIsNone(frappe.cache.get_value(health.CACHE_KEY))
+        self.assertIsNone(frappe.cache.get_value(health.CACHE_KEY, expires=True))
         self.assertEqual(states(health.all_health()[SICK])["erp"], health.AT_RISK)
 
         create_customer("Health New Traders")
-        self.assertIsNone(frappe.cache.get_value(health.CACHE_KEY))
+        self.assertIsNone(frappe.cache.get_value(health.CACHE_KEY, expires=True))
         self.assertIn("Health New Traders", health.all_health())
