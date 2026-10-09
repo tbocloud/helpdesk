@@ -13,6 +13,16 @@
           :aria-label="__('Contract')"
           :options="contractOptions"
         />
+        <Button
+          v-if="canBill && data"
+          variant="subtle"
+          :label="__('Create invoice draft')"
+          @click="invoicing = true"
+        >
+          <template #prefix>
+            <LucideReceiptText class="size-4" aria-hidden="true" />
+          </template>
+        </Button>
         <template v-if="data?.can_manage && data.contracts.length">
           <Button
             v-if="data.contract"
@@ -377,6 +387,18 @@
       </SectionCard>
     </template>
 
+    <InvoiceList
+      v-if="canBill && data"
+      ref="invoiceList"
+      :customer="customer"
+    />
+    <InvoiceDraftDialog
+      v-if="invoicing"
+      v-model:open="invoicing"
+      :customer="customer"
+      @created="invoiceList?.reload()"
+    />
+
     <SupportContractDialog
       v-if="dialog.open"
       v-model:open="dialog.open"
@@ -390,6 +412,8 @@
 <script setup lang="ts">
 import SupportContractDialog from "@/components/customer/SupportContractDialog.vue";
 import SupportHoursMeter from "@/components/customer/SupportHoursMeter.vue";
+import InvoiceDraftDialog from "@/components/invoicing/InvoiceDraftDialog.vue";
+import InvoiceList from "@/components/invoicing/InvoiceList.vue";
 import SectionCard from "@/components/SectionCard.vue";
 import StatTile from "@/components/StatTile.vue";
 import TaskyBadge from "@/components/TaskyBadge.vue";
@@ -403,6 +427,7 @@ import {
   type SupportContract,
   type UsagePeriod,
 } from "@/composables/supportHours";
+import { useAuthStore } from "@/stores/auth";
 import { useUserStore } from "@/stores/user";
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
@@ -416,6 +441,7 @@ import LucideClock from "~icons/lucide/clock";
 import LucideHourglass from "~icons/lucide/hourglass";
 import LucideLock from "~icons/lucide/lock";
 import LucidePlus from "~icons/lucide/plus";
+import LucideReceiptText from "~icons/lucide/receipt-text";
 import LucideSquarePen from "~icons/lucide/square-pen";
 
 /** `name` is empty for time outside a project, or (`other`) for records the viewer can't open */
@@ -452,6 +478,12 @@ const props = defineProps<{ customer: string }>();
 const route = useRoute();
 const router = useRouter();
 const { getUser } = useUserStore();
+const auth = useAuthStore();
+
+// only Agent Managers and System Managers bill (the server checks the same)
+const canBill = computed(() => auth.isAdmin || auth.isManager);
+const invoicing = ref(false);
+const invoiceList = ref<InstanceType<typeof InvoiceList> | null>(null);
 
 // the contract on screen, in the URL so a link opens the same one
 const contractName = ref(

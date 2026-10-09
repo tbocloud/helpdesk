@@ -680,6 +680,26 @@ def get_custom_fields():
                 "insert_after": "completed",
                 "in_list_view": 1,
             },
+            {
+                # set when the time log goes on a draft Sales Invoice, so it is
+                # never billed twice (docs/timesheet-invoicing.md)
+                "fieldname": "custom_billed_invoice",
+                "fieldtype": "Link",
+                "options": "HD Customer Invoice",
+                "label": "Billed On Invoice",
+                "insert_after": "custom_billable",
+                "read_only": 1,
+                "no_copy": 1,
+                "search_index": 1,
+            },
+            {
+                "fieldname": "custom_billed_on",
+                "fieldtype": "Date",
+                "label": "Billed On",
+                "insert_after": "custom_billed_invoice",
+                "read_only": 1,
+                "no_copy": 1,
+            },
         ],
         "Project User": [
             {

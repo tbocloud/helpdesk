@@ -180,6 +180,9 @@
                     <th scope="col" class="px-4 py-2 text-right font-normal">
                       {{ __("Left") }}
                     </th>
+                    <th v-if="canBill" scope="col" class="px-4 py-2">
+                      <span class="sr-only">{{ __("Invoice") }}</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -240,6 +243,23 @@
                           : hours(row.remaining)
                       }}
                     </td>
+                    <td v-if="canBill" class="px-4 py-2.5 text-right">
+                      <Button
+                        variant="ghost"
+                        :label="__('Invoice')"
+                        :aria-label="
+                          __('Create invoice draft for {0}', row.customer)
+                        "
+                        @click="invoiceCustomer = row.customer"
+                      >
+                        <template #prefix>
+                          <LucideReceiptText
+                            class="size-4"
+                            aria-hidden="true"
+                          />
+                        </template>
+                      </Button>
+                    </td>
                   </tr>
                 </tbody>
               </table>
@@ -275,11 +295,32 @@
                   <span class="text-xs tabular-nums text-ink-gray-6">
                     {{ usageText(row) }} · {{ periodText(row) }}
                   </span>
+                  <Button
+                    v-if="canBill"
+                    class="h-11 self-start"
+                    variant="subtle"
+                    :label="__('Create invoice draft')"
+                    @click="invoiceCustomer = row.customer"
+                  >
+                    <template #prefix>
+                      <LucideReceiptText class="size-4" aria-hidden="true" />
+                    </template>
+                  </Button>
                 </li>
               </ul>
             </template>
           </SectionCard>
+
+          <InvoiceList v-if="canBill" ref="invoiceList" class="mt-4" />
         </template>
+
+        <InvoiceDraftDialog
+          v-if="invoiceCustomer"
+          :open="!!invoiceCustomer"
+          :customer="invoiceCustomer"
+          @update:open="(value: boolean) => !value && (invoiceCustomer = '')"
+          @created="invoiceList?.reload()"
+        />
       </div>
     </div>
   </div>
@@ -287,6 +328,8 @@
 
 <script setup lang="ts">
 import SupportHoursMeter from "@/components/customer/SupportHoursMeter.vue";
+import InvoiceDraftDialog from "@/components/invoicing/InvoiceDraftDialog.vue";
+import InvoiceList from "@/components/invoicing/InvoiceList.vue";
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import SectionCard from "@/components/SectionCard.vue";
 import StatTile from "@/components/StatTile.vue";
@@ -304,6 +347,7 @@ import {
   type UsagePeriod,
   type UsageStage,
 } from "@/composables/supportHours";
+import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
 import { Button, createResource, FormControl } from "frappe-ui";
@@ -312,6 +356,7 @@ import { RouterLink, useRoute, useRouter } from "vue-router";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideFileSpreadsheet from "~icons/lucide/file-spreadsheet";
 import LucideHourglass from "~icons/lucide/hourglass";
+import LucideReceiptText from "~icons/lucide/receipt-text";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideSearchX from "~icons/lucide/search-x";
 import LucideTriangleAlert from "~icons/lucide/triangle-alert";
@@ -330,6 +375,12 @@ interface SupportHoursList {
 
 const route = useRoute();
 const router = useRouter();
+const auth = useAuthStore();
+
+// only Agent Managers and System Managers bill (the server checks the same)
+const canBill = computed(() => auth.isAdmin || auth.isManager);
+const invoiceCustomer = ref("");
+const invoiceList = ref<InstanceType<typeof InvoiceList> | null>(null);
 
 function queryValue(key: string, allowed: readonly string[]) {
   const value = route.query[key];
