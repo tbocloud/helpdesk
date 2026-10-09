@@ -60,7 +60,7 @@ POST only, for users with the role **Copilot Worker** (created on migrate, no de
 
 | Call | Does |
 |---|---|
-| `claim_job(worker_id, free_slots=1, capabilities="")` | the oldest queued run: `{run, lease_token, lease_expires, context}`, or `{}` |
+| `claim_job(worker_id, free_slots=1, capabilities="", run="")` | the oldest queued run, or the named one when it is queued (an evaluation claims exactly the runs it started): `{run, lease_token, lease_expires, context}`, or `{}` |
 | `heartbeat(run, lease_token, stage="")` | keeps the lease; `{ok, action: continue or cancel}` |
 | `post_events(run, lease_token, events)` | stores `[{seq, type, payload}]`; a repeated `seq` is ignored; payloads over 16 KB are cut and marked |
 | `submit_result(run, lease_token, result)` | `{kind: investigation, root_cause_category, confidence, summary, evidence[], proposal{}, customer_message, questions[], cost{tokens_in, tokens_out, usd, model}}` or `{kind: failure, reason}`; the run keeps the tokens and the model |

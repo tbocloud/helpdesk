@@ -43,15 +43,17 @@ def _parse(value, what: str):
 
 
 @frappe.whitelist(methods=["POST"])
-def claim_job(worker_id: str, free_slots: int = 1, capabilities: str = "") -> dict:
-    """The oldest queued run with its lease token and context, or {} when there is nothing to do."""
+def claim_job(
+    worker_id: str, free_slots: int = 1, capabilities: str = "", run: str | None = None
+) -> dict:
+    """The oldest queued run (or `run`, if it is queued) with its lease token and context, or {}."""
     worker_only()
     worker_id = (worker_id or "").strip()[:140]
     if not worker_id:
         frappe.throw(_("worker_id is required"))
     if int(free_slots) < 1:
         return {}
-    run, token = runs.claim(worker_id, capabilities or "")
+    run, token = runs.claim(worker_id, capabilities or "", (run or "").strip() or None)
     if not run:
         return {}
     return {

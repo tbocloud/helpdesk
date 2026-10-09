@@ -95,3 +95,17 @@ class TestWorkerApi(FrappeTestCase):
     def test_an_empty_queue_gives_nothing(self):
         runs.transition(self.run, "Cancelled", runs.AGENT)
         self.assertEqual(api.claim_job("w1"), {})
+
+    def test_a_named_run_is_claimed_even_when_an_older_one_waits(self):
+        newer_ticket = make_ticket(
+            subject="Worker API named", customer=self.ticket.customer
+        )
+        newer = make_copilot_run(newer_ticket.name)
+
+        job = api.claim_job("w1", run=newer.name)
+
+        self.assertEqual(job["run"], newer.name)
+        self.assertEqual(
+            frappe.db.get_value("HDS Copilot Run", self.run.name, "state"), "Queued"
+        )
+        self.assertEqual(api.claim_job("w1", run=newer.name), {})  # no longer queued

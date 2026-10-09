@@ -250,11 +250,18 @@ def lease_minutes() -> int:
     return copilot_settings.get_settings().lease_minutes or 5
 
 
-def claim(worker_id: str, capabilities: str = ""):
-    """Hands the oldest queued run to a worker for the lease time; (None, None) when the queue is empty."""
+def claim(worker_id: str, capabilities: str = "", run: str | None = None):
+    """Hands the oldest queued run (or `run`, when it is queued) to a worker for the lease time.
+
+    (None, None) when there is nothing to hand out. Naming the run lets an
+    evaluation work on exactly the runs it started.
+    """
+    filters = {"state": "Queued"}
+    if run:
+        filters["name"] = run
     candidates = frappe.get_all(
         "HDS Copilot Run",
-        filters={"state": "Queued"},
+        filters=filters,
         order_by="queued_at asc, creation asc",
         limit=5,
         pluck="name",
