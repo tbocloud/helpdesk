@@ -78,6 +78,7 @@ def get_run(ticket: str | int) -> dict:
         "summary": run.summary,
         "customer_message": run.customer_message,
         "evidence": json.loads(run.evidence or "[]"),
+        "proposal": json.loads(run.proposal or "{}"),
         "task": run.task,
         "handed_over_to": run.handed_over_to,
         "failure_reason": run.failure_reason,

@@ -247,9 +247,12 @@ class TestReview(ShadowCase):
             api.review_diagnosis(self.ticket.name, "Right")
 
     def test_the_dialog_gets_the_review_and_the_categories(self):
-        self.investigated("bug")
+        self.investigated(
+            "bug", proposal={"action": "fix the hook", "files": "hooks.py"}
+        )
         info = api.get_run(self.ticket.name)
 
+        self.assertEqual(info["proposal"]["action"], "fix the hook")
         self.assertTrue(info["shadow"])
         self.assertTrue(info["can_review"])
         self.assertEqual(info["categories"], list(router.CATEGORIES))
