@@ -84,3 +84,27 @@ Every diagnosis is an internal note on the ticket (category, confidence, summary
 **The agent's Copilot button** (HD Form Script "Helpdesk Copilot Actions", installed with the AI one by `helpdesk/setup/form_scripts.py`): start a run, see the state, root cause, diagnosis, evidence and latest events, cancel it, start again. API: `helpdesk.api.copilot.start_run`, `get_run`, `cancel_run` (agents).
 
 **Connections** record `client_version` and `client_capabilities` from registration and the daily health check (`helpdesk/client_api.py`: `call`, `hub_api`, `supports`).
+
+## MCP server (`helpdesk/api/copilot_mcp.py`, `helpdesk/copilot/mcp/`)
+
+TBO staff use tickets, tasks and the knowledge base from the TBO Copilot desktop app, or any MCP client, **as themselves, with their own permissions** (TASK-2026-00013).
+
+- **Endpoint:** `POST /api/method/helpdesk.api.copilot_mcp.handle`. Streamable HTTP without sessions or event streams: every request is a POST and carries its own credentials; GET and DELETE answer 405. Replies are raw JSON-RPC (`initialize`, `ping`, `tools/list`, `tools/call`, batches; notifications get 202). Protocol versions 2025-11-25, 2025-06-18 and 2025-03-26.
+- **Who:** an enabled agent (Agent or Agent Manager role, or an HD Agent) with their own API key, `Authorization: token <key>:<secret>`, which Frappe checks before the endpoint runs. Administrator, non-agents and requests without the header are refused (403, 403, 401). The key is checked on every request.
+- **Switch and limit:** HDS Copilot Settings **MCP Server On** and **MCP Calls per Minute** (per person, default 120; over it a call is refused as "Rate limited").
+- **Log:** every tool call is an **HDS Copilot Call Log** row (user, kind, tool, status OK / Refused / Error / Limited, time, ticket, task, run, arguments, the start of the result), kept 90 days.
+- **Results:** compact JSON as text. Ticket text written by people is wrapped in `<untrusted_ticket_content>`. Conversations keep the last 15 messages (2,500 characters each) and notes (1,500), the description 6,000; anything over 100,000 characters is cut. A refusal (permission, missing record, bad argument, rate limit) is an `isError` result whose first words say why, and is not written to Error Log.
+
+| Read tool | Wraps |
+|---|---|
+| `my_work` | `helpdesk.api.work.get_my_work` |
+| `get_ticket` | `hd_ticket.api.get_one`, `support_hub.get_triage`, `api.ai_suggestion.get_suggestion` |
+| `search_tickets` | `api.search.search` for words, `frappe.get_list("HD Ticket")` for status, priority, customer, assigned to me |
+| `get_task`, `list_projects`, `list_project_tasks` | `tasky.api.get_task_detail`, `get_projects`, `get_kanban_tasks` |
+| `search_knowledge_base`, `get_kb_article` | `api.article.search`, `api.knowledge_base.get_article` |
+| `get_fix_brief`, `get_possible_duplicates`, `get_session_replay` | `api.fix_brief`, `api.duplicates`, `api.session_replay` |
+| `get_calendar`, `get_copilot_run` | `api.calendar.get_calendar`, `api.copilot.get_run` |
+
+Ticket numbers may be written as people write them (`236`, `#236`, `HD-0236`).
+
+**TBO Copilot desktop:** Settings → MCP → Add → HTTP endpoint, the URL above and the header `Authorization: token <key>:<secret>`, then Test connection. The tools appear as `mcp_<server id>_<tool>`; the app asks before each call in Ask mode and hides MCP tools in Plan and Goal mode. The header is stored in plain text in `~/.agents/servers/<id>.json`, so use your own key, never an admin's.

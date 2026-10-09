@@ -2350,3 +2350,34 @@ def run_fake_worker(category: str = "question", abandon: bool = False, ticket: s
         return {"claimed": worker.run, "abandoned": True}
     worker.events([{"seq": 1, "type": "tool_call", "payload": {"tool": "get_error_log", "ms": 120}}])
     return {"claimed": worker.run, **worker.report(category)}
+
+
+def mcp_message(method: str, params: dict | None = None, req_id: int | None = 1) -> dict:
+    """A JSON-RPC 2.0 message for the hub's MCP server; `req_id=None` makes it a notification."""
+    message = {"jsonrpc": "2.0", "method": method}
+    if params is not None:
+        message["params"] = params
+    if req_id is not None:
+        message["id"] = req_id
+    return message
+
+
+def mcp_tool_result(result: dict):
+    """The JSON a tools/call result carries in its text block (or the text itself when it isn't JSON)."""
+    text = result["content"][0]["text"]
+    try:
+        return json.loads(text)
+    except ValueError:
+        return text
+
+
+def fake_http_request(test_case, method: str = "POST", body: bytes | str = b"", headers: dict | None = None):
+    """Gives frappe.local a request with `method`, `body` and `headers`, put back after the test."""
+    from types import SimpleNamespace
+
+    data = body.encode() if isinstance(body, str) else body
+    previous = getattr(frappe.local, "request", None)
+    frappe.local.request = SimpleNamespace(
+        method=method, headers=headers or {}, cookies={}, get_data=lambda *a, **k: data
+    )
+    test_case.addCleanup(setattr, frappe.local, "request", previous)

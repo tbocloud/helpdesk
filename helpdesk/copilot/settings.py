@@ -6,6 +6,8 @@
 import frappe
 from frappe import _
 
+DEFAULT_MCP_CALLS_PER_MINUTE = 120
+
 # the stages a customer sees on their own ticket, in the order they usually happen
 STAGES = (
     "Received",
@@ -62,3 +64,7 @@ def validate_limits(settings) -> None:
         frappe.throw(_("Max lease losses must be at least 1"))
     if not 0 <= (settings.min_confidence or 0) <= 1:
         frappe.throw(_("Min confidence must be between 0 and 1"))
+    if not settings.mcp_calls_per_minute:
+        settings.mcp_calls_per_minute = DEFAULT_MCP_CALLS_PER_MINUTE
+    if settings.mcp_calls_per_minute < 1:
+        frappe.throw(_("MCP calls per minute must be at least 1"))

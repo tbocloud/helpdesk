@@ -10,6 +10,10 @@
 		"lease_minutes",
 		"max_lease_losses",
 		"min_confidence",
+		"mcp_section",
+		"mcp_enabled",
+		"column_break_mcp",
+		"mcp_calls_per_minute",
 		"templates_section",
 		"message_templates"
 	],
@@ -54,6 +58,29 @@
 			"label": "Min Confidence"
 		},
 		{
+			"fieldname": "mcp_section",
+			"fieldtype": "Section Break",
+			"label": "MCP Server"
+		},
+		{
+			"default": "1",
+			"description": "TBO staff and the Copilot worker use the hub's MCP server (helpdesk.api.copilot_mcp.handle)",
+			"fieldname": "mcp_enabled",
+			"fieldtype": "Check",
+			"label": "MCP Server On"
+		},
+		{
+			"fieldname": "column_break_mcp",
+			"fieldtype": "Column Break"
+		},
+		{
+			"default": "120",
+			"description": "Per person; calls over this are refused for the rest of the minute",
+			"fieldname": "mcp_calls_per_minute",
+			"fieldtype": "Int",
+			"label": "MCP Calls per Minute"
+		},
+		{
 			"fieldname": "templates_section",
 			"fieldtype": "Section Break",
 			"label": "Messages to the Customer"
@@ -68,7 +95,7 @@
 	],
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-10-08 12:00:00.000000",
+	"modified": "2026-10-09 14:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Copilot Settings",

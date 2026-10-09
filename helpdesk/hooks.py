@@ -271,4 +271,5 @@ default_log_clearing_doctypes = {
     "HDS Site Login Log": 180,
     "HDS Remote Audit Log": 365,
     "HDS Copilot Event": 90,
+    "HDS Copilot Call Log": 90,
 }
