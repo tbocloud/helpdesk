@@ -188,6 +188,15 @@ class TestTaskActivity(TaskActivityCase):
             status = get_task_activity_as(DEV[0], self.task, "status")
         self.assertEqual([s["to"] for s in status], ["Working"])
 
+    def test_saves_that_only_mention_a_tracked_field_dont_push_out_changes(self):
+        save_task_as(DEV[0], self.task, status="Working")
+        with patch("helpdesk.task_activity.MAX_ITEMS", 2):
+            # the description holds a tracked field name, so these rows pass the SQL filter
+            for n in range(3):
+                save_task_as(DEV[0], self.task, description=f'"status" note {n}')
+            status = get_task_activity_as(DEV[0], self.task, "status")
+        self.assertEqual([s["to"] for s in status], ["Working"])
+
     def test_a_note_that_repeats_the_subject_is_not_shown(self):
         subject = frappe.db.get_value("Task", self.task, "subject")
         frappe.get_doc(

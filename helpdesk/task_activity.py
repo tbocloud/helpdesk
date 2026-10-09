@@ -130,38 +130,51 @@ class TaskActivity:
         return note if note and note not in generic else None
 
     def change_items(self) -> list[dict]:
+        """Status, due date and estimate changes from the task's Version history.
+
+        The SQL filter only narrows rows down (a field name can also appear inside an
+        unrelated value), so rows are read a page at a time until MAX_ITEMS real
+        changes are found or the history runs out: rows that only look relevant can't
+        push older real changes off the list.
+        """
         version = frappe.qb.DocType("Version")
-        # only saves touching a tracked field count toward the cap, so edits to other
-        # fields can't push older status or due date changes out
         touches_tracked = Criterion.any(
             version.data.like(f'%"{fieldname}"%') for fieldname in TRACKED_FIELDS
         )
-        versions = (
-            frappe.qb.get_query(
-                "Version",
-                fields=["data", "owner", "creation"],
-                filters={"ref_doctype": "Task", "docname": self.doc.name},
-                order_by="creation desc",
-                limit=MAX_ITEMS,
-            )
-            .where(touches_tracked)
-            .run(as_dict=True)
-        )
         items = []
-        for version in versions:
-            changed = json.loads(version.data or "{}").get("changed") or []
-            for fieldname, old, new in changed:
-                kind = TRACKED_FIELDS.get(fieldname)
-                if kind:
-                    items.append(
-                        {
-                            "kind": kind,
-                            "at": version.creation,
-                            "by": version.owner,
-                            **self.change_values(kind, old, new),
-                        }
-                    )
-        return items
+        start = 0
+        while len(items) < MAX_ITEMS:
+            versions = (
+                frappe.qb.get_query(
+                    "Version",
+                    fields=["data", "owner", "creation"],
+                    filters={"ref_doctype": "Task", "docname": self.doc.name},
+                    order_by="creation desc",
+                    limit=MAX_ITEMS,
+                    offset=start,
+                )
+                .where(touches_tracked)
+                .run(as_dict=True)
+            )
+            for row in versions:
+                items.extend(self.items_from_version(row))
+            if len(versions) < MAX_ITEMS:
+                break
+            start += MAX_ITEMS
+        return items[:MAX_ITEMS]
+
+    def items_from_version(self, row) -> list[dict]:
+        changed = json.loads(row.data or "{}").get("changed") or []
+        return [
+            {
+                "kind": TRACKED_FIELDS[fieldname],
+                "at": row.creation,
+                "by": row.owner,
+                **self.change_values(TRACKED_FIELDS[fieldname], old, new),
+            }
+            for fieldname, old, new in changed
+            if fieldname in TRACKED_FIELDS
+        ]
 
     @staticmethod
     def change_values(kind: str, old, new) -> dict:

@@ -484,7 +484,10 @@ the logic is `TaskActivity` in `helpdesk/task_activity.py`.
     `estimate` (`from`, `to` as floats) — from the task's Version history (`status`,
     `exp_end_date`, `custom_estimated_hours` in `changed`); `by` is the Version's owner.
     Only Versions whose data mentions one of those fields are read (filtered in SQL), so saves
-    that change other fields don't use up the 300-row cap. Versions store dates in the site's
+    that change other fields don't use up the 300-row cap. That filter only narrows rows down (a
+    field name can also appear inside an unrelated value, e.g. a description), so rows are read
+    300 at a time until 300 real changes are found or the history runs out
+    (`TaskActivity.change_items`). Versions store dates in the site's
     display format (e.g. `05-10-2026` on a `dd-mm-yyyy` site), so `due` values are parsed with
     `parse_date`, which tries the site's format first (`getdate` would read them month first).
     The UI shows only the new status; a value it doesn't know (`Overdue`, `Template`, or a
