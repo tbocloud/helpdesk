@@ -1532,10 +1532,17 @@ class TestTeamTimesheets(WorkControlCase):
             )
             return {t["owner"] for t in rows}
 
+        # completing logs time from "now minus hours worked", which is yesterday in
+        # the first hours after midnight; filter by the day it was actually logged
+        logged_on = str(
+            getdate(
+                frappe.db.get_value("Timesheet Detail", {"task": task}, "from_time")
+            )
+        )
         self.assertEqual(names(agent=DEV[0]), {DEV[0]})
         self.assertEqual(names(agent=LEAD[0]), set())
-        self.assertEqual(names(agent=DEV[0], from_date=nowdate()), {DEV[0]})
-        self.assertEqual(names(from_date=add_days(nowdate(), 1)), set())
+        self.assertEqual(names(agent=DEV[0], from_date=logged_on), {DEV[0]})
+        self.assertEqual(names(from_date=add_days(logged_on, 1)), set())
 
         # entered today for work done ten days ago: it belongs to that date
         late = self.as_user(
