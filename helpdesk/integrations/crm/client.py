@@ -26,8 +26,10 @@ class CRMClient:
         )
 
     @classmethod
-    def from_settings(cls) -> "CRMClient":
-        settings = frappe.get_single("HD CRM Settings")
+    def from_settings(cls, settings=None) -> "CRMClient":
+        """From the saved settings, or from `settings` while it is being saved: a newly
+        typed secret is still plain text there, and get_password reads it or the stored one."""
+        settings = settings or frappe.get_single("HD CRM Settings")
         secret = settings.get_password("api_secret", raise_exception=False)
         if not (settings.site_url and settings.api_key and secret):
             raise CRMError(_("Add the CRM site URL, API key and API secret first."))
@@ -116,15 +118,7 @@ class CRMClient:
     def erp_customers(self) -> list[dict]:
         """ERPNext Customers on the CRM site, shaped like organizations; none without ERPNext."""
         try:
-            data = self.request(
-                "GET",
-                "/api/resource/Customer",
-                params={
-                    "fields": json.dumps(["name", "customer_name", "website"]),
-                    "filters": json.dumps([["disabled", "=", 0]]),
-                    "limit_page_length": 0,
-                },
-            )
+            customers = self.customers()
         except CRMError:
             # no ERPNext on the CRM site (or no access to it): nothing to add
             return []
@@ -134,8 +128,16 @@ class CRMClient:
                 "organization_name": c.get("customer_name") or c.get("name"),
                 "website": c.get("website"),
             }
-            for c in (data or {}).get("data") or []
+            for c in customers
         ]
+
+    def customers(self) -> list[dict]:
+        """Enabled ERPNext Customers; raises CRMError when the site can't list them."""
+        return self.get_list(
+            "Customer",
+            ["name", "customer_name", "website"],
+            [["disabled", "=", 0]],
+        )
 
     def create_organization(self, name: str, website: str | None = None) -> dict:
         data = self.request(
@@ -151,6 +153,100 @@ class CRMClient:
             "POST",
             "/api/method/crm.api.user.add_existing_users",
             data={"users": json.dumps(emails), "role": role},
+        )
+
+    # --- ERPNext on the CRM site, for invoicing (docs/timesheet-invoicing.md) ---
+
+    def get_list(self, doctype: str, fields: list[str], filters=None) -> list[dict]:
+        data = self.request(
+            "GET",
+            f"/api/resource/{quote(doctype)}",
+            params={
+                "fields": json.dumps(fields),
+                "filters": json.dumps(filters or []),
+                "limit_page_length": 0,
+            },
+        )
+        return (data or {}).get("data") or []
+
+    def get_doc(self, doctype: str, name: str) -> dict | None:
+        """The document, or None when it doesn't exist (404)."""
+        data = self.request("GET", f"/api/resource/{quote(doctype)}/{quote(name)}")
+        return None if data is None else data.get("data")
+
+    def companies(self) -> list[dict]:
+        return self.get_list("Company", ["name", "default_currency"])
+
+    def service_items(self) -> list[dict]:
+        """Enabled sales items that aren't stocked: what support hours are billed as."""
+        return self.get_list(
+            "Item",
+            ["name", "item_name"],
+            [
+                ["disabled", "=", 0],
+                ["is_sales_item", "=", 1],
+                ["is_stock_item", "=", 0],
+            ],
+        )
+
+    def taxes_templates(self, company: str) -> list[dict]:
+        return self.get_list(
+            "Sales Taxes and Charges Template",
+            ["name", "title"],
+            [["company", "=", company], ["disabled", "=", 0]],
+        )
+
+    def income_accounts(self, company: str) -> list[dict]:
+        return self.get_list(
+            "Account",
+            ["name", "account_name"],
+            [
+                ["company", "=", company],
+                ["root_type", "=", "Income"],
+                ["is_group", "=", 0],
+                ["disabled", "=", 0],
+            ],
+        )
+
+    def cost_centers(self, company: str) -> list[dict]:
+        return self.get_list(
+            "Cost Center",
+            ["name", "cost_center_name"],
+            [["company", "=", company], ["is_group", "=", 0], ["disabled", "=", 0]],
+        )
+
+    def template_taxes(self, template: str) -> list[dict]:
+        """The tax rows of a Sales Taxes and Charges Template, ready for an invoice."""
+        data = self.request(
+            "GET",
+            "/api/method/erpnext.controllers.accounts_controller.get_taxes_and_charges",
+            params={
+                "master_doctype": "Sales Taxes and Charges Template",
+                "master_name": template,
+            },
+        )
+        return (data or {}).get("message") or []
+
+    def create_sales_invoice(self, invoice: dict) -> dict:
+        """Insert a draft Sales Invoice; it is never submitted from the hub."""
+        data = self.request(
+            "POST",
+            f"/api/resource/{quote('Sales Invoice')}",
+            json={**invoice, "docstatus": 0},
+        )
+        created = (data or {}).get("data") or {}
+        if not created.get("name"):
+            raise CRMError(_("The CRM site didn't return the new invoice."))
+        return created
+
+    def delete_sales_invoice(self, name: str):
+        self.request("DELETE", f"/api/resource/{quote('Sales Invoice')}/{quote(name)}")
+
+    def sales_invoices(self, names: list[str]) -> list[dict]:
+        return self.get_list(
+            "Sales Invoice",
+            ["name", "docstatus", "status", "grand_total", "outstanding_amount"],
+            [["name", "in", names]],
         )
 
 

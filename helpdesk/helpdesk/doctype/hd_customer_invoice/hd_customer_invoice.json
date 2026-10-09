@@ -1,0 +1,184 @@
+{
+	"actions": [],
+	"autoname": "format:BILL-{#####}",
+	"creation": "2026-10-09 12:00:00.000000",
+	"description": "A draft Sales Invoice the hub created in ERPNext on the CRM site from a customer's billable time. The time logs it covers point here (Timesheet Detail.custom_billed_invoice). See docs/timesheet-invoicing.md.",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"customer",
+		"invoice",
+		"invoice_url",
+		"status",
+		"column_break_1",
+		"company",
+		"posting_date",
+		"currency",
+		"amount",
+		"period_section",
+		"period_start",
+		"period_end",
+		"mode",
+		"contract",
+		"column_break_2",
+		"hours_logged",
+		"hours_covered",
+		"hours_billed"
+	],
+	"fields": [
+		{
+			"fieldname": "customer",
+			"fieldtype": "Link",
+			"label": "Customer",
+			"options": "HD Customer",
+			"reqd": 1,
+			"read_only": 1,
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"search_index": 1
+		},
+		{
+			"fieldname": "invoice",
+			"fieldtype": "Data",
+			"label": "Sales Invoice",
+			"reqd": 1,
+			"read_only": 1,
+			"in_list_view": 1,
+			"description": "Its name in ERPNext on the CRM site."
+		},
+		{
+			"fieldname": "invoice_url",
+			"fieldtype": "Data",
+			"label": "Invoice URL",
+			"options": "URL",
+			"read_only": 1
+		},
+		{
+			"fieldname": "status",
+			"fieldtype": "Select",
+			"label": "Status",
+			"options": "Linked\nUnlinked",
+			"default": "Linked",
+			"read_only": 1,
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"description": "Unlinked once the invoice was deleted or cancelled in ERPNext and its time logs were freed to bill again."
+		},
+		{
+			"fieldname": "column_break_1",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "company",
+			"fieldtype": "Data",
+			"label": "Company",
+			"read_only": 1
+		},
+		{
+			"fieldname": "posting_date",
+			"fieldtype": "Date",
+			"label": "Posting Date",
+			"read_only": 1
+		},
+		{
+			"fieldname": "currency",
+			"fieldtype": "Link",
+			"label": "Currency",
+			"options": "Currency",
+			"read_only": 1
+		},
+		{
+			"fieldname": "amount",
+			"fieldtype": "Currency",
+			"label": "Amount Before Tax",
+			"options": "currency",
+			"read_only": 1,
+			"in_list_view": 1
+		},
+		{
+			"fieldname": "period_section",
+			"fieldtype": "Section Break",
+			"label": "Hours"
+		},
+		{
+			"fieldname": "period_start",
+			"fieldtype": "Date",
+			"label": "Period Start",
+			"read_only": 1
+		},
+		{
+			"fieldname": "period_end",
+			"fieldtype": "Date",
+			"label": "Period End",
+			"read_only": 1
+		},
+		{
+			"fieldname": "mode",
+			"fieldtype": "Select",
+			"label": "Billed",
+			"options": "Extra hours\nAll billable hours",
+			"read_only": 1
+		},
+		{
+			"fieldname": "contract",
+			"fieldtype": "Link",
+			"label": "Support Contract",
+			"options": "HD Support Contract",
+			"read_only": 1
+		},
+		{
+			"fieldname": "column_break_2",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "hours_logged",
+			"fieldtype": "Float",
+			"label": "Hours Logged",
+			"read_only": 1,
+			"description": "All the billable time this invoice settles."
+		},
+		{
+			"fieldname": "hours_covered",
+			"fieldtype": "Float",
+			"label": "Hours Covered by the Contract",
+			"read_only": 1
+		},
+		{
+			"fieldname": "hours_billed",
+			"fieldtype": "Float",
+			"label": "Hours Billed",
+			"read_only": 1
+		}
+	],
+	"in_create": 1,
+	"index_web_pages_for_search": 0,
+	"links": [],
+	"modified": "2026-10-09 12:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD Customer Invoice",
+	"naming_rule": "Expression",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"role": "System Manager",
+			"read": 1,
+			"report": 1,
+			"export": 1,
+			"print": 1
+		},
+		{
+			"role": "Agent Manager",
+			"read": 1,
+			"report": 1,
+			"export": 1,
+			"print": 1
+		}
+	],
+	"search_fields": "customer,invoice",
+	"sort_field": "creation",
+	"sort_order": "DESC",
+	"states": [],
+	"title_field": "invoice",
+	"track_changes": 1
+}

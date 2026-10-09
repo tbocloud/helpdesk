@@ -1,4 +1,5 @@
-"""Settings → CRM: test the connection to the TBO CRM site and sync users and customers now."""
+"""Settings → CRM: test the connection to the TBO CRM site, sync users and customers now,
+and read the invoicing pickers from it."""
 
 import frappe
 from frappe import _
@@ -32,6 +33,30 @@ def test_connection() -> dict:
         "ok": True,
         "message": _("Connected as {0}.").format(user or _("the API user")),
     }
+
+
+@frappe.whitelist()
+def get_invoicing_options(company: str | None = None) -> dict:
+    """The pickers of Settings → CRM → Invoicing, read live from ERPNext on the CRM site:
+    companies and service items, and for `company` its taxes templates, income accounts
+    and cost centers."""
+    require_admin()
+    try:
+        client = CRMClient.from_settings()
+        options = {
+            "companies": client.companies(),
+            "items": client.service_items(),
+            "taxes_templates": [],
+            "income_accounts": [],
+            "cost_centers": [],
+        }
+        if company:
+            options["taxes_templates"] = client.taxes_templates(company)
+            options["income_accounts"] = client.income_accounts(company)
+            options["cost_centers"] = client.cost_centers(company)
+    except CRMError as e:
+        return {"ok": False, "message": str(e)}
+    return {"ok": True, **options}
 
 
 @frappe.whitelist(methods=["POST"])

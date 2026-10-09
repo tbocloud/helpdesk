@@ -99,7 +99,7 @@ Telephony providers and pending invites.
 | Departments | Add department (labelled field), then the ordered list with move, rename, activate and delete inline. See [departments.md](departments.md). |
 | SLA Policies, Business Holidays, Assignment Rules, Field Dependencies, Saved Replies | List page + editor sub-page with the shared header. |
 | Sign-off templates | List (inactive greyed, question count) and an editor sub-page with Active, Back and Save in the header. See [project-signoff.md](project-signoff.md). |
-| Content, Tasks, File storage, CRM | TBO pages; sections of `SettingRow`s, Save in the header, load errors with Try again. See [content-calendar.md](content-calendar.md), [ai-task-descriptions.md](ai-task-descriptions.md), [project-files.md](project-files.md), [tbo-crm-integration.md](tbo-crm-integration.md). Tasks also has the Support hours section (email the customer when their hours run low; [support-contracts.md](support-contracts.md)). |
+| Content, Tasks, File storage, CRM | TBO pages; sections of `SettingRow`s, Save in the header, load errors with Try again. See [content-calendar.md](content-calendar.md), [ai-task-descriptions.md](ai-task-descriptions.md), [project-files.md](project-files.md), [tbo-crm-integration.md](tbo-crm-integration.md). Tasks also has the Support hours section (email the customer when their hours run low; [support-contracts.md](support-contracts.md)). CRM also has the Invoicing section, whose pickers are read live from the CRM site and checked on save ([timesheet-invoicing.md](timesheet-invoicing.md)). |
 | Telephony | Default medium, then Twilio and Exotel as list rows that open their sub-pages. |
 | ERPNext | Enable switch, in-sync / sync-needed status (success or warning soft panel, with icon). |
 

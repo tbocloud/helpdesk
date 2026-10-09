@@ -22,6 +22,15 @@
 		"customers_section",
 		"sync_customers",
 		"created_in_crm",
+		"invoicing_section",
+		"invoice_company",
+		"invoice_item",
+		"invoice_taxes_template",
+		"column_break_4",
+		"invoice_hourly_rate",
+		"invoice_currency",
+		"invoice_income_account",
+		"invoice_cost_center",
 		"status_section",
 		"last_sync_on",
 		"last_sync_result"
@@ -143,11 +152,60 @@
 			"label": "Users Created in the CRM",
 			"read_only": 1,
 			"hidden": 1
+		},
+		{
+			"fieldname": "invoicing_section",
+			"fieldtype": "Section Break",
+			"label": "Invoicing",
+			"description": "Billable time becomes a draft Sales Invoice in ERPNext on the CRM site. The names below are records on that site, checked when you save. See docs/timesheet-invoicing.md."
+		},
+		{
+			"fieldname": "invoice_company",
+			"fieldtype": "Data",
+			"label": "Company"
+		},
+		{
+			"fieldname": "invoice_item",
+			"fieldtype": "Data",
+			"label": "Item",
+			"description": "A service item (sales item, not stocked) the hours are billed as."
+		},
+		{
+			"fieldname": "invoice_taxes_template",
+			"fieldtype": "Data",
+			"label": "Sales Taxes and Charges Template"
+		},
+		{
+			"fieldname": "column_break_4",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "invoice_hourly_rate",
+			"fieldtype": "Currency",
+			"label": "Default Hourly Rate",
+			"options": "invoice_currency",
+			"description": "For customers without a support contract rate per extra hour."
+		},
+		{
+			"fieldname": "invoice_currency",
+			"fieldtype": "Link",
+			"label": "Currency",
+			"options": "Currency"
+		},
+		{
+			"fieldname": "invoice_income_account",
+			"fieldtype": "Data",
+			"label": "Income Account"
+		},
+		{
+			"fieldname": "invoice_cost_center",
+			"fieldtype": "Data",
+			"label": "Cost Center"
 		}
 	],
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-10-05 14:00:00.000000",
+	"modified": "2026-10-09 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD CRM Settings",
