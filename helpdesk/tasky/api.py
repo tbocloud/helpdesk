@@ -63,7 +63,7 @@ DASHBOARD_STAT_RULES = {
     "pending": lambda t, today: t.status == "Open",
     "reviewing": lambda t, today: t.status == PENDING_REVIEW_STATUS,
     "on_hold": lambda t, today: t.status == ON_HOLD,
-    "rescheduled": lambda t, today: bool(t.slip_count),
+    "rescheduled": lambda t, today: (t.slip_count or 0) > 0,
     "cancelled": lambda t, today: t.status == "Cancelled",
     "overdue": _is_overdue,
 }
