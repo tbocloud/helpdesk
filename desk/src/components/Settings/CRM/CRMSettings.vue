@@ -246,6 +246,13 @@
                 :disabled="!form.invoice_company"
               />
             </div>
+            <p class="text-p-xs text-ink-gray-6">
+              {{
+                __(
+                  "To turn invoicing off, clear the company; the item, template, account and cost center are cleared with it."
+                )
+              }}
+            </p>
           </template>
         </SettingsSection>
       </div>
@@ -391,6 +398,8 @@ watch(
       form.value.invoice_taxes_template = "";
       form.value.invoice_income_account = "";
       form.value.invoice_cost_center = "";
+      // no company turns invoicing off; the server clears the item too
+      if (!company) form.value.invoice_item = "";
       const currency = optionsData.value?.companies?.find(
         (c) => c.name === company
       )?.default_currency;

@@ -17,6 +17,13 @@ INVOICING_FIELDS = (
     "invoice_hourly_rate",
     "invoice_currency",
 )
+# cleared when the company is, which turns invoicing off
+COMPANY_FIELDS = (
+    "invoice_item",
+    "invoice_taxes_template",
+    "invoice_income_account",
+    "invoice_cost_center",
+)
 
 
 class HDCRMSettings(Document):
@@ -53,8 +60,7 @@ class HDCRMSettings(Document):
         if not self.invoicing_changed():
             return
         if not self.invoice_company:
-            if self.invoice_item or self.invoice_taxes_template:
-                frappe.throw(_("Pick the company to invoice from first."))
+            self.clear_company_records()
             return
         if not self.invoice_item:
             frappe.throw(_("Pick the item the support hours are billed as."))
@@ -70,6 +76,12 @@ class HDCRMSettings(Document):
             )
         if problem:
             frappe.throw(problem)
+
+    def clear_company_records(self):
+        """No company turns invoicing off; the item, template, account and cost center
+        are records of a company on the CRM site, so they go with it."""
+        for field in COMPANY_FIELDS:
+            self.set(field, None)
 
     def invoicing_changed(self) -> bool:
         # a Single reads an unset field back as None or "", and the rate as 0 or 0.0

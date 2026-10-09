@@ -31,6 +31,11 @@ the save with what to fix. Saving other CRM settings doesn't call the CRM site. 
 company clears the template, account and cost center in the form and takes the company's
 default currency when none is set.
 
+**Turning invoicing off.** Clear the company. The item, template, account and cost center
+belong to a company on the CRM site, so the save clears them too
+(`clear_company_records`) and doesn't call the CRM site; the form clears them as well and
+says so. The rate and currency are kept for when invoicing is turned back on.
+
 ## What is billed
 
 The time that counts is the support hours rule (`billable_logs()` in
@@ -158,7 +163,7 @@ and default rate, no contract, beyond-the-contract outside a contract period, no
 lines per task; create (draft, items, marks), taxes template, customer missing in ERPNext,
 failed remote create, changed hours, no double billing (and late time in a billed period),
 unlink only once gone or cancelled, list and statuses, permissions; settings: valid, unknown
-records, required item and rate, other changes don't call the CRM site, the pickers.
+records, required item and rate, clearing the company turns invoicing off, other changes don't call the CRM site, the pickers.
 
 ## Known limits
 

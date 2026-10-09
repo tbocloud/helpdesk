@@ -303,6 +303,23 @@ class TestInvoicingSettings(FrappeTestCase):
         with self.assertRaises(frappe.ValidationError):
             self.save(invoice_item="")
 
+    def test_clearing_the_company_turns_invoicing_off(self):
+        enable_invoicing(enabled=0, invoice_taxes_template=FAKE_TAXES)
+        settings = frappe.get_single("HD CRM Settings")
+        settings.invoice_company = ""
+        # no company: nothing to check on the CRM site
+        with patch(FROM_SETTINGS, side_effect=AssertionError("CRM called")):
+            settings.save(ignore_permissions=True)
+        saved = frappe.get_single("HD CRM Settings")
+        for field in (
+            "invoice_company",
+            "invoice_item",
+            "invoice_taxes_template",
+            "invoice_income_account",
+            "invoice_cost_center",
+        ):
+            self.assertFalse(saved.get(field), field)
+
     def test_other_changes_dont_call_the_crm(self):
         settings = frappe.get_single("HD CRM Settings")
         settings.crm_role = "Sales Manager"
