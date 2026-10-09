@@ -14,7 +14,10 @@ import json
 
 import frappe
 import requests
+from frappe import _
+from frappe.utils import add_to_date, now_datetime
 
+from helpdesk import client_api
 from helpdesk.automation import automation_user
 from helpdesk.mcp_client import MCPClient
 from helpdesk.session_replay import is_diagnostics_file, is_replay_file
@@ -336,6 +339,7 @@ def pull_connection(connection: str, customer_name: str | None = None) -> int:
 
 
 def _pull_connection(connection: str, customer_name: str | None) -> int:
+    conn = frappe.get_doc("HDS Support Connection", connection)
     try:
         mcp = MCPClient(connection)
         tickets = _pending_tickets(mcp)
@@ -354,7 +358,7 @@ def _pull_connection(connection: str, customer_name: str | None) -> int:
             if _already_imported(connection, ticket["name"]):
                 # HD Ticket exists; the previous push-back must have failed.
                 try:
-                    _push_back(mcp, ticket["name"], {"status": "Open"})
+                    _write_ticket(conn, mcp, ticket["name"], {"status": "Open"})
                 except Exception:
                     _log_once(
                         f"Status push-back refused for {ticket.get('name')}",
@@ -383,7 +387,7 @@ def _pull_connection(connection: str, customer_name: str | None) -> int:
                     )
             frappe.db.commit()  # keep each imported ticket even if a later one fails - nosemgrep
 
-            _push_back(mcp, ticket["name"], {"ticket_id": hd_name, "status": "Open"})
+            _write_ticket(conn, mcp, ticket["name"], {"ticket_id": hd_name, "status": "Open"})
             created += 1
         except Exception:
             frappe.db.rollback()
@@ -416,18 +420,30 @@ def _set_connection_health(connection: str, error: str | None = None):
     )
 
 
-def _status_payload(row) -> dict:
-    """What the customer's ticket should show for this hub ticket."""
+def _status_payload(row, raw: bool = False) -> dict:
+    """What the customer's ticket should show for this hub ticket.
+
+    A hub_api client gets the hub's own status label (`raw`) and maps it
+    itself, keeping the label; an older client gets a label it accepts.
+    """
     values = {
         "priority": row.priority or "",
         # keeps the customer's "TBO #" right if the hub ticket
         # was restored under a new number
         "ticket_id": row.name,
     }
-    status = client_status_for(row.status)
+    status = row.status if raw else client_status_for(row.status)
     if status:
         values["status"] = status
     return values
+
+
+def _write_ticket(conn, mcp, client_ticket: str, values: dict) -> None:
+    """The hub's view of a ticket on the customer site: through hub_api when the client has it, else MCP."""
+    if client_api.supports(conn, client_api.HUB_API):
+        client_api.hub_api(conn, "update_ticket", {"name": client_ticket, "values": values})
+    else:
+        _push_back(mcp, client_ticket, values)
 
 
 def _payload_hash(values: dict) -> str:
@@ -460,26 +476,30 @@ def push_ticket_statuses() -> int:
 
     by_connection = {}
     for row in rows:
-        values = _status_payload(row)
-        digest = _payload_hash(values)
-        if digest == (row.custom_client_push_hash or ""):
-            continue
-        by_connection.setdefault(row.custom_qcs_connection, []).append((row, values, digest))
+        by_connection.setdefault(row.custom_qcs_connection, []).append(row)
 
     pushed = 0
     for connection_name, tickets in by_connection.items():
-        try:
-            mcp = MCPClient(connection_name)
-        except Exception:
-            frappe.log_error(
-                title=f"Status push failed for {connection_name}",
-                message=frappe.get_traceback(),
-            )
-            continue
-
-        for row, values, digest in tickets:
+        conn = frappe.get_doc("HDS Support Connection", connection_name)
+        use_hub_api = client_api.supports(conn, client_api.HUB_API)
+        mcp = None
+        if not use_hub_api:
             try:
-                _push_back(mcp, row.custom_client_ticket, values)
+                mcp = MCPClient(connection_name)
+            except Exception:
+                frappe.log_error(
+                    title=f"Status push failed for {connection_name}",
+                    message=frappe.get_traceback(),
+                )
+                continue
+
+        for row in tickets:
+            values = _status_payload(row, raw=use_hub_api)
+            digest = _payload_hash(values)
+            if digest == (row.custom_client_push_hash or ""):
+                continue
+            try:
+                _write_ticket(conn, mcp, row.custom_client_ticket, values)
                 frappe.db.set_value(
                     "HD Ticket",
                     row.name,
@@ -540,11 +560,10 @@ def sync_conversations() -> int:
 
     synced = 0
     for conn_name, tickets in by_conn.items():
+        conn = frappe.get_doc("HDS Support Connection", conn_name)
+        use_hub_api = client_api.supports(conn, client_api.HUB_API)
         # comments the hub itself wrote on the customer site aren't pulled back
-        support_user = (
-            frappe.db.get_value("HDS Support Connection", conn_name, "support_user")
-            or "support@quarkcs.com"
-        )
+        support_user = conn.support_user or "support@quarkcs.com"
         try:
             mcp = MCPClient(conn_name)
         except Exception:
@@ -599,6 +618,7 @@ def sync_conversations() -> int:
                     hd_comment.insert(ignore_permissions=True)
                     state["client"].append(c["name"])
                     synced += 1
+                    _follow_up_on_comment(row.name)
                 # MCPClient commits after every call it audits, so anything
                 # written above outlives a rollback; record it now, or a later
                 # failure in this ticket would re-import the same comments.
@@ -613,26 +633,39 @@ def sync_conversations() -> int:
                         "communication_type": "Communication",
                         "sent_or_received": "Sent",
                     },
-                    fields=["name", "content"],
+                    fields=["name", "content", "sender_full_name"],
                     limit=50,
                 )
                 for m in replies:
                     if m.name in state["hub"]:
                         continue
-                    result = mcp.call_tool(
-                        "create_doc",
-                        {
-                            "doctype": "Comment",
-                            "values": {
-                                "comment_type": "Comment",
-                                "reference_doctype": "Support Ticket",
-                                "reference_name": ct,
+                    if use_hub_api:
+                        # one comment per reply on the customer site, whatever the retries
+                        client_api.hub_api(
+                            conn,
+                            "post_reply",
+                            {
+                                "name": ct,
+                                "hub_ref": m.name,
                                 "content": m.content or "",
+                                "author_name": m.sender_full_name or "TBO Support",
                             },
-                        },
-                    )
-                    # a refused reply is retried next run, never marked as sent
-                    _raise_if_refused(result, f"reply {m.name}")
+                        )
+                    else:
+                        result = mcp.call_tool(
+                            "create_doc",
+                            {
+                                "doctype": "Comment",
+                                "values": {
+                                    "comment_type": "Comment",
+                                    "reference_doctype": "Support Ticket",
+                                    "reference_name": ct,
+                                    "content": m.content or "",
+                                },
+                            },
+                        )
+                        # a refused reply is retried next run, never marked as sent
+                        _raise_if_refused(result, f"reply {m.name}")
                     state["hub"].append(m.name)
                     _save_sync_state(row.name, state)
                     synced += 1
@@ -689,7 +722,92 @@ def sync_conversations() -> int:
                     f"Conversation sync failed for {row.name}",
                     f"hds_conversation_sync_failed:{row.name}",
                 )
+    # every hub_api site, open tickets or not: a customer may reopen a closed ticket
+    for conn_name in _hub_api_connections():
+        synced += _pull_client_changes(frappe.get_doc("HDS Support Connection", conn_name))
     return synced
+
+
+def _hub_api_connections() -> list[str]:
+    return frappe.get_all(
+        "HDS Support Connection",
+        filters={
+            "connection_status": ["in", PULLABLE_STATUSES],
+            "client_capabilities": ["like", f"%{client_api.HUB_API}%"],
+        },
+        pluck="name",
+    )
+
+
+def _follow_up_on_comment(ticket: str) -> None:
+    """A customer's comment after Copilot's question starts a follow-up run; never breaks the sync."""
+    from helpdesk.copilot.customer import on_customer_comment
+
+    try:
+        on_customer_comment(ticket)
+    except Exception:
+        frappe.log_error(
+            title=f"Copilot follow-up not started for {ticket}", message=frappe.get_traceback()
+        )
+
+
+def _pull_client_changes(conn) -> int:
+    """The customer's confirmations and reopens from their site since the connection's cursor."""
+    from helpdesk.copilot.customer import decide_resolution
+
+    since = conn.client_changes_cursor or add_to_date(now_datetime(), days=-1)
+    try:
+        changes = client_api.hub_api(
+            conn, "get_ticket_changes", {"since": str(since), "limit": 200}
+        )
+    except Exception:
+        _log_once(
+            f"Could not read ticket changes from {conn.name}",
+            f"hds_client_changes:{conn.name}",
+        )
+        return 0
+
+    handled = 0
+    for change in changes.get("tickets") or []:
+        confirmation = change.get("customer_confirmation")
+        if confirmation not in ("Confirmed", "Reopened"):
+            continue
+        ticket = frappe.db.get_value(
+            "HD Ticket",
+            {"custom_qcs_connection": conn.name, "custom_client_ticket": change.get("name")},
+            "name",
+        )
+        if not ticket:
+            continue
+        marker = f"{confirmation}@{change.get('confirmed_at')}"
+        state = _load_conv_state(frappe.db.get_value("HD Ticket", ticket, "custom_sync_state"))
+        if state.get("confirmation") == marker:
+            continue  # already applied
+        try:
+            decide_resolution(
+                ticket,
+                confirmation == "Confirmed",
+                change.get("confirmation_note") or _("(no details given)"),
+            )
+            state["confirmation"] = marker
+            _save_sync_state(ticket, state)
+            frappe.db.commit()  # keep each applied answer even if the next fails - nosemgrep
+            handled += 1
+        except Exception:
+            frappe.db.rollback()
+            _log_once(
+                f"Customer confirmation not applied for {ticket}",
+                f"hds_client_confirmation:{ticket}",
+            )
+    if changes.get("server_time"):
+        frappe.db.set_value(
+            "HDS Support Connection",
+            conn.name,
+            "client_changes_cursor",
+            changes["server_time"],
+            update_modified=False,
+        )
+    return handled
 
 
 def _save_sync_state(ticket: str, state: dict) -> None:
