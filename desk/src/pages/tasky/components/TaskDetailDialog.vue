@@ -121,6 +121,11 @@
           :reference-name="detail.name"
           flush
         />
+        <!-- every step in this dialog closes it first, so reopening loads fresh activity -->
+        <TaskActivity
+          :task="detail.name"
+          class="border-t border-outline-gray-1 pt-4"
+        />
       </div>
     </template>
   </Dialog>
@@ -193,6 +198,7 @@ import RequestHelpDialog from "./RequestHelpDialog.vue";
 import ResumeTaskDialog from "./ResumeTaskDialog.vue";
 import SendBackTaskDialog from "./SendBackTaskDialog.vue";
 import SlipBadge from "./SlipBadge.vue";
+import TaskActivity from "./TaskActivity.vue";
 import TaskPlanDialog from "./TaskPlanDialog.vue";
 import TaskPullRequests from "./TaskPullRequests.vue";
 

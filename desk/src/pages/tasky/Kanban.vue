@@ -222,11 +222,7 @@
                     <span class="sr-only">{{ __("Key task") }}</span>
                   </template>
                   <MilestoneMark v-if="task.is_milestone" class="mt-0.5" />
-                  <Dropdown
-                    v-if="cardActions(task).length"
-                    :options="cardActions(task)"
-                    align="end"
-                  >
+                  <Dropdown :options="cardActions(task)" align="end">
                     <Button
                       variant="ghost"
                       size="sm"
@@ -483,6 +479,11 @@
       @update:open="(v: boolean) => !v && (recurringFrom = null)"
     />
 
+    <TaskDetailDialog
+      v-model:task="detailTask"
+      :mine="!!detailTask?.assignees?.includes(authStore.userId)"
+      @changed="kanban.reload()"
+    />
     <CompleteTaskDialog
       v-model:task="completingTask"
       :tracked-hours="completingTrackedHours"
@@ -510,6 +511,7 @@ import LucideGripVertical from "~icons/lucide/grip-vertical";
 import LucideInfo from "~icons/lucide/info";
 import LucideMoreHorizontal from "~icons/lucide/more-horizontal";
 import LucidePause from "~icons/lucide/pause";
+import LucidePanelRight from "~icons/lucide/panel-right";
 import LucidePencil from "~icons/lucide/pencil";
 import LucidePlay from "~icons/lucide/play";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
@@ -532,6 +534,7 @@ import ResumeTaskDialog from "./components/ResumeTaskDialog.vue";
 import PullRequestChip from "./components/PullRequestChip.vue";
 import SendBackTaskDialog from "./components/SendBackTaskDialog.vue";
 import SlipBadge from "./components/SlipBadge.vue";
+import TaskDetailDialog from "./components/TaskDetailDialog.vue";
 import TaskPlanDialog from "./components/TaskPlanDialog.vue";
 import TaskyState from "@/components/TaskyState.vue";
 import WaitingOn from "./components/WaitingOn.vue";
@@ -645,6 +648,7 @@ const helpingTask = ref<Task | null>(null);
 const handingOverTask = ref<Task | null>(null);
 const movingTask = ref<Task | null>(null);
 const recurringFrom = ref<Task | null>(null);
+const detailTask = ref<Task | null>(null);
 
 const { approve, resource: approveResource } = useApproveTask(() =>
   kanban.reload()
@@ -656,7 +660,13 @@ function canEdit(task: Task) {
 }
 
 function cardActions(task: Task) {
-  const actions: Record<string, any>[] = [];
+  const actions: Record<string, any>[] = [
+    {
+      label: __("Details"),
+      icon: LucidePanelRight,
+      onClick: () => (detailTask.value = task),
+    },
+  ];
   if (canEdit(task))
     actions.push({
       label: __("Edit"),
