@@ -895,6 +895,16 @@ class TestTaskHold(WorkControlCase):
         self.assertEqual(card["hold_by"], DEV[0])
         self.assertEqual(card["hold_by_name"], DEV[1])
 
+        item = next(
+            i
+            for i in self.as_user(
+                DEV, lambda: frappe.call("helpdesk.api.work.get_my_work")
+            )["items"]
+            if i["name"] == task
+        )
+        self.assertEqual(item["hold_note"], "Laptop sent for repair")
+        self.assertEqual(item["hold_by_name"], DEV[1])
+
     def test_other_needs_a_note(self):
         task = self.make_task("Set up branch warehouses", add_days(nowdate(), 3))
         for note in ("", "   "):

@@ -242,8 +242,10 @@ On Hold) clears all four in `end_hold`.
 - **Payloads.** Task lists select the hold fields from one list, `TASK_HOLD_FIELDS` in
   `helpdesk/tasky/api.py` (`get_kanban_tasks`, `get_my_tasks`, `get_phase_tasks`,
   `get_project_dashboard`, and `TASK_FIELDS` in `helpdesk/api/work.py`). `_format_task` adds
-  `hold_by_name` through `frappe.utils.get_fullname`, which is cached per request, so a board
-  doesn't query User per card. Work items (`get_my_work`, `get_overview`, team pages) carry
+  `hold_by_name`. List endpoints (`_format_tasks`, and `_items` and `get_team_workload` in
+  `work.py`) fetch every holder's name in one User query (`hold_by_names`) and pass it in, so
+  a board doesn't query User per card; a single task (details, a dialog's response) looks
+  the user up directly (`hold_by_name`). Work items (`get_my_work`, `get_overview`, team pages) carry
   `hold_note` and `hold_by_name` only while the task is on hold.
 - **UI.** The warning pill still shows the reason and days held; under it,
   `components/HoldNote.vue` shows the note as neutral text (clamped to two lines) and "Put on

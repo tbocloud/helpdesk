@@ -68,8 +68,31 @@ def _task_dict(doc):
     return data
 
 
-def _format_task(task):
-    """Normalize a Task dict for frontend consumption."""
+def hold_by_names(tasks) -> dict[str, str]:
+    """Full names of whoever put these tasks on hold, from one User query for the list."""
+    return user_full_names({t.get("hold_by") for t in tasks if t.get("hold_by")})
+
+
+def hold_by_name(user: str | None, names: dict[str, str] | None = None) -> str | None:
+    """`names` comes from hold_by_names() for a list; a single task looks the user up."""
+    if not user:
+        return None
+    if names is None:
+        return frappe.utils.get_fullname(user)
+    return names.get(user) or user
+
+
+def _format_tasks(tasks) -> list[dict]:
+    """_format_task for a list, with the holders' names fetched once."""
+    names = hold_by_names(tasks)
+    return [_format_task(t, names) for t in tasks]
+
+
+def _format_task(task, hold_names: dict[str, str] | None = None):
+    """Normalize a Task dict for frontend consumption.
+
+    Lists pass `hold_names` (see _format_tasks) so held tasks don't look up User one by one.
+    """
     assign_raw = task.pop("_assign", None) or ""
     try:
         assigned = json.loads(assign_raw)
@@ -98,9 +121,7 @@ def _format_task(task):
         "hold_note": task.get("hold_note"),
         "hold_since": task.get("hold_since"),
         "hold_by": task.get("hold_by"),
-        "hold_by_name": frappe.utils.get_fullname(task.get("hold_by"))
-        if task.get("hold_by")
-        else None,
+        "hold_by_name": hold_by_name(task.get("hold_by"), hold_names),
         "hold_days_total": task.get("hold_days_total") or 0,
         "is_milestone": bool(task.get("is_milestone")),
         "ai_estimated": bool(task.get("ai_estimated")),
@@ -644,8 +665,8 @@ def get_my_tasks(
     )
     return add_assigners(
         [
-            {**_format_task(t), "project_name": project_names.get(t.project)}
-            for t in tasks
+            {**t, "project_name": project_names.get(t.get("project"))}
+            for t in _format_tasks(tasks)
         ]
     )
 
@@ -1383,7 +1404,7 @@ def get_project_dashboard(project: str):
     return {
         "phases": phases,
         "milestones": milestones,
-        "tasks": [_format_task(t) for t in tasks],
+        "tasks": _format_tasks(tasks),
         "stats": {
             "total": total_tasks,
             "completed": completed,
@@ -1430,7 +1451,7 @@ def get_phase_tasks(project: str, phase: str):
         ],
         order_by="subject asc",
     )
-    return [_format_task(t) for t in tasks]
+    return _format_tasks(tasks)
 
 
 @frappe.whitelist()
@@ -1507,7 +1528,7 @@ def get_kanban_tasks(project: str | None = None):
             )
         )
     )
-    for t in add_assigners([_format_task(t) for t in tasks]):
+    for t in add_assigners(_format_tasks(tasks)):
         t["project_name"] = project_names.get(t.get("project"))
         status = t.get("status") or "Open"
         if status not in columns:
