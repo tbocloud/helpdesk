@@ -19,6 +19,8 @@ export interface WorkItem {
   customer?: string | null;
   /** Set only while a task is On Hold. */
   hold_reason?: string | null;
+  hold_note?: string | null;
+  hold_by_name?: string | null;
   /** Days since the hold began; null unless the task is On Hold. */
   hold_days?: number | null;
   is_milestone?: boolean;

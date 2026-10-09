@@ -49,12 +49,17 @@
       <div
         v-if="onHold"
         class="mt-0.5 flex min-w-0 items-center gap-1 text-xs text-ink-gray-6"
-        :title="task.hold_note || undefined"
       >
         <LucidePause class="size-3 shrink-0 text-warning" aria-hidden="true" />
         <span class="sr-only">{{ __("On hold:") }}</span>
         <span class="truncate">{{ __(task.hold_reason || "On hold") }}</span>
       </div>
+      <HoldNote
+        v-if="onHold"
+        :note="task.hold_note"
+        :by-name="task.hold_by_name"
+        class="mt-0.5 pl-4"
+      />
       <div
         class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-ink-gray-5 md:hidden"
       >
@@ -177,6 +182,7 @@ import {
   priorityIcon,
   shortDate,
 } from "../taskMeta";
+import HoldNote from "./HoldNote.vue";
 import MilestoneMark from "./MilestoneMark.vue";
 import SlipBadge from "./SlipBadge.vue";
 import TaskStatusBadge from "./TaskStatusBadge.vue";

@@ -263,33 +263,38 @@
                   <WaitingOn :subject="task.depends_on_subject" />
                 </div>
 
-                <div
-                  v-if="isOnHold(task)"
-                  class="mt-2 flex items-center gap-2 rounded-md bg-warning-soft py-1 pl-2 pr-1 text-warning"
-                  :title="task.hold_note || undefined"
-                >
-                  <LucidePause class="size-3.5 shrink-0" aria-hidden="true" />
-                  <span class="sr-only">{{ __("On hold:") }}</span>
-                  <span class="min-w-0 truncate text-xs font-medium">{{
-                    __(task.hold_reason || "On hold")
-                  }}</span>
-                  <span
-                    class="shrink-0 font-mono text-xs tabular-nums"
-                    :aria-label="holdDurationLabel(holdDays(task))"
-                    :title="holdDurationLabel(holdDays(task))"
+                <template v-if="isOnHold(task)">
+                  <div
+                    class="mt-2 flex items-center gap-2 rounded-md bg-warning-soft py-1 pl-2 pr-1 text-warning"
                   >
-                    {{ __("{0}d", String(holdDays(task))) }}
-                  </span>
-                  <button
-                    type="button"
-                    class="ml-auto flex size-6 shrink-0 items-center justify-center rounded transition-colors hover:bg-surface-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
-                    :aria-label="__('Resume {0}', task.subject)"
-                    :title="__('Resume')"
-                    @click.stop="resumingTask = task"
-                  >
-                    <LucidePlay class="size-3.5" aria-hidden="true" />
-                  </button>
-                </div>
+                    <LucidePause class="size-3.5 shrink-0" aria-hidden="true" />
+                    <span class="sr-only">{{ __("On hold:") }}</span>
+                    <span class="min-w-0 truncate text-xs font-medium">{{
+                      __(task.hold_reason || "On hold")
+                    }}</span>
+                    <span
+                      class="shrink-0 font-mono text-xs tabular-nums"
+                      :aria-label="holdDurationLabel(holdDays(task))"
+                      :title="holdDurationLabel(holdDays(task))"
+                    >
+                      {{ __("{0}d", String(holdDays(task))) }}
+                    </span>
+                    <button
+                      type="button"
+                      class="ml-auto flex size-6 shrink-0 items-center justify-center rounded transition-colors hover:bg-surface-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+                      :aria-label="__('Resume {0}', task.subject)"
+                      :title="__('Resume')"
+                      @click.stop="resumingTask = task"
+                    >
+                      <LucidePlay class="size-3.5" aria-hidden="true" />
+                    </button>
+                  </div>
+                  <HoldNote
+                    :note="task.hold_note"
+                    :by-name="task.hold_by_name"
+                    class="mt-1 pl-2"
+                  />
+                </template>
 
                 <!-- Timer -->
                 <div
@@ -515,6 +520,7 @@ import LucideUserPlus from "~icons/lucide/user-plus";
 import CompleteTaskDialog from "./components/CompleteTaskDialog.vue";
 import EditTaskDialog from "./components/EditTaskDialog.vue";
 import HandOverTaskDialog from "./components/HandOverTaskDialog.vue";
+import HoldNote from "./components/HoldNote.vue";
 import HoldTaskDialog from "./components/HoldTaskDialog.vue";
 import MilestoneMark from "./components/MilestoneMark.vue";
 import MoveTaskDialog from "./components/MoveTaskDialog.vue";
@@ -596,6 +602,7 @@ interface Task {
   hold_reason?: string | null;
   hold_note?: string | null;
   hold_since?: string | null;
+  hold_by_name?: string | null;
   is_milestone?: boolean;
   slip_count?: number;
   depends_on_task?: string | null;

@@ -329,11 +329,15 @@ class Task(Document):
         return bool(before) and before.status == ON_HOLD and self.status != ON_HOLD
 
     def start_hold(self):
-        """Record why and since when; a running timer stops so the hold isn't counted as work."""
+        """Record why, by whom and since when; a running timer stops so the hold isn't counted as work."""
         if not self.hold_reason:
             frappe.throw(_("Choose why the task is on hold."))
+        # "Other" alone tells the lead nothing, so the note has to say what is blocking it
+        if self.hold_reason == "Other" and not (self.hold_note or "").strip():
+            frappe.throw(_("Say why the task is on hold when the reason is Other."))
         before = self.get_doc_before_save()
         self.hold_since = nowdate()
+        self.hold_by = frappe.session.user
         self.hold_previous_status = before.status if before else "Open"
         if self.get("custom_timer_start"):
             hours = (
@@ -363,6 +367,7 @@ class Task(Document):
         self.hold_reason = None
         self.hold_note = None
         self.hold_since = None
+        self.hold_by = None
         self.hold_previous_status = None
 
     def announce_hold(self):
