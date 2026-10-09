@@ -12,6 +12,19 @@ class Project(Document):
         self.validate_dates()
         self.validate_department()
 
+    def on_trash(self):
+        self.delete_file_folders()
+
+    def delete_file_folders(self):
+        from helpdesk.helpdesk.doctype.hd_project_folder.hd_project_folder import (
+            FolderTree,
+        )
+
+        # deepest first, so no folder moves its subfolders up on the way out;
+        # the files themselves go with the project's attachments
+        for folder in reversed(FolderTree(self.name).order()):
+            frappe.delete_doc("HD Project Folder", folder, ignore_permissions=True)
+
     def validate_dates(self):
         if (
             self.expected_start_date

@@ -1,15 +1,15 @@
 {
 	"actions": [],
 	"autoname": "hash",
-	"creation": "2026-10-07 10:00:00.000000",
-	"description": "A file attached to a project and who on the project it is for. The File holds the content; everyone on the project sees every file.",
+	"creation": "2026-10-09 12:00:00.000000",
+	"description": "A folder of files on a project and who on the project it is for. Folders nest up to five levels.",
 	"doctype": "DocType",
 	"engine": "InnoDB",
 	"field_order": [
 		"project",
-		"file",
-		"file_name",
-		"folder",
+		"folder_name",
+		"parent_folder",
+		"description",
 		"for_section",
 		"for_users"
 	],
@@ -25,28 +25,25 @@
 			"search_index": 1
 		},
 		{
-			"fieldname": "file",
-			"fieldtype": "Link",
-			"label": "File",
-			"options": "File",
-			"reqd": 1,
-			"unique": 1
-		},
-		{
-			"fieldname": "file_name",
+			"fieldname": "folder_name",
 			"fieldtype": "Data",
-			"label": "File Name",
-			"fetch_from": "file.file_name",
-			"read_only": 1,
-			"in_list_view": 1
+			"label": "Folder Name",
+			"reqd": 1,
+			"in_list_view": 1,
+			"description": "Unique among the folders in the same place."
 		},
 		{
-			"fieldname": "folder",
+			"fieldname": "parent_folder",
 			"fieldtype": "Link",
-			"label": "Folder",
+			"label": "Parent Folder",
 			"options": "HD Project Folder",
 			"search_index": 1,
-			"description": "Empty: the file sits at the top of the project's files."
+			"description": "Empty: the folder sits at the top of the project's files. Folders nest up to five levels."
+		},
+		{
+			"fieldname": "description",
+			"fieldtype": "Small Text",
+			"label": "Description"
 		},
 		{
 			"fieldname": "for_section",
@@ -58,7 +55,7 @@
 			"fieldtype": "Table",
 			"label": "For",
 			"options": "HD Project File User",
-			"description": "People on the project this file is meant for. They are notified; the file stays visible to everyone on the project."
+			"description": "People on the project this folder is meant for. They are notified when it is shared with them and when files are added to it; everyone on the project still sees it."
 		}
 	],
 	"index_web_pages_for_search": 0,
@@ -66,7 +63,7 @@
 	"modified": "2026-10-09 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
-	"name": "HD Project File",
+	"name": "HD Project Folder",
 	"naming_rule": "Random",
 	"owner": "Administrator",
 	"permissions": [
@@ -86,6 +83,6 @@
 	"sort_field": "creation",
 	"sort_order": "DESC",
 	"states": [],
-	"title_field": "file_name",
+	"title_field": "folder_name",
 	"track_changes": 1
 }

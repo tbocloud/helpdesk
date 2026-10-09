@@ -684,15 +684,35 @@ def make_project_file(
     content: bytes = b"# Master prompt\n\nBe concise.",
     for_users: list[str] | None = None,
     user: str | None = None,
+    folder: str | None = None,
 ) -> str:
-    """Adds a file to a project through the project files API, as `user` (default:
-    the session user), and returns the File's name."""
+    """Adds a file to a project (in `folder` when given) through the project files
+    API, as `user` (default: the session user), and returns the File's name."""
     from helpdesk.api.project_files import add_project_file
 
     def add():
-        return add_project_file(project, file_name, content, for_users)["name"]
+        return add_project_file(project, file_name, content, for_users, folder)["name"]
 
     return run_as_user(user, add) if user else add()
+
+
+def make_project_folder(
+    project: str,
+    folder_name: str = "Prompts",
+    for_users: list[str] | None = None,
+    user: str | None = None,
+    parent_folder: str | None = None,
+) -> str:
+    """Creates a folder of project files (inside `parent_folder` when given) through
+    the API, as `user` (default: the session user), and returns its name."""
+    from helpdesk.api.project_files import create_project_folder
+
+    def create():
+        return create_project_folder(
+            project, folder_name, for_users=for_users, parent_folder=parent_folder
+        )["name"]
+
+    return run_as_user(user, create) if user else create()
 
 
 def make_department(name: str, **kwargs):
