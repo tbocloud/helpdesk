@@ -24,6 +24,7 @@
 
 <script setup lang="ts">
 import { __ } from "@/translation";
+import { useOnLeave } from "@/composables/onLeave";
 import { useAuthStore } from "@/stores/auth";
 import { Autocomplete, createResource } from "frappe-ui";
 import { computed, watch } from "vue";
@@ -47,6 +48,7 @@ const props = defineProps<{
 const emit = defineEmits<{ "update:modelValue": [value: string] }>();
 
 const authStore = useAuthStore();
+const { leaveLabel } = useOnLeave();
 
 const projectDetail = createResource({
   url: "helpdesk.tasky.api.get_project_detail",
@@ -89,7 +91,7 @@ const options = computed(() => {
           ? __("{0} (project lead)", u.full_name || u.name)
           : u.full_name || u.name,
       value: u.name,
-      description: u.name,
+      description: leaveLabel(u.name) || u.name,
     }));
 });
 </script>

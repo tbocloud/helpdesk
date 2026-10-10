@@ -135,9 +135,10 @@
 		},
 		{
 			"fieldname": "afternoon_nudge_at",
-			"fieldtype": "Time",
+			"fieldtype": "Data",
 			"label": "Afternoon nudge from",
-			"default": "14:00"
+			"default": "14:00",
+			"description": "A 24-hour time, e.g. 14:00. A Data field: Frappe gives a new document's Time fields the current time instead of their default."
 		},
 		{
 			"fieldname": "overdue",
@@ -287,7 +288,7 @@
 	"index_web_pages_for_search": 0,
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-10-10 09:00:00.000000",
+	"modified": "2026-10-10 15:30:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Follow Up Settings",

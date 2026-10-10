@@ -182,9 +182,19 @@ export interface Systems {
   ai: { calls_today: number; triage_failed: number };
 }
 
+/** helpdesk.api.home._calendar: holidays and leave synced from the CRM site */
+export interface HomeCalendar {
+  next_holiday: { date: string; description: string; synced: boolean } | null;
+  /** null for people who don't run work */
+  on_leave_today:
+    | { user: string; full_name: string; to_date: string; half_day: boolean }[]
+    | null;
+}
+
 export interface HomeData {
   day: YourDay;
   follow_ups: FollowUpSummary;
+  calendar: HomeCalendar;
   company: Company | null;
   systems: Systems | null;
 }

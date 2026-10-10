@@ -74,3 +74,4 @@ helpdesk.patches.v16_0_2.seed_signoff_templates
 helpdesk.patches.v16_0_2.seed_content_options
 helpdesk.patches.v16_0_2.content_campaign_as_text
 helpdesk.patches.v16_0_2.seed_follow_up_settings
+helpdesk.patches.v16_0_2.reset_seeded_afternoon_nudge

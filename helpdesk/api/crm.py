@@ -1,11 +1,12 @@
-"""Settings → CRM: test the connection to the TBO CRM site, sync users and customers now,
-and read the invoicing pickers from it."""
+"""Settings → CRM: test the connection to the TBO CRM site, sync users, customers,
+holidays and leave now, and read the invoicing and holiday list pickers from it."""
 
 import frappe
 from frappe import _
 
 from helpdesk.integrations.crm.client import CRMClient, CRMError
 from helpdesk.integrations.crm.customers import sync_customers
+from helpdesk.integrations.crm.holidays import sync_holidays_and_leave
 from helpdesk.integrations.crm.users import sync_users
 
 ADMIN_ROLES = {"System Manager", "Agent Manager"}
@@ -77,4 +78,36 @@ def sync_now() -> dict:
         "message": frappe.db.get_single_value("HD CRM Settings", "last_sync_result"),
         "users": users,
         "customers": customers,
+    }
+
+
+@frappe.whitelist()
+def get_holiday_options() -> dict:
+    """The holiday list picker of Settings → CRM, read live from ERPNext on the CRM site:
+    every Holiday List with its dates, and each company's default list."""
+    require_admin()
+    try:
+        client = CRMClient.from_settings()
+        lists = sorted(
+            client.holiday_lists(),
+            key=lambda row: str(row.get("from_date") or ""),
+            reverse=True,
+        )
+        companies = client.company_holiday_lists()
+    except CRMError as e:
+        return {"ok": False, "message": str(e)}
+    return {"ok": True, "lists": lists, "companies": companies}
+
+
+@frappe.whitelist(methods=["POST"])
+def sync_holidays_now() -> dict:
+    """Holidays and approved leave from the CRM site, now."""
+    require_admin()
+    result = sync_holidays_and_leave()
+    return {
+        "ok": result["ok"],
+        "message": "\n".join(result["problems"])
+        or frappe.db.get_single_value("HD CRM Settings", "holiday_sync_result"),
+        "holidays": result["holidays"],
+        "leave": result["leave"],
     }

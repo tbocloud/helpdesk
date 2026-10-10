@@ -2,8 +2,8 @@
 
 This plans work ahead; it doesn't track or judge the hours people spent. Each
 person's available hours come from the work calendar (weekly off, the Saturdays
-off rule, the default SLA's holidays) at HD Work Settings' focused hours per day.
-Their planned load is the remaining estimated hours of their open tasks, spread
+off rule, the default SLA's holidays) at HD Work Settings' focused hours per day,
+less their approved leave (HD Leave, a half day counting half). Their planned load is the remaining estimated hours of their open tasks, spread
 over the working days up to each task's due date (see `task_allocation`).
 """
 
@@ -34,7 +34,7 @@ from helpdesk.tasky.permissions import (
     is_tasky_admin,
 )
 from helpdesk.utils import agent_only
-from helpdesk.work_calendar import is_saturday_off, saturday_rule
+from helpdesk.work_calendar import is_saturday_off, leave_fractions, saturday_rule
 
 WEEK_CHOICES = (1, 2, 4)
 DEFAULT_WEEKS = 2
@@ -101,8 +101,11 @@ def get_capacity(
             shares.append((person, task, total, allocation["typical"]))
 
     names = _full_names(people)
+    leave = leave_fractions(people, start, end)
     rows = [
-        _person_row(p, names.get(p) or p, loads[p], window, start, end, per_day)
+        _person_row(
+            p, names.get(p) or p, loads[p], window, start, end, per_day, leave.get(p)
+        )
         for p in people
     ]
     _add_contributions(rows, shares, infos, visible)
@@ -308,21 +311,43 @@ def _load(planned: float, available: float) -> dict:
 
 
 def _person_row(
-    user: str, full_name: str, load: dict, window: list, start, end, per_day
+    user: str,
+    full_name: str,
+    load: dict,
+    window: list,
+    start,
+    end,
+    per_day,
+    leave: dict | None = None,
 ) -> dict:
-    days = [{"date": str(day), **_load(load.get(day, 0), per_day)} for day in window]
+    """`leave` ({day: 1, or 0.5 for a half day}) takes those hours off what's available."""
+    leave = leave or {}
+
+    def hours(day) -> float:
+        return per_day * (1 - leave.get(day, 0))
+
+    days = [
+        {
+            "date": str(day),
+            **_load(load.get(day, 0), hours(day)),
+            "leave": leave.get(day, 0),
+        }
+        for day in window
+    ]
     weeks = []
     for w_start, w_end in week_ranges(start, end):
         in_week = [d for d in window if w_start <= d <= w_end]
         planned = sum(load.get(d, 0) for d in in_week)
-        weeks.append({"start": str(w_start), **_load(planned, per_day * len(in_week))})
+        available = sum(hours(d) for d in in_week)
+        weeks.append({"start": str(w_start), **_load(planned, available)})
     planned = sum(load.values())
-    available = per_day * len(window)
+    available = sum(hours(d) for d in window)
     return {
         "user": user,
         "full_name": full_name,
         **_load(planned, available),
         "free": round(max(available - planned, 0), 1),
+        "leave_days": sum(leave.get(d, 0) for d in window),
         "weeks": weeks,
         "days": days,
         "projects": [],

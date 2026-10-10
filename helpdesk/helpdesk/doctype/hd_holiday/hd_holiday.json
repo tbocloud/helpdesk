@@ -9,6 +9,7 @@
   "holiday_date",
   "column_break_2",
   "weekly_off",
+  "synced_from_crm",
   "section_break_4",
   "description"
  ],
@@ -38,6 +39,14 @@
    "label": "Weekly Off"
   },
   {
+   "default": "0",
+   "description": "Read from the holiday list on the CRM site (Settings → CRM). The next sync puts it back if it's changed or removed here.",
+   "fieldname": "synced_from_crm",
+   "fieldtype": "Check",
+   "label": "Synced from TBO CRM",
+   "read_only": 1
+  },
+  {
    "fieldname": "column_break_2",
    "fieldtype": "Column Break"
   },
@@ -49,7 +58,7 @@
  "idx": 1,
  "istable": 1,
  "links": [],
- "modified": "2021-12-23 19:03:23.507845",
+ "modified": "2026-10-10 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Helpdesk",
  "name": "HD Holiday",

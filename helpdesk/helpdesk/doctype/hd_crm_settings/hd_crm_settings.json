@@ -31,6 +31,16 @@
 		"invoice_currency",
 		"invoice_income_account",
 		"invoice_cost_center",
+		"holidays_section",
+		"sync_holidays",
+		"holiday_lists",
+		"sync_leave",
+		"column_break_5",
+		"holidays_synced_on",
+		"holidays_synced_count",
+		"leave_synced_count",
+		"holiday_sync_result",
+		"holiday_sync_error",
 		"status_section",
 		"last_sync_on",
 		"last_sync_result"
@@ -201,11 +211,71 @@
 			"fieldname": "invoice_cost_center",
 			"fieldtype": "Data",
 			"label": "Cost Center"
+		},
+		{
+			"fieldname": "holidays_section",
+			"fieldtype": "Section Break",
+			"label": "Holidays and Leave",
+			"description": "Read daily from ERPNext on the CRM site; nothing is written there."
+		},
+		{
+			"fieldname": "sync_holidays",
+			"fieldtype": "Check",
+			"label": "Sync Holidays",
+			"default": "1",
+			"description": "The holidays land in every SLA's holiday list, marked as synced, so SLAs, follow-ups and working-day counts skip them."
+		},
+		{
+			"fieldname": "holiday_lists",
+			"fieldtype": "Small Text",
+			"label": "Holiday Lists",
+			"description": "Holiday List names on the CRM site, one per line. Empty: the default holiday list of the invoicing company (or of the only company)."
+		},
+		{
+			"fieldname": "sync_leave",
+			"fieldtype": "Check",
+			"label": "Sync Approved Leave",
+			"default": "1",
+			"description": "Approved Leave Applications from 30 days ago to 60 days ahead, matched to people by the Employee's user or company email."
+		},
+		{
+			"fieldname": "column_break_5",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "holidays_synced_on",
+			"fieldtype": "Datetime",
+			"label": "Holidays Synced On",
+			"read_only": 1
+		},
+		{
+			"fieldname": "holidays_synced_count",
+			"fieldtype": "Int",
+			"label": "Holidays Synced",
+			"read_only": 1
+		},
+		{
+			"fieldname": "leave_synced_count",
+			"fieldtype": "Int",
+			"label": "Leave Synced",
+			"read_only": 1
+		},
+		{
+			"fieldname": "holiday_sync_result",
+			"fieldtype": "Small Text",
+			"label": "Holiday Sync Result",
+			"read_only": 1
+		},
+		{
+			"fieldname": "holiday_sync_error",
+			"fieldtype": "Small Text",
+			"label": "Holiday Sync Problems",
+			"read_only": 1
 		}
 	],
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-10-09 12:00:00.000000",
+	"modified": "2026-10-10 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD CRM Settings",

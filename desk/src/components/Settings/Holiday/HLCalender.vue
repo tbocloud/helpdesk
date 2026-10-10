@@ -26,7 +26,7 @@
                 @mouseleave="handleMouseLeave(getFormattedDate(date), close)"
                 @click="
                   () => {
-                    if (isWeekOff(date)) return;
+                    if (isLocked(date)) return;
                     close();
                     editHoliday(date);
                   }
@@ -57,7 +57,7 @@
                   </div>
                 </div>
                 <Popover
-                  v-if="!isWeekOff(date)"
+                  v-if="!isLocked(date)"
                   @close="isConfirmingDelete = false"
                 >
                   <template #target="{ open, close }">
@@ -154,6 +154,7 @@
 
 <script setup lang="ts">
 import { holidayData } from "@/stores/holidayList";
+import { __ } from "@/translation";
 import { getFormattedDate, htmlToText } from "@/utils";
 import { dayjs, Popover, useDatePicker } from "frappe-ui";
 import { ref, watch } from "vue";
@@ -255,6 +256,19 @@ const isWeekOff = (date: Date): boolean => {
   });
 };
 
+const isSynced = (date: Date): boolean => {
+  const inputDate = dayjs(date).startOf("day");
+  return (props.holidays ?? []).some(
+    (holiday) =>
+      dayjs(holiday.holiday_date).startOf("day").isSame(inputDate) &&
+      holiday.synced_from_crm == 1
+  );
+};
+
+// weekly offs come from the recurring rules and synced holidays from the CRM site:
+// neither is edited by hand here
+const isLocked = (date: Date): boolean => isWeekOff(date) || isSynced(date);
+
 const editHoliday = (date) => {
   const holiday = props.holidays.find((h) => {
     const holidayDate = getFormattedDate(h.holiday_date);
@@ -309,7 +323,7 @@ const getHolidayDescription = (date: Date): string => {
     ? `${htmlToText(holiday?.description || "")}: Recurring holiday`
     : htmlToText(holiday?.description || "");
 
-  return text;
+  return holiday?.synced_from_crm ? `${text} · ${__("From TBO CRM")}` : text;
 };
 
 watch(

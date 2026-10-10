@@ -70,6 +70,10 @@ scheduler_events = {
         "0 11 * * *": [
             "helpdesk.content_follow_up.send_client_follow_ups",
         ],
+        # 06:15: holidays and approved leave from the CRM site, before the working day
+        "15 6 * * *": [
+            "helpdesk.integrations.crm.holidays.sync_holidays_job",
+        ],
         # 00:30: champions of every period that ended yesterday (team dashboard)
         "30 0 * * *": [
             "helpdesk.team_dashboard.close_periods",

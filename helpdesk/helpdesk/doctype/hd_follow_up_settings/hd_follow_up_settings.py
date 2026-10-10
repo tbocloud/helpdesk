@@ -9,6 +9,8 @@ from frappe.model.document import Document
 from frappe.utils import cint
 
 TIME_PATTERN = re.compile(r"^([01]?\d|2[0-3]):([0-5]\d)$")
+# "14:00:00" → "14:00"; anything else after the minutes is left to fail TIME_PATTERN
+SECONDS_PATTERN = re.compile(r"^(\d{1,2}:\d{2}):[0-5]\d$")
 POSITIVE_FIELDS = (
     "untouched_days",
     "review_days",
@@ -23,6 +25,7 @@ POSITIVE_FIELDS = (
 class HDFollowUpSettings(Document):
     def validate(self):
         self.validate_digest_times()
+        self.validate_afternoon_nudge()
         self.validate_ladder()
         self.validate_thresholds()
         self.validate_sla_warnings()
@@ -37,6 +40,19 @@ class HDFollowUpSettings(Document):
                 )
             )
         self.digest_times = ", ".join(times)
+
+    def validate_afternoon_nudge(self):
+        """Stored as "14:00"; a valid time with seconds ("14:00:00") is accepted."""
+        value = (self.afternoon_nudge_at or "14:00").strip()
+        match = SECONDS_PATTERN.match(value)
+        if match:
+            value = match.group(1)
+        times = self.parse_digest_times(value)
+        if not times or len(times) != 1:
+            frappe.throw(
+                _("Write the afternoon nudge time as a 24-hour time, e.g. 14:00.")
+            )
+        self.afternoon_nudge_at = times[0]
 
     def validate_ladder(self):
         days = [

@@ -190,6 +190,7 @@
 </template>
 
 <script setup lang="ts">
+import { useOnLeave } from "@/composables/onLeave";
 import { errorText } from "@/utils";
 import { __ } from "@/translation";
 import {
@@ -314,6 +315,7 @@ const members = computed<{ user: string; full_name?: string }[]>(
 );
 const memberIds = computed(() => new Set(members.value.map((m) => m.user)));
 const assignableUsers = computed(() => (assignable.data ?? []) as Person[]);
+const { leaveLabel } = useOnLeave();
 
 const UNASSIGNED = "__unassigned__";
 
@@ -322,7 +324,7 @@ const assigneeOptions = computed(() => {
   const toOption = (u: Person) => ({
     label: u.full_name || u.name,
     value: u.name,
-    description: u.name,
+    description: leaveLabel(u.name) || u.name,
   });
   const team = assignableUsers.value.filter((u) => memberIds.value.has(u.name));
   const others = assignableUsers.value.filter(

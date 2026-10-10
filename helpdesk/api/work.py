@@ -36,6 +36,7 @@ from helpdesk.tasky.permissions import (
     is_tasky_admin,
 )
 from helpdesk.utils import agent_only, assigned_to_filter
+from helpdesk.work_calendar import on_leave
 
 KEY_TICKET_PRIORITIES = ("Urgent", "High")
 OPEN_TASK_FILTER = ("not in", ["Completed", "Cancelled", "Template"])
@@ -989,10 +990,13 @@ def get_team_workload(project: str | None = None, customer: str | None = None) -
             as_list=True,
         )
     )
+    # someone on approved leave today has no room, whatever their open work
+    away = on_leave(today, list(rows))
     team = []
     for row in rows.values():
         row["full_name"] = full_names.get(row["user"]) or row["user"]
         row["estimated_hours"] = round(row["estimated_hours"], 1)
+        row["on_leave"] = row["user"] in away
         team.append(row)
     team.sort(key=lambda r: (-r["overdue"], -r["open"], r["full_name"]))
     return {
@@ -1000,7 +1004,11 @@ def get_team_workload(project: str | None = None, customer: str | None = None) -
         "totals": {
             "people": len(team),
             "working_now": sum(1 for r in team if r["working"]),
-            "free": sum(1 for r in team if not r["open"] and not r["tickets"]),
+            "free": sum(
+                1
+                for r in team
+                if not r["open"] and not r["tickets"] and not r["on_leave"]
+            ),
             "open": sum(r["open"] for r in team),
             "overdue": sum(r["overdue"] for r in team),
             "review": sum(r["review"] for r in team),

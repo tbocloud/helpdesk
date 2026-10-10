@@ -44,9 +44,7 @@
             <component
               :is="KINDS[item.kind].icon"
               class="size-3.5"
-              :class="
-                item.kind === 'overdue' ? 'text-danger' : 'text-ink-gray-5'
-              "
+              :class="iconTone(item.kind)"
               aria-hidden="true"
             />
             {{ item.label }}
@@ -160,9 +158,7 @@
                 <component
                   :is="KINDS[event.type].icon"
                   class="size-4 shrink-0"
-                  :class="
-                    event.type === 'overdue' ? 'text-danger' : 'text-ink-gray-5'
-                  "
+                  :class="iconTone(event.type)"
                   aria-hidden="true"
                 />
                 <component
@@ -336,6 +332,7 @@ import {
 import { computed, ref, watch, type Component } from "vue";
 import { RouterLink, useRouter, type RouteLocationRaw } from "vue-router";
 import LucideCalendarCheck from "~icons/lucide/calendar-check";
+import LucideCalendarOff from "~icons/lucide/calendar-off";
 import LucideChevronDown from "~icons/lucide/chevron-down";
 import LucideChevronLeft from "~icons/lucide/chevron-left";
 import LucideChevronRight from "~icons/lucide/chevron-right";
@@ -343,6 +340,7 @@ import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideCircleDot from "~icons/lucide/circle-dot";
 import LucideFlag from "~icons/lucide/flag";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
+import LucideTreePalm from "~icons/lucide/tree-palm";
 import LucideVideo from "~icons/lucide/video";
 
 interface MeetingEvent {
@@ -367,13 +365,32 @@ interface TaskEvent {
   is_milestone: 0 | 1;
 }
 
+/** a named holiday on the hub's holiday list (weekly offs are left out) */
+interface HolidayEvent {
+  date: string;
+  description: string;
+  /** from the holiday list on the CRM site */
+  synced: boolean;
+}
+
+/** approved leave synced from the CRM site */
+interface LeaveEvent {
+  user: string;
+  full_name: string;
+  from_date: string;
+  to_date: string;
+  half_day: boolean;
+}
+
 interface CalendarData {
   meetings: MeetingEvent[];
   tasks: TaskEvent[];
+  holidays: HolidayEvent[];
+  leave: LeaveEvent[];
   can_see_team: boolean;
 }
 
-type Kind = "meeting" | "task" | "key" | "overdue";
+type Kind = "meeting" | "task" | "key" | "overdue" | "holiday" | "leave";
 
 // frappe-ui's calendar only knows its own named colours (no neutral, no red)
 // and looks them up in this exported map, so the TBO ones are added to it:
@@ -412,6 +429,16 @@ Object.assign(CalendarColorMap, {
     bg: "var(--danger-soft)",
     bgHover: "var(--danger-soft)",
   },
+  // a day off coming up: the quiet info tone, never loud
+  "tbo-holiday": {
+    ...BRAND_ACTIVE,
+    color: "var(--info)",
+    border: "var(--info)",
+    text: "var(--ink-gray-8)",
+    subtext: "var(--ink-gray-6)",
+    bg: "var(--info-soft)",
+    bgHover: "var(--info-soft)",
+  },
 });
 
 const KINDS: Record<Kind, { color: string; icon: Component }> = {
@@ -419,6 +446,8 @@ const KINDS: Record<Kind, { color: string; icon: Component }> = {
   task: { color: "tbo-task", icon: LucideCircleDot },
   key: { color: "tbo-task", icon: LucideFlag },
   overdue: { color: "tbo-overdue", icon: LucideCircleAlert },
+  holiday: { color: "tbo-holiday", icon: LucideCalendarOff },
+  leave: { color: "tbo-task", icon: LucideTreePalm },
 };
 
 const LEGEND: { kind: Kind; label: string }[] = [
@@ -426,7 +455,18 @@ const LEGEND: { kind: Kind; label: string }[] = [
   { kind: "task", label: __("Task due") },
   { kind: "key", label: __("Key task or milestone") },
   { kind: "overdue", label: __("Overdue task") },
+  { kind: "holiday", label: __("Holiday") },
+  { kind: "leave", label: __("On leave") },
 ];
+
+/** the icon's tone: red for overdue, info for holidays, else neutral */
+function iconTone(kind: Kind) {
+  return kind === "overdue"
+    ? "text-danger"
+    : kind === "holiday"
+    ? "text-info"
+    : "text-ink-gray-5";
+}
 
 const calendarConfig = {
   defaultMode: "Week",
@@ -567,11 +607,14 @@ const agenda = computed(() => {
 });
 
 function timeLabel(event: typeof events.value[number]) {
-  return event.fromTime
-    ? `${event.fromTime}–${event.toTime}`
-    : event.type === "overdue"
-    ? __("Overdue")
-    : __("Due");
+  if (event.fromTime) return `${event.fromTime}–${event.toTime}`;
+  return (
+    {
+      overdue: __("Overdue"),
+      holiday: __("Holiday"),
+      leave: __("All day"),
+    }[event.type as string] ?? __("Due")
+  );
 }
 
 const emptyText = computed(() =>
@@ -623,10 +666,93 @@ const events = computed(() => {
       record: t,
     };
   });
-  return [...meetings, ...tasks];
+  const allDay = (
+    id: string,
+    title: string,
+    date: string,
+    type: Kind,
+    record: unknown
+  ) => ({
+    id,
+    title,
+    participant: "",
+    fromDate: date,
+    toDate: date,
+    fromTime: undefined as string | undefined,
+    toTime: undefined as string | undefined,
+    isFullDay: true,
+    type,
+    color: KINDS[type].color,
+    kind: type,
+    record,
+  });
+  const holidays = (data.value?.holidays ?? []).map((h) =>
+    allDay(
+      `holiday:${h.date}`,
+      h.description || __("Holiday"),
+      h.date,
+      "holiday",
+      h
+    )
+  );
+  // one all-day event per day of the leave inside the range shown
+  const leave = (data.value?.leave ?? []).flatMap((l) => {
+    const days = [];
+    const last = l.to_date < range.value.end ? l.to_date : range.value.end;
+    for (
+      let day = dayjs(
+        l.from_date > range.value.start ? l.from_date : range.value.start
+      );
+      !day.isAfter(last, "day");
+      day = day.add(1, "day")
+    ) {
+      const date = day.format("YYYY-MM-DD");
+      days.push(
+        allDay(
+          `leave:${l.user}:${date}`,
+          l.half_day
+            ? __("{0} · Half day leave", l.full_name)
+            : __("{0} · On leave", l.full_name),
+          date,
+          "leave",
+          l
+        )
+      );
+    }
+    return days;
+  });
+  return [...holidays, ...leave, ...meetings, ...tasks];
 });
 
 function detail(event: Record<string, any>) {
+  if (event.kind === "holiday") {
+    const h = event.record as HolidayEvent;
+    return {
+      title: h.description || __("Holiday"),
+      when: dayjs(h.date).format("dddd D MMM YYYY"),
+      context: h.synced
+        ? __("From the holiday list on the CRM site")
+        : __("Business holiday"),
+      joinUrl: null,
+      route: null,
+      openLabel: "",
+    };
+  }
+  if (event.kind === "leave") {
+    const l = event.record as LeaveEvent;
+    const from = dayjs(l.from_date);
+    const to = dayjs(l.to_date);
+    return {
+      title: event.title,
+      when: from.isSame(to, "day")
+        ? from.format("ddd D MMM")
+        : `${from.format("ddd D MMM")}–${to.format("ddd D MMM")}`,
+      context: __("Approved leave"),
+      joinUrl: null,
+      route: null,
+      openLabel: "",
+    };
+  }
   if (event.kind === "meeting") {
     const m = event.record as MeetingEvent;
     const isTicket = m.reference_doctype === "HD Ticket";

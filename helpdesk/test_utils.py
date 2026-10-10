@@ -2368,6 +2368,14 @@ class FakeCRM:
         }
         self.invoices: dict[str, dict] = {}
         self.fail_invoices = False
+        # ERPNext on the CRM site, for holidays and leave
+        self.company_rows[0]["default_holiday_list"] = FAKE_HOLIDAY_LIST
+        self.holiday_rows: dict[str, list[dict]] = {FAKE_HOLIDAY_LIST: []}
+        self.leave_rows: list[dict] = []
+        self.employee_rows: list[dict] = []
+        # an Exception the holiday or leave reads raise, as the CRM site would
+        self.holidays_error: Exception | None = None
+        self.leave_error: Exception | None = None
 
     def logged_user(self):
         return "api@crm.example"
@@ -2464,10 +2472,85 @@ class FakeCRM:
             {"status": "Draft", **self.invoices[n]} for n in names if n in self.invoices
         ]
 
+    def holiday_lists(self):
+        return [{"name": name} for name in self.holiday_rows]
+
+    def company_holiday_lists(self):
+        return [
+            {"name": c["name"], "default_holiday_list": c.get("default_holiday_list")}
+            for c in self.company_rows
+        ]
+
+    def holidays(self, holiday_list):
+        from helpdesk.integrations.crm.client import CRMError
+
+        if self.holidays_error:
+            raise self.holidays_error
+        if holiday_list not in self.holiday_rows:
+            raise CRMError(f"No holiday list {holiday_list}")
+        return [dict(row) for row in self.holiday_rows[holiday_list]]
+
+    def approved_leave(self, start, end):
+        if self.leave_error:
+            raise self.leave_error
+        return [
+            dict(row)
+            for row in self.leave_rows
+            if str(row["to_date"]) >= str(start) and str(row["from_date"]) <= str(end)
+        ]
+
+    def employees(self, names):
+        if self.leave_error:
+            raise self.leave_error
+        return [dict(e) for e in self.employee_rows if e["name"] in names]
+
 
 FAKE_COMPANY = "TBO India Pvt Ltd"
 FAKE_ITEM = "Support Hours"
 FAKE_TAXES = "GST 18% - TBO"
+FAKE_HOLIDAY_LIST = "TBO India 2026"
+
+
+def erp_holiday(day, description: str, weekly_off: int = 0) -> dict:
+    """A row of an ERPNext Holiday List as the CRM site returns it (for FakeCRM.holiday_rows)."""
+    return {
+        "holiday_date": str(day),
+        "description": description,
+        "weekly_off": weekly_off,
+    }
+
+
+def erp_leave_application(
+    name: str, employee: str, from_date: str, to_date: str, **values
+) -> dict:
+    """An approved ERPNext Leave Application as the CRM site returns it (for
+    FakeCRM.leave_rows)."""
+    return {
+        "name": name,
+        "employee": employee,
+        "employee_name": employee,
+        "from_date": from_date,
+        "to_date": to_date,
+        "leave_type": "Casual Leave",
+        "half_day": 0,
+        **values,
+    }
+
+
+def make_hd_leave(
+    user: str, from_date, to_date, half_day: int = 0, leave_application=None
+):
+    """An approved leave of `user` in HD Leave, as the CRM holiday sync stores it."""
+    return frappe.get_doc(
+        {
+            "doctype": "HD Leave",
+            "leave_application": leave_application or f"HR-LAP-TEST-{user}-{from_date}",
+            "user": user,
+            "from_date": from_date,
+            "to_date": to_date,
+            "half_day": half_day,
+        }
+    ).insert(ignore_permissions=True)
 
 
 def enable_invoicing(**values):

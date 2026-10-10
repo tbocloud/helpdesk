@@ -55,6 +55,7 @@ from helpdesk.tasky.permissions import (
     get_assigners,
 )
 from helpdesk.utils import is_agent
+from helpdesk.work_calendar import on_leave
 from helpdesk.work_reminders import (
     _agent_managers,
     _assignees,
@@ -251,8 +252,36 @@ class Context:
         self.today = self.now.date()
         self.calendar = calendar or WorkCalendar(self.today)
         self.agent_managers = sorted(set(_agent_managers()))
+        # {user: last day of leave}: nobody on leave today is nudged or escalated to
+        self.on_leave = on_leave(self.today)
         self.customer_follow_ups = []
         self._heads = {}
+
+    def cover_leave(
+        self, recipients: list, owners: list, cover: list
+    ) -> tuple[list[str], str]:
+        """`recipients` without anyone on leave. When an owner (an assignee) who would
+        have been told is away, `cover` (the assigner and lead, or the team lead) is
+        told instead, with "X is on leave until …"; with nobody left, the Agent
+        Managers. Returns (recipients, the note to add to the text)."""
+        recipients = _unique(recipients)
+        away = [u for u in recipients if u in self.on_leave and u in owners]
+        present = [u for u in recipients if u not in self.on_leave]
+        if away or (recipients and not present):
+            # only cover who can be told: a disabled assigner or lead would leave nobody
+            reachable = set(
+                enabled_users(u for u in cover if u and u not in self.on_leave)
+            )
+            present = _unique([*present, *(u for u in cover if u in reachable)])
+        if recipients and not present:
+            present = [u for u in self.agent_managers if u not in self.on_leave]
+        note = "; ".join(
+            _("{0} is on leave until {1}").format(
+                get_fullname(u), formatdate(self.on_leave[u], "EEE d MMM")
+            )
+            for u in away
+        )
+        return present, note
 
     def heads(self, department: str | None) -> list[str]:
         """department_heads, read once per department; None is the Agent Managers."""
@@ -404,6 +433,11 @@ class TaskRules:
         elif task.is_key:
             label = _("Key task") + ": "
         title = f"{label}{task.subject}"
+        owners = self.owners(task)
+        recipients, away = self.ctx.cover_leave(
+            recipients, owners, [self.assigners.get(task.name), *self.leads(task)]
+        )
+        text = text.replace("{title}", title)
         return FollowUp(
             doctype="Task",
             name=task.name,
@@ -411,9 +445,9 @@ class TaskRules:
             rule=rule,
             stage=stage,
             severity=severity,
-            text=text.replace("{title}", title),
-            recipients=_unique(recipients),
-            owners=self.owners(task),
+            text=f"{text} · {away}" if away else text,
+            recipients=recipients,
+            owners=owners,
             link=f"/projects/{task.project}" if task.project else "/my-work",
             **kwargs,
         )
@@ -750,6 +784,9 @@ class TicketRules:
 
     def follow_up(self, ticket, rule, stage, severity, text, recipients, **kwargs):
         title = _("Ticket #{0}: {1}").format(ticket.name, ticket.subject)
+        owners = _assignees(ticket._assign)
+        recipients, away = self.ctx.cover_leave(recipients, owners, self.support_heads)
+        text = text.replace("{title}", title)
         return FollowUp(
             doctype="HD Ticket",
             name=str(ticket.name),
@@ -757,9 +794,9 @@ class TicketRules:
             rule=rule,
             stage=stage,
             severity=severity,
-            text=text.replace("{title}", title),
-            recipients=_unique(recipients),
-            owners=_assignees(ticket._assign),
+            text=f"{text} · {away}" if away else text,
+            recipients=recipients,
+            owners=owners,
             link=f"/tickets/{ticket.name}",
             **kwargs,
         )
@@ -1173,6 +1210,8 @@ def send_due_digests(follow_ups: list[FollowUp], ctx: Context) -> None:
     users = set(by_user)
     if morning:
         users |= open_work_owners()
+    # nobody on leave gets a digest; their items already went to who covers for them
+    users -= set(ctx.on_leave)
     for user in sorted(enabled_users(users)):
         try:
             send_digest(user, by_user.get(user, []), morning)

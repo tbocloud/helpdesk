@@ -204,8 +204,19 @@
                     >
                       {{ person.full_name }}
                     </RouterLink>
-                    <div class="mt-0.5">
-                      <TaskyBadge v-bind="flagBadge(person.flag)" />
+                    <div class="mt-0.5 flex flex-wrap gap-1">
+                      <TaskyBadge
+                        v-bind="flagBadge(person.flag, person.leave_days)"
+                      />
+                      <!-- part of the window on leave; all of it reads "On leave" above -->
+                      <TaskyBadge
+                        v-if="person.leave_days && person.flag"
+                        tone="info"
+                        :icon="LucideTreePalm"
+                        :label="
+                          __('{0} day(s) on leave', String(person.leave_days))
+                        "
+                      />
                     </div>
                   </div>
                 </div>
@@ -447,6 +458,7 @@ import { RouterLink, useRoute, useRouter } from "vue-router";
 import LucideChevronDown from "~icons/lucide/chevron-down";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideGauge from "~icons/lucide/gauge";
+import LucideTreePalm from "~icons/lucide/tree-palm";
 import LucideTriangleAlert from "~icons/lucide/triangle-alert";
 import LucideUsers from "~icons/lucide/users";
 import LucideX from "~icons/lucide/x";

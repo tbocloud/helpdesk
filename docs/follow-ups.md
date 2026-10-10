@@ -45,14 +45,33 @@ saved.
 
 - **Working days**: HD Work Settings' weekly off and Saturdays off, and the holidays on the
   default SLA's holiday list (`recurrence.working_day_checker`, the same check recurring
-  tasks use).
+  tasks use). That list includes the holidays synced from the CRM site (see
+  [tbo-crm-integration.md](tbo-crm-integration.md#holidays-and-leave-implemented-read-only)).
 - **Working hours**: the default SLA policy's working days and hours (Settings → SLA
   policies). Without a default SLA, the whole working day counts.
 - Every threshold counts working days, working hours or working minutes, so a weekend or a
   holiday never makes something look later than it is.
-- **Leave**: the hub has no leave records (no Leave Application or leave on HD Employee), so
-  the engine has nothing to check. A task held with the reason *Leave* leaves the overdue
-  ladder like any held task, and the hold rule asks about it after the hold days.
+- **Leave**: see [Leave](#leave) below.
+
+## Leave
+
+Approved leave comes from ERPNext on the CRM site into **HD Leave** (daily, see
+[tbo-crm-integration.md](tbo-crm-integration.md#approved-leave)). Each run reads who is on
+leave today once (`Context.on_leave`, `work_calendar.on_leave`); a half day doesn't count,
+since they still work part of it.
+
+- **Nobody on leave is nudged or escalated to** (`Context.cover_leave`, applied to every
+  follow-up): they're taken off its recipients, at every ladder level.
+- **The assignee is on leave**: when an owner (an assignee) would have been told, the
+  follow-up goes straight to who covers for them instead, with the text ending "Anu Varghese
+  is on leave until Wed 14 Oct":
+  - a task: its assigner and the project lead (else the project managers);
+  - a ticket: the team lead (the support department's heads, else the Agent Managers).
+- **Nobody left** (everyone told is away): the cover people, else the Agent Managers.
+- The item still counts as the assignee's (`owners`), so the banner and the manager view
+  show it as their work.
+- **Digests** skip people on leave, including the morning plan.
+- A task held with the reason *Leave* still leaves the overdue ladder like any held task.
 
 ## The rules
 
@@ -179,7 +198,10 @@ gives the same two roles write access):
   first, each item with its rule and level.
 
 Validation (`HDFollowUpSettings.validate`): digest times are 24-hour times (stored sorted,
-"09:30, 15:30", at least one), the ladder days are 1 or more and in order, thresholds are 1
+"09:30, 15:30", at least one), the afternoon nudge is one 24-hour time stored as "14:00" (a
+Data field, not Time: Frappe gives a new document's Time fields the current time instead of
+their default, so a fresh or seeded site nudged "in the afternoon" from whenever it was set
+up; the patch `v16_0_2.reset_seeded_afternoon_nudge` puts such a seeded value back to 14:00), the ladder days are 1 or more and in order, thresholds are 1
 or more, and the SLA warnings are 1–99% with the second after the first. On the page a
 cleared number box keeps its last value rather than sending 0.
 
@@ -216,6 +238,7 @@ Existing sites get the defaults stored by the patch `v16_0_2.seed_follow_up_sett
   *Escalation Channel Workflow URL*. Without the direct-message workflow, digests and pings
   go by email. People are matched by their user email.
 - **Working hours and days**: the default SLA policy's hours, HD Work Settings' weekly off
-  and Saturdays off, and the business holidays.
+  and Saturdays off, and the business holidays (synced from the CRM site when Settings → CRM
+  → Holidays and leave is on, which also brings approved leave).
 - **Follow-ups**: digest times, the ladder days, the support department (and its heads in
   Settings → Departments), whether to email customers, and auto-close in General.
