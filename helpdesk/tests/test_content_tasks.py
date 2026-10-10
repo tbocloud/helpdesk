@@ -2,7 +2,12 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_days, add_to_date, getdate, now_datetime
 
-from helpdesk.content_team import CONTENT_TEAM_ROLE, ensure_role, is_content_only
+from helpdesk.content_team import (
+    CONTENT_TEAM_ROLE,
+    DM_EMPLOYEE_ROLE,
+    ensure_role,
+    is_content_only,
+)
 from helpdesk.helpdesk.doctype.hd_content_post.hd_content_post import TASK_ROLES
 from helpdesk.helpdesk.doctype.hd_ticket.hd_ticket import permission_query
 from helpdesk.test_utils import (
@@ -417,6 +422,8 @@ class TestSeveralPeopleAndVideoEditor(ContentTaskCase):
             has_permission,
         )
 
+        # only the content team sees posts at all
+        frappe.get_doc("User", OTHER[0]).add_roles(DM_EMPLOYEE_ROLE)
         post = self.post()
         self.assertFalse(has_permission(post, "read", OTHER[0]))
         post.set_people("marketer", [MARKETER[0], OTHER[0]])

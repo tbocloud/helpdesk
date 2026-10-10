@@ -171,6 +171,7 @@
 
 <script setup lang="ts">
 import {
+  CONTENT_ROUTES,
   ERP_EMPLOYEE_HIDDEN_ROUTES,
   CONTENT_TEAM_ROUTES,
   DEPARTMENT_EMPLOYEE_HIDDEN_ROUTES,
@@ -278,6 +279,7 @@ const navItems = computed(() => {
   return options
     .filter((item) => isCallingEnabled.value || item.label !== __("Call Logs"))
     .filter((item) => !item.adminOnly || authStore.isAdmin)
+    .filter((item) => authStore.inContentTeam || !CONTENT_ROUTES.has(item.to))
     .filter(
       (item) => !authStore.isErpOnly || !ERP_EMPLOYEE_HIDDEN_ROUTES.has(item.to)
     )

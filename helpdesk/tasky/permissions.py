@@ -28,7 +28,12 @@ import json
 import frappe
 from frappe import _
 
-from helpdesk.content_team import DM_COORDINATOR_ROLE, DM_HEAD_ROLE, is_erp_only
+from helpdesk.content_team import (
+    DM_COORDINATOR_ROLE,
+    DM_HEAD_ROLE,
+    in_content_team,
+    is_erp_only,
+)
 from helpdesk.utils import assigned_names_query
 
 ADMIN_ROLES = ("System Manager", "Agent Manager")
@@ -36,8 +41,10 @@ ADMIN_ROLES = ("System Manager", "Agent Manager")
 CONTENT_DEPARTMENT = "Digital"
 # each team keeps out of the other's department (by department name, see departments.md)
 HIDDEN_DEPARTMENTS = {"DM Employee": "ERP", "ERP Employee": CONTENT_DEPARTMENT}
-# role -> the department its holders head (told when its champion is chosen)
+# role -> the department its holders head, besides the department's own Heads setting
 DEPARTMENT_HEADS = {DM_HEAD_ROLE: CONTENT_DEPARTMENT}
+# the user-list child table behind HD Department.heads
+DEPARTMENT_HEAD_TABLE = "HD Content Alert Recipient"
 PROJECT_MANAGER_ROLE = "Project Manager"
 # Value of Project User.custom_role that makes a member a manager of that project
 MANAGER_PROJECT_ROLE = "Project Manager"
@@ -71,15 +78,30 @@ def hidden_departments(user: str | None = None) -> list[str]:
 
 
 def department_heads(department: str | None) -> list[str]:
-    """Who heads a department; for the whole team (None), the Agent Managers."""
+    """Who heads a department: the enabled users in its Heads setting (Settings →
+    Departments) plus holders of a role in DEPARTMENT_HEADS for it. For the whole
+    team (None), the Agent Managers."""
     from helpdesk.content_team import _users_with_role
 
-    roles = (
-        [role for role, dept in DEPARTMENT_HEADS.items() if dept == department]
-        if department
-        else ["Agent Manager"]
+    if not department:
+        return sorted(_users_with_role("Agent Manager"))
+    roles = [role for role, dept in DEPARTMENT_HEADS.items() if dept == department]
+    head = frappe.qb.DocType(DEPARTMENT_HEAD_TABLE)
+    user = frappe.qb.DocType("User")
+    configured = (
+        frappe.qb.from_(head)
+        .join(user)
+        .on(user.name == head.user)
+        .select(head.user)
+        .where(
+            (head.parenttype == "HD Department")
+            & (head.parentfield == "heads")
+            & (head.parent == department)
+            & (user.enabled == 1)
+        )
+        .run(pluck=True)
     )
-    return sorted({user for role in roles for user in _users_with_role(role)})
+    return sorted({*configured, *(u for role in roles for u in _users_with_role(role))})
 
 
 def _departments_sql(departments: list[str]) -> str:
@@ -466,6 +488,13 @@ def task_query(user: str | None = None) -> str | None:
     if is_erp_only(user):
         # the content calendar is the Digital team's, whatever its project's department
         condition += " and ifnull(`tabTask`.`content_post`, '') = ''"
+    elif not in_content_team(user):
+        # outside the content team, only their own content tasks (agrees with is_own_task)
+        condition += (
+            f" and (ifnull(`tabTask`.`content_post`, '') = '' "
+            f"or `tabTask`.`name` in ({_own_tasks_subquery(user)}) "
+            f"or `tabTask`.`owner` = {owner})"
+        )
     return condition
 
 
@@ -510,7 +539,12 @@ def task_has_permission(
         return None
     if is_hidden_project(doc.project, user):
         return False
-    if doc.get("content_post") and is_erp_only(user):
+    # outside the content team, only their own content tasks; never for ERP Employees
+    if (
+        doc.get("content_post")
+        and not in_content_team(user)
+        and (is_erp_only(user) or not is_own_task(doc, user))
+    ):
         return False
     if can_manage_project(doc.project, user):
         return None

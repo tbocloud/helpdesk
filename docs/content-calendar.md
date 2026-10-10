@@ -170,6 +170,50 @@ The **Assign** dialog on a board card (`EntryActionDialog.vue`) has the same Est
 to the people, filled with the role's current hours; saving sends them to
 `helpdesk.api.content_board.assign` (`hours`), and clearing the box sets the role to 0.
 
+## Who sees the content calendar
+
+Only the **content team** sees it (opt-in). Everyone else, such as ERP consultants,
+developers and functional consultants, doesn't, without needing any role for it.
+
+| In the content team (`content_team.in_content_team()`) | Why |
+| --- | --- |
+| System Manager, Agent Manager, Project Manager, DM Coordinator (`CONTENT_EDITOR_ROLES`) | They edit content (`can_edit_content`) |
+| Digital Marketing Head, DM Employee, Content Team (`CONTENT_CALENDAR_ROLES`) | Content calendar roles |
+| Administrator | Always |
+
+Holding **ERP Employee** keeps someone out even with a content role, unless they also edit
+content: the ERP wall from [departments.md](departments.md) is unchanged.
+
+For everyone outside the content team:
+
+- **Screens:** the sidebar hides **Content** and **Performance** (the Performance page is the
+  content delivery report), and the router sends `ContentCalendar`, `ContentReport`,
+  `ContentPlans` and `Performance` to Home (`CONTENT_ROUTES` in
+  `desk/src/pages/content/contentTeam.ts`, `authStore.inContentTeam` from the `in_content_team`
+  flag in `helpdesk.api.auth.get_user`). The work **Calendar** stays: it shows their own Teams
+  meetings and due tasks, not content. It stays hidden from ERP Employees, as before.
+- **Posts:** the HD Content Post `permission_query` returns none and `has_permission` refuses,
+  even for a member of the client's project.
+- **Content performance:** `content_performance.get_content_performance` and
+  `get_customer_performance` refuse them. The Scoreboard still shows every department's
+  numbers, Digital and content included, to everyone.
+- **A content task given to them** (say a developer asked for a website banner) stays theirs:
+  `task_query` and `task_has_permission` leave out a post's tasks (`Task.content_post` set)
+  unless they're the person's own (assigned to them, given out by them or created by them, as
+  `is_own_task`). They work on that task from My Work and the task page, but don't see the post
+  or the calendar. ERP Employees still can't be given content tasks at all.
+
+**Adding someone:** Settings → Agents shows a **Content team** badge on everyone in it
+(`helpdesk.api.departments.get_content_team(users)`, System and Agent Managers). Picking
+**Digital team: content calendar, no ERP** from the agent's menu gives them DM Employee, which
+adds them; **No wall** takes it away. Members through another role (a DM Coordinator, a
+manager) keep the badge whatever their wall.
+
+**Moving to opt-in:** existing DM and Content Team roles keep working. Anyone with none of
+these roles stopped seeing the calendar on deploy, including people already on posts' teams
+without a role; they keep their own content tasks, and need the Digital team wall to see the
+calendar again.
+
 ## Who can edit entries
 
 Roles (created on install and migrate by `content_team.ensure_role()`, given to **agents**):

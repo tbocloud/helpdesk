@@ -4,6 +4,7 @@ import { useAuthStore } from "@/stores/auth";
 import { useUserStore } from "@/stores/user";
 import { isCustomerPortal } from "@/utils";
 import {
+  CONTENT_ROUTES,
   ERP_EMPLOYEE_HIDDEN_ROUTES,
   CONTENT_TEAM_ROUTES,
   DEPARTMENT_EMPLOYEE_HIDDEN_ROUTES,
@@ -421,10 +422,15 @@ router.beforeEach(async (to, _, next) => {
     // DM and ERP Employees work on projects and content, not support
     next({ name: "Home" });
   } else if (
+    !authStore.inContentTeam &&
+    CONTENT_ROUTES.has(String(to.name))
+  ) {
+    // the content calendar is only for its team
+    next({ name: "Home" });
+  } else if (
     authStore.isErpOnly &&
     ERP_EMPLOYEE_HIDDEN_ROUTES.has(String(to.name))
   ) {
-    // the content calendar is the Digital team's
     next({ name: "Home" });
   } else if (to.name === "TicketAgent" && !authStore.isAgent) {
     const ticketId = to.params.ticketId;

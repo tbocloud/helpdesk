@@ -3,6 +3,7 @@ import frappe
 from helpdesk.api.work import can_see_overview
 from helpdesk.content_team import (
     can_edit_content,
+    in_content_team,
     is_content_only,
     is_department_employee,
     is_dm_head,
@@ -80,7 +81,9 @@ def get_user():
         "is_content_team": is_content_only(current_user),
         "is_dm_head": is_dm_head(current_user),
         "can_edit_content": can_edit_content(current_user),
-        # ERP Employees don't see the content calendar
+        # the only people who see the content calendar and content performance
+        "in_content_team": in_content_team(current_user),
+        # ERP Employees: no work Calendar either (and no Digital department, server side)
         "is_erp_only": is_erp_only(current_user),
         # DM / ERP Employees: no tickets, customers, contacts, templates, KB or reports
         "is_department_employee": is_department_employee(current_user),

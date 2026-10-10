@@ -53,7 +53,11 @@ export const useAuthStore = defineStore("auth", () => {
   const canEditContent: ComputedRef<boolean> = computed(
     () => !!user__.value.can_edit_content
   );
-  // ERP Employees: no content calendar, and no Digital department (server side)
+  // the only people who see the content calendar and content performance
+  const inContentTeam: ComputedRef<boolean> = computed(
+    () => !!user__.value.in_content_team
+  );
+  // ERP Employees: no work Calendar, and no Digital department (server side)
   const isErpOnly: ComputedRef<boolean> = computed(
     () => !!user__.value.is_erp_only
   );
@@ -134,6 +138,7 @@ export const useAuthStore = defineStore("auth", () => {
     isContentTeam,
     isDmHead,
     canEditContent,
+    inContentTeam,
     isErpOnly,
     isDepartmentEmployee,
     telephonyInstalled,

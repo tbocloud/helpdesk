@@ -10,6 +10,7 @@
 		"sort_order",
 		"column_break_1",
 		"is_active",
+		"heads",
 		"description_section",
 		"description"
 	],
@@ -43,6 +44,13 @@
 			"description": "Inactive departments can't be picked for projects; projects already in one keep it."
 		},
 		{
+			"fieldname": "heads",
+			"fieldtype": "Table MultiSelect",
+			"label": "Heads",
+			"options": "HD Content Alert Recipient",
+			"description": "Told when the department's Scoreboard champion is chosen. Digital Marketing Heads also head Digital."
+		},
+		{
 			"fieldname": "description_section",
 			"fieldtype": "Section Break"
 		},
@@ -54,7 +62,7 @@
 	],
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-10-06 10:00:00.000000",
+	"modified": "2026-10-10 10:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Department",

@@ -1,11 +1,13 @@
 // What a Content Team member (writer, designer, marketer) can open: the
 // content calendar, their projects and tasks, their calendar and timesheets,
 // and their own content performance.
-// The content calendar's pages, which ERP Employees don't see
+// The content calendar's pages and its performance report: only the content
+// team sees them (authStore.inContentTeam, docs/content-calendar.md)
 export const CONTENT_ROUTES = new Set([
   "ContentCalendar",
   "ContentReport",
   "ContentPlans",
+  "Performance",
 ]);
 
 // Hidden from DM and ERP Employees, who work on projects and content, not support
@@ -25,11 +27,8 @@ export const DEPARTMENT_EMPLOYEE_HIDDEN_ROUTES = new Set([
   "NewArticle",
 ]);
 
-// Hidden from ERP Employees: the content calendar's pages and the work calendar
-export const ERP_EMPLOYEE_HIDDEN_ROUTES = new Set([
-  ...CONTENT_ROUTES,
-  "WorkCalendar",
-]);
+// Also hidden from ERP Employees, who are never in the content team
+export const ERP_EMPLOYEE_HIDDEN_ROUTES = new Set(["WorkCalendar"]);
 
 export const CONTENT_TEAM_ROUTES = new Set([
   "ContentCalendar",

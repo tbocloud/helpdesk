@@ -1436,8 +1436,12 @@ def _agent_query(user: str) -> str | None:
             query += " OR (`tabHD Ticket`.agent_group is null)"
         return query
 
-    query += " OR (JSON_SEARCH(`tabHD Ticket`._assign, 'all', {u}) IS NOT NULL)".format(
-        u=frappe.db.escape(user)
+    # tickets assigned to the user, matched exactly through their open ToDos
+    # (JSON_SEARCH on `_assign` reads `_` and `%` in a user ID as wildcards)
+    query += (
+        " OR (`tabHD Ticket`.`name` in (select `reference_name` from `tabToDo` "
+        "where `reference_type` = 'HD Ticket' and `status` not in ('Cancelled', 'Closed') "
+        f"and `allocated_to` = {frappe.db.escape(user)}))"
     )
     team_names = [t.get("team_name") for t in teams]
     if team_names:

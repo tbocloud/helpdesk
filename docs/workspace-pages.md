@@ -48,14 +48,17 @@ Home, the project cards' stats, the timesheet task pickers and task details.
 from the task's ToDos (`allocated_to`, `assigned_by`), matched exactly: a LIKE on `_assign`
 would read `_` in a user ID as a wildcard. A finished assignment (Closed ToDo) still counts,
 so people keep seeing the tasks they completed; a withdrawn one (Cancelled) doesn't. The
-department walls ([departments.md](departments.md)) apply on top of every row except admins.
+department walls ([departments.md](departments.md)) apply on top of every row except admins,
+and so does the content team rule: outside the content team, a content post's tasks are only
+seen when they're the person's own, whatever the row
+([content-calendar.md](content-calendar.md#who-sees-the-content-calendar)).
 
 **Exact "assigned to" everywhere.** Every list of someone's tasks or tickets matches the
 assignment through ToDos, never a LIKE (or JSON_SEARCH) on `_assign`: My tasks
 (`get_my_tasks`), the sidebar Board (`get_kanban_tasks` without a project), My Work and its
 Completed tab, the Overview's assignee filter, the work Calendar, the sidebar counts
 (`helpdesk.api.sidebar.get_nav_counts`), the projects a member sees through an assigned task
-(`project_query`, `has_assigned_task`), the agent home's ticket lists, the analytics dashboard's
+(`project_query`, `has_assigned_task`), the agent home's ticket lists and analytics (`analytics_utils`), the ticket permission query (agents see tickets assigned to them), the analytics dashboard's
 agent filter, the Ticket Analytics and Ticket Summary reports, and the ticket list's "Assigned
 to" filter (`handle_assigned_to_filter` in `helpdesk/api/doc.py`, which turns `_assign like
 %user%` into a name filter). The one rule is `assigned_names_query(doctype, user, finished)` in
