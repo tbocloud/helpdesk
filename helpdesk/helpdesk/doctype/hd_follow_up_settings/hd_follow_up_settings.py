@@ -23,6 +23,7 @@ POSITIVE_FIELDS = (
 class HDFollowUpSettings(Document):
     def validate(self):
         self.validate_digest_times()
+        self.validate_afternoon_nudge()
         self.validate_ladder()
         self.validate_thresholds()
         self.validate_sla_warnings()
@@ -37,6 +38,16 @@ class HDFollowUpSettings(Document):
                 )
             )
         self.digest_times = ", ".join(times)
+
+    def validate_afternoon_nudge(self):
+        """Stored as "14:00"; a time with seconds ("14:00:00") is accepted."""
+        value = ":".join((self.afternoon_nudge_at or "14:00").strip().split(":")[:2])
+        times = self.parse_digest_times(value)
+        if not times or len(times) != 1:
+            frappe.throw(
+                _("Write the afternoon nudge time as a 24-hour time, e.g. 14:00.")
+            )
+        self.afternoon_nudge_at = times[0]
 
     def validate_ladder(self):
         days = [

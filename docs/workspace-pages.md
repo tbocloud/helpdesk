@@ -167,8 +167,10 @@ for By person, `get_project_portfolio` for By project (`components/ProjectPortfo
   (with SLA breached), next due task and date. Sort select (`sort` in the URL): most overdue
   first (the server's order), most open work, most due this week, next due date, name.
 - **On leave**: someone on approved leave today has an "On leave until Wed 14 Oct" (or "Half
-  day today") badge under their name, and isn't shown as Free. It comes from
-  `composables/onLeave.ts` (`helpdesk.api.calendar.get_on_leave`, one request per page load),
+  day today") badge under their name. A whole day of leave means they aren't Free: the
+  server's `on_leave` per person and `totals.free` agree with the badge and the Free tile. The
+  badge text comes from
+  `composables/onLeave.ts` (`helpdesk.api.calendar.get_on_leave`, loaded once a day, so an app left open overnight asks again),
   which the assignee pickers use too: the task dialogs' and teammate pickers show it in place
   of the email, and the ticket's assignee list shows it next to the name and warns when such a
   person is assigned.
@@ -195,8 +197,9 @@ project they don't run (it returns no one).
   SLA's holiday list (including those synced from the CRM site). Approved leave (HD Leave,
   synced from the CRM site, see
   [tbo-crm-integration.md](tbo-crm-integration.md#approved-leave)) takes a day's hours off
-  what the person has, a half day half (`work_calendar.leave_fractions`); the row shows "N
-  day(s) on leave" (info tone, palm-tree icon) and each day carries its `leave`.
+  what the person has, a half day half (`work_calendar.leave_fractions`). Leave for the whole
+  window reads "On leave" instead of "No working days"; part of it adds "N day(s) on leave"
+  (info tone, palm-tree icon); each day carries its `leave`.
 - **Planned hours** come from open tasks assigned to the person with status Open, Working,
   Overdue or Waiting on Task (On Hold and Pending Review wait on someone else). Each task's
   remaining hours = `custom_estimated_hours` (else the standard estimate from

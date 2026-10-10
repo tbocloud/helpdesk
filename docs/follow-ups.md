@@ -198,7 +198,10 @@ gives the same two roles write access):
   first, each item with its rule and level.
 
 Validation (`HDFollowUpSettings.validate`): digest times are 24-hour times (stored sorted,
-"09:30, 15:30", at least one), the ladder days are 1 or more and in order, thresholds are 1
+"09:30, 15:30", at least one), the afternoon nudge is one 24-hour time stored as "14:00" (a
+Data field, not Time: Frappe gives a new document's Time fields the current time instead of
+their default, so a fresh or seeded site nudged "in the afternoon" from whenever it was set
+up; the patch `v16_0_2.reset_seeded_afternoon_nudge` puts such a seeded value back to 14:00), the ladder days are 1 or more and in order, thresholds are 1
 or more, and the SLA warnings are 1–99% with the second after the first. On the page a
 cleared number box keeps its last value rather than sending 0.
 

@@ -120,6 +120,15 @@ On by default (*Sync approved leave*).
   [follow-ups.md](follow-ups.md#leave)), capacity (a day of leave has no available hours, a
   half day half), the Calendar, Home, the Team page and the assignee pickers. The leave type
   stays in HD Leave; the pages show only dates.
+- **Who sees it**: every agent sees who is on leave today and until when
+  (`helpdesk.api.calendar.get_on_leave`, for the pickers and team views), on purpose: whoever
+  assigns work needs to know who is away. The Calendar's team view and Home's "On leave
+  today" are for people who can see the Overview. HD Leave itself (with the leave type) is
+  readable only by System Managers and Agent Managers.
+- **Kept, not deleted**: a leave still approved upstream stays even when its employee can't
+  be matched (or it can't be stored) on a run; only leave no longer approved in the window is
+  removed. A list or leave that fails to save is rolled back on its own and listed as a
+  problem; the rest continues.
 - **No access**: when the API user can't read Leave Application or Employee (HTTP 403),
   holidays still sync and Settings → CRM shows "Leave sync needs read access to Leave
   Application and Employee on tboindia.tbocloud.in". That message is not written to the Error

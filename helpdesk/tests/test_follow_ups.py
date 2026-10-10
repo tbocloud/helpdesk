@@ -582,6 +582,16 @@ class TestSettingsAccess(FollowUpCase):
         self.assertEqual(saved["hold_days"], 9)
         self.assertEqual(saved["digest_times"], "09:30, 15:30")
 
+    def test_afternoon_nudge_defaults_to_14_00_and_is_stored_as_hh_mm(self):
+        # a Time field would get the current time on a new document, not its default
+        self.assertEqual(frappe.new_doc(SETTINGS).afternoon_nudge_at, "14:00")
+        self.assertEqual(
+            set_follow_up_settings(afternoon_nudge_at="9:05:00").afternoon_nudge_at,
+            "09:05",
+        )
+        with self.assertRaises(frappe.ValidationError):
+            set_follow_up_settings(afternoon_nudge_at="after lunch")
+
     def test_the_ladder_must_climb(self):
         with self.assertRaises(frappe.ValidationError):
             set_follow_up_settings(ladder_l1_days=4, ladder_l2_days=2)
