@@ -32,7 +32,7 @@
           <template v-if="section.label && !section.collapsible">
             <div
               v-if="!isCollapsed"
-              class="mb-1 mt-4 select-none px-3 text-2xs font-semibold uppercase tracking-[0.08em] text-ink-gray-5"
+              class="mb-1 mt-4 select-none px-2 text-xs font-medium text-ink-gray-5"
             >
               {{ section.label }}
             </div>
@@ -66,7 +66,7 @@
               @click="item.onClick && item.onClick()"
             >
               <template #prefix>
-                <span class="tbo-nav-icon relative">
+                <span class="tbo-nav-icon relative" :data-tone="item.tone">
                   <component
                     :is="item.icon"
                     class="size-3.5"
@@ -169,7 +169,7 @@
             @click="collapsed = !collapsed"
           >
             <template #prefix>
-              <span class="tbo-nav-icon">
+              <span class="tbo-nav-icon" data-tone="gray">
                 <LucidePanelLeftOpen
                   v-if="isCollapsed"
                   class="size-3.5"
@@ -337,6 +337,7 @@ const navItems = computed(() => {
       onClick: () => selectItem(option.to, { name: option.to }),
       badge: option.countKey ? navCounts.data?.[option.countKey] : undefined,
       section: option.section,
+      tone: option.tone,
       key: option.label,
     }));
 });
@@ -350,6 +351,7 @@ const searchItem = computed(() => ({
   icon: LucideSearch,
   onClick: () => (showCommandPalette.value = true),
   shortcut: true,
+  tone: "gray",
   key: "search",
 }));
 
@@ -363,6 +365,7 @@ const notificationItem = computed(() =>
         isActive: activeItem.value === "Notifications",
         onClick: () => selectItem("Notifications", { name: "Notifications" }),
         badge: notificationStore.unread,
+        tone: "orange",
         key: "notifications",
         id: "notifications-btn",
       }
@@ -371,6 +374,7 @@ const notificationItem = computed(() =>
         icon: LucideBell,
         onClick: () => notificationStore.toggle(),
         badge: notificationStore.unread,
+        tone: "orange",
         key: "notifications",
         id: "notifications-btn",
       }
@@ -380,6 +384,7 @@ const themeRailItem = computed(() => ({
   label: themeToggle.label.value,
   icon: themeToggle.icon.value,
   onClick: themeToggle.toggle,
+  tone: "gray",
   key: "theme",
 }));
 

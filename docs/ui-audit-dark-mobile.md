@@ -40,7 +40,7 @@ Changed pairs are covered too: the settings radios now use `ink-gray-9` on `surf
 | `ink-gray-6` on `champion-soft` (champion card text) | 6.39 | 6.59 |
 | `success` on `champion-soft` (reason checks) | 5.33 | 7.21 |
 
-The current sidebar item and the Settings nav use `brand-ink` on `brand-soft`; the checked
+The Settings nav's current item uses `brand-ink` on `brand-soft` (the app sidebar's is a white card with an `on-brand` icon on a `brand` tile); the checked
 segmented-control option uses `on-brand` on `brand` (both above).
 
 Every text pair passes 4.5:1. `ink-gray-4` (3.11 light, 3.69 dark) is only used for

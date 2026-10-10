@@ -4,10 +4,27 @@
   <RouterLink
     v-if="parts.length"
     :to="{ name: 'MyWork' }"
-    class="flex min-w-0 items-start gap-2 rounded-lg border border-outline-gray-2 bg-surface-base text-ink-gray-8 transition-colors hover:border-outline-gray-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
-    :class="compact ? 'px-2.5 py-2 text-sm' : 'px-3 py-2.5 text-base'"
+    class="flex min-w-0 gap-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+    :class="
+      compact
+        ? [
+            'items-center rounded-[12px] px-2 py-2 text-sm hover:brightness-[0.98]',
+            urgent ? 'bg-danger-soft' : 'bg-warning-soft',
+          ]
+        : 'items-start rounded-lg border border-outline-gray-2 bg-surface-base px-3 py-2.5 text-base text-ink-gray-8 hover:border-outline-gray-4'
+    "
   >
+    <!-- the sidebar's card puts the bell in a tile, like the nav icons above it -->
+    <span
+      v-if="compact"
+      class="grid size-[26px] shrink-0 place-items-center rounded-[7px] bg-surface-base"
+      :class="urgent ? 'text-danger' : 'text-warning'"
+      aria-hidden="true"
+    >
+      <LucideBellRing class="size-3.5" />
+    </span>
     <LucideBellRing
+      v-else
       class="mt-0.5 size-4 shrink-0"
       :class="urgent ? 'text-danger' : 'text-ink-gray-5'"
       aria-hidden="true"
@@ -18,7 +35,13 @@
         <span v-if="index" class="text-ink-gray-4" aria-hidden="true"> · </span>
         <span
           class="tabular-nums"
-          :class="part.danger ? 'text-danger' : 'text-ink-gray-7'"
+          :class="
+            part.danger
+              ? 'text-danger'
+              : compact
+              ? 'font-medium text-ink-gray-9'
+              : 'text-ink-gray-7'
+          "
           >{{ part.label }}</span
         >
       </template>
@@ -27,7 +50,8 @@
       </span>
     </span>
     <LucideChevronRight
-      class="mt-0.5 size-4 shrink-0 text-ink-gray-4"
+      class="size-4 shrink-0"
+      :class="compact ? 'text-ink-gray-5' : 'mt-0.5 text-ink-gray-4'"
       aria-hidden="true"
     />
   </RouterLink>

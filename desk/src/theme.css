@@ -51,6 +51,18 @@
   --channel-whatsapp: #1c7a43;
 
   --surface-sidebar: oklch(0.976 0.003 265);
+
+  /* sidebar icon tiles, one tint per group of pages (owner's sidebar mockup) */
+  --nav-blue-bg: oklch(0.949 0.03 260);
+  --nav-blue: oklch(0.5 0.17 262);
+  --nav-teal-bg: oklch(0.951 0.035 180);
+  --nav-teal: oklch(0.5 0.09 180);
+  --nav-orange-bg: oklch(0.952 0.035 50);
+  --nav-orange: oklch(0.56 0.15 45);
+  --nav-purple-bg: oklch(0.948 0.035 300);
+  --nav-purple: oklch(0.5 0.17 300);
+  --nav-green-bg: oklch(0.951 0.04 150);
+  --nav-green: oklch(0.5 0.12 150);
   --surface-gray-1: oklch(0.976 0.003 265);
   --surface-gray-2: oklch(0.961 0.004 268);
   --surface-gray-3: oklch(0.949 0.006 265);
@@ -115,6 +127,17 @@
 
   --surface-base: oklch(0.205 0.008 275);
   --surface-sidebar: oklch(0.169 0.006 271);
+
+  --nav-blue-bg: oklch(0.3 0.06 262);
+  --nav-blue: oklch(0.8 0.1 262);
+  --nav-teal-bg: oklch(0.3 0.05 180);
+  --nav-teal: oklch(0.8 0.08 180);
+  --nav-orange-bg: oklch(0.31 0.06 50);
+  --nav-orange: oklch(0.8 0.11 50);
+  --nav-purple-bg: oklch(0.3 0.06 300);
+  --nav-purple: oklch(0.8 0.1 300);
+  --nav-green-bg: oklch(0.3 0.05 150);
+  --nav-green: oklch(0.8 0.1 150);
   --surface-gray-1: oklch(0.235 0.01 268);
   --surface-gray-2: oklch(0.269 0.012 271);
   --surface-gray-3: oklch(0.3 0.013 268);
@@ -232,17 +255,54 @@ kbd {
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 1.625rem;
+  height: 1.625rem;
+  border-radius: 7px;
   color: var(--ink-gray-6);
+}
+/* a tinted tile per page group; data-tone="gray" for the utility rows */
+[data-slot="sidebar"] .tbo-nav-icon[data-tone="gray"] {
+  background-color: var(--surface-gray-2);
+}
+[data-slot="sidebar"] .tbo-nav-icon[data-tone="blue"] {
+  background-color: var(--nav-blue-bg);
+  color: var(--nav-blue);
+}
+[data-slot="sidebar"] .tbo-nav-icon[data-tone="teal"] {
+  background-color: var(--nav-teal-bg);
+  color: var(--nav-teal);
+}
+[data-slot="sidebar"] .tbo-nav-icon[data-tone="orange"] {
+  background-color: var(--nav-orange-bg);
+  color: var(--nav-orange);
+}
+[data-slot="sidebar"] .tbo-nav-icon[data-tone="purple"] {
+  background-color: var(--nav-purple-bg);
+  color: var(--nav-purple);
+}
+[data-slot="sidebar"] .tbo-nav-icon[data-tone="green"] {
+  background-color: var(--nav-green-bg);
+  color: var(--nav-green);
 }
 [data-slot="sidebar"] .tbo-nav-label {
   color: var(--ink-gray-8);
 }
+/* the current page: a white card with the brand tile */
+[data-slot="sidebar"] [data-slot="sidebar-item"][data-state="active"] {
+  background-color: var(--surface-base);
+  color: var(--ink-gray-9);
+  box-shadow: 0 0 0 1px var(--outline-gray-2), 0 1px 2px rgb(0 0 0 / 0.05);
+}
+[data-slot="sidebar"]
+  [data-slot="sidebar-item"][data-state="active"]
+  .tbo-nav-icon {
+  background-color: var(--brand);
+  color: var(--on-brand);
+}
 [data-slot="sidebar"]
   [data-slot="sidebar-item"][data-state="active"]
   .tbo-nav-label {
-  color: var(--brand-ink);
+  color: var(--ink-gray-9);
   font-weight: 600;
 }
 

@@ -33,7 +33,7 @@
         "
       >
         <template #prefix>
-          <span class="tbo-nav-icon">
+          <span class="tbo-nav-icon" data-tone="blue">
             <LucideCircleHelp class="size-3.5" aria-hidden="true" />
           </span>
         </template>
