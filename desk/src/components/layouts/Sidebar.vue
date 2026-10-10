@@ -74,6 +74,7 @@ import SettingsModal from "@/components/Settings/SettingsModal.vue";
 import { confirmLoginToFrappeCloud } from "@/composables/fc";
 import { useApps } from "@/composables/useApps";
 import { useScreenSize } from "@/composables/screen";
+import { useThemeToggle } from "@/composables/useThemeToggle";
 import { showNewContactModal } from "@/pages/contact/dialogState";
 import {
   showAssignmentModal,
@@ -84,7 +85,7 @@ import { useAuthStore } from "@/stores/auth";
 import { useConfigStore } from "@/stores/config";
 import { capture } from "@/telemetry";
 import { isCustomerPortal } from "@/utils";
-import { call, SidebarItem, toast, useTheme } from "frappe-ui";
+import { call, SidebarItem, toast } from "frappe-ui";
 import {
   GettingStartedBanner,
   HelpModal,
@@ -105,8 +106,6 @@ import LucideCircleHelp from "~icons/lucide/circle-help";
 import FileText from "~icons/lucide/file-text";
 import Globe from "~icons/lucide/globe";
 import LucideKeyboard from "~icons/lucide/keyboard";
-import LucideMoon from "~icons/lucide/moon";
-import LucideSun from "~icons/lucide/sun";
 import LucideMail from "~icons/lucide/mail";
 import MailOpen from "~icons/lucide/mail-open";
 import MessageCircle from "~icons/lucide/message-circle";
@@ -128,13 +127,9 @@ const configStore = useConfigStore();
 
 const showShortcutsModal = ref(false);
 const { appsMenuOption } = useApps();
-const { currentTheme, toggleTheme } = useTheme();
-
-const themeMenuItem = computed(() => ({
-  label: __("Toggle theme"),
-  icon: currentTheme.value === "dark" ? LucideSun : LucideMoon,
-  onClick: () => toggleTheme(),
-}));
+// Agents switch theme from the button beside Notifications; the customer
+// portal has no Notifications row, so it keeps the menu entry.
+const { menuItem: themeMenuItem } = useThemeToggle();
 
 const isFCSite = ref(window.is_fc_site);
 

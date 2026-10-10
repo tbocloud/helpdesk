@@ -93,6 +93,30 @@
                   <component :is="device.modifierIcon" class="size-3" />
                   K
                 </kbd>
+                <template v-else-if="item.key === 'notifications'">
+                  <span
+                    v-if="item.badge"
+                    class="me-1 font-mono text-xs tabular-nums text-ink-gray-5"
+                    :aria-label="__('{0} unread', String(item.badge))"
+                  >
+                    {{ item.badge > 99 ? "99+" : item.badge }}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    class="me-0.5 !text-ink-gray-6"
+                    :tooltip="themeToggle.label.value"
+                    :aria-label="themeToggle.label.value"
+                    @click="themeToggle.toggle()"
+                  >
+                    <template #icon>
+                      <component
+                        :is="themeToggle.icon.value"
+                        class="size-3.5"
+                        aria-hidden="true"
+                      />
+                    </template>
+                  </Button>
+                </template>
                 <span
                   v-else-if="item.badge"
                   class="me-2 font-mono text-xs tabular-nums text-ink-gray-5"
@@ -179,6 +203,7 @@ import {
 import CP from "@/components/command-palette/CP.vue";
 import UserMenu from "@/components/UserMenu.vue";
 import { useDevice } from "@/composables";
+import { useThemeToggle } from "@/composables/useThemeToggle";
 import { currentView, useView } from "@/composables/useView";
 import { useAuthStore } from "@/stores/auth";
 import { useNotificationStore } from "@/stores/notification";
@@ -224,6 +249,7 @@ const { isCallingEnabled } = storeToRefs(useTelephonyStore());
 const { pinnedViews, viewActions, handleView } = useView();
 
 const showCommandPalette = ref(false);
+const themeToggle = useThemeToggle();
 
 // Local modal state for the per-view kebab menu (edit/duplicate). The action
 // logic itself is shared via useView so the sidebar and breadcrumb stay in sync.
@@ -345,6 +371,13 @@ const notificationItem = computed(() =>
       }
 );
 
+const themeRailItem = computed(() => ({
+  label: themeToggle.label.value,
+  icon: themeToggle.icon.value,
+  onClick: themeToggle.toggle,
+  key: "theme",
+}));
+
 const sections = computed(() => {
   if (isCustomerPortal.value) {
     return [{ label: "", items: navItems.value, collapsible: false }];
@@ -355,6 +388,9 @@ const sections = computed(() => {
     props.mobile || showSearchCard.value
       ? [notificationItem.value]
       : [searchItem.value, notificationItem.value];
+  // Expanded, the theme button sits in the Notifications row; the collapsed
+  // rail hides row suffixes, so it gets its own rail item there.
+  if (isCollapsed.value) top.push(themeRailItem.value);
   const result = [{ label: "", items: top, collapsible: false }];
   for (const label of ["Workspace", "Directory"]) {
     const items = navItems.value.filter((item) => item.section === label);
