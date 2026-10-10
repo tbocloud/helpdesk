@@ -21,6 +21,7 @@ from frappe import _
 from frappe.utils import add_days, date_diff, getdate
 
 from helpdesk.api.performance import check_range, resolve_scope, sees_everyone
+from helpdesk.content_team import in_content_team
 from helpdesk.helpdesk.doctype.hd_content_post.hd_content_post import (
     TASK_ROLES,
     team_of,
@@ -202,6 +203,15 @@ def scored_posts(start, end, customer: str | None = None) -> list[dict]:
     return posts
 
 
+def check_in_content_team():
+    """The report is the content calendar's, so only its team opens it."""
+    if not in_content_team():
+        frappe.throw(
+            _("Only the content team can see content performance."),
+            frappe.PermissionError,
+        )
+
+
 @frappe.whitelist()
 def get_content_performance(
     from_date: str,
@@ -211,6 +221,7 @@ def get_content_performance(
     for_customer: str | None = None,
 ) -> dict:
     """`for_customer` limits everything, the ranking included, to that customer's posts."""
+    check_in_content_team()
     start, end = check_range(from_date, to_date)
     # the department narrows the ranking, not who may be opened: someone picked
     # from another department is still shown, just not ranked against this one
@@ -319,6 +330,7 @@ def get_customer_performance(
     `customer` picks the one shown in detail; `for_customer` limits the whole
     report to that customer.
     """
+    check_in_content_team()
     start, end = check_range(from_date, to_date)
     people = resolve_scope(None, department)
     person_of = {p.user_id: p for p in people}

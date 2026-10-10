@@ -47,7 +47,10 @@ Home, the project cards' stats, the timesheet task pickers and task details.
 from the task's ToDos (`allocated_to`, `assigned_by`), matched exactly: a LIKE on `_assign`
 would read `_` in a user ID as a wildcard. A finished assignment (Closed ToDo) still counts,
 so people keep seeing the tasks they completed; a withdrawn one (Cancelled) doesn't. The
-department walls ([departments.md](departments.md)) apply on top of every row except admins.
+department walls ([departments.md](departments.md)) apply on top of every row except admins,
+and so does the content team rule: outside the content team, a content post's tasks are only
+seen when they're the person's own, whatever the row
+([content-calendar.md](content-calendar.md#who-sees-the-content-calendar)).
 
 - **What a member sees of the project**: the project itself stays visible (members, lead,
   files). On the task tabs a line under the tab bar says they see their own tasks

@@ -24,7 +24,12 @@ import json
 import frappe
 from frappe import _
 
-from helpdesk.content_team import DM_COORDINATOR_ROLE, DM_HEAD_ROLE, is_erp_only
+from helpdesk.content_team import (
+    DM_COORDINATOR_ROLE,
+    DM_HEAD_ROLE,
+    in_content_team,
+    is_erp_only,
+)
 
 ADMIN_ROLES = ("System Manager", "Agent Manager")
 # the digital marketing team's department (by name, see departments.md)
@@ -396,6 +401,13 @@ def task_query(user: str | None = None) -> str | None:
     if is_erp_only(user):
         # the content calendar is the Digital team's, whatever its project's department
         condition += " and ifnull(`tabTask`.`content_post`, '') = ''"
+    elif not in_content_team(user):
+        # outside the content team, only their own content tasks (agrees with is_own_task)
+        condition += (
+            f" and (ifnull(`tabTask`.`content_post`, '') = '' "
+            f"or `tabTask`.`name` in ({_own_tasks_subquery(user)}) "
+            f"or `tabTask`.`owner` = {owner})"
+        )
     return condition
 
 
@@ -440,7 +452,12 @@ def task_has_permission(
         return None
     if is_hidden_project(doc.project, user):
         return False
-    if doc.get("content_post") and is_erp_only(user):
+    # outside the content team, only their own content tasks; never for ERP Employees
+    if (
+        doc.get("content_post")
+        and not in_content_team(user)
+        and (is_erp_only(user) or not is_own_task(doc, user))
+    ):
         return False
     if can_manage_project(doc.project, user):
         return None

@@ -21,6 +21,7 @@ from frappe.utils import (
 from helpdesk.content_team import (
     can_edit_content,
     head_approvers,
+    in_content_team,
     is_dm_head,
     is_erp_only,
 )
@@ -906,8 +907,8 @@ def permission_query(user: str | None = None) -> str | None:
     user = user or frappe.session.user
     if _is_content_lead(user):
         return None
-    # the content calendar is the Digital team's; ERP Employees don't see it
-    if is_erp_only(user):
+    # only the content team sees the content calendar (in_content_team)
+    if not in_content_team(user):
         return "1 = 0"
     u = frappe.db.escape(user)
     table = "`tabHD Content Post`"
@@ -926,7 +927,7 @@ def has_permission(
     user = user or frappe.session.user
     if ptype == "create" or _is_content_lead(user):
         return None
-    if is_erp_only(user):
+    if not in_content_team(user):
         return False
     on_team = any(user in people for people in team_of(doc).values())
     if on_team or user == doc.owner or doc.customer in member_customers(user):

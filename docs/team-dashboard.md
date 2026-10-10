@@ -3,7 +3,7 @@
 Who finished what in a period, how much of it was on time, and who the **champion** is: per
 department, per person and per shared project. Asked for by the owner as a "team dashboard"
 under Home and Overview; it is called **Scoreboard** in the app because **Team** (current
-workload and capacity) and **Performance** (content delivery by customer and employee)
+workload and capacity) and **Performance** (content delivery by customer and employee, for the content team)
 already exist.
 
 - Page: `desk/src/pages/work/TeamDashboard.vue` (route `TeamDashboard`,
