@@ -7,9 +7,14 @@ export interface LeaveToday {
   half_day: boolean;
 }
 
-// one request per page load, shared by every picker and team view
+// one request a day, shared by every picker and team view
+let fetchedFor = "";
 const onLeave = createResource({
   url: "helpdesk.api.calendar.get_on_leave",
+  onSuccess() {
+    fetchedFor = dayjs().format("YYYY-MM-DD");
+  },
+  // a failed load shows nobody as away and is tried again by the next picker
   onError() {},
 });
 
@@ -28,14 +33,15 @@ function leaveText(leave: LeaveToday | null | undefined): string {
  * shows nobody as away rather than blocking the picker.
  */
 export function useOnLeave() {
-  if (!onLeave.data && !onLeave.loading) onLeave.fetch();
+  // the app can stay open past midnight: today's leave is asked for again
+  if (fetchedFor !== dayjs().format("YYYY-MM-DD") && !onLeave.loading)
+    onLeave.fetch();
 
   function leaveOf(user: string | null | undefined): LeaveToday | null {
     return (user && (onLeave.data as Record<string, LeaveToday>)?.[user]) || null;
   }
 
   return {
-    leaveOf,
     /** The marker text for `user`, or "" when they're working. */
     leaveLabel: (user: string | null | undefined) => leaveText(leaveOf(user)),
   };

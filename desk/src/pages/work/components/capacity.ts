@@ -4,6 +4,7 @@ import type { Component } from "vue";
 import LucideCalendarX from "~icons/lucide/calendar-x";
 import LucideCoffee from "~icons/lucide/coffee";
 import LucideHourglass from "~icons/lucide/hourglass";
+import LucideTreePalm from "~icons/lucide/tree-palm";
 import LucideTriangleAlert from "~icons/lucide/triangle-alert";
 
 /** helpdesk.api.capacity.load_flag: over 100%, from 80%, under 80% */
@@ -72,10 +73,14 @@ const BADGES: Record<Flag, { label: string; tone: Tone; icon: Component }> = {
   available: { label: __("Available"), tone: "neutral", icon: LucideCoffee },
 };
 
-/** TaskyBadge props for a load flag; no flag means no working days in the window. */
-export function flagBadge(flag: Flag | null) {
-  return flag
-    ? BADGES[flag]
+/**
+ * TaskyBadge props for a load flag. No flag means no hours to plan in: on leave when
+ * `leaveDays` took them, else no working days in the window.
+ */
+export function flagBadge(flag: Flag | null, leaveDays = 0) {
+  if (flag) return BADGES[flag];
+  return leaveDays
+    ? { label: __("On leave"), tone: "info" as Tone, icon: LucideTreePalm }
     : {
         label: __("No working days"),
         tone: "neutral" as Tone,

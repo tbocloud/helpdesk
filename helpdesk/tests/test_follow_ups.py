@@ -180,11 +180,15 @@ class TestTaskRules(FollowUpCase):
         task = self.task("Send invoice", "2026-10-12")
 
         morning = self.one(task, "due_today")
-        afternoon = self.one(
-            task, "due_today", follow_up_context(datetime(2026, 10, 12, 15, 0))
-        )
+        three_pm = follow_up_context(datetime(2026, 10, 12, 15, 0))
+        afternoon = self.one(task, "due_today", three_pm)
         self.assertEqual(morning.stage, "morning")
-        self.assertEqual(afternoon.stage, "afternoon")
+        # the clock and the setting it is compared with, should this ever fail
+        self.assertEqual(
+            afternoon.stage,
+            "afternoon",
+            (three_pm.now, three_pm.settings.afternoon_nudge_at),
+        )
 
         frappe.db.set_value("Task", task, "status", "Working")
         self.assertEqual(self.found(task, rule="due_today"), [])

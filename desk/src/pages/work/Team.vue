@@ -253,7 +253,7 @@
                   <!-- Working on -->
                   <div class="min-w-0">
                     <TaskyBadge
-                      v-if="isFree(person) && !leaveLabel(person.user)"
+                      v-if="isFree(person)"
                       tone="success"
                       :icon="LucideCoffee"
                       :label="__('Free')"
@@ -505,6 +505,8 @@ interface Person {
   tickets: number;
   sla_breached: number;
   estimated_hours: number;
+  /** on approved leave today (a whole day), so not free */
+  on_leave: boolean;
 }
 
 interface Totals {
@@ -777,8 +779,9 @@ const tiles = computed<Tile[]>(() => {
 
 const showTile = computed(() => tiles.value.find((t) => t.key === show.value));
 
+// the server's totals.free counts the same people
 function isFree(person: Person) {
-  return !person.open && !person.tickets;
+  return !person.open && !person.tickets && !person.on_leave;
 }
 
 function workingOnTitle(person: Person) {

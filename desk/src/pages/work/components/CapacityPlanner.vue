@@ -205,9 +205,12 @@
                       {{ person.full_name }}
                     </RouterLink>
                     <div class="mt-0.5 flex flex-wrap gap-1">
-                      <TaskyBadge v-bind="flagBadge(person.flag)" />
                       <TaskyBadge
-                        v-if="person.leave_days"
+                        v-bind="flagBadge(person.flag, person.leave_days)"
+                      />
+                      <!-- part of the window on leave; all of it reads "On leave" above -->
+                      <TaskyBadge
+                        v-if="person.leave_days && person.flag"
                         tone="info"
                         :icon="LucideTreePalm"
                         :label="

@@ -794,11 +794,11 @@ const holidaySync = createResource({
 });
 
 const holidayCounts = computed(() => {
+  // the time of the last run of either part; each count is shown while its part is on
   const s = holidayStatus.value;
-  const parts = [
-    __("Synced {0}", dayjs(s.on).fromNow()),
-    __("{0} holidays", String(s.holidays ?? 0)),
-  ];
+  const parts = [__("Synced {0}", dayjs(s.on).fromNow())];
+  if (form.value?.sync_holidays)
+    parts.push(__("{0} holidays", String(s.holidays ?? 0)));
   if (form.value?.sync_leave)
     parts.push(__("{0} approved leave", String(s.leave ?? 0)));
   return parts.join(" · ");

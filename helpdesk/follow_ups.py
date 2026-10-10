@@ -268,7 +268,11 @@ class Context:
         away = [u for u in recipients if u in self.on_leave and u in owners]
         present = [u for u in recipients if u not in self.on_leave]
         if away or (recipients and not present):
-            present = _unique([*present, *(u for u in cover if u not in self.on_leave)])
+            # only cover who can be told: a disabled assigner or lead would leave nobody
+            reachable = set(
+                enabled_users(u for u in cover if u and u not in self.on_leave)
+            )
+            present = _unique([*present, *(u for u in cover if u in reachable)])
         if recipients and not present:
             present = [u for u in self.agent_managers if u not in self.on_leave]
         note = "; ".join(

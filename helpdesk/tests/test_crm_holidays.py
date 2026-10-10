@@ -296,6 +296,15 @@ class TestLeaveSync(CRMHolidayCase):
         self.assertFalse(frappe.db.exists("HD Leave", "HR-LAP-0001"))
         self.assertTrue(frappe.db.exists("HD Leave", "HR-LAP-0002"))
 
+    def test_leave_still_approved_is_kept_when_its_match_is_lost(self):
+        self.sync()
+        self.crm.employee_rows[0]["user_id"] = "anu@another-site.example"
+
+        result = self.sync()
+
+        self.assertTrue(frappe.db.exists("HD Leave", "HR-LAP-0001"))
+        self.assertEqual(result["unmatched"], 2)
+
     def test_without_leave_access_holidays_still_sync(self):
         self.crm.leave_error = CRMPermissionError("403")
 

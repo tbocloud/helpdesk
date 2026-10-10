@@ -150,10 +150,18 @@ def sync_holidays(client, settings, today, result: dict):
             )
         )
     for name in targets:
-        doc = frappe.get_doc("HD Service Holiday List", name)
-        rows, changed = merge_synced(doc.holidays, wanted, start, end)
-        if changed:
-            save_holidays(doc, rows)
+        # saving re-saves the SLA's open tickets; one list failing mustn't stop the rest
+        frappe.db.savepoint("crm_holiday_list")
+        try:
+            doc = frappe.get_doc("HD Service Holiday List", name)
+            rows, changed = merge_synced(doc.holidays, wanted, start, end)
+            if changed:
+                save_holidays(doc, rows)
+        except Exception as e:  # noqa: BLE001 - recorded, and the next list goes on
+            frappe.db.rollback(save_point="crm_holiday_list")
+            result["problems"].append(
+                _("Couldn't update the holiday list {0}: {1}").format(name, str(e))
+            )
     result["lists"] = lists
     result["holidays"] = len(wanted)
     result["covered"] = len(weekly_offs) - len(uncovered)
@@ -257,16 +265,25 @@ def sync_leave(client, today, result: dict):
             fields=["name", *LEAVE_FIELDS],
         )
     }
+    # still approved upstream: kept even when it can't be stored or matched this time
+    upstream = {a.get("name") for a in applications if a.get("name")}
     synced, unmatched = set(), 0
     for application in applications:
+        name = application.get("name")
         user = match_user(employees.get(application.get("employee")) or {}, users)
-        if not user or not application.get("name"):
+        if not user or not name:
             unmatched += 1
             continue
-        values = leave_values(application, user)
-        synced.add(application["name"])
-        store_leave(application["name"], values, existing.get(application["name"]))
-    for name in set(existing) - synced:
+        frappe.db.savepoint("crm_leave")
+        try:
+            store_leave(name, leave_values(application, user), existing.get(name))
+            synced.add(name)
+        except Exception as e:  # noqa: BLE001 - recorded, and the next leave goes on
+            frappe.db.rollback(save_point="crm_leave")
+            result["problems"].append(
+                _("Couldn't store leave {0}: {1}").format(name, str(e))
+            )
+    for name in set(existing) - upstream:
         frappe.delete_doc("HD Leave", name, ignore_permissions=True, force=True)
     result["leave"] = len(synced)
     result["unmatched"] = unmatched
@@ -303,8 +320,11 @@ def store_leave(name: str, values: dict, existing=None):
             {"doctype": "HD Leave", "leave_application": name, **values}
         ).insert(ignore_permissions=True)
         return
+    # an empty Data field reads back as None or ""; both mean nothing
     changed = {
-        field: value for field, value in values.items() if existing[field] != value
+        field: value
+        for field, value in values.items()
+        if (existing[field] or None) != (value or None)
     }
     if changed:
         frappe.db.set_value("HD Leave", name, changed)
@@ -341,8 +361,10 @@ def finish(result: dict) -> dict:
         "holiday_sync_error": "\n".join(result["problems"]),
         "holiday_sync_result": summary(result),
     }
-    if result["holidays"] is not None:
+    # when either part synced; each count changes only when its part did
+    if result["holidays"] is not None or result["leave"] is not None:
         values["holidays_synced_on"] = now_datetime()
+    if result["holidays"] is not None:
         values["holidays_synced_count"] = result["holidays"]
     if result["leave"] is not None:
         values["leave_synced_count"] = result["leave"]

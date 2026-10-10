@@ -52,7 +52,9 @@ def get_calendar(start: str, end: str, team: int | str = 0) -> dict:
 @agent_only
 def get_on_leave() -> dict:
     """{user: {to_date, half_day}} for everyone on leave today, for the assignee pickers
-    and the team views. Only dates: the leave type stays in HD Leave."""
+    and the team views. Every agent sees it, on purpose: whoever assigns work needs to
+    know who is away. Only dates: the leave type stays in HD Leave, which only System
+    Managers and Agent Managers can read."""
     return leave_today()
 
 
