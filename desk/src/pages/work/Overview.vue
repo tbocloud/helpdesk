@@ -593,7 +593,7 @@ const tiles = computed<Record<Bucket, Tile>>(() => ({
     hint: __("Due in the next 3 days"),
     empty: __("Nothing is due in the next 3 days."),
     icon: LucideCalendarClock,
-    tone: "neutral",
+    tone: "info",
   },
   key: {
     key: "key",

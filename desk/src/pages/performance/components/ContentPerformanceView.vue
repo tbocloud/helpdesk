@@ -198,28 +198,11 @@
                 {{ __("How each post they worked on was delivered") }}
               </p>
             </div>
-            <div
-              class="inline-flex rounded-lg bg-surface-gray-2 p-0.5"
-              role="tablist"
+            <TabButtons
+              v-model="sort"
               :aria-label="__('Sort posts')"
-            >
-              <button
-                v-for="o in SORTS"
-                :key="o.key"
-                type="button"
-                role="tab"
-                :aria-selected="sort === o.key"
-                class="h-7 rounded-md px-3 text-sm"
-                :class="
-                  sort === o.key
-                    ? 'bg-brand text-brand-on shadow-sm'
-                    : 'text-ink-gray-6 hover:text-ink-gray-8'
-                "
-                @click="sort = o.key"
-              >
-                {{ o.label }}
-              </button>
-            </div>
+              :options="SORTS.map((o) => ({ label: o.label, value: o.key }))"
+            />
           </header>
           <div class="overflow-x-auto">
             <table class="w-full min-w-[720px] text-left text-sm">
@@ -439,8 +422,14 @@
 <script setup lang="ts">
 import { FILL, INK, type Tone } from "@/components/tone";
 import { __ } from "@/translation";
-import { Avatar, dayjs } from "frappe-ui";
-import { channelColor, onTimeTone, roles, scoreTone } from "../performanceMeta";
+import { Avatar, dayjs, TabButtons } from "frappe-ui";
+import {
+  channelColor,
+  onTimeClass,
+  onTimeTone,
+  roles,
+  scoreTone,
+} from "../performanceMeta";
 import { computed, h, ref } from "vue";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideCircleCheck from "~icons/lucide/circle-check";
@@ -467,8 +456,6 @@ const SORTS = [
   { key: "date", label: __("By date") },
 ] as const;
 
-const onTimeClass = (pct: number | null) =>
-  pct == null ? "text-ink-gray-5" : INK[onTimeTone(pct)];
 const scoreClass = (score: number | null) =>
   score == null ? "text-ink-gray-5" : INK[scoreTone(score)];
 

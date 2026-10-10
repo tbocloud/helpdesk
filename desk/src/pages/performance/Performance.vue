@@ -20,29 +20,17 @@
         </div>
       </template>
       <template #right-header>
-        <div
-          class="inline-flex rounded-lg bg-surface-gray-2 p-0.5"
-          role="tablist"
+        <TabButtons
+          v-model="view"
           :aria-label="__('Report')"
-        >
-          <button
-            v-for="v in VIEWS"
-            :key="v.key"
-            type="button"
-            role="tab"
-            :aria-selected="view === v.key"
-            class="inline-flex h-7 items-center gap-1.5 rounded-md px-3 text-sm"
-            :class="
-              view === v.key
-                ? 'bg-brand text-brand-on shadow-sm'
-                : 'text-ink-gray-6 hover:text-ink-gray-8'
-            "
-            @click="view = v.key"
-          >
-            <component :is="v.icon" class="size-4" aria-hidden="true" />
-            {{ v.label }}
-          </button>
-        </div>
+          :options="
+            VIEWS.map((v) => ({
+              label: v.label,
+              value: v.key,
+              iconLeft: v.icon,
+            }))
+          "
+        />
       </template>
     </LayoutHeader>
 
@@ -186,8 +174,14 @@
 import { Link } from "@/components";
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import { __ } from "@/translation";
-import { Button, createResource, dayjs, FormControl } from "frappe-ui";
-import { computed, markRaw, reactive, ref, watch } from "vue";
+import {
+  Button,
+  createResource,
+  dayjs,
+  FormControl,
+  TabButtons,
+} from "frappe-ui";
+import { computed, markRaw, reactive, ref, watch, type Component } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import LucideChevronRight from "~icons/lucide/chevron-right";
 import LucideCalendarDays from "~icons/lucide/calendar-days";
@@ -227,7 +221,7 @@ const custom = reactive({
 const employee = ref(query("employee"));
 
 type View = "customers" | "content";
-const VIEWS: { key: View; label: string; icon: unknown }[] = [
+const VIEWS: { key: View; label: string; icon: Component }[] = [
   { key: "customers", label: __("Customers"), icon: markRaw(LucideBuilding2) },
   {
     key: "content",

@@ -20,8 +20,13 @@ Today, This week (Monday to Sunday), This month, This quarter, Half year (Januar
 July to December) and This year; `period_bounds()` is the one definition. Every figure is
 compared with the **previous period up to the same point** (`comparison_bounds()`): on a
 Wednesday, this week is compared with Monday to Wednesday of last week, so a week in progress
-isn't compared with a whole one. Tiles show "↑ 3 vs last week" (arrow and text, never colour
-alone). "Overdue now" has no comparison, since it is today's state.
+isn't compared with a whole one. Tiles show "↑ 3 vs last week" (`StatTile`'s `delta` and
+`deltaText`: an arrow icon, a screen-reader "Up"/"Down" and text, never colour alone; a rise
+is green, a fall stays gray). "Overdue now" has no comparison, since it is today's state.
+The tiles' icon circles follow the colour rule in [ui-guidelines.md](ui-guidelines.md) §8:
+Tasks finished and Posts published success, On time success, Overdue now danger, Hours
+logged info. The period and Departments / People / Projects switches are frappe-ui
+`TabButtons`.
 
 The URL keeps `period`, `department`, `view` (`people`, `projects`; Departments is the default),
 `person` (the open score breakdown) and `project` (highlighted in Projects).
@@ -64,7 +69,9 @@ dashboard, the stored champions and the AI all use it. Weights (`WEIGHTS`):
   Today 2, week 3, month 5, quarter 8, half year 12, year 20. One lucky task doesn't win.
 - **Ties** go to the better on-time rate, then more tasks done, then fewer overdue.
 - **Why**: each score carries its breakdown (`breakdown`: part, points, words) and the three
-  biggest positive parts as `reasons`. The champion card shows the reasons and "How the
+  biggest positive parts as `reasons`. The champion card (`ChampionCard`, the one place
+  the gold `champion` tokens are used) shows a trophy label ("Champion · This week"), a
+  rosette badge, the avatar, name and score, the reasons as a checked list and "How the
   score adds up"; a People row opens to the same breakdown.
 
 ## Views

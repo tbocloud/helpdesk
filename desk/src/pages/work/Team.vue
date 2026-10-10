@@ -32,32 +32,20 @@
           class="mt-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between"
         >
           <!-- View switch -->
-          <div
-            class="inline-flex gap-1 self-start rounded-lg bg-surface-gray-2 p-0.5 lg:self-auto"
-            role="tablist"
-            :aria-label="__('Show the team')"
-          >
-            <button
-              v-for="option in VIEWS"
-              :key="option.key"
-              type="button"
-              role="tab"
-              :aria-selected="view === option.key"
-              class="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
-              :class="
-                view === option.key
-                  ? 'bg-surface-base text-ink-gray-9 shadow-sm'
-                  : 'text-ink-gray-6 hover:text-ink-gray-8'
+          <div class="max-w-full self-start overflow-x-auto lg:self-auto">
+            <TabButtons
+              :model-value="view"
+              size="md"
+              :aria-label="__('Show the team')"
+              :options="
+                VIEWS.map((o) => ({
+                  label: o.label,
+                  value: o.key,
+                  iconLeft: o.icon,
+                }))
               "
-              @click="setView(option.key)"
-            >
-              <component
-                :is="option.icon"
-                class="hidden size-4 sm:block"
-                aria-hidden="true"
-              />
-              {{ option.label }}
-            </button>
+              @update:model-value="setView($event as View)"
+            />
           </div>
 
           <!-- Filters -->
@@ -463,7 +451,13 @@ import StatTile from "@/components/StatTile.vue";
 import TaskyBadge from "@/components/TaskyBadge.vue";
 import TaskyState from "@/components/TaskyState.vue";
 import { __ } from "@/translation";
-import { Button, createResource, dayjs, FormControl } from "frappe-ui";
+import {
+  Button,
+  createResource,
+  dayjs,
+  FormControl,
+  TabButtons,
+} from "frappe-ui";
 import { computed, reactive, ref, useId, watch, type Component } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";

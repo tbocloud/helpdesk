@@ -41,6 +41,11 @@ export default {
           DEFAULT: "var(--info)",
           soft: "var(--info-soft)",
         },
+        champion: {
+          DEFAULT: "var(--champion)",
+          soft: "var(--champion-soft)",
+          border: "var(--champion-border)",
+        },
       },
       fontFamily: {
         sans: ["var(--font-sans)"],

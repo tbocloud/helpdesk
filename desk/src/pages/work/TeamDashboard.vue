@@ -32,28 +32,13 @@
         <div
           class="mt-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between"
         >
-          <div
-            class="hidden gap-1 self-start rounded-lg bg-surface-gray-2 p-0.5 sm:inline-flex"
-            role="tablist"
+          <TabButtons
+            v-model="period"
+            class="hidden self-start sm:block"
+            size="md"
             :aria-label="__('Period')"
-          >
-            <button
-              v-for="p in PERIODS"
-              :key="p.key"
-              type="button"
-              role="tab"
-              :aria-selected="period === p.key"
-              class="rounded-md px-3 py-1.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
-              :class="
-                period === p.key
-                  ? 'bg-surface-base text-ink-gray-9 shadow-sm'
-                  : 'text-ink-gray-6 hover:text-ink-gray-8'
-              "
-              @click="period = p.key"
-            >
-              {{ p.label }}
-            </button>
-          </div>
+            :options="PERIODS.map((p) => ({ label: p.label, value: p.key }))"
+          />
           <FormControl
             v-model="period"
             class="sm:hidden"
@@ -115,6 +100,7 @@
           >
             <ChampionCard
               :title="championTitle"
+              :period="periodMeta.label"
               :champion="data?.champion ?? null"
               :loading="!data"
             />
@@ -126,21 +112,23 @@
                 :label="__('Tasks finished')"
                 :value="data?.summary.tasks ?? 0"
                 :icon="LucideCircleCheck"
+                icon-tone="success"
                 :loading="!data"
-                :sub="data ? deltaText('tasks') : undefined"
+                v-bind="change('tasks')"
               />
               <StatTile
                 :label="__('On time')"
                 :value="pctText(data?.summary.on_time_pct)"
                 :icon="LucideCalendarCheck"
+                icon-tone="success"
                 :loading="!data"
-                :sub="data ? deltaText('on_time_pct', ' pts') : undefined"
+                v-bind="change('on_time_pct', ' pts')"
               />
               <StatTile
                 :label="__('Overdue now')"
                 :value="data?.summary.overdue ?? 0"
                 :icon="LucideAlarmClock"
-                :icon-tone="data?.summary.overdue ? 'danger' : 'neutral'"
+                icon-tone="danger"
                 :value-tone="data?.summary.overdue ? 'danger' : 'neutral'"
                 :loading="!data"
                 :sub="__('Open tasks past their due date')"
@@ -150,15 +138,17 @@
                 :label="__('Posts published')"
                 :value="data?.summary.posts ?? 0"
                 :icon="LucideCalendarDays"
+                icon-tone="success"
                 :loading="!data"
-                :sub="postsSub"
+                v-bind="postsChange"
               />
               <StatTile
                 :label="__('Hours logged')"
                 :value="hoursText(data?.summary.hours ?? 0)"
                 :icon="LucideClock"
+                icon-tone="info"
                 :loading="!data"
-                :sub="data ? deltaText('hours', 'h') : undefined"
+                v-bind="change('hours', 'h')"
               />
             </div>
           </div>
@@ -168,28 +158,13 @@
           >
             <!-- the list: departments, people or projects -->
             <div class="flex min-w-0 flex-col gap-4">
-              <div
-                class="inline-flex gap-1 self-start rounded-lg bg-surface-gray-2 p-0.5"
-                role="tablist"
+              <TabButtons
+                v-model="view"
+                class="self-start"
+                size="md"
                 :aria-label="__('Show')"
-              >
-                <button
-                  v-for="v in VIEWS"
-                  :key="v.key"
-                  type="button"
-                  role="tab"
-                  :aria-selected="view === v.key"
-                  class="rounded-md px-3 py-1.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
-                  :class="
-                    view === v.key
-                      ? 'bg-surface-base text-ink-gray-9 shadow-sm'
-                      : 'text-ink-gray-6 hover:text-ink-gray-8'
-                  "
-                  @click="view = v.key"
-                >
-                  {{ v.label }}
-                </button>
-              </div>
+                :options="VIEWS.map((v) => ({ label: v.label, value: v.key }))"
+              />
 
               <div
                 v-if="!data"
@@ -286,7 +261,13 @@ import TaskyState from "@/components/TaskyState.vue";
 import { pctText } from "@/pages/performance/performanceMeta";
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
-import { Avatar, Button, createResource, FormControl } from "frappe-ui";
+import {
+  Avatar,
+  Button,
+  createResource,
+  FormControl,
+  TabButtons,
+} from "frappe-ui";
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
@@ -356,10 +337,8 @@ const departmentOptions = computed(() => {
 });
 
 const championTitle = computed(() => {
-  const label = periodMeta.value.label;
   const scope = data.value?.department;
-  if (!scope) return __("Champion · {0}", label);
-  return __("{0} champion · {1}", scope, label);
+  return scope ? __("{0} champion", scope) : __("Champion");
 });
 const historyNote = computed(() =>
   data.value?.department
@@ -368,31 +347,30 @@ const historyNote = computed(() =>
 );
 
 type Compared = "tasks" | "on_time_pct" | "hours" | "posts";
-function deltaText(key: Compared, unit = "") {
+/** StatTile's change line; more done, more on time and more hours read as better. */
+function change(key: Compared, unit = "") {
   const s = data.value?.summary;
-  if (!s) return undefined;
-  const change = delta(s[key], s.previous[key]);
-  if (change == null) return __("Nothing to compare with yet");
-  if (!change) return __("Same as {0}", periodMeta.value.previous);
-  const arrow = change > 0 ? "↑" : "↓";
-  return __(
-    "{0} {1}{2} vs {3}",
-    arrow,
-    String(Math.abs(change)),
-    unit,
-    periodMeta.value.previous
-  );
+  if (!s) return {};
+  const d = delta(s[key], s.previous[key]);
+  const previous = periodMeta.value.previous;
+  let deltaText: string;
+  if (d == null) deltaText = __("Nothing to compare with yet");
+  else if (!d) deltaText = __("Same as {0}", previous);
+  else deltaText = __("{0}{1} vs {2}", String(Math.abs(d)), unit, previous);
+  return {
+    delta: d,
+    deltaText,
+    deltaTone: (d ?? 0) > 0 ? ("success" as const) : ("neutral" as const),
+  };
 }
 const showPosts = computed(() => {
   const s = data.value?.summary;
   return !!s && !!(s.posts || s.posts_missed || s.previous.posts);
 });
-const postsSub = computed(() => {
+const postsChange = computed(() => {
   const s = data.value?.summary;
-  if (!s) return undefined;
-  return s.posts_missed
-    ? __("{0} missed their date", String(s.posts_missed))
-    : deltaText("posts");
+  if (!s?.posts_missed) return change("posts");
+  return { sub: __("{0} missed their date", String(s.posts_missed)) };
 });
 
 function openDepartment(name: string) {

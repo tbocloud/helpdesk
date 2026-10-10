@@ -91,6 +91,31 @@ The happy path alone is not a finished UI.
   (a soft-coloured square behind every icon), rainbow stat cards and colour used as
   decoration.
 
+### The owner's exception: soft status circles (2026-10-10)
+
+The owner asked for the Scoreboard mockup's feel across the app, so a soft tinted circle
+behind an icon is allowed **only where the colour carries meaning**. The reason: a status
+read at a glance (done, overdue, time) helps people scan a row of numbers, while colour that
+means nothing is noise. The mapping is fixed:
+
+| Meaning | Tone |
+| --- | --- |
+| Done, completed, published | `success` |
+| Overdue, risk, missed, failed | `danger` |
+| Time, hours, dates coming up | `info` |
+| On time | `success` (or `info` when it is a date, not an outcome) |
+
+- `StatTile` draws the circle from `iconTone` (`TONE_CLASSES` in `tone.ts`). Without a
+  meaning the circle stays neutral gray, never a pastel.
+- **Brand fill** is for the current selection: the active segmented control option
+  (frappe-ui `TabButtons`, themed in `theme.css`) and the current sidebar item, which is
+  brand-tinted (`brand-soft` with `brand-ink` icon and label).
+- **Champion gold** (`champion`, `champion-soft`, `champion-border`) is only for the
+  Scoreboard's champion card, with a trophy and a badge: it marks an award, not a status.
+- Everything else stays neutral: sidebar icons that aren't current, decorative and section
+  icons, and tiles whose number isn't a status. Still no gradients, rainbow cards or
+  decorative colour, and every tone keeps an icon or text next to it.
+
 ## 9. Components
 
 Reusable, composable, predictable, accessible and responsive, without over-abstracting.
