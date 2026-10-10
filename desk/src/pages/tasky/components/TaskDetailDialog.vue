@@ -320,9 +320,15 @@ const canCoordinate = computed(
 watch(
   () => props.task?.name,
   (name) => {
-    if (!name) return;
-    taskDetail.submit({ task: name });
-    const p = props.task?.project;
+    if (name) taskDetail.submit({ task: name });
+  },
+  { immediate: true }
+);
+
+// the opener may pass only the task's name; its project then comes with the details
+watch(
+  project,
+  (p) => {
     if (p && projectAccess.params?.project !== p)
       projectAccess.submit({ project: p });
   },

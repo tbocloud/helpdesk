@@ -1,5 +1,6 @@
 """Who a task or ticket is assigned to is matched exactly, never with a LIKE on `_assign`,
-where `_` and `%` in a user ID are wildcards (jane_doe@ would match janeXdoe@)."""
+where `_` and `%` in a user ID are wildcards (jane_doe@ would match janexdoe@; Frappe
+keeps user IDs lowercase)."""
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
@@ -15,7 +16,7 @@ from helpdesk.test_utils import (
 
 PM = ("leena.varghese@exact-assign.example", "Leena Varghese")
 UNDERSCORE = ("jane_doe@exact-assign.example", "Jane Doe")
-LOOKALIKE = ("janeXdoe@exact-assign.example", "Jane Xavier Doe")
+LOOKALIKE = ("janexdoe@exact-assign.example", "Jane Xavier Doe")
 
 
 class TestExactAssignment(FrappeTestCase):

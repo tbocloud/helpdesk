@@ -205,7 +205,7 @@ class TicketSummary:
 
         if self.filters.get("assigned_to"):
             filters["name"] = assigned_to_filter(
-                "HD Ticket", self.filters.get("assigned_to")
+                "HD Ticket", self.filters.get("assigned_to"), finished=False
             )
 
         for entry in ["status", "priority", "contact", "ticket_type"]:

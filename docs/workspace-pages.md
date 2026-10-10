@@ -64,7 +64,7 @@ to" filter (`handle_assigned_to_filter` in `helpdesk/api/doc.py`, which turns `_
 `_assigned_tasks_subquery` in `permissions.py` is the same rule in SQL for the permission query
 conditions). Tasks count finished (Closed) assignments; open-ticket lists and counts don't
 (`finished=False`, what `_assign` holds), since resolving a ticket closes its ToDos and a
-reopened ticket may go to someone else; the Completed tab, the dashboard and the reports do.
+reopened ticket may go to someone else, and the same holds for the dashboard and the reports; only My Work's Completed tab counts them.
 
 - **What a member sees of the project**: the project itself stays visible (members, lead,
   files). On the task tabs a line under the tab bar says they see their own tasks
@@ -103,7 +103,7 @@ counts only on the project where the person holds it.
 | Delete tasks | No | `task_has_permission` |
 | Recurring schedules, Sign-off, Generate checklist | No | `can_manage_project`, project write permission |
 | Invoicing | No | admins only (`helpdesk/api/invoices.py`) |
-| Move a task to another project | Only one they assigned, as anyone may | `can_move_task` |
+| Move a task to another project | Only one they assigned, as anyone may | `can_move_task`, also on a plain form save (`Task.check_project_move`) |
 
 ## Overview (`/overview`)
 

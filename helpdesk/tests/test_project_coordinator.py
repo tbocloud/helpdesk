@@ -180,6 +180,24 @@ class TestWhatACoordinatorMayNotDo(CoordinatorCase):
             values={"title": "Monthly backup check"},
         )
 
+    def test_a_plain_save_cant_move_a_task_to_another_project(self):
+        elsewhere = make_project(
+            "Galom International Trading - Payroll",
+            members=[(COORDINATOR[0], "Project Coordinator")],
+            owner=PM[0],
+        ).name
+
+        def move():
+            doc = frappe.get_doc("Task", self.task)
+            doc.project = elsewhere
+            doc.save()
+
+        with self.assertRaises(frappe.PermissionError):
+            run_as_user(COORDINATOR[0], move)
+        self.assertEqual(
+            frappe.db.get_value("Task", self.task, "project"), self.project
+        )
+
     def test_the_role_counts_only_on_their_own_project(self):
         elsewhere = make_project(
             "TBO Internal - Website",

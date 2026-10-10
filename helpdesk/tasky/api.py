@@ -1238,7 +1238,7 @@ def _reassign(
         and doc.project
         # a content post's people work on the content calendar without joining its team
         and not doc.get("content_post")
-        and not _is_project_member(doc.project, new_assignee)
+        and not _is_on_team(doc.project, new_assignee)
     ):
         _add_member_for_assignment(doc.project, new_assignee)
     for user in previous:

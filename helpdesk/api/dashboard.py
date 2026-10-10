@@ -112,7 +112,9 @@ class HelpdeskDashboard:
             conds.append(self.ticket.agent_group == self.team)
         if self.agent:
             conds.append(
-                self.ticket.name.isin(assigned_names_query("HD Ticket", self.agent))
+                self.ticket.name.isin(
+                    assigned_names_query("HD Ticket", self.agent, finished=False)
+                )
             )
         return conds
 
@@ -427,7 +429,7 @@ def get_master_dashboard_data(
     if team:
         filters["agent_group"] = team
     if agent:
-        filters["name"] = assigned_to_filter("HD Ticket", agent)
+        filters["name"] = assigned_to_filter("HD Ticket", agent, finished=False)
     team_data = get_team_chart_data(from_date, to_date, filters)
     ticket_type_data = get_ticket_type_chart_data(from_date, to_date, filters)
     ticket_priority_data = get_ticket_priority_chart_data(from_date, to_date, filters)

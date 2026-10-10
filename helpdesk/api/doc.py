@@ -45,7 +45,6 @@ def get_list_data(
     label_field = view.get("label_field") if view else None
 
     handle_at_me_support(filters)
-    handle_assigned_to_filter(filters, doctype)
     handle_assigned_on_filter(filters, doctype)
 
     _list = get_controller(doctype)
@@ -100,6 +99,9 @@ def get_list_data(
                         filters.append([key, value[0], value[1]])
                     else:
                         filters.append([key, "=", value])
+
+    # after the default view's filters, which may name an assignee too
+    handle_assigned_to_filter(filters, doctype)
 
     if rows is None:
         rows = []
@@ -648,6 +650,9 @@ def _merge_name_filter(filters, ticket_names):
             if isinstance(existing_filter, list) and existing_filter[0] == "in":
                 # Intersection of both filters
                 ticket_names = list(set(ticket_names) & set(existing_filter[1]))
+            elif isinstance(existing_filter, (str, int)):
+                # an exact name stays exact
+                ticket_names = list({str(existing_filter)} & set(ticket_names))
         filters["name"] = ["in", ticket_names]
         return
     existing = next(
