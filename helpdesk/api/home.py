@@ -43,6 +43,7 @@ from helpdesk.customer_health import (
     readable,
     sort_key,
 )
+from helpdesk.follow_ups import summary_for
 from helpdesk.helpdesk.doctype.hd_project_folder.hd_project_folder import FolderTree
 from helpdesk.helpdesk.doctype.hd_ticket.hd_ticket import LOW_RATING_STARS
 from helpdesk.tasky.permissions import (
@@ -109,6 +110,7 @@ def get_home() -> dict:
     return {
         "mine": {"counts": mine["counts"], "items": mine["items"][:LIST_LIMIT]},
         "day": day,
+        "follow_ups": summary_for(frappe.session.user),
         "company": _company(portfolio) if company else None,
         "systems": _systems() if is_tasky_admin() else None,
     }

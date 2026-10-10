@@ -60,6 +60,8 @@
           />
         </header>
 
+        <FollowUpStrip v-if="data" :summary="data.follow_ups" />
+
         <TaskyState
           v-if="home.error && !data"
           :icon="LucideCircleAlert"
@@ -112,6 +114,7 @@
 </template>
 
 <script setup lang="ts">
+import FollowUpStrip from "@/components/FollowUpStrip.vue";
 import { INK } from "@/components/tone";
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import TaskyState from "@/components/TaskyState.vue";

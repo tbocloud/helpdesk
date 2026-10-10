@@ -23,6 +23,7 @@ who is champion is on the **Scoreboard** (`/helpdesk/team-dashboard`, see
 | Section | Who | Key in `get_home` |
 | --- | --- | --- |
 | Header and status line | Everyone | `day.summary` (+ replies and reviews) |
+| Follow-ups strip | Everyone with overdue, escalated or waiting work | `follow_ups` |
 | Your action plan | Everyone with open work | `get_action_plan` |
 | Your day | Everyone | `day` |
 | Your projects | Everyone on an open project | `day.projects` |
@@ -51,6 +52,15 @@ open and nothing waiting for the user's review.
 
 Company problems (SLAs breached, unassigned tickets, overdue work across projects) are not
 repeated here; managers see them in the pulse strip right below.
+
+## Follow-ups strip (`follow_ups`)
+
+Under the header, `FollowUpStrip.vue` says what the follow-ups found for this person, e.g.
+"2 overdue · 1 escalated to your head · 3 waiting on you" (own overdue work, own work escalated
+to L2 or above, own breached tickets, and items waiting on them as reviewer, lead or head),
+linking to My Work. It stays until the work moves, and the same strip sits at the bottom of the
+sidebar. The plan for today below is also the first part of the person's first Teams digest of
+the day. See [follow-ups.md](follow-ups.md).
 
 **Why the old line said "All clear" wrongly (fixed):** the header and Your day counted only
 tasks that were overdue, due today or at risk. On-hold tasks, tasks in progress due later,

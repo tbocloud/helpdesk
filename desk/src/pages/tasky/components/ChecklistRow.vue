@@ -42,6 +42,7 @@
           v-if="task.slip_count > 0 && !done"
           :count="task.slip_count"
         />
+        <EscalationBadge v-if="!done" :level="task.escalation_level" />
       </div>
       <div v-if="task.blocked && !done" class="mt-0.5 flex min-w-0">
         <WaitingOn :subject="task.depends_on_subject" />
@@ -185,6 +186,7 @@ import {
 import HoldNote from "./HoldNote.vue";
 import MilestoneMark from "./MilestoneMark.vue";
 import SlipBadge from "./SlipBadge.vue";
+import EscalationBadge from "@/components/EscalationBadge.vue";
 import TaskStatusBadge from "./TaskStatusBadge.vue";
 import WaitingOn from "./WaitingOn.vue";
 

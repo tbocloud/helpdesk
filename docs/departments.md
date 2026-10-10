@@ -226,7 +226,10 @@ every longer period ([team-dashboard.md](team-dashboard.md#champions-of-closed-p
   stay with its managers. The full table is in
   [workspace-pages.md](workspace-pages.md#what-a-project-coordinator-may-do). They aren't
   project managers: they get no manager notices (`get_project_managers` in
-  `helpdesk/work_reminders.py`) and don't generate customer summaries.
+  `helpdesk/work_reminders.py`) and don't generate customer summaries. The follow-up ladder
+  does bring them in: from L2 an overdue task also goes to its coordinators and its
+  department's heads, and a task waiting for review goes to them first
+  ([follow-ups.md](follow-ups.md#the-ladder)).
 - **Lead rotation stays among Developers** (`LEAD_ROTATION_ROLES` in `helpdesk/tasky/api.py`).
   This is deliberate, not a bug: the lead is the senior developer who answers for the build,
   and a coordinator already has the task powers a lead uses, so making one lead would add

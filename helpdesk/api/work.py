@@ -69,6 +69,7 @@ TASK_FIELDS = [
     *TASK_HOLD_FIELDS,
     "is_milestone",
     "slip_count",
+    "escalation_level",
     "depends_on_task",
     "_assign",
     # a task due today is overdue once it has run past its estimate
@@ -83,6 +84,7 @@ TICKET_FIELDS = [
     "priority",
     "resolution_by",
     "_assign",
+    "custom_escalation_level",
 ]
 
 
@@ -203,6 +205,7 @@ def _task_item(
         ),
         "is_milestone": bool(task.is_milestone),
         "slip_count": task.slip_count or 0,
+        "escalation_level": task.get("escalation_level") or 0,
         "waiting_on": waiting_on,
         # overdue work is already flagged; risks are for work that may still slip
         "risks": [] if is_overdue else _task_risks(task, deadline, today, waiting_on),
@@ -240,6 +243,7 @@ def _ticket_item(ticket) -> dict:
         ),
         "risks": _ticket_risks(ticket, deadline),
         "assignees": _assignees(ticket._assign),
+        "escalation_level": ticket.get("custom_escalation_level") or 0,
     }
 
 

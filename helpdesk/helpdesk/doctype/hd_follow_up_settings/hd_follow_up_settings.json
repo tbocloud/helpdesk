@@ -1,0 +1,321 @@
+{
+	"actions": [],
+	"creation": "2026-10-10 09:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"enabled",
+		"delivery_section",
+		"digest_times",
+		"morning_plan",
+		"breach_pings_outside_hours",
+		"digest_sent_through",
+		"ladder_section",
+		"ladder_l1_days",
+		"ladder_l2_days",
+		"ladder_l3_days",
+		"key_tasks_escalate_faster",
+		"task_section",
+		"due_tomorrow",
+		"due_today",
+		"afternoon_nudge_at",
+		"overdue",
+		"untouched",
+		"untouched_days",
+		"review",
+		"review_days",
+		"hold",
+		"hold_days",
+		"no_due_date",
+		"no_due_date_days",
+		"blocked",
+		"ticket_section",
+		"sla_warnings",
+		"sla_first_warning",
+		"sla_second_warning",
+		"ticket_department",
+		"unassigned",
+		"unassigned_minutes",
+		"customer_replied",
+		"customer_replied_hours",
+		"awaiting_customer",
+		"awaiting_customer_days",
+		"customer_section",
+		"customer_follow_up_email",
+		"customer_follow_up_message"
+	],
+	"fields": [
+		{
+			"fieldname": "enabled",
+			"fieldtype": "Check",
+			"label": "Send follow-ups",
+			"default": "1",
+			"description": "Reminders and escalations for tasks and tickets, in the notification panel and in Teams or email."
+		},
+		{
+			"fieldname": "delivery_section",
+			"fieldtype": "Section Break",
+			"label": "Delivery"
+		},
+		{
+			"fieldname": "digest_times",
+			"fieldtype": "Data",
+			"label": "Digest times",
+			"default": "09:30, 15:30",
+			"description": "When each person gets one Teams message with everything that needs them, in working hours (24-hour times, separated by commas). The first one also carries the plan for today."
+		},
+		{
+			"fieldname": "morning_plan",
+			"fieldtype": "Check",
+			"label": "Add the plan for today to the first digest",
+			"default": "1"
+		},
+		{
+			"fieldname": "breach_pings_outside_hours",
+			"fieldtype": "Check",
+			"label": "Send SLA breaches outside working hours",
+			"default": "0",
+			"description": "Everything else waits for working hours."
+		},
+		{
+			"fieldname": "digest_sent_through",
+			"fieldtype": "Datetime",
+			"label": "Digests Sent Through",
+			"read_only": 1,
+			"hidden": 1
+		},
+		{
+			"fieldname": "ladder_section",
+			"fieldtype": "Section Break",
+			"label": "Escalation ladder"
+		},
+		{
+			"fieldname": "ladder_l1_days",
+			"fieldtype": "Int",
+			"label": "Lead after (working days overdue)",
+			"default": "1",
+			"description": "The assigner and the project lead join the assignee."
+		},
+		{
+			"fieldname": "ladder_l2_days",
+			"fieldtype": "Int",
+			"label": "Head after (working days overdue)",
+			"default": "3",
+			"description": "The project coordinators and the department heads join."
+		},
+		{
+			"fieldname": "ladder_l3_days",
+			"fieldtype": "Int",
+			"label": "Managers after (working days overdue)",
+			"default": "5",
+			"description": "Agent Managers join."
+		},
+		{
+			"fieldname": "key_tasks_escalate_faster",
+			"fieldtype": "Check",
+			"label": "Key tasks and milestones escalate one level sooner",
+			"default": "1"
+		},
+		{
+			"fieldname": "task_section",
+			"fieldtype": "Section Break",
+			"label": "Task rules"
+		},
+		{
+			"fieldname": "due_tomorrow",
+			"fieldtype": "Check",
+			"label": "Due on the next working day",
+			"default": "1"
+		},
+		{
+			"fieldname": "due_today",
+			"fieldtype": "Check",
+			"label": "Due today and not started",
+			"default": "1"
+		},
+		{
+			"fieldname": "afternoon_nudge_at",
+			"fieldtype": "Time",
+			"label": "Afternoon nudge from",
+			"default": "14:00"
+		},
+		{
+			"fieldname": "overdue",
+			"fieldtype": "Check",
+			"label": "Overdue tasks climb the ladder",
+			"default": "1"
+		},
+		{
+			"fieldname": "untouched",
+			"fieldtype": "Check",
+			"label": "Assigned but untouched",
+			"default": "1"
+		},
+		{
+			"fieldname": "untouched_days",
+			"fieldtype": "Int",
+			"label": "Untouched for (working days)",
+			"default": "2"
+		},
+		{
+			"fieldname": "review",
+			"fieldtype": "Check",
+			"label": "Waiting for review",
+			"default": "1"
+		},
+		{
+			"fieldname": "review_days",
+			"fieldtype": "Int",
+			"label": "In review for (working days)",
+			"default": "1"
+		},
+		{
+			"fieldname": "hold",
+			"fieldtype": "Check",
+			"label": "On hold",
+			"default": "1"
+		},
+		{
+			"fieldname": "hold_days",
+			"fieldtype": "Int",
+			"label": "On hold for (working days)",
+			"default": "3"
+		},
+		{
+			"fieldname": "no_due_date",
+			"fieldtype": "Check",
+			"label": "Open without a due date",
+			"default": "1"
+		},
+		{
+			"fieldname": "no_due_date_days",
+			"fieldtype": "Int",
+			"label": "Without a due date for (working days)",
+			"default": "1"
+		},
+		{
+			"fieldname": "blocked",
+			"fieldtype": "Check",
+			"label": "Blocking an overdue task",
+			"default": "1"
+		},
+		{
+			"fieldname": "ticket_section",
+			"fieldtype": "Section Break",
+			"label": "Ticket rules"
+		},
+		{
+			"fieldname": "sla_warnings",
+			"fieldtype": "Check",
+			"label": "SLA warnings",
+			"default": "1"
+		},
+		{
+			"fieldname": "sla_first_warning",
+			"fieldtype": "Int",
+			"label": "First warning at (% of the SLA)",
+			"default": "50"
+		},
+		{
+			"fieldname": "sla_second_warning",
+			"fieldtype": "Int",
+			"label": "Second warning at (% of the SLA)",
+			"default": "80"
+		},
+		{
+			"fieldname": "ticket_department",
+			"fieldtype": "Link",
+			"label": "Support department",
+			"options": "HD Department",
+			"description": "Its heads are the tickets' team lead in the ladder. Without one, the Agent Managers are."
+		},
+		{
+			"fieldname": "unassigned",
+			"fieldtype": "Check",
+			"label": "Unassigned tickets",
+			"default": "1"
+		},
+		{
+			"fieldname": "unassigned_minutes",
+			"fieldtype": "Int",
+			"label": "Unassigned for (working minutes)",
+			"default": "30"
+		},
+		{
+			"fieldname": "customer_replied",
+			"fieldtype": "Check",
+			"label": "Customer replied, no answer yet",
+			"default": "1"
+		},
+		{
+			"fieldname": "customer_replied_hours",
+			"fieldtype": "Int",
+			"label": "Unanswered for (working hours)",
+			"default": "4"
+		},
+		{
+			"fieldname": "awaiting_customer",
+			"fieldtype": "Check",
+			"label": "Waiting on the customer",
+			"default": "1"
+		},
+		{
+			"fieldname": "awaiting_customer_days",
+			"fieldtype": "Int",
+			"label": "Waiting for (working days)",
+			"default": "3"
+		},
+		{
+			"fieldname": "customer_section",
+			"fieldtype": "Section Break",
+			"label": "Customer follow-up"
+		},
+		{
+			"fieldname": "customer_follow_up_email",
+			"fieldtype": "Check",
+			"label": "Email the customer when they haven't replied",
+			"default": "0"
+		},
+		{
+			"fieldname": "customer_follow_up_message",
+			"fieldtype": "Text Editor",
+			"label": "Follow-up email",
+			"default": "<p>Hello,</p><p>We're following up on ticket #{{ ticket }}: {{ subject }}. We replied a few days ago and haven't heard back. Is there anything else you need from us, or can we close it?</p><p>Just reply to this email and we'll pick it up.</p>",
+			"description": "Sent once per wait as a reply on the ticket. {{ ticket }}, {{ subject }} and {{ customer }} are filled in."
+		}
+	],
+	"index_web_pages_for_search": 0,
+	"issingle": 1,
+	"links": [],
+	"modified": "2026-10-10 09:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD Follow Up Settings",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"print": 1,
+			"read": 1,
+			"role": "System Manager",
+			"share": 1,
+			"write": 1
+		},
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"print": 1,
+			"read": 1,
+			"role": "Agent Manager",
+			"share": 1,
+			"write": 1
+		}
+	],
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": [],
+	"track_changes": 1
+}

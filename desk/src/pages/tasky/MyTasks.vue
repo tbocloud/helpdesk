@@ -205,6 +205,10 @@
                           v-if="task.slip_count && !isClosed(task)"
                           :count="task.slip_count"
                         />
+                        <EscalationBadge
+                          v-if="!isClosed(task)"
+                          :level="task.escalation_level"
+                        />
                       </div>
                       <div
                         class="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 text-sm text-ink-gray-5"
@@ -329,6 +333,7 @@ import LucideSearchX from "~icons/lucide/search-x";
 import HoldNote from "./components/HoldNote.vue";
 import MilestoneMark from "./components/MilestoneMark.vue";
 import SlipBadge from "./components/SlipBadge.vue";
+import EscalationBadge from "@/components/EscalationBadge.vue";
 import TaskDetailDialog from "./components/TaskDetailDialog.vue";
 import TaskStatusBadge from "./components/TaskStatusBadge.vue";
 import WaitingOn from "./components/WaitingOn.vue";
@@ -359,6 +364,7 @@ interface Task {
   hold_by_name?: string | null;
   is_milestone?: boolean;
   slip_count?: number;
+  escalation_level?: number;
   depends_on_subject?: string | null;
   blocked?: boolean;
 }

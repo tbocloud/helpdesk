@@ -36,6 +36,8 @@ import Preferences from "./Preferences/Preferences.vue";
 import ContentSettings from "./Content/ContentSettings.vue";
 import TaskSettings from "./Tasks/TaskSettings.vue";
 import LucideListChecks from "~icons/lucide/list-checks";
+import FollowUpSettings from "./FollowUps/FollowUpSettings.vue";
+import LucideBellRing from "~icons/lucide/bell-ring";
 import FileStorageSettings from "./FileStorage/FileStorageSettings.vue";
 import CRMSettings from "./CRM/CRMSettings.vue";
 import LucideHandshake from "~icons/lucide/handshake";
@@ -183,6 +185,13 @@ export const tabs = computed(() => {
           // HD Work Settings is writable by System Managers only
           condition: () => auth.isAdmin,
         },
+        {
+          label: __("Follow-ups"),
+          icon: markRaw(LucideBellRing),
+          component: markRaw(FollowUpSettings),
+          // HD Follow Up Settings: System Managers and Agent Managers
+          condition: () => auth.isAdmin || auth.isManager,
+        },
       ],
     },
     {
@@ -252,6 +261,7 @@ type TabName =
   | "Saved Replies"
   | "Content"
   | "Tasks"
+  | "Follow-ups"
   | "Sign-off templates"
   | "File storage"
   | "CRM";

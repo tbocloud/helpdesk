@@ -47,6 +47,7 @@
             v-if="item.kind === 'task' && item.slip_count"
             :count="item.slip_count"
           />
+          <EscalationBadge :level="item.escalation_level" />
           <PullRequestChip
             v-for="pr in pullRequests"
             :key="`${pr.repo}#${pr.number}`"
@@ -221,6 +222,7 @@ import HoldNote from "@/pages/tasky/components/HoldNote.vue";
 import MilestoneMark from "@/pages/tasky/components/MilestoneMark.vue";
 import PullRequestChip from "@/pages/tasky/components/PullRequestChip.vue";
 import SlipBadge from "@/pages/tasky/components/SlipBadge.vue";
+import EscalationBadge from "@/components/EscalationBadge.vue";
 import TaskStatusBadge from "@/pages/tasky/components/TaskStatusBadge.vue";
 import TaskyBadge from "@/components/TaskyBadge.vue";
 import WaitingOn from "@/pages/tasky/components/WaitingOn.vue";

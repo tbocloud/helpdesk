@@ -46,9 +46,10 @@ scheduler_events = {
         "* * * * *": [
             "helpdesk.tasks.pull_client_tickets",
         ],
-        # every 15 minutes: SLA reminders, so a short first-reply SLA isn't missed
+        # every 15 minutes: follow-ups and escalation for tasks and tickets, and the
+        # digests at their times (docs/follow-ups.md)
         "*/15 * * * *": [
-            "helpdesk.work_reminders.send_ticket_reminders",
+            "helpdesk.follow_ups.run",
             "helpdesk.helpdesk.doctype.hd_meeting.hd_meeting.sync_with_outlook",
         ],
         "*/5 * * * *": [
@@ -60,10 +61,6 @@ scheduler_events = {
         # every 10 minutes: new hub errors to the team's chat channel
         "*/10 * * * *": [
             "helpdesk.error_alerts.post_error_digest",
-        ],
-        # 10:00 every day: each assignee's morning brief
-        "0 10 * * *": [
-            "helpdesk.morning_brief.send_morning_briefs",
         ],
         # 09:00: from the planning day on, next month's content plans
         "0 9 * * *": [
@@ -87,8 +84,6 @@ scheduler_events = {
         "helpdesk.tasks.health_check_connections",
         "helpdesk.tasks.retry_pending_triages",
         "helpdesk.helpdesk.doctype.hd_content_post.hd_content_post.send_due_reminders",
-        "helpdesk.work_reminders.send_task_reminders",
-        "helpdesk.work_reminders.send_hold_reminders",
         "helpdesk.work_calendar.sync_saturdays_off",
         "helpdesk.helpdesk.doctype.hd_github_delivery.hd_github_delivery.clear_old_deliveries",
         "helpdesk.helpdesk.doctype.hd_chatwoot_event.hd_chatwoot_event.clear_old_events",

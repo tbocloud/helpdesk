@@ -1,3 +1,4 @@
+import type { FollowUpSummary } from "@/components/followUps";
 import type { Tone } from "@/components/tone";
 import type { HealthBrief } from "@/composables/customerHealth";
 import {
@@ -183,6 +184,7 @@ export interface Systems {
 
 export interface HomeData {
   day: YourDay;
+  follow_ups: FollowUpSummary;
   company: Company | null;
   systems: Systems | null;
 }

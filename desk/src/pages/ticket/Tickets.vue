@@ -64,6 +64,10 @@
           <span
             class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-gray-6"
           >
+            <EscalationBadge
+              v-if="row.custom_escalation_level"
+              :level="row.custom_escalation_level"
+            />
             <span class="font-mono tabular-nums text-ink-gray-5">
               #{{ row.name }}
             </span>
@@ -162,6 +166,7 @@ import { currentView, useView } from "@/composables/useView";
 import { useAuthStore } from "@/stores/auth";
 import { globalStore } from "@/stores/globalStore";
 import TaskyBadge from "@/components/TaskyBadge.vue";
+import EscalationBadge from "@/components/EscalationBadge.vue";
 import { useTicketStatusStore } from "@/stores/ticketStatus";
 import { __ } from "@/translation";
 import { View } from "@/types";
@@ -247,11 +252,17 @@ const options = computed(() => ({
   columnConfig: {
     subject: {
       custom: ({ row, item }) =>
-        h(
-          "span",
-          { class: ["truncate flex-1", isUnseen(row) && "font-semibold"] },
-          item
-        ),
+        h("span", { class: "flex min-w-0 flex-1 items-center gap-1.5" }, [
+          h(
+            "span",
+            { class: ["truncate", isUnseen(row) && "font-semibold"] },
+            item
+          ),
+          // how far up the follow-up ladder its SLA breach has gone (docs/follow-ups.md)
+          !isCustomerPortal.value && row.custom_escalation_level
+            ? h(EscalationBadge, { level: row.custom_escalation_level })
+            : null,
+        ]),
     },
     status: {
       custom: ({ item }) => {

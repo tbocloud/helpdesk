@@ -65,6 +65,10 @@ phone rows and empty state are its own (see [customer-portal-and-kb.md](customer
   next minute; only the latest request may set the counts), the badges show
   the deadline in neutral. Deadlines are read in the site's time zone (`dayjsLocal`, as the task
   timers do since #76) and shown in the agent's time zone, which defaults to the site's.
+- **Escalation**: a ticket whose SLA warnings or breach have taken it up the follow-up ladder
+  shows `EscalationBadge` ("Escalated to lead / head / managers") after its subject (agents
+  only; `custom_escalation_level` is one of the list's rows). The SLA reminders themselves are in
+  [follow-ups.md](follow-ups.md).
 - **Summary strip and tones agree**: "SLA breached" and "First reply overdue" count tickets
   whose deadline has passed, which is exactly when a cell shows Failed; neither uses an "at
   risk" window, so the working-time warning changes no count.

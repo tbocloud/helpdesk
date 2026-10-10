@@ -30,6 +30,8 @@
 		"column_break_2",
 		"exp_end_date",
 		"slip_count",
+		"escalation_level",
+		"escalated_on",
 		"completed_on",
 		"ai_estimated",
 		"estimate_note",
@@ -201,6 +203,22 @@
 			"description": "How often the due date was moved later (holds don't count)."
 		},
 		{
+			"fieldname": "escalation_level",
+			"fieldtype": "Int",
+			"label": "Escalation Level",
+			"read_only": 1,
+			"no_copy": 1,
+			"default": "0",
+			"description": "How far up the follow-up ladder this overdue task has gone: 1 the lead, 2 the department head, 3 the managers (docs/follow-ups.md)."
+		},
+		{
+			"fieldname": "escalated_on",
+			"fieldtype": "Date",
+			"label": "Escalated On",
+			"read_only": 1,
+			"no_copy": 1
+		},
+		{
 			"fieldname": "completed_on",
 			"fieldtype": "Date",
 			"label": "Completed On",
@@ -241,7 +259,7 @@
 	],
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-10-09 12:00:00.000000",
+	"modified": "2026-10-10 09:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "Task",

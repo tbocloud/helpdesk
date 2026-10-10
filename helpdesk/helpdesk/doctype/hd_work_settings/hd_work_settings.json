@@ -10,8 +10,6 @@
 		"weekly_off",
 		"saturdays_off",
 		"dev_hours_per_day",
-		"brief_section",
-		"morning_brief",
 		"support_hours_section",
 		"support_hours_email_customer"
 	],
@@ -43,19 +41,7 @@
 			"label": "Weekly Off",
 			"default": "Sunday",
 			"options": "Sunday\nFriday\nSaturday and Sunday\nFriday and Saturday",
-			"description": "Skipped when counting working days, and no morning brief is sent on these days."
-		},
-		{
-			"fieldname": "brief_section",
-			"fieldtype": "Section Break",
-			"label": "Morning Brief"
-		},
-		{
-			"fieldname": "morning_brief",
-			"fieldtype": "Check",
-			"label": "Send each assignee a morning brief at 10:00",
-			"default": "1",
-			"description": "Overdue work, what's due today and soon, key and at-risk items, new tasks and SLA deadlines, in the notification panel and Teams or email."
+			"description": "Skipped when counting working days, and no follow-ups are sent on these days."
 		},
 		{
 			"fieldname": "dev_hours_per_day",
@@ -88,7 +74,7 @@
 	"index_web_pages_for_search": 0,
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-10-08 12:00:00.000000",
+	"modified": "2026-10-10 09:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Work Settings",

@@ -365,6 +365,10 @@
                     v-if="task.slip_count && !isClosed(task)"
                     :count="task.slip_count"
                   />
+                  <EscalationBadge
+                    v-if="!isClosed(task)"
+                    :level="task.escalation_level"
+                  />
                   <PullRequestChip
                     v-if="task.pull_request"
                     :pr="task.pull_request"
@@ -534,6 +538,7 @@ import ResumeTaskDialog from "./components/ResumeTaskDialog.vue";
 import PullRequestChip from "./components/PullRequestChip.vue";
 import SendBackTaskDialog from "./components/SendBackTaskDialog.vue";
 import SlipBadge from "./components/SlipBadge.vue";
+import EscalationBadge from "@/components/EscalationBadge.vue";
 import TaskDetailDialog from "./components/TaskDetailDialog.vue";
 import TaskPlanDialog from "./components/TaskPlanDialog.vue";
 import TaskyState from "@/components/TaskyState.vue";
@@ -610,6 +615,7 @@ interface Task {
   hold_by_name?: string | null;
   is_milestone?: boolean;
   slip_count?: number;
+  escalation_level?: number;
   depends_on_task?: string | null;
   depends_on_subject?: string | null;
   blocked?: boolean;

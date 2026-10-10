@@ -1329,6 +1329,60 @@ def get_reminder_messages(user: str, reference_name) -> list[str]:
     )
 
 
+def send_task_reminder(task: str, escalate: bool = False) -> str:
+    """Reminds `task`'s assignees through notify_users (the panel plus chat or email),
+    as any reminder reaches people; returns the message sent."""
+    from helpdesk.work_reminders import notify_users
+
+    doc = frappe.get_doc("Task", task)
+    message = f"Due tomorrow: {doc.subject}"
+    notify_users(doc.assignees(), "Task", task, message, escalate=escalate)
+    return message
+
+
+FOLLOW_UP_MONDAY = datetime(2026, 10, 12, 11, 0)
+
+
+def follow_up_context(now=None, holidays=(), **settings):
+    """A follow-ups Context at `now` (default: Monday 12 Oct 2026, 11:00, in working
+    hours) on a Monday-to-Saturday calendar with Sundays and `holidays` off, with
+    HD Follow Up Settings' defaults plus `settings`."""
+    from helpdesk import follow_ups
+
+    doc = frappe.get_doc(follow_ups.SETTINGS)
+    doc.update(settings)
+    holidays = {getdate(day) for day in holidays}
+    with patch.object(
+        follow_ups,
+        "working_day_checker",
+        return_value=lambda day: day.weekday() != 6 and day not in holidays,
+    ):
+        calendar = follow_ups.WorkCalendar(getdate(now or FOLLOW_UP_MONDAY))
+    calendar.sla = None
+    return follow_ups.Context(doc, now or FOLLOW_UP_MONDAY, calendar)
+
+
+def get_follow_up_notices(user: str, reference_name) -> list[dict]:
+    """The follow-up HD Notifications `user` has about a document: message, key, read."""
+    return frappe.get_all(
+        "HD Notification",
+        filters={
+            "user_to": user,
+            "reference_name": str(reference_name),
+            "dedupe_key": ("like", "follow-up:%"),
+        },
+        fields=["name", "message", "dedupe_key", "read"],
+    )
+
+
+def set_follow_up_settings(**values):
+    """Saves HD Follow Up Settings with `values`."""
+    doc = frappe.get_doc("HD Follow Up Settings")
+    doc.update(values)
+    doc.save(ignore_permissions=True)
+    return doc
+
+
 # shaped like Teams Workflows URLs, so HD Chat Settings accepts them
 TEST_TEAMS_DIRECT_URL = (
     "https://prod-01.westeurope.logic.azure.com/workflows/direct/triggers/manual/"
@@ -1453,7 +1507,7 @@ def graph_response(payload: dict | None = None, status: int = 200):
 
 
 def set_work_settings(**values):
-    """Saves HD Work Settings (AI estimates, weekly off, morning brief) with `values`."""
+    """Saves HD Work Settings (AI estimates, weekly off, Saturdays off) with `values`."""
     doc = frappe.get_doc("HD Work Settings")
     doc.update(values)
     doc.save(ignore_permissions=True)

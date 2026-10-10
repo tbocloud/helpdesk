@@ -291,6 +291,8 @@
             </div>
           </div>
 
+          <FollowUpControl v-if="auth.isAdmin || auth.isManager" class="mt-6" />
+
           <!-- The selected bucket's list -->
           <SectionCard
             :id="listId"
@@ -371,6 +373,7 @@ import LayoutHeader from "@/components/LayoutHeader.vue";
 import SectionCard from "@/components/SectionCard.vue";
 import StatTile from "@/components/StatTile.vue";
 import TaskyState from "@/components/TaskyState.vue";
+import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
 import { Button, createResource } from "frappe-ui";
 import {
@@ -398,6 +401,7 @@ import LucideTriangleAlert from "~icons/lucide/triangle-alert";
 import LucideUserX from "~icons/lucide/user-x";
 import LucideUsers from "~icons/lucide/users";
 import LucideX from "~icons/lucide/x";
+import FollowUpControl from "./components/FollowUpControl.vue";
 import OverviewAttention from "./components/OverviewAttention.vue";
 import OverviewDonut from "./components/OverviewDonut.vue";
 import OverviewProjectChart from "./components/OverviewProjectChart.vue";
@@ -432,6 +436,7 @@ interface Tile {
 }
 
 const route = useRoute();
+const auth = useAuthStore();
 const router = useRouter();
 const uid = useId();
 const listId = `work-overview-list-${uid}`;
