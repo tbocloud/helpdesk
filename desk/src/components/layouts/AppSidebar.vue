@@ -93,7 +93,9 @@
                   <component :is="device.modifierIcon" class="size-3" />
                   K
                 </kbd>
-                <template v-else-if="item.key === 'notifications'">
+                <template
+                  v-else-if="item.key === 'notifications' && !isCollapsed"
+                >
                   <span
                     v-if="item.badge"
                     class="me-1 font-mono text-xs tabular-nums text-ink-gray-5"
@@ -105,7 +107,7 @@
                     variant="ghost"
                     class="me-0.5 !text-ink-gray-6"
                     :tooltip="themeToggle.label.value"
-                    :aria-label="themeToggle.label.value"
+                    :label="themeToggle.label.value"
                     @click="themeToggle.toggle()"
                   >
                     <template #icon>
