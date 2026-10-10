@@ -1,13 +1,15 @@
 import frappe
 from frappe.query_builder.functions import Count
 
+from helpdesk.follow_ups import summary_for
 from helpdesk.utils import agent_only, assigned_names_query
 
 
 @frappe.whitelist()
 @agent_only
-def get_nav_counts() -> dict[str, int]:
-    """Counts of work waiting on the current agent, for the sidebar."""
+def get_nav_counts() -> dict:
+    """Counts of work waiting on the current agent, for the sidebar, and the
+    follow-ups that need them (the sidebar's strip, docs/follow-ups.md)."""
     user = frappe.session.user
     ticket = frappe.qb.DocType("HD Ticket")
     counts = {
@@ -22,6 +24,7 @@ def get_nav_counts() -> dict[str, int]:
     counts["my_work"] = counts["my_tasks"] + _count_assigned(
         "HD Ticket", user, ticket.status_category.isin(["Open", "Paused"])
     )
+    counts["follow_ups"] = summary_for(user)
     return counts
 
 

@@ -4,7 +4,7 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_days, nowdate
 
-from helpdesk import chat_notifications, work_reminders
+from helpdesk import chat_notifications
 from helpdesk.test_utils import (
     TEST_TEAMS_CHANNEL_URL,
     TEST_TEAMS_DIRECT_URL,
@@ -15,6 +15,7 @@ from helpdesk.test_utils import (
     make_tasky_user,
     make_ticket,
     run_as_user,
+    send_task_reminder,
 )
 
 PM = ("pm.chat@chat-notify.example", "Rekha Pillai")
@@ -55,11 +56,11 @@ class ChatCase(FrappeTestCase):
 class TestTeams(ChatCase):
     def test_reminder_goes_to_teams_instead_of_email(self):
         enable_chat_notifications("Microsoft Teams")
-        self.due_soon_task()
+        task = self.due_soon_task()
         with patch(
             "helpdesk.chat_notifications.requests.post", return_value=ok_response()
         ) as post, patch("frappe.sendmail") as sendmail:
-            work_reminders.send_task_reminders()
+            send_task_reminder(task)
 
         direct = [
             c
@@ -85,10 +86,9 @@ class TestTeams(ChatCase):
         with patch(
             "helpdesk.chat_notifications.requests.post", return_value=ok_response()
         ) as post:
-            work_reminders.send_task_reminders()
-            work_reminders.send_task_reminders()
+            send_task_reminder(task.name, escalate=True)
+            send_task_reminder(task.name, escalate=True)
 
-        # other overdue tasks in the test database escalate too; count this one's
         posts = [
             c.kwargs["json"]["attachments"][0]["content"]["body"][0]["text"]
             for c in post.call_args_list
@@ -96,16 +96,16 @@ class TestTeams(ChatCase):
         ]
         mine = [text for text in posts if "Go-live checklist" in text]
         self.assertEqual(len(mine), 1)
-        self.assertIn("Escalated, overdue since", mine[0])
+        self.assertEqual(mine[0], "Due tomorrow: Go-live checklist")
 
     def test_failed_webhook_falls_back_to_email(self):
         enable_chat_notifications("Microsoft Teams")
-        self.due_soon_task()
+        task = self.due_soon_task()
         with patch(
             "helpdesk.chat_notifications.requests.post",
             return_value=ok_response(status=500),
         ), patch("frappe.sendmail") as sendmail, patch.object(frappe, "log_error"):
-            work_reminders.send_task_reminders()
+            send_task_reminder(task)
         emailed = [c.kwargs["recipients"] for c in sendmail.call_args_list]
         self.assertIn(DEV[0], emailed)
 
@@ -116,13 +116,13 @@ class TestTeams(ChatCase):
             teams_direct_webhook="",
             teams_channel_webhook=TEAMS_CHANNEL,
         )
-        self.due_soon_task()
+        task = self.due_soon_task()
         with patch(
             "helpdesk.chat_notifications.requests.post", return_value=ok_response()
         ) as post, patch("frappe.sendmail") as sendmail, patch.object(
             frappe, "log_error"
         ) as log_error:
-            work_reminders.send_task_reminders()
+            send_task_reminder(task)
 
         self.assertFalse([c for c in post.call_args_list if c.args[0] != TEAMS_CHANNEL])
         self.assertIn(DEV[0], [c.kwargs["recipients"] for c in sendmail.call_args_list])
@@ -236,9 +236,9 @@ class TestSlack(ChatCase):
 
     def test_reminder_is_a_slack_dm(self):
         enable_chat_notifications("Slack")
-        self.due_soon_task()
+        task = self.due_soon_task()
         with self.slack() as post, patch("frappe.sendmail") as sendmail:
-            work_reminders.send_task_reminders()
+            send_task_reminder(task)
 
         messages = [
             c for c in post.call_args_list if c.args[0].endswith("chat.postMessage")
@@ -251,15 +251,15 @@ class TestSlack(ChatCase):
 
     def test_people_not_in_slack_get_an_email_unless_turned_off(self):
         enable_chat_notifications("Slack")
-        self.due_soon_task()
+        task = self.due_soon_task()
         with self.slack(found=False), patch("frappe.sendmail") as sendmail:
-            work_reminders.send_task_reminders()
+            send_task_reminder(task)
         self.assertTrue(sendmail.called)
 
         frappe.db.delete("HD Notification")
         enable_chat_notifications("Slack", email_when_unreachable=0)
         with self.slack(found=False), patch("frappe.sendmail") as sendmail:
-            work_reminders.send_task_reminders()
+            send_task_reminder(task)
         self.assertFalse(sendmail.called)
 
     def test_mentions_go_to_slack_too(self):
@@ -299,11 +299,11 @@ class TestSlack(ChatCase):
 
 class TestSettings(ChatCase):
     def test_disabled_means_email_as_before(self):
-        self.due_soon_task()
+        task = self.due_soon_task()
         with patch("helpdesk.chat_notifications.requests.post") as post, patch(
             "frappe.sendmail"
         ) as sendmail:
-            work_reminders.send_task_reminders()
+            send_task_reminder(task)
         self.assertFalse(post.called)
         self.assertTrue(sendmail.called)
 

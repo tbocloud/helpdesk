@@ -650,6 +650,35 @@ def get_custom_fields():
                 "read_only": 1,
                 "hidden": 1,
             },
+            # follow-ups (docs/follow-ups.md): how far up the ladder the SLA has gone
+            {
+                "fieldname": "custom_escalation_level",
+                "fieldtype": "Int",
+                "label": "Escalation Level",
+                "insert_after": "agreement_status",
+                "read_only": 1,
+                "no_copy": 1,
+                "default": "0",
+            },
+            {
+                "fieldname": "custom_escalated_on",
+                "fieldtype": "Datetime",
+                "label": "Escalated On",
+                "insert_after": "custom_escalation_level",
+                "read_only": 1,
+                "no_copy": 1,
+            },
+            {
+                # the automatic follow-up email to a customer who hasn't replied,
+                # so it goes once per wait
+                "fieldname": "custom_customer_followed_up_on",
+                "fieldtype": "Datetime",
+                "label": "Customer Followed Up On",
+                "insert_after": "custom_escalated_on",
+                "read_only": 1,
+                "hidden": 1,
+                "no_copy": 1,
+            },
         ],
         "Project": [
             {

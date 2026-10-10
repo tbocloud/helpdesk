@@ -34,6 +34,7 @@ from helpdesk.test_utils import (
     make_ticket,
     make_timesheet,
     make_work_summary,
+    send_task_reminder,
     start_task_timer,
 )
 
@@ -833,46 +834,6 @@ class TestTicketToTask(WorkControlCase):
         self.assertEqual([pr["number"] for pr in item["pull_requests"]], [8, 7])
 
 
-class TestReminders(WorkControlCase):
-    def test_task_stages_reach_the_right_people_once(self):
-        soon = self.make_task("Data migration", add_days(nowdate(), 1))
-        late = self.make_task("Opening balances", add_days(nowdate(), -1))
-        very_late = self.make_task(
-            "Go-live checklist", add_days(nowdate(), -5), is_key=1
-        )
-
-        work_reminders.send_task_reminders()
-        work_reminders.send_task_reminders()  # a second run must not repeat anything
-
-        self.assertEqual(len(self.notified(DEV, soon)), 1)
-        self.assertEqual(len(self.notified(LEAD, late)), 1)
-        self.assertEqual(self.notified(LEAD, soon), [])
-        escalations = [s for s in self.notified(PM, very_late) if "Escalated" in s]
-        self.assertEqual(len(escalations), 1)
-        self.assertIn("Key task", escalations[0])
-
-    def test_breached_ticket_goes_to_agent_managers(self):
-        manager = ("manager.control@work-control.example", "Divya Menon")
-        make_tasky_user(*manager, roles=("Agent Manager",))
-        ticket = make_ticket(subject="Payroll run failed", customer=CUSTOMER)
-        make_assignment("HD Ticket", ticket.name, SUPPORT[0])
-        frappe.db.set_value(
-            "HD Ticket",
-            ticket.name,
-            "resolution_by",
-            add_to_date(now_datetime(), hours=-2),
-        )
-
-        work_reminders.send_ticket_reminders()
-
-        self.assertTrue(
-            any("SLA breached" in s for s in self.notified(SUPPORT, ticket.name))
-        )
-        self.assertTrue(
-            any("SLA breached" in s for s in self.notified(manager, ticket.name))
-        )
-
-
 class TestTaskHold(WorkControlCase):
     def hold(self, task, reason="Laptop / system issue", days_ago=0):
         self.as_user(
@@ -949,18 +910,6 @@ class TestTaskHold(WorkControlCase):
         self.assertEqual(doc.status, "Working")
         self.assertEqual(doc.hold_days_total, 1)
 
-    def test_held_tasks_skip_due_reminders_and_escalate_when_stuck(self):
-        task = self.make_task("Bank reconciliation", add_days(nowdate(), -4))
-        self.hold(task, days_ago=4)
-
-        work_reminders.send_task_reminders()
-        work_reminders.send_hold_reminders()
-        work_reminders.send_hold_reminders()
-
-        self.assertFalse(any("Overdue" in s for s in self.notified(DEV, task)))
-        stuck = [s for s in self.notified(PM, task) if "On hold for over" in s]
-        self.assertEqual(len(stuck), 1)
-
     def test_overview_lists_held_work(self):
         task = self.make_task("Tally migration", add_days(nowdate(), -1))
         self.hold(task)
@@ -1025,7 +974,7 @@ class TestReminderDelivery(WorkControlCase):
     def test_reminder_opens_the_project_and_is_emailed(self):
         task = self.make_task("Share UAT build", add_days(nowdate(), 1))
         with patch("frappe.sendmail") as sendmail:
-            work_reminders.send_task_reminders()
+            send_task_reminder(task)
 
         note = frappe.get_last_doc(
             "HD Notification", filters={"user_to": DEV[0], "reference_name": task}
@@ -1037,7 +986,7 @@ class TestReminderDelivery(WorkControlCase):
         )
 
     def test_no_email_when_the_person_turned_email_off(self):
-        self.make_task("Share UAT build", add_days(nowdate(), 1))
+        task = self.make_task("Share UAT build", add_days(nowdate(), 1))
         if not frappe.db.exists("Notification Settings", DEV[0]):
             create_notification_settings(DEV[0])
         frappe.db.set_value(
@@ -1045,14 +994,15 @@ class TestReminderDelivery(WorkControlCase):
         )
         frappe.clear_document_cache("Notification Settings", DEV[0])
         with patch("frappe.sendmail") as sendmail:
-            work_reminders.send_task_reminders()
+            send_task_reminder(task)
         self.assertFalse(sendmail.called)
 
     def test_clearing_one_reminder_leaves_the_rest_unread(self):
         first = self.make_task("Share UAT build", add_days(nowdate(), 1))
         second = self.make_task("Collect sign-off", add_days(nowdate(), 1))
         with patch("frappe.sendmail"):
-            work_reminders.send_task_reminders()
+            send_task_reminder(first)
+            send_task_reminder(second)
         one = frappe.get_last_doc(
             "HD Notification", filters={"reference_name": first, "user_to": DEV[0]}
         )

@@ -1290,6 +1290,7 @@ class HDTicket(Document):
             "agent_group",
             "contact",
             "agreement_status",
+            "custom_escalation_level",
             "response_by",
             "resolution_by",
             "customer",

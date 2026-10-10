@@ -25,6 +25,7 @@ class Task(Document):
         self.route_completion_to_review()
         self.track_slip()
         self.set_completed_on()
+        self.clear_escalation()
         self.unmark_ai_description_when_edited()
 
     def after_insert(self):
@@ -39,6 +40,20 @@ class Task(Document):
         self.advance_content_post()
         self.clarify_signoff_item()
         self.tell_assigner_it_is_done()
+        self.refresh_follow_ups()
+
+    def clear_escalation(self):
+        """Done, cancelled or on hold: off the follow-up ladder (docs/follow-ups.md)."""
+        if self.status in (*DONE, ON_HOLD) and self.get("escalation_level"):
+            self.escalation_level = 0
+            self.escalated_on = None
+
+    def refresh_follow_ups(self):
+        """A task that moved leaves the follow-up banner now, not in a few minutes."""
+        from helpdesk.follow_ups import clear_cache
+
+        if self.status_changed() or self.has_value_changed("exp_end_date"):
+            clear_cache()
 
     def tell_assigner_it_is_done(self):
         """Whoever gave out the task hears when it's completed, in the helpdesk with a chime.

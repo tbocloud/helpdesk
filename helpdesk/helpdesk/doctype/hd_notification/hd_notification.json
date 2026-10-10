@@ -18,6 +18,7 @@
 		"reference_doctype",
 		"reference_name",
 		"link",
+		"dedupe_key",
 		"message"
 	],
 	"fields": [
@@ -100,11 +101,20 @@
 			"fieldtype": "Data",
 			"label": "Link",
 			"description": "Path inside /helpdesk to open, for reminders about tasks and tickets."
+		},
+		{
+			"fieldname": "dedupe_key",
+			"fieldtype": "Data",
+			"label": "Dedupe Key",
+			"read_only": 1,
+			"hidden": 1,
+			"search_index": 1,
+			"description": "One notification per person, document and key (helpdesk.work_reminders.notify_users)."
 		}
 	],
 	"index_web_pages_for_search": 1,
 	"links": [],
-	"modified": "2026-10-09 12:00:00.000000",
+	"modified": "2026-10-10 09:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Notification",

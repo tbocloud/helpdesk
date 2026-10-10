@@ -137,6 +137,9 @@ assignee, department)`. Project managers and project leads only.
   from the bucket's items.
 - The bucket and filters live in the URL (`bucket`, `project`, `customer`, `assignee`,
   `department`).
+- **Follow-ups** (System Managers and Agent Managers): escalated (L2+), breached and overdue
+  counts, the escalated items, the oldest overdue tasks and who has the most open escalations
+  (`FollowUpControl.vue`, see [follow-ups.md](follow-ups.md#where-escalation-shows)).
 
 ## Scoreboard (`/team-dashboard`)
 
@@ -504,11 +507,22 @@ too, while the timer runs). Tasks due on a later day only go overdue when their 
 task with no estimate only by date. An overdue task carries no "at risk" reasons, so it's counted once (overdue), not in both buckets.
 My tasks and the phase checklist load the timer fields for this. Where it shows: My Work
 (Overdue group and tab; the label
-reads "Overdue · past its estimate"), Overview buckets, Team and Projects counts, the morning
-brief, the project board, My tasks and the Overdue page ("Past its estimate"), the project
+reads "Overdue · past its estimate"), Overview buckets, Team and Projects counts, the
+follow-ups ([follow-ups.md](follow-ups.md)), the project board, My tasks and the Overdue page ("Past its estimate"), the project
 dashboard (count and milestones) and the ticket page's Linked work (`is_overdue` from
-`get_ticket_linked_work`). Reminders and the weekly AI summaries still go by due date only.
+`get_ticket_linked_work`). The weekly AI summaries still go by due date only.
 Overdue is worked out when the page loads, so an open page turns red on its next refresh.
+
+### Follow-ups and escalation
+
+Reminders about tasks (due next working day, due today and not started, overdue, untouched,
+waiting for review, on hold, no due date, blocking an overdue task) and the overdue ladder
+(the assignee, then the assigner and lead, the coordinators and department heads, the Agent
+Managers) come from one engine, described in [follow-ups.md](follow-ups.md). How far up the
+ladder an overdue task has gone is `Task.escalation_level`, shown as a badge
+(`EscalationBadge`: "Escalated to lead / head / managers") on board cards, checklist rows, My
+Tasks rows, work rows and the task details, and counted in the strip on Home and in the
+sidebar. It goes back to 0 when the task is completed, cancelled or put on hold.
 
 ### Activity
 

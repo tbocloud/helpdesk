@@ -77,6 +77,9 @@ class HDNotification(Document):
 
         if self.notification_type not in ("Mention", "Reminder"):
             return
+        # a follow-up reaches chat in the person's digest, not one message per item
+        if self.flags.skip_delivery:
+            return
         if not is_enabled():
             self.send_email()
             return
@@ -137,7 +140,7 @@ class HDNotification(Document):
         try:
             frappe.sendmail(
                 recipients=self.user_to,
-                # multi-line reminders (the morning brief) use their first line as subject
+                # a multi-line reminder uses its first line as the subject
                 subject=text.split("\n", 1)[0],
                 template="new_notification",
                 args={
