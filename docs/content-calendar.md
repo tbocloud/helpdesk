@@ -72,8 +72,10 @@ screens the day's date column stays pinned at the top of the list while its card
 - **Header:** a building tile, then the client in a larger semibold font (always shown, even
   with the customer filter set); below it the copy (the post's `title`, opens the post) · post
   type. On the right: the platforms (brand mark + name, from `ChannelIcon.vue`, coloured with
-  the `--channel-*` tokens), the time, the status pill (`StatusPill.vue` at `size="md"`), and an
-  edit (pencil) button that opens the post, the same as clicking the copy.
+  the `--channel-*` tokens), the time, the status pill (`StatusPill.vue` at `size="md"`), and a
+  round button that opens the post, the same as clicking the copy: a pencil ("Edit …") for
+  people who can edit content (`auth.canEditContent`), a paperclip ("Open … to add files") for
+  everyone else.
 - **Warning line** "Goes live within 2 days and isn't approved yet." when the post isn't
   Approved/Scheduled/Published and goes live within 48 hours.
 - **Sub Copy** (`caption`) and **Description** (`brief`) side by side in white boxes ("Not
@@ -81,9 +83,11 @@ screens the day's date column stays pinned at the top of the list while its card
 - **Roles** (`RoleBox.vue`): Writer, Designer, Video editor, Digital marketer. Each assigned
   person shows with a role-coloured initial tile, their name and task status (and "late" when
   the task is past due); an empty role shows a dashed **+ Assign** box in the card's tone.
-  Either opens the assign dialog. The filled box is a native `<button>` (or a plain `<div>` for
-  people who can't reassign), not `<component :is="'button'">`, which resolves to frappe-ui's
-  global `Button` and clipped the names to its fixed height.
+  Either opens the assign dialog. People who can't edit content get plain, non-interactive
+  boxes instead: the same names and statuses, and **Not assigned** for an empty role. The filled
+  box is a native `<button>` for editors and a plain `<div>` for everyone else, not
+  `<component :is="'button'">`, which resolves to frappe-ui's global `Button` and clipped the
+  names to its fixed height.
 - **Footer:** "Goes live …" (or the published / missed / cancelled line), then **Mark
   published** (primary), **Postpone**, and a cancel icon button, all through
   `EntryActionDialog.vue`. Published posts link to the live post instead.
