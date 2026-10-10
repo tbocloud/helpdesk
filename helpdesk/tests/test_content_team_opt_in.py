@@ -9,13 +9,15 @@ from helpdesk.content_team import (
     CONTENT_TEAM_ROLE,
     DM_COORDINATOR_ROLE,
     DM_EMPLOYEE_ROLE,
+    DM_HEAD_ROLE,
     ERP_EMPLOYEE_ROLE,
     in_content_team,
 )
 from helpdesk.test_utils import (
-    call_as_user,
     create_customer,
     get_content_task,
+    get_content_team_as,
+    get_session_user_as,
     get_visible_content_posts,
     get_visible_tasks,
     hold_commits,
@@ -72,12 +74,9 @@ class TestContentTeamOptIn(FrappeTestCase):
         )
         self.writer_task = get_content_task(self.post.name, "Writer")
 
-    def flag(self, user: str) -> bool:
-        return call_as_user(user, "helpdesk.api.auth.get_user")["in_content_team"]
-
     def test_a_plain_agent_sees_no_content_calendar(self):
         self.assertFalse(in_content_team(self.consultant))
-        self.assertFalse(self.flag(self.consultant))
+        self.assertFalse(get_session_user_as(self.consultant)["in_content_team"])
         # a member of the client's project used to see the client's posts
         self.assertEqual(get_visible_content_posts(self.consultant), set())
         self.assertFalse(
@@ -106,7 +105,7 @@ class TestContentTeamOptIn(FrappeTestCase):
             )
         )
         # the task, never the calendar
-        self.assertFalse(self.flag(self.developer))
+        self.assertFalse(get_session_user_as(self.developer)["in_content_team"])
         self.assertEqual(get_visible_content_posts(self.developer), set())
 
     def test_the_content_roles_and_the_admins_are_in(self):
@@ -134,7 +133,7 @@ class TestContentTeamOptIn(FrappeTestCase):
         ]
         for user in people:
             self.assertTrue(in_content_team(user), user)
-            self.assertTrue(self.flag(user), user)
+            self.assertTrue(get_session_user_as(user)["in_content_team"], user)
         self.assertTrue(in_content_team("Administrator"))
         # the writer sees the post they're on; the leads see every post
         for user in (self.writer, *people[1:3], *people[4:]):
@@ -148,16 +147,25 @@ class TestContentTeamOptIn(FrappeTestCase):
         # even with a content role, an ERP Employee stays out unless they edit content
         frappe.get_doc("User", erp).add_roles(DM_EMPLOYEE_ROLE)
         self.assertFalse(in_content_team(erp))
-        self.assertFalse(self.flag(erp))
-        self.assertTrue(call_as_user(erp, "helpdesk.api.auth.get_user")["is_erp_only"])
+        self.assertFalse(get_session_user_as(erp)["in_content_team"])
+        self.assertTrue(get_session_user_as(erp)["is_erp_only"])
         task = make_task(
             self.project, "Onam offer: caption", content_post=self.post.name
         ).name
         with self.assertRaises(frappe.ValidationError):
             make_assignment("Task", task, erp)
 
+        # a head who is also an ERP Employee doesn't see the posts either
+        frappe.get_doc("User", erp).add_roles(DM_HEAD_ROLE)
+        self.assertFalse(in_content_team(erp))
+        self.assertEqual(get_visible_content_posts(erp), set())
+        self.assertFalse(
+            frappe.has_permission("HD Content Post", "read", self.post.name, user=erp)
+        )
+
         frappe.get_doc("User", erp).add_roles(DM_COORDINATOR_ROLE)
         self.assertTrue(in_content_team(erp))
+        self.assertIn(self.post.name, get_visible_content_posts(erp))
 
     def test_settings_shows_and_sets_who_is_in_the_content_team(self):
         manager = make_tasky_user(
@@ -165,21 +173,12 @@ class TestContentTeamOptIn(FrappeTestCase):
         )
         users = [self.consultant, self.writer, manager]
 
-        def members():
-            return call_as_user(
-                manager, "helpdesk.api.departments.get_content_team", users=users
-            )
-
-        self.assertEqual(members(), [self.writer, manager])
+        self.assertEqual(get_content_team_as(manager, users), [self.writer, manager])
         # the Digital team wall is the DM Employee role, which adds them
         set_department_wall_as(manager, self.consultant, DM_EMPLOYEE_ROLE)
-        self.assertEqual(members(), users)
+        self.assertEqual(get_content_team_as(manager, users), users)
         set_department_wall_as(manager, self.consultant, "")
-        self.assertEqual(members(), [self.writer, manager])
+        self.assertEqual(get_content_team_as(manager, users), [self.writer, manager])
 
         with self.assertRaises(frappe.PermissionError):
-            call_as_user(
-                self.consultant,
-                "helpdesk.api.departments.get_content_team",
-                users=users,
-            )
+            get_content_team_as(self.consultant, users)

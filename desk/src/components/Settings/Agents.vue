@@ -143,7 +143,7 @@ import { __ } from "@/translation";
 import { renderOptionIcon } from "@/utils";
 
 const { getUserRole, updateUserRoleCache } = useUserStore();
-const { isManager } = useAuthStore();
+const { isManager, isAdmin } = useAuthStore();
 
 const agentStore = useAgents();
 const search = agentStore.search;
@@ -286,7 +286,9 @@ function loadWalls() {
 
 function loadContentTeam() {
   const names = (agents.data ?? []).map((a) => a.name);
-  if (isManager && names.length) contentTeam.submit({ users: names });
+  // System Managers may read it too, with or without the Agent Manager role
+  if ((isManager || isAdmin) && names.length)
+    contentTeam.submit({ users: names });
 }
 
 watch(() => (agents.data ?? []).map((a) => a.name).join(","), loadWalls, {

@@ -905,11 +905,12 @@ def member_customers(user: str) -> set[str]:
 
 def permission_query(user: str | None = None) -> str | None:
     user = user or frappe.session.user
-    if _is_content_lead(user):
-        return None
-    # only the content team sees the content calendar (in_content_team)
+    # only the content team sees the content calendar, leads included: a head who is
+    # also an ERP Employee stays out
     if not in_content_team(user):
         return "1 = 0"
+    if _is_content_lead(user):
+        return None
     u = frappe.db.escape(user)
     table = "`tabHD Content Post`"
     return (
@@ -925,10 +926,12 @@ def has_permission(
     doc, ptype: str | None = None, user: str | None = None
 ) -> bool | None:
     user = user or frappe.session.user
-    if ptype == "create" or _is_content_lead(user):
+    if ptype == "create":
         return None
     if not in_content_team(user):
         return False
+    if _is_content_lead(user):
+        return None
     on_team = any(user in people for people in team_of(doc).values())
     if on_team or user == doc.owner or doc.customer in member_customers(user):
         return None
