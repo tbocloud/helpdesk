@@ -35,7 +35,11 @@ each team out of the other's department:
 | Role | Never sees |
 | --- | --- |
 | **DM Employee** | the **ERP** department |
-| **ERP Employee** | the **Digital** department, the content calendar and the work Calendar |
+| **ERP Employee** | the **Digital** department, the content calendar (even with a content role) and the work Calendar |
+
+The content calendar is opt-in for everyone else too: only the content team sees it, so a plain
+agent with neither role (an ERP consultant, a developer) doesn't see it either; see
+[content-calendar.md](content-calendar.md#who-sees-the-content-calendar).
 
 Creative, GrowthX, Internal / R&D and projects with no department stay visible to both. System
 Managers and Agent Managers see every department. **The Scoreboard is the one exception**: there
@@ -60,13 +64,14 @@ both teams see every department, so they can compete ([team-dashboard.md](team-d
   task with its assignee, and a share would let them open it even though it's hidden from their
   lists.
 - **Content calendar for ERP Employees** (`content_team.is_erp_only()`, unless they also edit
-  content): HD Content Post `permission_query` returns no posts and `has_permission` refuses
-  them; a content post's tasks (`Task.content_post` set) are left out of `task_query` and
-  refused by `task_has_permission`, whatever their project's department; one left on a post's
-  team gets no task and no "your turn" notice from it (`HDContentPost.task_people`); the sidebar hides
-  Content and Calendar, and the router sends `ContentCalendar`,
-  `ContentReport`, `ContentPlans` and `WorkCalendar` to Home (`ERP_EMPLOYEE_HIDDEN_ROUTES` in
-  `pages/content/contentTeam.ts`, `authStore.isErpOnly`).
+  content): they are never in the content team (`in_content_team()`), so the posts, Content,
+  Performance and the content routes are hidden as for every non-member. On top of that, a
+  content post's tasks (`Task.content_post` set) are left out of `task_query` and refused by
+  `task_has_permission` even when assigned to them, whatever their project's department; one
+  left on a post's team gets no task and no "your turn" notice from it
+  (`HDContentPost.task_people`); and the sidebar hides the work Calendar, whose route
+  (`WorkCalendar`) goes to Home (`ERP_EMPLOYEE_HIDDEN_ROUTES` in `pages/content/contentTeam.ts`,
+  `authStore.isErpOnly`).
 - **Support pages hidden from both** (`content_team.is_department_employee()`, false for System
   Managers and Agent Managers; `authStore.isDepartmentEmployee`): Support hours, Tickets,
   Customers, Contacts, Templates, Knowledge base and Customer report leave the sidebar, and their
@@ -80,7 +85,9 @@ both teams see every department, so they can compete ([team-dashboard.md](team-d
   projects. The full matrix is in [workspace-pages.md](workspace-pages.md#who-sees-which-tasks).
 - **Setting the walls: Settings → Agents.** Each agent row shows an "ERP team" or "Digital
   team" badge, and System Managers and Agent Managers set it from the agent's menu
-  (Department wall: No wall, ERP team, Digital team). Picking one gives the user that role and
+  (Department wall: No wall, ERP team, Digital team). A "Content team" badge marks everyone who
+  sees the content calendar (`get_content_team(users)`); the Digital team wall adds someone
+  to it. Picking one gives the user that role and
   takes the other away; their other roles stay. API in `helpdesk/api/departments.py`:
   `get_department_walls(users)` and `set_department_wall(user, role)` (POST; `role` is
   `ERP Employee`, `DM Employee` or empty). Someone with both roles shows "ERP and Digital
@@ -136,6 +143,7 @@ are unchanged.
 | `delete_department(department)` | POST | delete | Turns Frappe's `LinkExistsError` into a clear message |
 | `get_department_walls(users)` | GET | System / Agent Manager | `{user: [wall roles]}` for Settings → Agents |
 | `set_department_wall(user, role=None)` | POST | System / Agent Manager | Gives the agent DM Employee, ERP Employee or neither |
+| `get_content_team(users)` | GET | System / Agent Manager | Which of `users` are in the content team, for the badge |
 
 `helpdesk/tasky/api.py`: `create_project` and `update_project` take `department` (leaving it out
 of an update keeps the project's department, an empty value clears it). `Project.validate`

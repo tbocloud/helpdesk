@@ -1206,6 +1206,31 @@ def get_visible_tasks(user: str, project: str | None = None) -> set[str]:
     )
 
 
+def get_session_user_as(user: str) -> dict:
+    """What the app boots with for `user` (`helpdesk.api.auth.get_user`): their flags."""
+    return call_as_user(user, "helpdesk.api.auth.get_user")
+
+
+def get_content_team_as(as_user: str, users: list[str]) -> list[str]:
+    """Which of `users` are in the content team, as Settings → Agents asks as `as_user`."""
+    return call_as_user(
+        as_user, "helpdesk.api.departments.get_content_team", users=users
+    )
+
+
+def get_visible_content_posts(user: str) -> set[str]:
+    """Names of the HD Content Posts `user` may list (through `frappe.get_list`, so the
+    post's permission query and the content team rule apply)."""
+    return set(
+        run_as_user(
+            user,
+            lambda: frappe.get_list(
+                "HD Content Post", pluck="name", limit_page_length=0
+            ),
+        )
+    )
+
+
 def get_task_completed_notices(task: str) -> list:
     """The Task Completed HD Notifications sent about `task` (user_to, user_from, message)."""
     return frappe.get_all(

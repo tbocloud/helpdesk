@@ -23,6 +23,13 @@ CONTENT_EDITOR_ROLES = (
     "Agent Manager",
     "Project Manager",
 )
+# with the editors, the people who are part of the content calendar; nobody else sees it
+CONTENT_CALENDAR_ROLES = (
+    CONTENT_TEAM_ROLE,
+    DM_HEAD_ROLE,
+    DM_COORDINATOR_ROLE,
+    DM_EMPLOYEE_ROLE,
+)
 FULL_ACCESS_ROLES = (
     "Administrator",
     "System Manager",
@@ -58,11 +65,54 @@ def sees_no_tickets(user: str | None = None) -> bool:
 
 
 def is_erp_only(user: str | None = None) -> bool:
-    """An ERP Employee who doesn't also edit content: the content calendar is hidden."""
+    """An ERP Employee who doesn't also edit content: never in the content team, never
+    given a content post's task, and the work Calendar is hidden from them too."""
     user = user or frappe.session.user
     if user == "Administrator":
         return False
     return ERP_EMPLOYEE_ROLE in frappe.get_roles(user) and not can_edit_content(user)
+
+
+def in_content_team(user: str | None = None) -> bool:
+    """Part of the content calendar, so it's shown to them: whoever edits content (the
+    admins, Project Managers and DM Coordinators) and holders of a content calendar role.
+    Everyone else, ERP Employees included, sees only the content tasks that are their
+    own (see docs/content-calendar.md)."""
+    user = user or frappe.session.user
+    if user == "Administrator":
+        return True
+    return _in_content_team(set(frappe.get_roles(user)))
+
+
+def content_team_members(users: list[str]) -> list[str]:
+    """Which of `users` are in the content team, from one query (Settings → Agents)."""
+    if not users:
+        return []
+    has_role = frappe.qb.DocType("Has Role")
+    roles = {user: set() for user in users}
+    for user, role in (
+        frappe.qb.from_(has_role)
+        .select(has_role.parent, has_role.role)
+        .where(
+            (has_role.parenttype == "User")
+            & has_role.parent.isin(users)
+            & has_role.role.isin(
+                [*CONTENT_EDITOR_ROLES, *CONTENT_CALENDAR_ROLES, ERP_EMPLOYEE_ROLE]
+            )
+        )
+        .run()
+    ):
+        roles[user].add(role)
+    return [u for u in users if u == "Administrator" or _in_content_team(roles[u])]
+
+
+def _in_content_team(roles: set[str]) -> bool:
+    if roles & set(CONTENT_EDITOR_ROLES):
+        return True
+    # the ERP Employee wall keeps them out whatever else they hold, as `is_erp_only`
+    if ERP_EMPLOYEE_ROLE in roles:
+        return False
+    return bool(roles & set(CONTENT_CALENDAR_ROLES))
 
 
 def can_edit_content(user: str | None = None) -> bool:

@@ -5,6 +5,7 @@ import frappe
 from frappe import _
 from frappe.query_builder.functions import Count
 
+from helpdesk.content_team import content_team_members
 from helpdesk.tasky.permissions import (
     DEPARTMENT_HEAD_TABLE,
     DEPARTMENT_HEADS,
@@ -256,6 +257,15 @@ def get_department_walls(users: list[str] | str) -> dict[str, list[str]]:
     ):
         walls[user].append(role)
     return walls
+
+
+@frappe.whitelist()
+def get_content_team(users: list[str] | str) -> list[str]:
+    """Which agents are in the content team and see the content calendar, for the badge
+    in Settings → Agents. The Digital team wall (DM Employee) adds someone to it."""
+    _check_can_set_walls()
+    users = frappe.parse_json(users) if isinstance(users, str) else users or []
+    return content_team_members(users)
 
 
 @frappe.whitelist(methods=["POST"])

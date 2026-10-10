@@ -6,10 +6,13 @@ from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_days, getdate, now_datetime, nowdate
 
 from helpdesk.api import content_performance, performance
+from helpdesk.content_team import DM_EMPLOYEE_ROLE
 from helpdesk.test_utils import (
+    call_as_user,
     create_customer,
     hold_commits,
     make_content_post_due,
+    make_content_user,
     make_employee,
     make_tasky_user,
 )
@@ -29,8 +32,8 @@ class TestContentPerformance(FrappeTestCase):
         create_customer(ACME)
         create_customer(GLOBEX)
         # the team is the active agents; without an Employee record a person is their user
-        self.writer = make_tasky_user(*WRITER)
-        self.designer = make_tasky_user(*DESIGNER)
+        self.writer = make_content_user(*WRITER, DM_EMPLOYEE_ROLE)
+        self.designer = make_content_user(*DESIGNER, DM_EMPLOYEE_ROLE)
         self.start = str(add_days(nowdate(), -6))
         self.end = str(add_days(nowdate(), 6))
 
@@ -165,6 +168,19 @@ class TestContentPerformance(FrappeTestCase):
             content_performance.get_content_performance(
                 self.start, self.end, employee=self.designer
             )
+
+    def test_only_the_content_team_sees_content_performance(self):
+        agent = make_tasky_user(
+            "cp.consultant@perf-test.example", "Gayathri Consultant"
+        )
+        for method in ("get_content_performance", "get_customer_performance"):
+            with self.assertRaises(frappe.PermissionError):
+                call_as_user(
+                    agent,
+                    f"helpdesk.api.content_performance.{method}",
+                    from_date=self.start,
+                    to_date=self.end,
+                )
 
     def test_customer_filter_limits_both_reports(self):
         by_customer = content_performance.get_customer_performance(

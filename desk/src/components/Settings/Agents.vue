@@ -3,7 +3,7 @@
     :title="__('Agents')"
     :description="
       __(
-        'Everyone who works here: agent or manager, and their department wall (ERP or Digital team), set from each agent\'s menu.'
+        'Everyone who works here: agent or manager, and their department wall (ERP or Digital team), set from each agent\'s menu. Only the content team sees the content calendar; put someone on the Digital team to add them.'
       )
     "
   >
@@ -67,6 +67,11 @@
                 :label="wallLabel(agent.name)"
                 :icon="LucideBrickWall"
               />
+              <TaskyBadge
+                v-if="contentTeam.data?.includes(agent.name)"
+                :label="__('Content team')"
+                :icon="LucideCalendarDays"
+              />
             </template>
             <template #actions>
               <Dropdown
@@ -121,6 +126,7 @@ import {
 } from "frappe-ui";
 import { h, onUnmounted, ref, watch } from "vue";
 import LucideBrickWall from "~icons/lucide/brick-wall";
+import LucideCalendarDays from "~icons/lucide/calendar-days";
 import LucideCheck from "~icons/lucide/check";
 import LucideChevronDown from "~icons/lucide/chevron-down";
 import LucideEllipsis from "~icons/lucide/ellipsis";
@@ -137,7 +143,7 @@ import { __ } from "@/translation";
 import { renderOptionIcon } from "@/utils";
 
 const { getUserRole, updateUserRoleCache } = useUserStore();
-const { isManager } = useAuthStore();
+const { isManager, isAdmin } = useAuthStore();
 
 const agentStore = useAgents();
 const search = agentStore.search;
@@ -215,6 +221,7 @@ function updateRole(agent: string, newRole: string) {
     new_role: newRole,
   }).then(() => {
     updateUserRoleCache(agent, newRole);
+    loadContentTeam();
     toast.success(__(`Role updated to ${newRole} successfully.`));
   });
 }
@@ -253,7 +260,7 @@ function getOptions(agent) {
 const WALLS = [
   { role: "", label: __("No wall: every department") },
   { role: "ERP Employee", label: __("ERP team: no Digital or content") },
-  { role: "DM Employee", label: __("Digital team: no ERP") },
+  { role: "DM Employee", label: __("Digital team: content calendar, no ERP") },
 ];
 
 const walls = createResource({
@@ -264,9 +271,24 @@ const walls = createResource({
 // the agent whose wall is being saved; every choice waits so saves can't cross
 const savingWall = ref("");
 
+// who sees the content calendar, from their roles (content_team.in_content_team)
+const contentTeam = createResource({
+  url: "helpdesk.api.departments.get_content_team",
+  // only a badge; without it the list still works
+  onError() {},
+});
+
 function loadWalls() {
   const names = (agents.data ?? []).map((a) => a.name);
   if (isManager && names.length) walls.submit({ users: names });
+  loadContentTeam();
+}
+
+function loadContentTeam() {
+  const names = (agents.data ?? []).map((a) => a.name);
+  // System Managers may read it too, with or without the Agent Manager role
+  if ((isManager || isAdmin) && names.length)
+    contentTeam.submit({ users: names });
 }
 
 watch(() => (agents.data ?? []).map((a) => a.name).join(","), loadWalls, {
@@ -312,6 +334,7 @@ function setWall(agent: string, role: string) {
   call("helpdesk.api.departments.set_department_wall", { user: agent, role })
     .then((roles: string[]) => {
       walls.setData({ ...(walls.data ?? {}), [agent]: roles });
+      loadContentTeam();
       toast.success(
         role
           ? __("{0} is now on the {1}", agent, wallLabel(agent))

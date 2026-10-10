@@ -6,6 +6,7 @@ from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_to_date, now_datetime
 
 from helpdesk.api import content_board
+from helpdesk.content_team import DM_EMPLOYEE_ROLE
 from helpdesk.helpdesk.doctype.hd_content_post.hd_content_post import (
     send_due_reminders,
     send_missed_post_alerts,
@@ -346,9 +347,10 @@ class TestWhoEditsEntries(FrappeTestCase):
         hold_commits(self)
         self.addCleanup(frappe.set_user, "Administrator")
         create_customer(CUSTOMER)
-        make_tasky_user(*WRITER)
+        # a writer in the content team; nobody outside it can open an entry at all
+        make_content_user(*WRITER, DM_EMPLOYEE_ROLE)
         make_content_user(*COORDINATOR, "DM Coordinator")
-        make_content_user(*EMPLOYEE, "DM Employee")
+        make_content_user(*EMPLOYEE, DM_EMPLOYEE_ROLE)
         self.post = make_content_post(
             "Onam offer", CUSTOMER, status="Drafting", writer=WRITER[0]
         )
@@ -542,15 +544,17 @@ class TestMissedPostAlerts(FrappeTestCase):
 
 
 class TestHDContentPostVisibility(FrappeTestCase):
-    """Writers see their own posts and their clients' posts, not other clients'."""
+    """In the content team, writers see their own posts and their clients' posts, not
+    other clients'. Nobody outside the content team sees any."""
 
     def setUp(self):
         hold_commits(self)
         self.addCleanup(frappe.set_user, "Administrator")
         create_customer(CUSTOMER)
         create_customer(OTHER_CUSTOMER)
-        for user in (WRITER, TEAMMATE, OUTSIDER):
-            make_tasky_user(*user)
+        for user in (WRITER, TEAMMATE):
+            make_content_user(*user, DM_EMPLOYEE_ROLE)
+        make_tasky_user(*OUTSIDER)
         project = make_project(
             f"{CUSTOMER} - Social", members=[(TEAMMATE[0], "Developer")]
         )
@@ -581,6 +585,15 @@ class TestHDContentPostVisibility(FrappeTestCase):
         self.assertFalse(
             frappe.has_permission(
                 "HD Content Post", "read", self.client_post, user=OUTSIDER[0]
+            )
+        )
+
+    def test_a_project_member_outside_the_content_team_sees_nothing(self):
+        frappe.get_doc("User", TEAMMATE[0]).remove_roles(DM_EMPLOYEE_ROLE)
+        self.assertEqual(self.visible_to(TEAMMATE), set())
+        self.assertFalse(
+            frappe.has_permission(
+                "HD Content Post", "read", self.client_post, user=TEAMMATE[0]
             )
         )
 
