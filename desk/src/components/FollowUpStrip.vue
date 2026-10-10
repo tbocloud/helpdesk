@@ -8,7 +8,7 @@
     :class="
       compact
         ? [
-            'items-center rounded-[12px] px-2 py-2 text-sm hover:brightness-[0.98]',
+            'min-h-11 items-center rounded-[12px] px-2 py-2 text-sm hover:brightness-[0.98]',
             urgent ? 'bg-danger-soft' : 'bg-warning-soft',
           ]
         : 'items-start rounded-lg border border-outline-gray-2 bg-surface-base px-3 py-2.5 text-base text-ink-gray-8 hover:border-outline-gray-4'
