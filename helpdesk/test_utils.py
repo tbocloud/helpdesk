@@ -1250,6 +1250,16 @@ def set_department_wall_as(as_user: str, user: str, role: str):
     )
 
 
+def set_department_heads_as(as_user: str, department: str, heads: list[str]):
+    """`as_user` sets who heads `department` from Settings → Departments."""
+    return call_as_user(
+        as_user,
+        "helpdesk.api.departments.set_department_heads",
+        department=department,
+        heads=heads,
+    )
+
+
 def get_visible_tasks(user: str, project: str | None = None) -> set[str]:
     """Names of the Tasks `user` may list (through `frappe.get_list`, so `task_query`
     and the department walls apply), in `project` when given."""

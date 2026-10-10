@@ -31,7 +31,6 @@
       <Button
         v-if="detail.data?.can_change_lead"
         variant="ghost"
-        class="min-h-11 min-w-11 md:min-h-0 md:min-w-0"
         :label="__('Edit project')"
         @click="showEdit = true"
       >
@@ -41,11 +40,7 @@
         <span class="hidden md:inline">{{ __("Edit project") }}</span>
       </Button>
       <Dropdown v-if="detail.data?.can_change_lead" :options="leadOptions">
-        <Button
-          class="min-h-11 min-w-11 md:min-h-0 md:min-w-0"
-          :loading="changingLead"
-          :label="leadLabel"
-        >
+        <Button :loading="changingLead" :label="leadLabel">
           <template #prefix
             ><LucideUserStar class="size-4" aria-hidden="true"
           /></template>

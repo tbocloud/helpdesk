@@ -34,7 +34,7 @@ PERIODS = {
     "half": ("Half year", 12),
     "year": ("Year", 20),
 }
-# a day's champion is kept for the history but nobody is notified, and no AI runs
+# no AI analysis for a day (cost): not at close, and no refresh on the page
 QUIET_PERIODS = ("today",)
 
 WEIGHTS = {
@@ -724,7 +724,7 @@ def save_champion(period: str, start, end, department: str | None, data, label):
             "generated_by_ai": int(bool(analysis and analysis["status"] == "ready")),
         }
     ).insert(ignore_permissions=True)
-    if champion and period not in QUIET_PERIODS:
+    if champion:
         announce(doc, label)
     return doc
 

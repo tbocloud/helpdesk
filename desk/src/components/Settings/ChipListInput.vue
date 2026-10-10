@@ -3,7 +3,7 @@
     <span
       v-for="value in values"
       :key="value"
-      class="inline-flex h-7 items-center gap-1 rounded-full bg-surface-gray-2 pe-1 ps-2.5 text-sm text-ink-gray-8"
+      class="inline-flex min-h-7 items-center gap-1 rounded-full bg-surface-gray-2 pe-1 ps-2.5 text-sm text-ink-gray-8"
     >
       <span :class="mono ? 'font-mono text-xs' : ''">{{ value }}</span>
       <button

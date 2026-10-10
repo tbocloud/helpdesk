@@ -8,8 +8,8 @@ the matching categories go to them.
 ## Where it is in the app
 
 - **Settings → Departments** (System Managers and Agent Managers): the list in display order.
-  Add a department, rename it (its projects move with it), move it up or down, deactivate or
-  activate it, or delete it. A department that projects still use can't be deleted; the
+  Add a department, rename it (its projects move with it), set its heads, move it up or down,
+  deactivate or activate it, or delete it. A department that projects still use can't be deleted; the
   message says how many projects use it and suggests moving them or deactivating it instead.
 - **New / Edit project** dialog: a **Department** picker listing active departments in order.
   A project already in an inactive department keeps it, shown as "(inactive)". A new project
@@ -38,7 +38,8 @@ each team out of the other's department:
 | **ERP Employee** | the **Digital** department, the content calendar and the work Calendar |
 
 Creative, GrowthX, Internal / R&D and projects with no department stay visible to both. System
-Managers and Agent Managers see every department.
+Managers and Agent Managers see every department. **The Scoreboard is the one exception**: there
+both teams see every department, so they can compete ([team-dashboard.md](team-dashboard.md#who-sees-what)).
 
 - **What's hidden** (`hidden_departments()` in `helpdesk/tasky/permissions.py`, mapping
   `HIDDEN_DEPARTMENTS`): that department's projects and their tasks, in every list
@@ -108,8 +109,10 @@ are unchanged.
 
 - **HD Department** (`helpdesk/helpdesk/doctype/hd_department`): `department_name` (Data,
   unique, also the record name via `field:department_name`, renamable), `sort_order` (Int, new
-  departments go to the end), `is_active` (Check, default 1), `description`. System Manager
-  and Agent Manager have full access; Agent and Project Manager can read.
+  departments go to the end), `is_active` (Check, default 1), `heads` (Table MultiSelect of
+  users, reusing the child doctype **HD Content Alert Recipient**: one `user` link per row),
+  `description`. System Manager and Agent Manager have full access; Agent and Project Manager
+  can read.
 - **Project.custom_department**: Link → HD Department, defined in
   `helpdesk/setup/install.py` `get_custom_fields()` and applied on install and on every
   migrate. It is a standard filter.
@@ -124,11 +127,12 @@ are unchanged.
 
 | Method | HTTP | Permission | What it does |
 | --- | --- | --- | --- |
-| `get_departments(include_inactive=False)` | GET | read | Departments in order, each with `project_count` |
+| `get_departments(include_inactive=False)` | GET | read | Departments in order, each with `project_count`, `heads` (`user`, `full_name`) and `head_roles` |
 | `add_department(department_name, description=None)` | POST | create | Adds one at the end |
 | `rename_department(department, new_name)` | POST | write | `frappe.rename_doc`; projects follow |
 | `move_department(department, direction)` | POST | write | `up`/`down`; locks the rows (`FOR UPDATE`) and renumbers all to 1..n |
 | `set_department_active(department, is_active)` | POST | write | Activates or deactivates |
+| `set_department_heads(department, heads)` | POST | write | Replaces the department's heads (a list of users, duplicates dropped; disabled or unknown accounts refused) |
 | `delete_department(department)` | POST | delete | Turns Frappe's `LinkExistsError` into a clear message |
 | `get_department_walls(users)` | GET | System / Agent Manager | `{user: [wall roles]}` for Settings → Agents |
 | `set_department_wall(user, role=None)` | POST | System / Agent Manager | Gives the agent DM Employee, ERP Employee or neither |
@@ -173,9 +177,19 @@ also gives rough durations for designs and videos.
 
 ## Department heads
 
-`DEPARTMENT_HEADS` in `helpdesk/tasky/permissions.py` maps a role to the department its holders
-head: **Digital Marketing Head → Digital**. Heads are told when their department's Scoreboard
-champion is chosen ([team-dashboard.md](team-dashboard.md)).
+Every department can have heads. `department_heads(department)` in
+`helpdesk/tasky/permissions.py` is the one answer to "who heads department X": the enabled users
+in the department's **Heads** setting plus the holders of a role mapped to it in
+`DEPARTMENT_HEADS` (**Digital Marketing Head → Digital**, so the content calendar's approver
+heads Digital without extra setup). For the whole team (no department) it returns the Agent
+Managers. Heads are told when their department's Scoreboard champion is chosen, daily and for
+every longer period ([team-dashboard.md](team-dashboard.md#champions-of-closed-periods)).
+
+- **Settings → Departments**: each row shows its heads ("Heads: Deepa Varma, everyone with
+  Digital Marketing Head") or "No heads set". **Set heads** (the person-gear button) opens the
+  row as a form: pick people, **Save heads** or Cancel (Esc). Only System Managers and Agent
+  Managers (write permission on HD Department) can save; anyone else gets a permission error.
+- Renaming a department keeps its heads.
 
 ## Decisions
 
