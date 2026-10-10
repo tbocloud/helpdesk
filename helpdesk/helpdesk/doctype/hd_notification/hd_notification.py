@@ -17,9 +17,8 @@ class HDNotification(Document):
         return ""
 
     def get_from(self):
-        return frappe.db.get_value(
-            "User", {"name": self.user_from}, fieldname="full_name"
-        )
+        # cached per request, so a list of notifications looks each sender up once
+        return frappe.utils.get_fullname(self.user_from)
 
     def get_button_label(self):
         if self.reference_comment:
@@ -56,6 +55,7 @@ class HDNotification(Document):
     def after_insert(self):
         self.deliver()
         self.announce()
+        self.push()
 
     def announce(self):
         """Tell the recipient's open helpdesk tabs, so the bell updates without a reload
@@ -70,6 +70,13 @@ class HDNotification(Document):
             user=self.user_to,
             after_commit=True,
         )
+
+    def push(self):
+        """To the recipient's phones when Mobile push is on (helpdesk.mobile_push);
+        a failure there is logged and never stops the notification."""
+        from helpdesk.mobile_push import enqueue_push
+
+        enqueue_push(self)
 
     def deliver(self):
         """Chat instead of email when HD Chat Settings is on (sent after commit, in the background)."""

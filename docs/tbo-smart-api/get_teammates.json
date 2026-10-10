@@ -1,0 +1,17 @@
+{
+  "v": 1,
+  "data": [
+    {
+      "user": "arun@teambackoffice.com",
+      "full_name": "Arun Menon",
+      "image": null,
+      "on_leave": false
+    },
+    {
+      "user": "sanika@teambackoffice.com",
+      "full_name": "Sanika Rao",
+      "image": null,
+      "on_leave": true
+    }
+  ]
+}

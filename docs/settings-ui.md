@@ -42,7 +42,7 @@ settings header) and the scrolling content area.
   ("CRM settings saved"); a failure toast carries the server's message and the form keeps its
   values so the user can fix and retry.
 - Field errors show under the field (`ErrorMessage role="alert"`), saying what to fix.
-- **Exceptions kept from upstream:** on General, the six switches in `toggleFields` and
+- **Exceptions kept from upstream:** on General, the seven switches in `toggleFields` (Mobile push among them) and
   "Disable signup" save as soon as they change; list rows' Enabled switches (SLA, assignment
   rules, field dependencies) and Departments' actions save straight away, each with a toast.
 - Sub-pages ask "Leave without saving?" before going back with unsaved changes.
@@ -92,7 +92,7 @@ Telephony providers and pending invites.
 | Preferences | Theme (a radio group of buttons; the current theme carries the brand border), language and timezone; saving reloads the app. |
 | Email Accounts | List with each account's role badge (Default Inbox, Default Sending…; info tone when that direction is on). Add and edit are sub-pages with Back, Save in the header and Pull emails now. |
 | Email Notifications | List of the four emails; each opens an editor with Enabled and Save in the header. |
-| General | Branding, Tickets, Workflow and knowledge base, User sign-up sections. |
+| General | Branding, Tickets, Workflow and knowledge base, User sign-up and Mobile app (Mobile push, see tbo-smart-api.md) sections. |
 | Agents | Search, All/Active/Inactive filter, role menu per agent (managers), deactivate/reactivate. Invite agents is the primary action. |
 | Invite Agents | Emails and role, Send invites; pending invites with Cancel invitation. |
 | Teams | List; a team page with Add members, Enabled and a ⋯ menu (assignment rule, rename, access, delete). |

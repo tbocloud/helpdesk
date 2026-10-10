@@ -1,0 +1,29 @@
+{
+  "v": 1,
+  "data": {
+    "steps": [
+      {
+        "id": "s1",
+        "text": "Close “TBO ERP: migrate customers” first: it is 2 day(s) overdue.",
+        "detail": "",
+        "route": "/task/TASK-2026-00412"
+      },
+      {
+        "id": "s2",
+        "text": "Reply to 2 ticket(s) waiting for you.",
+        "detail": "",
+        "route": null
+      },
+      {
+        "id": "s3",
+        "text": "Follow up on “Galom: e-invoice set-up”: waiting on customer for 2 day(s).",
+        "detail": "",
+        "route": "/task/TASK-2026-00405"
+      }
+    ],
+    "generated_at": "2026-10-10 09:05:12.310021",
+    "source": "ai",
+    "stale": false,
+    "reason": null
+  }
+}

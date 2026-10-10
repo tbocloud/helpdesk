@@ -1498,12 +1498,45 @@ def fake_graph_token(roles: list[str] | None = None) -> str:
 
 
 def graph_response(payload: dict | None = None, status: int = 200):
-    """A fake requests response from Microsoft Graph or its token endpoint."""
+    """A fake requests response (Microsoft Graph and its token endpoint, the Expo push
+    service) whose json() is `payload`."""
     from unittest.mock import MagicMock
 
     response = MagicMock(status_code=status)
     response.json.return_value = payload or {}
     return response
+
+
+def enable_mobile_push():
+    frappe.db.set_single_value("HD Settings", "enable_mobile_push", 1)
+
+
+def disable_mobile_push():
+    frappe.db.set_single_value("HD Settings", "enable_mobile_push", 0)
+
+
+def call_mobile_as(user: str, method: str, **kwargs):
+    """Calls helpdesk.api.mobile.<method> through `frappe.call` as `user`, the way the
+    TBO Smart app does; returns the whole {"v", "data", …} answer."""
+    return call_as_user(user, f"helpdesk.api.mobile.{method}", **kwargs)
+
+
+def register_device_as(user: str, token: str, platform: str = "ios") -> dict:
+    """Registers a phone's push token for `user` through the mobile API; returns the
+    device the API sends back."""
+    return call_mobile_as(
+        user, "register_device", token=token, platform=platform, app_version="1.0.0"
+    )["data"]
+
+
+def get_pushed_messages(post_mock, notification: str) -> list[dict]:
+    """The Expo messages a mocked requests.post sent for one HD Notification."""
+    return [
+        message
+        for call in post_mock.call_args_list
+        for message in call.kwargs.get("json") or []
+        if message["data"]["notification"] == notification
+    ]
 
 
 def set_work_settings(**values):

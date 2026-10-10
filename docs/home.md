@@ -14,7 +14,8 @@ who is champion is on the **Scoreboard** (`/helpdesk/team-dashboard`, see
   `desk/src/pages/home/homeMeta.ts`.
 - Data: `helpdesk.api.home.get_home` (agents only), then the action plan as its own
   request, `helpdesk.api.home.get_action_plan` (POST), so a slow AI never holds the page
-  up. Every list goes through
+  up. `build_day` builds "your day" and keeps it for that request; the TBO Smart app's
+  `helpdesk.api.mobile` starts from it too (docs/tbo-smart-api.md). Every list goes through
   `frappe.get_list` (or is narrowed to records the user can read), so nobody sees records
   they couldn't open.
 

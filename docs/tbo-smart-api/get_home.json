@@ -1,0 +1,15 @@
+{
+  "v": 1,
+  "data": {
+    "open_tickets": 3,
+    "awaiting_reply": 2,
+    "tasks_open": 6,
+    "tasks_due_today": 1,
+    "tasks_overdue": 1,
+    "tasks_on_hold": 1,
+    "tasks_in_review": 1,
+    "escalated_to_head": 1,
+    "approvals": 2,
+    "unread_notifications": 4
+  }
+}

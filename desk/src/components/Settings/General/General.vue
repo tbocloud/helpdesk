@@ -31,6 +31,19 @@
             <Switch :id="id" v-model="disableSignup" />
           </SettingRow>
         </SettingsSection>
+        <SettingsSection :title="__('Mobile app')">
+          <SettingRow
+            v-slot="{ id }"
+            :label="__('Mobile push')"
+            :description="
+              __(
+                'Send each new notification to the TBO Smart app on the person\'s phones.'
+              )
+            "
+          >
+            <Switch :id="id" v-model="settingsData.enableMobilePush" />
+          </SettingRow>
+        </SettingsSection>
       </div>
     </template>
   </SettingsLayoutBase>
@@ -74,6 +87,7 @@ const settingsData = ref({
   disableSavedRepliesGlobalScope: false,
   enableOutsideHoursBanner: false,
   outsideWorkingHoursBannerMessage: "",
+  enableMobilePush: false,
 });
 const disableSignup = ref(false);
 
@@ -130,6 +144,7 @@ const saveSettingsResource = createResource({
           settingsData.value.enableOutsideHoursBanner,
         outside_working_hours_message:
           settingsData.value.outsideWorkingHoursBannerMessage,
+        enable_mobile_push: settingsData.value.enableMobilePush,
       },
     };
   },
@@ -166,6 +181,7 @@ const transformData = (data: any) => {
     ),
     enableOutsideHoursBanner: Boolean(data.enable_outside_hours_banner),
     outsideWorkingHoursBannerMessage: data.outside_working_hours_message || "",
+    enableMobilePush: Boolean(data.enable_mobile_push),
   };
 };
 
@@ -230,6 +246,7 @@ const toggleFields = [
   "allowAnyoneToCreateTickets",
   "preferKnowledgeBase",
   "skipEmailWorkflow",
+  "enableMobilePush",
 ] as const;
 
 // Track dirty state for non-toggle fields only
