@@ -17,6 +17,8 @@ ALLOWED_PATHS = [
     "/api/method/frappe.integrations.oauth2.authorize",
     "/api/method/frappe.integrations.oauth2.approve",
     "/api/method/frappe.integrations.oauth2.get_token",
+    # the TBO Smart app revokes its tokens on sign-out (docs/tbo-smart-api.md)
+    "/api/method/frappe.integrations.oauth2.revoke_token",
     "/api/method/frappe.www.login.login_via_google",
     "/api/method/frappe.www.login.login_via_github",
     "/api/method/frappe.www.login.login_via_facebook",

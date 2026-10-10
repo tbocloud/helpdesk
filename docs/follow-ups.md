@@ -220,6 +220,10 @@ Existing sites get the defaults stored by the patch `v16_0_2.seed_follow_up_sett
   and it says so): counts of escalated (L2+), breached and overdue items, the
   escalated items, the oldest overdue tasks, and the people with the most open escalations
   (L1+, by assignee).
+- **TBO Smart app** (docs/tbo-smart-api.md): `get_escalations` lists every L2+ item
+  (`follow_ups.escalations()`, the same list the Overview shows the top of), for the same
+  people. A manager can **nudge** an item's assignees from there (`nudge`: a Reminder through
+  `notify_users`, sent every time, plus a note on the item) or reassign it.
 
 ## Files
 

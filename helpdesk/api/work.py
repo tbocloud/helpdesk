@@ -214,12 +214,18 @@ def _task_item(
     }
 
 
+def sla_due_soon(deadline, now=None) -> bool:
+    """The SLA deadline is still ahead but within SLA_RISK_HOURS."""
+    now = now or now_datetime()
+    return bool(deadline) and now <= deadline <= add_to_date(now, hours=SLA_RISK_HOURS)
+
+
 def _ticket_risks(ticket, deadline) -> list[str]:
     if ticket.status_category != "Open":
         return []
     risks = []
     now = now_datetime()
-    if deadline and now <= deadline <= add_to_date(now, hours=SLA_RISK_HOURS):
+    if sla_due_soon(deadline, now):
         hours = max(int((deadline - now).total_seconds() // 3600), 0)
         risks.append(_("SLA due in {0}h").format(hours))
     if ticket.priority in KEY_TICKET_PRIORITIES and not _assignees(ticket._assign):

@@ -1,0 +1,92 @@
+{
+  "v": 1,
+  "data": {
+    "name": "TASK-2026-00412",
+    "subject": "TBO ERP: migrate customers",
+    "project": "PROJ-0031",
+    "project_name": "Galom - ERPNext rollout",
+    "customer": "Galom Trading",
+    "status": "Working",
+    "group": "overdue",
+    "exp_end_date": "2026-10-08",
+    "is_overdue": true,
+    "is_key": true,
+    "is_milestone": false,
+    "priority": "High",
+    "assignees": [
+      "najath@teambackoffice.com"
+    ],
+    "assigned_by": {
+      "user": "arun@teambackoffice.com",
+      "full_name": "Arun Menon"
+    },
+    "hold_reason": null,
+    "hold_note": null,
+    "hold_days": null,
+    "escalation": {
+      "level": 2,
+      "label": "Escalated to head"
+    },
+    "timer": {
+      "state": "paused",
+      "started_at": null,
+      "logged_hours": 3.5
+    },
+    "expected_hours": 6.0,
+    "waiting_on": null,
+    "risks": [],
+    "can_approve": false,
+    "description": "<p>Import the 1,240 customers from the old system with their GSTINs.</p>",
+    "activity": [
+      {
+        "id": "a1b2c3d4e5",
+        "at": "2026-10-10 10:42:00",
+        "who": "Najath Thekkeyil",
+        "kind": "comment",
+        "type": "comment",
+        "text": "Customer list has 14 duplicate GSTINs, cleaning them first.",
+        "data": {
+          "name": "a1b2c3d4e5"
+        }
+      },
+      {
+        "id": "time-1",
+        "at": "2026-10-09 18:05:12",
+        "who": "Najath Thekkeyil",
+        "kind": "time",
+        "type": "time",
+        "text": null,
+        "data": {
+          "hours": 3.5,
+          "date": "2026-10-09"
+        }
+      },
+      {
+        "id": "status-2",
+        "at": "2026-10-09 14:35:40",
+        "who": "Najath Thekkeyil",
+        "kind": "status",
+        "type": "status",
+        "text": null,
+        "data": {
+          "from": "Open",
+          "to": "Working"
+        }
+      },
+      {
+        "id": "assigned-3",
+        "at": "2026-10-06 09:12:03",
+        "who": "Arun Menon",
+        "kind": "assign",
+        "type": "assigned",
+        "text": null,
+        "data": {
+          "to": "najath@teambackoffice.com",
+          "to_name": "Najath Thekkeyil",
+          "note": null
+        }
+      }
+    ],
+    "pull_requests": []
+  }
+}

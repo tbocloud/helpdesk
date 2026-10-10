@@ -101,13 +101,7 @@ def get_home() -> dict:
     mine = get_my_work()
     company = can_see_overview()
     portfolio = get_project_portfolio("Open") if company else None
-    day = _day(mine["items"], portfolio["projects"] if portfolio else None)
-    # the action plan comes next as its own request and reads the day from here
-    frappe.cache.set_value(
-        home_plan.day_cache_key(frappe.session.user),
-        day,
-        expires_in_sec=home_plan.DAY_CACHE_SECONDS,
-    )
+    day = build_day(mine["items"], portfolio["projects"] if portfolio else None)
     return {
         "mine": {"counts": mine["counts"], "items": mine["items"][:LIST_LIMIT]},
         "day": day,
@@ -135,6 +129,18 @@ def get_action_plan(refresh: bool = False) -> dict:
     if day is None:
         day = _day(get_my_work()["items"])
     return home_plan.action_plan(user, day, refresh=bool(refresh))
+
+
+def build_day(items: list[dict], cards: list[dict] | None = None) -> dict:
+    """The user's day (see _day), kept for the action plan request that follows
+    (get_action_plan); the web Home and the mobile app both start here."""
+    day = _day(items, cards)
+    frappe.cache.set_value(
+        home_plan.day_cache_key(frappe.session.user),
+        day,
+        expires_in_sec=home_plan.DAY_CACHE_SECONDS,
+    )
+    return day
 
 
 def _calendar(company: bool) -> dict:

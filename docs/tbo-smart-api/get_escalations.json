@@ -1,0 +1,27 @@
+{
+  "v": 1,
+  "data": [
+    {
+      "id": "Task:TASK-2026-00412",
+      "kind": "task",
+      "doctype": "Task",
+      "ref": "TASK-2026-00412",
+      "title": "TBO ERP: migrate customers",
+      "owners": [
+        {
+          "user": "najath@teambackoffice.com",
+          "full_name": "Najath Thekkeyil"
+        }
+      ],
+      "level": 2,
+      "level_label": "Escalated to head",
+      "days": 2,
+      "severity": "escalated",
+      "reason": "TBO ERP: migrate customers is 2 working days overdue (Najath Thekkeyil)",
+      "route": "/projects/PROJ-0031",
+      "app_route": "/task/TASK-2026-00412"
+    }
+  ],
+  "next_cursor": null,
+  "has_more": false
+}

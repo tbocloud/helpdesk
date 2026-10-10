@@ -1415,14 +1415,21 @@ def summary_for(user: str, follow_ups: list[FollowUp] | None = None) -> dict:
     }
 
 
+def escalations(follow_ups: list[FollowUp] | None = None) -> list[FollowUp]:
+    """Overdue work and breached SLAs escalated to L2 or above, the highest level and
+    the longest wait first."""
+    follow_ups = current() if follow_ups is None else follow_ups
+    return sorted(
+        (f for f in follow_ups if f.level >= 2 and f.rule in ("overdue", "sla")),
+        key=lambda f: (-f.level, -f.days),
+    )
+
+
 def overview(follow_ups: list[FollowUp] | None = None) -> dict:
     """For managers: what is escalated to L2 or above, the oldest overdue work and who
     has the most open escalations."""
     follow_ups = current() if follow_ups is None else follow_ups
-    escalated = sorted(
-        (f for f in follow_ups if f.level >= 2 and f.rule in ("overdue", "sla")),
-        key=lambda f: (-f.level, -f.days),
-    )
+    escalated = escalations(follow_ups)
     overdue = sorted(
         (f for f in follow_ups if f.rule == "overdue"), key=lambda f: -f.days
     )

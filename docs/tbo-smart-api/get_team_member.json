@@ -1,0 +1,78 @@
+{
+  "v": 1,
+  "data": [
+    {
+      "name": "TASK-2026-00412",
+      "subject": "TBO ERP: migrate customers",
+      "project": "PROJ-0031",
+      "project_name": "Galom - ERPNext rollout",
+      "customer": "Galom Trading",
+      "status": "Working",
+      "group": "overdue",
+      "exp_end_date": "2026-10-08",
+      "is_overdue": true,
+      "is_key": true,
+      "is_milestone": false,
+      "priority": "High",
+      "assignees": [
+        "najath@teambackoffice.com"
+      ],
+      "assigned_by": {
+        "user": "arun@teambackoffice.com",
+        "full_name": "Arun Menon"
+      },
+      "hold_reason": null,
+      "hold_note": null,
+      "hold_days": null,
+      "escalation": {
+        "level": 2,
+        "label": "Escalated to head"
+      },
+      "timer": {
+        "state": "paused",
+        "started_at": null,
+        "logged_hours": 3.5
+      },
+      "expected_hours": 6.0,
+      "waiting_on": null,
+      "risks": [],
+      "can_approve": false
+    },
+    {
+      "name": "TASK-2026-00405",
+      "subject": "Galom: e-invoice set-up",
+      "project": "PROJ-0031",
+      "project_name": "Galom - ERPNext rollout",
+      "customer": "Galom Trading",
+      "status": "On Hold",
+      "group": "on_hold",
+      "exp_end_date": "2026-10-14",
+      "is_overdue": false,
+      "is_key": false,
+      "is_milestone": false,
+      "priority": "High",
+      "assignees": [
+        "najath@teambackoffice.com"
+      ],
+      "assigned_by": {
+        "user": "arun@teambackoffice.com",
+        "full_name": "Arun Menon"
+      },
+      "hold_reason": "Waiting on customer",
+      "hold_note": "Rahul to share the GST portal credentials",
+      "hold_days": 2,
+      "escalation": null,
+      "timer": {
+        "state": "idle",
+        "started_at": null,
+        "logged_hours": 0.5
+      },
+      "expected_hours": 2.0,
+      "waiting_on": null,
+      "risks": [],
+      "can_approve": false
+    }
+  ],
+  "next_cursor": null,
+  "has_more": false
+}
