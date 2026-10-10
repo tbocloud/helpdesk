@@ -489,6 +489,17 @@ class TestDigest(FollowUpCase):
         self.assertIn("/helpdesk/my-work)", text)
 
 
+class TestSwitchedOff(FollowUpCase):
+    def test_turning_follow_ups_off_clears_the_badges(self):
+        task = self.task("Bank feeds", WEDNESDAY)
+        follow_ups.process(follow_up_context())
+        self.assertEqual(frappe.db.get_value("Task", task, "escalation_level"), 2)
+
+        set_follow_up_settings(enabled=0)
+        follow_ups.run()
+        self.assertEqual(frappe.db.get_value("Task", task, "escalation_level"), 0)
+
+
 class TestSettingsAccess(FollowUpCase):
     def test_only_admins_change_the_settings(self):
         with self.assertRaises(frappe.PermissionError):

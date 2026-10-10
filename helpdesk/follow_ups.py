@@ -943,6 +943,24 @@ def run():
     settings = get_settings()
     if settings.enabled:
         process(Context(settings))
+    else:
+        clear_levels()
+
+
+def clear_levels() -> None:
+    """Follow-ups switched off: nothing is escalated any more, so the badges go too."""
+    for doctype, level_field, date_field in (
+        ("Task", "escalation_level", "escalated_on"),
+        ("HD Ticket", "custom_escalation_level", "custom_escalated_on"),
+    ):
+        table = frappe.qb.DocType(doctype)
+        (
+            frappe.qb.update(table)
+            .set(table[level_field], 0)
+            .set(table[date_field], None)
+            .where(table[level_field] > 0)
+            .run()
+        )
 
 
 def process(ctx: Context) -> None:
@@ -1149,10 +1167,7 @@ def send_due_digests(follow_ups: list[FollowUp], ctx: Context) -> None:
     due = [slot for slot in slots if sent_through < slot <= ctx.now]
     if not due:
         return
-    settings = frappe.get_doc(SETTINGS)
-    # recorded before sending, so a failure halfway never sends anyone two
-    settings.digest_sent_through = ctx.now
-    settings.save(ignore_permissions=True)
+    record_digest(ctx.now)
     morning = bool(ctx.settings.morning_plan) and slots[0] in due
     by_user = items_by_user(follow_ups)
     users = set(by_user)
@@ -1174,6 +1189,21 @@ def most_pressing(follow_ups: list[FollowUp]) -> dict[tuple, FollowUp]:
             if key not in chosen or f.rank() > chosen[key].rank():
                 chosen[key] = f
     return chosen
+
+
+def record_digest(moment) -> None:
+    """Recorded and committed before sending: chat posts can't be rolled back, so a job
+    that dies halfway must not send anyone a second digest. Written straight to the
+    field (no Version row twice a day); a site that never saved the settings stores
+    all of them first, so the other fields keep their defaults."""
+    if frappe.db.get_singles_dict(SETTINGS):
+        frappe.db.set_single_value(SETTINGS, "digest_sent_through", moment)
+    else:
+        settings = frappe.new_doc(SETTINGS)
+        settings.digest_sent_through = moment
+        settings.save(ignore_permissions=True)
+    frappe.clear_document_cache(SETTINGS, SETTINGS)
+    frappe.db.commit()  # nosemgrep
 
 
 def items_by_user(follow_ups: list[FollowUp]) -> dict[str, list[FollowUp]]:

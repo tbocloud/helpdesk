@@ -28,6 +28,8 @@ module (`new_notification`).
    `HD Ticket.custom_escalation_level` / `custom_escalated_on`, written without touching
    `modified`. A level goes back to 0 when the item is no longer late; `Task.clear_escalation`
    (validate) also resets it as soon as a task is Completed, Cancelled or put On Hold.
+   Switching follow-ups off clears every stored level on the next run (`clear_levels`), so
+   no badge outlives the engine.
 4. **Notices** (`post_notices`): one notification per person and item per day, see Dedupe.
 5. **Customer follow-up emails** (`send_customer_follow_ups`), when switched on.
 6. **Digests** (`send_due_digests`) at the digest times.
@@ -120,7 +122,8 @@ Each level **adds** people; nobody drops off.
   email (unless the person turned email notifications off, or chat is on and *Email people who
   can't be reached in chat* is off). A run that missed a digest time sends one digest, not one
   per missed time; `digest_sent_through` (hidden) records it before sending, so a failure
-  halfway never sends anyone two.
+  halfway never sends anyone two (it is committed before the first message goes out,
+  since chat posts can't be rolled back).
 - **In-app strip**: `FollowUpStrip.vue` on Home (`get_home().follow_ups`) and at the bottom of
   the sidebar (`get_nav_counts().follow_ups`), e.g. "2 overdue · 1 escalated to your head ·
   3 waiting on you", linking to My Work, until the work moves (`summary_for`).
