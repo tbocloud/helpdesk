@@ -120,7 +120,10 @@
             <span class="hidden text-right font-mono tabular-nums lg:block">
               {{ person.tasks }}
             </span>
-            <span class="hidden text-right font-mono tabular-nums lg:block">
+            <span
+              class="hidden text-right font-mono tabular-nums lg:block"
+              :class="onTimeClass(person.on_time_pct)"
+            >
               {{ pctText(person.on_time_pct) }}
             </span>
             <span class="hidden text-right font-mono tabular-nums lg:block">
@@ -198,7 +201,7 @@
 import NativeButton from "@/components/NativeButton";
 import SectionCard from "@/components/SectionCard.vue";
 import TaskyState from "@/components/TaskyState.vue";
-import { pctText } from "@/pages/performance/performanceMeta";
+import { onTimeClass, pctText } from "@/pages/performance/performanceMeta";
 import { __ } from "@/translation";
 import { Avatar, FormControl } from "frappe-ui";
 import { computed, ref } from "vue";

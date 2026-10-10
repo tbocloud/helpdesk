@@ -83,7 +83,10 @@
             <span class="hidden text-right font-mono tabular-nums lg:block">
               {{ row.tasks }}
             </span>
-            <span class="hidden text-right font-mono tabular-nums lg:block">
+            <span
+              class="hidden text-right font-mono tabular-nums lg:block"
+              :class="onTimeClass(row.on_time_pct)"
+            >
               {{ pctText(row.on_time_pct) }}
             </span>
             <span
@@ -105,8 +108,8 @@
 
             <span class="flex min-w-0 items-center gap-2 text-sm">
               <template v-if="row.champion">
-                <LucideAward
-                  class="size-3.5 shrink-0 text-ink-gray-5"
+                <LucideUser
+                  class="size-4 shrink-0 text-ink-gray-5"
                   aria-hidden="true"
                 />
                 <span class="sr-only">{{ __("Champion") }}</span>
@@ -117,7 +120,11 @@
                   {{ row.champion.score }}
                 </span>
               </template>
-              <span v-else-if="row.department" class="text-ink-gray-5">
+              <span
+                v-else-if="row.department"
+                class="flex items-center gap-2 text-ink-gray-5"
+              >
+                <LucideUser class="size-4 shrink-0" aria-hidden="true" />
                 {{ __("No champion yet") }}
               </span>
             </span>
@@ -132,12 +139,12 @@
 import NativeButton from "@/components/NativeButton";
 import SectionCard from "@/components/SectionCard.vue";
 import TaskyState from "@/components/TaskyState.vue";
-import { pctText } from "@/pages/performance/performanceMeta";
+import { onTimeClass, pctText } from "@/pages/performance/performanceMeta";
 import { __ } from "@/translation";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
-import LucideAward from "~icons/lucide/award";
 import LucideBuilding2 from "~icons/lucide/building-2";
 import LucideChevronRight from "~icons/lucide/chevron-right";
+import LucideUser from "~icons/lucide/user";
 import {
   departmentLabel,
   hoursText,

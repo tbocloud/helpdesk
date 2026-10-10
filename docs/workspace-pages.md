@@ -8,16 +8,23 @@ No invented trends ("+12% vs last week") and no activity feed.
 Shared building blocks, in `desk/src/components/`:
 
 - **`StatTile`**: the one stat tile. Static, a link (`to`, shows a chevron) or a toggle
-  (`pressed`, a button with `aria-pressed`). `loading` shows a skeleton; `iconTone` and
-  `valueTone` colour the icon or number only when that carries meaning; `compact` tightens it
-  for a strip above a list. Used by Overview, Team, the By project view, Performance, the
+  (`pressed`, a button with `aria-pressed`). `loading` shows a skeleton. The icon sits in a
+  circle: soft-tinted by `iconTone` only when that carries meaning (done success, overdue
+  danger, time info; [ui-guidelines.md](ui-guidelines.md) §8), neutral gray otherwise.
+  `valueTone` colours the number the same way; `delta`, `deltaText` and `deltaTone` add a
+  change line with an up/down arrow; `compact` tightens it for a strip above a list (an
+  inline icon, no circle). Used by Overview, Team, the By project view, Performance, the
   tickets summary strip ([tickets-and-calendar-pages.md](tickets-and-calendar-pages.md)), and
   the customer report and the customer and contact pages ([customer-pages.md](customer-pages.md)).
 - **`DirectoryList`**: the Customers and Contacts list (link rows, bulk delete, paging and
   every state), with `useDirectory()` keeping search and sort in the URL
   ([customer-pages.md](customer-pages.md)).
-- **`SectionCard`**: the one titled card (title, optional count, description, header actions
-  slot, "See all" link). Used by Home, Overview and Team.
+- **`SectionCard`**: the one titled card (optional icon and count, title, description,
+  header actions slot, "See all" link). Used by Home, Overview and Team.
+- **Segmented controls**: frappe-ui `TabButtons` everywhere a page switches view, period or
+  status filter (Scoreboard, Team, Timesheets, My Work, My tasks, Projects, Performance,
+  content plans); `theme.css` fills the checked option in brand. Counts go in its `suffix`
+  slot. Wrap it in `overflow-x-auto` where it may be wider than a phone.
 - **`TaskyState`**: the one empty, error and no-access message (icon, title, message, actions).
 - **`TaskyBadge`**: the one small status badge (label, tone, icon).
 - **`tone.ts`**: the one `Tone` type (`neutral`, `info`, `warning`, `success`, `danger`) and

@@ -230,12 +230,7 @@
               :class="[SEGMENT, view === v.key ? SEGMENT_ON : SEGMENT_OFF]"
               @click="view = v.key"
             >
-              <component
-                :is="v.icon"
-                class="size-4"
-                :class="view === v.key ? 'text-brand' : ''"
-                aria-hidden="true"
-              />
+              <component :is="v.icon" class="size-4" aria-hidden="true" />
               <span class="sr-only sm:not-sr-only">{{ v.label }}</span>
             </button>
           </div>
@@ -620,7 +615,8 @@ const CONTROL_TILE =
   "grid size-5 shrink-0 place-items-center rounded-[5px] border border-outline-gray-2 text-ink-gray-6";
 const SEGMENT =
   "inline-flex h-7 items-center gap-1.5 rounded-[8px] px-2.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-3";
-const SEGMENT_ON = "bg-surface-base font-semibold text-ink-gray-9 shadow-sm";
+// the same brand fill as frappe-ui's TabButtons (theme.css)
+const SEGMENT_ON = "bg-brand font-semibold text-brand-on";
 const SEGMENT_OFF = "font-medium text-ink-gray-6 hover:text-ink-gray-8";
 const STEP_BTN =
   "grid h-full w-8 place-items-center text-ink-gray-7 hover:bg-surface-gray-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-outline-gray-3";

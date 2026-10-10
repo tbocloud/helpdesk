@@ -1,13 +1,13 @@
 <template>
   <section
-    class="flex min-w-0 flex-col rounded-lg border border-outline-gray-2 bg-surface-base"
+    class="flex min-w-0 flex-col rounded-xl border border-outline-gray-2 bg-surface-base"
     :aria-labelledby="headingId"
   >
     <header class="flex items-start justify-between gap-3 px-4 py-3">
       <div class="min-w-0">
         <h2
           :id="headingId"
-          class="flex min-w-0 items-center gap-2 text-base-medium text-ink-gray-9"
+          class="flex min-w-0 items-center gap-2 text-base-semibold text-ink-gray-9"
         >
           <component
             :is="icon"

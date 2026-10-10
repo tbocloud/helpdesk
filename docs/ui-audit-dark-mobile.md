@@ -36,6 +36,12 @@ Changed pairs are covered too: the settings radios now use `ink-gray-9` on `surf
 | `ink-gray-5` on `surface-gray-2` | 4.86 | 4.53 |
 | `ink-gray-9` on `surface-base` (radios, checked fill) | 17.92 | 15.44 |
 | channel colours on `surface-base` (lowest of eight) | 5.37 | 7.53 |
+| `champion` on `champion-soft` (champion card label and trophy) | 5.76 | 9.22 |
+| `ink-gray-6` on `champion-soft` (champion card text) | 6.39 | 6.59 |
+| `success` on `champion-soft` (reason checks) | 5.33 | 7.21 |
+
+The current sidebar item and the Settings nav use `brand-ink` on `brand-soft`; the checked
+segmented-control option uses `on-brand` on `brand` (both above).
 
 Every text pair passes 4.5:1. `ink-gray-4` (3.11 light, 3.69 dark) is only used for
 placeholders, disabled text and icons, where 3:1 applies.

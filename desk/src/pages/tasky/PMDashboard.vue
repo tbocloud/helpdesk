@@ -150,7 +150,7 @@
               :label="card.label"
               :value="card.value"
               :icon="card.icon"
-              :icon-tone="card.tone"
+              :icon-tone="card.key === 'completed' ? 'success' : card.tone"
               :value-tone="card.tone"
               :loading="!dashboard.data"
               :to="card.to"

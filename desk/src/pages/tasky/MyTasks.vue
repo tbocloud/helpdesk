@@ -84,37 +84,25 @@
           <div
             class="mt-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between"
           >
-            <div
-              class="-mx-1 flex gap-1 overflow-x-auto px-1"
-              role="tablist"
-              :aria-label="__('Filter tasks by status')"
-            >
-              <button
-                v-for="tab in tabs"
-                :key="tab.key"
-                type="button"
-                role="tab"
-                :aria-selected="activeFilter === tab.key"
-                class="flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
-                :class="
-                  activeFilter === tab.key
-                    ? 'bg-surface-gray-3 text-ink-gray-9'
-                    : 'text-ink-gray-6 hover:bg-surface-gray-2 hover:text-ink-gray-8'
+            <div class="-mx-1 min-w-0 overflow-x-auto px-1">
+              <TabButtons
+                :model-value="activeFilter"
+                size="md"
+                :aria-label="__('Filter tasks by status')"
+                :options="
+                  tabs.map((t) => ({ label: __(t.label), value: t.key }))
                 "
-                @click="setFilter(tab.key)"
+                @update:model-value="setFilter($event)"
               >
-                {{ __(tab.label) }}
-                <span
-                  class="rounded px-1 text-xs tabular-nums"
-                  :class="
-                    activeFilter === tab.key
-                      ? 'bg-surface-base text-ink-gray-8'
-                      : 'text-ink-gray-5'
-                  "
-                >
-                  {{ countFor(tab.key) }}
-                </span>
-              </button>
+                <template #suffix="{ button, checked }">
+                  <span
+                    class="font-mono text-xs tabular-nums"
+                    :class="checked ? '' : 'text-ink-gray-5'"
+                  >
+                    {{ countFor(button.modelValue) }}
+                  </span>
+                </template>
+              </TabButtons>
             </div>
             <TextInput
               v-model="search"
@@ -320,7 +308,13 @@
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import TaskyState from "@/components/TaskyState.vue";
 import { __ } from "@/translation";
-import { Button, TextInput, createResource, dayjs } from "frappe-ui";
+import {
+  Button,
+  TabButtons,
+  TextInput,
+  createResource,
+  dayjs,
+} from "frappe-ui";
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";

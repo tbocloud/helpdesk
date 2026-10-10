@@ -9,9 +9,7 @@
         class="mt-3 flex h-10 w-full shrink-0 items-center gap-2.5 rounded-[12px] border border-outline-gray-2 bg-surface-base px-2 text-start transition-colors hover:bg-surface-gray-1"
         @click="showCommandPalette = true"
       >
-        <span
-          class="grid size-6 shrink-0 place-items-center rounded-[6px] bg-surface-gray-2 text-ink-gray-6"
-        >
+        <span class="grid size-6 shrink-0 place-items-center text-ink-gray-6">
           <LucideSearch class="size-3.5" aria-hidden="true" />
         </span>
         <span class="flex-1 truncate text-base text-ink-gray-6">
