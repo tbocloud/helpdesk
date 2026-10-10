@@ -28,7 +28,7 @@
           :value="pctText(sum.on_time_pct)"
           :sub="__('of published posts')"
           :icon="LucideCircleCheck"
-          icon-tone="success"
+          :icon-tone="onTimeTone(sum.on_time_pct)"
           :value-tone="onTimeTone(sum.on_time_pct)"
         />
         <StatTile

@@ -120,7 +120,7 @@
                 :label="__('On time')"
                 :value="pctText(data?.summary.on_time_pct)"
                 :icon="LucideCalendarCheck"
-                icon-tone="success"
+                :icon-tone="onTimeTone(data?.summary.on_time_pct)"
                 :loading="!data"
                 v-bind="change('on_time_pct', ' pts')"
               />
@@ -258,7 +258,7 @@ import LayoutHeader from "@/components/LayoutHeader.vue";
 import SectionCard from "@/components/SectionCard.vue";
 import StatTile from "@/components/StatTile.vue";
 import TaskyState from "@/components/TaskyState.vue";
-import { pctText } from "@/pages/performance/performanceMeta";
+import { onTimeTone, pctText } from "@/pages/performance/performanceMeta";
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
 import {

@@ -103,7 +103,7 @@ means nothing is noise. The mapping is fixed:
 | Done, completed, published | `success` |
 | Overdue, risk, missed, failed | `danger` |
 | Time, hours, dates coming up | `info` |
-| On time | `success` (or `info` when it is a date, not an outcome) |
+| On-time rate | `onTimeTone`: success at 95% and up, warning from 80%, danger below; a date, not an outcome, is `info` |
 
 - `StatTile` draws the circle from `iconTone` (`TONE_CLASSES` in `tone.ts`). Without a
   meaning the circle stays neutral gray, never a pastel.

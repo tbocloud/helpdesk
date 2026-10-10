@@ -24,7 +24,7 @@ isn't compared with a whole one. Tiles show "↑ 3 vs last week" (`StatTile`'s `
 `deltaText`: an arrow icon, a screen-reader "Up"/"Down" and text, never colour alone; a rise
 is green, a fall stays gray). "Overdue now" has no comparison, since it is today's state.
 The tiles' icon circles follow the colour rule in [ui-guidelines.md](ui-guidelines.md) §8:
-Tasks finished and Posts published success, On time success, Overdue now danger, Hours
+Tasks finished and Posts published success, On time by its rate (`onTimeTone`), Overdue now danger, Hours
 logged info. The period and Departments / People / Projects switches are frappe-ui
 `TabButtons`.
 
