@@ -47,6 +47,8 @@ import LucideBuilding2 from "~icons/lucide/building-2";
 import Departments from "./Departments/Departments.vue";
 import SignoffTemplates from "./Signoff/SignoffTemplates.vue";
 import LucideClipboardCheck from "~icons/lucide/clipboard-check";
+import ChatSettings from "./Chat/ChatSettings.vue";
+import LucideMessagesSquare from "~icons/lucide/messages-square";
 
 export const showSettingsModal = ref(false);
 
@@ -203,6 +205,13 @@ export const tabs = computed(() => {
           component: markRaw(TelephonyPage),
         },
         {
+          label: __("Chat & Teams"),
+          icon: markRaw(LucideMessagesSquare),
+          component: markRaw(ChatSettings),
+          // HD Chat Settings through helpdesk.api.chat_settings, which checks the roles
+          condition: () => auth.isAdmin || auth.isManager,
+        },
+        {
           label: __("File storage"),
           icon: markRaw(LucideHardDrive),
           component: markRaw(FileStorageSettings),
@@ -262,6 +271,7 @@ type TabName =
   | "Content"
   | "Tasks"
   | "Follow-ups"
+  | "Chat & Teams"
   | "Sign-off templates"
   | "File storage"
   | "CRM";

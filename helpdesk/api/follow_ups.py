@@ -107,7 +107,7 @@ def send_test_digest() -> dict:
     if not via:
         frappe.throw(
             _(
-                "The digest couldn't be sent: set up chat in HD Chat Settings or an outgoing email account, and keep email notifications on."
+                "The digest couldn't be sent: set up chat in Settings → Chat & Teams or an outgoing email account, and keep email notifications on."
             )
         )
     return {"via": via, "items": len(items)}

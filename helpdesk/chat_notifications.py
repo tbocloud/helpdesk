@@ -236,28 +236,62 @@ def send_test_message() -> dict:
     # only_for is skipped in tests, so check the role directly
     if "System Manager" not in frappe.get_roles():
         frappe.throw(_("Only System Managers can send a test."), frappe.PermissionError)
-    text = _("Test message from TBO Support. Chat notifications are working.")
+    text = setup_check_text()
     try:
         direct = send_direct(frappe.session.user, text, helpdesk_url(None))
         channel = post_to_channel(text, helpdesk_url(None))
     except (ChatError, requests.RequestException) as e:
-        hint = teams_http_hint(str(e))
-        frappe.throw(
-            _("The chat platform refused the message: {0}").format(str(e))
-            + (f" {hint}" if hint else "")
-        )
+        frappe.throw(describe_error(e))
     if not direct and not channel:
         frappe.throw(
             _("Nothing was sent: add a Direct Message or Escalation Channel URL first.")
         )
     if not direct:
-        frappe.msgprint(_direct_not_sent_message())
+        frappe.msgprint(direct_not_sent_message())
     return {"direct": direct, "channel": channel}
 
 
-def teams_http_hint(error: str) -> str:
-    """What a Teams Workflows refusal usually means, for the person setting it up."""
+def setup_check_text() -> str:
+    return _("Test message from TBO Support. Chat notifications are working.")
+
+
+def describe_error(e: Exception) -> str:
+    """A failed send, in words the person setting up chat can act on.
+
+    A requests error's text can carry the workflow URL with its &sig= secret,
+    so only its kind is shown.
+    """
+    if isinstance(e, requests.RequestException):
+        return _(
+            "Couldn't reach the chat platform ({0}). Check the server's internet access and try again."
+        ).format(type(e).__name__)
+    hint = error_hint(str(e))
+    return _("The chat platform refused the message: {0}").format(str(e)) + (
+        f" {hint}" if hint else ""
+    )
+
+
+def error_hint(error: str) -> str:
+    """What a Teams Workflows or Slack refusal usually means, for the person setting it up."""
     return {
+        "no_token": _("Add the Slack bot token and save first."),
+        "no_webhook": _("Add the workflow URL and save first."),
+        "invalid_auth": _(
+            "Slack doesn't accept the bot token: copy it again from your Slack app (OAuth & Permissions)."
+        ),
+        "token_revoked": _(
+            "The bot token was revoked: reinstall the Slack app and paste its new token."
+        ),
+        "missing_scope": _(
+            "The Slack app needs the chat:write, users:read and users:read.email scopes. Add them and reinstall the app."
+        ),
+        "channel_not_found": _(
+            "Slack has no channel with that ID, or the app can't see it: check the ID and invite the app."
+        ),
+        "not_in_channel": _(
+            "Invite the Slack app to the channel (/invite @your-app), then test again."
+        ),
+        "ratelimited": _("Slack is limiting requests: wait a minute and try again."),
         "http_401": _(
             "The workflow refused the caller: its URL has no &sig= part, or the trigger's 'Who can trigger the flow' isn't Anyone."
         ),
@@ -273,7 +307,7 @@ def teams_http_hint(error: str) -> str:
     }.get(error, "")
 
 
-def _direct_not_sent_message() -> str:
+def direct_not_sent_message() -> str:
     if get_settings().platform == SLACK:
         return _(
             "{0} wasn't found in Slack. Use the same email in Slack and here."
