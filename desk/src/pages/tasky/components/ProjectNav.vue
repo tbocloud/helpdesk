@@ -110,7 +110,7 @@
     />
     {{
       __(
-        "You see your own tasks in this project: the ones assigned to you and the ones you gave out. The project's manager and lead see every task."
+        "You see your own tasks in this project: the ones assigned to you and the ones you gave out. The project's manager, lead and coordinators see every task."
       )
     }}
   </p>
@@ -123,7 +123,7 @@
   />
 
   <NewTaskDialog
-    v-if="detail.data?.can_manage"
+    v-if="detail.data?.can_add_tasks"
     v-model:open="showNewTask"
     :project-id="projectId"
     :phases="phases"
@@ -317,6 +317,8 @@ const leadOptions = computed(() => {
 
 defineExpose({
   canManage: computed(() => !!detail.data?.can_manage),
+  // runs the tasks (edit, plan, review): managers, the lead and coordinators
+  canCoordinate: computed(() => !!detail.data?.can_coordinate),
   openNewTask: () => (showNewTask.value = true),
   reload: () => detail.reload(),
 });

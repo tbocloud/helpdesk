@@ -6,6 +6,7 @@ from frappe.query_builder.functions import Avg, Function
 from frappe.utils import add_days, nowdate
 
 from helpdesk.api.agent_home.utils import calculate_percentage_change
+from helpdesk.utils import assigned_names_query
 
 Scope = str  # Literal["agent", "customer", "contact"]
 
@@ -22,10 +23,10 @@ def _apply_scope(query, Ticket, scope: Scope, identifier: str | None):
     identifier : agent email / customer name / contact name
     """
     if scope == "agent":
+        # matched exactly through the ToDos: JSON_SEARCH reads `_` and `%` as wildcards
+        agent = identifier or frappe.session.user
         query = query.where(
-            Function(
-                "JSON_SEARCH", Ticket._assign, "one", identifier or frappe.session.user
-            ).isnotnull()
+            Ticket.name.isin(assigned_names_query("HD Ticket", agent, finished=False))
         )
     elif scope == "customer":
         query = query.where(Ticket.customer == identifier)

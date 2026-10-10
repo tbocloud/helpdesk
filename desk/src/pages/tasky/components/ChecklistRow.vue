@@ -190,8 +190,8 @@ import WaitingOn from "./WaitingOn.vue";
 
 const props = defineProps<{
   task: Record<string, any>;
-  /** The viewer is the project's manager or lead: show plan and review actions. */
-  canManage?: boolean;
+  /** The viewer runs the project's tasks (manager, lead or coordinator): show plan and review actions. */
+  canCoordinate?: boolean;
   /** The viewer may edit the task (manager, lead, or its assignee). */
   canEdit?: boolean;
 }>();
@@ -250,7 +250,7 @@ const actions = computed(() => {
     ? [{ label: __("Edit"), icon: LucidePencil, onClick: () => emit("edit") }]
     : [];
   const review =
-    props.canManage && isPendingReview(props.task)
+    props.canCoordinate && isPendingReview(props.task)
       ? [
           {
             label: __("Approve"),
@@ -265,7 +265,7 @@ const actions = computed(() => {
         ]
       : [];
   const plan =
-    props.canManage && !isClosed(props.task)
+    props.canCoordinate && !isClosed(props.task)
       ? [
           {
             label: __("Plan"),

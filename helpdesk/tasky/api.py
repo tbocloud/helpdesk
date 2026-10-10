@@ -13,6 +13,7 @@ from helpdesk.github_sync import get_pull_requests
 from helpdesk.tasky.permissions import (
     MANAGER_PROJECT_ROLE,
     can_add_tasks,
+    can_coordinate_project,
     can_manage_project,
     can_move_task,
     check_can_take_content_task,
@@ -22,7 +23,12 @@ from helpdesk.tasky.permissions import (
     is_tasky_admin,
     sees_all_tasks,
 )
-from helpdesk.utils import add_assignment, csv_safe, remove_assignment
+from helpdesk.utils import (
+    add_assignment,
+    assigned_to_filter,
+    csv_safe,
+    remove_assignment,
+)
 
 # member roles a project lead is rotated among
 LEAD_ROTATION_ROLES = ("Developer",)
@@ -518,14 +524,11 @@ def _estimate_if_undated(task_doc):
 
 @frappe.whitelist()
 def estimate_undated_tasks(project: str) -> dict:
-    """Managers and leads: let the AI set due dates for open tasks that have none."""
+    """Managers, leads and coordinators: let the AI set due dates for open tasks that have none."""
     from helpdesk.task_estimates import get_settings, queue_estimate
 
     project = _resolve_project(str(project))
-    if not can_manage_project(project):
-        frappe.throw(
-            _("Only the project's manager or lead can do this."), frappe.PermissionError
-        )
+    _check_can_coordinate(project)
     if not get_settings().ai_task_estimates:
         frappe.throw(_("AI task estimates are turned off in HD Work Settings."))
     tasks = frappe.get_all(
@@ -602,14 +605,7 @@ def add_task(
     if assigned_to and not _is_assignable(assigned_to):
         frappe.throw(_("{0} is not an active agent.").format(assigned_to))
     if assigned_to and not _is_project_member(project, assigned_to):
-        # adding people to the team is the manager's call
-        if not manages:
-            frappe.throw(
-                _(
-                    "{0} isn't on this project. Ask the project's manager or lead to add them."
-                ).format(assigned_to),
-                frappe.PermissionError,
-            )
+        _check_can_bring_in(project, assigned_to)
         _add_member_for_assignment(project, assigned_to)
     doc = frappe.get_doc(
         {
@@ -646,9 +642,7 @@ def get_my_tasks(
     limit: int = 50,
 ):
     """Get tasks assigned to current user."""
-    user = frappe.session.user
-
-    filters = {"_assign": ("like", f'%"{user}"%')}
+    filters = {"name": assigned_to_filter("Task", frappe.session.user)}
     if project:
         filters["project"] = _resolve_project(str(project))
     if status:
@@ -962,13 +956,15 @@ def _hand_over_content_part(post, content_role: str, leaving: list[str], teammat
 
 
 def _get_own_task(task: str):
-    """An open project task the caller is assigned to, or manages."""
+    """An open project task the caller is assigned to, or coordinates."""
     doc = frappe.get_doc("Task", str(task))
-    if frappe.session.user not in doc.assignees() and not can_manage_project(
+    if frappe.session.user not in doc.assignees() and not can_coordinate_project(
         doc.project
     ):
         frappe.throw(
-            _("Only the task's assignee or the project lead can do this."),
+            _(
+                "Only the task's assignee or the project's lead or coordinator can do this."
+            ),
             frappe.PermissionError,
         )
     if not doc.project:
@@ -1044,13 +1040,30 @@ def _full_name(user: str) -> str:
 
 
 def _get_managed_task(task: str):
+    """A task whose project the caller coordinates (plans, reviews, edits its tasks)."""
     doc = frappe.get_doc("Task", str(task))
-    if not can_manage_project(doc.project):
+    _check_can_coordinate(doc.project)
+    return doc
+
+
+def _check_can_coordinate(project: str | None):
+    if not can_coordinate_project(project):
         frappe.throw(
-            _("Only the project's manager or lead can do this."),
+            _("Only the project's manager, lead or coordinator can do this."),
             frappe.PermissionError,
         )
-    return doc
+
+
+def _check_can_bring_in(project: str, user: str):
+    """Giving a task to someone outside the team adds them to it, which is the
+    project manager's or lead's call; coordinators and members pick from the team."""
+    if not can_manage_project(project):
+        frappe.throw(
+            _(
+                "{0} isn't on this project. Ask the project's manager or lead to add them."
+            ).format(user),
+            frappe.PermissionError,
+        )
 
 
 @frappe.whitelist()
@@ -1063,7 +1076,7 @@ def update_task_plan(
     depends_on_task: str | None = None,
     clear_dependency: bool = False,
 ) -> dict:
-    """Leads and managers reschedule, flag and link tasks; moving a date later needs a reason."""
+    """Leads, managers and coordinators reschedule, flag and link tasks; moving a date later needs a reason."""
     doc = _get_managed_task(task)
     if due_date and str(due_date) != str(doc.exp_end_date or ""):
         later = doc.exp_end_date and frappe.utils.getdate(
@@ -1097,7 +1110,7 @@ def update_task(
     assigned_to: str | None = None,
     ai_description: bool | None = None,
 ) -> dict:
-    """Edit a task's details. Leads and managers change anything; its assignee only the description.
+    """Edit a task's details. Leads, managers and coordinators change anything; its assignee only the description.
 
     `ai_description`: the description sent is an unedited "Write with AI" draft.
 
@@ -1148,15 +1161,24 @@ def update_task(
 
 
 def _check_can_edit(doc, details: dict):
-    """Leads and managers edit everything; the assignee may only rewrite the description."""
-    if can_manage_project(doc.project):
+    """Managers, leads and coordinators edit everything; the assignee may only rewrite
+    the description. Only managers and leads give it to someone outside the team."""
+    if can_coordinate_project(doc.project):
+        new_assignee = str(details.get("assigned_to") or "").strip()
+        if (
+            new_assignee
+            and doc.project
+            and not doc.get("content_post")
+            and not _is_on_team(doc.project, new_assignee)
+        ):
+            _check_can_bring_in(doc.project, new_assignee)
         return
     if frappe.session.user not in doc.assignees():
         frappe.throw(_("You can't edit this task."), frappe.PermissionError)
     if any(value is not None for value in details.values()):
         frappe.throw(
             _(
-                "Only the project's manager or lead can change this. You can edit the description."
+                "Only the project's manager, lead or coordinator can change this. You can edit the description."
             ),
             frappe.PermissionError,
         )
@@ -1216,7 +1238,7 @@ def _reassign(
         and doc.project
         # a content post's people work on the content calendar without joining its team
         and not doc.get("content_post")
-        and not _is_project_member(doc.project, new_assignee)
+        and not _is_on_team(doc.project, new_assignee)
     ):
         _add_member_for_assignment(doc.project, new_assignee)
     for user in previous:
@@ -1245,7 +1267,7 @@ def _reassign(
 
 @frappe.whitelist()
 def approve_task(task: str) -> dict:
-    """Lead signs off a reviewed task."""
+    """The lead, a manager or a coordinator signs off a reviewed task."""
     doc = _get_managed_task(task)
     if doc.status != "Pending Review":
         frappe.throw(_("Only tasks waiting for review can be approved."))
@@ -1257,7 +1279,7 @@ def approve_task(task: str) -> dict:
 
 @frappe.whitelist()
 def send_back_task(task: str, note: str) -> dict:
-    """Lead returns a reviewed task with what still needs doing."""
+    """The lead, a manager or a coordinator returns a reviewed task with what still needs doing."""
     from helpdesk.work_reminders import notify_users
 
     doc = _get_managed_task(task)
@@ -1555,9 +1577,8 @@ def get_kanban_tasks(project: str | None = None):
         filters = {"project": _resolve_project(str(project))}
         or_filters = None
     else:
-        user = frappe.session.user
         filters = {
-            "_assign": ("like", f'%"{user}"%'),
+            "name": assigned_to_filter("Task", frappe.session.user),
             "status": ("!=", "Template"),
         }
         # finished work stays a month, so the done columns don't grow forever
@@ -1595,9 +1616,6 @@ def get_kanban_tasks(project: str | None = None):
         ],
         order_by="custom_phase asc, subject asc",
     )
-    if not project:
-        # LIKE reads `_` and `%` in the user ID as wildcards, so keep exact matches only
-        tasks = [t for t in tasks if user in json.loads(t._assign or "[]")]
 
     # one query for the whole board; a card shows its most recently active open PR
     open_prs = get_pull_requests([t.name for t in tasks], open_only=True)
@@ -1764,6 +1782,8 @@ def get_project_detail(project: str):
             else []
         ),
         "can_manage": can_manage_project(doc.name),
+        # runs the tasks (plan, review, edit, reassign) without managing the project
+        "can_coordinate": can_coordinate_project(doc.name),
         # False: the project's task pages show only the viewer's own tasks
         "sees_all_tasks": sees_all_tasks(doc.name),
         "can_add_tasks": can_add_tasks(doc.name),

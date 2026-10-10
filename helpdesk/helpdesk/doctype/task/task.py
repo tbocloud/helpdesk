@@ -19,6 +19,7 @@ NEEDS_DEPENDENCY_DONE = ("Working", PENDING_REVIEW, "Completed")
 
 class Task(Document):
     def validate(self):
+        self.check_project_move()
         self.validate_dependency()
         self.track_hold()
         self.route_completion_to_review()
@@ -146,6 +147,41 @@ class Task(Document):
         before = self.get_doc_before_save()
         return not before or before.status != self.status
 
+    def check_project_move(self):
+        """Moving a task to another project follows `can_move_task`, however it's saved.
+
+        Writing to a task (a coordinator may write every task of their project) doesn't
+        let anyone change its project from a plain form save; move_task_to_project checks
+        the same rule and saves with ignore_permissions, as do system jobs."""
+        from helpdesk.tasky.permissions import (
+            can_add_tasks,
+            can_move_task,
+            get_assigners,
+        )
+
+        if self.is_new() or self.flags.ignore_permissions:
+            return
+        before = self.get_doc_before_save()
+        if not before or before.project == self.project:
+            return
+        # the stored assignment, not what the form sent
+        assignees = before.assignees()
+        assigner = (
+            get_assigners({self.name: assignees[0]}).get(self.name)
+            if assignees
+            else None
+        )
+        allowed = can_move_task(before.project, assigner, assignees) and (
+            not self.project or can_add_tasks(self.project)
+        )
+        if not allowed:
+            frappe.throw(
+                _(
+                    "Only the person who assigned this task, or the project's manager or lead, can move it, and only to a project they can add tasks to."
+                ),
+                frappe.PermissionError,
+            )
+
     def validate_dependency(self):
         """Same project, no loops, and the task it waits on must be done before this one moves on."""
         if not self.depends_on_task:
@@ -185,7 +221,7 @@ class Task(Document):
 
     def route_completion_to_review(self):
         """On projects that want it, a team member's "done" goes to the lead first."""
-        from helpdesk.tasky.permissions import can_manage_project
+        from helpdesk.tasky.permissions import can_coordinate_project
 
         # a published or cancelled content post closes its tasks without a review round
         if (
@@ -200,7 +236,7 @@ class Task(Document):
             "Project", self.project, "review_before_done"
         ):
             return
-        if self.status == "Completed" and can_manage_project(self.project):
+        if self.status == "Completed" and can_coordinate_project(self.project):
             return
         self.status = PENDING_REVIEW
         self.flags.review_requested = True

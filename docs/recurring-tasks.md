@@ -112,7 +112,7 @@ The list shows one of (`_state` in `helpdesk/api/recurring_tasks.py`):
 
 | Action | Who |
 | --- | --- |
-| See a project's schedules | Whoever sees every task of the project (`sees_all_tasks`: admins, its managers and lead, a Project Manager on its team, content leads on content projects) sees them all. Other members see only the schedules assigned to them or that they set up, and the last created task only when it is theirs (tasks follow `task_query`). |
+| See a project's schedules | Whoever sees every task of the project (`sees_all_tasks`: admins, its managers, lead and coordinators, a Project Manager on its team, content leads on content projects) sees them all. Other members see only the schedules assigned to them or that they set up, and the last created task only when it is theirs (tasks follow `task_query`). |
 | Create, edit, pause, resume, delete, preview, prefill from a task | Admins, the project's managers and the project lead (`can_manage_project`) |
 
 The doctype gives role access to System Manager only; every call checks these rules in

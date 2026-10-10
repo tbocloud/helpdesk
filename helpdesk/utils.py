@@ -36,6 +36,35 @@ def remove_assignment(doctype: str, name: str, user: str, ignore_permissions=Fal
     return remove(doctype, name, user, ignore_permissions=ignore_permissions)
 
 
+def assigned_names_query(doctype: str, user: str, finished: bool = True):
+    """The names of the `doctype` records assigned to `user`, as a query to use as a
+    subquery: their ToDos, matched exactly. A LIKE (or JSON_SEARCH) on `_assign` reads
+    `_` and `%` in a user ID as wildcards, and Frappe v15 filters can't escape them.
+
+    A withdrawn assignment (Cancelled) never counts. A finished one (Closed) counts
+    unless `finished` is False, which matches what `_assign` lists: tickets pass it,
+    since a resolved ticket's ToDos close and a reopened one may go to someone else."""
+    todo = frappe.qb.DocType("ToDo")
+    statuses = ["Cancelled"] if finished else ["Cancelled", "Closed"]
+    return (
+        frappe.qb.from_(todo)
+        .select(todo.reference_name)
+        .distinct()
+        .where(
+            (todo.reference_type == doctype)
+            & (todo.allocated_to == user)
+            & todo.status.notin(statuses)
+        )
+    )
+
+
+def assigned_to_filter(doctype: str, user: str, finished: bool = True) -> tuple:
+    """`assigned_names_query` as a `frappe.get_list` filter on `name`, which can't take
+    a subquery: one ToDo query, then an IN list."""
+    names = assigned_names_query(doctype, user, finished).run(pluck=True)
+    return ("in", names or [""])
+
+
 def check_permissions(doctype, parent, doc=None):
     user = frappe.session.user
 
