@@ -100,7 +100,8 @@ def get_list_data(
                     else:
                         filters.append([key, "=", value])
 
-    # after the default view's filters, which may name an assignee too
+    # after the default view's filters, which may name an assignee (or @me) too
+    handle_at_me_support(filters)
     handle_assigned_to_filter(filters, doctype)
 
     if rows is None:

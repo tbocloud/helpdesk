@@ -153,23 +153,31 @@ class Task(Document):
         Writing to a task (a coordinator may write every task of their project) doesn't
         let anyone change its project from a plain form save; move_task_to_project checks
         the same rule and saves with ignore_permissions, as do system jobs."""
-        from helpdesk.tasky.permissions import can_move_task, get_assigners
+        from helpdesk.tasky.permissions import (
+            can_add_tasks,
+            can_move_task,
+            get_assigners,
+        )
 
         if self.is_new() or self.flags.ignore_permissions:
             return
         before = self.get_doc_before_save()
         if not before or before.project == self.project:
             return
-        assignees = self.assignees()
+        # the stored assignment, not what the form sent
+        assignees = before.assignees()
         assigner = (
             get_assigners({self.name: assignees[0]}).get(self.name)
             if assignees
             else None
         )
-        if not can_move_task(before.project, assigner, assignees):
+        allowed = can_move_task(before.project, assigner, assignees) and (
+            not self.project or can_add_tasks(self.project)
+        )
+        if not allowed:
             frappe.throw(
                 _(
-                    "Only the person who assigned this task, or the project's manager or lead, can move it."
+                    "Only the person who assigned this task, or the project's manager or lead, can move it, and only to a project they can add tasks to."
                 ),
                 frappe.PermissionError,
             )
