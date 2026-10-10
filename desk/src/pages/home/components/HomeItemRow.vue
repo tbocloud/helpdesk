@@ -137,12 +137,16 @@ const meta = computed(() => {
   if (props.showAssigner && item.assigned_by_name)
     parts.push({ text: __("Assigned by {0}", item.assigned_by_name) });
   if (props.showAssignee) {
-    const [first, ...rest] = item.assignees;
+    // the server sends names for tasks the user gave out; elsewhere use the user store
+    const names = item.assignee_names?.length
+      ? item.assignee_names
+      : item.assignees.map(fullName);
+    const [first, ...rest] = names;
     parts.push({
       text: first
         ? rest.length
-          ? `${fullName(first)} +${rest.length}`
-          : fullName(first)
+          ? `${first} +${rest.length}`
+          : first
         : __("Unassigned"),
     });
   }

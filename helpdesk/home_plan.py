@@ -66,10 +66,15 @@ def _refresh_key(user: str) -> str:
 
 def check_refresh_allowed(user: str) -> None:
     """At most one asked-for plan a minute per person: each is an AI call."""
-    lock = _refresh_key(user)
-    if frappe.cache.get_value(lock, expires=True):
+    # one atomic SET NX, so two quick clicks can't both get through
+    acquired = frappe.cache.set(  # key is site-prefixed via make_key; set_value can't do NX - nosemgrep
+        frappe.cache.make_key(_refresh_key(user)),
+        1,
+        nx=True,
+        ex=REFRESH_COOLDOWN_SECONDS,
+    )
+    if not acquired:
         frappe.throw(_("Your plan was refreshed less than a minute ago."))
-    frappe.cache.set_value(lock, 1, expires_in_sec=REFRESH_COOLDOWN_SECONDS)
 
 
 def action_plan(user: str, day: dict, refresh: bool = False) -> dict:
@@ -264,6 +269,8 @@ def rule_steps(day: dict) -> list[dict]:
             task_step(
                 _("Resume “{0}”: its timer is paused.").format(task["title"]), task
             )
+        else:
+            task_step(_("Keep going on “{0}”.").format(task["title"]), task)
     if day["replies"]["count"]:
         steps.append(
             {
