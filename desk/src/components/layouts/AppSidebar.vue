@@ -152,6 +152,11 @@
       </ScrollArea>
 
       <div class="mt-auto flex flex-col gap-2 pt-2">
+        <FollowUpStrip
+          v-if="!isCollapsed && !isCustomerPortal"
+          :summary="navCounts.data?.follow_ups"
+          compact
+        />
         <slot name="footer" :is-collapsed="isCollapsed" />
         <div
           v-if="!mobile || $slots['footer-items']"
@@ -201,6 +206,7 @@ import {
   DM_EMPLOYEE_HIDDEN_ROUTES,
 } from "@/pages/content/contentTeam";
 import CP from "@/components/command-palette/CP.vue";
+import FollowUpStrip from "@/components/FollowUpStrip.vue";
 import UserMenu from "@/components/UserMenu.vue";
 import { useDevice } from "@/composables";
 import { useThemeToggle } from "@/composables/useThemeToggle";

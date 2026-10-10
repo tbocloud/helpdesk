@@ -62,7 +62,9 @@
           </span>
         </div>
         <div
-          v-if="detail.is_milestone || detail.slip_count"
+          v-if="
+            detail.is_milestone || detail.slip_count || detail.escalation_level
+          "
           class="flex flex-wrap items-center gap-2"
         >
           <TaskyBadge
@@ -72,6 +74,7 @@
             :label="__('Milestone')"
           />
           <SlipBadge v-if="detail.slip_count" :count="detail.slip_count" />
+          <EscalationBadge :level="detail.escalation_level" />
         </div>
         <dl class="grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
           <div v-for="row in detailRows" :key="row.label">
@@ -198,6 +201,7 @@ import RequestHelpDialog from "./RequestHelpDialog.vue";
 import ResumeTaskDialog from "./ResumeTaskDialog.vue";
 import SendBackTaskDialog from "./SendBackTaskDialog.vue";
 import SlipBadge from "./SlipBadge.vue";
+import EscalationBadge from "@/components/EscalationBadge.vue";
 import TaskActivity from "./TaskActivity.vue";
 import TaskPlanDialog from "./TaskPlanDialog.vue";
 import TaskPullRequests from "./TaskPullRequests.vue";
@@ -231,6 +235,7 @@ interface TaskDetail {
   is_key?: boolean;
   is_milestone?: boolean;
   slip_count?: number;
+  escalation_level?: number;
   depends_on_task?: string | null;
   depends_on_subject?: string | null;
   blocked?: boolean;

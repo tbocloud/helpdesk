@@ -26,6 +26,8 @@ export interface WorkItem {
   is_milestone?: boolean;
   /** Times the task's due date was moved later. */
   slip_count?: number;
+  /** follow-up ladder level, tasks and tickets (docs/follow-ups.md) */
+  escalation_level?: number;
   /** Subject of the task's still-open dependency, if any. */
   waiting_on?: string | null;
   /** Plain-language, already translated reasons the item may slip. */
