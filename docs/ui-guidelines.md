@@ -108,11 +108,18 @@ means nothing is noise. The mapping is fixed:
 - `StatTile` draws the circle from `iconTone` (`TONE_CLASSES` in `tone.ts`). Without a
   meaning the circle stays neutral gray, never a pastel.
 - **Brand fill** is for the current selection: the active segmented control option
-  (frappe-ui `TabButtons`, themed in `theme.css`) and the current sidebar item, which is
-  brand-tinted (`brand-soft` with `brand-ink` icon and label).
+  (frappe-ui `TabButtons`, themed in `theme.css`) and the current app sidebar item: a white
+  card (`surface-base`, hairline) with its icon in a `brand` tile (`on-brand` icon).
+- **Sidebar icon tiles** are the owner's mockup, an exception to "no pastel icon tiles": each
+  app sidebar icon sits in a tile tinted by page group (`--nav-*` in `theme.css`, `tone` in
+  `layoutSettings.ts`): blue for Home, Overview, Scoreboard, Performance, Customers and Help;
+  teal for Team, Summaries, Customer report and Contacts; orange for Notifications, Support
+  hours and Tickets; purple for Projects, My Work, Board, Content and Templates; green for
+  Calendar, Timesheets and Knowledge base; gray for the Collapse control and the collapsed
+  rail's Search and theme items. The tint only groups pages. It never carries a status.
 - **Champion gold** (`champion`, `champion-soft`, `champion-border`) is only for the
   Scoreboard's champion card, with a trophy and a badge: it marks an award, not a status.
-- Everything else stays neutral: sidebar icons that aren't current, decorative and section
+- Everything else stays neutral: decorative and section
   icons, and tiles whose number isn't a status. Still no gradients, rainbow cards or
   decorative colour, and every tone keeps an icon or text next to it.
 
