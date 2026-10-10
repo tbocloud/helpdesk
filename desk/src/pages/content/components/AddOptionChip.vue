@@ -10,7 +10,7 @@
   <!-- not a <form>: the chip sits inside the dialog's own form -->
   <div
     v-else
-    class="inline-flex h-7 items-center gap-1 rounded-full border border-brand bg-surface-base pl-3 pr-1"
+    class="inline-flex min-h-7 items-center gap-1 rounded-full border border-brand bg-surface-base pl-3 pr-1"
   >
     <input
       ref="input"

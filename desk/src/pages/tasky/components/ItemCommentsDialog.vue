@@ -76,7 +76,6 @@
                 <Button
                   v-if="c.can_edit"
                   variant="ghost"
-                  class="min-h-11 min-w-11 md:min-h-0 md:min-w-0"
                   :tooltip="__('Edit')"
                   :aria-label="__('Edit your comment')"
                   @click="startEdit(c)"
@@ -88,7 +87,6 @@
                 <Button
                   v-if="c.can_delete"
                   variant="ghost"
-                  class="min-h-11 min-w-11 md:min-h-0 md:min-w-0"
                   :tooltip="__('Delete')"
                   :aria-label="__('Delete comment by {0}', c.author_name)"
                   @click="confirming = c.name"

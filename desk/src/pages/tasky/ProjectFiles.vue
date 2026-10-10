@@ -335,7 +335,6 @@
                 <Button
                   v-if="folder.comment_count"
                   variant="ghost"
-                  class="min-h-11 md:min-h-0"
                   :aria-label="
                     commentsLabel(folder.comment_count, folder.folder_name)
                   "
@@ -351,7 +350,6 @@
                 <Dropdown :options="folderMenu(folder, true)" align="end">
                   <Button
                     variant="ghost"
-                    class="min-h-11 min-w-11 md:min-h-0 md:min-w-0"
                     :aria-label="
                       __('Actions for folder {0}', folder.folder_name)
                     "
@@ -577,7 +575,6 @@
                   <Button
                     v-if="file.comment_count"
                     variant="ghost"
-                    class="min-h-11 md:min-h-0"
                     :aria-label="
                       commentsLabel(file.comment_count, file.file_name)
                     "
@@ -593,7 +590,6 @@
                   <Button
                     v-if="canPreview(file.file_name)"
                     variant="ghost"
-                    class="min-h-11 min-w-11 md:min-h-0 md:min-w-0"
                     :tooltip="__('View')"
                     :aria-label="__('View {0}', file.file_name)"
                     @click="viewing = file"
@@ -614,7 +610,6 @@
                   <Dropdown :options="fileMenu(file)" align="end">
                     <Button
                       variant="ghost"
-                      class="min-h-11 min-w-11 md:min-h-0 md:min-w-0"
                       :aria-label="__('More actions for {0}', file.file_name)"
                     >
                       <template #icon>

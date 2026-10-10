@@ -31,7 +31,7 @@
         :key="person.user"
         role="option"
         :aria-selected="i === active"
-        class="flex min-h-11 cursor-pointer items-center gap-2 px-3 py-1.5 text-sm md:min-h-0"
+        class="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm"
         :class="
           i === active
             ? 'bg-surface-gray-2 text-ink-gray-9'
