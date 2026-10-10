@@ -33,43 +33,25 @@
             role="status"
             class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-p-base"
           >
-            <template v-if="!parts.length">
-              <span class="inline-flex items-center gap-1.5 text-success">
-                <LucideCircleCheck class="size-4" aria-hidden="true" />
-                {{ __("All clear. Nothing needs action right now.") }}
-              </span>
-            </template>
-            <template v-else>
-              <span
-                v-if="clearOnTickets"
-                class="inline-flex items-center gap-1.5 text-ink-gray-7"
+            <!-- only when nothing is open: held, undated and later work all count -->
+            <span
+              v-if="!parts.length"
+              class="inline-flex items-center gap-1.5 text-success"
+            >
+              <LucideCircleCheck class="size-4" aria-hidden="true" />
+              {{ __("All clear. You have no open work.") }}
+            </span>
+            <template v-for="(part, index) in parts" :key="part.key">
+              <span v-if="index" class="text-ink-gray-4" aria-hidden="true"
+                >·</span
               >
-                <LucideCircleCheck
-                  class="size-4 text-success"
-                  aria-hidden="true"
-                />
-                {{ __("All clear on tickets") }}
+              <span
+                class="inline-flex items-center gap-1.5 tabular-nums"
+                :class="INK[part.tone]"
+              >
+                <component :is="part.icon" class="size-4" aria-hidden="true" />
+                {{ part.label }}
               </span>
-              <template v-for="(part, index) in parts" :key="part.key">
-                <span
-                  v-if="index || clearOnTickets"
-                  class="text-ink-gray-4"
-                  aria-hidden="true"
-                  >·</span
-                >
-                <span
-                  class="inline-flex items-center gap-1.5"
-                  :class="STATUS_TEXT[part.tone]"
-                >
-                  <component
-                    :is="STATUS_ICON[part.tone]"
-                    v-if="STATUS_ICON[part.tone]"
-                    class="size-4"
-                    aria-hidden="true"
-                  />
-                  {{ part.label }}
-                </span>
-              </template>
             </template>
           </p>
           <span
@@ -101,6 +83,7 @@
             :class="hasSide ? 'xl:grid-cols-[minmax(0,1fr)_20rem]' : ''"
           >
             <div class="flex min-w-0 flex-col gap-5">
+              <ActionPlan :day="data.day" />
               <YourDay :day="data.day" @changed="home.reload()" />
               <NeedsAttention
                 v-if="data.company"
@@ -113,8 +96,12 @@
             <aside
               v-if="hasSide"
               class="flex min-w-0 flex-col gap-5"
-              :aria-label="__('Customers, projects and team')"
+              :aria-label="__('Your projects, customers and team')"
             >
+              <YourProjects
+                v-if="data.day.projects.count"
+                :projects="data.day.projects"
+              />
               <HomeSide v-if="data.company" :company="data.company" />
             </aside>
           </div>
@@ -125,38 +112,25 @@
 </template>
 
 <script setup lang="ts">
-import type { Tone } from "@/components/tone";
+import { INK } from "@/components/tone";
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import TaskyState from "@/components/TaskyState.vue";
 import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
 import { Button, createResource, dayjs } from "frappe-ui";
 import { storeToRefs } from "pinia";
-import { computed, type Component } from "vue";
+import { computed } from "vue";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
-import LucideTriangleAlert from "~icons/lucide/triangle-alert";
+import ActionPlan from "./components/ActionPlan.vue";
 import HomeSide from "./components/HomeSide.vue";
 import NeedsAttention from "./components/NeedsAttention.vue";
 import PulseStrip from "./components/PulseStrip.vue";
 import SystemsCard from "./components/SystemsCard.vue";
 import YourDay from "./components/YourDay.vue";
-import { greeting, statusParts, ticketsClear, type HomeData } from "./homeMeta";
-
-// full class strings so Tailwind's scanner keeps them
-const STATUS_TEXT: Record<Tone, string> = {
-  neutral: "text-ink-gray-8",
-  info: "text-info",
-  warning: "text-warning",
-  success: "text-success",
-  danger: "text-danger",
-};
-
-const STATUS_ICON: Partial<Record<Tone, Component>> = {
-  warning: LucideCircleAlert,
-  danger: LucideTriangleAlert,
-};
+import YourProjects from "./components/YourProjects.vue";
+import { greeting, statusParts, type HomeData } from "./homeMeta";
 
 const { userFirstName } = storeToRefs(useAuthStore());
 
@@ -166,9 +140,10 @@ const home = createResource({
 });
 
 const data = computed<HomeData | null>(() => home.data ?? null);
-const parts = computed(() => (data.value ? statusParts(data.value) : []));
-const clearOnTickets = computed(() => !!data.value && ticketsClear(data.value));
-const hasSide = computed(() => !!data.value?.company);
+const parts = computed(() => (data.value ? statusParts(data.value.day) : []));
+const hasSide = computed(
+  () => !!data.value?.company || !!data.value?.day.projects.count
+);
 
 const todayLabel = computed(() => dayjs().format("dddd, D MMMM YYYY"));
 </script>

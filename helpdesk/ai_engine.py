@@ -4,6 +4,7 @@
 """Anthropic API wrapper with prompt caching and token tracking."""
 
 import json
+import re
 
 import anthropic
 import frappe
@@ -262,6 +263,19 @@ def parse_json_answer(text: str) -> dict:
         if isinstance(parsed, dict):
             return parsed
     return {"raw_response": text, "parse_error": True}
+
+
+NUMBER = re.compile(r"\d+(?:\.\d+)?")
+
+
+def fact_numbers(facts) -> set[str]:
+    """Every number in the facts given to the model, for `invents_numbers`."""
+    return set(NUMBER.findall(json.dumps(facts, default=str)))
+
+
+def invents_numbers(text: str, known: set[str]) -> bool:
+    """The model's text has a number that isn't in its facts, so it can't be trusted."""
+    return bool(set(NUMBER.findall(text)) - known)
 
 
 def call_haiku(system_prompt, user_message, ticket_name=None):

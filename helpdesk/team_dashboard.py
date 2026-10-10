@@ -20,7 +20,7 @@ from frappe import _
 from frappe.query_builder.functions import Count, Sum
 from frappe.utils import add_days, flt, get_last_day, getdate, now_datetime, nowdate
 
-from helpdesk.ai_engine import call_haiku
+from helpdesk.ai_engine import call_haiku, fact_numbers, invents_numbers
 from helpdesk.api.content_performance import members, scored_posts
 from helpdesk.api.ticket_ai import truncate
 from helpdesk.work_reminders import SKIP, notify_users
@@ -615,13 +615,13 @@ def clean_analysis(response, facts: dict) -> dict | None:
     numbers all appear in the facts."""
     if not isinstance(response, dict):
         return None
-    known = set(re.findall(r"\d+(?:\.\d+)?", json.dumps(facts, default=str)))
+    known = fact_numbers(facts)
 
     def honest(text) -> str:
         if not isinstance(text, str):
             return ""
         text = truncate(re.sub(r"<[^>]+>", "", text).strip(), AI_TEXT_CHARS)
-        return "" if set(re.findall(r"\d+(?:\.\d+)?", text)) - known else text
+        return "" if invents_numbers(text, known) else text
 
     def items(value) -> list[str]:
         if not isinstance(value, list):

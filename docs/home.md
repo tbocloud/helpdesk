@@ -1,6 +1,9 @@
 # Home
 
-Home answers "what should I do now, and is anything on fire?". Analysis (charts, buckets,
+Home answers "what should I do now, and is anything on fire?". Every user, whatever their
+role, first gets their own plan for today: a factual line about their open work, a short
+numbered action plan, and their work in the order to tackle it. People who run projects get
+the company sections below that. Analysis (charts, buckets,
 filters by project, customer, assignee and department) lives on the **Overview**
 (`/helpdesk/overview`); Home links into it instead of repeating it. Who delivered most and
 who is champion is on the **Scoreboard** (`/helpdesk/team-dashboard`, see
@@ -9,7 +12,9 @@ who is champion is on the **Scoreboard** (`/helpdesk/team-dashboard`, see
 - Page: `desk/src/pages/home/Home.vue` (route `Home`, `/helpdesk/home`), with its parts in
   `desk/src/pages/home/components/` and types, link builders and the status sentence in
   `desk/src/pages/home/homeMeta.ts`.
-- Data: one call, `helpdesk.api.home.get_home` (agents only). Every list goes through
+- Data: `helpdesk.api.home.get_home` (agents only), then the action plan as its own
+  request, `helpdesk.api.home.get_action_plan` (POST), so a slow AI never holds the page
+  up. Every list goes through
   `frappe.get_list` (or is narrowed to records the user can read), so nobody sees records
   they couldn't open.
 
@@ -17,8 +22,10 @@ who is champion is on the **Scoreboard** (`/helpdesk/team-dashboard`, see
 
 | Section | Who | Key in `get_home` |
 | --- | --- | --- |
-| Header and status line | Everyone | built in the browser from the rest |
+| Header and status line | Everyone | `day.summary` (+ replies and reviews) |
+| Your action plan | Everyone with open work | `get_action_plan` |
 | Your day | Everyone | `day` |
+| Your projects | Everyone on an open project | `day.projects` |
 | Pulse strip | People who can see the Overview (`can_see_overview`: admins, project managers, anyone leading a project) | `company` |
 | Needs attention | Same | `company.attention_groups` |
 | Customers at risk | Same, only when a customer they may read is at risk or on watch | `company.customer_health` |
@@ -26,38 +33,99 @@ who is champion is on the **Scoreboard** (`/helpdesk/team-dashboard`, see
 | Systems | Admins (System Manager, Agent Manager) | `systems` |
 
 `company` and `systems` are `null` for people who don't qualify. On screens 1280px and wider
-the customers, projects and team cards sit in a right-hand column; below that they follow the
-main column. **Systems** sits in the main column under Needs attention (two columns on wider
+Your projects and the customers, projects and team cards sit in a right-hand column; below
+that they follow the main column (action plan, your day, then the rest). **Systems** sits in the main column under Needs attention (two columns on wider
 screens), so the side column stays short. The page never scrolls sideways.
 
 ## Header
 
-Greeting by time of day, today's date, and one status line made only of things that need
-action, most urgent first, joined with "·":
+Greeting by time of day, today's date, and one line of facts about the user's **own** open
+work, most urgent first, joined with "·", each with an icon (never colour alone) and tabular
+numbers, e.g. "1 overdue · 1 due today · 2 on hold · 8 open in 1 project": overdue (red),
+due today, on hold, tickets waiting for your reply, tasks waiting for your review, and
+"N open across M projects" (all open tasks and tickets, including held, undated and later
+ones).
 
-- Managers: SLAs breached, first replies overdue, items overdue, items at risk, tickets
-  unassigned (company numbers), then tickets waiting for your reply and tasks waiting for
-  your review.
-- Everyone else: your overdue items, tickets waiting for your reply, tasks waiting for your
-  review.
+The green "All clear. You have no open work." shows only when that line is empty: nothing
+open and nothing waiting for the user's review.
 
-Danger facts are red with a warning icon, at-risk ones amber with an icon, the rest neutral.
-When the ticket numbers are all zero but something else needs action the line starts with
-"All clear on tickets". The green "All clear. Nothing needs action right now." shows only
-when the list is empty.
+Company problems (SLAs breached, unassigned tickets, overdue work across projects) are not
+repeated here; managers see them in the pulse strip right below.
+
+**Why the old line said "All clear" wrongly (fixed):** the header and Your day counted only
+tasks that were overdue, due today or at risk. On-hold tasks, tasks in progress due later,
+key tasks and tasks with no due date were left out, so someone with eight open tasks (two on
+hold waiting on the customer, a paused task, key tasks, undated ones) and none due today saw
+"All clear" and "Nothing due today". Now every open task lands in exactly one section of
+Your day and is always counted in the header (`helpdesk/tests/test_home_plan.py`).
+
+## Your action plan (`get_action_plan`, `helpdesk/home_plan.py`)
+
+Three to five numbered steps for today, shown above Your day with a skeleton while they load.
+
+- **Facts only.** `plan_facts()` takes the first five items of each section of the user's
+  day: their own tasks (subject, project, status, due date, days overdue, key, timer, hold
+  reason, days on hold, hold note, assigned by), tickets waiting for their reply, tasks
+  waiting for their review and tasks they gave out (with the assignee's name). Nothing else
+  about other people's work is sent, and the facts never include a task the user can't see
+  (#94's rules apply through `get_my_work` and `frappe.get_list`).
+- **AI.** `call_haiku` writes the steps from those facts (the same client as the Scoreboard
+  and task descriptions). `clean_steps()` keeps plain text, strips the model's own numbering
+  and **drops any step with a number that isn't in the facts** (`ai_engine.fact_numbers` /
+  `invents_numbers`, shared with the Scoreboard's `clean_analysis`). Fewer than three usable
+  steps counts as a failed answer.
+- **Rules fallback.** When AI isn't set up, fails or answers badly, `rule_steps()` builds the
+  plan from the same priority order: close overdue work, finish what's due today, keep key
+  work going, resume paused timers, reply to tickets, review tasks, follow up on holds, check
+  in on tasks given out, set or ask for due dates, plan ahead. Steps about one task link to
+  its project. The card says which it is ("Written by AI from your open work, 5 minutes ago."
+  or "Built from your open work, most urgent first." plus the reason).
+- **Cache.** An AI plan is cached per user per day (`home_plan:<user>:<date>`, until
+  midnight) with a digest of its facts; when the user's work changes, the cached plan is
+  still shown, with "Your work changed since this plan was written", until they refresh.
+  After a failed AI call, plans come from the rules for 15 minutes before the AI is tried
+  again. Nothing open means no plan and no AI call; the card is hidden.
+- **Refresh plan** (shown when AI is set up): `get_action_plan(refresh=1)`, at most once a
+  minute per person ("Your plan was refreshed less than a minute ago.").
+- **Speed.** `get_home` keeps the day it built for two minutes (`home_plan_day:<user>`), so
+  the plan request doesn't rebuild it.
 
 ## Your day (`day`)
 
-Built from `helpdesk.api.work.get_my_work` (the user's open tasks and tickets) plus two
-queries. Each part is `{count, items}` with at most 6 items; only parts with items are
-shown, and an empty day shows one calm line instead.
+Built from `helpdesk.api.work.get_my_work` (the user's open tasks and tickets, with
+`assigned_by_name` and `can_plan`) plus a few grouped queries; no per-task lookups. Each part
+is `{count, items}` with at most 6 items; only parts with items are shown, with "See all N"
+to My Work with a tab in the URL (`?tab=overdue`, `task`, `ticket`). An empty day shows one
+calm line instead.
+
+Every open task of the user lands in exactly one task section, the first that fits, in the
+order below. Tasks due more than 7 days out are only counted (header and Your projects).
 
 | Part | What | Quick action |
 | --- | --- | --- |
-| `tasks` | My open tasks that are overdue, due today or at risk. On Hold tasks (not late while held) and Pending Review tasks (waiting on the reviewer) are left out. | **Start** on Open tasks (`helpdesk.tasky.api.update_task_status` → Working); **Complete** on Working/Overdue tasks (the existing Complete dialog, which logs hours and notes) |
+| `close_first` | Overdue (`is_task_overdue`), then due today, then key tasks in progress. Rows show project, due label and "Assigned by". | **Complete** (Working), **Start** (Open), **Resume timer** (timer paused) |
+| `in_progress` | Other tasks in Working, with "Timer running" or "Timer paused" (one query on `custom_timer_start`). | **Resume timer** (`helpdesk.tasky.api.start_timer`) or **Complete** |
 | `replies` | Tickets assigned to me in a status whose category is Open (the agent owes the next reply). Replied / Waiting on Task are Paused and not listed. | Row opens the ticket |
 | `approvals` | Tasks in Pending Review in projects I manage or lead (`get_managed_projects` ∪ `get_led_projects`), the same people `approve_task` accepts. | **Approve** (`helpdesk.tasky.api.approve_task`) |
+| `waiting` | My tasks On Hold (longest hold first) or in review. Held rows say "Waiting on customer for 3 days · follow up" ("check on it" for another task) and show the note and who held it (`HoldNote`). | **Resume** (the Resume dialog) |
+| `coming_up` | Due in the next 7 days, soonest first. | **Start** / **Complete** |
+| `no_date` | Open tasks without a due date. The hint says "Set a date…" when the user may plan them (`can_plan`), else "Ask your lead for a date…". | **Set date** (the Plan dialog) for leads and managers, else **Start** |
+| `given_out` | Tasks I gave someone else (an open ToDo with `assigned_by` = me) that are overdue or in review, minus ones already in my approvals; rows name the assignee. | Row opens the project |
 | `files` | Project files marked "for" me by someone else in the last 7 days (`HD Project File User` rows, see `docs/project-files.md`), only from projects I can read. | Row opens the project's Files tab |
+
+The page shows them in that order (replies and reviews right after the work in progress).
+Steps that need the whole task (Complete, Resume, Set date) open `TaskDetailDialog` with that
+step, as My Work does. `summary` holds the header's counts: `open` (tasks and tickets),
+`overdue`, `due_today`, `on_hold`, `in_review`, `in_progress`, `projects`.
+
+## Your projects (`day.projects`)
+
+Open projects the user is on (a member, the lead, or with an open task in it), at most 6,
+most overdue first, each opening the project. Every row shows **the user's own** open and
+overdue tasks and the next open milestone they can see (dated first). People who run the
+project (it is in their portfolio, `get_project_portfolio`) also get the whole project's open
+and overdue counts; everyone else never sees totals that would include tasks hidden from them
+(#94).
 
 ## Pulse strip (`company.tickets`, `company.work`)
 
@@ -121,6 +189,11 @@ through `frappe.desk.form.assign_to.add`, the same endpoint as the ticket page.
 (`helpdesk/tests/test_home.py`, `helpdesk/tests/test_sla_alerts.py`).
 
 ## Removed from Home
+
+- The old `day.tasks` part ("Due today, overdue or at risk"), replaced by the task sections
+  above, and the header's company status line and "All clear on tickets" (the pulse strip
+  shows those numbers).
+
 
 The eight big KPI tiles (most showed 0 or "-"), the single "Needs attention" list that
 truncated titles, and the full projects table. Their information is in the pulse strip,
