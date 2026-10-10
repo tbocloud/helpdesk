@@ -31,7 +31,6 @@ from helpdesk.test_utils import (
     make_pull_request,
     make_task,
     make_tasky_user,
-    make_team,
     make_ticket,
     make_timesheet,
     make_work_summary,
@@ -639,18 +638,18 @@ class TestDepartmentWalls(WorkControlCase):
         self.assertEqual(raised.raised_by, self.erp_dev)
 
     def test_erp_team_sees_only_what_agents_see(self):
-        # with team restrictions on, a ticket of a team they aren't in stays hidden, as
-        # for every agent: the ERP team gets no wider access
+        # with team restrictions on, the ERP team gets exactly a plain agent's ticket
+        # filter (their teams and assignments), no wider
         frappe.db.set_single_value("HD Settings", "restrict_tickets_by_agent_group", 1)
-        frappe.db.set_single_value(
-            "HD Settings", "do_not_restrict_tickets_without_an_agent_group", 0
-        )
-        team = make_team("Wall Billing").name
-        ticket = make_ticket(subject="Billing team only", agent_group=team)
         make_tasky_user(DEV[0], DEV[1])
 
-        for user in (self.erp_dev, DEV[0]):
-            self.assertEqual(self.ticket_listed(user, ticket.name), [], user)
+        def condition(user):
+            query = ticket_permission_query(user)
+            self.assertIsNotNone(query, user)
+            return query.replace(frappe.db.escape(user), "<user>")
+
+        self.assertEqual(condition(self.erp_dev), condition(DEV[0]))
+        self.assertIn("tabToDo", condition(self.erp_dev))
 
     def test_ticket_list_gate(self):
         make_tasky_user(DEV[0], DEV[1])
