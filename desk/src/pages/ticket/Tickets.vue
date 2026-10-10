@@ -64,6 +64,10 @@
           <span
             class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-gray-6"
           >
+            <EscalationBadge
+              v-if="row.custom_escalation_level"
+              :level="row.custom_escalation_level"
+            />
             <span class="font-mono tabular-nums text-ink-gray-5">
               #{{ row.name }}
             </span>

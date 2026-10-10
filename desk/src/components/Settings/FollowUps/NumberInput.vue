@@ -9,7 +9,7 @@
       class="w-20"
       :disabled="disabled"
       :aria-label="ariaLabel"
-      @update:model-value="(v: string) => emit('update:modelValue', Number(v))"
+      @update:model-value="update"
     />
     <span
       v-if="suffix"
@@ -32,4 +32,10 @@ defineProps<{
 }>();
 
 const emit = defineEmits<{ "update:modelValue": [value: number] }>();
+
+// a cleared box keeps the last number instead of saving 0, which the server refuses
+function update(value: string) {
+  if (value === "" || value == null) return;
+  emit("update:modelValue", Number(value));
+}
 </script>

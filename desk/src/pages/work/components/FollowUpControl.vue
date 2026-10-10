@@ -4,7 +4,11 @@
     <div class="flex items-baseline justify-between gap-3">
       <h2 class="text-base-semibold text-ink-gray-9">{{ __("Follow-ups") }}</h2>
       <span class="text-p-sm text-ink-gray-5">
-        {{ __("Escalated work, the oldest overdue and who has most of it") }}
+        {{
+          __(
+            "All projects and tickets: the filters above don't apply here. Escalated work, the oldest overdue and who has most of it."
+          )
+        }}
       </span>
     </div>
 

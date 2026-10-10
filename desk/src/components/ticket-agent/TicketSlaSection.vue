@@ -1,5 +1,9 @@
 <template>
-  <PanelSection v-if="rows.length" :title="__('SLA')" :icon="LucideTimer">
+  <PanelSection
+    v-if="rows.length || doc.custom_escalation_level"
+    :title="__('SLA')"
+    :icon="LucideTimer"
+  >
     <dl class="flex flex-col gap-2.5">
       <div v-if="doc.sla" class="flex items-baseline justify-between gap-3">
         <dt class="text-xs font-medium text-ink-gray-6">{{ __("Policy") }}</dt>

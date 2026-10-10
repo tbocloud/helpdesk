@@ -54,6 +54,7 @@ from helpdesk.tasky.permissions import (
     department_heads,
     get_assigners,
 )
+from helpdesk.utils import is_agent
 from helpdesk.work_reminders import (
     _agent_managers,
     _assignees,
@@ -63,7 +64,8 @@ from helpdesk.work_reminders import (
 
 SETTINGS = "HD Follow Up Settings"
 CACHE_KEY = "follow_ups"
-CACHE_SECONDS = 300
+# longer than the 15-minute run that refreshes it; task and settings changes clear it
+CACHE_SECONDS = 16 * 60
 NOTICE_PREFIX = "follow-up"
 OPEN_TASK_STATUSES = ("Completed", "Cancelled", "Template")
 WAITING_ON_CUSTOMER = "Waiting on customer"
@@ -1085,9 +1087,13 @@ def send_customer_follow_ups(ctx: Context) -> None:
     """The polite email to customers who haven't replied, once per wait, as a reply on
     the ticket (so HD Settings' auto-close counts its days from it)."""
     for name in ctx.customer_follow_ups:
+        # a failed send must not leave a reply on the ticket that never reached them
+        savepoint = f"customer_follow_up_{name}"
+        frappe.db.savepoint(savepoint)
         try:
             send_customer_follow_up(name, ctx.settings)
         except Exception:  # noqa: BLE001 - one ticket's email must not stop the rest
+            frappe.db.rollback(save_point=savepoint)
             frappe.log_error(title=f"Customer follow-up not sent for ticket {name}")
 
 
@@ -1104,8 +1110,12 @@ def send_customer_follow_up(name: str, settings) -> None:
         },
     )
     previous = frappe.session.user
-    # the reply is the hub's (TBO AI), not Administrator's, the job's own user
-    frappe.set_user(automation_user())  # nosemgrep
+    # the reply is the hub's (TBO AI); reply_via_agent needs an agent, so a hub user
+    # without an agent role falls back to Administrator, the job's own user
+    sender = automation_user()
+    if not is_agent(sender):
+        sender = "Administrator"
+    frappe.set_user(sender)  # nosemgrep
     try:
         ticket.reply_via_agent(message=message, to=ticket.raised_by)
     finally:

@@ -388,9 +388,10 @@ class TestDelivery(FollowUpCase):
 
     def test_pings_go_out_only_for_l2_breaches_and_key_work(self):
         follow_ups.process(follow_up_context())
+        low = self.task("Item groups", FRIDAY)
+        # assigning the task emails the assignee; only follow-up emails count from here
         self.sendmail.reset_mock()
 
-        low = self.task("Item groups", FRIDAY)
         follow_ups.process(follow_up_context())
         self.assertNotIn(DEV[0], self.emailed())
 

@@ -32,7 +32,8 @@ module (`new_notification`).
 5. **Customer follow-up emails** (`send_customer_follow_ups`), when switched on.
 6. **Digests** (`send_due_digests`) at the digest times.
 
-The result of step 1 is cached for 5 minutes (`current()`), and the cache is dropped when a
+The result of step 1 is cached for 16 minutes (`current()`), longer than the run that
+refreshes it, so page loads don't evaluate everything themselves; the cache is dropped when a
 task's status or due date changes (`Task.refresh_follow_ups`) and when the settings are
 saved.
 
@@ -139,7 +140,9 @@ The key is **(person, item, rule, stage or level, date)**:
 
 - **The email** (*Email customers who haven't replied*, **off** by default): after the
   waiting days, the customer gets one polite follow-up as a reply on the ticket
-  (`HDTicket.reply_via_agent`, as the automation user, to `raised_by`). The text is the
+  (`HDTicket.reply_via_agent`, to `raised_by`, as the automation user, or Administrator when
+  that user isn't an agent, since only agents may reply). Each ticket's send runs in its own
+  savepoint, so a failed email leaves no reply on the ticket and is tried again. The text is the
   *Follow-up email* setting, rendered with `{{ ticket }}`, `{{ subject }}` and
   `{{ customer }}` (`HDTicket._get_rendered_template`, the same as the other ticket emails).
   `HD Ticket.custom_customer_followed_up_on` records it, so it goes once per wait; an agent's
@@ -173,8 +176,12 @@ gives the same two roles write access):
   first, each item with its rule and level.
 
 Validation (`HDFollowUpSettings.validate`): digest times are 24-hour times (stored sorted,
-"09:30, 15:30"), the ladder days are 1 or more and in order, thresholds are 1 or more, and
-the SLA warnings are 1–99% with the second after the first.
+"09:30, 15:30", at least one), the ladder days are 1 or more and in order, thresholds are 1
+or more, and the SLA warnings are 1–99% with the second after the first. On the page a
+cleared number box keeps its last value rather than sending 0.
+
+Existing sites get the defaults stored by the patch `v16_0_2.seed_follow_up_settings`
+(post model sync), since a new Single has nothing stored until it is saved.
 
 ## Where escalation shows
 
@@ -183,7 +190,8 @@ the SLA warnings are 1–99% with the second after the first.
   (My Work, Overview lists, Home), the Tickets list (next to the subject) and the ticket's SLA
   panel ("Follow-up").
 - **Overview → Follow-ups** (`FollowUpControl.vue`, System Managers and Agent Managers,
-  `get_follow_up_overview`): counts of escalated (L2+), breached and overdue items, the
+  `get_follow_up_overview`), across all projects and tickets (the page's filters don't apply,
+  and it says so): counts of escalated (L2+), breached and overdue items, the
   escalated items, the oldest overdue tasks, and the people with the most open escalations
   (L1+, by assignee).
 
