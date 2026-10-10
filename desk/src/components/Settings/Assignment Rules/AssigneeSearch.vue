@@ -28,7 +28,7 @@
               :placeholder="__('Search')"
             />
             <button
-              class="absolute right-1.5 inline-flex h-7 w-7 items-center justify-center"
+              class="touch-target absolute right-1.5 inline-flex h-7 w-7 items-center justify-center"
               @click="query = ''"
             >
               <FeatherIcon name="x" class="w-4" />

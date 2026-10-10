@@ -277,7 +277,7 @@
                     </span>
                     <button
                       type="button"
-                      class="ml-auto flex size-6 shrink-0 items-center justify-center rounded transition-colors hover:bg-surface-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+                      class="touch-target ml-auto flex size-6 shrink-0 items-center justify-center rounded transition-colors hover:bg-surface-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
                       :aria-label="__('Resume {0}', task.subject)"
                       :title="__('Resume')"
                       @click.stop="resumingTask = task"
@@ -309,7 +309,7 @@
                   }}</span>
                   <button
                     type="button"
-                    class="ml-auto flex size-6 items-center justify-center rounded transition-colors hover:bg-surface-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4 disabled:opacity-50"
+                    class="touch-target ml-auto flex size-6 items-center justify-center rounded transition-colors hover:bg-surface-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4 disabled:opacity-50"
                     :aria-label="__('Pause the timer on {0}', task.subject)"
                     :disabled="savingTimer === task.name"
                     @click.stop="togglePause(task)"
@@ -328,7 +328,7 @@
                   }}</span>
                   <button
                     type="button"
-                    class="ml-auto flex size-6 items-center justify-center rounded transition-colors hover:bg-surface-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4 disabled:opacity-50"
+                    class="touch-target ml-auto flex size-6 items-center justify-center rounded transition-colors hover:bg-surface-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4 disabled:opacity-50"
                     :aria-label="__('Resume the timer on {0}', task.subject)"
                     :disabled="savingTimer === task.name"
                     @click.stop="togglePause(task)"

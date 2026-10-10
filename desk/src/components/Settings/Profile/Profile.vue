@@ -47,7 +47,7 @@
                     <button
                       v-if="user.doc?.user_image"
                       type="button"
-                      class="absolute -right-1 -top-1 flex size-5 items-center justify-center rounded-full bg-surface-base shadow-sm ring-1 ring-outline-gray-2 duration-300 ease-in-out hover:bg-surface-gray-2 sm:opacity-0 sm:focus-visible:opacity-100 sm:group-hover:opacity-100"
+                      class="touch-target absolute -right-1 -top-1 flex size-5 items-center justify-center rounded-full bg-surface-base shadow-sm ring-1 ring-outline-gray-2 duration-300 ease-in-out hover:bg-surface-gray-2 sm:opacity-0 sm:focus-visible:opacity-100 sm:group-hover:opacity-100"
                       :aria-label="__('Remove Photo')"
                       @click.stop="updateImage()"
                       @mouseenter="isHoveringRemove = true"

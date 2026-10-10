@@ -324,6 +324,18 @@
         clip: rect(0 0 0 0);
         white-space: nowrap;
       }
+      /* Touch targets: 44px controls on phones and touch screens, the same
+         rule as desk/src/theme.css. :root outranks the pages' own heights. */
+      @media (max-width: 639.98px), (pointer: coarse) {
+        :root
+          :is(.btn, .chip, .select, .input, .link-btn, .check, .viewer-nav) {
+          min-height: 44px;
+        }
+        :root :is(.btn, .chip, .viewer-nav) {
+          min-width: 44px;
+          justify-content: center;
+        }
+      }
     </style>
     {% block style %}{% endblock %}
   </head>

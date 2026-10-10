@@ -18,7 +18,7 @@
           <label
             v-for="option in options"
             :key="option.value"
-            class="flex min-h-11 cursor-pointer items-center gap-2 rounded-md border py-2 pr-3 text-sm transition-colors focus-within:ring-2 focus-within:ring-outline-gray-4 md:min-h-0"
+            class="flex cursor-pointer items-center gap-2 rounded-md border py-2 pr-3 text-sm transition-colors focus-within:ring-2 focus-within:ring-outline-gray-4"
             :style="{ paddingLeft: `${12 + option.indent * 16}px` }"
             :class="
               target === option.value
