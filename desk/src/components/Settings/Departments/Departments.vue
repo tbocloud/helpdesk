@@ -77,6 +77,7 @@
               <!-- heads -->
               <form
                 v-else-if="editingHeads === dept.name"
+                :id="HEADS_FORM_ID"
                 class="flex min-w-0 flex-1 flex-col gap-2"
                 :aria-label="__('Heads of {0}', dept.name)"
                 @submit.prevent="saveHeads(dept)"
@@ -365,11 +366,18 @@ function headsLine(dept: Department): string {
 const editingHeads = ref("");
 const headsValue = ref<string[]>([]);
 
-function startHeads(dept: Department) {
+const HEADS_FORM_ID = "department-heads-form";
+
+async function startHeads(dept: Department) {
   deleting.value = "";
   renaming.value = "";
   editingHeads.value = dept.name;
   headsValue.value = dept.heads.map((h) => h.user);
+  await nextTick();
+  document
+    .getElementById(HEADS_FORM_ID)
+    ?.querySelector<HTMLElement>("input, button")
+    ?.focus();
 }
 
 const setHeads = createResource({

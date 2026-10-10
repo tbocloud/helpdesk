@@ -218,7 +218,8 @@ class TestTeamDashboard(FrappeTestCase):
         # the department walls don't apply on the Scoreboard, so the teams can compete
         make_tasky_user(KIRAN, "Kiran Pillai", ("ERP Employee",))
         campaign = make_project(
-            "Spice Route Instagram campaign", members=[(SANA, "Developer")]
+            "Spice Route Instagram campaign",
+            members=[(SANA, "Developer"), (DEEPA, "Developer")],
         ).name
         frappe.db.set_value("Project", campaign, "custom_department", "Digital")
         make_done_task(campaign, "Onam reel storyboard", SANA, "2031-03-10")

@@ -52,7 +52,9 @@ def get_departments(include_inactive: bool = False) -> list[dict]:
 
 
 def _configured_heads(departments: list[str]) -> dict[str, list[dict]]:
-    """Each department's Heads setting, as {user, full_name}, in the order set."""
+    """Each department's Heads setting, as {user, full_name}, in the order set.
+    Disabled accounts are left out, as in tasky.permissions.department_heads, so
+    saving the row again drops them."""
     if not departments:
         return {}
     head = frappe.qb.DocType(DEPARTMENT_HEAD_TABLE)
@@ -60,13 +62,14 @@ def _configured_heads(departments: list[str]) -> dict[str, list[dict]]:
     out: dict[str, list[dict]] = {}
     for row in (
         frappe.qb.from_(head)
-        .left_join(user)
+        .join(user)
         .on(user.name == head.user)
         .select(head.parent, head.user, user.full_name)
         .where(
             (head.parenttype == DEPARTMENT)
             & (head.parentfield == "heads")
             & head.parent.isin(departments)
+            & (user.enabled == 1)
         )
         .orderby(head.idx)
         .run(as_dict=True)
