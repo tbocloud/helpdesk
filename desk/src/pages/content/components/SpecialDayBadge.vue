@@ -5,7 +5,7 @@
   >
     <LucideStar class="size-3 shrink-0 fill-current" aria-hidden="true" />
     <span class="sr-only">{{ __("Special day:") }}</span>
-    <span class="truncate">{{ name }}</span>
+    <span class="min-w-0 truncate">{{ name }}</span>
   </span>
 </template>
 

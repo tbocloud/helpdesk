@@ -58,7 +58,8 @@
           <td class="max-w-[18rem] px-3 py-2">
             <button
               type="button"
-              class="truncate text-left text-ink-gray-9 hover:underline"
+              class="block max-w-full truncate text-left text-ink-gray-9 hover:underline"
+              :title="post.title"
               @click.stop="emit('open', post.name)"
             >
               {{ post.title }}
@@ -66,7 +67,7 @@
             <SpecialDayBadge
               v-if="post.special_day"
               :name="post.special_day"
-              class="ml-1.5 align-middle"
+              class="mt-0.5"
             />
           </td>
           <td

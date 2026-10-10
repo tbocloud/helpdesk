@@ -66,32 +66,35 @@ missed.
 
 ### Entry cards
 
-Grouped by day (day number, weekday, number of entries that day), sorted by time.
+Grouped by day (day number, weekday, number of entries that day), sorted by time. On wider
+screens the day's date column stays pinned at the top of the list while its cards scroll past.
 
-- **Header:** the client first, in a larger semibold font with a building icon (always shown, even
-  with the customer filter set); below it the copy (the post's `title`, opens the post) · post
-  type; and on the right the platforms (brand mark + name, from
-  `ChannelIcon.vue`, coloured with the `--channel-*` tokens), time, the status pill and an edit (pencil) button that opens the post, the same as
-  clicking the copy.
-- **Warning line** "Goes live within 2 days and isn't approved yet." when the post isn't
-  Approved/Scheduled/Published and goes live within 48 hours.
-- **Sub Copy** (`caption`) and **Description** (`brief`) side by side ("Not written yet" /
-  "No description yet" when empty).
-- **Roles:** Writer, Designer, Video editor, Digital marketer. Each assigned person shows with
-  their task status (and "late" when the task is past due); an empty role shows an amber
-  **+ Assign** chip. Either opens the assign dialog.
+- **Title row:** the client first, in a larger semibold font (always shown, even with the
+  customer filter set) · the copy (the post's `title`, opens the post) · post type, and an edit
+  (pencil) button on the right that opens the post, the same as clicking the copy. Long values
+  truncate with the full value in a tooltip.
+- **Meta row:** the platforms (brand mark + name, from `ChannelIcon.vue`, coloured with the
+  `--channel-*` tokens), the time, the status pill (`StatusPill.vue`, the same one the Sheet
+  uses), the special day badge, and a warning badge "Goes live within 2 days and isn't
+  approved yet." when the post isn't Approved/Scheduled/Published and goes live within 48 hours.
+- **Sub Copy** (`caption`) and **Description** (`brief`) side by side in one quiet panel
+  ("Not written yet" / "No description yet" when empty).
+- **Roles** (`RoleBox.vue`): Writer, Designer, Video editor, Digital marketer, four across on
+  wide screens and two by two below that, so names are never squeezed. Each assigned person shows
+  their name and task status (and "late" when the task is past due); an empty role shows a
+  neutral dashed **+ Assign** box. Either opens the assign dialog. The box is a native
+  `<button>`, not `<component :is="'button'">`, which resolves to frappe-ui's global `Button`
+  and clipped the names to its fixed height.
 - **Footer:** "Goes live …" (or the published / missed / cancelled line), then **Mark
-  published** (green), **Postpone**, and a cancel icon button, all through
+  published** (primary), **Postpone**, and a cancel icon button, all through
   `EntryActionDialog.vue`. Published posts link to the live post instead.
 
-Card tints carry meaning:
+Cards stay neutral; colour only marks what needs chasing, always next to text:
 
-| Tint | When |
-| --- | --- |
-| Red (danger) | Missed, or going live within 2 days without approval |
-| Green (success) | Published |
-| Neutral gray | Cancelled |
-| Blue (info) | Anything else still upcoming |
+| Left edge | When | Also shown |
+| --- | --- | --- |
+| Red (danger) | Missed: past its time, not published or cancelled | "Missed" in the status pill and the footer line |
+| Amber (warning) | Going live within 2 days without approval | The warning badge in the meta row |
 
 ## Adding and editing a post
 
@@ -147,7 +150,7 @@ Video, Article, Newsletter) on install and through the patch `seed_content_optio
 A post with a **Special day** (`special_day`, e.g. "Diwali", "Brand anniversary") is highlighted
 everywhere it shows, always as a star plus the day's name (`SpecialDayBadge.vue`, amber):
 
-- **Board:** a badge under the card's post type line, and the day heading lists that day's
+- **Board:** a badge in the card's meta row, and the day heading lists that day's
   special days.
 - **Day strip:** a star next to the day's count (the tooltip and screen-reader label name it).
 - **Calendar view:** the event title starts with "★ Diwali ·".
