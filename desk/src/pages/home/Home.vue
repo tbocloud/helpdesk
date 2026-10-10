@@ -29,6 +29,29 @@
           </h1>
           <p class="text-p-sm text-ink-gray-6">{{ todayLabel }}</p>
           <p
+            v-if="nextHoliday || onLeaveToday"
+            class="flex flex-wrap items-center gap-x-4 gap-y-1 text-p-sm text-ink-gray-6"
+          >
+            <RouterLink
+              v-if="nextHoliday"
+              :to="{ name: 'WorkCalendar' }"
+              class="inline-flex items-center gap-1.5 rounded hover:text-ink-gray-8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+            >
+              <LucideCalendarOff
+                class="size-4 shrink-0 text-info"
+                aria-hidden="true"
+              />
+              {{ nextHoliday }}
+            </RouterLink>
+            <span v-if="onLeaveToday" class="inline-flex items-center gap-1.5">
+              <LucideTreePalm
+                class="size-4 shrink-0 text-ink-gray-5"
+                aria-hidden="true"
+              />
+              {{ onLeaveToday }}
+            </span>
+          </p>
+          <p
             v-if="data"
             role="status"
             class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-p-base"
@@ -125,7 +148,10 @@ import { storeToRefs } from "pinia";
 import { computed } from "vue";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideCircleCheck from "~icons/lucide/circle-check";
+import LucideCalendarOff from "~icons/lucide/calendar-off";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
+import LucideTreePalm from "~icons/lucide/tree-palm";
+import { RouterLink } from "vue-router";
 import ActionPlan from "./components/ActionPlan.vue";
 import HomeSide from "./components/HomeSide.vue";
 import NeedsAttention from "./components/NeedsAttention.vue";
@@ -149,4 +175,34 @@ const hasSide = computed(
 );
 
 const todayLabel = computed(() => dayjs().format("dddd, D MMMM YYYY"));
+
+// "Next holiday: Diwali · Thu 20 Oct", from the hub's holiday list
+const nextHoliday = computed(() => {
+  const holiday = data.value?.calendar?.next_holiday;
+  if (!holiday) return "";
+  const day = dayjs(holiday.date);
+  return day.isSame(dayjs(), "day")
+    ? __("Today is a holiday: {0}", holiday.description)
+    : __(
+        "Next holiday: {0} · {1}",
+        holiday.description,
+        day.format("ddd D MMM")
+      );
+});
+
+// for people who run work: "On leave today: Anu Varghese (until Wed 14 Oct), …"
+const onLeaveToday = computed(() => {
+  const people = data.value?.calendar?.on_leave_today;
+  if (!people?.length) return "";
+  const span = (p: typeof people[number]) =>
+    p.half_day
+      ? __("half day")
+      : dayjs(p.to_date).isSame(dayjs(), "day")
+      ? __("back tomorrow")
+      : __("until {0}", dayjs(p.to_date).format("ddd D MMM"));
+  return __(
+    "On leave today: {0}",
+    people.map((p) => `${p.full_name} (${span(p)})`).join(", ")
+  );
+});
 </script>

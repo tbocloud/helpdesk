@@ -1,17 +1,20 @@
-"""Calendar: Teams meetings and task due dates in one place.
+"""Calendar: Teams meetings, task due dates, holidays and leave in one place.
 
-Everyone sees their own: meetings they scheduled or are invited to, and the
-open tasks assigned to them. People who can see the overview (project
-managers, project leads, admins) can switch to the whole team.
+Everyone sees their own: meetings they scheduled or are invited to, the open
+tasks assigned to them and their approved leave, plus the hub's holidays.
+People who can see the overview (project managers, project leads, admins) can
+switch to the whole team, which shows everyone's leave.
 """
 
 import frappe
 from frappe import _
 from frappe.utils import add_days, get_datetime, getdate
 
+from helpdesk.api.content_board import user_full_names
 from helpdesk.api.work import OPEN_TASK_FILTER, can_see_overview
 from helpdesk.helpdesk.doctype.hd_meeting.hd_meeting import SCHEDULED
 from helpdesk.utils import agent_only, assigned_to_filter
+from helpdesk.work_calendar import holidays_between, leave_between, leave_today
 
 MAX_RANGE_DAYS = 62
 MAX_EVENTS = 500
@@ -36,8 +39,37 @@ def get_calendar(start: str, end: str, team: int | str = 0) -> dict:
     return {
         "meetings": _meetings(start_day, end_day, None if team else user),
         "tasks": _tasks(start_day, end_day, None if team else user),
+        "holidays": [
+            {**row, "date": str(row["date"])}
+            for row in holidays_between(start_day, end_day, weekly_off=False)
+        ],
+        "leave": _leave(start_day, end_day, None if team else user),
         "can_see_team": can_see_overview(),
     }
+
+
+@frappe.whitelist()
+@agent_only
+def get_on_leave() -> dict:
+    """{user: {to_date, half_day}} for everyone on leave today, for the assignee pickers
+    and the team views. Only dates: the leave type stays in HD Leave."""
+    return leave_today()
+
+
+def _leave(start_day, end_day, user: str | None) -> list[dict]:
+    """Approved leave in the range: the user's own, or everyone's for the team view."""
+    rows = leave_between(start_day, end_day, [user] if user else None)
+    names = user_full_names({row.user for row in rows})
+    return [
+        {
+            "user": row.user,
+            "full_name": names.get(row.user) or row.user,
+            "from_date": str(row.from_date),
+            "to_date": str(row.to_date),
+            "half_day": bool(row.half_day),
+        }
+        for row in rows
+    ]
 
 
 def _meetings(start_day, end_day, user: str | None) -> list[dict]:

@@ -148,6 +148,13 @@
                 <span class="text-ink-gray-7 flex-1 text-start truncate">
                   {{ agent.label }}
                 </span>
+                <span
+                  v-if="leaveLabel(agent.value)"
+                  class="flex shrink-0 items-center gap-1 text-xs text-ink-gray-5"
+                >
+                  <LucideTreePalm class="size-3" aria-hidden="true" />
+                  {{ leaveLabel(agent.value) }}
+                </span>
               </button>
             </template>
 
@@ -163,6 +170,7 @@
 </template>
 
 <script setup lang="ts">
+import { useOnLeave } from "@/composables/onLeave";
 import { useShortcut } from "@/composables/shortcuts";
 import { useAgentStatusStore } from "@/stores/agentStatus.ts";
 import { useUserStore } from "@/stores/user";
@@ -192,6 +200,7 @@ import {
 import { computed, inject, nextTick, ref, useTemplateRef, watch } from "vue";
 
 import LucideSearch from "~icons/lucide/search";
+import LucideTreePalm from "~icons/lucide/tree-palm";
 import MultipleAvatar from "../MultipleAvatar.vue";
 import UserAvatar from "../UserAvatar.vue";
 interface Props {
@@ -214,6 +223,7 @@ const activities = inject(ActivitiesSymbol)!;
 const { getUser } = useUserStore();
 const currentUser = computed(() => getUser("")); // empty string returns current user
 const agentStatusStore = useAgentStatusStore();
+const { leaveLabel } = useOnLeave();
 const currentAgentName = window.agent;
 
 const searchText = ref("");
@@ -566,6 +576,12 @@ function warnUnavailableAgents(addedNames: string[]): boolean {
     if (!addedNames.includes(agent.value)) continue;
     // No point warning agents about their own status when assigning themselves.
     if (agent.value === currentAgentName) continue;
+    const leave = leaveLabel(agent.value);
+    if (leave) {
+      toast.warning(__("{0} · {1}", agent.label, leave));
+      hasUnavailable = true;
+      continue;
+    }
     const category = agentStatusStore.getStatus(
       agent.availability || ""
     )?.category;

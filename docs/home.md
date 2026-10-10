@@ -23,6 +23,8 @@ who is champion is on the **Scoreboard** (`/helpdesk/team-dashboard`, see
 | Section | Who | Key in `get_home` |
 | --- | --- | --- |
 | Header and status line | Everyone | `day.summary` (+ replies and reviews) |
+| Next holiday | Everyone, when the hub has one within a year | `calendar.next_holiday` |
+| On leave today | People who can see the Overview | `calendar.on_leave_today` |
 | Follow-ups strip | Everyone with overdue, escalated or waiting work | `follow_ups` |
 | Your action plan | Everyone with open work | `get_action_plan` |
 | Your day | Everyone | `day` |
@@ -52,6 +54,17 @@ open and nothing waiting for the user's review.
 
 Company problems (SLAs breached, unassigned tickets, overdue work across projects) are not
 repeated here; managers see them in the pulse strip right below.
+
+Under the date, one quiet line (`calendar`, from `helpdesk.api.home._calendar`):
+
+- **Next holiday**: "Next holiday: Diwali · Tue 20 Oct" (or "Today is a holiday: …"), the
+  next named holiday on the hub's holiday list (`work_calendar.next_holiday`, weekly offs
+  left out), with an info-toned calendar-off icon, linking to the Calendar. The list includes
+  holidays synced from the CRM site.
+- **On leave today** (people who can see the Overview): "On leave today: Anu Varghese (until
+  Wed 14 Oct), Biju Thomas (half day)", from HD Leave (`work_calendar.leave_today`). Only
+  dates, never the leave type. See
+  [tbo-crm-integration.md](tbo-crm-integration.md#approved-leave).
 
 ## Follow-ups strip (`follow_ups`)
 

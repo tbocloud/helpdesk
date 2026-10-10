@@ -147,6 +147,7 @@
 </template>
 
 <script setup lang="ts">
+import { useOnLeave } from "@/composables/onLeave";
 import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
 import {
@@ -266,6 +267,7 @@ const assignable = createResource({
 const assignableUsers = computed(
   () => (assignable.data ?? []) as { name: string; full_name?: string }[]
 );
+const { leaveLabel } = useOnLeave();
 
 const memberIds = computed(() => new Set(members.value.map((m) => m.user)));
 
@@ -276,7 +278,7 @@ const assigneeOptions = computed(() => {
   const toOption = (u: { name: string; full_name?: string }) => ({
     label: u.full_name || u.name,
     value: u.name,
-    description: u.name,
+    description: leaveLabel(u.name) || u.name,
   });
   const team = assignableUsers.value.filter((u) => memberIds.value.has(u.name));
   const others = assignableUsers.value.filter(

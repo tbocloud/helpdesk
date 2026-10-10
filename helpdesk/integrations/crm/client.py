@@ -14,6 +14,10 @@ class CRMError(Exception):
     """The CRM site is unreachable, refused the key, or rejected a request."""
 
 
+class CRMPermissionError(CRMError):
+    """The CRM site's API user may not read or change this (HTTP 403)."""
+
+
 class CRMClient:
     def __init__(self, site_url: str, api_key: str, api_secret: str):
         self.base = site_url.rstrip("/")
@@ -45,7 +49,8 @@ class CRMClient:
         if response.status_code == 404:
             return None
         if response.status_code in (401, 403):
-            raise CRMError(
+            error = CRMPermissionError if response.status_code == 403 else CRMError
+            raise error(
                 _("The CRM site refused the API key ({0}).").format(
                     response.status_code
                 )
@@ -246,6 +251,53 @@ class CRMClient:
         return self.get_list(
             "Sales Invoice",
             ["name", "docstatus", "status", "grand_total", "outstanding_amount"],
+            [["name", "in", names]],
+        )
+
+    # --- ERPNext on the CRM site, for holidays and leave (read only) ---
+
+    def holiday_lists(self) -> list[dict]:
+        return self.get_list("Holiday List", ["name", "from_date", "to_date"])
+
+    def company_holiday_lists(self) -> list[dict]:
+        """Each company with its default holiday list."""
+        return self.get_list("Company", ["name", "default_holiday_list"])
+
+    def holidays(self, holiday_list: str) -> list[dict]:
+        """The rows of a Holiday List: holiday_date, description, weekly_off."""
+        doc = self.get_doc("Holiday List", holiday_list)
+        if doc is None:
+            raise CRMError(
+                _("There's no holiday list {0} on the CRM site.").format(holiday_list)
+            )
+        return doc.get("holidays") or []
+
+    def approved_leave(self, start, end) -> list[dict]:
+        """Approved, submitted Leave Applications overlapping `start` to `end`."""
+        return self.get_list(
+            "Leave Application",
+            [
+                "name",
+                "employee",
+                "employee_name",
+                "from_date",
+                "to_date",
+                "half_day",
+                "half_day_date",
+                "leave_type",
+            ],
+            [
+                ["status", "=", "Approved"],
+                ["docstatus", "=", 1],
+                ["to_date", ">=", str(start)],
+                ["from_date", "<=", str(end)],
+            ],
+        )
+
+    def employees(self, names: list[str]) -> list[dict]:
+        return self.get_list(
+            "Employee",
+            ["name", "user_id", "company_email", "prefered_email"],
             [["name", "in", names]],
         )
 

@@ -53,6 +53,7 @@ from helpdesk.tasky.permissions import (
     is_tasky_admin,
 )
 from helpdesk.utils import agent_only
+from helpdesk.work_calendar import leave_today, next_holiday
 
 LIST_LIMIT = 8
 CUSTOMER_LIMIT = 6
@@ -111,6 +112,7 @@ def get_home() -> dict:
         "mine": {"counts": mine["counts"], "items": mine["items"][:LIST_LIMIT]},
         "day": day,
         "follow_ups": summary_for(frappe.session.user),
+        "calendar": _calendar(company),
         "company": _company(portfolio) if company else None,
         "systems": _systems() if is_tasky_admin() else None,
     }
@@ -133,6 +135,25 @@ def get_action_plan(refresh: bool = False) -> dict:
     if day is None:
         day = _day(get_my_work()["items"])
     return home_plan.action_plan(user, day, refresh=bool(refresh))
+
+
+def _calendar(company: bool) -> dict:
+    """The next holiday, and for people who run work who is on leave today."""
+    holiday = next_holiday()
+    away = leave_today() if company else {}
+    names = user_full_names(set(away))
+    return {
+        "next_holiday": {**holiday, "date": str(holiday["date"])} if holiday else None,
+        "on_leave_today": sorted(
+            (
+                {"user": user, "full_name": names.get(user) or user, **leave}
+                for user, leave in away.items()
+            ),
+            key=lambda row: row["full_name"],
+        )
+        if company
+        else None,
+    }
 
 
 # --- your day ---

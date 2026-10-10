@@ -15,6 +15,7 @@ from helpdesk.test_utils import (
     make_assigned_ticket,
     make_assignment,
     make_department,
+    make_hd_leave,
     make_project,
     make_task,
     make_tasky_user,
@@ -363,6 +364,67 @@ class TestTicketRules(FollowUpCase):
         self.assertEqual(
             self.found(ticket, follow_up_context(customer_follow_up_email=1)), []
         )
+
+
+class TestLeave(FollowUpCase):
+    """Approved leave (HD Leave, synced from the CRM site): nobody on leave is nudged or
+    escalated to; when the assignee is away, who covers for them hears instead."""
+
+    def test_assignee_on_leave_goes_straight_to_the_assigner_and_lead(self):
+        make_hd_leave(DEV[0], "2026-10-12", "2026-10-14")
+        task = self.task("Send invoice", "2026-10-12")
+
+        nudge = self.one(task, "due_today")
+
+        self.assertNotIn(DEV[0], nudge.recipients)
+        self.assertEqual(set(nudge.recipients), {PM[0], LEAD[0]})
+        self.assertIn("Anu Varghese is on leave until Wed 14 Oct", nudge.text)
+        # still the assignee's work, so it counts as theirs
+        self.assertEqual(nudge.owners, [DEV[0]])
+
+    def test_escalation_skips_a_head_on_leave(self):
+        make_hd_leave(HEAD[0], "2026-10-12", "2026-10-12")
+
+        l2 = self.one(self.task("Configure GST", WEDNESDAY), "overdue")
+
+        self.assertEqual(l2.level, 2)
+        self.assertNotIn(HEAD[0], l2.recipients)
+        self.assertIn(DEV[0], l2.recipients)
+        self.assertNotIn("on leave", l2.text)
+
+    def test_ticket_assignee_on_leave_goes_to_the_team_lead(self):
+        make_hd_leave(DEV[0], "2026-10-12", "2026-10-12")
+        ticket = make_assigned_ticket(
+            "Invoice mismatch",
+            DEV[0],
+            sla=None,
+            response_by=None,
+            status_category="Open",
+            first_responded_on=FOLLOW_UP_MONDAY,
+            service_level_agreement_creation=add_to_date(FOLLOW_UP_MONDAY, hours=-5),
+            resolution_by=add_to_date(FOLLOW_UP_MONDAY, hours=5),
+        )
+
+        half = self.one(ticket, "sla")
+
+        self.assertNotIn(DEV[0], half.recipients)
+        self.assertIn(MANAGER[0], half.recipients)
+        self.assertIn("is on leave until", half.text)
+
+    def test_a_half_day_still_counts_as_working(self):
+        make_hd_leave(DEV[0], "2026-10-12", "2026-10-12", half_day=1)
+        task = self.task("Send invoice", "2026-10-12")
+        self.assertEqual(self.one(task, "due_today").recipients, [DEV[0]])
+
+    def test_nobody_on_leave_gets_a_digest(self):
+        make_hd_leave(DEV[0], "2026-10-12", "2026-10-12")
+        self.task("Bank import", WEDNESDAY)
+        with patch.object(follow_ups, "deliver_digest", return_value="chat") as deliver:
+            follow_ups.process(follow_up_context(datetime(2026, 10, 12, 9, 31)))
+
+        people = {c.args[0] for c in deliver.call_args_list}
+        self.assertNotIn(DEV[0], people)
+        self.assertIn(PM[0], people)
 
 
 class TestDelivery(FollowUpCase):

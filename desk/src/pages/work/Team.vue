@@ -236,6 +236,13 @@
                       <div class="truncate font-mono text-xs text-ink-gray-5">
                         {{ person.user }}
                       </div>
+                      <TaskyBadge
+                        v-if="leaveLabel(person.user)"
+                        class="mt-1"
+                        tone="info"
+                        :icon="LucideTreePalm"
+                        :label="leaveLabel(person.user)"
+                      />
                     </div>
                     <LucideChevronRight
                       class="size-4 shrink-0 text-ink-gray-4 xl:hidden"
@@ -246,7 +253,7 @@
                   <!-- Working on -->
                   <div class="min-w-0">
                     <TaskyBadge
-                      v-if="isFree(person)"
+                      v-if="isFree(person) && !leaveLabel(person.user)"
                       tone="success"
                       :icon="LucideCoffee"
                       :label="__('Free')"
@@ -471,8 +478,10 @@ import LucideFolderKanban from "~icons/lucide/folder-kanban";
 import LucideGauge from "~icons/lucide/gauge";
 import LucidePause from "~icons/lucide/pause";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
+import LucideTreePalm from "~icons/lucide/tree-palm";
 import LucideUsers from "~icons/lucide/users";
 import LucideX from "~icons/lucide/x";
+import { useOnLeave } from "@/composables/onLeave";
 import CapacityPlanner from "./components/CapacityPlanner.vue";
 import ProjectPortfolio from "./components/ProjectPortfolio.vue";
 
@@ -557,6 +566,7 @@ const GRID =
 
 const route = useRoute();
 const router = useRouter();
+const { leaveLabel } = useOnLeave();
 const tableId = `team-people-${useId()}`;
 
 function queryValue(key: string) {

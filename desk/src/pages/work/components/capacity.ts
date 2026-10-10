@@ -21,8 +21,11 @@ export interface PersonCapacity extends Load {
   user: string;
   full_name: string;
   free: number;
+  /** working days of approved leave in the window (a half day counts 0.5) */
+  leave_days: number;
   weeks: (Load & { start: string })[];
-  days: (Load & { date: string })[];
+  /** leave: 1, or 0.5 for a half day; its hours are taken off `available` */
+  days: (Load & { date: string; leave: number })[];
   /** project null: work on projects the viewer doesn't run */
   projects: { project: string | null; project_name: string | null; hours: number }[];
   tasks: {
