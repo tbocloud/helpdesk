@@ -256,3 +256,75 @@ kbd {
 [role="tablist"] .bg-surface-gray-10 {
   background-color: var(--brand);
 }
+
+/*
+ * Touch targets (ui-guidelines §16): on phones and touch screens every control
+ * is at least 44×44px to tap. Desktop pointers keep the dense sizes. Keep the
+ * query in step with TOUCH_TARGET_QUERY in composables/screen.ts.
+ *
+ * - Buttons, links, tabs, menu items, options and labels wrapping a checkbox or
+ *   radio grow to 44px. :where() keeps
+ *   the rule at zero specificity, so a utility such as min-h-0 still opts out.
+ * - Checkboxes, radios and switches keep their drawn size; an invisible ::after
+ *   centred on them takes the taps. Add `touch-target` to any other control
+ *   that must stay small inside a dense card, and keep 8px or more around it.
+ */
+@media (max-width: 639.98px), (pointer: coarse) {
+  :where(
+      button,
+      a[href],
+      summary,
+      select,
+      [role="button"],
+      [role="tab"],
+      [role="menuitem"],
+      [role="menuitemcheckbox"],
+      [role="menuitemradio"],
+      [role="option"],
+      label:has(> input[type="checkbox"], > input[type="radio"])
+    ):where(
+      :not(
+          .touch-target,
+          .sr-only,
+          [role="switch"],
+          [role="checkbox"],
+          [role="radio"]
+        )
+    ) {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  :where(
+      input[type="checkbox"],
+      input[type="radio"],
+      [role="switch"],
+      [role="checkbox"],
+      [role="radio"],
+      .touch-target
+    ) {
+    position: relative;
+  }
+  :where(
+      input[type="checkbox"],
+      input[type="radio"],
+      [role="switch"],
+      [role="checkbox"],
+      [role="radio"],
+      .touch-target
+    )::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+    transform: translate(-50%, -50%);
+  }
+
+  [data-slot="sidebar-item"],
+  [data-slot="sidebar"] [data-slot="sidebar-item"] {
+    height: auto;
+    min-height: 44px;
+  }
+}

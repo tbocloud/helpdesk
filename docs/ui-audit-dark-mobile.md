@@ -74,5 +74,59 @@ changes. All five chart components use it.
 | Holiday calendar (settings) | Day details open on hover, in a 320px-wide popover | Left (P2): desktop settings screen; clicking a day still edits it |
 | Editor tables (`tiptap-extensions.ts`) | Inline `#d1d5db` borders | Left: the HTML goes out in emails, so it has to carry its own colours |
 | `components/desk/global/CustomIcons.vue` | Hard-coded SVG colours | Left: the file isn't imported anywhere (dead code; remove it in a separate change) |
-| frappe-ui `Button` (`sm`, 28px) | Most page and dialog actions are under 44px on phones | Left (P1): raising every button needs a project-wide decision; the composer, capacity planner, recurring dialog and settings picker already use 44px on phones |
+| frappe-ui `Button` (`sm`, 28px) | Most page and dialog actions are under 44px on phones | Fixed: see "44px touch targets" below |
 | Support hours page, customer Support hours tab, Settings → CRM | Checked only, not edited (another change in progress): phone layouts and responsive grids are already in place | No issues found |
+
+## 44px touch targets (resolved)
+
+**Decision (owner, 2026-10-10):** every control in the app and the portals has a hit area of
+at least 44×44px on phones and touch screens. Desktop pointers keep the dense sizes.
+
+**When:** `(max-width: 639.98px), (pointer: coarse)`, so phones, and tablets used by touch at
+any width. The query lives in `desk/src/theme.css`, `TOUCH_TARGET_QUERY` in
+`composables/screen.ts` (for script) and `helpdesk/templates/portal_base.html`.
+
+**How (one rule, no per-page sizes):**
+
+- **Grow.** Buttons (frappe-ui `Button`, `NativeButton`, plain `<button>`), links laid out as
+  blocks, tabs, menu items, options, `<select>`, `<summary>` and labels that wrap a checkbox or
+  radio get `min-height` and `min-width` 44px. The rule sits in `:where()`, so it has no
+  specificity and a utility such as `min-h-0` still opts a control out. Inline links in running
+  text aren't affected (min sizes don't apply to inline boxes).
+- **Expand without moving.** Checkboxes, radios and switches keep their drawn size, and an
+  invisible `::after` centred on them takes the taps. The `touch-target` class does the same
+  for any other control that must stay small inside a dense card.
+- **Rows.** List rows (`ListViewBuilder`) are 44px on touch, so row checkboxes' hit areas
+  don't overlap. Sidebar items are 44px.
+- **No overlap.** Grown controls are real boxes, so they can't overlap. `touch-target` is used
+  only in a strip with nothing else to tap (the Kanban hold and timer strips), or on a control
+  that sits on top of a larger one (an input's clear button, a photo's remove badge).
+
+Checked in the built CSS with headless Chromium and WebKit at 360px (touch) and 1280px (mouse):
+icon buttons 28px → 44px on touch and 28px on desktop, `min-h-0` opt-out still 28px, a
+`touch-target` button stays 24px and takes taps 18px above its centre, checkbox 14px with a
+44px tap area, no horizontal scroll at 360px. Real screens weren't rendered (no site).
+
+| Screen | What changed |
+| --- | --- |
+| Sidebar, mobile header | Sidebar items 44px tall; the menu button 44px |
+| Home, Overview | Tiles were already 44px or more. "See all" links, section actions and row menus grow to 44px |
+| Scoreboard | No file changes; its links and buttons grow through the theme rule |
+| My Work | Task rows, timer and row-menu buttons grow to 44px |
+| Board (Kanban) | Card "…" menus grow to 44px. The play, pause and resume buttons in the hold and timer strips keep their 24px look and get a 44px `touch-target` |
+| Checklist | "Generate checklist" and "Clear filter" buttons: per-file `min-h-11 … md:min-h-0` classes removed; the theme rule now covers them, on touch tablets too |
+| Timeline | Buttons and links grow through the theme rule |
+| Files | Comment, preview and file-menu buttons: per-file classes removed, theme rule instead. The download link was already 44px |
+| Tickets list | List rows 44px on touch; the phone's stacked rows are links that grow to 44px; view controls grow |
+| Ticket detail | Header actions, composer and activity buttons grow (the composer was already 44px) |
+| Settings | Nav items and every button grow. SLA, SLA-holiday and holiday radios get a 44px tap area; their no-op `:checked::after` rules were removed, because on touch they would have painted a 44px square over the radio. Chip lists grow with their remove buttons (`min-h-7` instead of `h-7`). The profile photo's remove badge and the clear buttons in the assignee search and multi-select inputs keep their size with `touch-target` |
+| Dialogs | frappe-ui close buttons and actions grow. Move-to-folder radios (label rule), mention options and comment edit/delete buttons lost their per-file classes. Post dialog image download/remove buttons grow; the add-option chip grows while editing (`min-h-7`) |
+| Customer portal (`/helpdesk/my-tickets`) | Same theme rule as the agent app |
+| Content calendar (app) | Chips, view toggles and post actions grow through the theme rule |
+| Content portal (`/content-portal`) | `.btn`, `.chip`, `.select`, `.input`, `.link-btn`, `.check` and the image viewer arrows are 44px; filter chips 8px apart on touch |
+| Project sign-off (`/project-signoff`) | Same portal rule; its choices and sign-off button were already 44px |
+
+**Left:** two small controls sit on top of a larger one, so their tap areas overlap it by
+design, with the small one on top: the profile photo's remove badge (on the "change photo"
+button) and the clear buttons inside the assignee search and multi-select inputs. The build's CSS minifier warns
+about a nested `li` rule; that comes from existing CSS, not this change.

@@ -9,7 +9,6 @@
       <template #actions>
         <Button
           v-if="canManage"
-          class="min-h-11 min-w-11 md:min-h-0 md:min-w-0"
           :label="__('Generate checklist')"
           @click="showChecklistModal = true"
         >
@@ -74,7 +73,6 @@
             <span aria-hidden="true">·</span>
             <Button
               variant="ghost"
-              class="min-h-11 md:min-h-0"
               :label="__('Clear filter')"
               @click="clearFilter"
             />

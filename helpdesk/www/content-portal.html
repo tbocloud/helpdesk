@@ -330,6 +330,12 @@ _("Content Calendar") }}{% endblock %} {% block style %}
     margin-top: 14px;
   }
 
+  /* 44px chips (portal_base.html) keep 8px apart on touch */
+  @media (max-width: 639.98px), (pointer: coarse) {
+    .chips {
+      gap: 8px;
+    }
+  }
   @media (max-width: 720px) {
     .tiles {
       grid-template-columns: repeat(2, minmax(0, 1fr));
