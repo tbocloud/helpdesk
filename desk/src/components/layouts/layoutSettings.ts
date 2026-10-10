@@ -74,7 +74,7 @@ export const agentPortalSidebarOptions = [
     to: "TicketsAgent",
     section: "Workspace",
     countKey: "tickets",
-    adminOnly: true,
+    ticketWorkersOnly: true,
   },
   {
     label: __("Projects"),

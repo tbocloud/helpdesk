@@ -95,14 +95,14 @@ const navigationItems = computed(() => {
         params: { ticketId: query.value.slice(1) },
       },
     });
-  } else if (authStore.isAdmin) {
+  } else if (authStore.canWorkTickets) {
     items.push({
       title: __("Tickets"),
       icon: () => h(LucideTicket),
       route: { name: "TicketsAgent" },
     });
   }
-  if (!authStore.isDepartmentEmployee)
+  if (!authStore.isDmEmployee)
     items.push({
       title: __("Knowledge Base"),
       icon: () => h(LucideBookOpen),

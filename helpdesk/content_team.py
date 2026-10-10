@@ -46,22 +46,36 @@ def is_content_only(user: str | None = None) -> bool:
     return CONTENT_TEAM_ROLE in roles and not roles & set(FULL_ACCESS_ROLES)
 
 
-def is_department_employee(user: str | None = None) -> bool:
-    """A DM or ERP Employee: tickets, customers, contacts, templates, the knowledge
-    base, support hours and the customer report are hidden from them. System Managers
-    and Agent Managers keep everything, as with the department walls."""
+def is_dm_employee(user: str | None = None) -> bool:
+    """A DM Employee: tickets, customers, contacts, templates, the knowledge base,
+    support hours and the customer report are hidden from them. System Managers and
+    Agent Managers keep everything, as with the department walls. ERP Employees work
+    tickets like any agent (`can_work_tickets`)."""
     from helpdesk.tasky.permissions import is_tasky_admin
 
     user = user or frappe.session.user
     if is_tasky_admin(user):
         return False
-    return bool({DM_EMPLOYEE_ROLE, ERP_EMPLOYEE_ROLE} & set(frappe.get_roles(user)))
+    return DM_EMPLOYEE_ROLE in frappe.get_roles(user)
 
 
 def sees_no_tickets(user: str | None = None) -> bool:
-    """Writers and designers (Content Team) and DM / ERP Employees work on projects and
+    """Writers and designers (Content Team) and DM Employees work on projects and
     content, not tickets; the tickets they raised stay theirs."""
-    return is_content_only(user) or is_department_employee(user)
+    return is_content_only(user) or is_dm_employee(user)
+
+
+def can_work_tickets(user: str | None = None) -> bool:
+    """Gets the Tickets list, New ticket and the command palette's Tickets entry: System
+    Managers, Agent Managers and the ERP team. Which tickets they see is the usual agent
+    permission (HD Ticket `permission_query`); other agents still open a ticket they can
+    read, from a link."""
+    from helpdesk.tasky.permissions import is_tasky_admin
+
+    user = user or frappe.session.user
+    if is_tasky_admin(user):
+        return True
+    return ERP_EMPLOYEE_ROLE in frappe.get_roles(user) and not sees_no_tickets(user)
 
 
 def is_erp_only(user: str | None = None) -> bool:

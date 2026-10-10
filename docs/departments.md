@@ -32,10 +32,10 @@ the matching categories go to them.
 Two roles (created on install and migrate by `content_team.ensure_role()`, given to agents) keep
 each team out of the other's department:
 
-| Role | Never sees |
-| --- | --- |
-| **DM Employee** | the **ERP** department |
-| **ERP Employee** | the **Digital** department, the content calendar (even with a content role) and the work Calendar |
+| Role | Never sees | Tickets |
+| --- | --- | --- |
+| **DM Employee** | the **ERP** department, and the support pages: Tickets, Customers, Contacts, Templates, Knowledge base, Support hours, Customer report | only tickets they raised |
+| **ERP Employee** | the **Digital** department, the content calendar (even with a content role) and the work Calendar | works tickets like any agent, with the Tickets list ([Tickets list](#tickets-list)) |
 
 The content calendar is opt-in for everyone else too: only the content team sees it, so a plain
 agent with neither role (an ERP consultant, a developer) doesn't see it either; see
@@ -72,13 +72,20 @@ both teams see every department, so they can compete ([team-dashboard.md](team-d
   (`HDContentPost.task_people`); and the sidebar hides the work Calendar, whose route
   (`WorkCalendar`) goes to Home (`ERP_EMPLOYEE_HIDDEN_ROUTES` in `pages/content/contentTeam.ts`,
   `authStore.isErpOnly`).
-- **Support pages hidden from both** (`content_team.is_department_employee()`, false for System
-  Managers and Agent Managers; `authStore.isDepartmentEmployee`): Support hours, Tickets,
-  Customers, Contacts, Templates, Knowledge base and Customer report leave the sidebar, and their
-  routes (`DEPARTMENT_EMPLOYEE_HIDDEN_ROUTES` in `pages/content/contentTeam.ts`, including single
-  tickets, customers, contacts and articles) send them to Home; the command palette drops
-  Knowledge Base. Tickets are also hidden on the server: `sees_no_tickets()` gives them the same
-  ticket visibility as the Content Team (only tickets they raised themselves).
+- **Support pages hidden from DM Employees** (`content_team.is_dm_employee()`, false for System
+  Managers and Agent Managers; `authStore.isDmEmployee`): Support hours, Tickets, Customers,
+  Contacts, Templates, Knowledge base and Customer report leave the sidebar, and their routes
+  (`DM_EMPLOYEE_HIDDEN_ROUTES` in `pages/content/contentTeam.ts`, including single tickets,
+  customers, contacts and articles) send them to Home; the command palette drops Knowledge Base.
+  Tickets are also hidden on the server: `sees_no_tickets()` gives them the same ticket
+  visibility as the Content Team (only tickets they raised themselves). Someone holding both
+  walls counts as a DM Employee here.
+- **ERP Employees work tickets** (owner, 2026-10-10: "Tickets must be visible for all ERP team
+  members"): they keep Customers, Contacts, Templates and the Knowledge base like any agent,
+  get the Tickets list ([below](#tickets-list)), and on the server see the tickets any agent
+  would (`sees_no_tickets()` is false, so HD Ticket's `permission_query` and `has_permission`
+  apply the usual team and assignment rules, never more). Support hours and the Customer
+  report follow the usual rule too: Agent Managers and project managers only.
 - **Inside a project they can see**, DM and ERP Employees, like every member who doesn't run
   it, see only their own tasks (assigned to them, given out by them or created by them); the
   Digital Marketing Head and DM Coordinators see every task of content calendar and Digital
@@ -96,21 +103,32 @@ both teams see every department, so they can compete ([team-dashboard.md](team-d
   Settings → Departments turns its wall off until `HIDDEN_DEPARTMENTS` is updated. Projects with
   no department aren't walled, so set each project's department for the walls to apply.
 
-## Admin-only Tickets list
+## Tickets list
 
-Separately from the walls, the Tickets list is for System Managers (`authStore.isAdmin`, the
-`is_admin` flag from `helpdesk/api/auth.py`: System Manager or Administrator). Every other
-agent is affected, including Agent Managers, not only DM and ERP Employees:
+Separately from the walls, the Tickets list is for the people who work tickets:
+`content_team.can_work_tickets()`, sent in the boot as `can_work_tickets`
+(`authStore.canWorkTickets`). That is System Managers, Agent Managers and ERP Employees (unless
+they also hold DM Employee, or only do content). Every other agent, a developer with no wall
+for example, doesn't get it:
 
-- the **Tickets** sidebar item is `adminOnly` (`layoutSettings.ts`, filtered in `AppSidebar.vue`);
+- the **Tickets** sidebar item is `ticketWorkersOnly` (`layoutSettings.ts`, filtered in
+  `AppSidebar.vue`);
 - the `TicketsAgent` (`/tickets`) and `TicketAgentNew` routes send everyone else to Home
   (`beforeEnter` in `desk/src/router/index.ts`);
 - the command palette's **Tickets** entry is shown only to them (`CP.vue`). Typing `#<id>`
   still jumps to a ticket.
 
-This only hides the pages. A single ticket (`/tickets/:ticketId`) still opens for any agent who
-can read it (DM and ERP Employees excepted, as above), and ticket permissions on the server
-are unchanged.
+| Who | Tickets list and New ticket | Which tickets (server) |
+| --- | --- | --- |
+| Administrator | yes | all |
+| System Manager, Agent Manager | yes | what their agent permissions allow |
+| ERP Employee | yes | what any agent sees (teams, assignment) |
+| Other agents (no wall) | no | what any agent sees; a ticket opens from a link |
+| DM Employee, Content Team | no | only tickets they raised |
+
+The list gate only hides pages; which tickets someone sees is always HD Ticket's
+`permission_query` and `has_permission`. Home and My Work list the tickets assigned to a person
+through the same permissions, so they show up for the ERP team too.
 
 ## Data model
 

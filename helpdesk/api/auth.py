@@ -3,9 +3,10 @@ import frappe
 from helpdesk.api.work import can_see_overview
 from helpdesk.content_team import (
     can_edit_content,
+    can_work_tickets,
     in_content_team,
     is_content_only,
-    is_department_employee,
+    is_dm_employee,
     is_dm_head,
     is_erp_only,
 )
@@ -85,8 +86,10 @@ def get_user():
         "in_content_team": in_content_team(current_user),
         # ERP Employees: no work Calendar either (and no Digital department, server side)
         "is_erp_only": is_erp_only(current_user),
-        # DM / ERP Employees: no tickets, customers, contacts, templates, KB or reports
-        "is_department_employee": is_department_employee(current_user),
+        # DM Employees: no tickets, customers, contacts, templates, KB or reports
+        "is_dm_employee": is_dm_employee(current_user),
+        # the Tickets list and New ticket: System / Agent Managers and the ERP team
+        "can_work_tickets": can_work_tickets(current_user),
         # lets the frontend skip call-integration checks when telephony isn't installed
         "telephony_installed": "telephony" in frappe.get_installed_apps(),
         "user_image": user_image,
