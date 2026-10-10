@@ -186,7 +186,8 @@ gives the same two roles write access):
 
 - **Enabled** in the header; Save in the header (see [settings-ui.md](settings-ui.md)).
 - **Delivery**: digest times, the plan in the first digest, breaches outside working hours,
-  where messages go now (chat or email), and **Send me a test digest** (`send_test_digest`:
+  where messages go now (chat or email) with a link to **Settings → Chat & Teams**
+  ([settings-ui.md](settings-ui.md#chat--teams)), and **Send me a test digest** (`send_test_digest`:
   today's digest for the caller only, to the caller only).
 - **Escalation ladder**: the three days and the key-task switch.
 - **Task rules** and **Ticket rules**: a switch per rule and its threshold; the support
@@ -233,7 +234,7 @@ Existing sites get the defaults stored by the patch `v16_0_2.seed_follow_up_sett
 
 ## After deploy
 
-- **Teams**: HD Chat Settings → enabled, platform Microsoft Teams, the *Direct Message
+- **Teams**: Settings → Chat & Teams (HD Chat Settings) → enabled, platform Microsoft Teams, the *Direct Message
   Workflow URL* (one workflow for everyone; it receives the recipient's email) and the
   *Escalation Channel Workflow URL*. Without the direct-message workflow, digests and pings
   go by email. People are matched by their user email.

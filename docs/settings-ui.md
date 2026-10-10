@@ -101,8 +101,49 @@ Telephony providers and pending invites.
 | Sign-off templates | List (inactive greyed, question count) and an editor sub-page with Active, Back and Save in the header. See [project-signoff.md](project-signoff.md). |
 | Content, Tasks, File storage, CRM | TBO pages; sections of `SettingRow`s, Save in the header, load errors with Try again. See [content-calendar.md](content-calendar.md), [ai-task-descriptions.md](ai-task-descriptions.md), [project-files.md](project-files.md), [tbo-crm-integration.md](tbo-crm-integration.md). Tasks also has the Support hours section (email the customer when their hours run low; [support-contracts.md](support-contracts.md)). CRM also has the Invoicing section, whose pickers are read live from the CRM site and checked on save ([timesheet-invoicing.md](timesheet-invoicing.md)). |
 | Follow-ups | System Managers and Agent Managers. Enabled in the header; Delivery (digest times, Send me a test digest), Escalation ladder, Task rules and Ticket rules (a switch and threshold per rule), Customer follow-up, Working hours (read from the default SLA) and a Preview of each person's digest. See [follow-ups.md](follow-ups.md). |
+| Chat & Teams | System Managers and Agent Managers. Every HD Chat Settings field; secrets masked, with Send me a test and Send a test to the channel. See [Chat & Teams](#chat--teams) below. |
 | Telephony | Default medium, then Twilio and Exotel as list rows that open their sub-pages. |
 | ERPNext | Enable switch, in-sync / sync-needed status (success or warning soft panel, with icon). |
+
+## Chat & Teams
+
+`desk/src/components/Settings/Chat/` (`ChatSettings.vue`, `SecretField.vue`, `SendTest.vue`),
+backed by `helpdesk.api.chat_settings`, which checks for System Manager or Agent Manager
+itself and saves HD Chat Settings with `ignore_permissions` (the doctype stays writable by
+System Managers only). No new storage: it is the same Single the desk form edits.
+
+- **Header**: Enabled switch and Save changes.
+- **Delivery**: platform (Microsoft Teams or Slack) and *Email people who can't be reached
+  in chat*.
+- **Microsoft Teams** (Teams only): Direct Message Workflow URL and Escalation Channel
+  Workflow URL. **Slack** (Slack only): Bot Token and Escalation Channel ID.
+- **Error alerts**: post hub errors to the escalation channel, and the titles to ignore.
+- **Last delivery problem**: shown only when the Error Log has a chat delivery failure
+  (`error_alerts.CHAT_ERROR_TITLES`); its title and time, never the traceback, which can
+  hold the URL.
+- **Creating the Teams workflows** (Teams only): the two templates, *Who can trigger the
+  flow* = Anyone, Recipient = `triggerBody()?['recipient']`, and the payload
+  `chat_notifications.teams_message` posts (plus `recipient` for direct messages).
+
+**Secrets** (the bot token and both workflow URLs; a workflow URL carries its `&sig=` key):
+once saved they never go back to the browser. `get_settings` returns
+`secrets[field] = {set, masked}`, the mask being the URL's scheme and host or the token's
+`xoxb-` prefix. A saved secret shows masked with **Replace** (an input with Cancel) and, for
+the two optional URLs, **Remove** (Undo until saved). `save_settings(values)` keeps a
+secret whose key isn't sent (or is null), stores a sent value trimmed, and removes it for
+"". The URLs are checked by `HDChatSettings.validate` (`teams_url_problem`); its message
+starts with the field's label, so the page shows it under that field as well as in a toast.
+
+**Send a test** (`send_test(target)`, POST, `direct` or `channel`): uses the saved settings,
+so the buttons are disabled while the page has unsaved changes. It returns `{ok, message}`:
+sent, not set up yet ("add it, save, then test again"), or the platform's error with a hint
+(`chat_notifications.describe_error` / `error_hint`: Teams HTTP 401/403/404/405, Slack
+`invalid_auth`, `not_in_channel`, `missing_scope`…). A network error shows only its kind,
+since its text can hold the URL. The desk form's *Send test message*
+(`chat_notifications.send_test_message`) uses the same wording. Tests:
+`helpdesk/tests/test_chat_settings.py`.
+
+Settings → Follow-ups links here from its Delivery section ("Where do messages go?").
 
 ## Copy
 

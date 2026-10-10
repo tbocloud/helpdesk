@@ -1415,6 +1415,13 @@ def enable_chat_notifications(platform: str = "Microsoft Teams", **settings):
     return doc
 
 
+def get_chat_secret(fieldname: str) -> str | None:
+    """The stored (decrypted) value of a Password field in HD Chat Settings, or None."""
+    return frappe.get_doc("HD Chat Settings").get_password(
+        fieldname, raise_exception=False
+    )
+
+
 def make_error_log(title: str, at=None):
     """Creates an Error Log entry titled `title`, logged at `at` (default: now)."""
     doc = frappe.get_doc(

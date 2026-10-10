@@ -67,6 +67,20 @@
           >
             <Switch :id="id" v-model="form.breach_pings_outside_hours" />
           </SettingRow>
+          <p
+            class="flex flex-wrap items-center gap-1 text-p-sm text-ink-gray-6"
+          >
+            {{ __("Where do messages go?") }}
+            <Button
+              variant="ghost"
+              :label="__('Chat & Teams')"
+              @click="setActiveSettingsTab('Chat & Teams')"
+            >
+              <template #suffix>
+                <LucideArrowRight class="size-4" aria-hidden="true" />
+              </template>
+            </Button>
+          </p>
         </SettingsSection>
 
         <SettingsSection
@@ -378,6 +392,7 @@ import type { Tone } from "@/components/tone";
 import { __ } from "@/translation";
 import { Button, createResource, FormControl, Switch, toast } from "frappe-ui";
 import { computed, ref } from "vue";
+import LucideArrowRight from "~icons/lucide/arrow-right";
 import LucideChevronRight from "~icons/lucide/chevron-right";
 import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
@@ -587,7 +602,7 @@ const chatLine = computed(() => {
   const chat = data.value?.chat;
   if (!chat?.enabled)
     return __(
-      "Chat isn't switched on (HD Chat Settings), so digests and pings go by email."
+      "Chat isn't switched on (Chat & Teams), so digests and pings go by email."
     );
   if (!chat.direct_messages)
     return __(
