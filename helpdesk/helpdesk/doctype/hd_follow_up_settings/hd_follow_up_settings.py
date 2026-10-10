@@ -6,6 +6,7 @@ import re
 import frappe
 from frappe import _
 from frappe.model.document import Document
+from frappe.utils import cint
 
 TIME_PATTERN = re.compile(r"^([01]?\d|2[0-3]):([0-5]\d)$")
 POSITIVE_FIELDS = (
@@ -29,7 +30,7 @@ class HDFollowUpSettings(Document):
     def validate_digest_times(self):
         """Stored as "09:30, 15:30", sorted and without repeats."""
         times = self.parse_digest_times(self.digest_times)
-        if times is None:
+        if not times:
             frappe.throw(
                 _(
                     "Write the digest times as 24-hour times separated by commas, e.g. 09:30, 15:30."
@@ -38,8 +39,12 @@ class HDFollowUpSettings(Document):
         self.digest_times = ", ".join(times)
 
     def validate_ladder(self):
-        days = [self.ladder_l1_days, self.ladder_l2_days, self.ladder_l3_days]
-        if any((d or 0) < 1 for d in days) or days != sorted(days):
+        days = [
+            cint(self.ladder_l1_days),
+            cint(self.ladder_l2_days),
+            cint(self.ladder_l3_days),
+        ]
+        if days[0] < 1 or days != sorted(days):
             frappe.throw(
                 _(
                     "The ladder's days must be 1 or more, and each step at least as late as the one before."
@@ -48,7 +53,7 @@ class HDFollowUpSettings(Document):
 
     def validate_thresholds(self):
         for fieldname in POSITIVE_FIELDS:
-            if (self.get(fieldname) or 0) < 1:
+            if cint(self.get(fieldname)) < 1:
                 frappe.throw(
                     _("{0} must be 1 or more.").format(
                         _(self.meta.get_label(fieldname))
@@ -56,7 +61,7 @@ class HDFollowUpSettings(Document):
                 )
 
     def validate_sla_warnings(self):
-        first, second = self.sla_first_warning or 0, self.sla_second_warning or 0
+        first, second = cint(self.sla_first_warning), cint(self.sla_second_warning)
         if not 1 <= first < second <= 99:
             frappe.throw(
                 _(
