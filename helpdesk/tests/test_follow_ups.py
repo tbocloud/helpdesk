@@ -589,8 +589,9 @@ class TestSettingsAccess(FollowUpCase):
             set_follow_up_settings(afternoon_nudge_at="9:05:00").afternoon_nudge_at,
             "09:05",
         )
-        with self.assertRaises(frappe.ValidationError):
-            set_follow_up_settings(afternoon_nudge_at="after lunch")
+        for wrong in ("after lunch", "14:00:99", "14:00:00:00"):
+            with self.assertRaises(frappe.ValidationError):
+                set_follow_up_settings(afternoon_nudge_at=wrong)
 
     def test_the_ladder_must_climb(self):
         with self.assertRaises(frappe.ValidationError):
