@@ -6,7 +6,9 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from helpdesk import team_dashboard as td
+from helpdesk.api import departments
 from helpdesk.content_team import ensure_role
+from helpdesk.tasky.permissions import department_heads
 from helpdesk.test_utils import (
     call_team_dashboard,
     get_reminder_messages,
@@ -18,6 +20,7 @@ from helpdesk.test_utils import (
     make_project,
     make_task,
     make_tasky_user,
+    set_department_heads_as,
 )
 
 # a week far from the real calendar, so only this test's records fall in it
@@ -27,6 +30,9 @@ ANU = "anu.menon@tbo-dash.test"
 RAHUL = "rahul.nair@tbo-dash.test"
 DEEPA = "deepa.varma@tbo-dash.test"
 SANA = "sana.dm@tbo-dash.test"
+KIRAN = "kiran.erp@tbo-dash.test"
+MANAGER = "meera.manager@tbo-dash.test"
+DAY = "2031-03-10"
 
 
 def stats(**values) -> dict:
@@ -208,23 +214,39 @@ class TestTeamDashboard(FrappeTestCase):
                 period="week",
             )
 
-    def test_hidden_department_stays_hidden(self):
-        data = call_team_dashboard(SANA, TODAY, period="week")
-        self.assertNotIn("ERP", data["access"]["departments"])
-        self.assertNotIn("ERP", [d["department"] for d in data["departments"]])
-        people = {p["user"]: p for p in data["people"]}
-        self.assertEqual(people.get(ANU, {}).get("tasks", 0), 0)
-        # the whole team's stored history and analysis include ERP
-        self.assertEqual(data["history"], [])
-        self.assertEqual(data["analysis"], {"status": "none"})
-        self.assertRaises(
-            frappe.PermissionError,
-            call_team_dashboard,
-            SANA,
-            TODAY,
-            period="week",
-            department="ERP",
-        )
+    def test_dm_and_erp_see_each_other(self):
+        # the department walls don't apply on the Scoreboard, so the teams can compete
+        make_tasky_user(KIRAN, "Kiran Pillai", ("ERP Employee",))
+        campaign = make_project(
+            "Spice Route Instagram campaign",
+            members=[(SANA, "Developer"), (DEEPA, "Developer")],
+        ).name
+        frappe.db.set_value("Project", campaign, "custom_department", "Digital")
+        make_done_task(campaign, "Onam reel storyboard", SANA, "2031-03-10")
+        with patch("helpdesk.ai_suggestion.is_ai_configured", return_value=False):
+            td.clear_cache()
+            td.close_period("week", *WEEK)
+
+        dm = call_team_dashboard(SANA, TODAY, period="week")
+        self.assertIn("ERP", dm["access"]["departments"])
+        erp = next(d for d in dm["departments"] if d["department"] == "ERP")
+        self.assertEqual(erp["champion"]["user"], ANU)
+        self.assertEqual({p["user"]: p for p in dm["people"]}[ANU]["tasks"], 3)
+        self.assertIn(self.project, [p["project"] for p in dm["projects"]])
+        erp_only = call_team_dashboard(SANA, TODAY, period="week", department="ERP")
+        self.assertEqual(erp_only["summary"]["tasks"], 4)
+
+        erp_view = call_team_dashboard(KIRAN, TODAY, period="week")
+        self.assertIn("Digital", erp_view["access"]["departments"])
+        self.assertIn("Digital", [d["department"] for d in erp_view["departments"]])
+        self.assertEqual({p["user"]: p for p in erp_view["people"]}[SANA]["tasks"], 1)
+        self.assertIn(campaign, [p["project"] for p in erp_view["projects"]])
+        digital = call_team_dashboard(KIRAN, TODAY, period="week", department="Digital")
+        self.assertIn(SANA, [p["user"] for p in digital["people"]])
+
+        # and the whole team's stored champions, ERP included
+        later = call_team_dashboard(SANA, "2031-03-18", period="week")
+        self.assertEqual(later["history"][0]["user"], ANU)
 
     def test_champion_is_kept_and_announced_once(self):
         with patch("helpdesk.ai_suggestion.is_ai_configured", return_value=False):
@@ -245,6 +267,59 @@ class TestTeamDashboard(FrappeTestCase):
         )["history"]
         self.assertEqual(history[0]["user"], ANU)
         self.assertEqual(history[0]["start"], WEEK[0])
+
+    def test_day_champion_and_heads_are_told_once_without_ai(self):
+        make_tasky_user(MANAGER, "Meera Iyer", ("Agent Manager",))
+        set_department_heads_as("Administrator", "ERP", [RAHUL])
+        with (
+            patch("helpdesk.ai_suggestion.is_ai_configured", return_value=True),
+            patch.object(td, "call_haiku") as ai,
+        ):
+            td.clear_cache()
+            td.close_period("today", DAY, DAY)
+            td.close_period("today", DAY, DAY)
+        ai.assert_not_called()
+        erp = frappe.get_doc(
+            "HD Team Champion",
+            {"period_type": "Day", "period_start": DAY, "department": "ERP"},
+        )
+        self.assertEqual(erp.user, ANU)
+        self.assertFalse(erp.analysis)
+        self.assertEqual(len(get_reminder_messages(ANU, erp.name)), 1)
+        told = get_reminder_messages(RAHUL, erp.name)
+        self.assertEqual(len(told), 1)
+        self.assertIn("Anu Menon", told[0])
+        team = frappe.db.get_value(
+            "HD Team Champion",
+            {
+                "period_type": "Day",
+                "period_start": DAY,
+                "department": ("is", "not set"),
+            },
+        )
+        self.assertEqual(len(get_reminder_messages(MANAGER, team)), 1)
+
+    def test_heads_come_from_the_setting_and_the_dm_head_role(self):
+        set_department_heads_as("Administrator", "ERP", [RAHUL, RAHUL])
+        set_department_heads_as("Administrator", "Digital", [ANU])
+        self.assertEqual(department_heads("ERP"), [RAHUL])
+        digital = department_heads("Digital")
+        self.assertLessEqual({ANU, DEEPA}, set(digital))
+        self.assertNotIn(RAHUL, digital)
+        erp = next(d for d in departments.get_departments() if d.name == "ERP")
+        self.assertEqual(erp.heads, [{"user": RAHUL, "full_name": "Rahul Nair"}])
+        self.assertEqual(erp.head_roles, [])
+
+    def test_only_admins_set_heads(self):
+        for user in (RAHUL, DEEPA, SANA):
+            self.assertRaises(
+                frappe.PermissionError,
+                set_department_heads_as,
+                user,
+                "ERP",
+                [user],
+            )
+        self.assertFalse({RAHUL, DEEPA, SANA} & set(department_heads("ERP")))
 
     def test_ai_failure_leaves_the_champion(self):
         with (
