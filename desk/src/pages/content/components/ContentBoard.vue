@@ -275,146 +275,157 @@
         <article
           v-for="post in day.posts"
           :key="post.name"
-          class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
-          :class="entryAccent(post)"
+          class="entry overflow-hidden rounded-[16px] border"
+          :class="`entry-${entryTone(post)}`"
           :aria-labelledby="`client-${post.name} entry-${post.name}`"
         >
-          <header class="flex items-start gap-3 px-4 pt-3">
-            <div class="min-w-0 flex-1">
-              <!-- the client leads, shown even when filtered, so every card says whose it is -->
-              <p
-                class="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5"
+          <header class="flex flex-wrap items-start gap-x-3 gap-y-2 px-4 pt-3">
+            <div class="flex min-w-0 flex-1 basis-72 gap-3">
+              <span
+                class="grid size-10 shrink-0 place-items-center rounded-[10px] border border-outline-gray-2 bg-surface-base text-ink-gray-7 shadow-sm"
+                aria-hidden="true"
               >
-                <span
+                <LucideBuilding2 class="size-[18px]" />
+              </span>
+              <div class="min-w-0 flex-1">
+                <!-- the client leads, shown even when filtered, so every card says whose it is -->
+                <p
                   v-if="post.customer"
                   :id="`client-${post.name}`"
-                  class="max-w-full truncate text-lg font-semibold text-ink-gray-9"
+                  class="truncate text-lg font-semibold text-ink-gray-9"
                   :title="post.customer"
-                  >{{ post.customer }}</span
                 >
-                <span
-                  v-if="post.customer"
-                  class="hidden text-ink-gray-4 sm:inline"
-                  aria-hidden="true"
-                  >·</span
+                  {{ post.customer }}
+                </p>
+                <p
+                  class="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1"
                 >
-                <button
-                  :id="`entry-${post.name}`"
-                  type="button"
-                  class="min-w-0 max-w-full truncate rounded text-left text-base text-ink-gray-7 hover:text-ink-gray-9 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
-                  :title="post.title"
-                  @click="emit('open', post.name)"
-                >
-                  {{ post.title }}
-                </button>
-                <span
-                  v-if="post.format"
-                  class="inline-flex h-5 shrink-0 items-center self-center rounded-md border border-outline-gray-2 px-1.5 text-xs text-ink-gray-7"
-                  >{{ post.format }}</span
-                >
-              </p>
-              <div
-                class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm text-ink-gray-7"
-              >
-                <ul
-                  class="flex flex-wrap items-center gap-x-3 gap-y-1"
-                  :aria-label="__('Platforms')"
-                >
-                  <li
-                    v-for="p in platformsOf(post)"
-                    :key="p"
-                    class="inline-flex items-center gap-1.5"
+                  <button
+                    :id="`entry-${post.name}`"
+                    type="button"
+                    class="min-w-0 max-w-full truncate rounded text-left text-base text-ink-gray-7 hover:text-ink-gray-9 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+                    :title="post.title"
+                    @click="emit('open', post.name)"
                   >
-                    <ChannelIcon :channel="p" class="size-[15px] shrink-0" />{{
-                      __(p)
-                    }}
-                  </li>
-                </ul>
-                <span
-                  class="inline-flex items-center gap-1.5 font-mono tabular-nums"
-                >
-                  <LucideClock
-                    class="size-3.5 shrink-0 text-ink-gray-5"
-                    aria-hidden="true"
-                  /><span class="sr-only">{{ __("Time:") }}</span
-                  ><time :datetime="post.publish_on">{{
-                    dayjs(post.publish_on).format("h:mm A")
-                  }}</time></span
-                >
-                <StatusPill :post="post" />
+                    {{ post.title }}
+                  </button>
+                  <span
+                    v-if="post.format"
+                    class="inline-flex h-5 items-center rounded-[6px] border border-outline-gray-2 bg-surface-base px-1.5 text-xs text-ink-gray-7"
+                    >{{ post.format }}</span
+                  >
+                </p>
                 <SpecialDayBadge
                   v-if="post.special_day"
                   :name="post.special_day"
+                  class="mt-1.5"
                 />
-                <TaskyBadge
+                <p
                   v-if="needsApprovalSoon(post, now)"
-                  tone="warning"
-                  :icon="LucideTriangleAlert"
-                  :label="
-                    __('Goes live within 2 days and isn\'t approved yet.')
-                  "
-                />
+                  class="mt-1.5 inline-flex items-center gap-1.5 rounded-md bg-danger-soft px-2 py-0.5 text-sm text-danger"
+                >
+                  <LucideTriangleAlert
+                    class="size-3.5 shrink-0"
+                    aria-hidden="true"
+                  />
+                  {{ __("Goes live within 2 days and isn't approved yet.") }}
+                </p>
               </div>
             </div>
-            <Tooltip
-              :text="
-                auth.canEditContent ? __('Edit entry') : __('Open to add files')
-              "
-            >
-              <button
-                type="button"
-                class="grid size-8 shrink-0 place-items-center rounded-lg text-ink-gray-6 transition-colors hover:bg-surface-gray-2 hover:text-ink-gray-9 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
-                :aria-label="
-                  auth.canEditContent
-                    ? __('Edit {0}', post.title)
-                    : __('Open {0} to add files', post.title)
-                "
-                @click="emit('open', post.name)"
+            <div class="flex flex-wrap items-center gap-2">
+              <ul
+                class="flex flex-wrap items-center gap-2"
+                :aria-label="__('Platforms')"
               >
-                <LucidePencil
-                  v-if="auth.canEditContent"
-                  class="size-4"
+                <li
+                  v-for="p in platformsOf(post)"
+                  :key="p"
+                  class="inline-flex h-7 items-center gap-1.5 rounded-full border border-outline-gray-2 bg-surface-base px-2.5 text-sm text-ink-gray-8"
+                >
+                  <ChannelIcon :channel="p" class="size-[15px] shrink-0" />{{
+                    __(p)
+                  }}
+                </li>
+              </ul>
+              <span
+                class="inline-flex h-7 items-center gap-1.5 rounded-full border border-outline-gray-2 bg-surface-base px-2.5 font-mono text-sm tabular-nums text-ink-gray-8"
+              >
+                <LucideClock
+                  class="size-3.5 shrink-0 text-ink-gray-5"
                   aria-hidden="true"
-                />
-                <LucidePaperclip v-else class="size-4" aria-hidden="true" />
-              </button>
-            </Tooltip>
+                /><span class="sr-only">{{ __("Time:") }}</span
+                ><time :datetime="post.publish_on">{{
+                  dayjs(post.publish_on).format("h:mm A")
+                }}</time></span
+              >
+              <StatusPill :post="post" size="md" />
+              <Tooltip
+                :text="
+                  auth.canEditContent
+                    ? __('Edit entry')
+                    : __('Open to add files')
+                "
+              >
+                <button
+                  type="button"
+                  class="grid size-7 place-items-center rounded-full border border-outline-gray-2 bg-surface-base text-ink-gray-7 transition-colors hover:bg-surface-gray-2 hover:text-ink-gray-9 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+                  :aria-label="
+                    auth.canEditContent
+                      ? __('Edit {0}', post.title)
+                      : __('Open {0} to add files', post.title)
+                  "
+                  @click="emit('open', post.name)"
+                >
+                  <LucidePencil
+                    v-if="auth.canEditContent"
+                    class="size-3.5"
+                    aria-hidden="true"
+                  />
+                  <LucidePaperclip v-else class="size-3.5" aria-hidden="true" />
+                </button>
+              </Tooltip>
+            </div>
           </header>
 
-          <dl
-            class="mx-4 mt-3 grid grid-cols-1 gap-x-6 gap-y-2 rounded-lg bg-surface-gray-1 px-3 py-2 md:grid-cols-[1.65fr_1fr]"
+          <div
+            class="grid grid-cols-1 gap-2 px-4 pt-2.5 md:grid-cols-[1.65fr_1fr]"
           >
-            <div class="min-w-0">
-              <dt class="text-xs text-ink-gray-6">{{ __("Sub copy") }}</dt>
-              <dd
+            <div
+              class="min-w-0 rounded-xl border border-outline-gray-2 bg-surface-base px-3 py-2"
+            >
+              <p class="text-[13px] text-ink-gray-6">{{ __("Sub copy") }}</p>
+              <p
                 class="mt-0.5 line-clamp-2 whitespace-pre-line text-sm leading-snug"
                 :class="
                   captionOf(post) ? 'text-ink-gray-9' : 'italic text-ink-gray-5'
                 "
               >
                 {{ captionOf(post) || __("Not written yet") }}
-              </dd>
+              </p>
             </div>
-            <div class="min-w-0">
-              <dt class="text-xs text-ink-gray-6">{{ __("Description") }}</dt>
-              <dd
+            <div
+              class="min-w-0 rounded-xl border border-outline-gray-2 bg-surface-base px-3 py-2"
+            >
+              <p class="text-[13px] text-ink-gray-6">{{ __("Description") }}</p>
+              <p
                 class="mt-0.5 line-clamp-2 whitespace-pre-line text-sm leading-snug"
                 :class="
                   post.brief ? 'text-ink-gray-9' : 'italic text-ink-gray-5'
                 "
               >
                 {{ post.brief || __("No description yet") }}
-              </dd>
+              </p>
             </div>
-          </dl>
+          </div>
 
           <div
-            class="grid grid-cols-1 gap-2 px-4 pt-3 min-[420px]:grid-cols-2 xl:grid-cols-4"
+            class="grid grid-cols-1 gap-2 px-4 pt-2 min-[420px]:grid-cols-2 lg:grid-cols-4"
           >
             <RoleBox
               v-for="role in TEAM_ROLES"
               :key="role.field"
               :label="role.label"
+              :role="role.field"
               :people="peopleOf(post, role.field)"
               :can-edit="auth.canEditContent"
               @assign="emit('action', post, 'assign', role.field)"
@@ -422,10 +433,10 @@
           </div>
 
           <footer
-            class="mt-3 flex flex-wrap items-center gap-2 border-t border-outline-gray-2 px-4 py-2"
+            class="entry-footer mt-3 flex flex-wrap items-center gap-2 border-t px-4 py-2"
           >
             <p
-              class="flex min-w-0 flex-1 basis-48 items-center gap-2 text-sm"
+              class="flex flex-1 basis-48 items-center gap-2 text-base"
               :class="isMissed(post, now) ? 'text-danger' : 'text-ink-gray-7'"
             >
               <component
@@ -537,6 +548,7 @@ import LucideClock from "~icons/lucide/clock";
 import LucideExternalLink from "~icons/lucide/external-link";
 import LucidePlus from "~icons/lucide/plus";
 import LucideSend from "~icons/lucide/send";
+import LucideBuilding2 from "~icons/lucide/building-2";
 import LucidePaperclip from "~icons/lucide/paperclip";
 import LucidePencil from "~icons/lucide/pencil";
 import LucideTriangleAlert from "~icons/lucide/triangle-alert";
@@ -560,7 +572,6 @@ import ChannelIcon from "./ChannelIcon.vue";
 import RoleBox from "./RoleBox.vue";
 import SpecialDayBadge from "./SpecialDayBadge.vue";
 import StatusPill from "./StatusPill.vue";
-import TaskyBadge from "@/components/TaskyBadge.vue";
 
 const auth = useAuthStore();
 
@@ -812,15 +823,13 @@ const tiles = computed<Tile[]>(() => {
   ];
 });
 
-/**
- * A thin left edge marks a card that needs chasing; the card itself stays
- * neutral, and its status line and badges say why.
- */
-function entryAccent(post: ContentPost) {
-  if (isMissed(post, now.value)) return "border-l-[3px] border-l-danger";
-  if (needsApprovalSoon(post, now.value))
-    return "border-l-[3px] border-l-warning";
-  return "";
+/** The card's tint: what needs chasing first, then how it went. */
+function entryTone(post: ContentPost) {
+  if (isMissed(post, now.value) || needsApprovalSoon(post, now.value))
+    return "danger";
+  if (post.status === "Published") return "success";
+  if (post.status === "Cancelled") return "neutral";
+  return "info";
 }
 
 const days = computed(() => {
@@ -885,6 +894,33 @@ function statusLine(post: ContentPost) {
 </script>
 
 <style scoped>
+/* Cards take a light wash of their tone; the footer and border carry it a step stronger. */
+.entry {
+  --tone: var(--outline-gray-3);
+  --tone-soft: var(--surface-gray-2);
+  background-color: color-mix(
+    in srgb,
+    var(--tone-soft) 55%,
+    var(--surface-base)
+  );
+  border-color: color-mix(in srgb, var(--tone) 30%, var(--outline-gray-2));
+}
+.entry-info {
+  --tone: var(--info);
+  --tone-soft: var(--info-soft);
+}
+.entry-danger {
+  --tone: var(--danger);
+  --tone-soft: var(--danger-soft);
+}
+.entry-success {
+  --tone: var(--success);
+  --tone-soft: var(--success-soft);
+}
+.entry-footer {
+  background-color: var(--tone-soft);
+  border-color: color-mix(in srgb, var(--tone) 20%, var(--outline-gray-2));
+}
 .stat-warning {
   border-color: color-mix(in srgb, var(--warning) 35%, var(--outline-gray-2));
 }

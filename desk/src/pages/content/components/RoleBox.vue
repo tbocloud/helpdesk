@@ -1,43 +1,46 @@
 <template>
   <DefinePeople>
-    <span class="block truncate text-xs text-ink-gray-6">{{ __(label) }}</span>
-    <span class="mt-1 flex flex-col gap-2">
-      <span
-        v-for="person in people"
-        :key="person.user"
-        class="flex min-w-0 items-center gap-2.5"
-      >
+    <span
+      v-for="(person, i) in people"
+      :key="person.user"
+      class="flex min-w-0 items-center gap-3"
+    >
+      <span class="relative shrink-0">
         <span
-          class="relative grid size-7 shrink-0 place-items-center rounded-full bg-surface-gray-2 text-xs font-semibold text-ink-gray-7"
+          class="grid size-[30px] place-items-center rounded-[8px] text-[13px] font-semibold"
+          :class="avatarTone"
+          aria-hidden="true"
+          >{{ initialOf(person.full_name) }}</span
+        >
+        <span
+          v-if="person.status === 'Completed'"
+          class="absolute -bottom-1 -right-1 grid size-3.5 place-items-center rounded-full bg-success text-ink-base shadow-[0_0_0_2px_var(--surface-base)]"
           aria-hidden="true"
         >
-          {{ initialOf(person.full_name) }}
-          <span
-            v-if="person.status === 'Completed'"
-            class="absolute -bottom-0.5 -right-0.5 grid size-3.5 place-items-center rounded-full bg-success text-ink-base ring-2 ring-surface-base"
-          >
-            <LucideCheck class="size-2.5" />
-          </span>
+          <LucideCheck class="size-2.5" />
         </span>
-        <span class="min-w-0 flex-1">
-          <span
-            class="block truncate text-sm font-semibold text-ink-gray-9"
-            :title="person.full_name"
-            >{{ person.full_name }}</span
-          >
-          <span
-            v-if="person.status || isTaskLate(person)"
-            class="block truncate text-xs"
-            :class="statusClass(person)"
-            :title="person.task"
-          >
-            <template v-if="person.status">{{
-              __(taskStatusMeta(person.status).label)
-            }}</template>
-            <template v-if="isTaskLate(person)">
-              <template v-if="person.status"> · </template>{{ __("late") }}
-            </template>
-          </span>
+      </span>
+      <span class="min-w-0">
+        <span v-if="i === 0" class="block truncate text-xs text-ink-gray-6">{{
+          __(label)
+        }}</span>
+        <span
+          class="block truncate text-base font-semibold text-ink-gray-9"
+          :title="person.full_name"
+          >{{ person.full_name }}</span
+        >
+        <span
+          v-if="person.status || isTaskLate(person)"
+          class="block truncate text-xs"
+          :class="statusClass(person)"
+          :title="person.task"
+        >
+          <template v-if="person.status">{{
+            __(taskStatusMeta(person.status).label)
+          }}</template>
+          <template v-if="isTaskLate(person)">
+            <template v-if="person.status"> · </template>{{ __("late") }}
+          </template>
         </span>
       </span>
     </span>
@@ -46,27 +49,42 @@
   <button
     v-if="!people.length && canEdit"
     type="button"
-    :class="[
-      BOX,
-      'border-dashed border-outline-gray-3 hover:bg-surface-gray-1',
-    ]"
+    class="assign-box flex min-h-[52px] min-w-0 items-center gap-2.5 rounded-xl bg-transparent px-3 py-2 text-left transition-colors hover:bg-surface-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
     :aria-label="__('Assign {0}', __(label))"
     @click="emit('assign')"
   >
-    <span class="block truncate text-xs text-ink-gray-6">{{ __(label) }}</span>
     <span
-      class="mt-1 flex items-center gap-1.5 text-sm font-medium text-ink-gray-8"
+      class="grid size-[30px] shrink-0 place-items-center rounded-[8px] bg-brand-soft text-brand"
     >
-      <LucidePlus class="size-4 text-ink-gray-6" aria-hidden="true" />
-      {{ __("Assign") }}
+      <LucidePlus class="size-4" aria-hidden="true" />
+    </span>
+    <span class="min-w-0">
+      <span class="block truncate text-xs text-ink-gray-6">{{
+        __(label)
+      }}</span>
+      <span class="block text-base font-semibold text-brand-ink">{{
+        __("Assign")
+      }}</span>
     </span>
   </button>
 
-  <div v-else-if="!people.length" :class="[BOX, 'border-outline-gray-2']">
-    <span class="block truncate text-xs text-ink-gray-6">{{ __(label) }}</span>
-    <span class="mt-1 block text-sm text-ink-gray-5">{{
-      __("Not assigned")
-    }}</span>
+  <div
+    v-else-if="!people.length"
+    class="flex min-h-[52px] min-w-0 items-center gap-2.5 rounded-xl border border-outline-gray-2 bg-surface-base px-3 py-2"
+  >
+    <span
+      class="grid size-[30px] shrink-0 place-items-center rounded-[8px] bg-surface-gray-2 text-[13px] font-semibold text-ink-gray-5"
+      aria-hidden="true"
+      >?</span
+    >
+    <span class="min-w-0">
+      <span class="block truncate text-xs text-ink-gray-6">{{
+        __(label)
+      }}</span>
+      <span class="block text-base text-ink-gray-5">{{
+        __("Not assigned")
+      }}</span>
+    </span>
   </div>
 
   <!-- everyone on the role, each with how far their task is; a button only for
@@ -76,7 +94,7 @@
   <button
     v-else-if="canEdit"
     type="button"
-    :class="[BOX, 'border-outline-gray-2 hover:bg-surface-gray-1']"
+    class="flex min-h-[52px] min-w-0 flex-col justify-center gap-2.5 rounded-xl border border-outline-gray-2 bg-surface-base px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4 hover:bg-surface-gray-1"
     :title="__('Change who is on this')"
     @click="emit('assign')"
   >
@@ -85,7 +103,10 @@
     <span class="sr-only">{{ __("Change who is on this") }}</span>
   </button>
 
-  <div v-else :class="[BOX, 'border-outline-gray-2']">
+  <div
+    v-else
+    class="flex min-h-[52px] min-w-0 flex-col justify-center gap-2.5 rounded-xl border border-outline-gray-2 bg-surface-base px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+  >
     <ReusePeople />
   </div>
 </template>
@@ -95,25 +116,35 @@ import { __ } from "@/translation";
 import { taskStatusMeta } from "@/pages/tasky/taskMeta";
 import { createReusableTemplate } from "@vueuse/core";
 import { dayjs } from "frappe-ui";
+import { computed } from "vue";
 import LucideCheck from "~icons/lucide/check";
 import LucidePlus from "~icons/lucide/plus";
-import type { RolePerson } from "../constants";
+import type { RolePerson, TeamRole } from "../constants";
 
-defineProps<{
+const props = defineProps<{
   label: string;
   people: RolePerson[];
   canEdit: boolean;
+  role?: TeamRole;
 }>();
-const emit = defineEmits<{ (e: "assign"): void }>();
 
-const [DefinePeople, ReusePeople] = createReusableTemplate();
-
-const BOX =
-  "block min-w-0 rounded-lg border bg-surface-base px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4";
+// full class strings so Tailwind's scanner keeps them; each role keeps its colour across cards
+const ROLE_TONES: Record<TeamRole, string> = {
+  writer: "bg-brand-soft text-brand-ink",
+  designer: "bg-info-soft text-info",
+  marketer: "bg-success-soft text-success",
+  video_editor: "bg-warning-soft text-warning",
+};
+const avatarTone = computed(() =>
+  props.role ? ROLE_TONES[props.role] : "bg-surface-gray-2 text-ink-gray-7"
+);
 
 function initialOf(name: string) {
   return (name || "?").trim().charAt(0).toUpperCase();
 }
+const emit = defineEmits<{ (e: "assign"): void }>();
+
+const [DefinePeople, ReusePeople] = createReusableTemplate();
 
 function isTaskLate(person: RolePerson) {
   return (
@@ -130,3 +161,11 @@ function statusClass(person: RolePerson) {
   return "text-ink-gray-6";
 }
 </script>
+
+<style scoped>
+/* the dashed outline takes the card's tone (set on .entry in ContentBoard) */
+.assign-box {
+  border: 1.5px dashed
+    color-mix(in srgb, var(--tone, var(--brand)) 45%, var(--surface-base));
+}
+</style>
