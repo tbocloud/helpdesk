@@ -3,7 +3,7 @@
     :title="__('Departments')"
     :description="
       __(
-        'The Projects page groups projects by department, in this order. Inactive departments can\'t be picked for projects.'
+        'The Projects page groups projects by department, in this order. Inactive departments can\'t be picked for projects. Heads are told who their department\'s Scoreboard champion is.'
       )
     "
   >
@@ -74,6 +74,46 @@
                 <Button :label="__('Cancel')" @click="renaming = ''" />
               </form>
 
+              <!-- heads -->
+              <form
+                v-else-if="editingHeads === dept.name"
+                class="flex min-w-0 flex-1 flex-col gap-2"
+                :aria-label="__('Heads of {0}', dept.name)"
+                @submit.prevent="saveHeads(dept)"
+                @keydown.esc.stop="editingHeads = ''"
+              >
+                <span class="text-base-medium text-ink-gray-9">{{
+                  __("Heads of {0}", dept.name)
+                }}</span>
+                <span class="text-p-sm text-ink-gray-6">
+                  {{ __("They're told who the Scoreboard champion is.") }}
+                  {{
+                    dept.head_roles.length
+                      ? __(
+                          "Anyone with the {0} role heads it too.",
+                          dept.head_roles.join(", ")
+                        )
+                      : ""
+                  }}
+                </span>
+                <ChipListInput
+                  v-model="headsValue"
+                  doctype="User"
+                  :filters="{ enabled: 1, user_type: 'System User' }"
+                  :placeholder="__('Add a head')"
+                  mono
+                />
+                <div class="flex items-center gap-2">
+                  <Button
+                    variant="solid"
+                    type="submit"
+                    :label="__('Save heads')"
+                    :loading="setHeads.loading"
+                  />
+                  <Button :label="__('Cancel')" @click="editingHeads = ''" />
+                </div>
+              </form>
+
               <!-- delete confirmation -->
               <div
                 v-else-if="deleting === dept.name"
@@ -117,6 +157,11 @@
                         : __("{0} projects", String(dept.project_count))
                     }}
                   </span>
+                  <span
+                    class="truncate text-xs text-ink-gray-6"
+                    :title="headsLine(dept)"
+                    >{{ headsLine(dept) }}</span
+                  >
                 </div>
 
                 <div class="flex shrink-0 items-center gap-0.5">
@@ -144,6 +189,16 @@
                   >
                     <template #icon
                       ><LucideArrowDown class="size-4" aria-hidden="true"
+                    /></template>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    :tooltip="__('Set heads')"
+                    :label="__('Set heads of {0}', dept.name)"
+                    @click="startHeads(dept)"
+                  >
+                    <template #icon
+                      ><LucideUserCog class="size-4" aria-hidden="true"
                     /></template>
                   </Button>
                   <Button
@@ -211,6 +266,8 @@ import LucideEyeOff from "~icons/lucide/eye-off";
 import LucidePencil from "~icons/lucide/pencil";
 import LucidePlus from "~icons/lucide/plus";
 import LucideTrash2 from "~icons/lucide/trash-2";
+import LucideUserCog from "~icons/lucide/user-cog";
+import ChipListInput from "../ChipListInput.vue";
 import SettingsList from "../SettingsList.vue";
 
 interface Department {
@@ -220,6 +277,9 @@ interface Department {
   is_active: boolean;
   description?: string;
   project_count: number;
+  heads: { user: string; full_name: string }[];
+  /** Roles whose holders head this department as well, e.g. Digital Marketing Head. */
+  head_roles: string[];
 }
 
 const API = "helpdesk.api.departments";
@@ -263,6 +323,7 @@ const renameValue = ref("");
 
 async function startRename(dept: Department) {
   deleting.value = "";
+  editingHeads.value = "";
   renaming.value = dept.name;
   renameValue.value = dept.name;
   await nextTick();
@@ -289,6 +350,41 @@ function saveRename(dept: Department) {
     return;
   }
   rename.submit({ department: dept.name, new_name: name });
+}
+
+// --- heads ---
+
+function headsLine(dept: Department): string {
+  const heads = [
+    ...dept.heads.map((h) => h.full_name),
+    ...dept.head_roles.map((role) => __("everyone with {0}", role)),
+  ];
+  return heads.length ? __("Heads: {0}", heads.join(", ")) : __("No heads set");
+}
+
+const editingHeads = ref("");
+const headsValue = ref<string[]>([]);
+
+function startHeads(dept: Department) {
+  deleting.value = "";
+  renaming.value = "";
+  editingHeads.value = dept.name;
+  headsValue.value = dept.heads.map((h) => h.user);
+}
+
+const setHeads = createResource({
+  url: `${API}.set_department_heads`,
+  onSuccess() {
+    toast.success(__("Heads saved"));
+    editingHeads.value = "";
+    departments.reload();
+  },
+  onError: showError,
+});
+
+function saveHeads(dept: Department) {
+  if (setHeads.loading) return;
+  setHeads.submit({ department: dept.name, heads: headsValue.value });
 }
 
 // --- reorder, activate, delete ---

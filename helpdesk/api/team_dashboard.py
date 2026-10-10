@@ -1,10 +1,11 @@
 """The team dashboard (/helpdesk/team-dashboard), the Scoreboard.
 
-Every agent sees all of it: every department, person, project, ranking and
-champion, so the team can compete (the owner's decision). Only System Managers
-and Agent Managers may ask the AI to refresh the analysis. Departments hidden
-from someone's team (tasky.permissions.hidden_departments) still never show up
-for them. The numbers and the scoring live in helpdesk.team_dashboard.
+Every agent sees all of it: every department, person, project, ranking,
+champion, history and analysis, so the team can compete (the owner's decision).
+That includes DM and ERP Employees: the department walls
+(tasky.permissions.hidden_departments) don't apply here. Only System Managers and
+Agent Managers may ask the AI to refresh the analysis. The numbers and the
+scoring live in helpdesk.team_dashboard.
 """
 
 import json
@@ -16,7 +17,7 @@ from frappe.query_builder.functions import Count, Sum
 from frappe.utils import getdate, nowdate
 
 from helpdesk import team_dashboard as td
-from helpdesk.tasky.permissions import hidden_departments, is_tasky_admin
+from helpdesk.tasky.permissions import is_tasky_admin
 from helpdesk.utils import agent_only
 
 REFRESH_COOLDOWN_SECONDS = 60
@@ -37,17 +38,14 @@ def get_team_dashboard(period: str = "week", department: str | None = None) -> d
     data = td.collect(start, end, with_overdue=True, today=today)
     prev = td.collect(c_start, c_end, with_overdue=False, today=today)
 
-    keep = in_scope(access, department)
+    keep = in_scope(department)
     by_department = td.tally(
         data, lambda r: (r["department"] or NO_DEPARTMENT) if keep(r) else None
     )
     ranked = td.rank(td.tally(data, lambda r: True if keep(r) else None)[True], period)
-    members = department_members(department, access)
+    members = department_members(department)
     for person in sorted(set().union(*members.values()) - {r["user"] for r in ranked}):
         ranked.extend(td.rank({person: td.blank()}, period))
-    # the whole team's stored champions and analysis cover every department, so
-    # someone with a department hidden from them sees only per-department ones
-    whole_team_hidden = not department and bool(access.hidden)
     return {
         "period": {
             "key": period,
@@ -63,18 +61,14 @@ def get_team_dashboard(period: str = "week", department: str | None = None) -> d
         "department": department,
         "summary": summary(data, prev, keep),
         "trend": td.trend(data, keep, start, end, period),
-        "history": [] if whole_team_hidden else history(department, today),
+        "history": history(department, today),
         "champion": champion_card(td.champion_of(ranked)),
         "people": people_rows(ranked, by_department, members),
         "departments": department_rows(
             data, prev, by_department, members, access, department, period
         ),
-        "projects": project_rows(data, keep, department, access),
-        "analysis": (
-            {"status": "none"}
-            if whole_team_hidden
-            else current_analysis(period, start, department)
-        ),
+        "projects": project_rows(data, keep, department),
+        "analysis": current_analysis(period, start, department),
     }
 
 
@@ -97,7 +91,7 @@ def refresh_analysis(period: str = "week", department: str | None = None) -> dic
     frappe.cache.set_value(lock, 1, expires_in_sec=REFRESH_COOLDOWN_SECONDS)
 
     data = td.collect(start, end, with_overdue=True, today=today)
-    keep = in_scope(access, department)
+    keep = in_scope(department)
     ranked = td.rank(td.tally(data, lambda r: True if keep(r) else None)[True], period)
     facts = td.analysis_facts(
         department or _("Whole team"),
@@ -119,23 +113,18 @@ def refresh_analysis(period: str = "week", department: str | None = None) -> dic
 
 
 def viewer_access(user: str) -> frappe._dict:
-    """The departments the viewer may pick (all but those hidden from their team,
-    see tasky.permissions.hidden_departments) and whether they may refresh the
-    analysis (System and Agent Managers)."""
-    hidden = hidden_departments(user)
+    """The departments the viewer may pick (every active one, past the department
+    walls, so DM and ERP can compete) and whether they may refresh the analysis
+    (System and Agent Managers)."""
     return frappe._dict(
-        departments=[d for d in td.active_departments() if d not in hidden],
-        hidden=set(hidden),
+        departments=td.active_departments(),
         can_refresh=is_tasky_admin(user),
     )
 
 
 def scope_department(access, department: str | None) -> str | None:
     if department and department not in access.departments:
-        frappe.throw(
-            _("You can't see the {0} department's numbers.").format(department),
-            frappe.PermissionError,
-        )
+        frappe.throw(_("{0} isn't an active department.").format(department))
     return department or None
 
 
@@ -149,12 +138,11 @@ def department_is(department: str):
     return lambda r: (r["department"] or NO_DEPARTMENT) == department
 
 
-def in_scope(access, department: str | None):
-    """Rows of the picked department, else of every department the viewer may see."""
+def in_scope(department: str | None):
+    """Rows of the picked department, else every row."""
     if department:
         return lambda r: r["department"] == department
-    hidden = access.hidden
-    return lambda r: r["department"] not in hidden
+    return lambda r: True
 
 
 # --- the parts of the page ---------------------------------------------------
@@ -258,7 +246,7 @@ def department_rows(data, prev, by_department, members, access, department, peri
     return rows
 
 
-def department_members(department: str | None, access) -> dict[str, set]:
+def department_members(department: str | None) -> dict[str, set]:
     """Who belongs to each department in scope: the members of its open projects.
     With no department picked, every active agent is listed too."""
     project = frappe.qb.DocType("Project")
@@ -277,8 +265,6 @@ def department_members(department: str | None, access) -> dict[str, set]:
     )
     if department:
         query = query.where(project.custom_department == department)
-    elif access.hidden:
-        query = query.where(project.custom_department.notin(access.hidden))
     out: dict[str, set] = {}
     for dept, user in query.run():
         out.setdefault(dept, set()).add(user)
@@ -293,7 +279,7 @@ def department_members(department: str | None, access) -> dict[str, set]:
     return out
 
 
-def project_rows(data, keep, department, access) -> list[dict]:
+def project_rows(data, keep, department) -> list[dict]:
     """Projects with more than one member, in scope, that are open or had work in
     the period: progress, hours and who contributed what."""
     active = {
@@ -321,11 +307,6 @@ def project_rows(data, keep, department, access) -> list[dict]:
     )
     if department:
         query = query.where(project.custom_department == department)
-    elif access.hidden:
-        query = query.where(
-            project.custom_department.isnull()
-            | project.custom_department.notin(access.hidden)
-        )
     projects = [
         p for p in query.run(as_dict=True) if p.status == "Open" or p.name in active
     ]

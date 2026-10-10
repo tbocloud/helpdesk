@@ -92,12 +92,12 @@ team competes ("only then will there be competition").
 
 - **Refresh analysis** (`refresh_analysis`) is for System Managers and Agent Managers only
   (`is_tasky_admin`); everyone else gets a permission error.
-- Departments hidden from someone's team (`hidden_departments` in
-  `helpdesk/tasky/permissions.py`, e.g. ERP for DM Employees) stay hidden here too: not
-  listed, not counted in their totals, and refused when asked for. The whole team's stored
-  champions history and analysis cover every department, so such a viewer gets them only per
-  department. This keeps the
-  department walls from the content calendar work; the Scoreboard doesn't open them.
+- **The department walls don't apply here.** DM Employees see ERP and ERP Employees see
+  Digital on the Scoreboard: its departments, people, projects, history and analysis, so the
+  two teams compete (the owner's decision, 2026-10-10). Every other wall stays
+  (`hidden_departments` in `helpdesk/tasky/permissions.py`: projects, tasks, the content
+  calendar, the department filters elsewhere). Asking for a department that isn't active is
+  refused.
 
 Both rules live in `viewer_access` and `scope_department` in `helpdesk/api/team_dashboard.py`.
 
@@ -111,9 +111,14 @@ minimum, score, breakdown, analysis). The record name is derived from period and
 so a second run finds the first and changes nothing; the history never shifts when tasks are
 edited later. Overdue counts as of the day after the period.
 
-For weeks and longer, the champion is told once through `notify_users` (helpdesk panel plus
-Teams or email), and so are the department's heads, or the Agent Managers for the whole team.
-A day's champion is stored for the record without notifications or AI.
+Every closed period's champion, a day's included, is told once through `notify_users`
+(helpdesk panel plus Teams or email): "You're the ERP champion for 9 Oct 2026", "… for the
+week of 5 Oct 2026". So are the department's heads ("Anu Menon is the ERP champion for …"),
+or the Agent Managers for the whole team. Heads come from `department_heads()` in
+`helpdesk/tasky/permissions.py`: the department's **Heads** setting (Settings → Departments,
+see [departments.md](departments.md#department-heads)) plus holders of a role in
+`DEPARTMENT_HEADS` (Digital Marketing Head for Digital). Notices go out only when the record
+is first inserted, so re-running `close_period` for a closed day or week tells nobody again.
 
 HD Team Champion: System Manager full, Agent Manager read; every agent reads it through the
 page's API.
@@ -127,7 +132,9 @@ same client as task descriptions and weekly summaries. The model returns a summa
 who could use help. `clean_analysis()` keeps plain text and **drops any sentence or item with
 a number that isn't in the facts**, so it can't invent figures.
 
-- Written at period close (weeks and longer) and stored on the HD Team Champion.
+- Written at period close (weeks and longer) and stored on the HD Team Champion. **Never
+  for a day** (`QUIET_PERIODS`), to keep the AI cost down: a day's champion is stored and
+  announced without an analysis.
 - **Write analysis / Refresh** (System and Agent Managers, not for Today): `refresh_analysis` (POST)
   writes one for the period in progress and caches it for 12 hours per period and department
   (once a minute at most).
@@ -152,9 +159,10 @@ a number that isn't in the facts**, so it can't invent figures.
 - **Due dates matter.** A task without a due date earns only half its worth, since it can't be
   on time; this nudges setting due dates rather than rewarding their absence.
 - **Open to everyone.** All agents see all numbers, by the owner's decision, so the team can
-  compete. Only the AI refresh is limited to managers.
-- **Department heads are roles**, used to tell them their department's champion. Only the
-  Digital Marketing Head exists (from the content calendar's approval flow); an ERP head
-  would be one more entry in `DEPARTMENT_HEADS`.
+  compete, across the DM and ERP walls too. Only the AI refresh is limited to managers.
+- **Every department has heads**, set per department in Settings → Departments and told
+  their department's champion. The Digital Marketing Head role still counts as a head of
+  Digital, so the content calendar's approver needs no extra setup.
+- **Weights didn't change** when daily champions started being announced (2026-10-10).
 - **Period ranges are computed on the server only**, so the page and the stored champions
   can't disagree about where a week or quarter starts.
