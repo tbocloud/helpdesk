@@ -161,7 +161,7 @@ to `POST /api/method/upload_file` (multipart, `is_private=1`, `doctype=HD Ticket
 
 | Method | Params | Returns | Who / notes |
 | --- | --- | --- | --- |
-| `get_tasks` | `group?` (overdue, today, upcoming, on_hold, in_review), `cursor`, `limit` | page of `Task` (no description/activity) | My own open tasks only (My Work), overdue first. Fixture `get_tasks.json` |
+| `get_tasks` | `group?` (overdue, today, upcoming, on_hold, in_review), `cursor`, `limit` | page of `Task` (no description/activity) | My own open tasks only (My Work), overdue first. Like My Work, it reads at most 300 open tasks (`work.LIST_LIMIT`), so the app and the web always show the same list. Fixture `get_tasks.json` |
 | `get_task` | `task` | `Task` + `description` (HTML), `activity`, `pull_requests` | Anyone who may read the task (#94 visibility: members only their own, leads/coordinators/managers the project's). Fixture `get_task.json` |
 | `start_task` POST | `task` | `Task` detail | Starts an Open task (status Working, timer running) or resumes a paused timer. Write permission. Fixture `task_action.json` |
 | `pause_task` POST | `task` | `Task` detail | Banks the time; stays Working |
@@ -194,7 +194,7 @@ The app words each type the way the web's activity list does.
 | `get_tickets` | `view` (mine, unassigned, team, all-open), `search?` (ticket number or subject words), `cursor`, `limit` | page of `Ticket` (no conversation), soonest SLA first | Open and paused tickets the user can see (`frappe.get_list`). `team` = the user's HD Teams. Fixture `get_tickets.json` |
 | `get_ticket` | `ticket` | `Ticket` + `conversation` + `statuses` | Read permission on the ticket. Fixture `get_ticket.json` |
 | `reply_ticket` POST | `ticket`, `message` (plain text), `attachments?` (File names) | `Ticket` detail | Write permission; same path and side effects as the agent page (`HD Ticket.reply_via_agent`: email to the customer, status update, SLA). Only files the user uploaded may be attached. 60/min per IP |
-| `comment_ticket` POST | `ticket`, `message` | `Ticket` detail | Write permission. Internal note (`HD Ticket.new_comment`); @mentions notify as on the web. No attachments in v1 (`new_comment` types them as strings but reads them as objects). 60/min per IP |
+| `comment_ticket` POST | `ticket`, `message` | `Ticket` detail | Write permission. Internal note (`HD Ticket.new_comment`). `message` is plain text, so v1 notes don't support @mentions (the web's mentions are editor markup) and take no attachments (`new_comment` types them as strings but reads them as objects). 60/min per IP |
 | `set_ticket_status` POST | `ticket`, `status` | `Ticket` detail | Write permission; `status` must be one of the enabled HD Ticket Statuses (`statuses` in `get_ticket`) |
 | `assign_ticket` POST | `ticket`, `agent` | `Ticket` detail | Write permission; `agent` must be an HD Agent. Replaces the current assignees |
 

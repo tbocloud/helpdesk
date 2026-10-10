@@ -1515,10 +1515,11 @@ def disable_mobile_push():
     frappe.db.set_single_value("HD Settings", "enable_mobile_push", 0)
 
 
-def call_mobile_as(user: str, method: str, **kwargs):
-    """Calls helpdesk.api.mobile.<method> through `frappe.call` as `user`, the way the
-    TBO Smart app does; returns the whole {"v", "data", …} answer."""
-    return call_as_user(user, f"helpdesk.api.mobile.{method}", **kwargs)
+def call_mobile_as(as_user: str, method: str, **kwargs):
+    """Calls helpdesk.api.mobile.<method> through `frappe.call` as `as_user`, the way
+    the TBO Smart app does; returns the whole {"v", "data", …} answer. `as_user` leaves
+    `user` free for the method."""
+    return call_as_user(as_user, f"helpdesk.api.mobile.{method}", **kwargs)
 
 
 def register_device_as(user: str, token: str, platform: str = "ios") -> dict:
