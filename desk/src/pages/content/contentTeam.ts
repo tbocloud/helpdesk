@@ -10,8 +10,8 @@ export const CONTENT_ROUTES = new Set([
   "Performance",
 ]);
 
-// Hidden from DM and ERP Employees, who work on projects and content, not support
-export const DEPARTMENT_EMPLOYEE_HIDDEN_ROUTES = new Set([
+// Hidden from DM Employees, who work on projects and content, not support
+export const DM_EMPLOYEE_HIDDEN_ROUTES = new Set([
   "SupportHours",
   "CustomerReport",
   "TicketsAgent",

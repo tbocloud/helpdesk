@@ -9,7 +9,7 @@ from frappe.utils import add_days, add_to_date, getdate, now_datetime, nowdate
 
 from helpdesk import work_reminders
 from helpdesk.api import departments, work
-from helpdesk.content_team import is_department_employee, is_erp_only
+from helpdesk.content_team import can_work_tickets, is_dm_employee, is_erp_only
 from helpdesk.helpdesk.doctype.hd_notification.utils import clear as clear_notifications
 from helpdesk.helpdesk.doctype.hd_ticket.hd_ticket import (
     permission_query as ticket_permission_query,
@@ -20,6 +20,7 @@ from helpdesk.patches.v16_0_2.add_waiting_on_task_status import (
 from helpdesk.tasky import api as tasky
 from helpdesk.tasky.permissions import hidden_departments
 from helpdesk.test_utils import (
+    call_as_user,
     create_customer,
     get_task_completed_notices,
     hold_commits,
@@ -30,6 +31,7 @@ from helpdesk.test_utils import (
     make_pull_request,
     make_task,
     make_tasky_user,
+    make_team,
     make_ticket,
     make_timesheet,
     make_work_summary,
@@ -585,25 +587,85 @@ class TestDepartmentWalls(WorkControlCase):
         self.assertFalse(is_erp_only(pm))
         self.assertFalse(is_erp_only(DEV[0]))
 
-    def test_department_employees_work_no_tickets(self):
+    def ticket_listed(self, user, ticket):
+        return self.as_user(
+            (user,),
+            lambda: frappe.get_list(
+                "HD Ticket", filters={"name": ticket}, pluck="name"
+            ),
+        )
+
+    def test_dm_employees_work_no_tickets(self):
         ticket = make_ticket(subject="Invoice print is blank", customer=CUSTOMER)
+
+        self.assertTrue(is_dm_employee(self.dm))
+        self.assertFalse(can_work_tickets(self.dm))
+        self.assertIn("raised_by", ticket_permission_query(self.dm))
+        self.assertEqual(self.ticket_listed(self.dm, ticket.name), [])
+        boot = call_as_user(self.dm, "helpdesk.api.auth.get_user")
+        self.assertTrue(boot["is_dm_employee"])
+        self.assertFalse(boot["can_work_tickets"])
+        # a System Manager isn't restricted
+        frappe.get_doc("User", self.dm).add_roles("System Manager")
+        self.assertFalse(is_dm_employee(self.dm))
+        self.assertTrue(can_work_tickets(self.dm))
+
+    def test_erp_team_works_tickets_like_any_agent(self):
+        frappe.db.set_single_value("HD Settings", "restrict_tickets_by_agent_group", 0)
+        ticket = make_ticket(
+            subject="GST report totals are off",
+            customer=CUSTOMER,
+            raised_by="accounts@alnoor.example",
+        )
+
+        self.assertFalse(is_dm_employee(self.erp_dev))
+        self.assertTrue(can_work_tickets(self.erp_dev))
+        boot = call_as_user(self.erp_dev, "helpdesk.api.auth.get_user")
+        self.assertTrue(boot["can_work_tickets"])
+        self.assertFalse(boot["is_dm_employee"])
+        # the Tickets list, a ticket's page and New ticket
+        self.assertEqual(self.ticket_listed(self.erp_dev, ticket.name), [ticket.name])
+        opened = call_as_user(
+            self.erp_dev,
+            "helpdesk.helpdesk.doctype.hd_ticket.api.get_one",
+            name=ticket.name,
+        )
+        self.assertEqual(opened["name"], ticket.name)
+        raised = call_as_user(
+            self.erp_dev,
+            "helpdesk.helpdesk.doctype.hd_ticket.api.new",
+            doc={"subject": "Stock ledger won't load", "description": "Times out."},
+        )
+        self.assertEqual(raised.raised_by, self.erp_dev)
+
+    def test_erp_team_sees_only_what_agents_see(self):
+        # with team restrictions on, a ticket of a team they aren't in stays hidden, as
+        # for every agent: the ERP team gets no wider access
+        frappe.db.set_single_value("HD Settings", "restrict_tickets_by_agent_group", 1)
+        frappe.db.set_single_value(
+            "HD Settings", "do_not_restrict_tickets_without_an_agent_group", 0
+        )
+        team = make_team("Wall Billing").name
+        ticket = make_ticket(subject="Billing team only", agent_group=team)
         make_tasky_user(DEV[0], DEV[1])
 
-        for user in (self.dm, self.erp_dev):
-            self.assertTrue(is_department_employee(user), user)
-            self.assertIn("raised_by", ticket_permission_query(user))
-            listed = self.as_user(
-                (user,),
-                lambda: frappe.get_list(
-                    "HD Ticket", filters={"name": ticket.name}, pluck="name"
-                ),
-            )
-            self.assertEqual(listed, [], user)
-        # a plain agent keeps the usual ticket access; a System Manager isn't restricted
-        self.assertFalse(is_department_employee(DEV[0]))
+        for user in (self.erp_dev, DEV[0]):
+            self.assertEqual(self.ticket_listed(user, ticket.name), [], user)
+
+    def test_ticket_list_gate(self):
+        make_tasky_user(DEV[0], DEV[1])
+        manager = make_tasky_user(
+            "manager.wall@work-control.example", "Sona Manager", ("Agent Manager",)
+        )
+        self.assertTrue(can_work_tickets("Administrator"))
+        self.assertTrue(can_work_tickets(manager))
+        # an agent with no wall (a developer) keeps the ticket permissions they had,
+        # but not the Tickets list
+        self.assertFalse(can_work_tickets(DEV[0]))
         self.assertNotIn("raised_by", ticket_permission_query(DEV[0]) or "")
-        frappe.get_doc("User", self.dm).add_roles("System Manager")
-        self.assertFalse(is_department_employee(self.dm))
+        # holding both walls, the Digital one wins: no tickets
+        frappe.get_doc("User", self.erp_dev).add_roles("DM Employee")
+        self.assertFalse(can_work_tickets(self.erp_dev))
 
     def test_managers_see_every_department(self):
         projects, _, depts = self.visible("Administrator")

@@ -174,7 +174,7 @@ import {
   CONTENT_ROUTES,
   ERP_EMPLOYEE_HIDDEN_ROUTES,
   CONTENT_TEAM_ROUTES,
-  DEPARTMENT_EMPLOYEE_HIDDEN_ROUTES,
+  DM_EMPLOYEE_HIDDEN_ROUTES,
 } from "@/pages/content/contentTeam";
 import CP from "@/components/command-palette/CP.vue";
 import UserMenu from "@/components/UserMenu.vue";
@@ -278,15 +278,14 @@ const navItems = computed(() => {
     : agentPortalSidebarOptions;
   return options
     .filter((item) => isCallingEnabled.value || item.label !== __("Call Logs"))
-    .filter((item) => !item.adminOnly || authStore.isAdmin)
+    .filter((item) => !item.ticketWorkersOnly || authStore.canWorkTickets)
     .filter((item) => authStore.inContentTeam || !CONTENT_ROUTES.has(item.to))
     .filter(
       (item) => !authStore.isErpOnly || !ERP_EMPLOYEE_HIDDEN_ROUTES.has(item.to)
     )
     .filter(
       (item) =>
-        !authStore.isDepartmentEmployee ||
-        !DEPARTMENT_EMPLOYEE_HIDDEN_ROUTES.has(item.to)
+        !authStore.isDmEmployee || !DM_EMPLOYEE_HIDDEN_ROUTES.has(item.to)
     )
     .filter((item) => !item.projectManagerOnly || authStore.isProjectManager)
     .filter((item) => !item.overviewOnly || authStore.canSeeOverview)

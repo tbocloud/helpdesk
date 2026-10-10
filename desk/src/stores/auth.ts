@@ -61,9 +61,13 @@ export const useAuthStore = defineStore("auth", () => {
   const isErpOnly: ComputedRef<boolean> = computed(
     () => !!user__.value.is_erp_only
   );
-  // DM / ERP Employees: no tickets, customers, contacts, templates, KB or reports
-  const isDepartmentEmployee: ComputedRef<boolean> = computed(
-    () => !!user__.value.is_department_employee
+  // DM Employees: no tickets, customers, contacts, templates, KB or reports
+  const isDmEmployee: ComputedRef<boolean> = computed(
+    () => !!user__.value.is_dm_employee
+  );
+  // the Tickets list and New ticket: System / Agent Managers and the ERP team
+  const canWorkTickets: ComputedRef<boolean> = computed(
+    () => !!user__.value.can_work_tickets
   );
   const canSeeCustomerReport: ComputedRef<boolean> = computed(
     () => !!(user__.value.is_manager || user__.value.is_project_manager)
@@ -140,7 +144,8 @@ export const useAuthStore = defineStore("auth", () => {
     canEditContent,
     inContentTeam,
     isErpOnly,
-    isDepartmentEmployee,
+    isDmEmployee,
+    canWorkTickets,
     telephonyInstalled,
     isLoggedIn,
     login,

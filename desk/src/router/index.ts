@@ -7,7 +7,7 @@ import {
   CONTENT_ROUTES,
   ERP_EMPLOYEE_HIDDEN_ROUTES,
   CONTENT_TEAM_ROUTES,
-  DEPARTMENT_EMPLOYEE_HIDDEN_ROUTES,
+  DM_EMPLOYEE_HIDDEN_ROUTES,
 } from "@/pages/content/contentTeam";
 import { createRouter, createWebHistory } from "vue-router";
 const { isMobileView } = useScreenSize();
@@ -44,8 +44,8 @@ const portalRoutes = [
     path: "/tickets",
     name: "TicketsAgent",
     component: () => import("@/pages/ticket/Tickets.vue"),
-    // only System Managers work the ticket list
-    beforeEnter: () => useAuthStore().isAdmin || { name: "Home" },
+    // System / Agent Managers and the ERP team (docs/departments.md)
+    beforeEnter: () => useAuthStore().canWorkTickets || { name: "Home" },
   },
   {
     path: "/tickets/:ticketId",
@@ -59,7 +59,7 @@ const portalRoutes = [
     name: "TicketAgentNew",
     component: () => import("@/pages/ticket/TicketNew.vue"),
     props: true,
-    beforeEnter: () => useAuthStore().isAdmin || { name: "Home" },
+    beforeEnter: () => useAuthStore().canWorkTickets || { name: "Home" },
     meta: {
       onSuccessRoute: "TicketAgent",
       parent: "TicketsAgent",
@@ -416,10 +416,10 @@ router.beforeEach(async (to, _, next) => {
     // writers and designers land on the content calendar, not tickets
     next({ name: "ContentCalendar" });
   } else if (
-    authStore.isDepartmentEmployee &&
-    DEPARTMENT_EMPLOYEE_HIDDEN_ROUTES.has(String(to.name))
+    authStore.isDmEmployee &&
+    DM_EMPLOYEE_HIDDEN_ROUTES.has(String(to.name))
   ) {
-    // DM and ERP Employees work on projects and content, not support
+    // DM Employees work on projects and content, not support
     next({ name: "Home" });
   } else if (
     !authStore.inContentTeam &&
