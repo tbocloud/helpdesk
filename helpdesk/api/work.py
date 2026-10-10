@@ -29,13 +29,13 @@ from helpdesk.tasky.api import (
 )
 from helpdesk.tasky.permissions import (
     can_add_tasks,
-    can_manage_project,
+    can_coordinate_project,
     get_led_projects,
     get_managed_projects,
     is_project_manager,
     is_tasky_admin,
 )
-from helpdesk.utils import agent_only
+from helpdesk.utils import agent_only, assigned_to_filter
 
 KEY_TICKET_PRIORITIES = ("Urgent", "High")
 OPEN_TASK_FILTER = ("not in", ["Completed", "Cancelled", "Template"])
@@ -261,14 +261,15 @@ def _items(tasks, tickets, with_plan: bool = False) -> list[dict]:
     holders = hold_by_names(tasks)
     task_items = add_assigners([_task_item(t, names, waiting, holders) for t in tasks])
     _attach_pull_requests(task_items)
-    # who may plan a task or sign off one waiting for review: the project's manager or lead
+    # who may plan a task or sign off one waiting for review: the project's manager,
+    # lead or coordinator
     managed = {}
     for item in task_items:
         in_review = item["status"] == PENDING_REVIEW
         if not (with_plan or in_review):
             continue
         if item["project"] not in managed:
-            managed[item["project"]] = can_manage_project(item["project"])
+            managed[item["project"]] = can_coordinate_project(item["project"])
         if with_plan:
             item["can_plan"] = managed[item["project"]]
         if in_review:
@@ -281,11 +282,6 @@ def _items(tasks, tickets, with_plan: bool = False) -> list[dict]:
 def _sort_key(item: dict):
     deadline = item["deadline"] or "9999-12-31"
     return (not item["is_overdue"], not item["is_key"], deadline)
-
-
-def _assigned_to(user: str):
-    # _assign stores a JSON list, so match the quoted email
-    return ("like", f'%"{user}"%')
 
 
 @frappe.whitelist()
@@ -305,14 +301,17 @@ def get_my_work(user: str | None = None) -> dict:
             )
     tasks = frappe.get_list(
         "Task",
-        filters={"_assign": _assigned_to(user), "status": OPEN_TASK_FILTER},
+        filters={
+            "name": assigned_to_filter("Task", user),
+            "status": OPEN_TASK_FILTER,
+        },
         fields=TASK_FIELDS,
         limit_page_length=LIST_LIMIT,
     )
     tickets = frappe.get_list(
         "HD Ticket",
         filters={
-            "_assign": _assigned_to(user),
+            "name": assigned_to_filter("HD Ticket", user, finished=False),
             "status_category": ("in", ["Open", "Paused"]),
         },
         fields=TICKET_FIELDS,
@@ -339,7 +338,7 @@ def _done_items(user: str) -> list[dict]:
     tasks = frappe.get_list(
         "Task",
         filters={
-            "_assign": _assigned_to(user),
+            "name": assigned_to_filter("Task", user),
             "status": "Completed",
             "completed_on": (">=", since),
         },
@@ -349,8 +348,9 @@ def _done_items(user: str) -> list[dict]:
     )
     tickets = frappe.get_list(
         "HD Ticket",
+        # resolving a ticket closes its ToDos, so finished assignments count here
         filters={
-            "_assign": _assigned_to(user),
+            "name": assigned_to_filter("HD Ticket", user),
             "status_category": "Resolved",
             "resolution_date": (">=", since),
         },
@@ -416,8 +416,10 @@ def get_overview(
             or [""],
         )
     if assignee:
-        task_filters["_assign"] = _assigned_to(assignee)
-        ticket_filters["_assign"] = _assigned_to(assignee)
+        task_filters["name"] = assigned_to_filter("Task", assignee)
+        ticket_filters["name"] = assigned_to_filter(
+            "HD Ticket", assignee, finished=False
+        )
     if department:
         task_filters["project"] = _in_department(
             task_filters.get("project"), department

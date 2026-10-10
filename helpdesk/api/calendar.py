@@ -9,9 +9,9 @@ import frappe
 from frappe import _
 from frappe.utils import add_days, get_datetime, getdate
 
-from helpdesk.api.work import OPEN_TASK_FILTER, _assigned_to, can_see_overview
+from helpdesk.api.work import OPEN_TASK_FILTER, can_see_overview
 from helpdesk.helpdesk.doctype.hd_meeting.hd_meeting import SCHEDULED
-from helpdesk.utils import agent_only
+from helpdesk.utils import agent_only, assigned_to_filter
 
 MAX_RANGE_DAYS = 62
 MAX_EVENTS = 500
@@ -87,7 +87,7 @@ def _tasks(start_day, end_day, user: str | None) -> list[dict]:
         "exp_end_date": ("between", [str(start_day), str(end_day)]),
     }
     if user:
-        filters["_assign"] = _assigned_to(user)
+        filters["name"] = assigned_to_filter("Task", user)
     # get_list: a team view still shows only the tasks the viewer may open
     tasks = frappe.get_list(
         "Task",

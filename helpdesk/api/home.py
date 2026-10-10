@@ -41,6 +41,7 @@ from helpdesk.customer_health import (
 from helpdesk.helpdesk.doctype.hd_project_folder.hd_project_folder import FolderTree
 from helpdesk.helpdesk.doctype.hd_ticket.hd_ticket import LOW_RATING_STARS
 from helpdesk.tasky.permissions import (
+    get_coordinated_projects,
     get_led_projects,
     get_managed_projects,
     is_tasky_admin,
@@ -126,8 +127,12 @@ def _due_for_me(item: dict, today: str) -> bool:
 
 
 def _approvals(user: str) -> list[dict]:
-    """Tasks waiting for review in the projects the user manages or leads."""
-    projects = list(set(get_managed_projects(user)) | set(get_led_projects(user)))
+    """Tasks waiting for review in the projects the user manages, leads or coordinates."""
+    projects = list(
+        set(get_managed_projects(user))
+        | set(get_led_projects(user))
+        | set(get_coordinated_projects(user))
+    )
     if not projects:
         return []
     tasks = frappe.get_list(

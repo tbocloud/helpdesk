@@ -7,7 +7,12 @@ from frappe.query_builder import DocType
 from frappe.query_builder.functions import Avg, Count, Function
 from pypika import Case
 
-from helpdesk.utils import agent_only, is_frappe_version
+from helpdesk.utils import (
+    agent_only,
+    assigned_names_query,
+    assigned_to_filter,
+    is_frappe_version,
+)
 
 HD_TICKET = "HD Ticket"
 
@@ -106,11 +111,8 @@ class HelpdeskDashboard:
         if self.team:
             conds.append(self.ticket.agent_group == self.team)
         if self.agent:
-            # Pass args to Function(...) directly. ParameterizedFunction is not callable.
             conds.append(
-                Function(
-                    "JSON_SEARCH", self.ticket._assign, "one", self.agent
-                ).isnotnull()
+                self.ticket.name.isin(assigned_names_query("HD Ticket", self.agent))
             )
         return conds
 
@@ -425,7 +427,7 @@ def get_master_dashboard_data(
     if team:
         filters["agent_group"] = team
     if agent:
-        filters["_assign"] = ["like", f"%{agent}%"]
+        filters["name"] = assigned_to_filter("HD Ticket", agent)
     team_data = get_team_chart_data(from_date, to_date, filters)
     ticket_type_data = get_ticket_type_chart_data(from_date, to_date, filters)
     ticket_priority_data = get_ticket_priority_chart_data(from_date, to_date, filters)

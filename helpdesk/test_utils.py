@@ -148,10 +148,18 @@ def make_ticket(
 def make_assigned_ticket(subject: str, user: str, **values) -> str:
     """Creates a ticket assigned to `user` only and returns its name as a string.
 
-    `_assign` is set directly so assignment rules can't add someone else; other
-    `values` (e.g. status, status_category) are written the same way, after insert.
+    Whatever an assignment rule gave out is withdrawn first, so the ticket's ToDos (which
+    the work lists match) and `_assign` name `user` alone; other `values` (e.g. status,
+    status_category) are written straight to the ticket, after insert.
     """
     name = make_ticket(subject=subject, customer=values.pop("customer", None)).name
+    frappe.db.set_value(
+        "ToDo",
+        {"reference_type": "HD Ticket", "reference_name": name},
+        "status",
+        "Cancelled",
+    )
+    make_assignment("HD Ticket", name, user)
     frappe.db.set_value("HD Ticket", name, {"_assign": json.dumps([user]), **values})
     return str(name)
 

@@ -2,7 +2,7 @@
   <Dialog
     :open="!!props.task"
     :title="__('Edit task')"
-    :message="canManage ? undefined : task?.subject"
+    :message="canCoordinate ? undefined : task?.subject"
     size="xl"
     @update:open="onOpenChange"
   >
@@ -34,7 +34,7 @@
       novalidate
       @submit.prevent="submit"
     >
-      <template v-if="canManage">
+      <template v-if="canCoordinate">
         <TextInput
           v-model="form.task_name"
           :label="__('Task name')"
@@ -290,10 +290,10 @@ const task = computed<Record<string, any> | null>(() => detail.data ?? null);
 const project = computed(
   () => task.value?.project || props.task?.project || props.projectId || ""
 );
-const canManage = computed(
+const canCoordinate = computed(
   () =>
     projectDetail.params?.project === project.value &&
-    !!projectDetail.data?.can_manage
+    !!projectDetail.data?.can_coordinate
 );
 const closed = computed(() => !!task.value && isClosed(task.value));
 
@@ -328,12 +328,16 @@ const assigneeOptions = computed(() => {
   const others = assignableUsers.value.filter(
     (u) => !memberIds.value.has(u.name)
   );
+  // only the project's manager or lead brings new people onto the team; a content
+  // post's task may go to anyone, since its people don't join the project
+  const canBringIn =
+    !!projectDetail.data?.can_manage || !!task.value?.content_post;
   return [
     { label: __("Unassigned"), value: UNASSIGNED },
     ...(team.length
       ? [{ group: __("Project team"), options: team.map(toOption) }]
       : []),
-    ...(others.length
+    ...(others.length && canBringIn
       ? [{ group: __("Other agents"), options: others.map(toOption) }]
       : []),
   ];
@@ -392,7 +396,7 @@ const readOnlyRows = computed(() => {
 // the assignee can only change the description, so the AI sees the saved details
 const draftContext = computed<DraftContext>(() => {
   const t: Record<string, any> = task.value ?? props.task ?? {};
-  const editing = canManage.value;
+  const editing = canCoordinate.value;
   return {
     task: props.task?.name,
     task_name: editing ? form.task_name : t.subject || "",
@@ -410,7 +414,7 @@ const canSubmit = computed(
   () =>
     loaded.value &&
     !updateTask.loading &&
-    (!canManage.value || !!form.task_name.trim())
+    (!canCoordinate.value || !!form.task_name.trim())
 );
 
 const updateTask = createResource({
@@ -471,7 +475,7 @@ function openPlan() {
 
 function submit() {
   if (!props.task || !canSubmit.value) return;
-  if (!canManage.value) {
+  if (!canCoordinate.value) {
     updateTask.submit({
       task: props.task.name,
       description: form.description,

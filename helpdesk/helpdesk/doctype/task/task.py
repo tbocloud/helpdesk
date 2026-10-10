@@ -185,7 +185,7 @@ class Task(Document):
 
     def route_completion_to_review(self):
         """On projects that want it, a team member's "done" goes to the lead first."""
-        from helpdesk.tasky.permissions import can_manage_project
+        from helpdesk.tasky.permissions import can_coordinate_project
 
         # a published or cancelled content post closes its tasks without a review round
         if (
@@ -200,7 +200,7 @@ class Task(Document):
             "Project", self.project, "review_before_done"
         ):
             return
-        if self.status == "Completed" and can_manage_project(self.project):
+        if self.status == "Completed" and can_coordinate_project(self.project):
             return
         self.status = PENDING_REVIEW
         self.flags.review_requested = True

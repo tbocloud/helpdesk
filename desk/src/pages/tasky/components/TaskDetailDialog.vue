@@ -295,7 +295,7 @@ const detail = computed<TaskDetail | null>(() =>
   taskDetail.data?.name === props.task?.name ? taskDetail.data : null
 );
 
-// plan and review actions are for the task's project manager or lead only
+// plan and review actions are for whoever runs the project's tasks; schedules for its managers
 const projectAccess = createResource({
   url: "helpdesk.tasky.api.get_project_detail",
   onError() {},
@@ -303,12 +303,18 @@ const projectAccess = createResource({
 const project = computed(
   () => props.task?.project || detail.value?.project || ""
 );
-const canManage = computed(
+const projectLoaded = computed(
   () =>
     !!project.value &&
     !projectAccess.loading &&
-    projectAccess.params?.project === project.value &&
-    !!projectAccess.data?.can_manage
+    projectAccess.params?.project === project.value
+);
+const canManage = computed(
+  () => projectLoaded.value && !!projectAccess.data?.can_manage
+);
+// runs the project's tasks: managers, the lead and coordinators
+const canCoordinate = computed(
+  () => projectLoaded.value && !!projectAccess.data?.can_coordinate
 );
 
 watch(
@@ -396,15 +402,15 @@ const dialogActions = computed(() => {
   const actions: Record<string, any>[] = [];
   if (!d || taskDetail.loading) return actions;
   const open = !isClosed(d);
-  // the assignee can at least edit the description; others need to manage the project
-  if (props.mine || canManage.value) {
+  // the assignee can at least edit the description; others need to run the project's tasks
+  if (props.mine || canCoordinate.value) {
     actions.push({
       label: __("Edit"),
       iconLeft: LucidePencil,
       onClick: () => handOff(editingTask),
     });
   }
-  if (canManage.value) {
+  if (canCoordinate.value) {
     if (isPendingReview(d)) {
       actions.push(
         {
@@ -420,8 +426,8 @@ const dialogActions = computed(() => {
         }
       );
     }
-    // a task a schedule created already repeats
-    if (!d.custom_recurring_task) {
+    // a task a schedule created already repeats; schedules are the managers' and lead's
+    if (canManage.value && !d.custom_recurring_task) {
       actions.push({
         label: __("Make recurring…"),
         icon: LucideRepeat,
@@ -448,6 +454,9 @@ const dialogActions = computed(() => {
         onClick: () => handOff(completingTask),
       });
     }
+  }
+  // the assignee, or whoever runs the project's tasks, holds, resumes and hands it over
+  if ((props.mine || canCoordinate.value) && open) {
     if (isOnHold(d)) {
       actions.push({
         label: __("Resume"),
@@ -462,7 +471,7 @@ const dialogActions = computed(() => {
       });
     }
     // a task waits on one other task, so asking for help needs it free
-    if (!d.blocked)
+    if (props.mine && !d.blocked)
       actions.push({
         label: __("Ask a teammate for help"),
         icon: LucideUserPlus,

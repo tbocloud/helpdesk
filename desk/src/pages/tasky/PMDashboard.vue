@@ -120,7 +120,7 @@
           </div>
 
           <div
-            v-if="projectDetail.data?.can_manage && undatedCount"
+            v-if="projectDetail.data?.can_coordinate && undatedCount"
             class="-mb-1 mt-3 flex justify-end"
           >
             <Button
@@ -160,7 +160,7 @@
 
           <!-- Milestones -->
           <section
-            v-if="milestones.length || projectDetail.data?.can_manage"
+            v-if="milestones.length || projectDetail.data?.can_coordinate"
             aria-labelledby="pm-milestones"
             class="mt-6"
           >

@@ -407,7 +407,7 @@
                 </div>
 
                 <div
-                  v-if="canManage && isPendingReview(task)"
+                  v-if="canCoordinate && isPendingReview(task)"
                   class="mt-2.5 flex items-center justify-end gap-1.5 border-t border-outline-gray-1 pt-2.5"
                 >
                   <Button
@@ -565,6 +565,7 @@ const props = defineProps<{ projectId?: string }>();
 
 const nav = ref<InstanceType<typeof ProjectNav> | null>(null);
 const canManage = computed(() => !!nav.value?.canManage);
+const canCoordinate = computed(() => !!nav.value?.canCoordinate);
 const authStore = useAuthStore();
 
 const columnList = [
@@ -654,9 +655,9 @@ const { approve, resource: approveResource } = useApproveTask(() =>
   kanban.reload()
 );
 
-// the assignee may edit the description; leads and managers everything
+// the assignee may edit the description; leads, managers and coordinators everything
 function canEdit(task: Task) {
-  return canManage.value || !!task.assignees?.includes(authStore.userId);
+  return canCoordinate.value || !!task.assignees?.includes(authStore.userId);
 }
 
 function cardActions(task: Task) {
@@ -694,9 +695,9 @@ function cardActions(task: Task) {
       icon: LucideFolderInput,
       onClick: () => (movingTask.value = task),
     });
-  if (!canManage.value) return actions;
-  // a task a schedule created already repeats
-  if (!task.custom_recurring_task)
+  if (!canCoordinate.value) return actions;
+  // a task a schedule created already repeats; schedules are the managers' and lead's
+  if (canManage.value && !task.custom_recurring_task)
     actions.push({
       label: __("Make recurring…"),
       icon: LucideRepeat,
@@ -945,7 +946,7 @@ function changeStatus(task: Task, newStatus: string) {
   }
   if (newStatus === "Completed") {
     dropTarget.value = null;
-    if (isPendingReview(task) && canManage.value) approve(task);
+    if (isPendingReview(task) && canCoordinate.value) approve(task);
     else completingTask.value = task;
     return;
   }

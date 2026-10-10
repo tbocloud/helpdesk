@@ -11,6 +11,8 @@ from frappe import _, scrub
 from frappe.utils import add_days, add_to_date, flt, getdate
 from six import iteritems
 
+from helpdesk.utils import assigned_to_filter
+
 
 def get_fiscal_year():
     # TODO: handle this function properly
@@ -196,7 +198,9 @@ class TicketAnalytics:
         )
 
         if self.filters.get("assigned_to"):
-            filters["_assign"] = ("like", "%" + self.filters.get("assigned_to") + "%")
+            filters["name"] = assigned_to_filter(
+                "HD Ticket", self.filters.get("assigned_to")
+            )
 
         for entry in ["status", "priority", "contact"]:
             if self.filters.get(entry):

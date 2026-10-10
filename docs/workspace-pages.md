@@ -38,16 +38,33 @@ Home, the project cards' stats, the timesheet task pickers and task details.
 | --- | --- |
 | System Managers, Agent Managers | Every task of every project |
 | The project's owner, its members with the Project Manager project role, its lead | Every task of that project (`can_manage_project`) |
+| Its members with the Project Coordinator project role | Every task of that project, and they run its tasks (`can_coordinate_project`, see [What a Project Coordinator may do](#what-a-project-coordinator-may-do)) |
 | A Project Manager (role) who is on the project's team | Every task of that project, but no manager powers |
 | Digital Marketing Head, DM Coordinators | Every task of content calendar projects and of Digital projects |
 | Everyone else (developers, functional consultants, content people) | Only their own tasks: assigned to them, given out by them (they assigned it to someone), or created by them, assigned or not |
 
-`sees_all_tasks(project)` answers the first four rows for one project, and
+`sees_all_tasks(project)` answers the first five rows for one project, and
 `get_project_detail` returns it as `sees_all_tasks`. "Assigned to" and "given out by" come
 from the task's ToDos (`allocated_to`, `assigned_by`), matched exactly: a LIKE on `_assign`
 would read `_` in a user ID as a wildcard. A finished assignment (Closed ToDo) still counts,
 so people keep seeing the tasks they completed; a withdrawn one (Cancelled) doesn't. The
 department walls ([departments.md](departments.md)) apply on top of every row except admins.
+
+**Exact "assigned to" everywhere.** Every list of someone's tasks or tickets matches the
+assignment through ToDos, never a LIKE (or JSON_SEARCH) on `_assign`: My tasks
+(`get_my_tasks`), the sidebar Board (`get_kanban_tasks` without a project), My Work and its
+Completed tab, the Overview's assignee filter, the work Calendar, the sidebar counts
+(`helpdesk.api.sidebar.get_nav_counts`), the projects a member sees through an assigned task
+(`project_query`, `has_assigned_task`), the agent home's ticket lists, the analytics dashboard's
+agent filter, the Ticket Analytics and Ticket Summary reports, and the ticket list's "Assigned
+to" filter (`handle_assigned_to_filter` in `helpdesk/api/doc.py`, which turns `_assign like
+%user%` into a name filter). The one rule is `assigned_names_query(doctype, user, finished)` in
+`helpdesk/utils.py` (a subquery for `frappe.qb`; `assigned_to_filter` turns it into a
+`frappe.get_list` name filter with one ToDo query, since `get_list` can't take a subquery;
+`_assigned_tasks_subquery` in `permissions.py` is the same rule in SQL for the permission query
+conditions). Tasks count finished (Closed) assignments; open-ticket lists and counts don't
+(`finished=False`, what `_assign` holds), since resolving a ticket closes its ToDos and a
+reopened ticket may go to someone else; the Completed tab, the dashboard and the reports do.
 
 - **What a member sees of the project**: the project itself stays visible (members, lead,
   files). On the task tabs a line under the tab bar says they see their own tasks
@@ -61,6 +78,32 @@ department walls ([departments.md](departments.md)) apply on top of every row ex
   the tasks raised from that ticket to whoever can read the ticket. The content calendar
   shows each post's team and how far each person's part is (`get_team_task_status`); the
   tasks themselves follow the rule.
+
+## What a Project Coordinator may do
+
+A member whose project role (`Project User.custom_role`) is **Project Coordinator** runs that
+project's tasks, without managing the project. One rule, `can_coordinate_project(project)` in
+`helpdesk/tasky/permissions.py` (its managers and lead, plus its coordinators), backs the
+server checks; `get_project_detail` returns it as `can_coordinate`, and the board, checklist,
+task details, Edit task and the project dashboard show the task controls on it. The role
+counts only on the project where the person holds it.
+
+| Action | Coordinator | Where it's checked |
+| --- | --- | --- |
+| See every task of the project | Yes | `sees_all_tasks`, `task_query` |
+| Create tasks and assign them to the team | Yes | `add_task` (`can_add_tasks`) |
+| Reassign, hand over any task | Yes, to people on the team | `update_task`, `hand_over_task` (`_get_own_task`) |
+| Edit a task, move it between phases | Yes | `update_task` (`_check_can_edit`) |
+| Change due dates (recorded as slips), key, milestone, dependency; AI due dates | Yes | `update_task_plan`, `estimate_undated_tasks` |
+| Put on hold, resume, move on the board | Yes | write permission (`task_has_permission`) |
+| Approve or send back a review; their own "done" skips review | Yes | `approve_task`, `send_back_task`, `Task.route_completion_to_review` |
+| Approvals on Home, Plan and Approve on My Work | Yes | `_approvals` (`get_coordinated_projects`), `_items` |
+| Give a task to someone outside the team (adds them to it) | No | `_check_can_bring_in` |
+| Edit the project, its team, roles or lead | No | `update_project`, `set_project_lead`, `rotate_project_lead` (`is_project_owner`) |
+| Delete tasks | No | `task_has_permission` |
+| Recurring schedules, Sign-off, Generate checklist | No | `can_manage_project`, project write permission |
+| Invoicing | No | admins only (`helpdesk/api/invoices.py`) |
+| Move a task to another project | Only one they assigned, as anyone may | `can_move_task` |
 
 ## Overview (`/overview`)
 
@@ -184,6 +227,10 @@ week, kind, limit)` returns `{summaries, can_generate}`.
 - **Generate summary** (primary action) only shows when `can_generate`: Agent Managers, or
   project managers of at least one customer's project (the same rule `generate_summary`
   enforces per customer).
+- **Held tasks** (`helpdesk/work_summary.py`, `task_stats`): each held task in the stats
+  carries its reason, its note (`hold_note`) and who put it on hold (`hold_by`, as a name from
+  one User query for the list, `hold_by_names`), so the AI and the plain summary's Risks line
+  ("On hold since … (Other: note): task (project). Put on hold by …") say what would unblock it.
 
 ## Projects (`/projects`)
 
@@ -272,7 +319,7 @@ team member's work, for leads and managers of their projects (the Team page link
   shared with My Tasks (`/my-tasks`). Hold and dependency notices, status, priority, project,
   phase, assigned to, assigned by, due, estimate, description, pull requests and meetings. Its
   actions follow `mine`: the assignee may edit, complete, hold or resume, ask for help and hand
-  over; the project's manager or lead may edit, plan, approve and send back. "Move to
+  over; the project's manager, lead or coordinator may edit, plan, approve and send back, and also hold, resume and hand it over. "Move to
   project…" shows when the task says `can_move` (see [Moving a task](#moving-a-task-to-another-project)).
 - **Rows** say "Assigned by Arun" next to the project when someone other than the assignee gave
   the task out.
@@ -282,7 +329,7 @@ team member's work, for leads and managers of their projects (the Team page link
 The sidebar's **Board** (after My Work, for everyone including the Content Team) is the project
 board (`pages/tasky/Kanban.vue`, route `MyBoard`, no `projectId`) showing the current user's own
 tasks from every project they're assigned in, by status: Open, In progress, In review, On hold,
-Completed, Cancelled. `get_kanban_tasks()` without `project` returns tasks whose `_assign` holds
+Completed, Cancelled. `get_kanban_tasks()` without `project` returns tasks assigned to
 the user (through `frappe.get_list`, so permissions and department walls apply), with finished
 and cancelled ones only if changed in the last 30 days. Each card names its project. Dragging,
 the timer, hold/resume, complete, edit, ask for help and hand over work as on a project board,
@@ -334,7 +381,7 @@ On Hold) clears all four in `end_hold`.
 card's menu, the checklist row's menu and the task details (`HandOverTaskDialog`).
 
 - **Who:** the task's assignee, for their own share of it, or the project's managers and
-  lead, for the whole task (`_get_own_task`). Open tasks only, with the timer stopped.
+  lead or coordinators, for the whole task (`_get_own_task`). Open tasks only, with the timer stopped.
 - **To whom:** an active agent on the project's team; managers and leads may pick anyone
   (they join the team). A content post's task may go to any active agent, since content
   people work on the content calendar without joining its project (`TeammatePicker`

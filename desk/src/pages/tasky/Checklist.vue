@@ -123,7 +123,7 @@
                 >
                   <ChecklistRow
                     :task="task"
-                    :can-manage="canManage"
+                    :can-coordinate="canCoordinate"
                     :can-edit="canEdit(task)"
                     v-on="rowEvents(task)"
                   />
@@ -327,7 +327,7 @@
                   >
                     <ChecklistRow
                       :task="task"
-                      :can-manage="canManage"
+                      :can-coordinate="canCoordinate"
                       :can-edit="canEdit(task)"
                       v-on="rowEvents(task)"
                     />
@@ -369,7 +369,7 @@
                 >
                   <ChecklistRow
                     :task="task"
-                    :can-manage="canManage"
+                    :can-coordinate="canCoordinate"
                     :can-edit="canEdit(task)"
                     v-on="rowEvents(task)"
                   />
@@ -504,12 +504,13 @@ watch(
 );
 
 const canManage = computed(() => !!projectDetail.data?.can_manage);
+const canCoordinate = computed(() => !!projectDetail.data?.can_coordinate);
 const canAddTasks = computed(() => !!projectDetail.data?.can_add_tasks);
 const authStore = useAuthStore();
 
-// the assignee may edit the description; leads and managers everything
+// the assignee may edit the description; leads, managers and coordinators everything
 function canEdit(task: Record<string, any>) {
-  return canManage.value || !!task.assignees?.includes(authStore.userId);
+  return canCoordinate.value || !!task.assignees?.includes(authStore.userId);
 }
 const phaseList = computed<Phase[]>(() => phases.data?.phases ?? []);
 const phaseNames = computed(() => phaseList.value.map((p) => p.phase_name));
@@ -631,7 +632,7 @@ function onToggleTask(task: Record<string, any>) {
     return;
   }
   // a lead ticking a reviewed task signs it off; anyone else logs their time
-  if (isPendingReview(task) && canManage.value) {
+  if (isPendingReview(task) && canCoordinate.value) {
     approve(task);
     return;
   }

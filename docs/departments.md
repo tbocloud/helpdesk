@@ -179,13 +179,18 @@ champion is chosen ([team-dashboard.md](team-dashboard.md)).
 
 ## Decisions
 
-- **Project Coordinator has no manager powers.** Only members with the Project Manager
-  project role manage a project (`helpdesk/tasky/permissions.py` `MANAGER_PROJECT_ROLE`, and
-  `get_project_managers` in `helpdesk/work_reminders.py`, and the work-summary query). Giving
-  coordinators those rights would change who can edit projects and approve tasks, so it is left
-  for a separate decision.
+- **A Project Coordinator runs the project's tasks, not the project.** Coordinators
+  (`COORDINATOR_PROJECT_ROLE`, `can_coordinate_project` in `helpdesk/tasky/permissions.py`)
+  see every task and create, assign, hand over, plan, hold, resume and review them; editing
+  the project, its team, roles or lead, deleting, Sign-off, recurring schedules and invoicing
+  stay with its managers. The full table is in
+  [workspace-pages.md](workspace-pages.md#what-a-project-coordinator-may-do). They aren't
+  project managers: they get no manager notices (`get_project_managers` in
+  `helpdesk/work_reminders.py`) and don't generate customer summaries.
 - **Lead rotation stays among Developers** (`LEAD_ROTATION_ROLES` in `helpdesk/tasky/api.py`).
-  Creative projects can still set a lead by hand.
+  This is deliberate, not a bug: the lead is the senior developer who answers for the build,
+  and a coordinator already has the task powers a lead uses, so making one lead would add
+  nothing. Creative projects can still set a lead by hand.
 - **Department is a custom field**, like the other fields helpdesk adds to its own Project,
   Project User and Task doctypes, so option and field changes reach existing sites on migrate.
 - **Projects without a department** are listed last rather than hidden, so nothing goes missing
