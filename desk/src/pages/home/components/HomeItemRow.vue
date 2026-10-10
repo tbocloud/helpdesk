@@ -52,6 +52,7 @@
         />
         <span>{{ note.text }}</span>
       </p>
+      <slot name="details" />
     </div>
     <div
       class="flex shrink-0 flex-col items-end gap-2 sm:flex-row sm:items-center sm:gap-3"
@@ -90,12 +91,16 @@ import LucideSquareCheck from "~icons/lucide/square-check";
 import LucideStar from "~icons/lucide/star";
 import LucideTicket from "~icons/lucide/ticket";
 import LucideTriangleAlert from "~icons/lucide/triangle-alert";
-import { countLabel, type AttentionItem } from "../homeMeta";
+import LucidePause from "~icons/lucide/pause";
+import LucideTimer from "~icons/lucide/timer";
+import { countLabel, type AttentionItem, type DayTask } from "../homeMeta";
 
 const props = defineProps<{
-  item: AttentionItem;
+  item: AttentionItem & DayTask;
   /** Name the assignee (or say it's unassigned); off in the user's own lists. */
   showAssignee?: boolean;
+  /** Say who gave the user this task. */
+  showAssigner?: boolean;
 }>();
 
 const userStore = useUserStore();
@@ -129,13 +134,19 @@ const meta = computed(() => {
     text: item.kind === "ticket" ? `#${item.name}` : item.name,
     mono: true,
   });
+  if (props.showAssigner && item.assigned_by_name)
+    parts.push({ text: __("Assigned by {0}", item.assigned_by_name) });
   if (props.showAssignee) {
-    const [first, ...rest] = item.assignees;
+    // the server sends names for tasks the user gave out; elsewhere use the user store
+    const names = item.assignee_names?.length
+      ? item.assignee_names
+      : item.assignees.map(fullName);
+    const [first, ...rest] = names;
     parts.push({
       text: first
         ? rest.length
-          ? `${fullName(first)} +${rest.length}`
-          : fullName(first)
+          ? `${first} +${rest.length}`
+          : first
         : __("Unassigned"),
     });
   }
@@ -155,6 +166,26 @@ const note = computed(() => {
       ),
     };
   }
+  if (item.status === "On Hold" && item.hold_reason) {
+    return { tone: "neutral", icon: LucidePause, text: holdText(item) };
+  }
+  if (item.kind === "task" && item.status === "Pending Review") {
+    return {
+      tone: "neutral",
+      icon: LucidePause,
+      text: __("Waiting for a lead or manager to review it"),
+    };
+  }
+  if (item.timer) {
+    return {
+      tone: "neutral",
+      icon: LucideTimer,
+      text:
+        item.timer === "running"
+          ? __("Timer running")
+          : __("Timer paused: resume when you pick it up"),
+    };
+  }
   if (item.risks?.length) {
     return {
       tone: "warning",
@@ -164,4 +195,23 @@ const note = computed(() => {
   }
   return null;
 });
+
+// the hint names the next step for the holds the user can chase
+const NEXT_STEP: Record<string, string> = {
+  "Waiting on customer": __("follow up"),
+  "Waiting on another task": __("check on it"),
+};
+
+function holdText(item: DayTask) {
+  const reason = item.hold_reason || "";
+  const days = item.hold_days ?? 0;
+  const held =
+    days > 1
+      ? __("{0} for {1} days", reason, String(days))
+      : days === 1
+      ? __("{0} for 1 day", reason)
+      : __("{0} since today", reason);
+  const next = NEXT_STEP[reason];
+  return next ? `${held} · ${next}` : held;
+}
 </script>

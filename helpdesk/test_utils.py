@@ -1022,6 +1022,74 @@ def make_done_task(
     return task
 
 
+def make_member_day(project: str, member: str, lead: str, teammate: str) -> dict:
+    """A project member's open work like the day that showed a false "All clear" on
+    Home: eight tasks `lead` gave `member` (one overdue, one due today, a key task
+    in progress, one in progress with its timer paused, two on hold waiting on the
+    customer, one without a due date, one due in three days), one `member` gave
+    `teammate` that is overdue, and one of `teammate`'s own that `member` must not
+    see. Returns the task names by those keys."""
+    from frappe.utils import add_days, nowdate
+
+    today = nowdate()
+
+    def task(subject: str, assignee: str, by: str, **values) -> str:
+        name = make_assigned_task(project, subject, assignee, by)
+        frappe.db.set_value("Task", name, values)
+        return name
+
+    def held(subject: str, days: int) -> str:
+        return task(
+            subject,
+            member,
+            lead,
+            status="On Hold",
+            hold_reason="Waiting on customer",
+            hold_note="Asked for the bank statement",
+            hold_since=add_days(today, -days),
+            hold_by=member,
+        )
+
+    tasks = {
+        "overdue": task(
+            "Fix the GST return", member, lead, exp_end_date=add_days(today, -2)
+        ),
+        "due_today": task("Post the Onam reel", member, lead, exp_end_date=today),
+        "key_working": task(
+            "Migrate the item master",
+            member,
+            lead,
+            exp_end_date=add_days(today, 10),
+            is_key=1,
+        ),
+        "paused": task(
+            "Draft the user manual",
+            member,
+            lead,
+            status="Working",
+            exp_end_date=add_days(today, 20),
+            custom_timer_elapsed=1.5,
+        ),
+        "held_long": held("Reconcile the bank feed", 3),
+        "held_short": held("Map the cost centres", 1),
+        "no_date": task("Clean up old leads", member, lead, exp_end_date=None),
+        "coming_up": task(
+            "Train the sales team", member, lead, exp_end_date=add_days(today, 3)
+        ),
+        "given_out": task(
+            "Design the invoice print",
+            teammate,
+            member,
+            exp_end_date=add_days(today, -1),
+        ),
+        "teammate_own": task(
+            "Fix the payroll script", teammate, lead, exp_end_date=add_days(today, -4)
+        ),
+    }
+    start_task_timer(tasks["key_working"], hours_ago=1)
+    return tasks
+
+
 def log_hours(user: str, project: str, hours: float, day) -> str:
     """Creates a draft Timesheet of `hours` on `project` on `day`, logged by `user`
     (its owner); returns its name."""
