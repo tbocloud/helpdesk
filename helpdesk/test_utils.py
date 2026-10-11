@@ -1588,6 +1588,32 @@ def mock_microsoft_keys(test_case, key, kid: str = "test-key"):
     test_case.addCleanup(fetch.stop)
 
 
+def refresh_oauth_token(client_id: str, refresh_token: str) -> dict:
+    """POSTs grant_type=refresh_token to Frappe's own get_token, the way the app
+    refreshes, and returns its JSON answer (new tokens, or `error`)."""
+    from frappe.integrations.oauth2 import get_token
+    from werkzeug.test import EnvironBuilder
+    from werkzeug.wrappers import Request
+
+    builder = EnvironBuilder(
+        path="/api/method/frappe.integrations.oauth2.get_token",
+        method="POST",
+        base_url="https://hub.example",
+        data={
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token,
+            "client_id": client_id,
+        },
+    )
+    previous = getattr(frappe.local, "request", None), frappe.local.response
+    frappe.local.request = Request(builder.get_environ())
+    try:
+        get_token()
+        return dict(frappe.local.response)
+    finally:
+        frappe.local.request, frappe.local.response = previous
+
+
 def microsoft_id_token(key, email: str, kid: str = "test-key", **claims) -> str:
     """A Microsoft-shaped ID token for `email`, signed RS256 with `key`: valid for the
     test tenant and app unless `claims` override (or, with None, remove) a claim."""

@@ -1,7 +1,6 @@
 # Copyright (c) 2026, Frappe Technologies and Contributors
 # See license.txt
 
-import json
 import time
 from urllib.parse import urlencode
 
@@ -22,6 +21,7 @@ from helpdesk.test_utils import (
     make_tasky_user,
     microsoft_id_token,
     mock_microsoft_keys,
+    refresh_oauth_token,
 )
 
 AGENT = ("sso.agent@mobile-auth.example", "Nisha Varghese")
@@ -89,21 +89,9 @@ class TestMobileMicrosoftSignIn(FrappeTestCase):
     def test_refresh_works_through_frappe_get_token(self):
         data = self.exchange(self.token())["data"]
 
-        _headers, body, status = get_oauth_server().create_token_response(
-            f"{HUB}frappe.integrations.oauth2.get_token",
-            "POST",
-            urlencode(
-                {
-                    "grant_type": "refresh_token",
-                    "refresh_token": data["refresh_token"],
-                    "client_id": self.client.name,
-                }
-            ),
-            {"Content-Type": "application/x-www-form-urlencoded"},
-        )
+        refreshed = refresh_oauth_token(self.client.name, data["refresh_token"])
 
-        self.assertEqual(status, 200, body)
-        refreshed = json.loads(body)
+        self.assertNotIn("error", refreshed, refreshed)
         self.assertNotEqual(refreshed["access_token"], data["access_token"])
         stored = frappe.get_doc("OAuth Bearer Token", refreshed["access_token"])
         self.assertEqual(stored.user, AGENT[0])
