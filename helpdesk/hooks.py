@@ -136,6 +136,10 @@ user_invitation = {
 }
 
 doc_events = {
+    "Project": {
+        # content tasks made before the customer had a content project join it
+        "on_update": "helpdesk.helpdesk.doctype.hd_content_post.hd_content_post.attach_content_tasks",
+    },
     "ToDo": {
         # nobody is given a task in a department their team keeps out of
         "validate": "helpdesk.tasky.permissions.check_assignment_department",

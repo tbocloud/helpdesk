@@ -19,6 +19,7 @@ from helpdesk.test_utils import (
     make_content_occasion,
     make_content_package,
     make_content_post,
+    make_content_project,
     make_portal_contact,
     make_tasky_user,
     set_content_settings,
@@ -42,6 +43,8 @@ class ContentPlanningCase(FrappeTestCase):
         )
         create_customer(CUSTOMER)
         create_customer(OTHER_CUSTOMER)
+        make_content_project(CUSTOMER)
+        make_content_project(OTHER_CUSTOMER)
         for person in (WRITER, DESIGNER, MARKETER):
             make_tasky_user(*person)
         # only this test's occasions

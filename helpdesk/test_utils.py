@@ -859,13 +859,35 @@ def hold_commits(test_case):
     test_case.addCleanup(commit.stop)
 
 
-def make_content_post(title: str, customer: str | None = None, **kwargs):
+def make_content_project(customer: str) -> str:
+    """Returns the project the customer's post tasks go to, creating an open Content
+    Calendar project for them if they have no open project.
+
+    A post can't create tasks without one (HDContentPost.require_content_project)."""
+    from helpdesk.helpdesk.doctype.hd_content_post.hd_content_post import (
+        CONTENT_PROJECT_TYPE,
+        content_project_for,
+    )
+
+    if project := content_project_for(customer):
+        return project
+    project = make_customer_project(customer, f"{customer} - Content calendar")
+    frappe.db.set_value("Project", project, "project_type", CONTENT_PROJECT_TYPE)
+    return project
+
+
+def make_content_post(
+    title: str, customer: str | None = None, with_project: bool = True, **kwargs
+):
     """Creates an HD Content Post: an Instagram Idea a week out unless overridden.
 
-    Every post needs a posting date; pass `publish_on` to choose it.
+    Every post needs a posting date; pass `publish_on` to choose it. The customer gets a
+    project (make_content_project) unless `with_project` is False.
     """
     from frappe.utils import add_to_date, now_datetime
 
+    if customer and with_project:
+        make_content_project(customer)
     return frappe.get_doc(
         {
             "doctype": "HD Content Post",
