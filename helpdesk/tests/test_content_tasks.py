@@ -64,12 +64,14 @@ class ContentTaskCase(FrappeTestCase):
         return make_content_post(
             "Diwali offer",
             CUSTOMER,
-            status="Drafting",
-            publish_on=self.publish,
-            writer=WRITER[0],
-            designer=DESIGNER[0],
-            marketer=MARKETER[0],
-            **values,
+            **{
+                "status": "Drafting",
+                "publish_on": self.publish,
+                "writer": WRITER[0],
+                "designer": DESIGNER[0],
+                "marketer": MARKETER[0],
+                **values,
+            },
         )
 
     def tasks(self, post, open_only=True):
@@ -138,6 +140,96 @@ class TestTasksFromPosts(ContentTaskCase):
         self.assertEqual(self.assignees(tasks["Designer"]), [OTHER[0]])
         self.assertEqual(
             getdate(tasks["Marketer"].exp_end_date), add_days(getdate(self.publish), 2)
+        )
+
+    def at(self, days):
+        return add_days(now_datetime(), days).replace(
+            hour=10, minute=0, second=0, microsecond=0
+        )
+
+    def test_a_lead_time_already_passed_is_due_today(self):
+        # publishing tomorrow: the writer's 3 days and the designer's 1 day are used up
+        post = self.post(publish_on=self.at(1))
+
+        tasks = self.tasks(post)
+        today = getdate()
+        self.assertEqual(getdate(tasks["Writer"].exp_end_date), today)
+        self.assertEqual(getdate(tasks["Designer"].exp_end_date), today)
+        self.assertEqual(getdate(tasks["Marketer"].exp_end_date), add_days(today, 1))
+
+    def test_a_missed_post_keeps_its_publish_date(self):
+        post = self.post(publish_on=self.at(-1))
+
+        yesterday = add_days(getdate(), -1)
+        self.assertEqual(
+            {getdate(t.exp_end_date) for t in self.tasks(post).values()}, {yesterday}
+        )
+
+    def test_saving_the_post_does_not_move_a_late_tasks_date(self):
+        post = self.post()
+        writer = self.tasks(post)["Writer"].name
+        late = add_days(getdate(), -2)
+        frappe.db.set_value("Task", writer, "exp_end_date", late)
+
+        post.reload()
+        post.caption = "Lights, sweets and 20% off"
+        post.save()
+
+        self.assertEqual(
+            getdate(frappe.db.get_value("Task", writer, "exp_end_date")), late
+        )
+
+    def test_rescheduling_closer_makes_used_up_lead_times_due_today(self):
+        post = self.post()
+
+        post.reload()
+        post.postpone(self.at(1), "Client moved the launch")
+
+        tasks = self.tasks(post)
+        self.assertEqual(getdate(tasks["Writer"].exp_end_date), getdate())
+        self.assertEqual(
+            getdate(tasks["Marketer"].exp_end_date), add_days(getdate(), 1)
+        )
+
+    def late_writer(self, post):
+        writer = self.tasks(post)["Writer"].name
+        late = add_days(getdate(), -2)
+        frappe.db.set_value("Task", writer, "exp_end_date", late)
+        return writer, late
+
+    def test_a_new_time_on_the_same_day_leaves_a_late_task_alone(self):
+        post = self.post()
+        writer, late = self.late_writer(post)
+
+        post.reload()
+        post.postpone(post.publish_on.replace(hour=16), "Client wants the afternoon")
+
+        self.assertEqual(
+            getdate(frappe.db.get_value("Task", writer, "exp_end_date")), late
+        )
+        self.assertFalse(frappe.db.get_value("Task", writer, "slip_count"))
+
+    def test_bringing_a_post_earlier_leaves_a_late_task_late(self):
+        post = self.post()
+        writer, late = self.late_writer(post)
+
+        post.reload()
+        post.postpone(self.at(1), "Client moved the launch forward")
+
+        self.assertEqual(
+            getdate(frappe.db.get_value("Task", writer, "exp_end_date")), late
+        )
+
+    def test_postponing_later_moves_a_late_task_too(self):
+        post = self.post()
+        writer, late = self.late_writer(post)
+
+        post.reload()
+        post.postpone(self.at(20), "Client asked for later")
+
+        self.assertEqual(
+            getdate(frappe.db.get_value("Task", writer, "exp_end_date")),
+            add_days(getdate(self.at(20)), -3),
         )
 
     def test_a_cancelled_part_is_not_recreated(self):
