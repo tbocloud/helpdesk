@@ -9,10 +9,8 @@
     :aria-label="railLabel"
   >
     <span
-      class="grid size-[26px] place-items-center rounded-[7px]"
-      :class="
-        urgent ? 'bg-danger-soft text-danger' : 'bg-warning-soft text-warning'
-      "
+      class="grid size-[26px] place-items-center rounded-[7px] bg-surface-gray-2"
+      :class="urgent ? 'text-danger' : 'text-warning'"
       aria-hidden="true"
     >
       <LucideBellRing class="size-3.5" />
