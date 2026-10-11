@@ -131,6 +131,32 @@ with the campaign names. With the link gone, a post's tasks always go to the cus
 project (see below), the customer is never filled in from a campaign, and Draft with AI
 passes the campaign text as "Campaign: …". The `HD Content Campaign` doctype itself is unchanged.
 
+### When the tasks are due
+
+Each role's task is due on the publish date minus that role's lead time in Content Settings
+(`writer_days_before`, `designer_days_before`, `video_editor_days_before`; the digital
+marketer's is always 0, so it's due on the publish date). "One task for the post" uses the
+designer's. In `wanted_tasks` (`due()`):
+
+- **A lead time that has already passed makes the task due today**, not on a past date: a post
+  publishing tomorrow with a 3-day writer lead time gives the writer a task due today, so it
+  isn't overdue the moment it's made.
+- **Never after the publish date:** a post whose publish date has passed (a missed post) keeps
+  its publish date as the due date.
+- **The date is set once** when the task is made, and moves only when the post moves to
+  another **day** (Postpone or editing the date), with the same rules (`plan_task`,
+  `redates`). Other saves, and a new time on the same day, leave it alone: recalculating
+  would push a late task's date to today and hide that it's late. A task that is already
+  late only moves when the post moves to a **later** day; bringing the post earlier keeps it
+  late. A change to the lead times in Content Settings applies to new tasks and to posts moved
+  to another day.
+- **A part reopened by hand** (cancelled or completed, then reopened in Tasky) keeps the date
+  it had; whoever reopens it sets a new one if the post has moved since.
+
+When a task counts as overdue (past its date, or due today and past its estimated hours) is
+described in [workspace-pages.md](workspace-pages.md#when-a-task-is-overdue), and who hears
+about it in [follow-ups.md](follow-ups.md).
+
 ### Which project the tasks go to
 
 A post's tasks go to **one of the customer's open projects, of any type**

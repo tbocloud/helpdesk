@@ -200,8 +200,14 @@ class HDContentPost(Document):
         publish = getdate(self.publish_on) if self.publish_on else None
         settings = frappe.get_cached_doc("HD Content Settings")
 
+        today = getdate()
+
         def due(days_before):
-            return add_days(publish, -(days_before or 0)) if publish else None
+            if not publish:
+                return None
+            # a part whose lead time has already passed is due today, not on a past date,
+            # and never after the publish date (a missed post keeps it)
+            return min(max(add_days(publish, -(days_before or 0)), today), publish)
 
         days = {
             "writer": settings.writer_days_before,
@@ -329,8 +335,10 @@ class HDContentPost(Document):
         ):
             task.project = project
             changed = True
-        if plan["due"] and getdate(task.exp_end_date or "1900-01-01") != getdate(
+        if (
             plan["due"]
+            and self.redates(task)
+            and getdate(task.exp_end_date or "1900-01-01") != getdate(plan["due"])
         ):
             task.exp_end_date = plan["due"]
             changed = True
@@ -347,6 +355,23 @@ class HDContentPost(Document):
             task.custom_estimated_hours = 0
             changed = True
         return changed
+
+    def redates(self, task) -> bool:
+        """Whether this save gives an existing task a new due date. The date is set when the
+        task is made and moves only when the post moves to another day; recalculating on every
+        save would push a late task's date to today and hide that it's late. So a late task
+        only moves when the post moved to a later day (not for a new time on the same day, or
+        a post brought earlier)."""
+        if not task.exp_end_date:
+            return True
+        before = self.get_doc_before_save()
+        if not (before and before.publish_on and self.publish_on):
+            return False
+        old_day, new_day = getdate(before.publish_on), getdate(self.publish_on)
+        if old_day == new_day:
+            return False
+        late = getdate(task.exp_end_date) < getdate()
+        return not late or new_day > old_day
 
     def reassign_task(self, task, users: list):
         current = set(task.assignees())
