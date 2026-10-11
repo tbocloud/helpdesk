@@ -195,7 +195,10 @@ def import_item(item, calendar, customer: str, channel: str) -> str:
             "designer": existing_user(item.assigned_creative),
             "client_feedback": latest_feedback(item.description),
         }
-    ).insert(ignore_permissions=True)
+    )
+    # an imported client may have no project yet: its tasks join one once it does
+    post.flags.tasks_join_project_later = True
+    post.insert(ignore_permissions=True)
 
     updates = {"missed_alert_sent": item.missed_notification_sent or 0}
     if status == "Published":

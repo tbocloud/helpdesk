@@ -210,6 +210,8 @@ class HDContentPackage(Document):
         )
         # one summary per person (notify_team) instead of a notice per task
         post.flags.quiet_tasks = True
+        # planned in the background: tasks join the customer's project once it has one
+        post.flags.tasks_join_project_later = True
         return post.insert(ignore_permissions=True)
 
     def notify_team(self, month, count: int):

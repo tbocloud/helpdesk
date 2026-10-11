@@ -4,7 +4,7 @@ import json
 
 import frappe
 from frappe import _
-from frappe.utils import date_diff, flt
+from frappe.utils import date_diff, flt, strip_html
 
 from helpdesk.helpdesk.doctype.hd_content_occasion.hd_content_occasion import (
     occasions_between,
@@ -14,6 +14,8 @@ from helpdesk.helpdesk.doctype.hd_content_post.hd_content_post import (
     ONE_TASK,
     SHARED_ROLE,
     TASK_ROLES,
+    content_project_for,
+    missing_content_project_message,
     role_teams_of,
     team_of,
 )
@@ -96,6 +98,27 @@ def get_team_defaults(customer: str) -> dict:
     if not latest:
         return {role: [] for role in TEAM_FIELDS}
     return team_of(frappe.get_doc("HD Content Post", latest[0]))
+
+
+@frappe.whitelist()
+def get_content_project(customer: str) -> dict | None:
+    """The project this customer's post tasks go to, for the post dialogs to show:
+    {name, project_name}, {name: None, hidden: True} when the caller can't read it, or
+    {name: None, missing} when there is none."""
+    frappe.has_permission("HD Content Post", "read", throw=True)
+    project = content_project_for(customer)
+    if not project:
+        return {
+            "name": None,
+            "missing": strip_html(missing_content_project_message(customer)),
+        }
+    # someone who can't open the project still learns the entry is fine, not which project
+    if not frappe.has_permission("Project", "read", doc=project):
+        return {"name": None, "hidden": True}
+    return {
+        "name": project,
+        "project_name": frappe.db.get_value("Project", project, "project_name"),
+    }
 
 
 @frappe.whitelist(methods=["POST"])

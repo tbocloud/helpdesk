@@ -1,7 +1,10 @@
+from unittest.mock import patch
+
 import frappe
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_days, add_to_date, getdate, now_datetime
 
+from helpdesk.api.content_board import get_content_project
 from helpdesk.content_team import (
     CONTENT_TEAM_ROLE,
     DM_EMPLOYEE_ROLE,
@@ -14,6 +17,7 @@ from helpdesk.test_utils import (
     create_customer,
     hold_commits,
     make_content_post,
+    make_customer_project,
     make_project,
     make_tasky_user,
     make_ticket,
@@ -431,6 +435,221 @@ class TestSeveralPeopleAndVideoEditor(ContentTaskCase):
         self.assertIsNone(has_permission(post, "read", OTHER[0]))
         frappe.set_user(OTHER[0])
         self.assertIn(post.name, frappe.get_list("HD Content Post", pluck="name"))
+
+
+class TestContentProject(ContentTaskCase):
+    def without_project_customer(self):
+        frappe.db.set_value("Project", self.project, "customer", None)
+
+    def without_task_projects(self, post):
+        # tasks made before the customer's project had the customer (older posts)
+        for task in self.tasks(post).values():
+            frappe.db.set_value("Task", task.name, "project", None)
+
+    def test_tasks_join_the_project_once_it_has_the_customer(self):
+        post = self.post()
+        self.without_task_projects(post)
+        self.without_project_customer()
+
+        project = frappe.get_doc("Project", self.project)
+        project.customer = CUSTOMER
+        project.save()
+
+        self.assertEqual({t.project for t in self.tasks(post).values()}, {self.project})
+
+    def test_saving_the_post_fills_in_a_missing_project(self):
+        post = self.post()
+        self.without_task_projects(post)
+
+        post.reload()
+        post.caption = "Lights, sweets and 20% off"
+        post.save()
+
+        self.assertEqual({t.project for t in self.tasks(post).values()}, {self.project})
+
+    def test_no_content_project_blocks_creating_tasks(self):
+        self.without_project_customer()
+        with self.assertRaisesRegex(frappe.ValidationError, "has no open project"):
+            self.post(with_project=False)
+        self.assertFalse(
+            frappe.db.exists(
+                "HD Content Post", {"customer": CUSTOMER, "title": "Diwali offer"}
+            )
+        )
+
+    def test_a_post_without_people_needs_no_project(self):
+        self.without_project_customer()
+        post = make_content_post(
+            "Diwali offer", CUSTOMER, with_project=False, publish_on=self.publish
+        )
+        self.assertEqual(self.tasks(post), {})
+
+    def test_editing_a_post_that_has_its_tasks_is_not_blocked(self):
+        post = self.post()
+        self.without_project_customer()
+
+        post.reload()
+        post.caption = "Lights, sweets and 20% off"
+        post.save()
+
+        self.assertEqual(set(self.tasks(post)), {"Writer", "Designer", "Marketer"})
+
+    def test_adding_a_person_without_a_project_is_blocked(self):
+        post = make_content_post(
+            "Diwali offer",
+            CUSTOMER,
+            status="Drafting",
+            publish_on=self.publish,
+            writer=WRITER[0],
+        )
+        self.without_project_customer()
+
+        post.reload()
+        post.designer = DESIGNER[0]
+        with self.assertRaisesRegex(frappe.ValidationError, "has no open project"):
+            post.save()
+
+    def test_a_project_picked_by_hand_stays(self):
+        post = self.post()
+        other = make_project("Content Tasks hand-picked").name
+        writer = self.tasks(post)["Writer"].name
+        frappe.db.set_value("Task", writer, "project", other)
+
+        post.reload()
+        post.caption = "Lights, sweets and 20% off"
+        post.save()
+
+        self.assertEqual(frappe.db.get_value("Task", writer, "project"), other)
+
+    def test_a_new_customer_moves_the_tasks_to_their_project(self):
+        post = self.post()
+        create_customer("Content Tasks Movers")
+        theirs = make_project("Content Tasks Movers - Social media").name
+        frappe.db.set_value(
+            "Project",
+            theirs,
+            {"customer": "Content Tasks Movers", "project_type": "Content Calendar"},
+        )
+
+        post.reload()
+        post.customer = "Content Tasks Movers"
+        post.save()
+
+        self.assertEqual({t.project for t in self.tasks(post).values()}, {theirs})
+
+    def test_the_dialog_is_told_which_project_tasks_go_to(self):
+        self.assertEqual(get_content_project(CUSTOMER)["name"], self.project)
+        self.without_project_customer()
+        missing = get_content_project(CUSTOMER)
+        self.assertIsNone(missing["name"])
+        self.assertIn("has no open project", missing["missing"])
+
+    def test_the_dialog_hides_a_project_the_viewer_cant_open(self):
+        real = frappe.has_permission
+        with patch(
+            "helpdesk.api.content_board.frappe.has_permission",
+            side_effect=lambda doctype, *a, **k: doctype != "Project"
+            and real(doctype, *a, **k),
+        ):
+            self.assertEqual(
+                get_content_project(CUSTOMER), {"name": None, "hidden": True}
+            )
+
+    def test_a_project_of_any_type_takes_the_tasks(self):
+        frappe.db.set_value("Project", self.project, "project_type", "Website")
+        post = self.post(with_project=False)
+        self.assertEqual({t.project for t in self.tasks(post).values()}, {self.project})
+
+    def test_a_content_calendar_project_is_preferred(self):
+        frappe.db.set_value("Project", self.project, "project_type", "Website")
+        content = make_customer_project(CUSTOMER, "Content Tasks - Content calendar")
+        frappe.db.set_value("Project", content, "project_type", "Content Calendar")
+        # the other project changed last, but the content one still wins
+        frappe.db.set_value("Project", self.project, "project_name", "Website rebuild")
+
+        post = self.post(with_project=False)
+
+        self.assertEqual({t.project for t in self.tasks(post).values()}, {content})
+
+    def test_a_save_that_adds_nobody_is_not_blocked(self):
+        # a role left without a task (say it was deleted) doesn't block finishing,
+        # approving or other saves that add no one
+        post = self.post()
+        frappe.delete_doc("Task", self.tasks(post)["Designer"].name, force=True)
+        self.without_project_customer()
+
+        post.reload()
+        post.caption = "Lights, sweets and 20% off"
+        post.save()
+
+    def test_moving_a_post_to_a_customer_without_a_project_is_blocked(self):
+        post = self.post()
+        create_customer("Content Tasks Projectless")
+
+        post.reload()
+        post.customer = "Content Tasks Projectless"
+        with self.assertRaisesRegex(frappe.ValidationError, "has no open project"):
+            post.save()
+
+    def test_cancelling_while_changing_the_customer_is_not_blocked(self):
+        post = self.post()
+        create_customer("Content Tasks Projectless")
+
+        post.reload()
+        post.customer = "Content Tasks Projectless"
+        post.status = "Cancelled"
+        post.save()
+
+        self.assertEqual(self.tasks(post), {})
+
+    def test_one_task_for_the_post_needs_a_project_too(self):
+        self.without_project_customer()
+        with self.assertRaisesRegex(frappe.ValidationError, "has no open project"):
+            self.post(task_mode="One task for the post", with_project=False)
+
+    def test_background_posts_are_made_and_join_the_project_later(self):
+        self.without_project_customer()
+        post = frappe.get_doc(
+            {
+                "doctype": "HD Content Post",
+                "title": "Planned post",
+                "customer": CUSTOMER,
+                "channel": "Instagram",
+                "status": "Idea",
+                "publish_on": self.publish,
+                "writer": WRITER[0],
+            }
+        )
+        post.flags.tasks_join_project_later = True
+        post.insert(ignore_permissions=True)
+        self.assertEqual(self.tasks(post)["Writer"].project, None)
+
+        frappe.get_doc("Project", self.project).update({"customer": CUSTOMER}).save()
+
+        self.assertEqual(self.tasks(post)["Writer"].project, self.project)
+
+    def test_only_the_project_tasks_go_to_takes_them(self):
+        post = self.post()
+        self.without_task_projects(post)
+        other = make_customer_project(CUSTOMER, "Content Tasks - Website")
+
+        # the Content Calendar project is the one tasks go to, so saving another
+        # project of the customer takes nothing
+        frappe.get_doc("Project", other).save()
+
+        self.assertEqual({t.project for t in self.tasks(post).values()}, {None})
+
+    def test_the_project_is_found_through_any_customer_field(self):
+        # on ERPNext sites the HD Customer is in Project.hd_customer; stand in another
+        # field for it, since this site's Project has no hd_customer
+        frappe.db.set_value(
+            "Project", self.project, {"customer": None, "project_name": CUSTOMER}
+        )
+        with patch(
+            "helpdesk.helpdesk.doctype.hd_content_post.hd_content_post.project_customer_fields",
+            return_value=["customer", "project_name"],
+        ):
+            self.assertEqual(get_content_project(CUSTOMER)["name"], self.project)
 
 
 class TestContentTeamRole(ContentTaskCase):

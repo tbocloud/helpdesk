@@ -128,8 +128,50 @@ The Desk form uses the same labels (Copy, Sub Copy, Description).
 `campaign` used to link to `HD Content Campaign`; it is now a plain Data field, because the team
 names campaigns as they go. The patch `content_campaign_as_text` replaced the stored campaign IDs
 with the campaign names. With the link gone, a post's tasks always go to the customer's open
-Content Calendar project, the customer is never filled in from a campaign, and Draft with AI
+project (see below), the customer is never filled in from a campaign, and Draft with AI
 passes the campaign text as "Campaign: …". The `HD Content Campaign` doctype itself is unchanged.
+
+### Which project the tasks go to
+
+A post's tasks go to **one of the customer's open projects, of any type**
+(`content_project_for(customer)` in `hd_content_post.py`). When the customer has several, a
+project with Project type "Content Calendar" wins, then the most recently changed one. The
+owner's decision (2026-10-11): the project's customer is what links it, not its type.
+
+The project's customer is matched on `customer` and, where the field exists, `hd_customer`
+("Helpdesk Customer", `project_customer_fields()`). On sites with ERPNext, `Project.customer`
+links to ERPNext's Customer while posts use the HD Customer. Some of those sites (tboindia)
+keep the HD Customer in an `hd_customer` Custom Field that was added by hand; this app doesn't
+create it, it only uses it when it's there.
+
+- **No project, no tasks:** while the customer has no open project, a save that **adds people**
+  (a new post with people on it, a role that gets its first person, or tasks turned on by the
+  task mode) or **moves a post with open tasks to that customer** is refused
+  (`require_content_project`, `adds_tasks`, `moves_tasks`): "The customer *Y* has no open
+  project, so new tasks for this entry can't be created. Set *Y* as the customer on a project
+  first." (`missing_content_project_message`). Saves that add nobody go through, so finishing
+  a task, client and ERP approvals and edits to older posts never fail on it, even when a role
+  is missing its task.
+- **Background jobs aren't refused:** the spreadsheet import (`content_calendar_import`) and
+  monthly package planning (`HDContentPackage.make_post`) set `flags.tasks_join_project_later`,
+  so their posts and tasks are still made; the tasks join the customer's project once it has
+  one (below).
+- **The dialogs say where:** under Customer, Add entry and the post dialog show "Tasks go to
+  *project*" (a link, opening in a new tab), or the same message as a warning before saving
+  (`ContentProjectNote.vue`, `content_board.get_content_project`, which returns
+  `{name, project_name}` or `{name: null, missing}`). Someone who can read posts but can't open
+  the project gets `{name: null, hidden: true}` and sees "Tasks go to this customer's project",
+  without its name or link. The note drops an answer for a customer
+  picked earlier and checks again when the window gets focus, since the project is often fixed
+  in the tab its link opens.
+- **Missing projects are filled in later.** Saving a post gives its open tasks without a
+  project the customer's project (`plan_task`). Saving an open project that is the one a
+  customer's tasks go to moves that customer's open content tasks without a project into it
+  (`attach_content_tasks`, a Project `on_update` doc event, so it runs whichever controller
+  the site's Project uses). Each task is saved through the Task controller, so the project's
+  rollups follow; one that can't be saved is logged and left for the next save.
+- **A new customer moves the tasks:** changing a post's customer moves its open tasks to the
+  new customer's project. Otherwise a project set on a task by hand stays.
 
 ### Platforms and post types the team adds
 

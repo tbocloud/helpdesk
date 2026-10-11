@@ -5,6 +5,7 @@ import frappe
 from frappe import _
 from frappe.desk.form import assign_to
 from frappe.model.document import Document
+from frappe.query_builder import Case, Criterion, Order
 from frappe.utils import (
     add_days,
     add_to_date,
@@ -84,6 +85,7 @@ class HDContentPost(Document):
         self.reset_missed_alert()
         self.warn_if_no_client_connection()
         self.set_task_mode()
+        self.require_content_project()
         self.end_design_when_its_last_part_is_dropped()
         self.start_client_review()
 
@@ -170,11 +172,12 @@ class HDContentPost(Document):
         handled = {t.content_role for t in tasks if t.status in DONE_TASK_STATUSES}
         closing = CLOSE_TASKS_AS.get(self.status)
         wanted = {} if closing else self.wanted_tasks()
+        project = self.content_project() if wanted else None
 
         for role, name in open_tasks.items():
             task = frappe.get_doc("Task", name)
             if role in wanted:
-                if self.plan_task(task, wanted[role]):
+                if self.plan_task(task, wanted[role], project):
                     task.save(ignore_permissions=True)
                 self.reassign_task(task, wanted[role]["users"])
             else:
@@ -183,7 +186,7 @@ class HDContentPost(Document):
                 assign_to.close_all_assignments("Task", name, ignore_permissions=True)
         for role, plan in wanted.items():
             if role not in open_tasks and role not in handled:
-                self.create_task(role, plan)
+                self.create_task(role, plan, project)
 
     def content_tasks(self) -> list:
         return frappe.get_all(
@@ -251,26 +254,56 @@ class HDContentPost(Document):
         return text[:140]
 
     def content_project(self) -> str | None:
-        """The customer's open Content Calendar project."""
-        if not self.customer:
-            return None
-        return frappe.db.get_value(
-            "Project",
-            {
-                "customer": self.customer,
-                "project_type": CONTENT_PROJECT_TYPE,
-                "status": "Open",
-            },
-            "name",
-            order_by="modified desc",
+        return content_project_for(self.customer)
+
+    def require_content_project(self):
+        """Tasks go to one of the customer's projects, so adding people to a post, or moving a
+        post with open tasks to another customer, needs one. Saves that add nobody (finishing a
+        task, approvals) still go through, and so do background jobs that set
+        flags.tasks_join_project_later: their tasks join the project once the customer has one
+        (attach_content_tasks)."""
+        if self.flags.skip_task_sync or self.flags.tasks_join_project_later:
+            return
+        if not (self.adds_tasks() or self.moves_tasks()):
+            return
+        if not self.content_project():
+            frappe.throw(
+                missing_content_project_message(self.customer),
+                title=_("No content project"),
+            )
+
+    def adds_tasks(self) -> bool:
+        """Whether this save gives a role its first task: a role wanted now that wasn't wanted
+        before the save (a person added, or tasks turned on) and has no task yet."""
+        if CLOSE_TASKS_AS.get(self.status):
+            return False
+        before = self.get_doc_before_save()
+        wanted_before = (
+            set(before.wanted_tasks())
+            if before and not CLOSE_TASKS_AS.get(before.status)
+            else set()
+        )
+        added = set(self.wanted_tasks()) - wanted_before
+        if not added or self.is_new():
+            return bool(added)
+        return bool(added - {t.content_role for t in self.content_tasks()})
+
+    def moves_tasks(self) -> bool:
+        """Whether this save moves a post with open tasks to another customer (a post being
+        published or cancelled closes its tasks instead of moving them)."""
+        return (
+            not CLOSE_TASKS_AS.get(self.status)
+            and not self.is_new()
+            and self.has_value_changed("customer")
+            and any(t.status not in DONE_TASK_STATUSES for t in self.content_tasks())
         )
 
-    def create_task(self, role: str, plan: dict):
+    def create_task(self, role: str, plan: dict, project: str | None):
         task = frappe.get_doc(
             {
                 "doctype": "Task",
                 "subject": self.task_subject(role),
-                "project": self.content_project(),
+                "project": project,
                 "status": "Open",
                 "priority": "Medium",
                 "exp_end_date": plan["due"],
@@ -284,9 +317,18 @@ class HDContentPost(Document):
         for user in plan["users"]:
             self.give_task(task, user)
 
-    def plan_task(self, task, plan: dict) -> bool:
-        """Set the task's due date, subject and hours from the post; True if anything changed."""
+    def plan_task(self, task, plan: dict, project: str | None) -> bool:
+        """Set the task's due date, subject, hours and project from the post; True if anything changed."""
         changed = False
+        # a task made before the customer had a content project gets it now, and a
+        # new customer moves the post's tasks to theirs (a project picked by hand stays)
+        if (
+            project
+            and task.project != project
+            and (not task.project or self.has_value_changed("customer"))
+        ):
+            task.project = project
+            changed = True
         if plan["due"] and getdate(task.exp_end_date or "1900-01-01") != getdate(
             plan["due"]
         ):
@@ -692,6 +734,81 @@ class HDContentPost(Document):
             frappe.throw(
                 _("{0} is no longer waiting for your review").format(self.title)
             )
+
+
+def project_customer_fields() -> list[str]:
+    """Project fields that can hold a post's HD Customer. On ERPNext sites `customer` links to
+    ERPNext's Customer, and the HD Customer goes in the `hd_customer` Custom Field."""
+    fields = ["customer"]
+    if frappe.get_meta("Project").has_field("hd_customer"):
+        fields.append("hd_customer")
+    return fields
+
+
+def content_project_for(customer: str | None) -> str | None:
+    """The customer's open project for its post tasks: a Content Calendar one first, then
+    the latest changed, of any type."""
+    if not customer:
+        return None
+    project = frappe.qb.DocType("Project")
+    rows = (
+        frappe.qb.from_(project)
+        .select(project.name)
+        .where(project.status == "Open")
+        .where(
+            Criterion.any(
+                [project[field] == customer for field in project_customer_fields()]
+            )
+        )
+        .orderby(Case().when(project.project_type == CONTENT_PROJECT_TYPE, 0).else_(1))
+        .orderby(project.modified, order=Order.desc)
+        .limit(1)
+        .run(pluck=True)
+    )
+    return rows[0] if rows else None
+
+
+def missing_content_project_message(customer: str) -> str:
+    return _(
+        "The customer {0} has no open project, so new tasks for this entry can't be "
+        "created. Set {0} as the customer on a project first."
+    ).format(frappe.bold(customer))
+
+
+def attach_content_tasks(doc, method=None):
+    """Project on_update: when this is the project a customer's post tasks go to, it takes
+    that customer's open content tasks that have no project yet (made before it had the
+    customer)."""
+    customers = [
+        customer
+        for customer in {doc.get(field) for field in project_customer_fields()}
+        - {None, ""}
+        if content_project_for(customer) == doc.name
+    ]
+    if not customers:
+        return
+    task, post = frappe.qb.DocType("Task"), frappe.qb.DocType("HD Content Post")
+    names = (
+        frappe.qb.from_(task)
+        .join(post)
+        .on(task.content_post == post.name)
+        .select(task.name)
+        .where(post.customer.isin(customers))
+        .where(task.status.notin(DONE_TASK_STATUSES))
+        .where(task.project.isnull() | (task.project == ""))
+        .run(pluck=True)
+    )
+    for name in names:
+        # through the Task controller, so its project's rollups follow; a task that can't be
+        # saved is logged and left for the next save instead of failing the project's save
+        frappe.db.savepoint("attach_content_task")
+        try:
+            task = frappe.get_doc("Task", name)
+            task.project = doc.name
+            task.save(ignore_permissions=True)
+        except Exception:
+            frappe.db.rollback(save_point="attach_content_task")
+            frappe.log_error(title=f"Content task {name} couldn't join {doc.name}")
 
 
 def send_due_reminders():

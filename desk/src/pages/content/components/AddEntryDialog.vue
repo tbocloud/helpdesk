@@ -20,12 +20,15 @@
         @submit.prevent="save(false)"
       >
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Link
-            v-model="form.customer"
-            doctype="HD Customer"
-            :label="__('Customer') + ' *'"
-            :placeholder="__('Select customer')"
-          />
+          <div class="flex min-w-0 flex-col gap-1.5">
+            <Link
+              v-model="form.customer"
+              doctype="HD Customer"
+              :label="__('Customer') + ' *'"
+              :placeholder="__('Select customer')"
+            />
+            <ContentProjectNote :customer="form.customer" />
+          </div>
           <FormControl
             v-model="form.campaign"
             :label="__('Campaign (optional)')"
@@ -242,6 +245,7 @@ import {
 import { computed, nextTick, reactive, ref, watch } from "vue";
 import { TEAM_ROLES, type TeamRole, textToHtml } from "../constants";
 import { useContentOptions } from "../contentOptions";
+import ContentProjectNote from "./ContentProjectNote.vue";
 import AddOptionChip from "./AddOptionChip.vue";
 import ChannelIcon from "./ChannelIcon.vue";
 import ChipToggle from "./ChipToggle.vue";
