@@ -7,13 +7,22 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 
+from helpdesk.github_sync import REPO_NAME
+
 # "owner/repo" or "owner/*", with GitHub's allowed name characters
 REPO_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+/(\*|[A-Za-z0-9_.-]+)$")
+MERGE_BOT_WORKFLOW = re.compile(r"^[A-Za-z0-9_.-]+\.ya?ml$")
+# Singles' JSON defaults only reach new sites, so an existing hub gets them on save
+MERGE_BOT_DEFAULTS = {
+    "merge_bot_repo": "tbocloud/ai-review",
+    "merge_bot_workflow": "merge-bot.yml",
+}
 
 
 class HDGitHubSettings(Document):
     def validate(self):
         self.normalize_allowed_repos()
+        self.validate_merge_bot()
 
     def normalize_allowed_repos(self):
         """One pattern per line, blanks dropped, so matching never sees stray spaces."""
@@ -27,6 +36,17 @@ class HDGitHubSettings(Document):
                 )
             )
         self.allowed_repos = "\n".join(patterns)
+
+    def validate_merge_bot(self):
+        """Both values go into the dispatch URL, so nothing that could change its path."""
+        for field, default in MERGE_BOT_DEFAULTS.items():
+            self.set(field, (self.get(field) or "").strip() or default)
+        if not REPO_NAME.match(self.merge_bot_repo) or ".." in self.merge_bot_repo:
+            frappe.throw(_("Use owner/repo for the merge bot repository."))
+        if not MERGE_BOT_WORKFLOW.match(self.merge_bot_workflow):
+            frappe.throw(
+                _("Use the workflow's file name for the merge bot workflow, e.g. merge-bot.yml.")
+            )
 
     def allows_repo(self, repo: str | None) -> bool:
         """GitHub treats owner and repository names case-insensitively, so do we."""

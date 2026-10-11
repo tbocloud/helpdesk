@@ -62,6 +62,11 @@ scheduler_events = {
         "*/10 * * * *": [
             "helpdesk.error_alerts.post_error_digest",
         ],
+        # every 10 minutes, off the error digest's minutes: ask GitHub to run the org
+        # merge bot, whose own schedule doesn't fire (off by default; docs/github-sync.md)
+        "2-59/10 * * * *": [
+            "helpdesk.merge_bot.scheduled_run",
+        ],
         # 09:00: from the planning day on, next month's content plans
         "0 9 * * *": [
             "helpdesk.helpdesk.doctype.hd_content_package.hd_content_package.plan_upcoming_months",
