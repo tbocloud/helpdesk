@@ -1,0 +1,40 @@
+{
+  "v": 1,
+  "data": {
+    "name": "TASK-2026-00431",
+    "subject": "Call Galom about the GSTIN list",
+    "project": "PROJ-0031",
+    "project_name": "Galom - ERPNext rollout",
+    "customer": "Galom Trading",
+    "status": "Open",
+    "group": "upcoming",
+    "exp_end_date": "2026-10-13",
+    "is_overdue": false,
+    "is_key": false,
+    "is_milestone": false,
+    "priority": "High",
+    "assignees": [
+      "najath@teambackoffice.com"
+    ],
+    "assigned_by": {
+      "user": "najath@teambackoffice.com",
+      "full_name": "Najath Thekkeyil"
+    },
+    "hold_reason": null,
+    "hold_note": null,
+    "hold_days": null,
+    "escalation": null,
+    "timer": {
+      "state": "idle",
+      "started_at": null,
+      "logged_hours": 0
+    },
+    "expected_hours": null,
+    "waiting_on": null,
+    "risks": [],
+    "can_approve": false,
+    "description": "",
+    "activity": [],
+    "pull_requests": []
+  }
+}

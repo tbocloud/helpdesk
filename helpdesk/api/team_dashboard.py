@@ -42,10 +42,8 @@ def get_team_dashboard(period: str = "week", department: str | None = None) -> d
     by_department = td.tally(
         data, lambda r: (r["department"] or NO_DEPARTMENT) if keep(r) else None
     )
-    ranked = td.rank(td.tally(data, lambda r: True if keep(r) else None)[True], period)
     members = department_members(department)
-    for person in sorted(set().union(*members.values()) - {r["user"] for r in ranked}):
-        ranked.extend(td.rank({person: td.blank()}, period))
+    ranked = ranked_people(data, period, department, members)
     return {
         "period": {
             "key": period,
@@ -131,6 +129,16 @@ def scope_department(access, department: str | None) -> str | None:
 def check_period(period: str):
     if period not in td.PERIODS:
         frappe.throw(_("Unknown period: {0}").format(period))
+
+
+def ranked_people(data: dict, period: str, department: str | None, members: dict):
+    """Everyone in scope scored, best first, as the People view ranks them: whoever
+    has work in the scope, then its members (`department_members`) with nothing."""
+    keep = in_scope(department)
+    ranked = td.rank(td.tally(data, lambda r: True if keep(r) else None)[True], period)
+    for person in sorted(set().union(*members.values()) - {r["user"] for r in ranked}):
+        ranked.extend(td.rank({person: td.blank()}, period))
+    return ranked
 
 
 def department_is(department: str):

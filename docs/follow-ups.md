@@ -158,6 +158,32 @@ The key is **(person, item, rule, stage or level, date)**:
 - The digest's own once-per-time guard is `digest_sent_through`; the channel's is
   `HD Chat Escalation` (once per message text).
 
+## Snooze
+
+The assignee may **acknowledge** a reminder from the TBO Smart app
+(`helpdesk.api.mobile.snooze_follow_up` → `follow_ups.snooze`), with a reason and a date
+(tomorrow to 7 days ahead):
+
+- Only the item's assignee, and only while every follow-up they get on it is **L0 or L1**.
+  L2 and above and SLA breaches can't be snoozed, and a snooze never quiets them: when the
+  item climbs to L2 or breaches, the reminders come back at once (`snoozable`).
+- Recorded as one **HD Follow Up Snooze** per person and item (user, item, until, the level
+  then, reason). The record's name comes from the person and the item, so a new snooze
+  replaces the last, even when two requests arrive at once. Every save checks the rules,
+  however it is saved (`HDFollowUpSnooze.validate`): the person is the item's assignee,
+  there is a reason (≤500 characters), and the date is tomorrow to 7 days ahead. Each snooze
+  also leaves a note on the item ("Anu Menon
+  acknowledged the reminder until 14 Oct: …") so whoever runs the work sees why. Today's
+  follow-up notice about it is marked read.
+- Each run takes the person off that item's L0/L1 follow-ups until the date
+  (`drop_snoozed`, right after the run's result is cached): no notice and no digest line for
+  them. Everyone else on the follow-up (the assigner or lead at L1) is still told. The
+  reminders start again on the date itself.
+- The banner, Overview → Follow-ups and the preview still count the item: it is still late.
+
+HD Follow Up Snooze: System Manager full, Agent Manager read; written only through the
+endpoint.
+
 ## Customer follow-up and auto-close
 
 - **The email** (*Email customers who haven't replied*, **off** by default): after the
@@ -195,6 +221,9 @@ gives the same two roles write access):
 - **Customer follow-up**: the email switch and its template; a line on HD Settings'
   auto-close with a button to General.
 - **Working hours**: read from the default SLA policy, with a button to SLA policies.
+- **Weekly challenge**: the team's goal for the week shown in the TBO Smart app (close
+  every key task due this week, finish every task due this week on time, or off); see
+  [tbo-smart-api.md](tbo-smart-api.md#compete-scoreboard-for-the-app).
 - **Preview** (`get_preview`): what each person would get in a digest right now, busiest
   first, each item with its rule and level.
 
@@ -228,7 +257,8 @@ Existing sites get the defaults stored by the patch `v16_0_2.seed_follow_up_sett
 ## Files
 
 - Engine: `helpdesk/follow_ups.py`; API: `helpdesk/api/follow_ups.py`; settings:
-  `helpdesk/helpdesk/doctype/hd_follow_up_settings/`.
+  `helpdesk/helpdesk/doctype/hd_follow_up_settings/`; snoozes:
+  `helpdesk/helpdesk/doctype/hd_follow_up_snooze/`.
 - Fields: `Task.escalation_level`, `Task.escalated_on` (task.json);
   `HD Ticket.custom_escalation_level`, `custom_escalated_on`, `custom_customer_followed_up_on`
   (custom fields in `setup/install.py`); `HD Notification.dedupe_key`.

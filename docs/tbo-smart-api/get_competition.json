@@ -1,0 +1,324 @@
+{
+  "v": 1,
+  "data": {
+    "period": "week",
+    "period_label": "the week of 5 Oct 2026",
+    "range": {
+      "start": "2026-10-05",
+      "end": "2026-10-11"
+    },
+    "compare": {
+      "start": "2026-09-28",
+      "end": "2026-10-04"
+    },
+    "me": {
+      "user": "najath@teambackoffice.com",
+      "full_name": "Najath Thekkeyil",
+      "image": "/files/najath.jpg",
+      "department": "ERP",
+      "rank": 2,
+      "score": 13.5,
+      "rank_delta": 2,
+      "is_champion": false,
+      "tasks_done": 9,
+      "on_time_pct": 89,
+      "overdue": 1
+    },
+    "team": {
+      "department": null,
+      "champion": "arun@teambackoffice.com",
+      "of": 18,
+      "leaders": [
+        {
+          "user": "arun@teambackoffice.com",
+          "full_name": "Arun Menon",
+          "image": null,
+          "department": "ERP",
+          "rank": 1,
+          "score": 15.2,
+          "rank_delta": 0,
+          "is_champion": true,
+          "tasks_done": 11,
+          "on_time_pct": 100,
+          "overdue": 0
+        },
+        {
+          "user": "najath@teambackoffice.com",
+          "full_name": "Najath Thekkeyil",
+          "image": "/files/najath.jpg",
+          "department": "ERP",
+          "rank": 2,
+          "score": 13.5,
+          "rank_delta": 2,
+          "is_champion": false,
+          "tasks_done": 9,
+          "on_time_pct": 89,
+          "overdue": 1
+        },
+        {
+          "user": "sana@teambackoffice.com",
+          "full_name": "Sana Rafeeq",
+          "image": null,
+          "department": "Digital",
+          "rank": 3,
+          "score": 11.0,
+          "rank_delta": -1,
+          "is_champion": false,
+          "tasks_done": 8,
+          "on_time_pct": 88,
+          "overdue": 0
+        },
+        {
+          "user": "deepa@teambackoffice.com",
+          "full_name": "Deepa Varma",
+          "image": null,
+          "department": "Digital",
+          "rank": 4,
+          "score": 9.5,
+          "rank_delta": null,
+          "is_champion": false,
+          "tasks_done": 6,
+          "on_time_pct": 83,
+          "overdue": 0
+        }
+      ],
+      "me": {
+        "user": "najath@teambackoffice.com",
+        "full_name": "Najath Thekkeyil",
+        "image": "/files/najath.jpg",
+        "department": "ERP",
+        "rank": 2,
+        "score": 13.5,
+        "rank_delta": 2,
+        "is_champion": false,
+        "tasks_done": 9,
+        "on_time_pct": 89,
+        "overdue": 1
+      }
+    },
+    "departments": [
+      {
+        "department": "ERP",
+        "champion": "arun@teambackoffice.com",
+        "of": 9,
+        "leaders": [
+          {
+            "user": "arun@teambackoffice.com",
+            "full_name": "Arun Menon",
+            "image": null,
+            "department": "ERP",
+            "rank": 1,
+            "score": 15.2,
+            "rank_delta": 0,
+            "is_champion": true,
+            "tasks_done": 11,
+            "on_time_pct": 100,
+            "overdue": 0
+          },
+          {
+            "user": "najath@teambackoffice.com",
+            "full_name": "Najath Thekkeyil",
+            "image": "/files/najath.jpg",
+            "department": "ERP",
+            "rank": 2,
+            "score": 13.5,
+            "rank_delta": 2,
+            "is_champion": false,
+            "tasks_done": 9,
+            "on_time_pct": 89,
+            "overdue": 1
+          }
+        ],
+        "me": {
+          "user": "najath@teambackoffice.com",
+          "full_name": "Najath Thekkeyil",
+          "image": "/files/najath.jpg",
+          "department": "ERP",
+          "rank": 2,
+          "score": 13.5,
+          "rank_delta": 2,
+          "is_champion": false,
+          "tasks_done": 9,
+          "on_time_pct": 89,
+          "overdue": 1
+        }
+      },
+      {
+        "department": "Digital",
+        "champion": "sana@teambackoffice.com",
+        "of": 7,
+        "leaders": [
+          {
+            "user": "sana@teambackoffice.com",
+            "full_name": "Sana Rafeeq",
+            "image": null,
+            "department": "Digital",
+            "rank": 1,
+            "score": 11.0,
+            "rank_delta": -1,
+            "is_champion": true,
+            "tasks_done": 8,
+            "on_time_pct": 88,
+            "overdue": 0
+          },
+          {
+            "user": "deepa@teambackoffice.com",
+            "full_name": "Deepa Varma",
+            "image": null,
+            "department": "Digital",
+            "rank": 2,
+            "score": 9.5,
+            "rank_delta": null,
+            "is_champion": false,
+            "tasks_done": 6,
+            "on_time_pct": 83,
+            "overdue": 0
+          }
+        ],
+        "me": null
+      }
+    ],
+    "streaks": {
+      "on_time_days": 4,
+      "best_on_time_days": 9,
+      "podium_weeks": 3,
+      "lookback_days": 90
+    },
+    "personal_bests": {
+      "most_on_time_in_a_week": {
+        "value": 8,
+        "week_start": "2026-10-05"
+      },
+      "most_done_in_a_week": {
+        "value": 9,
+        "week_start": "2026-10-05"
+      },
+      "most_key_in_a_week": {
+        "value": 3,
+        "week_start": "2026-09-07"
+      },
+      "longest_on_time_streak": 9,
+      "champion_titles": 1,
+      "weeks_looked_at": 26
+    },
+    "badges": {
+      "earned": [
+        {
+          "name": "podium-2026-09-28-3f9a1c2b7d",
+          "badge": "podium",
+          "label": "Department top 3",
+          "period_type": "Week",
+          "start": "2026-09-28",
+          "end": "2026-10-04",
+          "department": "ERP",
+          "detail": "No. 2 in ERP with 12.7 points",
+          "earned_on": "2026-10-05"
+        },
+        {
+          "name": "on_time_streak-2026-10-02-8c21e0aa41",
+          "badge": "on_time_streak",
+          "label": "On-time streak 5",
+          "period_type": "Day",
+          "start": "2026-10-02",
+          "end": "2026-10-02",
+          "department": null,
+          "detail": "5 working days in a row with everything due done on time, to 2 Oct 2026",
+          "earned_on": "2026-10-03"
+        }
+      ],
+      "catalog": [
+        {
+          "badge": "on_time_streak",
+          "label": "On-time streak 5",
+          "rule": "5 working days in a row with everything you had due done on time. Days with nothing due neither count nor break it.",
+          "count": 3
+        },
+        {
+          "badge": "key_closer",
+          "label": "Key task closer",
+          "rule": "2 or more key tasks or milestones completed on time in one week.",
+          "count": 2
+        },
+        {
+          "badge": "zero_overdue_week",
+          "label": "Zero overdue week",
+          "rule": "At least 3 tasks due in the week, every one done on time, and nothing overdue when the week closed.",
+          "count": 1
+        },
+        {
+          "badge": "podium",
+          "label": "Department top 3",
+          "rule": "In the top 3 of a department's Scoreboard for the week, with the week's minimum activity.",
+          "count": 4
+        },
+        {
+          "badge": "champion_week",
+          "label": "Champion of the week",
+          "rule": "The week's champion of the whole team or of a department.",
+          "count": 1
+        },
+        {
+          "badge": "champion_month",
+          "label": "Champion of the month",
+          "rule": "The month's champion of the whole team or of a department.",
+          "count": 0
+        }
+      ]
+    },
+    "challenge": {
+      "key": "Key tasks due this week",
+      "title": "Close every key task due this week",
+      "week": {
+        "start": "2026-10-05",
+        "end": "2026-10-11"
+      },
+      "goal": 12,
+      "done": 9,
+      "pct": 75,
+      "complete": false,
+      "mine": {
+        "done": 1,
+        "total": 2
+      },
+      "completed_by": [
+        {
+          "user": "arun@teambackoffice.com",
+          "full_name": "Arun Menon",
+          "image": null
+        },
+        {
+          "user": "sana@teambackoffice.com",
+          "full_name": "Sana Rafeeq",
+          "image": null
+        }
+      ]
+    },
+    "move_up": {
+      "leader": false,
+      "next": {
+        "user": "arun@teambackoffice.com",
+        "full_name": "Arun Menon",
+        "score": 15.2
+      },
+      "gap": 1.7,
+      "actions": [
+        {
+          "task": "TASK-2026-00412",
+          "subject": "TBO ERP: migrate customers",
+          "due": "2026-10-08",
+          "points": 2.8,
+          "text": "Finish overdue “TBO ERP: migrate customers”: +2.8",
+          "passes": true
+        },
+        {
+          "task": "TASK-2026-00420",
+          "subject": "Galom: set up GST invoice print",
+          "due": "2026-10-14",
+          "points": 1.4,
+          "text": "Finish “Galom: set up GST invoice print” on time: +1.4",
+          "passes": false
+        }
+      ]
+    }
+  }
+}

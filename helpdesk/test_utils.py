@@ -1529,6 +1529,37 @@ def call_mobile_as(as_user: str, method: str, **kwargs):
     return call_as_user(as_user, f"helpdesk.api.mobile.{method}", **kwargs)
 
 
+def call_mobile_on(as_user: str, today, method: str, **kwargs):
+    """call_mobile_as with today fixed and the Scoreboard's cached numbers dropped,
+    so only the test's records fall in the period (as call_team_dashboard does)."""
+    from helpdesk.team_dashboard import clear_cache
+
+    clear_cache()
+    with patch("helpdesk.api.mobile.nowdate", return_value=str(today)):
+        return call_mobile_as(as_user, method, **kwargs)
+
+
+def make_follow_up(
+    doctype: str, name, user: str, level: int = 0, severity: str = "overdue"
+):
+    """A follow-up on a task or ticket for `user` (its owner and its only recipient) at
+    `level`, shaped as the engine finds them; a "breach" is an SLA one."""
+    from helpdesk.follow_ups import FollowUp
+
+    return FollowUp(
+        doctype=doctype,
+        name=str(name),
+        title=str(name),
+        rule="sla" if severity == "breach" else "overdue",
+        stage=f"L{level}",
+        severity=severity,
+        text=f"Follow up on {name}",
+        recipients=[user],
+        owners=[user],
+        level=level,
+    )
+
+
 def register_device_as(user: str, token: str, platform: str = "ios") -> dict:
     """Registers a phone's push token for `user` through the mobile API; returns the
     device the API sends back."""

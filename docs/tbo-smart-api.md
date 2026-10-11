@@ -5,8 +5,11 @@ hub** (https://teams.teambackoffice.com). The ESS half (tboindia, `tbo_smart` ap
 of this repo and is not covered here.
 
 - Code: `helpdesk/api/mobile.py` (every endpoint), `helpdesk/mobile_push.py` (push),
-  `HD Mobile Device` (push tokens), HD Settings → **Mobile push** (switch).
-- Tests: `helpdesk/tests/test_mobile_api.py`.
+  `HD Mobile Device` (push tokens), HD Settings → **Mobile push** (switch),
+  `helpdesk/competition.py` (Compete: ranks, streaks, bests, badges, the weekly challenge;
+  `HD Badge Award`), `helpdesk/team_insights.py` (management insights), the snooze in
+  `helpdesk/follow_ups.py` (`HD Follow Up Snooze`).
+- Tests: `helpdesk/tests/test_mobile_api.py`, `helpdesk/tests/test_mobile_competition.py`.
 - Fixtures: `docs/tbo-smart-api/<endpoint>.json`, one real-shaped response per endpoint, for
   mocking.
 
@@ -148,7 +151,7 @@ to `POST /api/method/upload_file` (multipart, `is_private=1`, `doctype=HD Ticket
 
 | Method | Params | Returns | Who / notes |
 | --- | --- | --- | --- |
-| `get_me` | – | `Me`: user, full_name, image, roles, is_agent, is_manager, `can` {team, projects_health, sla_summary, escalations, approvals}, departments, teams | Any agent. `is_manager` = sees the overview (Project Manager role, admins, project leads). Fixture `get_me.json` |
+| `get_me` | – | `Me`: user, full_name, image, roles, is_agent, is_manager, `can` {team, projects_health, sla_summary, escalations, approvals}, departments, teams, `capabilities` (below) | Any agent. `is_manager` = sees the overview (Project Manager role, admins, project leads). Fixture `get_me.json` |
 | `get_home` | – | `HomeCounts` | Any agent; counts from My Work and Home's day. Fixture `get_home.json` |
 | `get_home_bundle` | – | `{me, counts, tasks}` (tasks = first page of `get_tasks`) | **Call this at launch**: one round trip. Fixture `get_home_bundle.json` |
 | `get_action_plan` POST | `refresh` (bool) | `{steps: [{id, text, detail, route}], generated_at, source: "ai"\|"rules", stale, reason}` | Call right after `get_home_bundle` (it reuses the day that call built). The AI may take seconds; `refresh` is rate limited by the hub. Fixture `get_action_plan.json` |
@@ -156,6 +159,29 @@ to `POST /api/method/upload_file` (multipart, `is_private=1`, `doctype=HD Ticket
 `HomeCounts`: `open_tickets`, `awaiting_reply`, `tasks_open`, `tasks_due_today`,
 `tasks_overdue`, `tasks_on_hold`, `tasks_in_review`, `escalated_to_head` (own tasks at L2+),
 `approvals` (tasks waiting for my review), `unread_notifications`.
+
+### Capabilities
+
+`Me.capabilities` (in `get_me` and `get_home_bundle`) is the **one** answer to "what does the
+app show this person": tabs and actions appear only from these flags. It is computed on the
+hub from the user's real roles and project powers (`capabilities()` in `mobile.py`), each flag
+with the same check the hub enforces, so the app never decides access itself. A flag says
+what to *show*; every endpoint still checks permissions on its own.
+
+| Flag | Type | Granted by | Rule (code) |
+| --- | --- | --- | --- |
+| `tickets` | bool | System Manager, Agent Manager, ERP Employee (not DM Employees, not content-only people) | `content_team.can_work_tickets` |
+| `content` | bool | Admins, Project Managers, DM Coordinators, and the content calendar roles (Content Team, Digital Marketing Head, DM Employee); never ERP Employees | `content_team.in_content_team` |
+| `manage_team` | bool | System Manager, Agent Manager, or a head of any active department (Settings → Departments → Heads, or a role in `DEPARTMENT_HEADS` such as Digital Marketing Head for Digital) | `tasky.permissions.can_manage_team` |
+| `approve_reviews` | bool | A project's manager (its creator, or a member with the Project Manager project role), its lead, or a Project Coordinator on it | `_review_projects` (the same as `get_approvals`) |
+| `scoreboard` | bool | Every agent: the Scoreboard is open to all | `agent_only` |
+| `admin` | bool | System Manager, Agent Manager (sees and manages everything) | `tasky.permissions.is_tasky_admin` |
+| `departments_headed` | list | The active departments the user heads | `tasky.permissions.departments_headed` |
+| `projects_managed` | list | The open projects the user manages or leads (`can_manage_project`); admins manage every project, which `admin` says | `get_managed_projects` + `get_led_projects` |
+
+`manage_team` is **insights only**: it opens `get_insights` and gives no write power. The
+nudge and reassign actions keep their own checks (admins, or the project's manager, lead or
+coordinator for its tasks); the app shows them only behind `manage_team` and an explicit tap.
 
 ### Tasks
 
@@ -173,6 +199,10 @@ to `POST /api/method/upload_file` (multipart, `is_private=1`, `doctype=HD Ticket
 | `review_task` POST | `task`, `approve` (bool), `note` (required when sending back) | `Task` detail | The project's manager, lead or coordinator only |
 | `add_task_comment` POST | `task`, `content` | one activity item | Anyone who can read the task. Fixture `add_task_comment.json` |
 | `get_teammates` | `task?` | `[{user, full_name, image, on_leave}]` | Active agents; for a task, its project team unless the user manages the project. Fixture `get_teammates.json` |
+| `get_focus` | `limit` (1–3, default 3) | `[Task + focus]` | The 1–3 tasks to do now, in Home's order: `close_first` (overdue, due today, key work in progress), then `in_progress`, `coming_up` (next 7 days) and `no_date`; held and in-review work waits on others and is left out. `focus` names the section. Fixture `get_focus.json` |
+| `quick_add_task` POST | `project`, `subject`, `due_date?`, `assignee?` (default: the user) | `Task` detail | `tasky.add_task`, so `can_add_tasks` applies: anyone on the project (or with a task in it) may add; giving it to someone outside the team is the manager's or lead's call. Fixture `quick_add_task.json` |
+| `snooze_follow_up` POST | `item` (`Task:TASK-…` or `HD Ticket:123`), `until` (date, tomorrow to 7 days ahead), `reason` (required, ≤500) | `{item, until, reason, level}` | The **assignee** acknowledges today's L0/L1 reminder: their own notices and digest lines about it stop until `until` (reminders start again that day), the reason is noted on the item and today's notice is marked read. Refused while the item is at L2+ or its SLA is breached; those always go out. See [follow-ups.md](follow-ups.md#snooze). Fixture `snooze_follow_up.json` |
+| `get_my_stats` | `period` (today, week, month, quarter, half, year) | `{period, current, previous, trend}` | The user's own Scoreboard line for this period and the 7 before it, oldest first: `done`, `on_time`, `dated`, `on_time_pct`, `key`, `hours`, `score` (`score()`), and `overdue` (now; null for past periods). Past periods are scored without "Overdue now", which is today's state. Fixture `get_my_stats.json` |
 
 `Task`: `name`, `subject`, `project`, `project_name`, `customer`, `status` (Open, Working,
 Pending Review, On Hold, Completed, Cancelled), `group`, `exp_end_date`, `is_overdue` (the
@@ -283,6 +313,135 @@ off):
 `Escalation`: `id` (`Task:TASK-…`), `kind` (task, ticket), `doctype`, `ref`, `title`, `owners`,
 `level`, `level_label`, `days`, `severity`, `reason`, `route`, `app_route`.
 
+### Compete (Scoreboard for the app)
+
+| Method | Params | Returns | Who / notes |
+| --- | --- | --- | --- |
+| `get_competition` | `period` (today, week, month, quarter, half, year; default week), `limit` (1–50, default 10) | `Competition` | Every agent. The boards are public, as on the web Scoreboard: every active department, past the DM/ERP department walls (`viewer_access`). Streaks, bests, badges and `move_up` are the user's own. Fixture `get_competition.json` |
+
+Everything is derived from the Scoreboard (`helpdesk.team_dashboard`: `collect`, `tally`,
+`rank`, `score()`) and the tasks' due dates; **there is no second scoring formula**
+(`helpdesk/competition.py`).
+
+`Competition`:
+
+- `period`, `period_label`, `range` {start, end}, `compare` {start, end}: the comparison is
+  the previous period **up to the same point** (`comparison_bounds`), as the web tiles.
+- `me`: the user's line on the whole team's board (below), or null.
+- `team` and `departments` (one per active department): `{department, champion (user or
+  null), of (people on the board), leaders (top `limit`), me}`. A board line is `{user,
+  full_name, image, department, rank, score, rank_delta, is_champion, tasks_done,
+  on_time_pct, overdue}`. Boards rank exactly as the web People view (`ranked_people`,
+  `people_rows`): whoever has work in the scope, then its members with nothing.
+- **`rank_delta`**: the rank in the comparison period minus the rank now (`+2` = up two).
+  The previous rank is among the people who delivered something then (`delivered`: tasks
+  done plus posts published), so ranks among people with nothing (which only follow the
+  alphabet) never show as movement; anyone else has `rank_delta: null` ("new"). The
+  comparison is scored without "Overdue now", which is today's state.
+- `streaks`: `{on_time_days, best_on_time_days, podium_weeks, lookback_days}`, see below.
+- `personal_bests`: `{most_on_time_in_a_week, most_done_in_a_week, most_key_in_a_week}`
+  (each `{value, week_start}` or null, over the last 26 weeks), `longest_on_time_streak`
+  (working days, within the streak's look-back), `champion_titles` (HD Team Champion
+  records of weeks and longer, any department), `weeks_looked_at`.
+- `badges`: `{earned: [{name, badge, label, period_type, start, end, department, detail,
+  earned_on}] (latest 20), catalog: [{badge, label, rule, count}]}`.
+- `challenge`: the weekly challenge (below), or null when it's off.
+- `move_up`: `{leader, next {user, full_name, score} or null, gap, actions}`. `gap` is the
+  score of the person ranked just above minus the user's (ties go to the better on-time
+  rate). `actions` are up to 3 of the user's own open tasks (not held, not in review) that
+  gain the most: each is `score()` with the task finished now minus `score()` as it is, so
+  it follows the formula exactly, e.g. `{task, subject, due, points: 1.5, passes, text:
+  "Finish “TBO ERP: migrate customers” on time: +1.5"}`. On time when its due date is today
+  or later; an overdue task also stops costing its `−1` ("Finish overdue …"); one without a
+  due date earns half ("no due date, so half credit"). `passes` says it alone would close
+  the gap.
+
+**Streaks** respect the working calendar: HD Work Settings' weekly off and Saturdays off and
+the default SLA's holidays (`recurrence.working_day_checker`).
+
+- **On-time streak** (`on_time_days`): working days in a row, back to today, on which
+  everything the user had due was done on time (Completed on or before its due date). A
+  working day with nothing due neither counts nor breaks it; something late breaks it.
+  Work held or in review waits on someone else and is left out (as "Overdue now" does). A
+  task due on a day off counts on the next working day. Today counts once all of it is done,
+  and its pending work doesn't break the streak until the day is over. Looks back 90 days.
+- **Department top 3** (`podium_weeks`): closed weeks in a row, up to last week, with the
+  *Department top 3* badge.
+
+**Badges** (`HD Badge Award`: user, badge, period type/start/end, department, detail,
+earned_on). Awarded by the daily 00:30 job that closes periods
+(`team_dashboard.close_period` → `competition.award_badges`), after the champions. The
+record name comes from the badge, person, period and department, so a re-run awards and
+tells nobody twice, and the history never shifts. Each new badge is told once through
+`notify_users` ("You earned “Key task closer”: 3 key tasks or milestones done on time in
+the week"), except the champion badges: the champion already heard "You're the …
+champion".
+
+| Badge | Label | Rule | When |
+| --- | --- | --- | --- |
+| `on_time_streak` | On-time streak 5 | The on-time streak reaches 5 working days (a new streak can earn it again) | Each day's close |
+| `key_closer` | Key task closer | 2 or more key tasks or milestones completed on time in the week | Week close |
+| `zero_overdue_week` | Zero overdue week | At least 3 tasks due in the week, every one done on time, and nothing overdue when the week closed | Week close |
+| `podium` | Department top 3 | Top 3 of a department's week by `score()`, among people with the week's minimum activity (as the champion) | Week close |
+| `champion_week` | Champion of the week | The week's champion of the whole team or a department (HD Team Champion) | Week close |
+| `champion_month` | Champion of the month | The month's champion of the whole team or a department | Month close |
+
+HD Badge Award: System Manager full, Agent Manager read; agents read their own through
+`get_competition`.
+
+**Weekly challenge**: one goal for the whole team each week (Monday to Sunday), set in
+**Settings → Follow-ups → Weekly challenge** (`HD Follow Up Settings.weekly_challenge`):
+
+| Setting | Goal shown | Counts |
+| --- | --- | --- |
+| *Key tasks due this week* (**default**) | Close every key task due this week | Key tasks and milestones due this week |
+| *Every task due this week* | Finish every task due this week on time | Every task due this week |
+| *Off* | – | `challenge` is null |
+
+`challenge`: `{key, title, week {start, end}, goal (tasks counted), done (completed on time),
+pct, complete, mine {done, total} or null, completed_by [{user, full_name, image}]}`.
+`completed_by` is everyone with tasks in the challenge who finished all of theirs on time.
+Cancelled tasks don't count; held and in-review ones count as not done yet.
+
+### Insights (management, read-only)
+
+| Method | Params | Returns | Who / notes |
+| --- | --- | --- | --- |
+| `get_insights` | `period` (default week), `department?` | `Insights` | `manage_team` only. Admins: every department (no `department`) or the one asked for. Department heads: the departments they head, or one of them; another department is refused (403). Everyone else gets 403. **No write actions.** Fixture `get_insights.json` |
+
+`helpdesk/team_insights.py`, from what the hub already counts:
+
+- `scope`: `{departments (null = the whole team), label, tickets}`. Tasks are in scope by
+  their project's department; tickets belong to the support department (Settings →
+  Follow-ups), so their figures are null when the scope doesn't include it.
+- `tiles`: `[{key, label, value, previous, delta, unit, better}]`, `better` being the good
+  direction ("up", "down"; null for state and for hours, which aren't judged):
+  `tasks_done`, `on_time_pct` (as the Scoreboard counts them), `overdue_now` (no previous:
+  today's state), `escalations_open` (L2+ follow-ups in scope, `follow_ups.escalations`),
+  `sla_breaches` (tickets opened in the period whose SLA failed), `first_response_median`
+  (minutes, tickets first answered in the period), `hours_logged`. Previous = the
+  comparison period up to the same point.
+- `trend`: the last 8 periods, this one included: `{start, end, label, throughput (tasks
+  done), on_time_pct, overdue}`. A past period's `overdue` is the tasks past their due date
+  at its end and not completed by then; past holds aren't recorded, so work held or in
+  review now is left out, as "Overdue now" does.
+- `risks`: `projects` (top 5 open projects by overdue tasks, then milestones whose due date
+  moved or passed: `{project, project_name, department, overdue, slipped_milestones}`),
+  `people` (top 5 by overdue plus escalated work, **names and counts only**: `{user,
+  full_name, overdue, escalated}`), `tickets_breaching_soon` (top 5 open tickets whose SLA
+  runs out within `breaching_within_hours` (4): `{ticket, subject, due, kind, assignees}`),
+  `tickets_breaching_count`.
+- `workload`: `{people: [{user, full_name, image, open_tasks, overdue, utilisation?, load?,
+  free_hours?}] (busiest 15), average_open, capacity}`. The capacity fields come from
+  capacity planning (`api/capacity.get_capacity`, next week) for people who plan capacity
+  (project managers, leads, admins); `capacity` says whether they're there.
+- `summary`: `{source: "ai" | "rules", bullets (3–5), reason, generated_at?}`. Written by
+  the hub's AI (`ai_engine.call_haiku`) from the tiles and risks only, never hours; any
+  bullet with a number that isn't in the facts is dropped (`home_plan.clean_steps`, the
+  Scoreboard's guard). Cached 12 hours per period and scope; after a failure the rules are
+  used for 15 minutes. When AI is off or fails, and always for Today (as the Scoreboard
+  writes no analysis for a day), the same facts come as plain sentences.
+
 ## Where the app's types differ (src/api/types.ts)
 
 Decided per field; "app" means change `types.ts`, "hub" means a later hub change.
@@ -310,10 +469,14 @@ Decided per field; "app" means change `types.ts`, "hub" means a later hub change
 | `Approval` | `submitted` → `due`; only `review` comes from the hub (leave and expense are ESS) | app |
 | `ProjectHealth` | no `rag` and no hours: the hub has no project health rule or project hours yet. Show `overdue` and `next_milestone.is_overdue` | hub, if the owner wants a RAG rule (then it's added to the portfolio for the web too) |
 | `SlaSummary` | adds `new_today`, `first_reply_overdue`, `waiting_on_customer` | app (additive) |
-| `Scoreboard` | `range` is `{start, end}`; `champion` is the dashboard's card (`name`, `score`, `reasons`, `breakdown`); `me.delta_rank` isn't tracked; breakdown items are `{key, points, detail}` | app |
+| `Scoreboard` | `range` is `{start, end}`; `champion` is the dashboard's card (`name`, `score`, `reasons`, `breakdown`); `get_scoreboard` has no rank change: use `get_competition` (`rank_delta`); breakdown items are `{key, points, detail}` | app |
 
 ## Owner setup checklist
 
 1. Create the **OAuth Client** above and send its Client ID to the app developer.
 2. Turn on **Settings → General → Mobile app → Mobile push** once the app ships with push.
-3. Nothing else: the doctype and the setting arrive with `bench migrate`.
+3. Pick the **weekly challenge** in Settings → Follow-ups (default: close every key task due
+   this week), and set each department's **Heads** in Settings → Departments: heads get
+   `manage_team` and the insights of their departments.
+4. Nothing else: the doctypes (HD Mobile Device, HD Badge Award, HD Follow Up Snooze) and the
+   settings arrive with `bench migrate`; badges start with the next period close.

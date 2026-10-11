@@ -34,7 +34,10 @@ The URL keeps `period`, `department`, `view` (`people`, `projects`; Departments 
 ## What is counted
 
 All read in a few grouped `frappe.qb` queries per period (no per-person or per-task queries),
-cached for 5 minutes per period (`collect()`, key `team_dashboard:<start>:<end>:…`).
+cached for 5 minutes per period (`collect()`, key `team_dashboard:<start>:<end>:…`). A period
+that has already ended, read without today's overdue (the comparisons and the app's 8-period
+trends), is cached for an hour (`CLOSED_CACHE_SECONDS`): its numbers no longer depend on the
+day, so a late edit to an old task shows within the hour.
 
 | Figure | Source |
 | --- | --- |
@@ -129,6 +132,13 @@ is first inserted, so re-running `close_period` for a closed day or week tells n
 
 HD Team Champion: System Manager full, Agent Manager read; every agent reads it through the
 page's API.
+
+After the champions, `close_period` awards the period's **badges** (`competition.award_badges`:
+on-time streaks, key task closers, zero overdue weeks, each department's top 3, champions of
+the week and month) into **HD Badge Award**, just as idempotently. The TBO Smart app's
+Compete screen (`get_competition`) shows them with ranks and their change, streaks, personal
+bests, the weekly challenge and how to move up, all derived from `score()`; see
+[tbo-smart-api.md](tbo-smart-api.md#compete-scoreboard-for-the-app).
 
 ## AI analysis
 

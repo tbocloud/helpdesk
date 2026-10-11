@@ -1,0 +1,225 @@
+{
+  "v": 1,
+  "data": {
+    "period": "week",
+    "period_label": "the week of 5 Oct 2026",
+    "range": {
+      "start": "2026-10-05",
+      "end": "2026-10-11"
+    },
+    "compare": {
+      "start": "2026-09-28",
+      "end": "2026-10-04"
+    },
+    "scope": {
+      "departments": [
+        "ERP"
+      ],
+      "label": "ERP",
+      "tickets": false
+    },
+    "tiles": [
+      {
+        "key": "tasks_done",
+        "label": "Tasks done",
+        "value": 38,
+        "previous": 31,
+        "delta": 7,
+        "unit": null,
+        "better": "up"
+      },
+      {
+        "key": "on_time_pct",
+        "label": "On time",
+        "value": 87,
+        "previous": 81,
+        "delta": 6,
+        "unit": "%",
+        "better": "up"
+      },
+      {
+        "key": "overdue_now",
+        "label": "Overdue now",
+        "value": 6,
+        "previous": null,
+        "delta": null,
+        "unit": null,
+        "better": null
+      },
+      {
+        "key": "escalations_open",
+        "label": "Escalations open",
+        "value": 2,
+        "previous": null,
+        "delta": null,
+        "unit": null,
+        "better": null
+      },
+      {
+        "key": "sla_breaches",
+        "label": "SLA breaches",
+        "value": null,
+        "previous": null,
+        "delta": null,
+        "unit": null,
+        "better": "down"
+      },
+      {
+        "key": "first_response_median",
+        "label": "First response (median)",
+        "value": null,
+        "previous": null,
+        "delta": null,
+        "unit": "min",
+        "better": "down"
+      },
+      {
+        "key": "hours_logged",
+        "label": "Hours logged",
+        "value": 312.5,
+        "previous": 298.0,
+        "delta": 14.5,
+        "unit": "h",
+        "better": null
+      }
+    ],
+    "trend": [
+      {
+        "start": "2026-08-17",
+        "end": "2026-08-23",
+        "label": "the week of 17 Aug 2026",
+        "throughput": 27,
+        "on_time_pct": 79,
+        "overdue": 9
+      },
+      {
+        "start": "2026-08-24",
+        "end": "2026-08-30",
+        "label": "the week of 24 Aug 2026",
+        "throughput": 30,
+        "on_time_pct": 82,
+        "overdue": 8
+      },
+      {
+        "start": "2026-08-31",
+        "end": "2026-09-06",
+        "label": "the week of 31 Aug 2026",
+        "throughput": 25,
+        "on_time_pct": 76,
+        "overdue": 10
+      },
+      {
+        "start": "2026-09-07",
+        "end": "2026-09-13",
+        "label": "the week of 7 Sep 2026",
+        "throughput": 33,
+        "on_time_pct": 84,
+        "overdue": 7
+      },
+      {
+        "start": "2026-09-14",
+        "end": "2026-09-20",
+        "label": "the week of 14 Sep 2026",
+        "throughput": 29,
+        "on_time_pct": 80,
+        "overdue": 8
+      },
+      {
+        "start": "2026-09-21",
+        "end": "2026-09-27",
+        "label": "the week of 21 Sep 2026",
+        "throughput": 35,
+        "on_time_pct": 85,
+        "overdue": 6
+      },
+      {
+        "start": "2026-09-28",
+        "end": "2026-10-04",
+        "label": "the week of 28 Sep 2026",
+        "throughput": 31,
+        "on_time_pct": 81,
+        "overdue": 7
+      },
+      {
+        "start": "2026-10-05",
+        "end": "2026-10-11",
+        "label": "the week of 5 Oct 2026",
+        "throughput": 38,
+        "on_time_pct": 87,
+        "overdue": 6
+      }
+    ],
+    "risks": {
+      "projects": [
+        {
+          "project": "PROJ-0031",
+          "project_name": "Galom - ERPNext rollout",
+          "department": "ERP",
+          "overdue": 3,
+          "slipped_milestones": 1
+        },
+        {
+          "project": "PROJ-0027",
+          "project_name": "Kerala Spices - HR module",
+          "department": "ERP",
+          "overdue": 2,
+          "slipped_milestones": 0
+        }
+      ],
+      "people": [
+        {
+          "user": "najath@teambackoffice.com",
+          "full_name": "Najath Thekkeyil",
+          "overdue": 1,
+          "escalated": 1
+        },
+        {
+          "user": "rahul@teambackoffice.com",
+          "full_name": "Rahul Nair",
+          "overdue": 2,
+          "escalated": 0
+        }
+      ],
+      "tickets_breaching_soon": [],
+      "tickets_breaching_count": 0,
+      "breaching_within_hours": 4
+    },
+    "workload": {
+      "people": [
+        {
+          "user": "rahul@teambackoffice.com",
+          "full_name": "Rahul Nair",
+          "image": null,
+          "open_tasks": 9,
+          "overdue": 2,
+          "utilisation": 118,
+          "load": "overloaded",
+          "free_hours": 0
+        },
+        {
+          "user": "najath@teambackoffice.com",
+          "full_name": "Najath Thekkeyil",
+          "image": "/files/najath.jpg",
+          "open_tasks": 6,
+          "overdue": 1,
+          "utilisation": 74,
+          "load": null,
+          "free_hours": 10.5
+        }
+      ],
+      "average_open": 5.4,
+      "capacity": true
+    },
+    "summary": {
+      "source": "ai",
+      "bullets": [
+        "ERP finished 38 tasks this week, up from 31, and 87% were on time.",
+        "Galom - ERPNext rollout is the most at risk, with 3 overdue tasks and 1 slipped milestone.",
+        "Rahul Nair has 2 overdue tasks; a hand with his queue would help.",
+        "2 items are escalated to a head or above."
+      ],
+      "reason": null,
+      "generated_at": "2026-10-11 09:12:40.118203"
+    }
+  }
+}

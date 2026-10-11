@@ -210,6 +210,9 @@ in the department's **Heads** setting plus the holders of a role mapped to it in
 heads Digital without extra setup). For the whole team (no department) it returns the Agent
 Managers. Heads are told when their department's Scoreboard champion is chosen, daily and for
 every longer period ([team-dashboard.md](team-dashboard.md#champions-of-closed-periods)).
+`departments_headed(user)` reads it the other way; heads get the TBO Smart app's management
+insights for the departments they head (`manage_team`, read-only; see
+[tbo-smart-api.md](tbo-smart-api.md#capabilities)).
 
 - **Settings → Departments**: each row shows its heads ("Heads: Deepa Varma, everyone with
   Digital Marketing Head") or "No heads set". **Set heads** (the person-gear button) opens the

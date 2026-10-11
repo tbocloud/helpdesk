@@ -104,6 +104,21 @@ def department_heads(department: str | None) -> list[str]:
     return sorted({*configured, *(u for role in roles for u in _users_with_role(role))})
 
 
+def departments_headed(user: str | None = None) -> list[str]:
+    """The active departments the user heads: `department_heads` read the other way."""
+    from helpdesk.team_dashboard import active_departments
+
+    user = user or frappe.session.user
+    return [d for d in active_departments() if user in department_heads(d)]
+
+
+def can_manage_team(user: str | None = None) -> bool:
+    """Sees the management insights: admins (every department) and department heads
+    (the departments they head). Insights only; no extra powers come with it."""
+    user = user or frappe.session.user
+    return is_tasky_admin(user) or bool(departments_headed(user))
+
+
 def _departments_sql(departments: list[str]) -> str:
     return ", ".join(frappe.db.escape(d) for d in departments)
 

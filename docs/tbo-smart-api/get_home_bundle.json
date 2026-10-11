@@ -24,7 +24,21 @@
       "teams": [
         "Billing",
         "Product Experts"
-      ]
+      ],
+      "capabilities": {
+        "tickets": false,
+        "content": true,
+        "manage_team": true,
+        "approve_reviews": true,
+        "scoreboard": true,
+        "admin": false,
+        "departments_headed": [
+          "ERP"
+        ],
+        "projects_managed": [
+          "PROJ-0031"
+        ]
+      }
     },
     "counts": {
       "open_tickets": 3,
