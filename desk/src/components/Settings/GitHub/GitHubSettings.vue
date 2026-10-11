@@ -474,7 +474,7 @@ interface SettingsData {
 interface StatusData {
   last_dispatch: string | null;
   last_result: string | null;
-  last_ok: boolean;
+  last_outcome: "Dispatched" | "Failed" | "" | null;
   last_delivery: {
     at: string;
     event: string;
@@ -518,10 +518,13 @@ const secrets = computed(
 );
 const statusData = computed(() => status.data as StatusData | undefined);
 const lastDelivery = computed(() => statusData.value?.last_delivery);
-const resultTone = computed<Tone>(() => {
-  if (!statusData.value?.last_result) return "neutral";
-  return statusData.value.last_ok ? "success" : "danger";
-});
+const OUTCOME_TONES: Record<string, Tone> = {
+  Dispatched: "success",
+  Failed: "danger",
+};
+const resultTone = computed<Tone>(
+  () => OUTCOME_TONES[statusData.value?.last_outcome ?? ""] ?? "neutral"
+);
 
 /** What a secret's edit sends: a new value, "" to remove it, or nothing. */
 function secretParam(key: Secret): string | undefined {

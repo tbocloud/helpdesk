@@ -115,7 +115,10 @@ the merge bot), and they can replace or remove the tokens but never read them ba
   Project for PRs without a task, and GitHub Token with **Test GitHub token**.
 - **Org merge bot:** the trigger switch, repository, workflow, Merge bot token with **Test
   merge bot token**, Last run requested and Last result (green with a check when GitHub
-  accepted it, red with an alert otherwise), and **Request a merge bot run now**.
+  accepted it, red with an alert otherwise), and **Request a merge bot run now**. The colour
+  comes from the hidden "Last outcome" (`Dispatched` or `Failed`), which `merge_bot.record`
+  stores next to the result because the result itself is translated; a result recorded
+  before that field existed stays neutral.
 - **Last webhook delivery:** time, event and action, repository and status of the newest HD
   GitHub Delivery (never its payload or error text).
 - **Setting up GitHub:** the organization webhook and the fine-grained token, step by step.

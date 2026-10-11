@@ -114,7 +114,12 @@ def record(result: str, failed: bool = False) -> bool:
     """The last outcome on the settings; failures also go to the Error Log. Never the token."""
     frappe.db.set_single_value(
         github_sync.SETTINGS,
-        {"merge_bot_last_dispatch": now_datetime(), "merge_bot_last_result": result},
+        {
+            "merge_bot_last_dispatch": now_datetime(),
+            "merge_bot_last_result": result,
+            # the result is translated; the settings page colours it from this
+            "merge_bot_last_outcome": "Failed" if failed else "Dispatched",
+        },
         # an admin with the settings open mustn't hit "document has been modified"
         update_modified=False,
     )

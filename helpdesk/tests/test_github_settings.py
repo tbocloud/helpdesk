@@ -100,7 +100,7 @@ class TestMaskedRead(GitHubSettingsCase):
         status = call_as_user(MANAGER[0], API + "get_status")
 
         self.assertEqual(status["last_result"], "Dispatched (HTTP 204)")
-        self.assertTrue(status["last_ok"])
+        self.assertEqual(status["last_outcome"], "Dispatched")
         self.assertTrue(status["last_dispatch"])
         delivery = status["last_delivery"]
         self.assertEqual(
@@ -250,6 +250,10 @@ class TestRunNow(GitHubSettingsCase):
 
         self.assertTrue(result["ok"])
         self.assertIn("Dispatched (HTTP 204)", result["message"])
+        self.assertEqual(
+            frappe.db.get_single_value("HD GitHub Settings", "merge_bot_last_outcome"),
+            "Dispatched",
+        )
         self.post.assert_called_once()
         self.assertIn("merge-bot.yml/dispatches", self.post.call_args.args[0])
 
@@ -268,6 +272,10 @@ class TestRunNow(GitHubSettingsCase):
         result = self.run_now()
         self.assertFalse(result["ok"])
         self.assertIn("Failed (HTTP 403)", result["message"])
+        self.assertEqual(
+            frappe.db.get_single_value("HD GitHub Settings", "merge_bot_last_outcome"),
+            "Failed",
+        )
 
     def test_nothing_is_sent_while_the_trigger_is_off(self):
         enable_merge_bot_trigger(trigger_merge_bot=0)

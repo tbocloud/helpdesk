@@ -81,12 +81,11 @@ def get_status() -> dict:
         .limit(1)
         .run(as_dict=True)
     )
-    result = frappe.db.get_single_value(SETTINGS, "merge_bot_last_result") or ""
     return {
         "last_dispatch": frappe.db.get_single_value(SETTINGS, "merge_bot_last_dispatch"),
-        "last_result": result,
-        # merge_bot.dispatch records "Dispatched (HTTP 204)" when GitHub accepted it
-        "last_ok": result.startswith(_("Dispatched (HTTP {0})").partition("{0}")[0]),
+        "last_result": frappe.db.get_single_value(SETTINGS, "merge_bot_last_result"),
+        # "Dispatched" or "Failed"; empty for results recorded before it existed
+        "last_outcome": frappe.db.get_single_value(SETTINGS, "merge_bot_last_outcome"),
         "last_delivery": deliveries[0] if deliveries else None,
     }
 

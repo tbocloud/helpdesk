@@ -18,7 +18,8 @@
 		"column_break_merge_bot",
 		"merge_bot_token",
 		"merge_bot_last_dispatch",
-		"merge_bot_last_result"
+		"merge_bot_last_result",
+		"merge_bot_last_outcome"
 	],
 	"fields": [
 		{
@@ -115,12 +116,22 @@
 			"label": "Last result",
 			"read_only": 1,
 			"no_copy": 1
+		},
+		{
+			"fieldname": "merge_bot_last_outcome",
+			"fieldtype": "Select",
+			"label": "Last outcome",
+			"options": "\nDispatched\nFailed",
+			"read_only": 1,
+			"hidden": 1,
+			"no_copy": 1,
+			"description": "Last result as a fixed value, whatever the language, for Settings → GitHub."
 		}
 	],
 	"index_web_pages_for_search": 0,
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-10-11 12:00:00.000000",
+	"modified": "2026-10-11 18:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD GitHub Settings",
