@@ -28,7 +28,6 @@ REQUIRED_ROLE = "User.Read.All"
 SELECT = "id,accountEnabled,mail,userPrincipalName,otherMails,proxyAddresses"
 # Graph's largest page for /users
 PAGE_SIZE = 999
-DEFAULT_CAP = 5
 PROTECTED_ROLE = "System Manager"
 ALWAYS_PROTECTED = {"Administrator", "Guest"}
 DISABLED = "Disabled in Microsoft"
@@ -77,7 +76,8 @@ def offboard(settings, dry_run: bool) -> dict:
         raise OffboardingStopped(_("Add the company email domains first."))
     directory = directory_status(read_directory(), domains)
     people = leavers(directory, domains)
-    cap = cint(settings.offboarding_max_disables) or DEFAULT_CAP
+    # 0 (only storable around validation) means nobody may be disabled: alert instead
+    cap = cint(settings.offboarding_max_disables)
     if dry_run:
         return {"status": "dry_run", "people": people, "cap": cap}
     if len(people) > cap:

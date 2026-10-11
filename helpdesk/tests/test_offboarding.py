@@ -196,6 +196,15 @@ class TestOffboarding(FrappeTestCase):
         self.assertEqual(self.notifications(ADMIN[0]), 1)
         self.assertEqual(self.notifications(MANAGER[0]), 0)
 
+    def test_a_limit_of_zero_disables_nobody(self):
+        enable_offboarding(offboarding_max_disables=0)
+        self.directory(self.tenant())
+
+        offboarding.run()
+
+        self.assertNobodyChanged()
+        self.assertEqual(self.notifications(ADMIN[0]), 1)
+
     def test_dry_run_changes_nothing(self):
         enable_offboarding(offboarding_dry_run=1)
         self.directory(self.tenant())
