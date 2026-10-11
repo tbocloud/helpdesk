@@ -87,7 +87,11 @@
   "ignore_automated_emails",
   "ignored_email_senders",
   "mobile_app_section",
-  "enable_mobile_push"
+  "enable_mobile_push",
+  "enable_microsoft_sso",
+  "microsoft_tenant_id",
+  "microsoft_client_id",
+  "mobile_oauth_client"
  ],
  "fields": [
   {
@@ -571,12 +575,42 @@
    "fieldname": "enable_mobile_push",
    "fieldtype": "Check",
    "label": "Mobile push"
+  },
+  {
+   "default": "0",
+   "description": "Staff sign in to the TBO Smart app once with Microsoft; this site then issues its own tokens to the matching enabled agent.",
+   "fieldname": "enable_microsoft_sso",
+   "fieldtype": "Check",
+   "label": "Single sign-in with Microsoft",
+   "permlevel": 1
+  },
+  {
+   "description": "The Directory (tenant) ID of TBO's Microsoft Entra tenant. Only accounts from this tenant can sign in.",
+   "fieldname": "microsoft_tenant_id",
+   "fieldtype": "Data",
+   "label": "Microsoft tenant ID",
+   "permlevel": 1
+  },
+  {
+   "description": "The Application (client) ID of the TBO Smart app's Entra app registration. Only ID tokens issued to this app are accepted.",
+   "fieldname": "microsoft_client_id",
+   "fieldtype": "Data",
+   "label": "Mobile app client ID",
+   "permlevel": 1
+  },
+  {
+   "description": "Tokens issued after a Microsoft sign-in belong to this OAuth Client, the one the TBO Smart app already uses.",
+   "fieldname": "mobile_oauth_client",
+   "fieldtype": "Link",
+   "label": "OAuth client for TBO Smart",
+   "options": "OAuth Client",
+   "permlevel": 1
   }
  ],
  "grid_page_length": 50,
  "issingle": 1,
  "links": [],
- "modified": "2026-10-10 12:00:00.000000",
+ "modified": "2026-10-11 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Helpdesk",
  "name": "HD Settings",
@@ -607,6 +641,12 @@
    "read": 1,
    "role": "Agent Manager",
    "share": 1,
+   "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "System Manager",
    "write": 1
   }
  ],

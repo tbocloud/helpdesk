@@ -22,6 +22,7 @@ class HDSettings(Document):
         self.validate_auto_close_days()
         self.validate_email_contents()
         self.validate_send_feedback_when_ticket_closed()
+        self.validate_microsoft_sso()
 
     def validate_auto_close_days(self):
         if self.auto_close_tickets and self.auto_close_after_days <= 0:
@@ -39,6 +40,35 @@ class HDSettings(Document):
             frappe.throw(
                 _(
                     "The status for sending feedback must be of <u>Resolved</u> category."
+                )
+            )
+
+    def validate_microsoft_sso(self):
+        """The IDs Entra puts in its tokens are lowercase GUIDs, so they're stored that
+        way; switching single sign-in on needs all three settings, and an OAuth Client
+        whose scopes cover the tokens it will issue."""
+        # imported here: the endpoint's module loads the whole mobile API
+        from helpdesk.api.mobile_auth import GUID, SCOPES
+
+        for field in ("microsoft_tenant_id", "microsoft_client_id"):
+            self.set(field, (self.get(field) or "").strip().lower())
+        if not self.enable_microsoft_sso:
+            return
+        for field in ("microsoft_tenant_id", "microsoft_client_id"):
+            if not GUID.match(self.get(field)):
+                frappe.throw(
+                    _("{0} must be the GUID shown in Microsoft Entra.").format(
+                        _(self.meta.get_label(field))
+                    )
+                )
+        if not self.mobile_oauth_client:
+            frappe.throw(_("Choose the OAuth client for TBO Smart."))
+        scopes = frappe.db.get_value("OAuth Client", self.mobile_oauth_client, "scopes")
+        missing = set(SCOPES) - set((scopes or "").split())
+        if missing:
+            frappe.throw(
+                _("The OAuth client must allow the scopes: {0}").format(
+                    ", ".join(sorted(missing))
                 )
             )
 

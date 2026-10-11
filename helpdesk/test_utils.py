@@ -1522,6 +1522,99 @@ def disable_mobile_push():
     frappe.db.set_single_value("HD Settings", "enable_mobile_push", 0)
 
 
+TEST_MS_TENANT = "6f1c2b9e-0d4a-4c1e-9a57-3b2f8e4d1a10"
+TEST_MS_CLIENT = "0b7e4c2a-91d3-4f6b-8e15-c2a9d7f3e604"
+
+
+def make_oauth_client(app_name: str = "TBO Smart Test"):
+    """Creates (or fetches) an OAuth Client set up like TBO Smart's: public app, scopes
+    `all openid`, Agent and Agent Manager allowed."""
+    name = frappe.db.get_value("OAuth Client", {"app_name": app_name})
+    if name:
+        return frappe.get_doc("OAuth Client", name)
+    return frappe.get_doc(
+        {
+            "doctype": "OAuth Client",
+            "app_name": app_name,
+            "skip_authorization": 1,
+            "scopes": "all openid",
+            "redirect_uris": "tbosmart://oauth/callback",
+            "default_redirect_uri": "tbosmart://oauth/callback",
+            "grant_type": "Authorization Code",
+            "response_type": "Code",
+            "allowed_roles": [{"role": "Agent"}, {"role": "Agent Manager"}],
+        }
+    ).insert(ignore_permissions=True)
+
+
+def enable_microsoft_sso(oauth_client: str):
+    """Turns on TBO Smart's Microsoft single sign-in for the test tenant and app."""
+    frappe.db.set_single_value(
+        "HD Settings",
+        {
+            "enable_microsoft_sso": 1,
+            "microsoft_tenant_id": TEST_MS_TENANT,
+            "microsoft_client_id": TEST_MS_CLIENT,
+            "mobile_oauth_client": oauth_client,
+        },
+    )
+
+
+def disable_microsoft_sso():
+    frappe.db.set_single_value("HD Settings", "enable_microsoft_sso", 0)
+
+
+def make_rsa_key():
+    """A fresh RSA private key, standing in for one of Microsoft's signing keys."""
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    return rsa.generate_private_key(public_exponent=65537, key_size=2048)
+
+
+def mock_microsoft_keys(test_case, key, kid: str = "test-key"):
+    """Serves `key`'s public half as the tenant's JWKS (Entra's signing keys) for the
+    rest of the test, and forgets keys cached by earlier tests."""
+    from jwt import PyJWKClient
+    from jwt.algorithms import RSAAlgorithm
+
+    from helpdesk.api.mobile_auth import jwks_client
+
+    jwk = RSAAlgorithm.to_jwk(key.public_key(), as_dict=True)
+    jwk.update({"kid": kid, "use": "sig", "alg": "RS256"})
+    jwks_client.cache_clear()
+    test_case.addCleanup(jwks_client.cache_clear)
+    fetch = patch.object(PyJWKClient, "fetch_data", return_value={"keys": [jwk]})
+    fetch.start()
+    test_case.addCleanup(fetch.stop)
+
+
+def microsoft_id_token(key, email: str, kid: str = "test-key", **claims) -> str:
+    """A Microsoft-shaped ID token for `email`, signed RS256 with `key`: valid for the
+    test tenant and app unless `claims` override (or, with None, remove) a claim."""
+    import time
+
+    import jwt
+
+    now = int(time.time())
+    payload = {
+        "iss": f"https://login.microsoftonline.com/{TEST_MS_TENANT}/v2.0",
+        "aud": TEST_MS_CLIENT,
+        "tid": TEST_MS_TENANT,
+        "sub": "test-subject",
+        "oid": "test-object-id",
+        "iat": now,
+        "nbf": now,
+        "exp": now + 3600,
+        "uti": frappe.generate_hash(length=22),
+        "email": email,
+        "preferred_username": email,
+        "name": email,
+    }
+    payload.update(claims)
+    payload = {k: v for k, v in payload.items() if v is not None}
+    return jwt.encode(payload, key, algorithm="RS256", headers={"kid": kid})
+
+
 def call_mobile_as(as_user: str, method: str, **kwargs):
     """Calls helpdesk.api.mobile.<method> through `frappe.call` as `as_user`, the way
     the TBO Smart app does; returns the whole {"v", "data", …} answer. `as_user` leaves
