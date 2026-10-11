@@ -49,6 +49,8 @@ import SignoffTemplates from "./Signoff/SignoffTemplates.vue";
 import LucideClipboardCheck from "~icons/lucide/clipboard-check";
 import ChatSettings from "./Chat/ChatSettings.vue";
 import LucideMessagesSquare from "~icons/lucide/messages-square";
+import GitHubSettings from "./GitHub/GitHubSettings.vue";
+import LucideGitPullRequest from "~icons/lucide/git-pull-request";
 
 export const showSettingsModal = ref(false);
 
@@ -212,6 +214,13 @@ export const tabs = computed(() => {
           condition: () => auth.isAdmin || auth.isManager,
         },
         {
+          label: __("GitHub"),
+          icon: markRaw(LucideGitPullRequest),
+          component: markRaw(GitHubSettings),
+          // HD GitHub Settings through helpdesk.api.github_settings, which checks the roles
+          condition: () => auth.isAdmin || auth.isManager,
+        },
+        {
           label: __("File storage"),
           icon: markRaw(LucideHardDrive),
           component: markRaw(FileStorageSettings),
@@ -272,6 +281,7 @@ type TabName =
   | "Tasks"
   | "Follow-ups"
   | "Chat & Teams"
+  | "GitHub"
   | "Sign-off templates"
   | "File storage"
   | "CRM";

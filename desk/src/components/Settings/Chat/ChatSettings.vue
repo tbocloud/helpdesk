@@ -65,9 +65,10 @@
             placeholder="https://…logic.azure.com/…&sig=…"
             removable
           >
-            <SendTest
+            <SettingsAction
               :key="`direct-${saves}`"
-              target="direct"
+              :method="SEND_TEST"
+              :params="{ target: 'direct' }"
               :label="__('Send me a test')"
               :unsaved="isDirty"
             />
@@ -85,9 +86,10 @@
             placeholder="https://…powerplatform.com/…&sig=…"
             removable
           >
-            <SendTest
+            <SettingsAction
               :key="`channel-${saves}`"
-              target="channel"
+              :method="SEND_TEST"
+              :params="{ target: 'channel' }"
               :label="__('Send a test to the channel')"
               :unsaved="isDirty"
             />
@@ -116,9 +118,10 @@
             type="password"
             placeholder="xoxb-…"
           >
-            <SendTest
+            <SettingsAction
               :key="`direct-${saves}`"
-              target="direct"
+              :method="SEND_TEST"
+              :params="{ target: 'direct' }"
               :label="__('Send me a test')"
               :unsaved="isDirty"
             />
@@ -135,9 +138,10 @@
               "
               placeholder="C0123ABCD"
             />
-            <SendTest
+            <SettingsAction
               :key="`channel-${saves}`"
-              target="channel"
+              :method="SEND_TEST"
+              :params="{ target: 'channel' }"
               :label="__('Send a test to the channel')"
               :unsaved="isDirty"
             />
@@ -297,11 +301,12 @@ import SettingsSection from "../SettingsSection.vue";
 import SecretField, {
   type SecretEdit,
   type SecretStatus,
-} from "./SecretField.vue";
-import SendTest from "./SendTest.vue";
+} from "../SecretField.vue";
+import SettingsAction from "../SettingsAction.vue";
 
 const TEAMS = "Microsoft Teams";
 const SLACK = "Slack";
+const SEND_TEST = "helpdesk.api.chat_settings.send_test";
 
 // the shape chat_notifications.teams_message posts, plus recipient for direct messages
 const PAYLOAD_SAMPLE = JSON.stringify(
