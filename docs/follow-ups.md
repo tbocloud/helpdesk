@@ -168,7 +168,11 @@ The assignee may **acknowledge** a reminder from the TBO Smart app
   L2 and above and SLA breaches can't be snoozed, and a snooze never quiets them: when the
   item climbs to L2 or breaches, the reminders come back at once (`snoozable`).
 - Recorded as one **HD Follow Up Snooze** per person and item (user, item, until, the level
-  then, reason; a new snooze replaces the last), plus a note on the item ("Anu Menon
+  then, reason). The record's name comes from the person and the item, so a new snooze
+  replaces the last, even when two requests arrive at once. Every save checks the rules,
+  however it is saved (`HDFollowUpSnooze.validate`): the person is the item's assignee,
+  there is a reason (≤500 characters), and the date is tomorrow to 7 days ahead. Each snooze
+  also leaves a note on the item ("Anu Menon
   acknowledged the reminder until 14 Oct: …") so whoever runs the work sees why. Today's
   follow-up notice about it is marked read.
 - Each run takes the person off that item's L0/L1 follow-ups until the date

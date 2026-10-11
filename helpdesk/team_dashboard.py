@@ -62,6 +62,8 @@ OPEN_STATUSES = ("Open", "Working", "Overdue")
 SENT_BACK = "Sent back:%"
 CACHE_PREFIX = "team_dashboard"
 CACHE_SECONDS = 300
+# a closed period's numbers (later edits to old tasks show within the hour)
+CLOSED_CACHE_SECONDS = 60 * 60
 ANALYSIS_SECONDS = 12 * 60 * 60
 AI_PEOPLE_CAP = 15
 AI_TEXT_CHARS = 400
@@ -133,7 +135,10 @@ def collect(start, end, with_overdue: bool = True, today=None) -> dict:
     the period in progress or one that just closed.
     """
     today = getdate(today or nowdate())
-    key = f"{CACHE_PREFIX}:{start}:{end}:{int(with_overdue)}:{today}"
+    # a closed period without today's overdue no longer depends on the day: keep it
+    # longer, so 8-period trends don't recount years every few minutes
+    closed = not with_overdue and getdate(end) < today
+    key = f"{CACHE_PREFIX}:{start}:{end}:{int(with_overdue)}:{'' if closed else today}"
     cached = frappe.cache.get_value(key, expires=True)
     if cached is not None:
         return cached
@@ -143,7 +148,9 @@ def collect(start, end, with_overdue: bool = True, today=None) -> dict:
         "hours": logged_hours(start, end),
         "posts": delivered_posts(start, end),
     }
-    frappe.cache.set_value(key, data, expires_in_sec=CACHE_SECONDS)
+    frappe.cache.set_value(
+        key, data, expires_in_sec=CLOSED_CACHE_SECONDS if closed else CACHE_SECONDS
+    )
     return data
 
 

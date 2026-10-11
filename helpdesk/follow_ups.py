@@ -24,6 +24,7 @@ pings when the settings allow it.
 """
 
 import html
+from contextlib import suppress
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timedelta
 
@@ -65,8 +66,6 @@ from helpdesk.work_reminders import (
 
 SETTINGS = "HD Follow Up Settings"
 SNOOZE = "HD Follow Up Snooze"
-SNOOZE_MAX_DAYS = 7
-MAX_REASON_LENGTH = 500
 CACHE_KEY = "follow_ups"
 # longer than the 15-minute run that refreshes it; task and settings changes clear it
 CACHE_SECONDS = 16 * 60
@@ -1228,28 +1227,15 @@ def drop_snoozed(follow_ups: list[FollowUp], today) -> list[FollowUp]:
 
 def snooze(user: str, doctype: str, name: str, until, reason: str) -> dict:
     """The assignee acknowledges today's follow-up on their task or ticket: their own
-    reminders about it stop until `until` (at most SNOOZE_MAX_DAYS ahead), with the
-    reason noted on the item for whoever runs it. Refused while it is at L2 or
-    above, or its SLA is breached: those can't be snoozed."""
+    reminders about it stop until `until`, with the reason noted on the item for
+    whoever runs it. Refused while it is at L2 or above, or its SLA is breached:
+    those can't be snoozed. HD Follow Up Snooze checks the date and the reason."""
     doc = frappe.get_doc(doctype, name)
     doc.check_permission("read")
     if user not in _assignees(frappe.db.get_value(doctype, doc.name, "_assign")):
         frappe.throw(
             _("Only the person it's assigned to can snooze its reminders."),
             frappe.PermissionError,
-        )
-    reason = (reason or "").strip()
-    if not reason:
-        frappe.throw(_("Say why, so whoever runs the work knows."))
-    if len(reason) > MAX_REASON_LENGTH:
-        frappe.throw(_("Keep it under {0} characters.").format(MAX_REASON_LENGTH))
-    today = getdate(now_datetime())
-    until = getdate(until)
-    if not today < until <= add_days(today, SNOOZE_MAX_DAYS):
-        frappe.throw(
-            _("Snooze until a day from tomorrow to {0} days ahead.").format(
-                SNOOZE_MAX_DAYS
-            )
         )
     found = [
         f
@@ -1261,35 +1247,49 @@ def snooze(user: str, doctype: str, name: str, until, reason: str) -> dict:
     if not all(snoozable(f) for f in found):
         frappe.throw(_("Escalated work and SLA breaches can't be snoozed."))
     level = max(f.level for f in found)
-    record_snooze(user, doctype, str(doc.name), until, reason, level)
+    saved = record_snooze(
+        user,
+        doctype,
+        str(doc.name),
+        {"until": getdate(until), "reason": reason, "level": level},
+    )
     doc.add_comment(
         "Info",
         frappe.utils.escape_html(
             _("{0} acknowledged the reminder until {1}: {2}").format(
-                get_fullname(user), formatdate(until), reason
+                get_fullname(user), formatdate(saved.until), saved.reason
             )
         ),
     )
-    clear_todays_notice(user, doctype, str(doc.name), today)
-    return {"until": str(until), "reason": reason, "level": level}
+    clear_todays_notice(user, doctype, str(doc.name), getdate(now_datetime()))
+    return {"until": str(saved.until), "reason": saved.reason, "level": level}
 
 
-def record_snooze(user: str, doctype: str, name: str, until, reason: str, level: int):
-    """One snooze per person and item: a new one replaces the last."""
-    existing = frappe.db.get_value(
-        SNOOZE,
-        {"user": user, "reference_doctype": doctype, "reference_name": name},
+def record_snooze(user: str, doctype: str, name: str, values: dict):
+    """One snooze per person and item (its name comes from them): a new one replaces
+    the last, also when two requests arrive at once."""
+    from helpdesk.helpdesk.doctype.hd_follow_up_snooze.hd_follow_up_snooze import (
+        HDFollowUpSnooze,
     )
-    doc = (
-        frappe.get_doc(SNOOZE, existing)
-        if existing
-        else frappe.new_doc(SNOOZE).update(
-            {"user": user, "reference_doctype": doctype, "reference_name": name}
-        )
-    )
-    doc.update({"until": until, "reason": reason, "level": level})
-    # the endpoint checked that the user is the item's assignee
+
+    key = HDFollowUpSnooze.record_name(user, doctype, name)
+    # a request at the same moment may insert it first; this one is then the latest word
+    with suppress(frappe.DuplicateEntryError):
+        if not frappe.db.exists(SNOOZE, key):
+            # the caller checked that the user is the item's assignee
+            return frappe.get_doc(
+                {
+                    "doctype": SNOOZE,
+                    "user": user,
+                    "reference_doctype": doctype,
+                    "reference_name": name,
+                    **values,
+                }
+            ).insert(ignore_permissions=True)
+    doc = frappe.get_doc(SNOOZE, key)
+    doc.update(values)
     doc.save(ignore_permissions=True)
+    return doc
 
 
 def clear_todays_notice(user: str, doctype: str, name: str, today) -> None:

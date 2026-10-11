@@ -34,7 +34,10 @@ The URL keeps `period`, `department`, `view` (`people`, `projects`; Departments 
 ## What is counted
 
 All read in a few grouped `frappe.qb` queries per period (no per-person or per-task queries),
-cached for 5 minutes per period (`collect()`, key `team_dashboard:<start>:<end>:…`).
+cached for 5 minutes per period (`collect()`, key `team_dashboard:<start>:<end>:…`). A period
+that has already ended, read without today's overdue (the comparisons and the app's 8-period
+trends), is cached for an hour (`CLOSED_CACHE_SECONDS`): its numbers no longer depend on the
+day, so a late edit to an old task shows within the hour.
 
 | Figure | Source |
 | --- | --- |

@@ -401,6 +401,23 @@ class TestSnooze(CompetitionCase):
             follow_ups.drop_snoozed([low], self.until)[0].recipients, [ANU]
         )
 
+    def test_one_snooze_per_person_and_item_and_its_rules_hold(self):
+        found = [make_follow_up("Task", self.task, ANU)]
+        self.snooze(ANU, found)
+        self.until = add_days(nowdate(), 3)
+        self.snooze(ANU, found)
+        snoozes = frappe.get_all(
+            follow_ups.SNOOZE, filters={"user": ANU}, fields=["until"]
+        )
+        self.assertEqual([str(s.until) for s in snoozes], [str(self.until)])
+        # saved any other way, the record keeps the same rules
+        doc = frappe.get_doc(follow_ups.SNOOZE, {"user": ANU})
+        doc.until = add_days(nowdate(), 30)
+        self.assertRaises(frappe.ValidationError, doc.save, ignore_permissions=True)
+        doc.reload()
+        doc.user = RAHUL
+        self.assertRaises(frappe.ValidationError, doc.save, ignore_permissions=True)
+
     def test_escalated_work_and_others_work_cant_be_snoozed(self):
         with self.assertRaises(frappe.ValidationError):
             self.snooze(

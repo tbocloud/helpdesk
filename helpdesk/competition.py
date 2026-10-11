@@ -585,19 +585,23 @@ def award(user, badge, period_type, start, end, department, detail):
     name = HDBadgeAward.record_name(badge, user, start, department)
     if frappe.db.exists(BADGE, name) or not frappe.db.exists("User", user):
         return None
-    doc = frappe.get_doc(
-        {
-            "doctype": BADGE,
-            "user": user,
-            "badge": badge,
-            "period_type": period_type,
-            "period_start": start,
-            "period_end": end,
-            "department": department,
-            "detail": detail,
-            "earned_on": add_days(end, 1),
-        }
-    ).insert(ignore_permissions=True)
+    try:
+        doc = frappe.get_doc(
+            {
+                "doctype": BADGE,
+                "user": user,
+                "badge": badge,
+                "period_type": period_type,
+                "period_start": start,
+                "period_end": end,
+                "department": department,
+                "detail": detail,
+                "earned_on": add_days(end, 1),
+            }
+        ).insert(ignore_permissions=True)
+    except frappe.DuplicateEntryError:
+        # an overlapping run of the same close awarded it first
+        return None
     if badge not in SILENT_BADGES:
         notify_users(
             [user],
