@@ -32,6 +32,7 @@
           </SettingRow>
         </SettingsSection>
         <MobileAppSettings />
+        <OffboardingSettings :dirty="isDirty" />
       </div>
     </template>
   </SettingsLayoutBase>
@@ -48,6 +49,7 @@ import SettingRow from "../SettingRow.vue";
 import SettingsSection from "../SettingsSection.vue";
 import Branding from "./components/Branding.vue";
 import MobileAppSettings from "./components/MobileAppSettings.vue";
+import OffboardingSettings from "./components/OffboardingSettings.vue";
 import TicketSettings from "./components/TicketSettings.vue";
 import WorkflowKnowledgebaseSettings from "./components/WorkflowKnowledgebaseSettings.vue";
 
@@ -81,6 +83,10 @@ const settingsData = ref({
   microsoftTenantId: "",
   microsoftClientId: "",
   mobileOauthClient: "",
+  offboardRemovedMicrosoftUsers: false,
+  offboardingDomains: "",
+  offboardingDryRun: true,
+  offboardingMaxDisables: 5,
 });
 const disableSignup = ref(false);
 
@@ -142,6 +148,13 @@ const saveSettingsResource = createResource({
         microsoft_tenant_id: settingsData.value.microsoftTenantId,
         microsoft_client_id: settingsData.value.microsoftClientId,
         mobile_oauth_client: settingsData.value.mobileOauthClient,
+        offboard_removed_microsoft_users:
+          settingsData.value.offboardRemovedMicrosoftUsers,
+        offboarding_domains: settingsData.value.offboardingDomains,
+        offboarding_dry_run: settingsData.value.offboardingDryRun,
+        offboarding_max_disables: Number(
+          settingsData.value.offboardingMaxDisables
+        ),
       },
     };
   },
@@ -183,6 +196,12 @@ const transformData = (data: any) => {
     microsoftTenantId: data.microsoft_tenant_id || "",
     microsoftClientId: data.microsoft_client_id || "",
     mobileOauthClient: data.mobile_oauth_client || "",
+    offboardRemovedMicrosoftUsers: Boolean(
+      data.offboard_removed_microsoft_users
+    ),
+    offboardingDomains: data.offboarding_domains || "",
+    offboardingDryRun: Boolean(data.offboarding_dry_run),
+    offboardingMaxDisables: data.offboarding_max_disables,
   };
 };
 

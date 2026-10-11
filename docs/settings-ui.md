@@ -92,7 +92,7 @@ Telephony providers and pending invites.
 | Preferences | Theme (a radio group of buttons; the current theme carries the brand border), language and timezone; saving reloads the app. |
 | Email Accounts | List with each account's role badge (Default Inbox, Default Sending…; info tone when that direction is on). Add and edit are sub-pages with Back, Save in the header and Pull emails now. |
 | Email Notifications | List of the four emails; each opens an editor with Enabled and Save in the header. |
-| General | Branding, Tickets, Workflow and knowledge base, User sign-up and Mobile app (Mobile push, see tbo-smart-api.md) sections. |
+| General | Branding, Tickets, Workflow and knowledge base, User sign-up, Mobile app (Mobile push, see tbo-smart-api.md) and, for System Managers, Offboarding (switch, domains, dry run, limit, Preview and Run now with their results, and the recently disabled; see tbo-smart-api.md "Offboarding") sections. The Offboarding settings save with Save changes; Preview and Run now use the saved settings, so they wait until the page is saved. |
 | Agents | Search, All/Active/Inactive filter, role menu per agent (managers), deactivate/reactivate. Invite agents is the primary action. |
 | Invite Agents | Emails and role, Send invites; pending invites with Cancel invitation. |
 | Teams | List; a team page with Add members, Enabled and a ⋯ menu (assignment rule, rename, access, delete). |

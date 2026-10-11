@@ -5,13 +5,14 @@ hub** (https://teams.teambackoffice.com). The ESS half (tboindia, `tbo_smart` ap
 of this repo and is not covered here.
 
 - Code: `helpdesk/api/mobile.py` (every endpoint), `helpdesk/api/mobile_auth.py` (single
-  sign-in with Microsoft), `helpdesk/mobile_push.py` (push),
+  sign-in with Microsoft), `helpdesk/offboarding.py` and `helpdesk/api/offboarding.py`
+  (offboarding), `helpdesk/mobile_push.py` (push),
   `HD Mobile Device` (push tokens), HD Settings → **Mobile push** (switch),
   `helpdesk/competition.py` (Compete: ranks, streaks, bests, badges, the weekly challenge;
   `HD Badge Award`), `helpdesk/team_insights.py` (management insights), the snooze in
   `helpdesk/follow_ups.py` (`HD Follow Up Snooze`).
 - Tests: `helpdesk/tests/test_mobile_api.py`, `helpdesk/tests/test_mobile_competition.py`,
-  `helpdesk/tests/test_mobile_auth.py`.
+  `helpdesk/tests/test_mobile_auth.py`, `helpdesk/tests/test_offboarding.py`.
 - Fixtures: `docs/tbo-smart-api/<endpoint>.json`, one real-shaped response per endpoint, for
   mocking.
 
@@ -127,7 +128,7 @@ On sign-out the app, in this order:
 
 Revoked tokens fail at once (`OAuth Bearer Token.status = Revoked`). An admin can revoke a
 lost phone's tokens in desk (OAuth Bearer Token list → filter by user → set Revoked), and
-disabling the User stops all their tokens. The hub's endpoint guard (`helpdesk/auth.py`,
+disabling the User revokes all their tokens (see [Offboarding](#offboarding)). The hub's endpoint guard (`helpdesk/auth.py`,
 `block_endpoints`) lets `revoke_token` through, like `authorize` and `get_token`.
 
 ### CSRF
@@ -151,7 +152,8 @@ The app asks for **one** login: Microsoft (Entra ID). Each site then decides acc
 own users and roles. Both TBO sites already offer "Login with Office 365", so every staff
 member has an account in TBO's tenant. The per-site Frappe OAuth above stays as it is (the
 app's fallback, and what single sign-in hands over to): the tokens issued here are ordinary
-OAuth Bearer Tokens, so refresh, revoke and every endpoint work unchanged.
+OAuth Bearer Tokens, so revoke and every endpoint work unchanged. They come **without a
+refresh token**, so access never outlives the Microsoft account (see [Offboarding](#offboarding)).
 
 Only the hub's side is in this repo. tboindia needs the same endpoint in its own app.
 
@@ -170,15 +172,16 @@ Only the hub's side is in this repo. tboindia needs the same endpoint in its own
 3. The answer:
    ```json
    { "message": { "v": 1, "data": {
-       "access_token": "…", "refresh_token": "…", "expires_in": 3600,
+       "access_token": "…", "expires_in": 3600,
        "token_type": "Bearer", "scope": "all openid",
        "user": "anjali@teambackoffice.com", "full_name": "Anjali Pillai" } } }
    ```
-4. From here it is the normal flow: `Authorization: Bearer`, refresh through
-   `frappe.integrations.oauth2.get_token` (`grant_type=refresh_token&refresh_token=…&client_id=<the
-   OAuth Client's id>`), revoke on sign-out. When the site's refresh token stops working,
-   the app gets a fresh ID token from Microsoft (silently, with Microsoft's refresh token)
-   and exchanges it again.
+4. From here it is the normal flow: `Authorization: Bearer`, and revoke the access token on
+   sign-out. There is **no refresh token**: before `expires_in` runs out (or on a 401), the
+   app gets a fresh ID token from Microsoft (silently, with Microsoft's own refresh token)
+   and exchanges it again. Microsoft refuses that for an account TBO has disabled, so the
+   app's access ends within the hour. `get_token` with `grant_type=refresh_token` has
+   nothing to refresh: these tokens are stored with no refresh token.
 
 Errors (the message is safe to show):
 
@@ -219,8 +222,10 @@ rate-limited per IP address (30 a minute: an office shares one address).
    doesn't reveal which accounts exist.
 8. **Token:** issued by Frappe's own OAuth server (`get_oauth_server().bearer.create_token`
    and the validator's `save_bearer_token`): the same generator, `expires_in` 3600 and
-   storage as `get_token`, linked to the configured OAuth Client with scopes `all openid`,
-   plus a refresh token.
+   storage as `get_token`, linked to the configured OAuth Client with scopes `all openid`.
+   No refresh token (`create_token(refresh_token=False)`): a refresh at `get_token` would
+   never ask Microsoft, so it would keep a removed employee in for as long as they kept
+   refreshing.
 
 A refusal writes an Error Log titled "TBO Smart Microsoft sign-in refused" whose message is
 the reason class only (`InvalidAudienceError`, `wrong_tenant`, `stale_token`, `replayed`,
@@ -247,9 +252,10 @@ The endpoint guard (`helpdesk/auth.py`, `block_endpoints`) already lets every
   one exchange. The app should always send the nonce.
 - **Identity mapping.** `email`/`preferred_username`/`upn` are set by TBO's tenant admins
   (tenant-pinned), the same values "Login with Office 365" on the web already trusts.
-- **Turning someone off.** Disabling the User in Frappe blocks the exchange at once and, as
-  before, stops their existing tokens; deactivating their HD Agent blocks the exchange too.
-  Removing them from Entra stops new Microsoft sign-ins. Revoked site tokens behave as above.
+- **Turning someone off.** Disabling the User in Frappe blocks the exchange at once and
+  revokes their existing tokens; deactivating their HD Agent blocks the exchange too.
+  Disabling or deleting them in Entra stops new Microsoft sign-ins, so their last site token
+  dies within the hour, and the hourly [offboarding](#offboarding) job disables the User.
 - **No secrets.** The Entra app is a public client with no secret; the hub only needs the
   tenant's public keys.
 
@@ -274,6 +280,96 @@ The endpoint guard (`helpdesk/auth.py`, `block_endpoints`) already lets every
    then switch on **Single sign-in with Microsoft**. The switch stays off by default and only
    System Managers can see or change these settings.
 4. Do the same on tboindia once its endpoint exists.
+
+## Offboarding
+
+The owner's rule: Microsoft is the only sign-in for TBO staff. When someone leaves, TBO
+disables their Microsoft account, and that must end their access to the hub too.
+
+### What the hub does
+
+1. **Single sign-in issues no refresh token** (above). An hour after the last exchange the
+   app needs a new Microsoft ID token, which Microsoft won't issue to a disabled account.
+2. **A disabled user has no access.** Frappe already refuses them everywhere: a Bearer token
+   (`OAuthWebRequestValidator.validate_bearer_token` checks the User is enabled), a cookie
+   session (`Session.resume`) and API keys. On top of that, disabling a User revokes all
+   their OAuth Bearer Tokens (`helpdesk.offboarding.revoke_tokens_of_disabled_user`, a User
+   `on_update` doc event), so enabling the User again doesn't bring old phones back. This
+   includes tokens from the per-site OAuth sign-in above, which still carry refresh tokens.
+3. **Automatic offboarding from Entra** (`helpdesk.offboarding.run`, hourly at :40, **off by
+   default**). It reads the tenant through Microsoft Graph with app-only auth, reusing the
+   Entra app (Connected App) chosen in HD Meeting Settings: `GET /users?$select=id,
+   accountEnabled,mail,userPrincipalName,otherMails,proxyAddresses`, following every
+   `@odata.nextLink`. For each **enabled** hub User whose email is at one of the company
+   domains:
+   - an address (mail, UPN, other mails or an SMTP alias) on an enabled account: kept;
+   - on accounts that are all disabled: disabled, reason **Disabled in Microsoft**;
+   - on no account: disabled, reason **Not in Microsoft**. Deleted users drop out of
+     `/users` at once (they sit in Entra's recycle bin for 30 days), so this covers
+     deletion without reading `deletedItems`.
+
+   Disabling saves the User (which revokes their tokens), writes an **HD Offboarding Log**
+   (user, reason, when) and, once per run, tells the Agent Managers in one notification
+   (helpdesk panel plus email or chat). Nothing is unassigned, so tickets and tasks keep
+   their history.
+
+### Safety rules
+
+- Administrator, Guest, every **System Manager** and the automation user (HDS Hub Settings)
+  are never touched, so a break-glass admin can't be locked out by the job.
+- Only users at the configured **company email domains** are checked; customers and
+  partners at other domains never are.
+- Nobody is changed when Graph fails on any page (an error, throttling, a network failure),
+  when it returns nobody, or when it returns nobody at the company domains (a wrong tenant
+  or domain list). The run stops with an Error Log titled "Offboarding from Microsoft
+  stopped".
+- **Dry run** (on by default once switched on) finds who would go and changes nothing.
+- **Limit** (default 5): when more people would be disabled in one run, nobody is, and
+  System Managers get one alert listing them (repeated only when the list changes). Raise
+  the limit for a planned mass exit, or disable those people by hand.
+- Shared mailboxes are disabled accounts in Entra: a hub User for one (at a company domain,
+  without System Manager) would be offboarded. Run **Preview** before turning dry run off.
+
+### Settings (Settings → General → Offboarding, System Managers only)
+
+| Setting | Field | Default |
+| --- | --- | --- |
+| Disable people removed from Microsoft | `offboard_removed_microsoft_users` | off |
+| Company email domains (one per line, stored lowercase) | `offboarding_domains` | – |
+| Dry run | `offboarding_dry_run` | on |
+| Most people disabled per run | `offboarding_max_disables` | 5 |
+
+Switching it on needs the domains, a limit of at least 1 and a Microsoft app in HD Meeting
+Settings. The fields are permlevel 1 (System Managers). The page also has:
+
+- **Preview** (`helpdesk.api.offboarding.preview_offboarding`, POST, System Managers): who a
+  run would disable now and why, changing nothing; works with the switch off.
+- **Run now** (`helpdesk.api.offboarding.run_offboarding`, POST, System Managers): the hourly
+  job at once, with the saved dry run and limit.
+- **Recently disabled**: the last ten HD Offboarding Log entries.
+
+Both buttons sign in to Graph afresh, so a permission granted a minute ago is used. A Graph
+refusal shows Microsoft's message; a 403 without User.Read.All in the token says to grant it.
+
+### Owner steps (the code can't do these)
+
+1. **Grant the Graph application permission User.Read.All** to the Entra app chosen in HD
+   Meeting Settings (Entra → App registrations → the app → API permissions → Microsoft Graph
+   → Application permissions → User.Read.All), then **Grant admin consent**.
+2. **Make Office 365 the only way in, on the web too.** In **System Settings** on both sites
+   (the hub and tboindia): turn on **Disable Username/Password Login**, and turn off **Login
+   with email link**. Check "Login with Office 365" works for you first.
+3. **Keep at least one break-glass Administrator.** With username/password login disabled,
+   Frappe refuses password login for everyone, Administrator included, so keep a System
+   Manager whose Microsoft account isn't tied to one person, and keep server access for the
+   last resort: `bench --site <site> browse --user Administrator` opens a session without a
+   password, and `bench --site <site> console` can turn password login back on
+   (`frappe.db.set_single_value("System Settings", "disable_user_pass_login", 0)`). The
+   offboarding job never disables Administrator or a System Manager.
+4. In **Settings → General → Offboarding**: add the domains (e.g. `teambackoffice.com`),
+   switch it on, save, press **Preview** and check the list. When it is right, turn **Dry
+   run** off and save.
+5. On tboindia, the same rules need its own code (not in this repo).
 
 ## Endpoints
 
