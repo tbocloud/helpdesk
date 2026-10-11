@@ -102,7 +102,9 @@ def get_team_defaults(customer: str) -> dict:
 
 @frappe.whitelist()
 def get_content_project(customer: str) -> dict | None:
-    """The project this customer's post tasks go to, for the post dialogs to show."""
+    """The project this customer's post tasks go to, for the post dialogs to show:
+    {name, project_name}, {name: None, hidden: True} when the caller can't read it, or
+    {name: None, missing} when there is none."""
     frappe.has_permission("HD Content Post", "read", throw=True)
     project = content_project_for(customer)
     if not project:
@@ -110,6 +112,9 @@ def get_content_project(customer: str) -> dict | None:
             "name": None,
             "missing": strip_html(missing_content_project_message(customer)),
         }
+    # someone who can't open the project still learns the entry is fine, not which project
+    if not frappe.has_permission("Project", "read", doc=project):
+        return {"name": None, "hidden": True}
     return {
         "name": project,
         "project_name": frappe.db.get_value("Project", project, "project_name"),

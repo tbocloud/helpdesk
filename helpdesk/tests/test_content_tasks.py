@@ -544,6 +544,17 @@ class TestContentProject(ContentTaskCase):
         self.assertIsNone(missing["name"])
         self.assertIn("has no open project", missing["missing"])
 
+    def test_the_dialog_hides_a_project_the_viewer_cant_open(self):
+        real = frappe.has_permission
+        with patch(
+            "helpdesk.api.content_board.frappe.has_permission",
+            side_effect=lambda doctype, *a, **k: doctype != "Project"
+            and real(doctype, *a, **k),
+        ):
+            self.assertEqual(
+                get_content_project(CUSTOMER), {"name": None, "hidden": True}
+            )
+
     def test_a_project_of_any_type_takes_the_tasks(self):
         frappe.db.set_value("Project", self.project, "project_type", "Website")
         post = self.post(with_project=False)

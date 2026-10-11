@@ -19,6 +19,15 @@
           >
         </span>
       </template>
+      <template v-else-if="shown.hidden">
+        <LucideFolderKanban
+          class="mt-0.5 size-3.5 shrink-0 text-ink-gray-5"
+          aria-hidden="true"
+        />
+        <span class="min-w-0 text-ink-gray-6">{{
+          __("Tasks go to this customer's project")
+        }}</span>
+      </template>
       <template v-else>
         <LucideTriangleAlert
           class="mt-0.5 size-3.5 shrink-0 text-warning"
@@ -42,6 +51,8 @@ import LucideTriangleAlert from "~icons/lucide/triangle-alert";
 type ContentProject = {
   name: string | null;
   project_name?: string;
+  // the project exists but the viewer can't open it
+  hidden?: boolean;
   missing?: string;
 };
 

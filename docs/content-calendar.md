@@ -159,7 +159,9 @@ create it, it only uses it when it's there.
 - **The dialogs say where:** under Customer, Add entry and the post dialog show "Tasks go to
   *project*" (a link, opening in a new tab), or the same message as a warning before saving
   (`ContentProjectNote.vue`, `content_board.get_content_project`, which returns
-  `{name, project_name}` or `{name: null, missing}`). The note drops an answer for a customer
+  `{name, project_name}` or `{name: null, missing}`). Someone who can read posts but can't open
+  the project gets `{name: null, hidden: true}` and sees "Tasks go to this customer's project",
+  without its name or link. The note drops an answer for a customer
   picked earlier and checks again when the window gets focus, since the project is often fixed
   in the tab its link opens.
 - **Missing projects are filled in later.** Saving a post gives its open tasks without a
