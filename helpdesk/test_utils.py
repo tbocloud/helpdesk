@@ -2220,6 +2220,28 @@ def clear_merge_bot_debounce():
     frappe.cache.delete_value(DEBOUNCE_KEY)
 
 
+def get_github_secret(fieldname: str) -> str | None:
+    """The stored (decrypted) value of a Password field in HD GitHub Settings, or None."""
+    return frappe.get_doc("HD GitHub Settings").get_password(
+        fieldname, raise_exception=False
+    )
+
+
+def make_github_delivery(event: str = "pull_request", **values):
+    """Records an HD GitHub Delivery (as receive_webhook does) without processing it."""
+    return frappe.get_doc(
+        {
+            "doctype": "HD GitHub Delivery",
+            "delivery_id": frappe.generate_hash(length=20),
+            "event": event,
+            "action": "opened",
+            "repo": GITHUB_TEST_REPO,
+            "status": "Processed",
+            **values,
+        }
+    ).insert(ignore_permissions=True)
+
+
 def make_github_payload(event: str, action: str = "", **overrides) -> dict:
     """A minimal GitHub webhook payload shaped like the real one for `event`.
 

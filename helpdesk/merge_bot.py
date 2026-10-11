@@ -53,9 +53,7 @@ def may_be_mergeable(settings, event: str, payload: dict) -> bool:
 
 def request_run() -> bool:
     """Queue one dispatch unless one was queued in the last DEBOUNCE_SECONDS."""
-    cache = frappe.cache
-    # SET NX is atomic, so concurrent webhooks can't both pass
-    if not cache.set(cache.make_key(DEBOUNCE_KEY), 1, nx=True, ex=DEBOUNCE_SECONDS):
+    if not take_debounce():
         return False
     frappe.enqueue(
         "helpdesk.merge_bot.dispatch",
@@ -66,23 +64,32 @@ def request_run() -> bool:
     return True
 
 
+def take_debounce() -> bool:
+    """Whether a dispatch may go now; if so, no other may for DEBOUNCE_SECONDS."""
+    cache = frappe.cache
+    # SET NX is atomic, so concurrent webhooks can't both pass
+    return bool(
+        cache.set(cache.make_key(DEBOUNCE_KEY), 1, nx=True, ex=DEBOUNCE_SECONDS)
+    )
+
+
 def scheduled_run():
     """Scheduler fallback (every 10 minutes): catches anything the events missed."""
     if frappe.db.get_single_value(github_sync.SETTINGS, "trigger_merge_bot"):
         request_run()
 
 
-def dispatch():
-    """Background job: POST the workflow_dispatch and record the outcome on the settings."""
+def dispatch() -> bool:
+    """Background job: POST the workflow_dispatch and record the outcome on the settings.
+    Whether GitHub accepted it, for Settings → GitHub's "Request a run now"."""
     settings = frappe.get_single(github_sync.SETTINGS)
     if not settings.trigger_merge_bot:
-        return
+        return False
     token = settings.get_password(
         "merge_bot_token", raise_exception=False
     ) or settings.get_password("github_token", raise_exception=False)
     if not token:
-        record(_("Not sent: no merge bot token or GitHub token"), failed=True)
-        return
+        return record(_("Not sent: no merge bot token or GitHub token"), failed=True)
     url = (
         f"{github_sync.GITHUB_API}/repos/{settings.merge_bot_repo}"
         f"/actions/workflows/{settings.merge_bot_workflow}/dispatches"
@@ -97,15 +104,13 @@ def dispatch():
             timeout=github_sync.REQUEST_TIMEOUT,
         )
     except requests.RequestException as e:
-        record(_("Failed: {0}").format(type(e).__name__), failed=True)
-        return
+        return record(_("Failed: {0}").format(type(e).__name__), failed=True)
     if response.ok:
-        record(_("Dispatched (HTTP {0})").format(response.status_code))
-    else:
-        record(_("Failed (HTTP {0})").format(response.status_code), failed=True)
+        return record(_("Dispatched (HTTP {0})").format(response.status_code))
+    return record(_("Failed (HTTP {0})").format(response.status_code), failed=True)
 
 
-def record(result: str, failed: bool = False):
+def record(result: str, failed: bool = False) -> bool:
     """The last outcome on the settings; failures also go to the Error Log. Never the token."""
     frappe.db.set_single_value(
         github_sync.SETTINGS,
@@ -115,3 +120,4 @@ def record(result: str, failed: bool = False):
     )
     if failed:
         frappe.log_error(title=_("Merge bot dispatch failed"), message=result)
+    return not failed

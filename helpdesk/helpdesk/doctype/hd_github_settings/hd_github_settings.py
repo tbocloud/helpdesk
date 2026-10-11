@@ -21,8 +21,15 @@ MERGE_BOT_DEFAULTS = {
 
 class HDGitHubSettings(Document):
     def validate(self):
+        self.require_webhook_secret()
         self.normalize_allowed_repos()
         self.validate_merge_bot()
+
+    def require_webhook_secret(self):
+        """The webhook refuses everything without it; the form's mandatory_depends_on
+        isn't checked on the server."""
+        if self.enabled and not self.webhook_secret:
+            frappe.throw(_("Webhook Secret: add it before turning the sync on."))
 
     def normalize_allowed_repos(self):
         """One pattern per line, blanks dropped, so matching never sees stray spaces."""
@@ -31,7 +38,7 @@ class HDGitHubSettings(Document):
         invalid = [p for p in patterns if not REPO_PATTERN.match(p)]
         if invalid:
             frappe.throw(
-                _("Use owner/repo or owner/* for each repository: {0}").format(
+                _("Allowed Repositories: use owner/repo or owner/* on each line, not {0}").format(
                     ", ".join(invalid)
                 )
             )
@@ -42,10 +49,12 @@ class HDGitHubSettings(Document):
         for field, default in MERGE_BOT_DEFAULTS.items():
             self.set(field, (self.get(field) or "").strip() or default)
         if not REPO_NAME.match(self.merge_bot_repo) or ".." in self.merge_bot_repo:
-            frappe.throw(_("Use owner/repo for the merge bot repository."))
+            frappe.throw(_("Merge bot repository: use owner/repo, e.g. tbocloud/ai-review."))
         if not MERGE_BOT_WORKFLOW.match(self.merge_bot_workflow):
             frappe.throw(
-                _("Use the workflow's file name for the merge bot workflow, e.g. merge-bot.yml.")
+                _(
+                    "Merge bot workflow: use the workflow's file name, e.g. merge-bot.yml."
+                )
             )
 
     def allows_repo(self, repo: str | None) -> bool:
