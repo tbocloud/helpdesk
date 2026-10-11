@@ -4,12 +4,14 @@ The contract the TBO Smart mobile app (React Native, Expo) builds against on the
 hub** (https://teams.teambackoffice.com). The ESS half (tboindia, `tbo_smart` app) is not part
 of this repo and is not covered here.
 
-- Code: `helpdesk/api/mobile.py` (every endpoint), `helpdesk/mobile_push.py` (push),
+- Code: `helpdesk/api/mobile.py` (every endpoint), `helpdesk/api/mobile_auth.py` (single
+  sign-in with Microsoft), `helpdesk/mobile_push.py` (push),
   `HD Mobile Device` (push tokens), HD Settings → **Mobile push** (switch),
   `helpdesk/competition.py` (Compete: ranks, streaks, bests, badges, the weekly challenge;
   `HD Badge Award`), `helpdesk/team_insights.py` (management insights), the snooze in
   `helpdesk/follow_ups.py` (`HD Follow Up Snooze`).
-- Tests: `helpdesk/tests/test_mobile_api.py`, `helpdesk/tests/test_mobile_competition.py`.
+- Tests: `helpdesk/tests/test_mobile_api.py`, `helpdesk/tests/test_mobile_competition.py`,
+  `helpdesk/tests/test_mobile_auth.py`.
 - Fixtures: `docs/tbo-smart-api/<endpoint>.json`, one real-shaped response per endpoint, for
   mocking.
 
@@ -142,6 +144,136 @@ Private files (`/private/files/…`, project files, ticket attachments) download
 `Authorization: Bearer` header; Frappe checks the user's permission on the file. Uploads go
 to `POST /api/method/upload_file` (multipart, `is_private=1`, `doctype=HD Ticket`,
 `docname=<ticket>`), and the returned File `name` goes into `reply_ticket.attachments`.
+
+## Single sign-in with Microsoft
+
+The app asks for **one** login: Microsoft (Entra ID). Each site then decides access from its
+own users and roles. Both TBO sites already offer "Login with Office 365", so every staff
+member has an account in TBO's tenant. The per-site Frappe OAuth above stays as it is (the
+app's fallback, and what single sign-in hands over to): the tokens issued here are ordinary
+OAuth Bearer Tokens, so refresh, revoke and every endpoint work unchanged.
+
+Only the hub's side is in this repo. tboindia needs the same endpoint in its own app.
+
+### Flow
+
+1. The app signs in with Microsoft: Authorization Code + PKCE as a public client
+   (`expo-auth-session`), authority `https://login.microsoftonline.com/<tenant id>/v2.0`,
+   scopes `openid profile email offline_access`, a random `nonce`. Microsoft returns an
+   **ID token** (and its own refresh token, which stays on the phone for a silent re-login).
+2. The app sends the ID token to each site:
+   ```
+   POST /api/method/helpdesk.api.mobile_auth.exchange_microsoft_token
+   {"id_token": "<Microsoft ID token>", "nonce": "<the nonce from step 1>"}
+   ```
+   No Authorization header and no cookies.
+3. The answer:
+   ```json
+   { "message": { "v": 1, "data": {
+       "access_token": "…", "refresh_token": "…", "expires_in": 3600,
+       "token_type": "Bearer", "scope": "all openid",
+       "user": "anjali@teambackoffice.com", "full_name": "Anjali Pillai" } } }
+   ```
+4. From here it is the normal flow: `Authorization: Bearer`, refresh through
+   `frappe.integrations.oauth2.get_token` (`grant_type=refresh_token&refresh_token=…&client_id=<the
+   OAuth Client's id>`), revoke on sign-out. When the site's refresh token stops working,
+   the app gets a fresh ID token from Microsoft (silently, with Microsoft's refresh token)
+   and exchanges it again.
+
+Errors (the message is safe to show):
+
+| Status | When | App |
+| --- | --- | --- |
+| `401` `AuthenticationError` | the ID token failed a check below | sign in with Microsoft again (not a refresh) |
+| `403` `PermissionError` | single sign-in is off on this site, or "Your TBO account isn't set up for TBO Support." | show the message; offer the per-site sign-in |
+| `429` | more than 30 exchanges a minute from one IP address | retry later |
+
+### What the hub checks
+
+`helpdesk.api.mobile_auth.exchange_microsoft_token(id_token, nonce=None)`: guest, POST only,
+rate-limited per IP address (30 a minute: an office shares one address).
+
+1. Single sign-in is on and the tenant ID, app client ID and OAuth client are set, and the
+   OAuth Client still allows `all openid` (checked on every exchange, because issuing a token
+   directly skips the scope check Frappe's grant flows make; also checked when the switch is
+   saved).
+2. **Signature:** RS256 only, with the key Entra names in the token's `kid`, from the
+   tenant's JWKS (`https://login.microsoftonline.com/<tenant>/discovery/v2.0/keys`). PyJWT's
+   `PyJWKClient` caches the keys for an hour per worker and refetches when Microsoft rotates
+   to a key it hasn't seen. `none` and HS256 tokens are refused.
+3. **Claims:** `exp`, `nbf`, `iat`, `iss`, `aud`, `tid` and `sub` must be present;
+   `iss` = `https://login.microsoftonline.com/<tenant>/v2.0`; `tid` = the tenant;
+   `aud` = the mobile app's client ID; `exp`/`nbf` with 60 s leeway.
+4. **Fresh:** issued (`iat`) at most 10 minutes ago. The app exchanges the token right after
+   signing in; this also bounds replay.
+5. **Nonce:** when the app sends `nonce`, the token's `nonce` must equal it (constant-time
+   compare).
+6. **Once:** the token's `uti` (Entra's token id; `jti` if present instead) is stored in Redis
+   with `SET NX` until the token expires (plus leeway). A second exchange of the same token on
+   the same site is refused. A token without either is refused.
+7. **User:** the first of `email`, `preferred_username`, `upn` is matched to a User's email
+   (case-insensitively, by the database collation). The User must exist and be enabled, be
+   an active HD Agent (or, without an agent record, have Agent or Agent Manager), and have one
+   of the OAuth Client's Allowed Roles (the same rule Frappe's own sign-in applies). Users are
+   never created. Every one of these refusals gives the same 403 message, so the endpoint
+   doesn't reveal which accounts exist.
+8. **Token:** issued by Frappe's own OAuth server (`get_oauth_server().bearer.create_token`
+   and the validator's `save_bearer_token`): the same generator, `expires_in` 3600 and
+   storage as `get_token`, linked to the configured OAuth Client with scopes `all openid`,
+   plus a refresh token.
+
+A refusal writes an Error Log titled "TBO Smart Microsoft sign-in refused" whose message is
+the reason class only (`InvalidAudienceError`, `wrong_tenant`, `stale_token`, `replayed`,
+`unknown_user`, `not_agent`, …); never the token or the email. It is inserted deferred,
+because the refused request rolls back.
+
+The endpoint guard (`helpdesk/auth.py`, `block_endpoints`) already lets every
+`/api/method/helpdesk.*` path through, so it needs no allow-list entry.
+
+### Security notes
+
+- **Why an ID token, not an access token.** An ID token is issued *to our app*: its `aud` is
+  the mobile app's client ID, it is signed by Entra with keys published for the tenant, and
+  it names the person. A Microsoft Graph access token is meant for Graph only (its `aud` is
+  Graph, and Microsoft says its format can change and isn't for third parties to validate),
+  so accepting one would let any app that got a Graph token for the user sign in here.
+- **Audience-bound, tenant-pinned, signature-verified.** A token issued to another app, or by
+  another tenant (including personal accounts and `common`), fails `aud`, `iss` or `tid`; a
+  forged or altered one fails the signature. The tenant and client IDs must be GUIDs, so the
+  site can't be pointed at `common`.
+- **Replay.** ID tokens live about an hour. The hub accepts one only within 10 minutes of
+  issue, only once per site (`uti` in Redis), and, with the nonce, only for the sign-in the
+  app started. A token leaked from a phone or a log is still only good for 10 minutes and
+  one exchange. The app should always send the nonce.
+- **Identity mapping.** `email`/`preferred_username`/`upn` are set by TBO's tenant admins
+  (tenant-pinned), the same values "Login with Office 365" on the web already trusts.
+- **Turning someone off.** Disabling the User in Frappe blocks the exchange at once and, as
+  before, stops their existing tokens; deactivating their HD Agent blocks the exchange too.
+  Removing them from Entra stops new Microsoft sign-ins. Revoked site tokens behave as above.
+- **No secrets.** The Entra app is a public client with no secret; the hub only needs the
+  tenant's public keys.
+
+### Owner setup (one time)
+
+1. **Entra app registration** (Microsoft Entra admin center → App registrations → New):
+   name `TBO Smart`, single tenant ("Accounts in this organizational directory only").
+   - Authentication → Add a platform → **Mobile and desktop applications**, redirect URI
+     `tbosmart://oauth/callback` (add the `msauth.<bundle id>://auth` URI too if the app
+     uses MSAL).
+   - Advanced settings → **Allow public client flows: Yes**. No client secret.
+   - API permissions: Microsoft Graph delegated `openid`, `profile`, `email`,
+     `offline_access` (`User.Read` optional). Grant admin consent so staff don't see a
+     consent screen.
+   - Optional: Token configuration → add the optional claim `email` to the ID token (the hub
+     falls back to `preferred_username`, which is the sign-in address, when it's missing).
+2. Note the **Directory (tenant) ID** and the **Application (client) ID** (Overview) and give
+   the client ID to the app developer.
+3. On the hub, in **Settings → General → Mobile app** (System Managers): fill in
+   **Microsoft tenant ID**, **Mobile app client ID** and **OAuth client for TBO Smart** (the
+   OAuth Client from "Owner setup on the hub" above; its scopes must include `all openid`),
+   then switch on **Single sign-in with Microsoft**. The switch stays off by default and only
+   System Managers can see or change these settings.
+4. Do the same on tboindia once its endpoint exists.
 
 ## Endpoints
 
@@ -474,9 +606,10 @@ Decided per field; "app" means change `types.ts`, "hub" means a later hub change
 ## Owner setup checklist
 
 1. Create the **OAuth Client** above and send its Client ID to the app developer.
-2. Turn on **Settings → General → Mobile app → Mobile push** once the app ships with push.
-3. Pick the **weekly challenge** in Settings → Follow-ups (default: close every key task due
+2. For one login across both sites, do "Single sign-in with Microsoft → Owner setup".
+3. Turn on **Settings → General → Mobile app → Mobile push** once the app ships with push.
+4. Pick the **weekly challenge** in Settings → Follow-ups (default: close every key task due
    this week), and set each department's **Heads** in Settings → Departments: heads get
    `manage_team` and the insights of their departments.
-4. Nothing else: the doctypes (HD Mobile Device, HD Badge Award, HD Follow Up Snooze) and the
+5. Nothing else: the doctypes (HD Mobile Device, HD Badge Award, HD Follow Up Snooze) and the
    settings arrive with `bench migrate`; badges start with the next period close.

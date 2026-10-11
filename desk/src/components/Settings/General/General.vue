@@ -31,19 +31,7 @@
             <Switch :id="id" v-model="disableSignup" />
           </SettingRow>
         </SettingsSection>
-        <SettingsSection :title="__('Mobile app')">
-          <SettingRow
-            v-slot="{ id }"
-            :label="__('Mobile push')"
-            :description="
-              __(
-                'Send each new notification to the TBO Smart app on the person\'s phones.'
-              )
-            "
-          >
-            <Switch :id="id" v-model="settingsData.enableMobilePush" />
-          </SettingRow>
-        </SettingsSection>
+        <MobileAppSettings />
       </div>
     </template>
   </SettingsLayoutBase>
@@ -59,6 +47,7 @@ import { computed, provide, ref, watch } from "vue";
 import SettingRow from "../SettingRow.vue";
 import SettingsSection from "../SettingsSection.vue";
 import Branding from "./components/Branding.vue";
+import MobileAppSettings from "./components/MobileAppSettings.vue";
 import TicketSettings from "./components/TicketSettings.vue";
 import WorkflowKnowledgebaseSettings from "./components/WorkflowKnowledgebaseSettings.vue";
 
@@ -88,6 +77,10 @@ const settingsData = ref({
   enableOutsideHoursBanner: false,
   outsideWorkingHoursBannerMessage: "",
   enableMobilePush: false,
+  enableMicrosoftSso: false,
+  microsoftTenantId: "",
+  microsoftClientId: "",
+  mobileOauthClient: "",
 });
 const disableSignup = ref(false);
 
@@ -145,6 +138,10 @@ const saveSettingsResource = createResource({
         outside_working_hours_message:
           settingsData.value.outsideWorkingHoursBannerMessage,
         enable_mobile_push: settingsData.value.enableMobilePush,
+        enable_microsoft_sso: settingsData.value.enableMicrosoftSso,
+        microsoft_tenant_id: settingsData.value.microsoftTenantId,
+        microsoft_client_id: settingsData.value.microsoftClientId,
+        mobile_oauth_client: settingsData.value.mobileOauthClient,
       },
     };
   },
@@ -182,6 +179,10 @@ const transformData = (data: any) => {
     enableOutsideHoursBanner: Boolean(data.enable_outside_hours_banner),
     outsideWorkingHoursBannerMessage: data.outside_working_hours_message || "",
     enableMobilePush: Boolean(data.enable_mobile_push),
+    enableMicrosoftSso: Boolean(data.enable_microsoft_sso),
+    microsoftTenantId: data.microsoft_tenant_id || "",
+    microsoftClientId: data.microsoft_client_id || "",
+    mobileOauthClient: data.mobile_oauth_client || "",
   };
 };
 
@@ -247,6 +248,7 @@ const toggleFields = [
   "preferKnowledgeBase",
   "skipEmailWorkflow",
   "enableMobilePush",
+  "enableMicrosoftSso",
 ] as const;
 
 // Track dirty state for non-toggle fields only
