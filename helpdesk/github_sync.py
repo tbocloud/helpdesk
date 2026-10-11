@@ -40,6 +40,7 @@ from frappe.utils import (
     strip_html,
 )
 
+from helpdesk import merge_bot
 from helpdesk.automation import acting_user, credit
 from helpdesk.work_reminders import notify_users
 
@@ -112,15 +113,19 @@ def receive_webhook(raw: bytes, headers) -> dict:
         return {"ok": True, "duplicate": True}
 
     if note:
-        return {"ok": True, "ignored": note}
-    frappe.enqueue(
-        "helpdesk.github_sync.process_delivery",
-        queue="short",
-        delivery=delivery.name,
-        enqueue_after_commit=True,
-        now=frappe.flags.in_test,
-    )
-    return {"ok": True, "queued": delivery.name}
+        result = {"ok": True, "ignored": note}
+    else:
+        frappe.enqueue(
+            "helpdesk.github_sync.process_delivery",
+            queue="short",
+            delivery=delivery.name,
+            enqueue_after_commit=True,
+            now=frappe.flags.in_test,
+        )
+        result = {"ok": True, "queued": delivery.name}
+    # independent of the task sync and its allowed repositories: the bot covers both orgs
+    merge_bot.on_webhook(settings, event, payload)
+    return result
 
 
 def check_signature(settings, raw: bytes, signature: str | None):
@@ -658,11 +663,7 @@ class PullRequestSync:
             response = requests.request(
                 method,
                 f"{GITHUB_API}/repos/{self.repo}/{path}",
-                headers={
-                    "Authorization": f"Bearer {token}",
-                    "Accept": "application/vnd.github+json",
-                    "X-GitHub-Api-Version": "2022-11-28",
-                },
+                headers=github_headers(token),
                 timeout=REQUEST_TIMEOUT,
                 **kwargs,
             )
@@ -704,6 +705,14 @@ class PullRequestSync:
 
 
 # --- helpers ---
+
+
+def github_headers(token: str) -> dict:
+    return {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
 
 
 def github_time(value: str):

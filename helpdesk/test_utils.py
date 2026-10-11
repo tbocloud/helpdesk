@@ -2200,12 +2200,32 @@ def enable_github_sync(**values):
     return doc
 
 
+def enable_merge_bot_trigger(**values):
+    """Turns on the GitHub sync with the merge bot trigger and a GitHub token (plus any
+    overrides), and forgets the last dispatch so the debounce starts fresh."""
+    clear_merge_bot_debounce()
+    return enable_github_sync(
+        **{
+            "trigger_merge_bot": 1,
+            "github_token": "ghp_sync_token",
+            "merge_bot_token": None,
+            **values,
+        }
+    )
+
+
+def clear_merge_bot_debounce():
+    from helpdesk.merge_bot import DEBOUNCE_KEY
+
+    frappe.cache.delete_value(DEBOUNCE_KEY)
+
+
 def make_github_payload(event: str, action: str = "", **overrides) -> dict:
     """A minimal GitHub webhook payload shaped like the real one for `event`.
 
     Overrides: repo, number, title, body, branch, draft, merged, closed, login,
     comments, review_state, review_body, reviewer, conclusion, sha, workflow,
-    pull_requests (workflow_run: PR numbers the run belongs to).
+    pull_requests (workflow_run / check_suite: PR numbers the run belongs to).
     """
     repo = overrides.get("repo", GITHUB_TEST_REPO)
     number = overrides.get("number", 7)
@@ -2219,8 +2239,8 @@ def make_github_payload(event: str, action: str = "", **overrides) -> dict:
         "repository": {"full_name": repo, "name": repo.split("/")[-1]},
         "sender": {"login": login},
     }
-    if event == "workflow_run":
-        payload["workflow_run"] = {
+    if event in ("workflow_run", "check_suite"):
+        payload[event] = {
             "name": overrides.get("workflow", "Server Tests"),
             "head_branch": branch,
             "head_sha": sha,
