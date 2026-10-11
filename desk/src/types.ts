@@ -704,6 +704,10 @@ export interface HDSettings {
   microsoftTenantId: string;
   microsoftClientId: string;
   mobileOauthClient: string;
+  offboardRemovedMicrosoftUsers: boolean;
+  offboardingDomains: string;
+  offboardingDryRun: boolean;
+  offboardingMaxDisables: number;
 }
 
 export interface HolidayList {

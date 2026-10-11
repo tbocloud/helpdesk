@@ -91,7 +91,12 @@
   "enable_microsoft_sso",
   "microsoft_tenant_id",
   "microsoft_client_id",
-  "mobile_oauth_client"
+  "mobile_oauth_client",
+  "offboarding_section",
+  "offboard_removed_microsoft_users",
+  "offboarding_domains",
+  "offboarding_dry_run",
+  "offboarding_max_disables"
  ],
  "fields": [
   {
@@ -605,12 +610,51 @@
    "label": "OAuth client for TBO Smart",
    "options": "OAuth Client",
    "permlevel": 1
+  },
+  {
+   "description": "Microsoft is the only sign-in for TBO staff, so someone TBO disables or deletes in Microsoft is disabled here too.",
+   "fieldname": "offboarding_section",
+   "fieldtype": "Section Break",
+   "label": "Offboarding",
+   "permlevel": 1
+  },
+  {
+   "default": "0",
+   "description": "Every hour, read TBO's Microsoft directory (the Microsoft app from HD Meeting Settings, with the User.Read.All application permission) and disable each enabled user at the company domains whose Microsoft account is disabled or gone. System Managers and the automation user are never touched.",
+   "fieldname": "offboard_removed_microsoft_users",
+   "fieldtype": "Check",
+   "label": "Disable people removed from Microsoft",
+   "permlevel": 1
+  },
+  {
+   "description": "Only users whose email is at one of these domains are checked, e.g. teambackoffice.com. Separate them with commas or new lines.",
+   "fieldname": "offboarding_domains",
+   "fieldtype": "Small Text",
+   "label": "Company email domains",
+   "permlevel": 1
+  },
+  {
+   "default": "1",
+   "description": "Find who would be disabled without changing anyone.",
+   "fieldname": "offboarding_dry_run",
+   "fieldtype": "Check",
+   "label": "Dry run",
+   "permlevel": 1
+  },
+  {
+   "default": "5",
+   "description": "When more people would be disabled in one run, nobody is and System Managers are alerted instead.",
+   "fieldname": "offboarding_max_disables",
+   "fieldtype": "Int",
+   "label": "Most people disabled per run",
+   "non_negative": 1,
+   "permlevel": 1
   }
  ],
  "grid_page_length": 50,
  "issingle": 1,
  "links": [],
- "modified": "2026-10-11 12:00:00.000000",
+ "modified": "2026-10-11 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "Helpdesk",
  "name": "HD Settings",

@@ -23,6 +23,7 @@ class HDSettings(Document):
         self.validate_email_contents()
         self.validate_send_feedback_when_ticket_closed()
         self.validate_microsoft_sso()
+        self.validate_offboarding()
 
     def validate_auto_close_days(self):
         if self.auto_close_tickets and self.auto_close_after_days <= 0:
@@ -70,6 +71,31 @@ class HDSettings(Document):
             frappe.throw(
                 _("The OAuth client must allow the scopes: {0}").format(
                     ", ".join(sorted(missing))
+                )
+            )
+
+    def validate_offboarding(self):
+        """Domains are stored one per line in lowercase. Switching offboarding on needs
+        them, a limit, and the Microsoft app it reads the directory with."""
+        from helpdesk.offboarding import company_domains
+
+        domains = sorted(company_domains(self.offboarding_domains))
+        self.offboarding_domains = "\n".join(domains)
+        if not self.offboard_removed_microsoft_users:
+            return
+        if not domains:
+            frappe.throw(_("Add the company email domains to check."))
+        if any("." not in d or "@" in d for d in domains):
+            frappe.throw(_("Enter domains like teambackoffice.com, without names."))
+        if (self.offboarding_max_disables or 0) < 1:
+            frappe.throw(_("Allow at least one person to be disabled per run."))
+        # only when switching on: a later change there mustn't block every save here
+        if self.has_value_changed(
+            "offboard_removed_microsoft_users"
+        ) and not frappe.db.get_single_value("HD Meeting Settings", "connected_app"):
+            frappe.throw(
+                _(
+                    "Choose the Microsoft app in HD Meeting Settings first: offboarding reads the directory with it."
                 )
             )
 

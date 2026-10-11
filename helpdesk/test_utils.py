@@ -1586,6 +1586,93 @@ def disable_microsoft_sso():
     frappe.db.set_single_value("HD Settings", "enable_microsoft_sso", 0)
 
 
+def issue_sso_token(user: str, client) -> dict:
+    """An OAuth Bearer Token for `user` from `client`, as a Microsoft sign-in to TBO
+    Smart issues it (no ID token needed)."""
+    from helpdesk.api.mobile_auth import issue_tokens
+
+    return issue_tokens(user, client)
+
+
+def bearer_token_works(access_token: str) -> bool:
+    """Whether Frappe's OAuth server accepts `access_token` on an API call, as it does
+    for an `Authorization: Bearer` header."""
+    from urllib.parse import urlencode
+
+    from frappe.integrations.oauth2 import get_oauth_server
+
+    uri = "https://hub.example/api/method/helpdesk.api.mobile.get_me?" + urlencode(
+        {"access_token": access_token}
+    )
+    valid, _request = get_oauth_server().verify_request(
+        uri, "GET", None, {}, ["all", "openid"]
+    )
+    return valid
+
+
+def enable_offboarding(domains: str = "offboarding.example", **values):
+    """Switches on offboarding from Microsoft for `domains`, out of dry run and with a
+    limit of 5, reading the directory with enable_teams_meetings' app; `values`
+    override HD Settings fields."""
+    enable_teams_meetings()
+    frappe.db.set_single_value(
+        "HD Settings",
+        {
+            "offboard_removed_microsoft_users": 1,
+            "offboarding_domains": domains,
+            "offboarding_dry_run": 0,
+            "offboarding_max_disables": 5,
+            **values,
+        },
+    )
+
+
+def microsoft_account(email: str, enabled: bool = True, **values) -> dict:
+    """One account as Microsoft Graph's /users lists it."""
+    return {
+        "id": frappe.generate_hash(length=12),
+        "accountEnabled": enabled,
+        "mail": email,
+        "userPrincipalName": email,
+        "otherMails": [],
+        "proxyAddresses": [f"SMTP:{email}"],
+        **values,
+    }
+
+
+def mock_microsoft_directory(test_case, *pages: list, status: int = 200):
+    """Microsoft Graph for the rest of the test: a fake app sign-in, then every read of
+    /users answered with `pages` of accounts (chained by @odata.nextLink), or refused
+    with `status`. Returns the mock of the Graph calls."""
+    from helpdesk.teams_meetings import GRAPH
+
+    pages = pages or ([],)
+    marker = "$skiptoken=page"
+
+    def answer(method, url, **kwargs):
+        if status >= 300:
+            error = {"code": "Authorization_RequestDenied", "message": "Denied"}
+            return graph_response({"error": error}, status)
+        number = int(url.rpartition(marker)[2]) if marker in url else 0
+        body = {"value": pages[number]}
+        if number + 1 < len(pages):
+            body["@odata.nextLink"] = f"{GRAPH}/users?{marker}{number + 1}"
+        return graph_response(body)
+
+    token = patch(
+        "helpdesk.teams_meetings.requests.post",
+        return_value=graph_response(
+            {"access_token": fake_graph_token(["User.Read.All"]), "expires_in": 3600}
+        ),
+    )
+    calls = patch("helpdesk.teams_meetings.requests.request", side_effect=answer)
+    token.start()
+    test_case.addCleanup(token.stop)
+    mocked = calls.start()
+    test_case.addCleanup(calls.stop)
+    return mocked
+
+
 def make_rsa_key():
     """A fresh RSA private key, standing in for one of Microsoft's signing keys."""
     from cryptography.hazmat.primitives.asymmetric import rsa
@@ -1612,7 +1699,8 @@ def mock_microsoft_keys(test_case, key, kid: str = "test-key"):
 
 def refresh_oauth_token(client_id: str, refresh_token: str) -> dict:
     """POSTs grant_type=refresh_token to Frappe's own get_token, the way the app
-    refreshes, and returns its JSON answer (new tokens, or `error`)."""
+    refreshes, and returns its JSON answer (new tokens, or `error`). Frappe raises for
+    a refresh token it has never issued (a 404 over HTTP); that is an `error` too."""
     from frappe.integrations.oauth2 import get_token
     from werkzeug.test import EnvironBuilder
     from werkzeug.wrappers import Request
@@ -1632,6 +1720,8 @@ def refresh_oauth_token(client_id: str, refresh_token: str) -> dict:
     try:
         get_token()
         return dict(frappe.local.response)
+    except frappe.DoesNotExistError:
+        return {"error": "unknown_refresh_token"}
     finally:
         frappe.local.request, frappe.local.response = previous
 

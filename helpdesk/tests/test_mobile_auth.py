@@ -2,20 +2,20 @@
 # See license.txt
 
 import time
-from urllib.parse import urlencode
 
 import frappe
-from frappe.integrations.oauth2 import get_oauth_server
 from frappe.tests.utils import FrappeTestCase
 
 from helpdesk.test_utils import (
     TEST_MS_CLIENT,
     TEST_MS_TENANT,
+    bearer_token_works,
     call_as_user,
     create_user,
     disable_microsoft_sso,
     enable_microsoft_sso,
     hold_commits,
+    issue_sso_token,
     make_oauth_client,
     make_rsa_key,
     make_tasky_user,
@@ -27,7 +27,6 @@ from helpdesk.test_utils import (
 AGENT = ("sso.agent@mobile-auth.example", "Nisha Varghese")
 CUSTOMER = "sso.customer@mobile-auth.example"
 EXCHANGE = "helpdesk.api.mobile_auth.exchange_microsoft_token"
-HUB = "https://hub.example/api/method/"
 
 
 class TestMobileMicrosoftSignIn(FrappeTestCase):
@@ -63,22 +62,14 @@ class TestMobileMicrosoftSignIn(FrappeTestCase):
         self.assertEqual(data["token_type"], "Bearer")
         self.assertEqual(data["expires_in"], 3600)
         self.assertEqual(data["scope"], "all openid")
-        self.assertTrue(data["refresh_token"])
+        self.assertNotIn("refresh_token", data)
 
         stored = frappe.get_doc("OAuth Bearer Token", data["access_token"])
         self.assertEqual(stored.user, AGENT[0])
         self.assertEqual(stored.client, self.client.name)
-        self.assertEqual(stored.refresh_token, data["refresh_token"])
+        self.assertFalse(stored.refresh_token)
         self.assertEqual(stored.status, "Active")
-
-        uri = f"{HUB}helpdesk.api.mobile.get_me?" + urlencode(
-            {"access_token": data["access_token"]}
-        )
-        valid, request = get_oauth_server().verify_request(
-            uri, "GET", None, {}, ["all", "openid"]
-        )
-        self.assertTrue(valid)
-        self.assertEqual(request.user, AGENT[0])
+        self.assertTrue(bearer_token_works(data["access_token"]))
 
     def test_email_falls_back_to_preferred_username_case_insensitively(self):
         answer = self.exchange(
@@ -86,16 +77,38 @@ class TestMobileMicrosoftSignIn(FrappeTestCase):
         )
         self.assertEqual(answer["data"]["user"], AGENT[0])
 
-    def test_refresh_works_through_frappe_get_token(self):
+    def test_there_is_nothing_to_refresh(self):
+        """Access ends with the Microsoft account: a new hour needs a new ID token."""
         data = self.exchange(self.token())["data"]
 
-        refreshed = refresh_oauth_token(self.client.name, data["refresh_token"])
+        for guess in (data["access_token"], ""):
+            refreshed = refresh_oauth_token(self.client.name, guess)
+            self.assertIn("error", refreshed, refreshed)
+        self.assertEqual(frappe.db.count("OAuth Bearer Token", {"user": AGENT[0]}), 1)
 
-        self.assertNotIn("error", refreshed, refreshed)
-        self.assertNotEqual(refreshed["access_token"], data["access_token"])
-        stored = frappe.get_doc("OAuth Bearer Token", refreshed["access_token"])
-        self.assertEqual(stored.user, AGENT[0])
-        self.assertEqual(stored.client, self.client.name)
+    # --- offboarding ---
+
+    def test_disabled_users_token_is_refused(self):
+        access_token = self.exchange(self.token())["data"]["access_token"]
+        # straight in the database: no hook revokes it, Frappe itself must refuse
+        frappe.db.set_value("User", AGENT[0], "enabled", 0)
+
+        self.assertFalse(bearer_token_works(access_token))
+
+    def test_disabling_a_user_revokes_their_tokens(self):
+        first = self.exchange(self.token())["data"]["access_token"]
+        second = issue_sso_token(AGENT[0], self.client)["access_token"]
+        user = frappe.get_doc("User", AGENT[0])
+        user.enabled = 0
+        user.save(ignore_permissions=True)
+
+        for access_token in (first, second):
+            status = frappe.db.get_value("OAuth Bearer Token", access_token, "status")
+            self.assertEqual(status, "Revoked")
+
+        user.enabled = 1
+        user.save(ignore_permissions=True)
+        self.assertFalse(bearer_token_works(first))
 
     # --- the token itself ---
 

@@ -74,6 +74,11 @@ scheduler_events = {
         "15 6 * * *": [
             "helpdesk.integrations.crm.holidays.sync_holidays_job",
         ],
+        # hourly at :40: disable people TBO removed from Microsoft (off by default;
+        # docs/tbo-smart-api.md, "Offboarding")
+        "40 * * * *": [
+            "helpdesk.offboarding.run",
+        ],
         # 00:30: champions of every period that ended yesterday (team dashboard)
         "30 0 * * *": [
             "helpdesk.team_dashboard.close_periods",
@@ -136,6 +141,10 @@ user_invitation = {
 }
 
 doc_events = {
+    # a disabled user keeps no OAuth tokens (helpdesk/offboarding.py)
+    "User": {
+        "on_update": "helpdesk.offboarding.revoke_tokens_of_disabled_user",
+    },
     "Project": {
         # content tasks made before the customer had a content project join it
         "on_update": "helpdesk.helpdesk.doctype.hd_content_post.hd_content_post.attach_content_tasks",

@@ -3,9 +3,10 @@
 The app signs in once with Microsoft (Entra ID) and sends the ID token here. When
 the token is genuinely Microsoft's, for our tenant and our app, this site issues
 its own OAuth Bearer Token for the matching user, exactly like Frappe's OAuth
-server does, so refresh (`frappe.integrations.oauth2.get_token`) and revoke work
-unchanged. Access stays decided by this site's users and roles: users are never
-created here.
+server does, so revoke and every endpoint work unchanged. There is no refresh
+token: after an hour the app exchanges a fresh Microsoft ID token, which Microsoft
+won't issue to an account TBO has disabled (docs/tbo-smart-api.md, "Offboarding").
+Access stays decided by this site's users and roles: users are never created here.
 """
 
 import hmac
@@ -49,7 +50,7 @@ LOG_TITLE = "TBO Smart Microsoft sign-in refused"
 @frappe.whitelist(allow_guest=True, methods=["POST"])  # nosemgrep
 @rate_limit(limit=EXCHANGE_RATE_LIMIT, seconds=RATE_WINDOW_SECONDS)
 def exchange_microsoft_token(id_token: str, nonce: str | None = None) -> dict:
-    """A Microsoft ID token in, this site's access and refresh tokens out."""
+    """A Microsoft ID token in, this site's access token out."""
     settings = frappe.get_cached_doc("HD Settings")
     if not sso_ready(settings):
         refuse(
@@ -187,18 +188,18 @@ def is_app_user(user: str, roles: set) -> bool:
 
 def issue_tokens(user: str, client) -> dict:
     """An OAuth Bearer Token made by Frappe's own OAuth server: its token generator,
-    lifetime (3600 s) and save_bearer_token, so the token is indistinguishable from one
-    issued at get_token."""
+    lifetime (3600 s) and save_bearer_token, so the token works like one issued at
+    get_token. Without a refresh token, so access never outlives the Microsoft account:
+    a refresh at get_token would skip Microsoft."""
     server = get_oauth_server()
     request = Request(get_url())
     request.client = client.as_dict()
     request.user = user
     request.scopes = list(SCOPES)
-    token = server.bearer.create_token(request, refresh_token=True)
+    token = server.bearer.create_token(request, refresh_token=False)
     server.bearer.request_validator.save_bearer_token(token, request)
     return {
         "access_token": token["access_token"],
-        "refresh_token": token["refresh_token"],
         "expires_in": token["expires_in"],
         "token_type": "Bearer",
         "scope": token["scope"],
