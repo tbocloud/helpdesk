@@ -32,6 +32,33 @@ Shared building blocks, in `desk/src/components/`:
 
 A failed call's message comes from `errorText(error, fallback)` in `desk/src/utils.ts`.
 
+## Sidebar
+
+The app sidebar (`AppSidebar.vue`, state in `stores/sidebar.ts`). On desktop it **auto-hides**
+by default, like the Mac Dock: it rests as the icon rail and opens only when you go to it.
+
+- **Expands** over the page, never pushing it: the rail keeps its 3rem in the layout and the
+  full sidebar opens above the content with a shadow, in 200ms (instant with reduced motion).
+  It opens after 120ms of hover, so a pointer passing across doesn't open it, and closes
+  250ms after the pointer leaves.
+- **Keyboard:** Tab into it and it opens (only keyboard focus, so a mouse click doesn't hold
+  it open). Tabbing out closes it. Escape closes it and returns focus to where it came from,
+  or to the page.
+- **Touch:** the first tap on the rail opens it without acting; the next tap picks an item.
+  A tap outside, or picking an item, closes it. Hover is never needed.
+- **Stays open** while something it opened is still open: the workspace switcher, a view's
+  options menu (any `aria-haspopup` trigger inside it) or the Notifications panel.
+- **Pin:** the bottom control toggles "Keep sidebar open" and "Auto-hide sidebar". Pinned is
+  the old expanded sidebar, with the page laid out beside it. The choice is kept per browser
+  in localStorage (`sidebar_is_pinned`, default off, so everyone starts on auto-hide);
+  `useStorage` falls back to memory when storage is blocked.
+- **In the rail:** the unread dot on Notifications, Search and the theme toggle as their own
+  items, and the follow-ups strip as a bell with a count (`FollowUpStrip` with `rail`).
+- **Tooltips:** frappe-ui's rail tooltips stay as they are (no extra code). They wait 500ms,
+  and hover, focus and tap all open the sidebar sooner, so in practice they don't show; the
+  items keep their accessible names either way.
+- The mobile drawer is unchanged.
+
 ## Who sees which tasks
 
 Inside a project, people who run it see every task; everyone else sees only their own.

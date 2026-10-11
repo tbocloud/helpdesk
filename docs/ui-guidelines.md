@@ -115,7 +115,7 @@ means nothing is noise. The mapping is fixed:
   `layoutSettings.ts`): blue for Home, Overview, Scoreboard, Performance, Customers and Help;
   teal for Team, Summaries, Customer report and Contacts; orange for Notifications, Support
   hours and Tickets; purple for Projects, My Work, Board, Content and Templates; green for
-  Calendar, Timesheets and Knowledge base; gray for the Collapse control and the collapsed
+  Calendar, Timesheets and Knowledge base; gray for the pin control and the collapsed
   rail's Search and theme items. The tint only groups pages. It never carries a status.
 - **Champion gold** (`champion`, `champion-soft`, `champion-border`) is only for the
   Scoreboard's champion card, with a trophy and a badge: it marks an award, not a status.
