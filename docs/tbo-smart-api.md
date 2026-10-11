@@ -193,7 +193,10 @@ Errors (the message is safe to show):
 `helpdesk.api.mobile_auth.exchange_microsoft_token(id_token, nonce=None)`: guest, POST only,
 rate-limited per IP address (30 a minute: an office shares one address).
 
-1. Single sign-in is on and the tenant ID, app client ID and OAuth client are set.
+1. Single sign-in is on and the tenant ID, app client ID and OAuth client are set, and the
+   OAuth Client still allows `all openid` (checked on every exchange, because issuing a token
+   directly skips the scope check Frappe's grant flows make; also checked when the switch is
+   saved).
 2. **Signature:** RS256 only, with the key Entra names in the token's `kid`, from the
    tenant's JWKS (`https://login.microsoftonline.com/<tenant>/discovery/v2.0/keys`). PyJWT's
    `PyJWKClient` caches the keys for an hour per worker and refetches when Microsoft rotates

@@ -61,6 +61,13 @@ def exchange_microsoft_token(id_token: str, nonce: str | None = None) -> dict:
         id_token, nonce, settings.microsoft_tenant_id, settings.microsoft_client_id
     )
     client = frappe.get_doc("OAuth Client", settings.mobile_oauth_client)
+    # Frappe's grant flows check scopes before issuing; create_token alone doesn't
+    if missing_scopes(client.scopes):
+        refuse(
+            "client_scopes",
+            _("Single sign-in with Microsoft isn't set up correctly on this site."),
+            frappe.PermissionError,
+        )
     user = site_user(claims, client)
     return {"v": API_VERSION, "data": issue_tokens(user, client)}
 
@@ -72,6 +79,11 @@ def sso_ready(settings) -> bool:
         and settings.microsoft_client_id
         and settings.mobile_oauth_client
     )
+
+
+def missing_scopes(client_scopes: str | None) -> set:
+    """The scopes the issued tokens carry that the OAuth Client doesn't allow."""
+    return set(SCOPES) - set((client_scopes or "").split())
 
 
 def refuse(reason: str, message: str, exc=frappe.AuthenticationError):

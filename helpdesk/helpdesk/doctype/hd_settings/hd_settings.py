@@ -48,7 +48,7 @@ class HDSettings(Document):
         way; switching single sign-in on needs all three settings, and an OAuth Client
         whose scopes cover the tokens it will issue."""
         # imported here: the endpoint's module loads the whole mobile API
-        from helpdesk.api.mobile_auth import GUID, SCOPES
+        from helpdesk.api.mobile_auth import GUID, missing_scopes
 
         for field in ("microsoft_tenant_id", "microsoft_client_id"):
             self.set(field, (self.get(field) or "").strip().lower())
@@ -63,8 +63,9 @@ class HDSettings(Document):
                 )
         if not self.mobile_oauth_client:
             frappe.throw(_("Choose the OAuth client for TBO Smart."))
-        scopes = frappe.db.get_value("OAuth Client", self.mobile_oauth_client, "scopes")
-        missing = set(SCOPES) - set((scopes or "").split())
+        missing = missing_scopes(
+            frappe.db.get_value("OAuth Client", self.mobile_oauth_client, "scopes")
+        )
         if missing:
             frappe.throw(
                 _("The OAuth client must allow the scopes: {0}").format(

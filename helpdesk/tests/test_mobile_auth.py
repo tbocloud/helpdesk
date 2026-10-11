@@ -172,6 +172,10 @@ class TestMobileMicrosoftSignIn(FrappeTestCase):
         disable_microsoft_sso()
         self.assertRefused(self.token(), exc=frappe.PermissionError)
 
+    def test_client_without_the_scopes_is_refused(self):
+        frappe.db.set_value("OAuth Client", self.client.name, "scopes", "all")
+        self.assertRefused(self.token(), exc=frappe.PermissionError)
+
     def test_settings_store_lowercase_ids_and_need_a_guid(self):
         settings = frappe.get_doc("HD Settings")
         settings.microsoft_tenant_id = f" {TEST_MS_TENANT.upper()} "
