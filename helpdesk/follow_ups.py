@@ -24,7 +24,7 @@ pings when the settings allow it.
 """
 
 import html
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timedelta
 
 import frappe
@@ -64,6 +64,9 @@ from helpdesk.work_reminders import (
 )
 
 SETTINGS = "HD Follow Up Settings"
+SNOOZE = "HD Follow Up Snooze"
+SNOOZE_MAX_DAYS = 7
+MAX_REASON_LENGTH = 500
 CACHE_KEY = "follow_ups"
 # longer than the 15-minute run that refreshes it; task and settings changes clear it
 CACHE_SECONDS = 16 * 60
@@ -1004,6 +1007,8 @@ def process(ctx: Context) -> None:
     settings = ctx.settings
     follow_ups = evaluate(ctx)
     cache(follow_ups, ctx.today)
+    # after the cache: the banner and the manager views still show snoozed work
+    follow_ups = drop_snoozed(follow_ups, ctx.today)
     if not ctx.calendar.in_working_hours(ctx.now):
         if settings.breach_pings_outside_hours:
             post_notices([f for f in follow_ups if f.severity == "breach"], ctx.today)
@@ -1181,6 +1186,125 @@ def send_customer_follow_up(name: str, settings) -> None:
         "custom_customer_followed_up_on",
         now_datetime(),
         update_modified=False,
+    )
+
+
+# --- snooze --------------------------------------------------------------------
+
+
+def snoozable(f: FollowUp) -> bool:
+    """What an assignee may acknowledge: L0 and L1 reminders. Escalations from L2
+    and SLA breaches always go out."""
+    return f.level < 2 and f.severity != "breach"
+
+
+def snoozed(today) -> set[tuple[str, str, str]]:
+    """(person, doctype, name) of the items whose reminders are snoozed today."""
+    snooze = frappe.qb.DocType(SNOOZE)
+    return {
+        (user, doctype, str(name))
+        for user, doctype, name in frappe.qb.from_(snooze)
+        .select(snooze.user, snooze.reference_doctype, snooze.reference_name)
+        .where(snooze.until > getdate(today))
+        .run()
+    }
+
+
+def drop_snoozed(follow_ups: list[FollowUp], today) -> list[FollowUp]:
+    """Takes whoever snoozed an item off its L0/L1 follow-ups (no notice, no digest
+    line); everyone else on them is still told, and L2+ and breaches never change."""
+    keys = snoozed(today)
+    if not keys:
+        return follow_ups
+    kept = []
+    for f in follow_ups:
+        if snoozable(f):
+            recipients = [u for u in f.recipients if (u, f.doctype, f.name) not in keys]
+            if recipients != f.recipients:
+                f = replace(f, recipients=recipients)
+        kept.append(f)
+    return kept
+
+
+def snooze(user: str, doctype: str, name: str, until, reason: str) -> dict:
+    """The assignee acknowledges today's follow-up on their task or ticket: their own
+    reminders about it stop until `until` (at most SNOOZE_MAX_DAYS ahead), with the
+    reason noted on the item for whoever runs it. Refused while it is at L2 or
+    above, or its SLA is breached: those can't be snoozed."""
+    doc = frappe.get_doc(doctype, name)
+    doc.check_permission("read")
+    if user not in _assignees(frappe.db.get_value(doctype, doc.name, "_assign")):
+        frappe.throw(
+            _("Only the person it's assigned to can snooze its reminders."),
+            frappe.PermissionError,
+        )
+    reason = (reason or "").strip()
+    if not reason:
+        frappe.throw(_("Say why, so whoever runs the work knows."))
+    if len(reason) > MAX_REASON_LENGTH:
+        frappe.throw(_("Keep it under {0} characters.").format(MAX_REASON_LENGTH))
+    today = getdate(now_datetime())
+    until = getdate(until)
+    if not today < until <= add_days(today, SNOOZE_MAX_DAYS):
+        frappe.throw(
+            _("Snooze until a day from tomorrow to {0} days ahead.").format(
+                SNOOZE_MAX_DAYS
+            )
+        )
+    found = [
+        f
+        for f in current()
+        if f.doctype == doctype and f.name == str(doc.name) and user in f.recipients
+    ]
+    if not found:
+        frappe.throw(_("Nothing is following you up on this right now."))
+    if not all(snoozable(f) for f in found):
+        frappe.throw(_("Escalated work and SLA breaches can't be snoozed."))
+    level = max(f.level for f in found)
+    record_snooze(user, doctype, str(doc.name), until, reason, level)
+    doc.add_comment(
+        "Info",
+        frappe.utils.escape_html(
+            _("{0} acknowledged the reminder until {1}: {2}").format(
+                get_fullname(user), formatdate(until), reason
+            )
+        ),
+    )
+    clear_todays_notice(user, doctype, str(doc.name), today)
+    return {"until": str(until), "reason": reason, "level": level}
+
+
+def record_snooze(user: str, doctype: str, name: str, until, reason: str, level: int):
+    """One snooze per person and item: a new one replaces the last."""
+    existing = frappe.db.get_value(
+        SNOOZE,
+        {"user": user, "reference_doctype": doctype, "reference_name": name},
+    )
+    doc = (
+        frappe.get_doc(SNOOZE, existing)
+        if existing
+        else frappe.new_doc(SNOOZE).update(
+            {"user": user, "reference_doctype": doctype, "reference_name": name}
+        )
+    )
+    doc.update({"until": until, "reason": reason, "level": level})
+    # the endpoint checked that the user is the item's assignee
+    doc.save(ignore_permissions=True)
+
+
+def clear_todays_notice(user: str, doctype: str, name: str, today) -> None:
+    """Today's follow-up notice about the item is dealt with: mark it read."""
+    notice = frappe.qb.DocType("HD Notification")
+    (
+        frappe.qb.update(notice)
+        .set(notice.read, 1)
+        .where(
+            (notice.user_to == user)
+            & (notice.reference_doctype == doctype)
+            & (notice.reference_name == name)
+            & notice.dedupe_key.like(f"{NOTICE_PREFIX}:{today}:%")
+        )
+        .run()
     )
 
 

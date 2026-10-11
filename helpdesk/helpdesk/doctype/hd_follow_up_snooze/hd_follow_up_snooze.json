@@ -1,0 +1,109 @@
+{
+	"actions": [],
+	"autoname": "hash",
+	"creation": "2026-10-11 12:00:00.000000",
+	"description": "An assignee's acknowledgement of a follow-up (L0 or L1) on their task or ticket, with the reason: their own reminders about it stop until the date. Never quiets escalations from L2 or SLA breaches. Written through helpdesk.api.mobile.snooze_follow_up.",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"user",
+		"reference_doctype",
+		"reference_name",
+		"column_break_1",
+		"until",
+		"level",
+		"reason"
+	],
+	"fields": [
+		{
+			"fieldname": "user",
+			"fieldtype": "Link",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"label": "User",
+			"options": "User",
+			"read_only": 1,
+			"reqd": 1,
+			"search_index": 1
+		},
+		{
+			"fieldname": "reference_doctype",
+			"fieldtype": "Link",
+			"label": "Reference Type",
+			"options": "DocType",
+			"read_only": 1,
+			"reqd": 1
+		},
+		{
+			"fieldname": "reference_name",
+			"fieldtype": "Dynamic Link",
+			"in_list_view": 1,
+			"label": "Reference",
+			"options": "reference_doctype",
+			"read_only": 1,
+			"reqd": 1
+		},
+		{
+			"fieldname": "column_break_1",
+			"fieldtype": "Column Break"
+		},
+		{
+			"description": "Reminders start again on this day",
+			"fieldname": "until",
+			"fieldtype": "Date",
+			"in_list_view": 1,
+			"label": "Until",
+			"read_only": 1,
+			"reqd": 1
+		},
+		{
+			"description": "The follow-up's level when it was snoozed",
+			"fieldname": "level",
+			"fieldtype": "Int",
+			"label": "Level",
+			"read_only": 1
+		},
+		{
+			"fieldname": "reason",
+			"fieldtype": "Small Text",
+			"label": "Reason",
+			"read_only": 1,
+			"reqd": 1
+		}
+	],
+	"index_web_pages_for_search": 0,
+	"links": [],
+	"modified": "2026-10-11 12:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD Follow Up Snooze",
+	"naming_rule": "Random",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "System Manager",
+			"share": 1,
+			"write": 1
+		},
+		{
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "Agent Manager"
+		}
+	],
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": [],
+	"title_field": "reference_name",
+	"track_changes": 0
+}

@@ -115,6 +115,14 @@ def comparison_bounds(period: str, start, end, day=None) -> tuple[date, date]:
     return prev_start, min(prev_start + timedelta(days=max(elapsed, 0)), prev_end)
 
 
+def recent_periods(period: str, count: int, day=None) -> list[tuple[date, date]]:
+    """The `count` periods up to the one `day` (today) falls in, oldest first."""
+    found = [period_bounds(period, day)]
+    while len(found) < count:
+        found.insert(0, period_bounds(period, add_days(found[0][0], -1)))
+    return found
+
+
 # --- the numbers -------------------------------------------------------------
 
 
@@ -677,12 +685,16 @@ def close_period(period: str, start: str, end: str):
     """Champions of a closed period: the whole team and each active department.
 
     A period already closed is left as it was, so a re-run sends nobody a second
-    notification and the history never changes.
+    notification and the history never changes. The badges earned in the period
+    are awarded after the champions (helpdesk.competition), just as idempotently.
     """
+    from helpdesk.competition import award_badges
+
     data = collect(start, end, with_overdue=True, today=add_days(end, 1))
     label = period_label(period, start, end)
     for department in [None, *active_departments()]:
         save_champion(period, start, end, department, data, label)
+    award_badges(period, start, end, data)
 
 
 def save_champion(period: str, start, end, department: str | None, data, label):

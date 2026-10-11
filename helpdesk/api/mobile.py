@@ -30,13 +30,14 @@ from frappe.utils import (
     nowdate,
 )
 
-from helpdesk import follow_ups, task_activity
+from helpdesk import competition, follow_ups, task_activity
 from helpdesk import team_dashboard as td
+from helpdesk import team_insights
 from helpdesk.api import home, project_files
 from helpdesk.api.content_board import user_full_names
 from helpdesk.api.doc import remove_assignments
 from helpdesk.api.follow_ups import check_admin
-from helpdesk.api.team_dashboard import get_team_dashboard
+from helpdesk.api.team_dashboard import check_period, get_team_dashboard
 from helpdesk.api.ticket import assign_ticket_to_agent
 from helpdesk.api.work import (
     ON_HOLD,
@@ -51,6 +52,7 @@ from helpdesk.api.work import (
     is_task_overdue,
     sla_due_soon,
 )
+from helpdesk.content_team import can_work_tickets, in_content_team
 from helpdesk.helpdesk.doctype.hd_notification.utils import clear
 from helpdesk.helpdesk.doctype.hd_project_file.hd_project_file import SUPERSEDED
 from helpdesk.helpdesk.doctype.hd_ticket.api import get_comments, get_communications
@@ -58,6 +60,8 @@ from helpdesk.tasky import api as tasky
 from helpdesk.tasky.permissions import (
     can_coordinate_project,
     can_manage_project,
+    can_manage_team,
+    departments_headed,
     get_coordinated_projects,
     get_led_projects,
     get_managed_projects,
@@ -83,6 +87,12 @@ MAX_NUDGE_LENGTH = 500
 OPEN_TICKET_CATEGORIES = ["Open", "Paused"]
 TICKET_VIEWS = ("mine", "unassigned", "team", "all-open")
 NUDGE_DOCTYPES = ("Task", "HD Ticket")
+MAX_BOARD_LIMIT = 50
+MAX_FOCUS = 3
+TREND_PERIODS = 8
+# Home's sections the focus list takes tasks from, in order; held and in-review
+# work waits on someone else
+FOCUS_SECTIONS = ("close_first", "in_progress", "coming_up", "no_date")
 # per IP address (an office shares one), per minute
 REPLY_RATE_LIMIT = 60
 DEVICE_RATE_LIMIT = 30
@@ -242,7 +252,41 @@ def _me() -> dict:
         },
         "departments": _departments(user),
         "teams": sorted(t.team_name for t in get_agents_team()),
+        "capabilities": capabilities(user),
     }
+
+
+def capabilities(user: str) -> dict:
+    """What the app shows the user, from their real roles and project powers; the
+    one place the app's tabs and actions are decided (docs/tbo-smart-api.md,
+    Capabilities). Each flag reuses the check the hub itself enforces."""
+    headed = departments_headed(user)
+    return {
+        "tickets": can_work_tickets(user),
+        "content": in_content_team(user),
+        "manage_team": can_manage_team(user),
+        "approve_reviews": bool(_review_projects(user)),
+        "scoreboard": True,
+        "admin": is_tasky_admin(user),
+        "departments_headed": headed,
+        "projects_managed": _managed_open_projects(user),
+    }
+
+
+def _managed_open_projects(user: str) -> list[str]:
+    """Open projects the user runs as a manager or lead (can_manage_project); admins
+    manage every project, which `admin` says."""
+    mine = set(get_managed_projects(user)) | set(get_led_projects(user))
+    if not mine:
+        return []
+    project = frappe.qb.DocType("Project")
+    return (
+        frappe.qb.from_(project)
+        .select(project.name)
+        .where(project.name.isin(list(mine)) & (project.status == "Open"))
+        .orderby(project.name)
+        .run(pluck=True)
+    )
 
 
 def _review_projects(user: str) -> set[str]:
@@ -597,6 +641,93 @@ def _activity_item(item: dict, index: int) -> dict:
         "text": item.get("text"),
         "data": data,
     }
+
+
+@frappe.whitelist()
+@agent_only
+def get_focus(limit: int | str = MAX_FOCUS) -> dict:
+    """The 1–3 tasks to do now, in Home's order: close first (overdue, due today, key
+    work in progress), then in progress, coming up and without a date."""
+    limit = min(max(cint(limit) or MAX_FOCUS, 1), MAX_FOCUS)
+    tasks = [i for i in get_my_work()["items"] if i["kind"] == "task"]
+    groups = home._task_groups(tasks, getdate(nowdate()))
+    picked = [(key, t) for key in FOCUS_SECTIONS for t in groups[key]][:limit]
+    rows = _task_rows([t for _key, t in picked])
+    return _one(
+        [{**row, "focus": key} for row, (key, _task) in zip(rows, picked, strict=True)]
+    )
+
+
+@frappe.whitelist(methods=["POST"])
+@agent_only
+def quick_add_task(
+    project: str,
+    subject: str,
+    due_date: str | None = None,
+    assignee: str | None = None,
+) -> dict:
+    """Add a task to a project the user may add tasks to (tasky.add_task checks
+    can_add_tasks), given to `assignee` or, by default, the user."""
+    task = tasky.add_task(
+        project,
+        subject,
+        assigned_to=(assignee or "").strip() or frappe.session.user,
+        due_date=due_date or None,
+    )
+    return _one(_task_detail(task["name"]))
+
+
+@frappe.whitelist(methods=["POST"])
+@agent_only
+def snooze_follow_up(item: str, until: str, reason: str) -> dict:
+    """The assignee acknowledges today's reminder on their task or ticket (`item` is
+    "Task:TASK-…" or "HD Ticket:123", as in get_escalations) with a reason: their own
+    reminders about it stop until `until`. L2+ escalations and SLA breaches can't be
+    snoozed (follow_ups.snooze)."""
+    doctype, _sep, name = str(item or "").partition(":")
+    if doctype not in NUDGE_DOCTYPES or not name:
+        frappe.throw(_("Snooze a task or a ticket."))
+    result = follow_ups.snooze(frappe.session.user, doctype, name, until, reason)
+    return _one({"item": f"{doctype}:{name}", **result})
+
+
+@frappe.whitelist()
+@agent_only
+def get_my_stats(period: str = "week") -> dict:
+    """The user's own Scoreboard line for this period and the TREND_PERIODS before
+    it, oldest first: done, on time, hours and score (score() each time)."""
+    check_period(period)
+    user = frappe.session.user
+    today = getdate(nowdate())
+    periods = td.recent_periods(period, TREND_PERIODS, today)
+    trend = []
+    for index, (start, end) in enumerate(periods):
+        current = index == len(periods) - 1
+        data = td.collect(start, end, with_overdue=current, today=today)
+        stats = td.tally(data, lambda r: True)[True].get(user) or td.blank()
+        trend.append(
+            {
+                "start": str(start),
+                "end": str(end),
+                "label": td.period_label(period, start, end),
+                "done": stats["tasks"],
+                "on_time": stats["on_time"],
+                "dated": stats["dated"],
+                "on_time_pct": td.pct(stats["on_time"], stats["dated"]),
+                "key": stats["key"],
+                "hours": round(stats["hours"], 1),
+                "overdue": stats["overdue"] if current else None,
+                "score": td.score(stats, period)["score"],
+            }
+        )
+    return _one(
+        {
+            "period": period,
+            "current": trend[-1],
+            "previous": trend[-2],
+            "trend": trend,
+        }
+    )
 
 
 def _project_customers(projects: set) -> dict:
@@ -1491,3 +1622,33 @@ def _score_line(p: dict) -> dict:
         "hours": p["hours"],
         "overdue": p["overdue"],
     }
+
+
+@frappe.whitelist()
+@agent_only
+def get_competition(period: str = "week", limit: int | str = 10) -> dict:
+    """The Compete screen (helpdesk.competition): the user's rank and its change, the
+    whole team's and each department's leaders, streaks, personal bests, badges, the
+    weekly challenge and how to move up. The boards are public, as on the web."""
+    check_period(period)
+    limit = min(max(cint(limit) or 10, 1), MAX_BOARD_LIMIT)
+    tasks = _task_rows([i for i in get_my_work()["items"] if i["kind"] == "task"])
+    return _one(
+        competition.competition(
+            frappe.session.user, period, limit, getdate(nowdate()), tasks
+        )
+    )
+
+
+@frappe.whitelist()
+@agent_only
+def get_insights(period: str = "week", department: str | None = None) -> dict:
+    """Management insights (helpdesk.team_insights), read-only: KPI tiles against the
+    previous period, an 8-period trend, risks, workload and a short summary. For
+    admins (every department) and department heads (theirs); others get 403."""
+    check_period(period)
+    return _one(
+        team_insights.insights(
+            frappe.session.user, period, department or None, getdate(nowdate())
+        )
+    )

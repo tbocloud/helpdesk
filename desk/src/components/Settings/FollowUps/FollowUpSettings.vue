@@ -253,6 +253,25 @@
         </SettingsSection>
 
         <SettingsSection
+          :title="__('Weekly challenge')"
+          :description="
+            __(
+              'One goal for the whole team each week, shown in the TBO Smart app with its progress and who completed their part.'
+            )
+          "
+        >
+          <SettingRow v-slot="{ id }" :label="__('This week\'s goal')">
+            <FormControl
+              :id="id"
+              v-model="form.weekly_challenge"
+              type="select"
+              class="w-full sm:w-72"
+              :options="challengeOptions"
+            />
+          </SettingRow>
+        </SettingsSection>
+
+        <SettingsSection
           :title="__('Working hours')"
           :description="
             __(
@@ -461,6 +480,19 @@ const SEVERITY_TONES: Record<PreviewItem["severity"], Tone> = {
 
 const days = __("working days");
 
+// values are HD Follow Up Settings' weekly_challenge options
+const challengeOptions = [
+  {
+    value: "Key tasks due this week",
+    label: __("Close every key task due this week"),
+  },
+  {
+    value: "Every task due this week",
+    label: __("Finish every task due this week on time"),
+  },
+  { value: "Off", label: __("Off") },
+];
+
 const ladderSteps = [
   {
     field: "ladder_l1_days",
@@ -583,6 +615,8 @@ function toForm(values: Form): Form {
   const f: Form = { ...values };
   for (const key of CHECKS) f[key] = Boolean(f[key]);
   f.afternoon_nudge_at = String(f.afternoon_nudge_at || "14:00").slice(0, 5);
+  // a site that never saved the settings has no stored value yet
+  f.weekly_challenge = f.weekly_challenge || challengeOptions[0].value;
   return f;
 }
 

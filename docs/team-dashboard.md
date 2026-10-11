@@ -130,6 +130,13 @@ is first inserted, so re-running `close_period` for a closed day or week tells n
 HD Team Champion: System Manager full, Agent Manager read; every agent reads it through the
 page's API.
 
+After the champions, `close_period` awards the period's **badges** (`competition.award_badges`:
+on-time streaks, key task closers, zero overdue weeks, each department's top 3, champions of
+the week and month) into **HD Badge Award**, just as idempotently. The TBO Smart app's
+Compete screen (`get_competition`) shows them with ranks and their change, streaks, personal
+bests, the weekly challenge and how to move up, all derived from `score()`; see
+[tbo-smart-api.md](tbo-smart-api.md#compete-scoreboard-for-the-app).
+
 ## AI analysis
 
 `write_analysis()` sends `analysis_facts()` (the scope's totals, the champion with score and

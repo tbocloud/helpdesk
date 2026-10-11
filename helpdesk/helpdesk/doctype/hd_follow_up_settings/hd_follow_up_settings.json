@@ -42,7 +42,9 @@
 		"awaiting_customer_days",
 		"customer_section",
 		"customer_follow_up_email",
-		"customer_follow_up_message"
+		"customer_follow_up_message",
+		"challenge_section",
+		"weekly_challenge"
 	],
 	"fields": [
 		{
@@ -283,12 +285,25 @@
 			"label": "Follow-up email",
 			"default": "<p>Hello,</p><p>We're following up on ticket #{{ ticket }}: {{ subject }}. We replied a few days ago and haven't heard back. Is there anything else you need from us, or can we close it?</p><p>Just reply to this email and we'll pick it up.</p>",
 			"description": "Sent once per wait as a reply on the ticket. {{ ticket }}, {{ subject }} and {{ customer }} are filled in."
+		},
+		{
+			"fieldname": "challenge_section",
+			"fieldtype": "Section Break",
+			"label": "Weekly challenge"
+		},
+		{
+			"default": "Key tasks due this week",
+			"description": "One goal for the whole team each week, shown in the TBO Smart app with its progress and who completed it",
+			"fieldname": "weekly_challenge",
+			"fieldtype": "Select",
+			"label": "Weekly challenge",
+			"options": "Key tasks due this week\nEvery task due this week\nOff"
 		}
 	],
 	"index_web_pages_for_search": 0,
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-10-10 15:30:00.000000",
+	"modified": "2026-10-11 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Follow Up Settings",

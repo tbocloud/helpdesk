@@ -1,0 +1,138 @@
+{
+  "v": 1,
+  "data": {
+    "period": "week",
+    "current": {
+      "start": "2026-10-05",
+      "end": "2026-10-11",
+      "label": "the week of 5 Oct 2026",
+      "done": 9,
+      "on_time": 8,
+      "dated": 9,
+      "on_time_pct": 89,
+      "key": 2,
+      "hours": 38.5,
+      "overdue": 1,
+      "score": 13.5
+    },
+    "previous": {
+      "start": "2026-09-28",
+      "end": "2026-10-04",
+      "label": "the week of 28 Sep 2026",
+      "done": 7,
+      "on_time": 7,
+      "dated": 7,
+      "on_time_pct": 100,
+      "key": 2,
+      "hours": 40.0,
+      "overdue": null,
+      "score": 12.7
+    },
+    "trend": [
+      {
+        "start": "2026-08-17",
+        "end": "2026-08-23",
+        "label": "the week of 17 Aug 2026",
+        "done": 5,
+        "on_time": 4,
+        "dated": 5,
+        "on_time_pct": 80,
+        "key": 1,
+        "hours": 34.0,
+        "overdue": null,
+        "score": 7.6
+      },
+      {
+        "start": "2026-08-24",
+        "end": "2026-08-30",
+        "label": "the week of 24 Aug 2026",
+        "done": 6,
+        "on_time": 5,
+        "dated": 6,
+        "on_time_pct": 83,
+        "key": 1,
+        "hours": 38.5,
+        "overdue": null,
+        "score": 9.0
+      },
+      {
+        "start": "2026-08-31",
+        "end": "2026-09-06",
+        "label": "the week of 31 Aug 2026",
+        "done": 4,
+        "on_time": 4,
+        "dated": 4,
+        "on_time_pct": 100,
+        "key": 0,
+        "hours": 30.0,
+        "overdue": null,
+        "score": 6.4
+      },
+      {
+        "start": "2026-09-07",
+        "end": "2026-09-13",
+        "label": "the week of 7 Sep 2026",
+        "done": 7,
+        "on_time": 6,
+        "dated": 7,
+        "on_time_pct": 86,
+        "key": 2,
+        "hours": 41.0,
+        "overdue": null,
+        "score": 11.4
+      },
+      {
+        "start": "2026-09-14",
+        "end": "2026-09-20",
+        "label": "the week of 14 Sep 2026",
+        "done": 6,
+        "on_time": 6,
+        "dated": 6,
+        "on_time_pct": 100,
+        "key": 1,
+        "hours": 39.5,
+        "overdue": null,
+        "score": 10.5
+      },
+      {
+        "start": "2026-09-21",
+        "end": "2026-09-27",
+        "label": "the week of 21 Sep 2026",
+        "done": 8,
+        "on_time": 7,
+        "dated": 8,
+        "on_time_pct": 88,
+        "key": 2,
+        "hours": 42.0,
+        "overdue": null,
+        "score": 13.2
+      },
+      {
+        "start": "2026-09-28",
+        "end": "2026-10-04",
+        "label": "the week of 28 Sep 2026",
+        "done": 7,
+        "on_time": 7,
+        "dated": 7,
+        "on_time_pct": 100,
+        "key": 2,
+        "hours": 40.0,
+        "overdue": null,
+        "score": 12.7
+      },
+      {
+        "start": "2026-10-05",
+        "end": "2026-10-11",
+        "label": "the week of 5 Oct 2026",
+        "done": 9,
+        "on_time": 8,
+        "dated": 9,
+        "on_time_pct": 89,
+        "key": 2,
+        "hours": 38.5,
+        "overdue": 1,
+        "score": 13.5
+      }
+    ]
+  }
+}
