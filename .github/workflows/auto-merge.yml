@@ -1,13 +1,18 @@
 name: Auto-merge
 
-# Every PR merges by itself once the main ruleset is satisfied: CodeRabbit
-# approves, and task-reference, tests, linter and semantic commits pass.
-# A "changes requested" review blocks it until resolved. To keep a PR open,
-# add the "no-auto-merge" label (or click "Disable auto-merge" on the PR;
+# Every PR into main merges by itself once the main ruleset is satisfied:
+# CodeRabbit approves, and task-reference, tests, linter and semantic commits
+# pass. A "changes requested" review blocks it until resolved. To keep a PR
+# open, add the "no-auto-merge" label (or click "Disable auto-merge" on the PR;
 # that holds until the PR is reopened or the label is added and removed).
+#
+# Only PRs into the default branch get auto-merge: other branches have no
+# ruleset, so a PR stacked on a feature branch would merge at once, unreviewed,
+# and its code would reach main later inside that branch's PR. A PR retargeted
+# away from main has auto-merge switched off.
 on:
   pull_request:
-    types: [opened, reopened, ready_for_review, labeled, unlabeled]
+    types: [opened, reopened, ready_for_review, labeled, unlabeled, edited]
 
 permissions:
   contents: write
@@ -17,12 +22,14 @@ jobs:
   auto-merge:
     # same-repo PRs only: a fork's token can't enable auto-merge. Label events
     # count only for no-auto-merge, so an unrelated label change can't switch
-    # auto-merge back on after someone disabled it on the PR.
+    # auto-merge back on after someone disabled it on the PR. Edits count only
+    # when the base branch changed.
     if: >-
       github.event.pull_request.head.repo.full_name == github.repository &&
       !github.event.pull_request.draft &&
       (!contains(fromJSON('["labeled","unlabeled"]'), github.event.action) ||
-       github.event.label.name == 'no-auto-merge')
+       github.event.label.name == 'no-auto-merge') &&
+      (github.event.action != 'edited' || github.event.changes.base != null)
     runs-on: ubuntu-latest
     steps:
       - name: Enable or disable auto-merge
@@ -30,8 +37,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR: ${{ github.event.pull_request.html_url }}
           HOLD: ${{ contains(github.event.pull_request.labels.*.name, 'no-auto-merge') }}
+          INTO_DEFAULT: ${{ github.event.pull_request.base.ref == github.event.repository.default_branch }}
         run: |
-          if [ "$HOLD" = "true" ]; then
+          if [ "$HOLD" = "true" ] || [ "$INTO_DEFAULT" != "true" ]; then
             gh pr merge --disable-auto "$PR" || true
           else
             gh pr merge --auto --merge "$PR"
