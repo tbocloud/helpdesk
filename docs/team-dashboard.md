@@ -10,9 +10,12 @@ already exist.
   `/helpdesk/team-dashboard`), sidebar item right after Overview, open to every agent
   (`agent_only`; Content Team members who aren't agents don't get it). Parts in `desk/src/pages/work/components/` (`ChampionCard`,
   `ScoreBreakdown`, `TeamDepartmentList`, `TeamPeopleList`, `TeamProjectList`,
-  `TeamAnalysis`, `TeamTrendChart`); types and labels in `teamDashboardMeta.ts`.
+  `TeamRepeatIssues`, `RepeatIssueCard`, `TeamAnalysis`, `TeamTrendChart`); types and labels
+  in `teamDashboardMeta.ts`.
 - Numbers and scoring: `helpdesk/team_dashboard.py`. Who sees what and the page's API:
   `helpdesk/api/team_dashboard.py`. Closed periods: doctype **HD Team Champion**.
+- Repeat issues: `helpdesk/repeat_issues.py` (detection), `helpdesk/api/repeat_issues.py`
+  (the section's API and actions), doctype **HD Repeat Issue** (decisions).
 
 ## Periods
 
@@ -28,7 +31,7 @@ Tasks finished and Posts published success, On time by its rate (`onTimeTone`), 
 logged info. The period and Departments / People / Projects switches are frappe-ui
 `TabButtons`.
 
-The URL keeps `period`, `department`, `view` (`people`, `projects`; Departments is the default),
+The URL keeps `period`, `department`, `view` (`people`, `projects`, `repeats`; Departments is the default),
 `person` (the open score breakdown) and `project` (highlighted in Projects).
 
 ## What is counted
@@ -93,6 +96,122 @@ dashboard, the stored champions and the AI all use it. Weights (`WEIGHTS`):
 - Side column: the **analysis**, a **Tasks finished** trend (per day for a week or month,
   per week for a quarter or half, per month for a year; none for Today) and **Champions this
   year** (stored weekly and longer champions of the department, or of the whole team).
+
+## Repeat issues
+
+The owner asked for the Scoreboard to point out **work of a repeated nature from the same
+customer**: the same problem coming back as tickets and tasks. It is the fourth view,
+**Repeat issues** (`view=repeats`), for the same period and department as the rest of the page.
+
+### What counts as a repeat
+
+`helpdesk/repeat_issues.py`, deterministic, no AI:
+
+- **Window**: the period plus the **90 days before it** (`LOOKBACK_DAYS`), up to today, so
+  "this keeps happening" shows even in a week. Counts are given for the period and for the
+  whole window.
+- **Records**: the customers' tickets raised in the window, and tasks created in it in the
+  customers' projects (the project's customer). Left out:
+  - tickets **merged** into another (`is_merged`): counted once, as the ticket they went into;
+  - tasks a **recurring-task schedule** made (`custom_recurring_task`, see
+    [recurring-tasks.md](recurring-tasks.md)) and **content calendar** tasks (`content_post`):
+    planned repeats;
+  - a task **made from a ticket** in the window (`hd_ticket`): the same issue, so only the
+    ticket counts;
+  - a **root-cause task** (below): the answer to a repeat, not one more of it;
+  - cancelled and template tasks.
+- **Scope**: tasks are in a department by their project's department; tickets belong to the
+  support department (Settings → Follow-ups), as in the team insights.
+- **Words**: subject and description (the first 40 meaningful words), lowercased, without
+  `Re:`/`Fwd:`, the sign-off ("Regards, …"), emails and links, and **any word with a digit**
+  (ticket and document numbers, dates, amounts, GSTINs). Stopwords and greeting words are
+  dropped (the search's and the AI suggestion's lists plus a few, e.g. "kindly", "sir"). A
+  light stem makes "printed", "printing" and "prints" one word, and a few synonyms are folded
+  ("incorrect" and "invalid" → "wrong", "display" and "appear" → "show").
+- **Alike**: two items of **one customer** are alike when either
+  - their words overlap by **0.3** or more (`WORD_THRESHOLD`): Jaccard over IDF weights
+    (`log((n + 1) / df)` across every item in the window), so shared rare words ("GSTIN")
+    count much more than words every ticket has ("invoice"); subject words count twice; or
+  - their subjects' letter trigrams overlap by **0.6** or more (`TRIGRAM_THRESHOLD`): nearly
+    the same subject, typos included.
+
+  The **same ticket type or task category** adds **0.1** to the word overlap (`KIND_BONUS`):
+  enough to tip a close pair, never to link unrelated ones. "Unspecified", and any type or
+  category on more than half of the items (the default one, `KIND_MAX_SHARE`), say nothing
+  and are ignored.
+- **Clusters**: items joined by a chain of alike pairs (union-find), per customer only, so
+  two customers never share a cluster.
+- **A repeat issue** has at least **3 items in the window** and **at least 1 in the period**
+  (`MIN_OCCURRENCES`, `MIN_IN_PERIOD`; site config `repeat_issues_min_occurrences` and
+  `repeat_issues_min_in_period` may change them, never below 2 and 1).
+- **Rising**: at least 2 this period and happening more than 1.5 times as fast as in the 90
+  days before it (`RISING_MIN`, `RISING_RATIO`); else **steady**.
+
+The thresholds were picked on realistic wording: Galom International's "GSTIN wrong on sales
+invoice print", "Sales invoice print shows old GSTIN", "Wrong GSTIN printed on invoice" and
+"RE: Invoice print format showing incorrect GSTIN" form one issue, while "Sales invoice print
+is slow", "Salary slip email not sent" and "Stock balance mismatch" stay apart
+(`helpdesk/tests/test_repeat_issues.py`).
+
+**Speed**: two bounded queries (tickets, tasks; at most 6000 rows each, descriptions cut to
+2000 characters), clustering in memory per customer (at most 300 items each), at most 60
+issues. The result is cached for 10 minutes per period, department and day (`frappe.cache`,
+key `repeat_issues:…`). Stored decisions and AI titles are read on top of it, so a dismissal
+shows at once. The daily close job (`close_periods`, 00:30) also queues `precompute()`: this
+week's and month's whole-team issues with their AI titles.
+
+### Per issue
+
+Customer, title, likely cause and fix (AI, optional), tickets and tasks, count this period
+and in the window, first and last seen, rising or steady, who handled them (assignees, with
+counts), the tickets' average resolution time, the KB article written from one of its
+tickets (draft or published), the root-cause task and its status, and every occurrence
+(newest first, linked to the ticket or the task's project). A summary line opens the
+section: "3 repeat issues across 2 customers · 6 tickets this month · 1 task this month ·
+1 rising". Customers are ranked by repeats this period; the first one opens on its own.
+Rising is the only colour (`warning`, with an icon and the word); steady stays gray.
+
+### AI titles
+
+`label_clusters()` sends only the issues' subjects (up to 8 each, 20 issues a call) to the
+hub's AI (`ai_engine.call_haiku`) for a short title, a likely root cause and a fix. The
+Scoreboard's **number guard** applies per issue: a title, cause or fix with a number that
+isn't in that issue's subjects is dropped, and without a usable title the issue keeps the
+subject title. Titles are cached for 14 days per issue id. The page never waits for the AI:
+missing titles are written in the background (`label_job`), and after a failure the AI is
+left alone for 15 minutes. Without AI (or when it fails) the title is the subject most items
+share, else the ticket subject with most of the issue's keywords, without "Re:".
+
+### Actions
+
+| Action | Who | What |
+| --- | --- | --- |
+| **Create root-cause task** | `can_act` (System and Agent Managers, department heads, Project Managers), and only in a project they manage or lead, or whose department they head | A key, High priority Support task "Root cause: …" in an open project of the customer (the dialog asks which), listing every occurrence with links. One per issue. |
+| **Draft KB article** | Anyone who may create HD Articles, with AI set up | The existing KB draft feature (`kb_drafts.draft_article`) on the issue's most recently resolved ticket that the team answered: a draft for the Agent Managers to review. An article already written from one of its tickets is shown instead. At most once a minute per issue. |
+| **Not a repeat** | `can_act` | Hides the issue for everyone, with Undo (`restore_repeat_issue`). |
+
+**HD Repeat Issue** keeps these decisions: customer, title, status (Open, Dismissed,
+Root-cause task), the task, who decided, the issue's id when first stored (`signature`), its
+keywords and every ticket and task seen in it. A detected issue is matched to a record of the
+same customer by the same id, **any shared ticket or task**, or half of the same keywords, so
+a dismissal still holds as the issue grows. System and Agent Managers full, agents read; the
+page writes through the API only.
+
+### Fairness
+
+Repeats are a **customer and process insight**. They never change anyone's score or the
+champion: handling a repeat counts like any other ticket or task. The optional "Root cause
+fixed" credit (rewarding the person whose root-cause task stops an issue for 30 days) is
+**not implemented**: it would add a second scoring input that is hard to explain and easy to
+game (a task closed just before a quiet month), and `score()` stays the one formula. No
+repeat count was added to the People or Departments tables for the same reason: next to a
+person it reads as blame.
+
+### Who sees repeat issues
+
+Everyone who sees the Scoreboard sees Repeat issues, with the Scoreboard's department rules
+(`viewer_access`, `scope_department`): every active department, past the DM/ERP walls; an
+inactive department is refused. Actions follow the permissions above, checked on the server.
 
 ## Who sees what
 
@@ -168,6 +287,19 @@ a number that isn't in the facts**, so it can't invent figures.
 | --- | --- | --- |
 | `get_team_dashboard(period="week", department=None)` | GET | `period` (dates and comparison), `access` (departments, can_refresh), `summary` (with `previous`), `champion`, `departments`, `people`, `projects`, `trend`, `history`, `analysis` |
 | `refresh_analysis(period="week", department=None)` | POST | A new analysis for the period in progress (System and Agent Managers) |
+
+`helpdesk/api/repeat_issues.py`, agents only:
+
+| Method | HTTP | What |
+| --- | --- | --- |
+| `get_repeat_issues(period="week", department=None)` | GET | `period` (with `lookback_start`), `rules`, `summary`, `customers` (each with `projects` and `clusters`), `department`, `access` (`can_act`, `can_draft_kb`) |
+| `create_root_cause_task(period, cluster, project, department=None)` | POST | `{task, project, issue}` |
+| `draft_kb_article(period, cluster, department=None)` | POST | `{name, title, status, existing}` |
+| `dismiss_repeat_issue(period, cluster, department=None)` | POST | `{issue}` |
+| `restore_repeat_issue(issue)` | POST | `{issue}` (undo "Not a repeat") |
+
+The app reads the same answer through `helpdesk.api.mobile.get_repeat_issues`
+([tbo-smart-api.md](tbo-smart-api.md#repeat-issues-scoreboard)).
 
 ## Decisions
 

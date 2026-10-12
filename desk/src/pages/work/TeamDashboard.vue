@@ -158,13 +158,18 @@
           >
             <!-- the list: departments, people or projects -->
             <div class="flex min-w-0 flex-col gap-4">
-              <TabButtons
-                v-model="view"
-                class="self-start"
-                size="md"
-                :aria-label="__('Show')"
-                :options="VIEWS.map((v) => ({ label: v.label, value: v.key }))"
-              />
+              <div
+                class="-mx-1 max-w-full self-start overflow-x-auto px-1 pb-1"
+              >
+                <TabButtons
+                  v-model="view"
+                  size="md"
+                  :aria-label="__('Show')"
+                  :options="
+                    VIEWS.map((v) => ({ label: v.label, value: v.key }))
+                  "
+                />
+              </div>
 
               <div
                 v-if="!data"
@@ -182,9 +187,14 @@
                 @toggle="person = $event"
               />
               <TeamProjectList
-                v-else
+                v-else-if="view === 'projects'"
                 :projects="data.projects"
                 :highlight="project"
+              />
+              <TeamRepeatIssues
+                v-else
+                :period="period"
+                :department="department"
               />
             </div>
 
@@ -282,6 +292,7 @@ import TeamAnalysis from "./components/TeamAnalysis.vue";
 import TeamDepartmentList from "./components/TeamDepartmentList.vue";
 import TeamPeopleList from "./components/TeamPeopleList.vue";
 import TeamProjectList from "./components/TeamProjectList.vue";
+import TeamRepeatIssues from "./components/TeamRepeatIssues.vue";
 import TeamTrendChart from "./components/TeamTrendChart.vue";
 import {
   delta,

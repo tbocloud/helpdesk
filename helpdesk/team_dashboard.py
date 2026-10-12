@@ -669,7 +669,7 @@ def analysis_cache_key(period: str, start, department: str | None) -> str:
 
 def close_periods():
     """Scheduler, just after midnight: every period that ended yesterday gets its
-    champions, one background job per period."""
+    champions, one background job per period; then the repeat issues are worked out."""
     yesterday = add_days(getdate(nowdate()), -1)
     for period in PERIODS:
         start, end = period_bounds(period, yesterday)
@@ -686,6 +686,15 @@ def close_periods():
             start=str(start),
             end=str(end),
         )
+    # the Scoreboard's repeat issues, ready with their AI titles for the first visit
+    frappe.enqueue(
+        "helpdesk.repeat_issues.precompute",
+        queue="long",
+        timeout=JOB_TIMEOUT,
+        job_id=f"repeat-issues-{yesterday}",
+        deduplicate=True,
+        now=frappe.flags.in_test,
+    )
 
 
 def close_period(period: str, start: str, end: str):

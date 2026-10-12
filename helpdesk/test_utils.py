@@ -1141,6 +1141,32 @@ def call_team_dashboard(user: str, today, method: str = "get_team_dashboard", **
         )
 
 
+def call_repeat_issues(
+    user: str,
+    today,
+    method: str = "helpdesk.api.repeat_issues.get_repeat_issues",
+    **kwargs,
+):
+    """Calls a repeat issues endpoint (the web's, or the app's with `method`) as `user`
+    with today fixed, so only the test's records fall in the window, and no detected
+    clusters cached by an earlier call carry over."""
+    from helpdesk.repeat_issues import CACHE_PREFIX
+
+    frappe.cache.delete_keys(f"{CACHE_PREFIX}:")
+    with patch("helpdesk.api.repeat_issues.nowdate", return_value=str(today)):
+        return run_as_user(user, lambda: frappe.call(method, **kwargs))
+
+
+def make_task_created_on(project: str, subject: str, day, **values) -> str:
+    """Creates an open Task in `project` that reads as created on `day` (creation is
+    written straight to the database), plus any other `values`; returns its name."""
+    task = make_task(project, subject).name
+    frappe.db.set_value(
+        "Task", task, {"creation": f"{day} 10:00:00", **values}, update_modified=False
+    )
+    return task
+
+
 def record_versions(test_case):
     """Turns version history on for every save in the test, including saves inside the
     APIs. Tests skip it unless a save asks, and a task's activity is read from it."""
