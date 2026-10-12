@@ -77,13 +77,14 @@ def is_enabled() -> bool:
 
 
 def draft_article(ticket_id: str):
-    """Background job; a failure is logged and the ticket is left as it was."""
+    """Background job, also run on request from the Scoreboard's repeat issues; returns
+    the new draft, or None. A failure is logged and the ticket is left as it was."""
     try:
         if frappe.db.exists("HD Article", {"source_ticket": ticket_id}):
-            return
+            return None
         doc = frappe.get_doc("HD Ticket", ticket_id)
         if not has_team_answer(ticket_id):
-            return
+            return None
         result = call_haiku(
             DRAFT_SYSTEM_PROMPT, build_draft_prompt(doc), ticket_name=ticket_id
         )
@@ -91,11 +92,13 @@ def draft_article(ticket_id: str):
         if draft:
             article = create_draft(doc, draft)
             notify_reviewers(doc, article)
+            return article
     except Exception:  # noqa: BLE001 - see docstring
         frappe.log_error(
             title=f"KB draft failed for ticket {ticket_id}",
             message=frappe.get_traceback(),
         )
+    return None
 
 
 def has_team_answer(ticket_id: str) -> bool:

@@ -1,0 +1,222 @@
+{
+  "v": 1,
+  "data": {
+    "period": {
+      "key": "month",
+      "start": "2026-10-01",
+      "end": "2026-10-31",
+      "lookback_start": "2026-07-03"
+    },
+    "rules": {
+      "lookback_days": 90,
+      "min_occurrences": 3,
+      "min_in_period": 1
+    },
+    "summary": {
+      "issues": 2,
+      "customers": 2,
+      "rising": 1,
+      "tickets_in_period": 4,
+      "tasks_in_period": 1
+    },
+    "customers": [
+      {
+        "customer": "Galom International",
+        "issues": 1,
+        "in_period": 3,
+        "total": 5,
+        "rising": 1,
+        "projects": [
+          {
+            "name": "PROJ-0012",
+            "project_name": "Galom ERP support",
+            "department": "ERP"
+          }
+        ],
+        "clusters": [
+          {
+            "id": "47af842f0a83d8f1",
+            "customer": "Galom International",
+            "subject": "Invoice print format showing incorrect GSTIN",
+            "tickets": 4,
+            "tasks": 1,
+            "in_period": 3,
+            "earlier": 2,
+            "total": 5,
+            "first_seen": "2026-08-21",
+            "last_seen": "2026-10-11",
+            "trend": "rising",
+            "kinds": [
+              {
+                "label": "Bug",
+                "count": 2
+              }
+            ],
+            "people": [
+              {
+                "user": "anu.menon@teambackoffice.com",
+                "count": 3,
+                "name": "Anu Menon"
+              },
+              {
+                "user": "rahul.nair@teambackoffice.com",
+                "count": 2,
+                "name": "Rahul Nair"
+              }
+            ],
+            "avg_resolution_hours": 6.5,
+            "departments": [
+              "ERP"
+            ],
+            "items": [
+              {
+                "kind": "ticket",
+                "doctype": "HD Ticket",
+                "name": "4812",
+                "subject": "Our sales invoice print still has the wrong GSTIN",
+                "date": "2026-10-11",
+                "status": "Open",
+                "project": null,
+                "in_period": true
+              },
+              {
+                "kind": "task",
+                "doctype": "Task",
+                "name": "TASK-2026-00931",
+                "subject": "Fix GSTIN on the sales invoice print format",
+                "date": "2026-10-06",
+                "status": "Completed",
+                "project": "PROJ-0012",
+                "in_period": true
+              },
+              {
+                "kind": "ticket",
+                "doctype": "HD Ticket",
+                "name": "4790",
+                "subject": "GSTIN wrong on sales invoice print",
+                "date": "2026-10-02",
+                "status": "Closed",
+                "project": null,
+                "in_period": true
+              },
+              {
+                "kind": "ticket",
+                "doctype": "HD Ticket",
+                "name": "4655",
+                "subject": "Sales invoice print shows old GSTIN",
+                "date": "2026-09-14",
+                "status": "Closed",
+                "project": null,
+                "in_period": false
+              },
+              {
+                "kind": "ticket",
+                "doctype": "HD Ticket",
+                "name": "4521",
+                "subject": "RE: Invoice print format showing incorrect GSTIN",
+                "date": "2026-08-21",
+                "status": "Closed",
+                "project": null,
+                "in_period": false
+              }
+            ],
+            "title": "Sales invoice print shows old GSTIN",
+            "title_source": "ai",
+            "cause": "The print format likely reads the GSTIN from the old company address.",
+            "fix": "Point the print format at the company's current GSTIN and address.",
+            "root_cause": null,
+            "article": null
+          }
+        ]
+      },
+      {
+        "customer": "Ernakulam Traders",
+        "issues": 1,
+        "in_period": 2,
+        "total": 3,
+        "rising": 0,
+        "projects": [],
+        "clusters": [
+          {
+            "id": "cdef76aaffd72db8",
+            "customer": "Ernakulam Traders",
+            "subject": "Bank reconciliation statement not matching",
+            "tickets": 3,
+            "tasks": 0,
+            "in_period": 2,
+            "earlier": 1,
+            "total": 3,
+            "first_seen": "2026-08-10",
+            "last_seen": "2026-10-08",
+            "trend": "steady",
+            "kinds": [],
+            "people": [
+              {
+                "user": "kiran.pillai@teambackoffice.com",
+                "count": 3,
+                "name": "Kiran Pillai"
+              }
+            ],
+            "avg_resolution_hours": null,
+            "departments": [
+              "ERP"
+            ],
+            "items": [
+              {
+                "kind": "ticket",
+                "doctype": "HD Ticket",
+                "name": "4801",
+                "subject": "Bank reconciliation statement mismatch",
+                "date": "2026-10-08",
+                "status": "Open",
+                "project": null,
+                "in_period": true
+              },
+              {
+                "kind": "ticket",
+                "doctype": "HD Ticket",
+                "name": "4777",
+                "subject": "Bank reconciliation does not match the statement",
+                "date": "2026-10-03",
+                "status": "Closed",
+                "project": null,
+                "in_period": true
+              },
+              {
+                "kind": "ticket",
+                "doctype": "HD Ticket",
+                "name": "4600",
+                "subject": "Bank reconciliation statement not matching",
+                "date": "2026-08-10",
+                "status": "Closed",
+                "project": null,
+                "in_period": false
+              }
+            ],
+            "title": "Bank reconciliation statement not matching",
+            "title_source": "subjects",
+            "cause": null,
+            "fix": null,
+            "root_cause": {
+              "issue": "a3f9c1d2e4",
+              "task": "TASK-2026-00902",
+              "subject": "Root cause: Bank reconciliation statement not matching",
+              "status": "Working",
+              "project": "PROJ-0031"
+            },
+            "article": {
+              "name": "8b1e2f0c4d",
+              "title": "How do I reconcile a bank statement?",
+              "status": "Draft"
+            }
+          }
+        ]
+      }
+    ],
+    "department": null,
+    "access": {
+      "can_act": false,
+      "can_draft_kb": true
+    }
+  }
+}
