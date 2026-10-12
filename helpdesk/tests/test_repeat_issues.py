@@ -17,6 +17,7 @@ from helpdesk.test_utils import (
     make_task_created_on,
     make_tasky_user,
     set_department_heads_as,
+    use_support_department,
 )
 
 # a week far from the real calendar, so only this test's records fall in the window
@@ -363,24 +364,79 @@ class TestRepeatIssues(FrappeTestCase):
             self.assertIn(key, cluster)
 
     def test_department_scope_follows_the_scoreboard(self):
-        def support_department(name):
-            return patch(
-                "helpdesk.follow_ups.get_settings",
-                return_value=frappe._dict(ticket_department=name),
-            )
-
         # tickets belong to the support department; without one, ERP has the task only
-        with support_department(None):
+        with use_support_department(None):
             erp = call_repeat_issues(DM, TODAY, period="week", department="ERP")
         self.assertEqual(erp["department"], "ERP")
         self.assertEqual(erp["customers"], [])
         # the department walls don't apply on the Scoreboard: a DM Employee sees ERP
-        with support_department("ERP"):
+        with use_support_department("ERP"):
             erp = call_repeat_issues(DM, TODAY, period="week", department="ERP")
         self.assertEqual(self.galom(erp)["total"], 5)
         make_department("Closed Team", is_active=0)
         with self.assertRaises(frappe.ValidationError):
             call_repeat_issues(DM, TODAY, period="week", department="Closed Team")
+
+    def test_a_group_shows_its_departments_only(self):
+        make_department("GrowthX", parent_department="ERP")
+        make_department("Digital")
+        leads = make_customer_project(KOCHI, "Kochi Spices lead funnel")
+        frappe.db.set_value("Project", leads, "custom_department", "GrowthX")
+        for subject, day in (
+            ("Landing page lead form not saving", "2031-05-13"),
+            ("Landing page lead form not saving again", "2031-04-10"),
+            ("Lead form on the landing page not saving", "2031-03-10"),
+        ):
+            make_task_created_on(leads, subject, day)
+
+        # the ERP group is ERP and GrowthX; ERP alone leaves GrowthX's repeat out
+        expected = (
+            ({"group": "ERP"}, {GALOM, KOCHI}),
+            ({"department": "ERP"}, {GALOM}),
+            ({"department": "Digital"}, set()),
+            ({}, {GALOM, KOCHI}),
+        )
+        with use_support_department("ERP"):
+            for scope, customers in expected:
+                data = self.view(**scope)
+                self.assertEqual(
+                    {c["customer"] for c in data["customers"]}, customers, scope
+                )
+            with self.assertRaises(frappe.ValidationError):
+                self.view(group="Digital")
+
+    def test_a_past_period_is_computed_for_its_own_window(self):
+        earlier = ticket(GALOM, "Sales invoice print has the wrong GSTIN", "2031-05-08")
+        # 7 May is in the week of 5 to 11 May, which has closed by the 14th
+        data = self.view(day="2031-05-07")
+        self.assertEqual(
+            (data["period"]["start"], data["period"]["end"]),
+            ("2031-05-05", "2031-05-11"),
+        )
+        found = self.galom(data)
+        # what came after the week isn't in it, and the week's own ticket is
+        self.assertEqual(
+            {i["name"] for i in found["items"]}, {earlier, *self.gstin[1:]}
+        )
+        self.assertEqual((found["in_period"], found["total"]), (1, 4))
+        self.assertEqual(found["last_seen"], "2031-05-08")
+        # the week in progress still counts up to today
+        self.assertEqual(self.galom(self.view())["total"], 6)
+        with self.assertRaises(frappe.ValidationError):
+            self.view(day="2031-05-20")
+
+    def test_detection_is_cached_per_anchor_day(self):
+        frappe.cache.delete_keys(f"{ri.CACHE_PREFIX}:")
+        past = ri.detect("week", None, TODAY, "2031-05-07")
+        current = ri.detect("week", None, TODAY)
+        self.assertEqual(past["start"], "2031-05-05")
+        self.assertEqual(current["start"], "2031-05-12")
+        ticket(GALOM, "Sales invoice print still shows the old GSTIN", "2031-05-14")
+        # each anchor keeps its own answer until the cache expires
+        self.assertEqual(ri.detect("week", None, TODAY, "2031-05-07"), past)
+        self.assertEqual(ri.detect("week", None, TODAY), current)
+        keys = frappe.cache.get_keys(f"{ri.CACHE_PREFIX}:week:")
+        self.assertTrue(any(":2031-05-07:" in frappe.utils.cstr(k) for k in keys))
 
     def test_kb_article_already_written(self):
         article = frappe.get_doc(

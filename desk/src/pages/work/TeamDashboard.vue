@@ -309,6 +309,8 @@
                 v-else
                 :period="period"
                 :department="scope.department"
+                :group="scope.group"
+                :day="day"
               />
             </div>
 

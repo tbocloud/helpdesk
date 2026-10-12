@@ -1,8 +1,9 @@
 """Repeat issues on the Scoreboard (/helpdesk/team-dashboard?view=repeats).
 
 Everyone who sees the Scoreboard sees them, with the Scoreboard's own rules for
-departments (`viewer_access`, `scope_department`: every active department, past
-the DM/ERP walls). The actions follow permissions:
+departments, department groups and periods (`viewer_access`, `scope_of`: every
+active department, past the DM/ERP walls; `anchor_day`: today or a past day whose
+period the page shows). The actions follow permissions:
 
 - "Not a repeat" and "Create root-cause task": System and Agent Managers,
   department heads and Project Managers (`can_act`); the task itself only in a
@@ -18,7 +19,12 @@ from frappe import _
 from frappe.utils import escape_html, getdate, nowdate
 
 from helpdesk import repeat_issues as ri
-from helpdesk.api.team_dashboard import check_period, scope_department, viewer_access
+from helpdesk.api.team_dashboard import (
+    anchor_day,
+    check_period,
+    scope_of,
+    viewer_access,
+)
 from helpdesk.api.ticket_ai import truncate
 from helpdesk.tasky.permissions import (
     can_manage_project,
@@ -34,14 +40,20 @@ TASK_SUBJECT_CHARS = 140
 
 @frappe.whitelist()
 @agent_only
-def get_repeat_issues(period: str = "week", department: str | None = None) -> dict:
-    """The period's repeat issues, by customer, with what the viewer may do."""
-    check_period(period)
-    department = scope_department(viewer_access(frappe.session.user), department)
-    data = ri.repeat_issues(period, department, getdate(nowdate()))
+def get_repeat_issues(
+    period: str = "week",
+    department: str | None = None,
+    group: str | None = None,
+    day: str | None = None,
+) -> dict:
+    """The repeat issues of the period `day` falls in (today by default) for the
+    whole team, a department or a department group, as on the rest of the
+    Scoreboard; by customer, with what the viewer may do."""
+    scope, today, anchor = resolve(period, department, group, day)
+    data = ri.repeat_issues(period, scope.departments, today, anchor)
     return {
         **data,
-        "department": department,
+        "department": scope.department,
         "access": {
             "can_act": can_act(frappe.session.user),
             "can_draft_kb": bool(frappe.has_permission("HD Article", "create")),
@@ -52,11 +64,15 @@ def get_repeat_issues(period: str = "week", department: str | None = None) -> di
 @frappe.whitelist(methods=["POST"])
 @agent_only
 def dismiss_repeat_issue(
-    period: str, cluster: str, department: str | None = None
+    period: str,
+    cluster: str,
+    department: str | None = None,
+    group: str | None = None,
+    day: str | None = None,
 ) -> dict:
     """ "Not a repeat": the cluster stops showing, for everyone."""
     check_can_act()
-    found = find(period, cluster, department)
+    found = find(period, cluster, department, group, day)
     doc = ri.save_decision(found, "Dismissed")
     return {"issue": doc.name}
 
@@ -78,12 +94,17 @@ def restore_repeat_issue(issue: str) -> dict:
 @frappe.whitelist(methods=["POST"])
 @agent_only
 def create_root_cause_task(
-    period: str, cluster: str, project: str, department: str | None = None
+    period: str,
+    cluster: str,
+    project: str,
+    department: str | None = None,
+    group: str | None = None,
+    day: str | None = None,
 ) -> dict:
     """A key task in the customer's project to fix what keeps coming back, listing
     the cluster's tickets and tasks."""
     check_can_act()
-    found = find(period, cluster, department)
+    found = find(period, cluster, department, group, day)
     check_project(project, found["customer"])
     # two managers (or a double click) must not both create one: the second waits
     # for the first to commit, then finds its task
@@ -114,7 +135,13 @@ def create_root_cause_task(
 
 @frappe.whitelist(methods=["POST"])
 @agent_only
-def draft_kb_article(period: str, cluster: str, department: str | None = None) -> dict:
+def draft_kb_article(
+    period: str,
+    cluster: str,
+    department: str | None = None,
+    group: str | None = None,
+    day: str | None = None,
+) -> dict:
     """A draft KB article from the cluster's latest resolved ticket, through the
     existing KB draft feature (helpdesk.kb_drafts); an article already written
     from one of its tickets is returned instead."""
@@ -122,7 +149,7 @@ def draft_kb_article(period: str, cluster: str, department: str | None = None) -
     from helpdesk.ai_suggestion import is_ai_configured
 
     frappe.has_permission("HD Article", "create", throw=True)
-    found = find(period, cluster, department)
+    found = find(period, cluster, department, group, day)
     tickets = [i["name"] for i in found["items"] if i["kind"] == "ticket"]
     existing = ri.linked_articles(tickets)
     if existing:
@@ -172,10 +199,24 @@ def check_can_act():
         )
 
 
-def find(period: str, cluster: str, department: str | None) -> dict:
+def resolve(period: str, department: str | None, group: str | None, day: str | None):
+    """The Scoreboard's scope (whole team, department or group), today and the
+    anchor day, checked as the Scoreboard checks them."""
     check_period(period)
-    department = scope_department(viewer_access(frappe.session.user), department)
-    return ri.find_cluster(period, department, cluster, getdate(nowdate()))
+    scope = scope_of(viewer_access(frappe.session.user), department, group)
+    today = getdate(nowdate())
+    return scope, today, anchor_day(day, today)
+
+
+def find(
+    period: str,
+    cluster: str,
+    department: str | None,
+    group: str | None = None,
+    day: str | None = None,
+) -> dict:
+    scope, today, anchor = resolve(period, department, group, day)
+    return ri.find_cluster(period, scope.departments, cluster, today, anchor)
 
 
 def check_project(project: str, customer: str):

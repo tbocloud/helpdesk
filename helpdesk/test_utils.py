@@ -1219,6 +1219,31 @@ def call_repeat_issues(
         return run_as_user(user, lambda: frappe.call(method, **kwargs))
 
 
+def use_support_department(name: str | None):
+    """Patches Settings → Follow-ups so tickets belong to the department `name`
+    (None for no support department); use it as a context manager."""
+    return patch(
+        "helpdesk.follow_ups.get_settings",
+        return_value=frappe._dict(ticket_department=name),
+    )
+
+
+def capture_list_updates(fn, doctype: str = "Task") -> list[str]:
+    """Runs `fn()` and returns the names of the `doctype` records it announced
+    through the `list_update` realtime event (Frappe's own on save, or ours)."""
+    sent = []
+    publish = frappe.publish_realtime
+
+    def record(event=None, message=None, *args, **kwargs):
+        if event == "list_update" and (message or {}).get("doctype") == doctype:
+            sent.append(message["name"])
+        return publish(event, message, *args, **kwargs)
+
+    with patch("frappe.publish_realtime", side_effect=record):
+        fn()
+    return sent
+
+
 def make_task_created_on(project: str, subject: str, day, **values) -> str:
     """Creates an open Task in `project` that reads as created on `day` (creation is
     written straight to the database), plus any other `values`; returns its name."""

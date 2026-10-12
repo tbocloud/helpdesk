@@ -315,6 +315,7 @@ import {
   type RepeatCustomer,
   type RepeatIssues,
   type RepeatItem,
+  type RepeatScope,
 } from "../teamDashboardMeta";
 
 const props = defineProps<{
@@ -322,8 +323,8 @@ const props = defineProps<{
   projects: RepeatCustomer["projects"];
   access: RepeatIssues["access"];
   lookbackDays: number;
-  period: string;
-  department: string;
+  /** The Scoreboard's period, day and department or group, as the API takes them. */
+  scope: RepeatScope;
 }>();
 const emit = defineEmits<{ changed: []; dismissed: [issue: string] }>();
 
@@ -333,11 +334,7 @@ const itemsId = `repeat-items-${uid}`;
 const formId = `repeat-root-cause-${uid}`;
 const showItems = ref(false);
 
-const params = computed(() => ({
-  period: props.period,
-  department: props.department || null,
-  cluster: props.cluster.id,
-}));
+const params = computed(() => ({ ...props.scope, cluster: props.cluster.id }));
 
 const dayText = (day: string) => dayjs(day).format("D MMM");
 const countsText = computed(() =>

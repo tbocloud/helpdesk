@@ -316,6 +316,14 @@ export interface RepeatCustomer {
   clusters: RepeatCluster[];
 }
 
+/** Which repeat issues: the Scoreboard's period, day and department or group. */
+export interface RepeatScope {
+  period: PeriodKey;
+  department: string | null;
+  group: string | null;
+  day: string | null;
+}
+
 export interface RepeatIssues {
   period: { key: PeriodKey; start: string; end: string; lookback_start: string };
   rules: { lookback_days: number; min_occurrences: number; min_in_period: number };

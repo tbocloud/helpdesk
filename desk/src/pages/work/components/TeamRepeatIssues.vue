@@ -114,8 +114,7 @@
               :projects="row.projects"
               :access="data.access"
               :lookback-days="data.rules.lookback_days"
-              :period="period"
-              :department="department"
+              :scope="scope"
               @changed="issues.reload()"
               @dismissed="onDismissed"
             />
@@ -143,25 +142,37 @@ import {
   PERIODS,
   type PeriodKey,
   type RepeatIssues,
+  type RepeatScope,
 } from "../teamDashboardMeta";
 import RepeatIssueCard from "./RepeatIssueCard.vue";
 
 const props = defineProps<{
   period: PeriodKey;
   department: string;
+  group: string;
+  /** A past day whose period the Scoreboard shows; empty for the one in progress. */
+  day: string;
 }>();
+
+// the same period and department or group as the rest of the Scoreboard
+const scope = computed<RepeatScope>(() => ({
+  period: props.period,
+  department: props.department || null,
+  group: props.group || null,
+  day: props.day || null,
+}));
 
 const issues = createResource({
   url: "helpdesk.api.repeat_issues.get_repeat_issues",
-  makeParams: () => ({
-    period: props.period,
-    department: props.department || null,
-  }),
+  makeParams: () => scope.value,
   auto: true,
 });
 const data = computed(() => issues.data as RepeatIssues | undefined);
-const current = computed(
-  () => PERIODS.find((p) => p.key === props.period)?.current ?? ""
+// "this week", or "in the period" for a period that has closed
+const current = computed(() =>
+  props.day
+    ? __("in the period")
+    : PERIODS.find((p) => p.key === props.period)?.current ?? ""
 );
 
 const description = __(
@@ -239,7 +250,7 @@ const panelId = (customer: string) =>
   `repeat-${customer.replace(/[^a-zA-Z0-9]+/g, "-")}`;
 
 watch(
-  () => [props.period, props.department],
+  () => [props.period, props.department, props.group, props.day],
   () => {
     opened.value = new Set();
     closedFirst.value = false;

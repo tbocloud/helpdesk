@@ -308,10 +308,11 @@ def thresholds() -> tuple[int, int]:
 # --- the records -----------------------------------------------------------------
 
 
-def window(period: str, today) -> dict:
-    """The period, how far back the history goes, and the last day counted."""
+def window(period: str, today, day=None) -> dict:
+    """The period `day` falls in (today by default), how far back the history goes,
+    and the last day counted: the period's end once it has closed, else today."""
     today = getdate(today)
-    start, end = td.period_bounds(period, today)
+    start, end = td.period_bounds(period, getdate(day or today))
     return {
         "start": start,
         "end": end,
@@ -423,7 +424,7 @@ def task_items(since, last) -> list[dict]:
     ]
 
 
-def scoped_items(win: dict, department: str | None) -> list[dict]:
+def scoped_items(win: dict, departments: list[str] | None) -> list[dict]:
     """Tickets and tasks in scope. Tickets belong to the support department
     (Settings → Follow-ups), as in the team insights; a task made from a ticket is
     the same issue, so only the ticket counts."""
@@ -447,27 +448,36 @@ def scoped_items(win: dict, department: str | None) -> list[dict]:
         for t in task_items(win["since"], win["last"])
         if t.get("ticket") not in names and t["name"] not in fixes
     ]
-    items = tickets + tasks
-    if department:
-        items = [i for i in items if i["department"] == department]
-    return items
+    keep = td.scope_filter(departments)
+    return [i for i in tickets + tasks if keep(i)]
 
 
 # --- detection -------------------------------------------------------------------
 
 
-def detect(period: str, department: str | None, today) -> dict:
-    """Every repeat issue in scope, without the stored decisions or AI titles
-    (those change on their own; see `repeat_issues`). Cached for CACHE_SECONDS."""
+def detect(period: str, departments: list[str] | None, today, day=None) -> dict:
+    """Every repeat issue in scope (these departments, or the whole team when None)
+    for the period `day` falls in, without the stored decisions or AI titles (those
+    change on their own; see `repeat_issues`). Cached for CACHE_SECONDS, keyed by
+    the anchor day and today: a period in progress grows each day."""
     today = getdate(today)
-    win = window(period, today)
-    key = f"{CACHE_PREFIX}:{period}:{win['start']}:{department or ''}:{today}"
+    day = getdate(day or today)
+    win = window(period, today, day)
+    key = (
+        f"{CACHE_PREFIX}:{period}:{win['start']}:{day}:"
+        f"{scope_key(departments)}:{today}"
+    )
     cached = frappe.cache.get_value(key, expires=True)
     if cached is not None:
         return cached
-    result = compute(win, scoped_items(win, department))
+    result = compute(win, scoped_items(win, departments))
     frappe.cache.set_value(key, result, expires_in_sec=CACHE_SECONDS)
     return result
+
+
+def scope_key(departments: list[str] | None) -> str:
+    """The scope as text for cache keys and job ids; empty for the whole team."""
+    return ",".join(sorted(departments)) if departments else ""
 
 
 def compute(win: dict, items: list[dict]) -> dict:
@@ -734,23 +744,24 @@ def needs_labels(clusters: list[dict]) -> bool:
     )
 
 
-def queue_labels(period: str, department: str | None, today):
+def queue_labels(period: str, departments: list[str] | None, today, day):
     """The AI titles are written in the background; the page shows subjects meanwhile."""
     frappe.enqueue(
         "helpdesk.repeat_issues.label_job",
         queue="long",
         timeout=LABEL_JOB_TIMEOUT,
-        job_id=f"repeat-issue-labels-{period}-{department or ''}-{today}",
+        job_id=f"repeat-issue-labels-{period}-{day}-{scope_key(departments)}-{today}",
         deduplicate=True,
         enqueue_after_commit=True,
         period=period,
-        department=department,
+        departments=departments,
         today=str(today),
+        day=str(day),
     )
 
 
-def label_job(period: str, department: str | None, today: str):
-    label_clusters(detect(period, department, today)["clusters"])
+def label_job(period: str, departments: list[str] | None, today: str, day: str):
+    label_clusters(detect(period, departments, today, day)["clusters"])
 
 
 def precompute():
@@ -765,11 +776,13 @@ def precompute():
 # --- the view --------------------------------------------------------------------
 
 
-def repeat_issues(period: str, department: str | None, today) -> dict:
-    """The page's and the app's answer: the detected clusters with their titles and
-    stored decisions, dismissed ones left out, grouped by customer."""
+def repeat_issues(period: str, departments: list[str] | None, today, day=None) -> dict:
+    """The page's and the app's answer for the period `day` falls in: the detected
+    clusters with their titles and stored decisions, dismissed ones left out,
+    grouped by customer."""
     today = getdate(today)
-    found = detect(period, department, today)
+    day = getdate(day or today)
+    found = detect(period, departments, today, day)
     records = decisions(sorted({c["customer"] for c in found["clusters"]}))
     shown = []
     for c in found["clusters"]:
@@ -778,7 +791,7 @@ def repeat_issues(period: str, department: str | None, today) -> dict:
             continue
         shown.append(present(c, record))
     if needs_labels(found["clusters"]):
-        queue_labels(period, department, today)
+        queue_labels(period, departments, today, day)
     customers = group_by_customer(shown)
     return {
         "period": {
@@ -911,9 +924,11 @@ def open_projects(customers: list[str]) -> dict[str, list[dict]]:
     return dict(out)
 
 
-def find_cluster(period: str, department: str | None, cluster_id: str, today) -> dict:
+def find_cluster(
+    period: str, departments: list[str] | None, cluster_id: str, today, day=None
+) -> dict:
     """One detected cluster by its id, or a clear error when it's gone."""
-    found = detect(period, department, today)
+    found = detect(period, departments, today, day)
     match = next((c for c in found["clusters"] if c["id"] == cluster_id), None)
     if not match:
         frappe.throw(
