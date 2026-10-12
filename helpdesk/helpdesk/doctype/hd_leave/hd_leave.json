@@ -1,0 +1,109 @@
+{
+	"actions": [],
+	"autoname": "field:leave_application",
+	"creation": "2026-10-10 12:00:00.000000",
+	"description": "Approved leave read from ERPNext on the CRM site (Settings → CRM). Kept in step by the daily sync; never edited here.",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"user",
+		"employee_name",
+		"leave_type",
+		"column_break_1",
+		"from_date",
+		"to_date",
+		"half_day",
+		"half_day_date",
+		"leave_application"
+	],
+	"fields": [
+		{
+			"fieldname": "user",
+			"fieldtype": "Link",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"label": "User",
+			"options": "User",
+			"read_only": 1,
+			"reqd": 1,
+			"search_index": 1
+		},
+		{
+			"fieldname": "employee_name",
+			"fieldtype": "Data",
+			"label": "Employee Name",
+			"read_only": 1
+		},
+		{
+			"fieldname": "leave_type",
+			"fieldtype": "Data",
+			"label": "Leave Type",
+			"read_only": 1
+		},
+		{
+			"fieldname": "column_break_1",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "from_date",
+			"fieldtype": "Date",
+			"in_list_view": 1,
+			"label": "From Date",
+			"read_only": 1,
+			"reqd": 1
+		},
+		{
+			"fieldname": "to_date",
+			"fieldtype": "Date",
+			"in_list_view": 1,
+			"label": "To Date",
+			"read_only": 1,
+			"reqd": 1,
+			"search_index": 1
+		},
+		{
+			"default": "0",
+			"fieldname": "half_day",
+			"fieldtype": "Check",
+			"label": "Half Day",
+			"read_only": 1
+		},
+		{
+			"fieldname": "half_day_date",
+			"fieldtype": "Date",
+			"label": "Half Day Date",
+			"read_only": 1
+		},
+		{
+			"fieldname": "leave_application",
+			"fieldtype": "Data",
+			"label": "Leave Application on the CRM Site",
+			"read_only": 1,
+			"unique": 1
+		}
+	],
+	"in_create": 1,
+	"index_web_pages_for_search": 0,
+	"links": [],
+	"modified": "2026-10-10 12:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD Leave",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"read": 1,
+			"report": 1,
+			"role": "System Manager"
+		},
+		{
+			"read": 1,
+			"report": 1,
+			"role": "Agent Manager"
+		}
+	],
+	"sort_field": "from_date",
+	"sort_order": "DESC",
+	"states": [],
+	"title_field": "employee_name"
+}

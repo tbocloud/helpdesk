@@ -12,6 +12,8 @@ from helpdesk import content_sync
 from helpdesk.api.content import draft_caption, normalize_hashtags
 from helpdesk.test_utils import (
     create_customer,
+    hold_commits,
+    make_content_option,
     make_content_post,
     make_support_connection,
 )
@@ -123,7 +125,8 @@ class TestContentApprovalSync(FrappeTestCase):
             ]
         )
         content_sync.pull_approval_decisions()
-        self.assertEqual(self.reload().status, "Approved")
+        # the client's yes goes to the Digital Marketing Head first
+        self.assertEqual(self.reload().status, "Head Review")
 
     def test_images_go_with_the_approval_once(self):
         frappe.get_doc(
@@ -242,6 +245,19 @@ class TestDraftCaption(FrappeTestCase):
     def test_nothing_to_write_about_is_rejected(self):
         with self.assertRaises(frappe.ValidationError):
             draft_caption(title=" ", channel="Instagram")
+
+    @patch("helpdesk.api.content.call_haiku")
+    def test_team_added_platform_and_campaign_reach_the_model(self, call_haiku):
+        hold_commits(self)
+        make_content_option("HD Content Platform", "Threads")
+        call_haiku.return_value = {
+            "response": {"caption": "New drop, link in bio.", "hashtags": []}
+        }
+        draft_caption(title="Eid sale", channel="Threads", campaign="Eid 2026")
+        prompt = call_haiku.call_args.args[1]
+        self.assertIn("Channel: Threads", prompt)
+        self.assertNotIn("Guidelines:", prompt)
+        self.assertIn("Campaign: Eid 2026", prompt)
 
     def test_unknown_channel_rejected(self):
         with self.assertRaises(frappe.ValidationError):

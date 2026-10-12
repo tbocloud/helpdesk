@@ -94,6 +94,38 @@ class TestStats(WorkSummaryCase):
         self.assertEqual((progress["completed"], progress["tasks"]), (1, 4))
         self.assertEqual(progress["progress"], 25)
 
+    def test_held_tasks_say_why_and_who_held_them(self):
+        held = make_task(self.project, "Import opening stock", add_days(nowdate(), 5))
+        frappe.db.set_value(
+            "Task",
+            held.name,
+            {
+                "status": "On Hold",
+                "hold_reason": "Other",
+                "hold_note": "Customer is still cleaning the item master",
+                "hold_by": DEV[0],
+                "hold_since": add_days(nowdate(), -2),
+            },
+        )
+
+        stats = work_summary.collect_customer_stats(CUSTOMER, self.start, self.end)
+        item = stats["tasks"]["on_hold_list"][0]
+        self.assertEqual(
+            item["hold_note"], "Customer is still cleaning the item master"
+        )
+        self.assertEqual(item["hold_by"], DEV[1])
+
+        _overview, sections = work_summary.fallback_summary(stats)
+        risks = next(items for title, items, _empty in sections if title == "Risks")
+        self.assertTrue(
+            any(
+                "Other: Customer is still cleaning the item master" in r
+                and f"Put on hold by {DEV[1]}." in r
+                for r in risks
+            ),
+            risks,
+        )
+
     def test_sla_breaches_and_urgent_tickets(self):
         late = make_ticket(
             subject="Payroll run failed", priority="Low", customer=CUSTOMER

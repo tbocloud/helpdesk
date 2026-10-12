@@ -1,0 +1,25 @@
+{
+  "v": 1,
+  "data": [
+    {
+      "name": "b7c8d9e0f1",
+      "site": "hub",
+      "type": "Reminder",
+      "title": "Escalated to you: TBO ERP: migrate customers",
+      "body": "Najath Thekkeyil · 2 days overdue",
+      "at": "2026-10-10 09:15:00.000000",
+      "read": false,
+      "doctype": "Task",
+      "reference": "TASK-2026-00412",
+      "route": "/projects/PROJ-0031",
+      "app_route": "/task/TASK-2026-00412",
+      "from": {
+        "user": "automation@teambackoffice.com",
+        "full_name": "TBO Automation"
+      }
+    }
+  ],
+  "next_cursor": 20,
+  "has_more": true,
+  "unread": 4
+}

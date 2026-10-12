@@ -4,7 +4,7 @@ import json
 
 import frappe
 from frappe import _
-from frappe.utils import date_diff
+from frappe.utils import date_diff, flt, strip_html
 
 from helpdesk.helpdesk.doctype.hd_content_occasion.hd_content_occasion import (
     occasions_between,
@@ -14,16 +14,21 @@ from helpdesk.helpdesk.doctype.hd_content_post.hd_content_post import (
     ONE_TASK,
     SHARED_ROLE,
     TASK_ROLES,
+    content_project_for,
+    missing_content_project_message,
     role_teams_of,
     team_of,
 )
 
 TEAM_FIELDS = ("writer", "designer", "marketer", "video_editor")
+# each role's estimated hours, e.g. writer_hours
+HOURS_FIELDS = tuple(f"{role}_hours" for role in TEAM_FIELDS)
 # fields the Add entry dialog may set on every post it creates
 ENTRY_FIELDS = (
     "title",
     "customer",
     "campaign",
+    "special_day",
     "format",
     "status",
     "publish_on",
@@ -32,6 +37,7 @@ ENTRY_FIELDS = (
     "brief",
     "task_mode",
     *TEAM_FIELDS,
+    *HOURS_FIELDS,
 )
 
 
@@ -94,12 +100,39 @@ def get_team_defaults(customer: str) -> dict:
     return team_of(frappe.get_doc("HD Content Post", latest[0]))
 
 
+@frappe.whitelist()
+def get_content_project(customer: str) -> dict | None:
+    """The project this customer's post tasks go to, for the post dialogs to show:
+    {name, project_name}, {name: None, hidden: True} when the caller can't read it, or
+    {name: None, missing} when there is none."""
+    frappe.has_permission("HD Content Post", "read", throw=True)
+    project = content_project_for(customer)
+    if not project:
+        return {
+            "name": None,
+            "missing": strip_html(missing_content_project_message(customer)),
+        }
+    # someone who can't open the project still learns the entry is fine, not which project
+    if not frappe.has_permission("Project", "read", doc=project):
+        return {"name": None, "hidden": True}
+    return {
+        "name": project,
+        "project_name": frappe.db.get_value("Project", project, "project_name"),
+    }
+
+
 @frappe.whitelist(methods=["POST"])
-def assign(post: str, role: str, users: str | list | None = None) -> list[str]:
+def assign(
+    post: str,
+    role: str,
+    users: str | list | None = None,
+    hours: float | str | None = None,
+) -> list[str]:
     """Put these people on one role of a post; the first is its main person.
 
     Their tasks follow the post's task mode: in one-task-per-person mode
-    everyone on the role shares that role's task.
+    everyone on the role shares that role's task. `hours`, when given, is the
+    role's estimate, which goes on its task.
     """
     if role not in TEAM_FIELDS:
         frappe.throw(_("Unknown role {0}").format(role))
@@ -107,6 +140,8 @@ def assign(post: str, role: str, users: str | list | None = None) -> list[str]:
     doc = frappe.get_doc("HD Content Post", post)
     doc.check_permission("write")
     doc.set_people(role, users)
+    if hours is not None:
+        doc.set(f"{role}_hours", flt(hours))
     doc.save()
     return doc.people(role)
 
@@ -222,6 +257,24 @@ def postpone(post: str, publish_on: str, reason: str):
     doc.check_permission("write")
     doc.postpone(publish_on, reason)
     return {"publish_on": doc.publish_on, "times_postponed": doc.times_postponed}
+
+
+@frappe.whitelist(methods=["POST"])
+def head_approve(post: str):
+    """The Digital Marketing Head approves a post the client approved."""
+    doc = frappe.get_doc("HD Content Post", post)
+    doc.check_permission("read")
+    doc.approve_as_head()
+    return {"status": doc.status}
+
+
+@frappe.whitelist(methods=["POST"])
+def head_send_back(post: str, reason: str):
+    """The Digital Marketing Head sends a client-approved post back, saying why."""
+    doc = frappe.get_doc("HD Content Post", post)
+    doc.check_permission("read")
+    doc.send_back_as_head(reason)
+    return {"status": doc.status}
 
 
 @frappe.whitelist(methods=["POST"])

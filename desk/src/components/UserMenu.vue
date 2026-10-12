@@ -2,45 +2,41 @@
   <Dropdown :options="options">
     <template #default="{ open }">
       <button
-        class="flex h-12 items-center rounded-md py-2 duration-300 ease-in-out"
+        type="button"
+        class="flex items-center transition-colors duration-200 ease-in-out"
         :class="
           collapsed
-            ? 'w-auto px-0'
-            : open
-            ? 'w-full px-2 bg-surface-base shadow-sm'
-            : 'w-full px-2 hover:bg-surface-gray-3'
+            ? 'mx-auto justify-center rounded-[8px]'
+            : [
+                'w-full gap-2.5 rounded-[12px] border border-outline-gray-2 p-2.5 text-start shadow-sm',
+                open
+                  ? 'bg-surface-gray-1'
+                  : 'bg-surface-base hover:bg-surface-gray-1',
+              ]
+        "
+        :aria-label="
+          collapsed ? __('{0} menu', String(config.brandName || '')) : undefined
         "
       >
-        <BrandLogo />
-        <div
-          class="flex flex-1 flex-col text-left duration-300 ease-in-out overflow-hidden"
-          :class="
-            collapsed
-              ? 'ms-0 w-0 overflow-hidden opacity-0'
-              : 'ms-2 w-auto opacity-100'
-          "
-        >
-          <div class="text-base-medium leading-none text-ink-gray-9 truncate">
+        <BrandLogo
+          class="!rounded-[8px] !font-bold"
+          :class="collapsed ? '!size-8' : '!size-9'"
+        />
+        <div v-if="!collapsed" class="flex min-w-0 flex-1 flex-col gap-1">
+          <div
+            class="truncate text-base font-semibold leading-tight text-ink-gray-9"
+          >
             {{ config.brandName }}
           </div>
-          <div class="mt-1 text-sm text-ink-gray-7">
+          <div class="truncate text-xs leading-tight text-ink-gray-6">
             {{ authStore.userName }}
           </div>
         </div>
-        <div
-          class="duration-300 ease-in-out"
-          :class="
-            collapsed
-              ? 'ms-0 w-0 overflow-hidden opacity-0'
-              : 'ms-2 relative start-[-2.5px] w-auto opacity-100'
-          "
-        >
-          <FeatherIcon
-            name="chevron-down"
-            class="h-4 w-4 text-ink-gray-5"
-            aria-hidden="true"
-          />
-        </div>
+        <LucideChevronsUpDown
+          v-if="!collapsed"
+          class="size-4 shrink-0 text-ink-gray-5"
+          aria-hidden="true"
+        />
       </button>
     </template>
   </Dropdown>
@@ -51,8 +47,10 @@ import BrandLogo from "@/components/BrandLogo.vue";
 import { useAuthStore } from "@/stores/auth";
 import { useConfigStore } from "@/stores/config";
 import { useSidebarStore } from "@/stores/sidebar";
+import { __ } from "@/translation";
 import { Dropdown } from "frappe-ui";
 import { computed } from "vue";
+import LucideChevronsUpDown from "~icons/lucide/chevrons-up-down";
 
 const config = useConfigStore();
 

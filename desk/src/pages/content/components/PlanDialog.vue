@@ -41,14 +41,14 @@
             <FormControl
               v-model="row.channel"
               type="select"
-              :options="CHANNELS"
+              :options="platforms"
               :label="i === 0 ? __('Platform') : undefined"
               :aria-label="__('Platform')"
             />
             <FormControl
               v-model="row.format"
               type="select"
-              :options="FORMATS"
+              :options="postTypes"
               :label="i === 0 ? __('Post type') : undefined"
               :aria-label="__('Post type')"
             />
@@ -209,7 +209,8 @@ import {
 import { computed, reactive, ref, watch } from "vue";
 import LucidePlus from "~icons/lucide/plus";
 import LucideX from "~icons/lucide/x";
-import { CHANNELS, FORMATS, TEAM_ROLES } from "../constants";
+import { TEAM_ROLES } from "../constants";
+import { useContentOptions } from "../contentOptions";
 
 export interface PlanItem {
   channel: string;
@@ -243,6 +244,7 @@ export interface ContentPlan {
 const open = defineModel<boolean>("open", { default: false });
 const props = defineProps<{ plan: ContentPlan | null }>();
 const emit = defineEmits<{ saved: [name: string] }>();
+const { platforms, postTypes } = useContentOptions();
 
 const POSTING_DAYS = [
   { label: __("Monday to Saturday"), value: "Monday to Saturday" },

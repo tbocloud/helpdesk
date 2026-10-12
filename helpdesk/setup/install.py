@@ -8,6 +8,7 @@ from helpdesk.api.customization import (
     ensure_ticket_type as ensure_customization_ticket_type,
 )
 from helpdesk.consts import DEFAULT_ARTICLE_CATEGORY
+from helpdesk.content_options import ensure_default_content_options
 from helpdesk.content_team import ensure_role as ensure_content_team_role
 from helpdesk.helpdesk.doctype.hd_content_occasion.hd_content_occasion import (
     ensure_default_occasions,
@@ -87,6 +88,7 @@ def after_install():
     ensure_default_occasions()
     ensure_default_departments()
     ensure_default_signoff_templates()
+    ensure_default_content_options()
     ensure_customization_ticket_type()
     # Always keep this at last, because sql_ddl makes the db commit
     add_fts_index()
@@ -715,6 +717,35 @@ def get_custom_fields():
                 "insert_after": "custom_estimate_decided_on",
                 "read_only": 1,
                 "hidden": 1,
+            },
+            # follow-ups (docs/follow-ups.md): how far up the ladder the SLA has gone
+            {
+                "fieldname": "custom_escalation_level",
+                "fieldtype": "Int",
+                "label": "Escalation Level",
+                "insert_after": "agreement_status",
+                "read_only": 1,
+                "no_copy": 1,
+                "default": "0",
+            },
+            {
+                "fieldname": "custom_escalated_on",
+                "fieldtype": "Datetime",
+                "label": "Escalated On",
+                "insert_after": "custom_escalation_level",
+                "read_only": 1,
+                "no_copy": 1,
+            },
+            {
+                # the automatic follow-up email to a customer who hasn't replied,
+                # so it goes once per wait
+                "fieldname": "custom_customer_followed_up_on",
+                "fieldtype": "Datetime",
+                "label": "Customer Followed Up On",
+                "insert_after": "custom_escalated_on",
+                "read_only": 1,
+                "hidden": 1,
+                "no_copy": 1,
             },
         ],
         "Project": [

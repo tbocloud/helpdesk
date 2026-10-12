@@ -17,9 +17,11 @@ from helpdesk.test_utils import (
     make_assignment,
     make_project,
     make_project_file,
+    make_project_folder,
     make_task,
     make_tasky_user,
     make_ticket,
+    mark_project_item,
 )
 
 LEAD = ("lead.home@home-dashboard.example", "Asha Kurian")
@@ -102,7 +104,7 @@ class TestHome(FrappeTestCase):
         for key in ("connections", "mailboxes", "teams", "chat", "ai"):
             self.assertIn(key, systems)
 
-    def test_your_day_has_only_my_work_that_is_due(self):
+    def test_your_day_has_only_my_own_work(self):
         due_today = make_task(self.project, "Post the launch reel", nowdate()).name
         make_assignment("Task", due_today, LEAD[0])
         later = make_task(self.project, "Plan next quarter", add_days(nowdate(), 30))
@@ -112,12 +114,17 @@ class TestHome(FrappeTestCase):
 
         day = self.as_user(DEV)["day"]
 
-        self.assertEqual([i["name"] for i in day["tasks"]["items"]], [self.overdue])
+        self.assertEqual(
+            [i["name"] for i in day["close_first"]["items"]], [self.overdue]
+        )
+        # due after the coming week: not listed, but still open work
+        self.assertEqual(day["coming_up"]["count"], 0)
+        self.assertGreaterEqual(day["summary"]["open"], 3)
         replies = [i["name"] for i in day["replies"]["items"]]
         self.assertIn(mine, replies)
         self.assertNotIn(theirs, replies)
         lead_day = self.as_user(LEAD)["day"]
-        self.assertIn(due_today, [i["name"] for i in lead_day["tasks"]["items"]])
+        self.assertIn(due_today, [i["name"] for i in lead_day["close_first"]["items"]])
 
     def test_approvals_wait_for_the_project_lead_only(self):
         frappe.db.set_value("Task", self.overdue, "status", "Pending Review")
@@ -129,7 +136,10 @@ class TestHome(FrappeTestCase):
         self.assertTrue(lead_approvals["items"][0]["can_approve"])
         self.assertEqual(dev_day["approvals"]["count"], 0)
         # a task in review is waiting on the reviewer, not on its assignee
-        self.assertEqual(dev_day["tasks"]["count"], 0)
+        self.assertEqual(dev_day["close_first"]["count"], 0)
+        self.assertEqual(
+            [i["name"] for i in dev_day["waiting"]["items"]], [self.overdue]
+        )
 
     def test_files_for_me_skip_my_own_uploads(self):
         make_project_file(self.project, "brief.md", for_users=[DEV[0]], user=LEAD[0])
@@ -141,13 +151,36 @@ class TestHome(FrappeTestCase):
         self.assertEqual(dev_files["items"][0]["project"], self.project)
         self.assertEqual(lead_files["count"], 0)
 
+    def test_files_for_me_skip_files_in_a_superseded_folder(self):
+        old = make_project_folder(self.project, "Spec v1", user=LEAD[0])
+        make_project_file(
+            self.project, "spec.md", for_users=[DEV[0]], user=LEAD[0], folder=old
+        )
+        make_project_file(self.project, "brief.md", for_users=[DEV[0]], user=LEAD[0])
+        mark_project_item(LEAD[0], self.project, "folder", old)
+
+        dev_files = self.as_user(DEV)["day"]["files"]
+
+        self.assertEqual([f["file_name"] for f in dev_files["items"]], ["brief.md"])
+
     def test_quiet_day_is_all_zero(self):
         quiet = ("quiet.home@home-dashboard.example", "Nila Menon")
         make_tasky_user(*quiet)
 
         day = self.as_user(quiet)["day"]
 
-        for section in ("tasks", "replies", "approvals", "files"):
+        for section in (
+            "close_first",
+            "in_progress",
+            "waiting",
+            "coming_up",
+            "no_date",
+            "given_out",
+            "projects",
+            "replies",
+            "approvals",
+            "files",
+        ):
             self.assertEqual(day[section], {"count": 0, "items": []})
 
     def test_needs_attention_is_grouped_by_reason(self):

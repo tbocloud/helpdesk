@@ -44,6 +44,21 @@ const PRIORITY_ICONS: Record<string, Component> = {
 };
 
 export const TASK_STATUSES = Object.keys(TASK_STATUS);
+
+// The dashboard tiles the checklist can filter by (`?status=<key>`). The server
+// decides which tasks each key covers (`stat_tasks` from get_project_dashboard);
+// these are only the tile label and the link's name, untranslated like TASK_STATUS.
+export const CHECKLIST_FILTERS: Record<
+  string,
+  { label: string; action: string }
+> = {
+  completed: { label: "Completed", action: "Show completed tasks" },
+  in_progress: { label: "In progress", action: "Show tasks in progress" },
+  reviewing: { label: "Waiting review", action: "Show tasks waiting review" },
+  on_hold: { label: "On hold", action: "Show on hold tasks" },
+  rescheduled: { label: "Rescheduled", action: "Show rescheduled tasks" },
+  cancelled: { label: "Cancelled", action: "Show cancelled tasks" },
+};
 // keep in step with Task.custom_category in helpdesk/setup/install.py
 export const CATEGORIES = [
   "Functional",
@@ -136,15 +151,52 @@ export function holdDurationLabel(days: number) {
   return __("On hold {0} days", String(days));
 }
 
-// Due dates are date-only, so a task is overdue from the day after it's due.
+/** "Put on hold by Anjali Menon · 7 Oct 2026"; empty when it isn't known who held it. */
+export function holdByLabel(task: {
+  hold_by_name?: string | null;
+  hold_since?: string | null;
+}) {
+  if (!task.hold_by_name) return "";
+  return task.hold_since
+    ? __(
+        "Put on hold by {0} · {1}",
+        task.hold_by_name,
+        dayjs(task.hold_since).format("D MMM YYYY")
+      )
+    : __("Put on hold by {0}", task.hold_by_name);
+}
+
+// Due dates are date-only, so a task is overdue from the day after it's due, or on
+// its due day once it has been worked longer than its estimate (server: is_task_overdue).
 // A task on hold is never overdue: its due date moves out when it resumes.
-export function isOverdue(task: { status?: string; due_date?: string | null }) {
-  return (
-    !!task.due_date &&
-    !isClosed(task) &&
-    !isOnHold(task) &&
-    dayjs(task.due_date).isBefore(dayjs(), "day")
-  );
+export function isOverdue(
+  task: {
+    status?: string;
+    due_date?: string | null;
+    estimated_hours?: number | null;
+    custom_timer_start?: string | null;
+    custom_timer_elapsed?: number | null;
+  },
+  now = dayjs()
+) {
+  if (!task.due_date || isClosed(task) || isOnHold(task)) return false;
+  const due = dayjs(task.due_date);
+  if (due.isBefore(now, "day")) return true;
+  return due.isSame(now, "day") && isOverEstimate(task, now);
+}
+
+/**
+ * The task's timer has passed its estimated hours. The timer starts when the task
+ * moves to Working and stops while paused, so the clock runs from when work began.
+ */
+export function isOverEstimate(
+  task: Parameters<typeof taskTimer>[0] & { estimated_hours?: number | null },
+  now = dayjs()
+) {
+  const estimate = Number(task.estimated_hours) || 0;
+  if (!estimate) return false;
+  const timer = taskTimer(task, now);
+  return !!timer && timer.elapsed > estimate * 3600;
 }
 
 export function daysUntil(date: string) {
@@ -240,9 +292,7 @@ export function blockedMessage(task: { depends_on_subject?: string | null }) {
 /** The description is still the AI's text, unedited (`aiText` is what the AI wrote). */
 export function isAiDrafted(description: string, aiText: string | null) {
   return (
-    aiText !== null &&
-    !!aiText.trim() &&
-    description.trim() === aiText.trim()
+    aiText !== null && !!aiText.trim() && description.trim() === aiText.trim()
   );
 }
 

@@ -141,12 +141,14 @@
               : __('Alert at {0}% used', String(data.contract.alert_threshold))
           "
           :icon="LucideClock"
+          icon-tone="info"
         />
         <StatTile
           :label="period.is_current ? __('Period ends') : __('Period ended')"
           :value="dayjs(period.end).format('D MMM')"
           :sub="endSub"
           :icon="LucideCalendarClock"
+          icon-tone="info"
         />
       </section>
       <p

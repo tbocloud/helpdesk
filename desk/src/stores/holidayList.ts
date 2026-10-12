@@ -118,7 +118,10 @@ export const validateHoliday = (key?: HolidayField) => {
 };
 
 export function updateWeeklyOffDates() {
-  const newHolidays = holidayData.value.holidays.filter((h) => !h.weekly_off);
+  // weekly offs synced from the CRM site aren't the recurring rules' to regenerate
+  const newHolidays = holidayData.value.holidays.filter(
+    (h) => !h.weekly_off || h.synced_from_crm
+  );
 
   for (const day of holidayData.value.recurring_holidays) {
     const weeklyOffs = getWeeklyOffDates(

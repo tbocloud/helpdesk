@@ -18,7 +18,7 @@ from pypika.functions import Count
 from pypika.queries import Query
 from pypika.terms import Criterion
 
-from helpdesk.content_team import is_content_only
+from helpdesk.content_team import sees_no_tickets
 from helpdesk.helpdesk.doctype.hd_settings.helpers import (
     get_default_email_content,
     is_email_content_empty,
@@ -1290,6 +1290,7 @@ class HDTicket(Document):
             "agent_group",
             "contact",
             "agreement_status",
+            "custom_escalation_level",
             "response_by",
             "resolution_by",
             "customer",
@@ -1351,7 +1352,7 @@ def has_permission(doc, user=None):
         return True
     if _is_customer_manager(doc.customer, user):
         return True
-    if not is_agent(user) or is_content_only(user):
+    if not is_agent(user) or sees_no_tickets(user):
         return False
     return _agent_has_permission(doc, user)
 
@@ -1396,8 +1397,8 @@ def permission_query(user: str | None = None):
     user = user or frappe.session.user
     if is_admin(user):
         return
-    if is_content_only(user):
-        # writers and designers work on content only; tickets they raised stay theirs
+    if sees_no_tickets(user):
+        # content and department staff don't work tickets; tickets they raised stay theirs
         return _get_base_visibility(user)
     if not is_agent(user):
         return _customer_query(user)
@@ -1436,8 +1437,12 @@ def _agent_query(user: str) -> str | None:
             query += " OR (`tabHD Ticket`.agent_group is null)"
         return query
 
-    query += " OR (JSON_SEARCH(`tabHD Ticket`._assign, 'all', {u}) IS NOT NULL)".format(
-        u=frappe.db.escape(user)
+    # tickets assigned to the user, matched exactly through their open ToDos
+    # (JSON_SEARCH on `_assign` reads `_` and `%` in a user ID as wildcards)
+    query += (
+        " OR (`tabHD Ticket`.`name` in (select `reference_name` from `tabToDo` "
+        "where `reference_type` = 'HD Ticket' and `status` not in ('Cancelled', 'Closed') "
+        f"and `allocated_to` = {frappe.db.escape(user)}))"
     )
     team_names = [t.get("team_name") for t in teams]
     if team_names:

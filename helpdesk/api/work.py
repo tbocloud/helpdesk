@@ -12,6 +12,7 @@ from frappe import _
 from frappe.utils import (
     add_days,
     add_to_date,
+    flt,
     get_datetime,
     getdate,
     now_datetime,
@@ -20,16 +21,22 @@ from frappe.utils import (
 
 from helpdesk.github_sync import OPEN_STATES as PR_OPEN_STATES
 from helpdesk.github_sync import get_pull_requests
-from helpdesk.tasky.api import add_assigners
+from helpdesk.tasky.api import (
+    TASK_HOLD_FIELDS,
+    add_assigners,
+    hold_by_name,
+    hold_by_names,
+)
 from helpdesk.tasky.permissions import (
     can_add_tasks,
-    can_manage_project,
+    can_coordinate_project,
     get_led_projects,
     get_managed_projects,
     is_project_manager,
     is_tasky_admin,
 )
-from helpdesk.utils import agent_only
+from helpdesk.utils import agent_only, assigned_to_filter
+from helpdesk.work_calendar import on_leave
 
 KEY_TICKET_PRIORITIES = ("Urgent", "High")
 OPEN_TASK_FILTER = ("not in", ["Completed", "Cancelled", "Template"])
@@ -50,6 +57,7 @@ URGENCY_ORDER = ("overdue", "at_risk", "due_soon", "key")
 TOP_PROJECTS = 7
 ATTENTION_LIMIT = 8
 
+TIMER_FIELDS = ["custom_estimated_hours", "custom_timer_start", "custom_timer_elapsed"]
 TASK_FIELDS = [
     "name",
     "subject",
@@ -59,12 +67,14 @@ TASK_FIELDS = [
     "exp_end_date",
     "is_key",
     "hd_ticket",
-    "hold_reason",
-    "hold_since",
+    *TASK_HOLD_FIELDS,
     "is_milestone",
     "slip_count",
+    "escalation_level",
     "depends_on_task",
     "_assign",
+    # a task due today is overdue once it has run past its estimate
+    *TIMER_FIELDS,
 ]
 TICKET_FIELDS = [
     "name",
@@ -75,6 +85,7 @@ TICKET_FIELDS = [
     "priority",
     "resolution_by",
     "_assign",
+    "custom_escalation_level",
 ]
 
 
@@ -117,6 +128,35 @@ def _open_dependencies(tasks) -> dict:
     )
 
 
+def is_task_overdue(task, deadline, today) -> bool:
+    """Past its due date, or due today and already worked longer than its estimate.
+
+    The due date moves out by the days on hold, so a paused task is never late.
+    """
+    if not deadline or task.status in (ON_HOLD, "Completed", "Cancelled"):
+        return False
+    if deadline < today:
+        return True
+    return deadline == today and _over_estimate(task)
+
+
+def _over_estimate(task) -> bool:
+    """The task's timer (banked time plus the running stretch) has passed its estimated hours.
+
+    The timer starts when the task moves to Working and stops while it's paused, so
+    the clock runs from when the work started, not from when the task was created.
+    """
+    estimate = flt(task.get("custom_estimated_hours"))
+    if not estimate:
+        return False
+    worked = flt(task.get("custom_timer_elapsed"))
+    if task.status == "Working" and task.get("custom_timer_start"):
+        # the start is stored in the site's time zone, as now_datetime() is
+        running = now_datetime() - get_datetime(task.custom_timer_start)
+        worked += max(running.total_seconds(), 0) / 3600
+    return worked > estimate
+
+
 def _task_risks(task, deadline, today, waiting_on: str | None) -> list[str]:
     if task.status in (ON_HOLD, "Pending Review") or not deadline or deadline < today:
         return []
@@ -132,12 +172,18 @@ def _task_risks(task, deadline, today, waiting_on: str | None) -> list[str]:
 
 
 def _task_item(
-    task, project_names: dict, open_dependencies: dict | None = None
+    task,
+    project_names: dict,
+    open_dependencies: dict | None = None,
+    hold_names: dict | None = None,
 ) -> dict:
+    """One task as a work item; lists pass `hold_names` (hold_by_names) so held
+    tasks don't look up User one by one."""
     deadline = getdate(task.exp_end_date) if task.exp_end_date else None
     on_hold = task.status == ON_HOLD
     today = getdate(nowdate())
     waiting_on = (open_dependencies or {}).get(task.depends_on_task)
+    is_overdue = is_task_overdue(task, deadline, today)
     return {
         "kind": "task",
         "name": task.name,
@@ -148,10 +194,11 @@ def _task_item(
         "priority": task.priority,
         "deadline": str(deadline) if deadline else None,
         "is_key": bool(task.is_key),
-        # the due date moves out by the days on hold, so a paused task isn't late
-        "is_overdue": bool(deadline and deadline < today and not on_hold),
+        "is_overdue": is_overdue,
         "hd_ticket": task.hd_ticket,
         "hold_reason": task.hold_reason if on_hold else None,
+        "hold_note": task.hold_note if on_hold else None,
+        "hold_by_name": hold_by_name(task.hold_by, hold_names) if on_hold else None,
         "hold_days": (
             (today - getdate(task.hold_since)).days
             if on_hold and task.hold_since
@@ -159,10 +206,18 @@ def _task_item(
         ),
         "is_milestone": bool(task.is_milestone),
         "slip_count": task.slip_count or 0,
+        "escalation_level": task.get("escalation_level") or 0,
         "waiting_on": waiting_on,
-        "risks": _task_risks(task, deadline, today, waiting_on),
+        # overdue work is already flagged; risks are for work that may still slip
+        "risks": [] if is_overdue else _task_risks(task, deadline, today, waiting_on),
         "assignees": _assignees(task._assign),
     }
+
+
+def sla_due_soon(deadline, now=None) -> bool:
+    """The SLA deadline is still ahead but within SLA_RISK_HOURS."""
+    now = now or now_datetime()
+    return bool(deadline) and now <= deadline <= add_to_date(now, hours=SLA_RISK_HOURS)
 
 
 def _ticket_risks(ticket, deadline) -> list[str]:
@@ -170,7 +225,7 @@ def _ticket_risks(ticket, deadline) -> list[str]:
         return []
     risks = []
     now = now_datetime()
-    if deadline and now <= deadline <= add_to_date(now, hours=SLA_RISK_HOURS):
+    if sla_due_soon(deadline, now):
         hours = max(int((deadline - now).total_seconds() // 3600), 0)
         risks.append(_("SLA due in {0}h").format(hours))
     if ticket.priority in KEY_TICKET_PRIORITIES and not _assignees(ticket._assign):
@@ -195,6 +250,7 @@ def _ticket_item(ticket) -> dict:
         ),
         "risks": _ticket_risks(ticket, deadline),
         "assignees": _assignees(ticket._assign),
+        "escalation_level": ticket.get("custom_escalation_level") or 0,
     }
 
 
@@ -213,16 +269,18 @@ def _items(tasks, tickets, with_plan: bool = False) -> list[dict]:
     viewer may plan it (My Work's Plan step), which costs a lookup per project."""
     names = _project_names(tasks)
     waiting = _open_dependencies(tasks)
-    task_items = add_assigners([_task_item(t, names, waiting) for t in tasks])
+    holders = hold_by_names(tasks)
+    task_items = add_assigners([_task_item(t, names, waiting, holders) for t in tasks])
     _attach_pull_requests(task_items)
-    # who may plan a task or sign off one waiting for review: the project's manager or lead
+    # who may plan a task or sign off one waiting for review: the project's manager,
+    # lead or coordinator
     managed = {}
     for item in task_items:
         in_review = item["status"] == PENDING_REVIEW
         if not (with_plan or in_review):
             continue
         if item["project"] not in managed:
-            managed[item["project"]] = can_manage_project(item["project"])
+            managed[item["project"]] = can_coordinate_project(item["project"])
         if with_plan:
             item["can_plan"] = managed[item["project"]]
         if in_review:
@@ -235,11 +293,6 @@ def _items(tasks, tickets, with_plan: bool = False) -> list[dict]:
 def _sort_key(item: dict):
     deadline = item["deadline"] or "9999-12-31"
     return (not item["is_overdue"], not item["is_key"], deadline)
-
-
-def _assigned_to(user: str):
-    # _assign stores a JSON list, so match the quoted email
-    return ("like", f'%"{user}"%')
 
 
 @frappe.whitelist()
@@ -259,14 +312,17 @@ def get_my_work(user: str | None = None) -> dict:
             )
     tasks = frappe.get_list(
         "Task",
-        filters={"_assign": _assigned_to(user), "status": OPEN_TASK_FILTER},
+        filters={
+            "name": assigned_to_filter("Task", user),
+            "status": OPEN_TASK_FILTER,
+        },
         fields=TASK_FIELDS,
         limit_page_length=LIST_LIMIT,
     )
     tickets = frappe.get_list(
         "HD Ticket",
         filters={
-            "_assign": _assigned_to(user),
+            "name": assigned_to_filter("HD Ticket", user, finished=False),
             "status_category": ("in", ["Open", "Paused"]),
         },
         fields=TICKET_FIELDS,
@@ -293,7 +349,7 @@ def _done_items(user: str) -> list[dict]:
     tasks = frappe.get_list(
         "Task",
         filters={
-            "_assign": _assigned_to(user),
+            "name": assigned_to_filter("Task", user),
             "status": "Completed",
             "completed_on": (">=", since),
         },
@@ -303,8 +359,9 @@ def _done_items(user: str) -> list[dict]:
     )
     tickets = frappe.get_list(
         "HD Ticket",
+        # resolving a ticket closes its ToDos, so finished assignments count here
         filters={
-            "_assign": _assigned_to(user),
+            "name": assigned_to_filter("HD Ticket", user),
             "status_category": "Resolved",
             "resolution_date": (">=", since),
         },
@@ -370,8 +427,10 @@ def get_overview(
             or [""],
         )
     if assignee:
-        task_filters["_assign"] = _assigned_to(assignee)
-        ticket_filters["_assign"] = _assigned_to(assignee)
+        task_filters["name"] = assigned_to_filter("Task", assignee)
+        ticket_filters["name"] = assigned_to_filter(
+            "HD Ticket", assignee, finished=False
+        )
     if department:
         task_filters["project"] = _in_department(
             task_filters.get("project"), department
@@ -633,7 +692,15 @@ def _linked_tasks(ticket: str) -> list:
     return frappe.get_all(
         "Task",
         filters={"hd_ticket": ticket},
-        fields=["name", "subject", "status", "project", "exp_end_date", "_assign"],
+        fields=[
+            "name",
+            "subject",
+            "status",
+            "project",
+            "exp_end_date",
+            "_assign",
+            *TIMER_FIELDS,
+        ],
         order_by="creation desc",
     )
 
@@ -651,13 +718,20 @@ def get_ticket_linked_work(ticket: str | int) -> list[dict]:
     tasks = _linked_tasks(ticket)
     names = _project_names(tasks)
     user = frappe.session.user
+    today = getdate(nowdate())
     items = []
     for task in tasks:
         assignees = _assignees(task.pop("_assign"))
         can_open = frappe.has_permission("Task", "read", task.name)
+        deadline = getdate(task.exp_end_date) if task.exp_end_date else None
+        is_overdue = is_task_overdue(task, deadline, today)
+        # the timer only decides overdue; the ticket page doesn't show it
+        for field in TIMER_FIELDS:
+            task.pop(field, None)
         items.append(
             {
                 **task,
+                "is_overdue": is_overdue,
                 "project_name": names.get(task.project) or task.project,
                 "assignees": assignees,
                 "mine": user in assignees,
@@ -833,7 +907,7 @@ def get_team_workload(project: str | None = None, customer: str | None = None) -
         "Task",
         filters=task_filters,
         or_filters={"status": ("!=", "Completed"), "completed_on": (">=", week_ago)},
-        fields=[*TASK_FIELDS, "completed_on", "custom_estimated_hours"],
+        fields=[*TASK_FIELDS, "completed_on"],
         limit_page_length=0,
     )
     ticket_filters = {"status_category": ("in", ["Open", "Paused"])}
@@ -850,6 +924,7 @@ def get_team_workload(project: str | None = None, customer: str | None = None) -
         )
     )
     names = _project_names(tasks)
+    holders = hold_by_names(tasks)
 
     rows = {
         person: {
@@ -870,7 +945,7 @@ def get_team_workload(project: str | None = None, customer: str | None = None) -
         for person in people
     }
     for task in tasks:
-        item = _task_item(task, names)
+        item = _task_item(task, names, hold_names=holders)
         for person in item["assignees"]:
             row = rows.get(person)
             if not row:
@@ -924,10 +999,13 @@ def get_team_workload(project: str | None = None, customer: str | None = None) -
             as_list=True,
         )
     )
+    # someone on approved leave today has no room, whatever their open work
+    away = on_leave(today, list(rows))
     team = []
     for row in rows.values():
         row["full_name"] = full_names.get(row["user"]) or row["user"]
         row["estimated_hours"] = round(row["estimated_hours"], 1)
+        row["on_leave"] = row["user"] in away
         team.append(row)
     team.sort(key=lambda r: (-r["overdue"], -r["open"], r["full_name"]))
     return {
@@ -935,7 +1013,11 @@ def get_team_workload(project: str | None = None, customer: str | None = None) -
         "totals": {
             "people": len(team),
             "working_now": sum(1 for r in team if r["working"]),
-            "free": sum(1 for r in team if not r["open"] and not r["tickets"]),
+            "free": sum(
+                1
+                for r in team
+                if not r["open"] and not r["tickets"] and not r["on_leave"]
+            ),
             "open": sum(r["open"] for r in team),
             "overdue": sum(r["overdue"] for r in team),
             "review": sum(r["review"] for r in team),
@@ -954,6 +1036,7 @@ PORTFOLIO_TASK_FIELDS = [
     "exp_end_date",
     "is_milestone",
     "_assign",
+    *TIMER_FIELDS,
 ]
 PROJECT_FIELDS = [
     "name",
@@ -1116,7 +1199,7 @@ def _portfolio_card(project, tasks: list, roles: dict, today) -> dict:
             continue
         counts["open"] += 1
         deadline = getdate(task.exp_end_date) if task.exp_end_date else None
-        is_overdue = bool(deadline and deadline < today and task.status != ON_HOLD)
+        is_overdue = is_task_overdue(task, deadline, today)
         counts["overdue"] += is_overdue
         if task.status == "Working":
             counts["working"] += 1

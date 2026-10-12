@@ -14,7 +14,12 @@ from helpdesk.api.agent_home.utils import (
     get_ticket_count,
 )
 from helpdesk.api.analytics_utils import get_avg_time_metric
-from helpdesk.utils import agent_only, format_time_difference
+from helpdesk.utils import (
+    agent_only,
+    assigned_names_query,
+    assigned_to_filter,
+    format_time_difference,
+)
 
 
 @frappe.whitelist()
@@ -98,9 +103,11 @@ def get_agent_tickets(period: str = "last month"):
             .where(Ticket.creation >= from_date)
             .where(Ticket.creation < to_date_plus_one)
             .where(
-                Function(
-                    "JSON_SEARCH", Ticket._assign, "one", frappe.session.user
-                ).isnotnull()
+                Ticket.name.isin(
+                    assigned_names_query(
+                        "HD Ticket", frappe.session.user, finished=False
+                    )
+                )
             )
             .groupby(creation_date)
             .orderby(creation_date)
@@ -180,7 +187,7 @@ def get_recent_feedback(
     # Base query conditions
     base_conditions = [
         Ticket.feedback_rating > 0,
-        Function("JSON_SEARCH", Ticket._assign, "one", agent).isnotnull(),
+        Ticket.name.isin(assigned_names_query("HD Ticket", agent, finished=False)),
     ]
     if period_filter:
         base_conditions.append(Ticket.creation >= period_filter)
@@ -338,7 +345,9 @@ def get_avg_time_metrics(
         )
         .where(Ticket.creation >= current_from)
         .where(Ticket.creation < to_date_plus_one)
-        .where(Function("JSON_SEARCH", Ticket._assign, "one", agent).isnotnull())
+        .where(
+            Ticket.name.isin(assigned_names_query("HD Ticket", agent, finished=False))
+        )
         .groupby(year_val, month_val)
         .orderby(year_val)
         .orderby(month_val)
@@ -394,7 +403,9 @@ def get_avg_time_metrics(
         )
         .where(Ticket.creation >= current_from)
         .where(Ticket.creation < to_date_plus_one)
-        .where(Function("JSON_SEARCH", Ticket._assign, "one", agent).isnotnull())
+        .where(
+            Ticket.name.isin(assigned_names_query("HD Ticket", agent, finished=False))
+        )
         .run(as_dict=True)
     )
 
@@ -434,12 +445,20 @@ def _get_priority_range():
     return min_priority, max_priority
 
 
+def _assigned_to_me() -> list:
+    """Tickets assigned to the current agent now, matched exactly through their ToDos."""
+    return [
+        "name",
+        *assigned_to_filter("HD Ticket", frappe.session.user, finished=False),
+    ]
+
+
 def _get_upcoming_sla_tickets(limit=10):
     filters = [
         ["sla", "is", "set"],
         ["agreement_status", "in", ["First Response Due", "Resolution Due"]],
         ["status_category", "=", "Open"],
-        ["_assign", "like", f"%{frappe.session.user}%"],
+        _assigned_to_me(),
         ["creation", "between", [add_months(today(), -6), today()]],
     ]
 
@@ -521,7 +540,6 @@ def _get_new_tickets(limit=10):
 
     filters = [
         ["name", "in", ticket_names],
-        ["_assign", "like", f"%{frappe.session.user}%"],
         ["status_category", "=", "Open"],
         ["creation", "between", [add_months(today(), -6), today()]],
     ]
@@ -555,7 +573,7 @@ def _get_new_tickets(limit=10):
 
 def _get_pending_response_tickets(limit=10):
     filters = [
-        ["_assign", "like", f"%{frappe.session.user}%"],
+        _assigned_to_me(),
         ["status_category", "=", "Open"],
         ["last_customer_response", "is", "set"],
         ["creation", "between", [add_months(today(), -6), today()]],

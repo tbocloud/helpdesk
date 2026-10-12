@@ -77,7 +77,8 @@ sections inside the AI group.
 3. **SLA** (`TicketSlaSection.vue`, when the ticket has a deadline): the policy, First response and
    Resolution badges with "Due … · 30 working min left" / "Responded …" / "Resolved …" times, and
    "Paused since" while paused. The header says when each deadline falls; this has the exact
-   times and the working time left.
+   times and the working time left. A ticket on the follow-up ladder also shows "Follow-up" with
+   its `EscalationBadge` (`custom_escalation_level`, see [follow-ups.md](follow-ups.md)).
 4. **Linked work** (`TicketLinkedWork.vue`): tasks raised from this ticket with their status, project,
    due date (red with an icon when overdue) and pull requests (`PullRequestChip`, open first, at most
    three). A task opens in `TaskDetailDialog` when the viewer may read it (`mine` decides which steps

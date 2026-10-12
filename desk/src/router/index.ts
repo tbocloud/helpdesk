@@ -3,7 +3,12 @@ import { canViewPersona, personaInterrupt } from "@/persona";
 import { useAuthStore } from "@/stores/auth";
 import { useUserStore } from "@/stores/user";
 import { isCustomerPortal } from "@/utils";
-import { CONTENT_TEAM_ROUTES } from "@/pages/content/contentTeam";
+import {
+  CONTENT_ROUTES,
+  ERP_EMPLOYEE_HIDDEN_ROUTES,
+  CONTENT_TEAM_ROUTES,
+  DM_EMPLOYEE_HIDDEN_ROUTES,
+} from "@/pages/content/contentTeam";
 import { createRouter, createWebHistory } from "vue-router";
 const { isMobileView } = useScreenSize();
 
@@ -39,6 +44,8 @@ const portalRoutes = [
     path: "/tickets",
     name: "TicketsAgent",
     component: () => import("@/pages/ticket/Tickets.vue"),
+    // System / Agent Managers and the ERP team (docs/departments.md)
+    beforeEnter: () => useAuthStore().canWorkTickets || { name: "Home" },
   },
   {
     path: "/tickets/:ticketId",
@@ -52,6 +59,7 @@ const portalRoutes = [
     name: "TicketAgentNew",
     component: () => import("@/pages/ticket/TicketNew.vue"),
     props: true,
+    beforeEnter: () => useAuthStore().canWorkTickets || { name: "Home" },
     meta: {
       onSuccessRoute: "TicketAgent",
       parent: "TicketsAgent",
@@ -208,6 +216,11 @@ const portalRoutes = [
     props: true,
   },
   {
+    path: "/my-board",
+    name: "MyBoard",
+    component: () => import("@/pages/tasky/Kanban.vue"),
+  },
+  {
     path: "/my-tasks",
     name: "TaskyMyTasks",
     component: () => import("@/pages/tasky/MyTasks.vue"),
@@ -222,6 +235,12 @@ const portalRoutes = [
     name: "WorkOverview",
     component: () => import("@/pages/work/Overview.vue"),
     beforeEnter: () => useAuthStore().canSeeOverview || { name: "Home" },
+  },
+  // everyone may open it: their own numbers and the champions, more for heads
+  {
+    path: "/team-dashboard",
+    name: "TeamDashboard",
+    component: () => import("@/pages/work/TeamDashboard.vue"),
   },
   // everyone may open it; the server decides whose numbers they see
   {
@@ -396,6 +415,23 @@ router.beforeEach(async (to, _, next) => {
   ) {
     // writers and designers land on the content calendar, not tickets
     next({ name: "ContentCalendar" });
+  } else if (
+    authStore.isDmEmployee &&
+    DM_EMPLOYEE_HIDDEN_ROUTES.has(String(to.name))
+  ) {
+    // DM Employees work on projects and content, not support
+    next({ name: "Home" });
+  } else if (
+    !authStore.inContentTeam &&
+    CONTENT_ROUTES.has(String(to.name))
+  ) {
+    // the content calendar is only for its team
+    next({ name: "Home" });
+  } else if (
+    authStore.isErpOnly &&
+    ERP_EMPLOYEE_HIDDEN_ROUTES.has(String(to.name))
+  ) {
+    next({ name: "Home" });
   } else if (to.name === "TicketAgent" && !authStore.isAgent) {
     const ticketId = to.params.ticketId;
     next({

@@ -1,0 +1,73 @@
+{
+  "v": 1,
+  "data": {
+    "name": "1279",
+    "subject": "Invoices stuck in draft after the update",
+    "customer": "Haris Traders",
+    "contact": "haris@haristraders.example",
+    "raised_by": "haris@haristraders.example",
+    "priority": "Urgent",
+    "status": "Open",
+    "status_category": "Open",
+    "sla_due": "2026-10-10 11:30:00",
+    "sla_kind": "resolution",
+    "sla_breached": false,
+    "sla_due_soon": true,
+    "assigned_to": "najath@teambackoffice.com",
+    "assignees": [
+      {
+        "user": "najath@teambackoffice.com",
+        "full_name": "Najath Thekkeyil"
+      }
+    ],
+    "team": "Billing",
+    "opened_at": "2026-10-09 16:02:11.402113",
+    "awaiting_reply": true,
+    "escalation_level": 0,
+    "conversation": [
+      {
+        "id": "c3f1a9b2",
+        "kind": "customer",
+        "author": "Haris",
+        "author_email": "haris@haristraders.example",
+        "at": "2026-10-09 16:02:11",
+        "body": "Since this morning every invoice stays in draft.",
+        "body_html": "<p>Since this morning every invoice stays in draft.</p>",
+        "attachments": [
+          {
+            "name": "8d1e2f3a4b",
+            "file_name": "screenshot.png",
+            "file_url": "/private/files/screenshot.png"
+          }
+        ]
+      },
+      {
+        "id": "k9l8m7n6",
+        "kind": "note",
+        "author": "Najath Thekkeyil",
+        "author_email": "najath@teambackoffice.com",
+        "at": "2026-10-09 16:20:45",
+        "body": "Their naming series was reset by the update.",
+        "body_html": "Their naming series was reset by the update.",
+        "attachments": []
+      },
+      {
+        "id": "p5q4r3s2",
+        "kind": "agent",
+        "author": "Najath Thekkeyil",
+        "author_email": "najath@teambackoffice.com",
+        "at": "2026-10-09 16:31:02",
+        "body": "Looking into it now, I'll update you within the hour.",
+        "body_html": "Looking into it now, I'll update you within the hour.",
+        "attachments": []
+      }
+    ],
+    "statuses": [
+      "Open",
+      "Replied",
+      "Paused",
+      "Resolved",
+      "Closed"
+    ]
+  }
+}

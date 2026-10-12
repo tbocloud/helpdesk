@@ -47,6 +47,7 @@
             v-if="item.kind === 'task' && item.slip_count"
             :count="item.slip_count"
           />
+          <EscalationBadge :level="item.escalation_level" />
           <PullRequestChip
             v-for="pr in pullRequests"
             :key="`${pr.repo}#${pr.number}`"
@@ -104,6 +105,12 @@
             />
           </span>
         </div>
+        <HoldNote
+          v-if="onHold"
+          :note="item.hold_note"
+          :by-name="item.hold_by_name"
+          class="mt-0.5"
+        />
         <div
           v-if="risks.length"
           class="mt-1 flex min-w-0 items-center gap-1 text-xs text-warning"
@@ -211,9 +218,11 @@ import LucideSquareCheck from "~icons/lucide/square-check";
 import LucideStar from "~icons/lucide/star";
 import LucideTicket from "~icons/lucide/ticket";
 import LucideTriangleAlert from "~icons/lucide/triangle-alert";
+import HoldNote from "@/pages/tasky/components/HoldNote.vue";
 import MilestoneMark from "@/pages/tasky/components/MilestoneMark.vue";
 import PullRequestChip from "@/pages/tasky/components/PullRequestChip.vue";
 import SlipBadge from "@/pages/tasky/components/SlipBadge.vue";
+import EscalationBadge from "@/components/EscalationBadge.vue";
 import TaskStatusBadge from "@/pages/tasky/components/TaskStatusBadge.vue";
 import TaskyBadge from "@/components/TaskyBadge.vue";
 import WaitingOn from "@/pages/tasky/components/WaitingOn.vue";

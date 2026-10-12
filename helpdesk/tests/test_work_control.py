@@ -5,19 +5,27 @@ from frappe.desk.doctype.notification_settings.notification_settings import (
     create_notification_settings,
 )
 from frappe.tests.utils import FrappeTestCase
-from frappe.utils import add_days, add_to_date, now_datetime, nowdate
+from frappe.utils import add_days, add_to_date, getdate, now_datetime, nowdate
 
 from helpdesk import work_reminders
-from helpdesk.api import work
+from helpdesk.api import departments, work
+from helpdesk.content_team import can_work_tickets, is_dm_employee, is_erp_only
 from helpdesk.helpdesk.doctype.hd_notification.utils import clear as clear_notifications
+from helpdesk.helpdesk.doctype.hd_ticket.hd_ticket import (
+    permission_query as ticket_permission_query,
+)
 from helpdesk.patches.v16_0_2.add_waiting_on_task_status import (
     execute as add_waiting_status,
 )
 from helpdesk.tasky import api as tasky
+from helpdesk.tasky.permissions import hidden_departments
 from helpdesk.test_utils import (
+    call_as_user,
     create_customer,
+    get_task_completed_notices,
     hold_commits,
     make_assignment,
+    make_content_post,
     make_department,
     make_project,
     make_pull_request,
@@ -26,6 +34,8 @@ from helpdesk.test_utils import (
     make_ticket,
     make_timesheet,
     make_work_summary,
+    send_task_reminder,
+    start_task_timer,
 )
 
 CUSTOMER = "Al Noor Trading LLC"
@@ -275,6 +285,446 @@ class TestMyWorkAndOverview(WorkControlCase):
         self.assertIsNone(item["summary"])
 
 
+class TestOverEstimate(WorkControlCase):
+    """A task due today is overdue once it has been worked longer than its estimate."""
+
+    def my_item(self, task):
+        items = self.as_user(DEV, work.get_my_work)["items"]
+        return next(i for i in items if i["name"] == task)
+
+    def test_due_today_and_past_its_hours_is_overdue(self):
+        task = self.make_task("Bank reconciliation", nowdate())
+        start_task_timer(task, hours_ago=3, estimated_hours=2)
+
+        self.assertTrue(self.my_item(task)["is_overdue"])
+
+    def test_due_today_within_its_hours_is_not(self):
+        task = self.make_task("Bank reconciliation", nowdate())
+        start_task_timer(task, hours_ago=1, estimated_hours=2)
+
+        self.assertFalse(self.my_item(task)["is_overdue"])
+
+    def test_due_later_waits_for_its_due_date(self):
+        task = self.make_task("Bank reconciliation", add_days(nowdate(), 1))
+        start_task_timer(task, hours_ago=3, estimated_hours=2)
+
+        self.assertFalse(self.my_item(task)["is_overdue"])
+
+    def test_paused_time_counts_and_on_hold_never_does(self):
+        task = self.make_task("Bank reconciliation", nowdate())
+        start_task_timer(task, hours_ago=0, estimated_hours=2)
+        # paused after 2.5 hours: the timer is off but the time is banked
+        frappe.db.set_value(
+            "Task", task, {"custom_timer_start": None, "custom_timer_elapsed": 2.5}
+        )
+        self.assertTrue(self.my_item(task)["is_overdue"])
+
+        frappe.db.set_value("Task", task, "status", "On Hold")
+        self.assertFalse(
+            work.is_task_overdue(
+                frappe.get_doc("Task", task), getdate(nowdate()), getdate(nowdate())
+            )
+        )
+
+    def test_overdue_work_is_not_also_at_risk(self):
+        task = self.make_task("Bank reconciliation", nowdate())
+        frappe.db.set_value("Task", task, "slip_count", 5)
+        start_task_timer(task, hours_ago=3, estimated_hours=2)
+
+        item = self.my_item(task)
+        self.assertTrue(item["is_overdue"])
+        self.assertEqual(item["risks"], [])
+
+    def test_my_tasks_carries_the_timer_for_the_overdue_check(self):
+        task = self.make_task("Bank reconciliation", nowdate())
+        start_task_timer(task, hours_ago=3, estimated_hours=2)
+
+        mine = self.as_user(DEV, tasky.get_my_tasks)
+        row = next(t for t in mine if t["name"] == task)
+        self.assertTrue(row["custom_timer_start"])
+        self.assertEqual(row["estimated_hours"], 2)
+
+    def test_no_estimate_means_no_hours_rule(self):
+        task = self.make_task("Bank reconciliation", nowdate())
+        start_task_timer(task, hours_ago=8)
+
+        self.assertFalse(self.my_item(task)["is_overdue"])
+
+
+class TestReminderRecipients(WorkControlCase):
+    def test_a_deleted_or_disabled_assignee_is_skipped_not_fatal(self):
+        task = self.make_task("Petty cash in mobile app", add_days(nowdate(), -1))
+        make_tasky_user("gone.control@work-control.example", "Gone Person")
+        frappe.db.set_value("User", "gone.control@work-control.example", "enabled", 0)
+
+        work_reminders.notify_users(
+            [
+                "ghost.control@work-control.example",
+                "gone.control@work-control.example",
+                DEV[0],
+            ],
+            "Task",
+            task,
+            "Overdue: Petty cash in mobile app",
+        )
+
+        self.assertEqual(
+            frappe.get_all(
+                "HD Notification",
+                filters={"reference_name": task, "notification_type": "Reminder"},
+                pluck="user_to",
+            ),
+            [DEV[0]],
+        )
+
+
+class TestTaskCompletedNotice(WorkControlCase):
+    """Completing a task tells whoever assigned it, live, in the helpdesk."""
+
+    def assigned_by_pm(self, subject="Bank reconciliation"):
+        task = self.make_task(subject, add_days(nowdate(), 2), assignee=None)
+        self.as_user(PM, lambda: make_assignment("Task", task, DEV[0]))
+        return task
+
+    def complete(self, task, user=DEV, **flags):
+        def run():
+            doc = frappe.get_doc("Task", task)
+            doc.flags.update(flags)
+            doc.status = "Completed"
+            doc.save(ignore_permissions=True)
+
+        self.as_user(user, run)
+
+    def test_assigner_hears_live_when_the_assignee_completes_it(self):
+        task = self.assigned_by_pm()
+        with patch("frappe.publish_realtime") as publish:
+            self.complete(task)
+
+        [notice] = get_task_completed_notices(task)
+        self.assertEqual((notice.user_to, notice.user_from), (PM[0], DEV[0]))
+        self.assertEqual(notice.message, f"{DEV[1]} completed Bank reconciliation")
+        live = [
+            c
+            for c in publish.call_args_list
+            if c.args and c.args[0] == "helpdesk:new-notification"
+        ]
+        self.assertEqual(live[-1].kwargs["user"], PM[0])
+        self.assertEqual(live[-1].args[1]["notification_type"], "Task Completed")
+
+    def test_no_notice_for_your_own_task(self):
+        task = self.make_task("Bank reconciliation", add_days(nowdate(), 2), None)
+        self.as_user(DEV, lambda: make_assignment("Task", task, DEV[0]))
+
+        self.complete(task)
+
+        self.assertEqual(get_task_completed_notices(task), [])
+
+    def test_no_notice_when_a_published_post_closes_its_tasks(self):
+        task = self.assigned_by_pm()
+
+        self.complete(task, from_content_post=True)
+
+        self.assertEqual(get_task_completed_notices(task), [])
+
+    def test_with_review_the_notice_waits_for_the_approval(self):
+        frappe.db.set_value("Project", self.project, "review_before_done", 1)
+        task = self.assigned_by_pm()
+
+        self.complete(task)
+        self.assertEqual(frappe.db.get_value("Task", task, "status"), "Pending Review")
+        self.assertEqual(get_task_completed_notices(task), [])
+
+        self.complete(task, user=LEAD)
+        [notice] = get_task_completed_notices(task)
+        # the lead approved it; the assignee did the work
+        self.assertEqual((notice.user_to, notice.user_from), (PM[0], DEV[0]))
+        self.assertEqual(notice.message, f"{DEV[1]} completed Bank reconciliation")
+
+    def test_the_completing_assignees_assigner_hears(self):
+        task = self.assigned_by_pm()
+        self.as_user(LEAD, lambda: make_assignment("Task", task, SUPPORT[0]))
+
+        self.complete(task, user=SUPPORT)
+
+        [notice] = get_task_completed_notices(task)
+        self.assertEqual((notice.user_to, notice.user_from), (LEAD[0], SUPPORT[0]))
+
+    def test_completed_again_after_reopening_is_news_again(self):
+        task = self.assigned_by_pm()
+        self.complete(task)
+        frappe.db.set_value("Task", task, "status", "Working")
+
+        self.complete(task)
+
+        self.assertEqual(len(get_task_completed_notices(task)), 2)
+
+
+class TestDepartmentWalls(WorkControlCase):
+    """DM Employees don't see the ERP department; ERP Employees don't see Digital."""
+
+    def setUp(self):
+        super().setUp()
+        from helpdesk.content_team import ensure_role
+
+        ensure_role()
+        for name in ("ERP", "Digital"):
+            make_department(name)
+        self.erp = self.department_project("ERP")
+        self.digital = self.department_project("Digital")
+        self.dm = make_tasky_user(
+            "dm.wall@work-control.example", "Riya Dm", ("DM Employee",)
+        )
+        self.erp_dev = make_tasky_user(
+            "erp.wall@work-control.example", "Ajay Erp", ("ERP Employee",)
+        )
+
+    def department_project(self, department):
+        project = make_project(f"{department} wall project", owner=PM[0]).name
+        frappe.db.set_value("Project", project, "custom_department", department)
+        task = make_task(project, f"{department} task", add_days(nowdate(), 3)).name
+        return {"project": project, "task": task}
+
+    def give_both(self, user):
+        # each takes a task on their own side; the other side is refused (tested below)
+        for side in (self.erp, self.digital):
+            try:
+                make_assignment("Task", side["task"], user)
+            except frappe.ValidationError:
+                pass
+
+    def visible(self, user):
+        def run():
+            return (
+                set(frappe.get_list("Project", pluck="name")),
+                set(frappe.get_list("Task", pluck="name")),
+                {d.name for d in departments.get_departments()},
+            )
+
+        return self.as_user((user,), run)
+
+    def test_dm_employee_never_sees_erp(self):
+        self.give_both(self.dm)
+
+        projects, tasks, depts = self.visible(self.dm)
+        self.assertIn(self.digital["project"], projects)
+        self.assertNotIn(self.erp["project"], projects)
+        self.assertIn(self.digital["task"], tasks)
+        self.assertNotIn(self.erp["task"], tasks)
+        self.assertNotIn("ERP", depts)
+        self.assertIn("Digital", depts)
+        with self.assertRaises(frappe.PermissionError):
+            self.as_user(
+                (self.dm,),
+                lambda: frappe.get_doc("Task", self.erp["task"]).check_permission(
+                    "read"
+                ),
+            )
+
+    def test_nobody_puts_a_project_on_the_other_side(self):
+        # ignore_permissions skips the role check, so only the department rule decides
+        def create(department):
+            return frappe.get_doc(
+                {
+                    "doctype": "Project",
+                    "project_name": f"DM side {department}",
+                    "custom_department": department,
+                }
+            ).insert(ignore_permissions=True)
+
+        with self.assertRaises(frappe.PermissionError):
+            self.as_user((self.dm,), lambda: create("ERP"))
+        own = self.as_user((self.dm,), lambda: create("Digital"))
+
+        def move():
+            doc = frappe.get_doc("Project", own.name)
+            doc.custom_department = "ERP"
+            doc.save(ignore_permissions=True)
+
+        with self.assertRaises(frappe.PermissionError):
+            self.as_user((self.dm,), move)
+        # a System Manager may still file it anywhere
+        doc = frappe.get_doc("Project", own.name)
+        doc.custom_department = "ERP"
+        doc.save()
+
+    def test_nobody_is_given_a_task_on_the_other_side(self):
+        with self.assertRaises(frappe.ValidationError):
+            make_assignment("Task", self.erp["task"], self.dm)
+        with self.assertRaises(frappe.ValidationError):
+            make_assignment("Task", self.digital["task"], self.erp_dev)
+        make_assignment("Task", self.digital["task"], self.dm)
+
+    def test_erp_employee_never_sees_digital_or_the_content_calendar(self):
+        self.give_both(self.erp_dev)
+        post = make_content_post("Onam offer", CUSTOMER, writer=self.erp_dev)
+
+        projects, tasks, depts = self.visible(self.erp_dev)
+        self.assertIn(self.erp["project"], projects)
+        self.assertNotIn(self.digital["project"], projects)
+        self.assertNotIn(self.digital["task"], tasks)
+        self.assertNotIn("Digital", depts)
+        posts = self.as_user(
+            (self.erp_dev,), lambda: frappe.get_list("HD Content Post", pluck="name")
+        )
+        self.assertNotIn(post.name, posts)
+
+    def test_everyone_without_those_roles_sees_everything(self):
+        # a plain agent, given a task on each side, and a Project Manager
+        for user in (DEV[0], TEAMMATE[0]):
+            make_tasky_user(user, "Plain Agent")
+        self.give_both(DEV[0])
+        make_assignment("Task", self.erp["task"], TEAMMATE[0])
+        make_assignment("Task", self.digital["task"], TEAMMATE[0])
+        pm = make_tasky_user(
+            "pm.wall@work-control.example", "Leena Pm", ("Project Manager",)
+        )
+
+        projects, tasks, depts = self.visible(DEV[0])
+        self.assertTrue({self.erp["task"], self.digital["task"]} <= tasks)
+        self.assertTrue({self.erp["project"], self.digital["project"]} <= projects)
+        self.assertTrue({"ERP", "Digital"} <= depts)
+        self.assertEqual(hidden_departments(pm), [])
+        self.assertFalse(is_erp_only(pm))
+        self.assertFalse(is_erp_only(DEV[0]))
+
+    def ticket_listed(self, user, ticket):
+        return self.as_user(
+            (user,),
+            lambda: frappe.get_list(
+                "HD Ticket", filters={"name": ticket}, pluck="name"
+            ),
+        )
+
+    def test_dm_employees_work_no_tickets(self):
+        ticket = make_ticket(subject="Invoice print is blank", customer=CUSTOMER)
+
+        self.assertTrue(is_dm_employee(self.dm))
+        self.assertFalse(can_work_tickets(self.dm))
+        self.assertIn("raised_by", ticket_permission_query(self.dm))
+        self.assertEqual(self.ticket_listed(self.dm, ticket.name), [])
+        boot = call_as_user(self.dm, "helpdesk.api.auth.get_user")
+        self.assertTrue(boot["is_dm_employee"])
+        self.assertFalse(boot["can_work_tickets"])
+        # a System Manager isn't restricted
+        frappe.get_doc("User", self.dm).add_roles("System Manager")
+        self.assertFalse(is_dm_employee(self.dm))
+        self.assertTrue(can_work_tickets(self.dm))
+
+    def test_erp_team_works_tickets_like_any_agent(self):
+        frappe.db.set_single_value("HD Settings", "restrict_tickets_by_agent_group", 0)
+        ticket = make_ticket(
+            subject="GST report totals are off",
+            customer=CUSTOMER,
+            raised_by="accounts@alnoor.example",
+        )
+
+        self.assertFalse(is_dm_employee(self.erp_dev))
+        self.assertTrue(can_work_tickets(self.erp_dev))
+        boot = call_as_user(self.erp_dev, "helpdesk.api.auth.get_user")
+        self.assertTrue(boot["can_work_tickets"])
+        self.assertFalse(boot["is_dm_employee"])
+        # the Tickets list, a ticket's page and New ticket
+        self.assertEqual(self.ticket_listed(self.erp_dev, ticket.name), [ticket.name])
+        opened = call_as_user(
+            self.erp_dev,
+            "helpdesk.helpdesk.doctype.hd_ticket.api.get_one",
+            name=ticket.name,
+        )
+        self.assertEqual(opened["name"], ticket.name)
+        raised = call_as_user(
+            self.erp_dev,
+            "helpdesk.helpdesk.doctype.hd_ticket.api.new",
+            doc={"subject": "Stock ledger won't load", "description": "Times out."},
+        )
+        self.assertEqual(raised.raised_by, self.erp_dev)
+
+    def test_erp_team_sees_only_what_agents_see(self):
+        # with team restrictions on, the ERP team gets exactly a plain agent's ticket
+        # filter (their teams and assignments), no wider
+        frappe.db.set_single_value("HD Settings", "restrict_tickets_by_agent_group", 1)
+        make_tasky_user(DEV[0], DEV[1])
+
+        def condition(user):
+            query = ticket_permission_query(user)
+            self.assertIsNotNone(query, user)
+            return query.replace(frappe.db.escape(user), "<user>")
+
+        self.assertEqual(condition(self.erp_dev), condition(DEV[0]))
+        self.assertIn("tabToDo", condition(self.erp_dev))
+
+    def test_ticket_list_gate(self):
+        make_tasky_user(DEV[0], DEV[1])
+        manager = make_tasky_user(
+            "manager.wall@work-control.example", "Sona Manager", ("Agent Manager",)
+        )
+        self.assertTrue(can_work_tickets("Administrator"))
+        self.assertTrue(can_work_tickets(manager))
+        # an agent with no wall (a developer) keeps the ticket permissions they had,
+        # but not the Tickets list
+        self.assertFalse(can_work_tickets(DEV[0]))
+        self.assertNotIn("raised_by", ticket_permission_query(DEV[0]) or "")
+        # holding both walls, the Digital one wins: no tickets
+        frappe.get_doc("User", self.erp_dev).add_roles("DM Employee")
+        self.assertFalse(can_work_tickets(self.erp_dev))
+
+    def test_managers_see_every_department(self):
+        projects, _, depts = self.visible("Administrator")
+        self.assertTrue({self.erp["project"], self.digital["project"]} <= projects)
+        self.assertTrue({"ERP", "Digital"} <= depts)
+
+
+class TestMyBoard(WorkControlCase):
+    """The sidebar's Board: your own tasks from every project, by status."""
+
+    def board(self, user=DEV):
+        columns = self.as_user(user, tasky.get_kanban_tasks)["columns"]
+        return {t["name"]: (status, t) for status, ts in columns.items() for t in ts}
+
+    def test_your_tasks_from_every_project(self):
+        other = make_project("Second rollout", members=[(DEV[0], "Developer")]).name
+        here = self.make_task("Close GL", add_days(nowdate(), 2))
+        there = make_task(other, "Train users", add_days(nowdate(), 4)).name
+        make_assignment("Task", there, DEV[0])
+        someone_else = self.make_task("Phase 2 scoping", add_days(nowdate(), 9), LEAD)
+
+        cards = self.board()
+        self.assertTrue({here, there} <= set(cards))
+        self.assertNotIn(someone_else, cards)
+        self.assertEqual(cards[there][1]["project_name"], "Second rollout")
+        self.assertEqual(cards[here][0], "Open")
+
+    def test_finished_work_stays_a_month(self):
+        recent = self.make_task("Close GL", add_days(nowdate(), -2))
+        old = self.make_task("Opening balances", add_days(nowdate(), -60))
+        for task in (recent, old):
+            frappe.db.set_value("Task", task, "status", "Completed")
+        frappe.db.set_value(
+            "Task",
+            old,
+            "modified",
+            add_days(now_datetime(), -45),
+            update_modified=False,
+        )
+
+        cards = self.board()
+        self.assertIn(recent, cards)
+        self.assertNotIn(old, cards)
+
+    def test_underscore_in_your_id_is_not_a_wildcard(self):
+        jane = make_tasky_user("jane_doe@work-control.example", "Jane Doe")
+        other = make_tasky_user("janeXdoe@work-control.example", "Jane Xavier")
+        # jane leads the project, so she can read the other Jane's task
+        frappe.db.set_value("Project", self.project, "project_lead", jane)
+        mine = self.make_task("Close GL", add_days(nowdate(), 2), assignee=None)
+        theirs = self.make_task("Train users", add_days(nowdate(), 2), assignee=None)
+        make_assignment("Task", mine, jane)
+        make_assignment("Task", theirs, other)
+
+        cards = self.board(user=(jane, "Jane Doe"))
+        self.assertIn(mine, cards)
+        self.assertNotIn(theirs, cards)
+
+
 class TestTicketToTask(WorkControlCase):
     def make_ticket(self, customer=CUSTOMER):
         ticket = make_ticket(
@@ -384,46 +834,6 @@ class TestTicketToTask(WorkControlCase):
         self.assertEqual([pr["number"] for pr in item["pull_requests"]], [8, 7])
 
 
-class TestReminders(WorkControlCase):
-    def test_task_stages_reach_the_right_people_once(self):
-        soon = self.make_task("Data migration", add_days(nowdate(), 1))
-        late = self.make_task("Opening balances", add_days(nowdate(), -1))
-        very_late = self.make_task(
-            "Go-live checklist", add_days(nowdate(), -5), is_key=1
-        )
-
-        work_reminders.send_task_reminders()
-        work_reminders.send_task_reminders()  # a second run must not repeat anything
-
-        self.assertEqual(len(self.notified(DEV, soon)), 1)
-        self.assertEqual(len(self.notified(LEAD, late)), 1)
-        self.assertEqual(self.notified(LEAD, soon), [])
-        escalations = [s for s in self.notified(PM, very_late) if "Escalated" in s]
-        self.assertEqual(len(escalations), 1)
-        self.assertIn("Key task", escalations[0])
-
-    def test_breached_ticket_goes_to_agent_managers(self):
-        manager = ("manager.control@work-control.example", "Divya Menon")
-        make_tasky_user(*manager, roles=("Agent Manager",))
-        ticket = make_ticket(subject="Payroll run failed", customer=CUSTOMER)
-        make_assignment("HD Ticket", ticket.name, SUPPORT[0])
-        frappe.db.set_value(
-            "HD Ticket",
-            ticket.name,
-            "resolution_by",
-            add_to_date(now_datetime(), hours=-2),
-        )
-
-        work_reminders.send_ticket_reminders()
-
-        self.assertTrue(
-            any("SLA breached" in s for s in self.notified(SUPPORT, ticket.name))
-        )
-        self.assertTrue(
-            any("SLA breached" in s for s in self.notified(manager, ticket.name))
-        )
-
-
 class TestTaskHold(WorkControlCase):
     def hold(self, task, reason="Laptop / system issue", days_ago=0):
         self.as_user(
@@ -500,18 +910,6 @@ class TestTaskHold(WorkControlCase):
         self.assertEqual(doc.status, "Working")
         self.assertEqual(doc.hold_days_total, 1)
 
-    def test_held_tasks_skip_due_reminders_and_escalate_when_stuck(self):
-        task = self.make_task("Bank reconciliation", add_days(nowdate(), -4))
-        self.hold(task, days_ago=4)
-
-        work_reminders.send_task_reminders()
-        work_reminders.send_hold_reminders()
-        work_reminders.send_hold_reminders()
-
-        self.assertFalse(any("Overdue" in s for s in self.notified(DEV, task)))
-        stuck = [s for s in self.notified(PM, task) if "On hold for over" in s]
-        self.assertEqual(len(stuck), 1)
-
     def test_overview_lists_held_work(self):
         task = self.make_task("Tally migration", add_days(nowdate(), -1))
         self.hold(task)
@@ -519,12 +917,64 @@ class TestTaskHold(WorkControlCase):
         self.assertIn(task, {i["name"] for i in result["buckets"]["on_hold"]})
         self.assertNotIn(task, {i["name"] for i in result["buckets"]["overdue"]})
 
+    def test_board_shows_why_and_who_put_the_task_on_hold(self):
+        task = self.make_task("Configure GST reports", add_days(nowdate(), 3))
+        self.hold(task)
+
+        board = self.as_user(
+            DEV,
+            lambda: frappe.call(
+                "helpdesk.tasky.api.get_kanban_tasks", project=self.project
+            ),
+        )
+        card = next(t for t in board["columns"]["On Hold"] if t["name"] == task)
+        self.assertEqual(card["hold_note"], "Laptop sent for repair")
+        self.assertEqual(card["hold_by"], DEV[0])
+        self.assertEqual(card["hold_by_name"], DEV[1])
+
+        item = next(
+            i
+            for i in self.as_user(
+                DEV, lambda: frappe.call("helpdesk.api.work.get_my_work")
+            )["items"]
+            if i["name"] == task
+        )
+        self.assertEqual(item["hold_note"], "Laptop sent for repair")
+        self.assertEqual(item["hold_by_name"], DEV[1])
+
+    def test_other_needs_a_note(self):
+        task = self.make_task("Set up branch warehouses", add_days(nowdate(), 3))
+        for note in ("", "   "):
+            with self.assertRaises(frappe.ValidationError):
+                self.as_user(
+                    DEV,
+                    lambda note=note: frappe.call(
+                        "helpdesk.tasky.api.hold_task",
+                        task=task,
+                        reason="Other",
+                        note=note,
+                    ),
+                )
+        self.assertEqual(frappe.db.get_value("Task", task, "status"), "Open")
+
+    def test_resume_clears_who_put_it_on_hold(self):
+        task = self.make_task("Opening stock upload", add_days(nowdate(), 3))
+        self.hold(task)
+
+        self.as_user(
+            DEV, lambda: frappe.call("helpdesk.tasky.api.resume_task", task=task)
+        )
+
+        hold_by, hold_note = frappe.db.get_value("Task", task, ["hold_by", "hold_note"])
+        self.assertIsNone(hold_by)
+        self.assertIsNone(hold_note)
+
 
 class TestReminderDelivery(WorkControlCase):
     def test_reminder_opens_the_project_and_is_emailed(self):
         task = self.make_task("Share UAT build", add_days(nowdate(), 1))
         with patch("frappe.sendmail") as sendmail:
-            work_reminders.send_task_reminders()
+            send_task_reminder(task)
 
         note = frappe.get_last_doc(
             "HD Notification", filters={"user_to": DEV[0], "reference_name": task}
@@ -536,7 +986,7 @@ class TestReminderDelivery(WorkControlCase):
         )
 
     def test_no_email_when_the_person_turned_email_off(self):
-        self.make_task("Share UAT build", add_days(nowdate(), 1))
+        task = self.make_task("Share UAT build", add_days(nowdate(), 1))
         if not frappe.db.exists("Notification Settings", DEV[0]):
             create_notification_settings(DEV[0])
         frappe.db.set_value(
@@ -544,14 +994,15 @@ class TestReminderDelivery(WorkControlCase):
         )
         frappe.clear_document_cache("Notification Settings", DEV[0])
         with patch("frappe.sendmail") as sendmail:
-            work_reminders.send_task_reminders()
+            send_task_reminder(task)
         self.assertFalse(sendmail.called)
 
     def test_clearing_one_reminder_leaves_the_rest_unread(self):
         first = self.make_task("Share UAT build", add_days(nowdate(), 1))
         second = self.make_task("Collect sign-off", add_days(nowdate(), 1))
         with patch("frappe.sendmail"):
-            work_reminders.send_task_reminders()
+            send_task_reminder(first)
+            send_task_reminder(second)
         one = frappe.get_last_doc(
             "HD Notification", filters={"reference_name": first, "user_to": DEV[0]}
         )
@@ -1119,10 +1570,17 @@ class TestTeamTimesheets(WorkControlCase):
             )
             return {t["owner"] for t in rows}
 
+        # completing logs time from "now minus hours worked", which is yesterday in
+        # the first hours after midnight; filter by the day it was actually logged
+        logged_on = str(
+            getdate(
+                frappe.db.get_value("Timesheet Detail", {"task": task}, "from_time")
+            )
+        )
         self.assertEqual(names(agent=DEV[0]), {DEV[0]})
         self.assertEqual(names(agent=LEAD[0]), set())
-        self.assertEqual(names(agent=DEV[0], from_date=nowdate()), {DEV[0]})
-        self.assertEqual(names(from_date=add_days(nowdate(), 1)), set())
+        self.assertEqual(names(agent=DEV[0], from_date=logged_on), {DEV[0]})
+        self.assertEqual(names(from_date=add_days(logged_on, 1)), set())
 
         # entered today for work done ten days ago: it belongs to that date
         late = self.as_user(

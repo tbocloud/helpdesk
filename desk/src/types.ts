@@ -699,6 +699,15 @@ export interface HDSettings {
   disableSavedRepliesGlobalScope: boolean;
   enableOutsideHoursBanner: boolean;
   outsideWorkingHoursBannerMessage: string;
+  enableMobilePush: boolean;
+  enableMicrosoftSso: boolean;
+  microsoftTenantId: string;
+  microsoftClientId: string;
+  mobileOauthClient: string;
+  offboardRemovedMicrosoftUsers: boolean;
+  offboardingDomains: string;
+  offboardingDryRun: boolean;
+  offboardingMaxDisables: number;
 }
 
 export interface HolidayList {

@@ -86,7 +86,7 @@
                   placeholder="Search"
                 />
                 <button
-                  class="absolute right-0 inline-flex h-7 w-7 items-center justify-center"
+                  class="touch-target absolute right-0 inline-flex h-7 w-7 items-center justify-center"
                   @click="selectedValue = null"
                 >
                   <FeatherIcon name="x" class="w-4" />

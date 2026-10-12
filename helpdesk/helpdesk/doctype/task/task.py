@@ -11,6 +11,7 @@ from helpdesk.automation import acting_user
 WAITING_ON_TASK = "Waiting on Task"
 ON_HOLD = "On Hold"
 PENDING_REVIEW = "Pending Review"
+TASK_COMPLETED = "Task Completed"
 DONE = ("Completed", "Cancelled")
 # a task can't enter these while the task it depends on is still open
 NEEDS_DEPENDENCY_DONE = ("Working", PENDING_REVIEW, "Completed")
@@ -18,11 +19,13 @@ NEEDS_DEPENDENCY_DONE = ("Working", PENDING_REVIEW, "Completed")
 
 class Task(Document):
     def validate(self):
+        self.check_project_move()
         self.validate_dependency()
         self.track_hold()
         self.route_completion_to_review()
         self.track_slip()
         self.set_completed_on()
+        self.clear_escalation()
         self.unmark_ai_description_when_edited()
 
     def after_insert(self):
@@ -36,6 +39,60 @@ class Task(Document):
         self.unblock_dependents()
         self.advance_content_post()
         self.clarify_signoff_item()
+        self.tell_assigner_it_is_done()
+        self.refresh_follow_ups()
+
+    def clear_escalation(self):
+        """Done, cancelled or on hold: off the follow-up ladder (docs/follow-ups.md)."""
+        if self.status in (*DONE, ON_HOLD) and self.get("escalation_level"):
+            self.escalation_level = 0
+            self.escalated_on = None
+
+    def refresh_follow_ups(self):
+        """A task that moved leaves the follow-up banner now, not in a few minutes."""
+        from helpdesk.follow_ups import clear_cache
+
+        if self.status_changed() or self.has_value_changed("exp_end_date"):
+            clear_cache()
+
+    def tell_assigner_it_is_done(self):
+        """Whoever gave out the task hears when it's completed, in the helpdesk with a chime.
+
+        Not when they completed (or approved) it themselves or took it themselves, and not
+        when a published or cancelled content post closes its tasks all at once.
+        """
+        from helpdesk.tasky.permissions import get_assigners
+        from helpdesk.work_reminders import notify_users
+
+        if (
+            self.status != "Completed"
+            or not self.status_changed()
+            or self.flags.from_content_post
+        ):
+            return
+        assignees = self.assignees()
+        done_by = frappe.session.user
+        # the completing assignee's assigner; on a lead's approval, the first assignee's
+        worker = (
+            done_by if done_by in assignees else (assignees[0] if assignees else None)
+        )
+        assigner = get_assigners({self.name: worker}).get(self.name)
+        if not assigner or assigner in (done_by, worker):
+            return
+        # on review projects a lead's approval completes it; the assignees did the work
+        workers = assignees if assignees and done_by not in assignees else [done_by]
+        notify_users(
+            [assigner],
+            "Task",
+            self.name,
+            _("{0} completed {1}").format(
+                ", ".join(frappe.utils.get_fullname(u) for u in workers), self.subject
+            ),
+            notification_type=TASK_COMPLETED,
+            user_from=workers[0],
+            # a task reopened and completed again is news again
+            once=False,
+        )
 
     def clarify_signoff_item(self):
         """Completing a sign-off's clarification task returns its item to the customer."""
@@ -105,6 +162,41 @@ class Task(Document):
         before = self.get_doc_before_save()
         return not before or before.status != self.status
 
+    def check_project_move(self):
+        """Moving a task to another project follows `can_move_task`, however it's saved.
+
+        Writing to a task (a coordinator may write every task of their project) doesn't
+        let anyone change its project from a plain form save; move_task_to_project checks
+        the same rule and saves with ignore_permissions, as do system jobs."""
+        from helpdesk.tasky.permissions import (
+            can_add_tasks,
+            can_move_task,
+            get_assigners,
+        )
+
+        if self.is_new() or self.flags.ignore_permissions:
+            return
+        before = self.get_doc_before_save()
+        if not before or before.project == self.project:
+            return
+        # the stored assignment, not what the form sent
+        assignees = before.assignees()
+        assigner = (
+            get_assigners({self.name: assignees[0]}).get(self.name)
+            if assignees
+            else None
+        )
+        allowed = can_move_task(before.project, assigner, assignees) and (
+            not self.project or can_add_tasks(self.project)
+        )
+        if not allowed:
+            frappe.throw(
+                _(
+                    "Only the person who assigned this task, or the project's manager or lead, can move it, and only to a project they can add tasks to."
+                ),
+                frappe.PermissionError,
+            )
+
     def validate_dependency(self):
         """Same project, no loops, and the task it waits on must be done before this one moves on."""
         if not self.depends_on_task:
@@ -144,7 +236,7 @@ class Task(Document):
 
     def route_completion_to_review(self):
         """On projects that want it, a team member's "done" goes to the lead first."""
-        from helpdesk.tasky.permissions import can_manage_project
+        from helpdesk.tasky.permissions import can_coordinate_project
 
         # a published or cancelled content post closes its tasks without a review round
         if (
@@ -159,7 +251,7 @@ class Task(Document):
             "Project", self.project, "review_before_done"
         ):
             return
-        if self.status == "Completed" and can_manage_project(self.project):
+        if self.status == "Completed" and can_coordinate_project(self.project):
             return
         self.status = PENDING_REVIEW
         self.flags.review_requested = True
@@ -288,11 +380,15 @@ class Task(Document):
         return bool(before) and before.status == ON_HOLD and self.status != ON_HOLD
 
     def start_hold(self):
-        """Record why and since when; a running timer stops so the hold isn't counted as work."""
+        """Record why, by whom and since when; a running timer stops so the hold isn't counted as work."""
         if not self.hold_reason:
             frappe.throw(_("Choose why the task is on hold."))
+        # "Other" alone tells the lead nothing, so the note has to say what is blocking it
+        if self.hold_reason == "Other" and not (self.hold_note or "").strip():
+            frappe.throw(_("Say why the task is on hold when the reason is Other."))
         before = self.get_doc_before_save()
         self.hold_since = nowdate()
+        self.hold_by = frappe.session.user
         self.hold_previous_status = before.status if before else "Open"
         if self.get("custom_timer_start"):
             hours = (
@@ -322,6 +418,7 @@ class Task(Document):
         self.hold_reason = None
         self.hold_note = None
         self.hold_since = None
+        self.hold_by = None
         self.hold_previous_status = None
 
     def announce_hold(self):

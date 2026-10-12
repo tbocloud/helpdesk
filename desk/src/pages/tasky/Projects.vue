@@ -119,6 +119,7 @@
               :value="endingSoon.length"
               :sub="pastEnd.length ? pastEndSub : undefined"
               :icon="LucideCalendarClock"
+              icon-tone="info"
               :loading="isLoading"
               :pressed="show === 'ending'"
               :aria-controls="listId"
@@ -130,38 +131,24 @@
           <div
             class="mt-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between"
           >
-            <div
-              class="-mx-1 flex min-w-0 gap-1 overflow-x-auto px-1"
-              role="tablist"
-              :aria-label="__('Filter projects by status')"
-            >
-              <button
-                v-for="tab in STATUS_TABS"
-                :key="tab"
-                type="button"
-                role="tab"
-                :aria-selected="activeStatus === tab"
+            <div class="-mx-1 min-w-0 overflow-x-auto px-1">
+              <TabButtons
+                :model-value="activeStatus"
+                size="md"
+                :aria-label="__('Filter projects by status')"
                 :aria-controls="listId"
-                class="flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
-                :class="
-                  activeStatus === tab
-                    ? 'bg-surface-gray-3 text-ink-gray-9'
-                    : 'text-ink-gray-6 hover:bg-surface-gray-2 hover:text-ink-gray-8'
-                "
-                @click="setStatus(tab)"
+                :options="STATUS_TABS.map((t) => ({ label: __(t), value: t }))"
+                @update:model-value="setStatus($event)"
               >
-                {{ __(tab) }}
-                <span
-                  class="rounded px-1 font-mono text-xs tabular-nums"
-                  :class="
-                    activeStatus === tab
-                      ? 'bg-surface-base text-ink-gray-8'
-                      : 'text-ink-gray-5'
-                  "
-                >
-                  {{ countFor(tab) }}
-                </span>
-              </button>
+                <template #suffix="{ button, checked }">
+                  <span
+                    class="font-mono text-xs tabular-nums"
+                    :class="checked ? '' : 'text-ink-gray-5'"
+                  >
+                    {{ countFor(button.modelValue) }}
+                  </span>
+                </template>
+              </TabButtons>
             </div>
             <TextInput
               v-model="search"
@@ -373,7 +360,7 @@ import TaskyState from "@/components/TaskyState.vue";
 import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
 import { watchDebounced } from "@vueuse/core";
-import { Button, TextInput, createResource } from "frappe-ui";
+import { Button, TabButtons, TextInput, createResource } from "frappe-ui";
 import { computed, reactive, ref, useId, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";

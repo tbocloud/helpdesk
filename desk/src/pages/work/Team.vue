@@ -32,32 +32,20 @@
           class="mt-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between"
         >
           <!-- View switch -->
-          <div
-            class="inline-flex gap-1 self-start rounded-lg bg-surface-gray-2 p-0.5 lg:self-auto"
-            role="tablist"
-            :aria-label="__('Show the team')"
-          >
-            <button
-              v-for="option in VIEWS"
-              :key="option.key"
-              type="button"
-              role="tab"
-              :aria-selected="view === option.key"
-              class="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
-              :class="
-                view === option.key
-                  ? 'bg-surface-base text-ink-gray-9 shadow-sm'
-                  : 'text-ink-gray-6 hover:text-ink-gray-8'
+          <div class="max-w-full self-start overflow-x-auto lg:self-auto">
+            <TabButtons
+              :model-value="view"
+              size="md"
+              :aria-label="__('Show the team')"
+              :options="
+                VIEWS.map((o) => ({
+                  label: o.label,
+                  value: o.key,
+                  iconLeft: o.icon,
+                }))
               "
-              @click="setView(option.key)"
-            >
-              <component
-                :is="option.icon"
-                class="hidden size-4 sm:block"
-                aria-hidden="true"
-              />
-              {{ option.label }}
-            </button>
+              @update:model-value="setView($event as View)"
+            />
           </div>
 
           <!-- Filters -->
@@ -248,6 +236,13 @@
                       <div class="truncate font-mono text-xs text-ink-gray-5">
                         {{ person.user }}
                       </div>
+                      <TaskyBadge
+                        v-if="leaveLabel(person.user)"
+                        class="mt-1"
+                        tone="info"
+                        :icon="LucideTreePalm"
+                        :label="leaveLabel(person.user)"
+                      />
                     </div>
                     <LucideChevronRight
                       class="size-4 shrink-0 text-ink-gray-4 xl:hidden"
@@ -463,7 +458,13 @@ import StatTile from "@/components/StatTile.vue";
 import TaskyBadge from "@/components/TaskyBadge.vue";
 import TaskyState from "@/components/TaskyState.vue";
 import { __ } from "@/translation";
-import { Button, createResource, dayjs, FormControl } from "frappe-ui";
+import {
+  Button,
+  createResource,
+  dayjs,
+  FormControl,
+  TabButtons,
+} from "frappe-ui";
 import { computed, reactive, ref, useId, watch, type Component } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
@@ -477,8 +478,10 @@ import LucideFolderKanban from "~icons/lucide/folder-kanban";
 import LucideGauge from "~icons/lucide/gauge";
 import LucidePause from "~icons/lucide/pause";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
+import LucideTreePalm from "~icons/lucide/tree-palm";
 import LucideUsers from "~icons/lucide/users";
 import LucideX from "~icons/lucide/x";
+import { useOnLeave } from "@/composables/onLeave";
 import CapacityPlanner from "./components/CapacityPlanner.vue";
 import ProjectPortfolio from "./components/ProjectPortfolio.vue";
 
@@ -502,6 +505,8 @@ interface Person {
   tickets: number;
   sla_breached: number;
   estimated_hours: number;
+  /** on approved leave today (a whole day), so not free */
+  on_leave: boolean;
 }
 
 interface Totals {
@@ -563,6 +568,7 @@ const GRID =
 
 const route = useRoute();
 const router = useRouter();
+const { leaveLabel } = useOnLeave();
 const tableId = `team-people-${useId()}`;
 
 function queryValue(key: string) {
@@ -773,8 +779,9 @@ const tiles = computed<Tile[]>(() => {
 
 const showTile = computed(() => tiles.value.find((t) => t.key === show.value));
 
+// the server's totals.free counts the same people
 function isFree(person: Person) {
-  return !person.open && !person.tickets;
+  return !person.open && !person.tickets && !person.on_leave;
 }
 
 function workingOnTitle(person: Person) {

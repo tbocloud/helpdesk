@@ -1,0 +1,78 @@
+{
+ "actions": [],
+ "autoname": "hash",
+ "creation": "2026-10-11 12:00:00.000000",
+ "description": "Who offboarding from Microsoft disabled, why and when (helpdesk.offboarding).",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "user",
+  "full_name",
+  "reason",
+  "disabled_on"
+ ],
+ "fields": [
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "User",
+   "options": "User",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fetch_from": "user.full_name",
+   "fieldname": "full_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Full name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reason",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Reason",
+   "options": "Disabled in Microsoft\nNot in Microsoft",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "disabled_on",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Disabled on",
+   "read_only": 1,
+   "reqd": 1
+  }
+ ],
+ "in_create": 1,
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-11 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Helpdesk",
+ "name": "HD Offboarding Log",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "delete": 1,
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Agent Manager"
+  }
+ ],
+ "sort_field": "disabled_on",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "full_name"
+}

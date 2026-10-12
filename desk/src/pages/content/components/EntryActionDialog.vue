@@ -56,6 +56,16 @@
         </template>
 
         <FormControl
+          v-if="action === 'head_send_back'"
+          v-model="reason"
+          type="textarea"
+          :rows="3"
+          :label="__('What needs to change')"
+          :placeholder="__('e.g. Use the new logo, shorten the caption')"
+          required
+        />
+
+        <FormControl
           v-if="action === 'cancel'"
           v-model="reason"
           type="textarea"
@@ -66,9 +76,10 @@
 
         <template v-if="action === 'assign'">
           <!-- picks made before everyone on the role loads would be overwritten -->
-          <PeoplePicker
+          <RoleHoursField
             v-if="teamLoaded"
-            v-model="people"
+            v-model:people="people"
+            v-model:hours="hours"
             :label="__(roleLabel)"
             :placeholder="__('Pick one or more people')"
           />
@@ -78,7 +89,7 @@
           <p class="text-p-sm text-ink-gray-5">
             {{
               __(
-                "Everyone on this gets the post's task for it. Remove everyone to unassign."
+                "Everyone on this gets the post's task for it, with these hours. Remove everyone to unassign."
               )
             }}
           </p>
@@ -116,7 +127,7 @@ import {
   toast,
 } from "frappe-ui";
 import { computed, ref, watch } from "vue";
-import PeoplePicker from "./PeoplePicker.vue";
+import RoleHoursField from "./RoleHoursField.vue";
 import {
   type ContentPost,
   type EntryAction,
@@ -138,6 +149,7 @@ const date = ref("");
 const time = ref("10:00");
 const reason = ref("");
 const people = ref<string[]>([]);
+const hours = ref<number | string | null>(null);
 const error = ref("");
 const saving = ref(false);
 // saving before everyone on the role has loaded would take the others off it
@@ -164,6 +176,22 @@ const copy = computed(() => {
         ),
         submit: __("Postpone"),
       };
+    case "head_approve":
+      return {
+        title: __("Approve this post"),
+        help: __(
+          "The client has approved it. Once you approve, the team can schedule and publish it, and the digital marketer is told."
+        ),
+        submit: __("Approve"),
+      };
+    case "head_send_back":
+      return {
+        title: __("Send back to the team"),
+        help: __(
+          "It moves to Changes Requested, and the writer, designer and video editor are told what to change."
+        ),
+        submit: __("Send back"),
+      };
     case "cancel":
       return {
         title: __("Cancel this post"),
@@ -188,6 +216,8 @@ watch(open, (isOpen) => {
   url.value = props.post.published_url || "";
   people.value =
     props.role && props.post[props.role] ? [props.post[props.role]!] : [];
+  // 0 shows as an empty box, the same as never estimated
+  hours.value = (props.role && props.post[`${props.role}_hours`]) || null;
   const request = ++teamRequest;
   teamLoaded.value = true;
   if (props.action === "assign" && props.role) {
@@ -242,6 +272,17 @@ async function submit() {
           dayjs(`${date.value} ${time.value}`).format("D MMM, h:mm A")
         )
       );
+    } else if (props.action === "head_approve") {
+      await call("helpdesk.api.content_board.head_approve", {
+        post: post.name,
+      });
+      toast.success(__("Approved"));
+    } else if (props.action === "head_send_back") {
+      await call("helpdesk.api.content_board.head_send_back", {
+        post: post.name,
+        reason: reason.value,
+      });
+      toast.success(__("Sent back to the team"));
     } else if (props.action === "cancel") {
       await call("helpdesk.api.content_board.cancel", {
         post: post.name,
@@ -253,6 +294,8 @@ async function submit() {
         post: post.name,
         role: props.role,
         users: people.value,
+        // the box starts with the post's hours, so empty means none
+        hours: Number(hours.value) || 0,
       });
       toast.success(
         people.value.length ? __("Team updated") : __("Unassigned")

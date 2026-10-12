@@ -14,7 +14,7 @@
     >
       <fieldset class="flex flex-col gap-1.5">
         <legend class="mb-1.5 text-xs text-ink-gray-5">
-          {{ __("Why is it on hold?") }}
+          {{ __("Reason") }}
           <span class="text-danger" aria-hidden="true">*</span>
         </legend>
         <label
@@ -41,13 +41,16 @@
 
       <Textarea
         v-model="note"
-        :label="__('Note')"
+        :label="noteRequired ? __('Why is it on hold?') : __('Note')"
+        :required="noteRequired"
+        :error="noteError"
         :placeholder="
-          reason === 'Other'
+          noteRequired
             ? __('Say what is blocking the task')
             : __('Optional details, e.g. when you expect to be back')
         "
         :rows="2"
+        @blur="noteTouched = true"
       />
 
       <p class="flex items-start gap-2 text-p-sm text-ink-gray-6">
@@ -81,7 +84,7 @@
           :form="formId"
           :label="__('Put on hold')"
           :loading="holdTask.loading"
-          :disabled="!reason"
+          :disabled="!canSubmit"
         >
           <template #prefix>
             <LucidePause class="size-4" aria-hidden="true" />
@@ -119,6 +122,18 @@ const emit = defineEmits<{
 const formId = `tasky-hold-task-${useId()}`;
 const reason = ref("");
 const note = ref("");
+const noteTouched = ref(false);
+
+// "Other" says nothing on its own, so the board can only explain the hold with a note
+// (hold_task refuses it too)
+const noteRequired = computed(() => reason.value === "Other");
+const noteMissing = computed(() => noteRequired.value && !note.value.trim());
+const noteError = computed(() =>
+  noteMissing.value && noteTouched.value
+    ? __("Say what is blocking the task.")
+    : undefined
+);
+const canSubmit = computed(() => !!reason.value && !noteMissing.value);
 
 const holdTask = createResource({
   url: "helpdesk.tasky.api.hold_task",
@@ -145,6 +160,7 @@ watch(
     if (!name) return;
     reason.value = "";
     note.value = "";
+    noteTouched.value = false;
     holdTask.reset();
   },
   { immediate: true }
@@ -155,7 +171,11 @@ function onOpenChange(open: boolean) {
 }
 
 function submit() {
-  if (!props.task || !reason.value || holdTask.loading) return;
+  if (!props.task || holdTask.loading) return;
+  if (!canSubmit.value) {
+    noteTouched.value = true;
+    return;
+  }
   holdTask.submit({
     task: props.task.name,
     reason: reason.value,

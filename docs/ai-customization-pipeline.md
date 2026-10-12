@@ -29,7 +29,7 @@ hours of work. So for customizations:
 
 Once the estimate is approved the ticket waits on a task ("Waiting on Task" is a Paused
 status, so the SLA resolution clock stops) and the task's due date is the agreed date.
-Task reminders and the morning brief chase it; nothing new is needed for that.
+The task follow-ups ([follow-ups.md](follow-ups.md)) chase it; nothing new is needed for that.
 
 ## The flow
 

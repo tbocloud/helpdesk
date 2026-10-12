@@ -7,8 +7,16 @@ Hierarchy:
 - The Project Lead (one developer per project, rotated by the PM) sees every
   task in that project and can create and assign tasks there, but cannot create
   projects, edit the project, or change its lead.
-- Other members (developers, consultants, support engineers) see the projects
-  they are listed on, and only the tasks assigned to them.
+- Members with the "Project Coordinator" project role run the project's tasks
+  (`can_coordinate_project`): they see every task and create, assign, hand over,
+  plan, hold, resume and review them, but change nothing about the project, its
+  team or its lead, and don't delete tasks, run Sign-off or invoice.
+- Holders of the Project Manager role see every task of the projects they are on,
+  and the Digital Marketing Head and DM Coordinators every task of the content
+  calendar and Digital projects; seeing them gives no extra powers.
+- Other members (developers, consultants, support engineers, content people) see
+  the projects they are listed on, and only their own tasks there: assigned to
+  them, given out by them, or created by them (see docs/workspace-pages.md).
 
 Role permissions on the doctypes decide *what* a role may do; these hooks only
 narrow *which* records. Frappe hooks can deny but never grant, so every hook
@@ -18,11 +26,32 @@ returns False to deny or None to defer to role permissions.
 import json
 
 import frappe
+from frappe import _
+
+from helpdesk.content_team import (
+    DM_COORDINATOR_ROLE,
+    DM_HEAD_ROLE,
+    in_content_team,
+    is_erp_only,
+)
+from helpdesk.utils import assigned_names_query
 
 ADMIN_ROLES = ("System Manager", "Agent Manager")
+# the digital marketing team's department (by name, see departments.md)
+CONTENT_DEPARTMENT = "Digital"
+# each team keeps out of the other's department (by department name, see departments.md)
+HIDDEN_DEPARTMENTS = {"DM Employee": "ERP", "ERP Employee": CONTENT_DEPARTMENT}
+# role -> the department its holders head, besides the department's own Heads setting
+DEPARTMENT_HEADS = {DM_HEAD_ROLE: CONTENT_DEPARTMENT}
+# the user-list child table behind HD Department.heads
+DEPARTMENT_HEAD_TABLE = "HD Content Alert Recipient"
 PROJECT_MANAGER_ROLE = "Project Manager"
 # Value of Project User.custom_role that makes a member a manager of that project
 MANAGER_PROJECT_ROLE = "Project Manager"
+# Value of Project User.custom_role that lets a member run that project's tasks
+COORDINATOR_PROJECT_ROLE = "Project Coordinator"
+# see every task of the content calendar projects and of CONTENT_DEPARTMENT's projects
+CONTENT_LEAD_ROLES = (DM_HEAD_ROLE, DM_COORDINATOR_ROLE)
 
 
 def is_tasky_admin(user: str | None = None) -> bool:
@@ -36,6 +65,106 @@ def is_project_manager(user: str | None = None) -> bool:
     """Whether the user may create projects and templates."""
     user = user or frappe.session.user
     return is_tasky_admin(user) or PROJECT_MANAGER_ROLE in frappe.get_roles(user)
+
+
+def hidden_departments(user: str | None = None) -> list[str]:
+    """Departments whose projects and tasks this user never sees: ERP for DM Employees,
+    Digital for ERP Employees. System Managers and Agent Managers see every department."""
+    user = user or frappe.session.user
+    if is_tasky_admin(user):
+        return []
+    roles = set(frappe.get_roles(user))
+    return sorted({dept for role, dept in HIDDEN_DEPARTMENTS.items() if role in roles})
+
+
+def department_heads(department: str | None) -> list[str]:
+    """Who heads a department: the enabled users in its Heads setting (Settings →
+    Departments) plus holders of a role in DEPARTMENT_HEADS for it. For the whole
+    team (None), the Agent Managers."""
+    from helpdesk.content_team import _users_with_role
+
+    if not department:
+        return sorted(_users_with_role("Agent Manager"))
+    roles = [role for role, dept in DEPARTMENT_HEADS.items() if dept == department]
+    head = frappe.qb.DocType(DEPARTMENT_HEAD_TABLE)
+    user = frappe.qb.DocType("User")
+    configured = (
+        frappe.qb.from_(head)
+        .join(user)
+        .on(user.name == head.user)
+        .select(head.user)
+        .where(
+            (head.parenttype == "HD Department")
+            & (head.parentfield == "heads")
+            & (head.parent == department)
+            & (user.enabled == 1)
+        )
+        .run(pluck=True)
+    )
+    return sorted({*configured, *(u for role in roles for u in _users_with_role(role))})
+
+
+def departments_headed(user: str | None = None) -> list[str]:
+    """The active departments the user heads: `department_heads` read the other way."""
+    from helpdesk.team_dashboard import active_departments
+
+    user = user or frappe.session.user
+    return [d for d in active_departments() if user in department_heads(d)]
+
+
+def can_manage_team(user: str | None = None) -> bool:
+    """Sees the management insights: admins (every department) and department heads
+    (the departments they head). Insights only; no extra powers come with it."""
+    user = user or frappe.session.user
+    return is_tasky_admin(user) or bool(departments_headed(user))
+
+
+def _departments_sql(departments: list[str]) -> str:
+    return ", ".join(frappe.db.escape(d) for d in departments)
+
+
+def is_hidden_project(project: str | None, user: str | None = None) -> bool:
+    hidden = hidden_departments(user)
+    if not hidden or not project:
+        return False
+    return frappe.db.get_value("Project", project, "custom_department") in hidden
+
+
+def check_can_take_content_task(user: str):
+    """ERP Employees never see the content calendar, so they can't be given its tasks,
+    whatever the department of the post's project."""
+    if is_erp_only(user):
+        frappe.throw(
+            _("{0} can't be given content calendar tasks.").format(
+                frappe.utils.get_fullname(user)
+            )
+        )
+
+
+def check_assignment_department(todo, method=None):
+    """Refuse giving a task to someone whose team keeps out of its project's department.
+
+    Assigning shares the task with them, which would let them open it even though it's
+    hidden from all their lists; so the assignment itself is refused.
+    """
+    if (
+        todo.reference_type != "Task"
+        or not todo.allocated_to
+        or todo.status == "Cancelled"
+    ):
+        return
+    project, content_post = frappe.db.get_value(
+        "Task", todo.reference_name, ["project", "content_post"]
+    ) or (None, None)
+    if content_post:
+        check_can_take_content_task(todo.allocated_to)
+    if is_hidden_project(project, todo.allocated_to):
+        frappe.throw(
+            _("{0} can't be given tasks in the {1} department.").format(
+                frappe.utils.get_fullname(todo.allocated_to),
+                frappe.db.get_value("Project", project, "custom_department"),
+            )
+        )
 
 
 def get_managed_projects(user: str) -> list[str]:
@@ -57,6 +186,19 @@ def get_led_projects(user: str) -> list[str]:
     return frappe.get_all("Project", filters={"project_lead": user}, pluck="name")
 
 
+def get_coordinated_projects(user: str) -> list[str]:
+    """Projects the user is listed on with the Project Coordinator project role."""
+    return frappe.get_all(
+        "Project User",
+        filters={
+            "parenttype": "Project",
+            "user": user,
+            "custom_role": COORDINATOR_PROJECT_ROLE,
+        },
+        pluck="parent",
+    )
+
+
 def is_project_owner(project: str | None, user: str | None = None) -> bool:
     """Admins and the project's managers: may edit the project and change its lead."""
     user = user or frappe.session.user
@@ -73,6 +215,78 @@ def can_manage_project(project: str | None, user: str | None = None) -> bool:
     return (
         bool(project)
         and frappe.db.get_value("Project", project, "project_lead") == user
+    )
+
+
+def is_project_coordinator(project: str | None, user: str | None = None) -> bool:
+    """Listed on the project's team with the Project Coordinator project role."""
+    user = user or frappe.session.user
+    return bool(project) and bool(
+        frappe.db.exists(
+            "Project User",
+            {
+                "parenttype": "Project",
+                "parent": project,
+                "user": user,
+                "custom_role": COORDINATOR_PROJECT_ROLE,
+            },
+        )
+    )
+
+
+def can_coordinate_project(project: str | None, user: str | None = None) -> bool:
+    """Runs the project's tasks: its managers and lead, and its Project Coordinators.
+
+    They see every task and may create, assign, reassign and hand over, move between
+    phases, reschedule, hold and resume, and approve or send back tasks. Editing the
+    project, its team, roles or lead, deleting, Sign-off, recurring schedules and
+    invoicing stay with `can_manage_project` and `is_project_owner`.
+    """
+    user = user or frappe.session.user
+    return can_manage_project(project, user) or is_project_coordinator(project, user)
+
+
+def sees_all_tasks(project: str | None, user: str | None = None) -> bool:
+    """Sees every task of the project, not only their own: its managers, lead and
+    coordinators, a Project Manager on its team, and for content calendar and Digital
+    projects the Digital Marketing Head and DM Coordinators. Agrees with `task_query`."""
+    user = user or frappe.session.user
+    if not project:
+        return False
+    if can_coordinate_project(project, user):
+        return True
+    roles = set(frappe.get_roles(user))
+    if PROJECT_MANAGER_ROLE in roles and is_project_member(project, user):
+        return True
+    if not roles & set(CONTENT_LEAD_ROLES):
+        return False
+    from helpdesk.helpdesk.doctype.hd_content_post.hd_content_post import (
+        CONTENT_PROJECT_TYPE,
+    )
+
+    department, project_type = frappe.db.get_value(
+        "Project", project, ["custom_department", "project_type"]
+    ) or (None, None)
+    return department == CONTENT_DEPARTMENT or project_type == CONTENT_PROJECT_TYPE
+
+
+def is_own_task(doc, user: str) -> bool:
+    """Assigned to the user, given out by them, or created by them: the tasks a member
+    sees in a project they don't run. Agrees with `_own_tasks_subquery`."""
+    if doc.get("owner") == user:
+        return True
+    todo = frappe.qb.DocType("ToDo")
+    return bool(
+        frappe.qb.from_(todo)
+        .select(todo.name)
+        .where(
+            (todo.reference_type == "Task")
+            & (todo.reference_name == doc.name)
+            & (todo.status != "Cancelled")
+            & ((todo.allocated_to == user) | (todo.assigned_by == user))
+        )
+        .limit(1)
+        .run()
     )
 
 
@@ -112,11 +326,18 @@ def get_project_team(project: str) -> list[str]:
 
 
 def has_assigned_task(project: str, user: str) -> bool:
-    """A developer given a task in a project sees that project, member or not."""
+    """A developer given a task in a project sees that project, member or not.
+    Agrees with `_assigned_tasks_subquery`."""
+    task = frappe.qb.DocType("Task")
     return bool(
-        frappe.db.exists(
-            "Task", {"project": project, "_assign": ("like", f'%"{user}"%')}
+        frappe.qb.from_(task)
+        .select(task.name)
+        .where(
+            (task.project == project)
+            & task.name.isin(assigned_names_query("Task", user))
         )
+        .limit(1)
+        .run()
     )
 
 
@@ -194,6 +415,54 @@ def _managed_projects_subquery(user: str) -> str:
     )
 
 
+def _all_tasks_projects_subquery(user: str) -> str:
+    """Projects in which `user` sees every task (`sees_all_tasks`)."""
+    u = frappe.db.escape(user)
+    coordinator = frappe.db.escape(COORDINATOR_PROJECT_ROLE)
+    query = (
+        _managed_projects_subquery(user)
+        + " union select `parent` from `tabProject User` where `parenttype` = 'Project' "
+        f"and `user` = {u} and `custom_role` = {coordinator}"
+    )
+    roles = set(frappe.get_roles(user))
+    if PROJECT_MANAGER_ROLE in roles:
+        query += (
+            " union select `parent` from `tabProject User` "
+            f"where `parenttype` = 'Project' and `user` = {u}"
+        )
+    if roles & set(CONTENT_LEAD_ROLES):
+        from helpdesk.helpdesk.doctype.hd_content_post.hd_content_post import (
+            CONTENT_PROJECT_TYPE,
+        )
+
+        query += (
+            " union select `name` from `tabProject` where "
+            f"`custom_department` = {frappe.db.escape(CONTENT_DEPARTMENT)} "
+            f"or `project_type` = {frappe.db.escape(CONTENT_PROJECT_TYPE)}"
+        )
+    return query
+
+
+def _assigned_tasks_subquery(user: str) -> str:
+    """Tasks assigned to `user`: `assigned_names_query` in SQL, for the permission
+    query conditions."""
+    return (
+        "select `reference_name` from `tabToDo` where `reference_type` = 'Task' "
+        f"and `status` != 'Cancelled' and `allocated_to` = {frappe.db.escape(user)}"
+    )
+
+
+def _own_tasks_subquery(user: str) -> str:
+    """Tasks assigned to `user` or given out by them, from the ToDos. Matching the ToDo
+    columns exactly, since a LIKE on `_assign` reads `_` in a user ID as a wildcard;
+    a finished assignment (Closed) still counts, a withdrawn one (Cancelled) doesn't."""
+    u = frappe.db.escape(user)
+    return (
+        "select `reference_name` from `tabToDo` where `reference_type` = 'Task' "
+        f"and `status` != 'Cancelled' and (`allocated_to` = {u} or `assigned_by` = {u})"
+    )
+
+
 # --- permission_query_conditions ---
 
 
@@ -202,26 +471,46 @@ def project_query(user: str | None = None) -> str | None:
     if is_tasky_admin(user):
         return None
     u = frappe.db.escape(user)
-    assigned = frappe.db.escape(f'%"{user}"%')
-    return (
+    condition = (
         f"(`tabProject`.`owner` = {u} or `tabProject`.`project_lead` = {u} or `tabProject`.`name` in "
         f"(select `parent` from `tabProject User` where `parenttype` = 'Project' and `user` = {u}) "
-        f"or `tabProject`.`name` in (select `project` from `tabTask` where `_assign` like {assigned}))"
+        f"or `tabProject`.`name` in (select `project` from `tabTask` where `name` in "
+        f"({_assigned_tasks_subquery(user)})))"
     )
+    hidden = hidden_departments(user)
+    if hidden:
+        condition += f" and ifnull(`tabProject`.`custom_department`, '') not in ({_departments_sql(hidden)})"
+    return condition
 
 
 def task_query(user: str | None = None) -> str | None:
     user = user or frappe.session.user
     if is_tasky_admin(user):
         return None
-    # _assign stores a JSON list, so match the quoted email to avoid partial matches
-    assigned = frappe.db.escape(f'%"{user}"%')
     # a task someone added for a teammate stays visible to them
     owner = frappe.db.escape(user)
-    return (
-        f"(`tabTask`.`project` in ({_managed_projects_subquery(user)}) "
-        f"or `tabTask`.`_assign` like {assigned} or `tabTask`.`owner` = {owner})"
+    condition = (
+        f"(`tabTask`.`project` in ({_all_tasks_projects_subquery(user)}) "
+        f"or `tabTask`.`name` in ({_own_tasks_subquery(user)}) "
+        f"or `tabTask`.`owner` = {owner})"
     )
+    hidden = hidden_departments(user)
+    if hidden:
+        condition += (
+            f" and ifnull(`tabTask`.`project`, '') not in (select `name` from `tabProject` "
+            f"where `custom_department` in ({_departments_sql(hidden)}))"
+        )
+    if is_erp_only(user):
+        # the content calendar is the Digital team's, whatever its project's department
+        condition += " and ifnull(`tabTask`.`content_post`, '') = ''"
+    elif not in_content_team(user):
+        # outside the content team, only their own content tasks (agrees with is_own_task)
+        condition += (
+            f" and (ifnull(`tabTask`.`content_post`, '') = '' "
+            f"or `tabTask`.`name` in ({_own_tasks_subquery(user)}) "
+            f"or `tabTask`.`owner` = {owner})"
+        )
+    return condition
 
 
 def timesheet_query(user: str | None = None) -> str | None:
@@ -244,6 +533,8 @@ def project_has_permission(
     user = user or frappe.session.user
     if ptype == "create" or is_tasky_admin(user):
         return None
+    if doc.get("custom_department") in hidden_departments(user):
+        return False
     if is_project_owner(doc.name, user):
         return None
     if ptype in ("read", "print", "email", "report") and (
@@ -259,13 +550,29 @@ def task_has_permission(
     doc, ptype: str | None = None, user: str | None = None
 ) -> bool | None:
     user = user or frappe.session.user
-    if is_tasky_admin(user) or can_manage_project(doc.project, user):
+    if is_tasky_admin(user):
+        return None
+    if is_hidden_project(doc.project, user):
+        return False
+    # outside the content team, only their own content tasks; never for ERP Employees
+    if (
+        doc.get("content_post")
+        and not in_content_team(user)
+        and (is_erp_only(user) or not is_own_task(doc, user))
+    ):
+        return False
+    if can_manage_project(doc.project, user):
+        return None
+    # coordinators run every task of the project; deleting stays with its managers
+    if ptype != "delete" and is_project_coordinator(doc.project, user):
         return None
     if ptype == "create":
         return None if can_add_tasks(doc.project, user) else False
     if ptype == "delete":
         return False
-    if ptype in ("read", "print", "email", "report") and doc.get("owner") == user:
+    if ptype in ("read", "print", "email", "report") and (
+        sees_all_tasks(doc.project, user) or is_own_task(doc, user)
+    ):
         return None
     return None if is_assigned(doc, user) else False
 

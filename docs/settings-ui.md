@@ -42,7 +42,7 @@ settings header) and the scrolling content area.
   ("CRM settings saved"); a failure toast carries the server's message and the form keeps its
   values so the user can fix and retry.
 - Field errors show under the field (`ErrorMessage role="alert"`), saying what to fix.
-- **Exceptions kept from upstream:** on General, the six switches in `toggleFields` and
+- **Exceptions kept from upstream:** on General, the seven switches in `toggleFields` (Mobile push among them) and
   "Disable signup" save as soon as they change; list rows' Enabled switches (SLA, assignment
   rules, field dependencies) and Departments' actions save straight away, each with a toast.
 - Sub-pages ask "Leave without saving?" before going back with unsaved changes.
@@ -60,6 +60,14 @@ settings header) and the scrolling content area.
   named by the label plus its current value. A Button with its own text needs neither.
 - **`ChipListInput.vue`**: picked records as removable chips plus a Link picker to add more
   (File storage's document types, Content's alert recipients).
+- **`SecretField.vue`**: a saved secret shown masked with Replace and, when `removable`,
+  Remove (Undo until saved); the value never comes back from the server. Chat & Teams and
+  GitHub.
+- **`SettingsAction.vue`**: a button that runs a POST action on the saved settings (`method`,
+  `params`, `icon`) and shows its `{ok, message, details?}` result in success or danger with
+  an icon, and `details` as a label/value list. Disabled with "Save your changes first"
+  while the page is `unsaved`. Send a test (Chat & Teams), Test token and Request a merge
+  bot run now (GitHub).
 - Plain fields use frappe-ui `FormControl` with `label` (above the field) and `description`.
 - The large upstream editors (SLA policy, holiday schedule, assignment rule) keep their own
   layout, with section headings and dividers matched to `SettingsSection`.
@@ -92,7 +100,7 @@ Telephony providers and pending invites.
 | Preferences | Theme (a radio group of buttons; the current theme carries the brand border), language and timezone; saving reloads the app. |
 | Email Accounts | List with each account's role badge (Default Inbox, Default Sending…; info tone when that direction is on). Add and edit are sub-pages with Back, Save in the header and Pull emails now. |
 | Email Notifications | List of the four emails; each opens an editor with Enabled and Save in the header. |
-| General | Branding, Tickets, Workflow and knowledge base, User sign-up sections. |
+| General | Branding, Tickets, Workflow and knowledge base, User sign-up, Mobile app (Mobile push, see tbo-smart-api.md) and, for System Managers, Offboarding (switch, domains, dry run, limit, Preview and Run now with their results, and the recently disabled; see tbo-smart-api.md "Offboarding") sections. The Offboarding settings save with Save changes; Preview and Run now use the saved settings, so they wait until the page is saved. |
 | Agents | Search, All/Active/Inactive filter, role menu per agent (managers), deactivate/reactivate. Invite agents is the primary action. |
 | Invite Agents | Emails and role, Send invites; pending invites with Cancel invitation. |
 | Teams | List; a team page with Add members, Enabled and a ⋯ menu (assignment rule, rename, access, delete). |
@@ -100,8 +108,51 @@ Telephony providers and pending invites.
 | SLA Policies, Business Holidays, Assignment Rules, Field Dependencies, Saved Replies | List page + editor sub-page with the shared header. |
 | Sign-off templates | List (inactive greyed, question count) and an editor sub-page with Active, Back and Save in the header. See [project-signoff.md](project-signoff.md). |
 | Content, Tasks, File storage, CRM | TBO pages; sections of `SettingRow`s, Save in the header, load errors with Try again. See [content-calendar.md](content-calendar.md), [ai-task-descriptions.md](ai-task-descriptions.md), [project-files.md](project-files.md), [tbo-crm-integration.md](tbo-crm-integration.md). Tasks also has the Support hours section (email the customer when their hours run low; [support-contracts.md](support-contracts.md)). CRM also has the Invoicing section, whose pickers are read live from the CRM site and checked on save ([timesheet-invoicing.md](timesheet-invoicing.md)). |
+| Follow-ups | System Managers and Agent Managers. Enabled in the header; Delivery (digest times, Send me a test digest), Escalation ladder, Task rules and Ticket rules (a switch and threshold per rule), Customer follow-up, Working hours (read from the default SLA) and a Preview of each person's digest. See [follow-ups.md](follow-ups.md). |
+| Chat & Teams | System Managers and Agent Managers. Every HD Chat Settings field; secrets masked, with Send me a test and Send a test to the channel. See [Chat & Teams](#chat--teams) below. |
+| GitHub | System Managers and Agent Managers. Every HD GitHub Settings field: the webhook (Payload URL with Copy, events, secret), the task sync, the org merge bot with Test token and Request a merge bot run now, the last webhook delivery and setup help. Secrets masked as on Chat & Teams. See [github-sync.md](github-sync.md#the-settings-page). |
 | Telephony | Default medium, then Twilio and Exotel as list rows that open their sub-pages. |
 | ERPNext | Enable switch, in-sync / sync-needed status (success or warning soft panel, with icon). |
+
+## Chat & Teams
+
+`desk/src/components/Settings/Chat/ChatSettings.vue`, with the shared `SecretField.vue` and
+`SettingsAction.vue`, backed by `helpdesk.api.chat_settings`, which checks for System Manager or Agent Manager
+itself and saves HD Chat Settings with `ignore_permissions` (the doctype stays writable by
+System Managers only). No new storage: it is the same Single the desk form edits.
+
+- **Header**: Enabled switch and Save changes.
+- **Delivery**: platform (Microsoft Teams or Slack) and *Email people who can't be reached
+  in chat*.
+- **Microsoft Teams** (Teams only): Direct Message Workflow URL and Escalation Channel
+  Workflow URL. **Slack** (Slack only): Bot Token and Escalation Channel ID.
+- **Error alerts**: post hub errors to the escalation channel, and the titles to ignore.
+- **Last delivery problem**: shown only when the Error Log has a chat delivery failure
+  (`error_alerts.CHAT_ERROR_TITLES`); its title and time, never the traceback, which can
+  hold the URL.
+- **Creating the Teams workflows** (Teams only): the two templates, *Who can trigger the
+  flow* = Anyone, Recipient = `triggerBody()?['recipient']`, and the payload
+  `chat_notifications.teams_message` posts (plus `recipient` for direct messages).
+
+**Secrets** (the bot token and both workflow URLs; a workflow URL carries its `&sig=` key):
+once saved they never go back to the browser. `get_settings` returns
+`secrets[field] = {set, masked}`, the mask being the URL's scheme and host or the token's
+`xoxb-` prefix. A saved secret shows masked with **Replace** (an input with Cancel) and, for
+the two optional URLs, **Remove** (Undo until saved). `save_settings(values)` keeps a
+secret whose key isn't sent (or is null), stores a sent value trimmed, and removes it for
+"". The URLs are checked by `HDChatSettings.validate` (`teams_url_problem`); its message
+starts with the field's label, so the page shows it under that field as well as in a toast.
+
+**Send a test** (`send_test(target)`, POST, `direct` or `channel`): uses the saved settings,
+so the buttons are disabled while the page has unsaved changes. It returns `{ok, message}`:
+sent, not set up yet ("add it, save, then test again"), or the platform's error with a hint
+(`chat_notifications.describe_error` / `error_hint`: Teams HTTP 401/403/404/405, Slack
+`invalid_auth`, `not_in_channel`, `missing_scope`…). A network error shows only its kind,
+since its text can hold the URL. The desk form's *Send test message*
+(`chat_notifications.send_test_message`) uses the same wording. Tests:
+`helpdesk/tests/test_chat_settings.py`.
+
+Settings → Follow-ups links here from its Delivery section ("Where do messages go?").
 
 ## Copy
 

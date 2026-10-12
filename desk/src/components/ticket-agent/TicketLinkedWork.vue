@@ -87,15 +87,15 @@
               <span aria-hidden="true">·</span>
               <span
                 class="inline-flex items-center gap-1"
-                :class="isOverdue(task) && 'text-danger'"
+                :class="task.is_overdue && 'text-danger'"
               >
                 <LucideCircleAlert
-                  v-if="isOverdue(task)"
+                  v-if="task.is_overdue"
                   class="size-3.5"
                   aria-hidden="true"
                 />
                 {{
-                  isOverdue(task)
+                  task.is_overdue
                     ? __("Overdue, due {0}", formatDay(task.exp_end_date))
                     : __("Due {0}", formatDay(task.exp_end_date))
                 }}
@@ -138,7 +138,6 @@ import TaskDetailDialog from "@/pages/tasky/components/TaskDetailDialog.vue";
 import PullRequestChip from "@/pages/tasky/components/PullRequestChip.vue";
 import TaskStatusBadge from "@/pages/tasky/components/TaskStatusBadge.vue";
 import type { TaskPullRequest } from "@/pages/tasky/pullRequestMeta";
-import { isClosed } from "@/pages/tasky/taskMeta";
 import { showCreateTask } from "@/pages/ticket/modalStates";
 import { __ } from "@/translation";
 import { ActivitiesSymbol, TicketSymbol } from "@/types";
@@ -158,6 +157,8 @@ interface LinkedTask {
   project: string;
   project_name: string;
   exp_end_date?: string | null;
+  // past its due date, or due today and worked longer than its estimate (server rule)
+  is_overdue?: boolean;
   mine: boolean;
   can_open: boolean;
   pull_requests?: TaskPullRequest[];
@@ -185,14 +186,6 @@ const detailMine = computed(() => !!detailTask.value?.mine);
 
 function openTask(task: LinkedTask) {
   detailTask.value = task;
-}
-
-function isOverdue(task: LinkedTask) {
-  return (
-    !!task.exp_end_date &&
-    !isClosed(task) &&
-    dayjs(task.exp_end_date).isBefore(dayjs(), "day")
-  );
 }
 
 function formatDay(date: string) {

@@ -4,7 +4,9 @@ The hub signs in as the Entra app chosen in HD Meeting Settings (client
 credentials, no user sign-in), using the Connected App's client ID, secret and
 token URL with the Graph scope. The app needs the Graph *application*
 permission Calendars.ReadWrite with admin consent; an Exchange
-ApplicationAccessPolicy should limit it to staff mailboxes.
+ApplicationAccessPolicy should limit it to staff mailboxes. Offboarding
+(helpdesk.offboarding) reads the directory with the same app and needs
+User.Read.All as well.
 
 A meeting is an Outlook calendar event with a Teams link, created in the
 organizer's calendar, so Outlook sends the invitations (to customers too) and
@@ -98,11 +100,18 @@ def forget_token():
     frappe.cache.delete_value(TOKEN_CACHE_KEY.format(get_settings().connected_app))
 
 
-def graph(method: str, path: str, payload: dict | None = None) -> dict:
+def graph(
+    method: str,
+    path: str,
+    payload: dict | None = None,
+    required_role: str = REQUIRED_ROLE,
+) -> dict:
+    """One Graph call. `path` is relative to GRAPH, or a full URL Graph returned (a
+    nextLink); anything else is still sent to GRAPH, so the token never leaves it."""
     token = access_token()
     response = requests.request(
         method,
-        GRAPH + path,
+        path if path.startswith(GRAPH + "/") else GRAPH + path,
         json=payload,
         headers={
             "Authorization": f"Bearer {token}",
@@ -117,18 +126,32 @@ def graph(method: str, path: str, payload: dict | None = None) -> dict:
         message = _("Microsoft Teams refused the request: {0}").format(
             error.get("message") or error.get("code") or response.status_code
         )
-        if response.status_code == 403:
-            message += " " + access_denied_hint(token)
+        hint = response.status_code == 403 and access_denied_hint(token, required_role)
+        if hint:
+            message += " " + hint
         raise GraphError(message, response.status_code, error.get("code") or "")
     return data
 
 
-def access_denied_hint(token: str) -> str:
+def graph_list(path: str, required_role: str) -> list[dict]:
+    """Every item of a Graph collection, following its pages. A failure on any page
+    raises GraphError, so a caller never acts on part of a list."""
+    items = []
+    while path:
+        data = graph("GET", path, required_role=required_role)
+        items.extend(data.get("value") or [])
+        path = data.get("@odata.nextLink")
+    return items
+
+
+def access_denied_hint(token: str, required_role: str = REQUIRED_ROLE) -> str:
     """Why Graph said no: the token's own permissions tell a missing grant from a mailbox policy."""
-    if REQUIRED_ROLE not in token_roles(token):
+    if required_role not in token_roles(token):
         return _(
             "The Microsoft app has no {0} application permission with admin consent yet. Add it in Entra (API permissions > Microsoft Graph > Application permissions), grant admin consent, wait a few minutes and test again."
-        ).format(REQUIRED_ROLE)
+        ).format(required_role)
+    if required_role != REQUIRED_ROLE:
+        return ""
     return _(
         "The app has {0}, so an Exchange ApplicationAccessPolicy is keeping it out of this mailbox. Add the mailbox to the policy's group, or check it with Test-ApplicationAccessPolicy."
     ).format(REQUIRED_ROLE)

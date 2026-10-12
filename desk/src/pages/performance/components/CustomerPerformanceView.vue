@@ -20,6 +20,7 @@
           :value="`${sum.published} / ${sum.posts - sum.upcoming}`"
           :sub="sum.upcoming ? __('{0} not due yet', String(sum.upcoming)) : ''"
           :icon="LucideSend"
+          icon-tone="success"
           :meter="pct(sum.published, sum.posts - sum.upcoming)"
         />
         <StatTile
@@ -27,6 +28,7 @@
           :value="pctText(sum.on_time_pct)"
           :sub="__('of published posts')"
           :icon="LucideCircleCheck"
+          :icon-tone="onTimeTone(sum.on_time_pct)"
           :value-tone="onTimeTone(sum.on_time_pct)"
         />
         <StatTile
@@ -34,6 +36,7 @@
           :value="String(sum.missed)"
           :sub="__('due and not published')"
           :icon="LucideCircleAlert"
+          icon-tone="danger"
           :meter="sum.missed ? pct(sum.missed, sum.posts - sum.upcoming) : null"
           tone="danger"
           :value-tone="sum.missed ? 'danger' : 'neutral'"
@@ -174,11 +177,7 @@
                 </td>
                 <td
                   class="px-4 py-2.5 text-right font-semibold tabular-nums"
-                  :class="
-                    row.on_time_pct == null
-                      ? 'text-ink-gray-5'
-                      : INK[onTimeTone(row.on_time_pct)]
-                  "
+                  :class="onTimeClass(row.on_time_pct)"
                 >
                   {{ pctText(row.on_time_pct) }}
                 </td>
@@ -405,28 +404,11 @@
                 {{ __("How each post was delivered, and who was on it") }}
               </p>
             </div>
-            <div
-              class="inline-flex rounded-lg bg-surface-gray-2 p-0.5"
-              role="tablist"
+            <TabButtons
+              v-model="sort"
               :aria-label="__('Sort posts')"
-            >
-              <button
-                v-for="o in SORTS"
-                :key="o.key"
-                type="button"
-                role="tab"
-                :aria-selected="sort === o.key"
-                class="h-7 rounded-md px-3 text-sm"
-                :class="
-                  sort === o.key
-                    ? 'bg-brand text-brand-on shadow-sm'
-                    : 'text-ink-gray-6 hover:text-ink-gray-8'
-                "
-                @click="sort = o.key"
-              >
-                {{ o.label }}
-              </button>
-            </div>
+              :options="SORTS.map((o) => ({ label: o.label, value: o.key }))"
+            />
           </header>
           <div class="overflow-x-auto">
             <table class="w-full min-w-[820px] text-left text-sm">
@@ -562,7 +544,7 @@
 <script setup lang="ts">
 import { FILL, INK, TRACK, type Tone } from "@/components/tone";
 import { __ } from "@/translation";
-import { Avatar, dayjs } from "frappe-ui";
+import { Avatar, dayjs, TabButtons } from "frappe-ui";
 import { computed, h, ref } from "vue";
 import LucideBuilding2 from "~icons/lucide/building-2";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
@@ -575,6 +557,7 @@ import LucideSend from "~icons/lucide/send";
 import { useChartColors } from "../chartTheme";
 import {
   channelColor,
+  onTimeClass,
   onTimeTone,
   pctText,
   roles,

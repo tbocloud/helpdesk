@@ -1,0 +1,11 @@
+{
+  "v": 1,
+  "data": {
+    "name": "f1a2b3c4d5",
+    "file_name": "master-prompt.md",
+    "file_url": "/private/files/master-prompt.md",
+    "size": 18432,
+    "kind": "md",
+    "text": "# Master prompt\n\nBe concise."
+  }
+}

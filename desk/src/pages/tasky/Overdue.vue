@@ -234,7 +234,9 @@ const overdue = computed(() =>
 const dueThisWeek = computed(() =>
   allTasks.value
     .filter((t) => {
-      if (!t.due_date || isClosed(t) || isOnHold(t)) return false;
+      // a task over its hours today is listed as overdue, not as due this week
+      if (!t.due_date || isClosed(t) || isOnHold(t) || isOverdue(t))
+        return false;
       const days = daysUntil(t.due_date);
       return days >= 0 && days <= 7;
     })
@@ -243,7 +245,11 @@ const dueThisWeek = computed(() =>
 const onTrack = computed(() =>
   allTasks.value.filter(
     (t) =>
-      !!t.due_date && !isClosed(t) && !isOnHold(t) && daysUntil(t.due_date) >= 0
+      !!t.due_date &&
+      !isClosed(t) &&
+      !isOnHold(t) &&
+      !isOverdue(t) &&
+      daysUntil(t.due_date) >= 0
   )
 );
 
@@ -300,7 +306,8 @@ function dueLabel(task: Task) {
     return days === -1
       ? __("1 day overdue")
       : __("{0} days overdue", String(-days));
-  if (days === 0) return __("Due today");
+  if (days === 0)
+    return isOverdue(task) ? __("Past its estimate") : __("Due today");
   if (days === 1) return __("Due tomorrow");
   return __("Due {0}", dayjs(task.due_date).format("ddd D MMM"));
 }

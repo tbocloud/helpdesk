@@ -1,7 +1,15 @@
 import frappe
 
 from helpdesk.api.work import can_see_overview
-from helpdesk.content_team import is_content_only
+from helpdesk.content_team import (
+    can_edit_content,
+    can_work_tickets,
+    in_content_team,
+    is_content_only,
+    is_dm_employee,
+    is_dm_head,
+    is_erp_only,
+)
 from helpdesk.tasky.permissions import is_project_manager as tasky_is_project_manager
 from helpdesk.utils import agent_only, get_agent_name, get_agents_team
 from helpdesk.utils import is_agent as _is_agent
@@ -72,6 +80,16 @@ def get_user():
         "can_see_overview": can_see_overview(current_user)
         and not is_content_only(current_user),
         "is_content_team": is_content_only(current_user),
+        "is_dm_head": is_dm_head(current_user),
+        "can_edit_content": can_edit_content(current_user),
+        # the only people who see the content calendar and content performance
+        "in_content_team": in_content_team(current_user),
+        # ERP Employees: no work Calendar either (and no Digital department, server side)
+        "is_erp_only": is_erp_only(current_user),
+        # DM Employees: no tickets, customers, contacts, templates, KB or reports
+        "is_dm_employee": is_dm_employee(current_user),
+        # the Tickets list and New ticket: System / Agent Managers and the ERP team
+        "can_work_tickets": can_work_tickets(current_user),
         # lets the frontend skip call-integration checks when telephony isn't installed
         "telephony_installed": "telephony" in frappe.get_installed_apps(),
         "user_image": user_image,

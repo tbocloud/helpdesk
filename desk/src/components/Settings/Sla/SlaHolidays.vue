@@ -136,11 +136,6 @@ input[type="radio"]:checked {
   border: 2px solid var(--ink-gray-9);
 }
 
-input[type="radio"]:checked::after {
-  content: "";
-  background-color: var(--surface-base);
-}
-
 input[type="radio"]:focus:not(:focus-visible) {
   outline: none !important;
   box-shadow: none !important;

@@ -1,0 +1,65 @@
+{
+  "v": 1,
+  "data": {
+    "people": [
+      {
+        "user": "najath@teambackoffice.com",
+        "full_name": "Najath Thekkeyil",
+        "image": "/files/najath.jpg",
+        "on_leave": false,
+        "leave": null,
+        "open_tasks": 6,
+        "working": 1,
+        "in_review": 1,
+        "on_hold": 1,
+        "overdue": 1,
+        "due_this_week": 3,
+        "done_this_week": 4,
+        "tickets": 3,
+        "sla_breached": 0,
+        "working_on": [
+          {
+            "name": "TASK-2026-00412",
+            "title": "TBO ERP: migrate customers",
+            "project_name": "Galom - ERPNext rollout"
+          }
+        ],
+        "next_due": {
+          "name": "TASK-2026-00431",
+          "title": "Avera leave approval fix",
+          "deadline": "2026-10-10"
+        }
+      },
+      {
+        "user": "sanika@teambackoffice.com",
+        "full_name": "Sanika Rao",
+        "image": null,
+        "on_leave": true,
+        "leave": {
+          "to_date": "2026-10-11",
+          "half_day": false
+        },
+        "open_tasks": 2,
+        "working": 0,
+        "in_review": 0,
+        "on_hold": 0,
+        "overdue": 0,
+        "due_this_week": 1,
+        "done_this_week": 2,
+        "tickets": 0,
+        "sla_breached": 0,
+        "working_on": [],
+        "next_due": null
+      }
+    ],
+    "totals": {
+      "people": 2,
+      "working_now": 1,
+      "free": 0,
+      "open": 8,
+      "overdue": 1,
+      "review": 1,
+      "done_this_week": 6
+    }
+  }
+}

@@ -67,6 +67,8 @@
       selectable: options.selectable,
       showTooltip: false,
       resizeColumn: true,
+      // 44px rows on touch keep the row checkboxes' hit areas apart
+      rowHeight: isTouchSized ? 44 : 40,
       getRowRoute: (row) => ({
         name: options.rowRoute?.name,
         params: { [options.rowRoute?.prop]: row.name },
@@ -149,7 +151,7 @@ import {
   SortBy,
 } from "@/components/view-controls";
 import { Filter, normalizeFilters } from "@/components/view-controls/filter";
-import { useScreenSize } from "@/composables/screen";
+import { TOUCH_TARGET_QUERY, useScreenSize } from "@/composables/screen";
 import {
   currentView as headerView,
   useView,
@@ -160,7 +162,7 @@ import { globalStore } from "@/stores/globalStore";
 import { capture } from "@/telemetry";
 import { View, ViewType } from "@/types";
 import { formatTimeShort, getIcon } from "@/utils";
-import { useStorage } from "@vueuse/core";
+import { useMediaQuery, useStorage } from "@vueuse/core";
 import { useTicketStatusStore } from "@/stores/ticketStatus";
 import { __ } from "@/translation";
 import {
@@ -358,6 +360,7 @@ const options = computed(() => {
 });
 
 const { isMobileView } = useScreenSize();
+const isTouchSized = useMediaQuery(TOUCH_TARGET_QUERY);
 const slots = useSlots();
 
 const showMobileRows = computed(

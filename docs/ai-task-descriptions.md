@@ -112,7 +112,7 @@ from HDS Hub Settings, its retry with a larger token budget, JSON parsing and
 
 | Endpoint | Rule |
 | --- | --- |
-| `helpdesk.task_descriptions.draft_task_description` (POST) | New task: may read the project and `can_add_tasks` (admins, the project's managers and lead, members, people with a task in it). Editing (`task` given): read permission on the task and the same rule as saving its description (`_check_can_edit`: lead, manager or the assignee). Also refuses when AI isn't set up, and after 30 drafts per person in 10 minutes. |
+| `helpdesk.task_descriptions.draft_task_description` (POST) | New task: may read the project and `can_add_tasks` (admins, the project's managers and lead, members, people with a task in it). Editing (`task` given): read permission on the task and the same rule as saving its description (`_check_can_edit`: lead, manager, coordinator or the assignee). Also refuses when AI isn't set up, and after 30 drafts per person in 10 minutes. |
 | `helpdesk.task_descriptions.get_ai_status` (GET) | Any logged-in user; returns only whether AI is set up and why not. |
 
 The background job writes with a direct conditional update (no permission check) as the

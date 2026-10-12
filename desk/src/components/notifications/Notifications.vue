@@ -59,7 +59,7 @@
         <UserAvatar v-else :name="n.user_from" />
         <span>
           <div
-            v-if="n.notification_type === 'Reminder'"
+            v-if="isTextOnly(n)"
             class="mb-2 whitespace-pre-line leading-5 text-ink-gray-8"
           >
             {{ n.message }}
@@ -151,9 +151,15 @@ function linkProps(n: Notification) {
     : { to: getRoute(n) };
 }
 
+// a reminder or a completed task carries its whole message; the rest are built here
+function isTextOnly(n: Notification) {
+  return ["Reminder", "Task Completed"].includes(n.notification_type);
+}
+
 function getRoute(n: Notification) {
   switch (n.notification_type) {
     case "Reminder":
+    case "Task Completed":
       return n.link || { name: "MyWork" };
     case "Mention":
       return {

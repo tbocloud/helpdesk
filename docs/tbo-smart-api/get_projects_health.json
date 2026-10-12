@@ -1,0 +1,31 @@
+{
+  "v": 1,
+  "data": [
+    {
+      "name": "PROJ-0031",
+      "project_name": "Galom - ERPNext rollout",
+      "customer": "Galom Trading",
+      "lead": {
+        "user": "arun@teambackoffice.com",
+        "full_name": "Arun Menon"
+      },
+      "progress": 62,
+      "counts": {
+        "total": 48,
+        "done": 30,
+        "open": 18,
+        "working": 4,
+        "review": 2,
+        "on_hold": 1,
+        "overdue": 3
+      },
+      "overdue": 3,
+      "expected_end_date": "2026-11-30",
+      "next_milestone": {
+        "title": "UAT sign-off",
+        "due": "2026-10-24",
+        "is_overdue": false
+      }
+    }
+  ]
+}

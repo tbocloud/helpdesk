@@ -25,8 +25,20 @@
           :key="column.key"
           class="w-full overflow-hidden whitespace-nowrap text-ellipsis"
         >
+          <!-- synced from the CRM site: the next sync would undo an edit -->
+          <div
+            v-if="column.key === 'description' && holiday.synced_from_crm"
+            class="flex min-w-0 items-center gap-2 text-base"
+          >
+            <span class="truncate">{{ holiday.description }}</span>
+            <TaskyBadge
+              :icon="LucideRefreshCw"
+              :label="__('From TBO CRM')"
+              :title="__('Synced from the CRM site; change it there.')"
+            />
+          </div>
           <input
-            v-if="column.key === 'description'"
+            v-else-if="column.key === 'description'"
             :type="'text'"
             placeholder="Description"
             v-model="holiday[column.key]"
@@ -37,7 +49,11 @@
           </div>
         </div>
         <div class="flex justify-end">
-          <Dropdown placement="right" :options="dropdownOptions(holiday)">
+          <Dropdown
+            v-if="!holiday.synced_from_crm"
+            placement="right"
+            :options="dropdownOptions(holiday)"
+          >
             <Button
               icon="lucide-more-horizontal"
               variant="ghost"
@@ -60,7 +76,10 @@ import { computed, ref } from "vue";
 import { ConfirmDelete, getFormattedDate } from "@/utils";
 import { holidayData } from "@/stores/holidayList";
 import AddHolidayModal from "./Modals/AddHolidayModal.vue";
+import TaskyBadge from "@/components/TaskyBadge.vue";
+import { __ } from "@/translation";
 import { dayjs, Dropdown } from "frappe-ui";
+import LucideRefreshCw from "~icons/lucide/refresh-cw";
 
 const isConfirmingDelete = ref(false);
 
@@ -68,6 +87,7 @@ interface Holiday {
   holiday_date: string | null;
   description: string;
   weekly_off?: number;
+  synced_from_crm?: number;
 }
 
 const dropdownOptions = (holiday: Holiday) => [

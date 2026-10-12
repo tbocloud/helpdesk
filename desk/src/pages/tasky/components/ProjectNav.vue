@@ -31,7 +31,6 @@
       <Button
         v-if="detail.data?.can_change_lead"
         variant="ghost"
-        class="min-h-11 min-w-11 md:min-h-0 md:min-w-0"
         :label="__('Edit project')"
         @click="showEdit = true"
       >
@@ -41,11 +40,7 @@
         <span class="hidden md:inline">{{ __("Edit project") }}</span>
       </Button>
       <Dropdown v-if="detail.data?.can_change_lead" :options="leadOptions">
-        <Button
-          class="min-h-11 min-w-11 md:min-h-0 md:min-w-0"
-          :loading="changingLead"
-          :label="leadLabel"
-        >
+        <Button :loading="changingLead" :label="leadLabel">
           <template #prefix
             ><LucideUserStar class="size-4" aria-hidden="true"
           /></template>
@@ -105,6 +100,21 @@
     </router-link>
   </nav>
 
+  <p
+    v-if="showsOwnTasksOnly"
+    class="flex shrink-0 items-start gap-2 border-b border-outline-gray-2 bg-surface-gray-1 px-4 py-2 text-p-sm text-ink-gray-6 md:px-5"
+  >
+    <LucideEyeOff
+      class="mt-0.5 size-4 shrink-0 text-ink-gray-5"
+      aria-hidden="true"
+    />
+    {{
+      __(
+        "You see your own tasks in this project: the ones assigned to you and the ones you gave out. The project's manager, lead and coordinators see every task."
+      )
+    }}
+  </p>
+
   <ProjectFormDialog
     v-if="detail.data?.can_change_lead"
     v-model:open="showEdit"
@@ -113,7 +123,7 @@
   />
 
   <NewTaskDialog
-    v-if="detail.data?.can_manage"
+    v-if="detail.data?.can_add_tasks"
     v-model:open="showNewTask"
     :project-id="projectId"
     :phases="phases"
@@ -137,6 +147,7 @@ import LucideCalendarRange from "~icons/lucide/calendar-range";
 import LucideChevronDown from "~icons/lucide/chevron-down";
 import LucideChevronRight from "~icons/lucide/chevron-right";
 import LucideClipboardCheck from "~icons/lucide/clipboard-check";
+import LucideEyeOff from "~icons/lucide/eye-off";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideRepeat from "~icons/lucide/repeat";
 import LucideUserStar from "~icons/lucide/user-star";
@@ -183,6 +194,23 @@ function isCurrent(tab: { to: string; also?: string[] }) {
   const name = String(route.name);
   return name === tab.to || !!tab.also?.includes(name);
 }
+
+// the tabs that list the project's tasks (Files and Sign-off don't)
+const TASK_TABS = [
+  "TaskyProject",
+  "TaskyChecklist",
+  "TaskyKanban",
+  "TaskyTimeline",
+  "TaskyOverdue",
+  "TaskyRecurring",
+];
+
+const showsOwnTasksOnly = computed(
+  () =>
+    !!detail.data &&
+    !detail.data.sees_all_tasks &&
+    TASK_TABS.includes(String(route.name))
+);
 
 const detail = createResource({
   url: "helpdesk.tasky.api.get_project_detail",
@@ -289,6 +317,8 @@ const leadOptions = computed(() => {
 
 defineExpose({
   canManage: computed(() => !!detail.data?.can_manage),
+  // runs the tasks (edit, plan, review): managers, the lead and coordinators
+  canCoordinate: computed(() => !!detail.data?.can_coordinate),
   openNewTask: () => (showNewTask.value = true),
   reload: () => detail.reload(),
 });

@@ -4,7 +4,6 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_to_date, now_datetime
 
-from helpdesk import work_reminders
 from helpdesk.api.home import get_home
 from helpdesk.test_utils import (
     create_customer,
@@ -50,82 +49,6 @@ class SLAAlertCase(FrappeTestCase):
         return [
             c.args[0] for c in self.channel.call_args_list if f"#{ticket}:" in c.args[0]
         ]
-
-
-class TestFirstReplyReminders(SLAAlertCase):
-    def test_overdue_first_reply_reaches_agent_managers_and_channel(self):
-        ticket = self.ticket(
-            "Cannot log in",
-            AGENT,
-            response_by=add_to_date(self.now, minutes=-20),
-            resolution_by=add_to_date(self.now, days=2),
-        )
-
-        work_reminders.send_ticket_reminders()
-        work_reminders.send_ticket_reminders()  # no repeats
-
-        for user in (AGENT, MANAGER):
-            overdue = [
-                m
-                for m in get_reminder_messages(user[0], ticket)
-                if m.startswith("First reply overdue")
-            ]
-            self.assertEqual(len(overdue), 1, user)
-        self.assertTrue(self.channel_posts(ticket))
-
-    def test_answered_tickets_are_left_alone(self):
-        ticket = self.ticket(
-            "Report question",
-            AGENT,
-            response_by=add_to_date(self.now, minutes=-20),
-            resolution_by=add_to_date(self.now, days=2),
-        )
-        frappe.db.set_value("HD Ticket", ticket, "first_responded_on", self.now)
-
-        work_reminders.send_ticket_reminders()
-
-        self.assertEqual(get_reminder_messages(AGENT[0], ticket), [])
-        self.assertEqual(self.channel_posts(ticket), [])
-
-    def test_due_soon_goes_to_the_channel_only_when_unassigned(self):
-        due = add_to_date(self.now, minutes=10)
-        mine = self.ticket(
-            "Stock mismatch",
-            AGENT,
-            response_by=due,
-            resolution_by=add_to_date(self.now, days=2),
-        )
-        nobodys = self.ticket(
-            "Printer setup",
-            response_by=due,
-            resolution_by=add_to_date(self.now, days=2),
-        )
-
-        work_reminders.send_ticket_reminders()
-
-        self.assertTrue(
-            any(
-                m.startswith("First reply due")
-                for m in get_reminder_messages(AGENT[0], mine)
-            )
-        )
-        self.assertEqual(self.channel_posts(mine), [])
-        self.assertTrue(self.channel_posts(nobodys))
-
-
-class TestResolutionReminders(SLAAlertCase):
-    def test_unassigned_ticket_due_soon_is_posted_to_the_channel(self):
-        ticket = self.ticket(
-            "GST return blocked",
-            first_responded_on=self.now,
-            resolution_by=add_to_date(self.now, hours=1),
-        )
-
-        work_reminders.send_ticket_reminders()
-
-        posts = self.channel_posts(ticket)
-        self.assertEqual(len(posts), 1)
-        self.assertTrue(posts[0].startswith("SLA due"))
 
 
 class TestLowRatingAlert(SLAAlertCase):

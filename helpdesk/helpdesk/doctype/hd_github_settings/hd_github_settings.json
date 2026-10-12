@@ -10,7 +10,16 @@
 		"column_break_github",
 		"complete_on_merge",
 		"unlinked_pr_project",
-		"github_token"
+		"github_token",
+		"merge_bot_section",
+		"trigger_merge_bot",
+		"merge_bot_repo",
+		"merge_bot_workflow",
+		"column_break_merge_bot",
+		"merge_bot_token",
+		"merge_bot_last_dispatch",
+		"merge_bot_last_result",
+		"merge_bot_last_outcome"
 	],
 	"fields": [
 		{
@@ -57,12 +66,72 @@
 			"fieldtype": "Password",
 			"label": "GitHub Token",
 			"description": "Optional. Lets TBO Support ask on a PR for its task number and read why a PR was closed. Needs read and write access to pull requests and issues."
+		},
+		{
+			"fieldname": "merge_bot_section",
+			"fieldtype": "Section Break",
+			"label": "Org merge bot",
+			"description": "The merge bot merges PRs in both organisations that CodeRabbit approved and whose checks are green. GitHub doesn't reliably run it on its schedule, so TBO Support asks for a run when CodeRabbit approves a PR or a PR's CI passes, and every 10 minutes, at most once per 2 minutes. The merge rules stay in the bot."
+		},
+		{
+			"default": "0",
+			"fieldname": "trigger_merge_bot",
+			"fieldtype": "Check",
+			"label": "Trigger the org merge bot",
+			"description": "Needs the webhook at organization level in tbocloud and teambackoffice, also sending Pull request reviews, Check suites and Workflow runs."
+		},
+		{
+			"default": "tbocloud/ai-review",
+			"fieldname": "merge_bot_repo",
+			"fieldtype": "Data",
+			"label": "Merge bot repository"
+		},
+		{
+			"default": "merge-bot.yml",
+			"fieldname": "merge_bot_workflow",
+			"fieldtype": "Data",
+			"label": "Merge bot workflow",
+			"description": "The workflow file name; it's run on main with dry_run off."
+		},
+		{
+			"fieldname": "column_break_merge_bot",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "merge_bot_token",
+			"fieldtype": "Password",
+			"label": "Merge bot token",
+			"description": "Optional. A fine-grained token with Actions: Read and write on the merge bot repository only. Leave empty to use the GitHub Token above."
+		},
+		{
+			"fieldname": "merge_bot_last_dispatch",
+			"fieldtype": "Datetime",
+			"label": "Last run requested",
+			"read_only": 1,
+			"no_copy": 1
+		},
+		{
+			"fieldname": "merge_bot_last_result",
+			"fieldtype": "Data",
+			"label": "Last result",
+			"read_only": 1,
+			"no_copy": 1
+		},
+		{
+			"fieldname": "merge_bot_last_outcome",
+			"fieldtype": "Select",
+			"label": "Last outcome",
+			"options": "\nDispatched\nFailed",
+			"read_only": 1,
+			"hidden": 1,
+			"no_copy": 1,
+			"description": "Last result as a fixed value, whatever the language, for Settings → GitHub."
 		}
 	],
 	"index_web_pages_for_search": 0,
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-09-30 12:00:00.000000",
+	"modified": "2026-10-11 18:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD GitHub Settings",

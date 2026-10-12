@@ -84,37 +84,25 @@
           <div
             class="mt-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between"
           >
-            <div
-              class="-mx-1 flex gap-1 overflow-x-auto px-1"
-              role="tablist"
-              :aria-label="__('Filter tasks by status')"
-            >
-              <button
-                v-for="tab in tabs"
-                :key="tab.key"
-                type="button"
-                role="tab"
-                :aria-selected="activeFilter === tab.key"
-                class="flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
-                :class="
-                  activeFilter === tab.key
-                    ? 'bg-surface-gray-3 text-ink-gray-9'
-                    : 'text-ink-gray-6 hover:bg-surface-gray-2 hover:text-ink-gray-8'
+            <div class="-mx-1 min-w-0 overflow-x-auto px-1">
+              <TabButtons
+                :model-value="activeFilter"
+                size="md"
+                :aria-label="__('Filter tasks by status')"
+                :options="
+                  tabs.map((t) => ({ label: __(t.label), value: t.key }))
                 "
-                @click="setFilter(tab.key)"
+                @update:model-value="setFilter($event)"
               >
-                {{ __(tab.label) }}
-                <span
-                  class="rounded px-1 text-xs tabular-nums"
-                  :class="
-                    activeFilter === tab.key
-                      ? 'bg-surface-base text-ink-gray-8'
-                      : 'text-ink-gray-5'
-                  "
-                >
-                  {{ countFor(tab.key) }}
-                </span>
-              </button>
+                <template #suffix="{ button, checked }">
+                  <span
+                    class="font-mono text-xs tabular-nums"
+                    :class="checked ? '' : 'text-ink-gray-5'"
+                  >
+                    {{ countFor(button.modelValue) }}
+                  </span>
+                </template>
+              </TabButtons>
             </div>
             <TextInput
               v-model="search"
@@ -217,6 +205,10 @@
                           v-if="task.slip_count && !isClosed(task)"
                           :count="task.slip_count"
                         />
+                        <EscalationBadge
+                          v-if="!isClosed(task)"
+                          :level="task.escalation_level"
+                        />
                       </div>
                       <div
                         class="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 text-sm text-ink-gray-5"
@@ -250,6 +242,12 @@
                           <WaitingOn :subject="task.depends_on_subject" />
                         </template>
                       </div>
+                      <HoldNote
+                        v-if="isOnHold(task)"
+                        :note="task.hold_note"
+                        :by-name="task.hold_by_name"
+                        class="mt-0.5"
+                      />
                     </div>
                   </div>
 
@@ -314,7 +312,13 @@
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import TaskyState from "@/components/TaskyState.vue";
 import { __ } from "@/translation";
-import { Button, TextInput, createResource, dayjs } from "frappe-ui";
+import {
+  Button,
+  TabButtons,
+  TextInput,
+  createResource,
+  dayjs,
+} from "frappe-ui";
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
@@ -326,8 +330,10 @@ import LucidePause from "~icons/lucide/pause";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideSearch from "~icons/lucide/search";
 import LucideSearchX from "~icons/lucide/search-x";
+import HoldNote from "./components/HoldNote.vue";
 import MilestoneMark from "./components/MilestoneMark.vue";
 import SlipBadge from "./components/SlipBadge.vue";
+import EscalationBadge from "@/components/EscalationBadge.vue";
 import TaskDetailDialog from "./components/TaskDetailDialog.vue";
 import TaskStatusBadge from "./components/TaskStatusBadge.vue";
 import WaitingOn from "./components/WaitingOn.vue";
@@ -353,9 +359,12 @@ interface Task {
   project_name?: string;
   due_date?: string;
   hold_reason?: string | null;
+  hold_note?: string | null;
   hold_since?: string | null;
+  hold_by_name?: string | null;
   is_milestone?: boolean;
   slip_count?: number;
+  escalation_level?: number;
   depends_on_subject?: string | null;
   blocked?: boolean;
 }
@@ -432,7 +441,8 @@ function dueLabel(task: Task) {
     return days === -1
       ? __("1 day overdue")
       : __("{0} days overdue", String(-days));
-  if (days === 0) return __("Due today");
+  if (days === 0)
+    return isOverdue(task) ? __("Past its estimate") : __("Due today");
   if (days === 1) return __("Due tomorrow");
   if (days < 7) return __("Due {0}", due.format("ddd"));
   return due.format("D MMM");

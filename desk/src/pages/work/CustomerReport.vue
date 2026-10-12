@@ -104,6 +104,7 @@
               :value="totals ? totals.tickets_resolved : '–'"
               :sub="resolveSub"
               :icon="LucideCircleCheckBig"
+              icon-tone="success"
               :loading="loading"
             />
             <StatTile
@@ -119,12 +120,14 @@
               :label="__('Tasks done')"
               :value="totals ? totals.tasks_completed : '–'"
               :icon="LucideListChecks"
+              icon-tone="success"
               :loading="loading"
             />
             <StatTile
               :label="__('Hours logged')"
               :value="totals ? cell(totals, 'hours_logged') : '–'"
               :icon="LucideClock"
+              icon-tone="info"
               :loading="loading"
             />
           </section>

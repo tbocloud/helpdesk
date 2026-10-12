@@ -1,7 +1,8 @@
 import { useAuthStore } from "@/stores/auth";
 import { ListResource, Notification } from "@/types";
 import { isCustomerPortal } from "@/utils";
-import { createListResource, createResource } from "frappe-ui";
+import { playNotificationSound } from "@/composables/notificationSound";
+import { createListResource, createResource, toast } from "frappe-ui";
 import { defineStore } from "pinia";
 import { computed, ref, watch } from "vue";
 import { globalStore } from "./globalStore";
@@ -70,6 +71,17 @@ export const useNotificationStore = defineStore("notification", () => {
     if (isCustomerPortal.value) return;
     resource.reload();
   });
+  // sent only to the recipient, the moment a notification is created
+  $socket.on(
+    "helpdesk:new-notification",
+    (n: { notification_type: string; message?: string }) => {
+      if (isCustomerPortal.value) return;
+      resource.reload();
+      if (n.notification_type !== "Task Completed") return;
+      playNotificationSound();
+      if (n.message) toast.success(n.message);
+    }
+  );
 
   return {
     clear,

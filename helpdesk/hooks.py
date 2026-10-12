@@ -46,9 +46,10 @@ scheduler_events = {
         "* * * * *": [
             "helpdesk.tasks.pull_client_tickets",
         ],
-        # every 15 minutes: SLA reminders, so a short first-reply SLA isn't missed
+        # every 15 minutes: follow-ups and escalation for tasks and tickets, and the
+        # digests at their times (docs/follow-ups.md)
         "*/15 * * * *": [
-            "helpdesk.work_reminders.send_ticket_reminders",
+            "helpdesk.follow_ups.run",
             "helpdesk.helpdesk.doctype.hd_meeting.hd_meeting.sync_with_outlook",
         ],
         "*/5 * * * *": [
@@ -62,9 +63,10 @@ scheduler_events = {
         "*/10 * * * *": [
             "helpdesk.error_alerts.post_error_digest",
         ],
-        # 10:00 every day: each assignee's morning brief
-        "0 10 * * *": [
-            "helpdesk.morning_brief.send_morning_briefs",
+        # every 10 minutes, off the error digest's minutes: ask GitHub to run the org
+        # merge bot, whose own schedule doesn't fire (off by default; docs/github-sync.md)
+        "2-59/10 * * * *": [
+            "helpdesk.merge_bot.scheduled_run",
         ],
         # 09:00: from the planning day on, next month's content plans
         "0 9 * * *": [
@@ -73,6 +75,19 @@ scheduler_events = {
         # 11:00: remind clients about posts waiting for approval, then alert the team
         "0 11 * * *": [
             "helpdesk.content_follow_up.send_client_follow_ups",
+        ],
+        # 06:15: holidays and approved leave from the CRM site, before the working day
+        "15 6 * * *": [
+            "helpdesk.integrations.crm.holidays.sync_holidays_job",
+        ],
+        # hourly at :40: disable people TBO removed from Microsoft (off by default;
+        # docs/tbo-smart-api.md, "Offboarding")
+        "40 * * * *": [
+            "helpdesk.offboarding.run",
+        ],
+        # 00:30: champions of every period that ended yesterday (team dashboard)
+        "30 0 * * *": [
+            "helpdesk.team_dashboard.close_periods",
         ],
         # Monday 08:00: last week's summary per customer
         "0 8 * * 1": [
@@ -84,8 +99,6 @@ scheduler_events = {
         "helpdesk.tasks.health_check_connections",
         "helpdesk.tasks.retry_pending_triages",
         "helpdesk.helpdesk.doctype.hd_content_post.hd_content_post.send_due_reminders",
-        "helpdesk.work_reminders.send_task_reminders",
-        "helpdesk.work_reminders.send_hold_reminders",
         "helpdesk.work_calendar.sync_saturdays_off",
         "helpdesk.helpdesk.doctype.hd_github_delivery.hd_github_delivery.clear_old_deliveries",
         "helpdesk.helpdesk.doctype.hd_chatwoot_event.hd_chatwoot_event.clear_old_events",
@@ -134,6 +147,18 @@ user_invitation = {
 }
 
 doc_events = {
+    # a disabled user keeps no OAuth tokens (helpdesk/offboarding.py)
+    "User": {
+        "on_update": "helpdesk.offboarding.revoke_tokens_of_disabled_user",
+    },
+    "Project": {
+        # content tasks made before the customer had a content project join it
+        "on_update": "helpdesk.helpdesk.doctype.hd_content_post.hd_content_post.attach_content_tasks",
+    },
+    "ToDo": {
+        # nobody is given a task in a department their team keeps out of
+        "validate": "helpdesk.tasky.permissions.check_assignment_department",
+    },
     "File": {
         "after_insert": "helpdesk.storage.s3.after_insert",
     },

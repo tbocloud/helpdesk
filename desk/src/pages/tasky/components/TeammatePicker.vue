@@ -24,6 +24,7 @@
 
 <script setup lang="ts">
 import { __ } from "@/translation";
+import { useOnLeave } from "@/composables/onLeave";
 import { useAuthStore } from "@/stores/auth";
 import { Autocomplete, createResource } from "frappe-ui";
 import { computed, watch } from "vue";
@@ -40,11 +41,14 @@ const props = defineProps<{
   label: string;
   /** People not to offer, e.g. the task's current assignees. */
   exclude?: string[];
+  /** Offer every active agent, not only the team: a content post's task (the server allows it). */
+  anyone?: boolean;
 }>();
 
 const emit = defineEmits<{ "update:modelValue": [value: string] }>();
 
 const authStore = useAuthStore();
+const { leaveLabel } = useOnLeave();
 
 const projectDetail = createResource({
   url: "helpdesk.tasky.api.get_project_detail",
@@ -80,14 +84,14 @@ const options = computed(() => {
   if (detail.project_lead) team.add(detail.project_lead);
   const skip = new Set([authStore.userId, ...(props.exclude ?? [])]);
   return ((assignable.data ?? []) as Person[])
-    .filter((u) => team.has(u.name) && !skip.has(u.name))
+    .filter((u) => (props.anyone || team.has(u.name)) && !skip.has(u.name))
     .map((u) => ({
       label:
         u.name === detail.project_lead
           ? __("{0} (project lead)", u.full_name || u.name)
           : u.full_name || u.name,
       value: u.name,
-      description: u.name,
+      description: leaveLabel(u.name) || u.name,
     }));
 });
 </script>

@@ -1,0 +1,14 @@
+{
+  "v": 1,
+  "data": {
+    "id": "a1b2c3d4e5",
+    "at": "2026-10-10 10:42:00",
+    "who": "Najath Thekkeyil",
+    "kind": "comment",
+    "type": "comment",
+    "text": "Customer list has 14 duplicate GSTINs, cleaning them first.",
+    "data": {
+      "name": "a1b2c3d4e5"
+    }
+  }
+}

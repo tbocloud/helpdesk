@@ -4,29 +4,39 @@ import json
 
 import frappe
 from frappe import _
-from frappe.desk.form import assign_to
 from frappe.query_builder import Order
 
+from helpdesk import task_activity
 from helpdesk.api.content_board import user_full_names
 from helpdesk.api.project_files import file_counts
 from helpdesk.github_sync import get_pull_requests
 from helpdesk.tasky.permissions import (
     MANAGER_PROJECT_ROLE,
     can_add_tasks,
+    can_coordinate_project,
     can_manage_project,
     can_move_task,
+    check_can_take_content_task,
     get_assigners,
     is_assigner,
     is_project_owner,
     is_tasky_admin,
+    sees_all_tasks,
 )
-from helpdesk.utils import csv_safe
+from helpdesk.utils import (
+    add_assignment,
+    assigned_to_filter,
+    csv_safe,
+    remove_assignment,
+)
 
 # member roles a project lead is rotated among
 LEAD_ROTATION_ROLES = ("Developer",)
 ON_HOLD = "On Hold"
 PENDING_REVIEW_STATUS = "Pending Review"
 TASK_DONE = ("Completed", "Cancelled")
+# what task lists select so a held task shows why, since when and who held it
+TASK_HOLD_FIELDS = ["hold_reason", "hold_note", "hold_since", "hold_by"]
 # how many projects Recent projects keeps per person
 RECENT_PROJECTS = 8
 # the most one completion may log; longer work belongs on a manual timesheet
@@ -44,6 +54,29 @@ CATEGORY_TO_ROLE = {
     "Video": "Videographer cum Editor",
     "Motion Graphics": "Motion Graphics Artist / Animator",
     "Coordination": "Project Coordinator",
+}
+
+
+def _is_overdue(task, today) -> bool:
+    """The Overdue page's rule, for a task row fetched with its timer fields."""
+    # helpdesk.api.work imports this module, so it's imported here, not at the top
+    from helpdesk.api.work import is_task_overdue
+
+    deadline = frappe.utils.getdate(task.exp_end_date) if task.exp_end_date else None
+    return is_task_overdue(task, deadline, today)
+
+
+# what each project dashboard tile counts; the counts and the checklist's
+# `?status=` filter both come from these, so a tile's number is its list's length
+DASHBOARD_STAT_RULES = {
+    "completed": lambda t, today: t.status == "Completed",
+    "in_progress": lambda t, today: t.status == "Working",
+    "pending": lambda t, today: t.status == "Open",
+    "reviewing": lambda t, today: t.status == PENDING_REVIEW_STATUS,
+    "on_hold": lambda t, today: t.status == ON_HOLD,
+    "rescheduled": lambda t, today: (t.slip_count or 0) > 0,
+    "cancelled": lambda t, today: t.status == "Cancelled",
+    "overdue": _is_overdue,
 }
 
 
@@ -67,8 +100,31 @@ def _task_dict(doc):
     return data
 
 
-def _format_task(task):
-    """Normalize a Task dict for frontend consumption."""
+def hold_by_names(tasks) -> dict[str, str]:
+    """Full names of whoever put these tasks on hold, from one User query for the list."""
+    return user_full_names({t.get("hold_by") for t in tasks if t.get("hold_by")})
+
+
+def hold_by_name(user: str | None, names: dict[str, str] | None = None) -> str | None:
+    """`names` comes from hold_by_names() for a list; a single task looks the user up."""
+    if not user:
+        return None
+    if names is None:
+        return frappe.utils.get_fullname(user)
+    return names.get(user) or user
+
+
+def _format_tasks(tasks) -> list[dict]:
+    """_format_task for a list, with the holders' names fetched once."""
+    names = hold_by_names(tasks)
+    return [_format_task(t, names) for t in tasks]
+
+
+def _format_task(task, hold_names: dict[str, str] | None = None):
+    """Normalize a Task dict for frontend consumption.
+
+    Lists pass `hold_names` (see _format_tasks) so held tasks don't look up User one by one.
+    """
     assign_raw = task.pop("_assign", None) or ""
     try:
         assigned = json.loads(assign_raw)
@@ -96,12 +152,15 @@ def _format_task(task):
         "hold_reason": task.get("hold_reason"),
         "hold_note": task.get("hold_note"),
         "hold_since": task.get("hold_since"),
+        "hold_by": task.get("hold_by"),
+        "hold_by_name": hold_by_name(task.get("hold_by"), hold_names),
         "hold_days_total": task.get("hold_days_total") or 0,
         "is_milestone": bool(task.get("is_milestone")),
         "ai_estimated": bool(task.get("ai_estimated")),
         "estimate_note": task.get("estimate_note"),
         "ai_description": bool(task.get("custom_ai_description")),
         "slip_count": task.get("slip_count") or 0,
+        "escalation_level": task.get("escalation_level") or 0,
         **_dependency_info(task.get("depends_on_task")),
     }
 
@@ -466,14 +525,11 @@ def _estimate_if_undated(task_doc):
 
 @frappe.whitelist()
 def estimate_undated_tasks(project: str) -> dict:
-    """Managers and leads: let the AI set due dates for open tasks that have none."""
+    """Managers, leads and coordinators: let the AI set due dates for open tasks that have none."""
     from helpdesk.task_estimates import get_settings, queue_estimate
 
     project = _resolve_project(str(project))
-    if not can_manage_project(project):
-        frappe.throw(
-            _("Only the project's manager or lead can do this."), frappe.PermissionError
-        )
+    _check_can_coordinate(project)
     if not get_settings().ai_task_estimates:
         frappe.throw(_("AI task estimates are turned off in HD Work Settings."))
     tasks = frappe.get_all(
@@ -514,9 +570,7 @@ def _assign_user(
             args["assigned_by"] = assigned_by
         if note:
             args["description"] = note
-        # Frappe 16 keeps the internal _add next to the whitelisted add; 15 has only add
-        add = getattr(assign_to, "_add", None) or assign_to.add
-        add(args, ignore_permissions=ignore_permissions)
+        add_assignment(args, ignore_permissions=ignore_permissions)
 
 
 @frappe.whitelist()
@@ -552,14 +606,7 @@ def add_task(
     if assigned_to and not _is_assignable(assigned_to):
         frappe.throw(_("{0} is not an active agent.").format(assigned_to))
     if assigned_to and not _is_project_member(project, assigned_to):
-        # adding people to the team is the manager's call
-        if not manages:
-            frappe.throw(
-                _(
-                    "{0} isn't on this project. Ask the project's manager or lead to add them."
-                ).format(assigned_to),
-                frappe.PermissionError,
-            )
+        _check_can_bring_in(project, assigned_to)
         _add_member_for_assignment(project, assigned_to)
     doc = frappe.get_doc(
         {
@@ -596,9 +643,7 @@ def get_my_tasks(
     limit: int = 50,
 ):
     """Get tasks assigned to current user."""
-    user = frappe.session.user
-
-    filters = {"_assign": ("like", f'%"{user}"%')}
+    filters = {"name": assigned_to_filter("Task", frappe.session.user)}
     if project:
         filters["project"] = _resolve_project(str(project))
     if status:
@@ -617,12 +662,15 @@ def get_my_tasks(
             "priority",
             "exp_end_date",
             "custom_estimated_hours",
+            # due today and past its estimate is overdue too (isOverdue in taskMeta.ts)
+            "custom_timer_start",
+            "custom_timer_elapsed",
             "is_key",
             "hd_ticket",
-            "hold_reason",
-            "hold_since",
+            *TASK_HOLD_FIELDS,
             "is_milestone",
             "slip_count",
+            "escalation_level",
             "depends_on_task",
             "_assign",
         ],
@@ -639,8 +687,8 @@ def get_my_tasks(
     )
     return add_assigners(
         [
-            {**_format_task(t), "project_name": project_names.get(t.project)}
-            for t in tasks
+            {**t, "project_name": project_names.get(t.get("project"))}
+            for t in _format_tasks(tasks)
         ]
     )
 
@@ -654,6 +702,18 @@ def get_task_detail(task: str):
         **add_assigners([_format_task(_task_dict(doc))])[0],
         "pull_requests": get_pull_requests([doc.name]).get(doc.name, []),
     }
+
+
+@frappe.whitelist()
+def get_task_activity(task: str) -> dict:
+    """The task's history (created, assignments, changes, notes, comments, time), newest first."""
+    return task_activity.get_activity(task)
+
+
+@frappe.whitelist(methods=["POST"])
+def add_task_comment(task: str, content: str) -> dict:
+    """Comment on a task (anyone who can see it may); returns the new activity item."""
+    return task_activity.add_comment(task, content)
 
 
 @frappe.whitelist()
@@ -808,9 +868,13 @@ def request_help(
     }
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def hand_over_task(task: str, teammate: str, reason: str) -> dict:
-    """The assignee passes their task to a teammate and says why; the lead is told."""
+    """The assignee passes their task to a teammate and says why.
+
+    Whoever gave it out stays its assigner, so it leaves the hander's lists (unless
+    they gave it out or created it); the teammate, the lead and the assigner are told.
+    """
     from helpdesk.work_reminders import notify_users
 
     doc = _get_own_task(task)
@@ -824,41 +888,85 @@ def hand_over_task(task: str, teammate: str, reason: str) -> dict:
     if doc.custom_timer_start:
         frappe.throw(_("Stop the timer first, so your time on it is saved."))
 
-    _reassign(doc, previous, teammate, ignore_permissions=True)
+    giver = frappe.session.user
+    # an assignee hands over only their own share; a lead hands over the whole task
+    leaving = [giver] if giver in previous else previous
+    assigner = get_assigners({doc.name: leaving[0]}).get(doc.name) if leaving else None
+    post = _content_post_for_hand_over(doc, leaving)
+    _reassign(
+        doc,
+        leaving,
+        teammate,
+        ignore_permissions=True,
+        assigned_by=assigner or giver,
+    )
+    if post:
+        _hand_over_content_part(post, doc.content_role, leaving, teammate)
     doc.add_comment(
-        "Info", frappe.utils.escape_html(_("Handed over: {0}").format(reason))
+        "Info",
+        frappe.utils.escape_html(
+            _("Handed over by {0}: {1}").format(_full_name(giver), reason)
+        ),
     )
 
-    giver = _full_name(frappe.session.user)
+    giver_name = _full_name(giver)
     notify_users(
         [teammate],
         "Task",
         doc.name,
-        _("{0} handed you a task: {1}").format(giver, doc.subject),
+        _("{0} handed you a task: {1}").format(giver_name, doc.subject),
     )
     notify_users(
         [
             u
-            for u in doc.leads_or_managers()
-            if u not in (frappe.session.user, teammate)
+            for u in dict.fromkeys([*doc.leads_or_managers(), assigner])
+            if u and u not in (giver, teammate)
+            # the reason and subject go only to people who may still read the task
+            and frappe.has_permission("Task", "read", doc=doc, user=u)
         ],
         "Task",
         doc.name,
         _("{0} handed {1} to {2}: {3}").format(
-            giver, doc.subject, _full_name(teammate), reason
+            giver_name, doc.subject, _full_name(teammate), reason
         ),
     )
     return _format_task(_task_dict(doc))
 
 
+def _content_post_for_hand_over(doc, leaving: list[str]):
+    """A content task's post, checked before anything changes: the post decides who
+    has the task, so whoever hands it over must be on the part it stands for."""
+    if not doc.get("content_post"):
+        return None
+    post = frappe.get_doc("HD Content Post", doc.content_post)
+    if not set(leaving) & post.people_on_part(doc.content_role):
+        frappe.throw(
+            _(
+                "This task follows the content post's team, which you aren't on. Ask a DM Coordinator to change the post's team."
+            )
+        )
+    return post
+
+
+def _hand_over_content_part(post, content_role: str, leaving: list[str], teammate: str):
+    """Put the teammate in the hander's place on the content post, so the post's next
+    save doesn't hand the task back. The task is already reassigned, so the post
+    skips its task sync; the hander can't edit posts, hence ignore_permissions."""
+    post.replace_on_part(content_role, leaving, teammate)
+    post.flags.skip_task_sync = True
+    post.save(ignore_permissions=True)
+
+
 def _get_own_task(task: str):
-    """An open project task the caller is assigned to, or manages."""
+    """An open project task the caller is assigned to, or coordinates."""
     doc = frappe.get_doc("Task", str(task))
-    if frappe.session.user not in doc.assignees() and not can_manage_project(
+    if frappe.session.user not in doc.assignees() and not can_coordinate_project(
         doc.project
     ):
         frappe.throw(
-            _("Only the task's assignee or the project lead can do this."),
+            _(
+                "Only the task's assignee or the project's lead or coordinator can do this."
+            ),
             frappe.PermissionError,
         )
     if not doc.project:
@@ -869,13 +977,21 @@ def _get_own_task(task: str):
 
 
 def _teammate(doc, user: str) -> str:
-    """An active agent on the task's project; leads and managers may pick anyone."""
+    """An active agent on the task's project; leads and managers may pick anyone, and
+    a content post's task may go to anyone (the department walls still apply)."""
     user = str(user or "").strip()
     if not user:
         frappe.throw(_("Pick a teammate."))
     if not _is_assignable(user):
         frappe.throw(_("{0} is not an active agent.").format(user))
-    if not _is_on_team(doc.project, user) and not can_manage_project(doc.project):
+    if doc.get("content_post"):
+        # before anything is reassigned or anyone notified
+        check_can_take_content_task(user)
+    if (
+        not doc.get("content_post")
+        and not _is_on_team(doc.project, user)
+        and not can_manage_project(doc.project)
+    ):
         frappe.throw(
             _(
                 "Pick someone on the project team. The project lead can add other people."
@@ -926,13 +1042,30 @@ def _full_name(user: str) -> str:
 
 
 def _get_managed_task(task: str):
+    """A task whose project the caller coordinates (plans, reviews, edits its tasks)."""
     doc = frappe.get_doc("Task", str(task))
-    if not can_manage_project(doc.project):
+    _check_can_coordinate(doc.project)
+    return doc
+
+
+def _check_can_coordinate(project: str | None):
+    if not can_coordinate_project(project):
         frappe.throw(
-            _("Only the project's manager or lead can do this."),
+            _("Only the project's manager, lead or coordinator can do this."),
             frappe.PermissionError,
         )
-    return doc
+
+
+def _check_can_bring_in(project: str, user: str):
+    """Giving a task to someone outside the team adds them to it, which is the
+    project manager's or lead's call; coordinators and members pick from the team."""
+    if not can_manage_project(project):
+        frappe.throw(
+            _(
+                "{0} isn't on this project. Ask the project's manager or lead to add them."
+            ).format(user),
+            frappe.PermissionError,
+        )
 
 
 @frappe.whitelist()
@@ -945,7 +1078,7 @@ def update_task_plan(
     depends_on_task: str | None = None,
     clear_dependency: bool = False,
 ) -> dict:
-    """Leads and managers reschedule, flag and link tasks; moving a date later needs a reason."""
+    """Leads, managers and coordinators reschedule, flag and link tasks; moving a date later needs a reason."""
     doc = _get_managed_task(task)
     if due_date and str(due_date) != str(doc.exp_end_date or ""):
         later = doc.exp_end_date and frappe.utils.getdate(
@@ -979,7 +1112,7 @@ def update_task(
     assigned_to: str | None = None,
     ai_description: bool | None = None,
 ) -> dict:
-    """Edit a task's details. Leads and managers change anything; its assignee only the description.
+    """Edit a task's details. Leads, managers and coordinators change anything; its assignee only the description.
 
     `ai_description`: the description sent is an unedited "Write with AI" draft.
 
@@ -1030,15 +1163,24 @@ def update_task(
 
 
 def _check_can_edit(doc, details: dict):
-    """Leads and managers edit everything; the assignee may only rewrite the description."""
-    if can_manage_project(doc.project):
+    """Managers, leads and coordinators edit everything; the assignee may only rewrite
+    the description. Only managers and leads give it to someone outside the team."""
+    if can_coordinate_project(doc.project):
+        new_assignee = str(details.get("assigned_to") or "").strip()
+        if (
+            new_assignee
+            and doc.project
+            and not doc.get("content_post")
+            and not _is_on_team(doc.project, new_assignee)
+        ):
+            _check_can_bring_in(doc.project, new_assignee)
         return
     if frappe.session.user not in doc.assignees():
         frappe.throw(_("You can't edit this task."), frappe.PermissionError)
     if any(value is not None for value in details.values()):
         frappe.throw(
             _(
-                "Only the project's manager or lead can change this. You can edit the description."
+                "Only the project's manager, lead or coordinator can change this. You can edit the description."
             ),
             frappe.PermissionError,
         )
@@ -1076,7 +1218,11 @@ def _estimated_hours(value: float | str) -> float:
 
 
 def _reassign(
-    doc, previous: list[str], new_assignee: str, ignore_permissions: bool = False
+    doc,
+    previous: list[str],
+    new_assignee: str,
+    ignore_permissions: bool = False,
+    assigned_by: str | None = None,
 ):
     """Hand the task to `new_assignee` ("" = nobody) through ToDos.
 
@@ -1084,6 +1230,7 @@ def _reassign(
     ToDo and sends the new one Frappe's assignment notification.
     `ignore_permissions` is for an assignee handing their own task over: once
     their ToDo is cancelled they can no longer read it to assign the next person.
+    `assigned_by` keeps the original assigner on a hand-over (else the session user).
     """
     new = [new_assignee] if new_assignee else []
     if set(previous) == set(new):
@@ -1091,15 +1238,22 @@ def _reassign(
     if (
         new_assignee
         and doc.project
-        and not _is_project_member(doc.project, new_assignee)
+        # a content post's people work on the content calendar without joining its team
+        and not doc.get("content_post")
+        and not _is_on_team(doc.project, new_assignee)
     ):
         _add_member_for_assignment(doc.project, new_assignee)
     for user in previous:
         if user not in new:
             # the caller manages the project or hands over their own task (checked by the caller)
-            assign_to._remove("Task", doc.name, user, ignore_permissions=True)
+            remove_assignment("Task", doc.name, user, ignore_permissions=True)
     if new_assignee and new_assignee not in previous:
-        _assign_user(doc, new_assignee, ignore_permissions=ignore_permissions)
+        _assign_user(
+            doc,
+            new_assignee,
+            ignore_permissions=ignore_permissions,
+            assigned_by=assigned_by,
+        )
 
     doc.add_comment(
         "Info",
@@ -1115,7 +1269,7 @@ def _reassign(
 
 @frappe.whitelist()
 def approve_task(task: str) -> dict:
-    """Lead signs off a reviewed task."""
+    """The lead, a manager or a coordinator signs off a reviewed task."""
     doc = _get_managed_task(task)
     if doc.status != "Pending Review":
         frappe.throw(_("Only tasks waiting for review can be approved."))
@@ -1127,7 +1281,7 @@ def approve_task(task: str) -> dict:
 
 @frappe.whitelist()
 def send_back_task(task: str, note: str) -> dict:
-    """Lead returns a reviewed task with what still needs doing."""
+    """The lead, a manager or a coordinator returns a reviewed task with what still needs doing."""
     from helpdesk.work_reminders import notify_users
 
     doc = _get_managed_task(task)
@@ -1303,12 +1457,14 @@ def get_project_dashboard(project: str):
             "priority",
             "exp_end_date",
             "custom_estimated_hours",
+            "custom_timer_start",
+            "custom_timer_elapsed",
             "is_key",
             "hd_ticket",
-            "hold_reason",
-            "hold_since",
+            *TASK_HOLD_FIELDS,
             "is_milestone",
             "slip_count",
+            "escalation_level",
             "depends_on_task",
             "_assign",
             "creation",
@@ -1318,19 +1474,12 @@ def get_project_dashboard(project: str):
 
     today = frappe.utils.getdate(frappe.utils.today())
 
-    def count(status):
-        return sum(1 for t in tasks if t.status == status)
-
+    stat_tasks = {
+        key: [t.name for t in tasks if rule(t, today)]
+        for key, rule in DASHBOARD_STAT_RULES.items()
+    }
     total_tasks = len(tasks)
-    completed = count("Completed")
-    cancelled = count("Cancelled")
-    overdue = sum(
-        1
-        for t in tasks
-        if t.exp_end_date
-        and frappe.utils.getdate(t.exp_end_date) < today
-        and t.status not in ("Completed", "Cancelled", ON_HOLD)
-    )
+    completed = len(stat_tasks["completed"])
     progress_pct = round((completed / total_tasks * 100), 1) if total_tasks > 0 else 0
 
     # phases in order of their first task's creation
@@ -1366,11 +1515,7 @@ def get_project_dashboard(project: str):
                 "status": t.status,
                 "due_date": t.exp_end_date,
                 "slip_count": t.slip_count or 0,
-                "is_overdue": bool(
-                    t.exp_end_date
-                    and frappe.utils.getdate(t.exp_end_date) < today
-                    and t.status not in ("Completed", "Cancelled", ON_HOLD)
-                ),
+                "is_overdue": _is_overdue(t, today),
             }
             for t in tasks
             if t.is_milestone
@@ -1381,18 +1526,13 @@ def get_project_dashboard(project: str):
     return {
         "phases": phases,
         "milestones": milestones,
-        "tasks": [_format_task(t) for t in tasks],
+        "tasks": _format_tasks(tasks),
+        # the task names behind each count, for the checklist's tile filter
+        "stat_tasks": stat_tasks,
         "stats": {
             "total": total_tasks,
-            "completed": completed,
-            "in_progress": count("Working"),
-            "pending": count("Open"),
-            "reviewing": count("Pending Review"),
-            "on_hold": count(ON_HOLD),
-            "rescheduled": sum(1 for t in tasks if t.slip_count),
-            "cancelled": cancelled,
-            "blocked": cancelled,
-            "overdue": overdue,
+            **{key: len(names) for key, names in stat_tasks.items()},
+            "blocked": len(stat_tasks["cancelled"]),
             "completion_pct": progress_pct,
         },
     }
@@ -1415,27 +1555,46 @@ def get_phase_tasks(project: str, phase: str):
             "priority",
             "exp_end_date",
             "custom_estimated_hours",
+            # due today and past its estimate is overdue too (isOverdue in taskMeta.ts)
+            "custom_timer_start",
+            "custom_timer_elapsed",
             "is_key",
             "hd_ticket",
-            "hold_reason",
-            "hold_since",
+            *TASK_HOLD_FIELDS,
             "is_milestone",
             "slip_count",
+            "escalation_level",
             "depends_on_task",
             "_assign",
+            "content_post",
         ],
         order_by="subject asc",
     )
-    return [_format_task(t) for t in tasks]
+    return _format_tasks(tasks)
 
 
 @frappe.whitelist()
-def get_kanban_tasks(project: str):
-    """Get tasks grouped by status for kanban board."""
-    project = _resolve_project(str(project))
+def get_kanban_tasks(project: str | None = None):
+    """Tasks grouped by status for the board: one project's, or without `project` the
+    current user's own tasks across every project (the sidebar's Board)."""
+    if project:
+        filters = {"project": _resolve_project(str(project))}
+        or_filters = None
+    else:
+        filters = {
+            "name": assigned_to_filter("Task", frappe.session.user),
+            "status": ("!=", "Template"),
+        }
+        # finished work stays a month, so the done columns don't grow forever
+        month_ago = frappe.utils.add_days(frappe.utils.nowdate(), -30)
+        or_filters = {
+            "status": ("not in", ["Completed", "Cancelled"]),
+            "modified": (">=", month_ago),
+        }
     tasks = frappe.get_list(
         "Task",
-        filters={"project": project},
+        filters=filters,
+        or_filters=or_filters,
         fields=[
             "name",
             "subject",
@@ -1448,15 +1607,17 @@ def get_kanban_tasks(project: str):
             "custom_estimated_hours",
             "is_key",
             "hd_ticket",
-            "hold_reason",
-            "hold_since",
+            *TASK_HOLD_FIELDS,
             "is_milestone",
             "slip_count",
+            "escalation_level",
             "depends_on_task",
             "_assign",
             "custom_timer_start",
             "custom_timer_elapsed",
             "custom_recurring_task",
+            # a content post's task may be handed to anyone (TeammatePicker)
+            "content_post",
         ],
         order_by="custom_phase asc, subject asc",
     )
@@ -1472,7 +1633,21 @@ def get_kanban_tasks(project: str):
         "Completed": [],
         "Cancelled": [],
     }
-    for t in add_assigners([_format_task(t) for t in tasks]):
+    # across projects each card says which one it belongs to
+    project_names = (
+        {}
+        if project
+        else dict(
+            frappe.get_all(
+                "Project",
+                filters={"name": ("in", list({t.project for t in tasks if t.project}))},
+                fields=["name", "project_name"],
+                as_list=True,
+            )
+        )
+    )
+    for t in add_assigners(_format_tasks(tasks)):
+        t["project_name"] = project_names.get(t.get("project"))
         status = t.get("status") or "Open"
         if status not in columns:
             status = "Open"
@@ -1612,6 +1787,10 @@ def get_project_detail(project: str):
             else []
         ),
         "can_manage": can_manage_project(doc.name),
+        # runs the tasks (plan, review, edit, reassign) without managing the project
+        "can_coordinate": can_coordinate_project(doc.name),
+        # False: the project's task pages show only the viewer's own tasks
+        "sees_all_tasks": sees_all_tasks(doc.name),
         "can_add_tasks": can_add_tasks(doc.name),
         "can_change_lead": is_project_owner(doc.name),
         "project_lead": doc.project_lead,

@@ -12,6 +12,19 @@ class HelpdeskFile(File):
     on-disk checks and reads its bytes from there.
     """
 
+    def check_content_file_removal(self):
+        """On a content entry, people who can only attach files remove only their own."""
+        from helpdesk.content_team import can_edit_content
+
+        if self.attached_to_doctype != "HD Content Post":
+            return
+        if self.owner == frappe.session.user or can_edit_content():
+            return
+        frappe.throw(
+            frappe._("Only a DM Coordinator can remove files someone else added."),
+            frappe.PermissionError,
+        )
+
     @property
     def has_bucket_copy(self) -> bool:
         return bool(self.get(s3.KEY_FIELD))
@@ -55,6 +68,7 @@ class HelpdeskFile(File):
         return super().get_content()
 
     def on_trash(self):
+        self.check_content_file_removal()
         super().on_trash()
         self.delete_project_file_record()
 

@@ -67,29 +67,14 @@
           <div
             class="mt-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between"
           >
-            <div
+            <TabButtons
               v-if="canSeeTeam"
-              class="inline-flex gap-1 self-start rounded-lg bg-surface-gray-2 p-0.5 lg:self-auto"
-              role="tablist"
+              v-model="scope"
+              class="self-start lg:self-auto"
+              size="md"
               :aria-label="__('Whose timesheets')"
-            >
-              <button
-                v-for="option in SCOPES"
-                :key="option.key"
-                type="button"
-                role="tab"
-                :aria-selected="scope === option.key"
-                class="rounded-md px-3 py-1.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
-                :class="
-                  scope === option.key
-                    ? 'bg-surface-base text-ink-gray-9 shadow-sm'
-                    : 'text-ink-gray-6 hover:text-ink-gray-8'
-                "
-                @click="scope = option.key"
-              >
-                {{ option.label }}
-              </button>
-            </div>
+              :options="SCOPES.map((o) => ({ label: o.label, value: o.key }))"
+            />
 
             <div
               class="flex flex-wrap items-end gap-3"
@@ -138,6 +123,7 @@
               :value="summary.data ? formatHours(summary.data.hours) : '—'"
               :sub="periodLabel"
               :icon="LucideTimer"
+              icon-tone="info"
               :loading="summaryLoading"
             />
             <StatTile
@@ -462,6 +448,7 @@ import {
   Button,
   Dialog,
   FormControl,
+  TabButtons,
   TextInput,
   createResource,
   dayjs,

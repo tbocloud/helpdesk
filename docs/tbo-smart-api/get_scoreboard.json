@@ -1,0 +1,117 @@
+{
+  "v": 1,
+  "data": {
+    "period": "week",
+    "period_label": "the week of 5 Oct 2026",
+    "range": {
+      "start": "2026-10-05",
+      "end": "2026-10-11"
+    },
+    "champion": {
+      "user": "arun@teambackoffice.com",
+      "name": "Arun Menon",
+      "image": null,
+      "score": 47.0,
+      "reasons": [
+        "Tasks done: 11 (3 key or milestones)",
+        "On time: 100% (9 of 9 with a due date)"
+      ],
+      "breakdown": [
+        {
+          "key": "tasks",
+          "points": 30.0,
+          "detail": "Tasks done: 11 (3 key or milestones)"
+        },
+        {
+          "key": "on_time",
+          "points": 15.0,
+          "detail": "On time: 100% (9 of 9 with a due date)"
+        },
+        {
+          "key": "hours",
+          "points": 2.0,
+          "detail": "Hours logged: 40.0 (count lightly, capped)"
+        }
+      ]
+    },
+    "me": {
+      "user": "najath@teambackoffice.com",
+      "full_name": "Najath Thekkeyil",
+      "image": "/files/najath.jpg",
+      "department": "ERP",
+      "rank": 2,
+      "score": 41.5,
+      "tasks_done": 9,
+      "key_tasks": 2,
+      "on_time_pct": 89,
+      "hours": 38.5,
+      "overdue": 1,
+      "of": 18,
+      "breakdown": [
+        {
+          "key": "tasks",
+          "points": 27.0,
+          "detail": "Tasks done: 9 (2 key or milestones)"
+        },
+        {
+          "key": "on_time",
+          "points": 14.0,
+          "detail": "On time: 89% (8 of 9 with a due date)"
+        },
+        {
+          "key": "overdue",
+          "points": -1.5,
+          "detail": "Overdue now: 1"
+        }
+      ]
+    },
+    "leaders": [
+      {
+        "user": "arun@teambackoffice.com",
+        "full_name": "Arun Menon",
+        "image": "/files/najath.jpg",
+        "department": "ERP",
+        "rank": 1,
+        "score": 47.0,
+        "tasks_done": 11,
+        "key_tasks": 3,
+        "on_time_pct": 100,
+        "hours": 40.0,
+        "overdue": 0
+      },
+      {
+        "user": "najath@teambackoffice.com",
+        "full_name": "Najath Thekkeyil",
+        "image": "/files/najath.jpg",
+        "department": "ERP",
+        "rank": 2,
+        "score": 41.5,
+        "tasks_done": 9,
+        "key_tasks": 2,
+        "on_time_pct": 89,
+        "hours": 38.5,
+        "overdue": 1
+      }
+    ],
+    "departments": [
+      {
+        "department": "ERP",
+        "people": 9,
+        "done": 41,
+        "on_time_pct": 86,
+        "overdue": 4,
+        "hours": 302.5,
+        "champion": "Arun Menon"
+      },
+      {
+        "department": "Digital",
+        "people": 6,
+        "done": 27,
+        "on_time_pct": null,
+        "overdue": 1,
+        "hours": 188.0,
+        "champion": null
+      }
+    ]
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "v": 1,
+  "data": [
+    {
+      "name": "1279",
+      "subject": "Invoices stuck in draft after the update",
+      "customer": "Haris Traders",
+      "contact": "haris@haristraders.example",
+      "raised_by": "haris@haristraders.example",
+      "priority": "Urgent",
+      "status": "Open",
+      "status_category": "Open",
+      "sla_due": "2026-10-10 11:30:00",
+      "sla_kind": "resolution",
+      "sla_breached": false,
+      "sla_due_soon": true,
+      "assigned_to": "najath@teambackoffice.com",
+      "assignees": [
+        {
+          "user": "najath@teambackoffice.com",
+          "full_name": "Najath Thekkeyil"
+        }
+      ],
+      "team": "Billing",
+      "opened_at": "2026-10-09 16:02:11.402113",
+      "awaiting_reply": true,
+      "escalation_level": 0
+    }
+  ],
+  "next_cursor": null,
+  "has_more": false
+}

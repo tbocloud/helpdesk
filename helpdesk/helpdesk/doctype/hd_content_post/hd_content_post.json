@@ -9,6 +9,7 @@
 		"title",
 		"customer",
 		"campaign",
+		"special_day",
 		"content_package",
 		"column_break_1",
 		"status",
@@ -23,6 +24,12 @@
 		"marketer",
 		"video_editor",
 		"extra_team",
+		"hours_section",
+		"writer_hours",
+		"designer_hours",
+		"column_break_hours",
+		"video_editor_hours",
+		"marketer_hours",
 		"content_section",
 		"caption",
 		"hashtags",
@@ -36,6 +43,9 @@
 		"client_decided_on",
 		"client_reminded_on",
 		"client_escalated_on",
+		"head_decided_by",
+		"head_decided_on",
+		"head_feedback",
 		"outcome_section",
 		"client_feedback",
 		"published_url",
@@ -50,7 +60,7 @@
 		{
 			"fieldname": "title",
 			"fieldtype": "Data",
-			"label": "Title",
+			"label": "Copy",
 			"reqd": 1,
 			"in_list_view": 1,
 			"in_global_search": 1
@@ -67,9 +77,8 @@
 		},
 		{
 			"fieldname": "campaign",
-			"fieldtype": "Link",
+			"fieldtype": "Data",
 			"label": "Campaign",
-			"options": "HD Content Campaign",
 			"in_standard_filter": 1
 		},
 		{
@@ -81,7 +90,7 @@
 			"fieldname": "status",
 			"fieldtype": "Select",
 			"label": "Status",
-			"options": "Idea\nDrafting\nDesign\nInternal Review\nClient Review\nChanges Requested\nApproved\nScheduled\nPublished\nCancelled",
+			"options": "Idea\nDrafting\nDesign\nInternal Review\nClient Review\nChanges Requested\nHead Review\nApproved\nScheduled\nPublished\nCancelled",
 			"default": "Idea",
 			"reqd": 1,
 			"in_list_view": 1,
@@ -97,9 +106,9 @@
 		},
 		{
 			"fieldname": "channel",
-			"fieldtype": "Select",
+			"fieldtype": "Link",
 			"label": "Channel",
-			"options": "Instagram\nFacebook\nLinkedIn\nX\nYouTube\nBlog\nEmail\nWhatsApp",
+			"options": "HD Content Platform",
 			"reqd": 1,
 			"in_list_view": 1,
 			"in_standard_filter": 1,
@@ -107,9 +116,9 @@
 		},
 		{
 			"fieldname": "format",
-			"fieldtype": "Select",
+			"fieldtype": "Link",
 			"label": "Format",
-			"options": "Post\nCarousel\nReel\nStory\nVideo\nArticle\nNewsletter",
+			"options": "HD Content Post Type",
 			"default": "Post"
 		},
 		{
@@ -144,7 +153,7 @@
 		{
 			"fieldname": "caption",
 			"fieldtype": "Text Editor",
-			"label": "Caption"
+			"label": "Sub Copy"
 		},
 		{
 			"fieldname": "hashtags",
@@ -262,7 +271,7 @@
 		{
 			"fieldname": "brief",
 			"fieldtype": "Small Text",
-			"label": "Brief",
+			"label": "Description",
 			"description": "What the design or video should look like. Internal only, never shown to the client"
 		},
 		{
@@ -318,11 +327,77 @@
 			"label": "In Client Review Since",
 			"read_only": 1,
 			"no_copy": 1
+		},
+		{
+			"fieldname": "hours_section",
+			"fieldtype": "Section Break",
+			"label": "Estimated Hours",
+			"description": "Hours each role's task should take. They go on that role's task (and add up on the shared task)."
+		},
+		{
+			"fieldname": "writer_hours",
+			"fieldtype": "Float",
+			"label": "Writer Est. Hours",
+			"precision": "1",
+			"non_negative": 1
+		},
+		{
+			"fieldname": "designer_hours",
+			"fieldtype": "Float",
+			"label": "Designer Est. Hours",
+			"precision": "1",
+			"non_negative": 1
+		},
+		{
+			"fieldname": "column_break_hours",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "video_editor_hours",
+			"fieldtype": "Float",
+			"label": "Video Editor Est. Hours",
+			"precision": "1",
+			"non_negative": 1
+		},
+		{
+			"fieldname": "marketer_hours",
+			"fieldtype": "Float",
+			"label": "Digital Marketer Est. Hours",
+			"precision": "1",
+			"non_negative": 1
+		},
+		{
+			"fieldname": "special_day",
+			"fieldtype": "Data",
+			"label": "Special Day",
+			"in_standard_filter": 1,
+			"description": "The festival or occasion this post is for, e.g. Diwali or the brand's anniversary. The calendar highlights it."
+		},
+		{
+			"fieldname": "head_decided_by",
+			"fieldtype": "Link",
+			"options": "User",
+			"label": "Head Decided By",
+			"read_only": 1,
+			"description": "The Digital Marketing Head who approved the post or sent it back after the client approved it."
+		},
+		{
+			"fieldname": "head_decided_on",
+			"fieldtype": "Datetime",
+			"label": "Head Decided On",
+			"read_only": 1
+		},
+		{
+			"fieldname": "head_feedback",
+			"fieldtype": "Small Text",
+			"label": "Head Feedback",
+			"read_only": 1,
+			"description": "Why the Digital Marketing Head sent the post back."
 		}
 	],
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-10-06 18:00:00.000000",
+	"modified": "2026-10-09 14:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Content Post",

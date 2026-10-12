@@ -44,6 +44,12 @@
           <p v-if="detail.hold_note" class="pl-6 text-p-sm text-ink-gray-7">
             {{ detail.hold_note }}
           </p>
+          <p
+            v-if="holdByLabel(detail)"
+            class="pl-6 text-p-sm tabular-nums text-ink-gray-5"
+          >
+            {{ holdByLabel(detail) }}
+          </p>
         </div>
         <div
           v-if="detail.blocked && !isClosed(detail)"
@@ -56,7 +62,9 @@
           </span>
         </div>
         <div
-          v-if="detail.is_milestone || detail.slip_count"
+          v-if="
+            detail.is_milestone || detail.slip_count || detail.escalation_level
+          "
           class="flex flex-wrap items-center gap-2"
         >
           <TaskyBadge
@@ -66,6 +74,7 @@
             :label="__('Milestone')"
           />
           <SlipBadge v-if="detail.slip_count" :count="detail.slip_count" />
+          <EscalationBadge :level="detail.escalation_level" />
         </div>
         <dl class="grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
           <div v-for="row in detailRows" :key="row.label">
@@ -114,6 +123,11 @@
           reference-doctype="Task"
           :reference-name="detail.name"
           flush
+        />
+        <!-- every step in this dialog closes it first, so reopening loads fresh activity -->
+        <TaskActivity
+          :task="detail.name"
+          class="border-t border-outline-gray-1 pt-4"
         />
       </div>
     </template>
@@ -165,6 +179,7 @@ import LucideUserPlus from "~icons/lucide/user-plus";
 import type { TaskPullRequest } from "../pullRequestMeta";
 import {
   assignedByName,
+  holdByLabel,
   holdDays,
   holdDurationLabel,
   isClosed,
@@ -186,6 +201,8 @@ import RequestHelpDialog from "./RequestHelpDialog.vue";
 import ResumeTaskDialog from "./ResumeTaskDialog.vue";
 import SendBackTaskDialog from "./SendBackTaskDialog.vue";
 import SlipBadge from "./SlipBadge.vue";
+import EscalationBadge from "@/components/EscalationBadge.vue";
+import TaskActivity from "./TaskActivity.vue";
 import TaskPlanDialog from "./TaskPlanDialog.vue";
 import TaskPullRequests from "./TaskPullRequests.vue";
 
@@ -214,9 +231,11 @@ interface TaskDetail {
   hold_reason?: string | null;
   hold_note?: string | null;
   hold_since?: string | null;
+  hold_by_name?: string | null;
   is_key?: boolean;
   is_milestone?: boolean;
   slip_count?: number;
+  escalation_level?: number;
   depends_on_task?: string | null;
   depends_on_subject?: string | null;
   blocked?: boolean;
@@ -230,6 +249,7 @@ interface TaskDetail {
   assigned_by_name?: string | null;
   can_move?: boolean;
   custom_recurring_task?: string | null;
+  content_post?: string | null;
 }
 
 const props = withDefaults(
@@ -280,7 +300,7 @@ const detail = computed<TaskDetail | null>(() =>
   taskDetail.data?.name === props.task?.name ? taskDetail.data : null
 );
 
-// plan and review actions are for the task's project manager or lead only
+// plan and review actions are for whoever runs the project's tasks; schedules for its managers
 const projectAccess = createResource({
   url: "helpdesk.tasky.api.get_project_detail",
   onError() {},
@@ -288,20 +308,32 @@ const projectAccess = createResource({
 const project = computed(
   () => props.task?.project || detail.value?.project || ""
 );
-const canManage = computed(
+const projectLoaded = computed(
   () =>
     !!project.value &&
     !projectAccess.loading &&
-    projectAccess.params?.project === project.value &&
-    !!projectAccess.data?.can_manage
+    projectAccess.params?.project === project.value
+);
+const canManage = computed(
+  () => projectLoaded.value && !!projectAccess.data?.can_manage
+);
+// runs the project's tasks: managers, the lead and coordinators
+const canCoordinate = computed(
+  () => projectLoaded.value && !!projectAccess.data?.can_coordinate
 );
 
 watch(
   () => props.task?.name,
   (name) => {
-    if (!name) return;
-    taskDetail.submit({ task: name });
-    const p = props.task?.project;
+    if (name) taskDetail.submit({ task: name });
+  },
+  { immediate: true }
+);
+
+// the opener may pass only the task's name; its project then comes with the details
+watch(
+  project,
+  (p) => {
     if (p && projectAccess.params?.project !== p)
       projectAccess.submit({ project: p });
   },
@@ -381,15 +413,15 @@ const dialogActions = computed(() => {
   const actions: Record<string, any>[] = [];
   if (!d || taskDetail.loading) return actions;
   const open = !isClosed(d);
-  // the assignee can at least edit the description; others need to manage the project
-  if (props.mine || canManage.value) {
+  // the assignee can at least edit the description; others need to run the project's tasks
+  if (props.mine || canCoordinate.value) {
     actions.push({
       label: __("Edit"),
       iconLeft: LucidePencil,
       onClick: () => handOff(editingTask),
     });
   }
-  if (canManage.value) {
+  if (canCoordinate.value) {
     if (isPendingReview(d)) {
       actions.push(
         {
@@ -405,8 +437,8 @@ const dialogActions = computed(() => {
         }
       );
     }
-    // a task a schedule created already repeats
-    if (!d.custom_recurring_task) {
+    // a task a schedule created already repeats; schedules are the managers' and lead's
+    if (canManage.value && !d.custom_recurring_task) {
       actions.push({
         label: __("Make recurring…"),
         icon: LucideRepeat,
@@ -433,6 +465,9 @@ const dialogActions = computed(() => {
         onClick: () => handOff(completingTask),
       });
     }
+  }
+  // the assignee, or whoever runs the project's tasks, holds, resumes and hands it over
+  if ((props.mine || canCoordinate.value) && open) {
     if (isOnHold(d)) {
       actions.push({
         label: __("Resume"),
@@ -447,7 +482,7 @@ const dialogActions = computed(() => {
       });
     }
     // a task waits on one other task, so asking for help needs it free
-    if (!d.blocked)
+    if (props.mine && !d.blocked)
       actions.push({
         label: __("Ask a teammate for help"),
         icon: LucideUserPlus,

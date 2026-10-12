@@ -1,0 +1,23 @@
+{
+  "v": 1,
+  "data": [
+    {
+      "name": "PROJ-0031",
+      "project_name": "Galom - ERPNext rollout",
+      "customer": "Galom Trading",
+      "department": "ERP",
+      "status": "Open",
+      "my_role": "Developer",
+      "lead": {
+        "user": "arun@teambackoffice.com",
+        "full_name": "Arun Menon"
+      },
+      "open_tasks": 4,
+      "files": 12,
+      "for_you": 2,
+      "expected_end_date": "2026-11-30"
+    }
+  ],
+  "next_cursor": null,
+  "has_more": false
+}

@@ -1,0 +1,4 @@
+{
+  "exc_type": "PermissionError",
+  "_server_messages": "[\"{\\\"message\\\": \\\"Only project managers and leads can see the team.\\\", \\\"title\\\": \\\"Message\\\", \\\"indicator\\\": \\\"red\\\", \\\"raise_exception\\\": 1}\"]"
+}

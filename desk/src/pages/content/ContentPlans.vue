@@ -41,29 +41,19 @@
 
     <div class="min-h-0 flex-1 overflow-y-auto">
       <div class="mx-auto flex max-w-4xl flex-col gap-4 px-4 py-5 md:px-6">
-        <div
-          class="inline-flex self-start rounded-lg bg-surface-gray-2 p-0.5"
-          role="tablist"
+        <TabButtons
+          v-model="tab"
+          class="self-start"
+          size="md"
           :aria-label="__('Monthly plans')"
-        >
-          <button
-            v-for="t in TABS"
-            :key="t.key"
-            type="button"
-            role="tab"
-            :aria-selected="tab === t.key"
-            class="inline-flex h-7 items-center gap-1.5 rounded-md px-3 text-sm"
-            :class="
-              tab === t.key
-                ? 'bg-surface-base text-ink-gray-9 shadow-sm'
-                : 'text-ink-gray-6 hover:text-ink-gray-8'
-            "
-            @click="tab = t.key"
-          >
-            <component :is="t.icon" class="size-4" aria-hidden="true" />
-            {{ t.label }}
-          </button>
-        </div>
+          :options="
+            TABS.map((t) => ({
+              label: t.label,
+              value: t.key,
+              iconLeft: t.icon,
+            }))
+          "
+        />
 
         <!-- customer plans -->
         <template v-if="tab === 'plans'">
@@ -392,10 +382,11 @@ import {
   dayjs,
   Dialog,
   Dropdown,
+  TabButtons,
   toast,
 } from "frappe-ui";
 import { useStorage } from "@vueuse/core";
-import { computed, markRaw, ref, watch } from "vue";
+import { computed, markRaw, ref, watch, type Component } from "vue";
 import LucideCalendarDays from "~icons/lucide/calendar-days";
 import LucideCalendarSync from "~icons/lucide/calendar-sync";
 import LucideChevronLeft from "~icons/lucide/chevron-left";
@@ -414,7 +405,7 @@ import OccasionDialog, { type Occasion } from "./components/OccasionDialog.vue";
 import PlanDialog, { type ContentPlan } from "./components/PlanDialog.vue";
 
 type Tab = "plans" | "occasions";
-const TABS: { key: Tab; label: string; icon: unknown }[] = [
+const TABS: { key: Tab; label: string; icon: Component }[] = [
   {
     key: "plans",
     label: __("Customer plans"),

@@ -1,0 +1,9 @@
+{
+  "v": 1,
+  "data": {
+    "item": "Task:TASK-2026-00412",
+    "until": "2026-10-13",
+    "reason": "Waiting for Galom's customer master export",
+    "level": 1
+  }
+}

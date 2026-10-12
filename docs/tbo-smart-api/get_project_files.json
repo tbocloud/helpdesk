@@ -1,0 +1,40 @@
+{
+  "v": 1,
+  "data": {
+    "project": "PROJ-0031",
+    "folder": {
+      "name": "PF-0007",
+      "folder_name": "Phase 1",
+      "path": "Prompts/Phase 1"
+    },
+    "folders": [
+      {
+        "name": "PF-0009",
+        "folder_name": "Screens",
+        "file_count": 3,
+        "folder_count": 0,
+        "for_you": false,
+        "status": "Active"
+      }
+    ],
+    "files": [
+      {
+        "name": "f1a2b3c4d5",
+        "file_name": "master-prompt.md",
+        "file_url": "/private/files/master-prompt.md",
+        "folder": "Prompts/Phase 1",
+        "folder_id": "PF-0007",
+        "kind": "md",
+        "size": 18432,
+        "modified": "2026-10-08 11:20:05.120000",
+        "uploaded_by": "Arun Menon",
+        "for_you": true,
+        "status": "Active",
+        "status_note": "",
+        "can_preview": true
+      }
+    ],
+    "superseded_hidden": 1,
+    "can_upload": true
+  }
+}

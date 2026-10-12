@@ -19,11 +19,15 @@ export interface WorkItem {
   customer?: string | null;
   /** Set only while a task is On Hold. */
   hold_reason?: string | null;
+  hold_note?: string | null;
+  hold_by_name?: string | null;
   /** Days since the hold began; null unless the task is On Hold. */
   hold_days?: number | null;
   is_milestone?: boolean;
   /** Times the task's due date was moved later. */
   slip_count?: number;
+  /** follow-up ladder level, tasks and tickets (docs/follow-ups.md) */
+  escalation_level?: number;
   /** Subject of the task's still-open dependency, if any. */
   waiting_on?: string | null;
   /** Plain-language, already translated reasons the item may slip. */
@@ -56,6 +60,9 @@ function taskDeadline(item: WorkItem): DeadlineInfo {
   const days = dayjs(item.deadline)
     .startOf("day")
     .diff(dayjs().startOf("day"), "day");
+  // due today and already worked longer than its estimate (server: is_task_overdue)
+  if (item.is_overdue && days === 0)
+    return { label: __("Overdue · past its estimate"), overdue: true };
   if (item.is_overdue || days < 0) {
     const late = Math.max(-days, 1);
     return {

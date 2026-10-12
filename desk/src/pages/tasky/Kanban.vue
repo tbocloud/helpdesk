@@ -1,6 +1,23 @@
 <template>
   <div class="flex h-full flex-col">
+    <!-- without a project it's the person's own board, across all their projects -->
+    <LayoutHeader v-if="!projectId">
+      <template #left-header>
+        <div class="text-lg-medium text-ink-gray-9">{{ __("My board") }}</div>
+      </template>
+      <template #right-header>
+        <Button
+          variant="ghost"
+          :label="__('Refresh')"
+          :loading="kanban.loading && !!kanban.data"
+          @click="kanban.reload()"
+        >
+          <template #icon><LucideRefreshCw class="size-4" /></template>
+        </Button>
+      </template>
+    </LayoutHeader>
     <ProjectNav
+      v-else
       ref="nav"
       :project-id="projectId"
       :phases="phaseNames"
@@ -64,9 +81,13 @@
             aria-hidden="true"
           />
           {{
-            __(
-              "This board is empty. Add a task, or generate one from a template on the Checklist tab."
-            )
+            projectId
+              ? __(
+                  "This board is empty. Add a task, or generate one from a template on the Checklist tab."
+                )
+              : __(
+                  "No tasks assigned to you. Tasks given to you in any project show up here."
+                )
           }}
         </p>
 
@@ -201,11 +222,7 @@
                     <span class="sr-only">{{ __("Key task") }}</span>
                   </template>
                   <MilestoneMark v-if="task.is_milestone" class="mt-0.5" />
-                  <Dropdown
-                    v-if="cardActions(task).length"
-                    :options="cardActions(task)"
-                    align="end"
-                  >
+                  <Dropdown :options="cardActions(task)" align="end">
                     <Button
                       variant="ghost"
                       size="sm"
@@ -223,6 +240,12 @@
                 </div>
 
                 <p
+                  v-if="!projectId && task.project"
+                  class="mt-1 truncate pl-5 text-xs font-medium text-ink-gray-7"
+                >
+                  {{ task.project_name || task.project }}
+                </p>
+                <p
                   v-if="assignedByName(task)"
                   class="mt-1 truncate pl-5 text-xs text-ink-gray-5"
                 >
@@ -236,33 +259,38 @@
                   <WaitingOn :subject="task.depends_on_subject" />
                 </div>
 
-                <div
-                  v-if="isOnHold(task)"
-                  class="mt-2 flex items-center gap-2 rounded-md bg-warning-soft py-1 pl-2 pr-1 text-warning"
-                  :title="task.hold_note || undefined"
-                >
-                  <LucidePause class="size-3.5 shrink-0" aria-hidden="true" />
-                  <span class="sr-only">{{ __("On hold:") }}</span>
-                  <span class="min-w-0 truncate text-xs font-medium">{{
-                    __(task.hold_reason || "On hold")
-                  }}</span>
-                  <span
-                    class="shrink-0 font-mono text-xs tabular-nums"
-                    :aria-label="holdDurationLabel(holdDays(task))"
-                    :title="holdDurationLabel(holdDays(task))"
+                <template v-if="isOnHold(task)">
+                  <div
+                    class="mt-2 flex items-center gap-2 rounded-md bg-warning-soft py-1 pl-2 pr-1 text-warning"
                   >
-                    {{ __("{0}d", String(holdDays(task))) }}
-                  </span>
-                  <button
-                    type="button"
-                    class="ml-auto flex size-6 shrink-0 items-center justify-center rounded transition-colors hover:bg-surface-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
-                    :aria-label="__('Resume {0}', task.subject)"
-                    :title="__('Resume')"
-                    @click.stop="resumingTask = task"
-                  >
-                    <LucidePlay class="size-3.5" aria-hidden="true" />
-                  </button>
-                </div>
+                    <LucidePause class="size-3.5 shrink-0" aria-hidden="true" />
+                    <span class="sr-only">{{ __("On hold:") }}</span>
+                    <span class="min-w-0 truncate text-xs font-medium">{{
+                      __(task.hold_reason || "On hold")
+                    }}</span>
+                    <span
+                      class="shrink-0 font-mono text-xs tabular-nums"
+                      :aria-label="holdDurationLabel(holdDays(task))"
+                      :title="holdDurationLabel(holdDays(task))"
+                    >
+                      {{ __("{0}d", String(holdDays(task))) }}
+                    </span>
+                    <button
+                      type="button"
+                      class="touch-target ml-auto flex size-6 shrink-0 items-center justify-center rounded transition-colors hover:bg-surface-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+                      :aria-label="__('Resume {0}', task.subject)"
+                      :title="__('Resume')"
+                      @click.stop="resumingTask = task"
+                    >
+                      <LucidePlay class="size-3.5" aria-hidden="true" />
+                    </button>
+                  </div>
+                  <HoldNote
+                    :note="task.hold_note"
+                    :by-name="task.hold_by_name"
+                    class="mt-1 pl-2"
+                  />
+                </template>
 
                 <!-- Timer -->
                 <div
@@ -281,7 +309,7 @@
                   }}</span>
                   <button
                     type="button"
-                    class="ml-auto flex size-6 items-center justify-center rounded transition-colors hover:bg-surface-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4 disabled:opacity-50"
+                    class="touch-target ml-auto flex size-6 items-center justify-center rounded transition-colors hover:bg-surface-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4 disabled:opacity-50"
                     :aria-label="__('Pause the timer on {0}', task.subject)"
                     :disabled="savingTimer === task.name"
                     @click.stop="togglePause(task)"
@@ -300,7 +328,7 @@
                   }}</span>
                   <button
                     type="button"
-                    class="ml-auto flex size-6 items-center justify-center rounded transition-colors hover:bg-surface-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4 disabled:opacity-50"
+                    class="touch-target ml-auto flex size-6 items-center justify-center rounded transition-colors hover:bg-surface-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4 disabled:opacity-50"
                     :aria-label="__('Resume the timer on {0}', task.subject)"
                     :disabled="savingTimer === task.name"
                     @click.stop="togglePause(task)"
@@ -336,6 +364,10 @@
                   <SlipBadge
                     v-if="task.slip_count && !isClosed(task)"
                     :count="task.slip_count"
+                  />
+                  <EscalationBadge
+                    v-if="!isClosed(task)"
+                    :level="task.escalation_level"
                   />
                   <PullRequestChip
                     v-if="task.pull_request"
@@ -379,7 +411,7 @@
                 </div>
 
                 <div
-                  v-if="canManage && isPendingReview(task)"
+                  v-if="canCoordinate && isPendingReview(task)"
                   class="mt-2.5 flex items-center justify-end gap-1.5 border-t border-outline-gray-1 pt-2.5"
                 >
                   <Button
@@ -418,24 +450,24 @@
     <ResumeTaskDialog v-model:task="resumingTask" @resumed="onHoldChanged" />
     <RequestHelpDialog
       v-model:task="helpingTask"
-      :project-id="projectId"
+      :project-id="projectId || helpingTask?.project || ''"
       @requested="kanban.reload()"
     />
     <HandOverTaskDialog
       v-model:task="handingOverTask"
-      :project-id="projectId"
+      :project-id="projectId || handingOverTask?.project || ''"
       @handed-over="kanban.reload()"
     />
     <EditTaskDialog
       v-model:task="editingTask"
-      :project-id="projectId"
-      :phases="phaseNames"
+      :project-id="projectId || editingTask?.project || ''"
+      :phases="phasesOf(editingTask?.project)"
       @saved="kanban.reload()"
       @plan="(t) => (planningTask = t as Task)"
     />
     <TaskPlanDialog
       v-model:task="planningTask"
-      :project-id="projectId"
+      :project-id="projectId || planningTask?.project || ''"
       @saved="kanban.reload()"
     />
     <SendBackTaskDialog
@@ -451,6 +483,11 @@
       @update:open="(v: boolean) => !v && (recurringFrom = null)"
     />
 
+    <TaskDetailDialog
+      v-model:task="detailTask"
+      :mine="!!detailTask?.assignees?.includes(authStore.userId)"
+      @changed="kanban.reload()"
+    />
     <CompleteTaskDialog
       v-model:task="completingTask"
       :tracked-hours="completingTrackedHours"
@@ -478,6 +515,7 @@ import LucideGripVertical from "~icons/lucide/grip-vertical";
 import LucideInfo from "~icons/lucide/info";
 import LucideMoreHorizontal from "~icons/lucide/more-horizontal";
 import LucidePause from "~icons/lucide/pause";
+import LucidePanelRight from "~icons/lucide/panel-right";
 import LucidePencil from "~icons/lucide/pencil";
 import LucidePlay from "~icons/lucide/play";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
@@ -488,9 +526,11 @@ import LucideUserPlus from "~icons/lucide/user-plus";
 import CompleteTaskDialog from "./components/CompleteTaskDialog.vue";
 import EditTaskDialog from "./components/EditTaskDialog.vue";
 import HandOverTaskDialog from "./components/HandOverTaskDialog.vue";
+import HoldNote from "./components/HoldNote.vue";
 import HoldTaskDialog from "./components/HoldTaskDialog.vue";
 import MilestoneMark from "./components/MilestoneMark.vue";
 import MoveTaskDialog from "./components/MoveTaskDialog.vue";
+import LayoutHeader from "@/components/LayoutHeader.vue";
 import ProjectNav from "./components/ProjectNav.vue";
 import RecurringTaskDialog from "./components/RecurringTaskDialog.vue";
 import RequestHelpDialog from "./components/RequestHelpDialog.vue";
@@ -498,6 +538,8 @@ import ResumeTaskDialog from "./components/ResumeTaskDialog.vue";
 import PullRequestChip from "./components/PullRequestChip.vue";
 import SendBackTaskDialog from "./components/SendBackTaskDialog.vue";
 import SlipBadge from "./components/SlipBadge.vue";
+import EscalationBadge from "@/components/EscalationBadge.vue";
+import TaskDetailDialog from "./components/TaskDetailDialog.vue";
 import TaskPlanDialog from "./components/TaskPlanDialog.vue";
 import TaskyState from "@/components/TaskyState.vue";
 import WaitingOn from "./components/WaitingOn.vue";
@@ -523,10 +565,12 @@ import {
 } from "./taskMeta";
 import { useApproveTask } from "./useApproveTask";
 
-const props = defineProps<{ projectId: string }>();
+// no project: the current user's own tasks across every project (sidebar's Board)
+const props = defineProps<{ projectId?: string }>();
 
 const nav = ref<InstanceType<typeof ProjectNav> | null>(null);
 const canManage = computed(() => !!nav.value?.canManage);
+const canCoordinate = computed(() => !!nav.value?.canCoordinate);
 const authStore = useAuthStore();
 
 const columnList = [
@@ -557,7 +601,9 @@ interface Task {
   assigned_by_name?: string | null;
   can_move?: boolean;
   custom_recurring_task?: string | null;
+  content_post?: string | null;
   project?: string;
+  project_name?: string | null;
   due_date?: string;
   estimated_hours?: number;
   custom_timer_start?: string;
@@ -566,8 +612,10 @@ interface Task {
   hold_reason?: string | null;
   hold_note?: string | null;
   hold_since?: string | null;
+  hold_by_name?: string | null;
   is_milestone?: boolean;
   slip_count?: number;
+  escalation_level?: number;
   depends_on_task?: string | null;
   depends_on_subject?: string | null;
   blocked?: boolean;
@@ -607,18 +655,25 @@ const helpingTask = ref<Task | null>(null);
 const handingOverTask = ref<Task | null>(null);
 const movingTask = ref<Task | null>(null);
 const recurringFrom = ref<Task | null>(null);
+const detailTask = ref<Task | null>(null);
 
 const { approve, resource: approveResource } = useApproveTask(() =>
   kanban.reload()
 );
 
-// the assignee may edit the description; leads and managers everything
+// the assignee may edit the description; leads, managers and coordinators everything
 function canEdit(task: Task) {
-  return canManage.value || !!task.assignees?.includes(authStore.userId);
+  return canCoordinate.value || !!task.assignees?.includes(authStore.userId);
 }
 
 function cardActions(task: Task) {
-  const actions: Record<string, any>[] = [];
+  const actions: Record<string, any>[] = [
+    {
+      label: __("Details"),
+      icon: LucidePanelRight,
+      onClick: () => (detailTask.value = task),
+    },
+  ];
   if (canEdit(task))
     actions.push({
       label: __("Edit"),
@@ -646,9 +701,9 @@ function cardActions(task: Task) {
       icon: LucideFolderInput,
       onClick: () => (movingTask.value = task),
     });
-  if (!canManage.value) return actions;
-  // a task a schedule created already repeats
-  if (!task.custom_recurring_task)
+  if (!canCoordinate.value) return actions;
+  // a task a schedule created already repeats; schedules are the managers' and lead's
+  if (canManage.value && !task.custom_recurring_task)
     actions.push({
       label: __("Make recurring…"),
       icon: LucideRepeat,
@@ -691,12 +746,16 @@ const totalTasks = computed(() =>
   )
 );
 
-const phaseNames = computed(() =>
-  Object.values(columnTasks.value)
+const phaseNames = computed(() => phasesOf(props.projectId));
+
+// phases already used in a project, offered when editing one of its tasks
+function phasesOf(project?: string) {
+  return Object.values(columnTasks.value)
     .flat()
+    .filter((t) => !project || !t.project || t.project === project)
     .map((t) => t.phase || "")
-    .filter(Boolean)
-);
+    .filter(Boolean);
+}
 
 const completingTask = ref<Task | null>(null);
 // what the card's timer shows, so the dialog offers the same hours
@@ -723,9 +782,7 @@ onUnmounted(() => {
 
 watch(
   () => props.projectId,
-  () => {
-    if (props.projectId) kanban.reload();
-  },
+  () => kanban.reload(),
   { immediate: true }
 );
 
@@ -895,7 +952,7 @@ function changeStatus(task: Task, newStatus: string) {
   }
   if (newStatus === "Completed") {
     dropTarget.value = null;
-    if (isPendingReview(task) && canManage.value) approve(task);
+    if (isPendingReview(task) && canCoordinate.value) approve(task);
     else completingTask.value = task;
     return;
   }

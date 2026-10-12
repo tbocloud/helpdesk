@@ -42,6 +42,7 @@
           v-if="task.slip_count > 0 && !done"
           :count="task.slip_count"
         />
+        <EscalationBadge v-if="!done" :level="task.escalation_level" />
       </div>
       <div v-if="task.blocked && !done" class="mt-0.5 flex min-w-0">
         <WaitingOn :subject="task.depends_on_subject" />
@@ -49,12 +50,17 @@
       <div
         v-if="onHold"
         class="mt-0.5 flex min-w-0 items-center gap-1 text-xs text-ink-gray-6"
-        :title="task.hold_note || undefined"
       >
         <LucidePause class="size-3 shrink-0 text-warning" aria-hidden="true" />
         <span class="sr-only">{{ __("On hold:") }}</span>
         <span class="truncate">{{ __(task.hold_reason || "On hold") }}</span>
       </div>
+      <HoldNote
+        v-if="onHold"
+        :note="task.hold_note"
+        :by-name="task.hold_by_name"
+        class="mt-0.5 pl-4"
+      />
       <div
         class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-ink-gray-5 md:hidden"
       >
@@ -177,15 +183,17 @@ import {
   priorityIcon,
   shortDate,
 } from "../taskMeta";
+import HoldNote from "./HoldNote.vue";
 import MilestoneMark from "./MilestoneMark.vue";
 import SlipBadge from "./SlipBadge.vue";
+import EscalationBadge from "@/components/EscalationBadge.vue";
 import TaskStatusBadge from "./TaskStatusBadge.vue";
 import WaitingOn from "./WaitingOn.vue";
 
 const props = defineProps<{
   task: Record<string, any>;
-  /** The viewer is the project's manager or lead: show plan and review actions. */
-  canManage?: boolean;
+  /** The viewer runs the project's tasks (manager, lead or coordinator): show plan and review actions. */
+  canCoordinate?: boolean;
   /** The viewer may edit the task (manager, lead, or its assignee). */
   canEdit?: boolean;
 }>();
@@ -244,7 +252,7 @@ const actions = computed(() => {
     ? [{ label: __("Edit"), icon: LucidePencil, onClick: () => emit("edit") }]
     : [];
   const review =
-    props.canManage && isPendingReview(props.task)
+    props.canCoordinate && isPendingReview(props.task)
       ? [
           {
             label: __("Approve"),
@@ -259,7 +267,7 @@ const actions = computed(() => {
         ]
       : [];
   const plan =
-    props.canManage && !isClosed(props.task)
+    props.canCoordinate && !isClosed(props.task)
       ? [
           {
             label: __("Plan"),

@@ -49,30 +49,28 @@ def draft_caption(
     current_caption: str = "",
 ) -> dict:
     """Draft (or improve) a caption and hashtags for a content post."""
-    if channel not in CHANNEL_GUIDE:
+    if not frappe.db.exists("HD Content Platform", channel):
         frappe.throw(_("Unknown channel: {0}").format(channel))
     if not (title.strip() or brief.strip() or current_caption.strip()):
         frappe.throw(
-            _("Add a title or a short brief so the AI knows what to write about.")
+            _("Add the copy or a short brief so the AI knows what to write about.")
         )
 
     lines = [
         f"Channel: {channel} ({format})",
-        f"Guidelines: {CHANNEL_GUIDE[channel]}",
+        # platforms the team added have no guide; the AI writes for the channel by name
+        *(
+            [f"Guidelines: {CHANNEL_GUIDE[channel]}"]
+            if channel in CHANNEL_GUIDE
+            else []
+        ),
         *([f"Format: {FORMAT_GUIDE[format]}"] if format in FORMAT_GUIDE else []),
         f"Post topic: {title.strip() or 'see the brief below'}",
     ]
     if customer:
         lines.append(f"Client: {customer}")
-    if campaign:
-        goal = frappe.db.get_value(
-            "HD Content Campaign", campaign, ["campaign_name", "goal"], as_dict=True
-        )
-        if goal:
-            lines.append(
-                f"Campaign: {goal.campaign_name}"
-                + (f" (goal: {goal.goal})" if goal.goal else "")
-            )
+    if campaign and campaign.strip():
+        lines.append(f"Campaign: {campaign.strip()}")
     if brief:
         lines.append(f"Brief from the team: {brief}")
     if current_caption.strip():

@@ -1,5 +1,9 @@
 <template>
-  <PanelSection v-if="rows.length" :title="__('SLA')" :icon="LucideTimer">
+  <PanelSection
+    v-if="rows.length || doc.custom_escalation_level"
+    :title="__('SLA')"
+    :icon="LucideTimer"
+  >
     <dl class="flex flex-col gap-2.5">
       <div v-if="doc.sla" class="flex items-baseline justify-between gap-3">
         <dt class="text-xs font-medium text-ink-gray-6">{{ __("Policy") }}</dt>
@@ -30,11 +34,22 @@
           {{ pausedSince }}
         </dd>
       </div>
+      <!-- how far up the follow-up ladder the breach has gone (docs/follow-ups.md) -->
+      <div
+        v-if="doc.custom_escalation_level"
+        class="flex items-center justify-between gap-3"
+      >
+        <dt class="text-xs font-medium text-ink-gray-6">
+          {{ __("Follow-up") }}
+        </dt>
+        <dd><EscalationBadge :level="doc.custom_escalation_level" /></dd>
+      </div>
     </dl>
   </PanelSection>
 </template>
 
 <script setup lang="ts">
+import EscalationBadge from "@/components/EscalationBadge.vue";
 import TaskyBadge from "@/components/TaskyBadge.vue";
 import { SlaTimeLeftSymbol } from "@/composables/useSlaTimeLeft";
 import {

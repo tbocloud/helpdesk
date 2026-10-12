@@ -9,9 +9,9 @@
         ? { type: 'button', 'aria-pressed': pressed }
         : {}
     "
-    class="flex min-w-0 flex-col gap-1 rounded-xl border text-left"
+    class="flex min-w-0 items-start rounded-xl border text-left"
     :class="[
-      compact ? 'px-3 py-2.5' : 'p-4',
+      compact ? 'px-3 py-2.5' : 'flex-col gap-2 p-4 sm:flex-row sm:gap-3',
       hero ? 'sm:col-span-2' : '',
       pressed
         ? 'border-brand bg-brand-soft'
@@ -22,62 +22,102 @@
       interactive && !pressed ? 'hover:border-outline-gray-4' : '',
     ]"
   >
-    <span class="flex items-center gap-1.5 text-sm text-ink-gray-7">
-      <component
-        :is="icon"
-        v-if="icon"
-        class="size-4 shrink-0"
-        :class="iconTone === 'neutral' ? 'text-ink-gray-5' : INK[iconTone]"
-        aria-hidden="true"
-      />
-      <span class="min-w-0 flex-1 truncate">{{ label }}</span>
-      <LucideChevronRight
-        v-if="to"
-        class="size-4 shrink-0 text-ink-gray-4"
-        aria-hidden="true"
-      />
-    </span>
+    <!-- the icon sits in a circle; soft colour only when iconTone carries meaning -->
     <span
-      class="font-semibold tabular-nums"
-      :class="[
-        hero ? 'text-5xl leading-tight' : compact ? 'text-xl' : 'text-2xl',
-        valueTone === 'neutral' ? 'text-ink-gray-9' : INK[valueTone],
-      ]"
+      v-if="icon && !compact"
+      class="grid size-9 shrink-0 place-items-center rounded-full"
+      :class="TONE_CLASSES[iconTone]"
     >
-      <span
-        v-if="loading"
-        class="inline-block h-7 w-10 animate-pulse rounded bg-surface-gray-2"
-      />
-      <template v-else>{{ value }}</template>
+      <component :is="icon" class="size-[18px]" aria-hidden="true" />
     </span>
-    <span v-if="meter != null" class="mt-1 flex flex-col gap-1">
-      <span
-        class="block h-2 overflow-hidden rounded-full"
-        :class="TRACK[tone]"
-        role="meter"
-        :aria-valuenow="Math.round(meter)"
-        aria-valuemin="0"
-        aria-valuemax="100"
-        :aria-label="label"
-      >
-        <span
-          class="block h-full rounded-full transition-[width]"
-          :class="FILL[tone]"
-          :style="{ width: `${Math.min(meter, 100)}%` }"
+
+    <span class="flex min-w-0 flex-1 flex-col gap-1">
+      <span class="flex items-center gap-1.5 text-sm text-ink-gray-7">
+        <component
+          :is="icon"
+          v-if="icon && compact"
+          class="size-4 shrink-0"
+          :class="iconTone === 'neutral' ? 'text-ink-gray-5' : INK[iconTone]"
+          aria-hidden="true"
+        />
+        <span class="min-w-0 flex-1" :class="compact ? 'truncate' : ''">{{
+          label
+        }}</span>
+        <LucideChevronRight
+          v-if="to"
+          class="size-4 shrink-0 text-ink-gray-4"
+          aria-hidden="true"
         />
       </span>
-    </span>
-    <span v-if="sub && !loading" class="text-p-sm tabular-nums text-ink-gray-6">
-      {{ sub }}
+      <span
+        class="font-semibold tabular-nums"
+        :class="[
+          hero ? 'text-5xl leading-tight' : compact ? 'text-xl' : 'text-3xl',
+          valueTone === 'neutral' ? 'text-ink-gray-9' : INK[valueTone],
+        ]"
+      >
+        <span
+          v-if="loading"
+          class="inline-block h-7 w-10 animate-pulse rounded bg-surface-gray-2"
+        />
+        <template v-else>{{ value }}</template>
+      </span>
+      <span v-if="meter != null" class="mt-1 flex flex-col gap-1">
+        <span
+          class="block h-2 overflow-hidden rounded-full"
+          :class="TRACK[tone]"
+          role="meter"
+          :aria-valuenow="Math.round(meter)"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          :aria-label="label"
+        >
+          <span
+            class="block h-full rounded-full transition-[width]"
+            :class="FILL[tone]"
+            :style="{ width: `${Math.min(meter, 100)}%` }"
+          />
+        </span>
+      </span>
+      <!-- the change against the last period: an arrow and words, never colour alone -->
+      <span
+        v-if="deltaText && !loading"
+        class="flex items-start gap-1 text-p-sm tabular-nums"
+        :class="deltaTone === 'neutral' ? 'text-ink-gray-6' : INK[deltaTone]"
+      >
+        <LucideArrowUp
+          v-if="delta != null && delta > 0"
+          class="mt-[3px] size-3.5 shrink-0"
+          aria-hidden="true"
+        />
+        <LucideArrowDown
+          v-else-if="delta != null && delta < 0"
+          class="mt-[3px] size-3.5 shrink-0"
+          aria-hidden="true"
+        />
+        <span v-if="delta" class="sr-only">
+          {{ delta > 0 ? __("Up") : __("Down") }}
+        </span>
+        <span class="min-w-0">{{ deltaText }}</span>
+      </span>
+      <span
+        v-if="sub && !loading"
+        class="text-p-sm tabular-nums text-ink-gray-6"
+      >
+        {{ sub }}
+      </span>
     </span>
   </component>
 </template>
 
 <script setup lang="ts">
 import NativeButton from "@/components/NativeButton";
-import { FILL, INK, TRACK, type Tone } from "@/components/tone";
+import { FILL, INK, TONE_CLASSES, TRACK, type Tone } from "@/components/tone";
+import { __ } from "@/translation";
 import { computed, type Component } from "vue";
 import { RouterLink, type RouteLocationRaw } from "vue-router";
+import LucideArrowDown from "~icons/lucide/arrow-down";
+import LucideArrowUp from "~icons/lucide/arrow-up";
 import LucideChevronRight from "~icons/lucide/chevron-right";
 
 const props = withDefaults(
@@ -86,7 +126,10 @@ const props = withDefaults(
     value: string | number;
     sub?: string;
     icon?: Component;
-    /** colours the icon, only when that carries meaning (e.g. overdue) */
+    /**
+     * Colours the icon's circle, only when that carries meaning: success for
+     * done, danger for overdue or risk, info for time and hours.
+     */
     iconTone?: Tone;
     hero?: boolean;
     /** tighter padding and a smaller number, for a strip above a list */
@@ -97,6 +140,12 @@ const props = withDefaults(
     tone?: Tone;
     /** colours the value, only when that says how it went */
     valueTone?: Tone;
+    /** signed change against the last period; its sign picks the arrow */
+    delta?: number | null;
+    /** the change in words, e.g. "101 vs last week" */
+    deltaText?: string;
+    /** colours the change line, only when that says it got better or worse */
+    deltaTone?: Tone;
     loading?: boolean;
     /** makes the tile a link to another page */
     to?: RouteLocationRaw;
@@ -108,6 +157,8 @@ const props = withDefaults(
     iconTone: "neutral",
     meter: null,
     valueTone: "neutral",
+    delta: null,
+    deltaTone: "neutral",
     // undefined keeps the tile a plain block; Vue would default a boolean to false
     pressed: undefined,
   }

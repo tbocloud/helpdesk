@@ -22,6 +22,8 @@ class HDSettings(Document):
         self.validate_auto_close_days()
         self.validate_email_contents()
         self.validate_send_feedback_when_ticket_closed()
+        self.validate_microsoft_sso()
+        self.validate_offboarding()
 
     def validate_auto_close_days(self):
         if self.auto_close_tickets and self.auto_close_after_days <= 0:
@@ -39,6 +41,61 @@ class HDSettings(Document):
             frappe.throw(
                 _(
                     "The status for sending feedback must be of <u>Resolved</u> category."
+                )
+            )
+
+    def validate_microsoft_sso(self):
+        """The IDs Entra puts in its tokens are lowercase GUIDs, so they're stored that
+        way; switching single sign-in on needs all three settings, and an OAuth Client
+        whose scopes cover the tokens it will issue."""
+        # imported here: the endpoint's module loads the whole mobile API
+        from helpdesk.api.mobile_auth import GUID, missing_scopes
+
+        for field in ("microsoft_tenant_id", "microsoft_client_id"):
+            self.set(field, (self.get(field) or "").strip().lower())
+        if not self.enable_microsoft_sso:
+            return
+        for field in ("microsoft_tenant_id", "microsoft_client_id"):
+            if not GUID.match(self.get(field)):
+                frappe.throw(
+                    _("{0} must be the GUID shown in Microsoft Entra.").format(
+                        _(self.meta.get_label(field))
+                    )
+                )
+        if not self.mobile_oauth_client:
+            frappe.throw(_("Choose the OAuth client for TBO Smart."))
+        missing = missing_scopes(
+            frappe.db.get_value("OAuth Client", self.mobile_oauth_client, "scopes")
+        )
+        if missing:
+            frappe.throw(
+                _("The OAuth client must allow the scopes: {0}").format(
+                    ", ".join(sorted(missing))
+                )
+            )
+
+    def validate_offboarding(self):
+        """Domains are stored one per line in lowercase. Switching offboarding on needs
+        them, a limit, and the Microsoft app it reads the directory with."""
+        from helpdesk.offboarding import company_domains
+
+        domains = sorted(company_domains(self.offboarding_domains))
+        self.offboarding_domains = "\n".join(domains)
+        if not self.offboard_removed_microsoft_users:
+            return
+        if not domains:
+            frappe.throw(_("Add the company email domains to check."))
+        if any("." not in d or "@" in d for d in domains):
+            frappe.throw(_("Enter domains like teambackoffice.com, without names."))
+        if (self.offboarding_max_disables or 0) < 1:
+            frappe.throw(_("Allow at least one person to be disabled per run."))
+        # only when switching on: a later change there mustn't block every save here
+        if self.has_value_changed(
+            "offboard_removed_microsoft_users"
+        ) and not frappe.db.get_single_value("HD Meeting Settings", "connected_app"):
+            frappe.throw(
+                _(
+                    "Choose the Microsoft app in HD Meeting Settings first: offboarding reads the directory with it."
                 )
             )
 

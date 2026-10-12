@@ -41,27 +41,19 @@ import { useRoute, useRouter } from "vue-router";
 
 import { useAuthStore } from "@/stores/auth";
 import { isCustomerPortal } from "@/utils";
-import { useTheme } from "frappe-ui";
-import LucideMoon from "~icons/lucide/moon";
-import LucideSun from "~icons/lucide/sun";
 
 import { mobileSidebarOpened as sidebarOpened } from "@/composables/mobile";
 import { useApps } from "@/composables/useApps";
+import { useThemeToggle } from "@/composables/useThemeToggle";
 import { __ } from "@/translation";
 import AppSidebar from "./AppSidebar.vue";
 import AvailabilityMenuMobile from "../AvailabilityMenuMobile.vue";
 
-const { currentTheme, toggleTheme } = useTheme();
+const { menuItem: themeMenuItem } = useThemeToggle();
 const { appsMenuOption } = useApps();
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
-
-const themeMenuItem = computed(() => ({
-  label: __("Toggle theme"),
-  icon: currentTheme.value === "dark" ? LucideSun : LucideMoon,
-  onClick: () => toggleTheme(),
-}));
 
 const customerPortalDropdown = computed(() => [
   themeMenuItem.value,
@@ -99,7 +91,6 @@ const agentPortalDropdown = computed(() => [
     label: __("Docs"),
     onClick: () => window.open("https://docs.frappe.io/helpdesk"),
   },
-  themeMenuItem.value,
   {
     label: __("Log out"),
     icon: "lucide-log-out",

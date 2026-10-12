@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import frappe
 from frappe.core.doctype.communication.test_communication import create_email_account
-from frappe.utils import add_to_date, getdate
+from frappe.utils import add_to_date, getdate, now_datetime
 
 from helpdesk.api.settings.field_dependency import create_update_field_dependency
 from helpdesk.integrations.erpnext.utils import create_customer_field
@@ -148,10 +148,18 @@ def make_ticket(
 def make_assigned_ticket(subject: str, user: str, **values) -> str:
     """Creates a ticket assigned to `user` only and returns its name as a string.
 
-    `_assign` is set directly so assignment rules can't add someone else; other
-    `values` (e.g. status, status_category) are written the same way, after insert.
+    Whatever an assignment rule gave out is withdrawn first, so the ticket's ToDos (which
+    the work lists match) and `_assign` name `user` alone; other `values` (e.g. status,
+    status_category) are written straight to the ticket, after insert.
     """
     name = make_ticket(subject=subject, customer=values.pop("customer", None)).name
+    frappe.db.set_value(
+        "ToDo",
+        {"reference_type": "HD Ticket", "reference_name": name},
+        "status",
+        "Cancelled",
+    )
+    make_assignment("HD Ticket", name, user)
     frappe.db.set_value("HD Ticket", name, {"_assign": json.dumps([user]), **values})
     return str(name)
 
@@ -645,6 +653,39 @@ def make_tasky_user(email: str, full_name: str, roles: tuple[str, ...] = ()):
     return email
 
 
+def make_dm_head(email: str, full_name: str, *roles: str):
+    """Creates an agent with the Digital Marketing Head role, who approves posts after the
+    client, plus any other `roles` (e.g. "DM Coordinator")."""
+    from helpdesk.content_team import DM_HEAD_ROLE, ensure_role
+
+    ensure_role()
+    return make_tasky_user(email, full_name, roles=(DM_HEAD_ROLE, *roles))
+
+
+def make_content_user(email: str, full_name: str, role: str):
+    """Creates an agent with a content role, e.g. "DM Coordinator" (edits entries) or
+    "DM Employee" (only attaches files)."""
+    from helpdesk.content_team import ensure_role
+
+    ensure_role()
+    return make_tasky_user(email, full_name, roles=(role,))
+
+
+def attach_file(doctype: str, name: str, file_name: str = "draft.png"):
+    """Attaches a small private file to a document as the current user, the way the
+    upload button does (it needs write permission on the document)."""
+    return frappe.get_doc(
+        {
+            "doctype": "File",
+            "file_name": file_name,
+            "attached_to_doctype": doctype,
+            "attached_to_name": name,
+            "is_private": 1,
+            "content": b"x",
+        }
+    ).insert()
+
+
 def make_project(
     project_name: str,
     members: list[tuple[str, str]] | None = None,
@@ -684,15 +725,86 @@ def make_project_file(
     content: bytes = b"# Master prompt\n\nBe concise.",
     for_users: list[str] | None = None,
     user: str | None = None,
+    folder: str | None = None,
 ) -> str:
-    """Adds a file to a project through the project files API, as `user` (default:
-    the session user), and returns the File's name."""
+    """Adds a file to a project (in `folder` when given) through the project files
+    API, as `user` (default: the session user), and returns the File's name."""
     from helpdesk.api.project_files import add_project_file
 
     def add():
-        return add_project_file(project, file_name, content, for_users)["name"]
+        return add_project_file(project, file_name, content, for_users, folder)["name"]
 
     return run_as_user(user, add) if user else add()
+
+
+def make_project_folder(
+    project: str,
+    folder_name: str = "Prompts",
+    for_users: list[str] | None = None,
+    user: str | None = None,
+    parent_folder: str | None = None,
+) -> str:
+    """Creates a folder of project files (inside `parent_folder` when given) through
+    the API, as `user` (default: the session user), and returns its name."""
+    from helpdesk.api.project_files import create_project_folder
+
+    def create():
+        return create_project_folder(
+            project, folder_name, for_users=for_users, parent_folder=parent_folder
+        )["name"]
+
+    return run_as_user(user, create) if user else create()
+
+
+def call_project_files(user: str, method: str, **kwargs):
+    """Calls helpdesk.api.project_files.<method> as `user` through frappe.call, so
+    arguments the method doesn't take are dropped as they are for a request."""
+    return run_as_user(
+        user, lambda: frappe.call(f"helpdesk.api.project_files.{method}", **kwargs)
+    )
+
+
+def mark_project_item(
+    user: str,
+    project: str,
+    kind: str,
+    item: str,
+    status: str = "Superseded",
+    superseded_by: str | None = None,
+    note: str | None = None,
+) -> dict:
+    """Sets a project file's or folder's status (Superseded by default) as `user`.
+    `kind` is "file" (item = the File) or "folder"."""
+    return call_project_files(
+        user,
+        "set_project_item_status",
+        project=project,
+        kind=kind,
+        item=item,
+        status=status,
+        superseded_by=superseded_by,
+        note=note,
+    )
+
+
+def make_project_item_comment(
+    user: str,
+    project: str,
+    kind: str,
+    item: str,
+    content: str = "Is this the latest version?",
+    mentions: list[str] | None = None,
+) -> str:
+    """Comments on a project file or folder as `user` and returns the Comment's name."""
+    return call_project_files(
+        user,
+        "add_item_comment",
+        project=project,
+        kind=kind,
+        item=item,
+        content=content,
+        mentions=mentions,
+    )["name"]
 
 
 def make_department(name: str, **kwargs):
@@ -727,6 +839,14 @@ def make_content_campaign(campaign_name: str, customer: str, **kwargs):
     ).insert(ignore_permissions=True)
 
 
+def make_content_option(doctype: str, name: str, **kwargs):
+    """Creates an HD Content Platform or HD Content Post Type named `name`, as the team would."""
+    field = "platform_name" if doctype == "HD Content Platform" else "post_type_name"
+    return frappe.get_doc({"doctype": doctype, field: name, **kwargs}).insert(
+        ignore_permissions=True
+    )
+
+
 def hold_commits(test_case):
     """Rolls back everything a test wrote, even where Frappe commits mid-test.
 
@@ -739,13 +859,35 @@ def hold_commits(test_case):
     test_case.addCleanup(commit.stop)
 
 
-def make_content_post(title: str, customer: str | None = None, **kwargs):
+def make_content_project(customer: str) -> str:
+    """Returns the project the customer's post tasks go to, creating an open Content
+    Calendar project for them if they have no open project.
+
+    A post can't create tasks without one (HDContentPost.require_content_project)."""
+    from helpdesk.helpdesk.doctype.hd_content_post.hd_content_post import (
+        CONTENT_PROJECT_TYPE,
+        content_project_for,
+    )
+
+    if project := content_project_for(customer):
+        return project
+    project = make_customer_project(customer, f"{customer} - Content calendar")
+    frappe.db.set_value("Project", project, "project_type", CONTENT_PROJECT_TYPE)
+    return project
+
+
+def make_content_post(
+    title: str, customer: str | None = None, with_project: bool = True, **kwargs
+):
     """Creates an HD Content Post: an Instagram Idea a week out unless overridden.
 
-    Every post needs a posting date; pass `publish_on` to choose it.
+    Every post needs a posting date; pass `publish_on` to choose it. The customer gets a
+    project (make_content_project) unless `with_project` is False.
     """
     from frappe.utils import add_to_date, now_datetime
 
+    if customer and with_project:
+        make_content_project(customer)
     return frappe.get_doc(
         {
             "doctype": "HD Content Post",
@@ -823,9 +965,9 @@ def make_ai_support_session(ticket: str, connection: str | None = None, **kwargs
 
 def make_assignment(doctype: str, name: str, user: str):
     """Assigns a document to `user` the normal way (ToDo), which is what sets `_assign`."""
-    from frappe.desk.form import assign_to
+    from helpdesk.utils import add_assignment
 
-    assign_to._add(
+    add_assignment(
         {"doctype": doctype, "name": str(name), "assign_to": [user]},
         ignore_permissions=True,
     )
@@ -843,6 +985,30 @@ def make_task(project: str, subject: str, exp_end_date=None, **kwargs):
             **kwargs,
         }
     ).insert(ignore_permissions=True)
+
+
+def make_task_in_status(project: str, subject: str, status: str, **values) -> str:
+    """Creates a Task in `project` and sets its status and any other `values`
+    (e.g. slip_count) straight in the database, skipping the hold, review and
+    slip hooks; returns its name. For tests that need a project in every state."""
+    task = make_task(project, subject).name
+    frappe.db.set_value("Task", task, {"status": status, **values})
+    return task
+
+
+def start_task_timer(task: str, hours_ago: float, estimated_hours: float = 0):
+    """Puts `task` in Working with its timer started `hours_ago`, as if the assignee began
+    it then, and sets its estimated hours."""
+    frappe.db.set_value(
+        "Task",
+        task,
+        {
+            "status": "Working",
+            "custom_timer_start": add_to_date(now_datetime(), hours=-hours_ago),
+            "custom_timer_elapsed": 0,
+            "custom_estimated_hours": estimated_hours,
+        },
+    )
 
 
 def make_assigned_task(
@@ -871,6 +1037,156 @@ def make_planned_task(
     task = make_task(project, subject, due, custom_estimated_hours=hours, **kwargs).name
     make_assignment("Task", task, assignee)
     return task
+
+
+def make_done_task(
+    project: str, subject: str, assignee: str, completed_on, due=None, **kwargs
+) -> str:
+    """Creates a Task in `project` assigned to `assignee`, due on `due`, and marks it
+    Completed on `completed_on`; returns its name. For team dashboard tests."""
+    task = make_task(project, subject, due, **kwargs).name
+    make_assignment("Task", task, assignee)
+    frappe.db.set_value(
+        "Task", task, {"status": "Completed", "completed_on": completed_on}
+    )
+    return task
+
+
+def make_member_day(project: str, member: str, lead: str, teammate: str) -> dict:
+    """A project member's open work like the day that showed a false "All clear" on
+    Home: eight tasks `lead` gave `member` (one overdue, one due today, a key task
+    in progress, one in progress with its timer paused, two on hold waiting on the
+    customer, one without a due date, one due in three days), one `member` gave
+    `teammate` that is overdue, and one of `teammate`'s own that `member` must not
+    see. Returns the task names by those keys."""
+    from frappe.utils import add_days, nowdate
+
+    today = nowdate()
+
+    def task(subject: str, assignee: str, by: str, **values) -> str:
+        name = make_assigned_task(project, subject, assignee, by)
+        frappe.db.set_value("Task", name, values)
+        return name
+
+    def held(subject: str, days: int) -> str:
+        return task(
+            subject,
+            member,
+            lead,
+            status="On Hold",
+            hold_reason="Waiting on customer",
+            hold_note="Asked for the bank statement",
+            hold_since=add_days(today, -days),
+            hold_by=member,
+        )
+
+    tasks = {
+        "overdue": task(
+            "Fix the GST return", member, lead, exp_end_date=add_days(today, -2)
+        ),
+        "due_today": task("Post the Onam reel", member, lead, exp_end_date=today),
+        "key_working": task(
+            "Migrate the item master",
+            member,
+            lead,
+            exp_end_date=add_days(today, 10),
+            is_key=1,
+        ),
+        "paused": task(
+            "Draft the user manual",
+            member,
+            lead,
+            status="Working",
+            exp_end_date=add_days(today, 20),
+            custom_timer_elapsed=1.5,
+        ),
+        "held_long": held("Reconcile the bank feed", 3),
+        "held_short": held("Map the cost centres", 1),
+        "no_date": task("Clean up old leads", member, lead, exp_end_date=None),
+        "coming_up": task(
+            "Train the sales team", member, lead, exp_end_date=add_days(today, 3)
+        ),
+        "given_out": task(
+            "Design the invoice print",
+            teammate,
+            member,
+            exp_end_date=add_days(today, -1),
+        ),
+        "teammate_own": task(
+            "Fix the payroll script", teammate, lead, exp_end_date=add_days(today, -4)
+        ),
+    }
+    start_task_timer(tasks["key_working"], hours_ago=1)
+    return tasks
+
+
+def log_hours(user: str, project: str, hours: float, day) -> str:
+    """Creates a draft Timesheet of `hours` on `project` on `day`, logged by `user`
+    (its owner); returns its name."""
+    sheet = make_timesheet(project, hours, f"{day} 10:00:00").name
+    frappe.db.set_value("Timesheet", sheet, "owner", user, update_modified=False)
+    return sheet
+
+
+def call_team_dashboard(user: str, today, method: str = "get_team_dashboard", **kwargs):
+    """Calls a helpdesk.api.team_dashboard endpoint as `user` with today fixed, so
+    only the test's records fall in the period, and nothing cached carries over."""
+    from helpdesk.team_dashboard import clear_cache
+
+    clear_cache()
+    with patch("helpdesk.api.team_dashboard.nowdate", return_value=str(today)):
+        return run_as_user(
+            user,
+            lambda: frappe.call(f"helpdesk.api.team_dashboard.{method}", **kwargs),
+        )
+
+
+def record_versions(test_case):
+    """Turns version history on for every save in the test, including saves inside the
+    APIs. Tests skip it unless a save asks, and a task's activity is read from it."""
+    from frappe.model.document import Document
+
+    save = Document._save
+
+    def save_with_version(self, ignore_permissions=None, ignore_version=None):
+        keep = False if ignore_version is None else ignore_version
+        return save(self, ignore_permissions, keep)
+
+    recording = patch.object(Document, "_save", save_with_version)
+    recording.start()
+    test_case.addCleanup(recording.stop)
+
+
+def save_task_as(user: str, task: str, **values):
+    """Sets `values` on the Task and saves it as `user`, the way the task form does."""
+
+    def save():
+        doc = frappe.get_doc("Task", task)
+        doc.update(values)
+        doc.save()
+
+    run_as_user(user, save)
+
+
+def use_date_format(test_case, date_format: str):
+    """Sets the site's date format (e.g. "dd-mm-yyyy") for the test and restores it after.
+    Version history stores dates in this format."""
+    previous = frappe.db.get_default("date_format")
+
+    def apply(value):
+        frappe.db.set_default("date_format", value)
+        frappe.local.user_date_format = None
+
+    apply(date_format)
+    test_case.addCleanup(apply, previous)
+
+
+def get_task_activity_as(user: str, task: str, kind: str | None = None) -> list[dict]:
+    """The task's activity items as `user` sees them, newest first; only `kind` if given."""
+    items = call_as_user(user, "helpdesk.tasky.api.get_task_activity", task=task)[
+        "items"
+    ]
+    return [i for i in items if not kind or i["kind"] == kind]
 
 
 def make_employee(user: str, employee_name: str | None = None):
@@ -921,6 +1237,107 @@ def run_as_user(user: str, fn):
         frappe.set_user("Administrator")
 
 
+def call_as_user(as_user: str, method: str, **kwargs):
+    """Calls the whitelisted `method` (a dotted path) through `frappe.call` as `as_user`,
+    then switches back to Administrator. `as_user` leaves `user` free for the method."""
+    return run_as_user(as_user, lambda: frappe.call(method, **kwargs))
+
+
+def hand_over_task_as(
+    user: str, task: str, teammate: str, reason: str = "Moving to the Galom go-live"
+):
+    """`user` hands `task` over to `teammate` through the whitelisted hand_over_task."""
+    return call_as_user(
+        user,
+        "helpdesk.tasky.api.hand_over_task",
+        task=task,
+        teammate=teammate,
+        reason=reason,
+    )
+
+
+def get_content_task(post: str, role: str) -> str | None:
+    """The Task a content post made for one role ("Writer", "Designer", …)."""
+    return frappe.db.get_value(
+        "Task", {"content_post": post, "content_role": role}, "name"
+    )
+
+
+def get_department_walls_as(as_user: str, user: str) -> list[str]:
+    """`user`'s department wall roles, as Settings → Agents asks for them as `as_user`."""
+    return call_as_user(
+        as_user, "helpdesk.api.departments.get_department_walls", users=[user]
+    )[user]
+
+
+def set_department_wall_as(as_user: str, user: str, role: str):
+    """`as_user` sets `user`'s department wall ("" for none) from Settings → Agents."""
+    return call_as_user(
+        as_user,
+        "helpdesk.api.departments.set_department_wall",
+        user=user,
+        role=role,
+    )
+
+
+def set_department_heads_as(as_user: str, department: str, heads: list[str]):
+    """`as_user` sets who heads `department` from Settings → Departments."""
+    return call_as_user(
+        as_user,
+        "helpdesk.api.departments.set_department_heads",
+        department=department,
+        heads=heads,
+    )
+
+
+def get_visible_tasks(user: str, project: str | None = None) -> set[str]:
+    """Names of the Tasks `user` may list (through `frappe.get_list`, so `task_query`
+    and the department walls apply), in `project` when given."""
+    filters = {"project": project} if project else {}
+    return set(
+        run_as_user(
+            user,
+            lambda: frappe.get_list(
+                "Task", filters=filters, pluck="name", limit_page_length=0
+            ),
+        )
+    )
+
+
+def get_session_user_as(user: str) -> dict:
+    """What the app boots with for `user` (`helpdesk.api.auth.get_user`): their flags."""
+    return call_as_user(user, "helpdesk.api.auth.get_user")
+
+
+def get_content_team_as(as_user: str, users: list[str]) -> list[str]:
+    """Which of `users` are in the content team, as Settings → Agents asks as `as_user`."""
+    return call_as_user(
+        as_user, "helpdesk.api.departments.get_content_team", users=users
+    )
+
+
+def get_visible_content_posts(user: str) -> set[str]:
+    """Names of the HD Content Posts `user` may list (through `frappe.get_list`, so the
+    post's permission query and the content team rule apply)."""
+    return set(
+        run_as_user(
+            user,
+            lambda: frappe.get_list(
+                "HD Content Post", pluck="name", limit_page_length=0
+            ),
+        )
+    )
+
+
+def get_task_completed_notices(task: str) -> list:
+    """The Task Completed HD Notifications sent about `task` (user_to, user_from, message)."""
+    return frappe.get_all(
+        "HD Notification",
+        filters={"reference_name": task, "notification_type": "Task Completed"},
+        fields=["user_to", "user_from", "message"],
+    )
+
+
 def get_reminder_messages(user: str, reference_name) -> list[str]:
     """Messages of the Reminder HD Notifications sent to `user` about a document."""
     return frappe.get_all(
@@ -932,6 +1349,60 @@ def get_reminder_messages(user: str, reference_name) -> list[str]:
         },
         pluck="message",
     )
+
+
+def send_task_reminder(task: str, escalate: bool = False) -> str:
+    """Reminds `task`'s assignees through notify_users (the panel plus chat or email),
+    as any reminder reaches people; returns the message sent."""
+    from helpdesk.work_reminders import notify_users
+
+    doc = frappe.get_doc("Task", task)
+    message = f"Due tomorrow: {doc.subject}"
+    notify_users(doc.assignees(), "Task", task, message, escalate=escalate)
+    return message
+
+
+FOLLOW_UP_MONDAY = datetime(2026, 10, 12, 11, 0)
+
+
+def follow_up_context(now=None, holidays=(), **settings):
+    """A follow-ups Context at `now` (default: Monday 12 Oct 2026, 11:00, in working
+    hours) on a Monday-to-Saturday calendar with Sundays and `holidays` off, with
+    HD Follow Up Settings' defaults plus `settings`."""
+    from helpdesk import follow_ups
+
+    doc = frappe.get_doc(follow_ups.SETTINGS)
+    doc.update(settings)
+    holidays = {getdate(day) for day in holidays}
+    with patch.object(
+        follow_ups,
+        "working_day_checker",
+        return_value=lambda day: day.weekday() != 6 and day not in holidays,
+    ):
+        calendar = follow_ups.WorkCalendar(getdate(now or FOLLOW_UP_MONDAY))
+    calendar.sla = None
+    return follow_ups.Context(doc, now or FOLLOW_UP_MONDAY, calendar)
+
+
+def get_follow_up_notices(user: str, reference_name) -> list[dict]:
+    """The follow-up HD Notifications `user` has about a document: message, key, read."""
+    return frappe.get_all(
+        "HD Notification",
+        filters={
+            "user_to": user,
+            "reference_name": str(reference_name),
+            "dedupe_key": ("like", "follow-up:%"),
+        },
+        fields=["name", "message", "dedupe_key", "read"],
+    )
+
+
+def set_follow_up_settings(**values):
+    """Saves HD Follow Up Settings with `values`."""
+    doc = frappe.get_doc("HD Follow Up Settings")
+    doc.update(values)
+    doc.save(ignore_permissions=True)
+    return doc
 
 
 # shaped like Teams Workflows URLs, so HD Chat Settings accepts them
@@ -964,6 +1435,13 @@ def enable_chat_notifications(platform: str = "Microsoft Teams", **settings):
     frappe.clear_document_cache("HD Chat Settings", "HD Chat Settings")
     frappe.cache.delete_keys("helpdesk:slack_user:")
     return doc
+
+
+def get_chat_secret(fieldname: str) -> str | None:
+    """The stored (decrypted) value of a Password field in HD Chat Settings, or None."""
+    return frappe.get_doc("HD Chat Settings").get_password(
+        fieldname, raise_exception=False
+    )
 
 
 def make_error_log(title: str, at=None):
@@ -1049,7 +1527,8 @@ def fake_graph_token(roles: list[str] | None = None) -> str:
 
 
 def graph_response(payload: dict | None = None, status: int = 200):
-    """A fake requests response from Microsoft Graph or its token endpoint."""
+    """A fake requests response (Microsoft Graph and its token endpoint, the Expo push
+    service) whose json() is `payload`."""
     from unittest.mock import MagicMock
 
     response = MagicMock(status_code=status)
@@ -1057,8 +1536,281 @@ def graph_response(payload: dict | None = None, status: int = 200):
     return response
 
 
+def enable_mobile_push():
+    frappe.db.set_single_value("HD Settings", "enable_mobile_push", 1)
+
+
+def disable_mobile_push():
+    frappe.db.set_single_value("HD Settings", "enable_mobile_push", 0)
+
+
+TEST_MS_TENANT = "6f1c2b9e-0d4a-4c1e-9a57-3b2f8e4d1a10"
+TEST_MS_CLIENT = "0b7e4c2a-91d3-4f6b-8e15-c2a9d7f3e604"
+
+
+def make_oauth_client(app_name: str = "TBO Smart Test"):
+    """Creates (or fetches) an OAuth Client set up like TBO Smart's: public app, scopes
+    `all openid`, Agent and Agent Manager allowed."""
+    name = frappe.db.get_value("OAuth Client", {"app_name": app_name})
+    if name:
+        return frappe.get_doc("OAuth Client", name)
+    return frappe.get_doc(
+        {
+            "doctype": "OAuth Client",
+            "app_name": app_name,
+            "skip_authorization": 1,
+            "scopes": "all openid",
+            "redirect_uris": "tbosmart://oauth/callback",
+            "default_redirect_uri": "tbosmart://oauth/callback",
+            "grant_type": "Authorization Code",
+            "response_type": "Code",
+            "allowed_roles": [{"role": "Agent"}, {"role": "Agent Manager"}],
+        }
+    ).insert(ignore_permissions=True)
+
+
+def enable_microsoft_sso(oauth_client: str):
+    """Turns on TBO Smart's Microsoft single sign-in for the test tenant and app."""
+    frappe.db.set_single_value(
+        "HD Settings",
+        {
+            "enable_microsoft_sso": 1,
+            "microsoft_tenant_id": TEST_MS_TENANT,
+            "microsoft_client_id": TEST_MS_CLIENT,
+            "mobile_oauth_client": oauth_client,
+        },
+    )
+
+
+def disable_microsoft_sso():
+    frappe.db.set_single_value("HD Settings", "enable_microsoft_sso", 0)
+
+
+def issue_sso_token(user: str, client) -> dict:
+    """An OAuth Bearer Token for `user` from `client`, as a Microsoft sign-in to TBO
+    Smart issues it (no ID token needed)."""
+    from helpdesk.api.mobile_auth import issue_tokens
+
+    return issue_tokens(user, client)
+
+
+def bearer_token_works(access_token: str) -> bool:
+    """Whether Frappe's OAuth server accepts `access_token` on an API call, as it does
+    for an `Authorization: Bearer` header."""
+    from urllib.parse import urlencode
+
+    from frappe.integrations.oauth2 import get_oauth_server
+
+    uri = "https://hub.example/api/method/helpdesk.api.mobile.get_me?" + urlencode(
+        {"access_token": access_token}
+    )
+    valid, _request = get_oauth_server().verify_request(
+        uri, "GET", None, {}, ["all", "openid"]
+    )
+    return valid
+
+
+def enable_offboarding(domains: str = "offboarding.example", **values):
+    """Switches on offboarding from Microsoft for `domains`, out of dry run and with a
+    limit of 5, reading the directory with enable_teams_meetings' app; `values`
+    override HD Settings fields."""
+    enable_teams_meetings()
+    frappe.db.set_single_value(
+        "HD Settings",
+        {
+            "offboard_removed_microsoft_users": 1,
+            "offboarding_domains": domains,
+            "offboarding_dry_run": 0,
+            "offboarding_max_disables": 5,
+            **values,
+        },
+    )
+
+
+def microsoft_account(email: str, enabled: bool = True, **values) -> dict:
+    """One account as Microsoft Graph's /users lists it."""
+    return {
+        "id": frappe.generate_hash(length=12),
+        "accountEnabled": enabled,
+        "mail": email,
+        "userPrincipalName": email,
+        "otherMails": [],
+        "proxyAddresses": [f"SMTP:{email}"],
+        **values,
+    }
+
+
+def mock_microsoft_directory(test_case, *pages: list, status: int = 200):
+    """Microsoft Graph for the rest of the test: a fake app sign-in, then every read of
+    /users answered with `pages` of accounts (chained by @odata.nextLink), or refused
+    with `status`. Returns the mock of the Graph calls."""
+    from helpdesk.teams_meetings import GRAPH
+
+    pages = pages or ([],)
+    marker = "$skiptoken=page"
+
+    def answer(method, url, **kwargs):
+        if status >= 300:
+            error = {"code": "Authorization_RequestDenied", "message": "Denied"}
+            return graph_response({"error": error}, status)
+        number = int(url.rpartition(marker)[2]) if marker in url else 0
+        body = {"value": pages[number]}
+        if number + 1 < len(pages):
+            body["@odata.nextLink"] = f"{GRAPH}/users?{marker}{number + 1}"
+        return graph_response(body)
+
+    token = patch(
+        "helpdesk.teams_meetings.requests.post",
+        return_value=graph_response(
+            {"access_token": fake_graph_token(["User.Read.All"]), "expires_in": 3600}
+        ),
+    )
+    calls = patch("helpdesk.teams_meetings.requests.request", side_effect=answer)
+    token.start()
+    test_case.addCleanup(token.stop)
+    mocked = calls.start()
+    test_case.addCleanup(calls.stop)
+    return mocked
+
+
+def make_rsa_key():
+    """A fresh RSA private key, standing in for one of Microsoft's signing keys."""
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    return rsa.generate_private_key(public_exponent=65537, key_size=2048)
+
+
+def mock_microsoft_keys(test_case, key, kid: str = "test-key"):
+    """Serves `key`'s public half as the tenant's JWKS (Entra's signing keys) for the
+    rest of the test, and forgets keys cached by earlier tests."""
+    from jwt import PyJWKClient
+    from jwt.algorithms import RSAAlgorithm
+
+    from helpdesk.api.mobile_auth import jwks_client
+
+    jwk = RSAAlgorithm.to_jwk(key.public_key(), as_dict=True)
+    jwk.update({"kid": kid, "use": "sig", "alg": "RS256"})
+    jwks_client.cache_clear()
+    test_case.addCleanup(jwks_client.cache_clear)
+    fetch = patch.object(PyJWKClient, "fetch_data", return_value={"keys": [jwk]})
+    fetch.start()
+    test_case.addCleanup(fetch.stop)
+
+
+def refresh_oauth_token(client_id: str, refresh_token: str) -> dict:
+    """POSTs grant_type=refresh_token to Frappe's own get_token, the way the app
+    refreshes, and returns its JSON answer (new tokens, or `error`). Frappe raises for
+    a refresh token it has never issued (a 404 over HTTP); that is an `error` too."""
+    from frappe.integrations.oauth2 import get_token
+    from werkzeug.test import EnvironBuilder
+    from werkzeug.wrappers import Request
+
+    builder = EnvironBuilder(
+        path="/api/method/frappe.integrations.oauth2.get_token",
+        method="POST",
+        base_url="https://hub.example",
+        data={
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token,
+            "client_id": client_id,
+        },
+    )
+    previous = getattr(frappe.local, "request", None), frappe.local.response
+    frappe.local.request = Request(builder.get_environ())
+    try:
+        get_token()
+        return dict(frappe.local.response)
+    except frappe.DoesNotExistError:
+        return {"error": "unknown_refresh_token"}
+    finally:
+        frappe.local.request, frappe.local.response = previous
+
+
+def microsoft_id_token(key, email: str, kid: str = "test-key", **claims) -> str:
+    """A Microsoft-shaped ID token for `email`, signed RS256 with `key`: valid for the
+    test tenant and app unless `claims` override (or, with None, remove) a claim."""
+    import time
+
+    import jwt
+
+    now = int(time.time())
+    payload = {
+        "iss": f"https://login.microsoftonline.com/{TEST_MS_TENANT}/v2.0",
+        "aud": TEST_MS_CLIENT,
+        "tid": TEST_MS_TENANT,
+        "sub": "test-subject",
+        "oid": "test-object-id",
+        "iat": now,
+        "nbf": now,
+        "exp": now + 3600,
+        "uti": frappe.generate_hash(length=22),
+        "email": email,
+        "preferred_username": email,
+        "name": email,
+    }
+    payload.update(claims)
+    payload = {k: v for k, v in payload.items() if v is not None}
+    return jwt.encode(payload, key, algorithm="RS256", headers={"kid": kid})
+
+
+def call_mobile_as(as_user: str, method: str, **kwargs):
+    """Calls helpdesk.api.mobile.<method> through `frappe.call` as `as_user`, the way
+    the TBO Smart app does; returns the whole {"v", "data", …} answer. `as_user` leaves
+    `user` free for the method."""
+    return call_as_user(as_user, f"helpdesk.api.mobile.{method}", **kwargs)
+
+
+def call_mobile_on(as_user: str, today, method: str, **kwargs):
+    """call_mobile_as with today fixed and the Scoreboard's cached numbers dropped,
+    so only the test's records fall in the period (as call_team_dashboard does)."""
+    from helpdesk.team_dashboard import clear_cache
+
+    clear_cache()
+    with patch("helpdesk.api.mobile.nowdate", return_value=str(today)):
+        return call_mobile_as(as_user, method, **kwargs)
+
+
+def make_follow_up(
+    doctype: str, name, user: str, level: int = 0, severity: str = "overdue"
+):
+    """A follow-up on a task or ticket for `user` (its owner and its only recipient) at
+    `level`, shaped as the engine finds them; a "breach" is an SLA one."""
+    from helpdesk.follow_ups import FollowUp
+
+    return FollowUp(
+        doctype=doctype,
+        name=str(name),
+        title=str(name),
+        rule="sla" if severity == "breach" else "overdue",
+        stage=f"L{level}",
+        severity=severity,
+        text=f"Follow up on {name}",
+        recipients=[user],
+        owners=[user],
+        level=level,
+    )
+
+
+def register_device_as(user: str, token: str, platform: str = "ios") -> dict:
+    """Registers a phone's push token for `user` through the mobile API; returns the
+    device the API sends back."""
+    return call_mobile_as(
+        user, "register_device", token=token, platform=platform, app_version="1.0.0"
+    )["data"]
+
+
+def get_pushed_messages(post_mock, notification: str) -> list[dict]:
+    """The Expo messages a mocked requests.post sent for one HD Notification."""
+    return [
+        message
+        for call in post_mock.call_args_list
+        for message in call.kwargs.get("json") or []
+        if message["data"]["notification"] == notification
+    ]
+
+
 def set_work_settings(**values):
-    """Saves HD Work Settings (AI estimates, weekly off, morning brief) with `values`."""
+    """Saves HD Work Settings (AI estimates, weekly off, Saturdays off) with `values`."""
     doc = frappe.get_doc("HD Work Settings")
     doc.update(values)
     doc.save(ignore_permissions=True)
@@ -1448,12 +2200,54 @@ def enable_github_sync(**values):
     return doc
 
 
+def enable_merge_bot_trigger(**values):
+    """Turns on the GitHub sync with the merge bot trigger and a GitHub token (plus any
+    overrides), and forgets the last dispatch so the debounce starts fresh."""
+    clear_merge_bot_debounce()
+    return enable_github_sync(
+        **{
+            "trigger_merge_bot": 1,
+            "github_token": "ghp_sync_token",
+            "merge_bot_token": None,
+            **values,
+        }
+    )
+
+
+def clear_merge_bot_debounce():
+    from helpdesk.merge_bot import DEBOUNCE_KEY
+
+    frappe.cache.delete_value(DEBOUNCE_KEY)
+
+
+def get_github_secret(fieldname: str) -> str | None:
+    """The stored (decrypted) value of a Password field in HD GitHub Settings, or None."""
+    return frappe.get_doc("HD GitHub Settings").get_password(
+        fieldname, raise_exception=False
+    )
+
+
+def make_github_delivery(event: str = "pull_request", **values):
+    """Records an HD GitHub Delivery (as receive_webhook does) without processing it."""
+    return frappe.get_doc(
+        {
+            "doctype": "HD GitHub Delivery",
+            "delivery_id": frappe.generate_hash(length=20),
+            "event": event,
+            "action": "opened",
+            "repo": GITHUB_TEST_REPO,
+            "status": "Processed",
+            **values,
+        }
+    ).insert(ignore_permissions=True)
+
+
 def make_github_payload(event: str, action: str = "", **overrides) -> dict:
     """A minimal GitHub webhook payload shaped like the real one for `event`.
 
     Overrides: repo, number, title, body, branch, draft, merged, closed, login,
     comments, review_state, review_body, reviewer, conclusion, sha, workflow,
-    pull_requests (workflow_run: PR numbers the run belongs to).
+    pull_requests (workflow_run / check_suite: PR numbers the run belongs to).
     """
     repo = overrides.get("repo", GITHUB_TEST_REPO)
     number = overrides.get("number", 7)
@@ -1467,8 +2261,8 @@ def make_github_payload(event: str, action: str = "", **overrides) -> dict:
         "repository": {"full_name": repo, "name": repo.split("/")[-1]},
         "sender": {"login": login},
     }
-    if event == "workflow_run":
-        payload["workflow_run"] = {
+    if event in ("workflow_run", "check_suite"):
+        payload[event] = {
             "name": overrides.get("workflow", "Server Tests"),
             "head_branch": branch,
             "head_sha": sha,
@@ -1919,6 +2713,14 @@ class FakeCRM:
         }
         self.invoices: dict[str, dict] = {}
         self.fail_invoices = False
+        # ERPNext on the CRM site, for holidays and leave
+        self.company_rows[0]["default_holiday_list"] = FAKE_HOLIDAY_LIST
+        self.holiday_rows: dict[str, list[dict]] = {FAKE_HOLIDAY_LIST: []}
+        self.leave_rows: list[dict] = []
+        self.employee_rows: list[dict] = []
+        # an Exception the holiday or leave reads raise, as the CRM site would
+        self.holidays_error: Exception | None = None
+        self.leave_error: Exception | None = None
 
     def logged_user(self):
         return "api@crm.example"
@@ -2015,10 +2817,85 @@ class FakeCRM:
             {"status": "Draft", **self.invoices[n]} for n in names if n in self.invoices
         ]
 
+    def holiday_lists(self):
+        return [{"name": name} for name in self.holiday_rows]
+
+    def company_holiday_lists(self):
+        return [
+            {"name": c["name"], "default_holiday_list": c.get("default_holiday_list")}
+            for c in self.company_rows
+        ]
+
+    def holidays(self, holiday_list):
+        from helpdesk.integrations.crm.client import CRMError
+
+        if self.holidays_error:
+            raise self.holidays_error
+        if holiday_list not in self.holiday_rows:
+            raise CRMError(f"No holiday list {holiday_list}")
+        return [dict(row) for row in self.holiday_rows[holiday_list]]
+
+    def approved_leave(self, start, end):
+        if self.leave_error:
+            raise self.leave_error
+        return [
+            dict(row)
+            for row in self.leave_rows
+            if str(row["to_date"]) >= str(start) and str(row["from_date"]) <= str(end)
+        ]
+
+    def employees(self, names):
+        if self.leave_error:
+            raise self.leave_error
+        return [dict(e) for e in self.employee_rows if e["name"] in names]
+
 
 FAKE_COMPANY = "TBO India Pvt Ltd"
 FAKE_ITEM = "Support Hours"
 FAKE_TAXES = "GST 18% - TBO"
+FAKE_HOLIDAY_LIST = "TBO India 2026"
+
+
+def erp_holiday(day, description: str, weekly_off: int = 0) -> dict:
+    """A row of an ERPNext Holiday List as the CRM site returns it (for FakeCRM.holiday_rows)."""
+    return {
+        "holiday_date": str(day),
+        "description": description,
+        "weekly_off": weekly_off,
+    }
+
+
+def erp_leave_application(
+    name: str, employee: str, from_date: str, to_date: str, **values
+) -> dict:
+    """An approved ERPNext Leave Application as the CRM site returns it (for
+    FakeCRM.leave_rows)."""
+    return {
+        "name": name,
+        "employee": employee,
+        "employee_name": employee,
+        "from_date": from_date,
+        "to_date": to_date,
+        "leave_type": "Casual Leave",
+        "half_day": 0,
+        **values,
+    }
+
+
+def make_hd_leave(
+    user: str, from_date, to_date, half_day: int = 0, leave_application=None
+):
+    """An approved leave of `user` in HD Leave, as the CRM holiday sync stores it."""
+    return frappe.get_doc(
+        {
+            "doctype": "HD Leave",
+            "leave_application": leave_application or f"HR-LAP-TEST-{user}-{from_date}",
+            "user": user,
+            "from_date": from_date,
+            "to_date": to_date,
+            "half_day": half_day,
+        }
+    ).insert(ignore_permissions=True)
 
 
 def enable_invoicing(**values):

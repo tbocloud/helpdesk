@@ -8,6 +8,7 @@ from pypika import Criterion
 
 from helpdesk.api.dashboard import COUNT_NAME
 from helpdesk.utils import (
+    assigned_to_filter,
     call_log_default_columns,
     check_permissions,
     contact_default_columns,
@@ -98,6 +99,10 @@ def get_list_data(
                         filters.append([key, value[0], value[1]])
                     else:
                         filters.append([key, "=", value])
+
+    # after the default view's filters, which may name an assignee (or @me) too
+    handle_at_me_support(filters)
+    handle_assigned_to_filter(filters, doctype)
 
     if rows is None:
         rows = []
@@ -547,6 +552,49 @@ def _replace_at_me(container, key):
         container[key] = "%" + frappe.session.user + "%"
 
 
+def handle_assigned_to_filter(filters, doctype):
+    """Turn an "Assigned to <user>" filter (`_assign` like %user%) into an exact match.
+
+    A LIKE reads `_` and `%` in a user ID as wildcards, so the records are found through
+    their open ToDos instead and merged into the filters as a name filter, in place.
+    """
+    for user in _pop_assigned_to_users(filters):
+        _merge_name_filter(
+            filters, assigned_to_filter(doctype, user, finished=False)[1]
+        )
+
+
+def _pop_assigned_to_users(filters) -> list[str]:
+    """Users named by `_assign` like filters, which are taken out of `filters`."""
+
+    def user_of(operator, value):
+        if str(operator).lower() != "like" or not isinstance(value, str):
+            return None
+        user = value.strip("%")
+        return user if user and frappe.db.exists("User", user) else None
+
+    if isinstance(filters, dict):
+        value = filters.get("_assign")
+        if isinstance(value, (list, tuple)) and len(value) == 2:
+            user = user_of(*value)
+            if user:
+                del filters["_assign"]
+                return [user]
+        return []
+    users = []
+    for condition in list(filters):
+        if (
+            isinstance(condition, list)
+            and len(condition) >= 3
+            and condition[0] == "_assign"
+        ):
+            user = user_of(condition[1], condition[2])
+            if user:
+                filters.remove(condition)
+                users.append(user)
+    return users
+
+
 def handle_assigned_on_filter(filters, doctype):
     """
     Handle the custom __assigned_on filter by querying ToDo table
@@ -603,6 +651,9 @@ def _merge_name_filter(filters, ticket_names):
             if isinstance(existing_filter, list) and existing_filter[0] == "in":
                 # Intersection of both filters
                 ticket_names = list(set(ticket_names) & set(existing_filter[1]))
+            elif isinstance(existing_filter, (str, int)):
+                # an exact name stays exact
+                ticket_names = list({str(existing_filter)} & set(ticket_names))
         filters["name"] = ["in", ticket_names]
         return
     existing = next(

@@ -95,48 +95,33 @@
         </TaskyState>
 
         <template v-else>
-          <div
-            class="-mx-1 mt-4 flex gap-1 overflow-x-auto px-1"
-            role="tablist"
-            :aria-label="__('Filter work')"
-          >
-            <button
-              v-for="tab in tabs"
-              :key="tab.key"
-              type="button"
-              role="tab"
-              :aria-selected="activeTab === tab.key"
+          <div class="-mx-1 mt-4 overflow-x-auto px-1">
+            <TabButtons
+              v-model="activeTab"
+              size="md"
+              :aria-label="__('Filter work')"
               :aria-controls="listId"
-              class="flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
-              :class="
-                activeTab === tab.key
-                  ? 'bg-surface-gray-3 text-ink-gray-9'
-                  : 'text-ink-gray-6 hover:bg-surface-gray-2 hover:text-ink-gray-8'
+              :options="
+                tabs.map((t) => ({
+                  label: t.label,
+                  value: t.key,
+                  iconLeft: t.icon,
+                }))
               "
-              @click="activeTab = tab.key"
             >
-              <component
-                :is="tab.icon"
-                v-if="tab.icon"
-                class="size-3.5"
-                aria-hidden="true"
-              />
-              {{ tab.label }}
-              <span
-                class="rounded px-1 font-mono text-xs tabular-nums"
-                :class="
-                  activeTab === tab.key
-                    ? 'bg-surface-base text-ink-gray-8'
-                    : 'text-ink-gray-5'
-                "
-              >
+              <template #suffix="{ button, checked }">
                 <span
-                  v-if="isLoading"
-                  class="inline-block h-3 w-3 animate-pulse rounded bg-surface-gray-2 align-middle"
-                />
-                <template v-else>{{ countFor(tab.key) }}</template>
-              </span>
-            </button>
+                  class="font-mono text-xs tabular-nums"
+                  :class="checked ? '' : 'text-ink-gray-5'"
+                >
+                  <span
+                    v-if="isLoading"
+                    class="inline-block h-3 w-3 animate-pulse rounded bg-surface-gray-2 align-middle"
+                  />
+                  <template v-else>{{ countFor(button.modelValue) }}</template>
+                </span>
+              </template>
+            </TabButtons>
           </div>
 
           <div :id="listId" class="mt-4" :aria-busy="work.loading">
@@ -334,6 +319,7 @@ import {
   Button,
   createResource,
   dayjs,
+  TabButtons,
   toast,
 } from "frappe-ui";
 import { computed, ref, useId, watch, type Component } from "vue";

@@ -65,6 +65,10 @@ phone rows and empty state are its own (see [customer-portal-and-kb.md](customer
   next minute; only the latest request may set the counts), the badges show
   the deadline in neutral. Deadlines are read in the site's time zone (`dayjsLocal`, as the task
   timers do since #76) and shown in the agent's time zone, which defaults to the site's.
+- **Escalation**: a ticket whose SLA warnings or breach have taken it up the follow-up ladder
+  shows `EscalationBadge` ("Escalated to lead / head / managers") after its subject (agents
+  only; `custom_escalation_level` is one of the list's rows). The SLA reminders themselves are in
+  [follow-ups.md](follow-ups.md).
 - **Summary strip and tones agree**: "SLA breached" and "First reply overdue" count tickets
   whose deadline has passed, which is exactly when a cell shows Failed; neither uses an "at
   risk" window, so the working-time warning changes no count.
@@ -82,8 +86,18 @@ phone rows and empty state are its own (see [customer-portal-and-kb.md](customer
 ## Calendar (`/calendar`)
 
 `desk/src/pages/work/WorkCalendar.vue`; API `helpdesk.api.calendar.get_calendar(start, end,
-team)` (unchanged): Teams meetings the user scheduled or is invited to, and their open tasks due
-in the range; project leads and managers can switch to Mine / Team.
+team)`: Teams meetings the user scheduled or is invited to, their open tasks due in the
+range, the hub's holidays and approved leave; project leads and managers can switch to
+Mine / Team.
+
+- **Holidays**: the named holidays on the default SLA's holiday list (weekly offs and
+  Saturdays off are left out), including those synced from the CRM site
+  ([tbo-crm-integration.md](tbo-crm-integration.md#holidays-and-leave-implemented-read-only)),
+  as all-day events in the quiet info tone with a calendar-off icon. The popover says
+  whether it came from the CRM site's holiday list or is a business holiday entered here.
+- **Leave**: approved leave (HD Leave) as all-day events, one per day in the range shown,
+  "Anu Varghese · On leave" (or "· Half day leave"), neutral with a palm-tree icon: the
+  user's own in Mine, everyone's in Team. Only dates are shown, never the leave type.
 
 - **Header**: the frappe-ui `Calendar`'s `#header` slot renders the month as a heading that is
   also a date picker (jump to any month or day, through the calendar's `onMonthYearChange`),
@@ -93,7 +107,8 @@ in the range; project leads and managers can switch to Mine / Team.
   `tbo-meeting`, `tbo-task` and `tbo-overdue` to the exported `CalendarColorMap`. Meetings and
   tasks are neutral (meetings a little darker); only overdue tasks are red; the selected event
   uses the brand soft colour. Each kind has an icon (`eventIcons`): video for meetings, a dot for
-  tasks, a flag for key tasks and milestones, an alert for overdue, and the legend shows the
+  tasks, a flag for key tasks and milestones, an alert for overdue, calendar-off for holidays
+  (`tbo-holiday`, info tone), a palm tree for leave (neutral), and the legend shows the
   same icons. Today's date is brand instead of black.
 - **States**: an empty range says so next to the legend; a failed load shows the error with
   **Retry**; the refresh button spins while loading.

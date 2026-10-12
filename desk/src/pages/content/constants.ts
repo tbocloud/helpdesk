@@ -24,6 +24,7 @@ export const STATUSES = [
   "Internal Review",
   "Client Review",
   "Changes Requested",
+  "Head Review",
   "Approved",
   "Scheduled",
   "Published",
@@ -35,7 +36,12 @@ export function stageColor(status: string) {
   if (status === "Published") return "green";
   if (["Approved", "Scheduled"].includes(status)) return "violet";
   if (
-    ["Internal Review", "Client Review", "Changes Requested"].includes(status)
+    [
+      "Internal Review",
+      "Client Review",
+      "Changes Requested",
+      "Head Review",
+    ].includes(status)
   )
     return "amber";
   return "blue";
@@ -49,6 +55,8 @@ export interface ContentPost {
   platforms?: string;
   format?: string;
   customer: string;
+  // the festival or occasion the post is for; the calendar highlights it
+  special_day?: string;
   publish_on?: string;
   published_on?: string;
   published_url?: string;
@@ -58,6 +66,10 @@ export interface ContentPost {
   designer?: string;
   marketer?: string;
   video_editor?: string;
+  writer_hours?: number;
+  designer_hours?: number;
+  video_editor_hours?: number;
+  marketer_hours?: number;
   times_postponed?: number;
 }
 
@@ -78,7 +90,16 @@ export interface RolePerson {
 }
 
 export type TeamRole = (typeof TEAM_ROLES)[number]["field"];
-export type EntryAction = "publish" | "postpone" | "cancel" | "assign";
+export type EntryAction =
+  | "publish"
+  | "postpone"
+  | "cancel"
+  | "assign"
+  | "head_approve"
+  | "head_send_back";
+
+// the client approved; the Digital Marketing Head approves before it can go out
+export const HEAD_REVIEW = "Head Review";
 
 // Done with: never missed, never needs a reminder
 export const CLOSED_STATUSES = ["Published", "Cancelled"];

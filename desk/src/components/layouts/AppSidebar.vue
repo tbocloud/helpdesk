@@ -1,110 +1,213 @@
 <template>
-  <Sidebar
-    v-model:collapsed="collapsed"
-    :disable-collapse="mobile"
-    class="border-e border-outline-gray-1"
+  <!-- Desktop auto-hide: this shell keeps the rail's width in the layout while
+       the sidebar inside expands over the page, so the page never reflows. -->
+  <div
+    ref="shell"
+    class="relative h-full shrink-0"
+    :class="autoHide && 'w-12'"
+    @pointerenter="onPointerEnter"
+    @pointerleave="onPointerLeave"
+    @pointerdown.capture="onPointerDown"
+    @click.capture="onClickCapture"
+    @focusin="onFocusIn"
+    @focusout="onFocusOut"
+    @keydown.esc="onEscape"
   >
-    <div class="flex h-full flex-col p-2">
-      <UserMenu :options="profileSettings" :is-collapsed="isCollapsed" />
+    <Sidebar
+      :collapsed="isCollapsed"
+      :disable-collapse="mobile"
+      :class="[
+        !mobile && 'motion-safe:!duration-200',
+        autoHide && 'absolute inset-y-0 start-0 z-20',
+        autoHide && !isCollapsed && 'border-e border-outline-gray-2 shadow-xl',
+      ]"
+    >
+      <div class="flex h-full flex-col" :class="isCollapsed ? 'p-2' : 'p-3'">
+        <UserMenu :options="profileSettings" :is-collapsed="isCollapsed" />
 
-      <ScrollArea class="mt-2 min-h-0 flex-1 -mx-2" viewport-class="px-2">
-        <template v-for="(section, index) in sections" :key="index">
-          <template v-if="section.label && !section.collapsible">
-            <div
-              v-if="!isCollapsed"
-              class="select-none px-2.5 pb-1.5 pt-3.5 text-2xs font-semibold uppercase tracking-[0.06em] text-ink-gray-5"
-            >
-              {{ section.label }}
-            </div>
-            <div v-else class="mx-2 my-2 border-t border-outline-gray-2" />
-          </template>
-          <SidebarLabel
-            v-else-if="section.label"
-            divider
-            class="my-1 select-none"
-            :class="section.collapsible && !isCollapsed && 'cursor-pointer'"
-            @click="section.collapsible && toggleSection(section.label)"
+        <button
+          v-if="showSearchCard"
+          type="button"
+          class="mt-3 flex h-10 w-full shrink-0 items-center gap-2.5 rounded-[12px] border border-outline-gray-2 bg-surface-base px-2 text-start transition-colors hover:bg-surface-gray-1"
+          @click="showCommandPalette = true"
+        >
+          <span class="grid size-6 shrink-0 place-items-center text-ink-gray-6">
+            <LucideSearch class="size-3.5" aria-hidden="true" />
+          </span>
+          <span class="flex-1 truncate text-base text-ink-gray-6">
+            {{ __("Search") }}
+          </span>
+          <kbd
+            class="flex items-center gap-0.5 rounded-[4px] bg-surface-gray-2 px-1.5 py-0.5 text-2xs text-ink-gray-6"
           >
-            <span class="flex items-center gap-1.5 text-sm font-medium">
-              <span
-                class="lucide-chevron-right size-4 shrink-0 text-ink-gray-9 transition-transform duration-300 ease-in-out"
-                :class="{ 'rotate-90': isSectionOpen(section.label) }"
-              />
-              <span class="truncate">{{ section.label }}</span>
-            </span>
-          </SidebarLabel>
-          <nav
-            v-if="!section.collapsible || isSectionOpen(section.label)"
-            class="flex flex-col gap-0.5"
-          >
-            <SidebarItem
-              v-for="item in section.items"
-              :key="item.key"
-              :id="item.id"
-              :label="__(item.label)"
-              :active="item.isActive"
-              @click="item.onClick && item.onClick()"
+            <component
+              :is="device.modifierIcon"
+              class="size-3"
+              aria-hidden="true"
+            />
+            K
+          </kbd>
+        </button>
+
+        <ScrollArea class="mt-2 min-h-0 flex-1 -mx-2" viewport-class="px-2">
+          <template v-for="(section, index) in sections" :key="index">
+            <template v-if="section.label && !section.collapsible">
+              <div
+                v-if="!isCollapsed"
+                class="mb-1 mt-4 select-none px-2 text-xs font-medium text-ink-gray-5"
+              >
+                {{ section.label }}
+              </div>
+              <div v-else class="mx-1 my-2 border-t border-outline-gray-2" />
+            </template>
+            <SidebarLabel
+              v-else-if="section.label"
+              divider
+              class="mt-3 mb-1 select-none"
+              :class="section.collapsible && !isCollapsed && 'cursor-pointer'"
+              @click="section.collapsible && toggleSection(section.label)"
             >
-              <template #prefix>
+              <span class="flex items-center gap-1.5 text-sm font-medium">
                 <span
-                  class="tbo-nav-icon relative grid size-4 shrink-0 place-items-center text-ink-gray-6"
-                >
-                  <component :is="item.icon" class="size-4" />
-                  <span
-                    v-if="
-                      item.key === 'notifications' && item.badge && isCollapsed
-                    "
-                    class="absolute -right-0.5 -top-0.5 size-1.5 rounded-full bg-surface-blue-5"
-                  />
+                  class="lucide-chevron-right size-4 shrink-0 text-ink-gray-9 transition-transform duration-300 ease-in-out"
+                  :class="{ 'rotate-90': isSectionOpen(section.label) }"
+                />
+                <span class="truncate">{{ section.label }}</span>
+              </span>
+            </SidebarLabel>
+            <nav
+              v-if="!section.collapsible || isSectionOpen(section.label)"
+              class="flex flex-col gap-0.5"
+            >
+              <SidebarItem
+                v-for="item in section.items"
+                :key="item.key"
+                :id="item.id"
+                :label="__(item.label)"
+                :active="item.isActive"
+                @click="item.onClick && item.onClick()"
+              >
+                <template #prefix>
+                  <span class="tbo-nav-icon relative" :data-tone="item.tone">
+                    <component
+                      :is="item.icon"
+                      class="size-3.5"
+                      aria-hidden="true"
+                    />
+                    <span
+                      v-if="
+                        item.key === 'notifications' &&
+                        item.badge &&
+                        isCollapsed
+                      "
+                      class="absolute -end-1 -top-1 size-2 rounded-full bg-brand ring-2 ring-[color:var(--surface-sidebar)]"
+                    />
+                  </span>
+                </template>
+                <span class="tbo-nav-label ms-1 truncate text-base">
+                  {{ __(item.label) }}
                 </span>
-              </template>
-              <template #suffix>
-                <kbd
-                  v-if="item.shortcut"
-                  class="me-2 flex items-center gap-0.5 rounded border border-outline-gray-2 px-1 text-2xs font-medium text-ink-gray-5"
-                >
-                  <component :is="device.modifierIcon" class="h-3 w-3" />
-                  K
-                </kbd>
-                <span
-                  v-else-if="item.badge"
-                  class="me-2 font-mono text-xs tabular-nums text-ink-gray-5"
-                  :aria-label="__('{0} unread', String(item.badge))"
-                >
-                  {{ item.badge > 99 ? "99+" : item.badge }}
-                </span>
-                <Dropdown
-                  v-else-if="item.view"
-                  side="right"
-                  align="start"
-                  :options="viewActions(item.view, viewDialogConfig)"
-                >
-                  <template #default="{ open }">
+                <template #suffix>
+                  <kbd
+                    v-if="item.shortcut"
+                    class="me-2 flex items-center gap-0.5 rounded-[4px] bg-surface-gray-2 px-1.5 py-0.5 text-2xs text-ink-gray-6"
+                  >
+                    <component :is="device.modifierIcon" class="size-3" />
+                    K
+                  </kbd>
+                  <template
+                    v-else-if="item.key === 'notifications' && !isCollapsed"
+                  >
+                    <span
+                      v-if="item.badge"
+                      class="me-1 font-mono text-xs tabular-nums text-ink-gray-5"
+                      :aria-label="__('{0} unread', String(item.badge))"
+                    >
+                      {{ item.badge > 99 ? "99+" : item.badge }}
+                    </span>
                     <Button
                       variant="ghost"
-                      icon="lucide-more-horizontal"
-                      class="me-1 !size-6 rounded !text-ink-gray-7"
-                      :class="
-                        open
-                          ? 'opacity-100'
-                          : 'opacity-0 group-hover/sidebar-item:opacity-100'
-                      "
-                      @click.stop
-                    />
+                      class="me-0.5 !text-ink-gray-6"
+                      :tooltip="themeToggle.label.value"
+                      :label="themeToggle.label.value"
+                      @click="themeToggle.toggle()"
+                    >
+                      <template #icon>
+                        <component
+                          :is="themeToggle.icon.value"
+                          class="size-3.5"
+                          aria-hidden="true"
+                        />
+                      </template>
+                    </Button>
                   </template>
-                </Dropdown>
-              </template>
-            </SidebarItem>
-          </nav>
-        </template>
-      </ScrollArea>
+                  <span
+                    v-else-if="item.badge"
+                    class="me-2 font-mono text-xs tabular-nums text-ink-gray-5"
+                    :aria-label="__('{0} unread', String(item.badge))"
+                  >
+                    {{ item.badge > 99 ? "99+" : item.badge }}
+                  </span>
+                  <Dropdown
+                    v-else-if="item.view"
+                    side="right"
+                    align="start"
+                    :options="viewActions(item.view, viewDialogConfig)"
+                  >
+                    <template #default="{ open }">
+                      <Button
+                        variant="ghost"
+                        icon="lucide-more-horizontal"
+                        class="me-1 !size-6 rounded !text-ink-gray-7"
+                        :class="
+                          open
+                            ? 'opacity-100'
+                            : 'opacity-0 group-hover/sidebar-item:opacity-100'
+                        "
+                        :aria-label="__('View options')"
+                        @click.stop
+                      />
+                    </template>
+                  </Dropdown>
+                </template>
+              </SidebarItem>
+            </nav>
+          </template>
+        </ScrollArea>
 
-      <div class="mt-auto flex flex-col gap-2">
-        <slot name="footer" :is-collapsed="isCollapsed" />
-        <SidebarCollapseToggle v-if="!mobile" />
+        <div class="mt-auto flex flex-col gap-2 pt-2">
+          <FollowUpStrip
+            v-if="!isCustomerPortal"
+            :summary="navCounts.data?.follow_ups"
+            compact
+            :rail="isCollapsed"
+          />
+          <slot name="footer" :is-collapsed="isCollapsed" />
+          <div
+            v-if="!mobile || $slots['footer-items']"
+            class="flex flex-col gap-0.5 border-t border-outline-gray-2 pt-2"
+          >
+            <slot name="footer-items" :is-collapsed="isCollapsed" />
+            <SidebarItem v-if="!mobile" :label="pinLabel" @click="togglePinned">
+              <template #prefix>
+                <span class="tbo-nav-icon" data-tone="gray">
+                  <LucidePinOff
+                    v-if="sidebarStore.isPinned"
+                    class="size-3.5"
+                    aria-hidden="true"
+                  />
+                  <LucidePin v-else class="size-3.5" aria-hidden="true" />
+                </span>
+              </template>
+              <span class="ms-1 truncate text-base text-ink-gray-5">
+                {{ pinLabel }}
+              </span>
+            </SidebarItem>
+          </div>
+        </div>
       </div>
-    </div>
-  </Sidebar>
+    </Sidebar>
+  </div>
   <CP v-if="!mobile" v-model="showCommandPalette" />
   <ViewModal
     v-if="viewDialogConfig.show"
@@ -114,10 +217,17 @@
 </template>
 
 <script setup lang="ts">
-import { CONTENT_TEAM_ROUTES } from "@/pages/content/contentTeam";
+import {
+  CONTENT_ROUTES,
+  ERP_EMPLOYEE_HIDDEN_ROUTES,
+  CONTENT_TEAM_ROUTES,
+  DM_EMPLOYEE_HIDDEN_ROUTES,
+} from "@/pages/content/contentTeam";
 import CP from "@/components/command-palette/CP.vue";
+import FollowUpStrip from "@/components/FollowUpStrip.vue";
 import UserMenu from "@/components/UserMenu.vue";
 import { useDevice } from "@/composables";
+import { useThemeToggle } from "@/composables/useThemeToggle";
 import { currentView, useView } from "@/composables/useView";
 import { useAuthStore } from "@/stores/auth";
 import { useNotificationStore } from "@/stores/notification";
@@ -132,15 +242,17 @@ import {
   Dropdown,
   ScrollArea,
   Sidebar,
-  SidebarCollapseToggle,
   SidebarItem,
   SidebarLabel,
 } from "frappe-ui";
+import { onClickOutside, useMutationObserver } from "@vueuse/core";
 import { storeToRefs } from "pinia";
-import { computed, reactive, ref, watch } from "vue";
+import { computed, onBeforeUnmount, reactive, ref, watch } from "vue";
 import type { RouteLocationRaw } from "vue-router";
 import { useRoute, useRouter } from "vue-router";
 import LucideBell from "~icons/lucide/bell";
+import LucidePin from "~icons/lucide/pin";
+import LucidePinOff from "~icons/lucide/pin-off";
 import LucideSearch from "~icons/lucide/search";
 import {
   agentPortalSidebarOptions,
@@ -162,6 +274,7 @@ const { isCallingEnabled } = storeToRefs(useTelephonyStore());
 const { pinnedViews, viewActions, handleView } = useView();
 
 const showCommandPalette = ref(false);
+const themeToggle = useThemeToggle();
 
 // Local modal state for the per-view kebab menu (edit/duplicate). The action
 // logic itself is shared via useView so the sidebar and breadcrumb stay in sync.
@@ -171,14 +284,138 @@ const viewDialogConfig = reactive({
   mode: "create",
 });
 
-const collapsed = computed({
-  get: () => !sidebarStore.isExpanded,
-  set: (value) => sidebarStore.toggleExpanded(!value),
-});
-
 // The mobile drawer pins the sidebar open (disable-collapse), so it is never
 // visually collapsed even when the store says so.
-const isCollapsed = computed(() => collapsed.value && !props.mobile);
+const isCollapsed = computed(() => !sidebarStore.isExpanded && !props.mobile);
+
+// Desktop auto-hide (docs/workspace-pages.md, "Sidebar"): the rail expands over
+// the page on hover intent, keyboard focus or a tap, and collapses once none of
+// those hold and no menu or panel it opened is still open.
+const HOVER_INTENT_MS = 120;
+const CLOSE_DELAY_MS = 250;
+
+const shell = ref<HTMLElement | null>(null);
+const autoHide = computed(() => !props.mobile && !sidebarStore.isPinned);
+const pinLabel = computed(() =>
+  sidebarStore.isPinned ? __("Auto-hide sidebar") : __("Keep sidebar open")
+);
+
+let pointerInside = false;
+const keyboardInside = ref(false);
+// a dropdown it owns (workspace switcher, a view's options) is open
+const popupOpen = ref(false);
+const holdOpen = computed(
+  () => keyboardInside.value || popupOpen.value || notificationStore.visible
+);
+let timer: ReturnType<typeof setTimeout> | undefined;
+let swallowClick = false;
+// where keyboard focus came from, so Escape can hand it back
+let returnFocus: HTMLElement | null = null;
+
+function setPeeking(value: boolean) {
+  clearTimeout(timer);
+  sidebarStore.isPeeking = value;
+}
+
+function schedule(value: boolean, delay: number) {
+  clearTimeout(timer);
+  timer = setTimeout(() => {
+    if (value || (!pointerInside && !holdOpen.value)) setPeeking(value);
+  }, delay);
+}
+
+// Touch is handled by tap (onPointerDown), so hover tracking ignores it.
+function onPointerEnter(e: PointerEvent) {
+  if (e.pointerType === "touch") return;
+  pointerInside = true;
+  if (autoHide.value) schedule(true, HOVER_INTENT_MS);
+}
+
+function onPointerLeave(e: PointerEvent) {
+  if (e.pointerType === "touch") return;
+  pointerInside = false;
+  if (autoHide.value) schedule(false, CLOSE_DELAY_MS);
+}
+
+// The first tap on the rail only expands it; the next tap picks an item.
+// Any pointer press also means the keyboard is no longer what holds it open.
+function onPointerDown(e: PointerEvent) {
+  keyboardInside.value = false;
+  swallowClick =
+    autoHide.value && e.pointerType === "touch" && !sidebarStore.isPeeking;
+  if (swallowClick) setPeeking(true);
+}
+
+function onClickCapture(e: MouseEvent) {
+  if (!swallowClick) return;
+  swallowClick = false;
+  e.preventDefault();
+  e.stopPropagation();
+}
+
+// Only keyboard focus expands it: a mouse click leaves focus on the item, and
+// that must not hold the sidebar open after the pointer has gone.
+function onFocusIn(e: FocusEvent) {
+  const target = e.target as HTMLElement;
+  if (!target.matches(":focus-visible")) {
+    keyboardInside.value = false;
+    return;
+  }
+  const from = e.relatedTarget;
+  if (!keyboardInside.value) {
+    returnFocus =
+      from instanceof HTMLElement && !shell.value?.contains(from) ? from : null;
+  }
+  keyboardInside.value = true;
+  if (autoHide.value) setPeeking(true);
+}
+
+function onFocusOut(e: FocusEvent) {
+  const next = e.relatedTarget;
+  if (next instanceof Node && shell.value?.contains(next)) return;
+  keyboardInside.value = false;
+}
+
+function onEscape() {
+  if (!autoHide.value || !sidebarStore.isPeeking) return;
+  keyboardInside.value = false;
+  setPeeking(false);
+  const target = returnFocus?.isConnected
+    ? returnFocus
+    : document.querySelector<HTMLElement>("main");
+  returnFocus = null;
+  target?.focus();
+}
+
+function togglePinned() {
+  sidebarStore.isPinned = !sidebarStore.isPinned;
+  // unpinned under the pointer or keyboard, it stays open until they leave
+  setPeeking(!sidebarStore.isPinned && (pointerInside || keyboardInside.value));
+}
+
+onClickOutside(shell, () => {
+  if (autoHide.value && sidebarStore.isPeeking && !holdOpen.value) {
+    setPeeking(false);
+  }
+});
+
+useMutationObserver(
+  shell,
+  () => {
+    popupOpen.value = Boolean(
+      shell.value?.querySelector('[aria-haspopup][aria-expanded="true"]')
+    );
+  },
+  { subtree: true, attributes: true, attributeFilter: ["aria-expanded"] }
+);
+
+watch(holdOpen, (held) => {
+  if (!held && autoHide.value && !pointerInside) {
+    schedule(false, CLOSE_DELAY_MS);
+  }
+});
+
+onBeforeUnmount(() => clearTimeout(timer));
 
 // Expanded/folded state of the collapsible view sections, keyed by label.
 const closedSections = ref(new Set<string>());
@@ -216,6 +453,15 @@ const navItems = computed(() => {
     : agentPortalSidebarOptions;
   return options
     .filter((item) => isCallingEnabled.value || item.label !== __("Call Logs"))
+    .filter((item) => !item.ticketWorkersOnly || authStore.canWorkTickets)
+    .filter((item) => authStore.inContentTeam || !CONTENT_ROUTES.has(item.to))
+    .filter(
+      (item) => !authStore.isErpOnly || !ERP_EMPLOYEE_HIDDEN_ROUTES.has(item.to)
+    )
+    .filter(
+      (item) =>
+        !authStore.isDmEmployee || !DM_EMPLOYEE_HIDDEN_ROUTES.has(item.to)
+    )
     .filter((item) => !item.projectManagerOnly || authStore.isProjectManager)
     .filter((item) => !item.overviewOnly || authStore.canSeeOverview)
     .filter(
@@ -234,15 +480,21 @@ const navItems = computed(() => {
       onClick: () => selectItem(option.to, { name: option.to }),
       badge: option.countKey ? navCounts.data?.[option.countKey] : undefined,
       section: option.section,
+      tone: option.tone,
       key: option.label,
     }));
 });
+
+const showSearchCard = computed(
+  () => !props.mobile && !isCustomerPortal.value && !isCollapsed.value
+);
 
 const searchItem = computed(() => ({
   label: __("Search"),
   icon: LucideSearch,
   onClick: () => (showCommandPalette.value = true),
   shortcut: true,
+  tone: "gray",
   key: "search",
 }));
 
@@ -256,6 +508,7 @@ const notificationItem = computed(() =>
         isActive: activeItem.value === "Notifications",
         onClick: () => selectItem("Notifications", { name: "Notifications" }),
         badge: notificationStore.unread,
+        tone: "orange",
         key: "notifications",
         id: "notifications-btn",
       }
@@ -264,18 +517,33 @@ const notificationItem = computed(() =>
         icon: LucideBell,
         onClick: () => notificationStore.toggle(),
         badge: notificationStore.unread,
+        tone: "orange",
         key: "notifications",
         id: "notifications-btn",
       }
 );
 
+const themeRailItem = computed(() => ({
+  label: themeToggle.label.value,
+  icon: themeToggle.icon.value,
+  onClick: themeToggle.toggle,
+  tone: "gray",
+  key: "theme",
+}));
+
 const sections = computed(() => {
   if (isCustomerPortal.value) {
     return [{ label: "", items: navItems.value, collapsible: false }];
   }
-  const top = props.mobile
-    ? [notificationItem.value]
-    : [searchItem.value, notificationItem.value];
+  // Expanded desktop shows search as its own card above the nav; collapsed it
+  // falls back to a rail item so it keeps its tooltip.
+  const top =
+    props.mobile || showSearchCard.value
+      ? [notificationItem.value]
+      : [searchItem.value, notificationItem.value];
+  // Expanded, the theme button sits in the Notifications row; the collapsed
+  // rail hides row suffixes, so it gets its own rail item there.
+  if (isCollapsed.value) top.push(themeRailItem.value);
   const result = [{ label: "", items: top, collapsible: false }];
   for (const label of ["Workspace", "Directory"]) {
     const items = navItems.value.filter((item) => item.section === label);
@@ -315,6 +583,10 @@ watch(
   () => {
     activeItem.value = currentRouteKey();
     if (!isCustomerPortal.value) navCounts.reload();
+    // a tap on an item navigated; fold the expanded rail away again
+    if (autoHide.value && !pointerInside && !keyboardInside.value) {
+      setPeeking(false);
+    }
   }
 );
 </script>

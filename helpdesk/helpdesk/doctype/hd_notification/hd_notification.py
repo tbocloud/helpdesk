@@ -17,9 +17,8 @@ class HDNotification(Document):
         return ""
 
     def get_from(self):
-        return frappe.db.get_value(
-            "User", {"name": self.user_from}, fieldname="full_name"
-        )
+        # cached per request, so a list of notifications looks each sender up once
+        return frappe.utils.get_fullname(self.user_from)
 
     def get_button_label(self):
         if self.reference_comment:
@@ -55,12 +54,38 @@ class HDNotification(Document):
 
     def after_insert(self):
         self.deliver()
+        self.announce()
+        self.push()
+
+    def announce(self):
+        """Tell the recipient's open helpdesk tabs, so the bell updates without a reload
+        (and chimes for a completed task)."""
+        frappe.publish_realtime(
+            "helpdesk:new-notification",
+            {
+                "name": self.name,
+                "notification_type": self.notification_type,
+                "message": self.message,
+            },
+            user=self.user_to,
+            after_commit=True,
+        )
+
+    def push(self):
+        """To the recipient's phones when Mobile push is on (helpdesk.mobile_push);
+        a failure there is logged and never stops the notification."""
+        from helpdesk.mobile_push import enqueue_push
+
+        enqueue_push(self)
 
     def deliver(self):
         """Chat instead of email when HD Chat Settings is on (sent after commit, in the background)."""
         from helpdesk.chat_notifications import is_enabled
 
         if self.notification_type not in ("Mention", "Reminder"):
+            return
+        # a follow-up reaches chat in the person's digest, not one message per item
+        if self.flags.skip_delivery:
             return
         if not is_enabled():
             self.send_email()
@@ -122,7 +147,7 @@ class HDNotification(Document):
         try:
             frappe.sendmail(
                 recipients=self.user_to,
-                # multi-line reminders (the morning brief) use their first line as subject
+                # a multi-line reminder uses its first line as the subject
                 subject=text.split("\n", 1)[0],
                 template="new_notification",
                 args={

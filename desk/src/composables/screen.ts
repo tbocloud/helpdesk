@@ -1,5 +1,8 @@
 import { computed, onMounted, onUnmounted, reactive } from "vue";
 
+/** Phones and touch screens, where controls get 44px hit areas (theme.css). */
+export const TOUCH_TARGET_QUERY = "(max-width: 639.98px), (pointer: coarse)";
+
 export function useScreenSize() {
   const size = reactive({
     width: window.innerWidth,

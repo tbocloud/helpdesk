@@ -65,6 +65,20 @@ class TestContentBoard(FrappeTestCase):
         post.save()
         self.assertEqual((post.channel, post.platforms), ("Facebook", "Facebook"))
 
+    def test_special_day_is_kept_on_every_post(self):
+        names = content_board.add_entries(
+            self.entry(special_day="Diwali"), ["Instagram", "Facebook"]
+        )
+
+        self.assertEqual(
+            set(
+                frappe.get_all(
+                    "HD Content Post", {"name": ("in", names)}, pluck="special_day"
+                )
+            ),
+            {"Diwali"},
+        )
+
     def test_needs_a_platform_and_valid_post(self):
         with self.assertRaises(frappe.ValidationError):
             content_board.add_entries(self.entry(), [])

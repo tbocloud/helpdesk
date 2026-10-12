@@ -32,9 +32,13 @@
     </div>
     <p class="text-p-xs text-ink-gray-5">
       {{
-        __(
-          "They get a notification. Everyone on the project can still see the file."
-        )
+        folder
+          ? __(
+              "They get a notification now and when files are added. Everyone on the project can still see the folder."
+            )
+          : __(
+              "They get a notification. Everyone on the project can still see the file."
+            )
       }}
     </p>
   </fieldset>
@@ -50,6 +54,8 @@ const props = defineProps<{
   modelValue: string[];
   /** The project's members and lead. */
   team: Person[];
+  /** Picking people for a folder rather than a file (changes the hint). */
+  folder?: boolean;
 }>();
 
 const emit = defineEmits<{ "update:modelValue": [value: string[]] }>();

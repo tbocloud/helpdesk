@@ -25,6 +25,7 @@ from frappe.utils import (
 
 from helpdesk.ai_engine import call_haiku
 from helpdesk.api.ticket_ai import html_to_text, truncate
+from helpdesk.tasky.api import hold_by_name, hold_by_names
 from helpdesk.work_reminders import get_project_managers, notify_users
 
 PERIOD_DAYS = 7
@@ -49,7 +50,8 @@ causes or plans that are not in the stats. If a list is empty, say nothing about
 in plain English, with no greetings and no sign-off.
 - overview: one or two sentences with the headline numbers for the period.
 - highlights: what got done (completed tasks, resolved tickets, project progress).
-- risks: overdue tasks, tasks on hold (with their reasons) and SLA-breached or urgent/high tickets.
+- risks: overdue tasks, tasks on hold (with their reason, note and who put them on hold) and
+  SLA-breached or urgent/high tickets.
 - next_week: what is due in the next 7 days, key tasks first.
 Order every list by impact on the customer, most serious first. Lead each item with the fact and
 include its number or date when the stats give one; in risks, add what would unblock it when the stats
@@ -209,6 +211,8 @@ def collect_customer_stats(customer: str, start, end) -> dict:
                 "exp_end_date",
                 "is_key",
                 "hold_reason",
+                "hold_note",
+                "hold_by",
                 "hold_since",
                 "modified",
             ],
@@ -300,6 +304,8 @@ def task_stats(tasks, projects, start, end, today) -> dict:
     ]
     on_hold = [t for t in still_open if t.status == ON_HOLD]
     key_open = [t for t in still_open if t.is_key]
+    # who held each listed task, from one User query
+    holders = hold_by_names(on_hold[:LIST_CAP])
 
     def items(rows, **extra):
         return [task_item(t, names, **extra) for t in rows[:LIST_CAP]]
@@ -311,7 +317,7 @@ def task_stats(tasks, projects, start, end, today) -> dict:
         "overdue": len(overdue),
         "overdue_list": items(overdue),
         "on_hold": len(on_hold),
-        "on_hold_list": items(on_hold, with_hold=True),
+        "on_hold_list": items(on_hold, holders=holders),
         "key_open": len(key_open),
         "key_open_list": items(key_open),
         "due_next_7_days": len(due_soon),
@@ -319,7 +325,8 @@ def task_stats(tasks, projects, start, end, today) -> dict:
     }
 
 
-def task_item(task, project_names: dict, with_hold: bool = False) -> dict:
+def task_item(task, project_names: dict, holders: dict[str, str] | None = None) -> dict:
+    """A task for the stats; `holders` (from hold_by_names) adds why and by whom it's held."""
     item = {
         "subject": task.subject,
         "project": project_names.get(task.project, task.project),
@@ -327,8 +334,10 @@ def task_item(task, project_names: dict, with_hold: bool = False) -> dict:
         "due": str(task.exp_end_date) if task.exp_end_date else None,
         "is_key": bool(task.is_key),
     }
-    if with_hold:
+    if holders is not None:
         item["hold_reason"] = task.hold_reason
+        item["hold_note"] = task.hold_note or None
+        item["hold_by"] = hold_by_name(task.hold_by, holders)
         item["hold_since"] = str(task.hold_since) if task.hold_since else None
     return item
 
@@ -451,15 +460,7 @@ def fallback_summary(stats: dict) -> tuple[str, list]:
         )
         for t in tasks["overdue_list"]
     ]
-    risks += [
-        _("On hold since {0} ({1}): {2} ({3})").format(
-            formatdate(t["hold_since"]) if t["hold_since"] else "-",
-            t["hold_reason"] or _("no reason given"),
-            key_label(t),
-            t["project"],
-        )
-        for t in tasks["on_hold_list"]
-    ]
+    risks += [hold_risk(t) for t in tasks["on_hold_list"]]
     risks += [
         _("SLA breached: ticket #{0} {1}").format(t["name"], t["subject"])
         for t in tickets["sla_breached_open"]
@@ -478,6 +479,22 @@ def fallback_summary(stats: dict) -> tuple[str, list]:
         for t in tasks["due_next_7_days_list"]
     ]
     return overview, section_list(highlights, risks, next_week)
+
+
+def hold_risk(task: dict) -> str:
+    """A held task as a risk line: since when, why (reason and note), who held it."""
+    reason = task["hold_reason"] or _("no reason given")
+    if task.get("hold_note"):
+        reason = f"{reason}: {task['hold_note']}"
+    line = _("On hold since {0} ({1}): {2} ({3})").format(
+        formatdate(task["hold_since"]) if task["hold_since"] else "-",
+        reason,
+        key_label(task),
+        task["project"],
+    )
+    if task.get("hold_by"):
+        line += " " + _("Put on hold by {0}.").format(task["hold_by"])
+    return line
 
 
 def key_label(task: dict) -> str:

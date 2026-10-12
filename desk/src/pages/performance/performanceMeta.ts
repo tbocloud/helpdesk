@@ -1,4 +1,4 @@
-import type { Tone } from "@/components/tone";
+import { INK, type Tone } from "@/components/tone";
 import { __ } from "@/translation";
 
 /** Score colour: green when on time, amber when late or reworked, red when missed. */
@@ -17,8 +17,16 @@ export function onTimeTone(pct: number | null | undefined): Tone {
   return "danger";
 }
 
+/** Text colour of an on-time %; "—" (nothing was due) stays gray. */
+export function onTimeClass(pct: number | null | undefined) {
+  return pct == null ? "text-ink-gray-5" : INK[onTimeTone(pct)];
+}
+
+// platforms the team added ("Google Business") have no token, so fall back to gray
 export const channelColor = (channel: string) =>
-  `var(--channel-${channel.toLowerCase()}, var(--ink-gray-7))`;
+  `var(--channel-${channel
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")}, var(--ink-gray-7))`;
 
 export function pctText(pct: number | null | undefined) {
   return pct == null ? "—" : `${pct}%`;

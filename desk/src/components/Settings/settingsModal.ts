@@ -36,6 +36,8 @@ import Preferences from "./Preferences/Preferences.vue";
 import ContentSettings from "./Content/ContentSettings.vue";
 import TaskSettings from "./Tasks/TaskSettings.vue";
 import LucideListChecks from "~icons/lucide/list-checks";
+import FollowUpSettings from "./FollowUps/FollowUpSettings.vue";
+import LucideBellRing from "~icons/lucide/bell-ring";
 import FileStorageSettings from "./FileStorage/FileStorageSettings.vue";
 import CRMSettings from "./CRM/CRMSettings.vue";
 import LucideHandshake from "~icons/lucide/handshake";
@@ -45,6 +47,10 @@ import LucideBuilding2 from "~icons/lucide/building-2";
 import Departments from "./Departments/Departments.vue";
 import SignoffTemplates from "./Signoff/SignoffTemplates.vue";
 import LucideClipboardCheck from "~icons/lucide/clipboard-check";
+import ChatSettings from "./Chat/ChatSettings.vue";
+import LucideMessagesSquare from "~icons/lucide/messages-square";
+import GitHubSettings from "./GitHub/GitHubSettings.vue";
+import LucideGitPullRequest from "~icons/lucide/git-pull-request";
 
 export const showSettingsModal = ref(false);
 
@@ -183,6 +189,13 @@ export const tabs = computed(() => {
           // HD Work Settings is writable by System Managers only
           condition: () => auth.isAdmin,
         },
+        {
+          label: __("Follow-ups"),
+          icon: markRaw(LucideBellRing),
+          component: markRaw(FollowUpSettings),
+          // HD Follow Up Settings: System Managers and Agent Managers
+          condition: () => auth.isAdmin || auth.isManager,
+        },
       ],
     },
     {
@@ -192,6 +205,20 @@ export const tabs = computed(() => {
           label: __("Telephony"),
           icon: markRaw(PhoneIcon),
           component: markRaw(TelephonyPage),
+        },
+        {
+          label: __("Chat & Teams"),
+          icon: markRaw(LucideMessagesSquare),
+          component: markRaw(ChatSettings),
+          // HD Chat Settings through helpdesk.api.chat_settings, which checks the roles
+          condition: () => auth.isAdmin || auth.isManager,
+        },
+        {
+          label: __("GitHub"),
+          icon: markRaw(LucideGitPullRequest),
+          component: markRaw(GitHubSettings),
+          // HD GitHub Settings through helpdesk.api.github_settings, which checks the roles
+          condition: () => auth.isAdmin || auth.isManager,
         },
         {
           label: __("File storage"),
@@ -252,6 +279,9 @@ type TabName =
   | "Saved Replies"
   | "Content"
   | "Tasks"
+  | "Follow-ups"
+  | "Chat & Teams"
+  | "GitHub"
   | "Sign-off templates"
   | "File storage"
   | "CRM";

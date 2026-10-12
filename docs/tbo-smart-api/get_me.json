@@ -1,0 +1,42 @@
+{
+  "v": 1,
+  "data": {
+    "user": "najath@teambackoffice.com",
+    "full_name": "Najath Thekkeyil",
+    "image": "/files/najath.jpg",
+    "roles": [
+      "Agent",
+      "Project Manager"
+    ],
+    "is_agent": true,
+    "is_manager": true,
+    "can": {
+      "team": true,
+      "projects_health": true,
+      "sla_summary": true,
+      "escalations": false,
+      "approvals": true
+    },
+    "departments": [
+      "ERP"
+    ],
+    "teams": [
+      "Billing",
+      "Product Experts"
+    ],
+    "capabilities": {
+      "tickets": false,
+      "content": true,
+      "manage_team": true,
+      "approve_reviews": true,
+      "scoreboard": true,
+      "admin": false,
+      "departments_headed": [
+        "ERP"
+      ],
+      "projects_managed": [
+        "PROJ-0031"
+      ]
+    }
+  }
+}
