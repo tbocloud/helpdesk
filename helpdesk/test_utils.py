@@ -1376,6 +1376,18 @@ def get_content_task(post: str, role: str) -> str | None:
     )
 
 
+def get_content_tasks_as(user: str, start, end, **filters) -> dict:
+    """The content calendar's Tasks view (helpdesk.api.content_tasks.get_content_tasks)
+    for `user`: the role tasks of the posts going live between `start` and `end`."""
+    return call_as_user(
+        user,
+        "helpdesk.api.content_tasks.get_content_tasks",
+        start=str(start),
+        end=str(end),
+        **filters,
+    )
+
+
 def get_department_walls_as(as_user: str, user: str) -> list[str]:
     """`user`'s department wall roles, as Settings → Agents asks for them as `as_user`."""
     return call_as_user(

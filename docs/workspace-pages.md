@@ -453,7 +453,7 @@ team member's work, for leads and managers of their projects (the Team page link
   or pause it, and links back to your own. Rows offer only Approve and Plan, and the detail
   dialog only the lead's and manager's steps.
 - **Task details** (`desk/src/pages/tasky/components/TaskDetailDialog.vue`): the one task panel,
-  shared with My Tasks (`/my-tasks`) and the Content Calendar's role boxes. Hold and dependency notices, status, priority, project,
+  shared with My Tasks (`/my-tasks`) and the Content Calendar's role boxes and Tasks view ([content-calendar.md](content-calendar.md#tasks-view)). Hold and dependency notices, status, priority, project,
   phase, assigned to, assigned by, due, estimate, timer (from `taskTimer` and
   `formatElapsed`: a running timer ticks every second while the dialog shows it, a paused one
   stays still; the ticker stops when the dialog closes or the timer stops), description,

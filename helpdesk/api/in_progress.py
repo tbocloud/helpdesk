@@ -306,19 +306,20 @@ def _pending_parts(post, team: dict, tasks: dict, full_names: dict) -> list[dict
             and post.status != REOPENS_PARTS
         ):
             continue
-        parts.append(
-            {
-                "role": field,
-                "label": _role_label(field),
-                "people": [
-                    {"user": u, "full_name": full_names.get(u, u)} for u in people
-                ],
-                "task": task["task"] if task else None,
-                "task_status": task["status"] if task else None,
-                "due": task["due"] if task else None,
-            }
-        )
+        parts.append(part_item(field, people, task, full_names))
     return parts
+
+
+def part_item(field: str, people: list[str], task: dict | None, full_names: dict):
+    """One part of a post: its role, who has it and how far their task is."""
+    return {
+        "role": field,
+        "label": _role_label(field),
+        "people": [{"user": u, "full_name": full_names.get(u, u)} for u in people],
+        "task": task["task"] if task else None,
+        "task_status": task["status"] if task else None,
+        "due": task["due"] if task else None,
+    }
 
 
 # --- summary and lanes ---
