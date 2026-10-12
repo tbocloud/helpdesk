@@ -546,6 +546,11 @@ class TestTeamDashboard(FrappeTestCase):
                 self.project, f"February close {i}", ANU, "2031-02-20", "2031-02-25"
             )
         make_team_champion("Month", "2031-02-01", "2031-02-28", RAHUL, 12.5)
+        # two more in March, so Anu reaches the month's minimum weighted work (5)
+        for i in range(2):
+            make_done_task(
+                self.project, f"March close {i}", ANU, "2031-03-10", "2031-03-12"
+            )
 
         february = call_team_dashboard(
             "Administrator", TODAY, period="month", day="2031-02-15"
@@ -575,14 +580,19 @@ class TestTeamDashboard(FrappeTestCase):
 
     def test_the_year_compares_its_months(self):
         make_team_champion("Month", "2031-02-01", "2031-02-28", RAHUL, 12.5)
+        # two more in March, so Anu reaches the month's minimum weighted work (5)
+        for i in range(2):
+            make_done_task(
+                self.project, f"March close {i}", ANU, "2031-03-10", "2031-03-12"
+            )
         data = call_team_dashboard("Administrator", TODAY, period="year")
         months = data["months"]
         self.assertEqual(len(months), 12)
         self.assertEqual(months[1]["champion"]["user"], RAHUL)
-        self.assertEqual((months[2]["tasks"], months[2]["champion"]["user"]), (4, ANU))
+        self.assertEqual((months[2]["tasks"], months[2]["champion"]["user"]), (6, ANU))
         self.assertTrue(months[3]["future"])
         anu = next(p for p in data["people"] if p["user"] == ANU)
-        self.assertEqual(anu["months"][2]["tasks"], 3)
+        self.assertEqual(anu["months"][2]["tasks"], 5)
         self.assertIsNone(anu["months"][11])
 
 
