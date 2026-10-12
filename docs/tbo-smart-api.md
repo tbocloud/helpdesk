@@ -10,9 +10,11 @@ of this repo and is not covered here.
   `HD Mobile Device` (push tokens), HD Settings → **Mobile push** (switch),
   `helpdesk/competition.py` (Compete: ranks, streaks, bests, badges, the weekly challenge;
   `HD Badge Award`), `helpdesk/team_insights.py` (management insights), the snooze in
-  `helpdesk/follow_ups.py` (`HD Follow Up Snooze`).
+  `helpdesk/follow_ups.py` (`HD Follow Up Snooze`), `helpdesk/repeat_issues.py` (repeat
+  issues).
 - Tests: `helpdesk/tests/test_mobile_api.py`, `helpdesk/tests/test_mobile_competition.py`,
-  `helpdesk/tests/test_mobile_auth.py`, `helpdesk/tests/test_offboarding.py`.
+  `helpdesk/tests/test_mobile_auth.py`, `helpdesk/tests/test_offboarding.py`,
+  `helpdesk/tests/test_repeat_issues.py`.
 - Fixtures: `docs/tbo-smart-api/<endpoint>.json`, one real-shaped response per endpoint, for
   mocking.
 
@@ -645,6 +647,28 @@ HD Badge Award: System Manager full, Agent Manager read; agents read their own t
 pct, complete, mine {done, total} or null, completed_by [{user, full_name, image}]}`.
 `completed_by` is everyone with tasks in the challenge who finished all of theirs on time.
 Cancelled tasks don't count; held and in-review ones count as not done yet.
+
+### Repeat issues (Scoreboard)
+
+| Method | Params | Returns | Who / notes |
+| --- | --- | --- | --- |
+| `get_repeat_issues` | `period` (today, week, month, quarter, half, year; default week), `department?` | `RepeatIssues` | Every agent, as on the web Scoreboard: every active department, past the DM/ERP department walls; an inactive department is refused. **Read-only**: the actions (root-cause task, KB draft, "Not a repeat") stay on the web for now; `access` says which ones the user could take there. Fixture `get_repeat_issues.json` |
+
+The web's own answer (`helpdesk.api.repeat_issues.get_repeat_issues`), unchanged; the rules
+are in [team-dashboard.md](team-dashboard.md#repeat-issues).
+
+- `period` `{key, start, end, lookback_start}`, `rules` `{lookback_days, min_occurrences,
+  min_in_period}`, `department`, `access` `{can_act, can_draft_kb}`.
+- `summary`: `{issues, customers, rising, tickets_in_period, tasks_in_period}`.
+- `customers`: by repeat volume this period, each `{customer, issues, in_period, total,
+  rising, projects (open: {name, project_name, department}), clusters}`.
+- A cluster: `{id, customer, title, title_source ("ai" | "subjects"), cause, fix, subject,
+  tickets, tasks, in_period, earlier, total, first_seen, last_seen, trend ("rising" |
+  "steady"), kinds [{label, count}], people [{user, name, count}], avg_resolution_hours,
+  departments, items, root_cause, article}`. `items` are newest first: `{kind (ticket, task),
+  doctype, name, subject, date, status, project, in_period}`. `root_cause` is `{issue, task,
+  subject, status, project}` or null; `article` `{name, title, status}` or null. `cause` and
+  `fix` are null without AI.
 
 ### Insights (management, read-only)
 

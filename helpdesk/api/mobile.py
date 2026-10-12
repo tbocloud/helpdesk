@@ -37,6 +37,7 @@ from helpdesk.api import home, in_progress, project_files
 from helpdesk.api.content_board import user_full_names
 from helpdesk.api.doc import remove_assignments
 from helpdesk.api.follow_ups import check_admin
+from helpdesk.api.repeat_issues import get_repeat_issues as repeat_issues_view
 from helpdesk.api.team_dashboard import check_period, get_team_dashboard
 from helpdesk.api.ticket import assign_ticket_to_agent
 from helpdesk.api.work import (
@@ -1677,3 +1678,13 @@ def get_insights(period: str = "week", department: str | None = None) -> dict:
             frappe.session.user, period, department or None, getdate(nowdate())
         )
     )
+
+
+@frappe.whitelist()
+@agent_only
+def get_repeat_issues(period: str = "week", department: str | None = None) -> dict:
+    """The Scoreboard's repeat issues (helpdesk.repeat_issues), as on the web: the
+    same issues tickets and tasks keep raising per customer, read-only. Every agent,
+    past the DM/ERP walls like the Scoreboard; `access` says which web actions the
+    user could take."""
+    return _one(repeat_issues_view(period, department or None))
