@@ -167,7 +167,11 @@ const qualityRows = computed(() => {
 const example = computed(() => {
   const w = props.rules.weight;
   const q = props.rules.quality;
-  const weight = w.base + w.key + 8 * w.size_per_hour + (w.priority.High || 0);
+  const weight =
+    w.base +
+    w.key +
+    Math.min(8 * w.size_per_hour, w.size_cap) +
+    (w.priority.High || 0);
   const excellent = q.rating.Excellent ?? 1;
   return __(
     "Example: a key task estimated at 8 hours, High priority, weighs {0}. Rated Excellent and done on time it earns {1}; done late, {2}.",

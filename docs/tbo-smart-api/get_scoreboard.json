@@ -118,15 +118,63 @@
     "departments": [
       {
         "department": "ERP",
+        "kind": "group",
+        "parent": null,
+        "people": 12,
+        "done": 50,
+        "weighted_work": 112.5,
+        "on_time_pct": 87,
+        "overdue": 4,
+        "hours": 380.0,
+        "champion": "Arun Menon"
+      },
+      {
+        "department": "ERP",
         "kind": "department",
         "parent": "ERP",
         "people": 9,
         "done": 41,
-        "weighted_work": 92.2,
+        "weighted_work": 92.5,
         "on_time_pct": 86,
         "overdue": 4,
         "hours": 302.5,
         "champion": "Arun Menon"
+      },
+      {
+        "department": "GrowthX",
+        "kind": "department",
+        "parent": "ERP",
+        "people": 2,
+        "done": 7,
+        "weighted_work": 15.5,
+        "on_time_pct": 100,
+        "overdue": 0,
+        "hours": 52.5,
+        "champion": "Najath Thekkeyil"
+      },
+      {
+        "department": "Internal / R&D",
+        "kind": "department",
+        "parent": "ERP",
+        "people": 1,
+        "done": 2,
+        "weighted_work": 4.5,
+        "on_time_pct": 50,
+        "overdue": 0,
+        "hours": 25.0,
+        "champion": null
+      },
+      {
+        "department": "Digital",
+        "kind": "group",
+        "parent": null,
+        "people": 8,
+        "done": 31,
+        "weighted_work": 69.5,
+        "on_time_pct": 90,
+        "overdue": 1,
+        "hours": 220.0,
+        "champion": "Sana Rafeeq"
       },
       {
         "department": "Digital",
@@ -134,10 +182,22 @@
         "parent": "Digital",
         "people": 6,
         "done": 27,
-        "weighted_work": 60.8,
-        "on_time_pct": null,
+        "weighted_work": 60.5,
+        "on_time_pct": 89,
         "overdue": 1,
         "hours": 188.0,
+        "champion": "Sana Rafeeq"
+      },
+      {
+        "department": "Creative",
+        "kind": "department",
+        "parent": "Digital",
+        "people": 2,
+        "done": 4,
+        "weighted_work": 9.0,
+        "on_time_pct": 100,
+        "overdue": 0,
+        "hours": 32.0,
         "champion": null
       }
     ]

@@ -221,6 +221,7 @@
                 :analysis="data.analysis"
                 :period="period"
                 :department="data.department"
+                :group="data.group"
                 :can-refresh="data.access.can_refresh"
               />
               <SectionCard v-if="data?.trend" :title="__('Tasks finished')">

@@ -11,7 +11,7 @@
         size="sm"
         :loading="refresh.loading"
         :label="analysis?.current ? __('Refresh') : __('Write analysis')"
-        @click="refresh.submit({ period, department })"
+        @click="refresh.submit({ period, department, group })"
       >
         <template #prefix>
           <LucideSparkles class="size-3.5" aria-hidden="true" />
@@ -113,6 +113,8 @@ const props = defineProps<{
   analysis: Analysis | null;
   period: string;
   department: string | null;
+  /** A department group (ERP with its sub-departments), instead of a department. */
+  group?: string | null;
   /** System and Agent Managers */
   canRefresh: boolean;
 }>();
