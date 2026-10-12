@@ -476,8 +476,11 @@ def detect(period: str, departments: list[str] | None, today, day=None) -> dict:
 
 
 def scope_key(departments: list[str] | None) -> str:
-    """The scope as text for cache keys and job ids; empty for the whole team."""
-    return ",".join(sorted(departments)) if departments else ""
+    """The scope as a short hash for cache keys and job ids; empty for the whole
+    team. Hashed from JSON, since a department's name may hold any delimiter."""
+    if not departments:
+        return ""
+    return hashlib.md5(json.dumps(sorted(departments)).encode()).hexdigest()[:16]
 
 
 def compute(win: dict, items: list[dict]) -> dict:

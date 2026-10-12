@@ -311,7 +311,8 @@ is slow", "Salary slip email not sent" and "Stock balance mismatch" stay apart
 **Speed**: two bounded queries (tickets, tasks; at most 6000 rows each, descriptions cut to
 2000 characters), clustering in memory per customer (at most 300 items each), at most 60
 issues. The result is cached for 10 minutes per period, anchor day, scope (the departments
-in it) and today (`frappe.cache`, key `repeat_issues:{period}:{start}:{day}:{departments}:{today}`):
+in it) and today (`frappe.cache`, key `repeat_issues:{period}:{start}:{day}:{scope}:{today}`,
+`scope` a hash of the departments' JSON so no name can collide with another scope):
 the anchor tells a browsed period from the one in progress, and today keeps the period in
 progress growing. Stored decisions and AI titles are read on top of it, so a dismissal
 shows at once. The daily close job (`close_periods`, 00:30) also queues `precompute()`: this
@@ -464,11 +465,12 @@ quality_reasons, rating, rated_by, rated_by_name, rated_on, can_rate, self_made}
 | `create_root_cause_task(period, cluster, project, department=None, group=None, day=None)` | POST | `{task, project, issue}` |
 | `draft_kb_article(period, cluster, department=None, group=None, day=None)` | POST | `{name, title, status, existing}` |
 | `dismiss_repeat_issue(period, cluster, department=None, group=None, day=None)` | POST | `{issue}` |
+| `restore_repeat_issue(issue)` | POST | `{issue}` (undo "Not a repeat") |
 
 `department`, `group` and `day` are checked as `get_team_dashboard` checks them (`scope_of`,
 `anchor_day`: a department or a group, not both; no future day). The actions take the same
-scope as the list, so a cluster found on a browsed period can be acted on there.
-| `restore_repeat_issue(issue)` | POST | `{issue}` (undo "Not a repeat") |
+scope as the list, so a cluster found on a browsed period can be acted on there. While the
+list reloads for a new scope its cards are inert, so an old card can't act in the new scope.
 
 The app reads the same answer through `helpdesk.api.mobile.get_repeat_issues`
 ([tbo-smart-api.md](tbo-smart-api.md#repeat-issues-scoreboard)).

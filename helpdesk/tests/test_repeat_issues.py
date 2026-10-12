@@ -379,7 +379,7 @@ class TestRepeatIssues(FrappeTestCase):
 
     def test_a_group_shows_its_departments_only(self):
         make_department("GrowthX", parent_department="ERP")
-        make_department("Digital")
+        make_department("Field Service")
         leads = make_customer_project(KOCHI, "Kochi Spices lead funnel")
         frappe.db.set_value("Project", leads, "custom_department", "GrowthX")
         for subject, day in (
@@ -393,7 +393,7 @@ class TestRepeatIssues(FrappeTestCase):
         expected = (
             ({"group": "ERP"}, {GALOM, KOCHI}),
             ({"department": "ERP"}, {GALOM}),
-            ({"department": "Digital"}, set()),
+            ({"department": "Field Service"}, set()),
             ({}, {GALOM, KOCHI}),
         )
         with use_support_department("ERP"):
@@ -403,7 +403,7 @@ class TestRepeatIssues(FrappeTestCase):
                     {c["customer"] for c in data["customers"]}, customers, scope
                 )
             with self.assertRaises(frappe.ValidationError):
-                self.view(group="Digital")
+                self.view(group="Field Service")
 
     def test_a_past_period_is_computed_for_its_own_window(self):
         earlier = ticket(GALOM, "Sales invoice print has the wrong GSTIN", "2031-05-08")

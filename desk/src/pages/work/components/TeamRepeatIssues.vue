@@ -34,6 +34,7 @@
       class="transition-opacity"
       :class="issues.loading ? 'opacity-60' : ''"
       :aria-busy="issues.loading"
+      :inert="issues.loading"
     >
       <p
         class="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-outline-gray-1 px-4 py-2.5 text-p-sm tabular-nums text-ink-gray-7"

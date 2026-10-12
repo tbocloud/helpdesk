@@ -7,6 +7,7 @@ from helpdesk.helpdesk.doctype.timesheet.timesheet import Timesheet
 from helpdesk.tasky import api as tasky
 from helpdesk.test_utils import (
     get_task_timesheets,
+    hold_commits,
     make_assignment,
     make_employee,
     make_project,
@@ -23,11 +24,8 @@ OTHER_DEV = ("other.complete@complete-task.example", "Vivek Kumar")
 
 class TestCompleteTask(FrappeTestCase):
     def setUp(self):
-        self.addCleanup(frappe.db.rollback)
+        hold_commits(self)
         self.addCleanup(frappe.set_user, "Administrator")
-        commit = patch.object(frappe.db, "commit")
-        commit.start()
-        self.addCleanup(commit.stop)
 
         make_tasky_user(*PM, roles=("Project Manager",))
         for user in (LEAD, DEV, OTHER_DEV):

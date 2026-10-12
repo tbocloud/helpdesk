@@ -236,8 +236,9 @@ Team too); Home's Your day "In progress" part links here.
   the timer (`start_timer`, `stop_timer`) and assignments (the ToDo `on_update` hook,
   `notify_task_assignment`). It goes out once per request after the commit, carries only the
   task's name, and reaches only sockets allowed to read Task. The page waits 1.5 seconds
-  after the last event (at most 10 seconds under a steady stream) and skips a reload while
-  one is running. It still loads again when the window regains focus (in case the socket was
+  after the last event (at most 10 seconds under a steady stream); an event that arrives
+  while a load is running reloads once more when it ends, since that answer may predate the
+  change, and nothing reloads after the page is left. It still loads again when the window regains focus (in case the socket was
   down), and on Refresh. Content posts send nothing, so they still refresh only that way.
 - **Performance**: one call; tasks capped at 1000 and posts at 500 (`truncated` says so and the
   page asks to filter). Project names, customers and departments, assignee and pending people's

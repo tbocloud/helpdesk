@@ -73,7 +73,7 @@
         <button
           v-if="compact"
           type="button"
-          class="h-7 rounded px-2 text-base font-medium text-ink-base transition-colors hover:bg-surface-gray-8 disabled:opacity-60"
+          class="min-h-11 rounded px-3 text-base font-medium sm:min-h-7 sm:px-2 text-ink-base transition-colors hover:bg-surface-gray-8 disabled:opacity-60"
           :disabled="rate.loading"
           @click="emit('skip')"
         >

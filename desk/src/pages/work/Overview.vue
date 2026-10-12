@@ -492,9 +492,7 @@ const overview = createResource({
   auto: true,
 });
 // a task changing (status, timer, assignee) moves the buckets: reload, debounced
-useListUpdate("Task", () => {
-  if (!overview.loading) overview.reload();
-});
+useListUpdate("Task", overview);
 
 // keep the bucket and filters in the URL so the view can be shared
 watch(

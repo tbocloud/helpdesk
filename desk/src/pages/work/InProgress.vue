@@ -404,11 +404,10 @@ watch([group, () => ({ ...filters })], ([g, f]) => {
 
 // live: a task's status, timer or assignee changing reloads the page (debounced);
 // coming back to the tab fetches again in case the socket was down
-function refresh() {
+useListUpdate("Task", resource);
+useEventListener(window, "focus", () => {
   if (!resource.loading) resource.reload();
-}
-useListUpdate("Task", refresh);
-useEventListener(window, "focus", refresh);
+});
 
 const data = computed(() => resource.data as InProgressData | undefined);
 const firstLoad = computed(() => resource.loading && !data.value);
