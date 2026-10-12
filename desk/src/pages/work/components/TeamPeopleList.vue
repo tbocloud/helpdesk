@@ -197,6 +197,9 @@
               :parts="person.breakdown"
               :score="person.score"
             />
+            <p v-else class="text-p-sm text-ink-gray-6">
+              {{ __("Nothing finished or overdue in this period yet.") }}
+            </p>
             <!-- in the year: the person's months side by side -->
             <div v-if="person.months" class="mt-3 max-w-lg">
               <h3 class="text-xs text-ink-gray-5">
@@ -222,9 +225,6 @@
                 </li>
               </ol>
             </div>
-            <p v-else class="text-p-sm text-ink-gray-6">
-              {{ __("Nothing finished or overdue in this period yet.") }}
-            </p>
             <p
               v-if="person.score > 0 && !person.eligible"
               class="mt-2 text-p-sm text-ink-gray-6"

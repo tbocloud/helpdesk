@@ -32,6 +32,14 @@ month boundary is two weeks, one in each month. Weekly champions are stored per 
 weekly challenge use the same weeks (`podium_streak` steps back week by week with
 `period_bounds`, never by 7 days). The year is the months compared (below).
 
+**Cut-over (no migration, on purpose):** weeks closed before this change were stored as full
+Monday-to-Sunday weeks (HD Team Champion, HD Badge Award) and stay exactly as they were:
+stored history is never rewritten. They can't clash with new records, because a period is
+only stored the day after it ends and the old weeks had all ended. Reading still finds them:
+the week before a clipped week starts on the Monday an old record starts on (or on the 1st,
+inside a month), so "previous champion" and the history show them. One effect: a podium streak
+that ran across the change counts again from the first clipped week.
+
 Every figure is compared with the **previous period up to the same point**
 (`comparison_bounds()`). A day or a week is compared with the same weekdays 1 or 7 days
 earlier: on a Wednesday, this week is compared with Monday to Wednesday of last week, and the
