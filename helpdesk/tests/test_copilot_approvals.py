@@ -41,7 +41,9 @@ class ApprovalCase(FrappeTestCase):
         self.run = make_copilot_run(self.ticket.name, state="Awaiting Approval")
         self.notified, self.channel = [], []
 
-        def notify(users, *args, **kwargs):
+        def notify(users, doctype, name, *args, **kwargs):
+            if name != self.ticket.name:
+                return  # another approval on the site (a real one) is reminded too
             self.notified.append(list(users))
             self.channel.append(bool(kwargs.get("escalate")))
 
