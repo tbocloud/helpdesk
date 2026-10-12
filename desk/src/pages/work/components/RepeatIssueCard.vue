@@ -325,7 +325,7 @@ const props = defineProps<{
   period: string;
   department: string;
 }>();
-const emit = defineEmits<{ changed: [] }>();
+const emit = defineEmits<{ changed: []; dismissed: [issue: string] }>();
 
 const uid = useId();
 const headingId = `repeat-title-${uid}`;
@@ -396,21 +396,10 @@ const draft = createResource({
   onError() {},
 });
 
-const restore = createResource({
-  url: "helpdesk.api.repeat_issues.restore_repeat_issue",
-  onSuccess: () => emit("changed"),
-});
+// the list (which outlives this card) offers Undo
 const dismiss = createResource({
   url: "helpdesk.api.repeat_issues.dismiss_repeat_issue",
-  onSuccess(result: { issue: string }) {
-    toast.success(__("Marked as not a repeat"), {
-      action: {
-        label: __("Undo"),
-        onClick: () => restore.submit({ issue: result.issue }),
-      },
-    });
-    emit("changed");
-  },
+  onSuccess: (result: { issue: string }) => emit("dismissed", result.issue),
   onError() {},
 });
 

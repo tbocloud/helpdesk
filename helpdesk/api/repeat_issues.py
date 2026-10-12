@@ -85,6 +85,9 @@ def create_root_cause_task(
     check_can_act()
     found = find(period, cluster, department)
     check_project(project, found["customer"])
+    # two managers (or a double click) must not both create one: the second waits
+    # for the first to commit, then finds its task
+    ri.lock_customer(found["customer"])
     record = ri.decision_for(found, ri.decisions([found["customer"]]))
     if record and record["status"] == "Root-cause task" and record["task"]:
         frappe.throw(
@@ -126,10 +129,6 @@ def draft_kb_article(period: str, cluster: str, department: str | None = None) -
         return {**next(iter(existing.values())), "existing": True}
     if not is_ai_configured():
         frappe.throw(_("AI isn't set up on this hub, so it can't draft an article."))
-    lock = f"{ri.CACHE_PREFIX}_draft:{found['id']}"
-    if frappe.cache.get_value(lock, expires=True):
-        frappe.throw(_("An article was asked for less than a minute ago."))
-    frappe.cache.set_value(lock, 1, expires_in_sec=DRAFT_COOLDOWN_SECONDS)
     source = answered_ticket(tickets)
     if not source:
         frappe.throw(
@@ -137,6 +136,10 @@ def draft_kb_article(period: str, cluster: str, department: str | None = None) -
                 "None of these tickets is resolved with a reply from the team yet, so there's no answer to write up."
             )
         )
+    lock = f"{ri.CACHE_PREFIX}_draft:{found['id']}"
+    if frappe.cache.get_value(lock, expires=True):
+        frappe.throw(_("An article was asked for less than a minute ago."))
+    frappe.cache.set_value(lock, 1, expires_in_sec=DRAFT_COOLDOWN_SECONDS)
     article = kb_drafts.draft_article(source)
     if not article:
         frappe.throw(

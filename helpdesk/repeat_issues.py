@@ -599,9 +599,16 @@ def decisions(customers: list[str]) -> list[dict]:
     return rows
 
 
+def lock_customer(customer: str):
+    """Holds the customer's row until the transaction ends, so two decisions about
+    the same customer's repeats are made one after the other."""
+    frappe.db.get_value("HD Customer", customer, "name", for_update=True)
+
+
 def save_decision(cluster_: dict, status: str, task: str | None = None):
     """Stores what a manager decided about a cluster: the record that already
     recognises it (`decision_for`), else a new one."""
+    lock_customer(cluster_["customer"])
     record = decision_for(cluster_, decisions([cluster_["customer"]]))
     if record:
         doc = frappe.get_doc("HD Repeat Issue", record["name"])

@@ -117,6 +117,7 @@
               :period="period"
               :department="department"
               @changed="issues.reload()"
+              @dismissed="onDismissed"
             />
           </div>
         </li>
@@ -132,7 +133,7 @@ import TaskyBadge from "@/components/TaskyBadge.vue";
 import TaskyState from "@/components/TaskyState.vue";
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
-import { Button, createResource } from "frappe-ui";
+import { Button, createResource, toast } from "frappe-ui";
 import { computed, ref, watch } from "vue";
 import LucideChevronDown from "~icons/lucide/chevron-down";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
@@ -204,6 +205,20 @@ const emptyText = computed(() => {
     current.value
   );
 });
+
+const restore = createResource({
+  url: "helpdesk.api.repeat_issues.restore_repeat_issue",
+  onSuccess: () => issues.reload(),
+  onError(error: unknown) {
+    toast.error(errorText(error, __("Couldn't bring the issue back.")));
+  },
+});
+function onDismissed(issue: string) {
+  toast.success(__("Marked as not a repeat"), {
+    action: { label: __("Undo"), onClick: () => restore.submit({ issue }) },
+  });
+  issues.reload();
+}
 
 // the first customer opens on its own: it has the most repeats
 const opened = ref<Set<string>>(new Set());
