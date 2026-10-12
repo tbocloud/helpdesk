@@ -381,13 +381,15 @@
             >
             <span
               class="grid h-5 min-w-[1.5rem] place-items-center rounded-[6px] px-1 font-mono text-base font-medium leading-none tabular-nums"
-              :class="
-                d.selected
-                  ? 'bg-brand text-brand-on'
-                  : d.isToday
-                  ? 'font-semibold text-ink-gray-9 ring-2 ring-inset ring-highlight'
-                  : 'text-ink-gray-9'
-              "
+              :class="[
+                d.selected ? 'bg-brand text-brand-on' : 'text-ink-gray-9',
+                // today keeps its ring when it is also the selected day,
+                // offset so the orange never sits directly on the teal fill
+                d.isToday &&
+                  (d.selected
+                    ? 'font-semibold ring-2 ring-highlight ring-offset-1 ring-offset-brand-soft'
+                    : 'font-semibold ring-2 ring-inset ring-highlight'),
+              ]"
               >{{ d.day }}</span
             >
             <span
