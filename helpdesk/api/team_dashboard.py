@@ -14,7 +14,7 @@ import frappe
 from frappe import _
 from frappe.query_builder import Case
 from frappe.query_builder.functions import Count, Sum
-from frappe.utils import getdate, nowdate
+from frappe.utils import add_days, getdate, nowdate
 
 from helpdesk import team_dashboard as td
 from helpdesk.tasky.permissions import is_tasky_admin
@@ -27,19 +27,28 @@ NO_DEPARTMENT = ""
 @frappe.whitelist()
 @agent_only
 def get_team_dashboard(
-    period: str = "week", department: str | None = None, group: str | None = None
+    period: str = "week",
+    department: str | None = None,
+    group: str | None = None,
+    day: str | None = None,
 ) -> dict:
-    """The period's numbers: summary, departments (with their groups), people,
-    projects, champion, trend, this year's champions and the analysis, for the
-    whole team, one department or one department group (a main department with
-    its sub-departments). Every agent sees all of it."""
+    """The numbers of the period `day` falls in (today by default; never a future
+    day): summary, departments (with their groups), people, projects, champion,
+    the previous period's champion, trend, the year's champions and the analysis,
+    for the whole team, one department or one department group (a main department
+    with its sub-departments). A closed period shows the champions stored when it
+    closed. The year adds its twelve months side by side. Every agent sees all of
+    it."""
     check_period(period)
     access = viewer_access(frappe.session.user)
     scope = scope_of(access, department, group)
     today = getdate(nowdate())
-    start, end = td.period_bounds(period, today)
+    anchor = anchor_day(day, today)
+    start, end = td.period_bounds(period, anchor)
+    closed = end < today
     c_start, c_end = td.comparison_bounds(period, start, end, today)
-    data = td.collect(start, end, with_overdue=True, today=today)
+    # overdue is today's state: it only belongs to the period in progress
+    data = td.collect(start, end, with_overdue=not closed, today=today)
     prev = td.collect(c_start, c_end, with_overdue=False, today=today)
 
     keep = td.scope_filter(scope.departments)
@@ -51,6 +60,12 @@ def get_team_dashboard(
     )
     members = department_members(scope.departments)
     ranked = ranked_people(data, period, scope.departments, members)
+    champions = Champions(period, start, closed)
+    months = (
+        year_months(period, start, today, scope, champions.of_month)
+        if period == "year"
+        else None
+    )
     return {
         "period": {
             "key": period,
@@ -58,26 +73,35 @@ def get_team_dashboard(
             "end": str(end),
             "compare_start": str(c_start),
             "compare_end": str(c_end),
+            "closed": closed,
+            "current": start <= today <= end,
+            "earliest": str(earliest_day(today)),
         },
         "access": {
             "departments": access.departments,
             "groups": [
                 {"group": g, "departments": ds} for g, ds in access.groups.items()
             ],
-            "can_refresh": access.can_refresh and period not in td.QUIET_PERIODS,
+            "can_refresh": access.can_refresh
+            and period not in td.QUIET_PERIODS
+            and not closed,
         },
         "department": scope.department,
         "group": scope.group,
         "summary": summary(data, prev, keep),
         "trend": td.trend(data, keep, start, end, period),
-        "history": history(scope, today),
-        "champion": champion_card(td.champion_of(ranked)),
-        "people": people_rows(ranked, by_department, members),
+        "history": history(scope, anchor),
+        "champion": champions.card(
+            scope.group or scope.department, scope.group, ranked
+        ),
+        "previous_champion": previous_champion(period, start, scope),
+        "people": people_rows(ranked, by_department, members, months),
         "departments": department_rows(
-            data, prev, (by_department, by_group), members, access, scope, period
+            data, prev, (by_department, by_group), members, access, scope, champions
         ),
         "projects": project_rows(data, keep, scope.departments),
-        "analysis": current_analysis(period, start, scope),
+        "analysis": current_analysis(period, start, scope, closed),
+        "months": months and months["rows"],
         "rules": td.score_rules(period),
     }
 
@@ -209,7 +233,11 @@ def champion_card(champion: dict | None) -> dict | None:
     }
 
 
-def people_rows(ranked: list, by_department: dict, members: dict) -> list[dict]:
+def people_rows(
+    ranked: list, by_department: dict, members: dict, months: dict | None = None
+) -> list[dict]:
+    """Everyone ranked, with their numbers; in the year, each person's twelve
+    months too (`months`, from year_months)."""
     info = td.people_info([r["user"] for r in ranked])
     rows = []
     for position, r in enumerate(ranked, start=1):
@@ -245,6 +273,7 @@ def people_rows(ranked: list, by_department: dict, members: dict) -> list[dict]:
                 "posts_on_time": s["posts_on_time"],
                 "posts_late": s["posts_late"],
                 "posts_missed": s["posts_missed"],
+                "months": months["people"].get(r["user"]) if months else None,
             }
         )
     return rows
@@ -264,7 +293,7 @@ def main_department(user: str, by_department: dict, members: dict) -> str | None
     return next((d for d, users in members.items() if user in users and d), None)
 
 
-def department_rows(data, prev, tallies, members, access, scope, period):
+def department_rows(data, prev, tallies, members, access, scope, champions):
     """One row per department in scope, each group (a main department with its
     sub-departments) first as a row of its own with its departments under it
     (`parent`), then the departments in no group and No department."""
@@ -278,9 +307,11 @@ def department_rows(data, prev, tallies, members, access, scope, period):
             "parent": parent,
             "people": len(active | people),
             **summary(data, prev, keep),
-            "champion": champion_card(td.champion_of(td.rank(stats, period)))
-            if name
-            else None,
+            "champion": (
+                champions.card(name, is_group, td.rank(stats, champions.period))
+                if name
+                else None
+            ),
         }
 
     def department(d, parent=None):
@@ -442,10 +473,10 @@ def task_progress(projects: list[str]) -> dict[str, tuple[int, int]]:
     return {project: (int(d or 0), int(t)) for project, d, t in rows}
 
 
-def history(scope, today) -> list[dict]:
-    """This year's champions (weeks and longer) of the department, the group or
-    the whole team, newest first. Stored when each period closed, so they never
-    shift."""
+def history(scope, day) -> list[dict]:
+    """The champions of `day`'s year (weeks and longer) of the department, the
+    group or the whole team, newest first. Stored when each period closed, so
+    they never shift."""
     champion = frappe.qb.DocType("HD Team Champion")
     query = (
         frappe.qb.from_(champion)
@@ -459,7 +490,8 @@ def history(scope, today) -> list[dict]:
         )
         .where(
             (champion.period_type != "Day")
-            & (champion.period_start >= f"{getdate(today).year}-01-01")
+            & (champion.period_start >= f"{getdate(day).year}-01-01")
+            & (champion.period_start <= f"{getdate(day).year}-12-31")
             & champion.user.isnotnull()
         )
         .orderby(champion.period_end, order=frappe.qb.desc)
@@ -482,14 +514,19 @@ def history(scope, today) -> list[dict]:
     ]
 
 
-def current_analysis(period: str, start, scope) -> dict:
-    """This period's analysis when someone refreshed it, else the last closed
-    period's (stored with its champion), else none yet."""
-    cached = frappe.cache.get_value(
-        td.analysis_cache_key(
-            period, start, scope.group or scope.department, bool(scope.group)
-        ),
-        expires=True,
+def current_analysis(period: str, start, scope, closed: bool = False) -> dict:
+    """A closed period's own analysis (stored with its champion). For the period
+    in progress: its analysis when someone refreshed it, else the last closed
+    period's, else none yet."""
+    cached = (
+        None
+        if closed
+        else frappe.cache.get_value(
+            td.analysis_cache_key(
+                period, start, scope.group or scope.department, bool(scope.group)
+            ),
+            expires=True,
+        )
     )
     if cached:
         return {**cached, "period_start": str(start), "current": True}
@@ -499,7 +536,11 @@ def current_analysis(period: str, start, scope) -> dict:
         .select(champion.analysis, champion.period_start, champion.period_end)
         .where(
             (champion.period_type == td.PERIODS[period][0])
-            & (champion.period_end < start)
+            & (
+                (champion.period_start == start)
+                if closed
+                else (champion.period_end < start)
+            )
             & champion.analysis.isnotnull()
         )
         .orderby(champion.period_start, order=frappe.qb.desc)
@@ -527,3 +568,191 @@ def stored_scope(query, champion, scope):
     return query.where(
         (champion.department == name) & (champion.is_group == int(bool(scope.group)))
     )
+
+
+# --- months, and champions of closed periods ------------------------------------
+
+
+def earliest_day(today):
+    """The first day the month picker offers: the start of last year."""
+    return getdate(today).replace(year=getdate(today).year - 1, month=1, day=1)
+
+
+def anchor_day(day: str | None, today):
+    """The day whose period the page shows: today, or a past day picked on the
+    page. A future day has no numbers yet, so it is refused."""
+    if not day:
+        return today
+    try:
+        anchor = getdate(day)
+    except Exception:  # noqa: BLE001 - getdate raises several kinds on bad text
+        frappe.throw(_("Pick a day as YYYY-MM-DD."))
+    if anchor > today:
+        frappe.throw(
+            _("{0} hasn't happened yet. Pick today or an earlier day.").format(
+                frappe.utils.formatdate(anchor)
+            )
+        )
+    return anchor
+
+
+def stored_champions(period_type: str, start, end=None) -> list:
+    """HD Team Champion records of the period type starting on `start` (or from
+    `start` to `end`), with a champion."""
+    champion = frappe.qb.DocType("HD Team Champion")
+    query = (
+        frappe.qb.from_(champion)
+        .select(
+            champion.period_start,
+            champion.period_end,
+            champion.department,
+            champion.is_group,
+            champion.user,
+            champion.score,
+            champion.breakdown,
+        )
+        .where((champion.period_type == period_type) & champion.user.isnotnull())
+    )
+    if end:
+        query = query.where(champion.period_start.between(start, end))
+    else:
+        query = query.where(champion.period_start == getdate(start))
+    return query.run(as_dict=True)
+
+
+def stored_card(row) -> dict:
+    """A stored champion as the page's champion card, with the reasons it was
+    stored with (its three biggest positive parts)."""
+    info = td.people_info([row.user]).get(row.user, {})
+    try:
+        breakdown = json.loads(row.breakdown or "[]")
+    except ValueError:
+        breakdown = []
+    reasons = [
+        b.get("detail")
+        for b in sorted(breakdown, key=lambda b: -(b.get("points") or 0))
+        if (b.get("points") or 0) > 0 and b.get("key") != "hours"
+    ][:3]
+    return {
+        "user": row.user,
+        "name": info.get("name") or row.user,
+        "image": info.get("image"),
+        "score": row.score,
+        "reasons": reasons,
+        "breakdown": breakdown,
+        "stored": True,
+        "start": str(row.period_start),
+        "end": str(row.period_end),
+    }
+
+
+def scope_key(name: str | None, is_group) -> tuple:
+    return (name or None, bool(is_group) and bool(name))
+
+
+class Champions:
+    """Who is champion of each scope (the whole team, a group, a department) of the
+    page's period. A closed period shows the records stored when it closed (HD
+    Team Champion), never a recomputation, so its history doesn't shift when the
+    formula or old tasks change; nobody stored means no champion. The period in
+    progress is worked out now."""
+
+    def __init__(self, period: str, start, closed: bool):
+        self.period = period
+        self.closed = closed
+        self.stored = (
+            {
+                scope_key(r.department, r.is_group): r
+                for r in stored_champions(td.PERIODS[period][0], start)
+            }
+            if closed
+            else {}
+        )
+
+    def card(self, name: str | None, is_group, ranked: list) -> dict | None:
+        if not self.closed:
+            return champion_card(td.champion_of(ranked))
+        row = self.stored.get(scope_key(name, is_group))
+        return stored_card(row) if row else None
+
+    @staticmethod
+    def of_month(rows: list, scope) -> dict:
+        """{month start: stored row} of the scope, from a year's Month records."""
+        key = scope_key(scope.group or scope.department, scope.group)
+        return {
+            getdate(r.period_start): r
+            for r in rows
+            if scope_key(r.department, r.is_group) == key
+        }
+
+
+def previous_champion(period: str, start, scope) -> dict | None:
+    """The champion of the period before (last month, last week, yesterday) as
+    stored when it closed, for the scope; None when nobody was stored."""
+    prev_start = td.period_bounds(period, add_days(start, -1))[0]
+    key = scope_key(scope.group or scope.department, scope.group)
+    row = next(
+        (
+            r
+            for r in stored_champions(td.PERIODS[period][0], prev_start)
+            if scope_key(r.department, r.is_group) == key
+        ),
+        None,
+    )
+    return stored_card(row) if row else None
+
+
+def year_months(period: str, start, today, scope, of_month) -> dict:
+    """The year's twelve months side by side for the scope: weighted work, tasks,
+    on time, quality and champion (stored for a closed month, worked out for the
+    month in progress, none for a month to come), and each person's month by
+    month (`people`: {user: [12 entries or None]})."""
+    year = getdate(start).year
+    keep = td.scope_filter(scope.departments)
+    stored = of_month(
+        stored_champions("Month", f"{year}-01-01", f"{year}-12-31"), scope
+    )
+    rows, people = [], {}
+    for month in range(1, 13):
+        m_start, m_end = td.period_bounds("month", f"{year}-{month:02d}-01")
+        row = {"month": str(m_start), "end": str(m_end)}
+        if m_start > today:
+            rows.append({**row, "future": True})
+            for entries in people.values():
+                entries.append(None)
+            continue
+        data = td.collect(m_start, m_end, with_overdue=False, today=today)
+        figures = td.totals(data, keep)
+        ranked = td.rank(
+            td.tally(data, lambda r: True if keep(r) else None)[True], "month"
+        )
+        if m_end < today:
+            champion = stored.get(m_start)
+            champion = stored_card(champion) if champion else None
+        else:
+            champion = champion_card(td.champion_of(ranked))
+        rows.append(
+            {
+                **row,
+                "future": False,
+                "tasks": figures["tasks"],
+                "weight": figures["weight"],
+                "on_time_pct": figures["on_time_pct"],
+                "quality": figures["quality"],
+                "champion": champion,
+            }
+        )
+        by_user = {r["user"]: r for r in ranked}
+        for user in by_user:
+            people.setdefault(user, [None] * (month - 1))
+        for user, entries in people.items():
+            stats = by_user.get(user)
+            entries.append(
+                {
+                    "month": str(m_start),
+                    "score": stats["score"] if stats else 0,
+                    "tasks": stats["stats"]["tasks"] if stats else 0,
+                    "weight": round(stats["stats"]["weight"], 1) if stats else 0,
+                }
+            )
+    return {"rows": rows, "people": people}

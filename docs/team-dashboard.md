@@ -20,11 +20,24 @@ already exist.
 
 ## Periods
 
-Today, This week (Monday to Sunday), This month, This quarter, Half year (January to June or
-July to December) and This year; `period_bounds()` is the one definition. Every figure is
-compared with the **previous period up to the same point** (`comparison_bounds()`): on a
-Wednesday, this week is compared with Monday to Wednesday of last week, so a week in progress
-isn't compared with a whole one. Tiles show "↑ 3 vs last week" (`StatTile`'s `delta` and
+Day, Week, Month, Quarter, Half year (January to June or July to December) and Year;
+`period_bounds()` is the one definition.
+
+**Everything is month-based** (the owner, 2026-10-12): the month is the calendar month, from
+the 1st to its last day (28, 29, 30 or 31), and it starts fresh on the 1st. Days and weeks
+live inside it: a **week runs Monday to Sunday clipped to its month**, so a month's weeks
+partition it exactly (October 2026: 1–4, 5–11, 12–18, 19–25, 26–31) and a week crossing a
+month boundary is two weeks, one in each month. Weekly champions are stored per clipped week
+(`close_period` runs on Sundays and on a month's last day), and the badges, streaks and the
+weekly challenge use the same weeks (`podium_streak` steps back week by week with
+`period_bounds`, never by 7 days). The year is the months compared (below).
+
+Every figure is compared with the **previous period up to the same point**
+(`comparison_bounds()`). A day or a week is compared with the same weekdays 1 or 7 days
+earlier: on a Wednesday, this week is compared with Monday to Wednesday of last week, and the
+clipped week Thursday 1 to Saturday 3 October with Thursday 24 to Saturday 26 September, so a
+short week is never set against a shorter or longer piece. A month, quarter, half or year is
+compared with the one before up to the same point. Tiles show "↑ 3 vs last week" (`StatTile`'s `delta` and
 `deltaText`: an arrow icon, a screen-reader "Up"/"Down" and text, never colour alone; a rise
 is green, a fall stays gray). "Overdue now" has no comparison, since it is today's state.
 The tiles' icon circles follow the colour rule in [ui-guidelines.md](ui-guidelines.md) §8:
@@ -32,7 +45,33 @@ Tasks finished and Posts published success, On time by its rate (`onTimeTone`), 
 logged info. The period and Departments / People / Projects switches are frappe-ui
 `TabButtons`.
 
-The URL keeps `period`, `department` or `group`, `view` (`people`, `projects`, `repeats`; Departments is the default),
+### Browsing past periods
+
+Under the period switch, **‹ October 2026 ›** steps to the period before or after (never past
+today), with **Back to this month** when looking back, and for Day, Week and Month a **month
+picker** (this year and last). The page then shows that period (`get_team_dashboard(day=…)`:
+the period `day` falls in; a future day is refused):
+
+- a **closed period** (ended before today) shows its full figures and ranking, and its
+  **champions as stored when it closed** (HD Team Champion, read by `Champions` in
+  `helpdesk/api/team_dashboard.py`), never a recomputation, so the history doesn't shift with
+  a later formula or late edits; nobody stored means no champion. Its own stored analysis
+  shows, nothing can be refreshed, and "Overdue now" is left out (it is today's state);
+- the **period before's champion** shows under the champion card on every view ("September
+  2026: Rahul Nair · 28.5", with the first reason), read from its stored record
+  (`previous_champion`); it opens that period;
+- repeat issues stay on the period in progress.
+
+### The year: months compared
+
+The Year view adds **Month by month** (`year_months`): for the scope (team, group or
+department) each month's tasks done, weighted work, on-time %, quality (the tasks' average
+quality, weighted by weight, `totals()["quality"]`) and champion: stored for a closed month,
+worked out for the month in progress, none for a month to come. A month opens its Month view.
+Each person's row in the People view opens to their month-by-month scores too. Quarter and
+half stay as they were.
+
+The URL keeps `period`, `day` (a past period), `department` or `group`, `view` (`people`, `projects`, `repeats`; Departments is the default),
 `person` (the open score breakdown) and `project` (highlighted in Projects).
 
 ## What is counted
@@ -387,7 +426,7 @@ a number that isn't in the facts**, so it can't invent figures.
 
 | Method | HTTP | What |
 | --- | --- | --- |
-| `get_team_dashboard(period="week", department=None, group=None)` | GET | `period` (dates and comparison), `access` (departments, `groups` [{group, departments}], can_refresh), `department`, `group`, `summary` (with `weight` and `previous`), `champion`, `departments` (rows with `kind`, `parent`, `weight`), `people` (with `weight`, `self_made`, `excellent`, `good`, `rework`, `sent_back`, `came_back`), `projects`, `trend`, `history`, `analysis`, `rules` (`score_rules()`) |
+| `get_team_dashboard(period="week", department=None, group=None, day=None)` | GET | `period` (dates, comparison, `closed`, `current`, `earliest` for the month picker), `previous_champion`, `months` (the year only), `access` (departments, `groups` [{group, departments}], can_refresh), `department`, `group`, `summary` (with `weight` and `previous`), `champion`, `departments` (rows with `kind`, `parent`, `weight`), `people` (with `weight`, `self_made`, `excellent`, `good`, `rework`, `sent_back`, `came_back`), `projects`, `trend`, `history`, `analysis`, `rules` (`score_rules()`) |
 | `refresh_analysis(period="week", department=None, group=None)` | POST | A new analysis for the period in progress (System and Agent Managers) |
 
 `helpdesk/tasky/api.py`: `rate_task(task, rating=None)` (POST; a completed task's rating, or
