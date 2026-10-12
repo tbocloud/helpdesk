@@ -29,6 +29,7 @@ from helpdesk.helpdesk.doctype.hd_content_post.hd_content_post import (
     NEXT_PERSON,
     READY_STATUSES,
     REMINDER_WINDOW_HOURS,
+    TASK_ROLES,
     _is_content_lead,
     role_teams_of,
 )
@@ -196,6 +197,16 @@ def _posts(user, department, customer, person) -> tuple[list[dict], bool]:
     filters = {"status": ("in", PRODUCTION_STATUSES)}
     if customer:
         filters["customer"] = customer
+    # narrowed in the query, so the cap counts only posts the viewer gets
+    wanted_names = None
+    if not _is_content_lead(user):
+        # outside the content leads, only the posts they're on: their own items
+        wanted_names = _posts_with(user, include_owned=True)
+    if person:
+        theirs = _posts_with(person)
+        wanted_names = theirs if wanted_names is None else wanted_names & theirs
+    if wanted_names is not None:
+        filters["name"] = ("in", list(wanted_names) or [""])
     rows = frappe.get_list(
         "HD Content Post",
         filters=filters,
@@ -204,19 +215,8 @@ def _posts(user, department, customer, person) -> tuple[list[dict], bool]:
         limit_page_length=POST_LIMIT + 1,
     )
     truncated = len(rows) > POST_LIMIT
-    rows = rows[:POST_LIMIT]
-    names = [p.name for p in rows]
-    teams = role_teams_of(names)
-    lead = _is_content_lead(user)
-    wanted = []
-    for post in rows:
-        everyone = {u for users in teams.get(post.name, {}).values() for u in users}
-        # outside the content leads, only the posts they're on: their own items
-        if not lead and user not in everyone and post.owner != user:
-            continue
-        if person and person not in everyone:
-            continue
-        wanted.append(post)
+    wanted = rows[:POST_LIMIT]
+    teams = role_teams_of([p.name for p in wanted])
     tasks = role_tasks([p.name for p in wanted])
     full_names = user_full_names(
         {u for p in wanted for users in teams.get(p.name, {}).values() for u in users}
@@ -225,6 +225,23 @@ def _posts(user, department, customer, person) -> tuple[list[dict], bool]:
     return [
         _post_item(p, teams.get(p.name, {}), tasks, full_names, now) for p in wanted
     ], truncated
+
+
+def _posts_with(user: str, include_owned: bool = False) -> set[str]:
+    """Posts with `user` on any part (main person or extra team), and the ones they
+    created when `include_owned`; two queries for any number of posts."""
+    fields = [*TASK_ROLES, "owner"] if include_owned else list(TASK_ROLES)
+    main = frappe.get_all(
+        "HD Content Post",
+        or_filters={field: user for field in fields},
+        pluck="name",
+    )
+    extra = frappe.get_all(
+        "HD Content Post Member",
+        filters={"parenttype": "HD Content Post", "user": user},
+        pluck="parent",
+    )
+    return set(main) | set(extra)
 
 
 def _post_item(post, team: dict, tasks: dict, full_names: dict, now) -> dict:

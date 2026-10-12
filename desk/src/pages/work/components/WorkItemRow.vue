@@ -39,7 +39,7 @@
           <button
             v-else-if="opens"
             type="button"
-            class="max-w-full truncate text-left text-base text-ink-gray-9 after:absolute after:inset-0 after:content-[''] focus-visible:outline-none"
+            class="max-w-full truncate text-left text-base text-ink-gray-9 after:absolute after:inset-0 after:rounded after:content-[''] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-highlight"
             @click="emit('open')"
           >
             {{ item.title }}
