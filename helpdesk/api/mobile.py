@@ -33,7 +33,7 @@ from frappe.utils import (
 from helpdesk import competition, follow_ups, task_activity
 from helpdesk import team_dashboard as td
 from helpdesk import team_insights
-from helpdesk.api import home, in_progress, project_files
+from helpdesk.api import content_tasks, home, in_progress, project_files
 from helpdesk.api.content_board import user_full_names
 from helpdesk.api.doc import remove_assignments
 from helpdesk.api.follow_ups import check_admin
@@ -1423,6 +1423,31 @@ def get_in_progress(
             person=person,
             only_overdue=only_overdue,
             hide_on_hold=hide_on_hold,
+        )
+    )
+
+
+@frappe.whitelist()
+@agent_only
+def get_content_tasks(
+    start: str,
+    end: str,
+    customer: str | None = None,
+    channel: str | None = None,
+    status: str | None = None,
+    person: str | None = None,
+) -> dict:
+    """The content calendar's Tasks view for posts going live between two dates
+    (helpdesk.api.content_tasks): content writers, designers and marketers get their
+    own tasks, the content leads every content task; outside the content team, 403."""
+    return _one(
+        content_tasks.get_content_tasks(
+            start=start,
+            end=end,
+            customer=customer,
+            channel=channel,
+            status=status,
+            person=person,
         )
     )
 

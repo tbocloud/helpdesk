@@ -196,7 +196,11 @@
             : 'border-dashed border-outline-gray-3 bg-surface-base text-ink-gray-8 hover:bg-surface-gray-1'
         "
         :aria-pressed="myPostsOn"
-        :title="__('Posts I am on, in any role')"
+        :title="
+          view === 'tasks'
+            ? __('Tasks assigned to me')
+            : __('Posts I am on, in any role')
+        "
         @click="filters.person = myPostsOn ? '' : auth.userId"
       >
         <span
@@ -208,7 +212,7 @@
         >
           <LucideUser class="size-3.5" />
         </span>
-        {{ __("My posts") }}
+        {{ view === "tasks" ? __("My tasks") : __("My posts") }}
       </button>
     </div>
 
@@ -316,8 +320,15 @@
             </div>
           </template>
         </div>
+        <YourTasksStrip
+          v-if="view !== 'tasks'"
+          :data="contentTasks.data"
+          @open="openMyTasks"
+        />
         <div
-          v-if="view !== 'calendar' && occasionsInRange.length"
+          v-if="
+            (view === 'board' || view === 'sheet') && occasionsInRange.length
+          "
           class="flex flex-wrap items-center gap-2"
           role="group"
           :aria-label="__('Occasions')"
@@ -490,10 +501,26 @@
             :day="period === 'day' ? anchor : ''"
             :loading="monthPosts.loading"
             :filters-customer="filters.customer"
+            :task-data="contentTasks.data"
             @open="openPost"
             @add="openAdd"
             @action="openAction"
             @changed="refresh"
+          />
+          <ContentTasks
+            v-else-if="view === 'tasks'"
+            :data="contentTasks.data"
+            :loading="contentTasks.loading"
+            :error="contentTasks.error"
+            :person="filters.person"
+            :period-text="periodText"
+            :period-key="rangeKey"
+            @open-post="openPost"
+            @reassign="(post, role) => openAction(post, 'assign', role)"
+            @changed="refresh"
+            @retry="contentTasks.reload()"
+            @clear-filters="clearFilters"
+            @show-everyone="filters.person = ''"
           />
           <ContentSheet
             v-else
@@ -553,6 +580,7 @@ import {
   Select,
   toast,
 } from "frappe-ui";
+import { useListUpdate } from "@/composables/realtime";
 import { useEventListener, useStorage } from "@vueuse/core";
 import { computed, markRaw, reactive, ref, watch } from "vue";
 import { useRoute } from "vue-router";
@@ -564,6 +592,7 @@ import LucideChevronLeft from "~icons/lucide/chevron-left";
 import LucideChevronRight from "~icons/lucide/chevron-right";
 import LucideCircleDot from "~icons/lucide/circle-dot";
 import LucideLayoutList from "~icons/lucide/layout-list";
+import LucideListChecks from "~icons/lucide/list-checks";
 import LucidePlus from "~icons/lucide/plus";
 import LucideMail from "~icons/lucide/mail";
 import LucideShare2 from "~icons/lucide/share-2";
@@ -591,9 +620,11 @@ import { useContentOptions } from "./contentOptions";
 import AddEntryDialog from "./components/AddEntryDialog.vue";
 import ContentBoard from "./components/ContentBoard.vue";
 import ContentSheet from "./components/ContentSheet.vue";
+import ContentTasks from "./components/ContentTasks.vue";
 import EntryActionDialog from "./components/EntryActionDialog.vue";
 import PostDialog from "./components/PostDialog.vue";
 import SharePortalDialog from "./components/SharePortalDialog.vue";
+import YourTasksStrip from "./components/YourTasksStrip.vue";
 
 // dragging a post reschedules it, which only editors may do
 const calendarConfig = computed(() => ({
@@ -632,11 +663,12 @@ const legend = [
   { label: __("Published"), swatch: "bg-success" },
 ];
 
-type View = "board" | "calendar" | "sheet";
+type View = "board" | "calendar" | "sheet" | "tasks";
 const VIEWS: { key: View; label: string; icon: unknown }[] = [
   { key: "board", label: __("Board"), icon: markRaw(LucideLayoutList) },
   { key: "calendar", label: __("Calendar"), icon: markRaw(LucideCalendarDays) },
   { key: "sheet", label: __("Sheet"), icon: markRaw(LucideSheet) },
+  { key: "tasks", label: __("Tasks"), icon: markRaw(LucideListChecks) },
 ];
 const view = useStorage<View>("helpdesk-content-view", "board");
 
@@ -760,6 +792,13 @@ const periodLabel = computed(() => {
     ? `${start.format("D")} – ${end.format("D MMM YYYY")}`
     : `${start.format("D MMM")} – ${end.format("D MMM YYYY")}`;
 });
+
+// the Tasks view's empty states and Done heading name the period on screen
+const periodText = computed(() =>
+  period.value === "day"
+    ? __("on {0}", periodLabel.value)
+    : __("in {0}", periodLabel.value)
+);
 
 function shiftPeriod(by: number) {
   anchor.value = dayjs(anchor.value || today)
@@ -929,6 +968,7 @@ function onRangeChange({
     end: dayjs(endDate).endOf("day").format("YYYY-MM-DD HH:mm:ss"),
   };
   posts.reload();
+  contentTasks.reload();
 }
 
 // posts saved before a posting date was required; opening one asks for a date
@@ -974,18 +1014,77 @@ const undatedText = computed(() => {
   return [parts[0], parts.slice(1).join("")];
 });
 
+// the role tasks of the posts on screen: the Tasks view, the "Your tasks" strip,
+// the role boxes' steps and the board cards' parts line (docs/content-calendar.md)
+const contentTasks = createResource({
+  url: "helpdesk.api.content_tasks.get_content_tasks",
+  makeParams: () => {
+    const calendar = view.value === "calendar" && range.value;
+    return {
+      start: calendar
+        ? range.value!.start.slice(0, 10)
+        : rangeStart.value.format("YYYY-MM-DD"),
+      end: calendar
+        ? range.value!.end.slice(0, 10)
+        : rangeEnd.value.format("YYYY-MM-DD"),
+      customer: filters.customer || undefined,
+      channel: filters.channel || undefined,
+      status: filters.status || undefined,
+    };
+  },
+});
+// someone starting, pausing or finishing a task shows here without a reload
+useListUpdate("Task", contentTasks);
+
 function refresh() {
   undated.reload();
   if (view.value === "calendar") {
-    if (range.value) posts.reload();
+    if (range.value) {
+      posts.reload();
+      contentTasks.reload();
+    }
   } else {
     monthPosts.reload();
     occasions.reload();
+    contentTasks.reload();
   }
 }
 
+// The Tasks view opens on the viewer's own tasks, unless they lead the content team
+// (heads, coordinators, admins), who start on everyone's. The person filter switches
+// between them; leaving the view drops the filter it set by itself. Watched before
+// the filters, so opening the page on the Tasks view loads once.
+let autoPerson = false;
+const seesAllTasks = computed(() => auth.canEditContent || auth.isDmHead);
+watch(
+  view,
+  (current) => {
+    if (current === "tasks") {
+      if (!filters.person && !seesAllTasks.value) {
+        filters.person = auth.userId;
+        autoPerson = true;
+      }
+    } else if (autoPerson) {
+      autoPerson = false;
+      if (filters.person === auth.userId) filters.person = "";
+    }
+  },
+  { immediate: true }
+);
+
 watch(filters, refresh);
 watch([view, fetchKey], refresh, { immediate: true });
+// Day view loads its whole week of posts but the tasks of only the day, so moving
+// to another day of the same week reloads just the tasks
+watch([rangeKey, fetchKey], ([, fetch], [, before]) => {
+  if (fetch === before && view.value !== "calendar") contentTasks.reload();
+});
+
+function openMyTasks() {
+  filters.person = auth.userId;
+  autoPerson = false;
+  view.value = "tasks";
+}
 
 function clearFilters() {
   Object.assign(filters, { customer: "", channel: "", status: "", person: "" });
@@ -1014,6 +1113,7 @@ async function onReschedule(event: {
     toast.error(e?.messages?.[0] || __("Couldn't reschedule this post"));
   } finally {
     posts.reload();
+    contentTasks.reload();
   }
 }
 

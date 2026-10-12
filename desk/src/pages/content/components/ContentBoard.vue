@@ -571,10 +571,49 @@
                 :people="peopleOf(post, role.field)"
                 :can-edit="auth.canEditContent"
                 :context="`${post.customer} · ${post.title}`"
+                :step="boxStep(roleTask(post, role.field))"
+                :busy="
+                  !!stepBusy && stepBusy === roleTaskName(post, role.field)
+                "
                 @assign="emit('action', post, 'assign', role.field)"
                 @open-task="showTask(post, role.field, $event)"
+                @step="runStep($event, roleTask(post, role.field)!)"
               />
             </div>
+
+            <!-- how far the post's parts are and who it waits on, from its role tasks -->
+            <p
+              v-if="progressLines[post.name]"
+              class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 px-4 pt-2 text-sm text-ink-gray-7"
+            >
+              <LucideListChecks
+                class="size-4 shrink-0 text-ink-gray-5"
+                aria-hidden="true"
+              />
+              <span>{{ progressLines[post.name].parts }}</span>
+              <template v-if="progressLines[post.name].waiting">
+                <span aria-hidden="true">·</span>
+                <span
+                  >{{ progressLines[post.name].waiting
+                  }}<template v-if="progressLines[post.name].due"
+                    >,</template
+                  ></span
+                >
+                <span
+                  v-if="progressLines[post.name].due"
+                  class="inline-flex items-center gap-1"
+                  :class="
+                    progressLines[post.name].late && 'font-medium text-danger'
+                  "
+                >
+                  <LucideCircleAlert
+                    v-if="progressLines[post.name].late"
+                    class="size-3.5"
+                    aria-hidden="true"
+                  />{{ progressLines[post.name].due }}</span
+                >
+              </template>
+            </p>
 
             <footer
               class="entry-footer mt-3 flex flex-wrap items-center gap-2 border-t px-4 py-2"
@@ -682,8 +721,9 @@
     <TodayMarker v-if="plan.todayMarker && !plan.next" />
 
     <TaskDetailDialog
-      v-model:task="openTask"
-      :mine="openTaskMine"
+      v-model:task="dialogTask"
+      :action="dialogAction"
+      :mine="dialogMine"
       @changed="emit('changed')"
     />
   </div>
@@ -691,9 +731,7 @@
 
 <script setup lang="ts">
 import { __ } from "@/translation";
-import TaskDetailDialog, {
-  type TaskRef,
-} from "@/pages/tasky/components/TaskDetailDialog.vue";
+import TaskDetailDialog from "@/pages/tasky/components/TaskDetailDialog.vue";
 import { createReusableTemplate } from "@vueuse/core";
 import { Button, createResource, dayjs, Tooltip } from "frappe-ui";
 import {
@@ -712,6 +750,7 @@ import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideClock from "~icons/lucide/clock";
 import LucideExternalLink from "~icons/lucide/external-link";
 import LucideHistory from "~icons/lucide/history";
+import LucideListChecks from "~icons/lucide/list-checks";
 import LucidePlus from "~icons/lucide/plus";
 import LucideSend from "~icons/lucide/send";
 import LucideBuilding2 from "~icons/lucide/building-2";
@@ -734,6 +773,15 @@ import {
   TEAM_ROLES,
   type TeamRole,
 } from "../constants";
+import {
+  boxStep,
+  type ContentTask,
+  type ContentTasksData,
+  dueText,
+  partsText,
+  useContentTaskSteps,
+  waitingText,
+} from "../contentTasks";
 import { planDays, prefersMotion, revealIfLow } from "../dayFocus";
 import ChannelIcon from "./ChannelIcon.vue";
 import RoleBox from "./RoleBox.vue";
@@ -779,6 +827,8 @@ const props = defineProps<{
   day?: string;
   loading?: boolean;
   filtersCustomer?: string;
+  /** The period's role tasks: each card's parts line and the viewer's step in a role box. */
+  taskData?: ContentTasksData | null;
 }>();
 const emit = defineEmits<{
   (e: "open", name: string): void;
@@ -1100,12 +1150,59 @@ async function jumpTo(post: ContentPost) {
 onBeforeUnmount(() => clearTimeout(flashTimer));
 
 // a role's task opens here; the assignee gets their own steps (complete, hold, ...)
-const openTask = ref<TaskRef | null>(null);
-const openTaskMine = ref(false);
+const {
+  busy: stepBusy,
+  dialogTask,
+  dialogAction,
+  dialogMine,
+  open: openTaskDialog,
+  run: runStep,
+} = useContentTaskSteps(() => emit("changed"));
 function showTask(post: ContentPost, role: TeamRole, task: string) {
-  openTaskMine.value = peopleOf(post, role).some((p) => p.user === auth.userId);
-  openTask.value = { name: task };
+  openTaskDialog(
+    { name: task },
+    peopleOf(post, role).some((p) => p.user === auth.userId)
+  );
 }
+
+// the role's task as the Tasks view has it: there only when the viewer may read it
+const tasksByName = computed(
+  () =>
+    new Map<string, ContentTask>(
+      (props.taskData?.tasks ?? []).map((t) => [t.name, t])
+    )
+);
+function roleTaskName(post: ContentPost, role: TeamRole) {
+  return peopleOf(post, role).find((p) => p.task)?.task;
+}
+function roleTask(post: ContentPost, role: TeamRole) {
+  const name = roleTaskName(post, role);
+  return name ? tasksByName.value.get(name) : undefined;
+}
+
+/** "3 of 4 parts done · waiting on Writer (Ajmal) · due tomorrow", for posts still open. */
+const progressLines = computed(() => {
+  const lines: Record<
+    string,
+    { parts: string; waiting: string; due: string; late: boolean }
+  > = {};
+  for (const [name, post] of Object.entries(props.taskData?.posts ?? {})) {
+    const progress = post.progress;
+    if (!progress.parts || CLOSED_STATUSES.includes(post.status)) continue;
+    const waiting = progress.waiting_on;
+    const due =
+      waiting?.kind === "part"
+        ? dueText(waiting.due)
+        : { text: "", late: false };
+    lines[name] = {
+      parts: partsText(progress),
+      waiting: waiting ? waitingText(waiting) : "",
+      due: due.text,
+      late: due.late,
+    };
+  }
+  return lines;
+});
 
 function captionOf(post: ContentPost) {
   return htmlToText(post.caption);

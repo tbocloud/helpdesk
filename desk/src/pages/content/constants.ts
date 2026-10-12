@@ -90,6 +90,15 @@ export interface RolePerson {
 }
 
 export type TeamRole = (typeof TEAM_ROLES)[number]["field"];
+
+// each role keeps its colour across the board's role boxes and the Tasks view's cards;
+// full class strings so Tailwind's scanner keeps them
+export const ROLE_TONES: Record<TeamRole, string> = {
+  writer: "bg-brand-soft text-brand-ink",
+  designer: "bg-info-soft text-info",
+  marketer: "bg-success-soft text-success",
+  video_editor: "bg-warning-soft text-warning",
+};
 export type EntryAction =
   | "publish"
   | "postpone"

@@ -433,6 +433,7 @@ coordinator for its tasks); the app shows them only behind `manage_team` and an 
 | `get_focus` | `limit` (1–3, default 3) | `[Task + focus]` | The 1–3 tasks to do now, in Home's order: `close_first` (overdue, due today, key work in progress), then `in_progress`, `coming_up` (next 7 days) and `no_date`; held and in-review work waits on others and is left out. `focus` names the section. Fixture `get_focus.json` |
 | `quick_add_task` POST | `project`, `subject`, `due_date?`, `assignee?` (default: the user) | `Task` detail | `tasky.add_task`, so `can_add_tasks` applies: anyone on the project (or with a task in it) may add; giving it to someone outside the team is the manager's or lead's call. Fixture `quick_add_task.json` |
 | `snooze_follow_up` POST | `item` (`Task:TASK-…` or `HD Ticket:123`), `until` (date, tomorrow to 7 days ahead), `reason` (required, ≤500) | `{item, until, reason, level}` | The **assignee** acknowledges today's L0/L1 reminder: their own notices and digest lines about it stop until `until` (reminders start again that day), the reason is noted on the item and today's notice is marked read. Refused while the item is at L2+ or its SLA is breached; those always go out. See [follow-ups.md](follow-ups.md#snooze). Fixture `snooze_follow_up.json` |
+| `get_content_tasks` | `start`, `end` (dates, at most 62 days apart), `customer?`, `channel?`, `status?` (a post status; Cancelled posts are left out otherwise), `person?` (tasks assigned to them) | `ContentTasks` | The content calendar's Tasks view (`helpdesk.api.content_tasks`): the role tasks of the posts going live between the dates. Content writers, designers and marketers get their own tasks, the content leads every content task (#94 visibility); outside the content team (`capabilities.content` false, ERP Employees included) 403. Not paged: 1,000 posts and tasks at most (`truncated`). Take steps with `start_task`, `pause_task`, `complete_task`, `hold_task`, `resume_task` and `review_task`, as `actions` allows. Fixture `get_content_tasks.json` |
 | `get_my_stats` | `period` (today, week, month, quarter, half, year) | `{period, current, previous, trend}` | The user's own Scoreboard line for this period and the 7 before it, oldest first: `done`, `weighted_work`, `on_time`, `dated`, `on_time_pct`, `key`, `hours`, `score` (`score()`), and `overdue` (now; null for past periods). Past periods are scored without "Overdue now", which is today's state. Fixture `get_my_stats.json` |
 
 `Task`: `name`, `subject`, `project`, `project_name`, `customer`, `status` (Open, Working,
@@ -442,6 +443,22 @@ hub's rule: past due, or due today and past its estimate; a held task is never o
 `hold_reason`, `hold_note`, `hold_days`, `escalation` {level, label} or null, `timer`
 {state: running|paused|idle, started_at, logged_hours}, `expected_hours`, `waiting_on`,
 `risks` (sentences), `can_approve`.
+
+`ContentTasks`: `sees_all` (a content lead, who gets every content task), `can_edit` (may
+reassign parts), `tasks`, `counts` {todo, in_progress, review, on_hold, done}, `posts`
+{name: ContentTaskPost}, `truncated`. A content task: `name`, `subject`, `status`, `stage`
+(todo, in_progress, review, on_hold, done), `review_label` (in review: "the lead's review",
+"the client's approval", …), `role` (writer, designer, video_editor, marketer, or null for the
+post's shared task), `role_label`, `post`, `publish_on`, `project`, `project_name`,
+`assignees`, `assignee_names` {user: full name}, `mine`, `due`, `is_overdue`, `hold_reason`,
+`hold_note`, `hold_by_name`, `hold_days`, `custom_timer_start` (site time, null while paused),
+`custom_timer_elapsed` (banked hours), `estimated_hours`, `escalation_level`, `waiting_on`
+(the open task it depends on) and `actions` (start, pause, resume_timer, complete, hold,
+resume, approve, reassign: what the viewer may do now). A `ContentTaskPost` is the calendar
+post (`name`, `title`, `customer`, `status`, `publish_on`, `channel`, `platforms`, `format`,
+`special_day`, the role fields and their hours) with `is_missed` and `progress` {parts, done,
+waiting_on: {kind: "review", label} or {kind: "part", role, label, people, task, task_status,
+due} or null}. Rules in [content-calendar.md](content-calendar.md#tasks-view).
 
 Activity item: `{id, at, who, kind, type, text, data}`. `kind` is the app's group (status,
 time, comment, assign); `type` is the hub's own kind (created, assigned, unassigned, status,
