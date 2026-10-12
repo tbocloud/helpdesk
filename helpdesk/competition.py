@@ -238,11 +238,16 @@ def podium_streak(user: str, today) -> int:
         )
         .run(pluck=True)
     }
+
+    def week_before(start):
+        # weeks are clipped to their month, so the one before isn't always 7 days back
+        return td.period_bounds("week", add_days(start, -1))[0]
+
     count = 0
-    week = getdate(add_days(monday, -7))
+    week = week_before(monday)
     while week in weeks:
         count += 1
-        week = getdate(add_days(week, -7))
+        week = week_before(week)
     return count
 
 
@@ -532,22 +537,44 @@ def move_up(ranked: list[dict], user: str, tasks: list[dict], period: str, today
     }
 
 
-def competition(user: str, period: str, limit: int, today, tasks: list[dict]) -> dict:
+def competition(
+    user: str, period: str, limit: int, today, tasks: list[dict], day=None
+) -> dict:
     """Everything the app's Compete screen shows. The boards are public, as on the
     web Scoreboard (every active department, past the DM/ERP walls); streaks, bests,
-    badges and how to move up are the user's own. `tasks` are the user's open tasks."""
-    from helpdesk.api.team_dashboard import NO_DEPARTMENT, scope_of, viewer_access
+    badges and how to move up are the user's own. `tasks` are the user's open tasks.
+
+    `day` picks a past period (the one it falls in): its boards then show the
+    champions stored when it closed, and there is no moving up in it."""
+    from helpdesk.api.team_dashboard import (
+        NO_DEPARTMENT,
+        Champions,
+        previous_champion,
+        scope_of,
+        viewer_access,
+    )
 
     access = viewer_access(user)
-    start, end = td.period_bounds(period, today)
+    start, end = td.period_bounds(period, day or today)
+    closed = end < getdate(today)
     c_start, c_end = td.comparison_bounds(period, start, end, today)
-    data = td.collect(start, end, with_overdue=True, today=today)
+    data = td.collect(start, end, with_overdue=not closed, today=today)
     prev = td.collect(c_start, c_end, with_overdue=False, today=today)
     by_department = td.tally(data, lambda r: r["department"] or NO_DEPARTMENT)
+    champions = Champions(period, start, closed)
 
     def board(department=None, group=None):
         scope = scope_of(access, department, group)
-        return leaderboard(data, prev, period, scope, by_department, limit, user)
+        found, ranked = leaderboard(
+            data, prev, period, scope, by_department, limit, user
+        )
+        if closed:
+            card = champions.card(scope.group or scope.department, scope.group, ranked)
+            found["champion"] = card and card["user"]
+            for row in [*found["leaders"], found["me"]]:
+                if row:
+                    row["is_champion"] = row["user"] == found["champion"]
+        return found, ranked
 
     team, ranked = board()
     streaks = my_streaks(user, today)
@@ -556,6 +583,10 @@ def competition(user: str, period: str, limit: int, today, tasks: list[dict]) ->
         "period_label": td.period_label(period, start, end),
         "range": {"start": str(start), "end": str(end)},
         "compare": {"start": str(c_start), "end": str(c_end)},
+        "closed": closed,
+        "previous_champion": previous_champion(
+            period, start, scope_of(access, None, None)
+        ),
         "me": team["me"],
         "team": team,
         "groups": [board(group=g)[0] for g in access.groups],
@@ -564,7 +595,7 @@ def competition(user: str, period: str, limit: int, today, tasks: list[dict]) ->
         "personal_bests": personal_bests(user, today, streaks["best_on_time_days"]),
         "badges": earned_badges(user),
         "challenge": weekly_challenge(user, today),
-        "move_up": move_up(ranked, user, tasks, period, today),
+        "move_up": None if closed else move_up(ranked, user, tasks, period, today),
     }
 
 
