@@ -18,7 +18,7 @@
     </div>
 
     <TaskyState
-      v-else-if="issues.error && !data"
+      v-else-if="issues.error"
       :icon="LucideCircleAlert"
       :title="__('Couldn\'t load the repeat issues')"
       :message="

@@ -480,7 +480,7 @@ def scope_key(departments: list[str] | None) -> str:
     team. Hashed from JSON, since a department's name may hold any delimiter."""
     if not departments:
         return ""
-    return hashlib.md5(json.dumps(sorted(departments)).encode()).hexdigest()[:16]
+    return hashlib.sha256(json.dumps(sorted(departments)).encode()).hexdigest()[:16]
 
 
 def compute(win: dict, items: list[dict]) -> dict:
