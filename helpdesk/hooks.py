@@ -157,6 +157,8 @@ doc_events = {
     "ToDo": {
         # nobody is given a task in a department their team keeps out of
         "validate": "helpdesk.tasky.permissions.check_assignment_department",
+        # In progress and Overview reload when a task changes hands
+        "on_update": "helpdesk.tasky.api.notify_task_assignment",
     },
     "File": {
         "after_insert": "helpdesk.storage.s3.after_insert",

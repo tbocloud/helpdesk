@@ -369,6 +369,7 @@
 <script setup lang="ts">
 import { INK, type Tone } from "@/components/tone";
 import { Link } from "@/components";
+import { useListUpdate } from "@/composables/realtime";
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import SectionCard from "@/components/SectionCard.vue";
 import StatTile from "@/components/StatTile.vue";
@@ -489,6 +490,10 @@ const overview = createResource({
   makeParams: () =>
     Object.fromEntries(FILTER_KEYS.map((k) => [k, filters[k] || null])),
   auto: true,
+});
+// a task changing (status, timer, assignee) moves the buckets: reload, debounced
+useListUpdate("Task", () => {
+  if (!overview.loading) overview.reload();
 });
 
 // keep the bucket and filters in the URL so the view can be shared

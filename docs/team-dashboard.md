@@ -68,7 +68,8 @@ the period `day` falls in; a future day is refused):
 - the **period before's champion** shows under the champion card on every view ("September
   2026: Rahul Nair · 28.5", with the first reason), read from its stored record
   (`previous_champion`); it opens that period;
-- repeat issues stay on the period in progress.
+- repeat issues follow the browsed period too: a closed period's are worked out for its own
+  window (its 90 days of history before it, nothing after its end).
 
 ### The year: months compared
 
@@ -190,7 +191,17 @@ times is 0.25.
   nobody rates their own work. It is given in the task dialog (`TaskQuality`): on a
   completed task the choice is saved at once (`rate_task`, POST); on a task waiting for
   review it goes with **Approve** (`approve_task(task, rating)`). The doer's Complete dialog
-  has no rating, since the doer can't rate. A form or Desk save can't change the rating
+  has no rating, since the doer can't rate.
+- **Rating after a one-click Approve** (Kanban, Checklist, Home and My Work): `approve_task`
+  returns the task's `quality`, and when the approver may rate it (`can_rate`) and nothing is
+  rated yet, the "Approved" toast offers **Excellent / Good / Needs rework / Skip**
+  (`useApproveTask` showing `TaskQuality` with `compact`). Picking one saves it through
+  `rate_task`; Skip, closing the toast or letting it time out (15 seconds, paused while the
+  pointer is on it) leaves the task unrated. It is a toast, not a dialog, so approving stays
+  one click and the rating stays optional. The doer never sees it, since an assignee can't
+  rate. The task dialog doesn't offer it again (`offerRating: false`): its rating already
+  sits next to Approve. Best first here, since a quick "Excellent" is the common answer; the
+  dialog keeps worst to best. A form or Desk save can't change the rating
   (`Task.guard_quality_rating`): only those calls set it (`Task.set_quality_rating`).
 - **Comebacks** (`reopen_count`, shown as "Came Back"): `Task.track_reopen` counts a
   Completed task moved back to an open status (a send-back isn't one: the task wasn't done
@@ -226,8 +237,7 @@ time earns 1.6. A self-assigned task with no estimate earns 0.5 on time.
 - **The department filter** lists the whole team, each group ("ERP group") and each
   department. A group shows its departments together: summary, people, projects, champion,
   history and analysis (`group` in the URL and the API; `department` and `group` can't both
-  be given). Repeat issues follow a department; with a group picked they show the whole
-  team.
+  be given). Repeat issues follow the same department or group.
 - **People**: everyone in scope, best score first (sort by score, done, weighted work, on
   time, overdue, hours or name): score, done, weighted, on time, key, overdue, slips, posts
   (only when someone has posts) and hours. Below `lg` each row is two lines. A row expands to its breakdown. With no
@@ -245,7 +255,8 @@ time earns 1.6. A self-assigned task with no estimate earns 0.5 on time.
 
 The owner asked for the Scoreboard to point out **work of a repeated nature from the same
 customer**: the same problem coming back as tickets and tasks. It is the fourth view,
-**Repeat issues** (`view=repeats`), for the same period and department as the rest of the page.
+**Repeat issues** (`view=repeats`), for the same period (the browsed `day` included) and
+department or department group as the rest of the page.
 
 ### What counts as a repeat
 
@@ -299,8 +310,10 @@ is slow", "Salary slip email not sent" and "Stock balance mismatch" stay apart
 
 **Speed**: two bounded queries (tickets, tasks; at most 6000 rows each, descriptions cut to
 2000 characters), clustering in memory per customer (at most 300 items each), at most 60
-issues. The result is cached for 10 minutes per period, department and day (`frappe.cache`,
-key `repeat_issues:…`). Stored decisions and AI titles are read on top of it, so a dismissal
+issues. The result is cached for 10 minutes per period, anchor day, scope (the departments
+in it) and today (`frappe.cache`, key `repeat_issues:{period}:{start}:{day}:{departments}:{today}`):
+the anchor tells a browsed period from the one in progress, and today keeps the period in
+progress growing. Stored decisions and AI titles are read on top of it, so a dismissal
 shows at once. The daily close job (`close_periods`, 00:30) also queues `precompute()`: this
 week's and month's whole-team issues with their AI titles.
 
@@ -438,7 +451,8 @@ a number that isn't in the facts**, so it can't invent figures.
 | `refresh_analysis(period="week", department=None, group=None)` | POST | A new analysis for the period in progress (System and Agent Managers) |
 
 `helpdesk/tasky/api.py`: `rate_task(task, rating=None)` (POST; a completed task's rating, or
-none to clear it; returns the task's `quality`), `approve_task(task, rating=None)` and
+none to clear it; returns the task's `quality`), `approve_task(task, rating=None)` (the
+approved task, with its `quality` so a one-click Approve can offer the rating) and
 `get_task_detail(task)`, whose `quality` is `{weight, weight_reasons, quality,
 quality_reasons, rating, rated_by, rated_by_name, rated_on, can_rate, self_made}`.
 
@@ -446,10 +460,14 @@ quality_reasons, rating, rated_by, rated_by_name, rated_on, can_rate, self_made}
 
 | Method | HTTP | What |
 | --- | --- | --- |
-| `get_repeat_issues(period="week", department=None)` | GET | `period` (with `lookback_start`), `rules`, `summary`, `customers` (each with `projects` and `clusters`), `department`, `access` (`can_act`, `can_draft_kb`) |
-| `create_root_cause_task(period, cluster, project, department=None)` | POST | `{task, project, issue}` |
-| `draft_kb_article(period, cluster, department=None)` | POST | `{name, title, status, existing}` |
-| `dismiss_repeat_issue(period, cluster, department=None)` | POST | `{issue}` |
+| `get_repeat_issues(period="week", department=None, group=None, day=None)` | GET | `period` (with `lookback_start`), `rules`, `summary`, `customers` (each with `projects` and `clusters`), `department`, `access` (`can_act`, `can_draft_kb`) |
+| `create_root_cause_task(period, cluster, project, department=None, group=None, day=None)` | POST | `{task, project, issue}` |
+| `draft_kb_article(period, cluster, department=None, group=None, day=None)` | POST | `{name, title, status, existing}` |
+| `dismiss_repeat_issue(period, cluster, department=None, group=None, day=None)` | POST | `{issue}` |
+
+`department`, `group` and `day` are checked as `get_team_dashboard` checks them (`scope_of`,
+`anchor_day`: a department or a group, not both; no future day). The actions take the same
+scope as the list, so a cluster found on a browsed period can be acted on there.
 | `restore_repeat_issue(issue)` | POST | `{issue}` (undo "Not a repeat") |
 
 The app reads the same answer through `helpdesk.api.mobile.get_repeat_issues`

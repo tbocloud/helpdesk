@@ -1,6 +1,8 @@
 # Copyright (c) 2026, Frappe Technologies and Contributors
 # See license.txt
 
+from functools import partial
+
 import frappe
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_to_date, now_datetime
@@ -8,10 +10,12 @@ from frappe.utils import add_to_date, now_datetime
 from helpdesk.api import work
 from helpdesk.tasky import api
 from helpdesk.test_utils import (
+    capture_list_updates,
     get_reminder_messages,
     get_task_comments,
     hold_commits,
     make_assigned_task,
+    make_assignment,
     make_project,
     make_task,
     make_tasky_user,
@@ -324,3 +328,21 @@ class TestPausedTimerStaysPaused(TaskMovesCase):
         with self.assertRaises(frappe.ValidationError):
             run_as_user(DEV, lambda: api.start_timer(task=task))
         self.assertIsNone(frappe.db.get_value("Task", task, "custom_timer_start"))
+
+
+class TestTaskListUpdates(TaskMovesCase):
+    """In progress and Overview reload on Task `list_update`: every change they
+    show must send one, including those made without saving the task."""
+
+    def test_status_timer_and_assignment_changes_are_announced(self):
+        task = self.task()
+        for step in (
+            lambda: api.move_task(task=task, new_status="Working"),
+            lambda: api.stop_timer(task=task),
+            lambda: api.start_timer(task=task),
+        ):
+            self.assertIn(task, capture_list_updates(partial(run_as_user, DEV, step)))
+        # an assignment only touches the ToDo and the task's _assign
+        self.assertIn(
+            task, capture_list_updates(lambda: make_assignment("Task", task, LEAD))
+        )
