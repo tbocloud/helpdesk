@@ -197,31 +197,6 @@
               :parts="person.breakdown"
               :score="person.score"
             />
-            <!-- in the year: the person's months side by side -->
-            <div v-if="person.months" class="mt-3 max-w-lg">
-              <h3 class="text-xs text-ink-gray-5">
-                {{ __("Month by month") }}
-              </h3>
-              <ol
-                class="mt-1 grid grid-cols-4 gap-1 text-xs sm:grid-cols-6"
-                role="list"
-              >
-                <li
-                  v-for="(entry, i) in person.months"
-                  :key="i"
-                  class="flex flex-col rounded border border-outline-gray-1 bg-surface-base px-2 py-1"
-                  :aria-label="monthLabel(entry, i)"
-                >
-                  <span class="text-ink-gray-5">{{ monthShort(i) }}</span>
-                  <span
-                    class="font-mono tabular-nums"
-                    :class="entry ? 'text-ink-gray-9' : 'text-ink-gray-4'"
-                  >
-                    {{ entry ? entry.score : "—" }}
-                  </span>
-                </li>
-              </ol>
-            </div>
             <p v-else class="text-p-sm text-ink-gray-6">
               {{ __("Nothing finished or overdue in this period yet.") }}
             </p>
@@ -248,7 +223,7 @@ import SectionCard from "@/components/SectionCard.vue";
 import TaskyState from "@/components/TaskyState.vue";
 import { onTimeClass, pctText } from "@/pages/performance/performanceMeta";
 import { __ } from "@/translation";
-import { Avatar, dayjs, FormControl } from "frappe-ui";
+import { Avatar, FormControl } from "frappe-ui";
 import { computed, ref } from "vue";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
 import LucideChevronDown from "~icons/lucide/chevron-down";
@@ -257,7 +232,6 @@ import {
   departmentLabel,
   hoursText,
   weightText,
-  type PersonMonth,
   type PersonRow,
 } from "../teamDashboardMeta";
 import ScoreBreakdown from "./ScoreBreakdown.vue";
@@ -279,22 +253,6 @@ const SORTS = [
   { label: __("Name"), value: "name" },
 ];
 const sort = ref("score");
-
-function monthShort(index: number) {
-  return dayjs().startOf("year").month(index).format("MMM");
-}
-
-function monthLabel(entry: PersonMonth, index: number) {
-  const month = dayjs().startOf("year").month(index).format("MMMM");
-  if (!entry) return __("{0}: not started", month);
-  return __(
-    "{0}: score {1}, {2} done, {3} weighted",
-    month,
-    String(entry.score),
-    String(entry.tasks),
-    weightText(entry.weight)
-  );
-}
 
 const postsOf = (p: PersonRow) => p.posts_on_time + p.posts_late;
 const showPosts = computed(() =>

@@ -116,18 +116,14 @@ Reply with JSON only: {"summary": "...", "risks": ["..."], "needs_help": ["..."]
 def period_bounds(period: str, day=None) -> tuple[date, date]:
     """First and last day of the period that `day` (today by default) falls in.
 
-    Everything lives inside the calendar month (the owner's rule): a week runs
-    Monday to Sunday **clipped to its month**, so a month's weeks partition it
-    exactly (October 2026: 1-4, 5-11, 12-18, 19-25, 26-31) and every month starts
-    fresh on the 1st. Halves are January-June and July-December.
+    Weeks run Monday to Sunday; halves are January-June and July-December.
     """
     day = getdate(day or nowdate())
     if period == "today":
         return day, day
     if period == "week":
         start = day - timedelta(days=day.weekday())
-        end = start + timedelta(days=6)
-        return max(start, day.replace(day=1)), min(end, get_last_day(day))
+        return start, start + timedelta(days=6)
     if period == "month":
         return day.replace(day=1), get_last_day(day)
     if period in ("quarter", "half"):
@@ -142,19 +138,11 @@ def period_bounds(period: str, day=None) -> tuple[date, date]:
 
 def comparison_bounds(period: str, start, end, day=None) -> tuple[date, date]:
     """The previous period up to the same point: a week in progress on Wednesday is
-    compared with Monday to Wednesday of the week before, not the whole week.
-
-    A day or a week is compared with the same weekdays 1 or 7 days earlier, so a
-    week clipped to its month (Thursday 1 to Sunday 4 October) is compared with
-    the same four days of the week before, never with a shorter piece of it."""
+    compared with Monday to Wednesday of the week before, not the whole week."""
     day = getdate(day or nowdate())
-    start, end = getdate(start), getdate(end)
-    upto = max(min(day, end), start)
-    if period in ("today", "week"):
-        shift = timedelta(days=1 if period == "today" else 7)
-        return start - shift, upto - shift
     prev_start, prev_end = period_bounds(period, add_days(start, -1))
-    return prev_start, min(prev_start + (upto - start), prev_end)
+    elapsed = (min(day, getdate(end)) - getdate(start)).days
+    return prev_start, min(prev_start + timedelta(days=max(elapsed, 0)), prev_end)
 
 
 def recent_periods(period: str, count: int, day=None) -> list[tuple[date, date]]:
@@ -705,13 +693,9 @@ def totals(data: dict, keep) -> dict:
     tasks = [t for t in data["tasks"] if keep(t)]
     dated = [t for t in tasks if t["dated"]]
     posts = [p for p in data["posts"] if keep(p)]
-    weight = sum(t["weight"] for t in tasks)
-    value = sum(t["weight"] * t["quality"] for t in tasks)
     return {
         "tasks": len(tasks),
-        "weight": round(weight, 1),
-        # the tasks' average quality, weighted by their weight
-        "quality": round(value / weight, 2) if weight else None,
+        "weight": round(sum(t["weight"] for t in tasks), 1),
         "key": sum(t["key"] for t in tasks),
         "on_time_pct": pct(sum(t["on_time"] for t in dated), len(dated)),
         "hours": round(sum(r["hours"] for r in data["hours"] if keep(r)), 1),
@@ -965,9 +949,9 @@ def save_champion(
             "is_group": int(is_group),
             "user": champion and champion["user"],
             "score": champion["score"] if champion else 0,
-            "breakdown": (
-                json.dumps(champion["breakdown"], indent=1) if champion else None
-            ),
+            "breakdown": json.dumps(champion["breakdown"], indent=1)
+            if champion
+            else None,
             "analysis": json.dumps(analysis, indent=1) if analysis else None,
             "generated_by_ai": int(bool(analysis and analysis["status"] == "ready")),
         }

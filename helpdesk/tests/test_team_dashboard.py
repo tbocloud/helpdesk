@@ -1,5 +1,5 @@
 import json
-from datetime import date, timedelta
+from datetime import date
 from unittest.mock import patch
 
 import frappe
@@ -22,7 +22,6 @@ from helpdesk.test_utils import (
     make_self_made_done_task,
     make_task,
     make_tasky_user,
-    make_team_champion,
     rate_task_as,
     score_stats,
     set_department_heads_as,
@@ -185,45 +184,6 @@ class TestPeriods(FrappeTestCase):
         self.assertEqual(
             td.comparison_bounds("quarter", start, end, "2026-12-31"),
             (date(2026, 7, 1), date(2026, 9, 30)),
-        )
-
-    def test_months_run_from_the_first_to_their_last_day(self):
-        for day, last in (
-            ("2026-02-14", date(2026, 2, 28)),
-            ("2028-02-14", date(2028, 2, 29)),
-            ("2026-09-30", date(2026, 9, 30)),
-            ("2026-10-01", date(2026, 10, 31)),
-        ):
-            start, end = td.period_bounds("month", day)
-            self.assertEqual((start.day, end), (1, last))
-
-    def test_weeks_are_clipped_to_their_month(self):
-        # October 2026 starts on a Thursday and ends on a Saturday
-        weeks = []
-        day = date(2026, 10, 1)
-        while day.month == 10:
-            weeks.append(td.period_bounds("week", day))
-            day = weeks[-1][1] + timedelta(days=1)
-        self.assertEqual(
-            [(s.day, e.day) for s, e in weeks],
-            [(1, 4), (5, 11), (12, 18), (19, 25), (26, 31)],
-        )
-        # the week of Monday 28 September is cut at the month's end
-        self.assertEqual(
-            td.period_bounds("week", "2026-09-29"),
-            (date(2026, 9, 28), date(2026, 9, 30)),
-        )
-
-    def test_a_clipped_week_is_compared_with_the_same_days(self):
-        start, end = td.period_bounds("week", "2026-10-03")
-        # Thursday 1 to Saturday 3 against the same weekdays a week earlier
-        self.assertEqual(
-            td.comparison_bounds("week", start, end, "2026-10-03"),
-            (date(2026, 9, 24), date(2026, 9, 26)),
-        )
-        self.assertEqual(
-            td.comparison_bounds("today", date(2026, 10, 1), date(2026, 10, 1)),
-            (date(2026, 9, 30), date(2026, 9, 30)),
         )
 
 
@@ -537,53 +497,6 @@ class TestTeamDashboard(FrappeTestCase):
         self.assertEqual(people[RAHUL]["self_made"], 4)
         self.assertEqual(data["summary"]["weight"], 7)
         self.assertEqual(data["champion"]["user"], ANU)
-
-    def test_a_closed_month_shows_the_champion_kept_when_it_closed(self):
-        # Anu did February's work, but Rahul was kept as February's champion:
-        # the stored record wins, so history never shifts with a new formula
-        for i in range(3):
-            make_done_task(
-                self.project, f"February close {i}", ANU, "2031-02-20", "2031-02-25"
-            )
-        make_team_champion("Month", "2031-02-01", "2031-02-28", RAHUL, 12.5)
-
-        february = call_team_dashboard(
-            "Administrator", TODAY, period="month", day="2031-02-15"
-        )
-        self.assertTrue(february["period"]["closed"])
-        self.assertEqual(february["period"]["start"], "2031-02-01")
-        self.assertEqual(february["champion"]["user"], RAHUL)
-        self.assertTrue(february["champion"]["stored"])
-        self.assertEqual(february["summary"]["tasks"], 3)
-
-        march = call_team_dashboard("Administrator", TODAY, period="month")
-        self.assertTrue(march["period"]["current"])
-        self.assertEqual(march["champion"]["user"], ANU)
-        self.assertEqual(march["previous_champion"]["user"], RAHUL)
-        self.assertEqual(march["previous_champion"]["score"], 12.5)
-        self.assertEqual(march["previous_champion"]["reasons"], ["Tasks done: 2"])
-
-    def test_a_future_day_is_refused(self):
-        self.assertRaises(
-            frappe.ValidationError,
-            call_team_dashboard,
-            "Administrator",
-            TODAY,
-            period="month",
-            day="2031-04-01",
-        )
-
-    def test_the_year_compares_its_months(self):
-        make_team_champion("Month", "2031-02-01", "2031-02-28", RAHUL, 12.5)
-        data = call_team_dashboard("Administrator", TODAY, period="year")
-        months = data["months"]
-        self.assertEqual(len(months), 12)
-        self.assertEqual(months[1]["champion"]["user"], RAHUL)
-        self.assertEqual((months[2]["tasks"], months[2]["champion"]["user"]), (4, ANU))
-        self.assertTrue(months[3]["future"])
-        anu = next(p for p in data["people"] if p["user"] == ANU)
-        self.assertEqual(anu["months"][2]["tasks"], 3)
-        self.assertIsNone(anu["months"][11])
 
 
 class TestDepartmentGroups(FrappeTestCase):

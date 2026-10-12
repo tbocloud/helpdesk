@@ -38,7 +38,7 @@ from helpdesk.api.content_board import user_full_names
 from helpdesk.api.doc import remove_assignments
 from helpdesk.api.follow_ups import check_admin
 from helpdesk.api.repeat_issues import get_repeat_issues as repeat_issues_view
-from helpdesk.api.team_dashboard import anchor_day, check_period, get_team_dashboard
+from helpdesk.api.team_dashboard import check_period, get_team_dashboard
 from helpdesk.api.ticket import assign_ticket_to_agent
 from helpdesk.api.work import (
     ON_HOLD,
@@ -1589,17 +1589,12 @@ def get_sla_summary() -> dict:
 @frappe.whitelist()
 @agent_only
 def get_scoreboard(
-    period: str = "week",
-    department: str | None = None,
-    group: str | None = None,
-    day: str | None = None,
+    period: str = "week", department: str | None = None, group: str | None = None
 ) -> dict:
     """The Scoreboard (helpdesk.api.team_dashboard), which every agent sees: the
     champion, the user's own line, the leaders and the departments with their
-    groups, for the whole team, a department or a department group. `day` picks a
-    past period (e.g. any day of last month); a closed period shows the champions
-    stored when it closed."""
-    board = get_team_dashboard(period, department, group, day)
+    groups, for the whole team, a department or a department group."""
+    board = get_team_dashboard(period, department, group)
     user = frappe.session.user
     people = board["people"]
     mine = next((p for p in people if p["user"] == user), None)
@@ -1612,10 +1607,7 @@ def get_scoreboard(
             "department": board["department"],
             "group": board["group"],
             "groups": board["access"]["groups"],
-            "closed": board["period"]["closed"],
             "champion": board["champion"],
-            "previous_champion": board["previous_champion"],
-            "months": board["months"],
             "me": (
                 {**_score_line(mine), "of": len(people), "breakdown": mine["breakdown"]}
                 if mine
@@ -1660,21 +1652,16 @@ def _score_line(p: dict) -> dict:
 
 @frappe.whitelist()
 @agent_only
-def get_competition(
-    period: str = "week", limit: int | str = 10, day: str | None = None
-) -> dict:
+def get_competition(period: str = "week", limit: int | str = 10) -> dict:
     """The Compete screen (helpdesk.competition): the user's rank and its change, the
     whole team's and each department's leaders, streaks, personal bests, badges, the
-    weekly challenge and how to move up. The boards are public, as on the web.
-    `day` picks a past period's boards (e.g. any day of last month)."""
+    weekly challenge and how to move up. The boards are public, as on the web."""
     check_period(period)
     limit = min(max(cint(limit) or 10, 1), MAX_BOARD_LIMIT)
-    today = getdate(nowdate())
-    anchor = anchor_day(day, today)
     tasks = _task_rows([i for i in get_my_work()["items"] if i["kind"] == "task"])
     return _one(
         competition.competition(
-            frappe.session.user, period, limit, today, tasks, day=anchor
+            frappe.session.user, period, limit, getdate(nowdate()), tasks
         )
     )
 

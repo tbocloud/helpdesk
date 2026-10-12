@@ -5,25 +5,25 @@ import { dayjs } from "frappe-ui";
 export const PERIODS = [
   {
     key: "today",
-    label: __("Day"),
+    label: __("Today"),
     previous: __("yesterday"),
     current: __("today"),
   },
   {
     key: "week",
-    label: __("Week"),
+    label: __("This week"),
     previous: __("last week"),
     current: __("this week"),
   },
   {
     key: "month",
-    label: __("Month"),
+    label: __("This month"),
     previous: __("last month"),
     current: __("this month"),
   },
   {
     key: "quarter",
-    label: __("Quarter"),
+    label: __("This quarter"),
     previous: __("last quarter"),
     current: __("this quarter"),
   },
@@ -35,7 +35,7 @@ export const PERIODS = [
   },
   {
     key: "year",
-    label: __("Year"),
+    label: __("This year"),
     previous: __("last year"),
     current: __("this year"),
   },
@@ -63,32 +63,7 @@ export interface Champion {
   score: number;
   reasons: string[];
   breakdown: BreakdownPart[];
-  /** Read from the record kept when the period closed (HD Team Champion). */
-  stored?: boolean;
-  /** The stored record's period. */
-  start?: string;
-  end?: string;
 }
-
-/** One month of the Year view (helpdesk.api.team_dashboard.year_months). */
-export interface MonthRow {
-  month: string;
-  end: string;
-  future: boolean;
-  tasks?: number;
-  weight?: number;
-  on_time_pct?: number | null;
-  quality?: number | null;
-  champion?: Champion | null;
-}
-
-/** A person's month in the Year view; null for a month to come. */
-export type PersonMonth = {
-  month: string;
-  score: number;
-  tasks: number;
-  weight: number;
-} | null;
 
 export interface Totals {
   tasks: number;
@@ -146,7 +121,6 @@ export interface PersonRow {
   posts_on_time: number;
   posts_late: number;
   posts_missed: number;
-  months: PersonMonth[] | null;
 }
 
 export interface ProjectRow {
@@ -201,12 +175,6 @@ export interface Dashboard {
     end: string;
     compare_start: string;
     compare_end: string;
-    /** Ended before today: champions are the stored ones, nothing is overdue. */
-    closed: boolean;
-    /** Today falls in it. */
-    current: boolean;
-    /** The first day the month picker offers. */
-    earliest: string;
   };
   access: {
     departments: string[];
@@ -218,9 +186,6 @@ export interface Dashboard {
   group: string | null;
   summary: Totals;
   champion: Champion | null;
-  /** The period before's champion, as stored when it closed. */
-  previous_champion: Champion | null;
-  months: MonthRow[] | null;
   departments: DepartmentRow[];
   people: PersonRow[];
   projects: ProjectRow[];
@@ -372,58 +337,6 @@ export function hoursText(value: number) {
 
 export function departmentLabel(department: string | null) {
   return department || __("No department");
-}
-
-/** Which week of its month a week clipped to the month is: 1 for the one with the 1st. */
-export function weekOfMonth(start: string) {
-  const day = dayjs(start);
-  const first = day.startOf("month");
-  // Monday is 0: the first week ends on the month's first Sunday
-  const firstSunday = first.date() + ((7 - first.day()) % 7);
-  return day.date() <= firstSunday
-    ? 1
-    : 2 + Math.floor((day.date() - firstSunday - 1) / 7);
-}
-
-/** The period's name: "Today", "Week 2 of October 2026", "October 2026", "Q4 2026", … */
-export function periodTitle(
-  period: PeriodKey,
-  start: string,
-  end: string,
-  current = false
-) {
-  const from = dayjs(start);
-  if (period === "today")
-    return current ? __("Today") : from.format("ddd D MMM YYYY");
-  if (period === "week")
-    return __(
-      "Week {0} of {1}",
-      String(weekOfMonth(start)),
-      from.format("MMMM YYYY")
-    );
-  if (period === "month") return from.format("MMMM YYYY");
-  if (period === "quarter")
-    return __("Q{0} {1}", String(Math.floor(from.month() / 3) + 1), from.format("YYYY"));
-  if (period === "half")
-    return __("H{0} {1}", from.month() < 6 ? "1" : "2", from.format("YYYY"));
-  return dayjs(end).format("YYYY");
-}
-
-/** The months the picker offers, newest first, from `earliest` to `today`. */
-export function monthOptions(earliest: string, today: string) {
-  const options: { label: string; value: string }[] = [];
-  let month = dayjs(today).startOf("month");
-  const first = dayjs(earliest).startOf("month");
-  while (!month.isBefore(first)) {
-    options.push({ label: month.format("MMMM YYYY"), value: month.format("YYYY-MM") });
-    month = month.subtract(1, "month");
-  }
-  return options;
-}
-
-/** "×1.04", or a dash when nothing was finished. */
-export function qualityText(value: number | null | undefined) {
-  return value == null ? "—" : `×${Math.round(value * 100) / 100}`;
 }
 
 /** "31" or "4.5": weighted work never shows a trailing ".0". */

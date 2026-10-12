@@ -34,13 +34,9 @@
 
     <p v-else-if="!champion" class="text-p-sm text-ink-gray-7">
       {{
-        closed
-          ? __(
-              "Nobody was champion when this period closed: nobody had finished enough work."
-            )
-          : __(
-              "No champion yet. Someone becomes champion once they've finished enough work in the period."
-            )
+        __(
+          "No champion yet. Someone becomes champion once they've finished enough work in the period."
+        )
       }}
     </p>
 
@@ -115,8 +111,6 @@ defineProps<{
   /** "This week" */
   period?: string;
   champion: Champion | null;
-  /** The period has ended: the champion is the one kept when it closed. */
-  closed?: boolean;
   loading?: boolean;
 }>();
 
