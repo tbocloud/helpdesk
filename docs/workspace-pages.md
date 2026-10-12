@@ -369,8 +369,9 @@ team member's work, for leads and managers of their projects (the Team page link
   or pause it, and links back to your own. Rows offer only Approve and Plan, and the detail
   dialog only the lead's and manager's steps.
 - **Task details** (`desk/src/pages/tasky/components/TaskDetailDialog.vue`): the one task panel,
-  shared with My Tasks (`/my-tasks`). Hold and dependency notices, status, priority, project,
-  phase, assigned to, assigned by, due, estimate, description, pull requests and meetings. Its
+  shared with My Tasks (`/my-tasks`) and the Content Calendar's role boxes. Hold and dependency notices, status, priority, project,
+  phase, assigned to, assigned by, due, estimate, timer (the time tracked when it opened,
+  running or paused, from `taskTimer`), description, pull requests and meetings. Its
   actions follow `mine`: the assignee may edit, complete, hold or resume, ask for help and hand
   over; the project's manager, lead or coordinator may edit, plan, approve and send back, and also hold, resume and hand it over. "Move to
   project…" shows when the task says `can_move` (see [Moving a task](#moving-a-task-to-another-project)).

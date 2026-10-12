@@ -493,9 +493,11 @@
             @open="openPost"
             @add="openAdd"
             @action="openAction"
+            @changed="refresh"
           />
           <ContentSheet
             v-else
+            :month="rangeKey"
             :period="period"
             :posts="visiblePosts"
             :loading="monthPosts.loading"
