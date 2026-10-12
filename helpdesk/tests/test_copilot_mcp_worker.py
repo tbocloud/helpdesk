@@ -34,6 +34,7 @@ WORKER_TOOLS = {
     "get_run_context",
     "post_event",
     "submit_investigation",
+    "submit_change",
     "customer_erp_read",
 }
 

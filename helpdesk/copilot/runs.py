@@ -266,11 +266,21 @@ def lease_minutes() -> int:
     return copilot_settings.get_settings().lease_minutes or 5
 
 
+# a fix job's lease outlives Preparing Fix when the pull request is followed before the worker reports
+FIX_LEASE_STATES = ("Preparing Fix", "Awaiting Approval", "Approved")
+
+
+def fixing(run) -> bool:
+    """Whether the run's lease is a fix job's (Copilot writes the fix) rather than the investigation's."""
+    return run.get("fix_status") == "Working" and run.state in FIX_LEASE_STATES
+
+
 def claim(worker_id: str, capabilities: str = "", run: str | None = None):
     """Hands the oldest queued run (or `run`, when it is queued) to a worker for the lease time.
 
     (None, None) when there is nothing to hand out. Naming the run lets an
-    evaluation work on exactly the runs it started.
+    evaluation work on exactly the runs it started. A worker that can fix
+    (`fix` among its capabilities) gets a fix job when no investigation waits.
     """
     filters = {"state": "Queued"}
     if run:
@@ -311,6 +321,53 @@ def claim(worker_id: str, capabilities: str = "", run: str | None = None):
             WORKER,
         )
         return doc, token
+    if "fix" in re.split(r"[\s,]+", (capabilities or "").lower()):
+        return claim_fix(worker_id, run)
+    return None, None
+
+
+def claim_fix(worker_id: str, run: str | None = None):
+    """Hands the oldest queued fix job (or `run`'s) to a worker; the run stays where it is, with a lease."""
+    filters = {"state": "Preparing Fix", "fix_requested": 1, "fix_status": "Queued"}
+    if run:
+        filters["name"] = run
+    for name in frappe.get_all(
+        "HDS Copilot Run",
+        filters=filters,
+        order_by="modified asc",
+        limit=5,
+        pluck="name",
+    ):
+        if (
+            frappe.db.get_value("HDS Copilot Run", name, "fix_status", for_update=True)
+            != "Queued"
+        ):
+            continue  # another worker got it first
+        doc = frappe.get_doc("HDS Copilot Run", name)
+        token = frappe.generate_hash(length=32)
+        doc.db_set(
+            {
+                "fix_status": "Working",
+                "fix_attempts": (doc.fix_attempts or 0) + 1,
+                "worker_id": worker_id,
+                "worker_user": frappe.session.user,
+                "lease_token_hash": _hash(token),
+                "lease_expires": add_to_date(now_datetime(), minutes=lease_minutes()),
+            },
+            update_modified=False,
+        )
+        add_event(
+            doc,
+            "fix_lease",
+            {
+                "worker_id": worker_id,
+                "attempt": doc.fix_attempts,
+                "expires": str(doc.lease_expires),
+            },
+            WORKER,
+        )
+        publish_run(doc)
+        return doc, token
     return None, None
 
 
@@ -322,7 +379,7 @@ def check_lease(run, token: str):
             _("This lease is not valid for run {0}").format(doc.name),
             frappe.PermissionError,
         )
-    if doc.state != "Investigating":
+    if doc.state != "Investigating" and not fixing(doc):
         frappe.throw(
             _("Run {0} is {1}; the lease has ended").format(doc.name, doc.state),
             frappe.PermissionError,
@@ -391,6 +448,27 @@ def expire_stale_leases():
                 worker_id=None,
             )
         frappe.db.commit()  # one run at a time; a failure on the next must not undo this - nosemgrep
+    _expire_fix_leases()
+
+
+def _expire_fix_leases():
+    """A fix job whose worker stopped reporting is tried again, or handed to the developer."""
+    from helpdesk.copilot import fixes
+
+    for name in frappe.get_all(
+        "HDS Copilot Run",
+        filters={"fix_status": "Working", "lease_expires": ["<", now_datetime()]},
+        pluck="name",
+    ):
+        frappe.db.get_value("HDS Copilot Run", name, "fix_status", for_update=True)
+        doc = frappe.get_doc("HDS Copilot Run", name)
+        if (
+            doc.fix_status != "Working"
+            or get_datetime(doc.lease_expires) >= now_datetime()
+        ):
+            continue  # a heartbeat or a report arrived meanwhile
+        fixes.fix_lease_lost(doc)
+        frappe.db.commit()  # one run at a time - nosemgrep
 
 
 def tell_people(run, subject: str):
@@ -457,10 +535,23 @@ def run_context(run) -> dict:
         if run.customer
         else None
     )
+    from helpdesk.copilot import fixes
+
     return {
         "run": run.name,
-        "kind": run.kind,
+        "kind": "fix" if fixing(run) else run.kind,
         "shadow": bool(run.shadow),
+        # what the investigation found, for the fix job (and for a follow-up run)
+        "diagnosis": {
+            "root_cause_category": run.root_cause_category,
+            "confidence": run.confidence,
+            "summary": run.summary,
+            "evidence": frappe.parse_json(run.evidence or "[]"),
+            "proposal": frappe.parse_json(run.proposal or "{}"),
+        }
+        if run.root_cause_category
+        else None,
+        "fix": fixes.fix_context(run) if fixing(run) else None,
         # read this app at this commit instead of the deployed code (evaluation runs)
         "base_app": run.base_app,
         "base_commit": run.base_commit,

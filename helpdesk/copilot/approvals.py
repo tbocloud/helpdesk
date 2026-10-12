@@ -61,8 +61,16 @@ def approvers() -> list[str]:
     return [row.user for row in _approver_rows()]
 
 
-def authors(run) -> set[str]:
-    """The people who made the fix (the fix task's assignees): they never approve it."""
+def authors(run, approval=None) -> set[str]:
+    """The people who made the fix (the fix task's assignees): they never approve it.
+
+    When Copilot alone made it (the App opened the pull request and wrote every
+    commit), nobody on the task wrote it, so the customer's developer may approve.
+    """
+    if approval and (frappe.parse_json(approval.payload or "{}") or {}).get(
+        "copilot_only"
+    ):
+        return set()
     if not run.task:
         return set()
     return set(
@@ -73,7 +81,7 @@ def authors(run) -> set[str]:
 def may_decide(approval, user: str) -> str | None:
     """Why `user` may not decide `approval`, or None when they may."""
     run = frappe.get_doc("HDS Copilot Run", approval.run)
-    if user in authors(run):
+    if user in authors(run, approval):
         return _("You made this fix, so someone else must approve it.")
     if approval.sensitive and user not in seniors():
         return _(
@@ -84,9 +92,14 @@ def may_decide(approval, user: str) -> str | None:
     return None
 
 
-def pick_approver(run, sensitive: bool, exclude: set[str] | None = None) -> str | None:
+def pick_approver(
+    run,
+    sensitive: bool,
+    exclude: set[str] | None = None,
+    copilot_only: bool = False,
+) -> str | None:
     """The customer's developer when they may; else the least loaded approver; else nobody."""
-    excluded = authors(run) | (exclude or set())
+    excluded = (set() if copilot_only else authors(run)) | (exclude or set())
     allowed = seniors() if sensitive else list(dict.fromkeys(approvers() + seniors()))
     developer = (
         frappe.db.get_value("HD Customer", run.customer, "custom_assigned_developer")
@@ -145,8 +158,12 @@ def open_approval(
     files: list[dict] | None,
     risk: dict,
     checks: dict | None,
+    extra: dict | None = None,
 ):
-    """A Pending approval for the pull request's head commit, assigned and announced."""
+    """A Pending approval for the pull request's head commit, assigned and announced.
+
+    `extra` joins the payload: whether Copilot alone made the change, and what it tested.
+    """
     payload = {
         "repo": pull.get("repo"),
         "number": pull.get("number"),
@@ -166,8 +183,11 @@ def open_approval(
         ],
         "risk": risk,
         "checks": checks or {},
+        **(extra or {}),
     }
-    approver = pick_approver(run, bool(risk.get("sensitive")))
+    approver = pick_approver(
+        run, bool(risk.get("sensitive")), copilot_only=bool(payload.get("copilot_only"))
+    )
     doc = frappe.get_doc(
         {
             "doctype": APPROVAL,
@@ -361,7 +381,16 @@ def remind_and_escalate():
         if waited >= escalate and not approval.escalated_at:
             run = frappe.get_doc("HDS Copilot Run", approval.run)
             exclude = {approval.assigned_to} if approval.assigned_to else set()
-            successor = pick_approver(run, True, exclude=exclude)  # a senior takes over
+            successor = pick_approver(  # a senior takes over
+                run,
+                True,
+                exclude=exclude,
+                copilot_only=bool(
+                    (frappe.parse_json(approval.payload or "{}") or {}).get(
+                        "copilot_only"
+                    )
+                ),
+            )
             approval.db_set(
                 {"assigned_to": successor, "escalated_at": now}, update_modified=False
             )

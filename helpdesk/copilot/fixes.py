@@ -26,6 +26,8 @@ from helpdesk.copilot.github import GitHubError
 FIX_STATES = ("Preparing Fix", "Awaiting Approval", "Approved")
 FOLLOWED = FIX_STATES + ("Merged",)
 FIX_TASK_PREFIX = "Copilot fix: "
+DEFAULT_COMMIT_EMAIL = "copilot@teambackoffice.com"
+EVIDENCE_RESULTS = ("pass", "fail", "not_run")
 DEFAULT_HOLD_LABEL = "no-auto-merge"
 
 
@@ -181,6 +183,275 @@ def _task_description(run) -> str:
             )
         )
     return "".join(parts)
+
+
+# --- Copilot's own fix (Phase 1c-2) ---------------------------------------------------------
+
+
+def commit_email() -> str:
+    return (
+        copilot_settings.get_settings().get("copilot_commit_email")
+        or DEFAULT_COMMIT_EMAIL
+    ).strip()
+
+
+def copilot_branch(run) -> str:
+    """The branch Copilot pushes a fix to: its own, never one a person or a site uses."""
+    number = int(run.name.rsplit("-", 1)[-1])
+    return f"copilot/{run.task}-r{number}-a{run.fix_attempts or 1}"
+
+
+def site_repositories(run) -> list[str]:
+    """`owner/name` of every app repository on the run's site card."""
+    if not run.registry:
+        return []
+    return [
+        name
+        for name in (
+            _repo_name(repository)
+            for repository in frappe.get_all(
+                "HDS Site App",
+                filters={"parent": run.registry, "parenttype": "HDS Site Registry"},
+                pluck="repository",
+            )
+        )
+        if "/" in name
+    ]
+
+
+def fix_context(run) -> dict:
+    """What the worker needs beyond the run's context to write the fix."""
+    settings = copilot_settings.get_settings()
+    return {
+        "task": run.task,
+        "closes": f"Closes {run.task}",
+        "branch": copilot_branch(run),
+        "attempt": run.fix_attempts or 1,
+        "max_usd": settings.get("max_fix_usd") or 0,
+        "commit_email": commit_email(),
+        "repositories": site_repositories(run),
+    }
+
+
+def open_pull_request(run) -> bool:
+    return bool(
+        run.pull_request
+        and frappe.db.get_value("HD Pull Request", run.pull_request, "state")
+        in ("Open", "Draft")
+    )
+
+
+def request_copilot_fix(run, user: str | None = None):
+    """Queues a fix job: a worker reproduces the bug on a sandbox copy, fixes it and opens the pull request."""
+    from helpdesk.copilot import customer
+
+    run = frappe.get_doc("HDS Copilot Run", run.name)
+    if run.state != "Preparing Fix":
+        frappe.throw(
+            _("Copilot fixes a run that is preparing a fix (this one is {0}).").format(
+                run.state
+            )
+        )
+    if run.fix_status in ("Queued", "Working"):
+        return run
+    if open_pull_request(run):
+        frappe.throw(
+            _("A pull request is already open for this fix; review that one instead.")
+        )
+    limit = copilot_settings.get_settings().get("max_fix_attempts") or 2
+    if (run.fix_attempts or 0) >= limit:
+        frappe.throw(
+            _("Copilot has tried {0} times; a developer takes it from here.").format(
+                limit
+            )
+        )
+    actor = runs.AGENT if user else runs.SYSTEM
+    if not run.task or frappe.db.get_value("Task", run.task, "status") in (
+        "Completed",
+        "Cancelled",
+    ):
+        create_fix_task(run, actor)
+    run = frappe.get_doc("HDS Copilot Run", run.name)
+    run.db_set(
+        {"fix_requested": 1, "fix_status": "Queued", "fix_requested_by": user},
+        update_modified=False,
+    )
+    runs.add_event(run, "fix_requested", {"by": user or "settings"}, actor)
+    customer.comment(
+        run.ticket,
+        escape_html(
+            _(
+                "Copilot will try to fix this on a sandbox copy of the site, then open the pull request for the one approval."
+            )
+        ),
+    )
+    runs.publish_run(run)
+    return run
+
+
+def _evidence_row(row: dict) -> dict:
+    result = str(row.get("result") or "").strip().lower()
+    return {
+        "check": str(row.get("check") or "")[:140],
+        "result": result if result in EVIDENCE_RESULTS else "not_run",
+        "detail": str(row.get("detail") or "")[:500],
+    }
+
+
+def on_change(run, change: dict):
+    """The worker opened its pull request: keep what it tested, end the lease, follow the pull request at once."""
+    from helpdesk.copilot import customer
+
+    repository = _repo_name(change.get("repository"))
+    number = int(change.get("number") or 0)
+    head = str(change.get("head_sha") or "").strip()
+    if not (repository and number and head):
+        frappe.throw(
+            _(
+                "A change needs the repository, the pull request number and its head commit."
+            )
+        )
+    if repository not in site_repositories(run):
+        frappe.throw(
+            _("{0} is not one of this site's repositories.").format(repository),
+            frappe.PermissionError,
+        )
+    kept = {
+        "repository": repository,
+        "number": number,
+        "head_sha": head,
+        "branch": str(change.get("branch") or "")[:255],
+        "summary": str(change.get("summary") or "")[:4000],
+        "evidence": [
+            _evidence_row(row)
+            for row in (change.get("evidence") or [])[:30]
+            if isinstance(row, dict)
+        ],
+        "tested_on": str(change.get("tested_on") or "")[:200],
+        "people_checks": [
+            str(item)[:300] for item in (change.get("people_checks") or [])[:10]
+        ],
+        "risk_notes": str(change.get("risk_notes") or "")[:2000],
+        "cost": change.get("cost") if isinstance(change.get("cost"), dict) else {},
+    }
+    run.db_set(
+        {
+            "change": json.dumps(kept, indent=1),
+            "fix_status": "Opened",
+            "lease_token_hash": None,
+            "lease_expires": None,
+        },
+        update_modified=False,
+    )
+    runs.add_event(
+        run,
+        "change_submitted",
+        {
+            "repository": repository,
+            "number": number,
+            "head_sha": head,
+            "checks": [[row["check"], row["result"]] for row in kept["evidence"]],
+        },
+        runs.WORKER,
+    )
+    customer.comment(
+        run.ticket,
+        '{0} <a href="https://github.com/{1}/pull/{2}">{1}#{2}</a>'.format(
+            escape_html(_("Copilot opened its fix:")), escape_html(repository), number
+        ),
+    )
+    if sync_on():
+        with contextlib.suppress(
+            GitHubError
+        ):  # else the webhook or the refresh follows it
+            replay(repository, github.get_pull(repository, number))
+    return frappe.get_doc("HDS Copilot Run", run.name)
+
+
+def push_key(run, repository: str) -> dict:
+    """The worker's one-hour key to push its branch to one of the site's repositories."""
+    from helpdesk.copilot import github_app
+
+    repository = _repo_name(repository)
+    if repository not in site_repositories(run):
+        frappe.throw(
+            _("{0} is not one of this site's repositories.").format(repository),
+            frappe.PermissionError,
+        )
+    key = github_app.push_token(repository)
+    runs.add_event(
+        run,
+        "push_key",
+        {"repository": repository, "expires_at": key.get("expires_at")},
+        runs.SYSTEM,
+    )
+    return {"repository": repository, **key}
+
+
+def fix_failed(run, reason: str, actor: str = runs.WORKER):
+    """Copilot could not fix it: the developer takes over, with what Copilot tried."""
+    from helpdesk.copilot import customer
+    from helpdesk.work_reminders import notify_users
+
+    reason = (reason or "").strip()[:1000] or _("no reason given")
+    run.db_set(
+        {
+            "fix_status": "Failed",
+            "fix_requested": 0,
+            "lease_token_hash": None,
+            "lease_expires": None,
+        },
+        update_modified=False,
+    )
+    runs.add_event(run, "fix_failed", {"reason": reason}, actor)
+    text = _("Copilot could not fix it: {0}").format(reason)
+    if run.task:
+        frappe.get_doc("Task", run.task).add_comment("Comment", escape_html(text))
+        notify_users(
+            sorted(approvals.authors(run)),
+            "Task",
+            run.task,
+            _("Copilot could not fix ticket {0}; over to you").format(run.ticket),
+            once=False,
+        )
+    customer.comment(run.ticket, escape_html(text))
+    runs.publish_run(run)
+
+
+def fix_lease_lost(run):
+    """The worker stopped reporting mid-fix: queued again while attempts are left, else handed over."""
+    limit = copilot_settings.get_settings().get("max_fix_attempts") or 2
+    if (run.fix_attempts or 0) < limit:
+        run.db_set(
+            {
+                "fix_status": "Queued",
+                "lease_token_hash": None,
+                "lease_expires": None,
+                "worker_id": None,
+            },
+            update_modified=False,
+        )
+        runs.add_event(
+            run, "fix_lease_expired", {"attempt": run.fix_attempts}, runs.SYSTEM
+        )
+        return
+    fix_failed(
+        run,
+        _("the worker stopped reporting ({0} attempts)").format(run.fix_attempts),
+        runs.SYSTEM,
+    )
+
+
+def _change_for(run, pull: dict) -> dict | None:
+    """What Copilot reported testing, when this pull request is the one it opened."""
+    change = frappe.parse_json(run.get("change") or "{}") or {}
+    if (
+        change
+        and change.get("repository") == (pull.get("repo") or "").lower()
+        and int(change.get("number") or 0) == int(pull.get("number") or 0)
+    ):
+        return change
+    return None
 
 
 # --- following the pull request -----------------------------------------------------------
@@ -343,7 +614,23 @@ def open_for(run, row_name: str, pull: dict):
     wrong = wrong_branch(run, pull["repo"], pull["base_branch"])
     if wrong:
         found["reasons"] = [*(found.get("reasons") or []), wrong]
-    approval = approvals.open_approval(run, row_name, pull, files, found, checks)
+    extra = {"copilot_only": False}
+    change = _change_for(run, pull)
+    if change:
+        extra["change"] = {
+            key: change.get(key)
+            for key in (
+                "summary",
+                "evidence",
+                "tested_on",
+                "people_checks",
+                "risk_notes",
+            )
+        }
+        extra["change"]["tested_commit"] = change.get("head_sha")
+    with contextlib.suppress(GitHubError):
+        extra["copilot_only"] = github.copilot_only(pull["repo"], pull, commit_email())
+    approval = approvals.open_approval(run, row_name, pull, files, found, checks, extra)
     if run.state != "Awaiting Approval":
         runs.transition(
             run,

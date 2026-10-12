@@ -58,6 +58,11 @@ def submit_investigation(
     questions: list | None = None,
     cost: dict | None = None,
 ) -> dict:
+    if runs.fixing(_run(caller)):
+        frappe.throw(
+            _("This is a fix job; report the change with submit_change."),
+            frappe.ValidationError,
+        )
     doc = router.route(
         caller.run,
         {
@@ -74,6 +79,43 @@ def submit_investigation(
     )
     # the lease ends with the investigation: this token stops working now
     return {"run": doc.name, "state": doc.state, "root_cause": doc.root_cause_category}
+
+
+def submit_change(
+    caller,
+    repository: str,
+    number: int,
+    head_sha: str,
+    branch: str = "",
+    summary: str = "",
+    evidence: list | None = None,
+    tested_on: str = "",
+    people_checks: list | None = None,
+    risk_notes: str = "",
+    cost: dict | None = None,
+) -> dict:
+    from helpdesk.copilot import fixes
+
+    run = _run(caller)
+    if not runs.fixing(run):
+        frappe.throw(_("Only a fix job reports a change."), frappe.ValidationError)
+    doc = fixes.on_change(
+        run,
+        {
+            "repository": repository,
+            "number": number,
+            "head_sha": head_sha,
+            "branch": branch,
+            "summary": summary,
+            "evidence": evidence or [],
+            "tested_on": tested_on,
+            "people_checks": people_checks or [],
+            "risk_notes": risk_notes,
+            "cost": cost or {},
+        },
+    )
+    # the lease ends with the change: this token stops working now
+    return {"run": doc.name, "state": doc.state, "fix": doc.fix_status}
 
 
 def customer_erp_read(caller, tool: str, arguments: dict | None = None) -> dict:
@@ -147,6 +189,26 @@ register_tool(
         "cost": {"type": "object"},
     },
     required=["root_cause_category", "confidence"],
+    read_only=False,
+)
+register_tool(
+    "submit_change",
+    kind=WORKER_TOOL,
+    description="Report the pull request a fix job opened and what it tested; ends this run's fix job.",
+    handler=submit_change,
+    properties={
+        "repository": {"type": "string", "maxLength": 200},
+        "number": {"type": "integer", "minimum": 1},
+        "head_sha": {"type": "string", "maxLength": 64},
+        "branch": {"type": "string", "maxLength": 255},
+        "summary": {"type": "string", "maxLength": 4000},
+        "evidence": {"type": "array"},
+        "tested_on": {"type": "string", "maxLength": 200},
+        "people_checks": {"type": "array"},
+        "risk_notes": {"type": "string", "maxLength": 2000},
+        "cost": {"type": "object"},
+    },
+    required=["repository", "number", "head_sha"],
     read_only=False,
 )
 register_tool(

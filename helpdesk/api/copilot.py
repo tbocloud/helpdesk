@@ -11,6 +11,7 @@ from frappe.utils import get_fullname, now_datetime, sbool
 
 from helpdesk.api.customization import is_ticket_customer
 from helpdesk.copilot import customer, router, runs
+from helpdesk.copilot import settings as copilot_settings
 from helpdesk.utils import agent_only, is_agent
 
 VERDICTS = ("Right", "Partly", "Wrong")
@@ -116,6 +117,7 @@ def _fix_card(run) -> dict | None:
     if run.state not in fixes.FOLLOWED + ("Resolved",) and not run.task:
         return None
     user = frappe.session.user
+    attempts = copilot_settings.get_settings().get("max_fix_attempts") or 2
     task = (
         frappe.db.get_value(
             "Task", run.task, ["name", "subject", "status"], as_dict=True
@@ -174,6 +176,13 @@ def _fix_card(run) -> dict | None:
             "why_not_me": approvals.may_decide(approval, user)
             if approval.status == "Pending"
             else None,
+            # what Copilot tested, when it made the fix, and on which commit
+            "change": payload.get("change"),
+            "copilot_only": bool(payload.get("copilot_only")),
+            "evidence_stale": bool(
+                payload.get("change")
+                and (payload["change"].get("tested_commit") or "") != approval.head_sha
+            ),
         }
     return {
         "task": task,
@@ -187,6 +196,16 @@ def _fix_card(run) -> dict | None:
         ),
         "can_refresh": run.state in fixes.FIX_STATES and bool(run.task),
         "can_mark_deployed": run.state == "Merged",
+        "copilot": {
+            "requested": bool(run.fix_requested),
+            "status": run.fix_status or None,
+            "attempts": run.fix_attempts or 0,
+            "max_attempts": attempts,
+        },
+        "can_request_fix": run.state == "Preparing Fix"
+        and run.fix_status not in ("Queued", "Working")
+        and not fixes.open_pull_request(run)
+        and (run.fix_attempts or 0) < attempts,
         "merge_commit": run.merge_commit,
         "deployed_at": str(run.deployed_at)[:16] if run.deployed_at else None,
     }
@@ -207,6 +226,17 @@ def create_fix_task(ticket: str | int) -> dict:
 
     frappe.has_permission("HD Ticket", "write", str(ticket), throw=True)
     fixes.create_fix_task(_run_of(ticket), actor=runs.AGENT)
+    return get_run(ticket)
+
+
+@frappe.whitelist(methods=["POST"])
+@agent_only
+def request_copilot_fix(ticket: str | int) -> dict:
+    """Ask Copilot to fix the diagnosed bug on a sandbox copy of the site and open the pull request."""
+    from helpdesk.copilot import fixes
+
+    frappe.has_permission("HD Ticket", "write", str(ticket), throw=True)
+    fixes.request_copilot_fix(_run_of(ticket), frappe.session.user)
     return get_run(ticket)
 
 

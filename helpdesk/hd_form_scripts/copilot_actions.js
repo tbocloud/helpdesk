@@ -227,6 +227,25 @@ function showCopilotRunDialog(info, doc, call, toast, $dialog) {
       },
     });
   }
+  if (fix.can_request_fix) {
+    actions.push({
+      label: "Let Copilot fix it",
+      variant: "subtle",
+      onClick: async function (_ref) {
+        try {
+          await call("helpdesk.api.copilot.request_copilot_fix", {
+            ticket: doc.name,
+          });
+          toast.success(
+            "Copilot will try to fix it on a sandbox copy of the site."
+          );
+          _ref.close();
+        } catch (error) {
+          toast.error(copilotError(error, "Failed to ask Copilot to fix it"));
+        }
+      },
+    });
+  }
   if (fix.approval && fix.approval.status === "Pending") {
     actions.push({
       label: "Review fix",
@@ -420,6 +439,24 @@ function copilotFixSummary(fix) {
         (pr.ci_state && pr.ci_state !== "None" ? " · CI " + pr.ci_state : ""),
     ]);
   }
+  var c = fix.copilot;
+  if (c && c.status) {
+    var said = {
+      Queued: "waiting for a worker",
+      Working: "working on it",
+      Opened: "opened its pull request",
+      Failed: "could not fix it; over to the developer",
+    };
+    rows.push([
+      "Copilot's fix",
+      (said[c.status] || c.status) +
+        " (attempt " +
+        Math.max(c.attempts, 1) +
+        " of " +
+        c.max_attempts +
+        ")",
+    ]);
+  }
   var a = fix.approval;
   if (a) {
     rows.push([
@@ -465,6 +502,58 @@ function copilotFixSummary(fix) {
       '<div style="color:#b91c1c">Cannot merge yet: ' +
       copilotEscape(a.merge_error) +
       "</div>";
+  }
+  return html + "</div>";
+}
+
+// What Copilot tested on its sandbox copy, when it made the fix itself.
+function copilotTestedByCopilot(a) {
+  var change = a.change;
+  if (!change || !change.evidence || !change.evidence.length) {
+    return "";
+  }
+  var marks = {
+    pass: ["✓", "#047857"],
+    fail: ["✗", "#b91c1c"],
+    not_run: ["–", "#6b7280"],
+  };
+  var html =
+    '<div style="margin-top:8px"><b>' +
+    copilotEscape(
+      "Tested by Copilot" + (change.tested_on ? " on " + change.tested_on : "")
+    ) +
+    "</b>";
+  if (a.evidence_stale) {
+    html +=
+      '<div style="color:#b45309">These results are for an earlier commit: the pull request changed after Copilot tested it.</div>';
+  }
+  html += '<table style="width:100%;font-size:13px;margin-top:4px">';
+  for (var i = 0; i < change.evidence.length; i++) {
+    var row = change.evidence[i];
+    var mark = marks[row.result] || marks.not_run;
+    html +=
+      '<tr><td style="color:' +
+      mark[1] +
+      ';padding:2px 6px 2px 0;width:1em">' +
+      mark[0] +
+      '</td><td style="padding:2px 8px 2px 0;white-space:nowrap">' +
+      copilotEscape(row.check) +
+      '</td><td style="color:#6b7280">' +
+      copilotEscape(row.detail) +
+      "</td></tr>";
+  }
+  html += "</table>";
+  if (change.people_checks && change.people_checks.length) {
+    html +=
+      '<div style="margin-top:4px"><b>Worth checking by a person:</b><ul style="margin:2px 0 0 16px">';
+    for (var j = 0; j < change.people_checks.length; j++) {
+      html += "<li>" + copilotEscape(change.people_checks[j]) + "</li>";
+    }
+    html += "</ul></div>";
+  }
+  if (a.copilot_only) {
+    html +=
+      '<div style="margin-top:4px;color:#6b7280">Copilot wrote every commit, so the customer\'s developer may approve it.</div>';
   }
   return html + "</div>";
 }
@@ -563,6 +652,7 @@ function showCopilotFixReview(info, doc, call, toast, $dialog) {
     '<div style="margin-top:8px"><b>Checks:</b> ' +
     copilotEscape(checkText || "not read yet") +
     ' <span style="color:#6b7280">(the hub merges only when they pass)</span></div>';
+  html += copilotTestedByCopilot(a);
   if (a.why_not_me) {
     html +=
       '<div style="margin-top:8px;color:#b91c1c">' +

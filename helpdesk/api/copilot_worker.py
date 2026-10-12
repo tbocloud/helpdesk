@@ -13,7 +13,7 @@ import json
 import frappe
 from frappe import _
 
-from helpdesk.copilot import router, runs
+from helpdesk.copilot import fixes, router, runs
 
 WORKER_ROLE = "Copilot Worker"
 
@@ -65,6 +65,16 @@ def claim_job(
 
 
 @frappe.whitelist(methods=["POST"])
+def repo_token(run: str, lease_token: str, repository: str) -> dict:
+    """A one-hour key to clone and push the fix's branch to one of the run's site repositories."""
+    worker_only()
+    doc = runs.check_lease(run, lease_token)
+    if not runs.fixing(doc):
+        frappe.throw(_("Only a fix job gets a push key."), frappe.PermissionError)
+    return fixes.push_key(doc, repository)
+
+
+@frappe.whitelist(methods=["POST"])
 def heartbeat(run: str, lease_token: str, stage: str = "") -> dict:
     """Keeps the lease; the answer says `continue` or `cancel`."""
     worker_only()
@@ -102,6 +112,13 @@ def submit_result(run: str, lease_token: str, result: dict | str) -> dict:
     doc = runs.check_lease(run, lease_token)
     result = _parse(result, "result") or {}
     kind = result.get("kind")
+    if runs.fixing(doc):
+        # a fix job ends with submit_change (the MCP tool), or with this failure
+        if kind != "failure":
+            frappe.throw(_("A fix job reports its change with submit_change."))
+        fixes.fix_failed(doc, str(result.get("reason") or ""))
+        doc.reload()
+        return {"run": doc.name, "state": doc.state, "fix": doc.fix_status}
     if kind == "investigation":
         doc = router.route(doc, result)
     elif kind == "failure":

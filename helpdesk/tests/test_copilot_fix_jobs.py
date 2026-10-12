@@ -1,0 +1,232 @@
+# Copyright (c) 2026, Quark Cyber Systems FZC and contributors
+# For license information, please see license.txt
+
+"""Copilot's own fix (Phase 1c-2): asked for, claimed with a lease, pushed with a one-repository key, reported, handed over when it fails."""
+
+import json
+from unittest.mock import patch
+
+import frappe
+from frappe.utils import add_to_date, now_datetime
+
+from helpdesk.api import copilot as api
+from helpdesk.api import copilot_worker as worker_api
+from helpdesk.copilot import approvals, fixes, runs
+from helpdesk.copilot.mcp import tools_worker
+from helpdesk.copilot.mcp.auth import WORKER, Caller
+from helpdesk.test_utils import make_copilot_settings, make_site_registry
+from helpdesk.tests.test_copilot_fix_flow import NEW_SHA, REPO, SHA, FixCase
+
+
+class FixJobCase(FixCase):
+    def setUp(self):
+        super().setUp()
+        # queued runs elsewhere on the site would be handed out first
+        frappe.db.set_value(
+            "HDS Copilot Run", {"state": "Queued"}, "state", "Cancelled"
+        )
+        make_site_registry(
+            self.customer,
+            apps=[
+                {
+                    "app": "demo_app",
+                    "repository": f"https://github.com/{REPO}.git",
+                    "branch": "main",
+                    "deployed_commit": SHA,
+                }
+            ],
+        )
+        self.diagnosed()
+
+    def claim(self, capabilities: str = "fix") -> dict:
+        return worker_api.claim_job("fix-worker", 1, capabilities)
+
+    def asked(self):
+        return fixes.request_copilot_fix(self.current_run(), self.approver)
+
+
+class TestFixJobs(FixJobCase):
+    def test_a_fix_job_waits_until_copilot_is_asked(self):
+        self.assertEqual(self.claim(), {})
+        self.asked()
+        self.assertEqual(self.claim("investigate"), {})
+
+        job = self.claim()
+
+        run = self.current_run()
+        self.assertEqual(
+            (run.state, run.fix_status, run.fix_attempts),
+            ("Preparing Fix", "Working", 1),
+        )
+        context = job["context"]
+        self.assertEqual(context["kind"], "fix")
+        self.assertTrue(context["fix"]["branch"].startswith(f"copilot/{run.task}-r"))
+        self.assertEqual(context["fix"]["closes"], f"Closes {run.task}")
+        self.assertEqual(context["fix"]["repositories"], [REPO])
+        self.assertEqual(context["diagnosis"]["root_cause_category"], "bug")
+        self.assertEqual(
+            worker_api.heartbeat(job["run"], job["lease_token"])["action"], "continue"
+        )
+
+    def test_the_push_key_is_for_the_sites_own_repository_only(self):
+        self.asked()
+        job = self.claim()
+        with patch(
+            "helpdesk.copilot.github_app.push_token",
+            return_value={"token": "push-key", "expires_at": "2026-10-13T03:00:00Z"},
+        ) as minted:
+            key = worker_api.repo_token(
+                job["run"], job["lease_token"], f"https://github.com/{REPO}.git"
+            )
+            with self.assertRaises(frappe.PermissionError):
+                worker_api.repo_token(job["run"], job["lease_token"], "someone/else")
+            with self.assertRaises(frappe.PermissionError):
+                worker_api.repo_token(job["run"], "not-the-lease", REPO)
+
+        self.assertEqual(key["token"], "push-key")
+        minted.assert_called_once_with(REPO)
+        self.assertTrue(self.events("push_key"))
+
+    def test_the_change_opens_the_approval_with_what_copilot_tested(self):
+        make_copilot_settings(
+            enabled=1,
+            approvers=[
+                {"user": self.developer, "senior": 0, "active": 1},
+                {"user": self.approver, "senior": 0, "active": 1},
+                {"user": self.senior, "senior": 1, "active": 1},
+            ],
+        )
+        self.asked()
+        job = self.claim()
+        task = self.current_run().task
+        self.github.add_pull(
+            REPO, 31, NEW_SHA, body=f"Closes {task}", author="tbo-copilot[bot]"
+        )
+        evidence = [
+            {
+                "check": "the bug shows before the fix",
+                "result": "pass",
+                "detail": "1.25",
+            },
+            {"check": "the check passes after the fix", "result": "pass"},
+            {"check": "the app's tests", "result": "not_run", "detail": "it has none"},
+        ]
+        caller = Caller(user="Administrator", kind=WORKER, run=job["run"])
+        with patch("helpdesk.copilot.github.copilot_only", return_value=True):
+            tools_worker.submit_change(
+                caller,
+                REPO,
+                31,
+                NEW_SHA,
+                branch=fixes.copilot_branch(self.current_run()),
+                summary="The margin is now a share of the selling price.",
+                evidence=evidence,
+                tested_on="a sandbox site",
+                people_checks=["the margin on one real invoice"],
+            )
+
+        run = self.current_run()
+        self.assertEqual(run.fix_status, "Opened")
+        self.assertFalse(run.lease_token_hash)
+        self.assertEqual(run.state, "Awaiting Approval")  # followed at once
+        approval = self.approval()
+        payload = json.loads(approval.payload)
+        self.assertTrue(payload["copilot_only"])
+        self.assertEqual(payload["change"]["tested_commit"], NEW_SHA)
+        self.assertEqual(
+            [row["result"] for row in payload["change"]["evidence"]],
+            ["pass", "pass", "not_run"],
+        )
+        # Copilot wrote it, so the customer's developer reviews and may approve
+        self.assertEqual(approval.assigned_to, self.developer)
+        self.assertIsNone(approvals.may_decide(approval, self.developer))
+        with self.assertRaises(frappe.PermissionError):
+            runs.check_lease(run.name, job["lease_token"])
+
+        frappe.set_user(self.developer)
+        card = api.get_run(self.ticket.name)["fix"]["approval"]
+        self.assertEqual(card["change"]["tested_on"], "a sandbox site")
+        self.assertFalse(card["evidence_stale"])
+
+    def test_a_fix_copilot_could_not_make_goes_back_to_the_developer(self):
+        self.asked()
+        job = self.claim()
+
+        worker_api.submit_result(
+            job["run"],
+            job["lease_token"],
+            {"kind": "failure", "reason": "the bug does not show on the copy"},
+        )
+
+        run = self.current_run()
+        self.assertEqual(
+            (run.state, run.fix_status, run.fix_requested),
+            ("Preparing Fix", "Failed", 0),
+        )
+        self.assertTrue(
+            frappe.db.exists(
+                "Comment",
+                {
+                    "reference_doctype": "Task",
+                    "reference_name": run.task,
+                    "content": ["like", "%does not show on the copy%"],
+                },
+            )
+        )
+        self.assertTrue(any(self.developer in call[0] for call in self.notified))
+
+    def test_a_lost_worker_is_tried_again_then_the_developer_takes_over(self):
+        self.asked()
+        for attempt in (1, 2):
+            job = self.claim()
+            self.assertEqual(self.current_run().fix_attempts, attempt)
+            frappe.db.set_value(
+                "HDS Copilot Run",
+                job["run"],
+                "lease_expires",
+                add_to_date(now_datetime(), minutes=-1),
+            )
+            runs.expire_stale_leases()
+
+        self.assertEqual(self.current_run().fix_status, "Failed")
+        self.assertEqual(self.claim(), {})
+
+    def test_a_fix_job_reports_a_change_and_nothing_else(self):
+        self.asked()
+        job = self.claim()
+        caller = Caller(user="Administrator", kind=WORKER, run=job["run"])
+        with self.assertRaises(frappe.ValidationError):
+            tools_worker.submit_investigation(caller, "bug", 0.9)
+        with self.assertRaises(frappe.ValidationError):
+            worker_api.submit_result(
+                job["run"],
+                job["lease_token"],
+                {
+                    "kind": "investigation",
+                    "root_cause_category": "bug",
+                    "confidence": 0.9,
+                },
+            )
+
+    def test_no_fix_job_while_a_pull_request_is_open(self):
+        self.opened(draft=True)  # a developer is already on it
+        with self.assertRaises(frappe.ValidationError):
+            self.asked()
+
+    def test_the_card_offers_copilot_and_shows_its_progress(self):
+        frappe.set_user(self.approver)
+        self.assertTrue(api.get_run(self.ticket.name)["fix"]["can_request_fix"])
+
+        fix = api.request_copilot_fix(self.ticket.name)["fix"]
+
+        self.assertEqual(fix["copilot"]["status"], "Queued")
+        self.assertFalse(fix["can_request_fix"])
+
+
+class TestAskedBySettings(FixCase):
+    def test_with_the_setting_on_copilot_is_asked_by_itself(self):
+        self.settings(shadow_mode=0, copilot_writes_fixes=1)
+        self.diagnosed()
+        run = self.current_run()
+        self.assertEqual((run.fix_requested, run.fix_status), (1, "Queued"))
+        self.assertTrue(run.task)

@@ -161,6 +161,8 @@ def _fix_task(run):
     frappe.db.savepoint("copilot_fix_task")
     try:
         fixes.create_fix_task(run)
+        if copilot_settings.get_settings().get("copilot_writes_fixes"):
+            fixes.request_copilot_fix(run)
     except fixes.NoProject:
         # a setup gap, not a failure: the agents see it on the ticket and can create the task later
         frappe.db.rollback(save_point="copilot_fix_task")
