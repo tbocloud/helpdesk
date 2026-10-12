@@ -13,6 +13,7 @@ has deployed it. `refresh` reads GitHub directly, for a webhook that never came.
 
 import contextlib
 import json
+import re
 
 import frappe
 from frappe import _
@@ -143,11 +144,22 @@ def create_fix_task(run, actor: str = runs.SYSTEM) -> str:
     return task
 
 
+def _plain(value) -> str:
+    """A diagnosis value as words: lists joined with commas, not Python's brackets."""
+    if isinstance(value, list | tuple):
+        return ", ".join(_plain(v) for v in value if v)
+    if isinstance(value, dict):
+        return "; ".join(_plain(v) for v in value.values() if v)
+    return str(value)
+
+
 def _task_description(run) -> str:
     evidence = frappe.parse_json(run.evidence or "[]") or []
     proposal = frappe.parse_json(run.proposal or "{}") or {}
     items = "".join(
-        "<li>{0}</li>".format(escape_html(" ".join(str(v) for v in item.values() if v)))
+        "<li>{0}</li>".format(
+            escape_html(" ".join(_plain(v) for v in item.values() if v))
+        )
         for item in evidence[:20]
         if isinstance(item, dict)
     )
@@ -165,7 +177,7 @@ def _task_description(run) -> str:
         parts.append(
             "<p><b>{0}</b> {1}</p>".format(
                 escape_html(_("Proposal:")),
-                escape_html(" ".join(str(v) for v in proposal.values() if v)),
+                escape_html(" ".join(_plain(v) for v in proposal.values() if v)),
             )
         )
     return "".join(parts)
@@ -328,6 +340,9 @@ def open_for(run, row_name: str, pull: dict):
         checks = github.checks(pull["repo"], pull["head_sha"])
     except GitHubError:
         checks = None
+    wrong = wrong_branch(run, pull["repo"], pull["base_branch"])
+    if wrong:
+        found["reasons"] = [*(found.get("reasons") or []), wrong]
     approval = approvals.open_approval(run, row_name, pull, files, found, checks)
     if run.state != "Awaiting Approval":
         runs.transition(
@@ -397,13 +412,16 @@ def try_merge(run) -> str:
         on_closed(run, pull)
         return "closed"
     if pull["state"] == "Draft":
-        follow(
-            run, approval.pull_request, pull
-        )  # the approval lapses, as on the webhook
+        # the approval lapses, as on the webhook
+        follow(run, approval.pull_request, pull)
         return "draft"
     if pull["head_sha"] != approval.head_sha:
         reopen_for_new_head(run, approval, _("new commits after the approval"))
         return "superseded"
+    wrong = wrong_branch(run, approval.repo, pull["base_branch"])
+    if wrong:
+        _blocked(approval, run, wrong)
+        return "blocked"
     try:
         result = github.checks(approval.repo, approval.head_sha)
     except GitHubError as e:
@@ -467,6 +485,40 @@ def try_merge(run) -> str:
     with contextlib.suppress(GitHubError):
         github.remove_label(approval.repo, approval.number, hold_label())
     return "merged"
+
+
+def site_branch(run, repo: str) -> str | None:
+    """The branch the customer's site runs for `repo`, from the run's site card; None when unknown."""
+    if not run.registry:
+        return None
+    for app in frappe.get_all(
+        "HDS Site App",
+        filters={"parent": run.registry, "parenttype": "HDS Site Registry"},
+        fields=["repository", "branch"],
+    ):
+        if app.branch and _repo_name(app.repository) == repo.lower():
+            return app.branch
+    return None
+
+
+def _repo_name(url_or_name: str | None) -> str:
+    """`owner/name` from a GitHub URL (https or ssh) or a bare `owner/name`, lower case."""
+    name = re.sub(r"\.git$", "", (url_or_name or "").strip().rstrip("/"))
+    return re.sub(r"^(https?://(www\.)?|git@)github\.com[/:]", "", name).lower()
+
+
+def wrong_branch(run, repo: str, base_branch: str) -> str | None:
+    """Why a fix into `base_branch` would not reach the customer's site, or None.
+
+    A merge into another branch than the site runs would never reach it. An
+    evaluation or demo run reads a base commit of its own and is not checked.
+    """
+    expected = None if run.get("base_commit") else site_branch(run, repo)
+    if expected and base_branch and base_branch != expected:
+        return _(
+            "the pull request targets {0}, but the customer's site runs {1}"
+        ).format(base_branch, expected)
+    return None
 
 
 def _merge_state_reason(merge_state: str) -> str:

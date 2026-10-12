@@ -21,6 +21,7 @@ from helpdesk.test_utils import (
     make_copilot_settings,
     make_customer_project,
     make_hd_pull_request,
+    make_site_registry,
     make_ticket,
 )
 
@@ -147,6 +148,18 @@ class TestFixTask(FixCase):
         self.assertTrue(info["fix"]["task"]["name"].startswith("TASK-"))
         self.assertFalse(info["fix"]["can_create_task"])
 
+    def test_the_task_lists_the_proposals_files_in_words(self):
+        run = frappe._dict(
+            evidence="[]",
+            proposal=json.dumps({"files": ["app/invoice.py", "tests/test_invoice.py"]}),
+            root_cause_category="bug",
+            confidence=0.9,
+            summary="The margin is wrong.",
+        )
+        text = fixes._task_description(run)
+        self.assertIn("app/invoice.py, tests/test_invoice.py", text)
+        self.assertNotIn("[", text)
+
     def test_no_project_is_a_note_not_an_error(self):
         frappe.db.set_value("Project", self.project, "status", "Completed")
         errors = frappe.db.count("Error Log")
@@ -157,6 +170,44 @@ class TestFixTask(FixCase):
         self.assertFalse(self.current_run().task)
         self.assertTrue(self.events("fix_task_missing"))
         self.assertEqual(frappe.db.count("Error Log"), errors)
+
+
+class TestSiteBranch(FixCase):
+    """A fix must go into the branch the customer's site runs, or it never reaches the site."""
+
+    def setUp(self):
+        super().setUp()
+        make_site_registry(
+            self.customer,
+            apps=[
+                {
+                    "app": "demo_app",
+                    "repository": f"https://github.com/{REPO}.git",
+                    "branch": "acme-live",
+                }
+            ],
+        )
+        self.diagnosed()
+
+    def test_a_pull_request_into_another_branch_is_not_merged(self):
+        self.opened()  # into main
+        self.assertIn("site runs acme-live", self.approval().reasons)
+
+        result = self.decide(self.approver)
+
+        self.assertEqual(
+            result["decision"], {"outcome": "approved", "merge": "blocked"}
+        )
+        self.assertIsNone(self.github.merged_with)
+        self.assertIn("targets main", self.approval().merge_error)
+
+    def test_a_pull_request_into_the_sites_branch_merges(self):
+        self.opened(base="acme-live")
+        self.assertNotIn("site runs", self.approval().reasons or "")
+
+        result = self.decide(self.approver)
+
+        self.assertEqual(result["decision"]["merge"], "merged")
 
 
 class TestApprovalOpens(FixCase):

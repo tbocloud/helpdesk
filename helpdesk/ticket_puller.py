@@ -565,9 +565,10 @@ def sync_conversations() -> int:
         try:
             mcp = MCPClient(conn_name)
         except Exception:
-            frappe.log_error(
-                title=f"Conversation sync failed for {conn_name}",
-                message=frappe.get_traceback(),
+            # a site that is down would otherwise log this on every run
+            _log_once(
+                f"Conversation sync failed for {conn_name}",
+                f"hds_conversation_sync_failed:{conn_name}",
             )
             continue
 

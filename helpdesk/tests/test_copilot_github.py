@@ -121,6 +121,34 @@ class TestRequests(FrappeTestCase):
                 github.checks("o/r", "s")
         self.assertIn("Actions read", caught.exception.message)
 
+    def test_merge_falls_back_to_a_method_the_repository_allows(self):
+        tried = []
+
+        def fake(method, path, body=None, params=None):
+            if path == "/repos/o/r":
+                return {}  # a token that may not read the merge settings
+            tried.append(body["merge_method"])
+            if body["merge_method"] == "merge":
+                raise GitHubError(
+                    405, "Merge commits are not allowed on this repository."
+                )
+            return {"sha": "m1"}
+
+        with patch.object(github, "request", side_effect=fake):
+            self.assertEqual(github.merge("o/r", 5, "a" * 40), "m1")
+        self.assertEqual(tried, ["merge", "squash"])
+
+    def test_a_merge_refused_for_another_reason_is_not_retried(self):
+        def fake(method, path, body=None, params=None):
+            if path == "/repos/o/r":
+                return {"allow_merge_commit": True}
+            raise GitHubError(405, "Pull Request is not mergeable")
+
+        with patch.object(github, "request", side_effect=fake) as request:
+            with self.assertRaises(GitHubError):
+                github.merge("o/r", 5, "a" * 40)
+        self.assertEqual(request.call_count, 2)
+
     def test_removing_a_missing_label_is_fine(self):
         with patch.object(
             github, "request", side_effect=GitHubError(404, "Label does not exist")

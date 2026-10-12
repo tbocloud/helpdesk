@@ -8,6 +8,7 @@ Unlike the task sync's helper, every call raises GitHubError with GitHub's own
 status and message: a refused merge must never pass for a network blip.
 """
 
+import re
 from urllib.parse import quote
 
 import requests
@@ -182,13 +183,33 @@ def merge_method(repo: str) -> str:
     return "merge"
 
 
+METHOD_REFUSED = re.compile(
+    r"(merge commits|squash merges|rebase merges) are not allowed", re.I
+)
+
+
 def merge(repo: str, number: int, sha: str, title: str = "") -> str:
-    """Merges with `sha` pinned: GitHub refuses (409) if the head moved. Returns the merge commit."""
-    body = {"merge_method": merge_method(repo), "sha": sha}
-    if title:
-        body["commit_title"] = title[:250]
-    result = request("PUT", f"/repos/{repo}/pulls/{int(number)}/merge", body=body)
-    return (result or {}).get("sha") or ""
+    """Merges with `sha` pinned: GitHub refuses (409) if the head moved. Returns the merge commit.
+
+    A token that may not read the repository's merge settings gets the default
+    method; when GitHub refuses that method (405), the next one is tried.
+    """
+    first = merge_method(repo)
+    for method in [first] + [m for m in ("merge", "squash", "rebase") if m != first]:
+        body = {"merge_method": method, "sha": sha}
+        if title:
+            body["commit_title"] = title[:250]
+        try:
+            result = request(
+                "PUT", f"/repos/{repo}/pulls/{int(number)}/merge", body=body
+            )
+        except GitHubError as e:
+            if e.status == 405 and METHOD_REFUSED.search(e.message or ""):
+                refused = e
+                continue
+            raise
+        return (result or {}).get("sha") or ""
+    raise refused
 
 
 def add_label(repo: str, number: int, label: str):
