@@ -3,7 +3,7 @@
     :title="__('Departments')"
     :description="
       __(
-        'The Projects page groups projects by department, in this order. Inactive departments can\'t be picked for projects. Heads are told who their department\'s Scoreboard champion is.'
+        'The Projects page groups projects by department, in this order. Inactive departments can\'t be picked for projects. Heads are told who their department\'s Scoreboard champion is. A department can be part of a main department\'s group (GrowthX in ERP); the Scoreboard ranks each group too.'
       )
     "
   >
@@ -115,6 +115,55 @@
                 </div>
               </form>
 
+              <!-- group: which main department this one is part of -->
+              <form
+                v-else-if="editingGroup === dept.name"
+                :id="GROUP_FORM_ID"
+                class="flex min-w-0 flex-1 flex-col gap-2"
+                :aria-label="__('Group of {0}', dept.name)"
+                @submit.prevent="saveGroup(dept)"
+                @keydown.esc.stop="editingGroup = ''"
+              >
+                <span class="text-base-medium text-ink-gray-9">{{
+                  __("Group of {0}", dept.name)
+                }}</span>
+                <p
+                  v-if="subDepartments(dept).length"
+                  class="text-p-sm text-ink-gray-6"
+                >
+                  {{
+                    __(
+                      "{0} is a main department with {1} in its group, so it stays a main department.",
+                      dept.name,
+                      subDepartments(dept).join(", ")
+                    )
+                  }}
+                </p>
+                <template v-else>
+                  <FormControl
+                    v-model="groupValue"
+                    type="select"
+                    :label="__('Part of')"
+                    :options="groupOptions(dept)"
+                  />
+                  <span class="text-p-sm text-ink-gray-6">{{
+                    __(
+                      "The Scoreboard adds a group's departments up under the main department, with a champion for the group."
+                    )
+                  }}</span>
+                </template>
+                <div class="flex items-center gap-2">
+                  <Button
+                    v-if="!subDepartments(dept).length"
+                    variant="solid"
+                    type="submit"
+                    :label="__('Save group')"
+                    :loading="setParent.loading"
+                  />
+                  <Button :label="__('Cancel')" @click="editingGroup = ''" />
+                </div>
+              </form>
+
               <!-- delete confirmation -->
               <div
                 v-else-if="deleting === dept.name"
@@ -163,6 +212,9 @@
                     :title="headsLine(dept)"
                     >{{ headsLine(dept) }}</span
                   >
+                  <span class="truncate text-xs text-ink-gray-6">{{
+                    groupLine(dept)
+                  }}</span>
                 </div>
 
                 <div class="flex shrink-0 items-center gap-0.5">
@@ -200,6 +252,16 @@
                   >
                     <template #icon
                       ><LucideUserCog class="size-4" aria-hidden="true"
+                    /></template>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    :tooltip="__('Set group')"
+                    :label="__('Set the group of {0}', dept.name)"
+                    @click="startGroup(dept)"
+                  >
+                    <template #icon
+                      ><LucideNetwork class="size-4" aria-hidden="true"
                     /></template>
                   </Button>
                   <Button
@@ -257,13 +319,20 @@
 import SettingsLayoutBase from "@/components/layouts/SettingsLayoutBase.vue";
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
-import { Button, createResource, TextInput, toast } from "frappe-ui";
+import {
+  Button,
+  createResource,
+  FormControl,
+  TextInput,
+  toast,
+} from "frappe-ui";
 import { computed, nextTick, ref } from "vue";
 import LucideArrowDown from "~icons/lucide/arrow-down";
 import LucideArrowUp from "~icons/lucide/arrow-up";
 import LucideBuilding2 from "~icons/lucide/building-2";
 import LucideEye from "~icons/lucide/eye";
 import LucideEyeOff from "~icons/lucide/eye-off";
+import LucideNetwork from "~icons/lucide/network";
 import LucidePencil from "~icons/lucide/pencil";
 import LucidePlus from "~icons/lucide/plus";
 import LucideTrash2 from "~icons/lucide/trash-2";
@@ -276,6 +345,8 @@ interface Department {
   department_name: string;
   sort_order: number;
   is_active: boolean;
+  /** The main department whose group this one is part of; empty for a main one. */
+  parent_department?: string | null;
   description?: string;
   project_count: number;
   heads: { user: string; full_name: string }[];
@@ -325,6 +396,7 @@ const renameValue = ref("");
 async function startRename(dept: Department) {
   deleting.value = "";
   editingHeads.value = "";
+  editingGroup.value = "";
   renaming.value = dept.name;
   renameValue.value = dept.name;
   await nextTick();
@@ -371,6 +443,7 @@ const HEADS_FORM_ID = "department-heads-form";
 async function startHeads(dept: Department) {
   deleting.value = "";
   renaming.value = "";
+  editingGroup.value = "";
   editingHeads.value = dept.name;
   headsValue.value = dept.heads.map((h) => h.user);
   await nextTick();
@@ -393,6 +466,64 @@ const setHeads = createResource({
 function saveHeads(dept: Department) {
   if (setHeads.loading) return;
   setHeads.submit({ department: dept.name, heads: headsValue.value });
+}
+
+// --- groups ---
+
+function subDepartments(dept: Department): string[] {
+  return list.value
+    .filter((d) => d.parent_department === dept.name)
+    .map((d) => d.name);
+}
+
+function groupLine(dept: Department): string {
+  if (dept.parent_department) return __("Part of {0}", dept.parent_department);
+  const subs = subDepartments(dept);
+  return subs.length
+    ? __("Main department of {0}", subs.join(", "))
+    : __("Main department");
+}
+
+// one level: only main departments (not part of a group themselves) can hold one
+function groupOptions(dept: Department) {
+  return [
+    { label: __("No group: a main department"), value: "" },
+    ...list.value
+      .filter((d) => d.name !== dept.name && !d.parent_department)
+      .map((d) => ({ label: d.name, value: d.name })),
+  ];
+}
+
+const GROUP_FORM_ID = "department-group-form";
+const editingGroup = ref("");
+const groupValue = ref("");
+
+async function startGroup(dept: Department) {
+  deleting.value = "";
+  renaming.value = "";
+  editingHeads.value = "";
+  editingGroup.value = dept.name;
+  groupValue.value = dept.parent_department || "";
+  await nextTick();
+  document
+    .getElementById(GROUP_FORM_ID)
+    ?.querySelector<HTMLElement>("select, button")
+    ?.focus();
+}
+
+const setParent = createResource({
+  url: `${API}.set_department_parent`,
+  onSuccess() {
+    toast.success(__("Group saved"));
+    editingGroup.value = "";
+    departments.reload();
+  },
+  onError: showError,
+});
+
+function saveGroup(dept: Department) {
+  if (setParent.loading) return;
+  setParent.submit({ department: dept.name, parent: groupValue.value || null });
 }
 
 // --- reorder, activate, delete ---

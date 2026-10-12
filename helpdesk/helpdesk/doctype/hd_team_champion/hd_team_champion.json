@@ -9,6 +9,7 @@
 		"period_end",
 		"column_break_1",
 		"department",
+		"is_group",
 		"user",
 		"score",
 		"details_section",
@@ -51,6 +52,15 @@
 			"in_standard_filter": 1,
 			"label": "Department",
 			"options": "HD Department"
+		},
+		{
+			"default": "0",
+			"fieldname": "is_group",
+			"fieldtype": "Check",
+			"label": "Department Group",
+			"in_list_view": 1,
+			"read_only": 1,
+			"description": "The department and its sub-departments together"
 		},
 		{
 			"description": "Empty when nobody reached the minimum activity",
@@ -96,7 +106,7 @@
 	],
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-10-09 12:00:00.000000",
+	"modified": "2026-10-12 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Team Champion",

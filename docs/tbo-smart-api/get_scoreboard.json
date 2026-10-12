@@ -7,6 +7,25 @@
       "start": "2026-10-05",
       "end": "2026-10-11"
     },
+    "department": null,
+    "group": null,
+    "groups": [
+      {
+        "group": "ERP",
+        "departments": [
+          "ERP",
+          "GrowthX",
+          "Internal / R&D"
+        ]
+      },
+      {
+        "group": "Digital",
+        "departments": [
+          "Digital",
+          "Creative"
+        ]
+      }
+    ],
     "champion": {
       "user": "arun@teambackoffice.com",
       "name": "Arun Menon",
@@ -42,6 +61,7 @@
       "rank": 2,
       "score": 41.5,
       "tasks_done": 9,
+      "weighted_work": 20.2,
       "key_tasks": 2,
       "on_time_pct": 89,
       "hours": 38.5,
@@ -74,6 +94,7 @@
         "rank": 1,
         "score": 47.0,
         "tasks_done": 11,
+        "weighted_work": 24.8,
         "key_tasks": 3,
         "on_time_pct": 100,
         "hours": 40.0,
@@ -87,6 +108,7 @@
         "rank": 2,
         "score": 41.5,
         "tasks_done": 9,
+        "weighted_work": 20.2,
         "key_tasks": 2,
         "on_time_pct": 89,
         "hours": 38.5,
@@ -96,8 +118,11 @@
     "departments": [
       {
         "department": "ERP",
+        "kind": "department",
+        "parent": "ERP",
         "people": 9,
         "done": 41,
+        "weighted_work": 92.2,
         "on_time_pct": 86,
         "overdue": 4,
         "hours": 302.5,
@@ -105,8 +130,11 @@
       },
       {
         "department": "Digital",
+        "kind": "department",
+        "parent": "Digital",
         "people": 6,
         "done": 27,
+        "weighted_work": 60.8,
         "on_time_pct": null,
         "overdue": 1,
         "hours": 188.0,

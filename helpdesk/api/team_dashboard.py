@@ -26,24 +26,31 @@ NO_DEPARTMENT = ""
 
 @frappe.whitelist()
 @agent_only
-def get_team_dashboard(period: str = "week", department: str | None = None) -> dict:
-    """The period's numbers: summary, departments, people, projects, champion,
-    trend, this year's champions and the analysis. Every agent sees all of it."""
+def get_team_dashboard(
+    period: str = "week", department: str | None = None, group: str | None = None
+) -> dict:
+    """The period's numbers: summary, departments (with their groups), people,
+    projects, champion, trend, this year's champions and the analysis, for the
+    whole team, one department or one department group (a main department with
+    its sub-departments). Every agent sees all of it."""
     check_period(period)
     access = viewer_access(frappe.session.user)
-    department = scope_department(access, department)
+    scope = scope_of(access, department, group)
     today = getdate(nowdate())
     start, end = td.period_bounds(period, today)
     c_start, c_end = td.comparison_bounds(period, start, end, today)
     data = td.collect(start, end, with_overdue=True, today=today)
     prev = td.collect(c_start, c_end, with_overdue=False, today=today)
 
-    keep = in_scope(department)
+    keep = td.scope_filter(scope.departments)
     by_department = td.tally(
         data, lambda r: (r["department"] or NO_DEPARTMENT) if keep(r) else None
     )
-    members = department_members(department)
-    ranked = ranked_people(data, period, department, members)
+    by_group = td.tally(
+        data, lambda r: access.group_of.get(r["department"]) if keep(r) else None
+    )
+    members = department_members(scope.departments)
+    ranked = ranked_people(data, period, scope.departments, members)
     return {
         "period": {
             "key": period,
@@ -54,25 +61,32 @@ def get_team_dashboard(period: str = "week", department: str | None = None) -> d
         },
         "access": {
             "departments": access.departments,
+            "groups": [
+                {"group": g, "departments": ds} for g, ds in access.groups.items()
+            ],
             "can_refresh": access.can_refresh and period not in td.QUIET_PERIODS,
         },
-        "department": department,
+        "department": scope.department,
+        "group": scope.group,
         "summary": summary(data, prev, keep),
         "trend": td.trend(data, keep, start, end, period),
-        "history": history(department, today),
+        "history": history(scope, today),
         "champion": champion_card(td.champion_of(ranked)),
         "people": people_rows(ranked, by_department, members),
         "departments": department_rows(
-            data, prev, by_department, members, access, department, period
+            data, prev, (by_department, by_group), members, access, scope, period
         ),
-        "projects": project_rows(data, keep, department),
-        "analysis": current_analysis(period, start, department),
+        "projects": project_rows(data, keep, scope.departments),
+        "analysis": current_analysis(period, start, scope),
+        "rules": td.score_rules(period),
     }
 
 
 @frappe.whitelist(methods=["POST"])
 @agent_only
-def refresh_analysis(period: str = "week", department: str | None = None) -> dict:
+def refresh_analysis(
+    period: str = "week", department: str | None = None, group: str | None = None
+) -> dict:
     """Ask the AI to read the period's numbers again (System and Agent Managers)."""
     check_period(period)
     access = viewer_access(frappe.session.user)
@@ -80,30 +94,28 @@ def refresh_analysis(period: str = "week", department: str | None = None) -> dic
         frappe.throw(
             _("Only managers can refresh the analysis."), frappe.PermissionError
         )
-    department = scope_department(access, department)
+    scope = scope_of(access, department, group)
     today = getdate(nowdate())
     start, end = td.period_bounds(period, today)
-    lock = f"{td.CACHE_PREFIX}_refresh:{period}:{start}:{department or ''}"
+    name = scope.group or scope.department or ""
+    key = td.analysis_cache_key(period, start, name, bool(scope.group))
+    lock = f"{key}:refresh"
     if frappe.cache.get_value(lock, expires=True):
         frappe.throw(_("The analysis was refreshed less than a minute ago."))
     frappe.cache.set_value(lock, 1, expires_in_sec=REFRESH_COOLDOWN_SECONDS)
 
     data = td.collect(start, end, with_overdue=True, today=today)
-    keep = in_scope(department)
+    keep = td.scope_filter(scope.departments)
     ranked = td.rank(td.tally(data, lambda r: True if keep(r) else None)[True], period)
     facts = td.analysis_facts(
-        department or _("Whole team"),
+        td.scope_title(name, bool(scope.group)),
         td.period_label(period, start, end),
         ranked,
         td.totals(data, keep),
     )
     analysis = td.write_analysis(facts)
     if analysis["status"] == "ready":
-        frappe.cache.set_value(
-            td.analysis_cache_key(period, start, department),
-            analysis,
-            expires_in_sec=td.ANALYSIS_SECONDS,
-        )
+        frappe.cache.set_value(key, analysis, expires_in_sec=td.ANALYSIS_SECONDS)
     return {**analysis, "period_start": str(start), "current": True}
 
 
@@ -111,11 +123,15 @@ def refresh_analysis(period: str = "week", department: str | None = None) -> dic
 
 
 def viewer_access(user: str) -> frappe._dict:
-    """The departments the viewer may pick (every active one, past the department
-    walls, so DM and ERP can compete) and whether they may refresh the analysis
-    (System and Agent Managers)."""
+    """The departments and department groups the viewer may pick (every active
+    one, past the department walls, so DM and ERP can compete) and whether they
+    may refresh the analysis (System and Agent Managers). `group_of` maps each
+    department in a group to the group."""
+    groups = td.department_groups()
     return frappe._dict(
         departments=td.active_departments(),
+        groups=groups,
+        group_of={d: g for g, ds in groups.items() for d in ds},
         can_refresh=is_tasky_admin(user),
     )
 
@@ -126,15 +142,34 @@ def scope_department(access, department: str | None) -> str | None:
     return department or None
 
 
+def scope_of(access, department: str | None, group: str | None) -> frappe._dict:
+    """What the page shows: the whole team, one department, or one department
+    group. `departments` lists the departments in it (None for the whole team)."""
+    if department and group:
+        frappe.throw(_("Pick a department or a department group, not both."))
+    if group:
+        if group not in access.groups:
+            frappe.throw(_("{0} isn't a department group.").format(group))
+        return frappe._dict(
+            department=None, group=group, departments=access.groups[group]
+        )
+    department = scope_department(access, department)
+    return frappe._dict(
+        department=department,
+        group=None,
+        departments=[department] if department else None,
+    )
+
+
 def check_period(period: str):
     if period not in td.PERIODS:
         frappe.throw(_("Unknown period: {0}").format(period))
 
 
-def ranked_people(data: dict, period: str, department: str | None, members: dict):
+def ranked_people(data: dict, period: str, departments: list | None, members: dict):
     """Everyone in scope scored, best first, as the People view ranks them: whoever
     has work in the scope, then its members (`department_members`) with nothing."""
-    keep = in_scope(department)
+    keep = td.scope_filter(departments)
     ranked = td.rank(td.tally(data, lambda r: True if keep(r) else None)[True], period)
     for person in sorted(set().union(*members.values()) - {r["user"] for r in ranked}):
         ranked.extend(td.rank({person: td.blank()}, period))
@@ -146,13 +181,6 @@ def department_is(department: str):
     return lambda r: (r["department"] or NO_DEPARTMENT) == department
 
 
-def in_scope(department: str | None):
-    """Rows of the picked department, else every row."""
-    if department:
-        return lambda r: r["department"] == department
-    return lambda r: True
-
-
 # --- the parts of the page ---------------------------------------------------
 
 
@@ -160,12 +188,10 @@ def summary(data: dict, prev: dict, keep) -> dict:
     now, before = td.totals(data, keep), td.totals(prev, keep)
     return {
         **now,
-        "previous": {k: before[k] for k in ("tasks", "on_time_pct", "hours", "posts")},
+        "previous": {
+            k: before[k] for k in ("tasks", "weight", "on_time_pct", "hours", "posts")
+        },
     }
-
-
-def champion_in(by_department: dict, department: str, period: str) -> dict | None:
-    return td.champion_of(td.rank(by_department.get(department, {}), period))
 
 
 def champion_card(champion: dict | None) -> dict | None:
@@ -203,13 +229,19 @@ def people_rows(ranked: list, by_department: dict, members: dict) -> list[dict]:
                 "breakdown": r["breakdown"],
                 "reasons": r["reasons"],
                 "tasks": s["tasks"],
+                "weight": round(s["weight"], 1),
                 "key": s["key"],
+                "self_made": s["self_made"],
                 "on_time_pct": td.pct(s["on_time"], s["dated"]),
                 "dated": s["dated"],
                 "hours": round(s["hours"], 1),
                 "overdue": s["overdue"],
                 "slips": s["slips"],
-                "sent_back": s["reviewed"] - s["first_time"],
+                "excellent": s["excellent"],
+                "good": s["good"],
+                "rework": s["rework"],
+                "sent_back": s["sent_back"],
+                "came_back": s["came_back"],
                 "posts_on_time": s["posts_on_time"],
                 "posts_late": s["posts_late"],
                 "posts_missed": s["posts_missed"],
@@ -232,29 +264,59 @@ def main_department(user: str, by_department: dict, members: dict) -> str | None
     return next((d for d, users in members.items() if user in users and d), None)
 
 
-def department_rows(data, prev, by_department, members, access, department, period):
-    departments = [department] if department else [*access.departments, NO_DEPARTMENT]
-    rows = []
-    for d in departments:
-        keep = department_is(d)
-        stats = by_department.get(d, {})
+def department_rows(data, prev, tallies, members, access, scope, period):
+    """One row per department in scope, each group (a main department with its
+    sub-departments) first as a row of its own with its departments under it
+    (`parent`), then the departments in no group and No department."""
+    by_department, by_group = tallies
+
+    def row(name, stats, keep, people, parent=None, is_group=False):
         active = {u for u, s in stats.items() if td.delivered(s) or s["overdue"]}
-        if d == NO_DEPARTMENT and not active:
-            continue
-        rows.append(
-            {
-                "department": d or None,
-                "people": len(active | members.get(d, set())),
-                **summary(data, prev, keep),
-                "champion": champion_card(champion_in(by_department, d, period))
-                if d
-                else None,
-            }
+        return {
+            "department": name or None,
+            "kind": "group" if is_group else "department",
+            "parent": parent,
+            "people": len(active | people),
+            **summary(data, prev, keep),
+            "champion": champion_card(td.champion_of(td.rank(stats, period)))
+            if name
+            else None,
+        }
+
+    def department(d, parent=None):
+        return row(
+            d,
+            by_department.get(d, {}),
+            department_is(d),
+            members.get(d, set()),
+            parent,
         )
+
+    def group(g):
+        ds = access.groups[g]
+        people = set().union(*(members.get(d, set()) for d in ds))
+        return [
+            row(g, by_group.get(g, {}), td.scope_filter(ds), people, is_group=True),
+            *(department(d, g) for d in ds),
+        ]
+
+    if scope.group:
+        return group(scope.group)
+    if scope.department:
+        return [department(scope.department, access.group_of.get(scope.department))]
+    rows = []
+    for d in access.departments:
+        if d in access.groups:
+            rows.extend(group(d))
+        elif d not in access.group_of:
+            rows.append(department(d))
+    no_department = by_department.get(NO_DEPARTMENT, {})
+    if any(td.delivered(s) or s["overdue"] for s in no_department.values()):
+        rows.append(department(NO_DEPARTMENT))
     return rows
 
 
-def department_members(department: str | None) -> dict[str, set]:
+def department_members(departments: list[str] | None) -> dict[str, set]:
     """Who belongs to each department in scope: the members of its open projects.
     With no department picked, every active agent is listed too."""
     project = frappe.qb.DocType("Project")
@@ -271,12 +333,12 @@ def department_members(department: str | None) -> dict[str, set]:
             & project.custom_department.isnotnull()
         )
     )
-    if department:
-        query = query.where(project.custom_department == department)
+    if departments:
+        query = query.where(project.custom_department.isin(departments))
     out: dict[str, set] = {}
     for dept, user in query.run():
         out.setdefault(dept, set()).add(user)
-    if not department:
+    if not departments:
         agent = frappe.qb.DocType("HD Agent")
         out[NO_DEPARTMENT] = set(
             frappe.qb.from_(agent)
@@ -287,7 +349,7 @@ def department_members(department: str | None) -> dict[str, set]:
     return out
 
 
-def project_rows(data, keep, department) -> list[dict]:
+def project_rows(data, keep, departments: list[str] | None) -> list[dict]:
     """Projects with more than one member, in scope, that are open or had work in
     the period: progress, hours and who contributed what."""
     active = {
@@ -313,8 +375,8 @@ def project_rows(data, keep, department) -> list[dict]:
         .groupby(project.name)
         .having(Count(member.user).distinct() > 1)
     )
-    if department:
-        query = query.where(project.custom_department == department)
+    if departments:
+        query = query.where(project.custom_department.isin(departments))
     projects = [
         p for p in query.run(as_dict=True) if p.status == "Open" or p.name in active
     ]
@@ -350,6 +412,7 @@ def project_rows(data, keep, department) -> list[dict]:
                             "name": info.get(u, {}).get("name") or u,
                             "image": info.get(u, {}).get("image"),
                             "tasks": s["tasks"],
+                            "weight": round(s["weight"], 1),
                             "hours": round(s["hours"], 1),
                             "overdue": s["overdue"],
                         }
@@ -379,9 +442,10 @@ def task_progress(projects: list[str]) -> dict[str, tuple[int, int]]:
     return {project: (int(d or 0), int(t)) for project, d, t in rows}
 
 
-def history(department: str | None, today) -> list[dict]:
-    """This year's champions (weeks and longer) of the department, or of the whole
-    team, newest first. Stored when each period closed, so they never shift."""
+def history(scope, today) -> list[dict]:
+    """This year's champions (weeks and longer) of the department, the group or
+    the whole team, newest first. Stored when each period closed, so they never
+    shift."""
     champion = frappe.qb.DocType("HD Team Champion")
     query = (
         frappe.qb.from_(champion)
@@ -401,10 +465,7 @@ def history(department: str | None, today) -> list[dict]:
         .orderby(champion.period_end, order=frappe.qb.desc)
         .orderby(champion.period_start, order=frappe.qb.desc)
     )
-    if department:
-        query = query.where(champion.department == department)
-    else:
-        query = query.where(champion.department.isnull())
+    query = stored_scope(query, champion, scope)
     rows = query.run(as_dict=True)
     info = td.people_info([r.user for r in rows])
     return [
@@ -421,11 +482,14 @@ def history(department: str | None, today) -> list[dict]:
     ]
 
 
-def current_analysis(period: str, start, department: str | None) -> dict:
+def current_analysis(period: str, start, scope) -> dict:
     """This period's analysis when someone refreshed it, else the last closed
     period's (stored with its champion), else none yet."""
     cached = frappe.cache.get_value(
-        td.analysis_cache_key(period, start, department), expires=True
+        td.analysis_cache_key(
+            period, start, scope.group or scope.department, bool(scope.group)
+        ),
+        expires=True,
     )
     if cached:
         return {**cached, "period_start": str(start), "current": True}
@@ -441,10 +505,7 @@ def current_analysis(period: str, start, department: str | None) -> dict:
         .orderby(champion.period_start, order=frappe.qb.desc)
         .limit(1)
     )
-    if department:
-        query = query.where(champion.department == department)
-    else:
-        query = query.where(champion.department.isnull())
+    query = stored_scope(query, champion, scope)
     row = next(iter(query.run(as_dict=True)), None)
     stored = json.loads(row.analysis) if row else None
     if not stored or stored.get("status") != "ready":
@@ -455,3 +516,14 @@ def current_analysis(period: str, start, department: str | None) -> dict:
         "period_end": str(row.period_end),
         "current": False,
     }
+
+
+def stored_scope(query, champion, scope):
+    """HD Team Champion records of the scope: the group, the department, or the
+    whole team (no department)."""
+    name = scope.group or scope.department
+    if not name:
+        return query.where(champion.department.isnull())
+    return query.where(
+        (champion.department == name) & (champion.is_group == int(bool(scope.group)))
+    )

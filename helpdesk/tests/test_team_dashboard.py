@@ -17,9 +17,13 @@ from helpdesk.test_utils import (
     make_assignment,
     make_department,
     make_done_task,
+    make_done_ticket_task,
     make_project,
+    make_self_made_done_task,
     make_task,
     make_tasky_user,
+    rate_task_as,
+    score_stats,
     set_department_heads_as,
 )
 
@@ -35,39 +39,35 @@ MANAGER = "meera.manager@tbo-dash.test"
 DAY = "2031-03-10"
 
 
-def stats(**values) -> dict:
-    return {**td.blank(), **values}
-
-
 class TestScoring(FrappeTestCase):
     def test_on_time_delivery_beats_long_hours(self):
-        on_time = stats(
+        on_time = score_stats(
             tasks=5, dated=5, on_time=5, weight=5, weight_on_time=5, hours=10
         )
-        late = stats(tasks=5, dated=5, weight=5, hours=200)
+        late = score_stats(tasks=5, dated=5, weight=5, hours=200)
         self.assertGreater(
             td.score(on_time, "week")["score"], td.score(late, "week")["score"]
         )
 
     def test_hours_alone_score_nothing(self):
-        result = td.score(stats(hours=120), "week")
+        result = td.score(score_stats(hours=120), "week")
         self.assertEqual(result["score"], 0)
         self.assertFalse(result["eligible"])
 
     def test_hours_are_capped_at_a_tenth_of_delivery(self):
-        result = td.score(stats(tasks=4, dated=4, weight=4, hours=500), "week")
+        result = td.score(score_stats(tasks=4, dated=4, weight=4, hours=500), "week")
         hours = next(b for b in result["breakdown"] if b["key"] == "hours")
         self.assertEqual(hours["points"], 0.2)
 
     def test_minimum_activity_before_anyone_is_champion(self):
-        one = stats(tasks=1, dated=1, on_time=1, weight=3, weight_on_time=3)
+        one = score_stats(tasks=1, dated=1, on_time=1, weight=3, weight_on_time=3)
         self.assertFalse(td.score(one, "week")["eligible"])
-        three = stats(tasks=3, dated=3, on_time=3, weight=3, weight_on_time=3)
+        three = score_stats(tasks=3, dated=3, on_time=3, weight=3, weight_on_time=3)
         self.assertTrue(td.score(three, "week")["eligible"])
         self.assertFalse(td.score(three, "month")["eligible"])
 
     def test_overdue_and_slips_cost_points(self):
-        clean = stats(tasks=3, dated=3, on_time=3, weight=3, weight_on_time=3)
+        clean = score_stats(tasks=3, dated=3, on_time=3, weight=3, weight_on_time=3)
         behind = {**clean, "overdue": 2, "slips": 2}
         self.assertEqual(
             td.score(clean, "week")["score"] - td.score(behind, "week")["score"], 3
@@ -77,11 +77,78 @@ class TestScoring(FrappeTestCase):
 
     def test_reasons_explain_the_score(self):
         result = td.score(
-            stats(tasks=3, key=1, dated=3, on_time=3, weight=4, weight_on_time=4),
+            score_stats(tasks=3, key=1, dated=3, on_time=3, weight=4, weight_on_time=4),
             "week",
         )
         self.assertEqual(len(result["reasons"]), 2)
         self.assertIn("Tasks done: 3", result["reasons"][0])
+
+
+class TestWeightAndQuality(FrappeTestCase):
+    def test_weight_comes_from_the_task(self):
+        self.assertEqual(td.task_weight({})["weight"], 1)
+        big = td.task_weight({"key": True, "estimate": 8, "priority": "High"})
+        self.assertEqual(big["weight"], 3.25)
+        self.assertEqual(big["reasons"], ["key", "8h estimate", "High priority"])
+        # bounded: a long estimate counts up to 16 hours
+        most = td.task_weight({"key": True, "estimate": 400, "priority": "Urgent"})
+        self.assertEqual(most["weight"], 4.5)
+
+    def test_a_self_made_task_cant_be_inflated_by_its_doer(self):
+        tiny = td.task_weight({"self_made": True})
+        self.assertEqual(tiny["weight"], 0.5)
+        # key, priority and a long estimate the doer set themselves add (almost) nothing
+        inflated = td.task_weight(
+            {"self_made": True, "key": True, "estimate": 40, "priority": "Urgent"}
+        )
+        self.assertEqual(inflated["weight"], 1.0)
+
+    def test_ten_tiny_own_tasks_dont_beat_two_big_key_tasks(self):
+        def person(task: dict, count: int) -> dict:
+            weight = td.task_weight(task)["weight"]
+            return score_stats(
+                tasks=count,
+                dated=count,
+                on_time=count,
+                weight=weight * count,
+                weight_on_time=weight * count,
+            )
+
+        gamer = person({"self_made": True}, 10)
+        builder = person({"key": True, "estimate": 8, "priority": "High"}, 2)
+        self.assertGreater(
+            td.score(builder, "week")["score"], td.score(gamer, "week")["score"]
+        )
+        ranked = td.rank({"gamer": gamer, "builder": builder}, "week")
+        self.assertEqual(td.champion_of(ranked)["user"], "builder")
+        # one big task alone still isn't enough to be champion
+        self.assertFalse(td.score(person({"key": True}, 1), "today")["eligible"])
+
+    def test_quality_multiplier(self):
+        self.assertEqual(td.task_quality({})["quality"], 1)
+        self.assertEqual(td.task_quality({})["reasons"], ["not rated"])
+        self.assertEqual(td.task_quality({"rating": "Excellent"})["quality"], 1.25)
+        self.assertEqual(td.task_quality({"rating": "Needs rework"})["quality"], 0.5)
+        self.assertEqual(
+            td.task_quality({"rating": "Good", "sent_back": 1})["quality"], 0.85
+        )
+        # bounded below, and never above Excellent
+        self.assertEqual(
+            td.task_quality({"rating": "Needs rework", "came_back": 5})["quality"],
+            0.25,
+        )
+        self.assertLessEqual(
+            td.task_quality({"rating": "Excellent", "came_back": 0})["quality"], 1.25
+        )
+
+    def test_quality_shows_in_the_score(self):
+        plain = score_stats(tasks=3, dated=3, on_time=3, weight=3, weight_on_time=3)
+        excellent = {**plain, "value": 3.75, "value_on_time": 3.75, "excellent": 3}
+        rework = {**plain, "value": 1.5, "value_on_time": 1.5, "rework": 3}
+        scores = [td.score(s, "week") for s in (rework, plain, excellent)]
+        self.assertEqual([s["score"] for s in scores], [1.5, 3, 3.8])
+        quality = next(b for b in scores[2]["breakdown"] if b["key"] == "quality")
+        self.assertIn("3 rated excellent", quality["detail"])
 
 
 class TestPeriods(FrappeTestCase):
@@ -364,3 +431,139 @@ class TestTeamDashboard(FrappeTestCase):
         )
         self.assertTrue(data["analysis"]["current"])
         self.assertIn("Anu Menon", data["analysis"]["summary"])
+
+    def test_rating_is_for_the_assigner_and_reviewers_never_the_doer(self):
+        task = frappe.db.get_value(
+            "Task", {"project": self.project, "is_key": 1}, "name"
+        )
+        # Anu did it; Rahul is only a teammate
+        for user in (ANU, RAHUL):
+            self.assertRaises(
+                frappe.PermissionError, rate_task_as, user, task, "Excellent"
+            )
+        # the project's lead reviews it, so may rate it
+        frappe.db.set_value("Project", self.project, "project_lead", RAHUL)
+        result = rate_task_as(RAHUL, task, "Excellent")
+        self.assertEqual(result["rating"], "Excellent")
+        self.assertEqual(result["rated_by"], RAHUL)
+        self.assertEqual(result["quality"], 1.25)
+        # a form save can't change it behind the API's back
+        doc = frappe.get_doc("Task", task)
+        doc.quality_rating = "Needs rework"
+        self.assertRaises(frappe.PermissionError, doc.save)
+
+        anu = {
+            p["user"]: p
+            for p in call_team_dashboard(
+                "Administrator", TODAY, period="week", department="ERP"
+            )["people"]
+        }[ANU]
+        self.assertEqual(anu["excellent"], 1)
+        quality = next(b for b in anu["breakdown"] if b["key"] == "quality")
+        # the key task weighs 2, so Excellent adds a quarter of it
+        self.assertEqual(quality["points"], 0.5)
+
+    def test_reopened_tasks_and_ticket_comebacks_lower_quality(self):
+        task = make_task(self.project, "Stock valuation report", "2031-03-12").name
+        make_assignment("Task", task, ANU)
+        doc = frappe.get_doc("Task", task)
+        doc.status = "Completed"
+        doc.save()
+        doc.status = "Open"
+        doc.save()
+        self.assertEqual(doc.reopen_count, 1)
+
+        ticket, from_ticket = make_done_ticket_task(
+            self.project, "Invoice print shows old GSTIN", ANU, "2031-03-11"
+        )
+        reopened = frappe.get_doc("HD Ticket", ticket)
+        reopened.status = "Open"
+        reopened.save(ignore_permissions=True)
+        self.assertEqual(frappe.db.get_value("Task", from_ticket, "reopen_count"), 1)
+        self.assertEqual(td.task_score(from_ticket)["quality"], 0.75)
+
+    def test_weighted_work_shows_next_to_the_task_count(self):
+        for i in range(4):
+            make_self_made_done_task(
+                self.project, f"Tidy my notes {i}", RAHUL, "2031-03-11", "2031-03-12"
+            )
+        data = call_team_dashboard(
+            "Administrator", TODAY, period="week", department="ERP"
+        )
+        people = {p["user"]: p for p in data["people"]}
+        # Anu: three tasks, one key; Rahul: one late plus four of his own at half
+        self.assertEqual((people[ANU]["tasks"], people[ANU]["weight"]), (3, 4))
+        self.assertEqual((people[RAHUL]["tasks"], people[RAHUL]["weight"]), (5, 3))
+        self.assertEqual(people[RAHUL]["self_made"], 4)
+        self.assertEqual(data["summary"]["weight"], 7)
+        self.assertEqual(data["champion"]["user"], ANU)
+
+
+class TestDepartmentGroups(FrappeTestCase):
+    def setUp(self):
+        hold_commits(self)
+        ensure_role()
+        frappe.cache.delete_keys(f"{td.CACHE_PREFIX}_")
+        make_department("ERP")
+        make_department("Digital")
+        make_department("GrowthX")
+        frappe.db.set_value("HD Department", "GrowthX", "parent_department", "ERP")
+        make_tasky_user(ANU, "Anu Menon")
+        make_tasky_user(RAHUL, "Rahul Nair")
+        erp = make_project("Kerala Spices ERP rollout", members=[(ANU, "Developer")])
+        growth = make_project("Lead funnel revamp", members=[(RAHUL, "Developer")])
+        frappe.db.set_value("Project", erp.name, "custom_department", "ERP")
+        frappe.db.set_value("Project", growth.name, "custom_department", "GrowthX")
+        for i in range(3):
+            make_done_task(erp.name, f"GST setup {i}", ANU, DAY, due="2031-03-12")
+        for i in range(4):
+            make_done_task(growth.name, f"Landing page {i}", RAHUL, DAY, "2031-03-12")
+
+    def test_a_group_rolls_up_its_departments(self):
+        data = call_team_dashboard("Administrator", TODAY, period="week")
+        groups = {g["group"]: g["departments"] for g in data["access"]["groups"]}
+        self.assertEqual(groups["ERP"][0], "ERP")
+        self.assertIn("GrowthX", groups["ERP"])
+        rows = data["departments"]
+        group_row = next(
+            r for r in rows if r["department"] == "ERP" and r["kind"] == "group"
+        )
+        self.assertEqual((group_row["department"], group_row["tasks"]), ("ERP", 7))
+        self.assertEqual(group_row["champion"]["user"], RAHUL)
+        growth = next(r for r in rows if r["department"] == "GrowthX")
+        self.assertEqual(growth["parent"], "ERP")
+        erp_alone = next(
+            r for r in rows if r["department"] == "ERP" and r["kind"] == "department"
+        )
+        self.assertEqual((erp_alone["tasks"], erp_alone["champion"]["user"]), (3, ANU))
+
+        group = call_team_dashboard("Administrator", TODAY, period="week", group="ERP")
+        self.assertEqual(group["group"], "ERP")
+        self.assertEqual(group["summary"]["tasks"], 7)
+        self.assertLessEqual({ANU, RAHUL}, {p["user"] for p in group["people"]})
+        # GrowthX is a department, not a group
+        self.assertRaises(
+            frappe.ValidationError,
+            call_team_dashboard,
+            "Administrator",
+            TODAY,
+            period="week",
+            group="GrowthX",
+        )
+
+    def test_group_champions_are_stored_once(self):
+        with patch("helpdesk.ai_suggestion.is_ai_configured", return_value=False):
+            td.clear_cache()
+            td.close_period("week", *WEEK)
+            td.close_period("week", *WEEK)
+        group = frappe.get_doc("HD Team Champion", f"week-{WEEK[0]}-group_erp")
+        self.assertTrue(group.is_group)
+        self.assertEqual(group.user, RAHUL)
+        self.assertEqual(
+            frappe.get_doc("HD Team Champion", f"week-{WEEK[0]}-erp").user, ANU
+        )
+        self.assertEqual(len(get_reminder_messages(RAHUL, group.name)), 1)
+        history = call_team_dashboard(
+            "Administrator", "2031-03-18", period="week", group="ERP"
+        )["history"]
+        self.assertEqual(history[0]["user"], RAHUL)

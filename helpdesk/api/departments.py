@@ -30,6 +30,7 @@ def get_departments(include_inactive: bool = False) -> list[dict]:
             department.department_name,
             department.sort_order,
             department.is_active,
+            department.parent_department,
             department.description,
         )
         .orderby(department.sort_order)
@@ -188,9 +189,31 @@ def set_department_heads(department: str, heads: list[str] | str | None = None) 
 
 
 @frappe.whitelist(methods=["POST"])
+def set_department_parent(department: str, parent: str | None = None) -> dict:
+    """Puts a department in a main department's group (ERP with GrowthX), or makes
+    it a main department again (no `parent`). The Scoreboard ranks each group too.
+    System Managers and Agent Managers; one level only (HDDepartment.validate)."""
+    doc = _get_department(department, "write")
+    if parent and not frappe.db.exists(DEPARTMENT, parent):
+        frappe.throw(
+            _("Department not found: {0}").format(parent), frappe.DoesNotExistError
+        )
+    doc.parent_department = parent or None
+    doc.save()
+    return {"name": doc.name, "parent_department": doc.parent_department}
+
+
+@frappe.whitelist(methods=["POST"])
 def delete_department(department: str) -> dict:
     """Deletes a department no project uses."""
     doc = _get_department(department, "delete")
+    if frappe.db.exists(DEPARTMENT, {"parent_department": doc.name}):
+        frappe.throw(
+            _(
+                "{0} has sub-departments. Move them out of its group first, or deactivate {0} instead."
+            ).format(doc.name),
+            title=_("Department in use"),
+        )
     try:
         frappe.delete_doc(DEPARTMENT, doc.name)
     except frappe.LinkExistsError:

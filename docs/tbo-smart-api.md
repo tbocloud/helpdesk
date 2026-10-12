@@ -418,7 +418,7 @@ coordinator for its tasks); the app shows them only behind `manage_team` and an 
 | Method | Params | Returns | Who / notes |
 | --- | --- | --- | --- |
 | `get_tasks` | `group?` (overdue, today, upcoming, on_hold, in_review), `cursor`, `limit` | page of `Task` (no description/activity) | My own open tasks only (My Work), overdue first. Like My Work, it reads at most 300 open tasks (`work.LIST_LIMIT`), so the app and the web always show the same list. Fixture `get_tasks.json` |
-| `get_task` | `task` | `Task` + `description` (HTML), `activity`, `pull_requests` | Anyone who may read the task (#94 visibility: members only their own, leads/coordinators/managers the project's). Fixture `get_task.json` |
+| `get_task` | `task` | `Task` + `description` (HTML), `activity`, `pull_requests`, `quality` (below) | Anyone who may read the task (#94 visibility: members only their own, leads/coordinators/managers the project's). Fixture `get_task.json` |
 | `start_task` POST | `task` | `Task` detail | Starts an Open task (status Working, timer running) or resumes a paused timer. Write permission. Fixture `task_action.json` |
 | `pause_task` POST | `task` | `Task` detail | Banks the time; stays Working |
 | `complete_task` POST | `task`, `hours_worked` (>0, ≤24), `notes` (required) | `Task` detail | Logs a timesheet; a review project moves it to Pending Review |
@@ -426,13 +426,14 @@ coordinator for its tasks); the app shows them only behind `manage_team` and an 
 | `resume_task` POST | `task`, `extend_due_date` (default true) | `Task` detail | The days on hold are added to the due date |
 | `hand_over_task` POST | `task`, `teammate`, `reason` (required) | `{task, handed_to}` | The assignee (or the project's lead/coordinator). The task may leave the user's view, so no detail comes back. Fixture `hand_over_task.json` |
 | `request_help` POST | `task`, `teammate`, `task_name` (required), `description?`, `due_date?` | `{task, help_task}` | The teammate gets a new task; this one waits on it. Fixture `request_help.json` |
-| `review_task` POST | `task`, `approve` (bool), `note` (required when sending back) | `Task` detail | The project's manager, lead or coordinator only |
+| `review_task` POST | `task`, `approve` (bool), `note` (required when sending back), `rating?` (with approve: `Needs rework`, `Good`, `Excellent`) | `Task` detail | The project's manager, lead or coordinator only. A rating is refused (403) when the reviewer is also an assignee |
+| `rate_task` POST | `task`, `rating?` (`Needs rework`, `Good`, `Excellent`; empty clears it) | `Task` detail | A completed task's optional quality rating: whoever assigned it, the project's managers, lead and coordinators, its department's heads and admins; never an assignee (403). `quality.can_rate` says whether to show the control |
 | `add_task_comment` POST | `task`, `content` | one activity item | Anyone who can read the task. Fixture `add_task_comment.json` |
 | `get_teammates` | `task?` | `[{user, full_name, image, on_leave}]` | Active agents; for a task, its project team unless the user manages the project. Fixture `get_teammates.json` |
 | `get_focus` | `limit` (1–3, default 3) | `[Task + focus]` | The 1–3 tasks to do now, in Home's order: `close_first` (overdue, due today, key work in progress), then `in_progress`, `coming_up` (next 7 days) and `no_date`; held and in-review work waits on others and is left out. `focus` names the section. Fixture `get_focus.json` |
 | `quick_add_task` POST | `project`, `subject`, `due_date?`, `assignee?` (default: the user) | `Task` detail | `tasky.add_task`, so `can_add_tasks` applies: anyone on the project (or with a task in it) may add; giving it to someone outside the team is the manager's or lead's call. Fixture `quick_add_task.json` |
 | `snooze_follow_up` POST | `item` (`Task:TASK-…` or `HD Ticket:123`), `until` (date, tomorrow to 7 days ahead), `reason` (required, ≤500) | `{item, until, reason, level}` | The **assignee** acknowledges today's L0/L1 reminder: their own notices and digest lines about it stop until `until` (reminders start again that day), the reason is noted on the item and today's notice is marked read. Refused while the item is at L2+ or its SLA is breached; those always go out. See [follow-ups.md](follow-ups.md#snooze). Fixture `snooze_follow_up.json` |
-| `get_my_stats` | `period` (today, week, month, quarter, half, year) | `{period, current, previous, trend}` | The user's own Scoreboard line for this period and the 7 before it, oldest first: `done`, `on_time`, `dated`, `on_time_pct`, `key`, `hours`, `score` (`score()`), and `overdue` (now; null for past periods). Past periods are scored without "Overdue now", which is today's state. Fixture `get_my_stats.json` |
+| `get_my_stats` | `period` (today, week, month, quarter, half, year) | `{period, current, previous, trend}` | The user's own Scoreboard line for this period and the 7 before it, oldest first: `done`, `weighted_work`, `on_time`, `dated`, `on_time_pct`, `key`, `hours`, `score` (`score()`), and `overdue` (now; null for past periods). Past periods are scored without "Overdue now", which is today's state. Fixture `get_my_stats.json` |
 
 `Task`: `name`, `subject`, `project`, `project_name`, `customer`, `status` (Open, Working,
 Pending Review, On Hold, Completed, Cancelled), `group`, `exp_end_date`, `is_overdue` (the
@@ -534,7 +535,12 @@ off):
 | `get_approvals` | – | `[Approval]` (kind review) | Managers, leads and coordinators of projects; others get 403. Decide with `review_task`. Fixture `get_approvals.json` |
 | `get_projects_health` | – | `[ProjectHealth]` | Same as `get_team` (the portfolio). Fixture `get_projects_health.json` |
 | `get_sla_summary` | – | `{open, new_today, breached, first_reply_overdue, breaching_soon, unassigned, waiting_on_customer, oldest_unassigned}` | Same as `get_team`. Fixture `get_sla_summary.json` |
-| `get_scoreboard` | `period` (today, week, month, quarter, half, year), `department?` | `{period, period_label, range, champion, me, leaders (top 10), departments}` | Every agent (the Scoreboard is open to all). Fixture `get_scoreboard.json` |
+| `get_scoreboard` | `period` (today, week, month, quarter, half, year), `department?` or `group?` (a main department with its sub-departments, e.g. `ERP`) | `{period, period_label, range, department, group, groups, champion, me, leaders (top 10), departments}` | Every agent (the Scoreboard is open to all). Lines carry `weighted_work` next to `tasks_done`; `groups` is `[{group, departments}]`; `departments` rows have `kind` (`group` or `department`), `parent` (a department's group) and `weighted_work`, a group row first with its departments under it. Fixture `get_scoreboard.json` |
+
+`Task.quality` (from `get_task`): `{weight, weight_reasons, quality, quality_reasons, rating,
+rated_by, rated_by_name, rated_on, can_rate, self_made}`, e.g. `weight 3.25` with
+`["key", "8h estimate", "High priority"]` and `quality 1.25` with `["rated Excellent"]`. The
+formulas are in [team-dashboard.md](team-dashboard.md#weight-and-quality).
 
 `TeamMember`: `user`, `full_name`, `image`, `on_leave`, `leave` {to_date, half_day},
 `open_tasks`, `working`, `in_review`, `on_hold`, `overdue`, `due_this_week`, `done_this_week`,
@@ -558,10 +564,11 @@ Everything is derived from the Scoreboard (`helpdesk.team_dashboard`: `collect`,
 - `period`, `period_label`, `range` {start, end}, `compare` {start, end}: the comparison is
   the previous period **up to the same point** (`comparison_bounds`), as the web tiles.
 - `me`: the user's line on the whole team's board (below), or null.
-- `team` and `departments` (one per active department): `{department, champion (user or
+- `team`, `groups` (one per department group, e.g. ERP with GrowthX and Internal / R&D) and
+  `departments` (one per active department): `{department, group, champion (user or
   null), of (people on the board), leaders (top `limit`), me}`. A board line is `{user,
   full_name, image, department, rank, score, rank_delta, is_champion, tasks_done,
-  on_time_pct, overdue}`. Boards rank exactly as the web People view (`ranked_people`,
+  weighted_work, on_time_pct, overdue}`. Boards rank exactly as the web People view (`ranked_people`,
   `people_rows`): whoever has work in the scope, then its members with nothing.
 - **`rank_delta`**: the rank in the comparison period minus the rank now (`+2` = up two).
   The previous rank is among the people who delivered something then (`delivered`: tasks
@@ -583,8 +590,9 @@ Everything is derived from the Scoreboard (`helpdesk.team_dashboard`: `collect`,
   it follows the formula exactly, e.g. `{task, subject, due, points: 1.5, passes, text:
   "Finish “TBO ERP: migrate customers” on time: +1.5"}`. On time when its due date is today
   or later; an overdue task also stops costing its `−1` ("Finish overdue …"); one without a
-  due date earns half ("no due date, so half credit"). `passes` says it alone would close
-  the gap.
+  due date earns half ("no due date, so half credit"). The task counts by its weight
+  (`task_weight`: key, estimate, priority; one the user gave themselves counts half) and,
+  since it isn't rated yet, quality 1. `passes` says it alone would close the gap.
 
 **Streaks** respect the working calendar: HD Work Settings' weekly off and Saturdays off and
 the default SLA's holidays (`recurrence.working_day_checker`).
