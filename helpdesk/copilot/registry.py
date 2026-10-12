@@ -3,7 +3,11 @@
 
 """HDS Site Registry: which customer site (and which apps) a ticket belongs to."""
 
+import json
+
 import frappe
+from frappe import _
+from frappe.utils import now_datetime
 
 
 def registry_for_ticket(ticket: str):
@@ -22,6 +26,62 @@ def registry_for_ticket(ticket: str):
             {"customer_name": customer, "environment": "Production"},
         )
     return frappe.get_doc("HDS Site Registry", name) if name else None
+
+
+def refresh_from_site(registry) -> dict:
+    """Every app the site runs, with its repository, branch and commit, read through its connection.
+
+    A sandbox copy needs all of them (Frappe, ERPNext, HRMS and the custom
+    apps), not only the ones a person typed in. An app the site reports
+    without a remote keeps the repository already on the card; uncommitted
+    changes on the site mark the app as drifted.
+    """
+    from helpdesk.mcp_client import MCPClient
+
+    if not registry.connection:
+        frappe.throw(_("This site card has no connection to read the site through."))
+    result = MCPClient(registry.connection).call_tool(
+        "get_code_identity", {}, session_id=f"registry-{registry.name}"
+    )
+    text = ((result.get("content") or [{}])[0] or {}).get("text") or ""
+    if result.get("isError"):
+        frappe.throw(_("The site could not report its apps: {0}").format(text[:300]))
+    try:
+        reported = json.loads(text)
+    except ValueError:
+        frappe.throw(_("The site's list of apps could not be read."))
+    known = {row.app: row.repository for row in registry.apps}
+    rows = []
+    for info in reported if isinstance(reported, list) else []:
+        if not isinstance(info, dict) or not info.get("app"):
+            continue
+        remotes = info.get("remotes") or {}
+        repository = (
+            remotes.get("origin")
+            or remotes.get("upstream")
+            or next(iter(remotes.values()), None)
+            or known.get(info["app"])
+        )
+        rows.append(
+            {
+                "app": info["app"],
+                "repository": repository,
+                "branch": info.get("branch"),
+                "deployed_commit": info.get("commit"),
+                "drift_status": "Drift"
+                if info.get("dirty")
+                else ("In sync" if info.get("commit") else "Unknown"),
+            }
+        )
+    if not rows:
+        frappe.throw(_("The site reported no apps."))
+    registry.set("apps", rows)
+    registry.last_synced = now_datetime()
+    registry.save(ignore_permissions=True)
+    return {
+        "apps": len(rows),
+        "drift": [row["app"] for row in rows if row["drift_status"] == "Drift"],
+    }
 
 
 def apps_for(registry) -> list[dict]:

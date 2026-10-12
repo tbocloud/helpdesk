@@ -230,6 +230,15 @@ def create_fix_task(ticket: str | int) -> dict:
 
 
 @frappe.whitelist(methods=["POST"])
+def refresh_site_card(registry: str) -> dict:
+    """Read every app, commit and branch of a registered site through its connection."""
+    from helpdesk.copilot.registry import refresh_from_site
+
+    frappe.has_permission("HDS Site Registry", "write", registry, throw=True)
+    return refresh_from_site(frappe.get_doc("HDS Site Registry", registry))
+
+
+@frappe.whitelist(methods=["POST"])
 @agent_only
 def request_copilot_fix(ticket: str | int) -> dict:
     """Ask Copilot to fix the diagnosed bug on a sandbox copy of the site and open the pull request."""

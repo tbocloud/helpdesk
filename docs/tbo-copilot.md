@@ -26,7 +26,7 @@ One row per customer site and environment (Production, UAT, Sandbox): the custom
 
 `helpdesk/copilot/registry.py`: `registry_for_ticket(ticket)` finds the Production site by the ticket's connection, else by its customer; `apps_for(registry)` hands the apps to a worker as plain dicts.
 
-Rows are entered by hand for the pilot. Press deployment (Phase 2) fills `press_site` and `press_release_group` and syncs the apps from Press; the client's code identity (Phase 1b) fills `deployed_commit` and the drift status.
+A row is created by hand; then **Refresh from the site** on the form (`helpdesk.api.copilot.refresh_site_card`, System Manager) reads every app the site runs through its connection (`get_code_identity`): the repository (from the git remote; an app reported without one keeps the repository already on the card), the branch, the deployed commit, and Drift when the site's code has uncommitted changes. A sandbox copy needs all of them. Press deployment (Phase 2) fills `press_site` and `press_release_group` and syncs the apps from Press.
 
 ## Runs (`HDS Copilot Run`, `helpdesk/copilot/runs.py`)
 

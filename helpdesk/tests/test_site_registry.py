@@ -3,10 +3,13 @@
 
 """HDS Site Registry: which site a ticket belongs to."""
 
+import json
+from unittest.mock import patch
+
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from helpdesk.copilot.registry import apps_for, registry_for_ticket
+from helpdesk.copilot.registry import apps_for, refresh_from_site, registry_for_ticket
 from helpdesk.test_utils import (
     create_customer,
     hold_commits,
@@ -51,13 +54,93 @@ class TestSiteRegistry(FrappeTestCase):
             self.customer,
             apps=[
                 {
-                    "app": "hydrotech",
-                    "repository": "teambackoffice/hydrotech",
+                    "app": "acme-live",
+                    "repository": "teambackoffice/acme-live",
                     "branch": "main",
                 }
             ],
-            site_url="https://erp.hydrotech.example/",
+            site_url="https://erp.acme-live.example/",
         )
-        self.assertEqual(reg.site_url, "https://erp.hydrotech.example")
-        self.assertEqual(apps_for(reg)[0]["repository"], "teambackoffice/hydrotech")
+        self.assertEqual(reg.site_url, "https://erp.acme-live.example")
+        self.assertEqual(apps_for(reg)[0]["repository"], "teambackoffice/acme-live")
         self.assertEqual(apps_for(reg)[0]["drift_status"], "Unknown")
+
+
+class TestRefreshFromSite(FrappeTestCase):
+    """The site card lists every app the site runs, read through its connection."""
+
+    def setUp(self):
+        hold_commits(self)
+        customer = create_customer("Registry Refresh Co").name
+        self.registry = make_site_registry(
+            customer,
+            connection=make_support_connection(customer).name,
+            apps=[
+                {
+                    "app": "tax_app",
+                    "repository": "https://github.com/acme/tax_app",
+                    "branch": "old",
+                }
+            ],
+        )
+
+    def reported(self, apps):
+        client = patch("helpdesk.mcp_client.MCPClient")
+        mocked = client.start()
+        self.addCleanup(client.stop)
+        mocked.return_value.call_tool.return_value = {
+            "content": [{"type": "text", "text": json.dumps(apps)}]
+        }
+
+    def test_every_app_with_its_repository_branch_and_commit(self):
+        self.reported(
+            [
+                {
+                    "app": "erpnext",
+                    "branch": "version-15",
+                    "commit": "e" * 40,
+                    "remotes": {"upstream": "https://github.com/frappe/erpnext"},
+                    "dirty": False,
+                },
+                # a Press bench without .git: commit and branch only
+                {"app": "tax_app", "branch": "acme-live", "commit": "k" * 40},
+                {
+                    "app": "billing_app",
+                    "branch": "version-15.01",
+                    "commit": "s" * 40,
+                    "remotes": {
+                        "origin": "https://github.com/acme/billing-app"
+                    },
+                    "dirty": True,
+                },
+            ]
+        )
+
+        found = refresh_from_site(self.registry)
+
+        rows = {
+            row.app: row
+            for row in frappe.get_doc("HDS Site Registry", self.registry.name).apps
+        }
+        self.assertEqual(found, {"apps": 3, "drift": ["billing_app"]})
+        self.assertEqual(
+            rows["erpnext"].repository, "https://github.com/frappe/erpnext"
+        )
+        self.assertEqual(
+            (rows["tax_app"].repository, rows["tax_app"].branch),
+            ("https://github.com/acme/tax_app", "acme-live"),
+        )
+        self.assertEqual(rows["billing_app"].drift_status, "Drift")
+        self.assertEqual(rows["erpnext"].drift_status, "In sync")
+
+    def test_a_site_that_reports_nothing_changes_nothing(self):
+        self.reported([])
+        with self.assertRaises(frappe.ValidationError):
+            refresh_from_site(self.registry)
+        self.assertEqual(
+            [
+                row.branch
+                for row in frappe.get_doc("HDS Site Registry", self.registry.name).apps
+            ],
+            ["old"],
+        )
