@@ -174,11 +174,13 @@ import LucidePause from "~icons/lucide/pause";
 import LucidePencil from "~icons/lucide/pencil";
 import LucidePlay from "~icons/lucide/play";
 import LucideRepeat from "~icons/lucide/repeat";
+import LucideTimer from "~icons/lucide/timer";
 import LucideUndo2 from "~icons/lucide/undo-2";
 import LucideUserPlus from "~icons/lucide/user-plus";
 import type { TaskPullRequest } from "../pullRequestMeta";
 import {
   assignedByName,
+  formatElapsed,
   holdByLabel,
   holdDays,
   holdDurationLabel,
@@ -187,6 +189,7 @@ import {
   isPendingReview,
   priorityIcon,
   taskStatusMeta,
+  taskTimer,
   waitingOnLabel,
 } from "../taskMeta";
 import { useApproveTask } from "../useApproveTask";
@@ -357,6 +360,15 @@ function statusMeta(status: string) {
   return { label: __(meta.label), icon: meta.icon };
 }
 
+// the time on the task's timer when the dialog opened
+function timerLabel(d: TaskDetail) {
+  const timer = taskTimer(d);
+  if (!timer) return "—";
+  return `${formatElapsed(timer.elapsed)} · ${
+    timer.running ? __("running") : __("paused")
+  }`;
+}
+
 const detailRows = computed(() => {
   const d = detail.value;
   if (!d) return [];
@@ -389,6 +401,7 @@ const detailRows = computed(() => {
       label: __("Estimate"),
       value: d.estimated_hours ? __("{0} hrs", String(d.estimated_hours)) : "—",
     },
+    { label: __("Timer"), value: timerLabel(d), icon: LucideTimer },
   ];
 });
 

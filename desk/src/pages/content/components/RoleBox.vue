@@ -87,27 +87,48 @@
     </span>
   </div>
 
-  <!-- everyone on the role, each with how far their task is; a button only for
-       editors, so people who can't reassign get plain text, not a disabled control.
-       Not <component :is="'button'">: that resolves to frappe-ui's global Button,
-       whose fixed height clipped the names. -->
-  <button
-    v-else-if="canEdit"
-    type="button"
-    class="flex min-h-[52px] min-w-0 flex-col justify-center gap-2.5 rounded-xl border border-outline-gray-2 bg-surface-base px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4 hover:bg-surface-gray-1"
-    :title="__('Change who is on this')"
-    @click="emit('assign')"
-  >
-    <ReusePeople />
-    <!-- the names stay in the accessible name; this says what pressing it does -->
-    <span class="sr-only">{{ __("Change who is on this") }}</span>
-  </button>
-
+  <!-- everyone on the role, each with how far their task is. Pressing the people opens
+       the role's task in place; editors change who is on it with the small button. Not
+       <component :is="'button'">: that resolves to frappe-ui's global Button, whose
+       fixed height clipped the names. -->
   <div
     v-else
-    class="flex min-h-[52px] min-w-0 flex-col justify-center gap-2.5 rounded-xl border border-outline-gray-2 bg-surface-base px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+    class="flex min-h-[52px] min-w-0 items-stretch rounded-xl border border-outline-gray-2 bg-surface-base"
   >
-    <ReusePeople />
+    <button
+      v-if="task"
+      type="button"
+      class="group flex min-w-0 flex-1 items-center gap-2 rounded-[11px] px-3 py-2 text-left transition-colors hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+      :aria-label="openLabel"
+      :aria-describedby="peopleId"
+      :title="__('Open task')"
+      @click="emit('open-task', task)"
+    >
+      <span :id="peopleId" class="flex min-w-0 flex-1 flex-col gap-2.5">
+        <ReusePeople />
+      </span>
+      <LucideClipboardList
+        class="size-4 shrink-0 self-start text-ink-gray-5 transition-colors group-hover:text-ink-gray-8"
+        aria-hidden="true"
+      />
+    </button>
+    <div
+      v-else
+      class="flex min-w-0 flex-1 flex-col justify-center gap-2.5 px-3 py-2"
+    >
+      <ReusePeople />
+    </div>
+    <!-- 32px to look at, 44px to press -->
+    <button
+      v-if="canEdit"
+      type="button"
+      class="relative mr-1.5 grid size-8 shrink-0 place-items-center self-center rounded-lg text-ink-gray-6 transition-colors after:absolute after:-inset-1.5 hover:bg-surface-gray-2 hover:text-ink-gray-9 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+      :aria-label="__('Change who is on {0}', changeTarget)"
+      :title="__('Change who is on this')"
+      @click="emit('assign')"
+    >
+      <LucideUserPen class="size-4" aria-hidden="true" />
+    </button>
   </div>
 </template>
 
@@ -116,9 +137,11 @@ import { __ } from "@/translation";
 import { taskStatusMeta } from "@/pages/tasky/taskMeta";
 import { createReusableTemplate } from "@vueuse/core";
 import { dayjs } from "frappe-ui";
-import { computed } from "vue";
+import { computed, useId } from "vue";
 import LucideCheck from "~icons/lucide/check";
+import LucideClipboardList from "~icons/lucide/clipboard-list";
 import LucidePlus from "~icons/lucide/plus";
+import LucideUserPen from "~icons/lucide/user-pen";
 import type { RolePerson, TeamRole } from "../constants";
 
 const props = defineProps<{
@@ -126,6 +149,8 @@ const props = defineProps<{
   people: RolePerson[];
   canEdit: boolean;
   role?: TeamRole;
+  /** The post, as "customer · copy", so each role's buttons say whose task they open. */
+  context?: string;
 }>();
 
 // full class strings so Tailwind's scanner keeps them; each role keeps its colour across cards
@@ -142,7 +167,22 @@ const avatarTone = computed(() =>
 function initialOf(name: string) {
   return (name || "?").trim().charAt(0).toUpperCase();
 }
-const emit = defineEmits<{ (e: "assign"): void }>();
+const emit = defineEmits<{
+  (e: "assign"): void;
+  (e: "open-task", task: string): void;
+}>();
+
+// everyone on a role shares its one task
+const task = computed(() => props.people.find((p) => p.task)?.task);
+const peopleId = useId();
+const changeTarget = computed(() =>
+  props.context ? `${__(props.label)} · ${props.context}` : __(props.label)
+);
+const openLabel = computed(() =>
+  props.context
+    ? __("Open {0} task for {1}", __(props.label), props.context)
+    : __("Open {0} task", __(props.label))
+);
 
 const [DefinePeople, ReusePeople] = createReusableTemplate();
 

@@ -326,6 +326,16 @@ export interface TaskTimer {
   elapsed: number;
 }
 
+/** Seconds tracked, as "1h 05m 09s". */
+export function formatElapsed(s: number) {
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = Math.floor(s % 60);
+  return `${h > 0 ? h + "h " : ""}${String(m).padStart(2, "0")}m ${String(
+    sec
+  ).padStart(2, "0")}s`;
+}
+
 /**
  * A task's timer, from the server's fields alone. It runs only while the task is
  * in progress with a start time; otherwise banked time shows as paused. Pausing
