@@ -3561,7 +3561,7 @@ class FakeGitHub:
     def labels(self, repo: str, number: int) -> list[str]:
         return [label["name"] for label in self.pulls[(repo, number)]["labels"]]
 
-    def request(self, method, path, body=None, params=None):
+    def request(self, method, path, body=None, params=None, owner=None):
         import copy
 
         from helpdesk.copilot.github import GitHubError

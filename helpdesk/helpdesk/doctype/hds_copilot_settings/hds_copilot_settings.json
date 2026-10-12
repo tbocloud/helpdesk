@@ -21,6 +21,16 @@
 		"approval_reminder_hours",
 		"approval_escalate_hours",
 		"hold_label",
+		"fixes_section",
+		"copilot_writes_fixes",
+		"max_fix_attempts",
+		"column_break_fixes",
+		"max_fix_usd",
+		"copilot_commit_email",
+		"github_app_section",
+		"github_app_id",
+		"column_break_github_app",
+		"github_app_private_key",
 		"templates_section",
 		"message_templates"
 	],
@@ -130,6 +140,67 @@
 			"label": "Hold Label"
 		},
 		{
+			"fieldname": "fixes_section",
+			"fieldtype": "Section Break",
+			"label": "Copilot fixes"
+		},
+		{
+			"default": "0",
+			"description": "Copilot fixes a diagnosed bug itself: it reproduces it on a sandbox copy of the site, changes the code until its check passes, and opens the pull request for the one approval. Off: only when an agent presses Let Copilot fix it.",
+			"fieldname": "copilot_writes_fixes",
+			"fieldtype": "Check",
+			"label": "Copilot writes fixes"
+		},
+		{
+			"default": "2",
+			"description": "How often Copilot may try to fix the same run (a lost worker counts as a try).",
+			"fieldname": "max_fix_attempts",
+			"fieldtype": "Int",
+			"label": "Fix attempts per run",
+			"non_negative": 1
+		},
+		{
+			"fieldname": "column_break_fixes",
+			"fieldtype": "Column Break"
+		},
+		{
+			"default": "3",
+			"description": "The worker stops a fix that would cost more than this, in US dollars (0: no cap).",
+			"fieldname": "max_fix_usd",
+			"fieldtype": "Float",
+			"label": "Dollar cap per fix",
+			"non_negative": 1
+		},
+		{
+			"default": "copilot@teambackoffice.com",
+			"description": "Copilot's commits carry this email. When every commit of a pull request does, the customer's developer may approve it.",
+			"fieldname": "copilot_commit_email",
+			"fieldtype": "Data",
+			"label": "Copilot commit email",
+			"options": "Email"
+		},
+		{
+			"fieldname": "github_app_section",
+			"fieldtype": "Section Break",
+			"label": "GitHub App"
+		},
+		{
+			"description": "The TBO Copilot GitHub App. With its id and private key, TBO Support uses a short-lived key per repository (and gives the worker one to push a fix) instead of the personal token in Settings, GitHub.",
+			"fieldname": "github_app_id",
+			"fieldtype": "Data",
+			"label": "GitHub App ID"
+		},
+		{
+			"fieldname": "column_break_github_app",
+			"fieldtype": "Column Break"
+		},
+		{
+			"description": "The App's private key (the .pem file's text).",
+			"fieldname": "github_app_private_key",
+			"fieldtype": "Password",
+			"label": "GitHub App private key"
+		},
+		{
 			"fieldname": "templates_section",
 			"fieldtype": "Section Break",
 			"label": "Messages to the Customer"
@@ -144,7 +215,7 @@
 	],
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-10-12 12:00:00.000000",
+	"modified": "2026-10-13 01:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Copilot Settings",

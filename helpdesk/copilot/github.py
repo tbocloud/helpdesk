@@ -42,17 +42,37 @@ def token() -> str:
     return value
 
 
+REPO_PATH = re.compile(r"^/repos/([^/]+)/([^/]+)")
+
+
+def _bearer(path: str, owner: str | None) -> str:
+    """The GitHub App's key for the repository (or owner) when the App is set up, else the personal token."""
+    from helpdesk.copilot import github_app
+
+    if github_app.configured():
+        if found := REPO_PATH.match(path):
+            return github_app.token_for_repo(f"{found.group(1)}/{found.group(2)}")
+        if owner:
+            return github_app.token_for_owner(owner)
+    return token()
+
+
 def request(
-    method: str, path: str, body: dict | None = None, params: dict | None = None
+    method: str,
+    path: str,
+    body: dict | None = None,
+    params: dict | None = None,
+    owner: str | None = None,
 ):
-    """One REST call; the parsed JSON, or GitHubError."""
+    """One REST call; the parsed JSON, or GitHubError. `owner` picks the App's key for calls outside a repository (search)."""
+    bearer = _bearer(path, owner)
     try:
         response = requests.request(
             method,
             f"{GITHUB_API}{path}",
             headers={
                 "Accept": "application/vnd.github+json",
-                "Authorization": f"Bearer {token()}",
+                "Authorization": f"Bearer {bearer}",
                 "X-GitHub-Api-Version": "2022-11-28",
             },
             json=body,
@@ -210,6 +230,37 @@ def merge(repo: str, number: int, sha: str, title: str = "") -> str:
             raise
         return (result or {}).get("sha") or ""
     raise refused
+
+
+def pull_commits(repo: str, number: int) -> list[dict]:
+    """The pull request's commits (GitHub lists at most 250)."""
+    commits = []
+    for page in range(1, MAX_FILE_PAGES + 1):
+        batch = request(
+            "GET",
+            f"/repos/{repo}/pulls/{int(number)}/commits",
+            params={"per_page": 100, "page": page},
+        )
+        commits.extend(batch or [])
+        if len(batch or []) < 100:
+            break
+    return commits
+
+
+def copilot_only(repo: str, pull: dict, email: str) -> bool:
+    """Whether Copilot alone made the pull request: the GitHub App opened it and every commit carries Copilot's email."""
+    from helpdesk.copilot import github_app
+
+    if not (email and github_app.configured()):
+        return False
+    if pull.get("author") != github_app.bot_login():
+        return False
+    commits = pull_commits(repo, pull["number"])
+    return bool(commits) and all(
+        ((c.get("commit") or {}).get("author") or {}).get("email", "").lower()
+        == email.lower()
+        for c in commits
+    )
 
 
 def add_label(repo: str, number: int, label: str):

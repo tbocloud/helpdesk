@@ -750,30 +750,59 @@ def _pull_to_read(run) -> tuple[str, int] | None:
 
 def discover(run) -> tuple[str, int] | None:
     """A pull request that says `Closes <fix task>` but never reached the hub by webhook."""
+    from helpdesk.copilot import github_app
     from helpdesk.github_sync import PullRequestSync
 
     if not run.task:
         return None
-    try:
-        found = github.request(
-            "GET",
-            "/search/issues",
-            params={"q": f'"{run.task}" is:pr is:open', "per_page": 10},
-        )
-    except GitHubError:
-        return None
     settings = frappe.get_single("HD GitHub Settings")
-    for item in (found or {}).get("items") or []:
-        repo = "/".join((item.get("repository_url") or "").split("/")[-2:])
-        if not repo or not settings.allows_repo(repo):
-            continue
+    # the App searches each owner it is installed on; a personal token searches once
+    for owner in (_owners(run) if github_app.configured() else []) or [None]:
         try:
-            pr = github.get_pull(repo, item.get("number"))
+            found = github.request(
+                "GET",
+                "/search/issues",
+                params={"q": f'"{run.task}" is:pr is:open', "per_page": 10},
+                owner=owner,
+            )
         except GitHubError:
             continue
-        if PullRequestSync(repo, pr).task_refs().get(run.task) == "Closes":
-            return repo, int(pr.get("number") or 0)
+        for item in (found or {}).get("items") or []:
+            repo = "/".join((item.get("repository_url") or "").split("/")[-2:])
+            if not repo or not settings.allows_repo(repo):
+                continue
+            try:
+                pr = github.get_pull(repo, item.get("number"))
+            except GitHubError:
+                continue
+            if PullRequestSync(repo, pr).task_refs().get(run.task) == "Closes":
+                return repo, int(pr.get("number") or 0)
     return None
+
+
+def _owners(run) -> list[str]:
+    """The GitHub owners to search: those of the site's app repositories, else the allowed ones."""
+    owners = [
+        _repo_name(repository).split("/")[0]
+        for repository in (
+            frappe.get_all(
+                "HDS Site App",
+                filters={"parent": run.registry, "parenttype": "HDS Site Registry"},
+                pluck="repository",
+            )
+            if run.registry
+            else []
+        )
+        if "/" in _repo_name(repository)
+    ]
+    if not owners:
+        allowed = frappe.db.get_single_value("HD GitHub Settings", "allowed_repos")
+        owners = [
+            line.strip().split("/")[0]
+            for line in (allowed or "").splitlines()
+            if "/" in line
+        ]
+    return list(dict.fromkeys(owner.lower() for owner in owners if owner))
 
 
 def replay(repo: str, pr: dict):

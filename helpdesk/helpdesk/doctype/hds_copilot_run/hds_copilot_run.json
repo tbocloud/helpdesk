@@ -44,6 +44,13 @@
 		"column_break_fix",
 		"deployed_at",
 		"deployed_by",
+		"copilot_fix_section",
+		"fix_requested",
+		"fix_status",
+		"fix_attempts",
+		"fix_requested_by",
+		"column_break_copilot_fix",
+		"change",
 		"review_section",
 		"review_verdict",
 		"reviewed_root_cause",
@@ -314,6 +321,51 @@
 			"read_only": 1
 		},
 		{
+			"fieldname": "copilot_fix_section",
+			"fieldtype": "Section Break",
+			"label": "Copilot's fix"
+		},
+		{
+			"default": "0",
+			"fieldname": "fix_requested",
+			"fieldtype": "Check",
+			"label": "Copilot asked to fix",
+			"read_only": 1
+		},
+		{
+			"fieldname": "fix_status",
+			"fieldtype": "Select",
+			"label": "Copilot fix",
+			"options": "\nQueued\nWorking\nOpened\nFailed",
+			"read_only": 1
+		},
+		{
+			"default": "0",
+			"fieldname": "fix_attempts",
+			"fieldtype": "Int",
+			"label": "Fix attempts",
+			"read_only": 1
+		},
+		{
+			"fieldname": "fix_requested_by",
+			"fieldtype": "Link",
+			"label": "Fix asked by",
+			"options": "User",
+			"read_only": 1
+		},
+		{
+			"fieldname": "column_break_copilot_fix",
+			"fieldtype": "Column Break"
+		},
+		{
+			"description": "The pull request Copilot opened and what it tested, as the worker reported it.",
+			"fieldname": "change",
+			"fieldtype": "Code",
+			"label": "Copilot's change",
+			"options": "JSON",
+			"read_only": 1
+		},
+		{
 			"fieldname": "review_section",
 			"fieldtype": "Section Break",
 			"label": "Team Review"
@@ -391,7 +443,7 @@
 		}
 	],
 	"links": [],
-	"modified": "2026-10-12 12:00:00.000000",
+	"modified": "2026-10-13 01:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Copilot Run",
