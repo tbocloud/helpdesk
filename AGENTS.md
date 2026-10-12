@@ -70,7 +70,8 @@ Frappe Helpdesk is an open-source ticket management tool built on the [Frappe Fr
   - Font sizes: `text-2xs`, `text-xs`, `text-sm`, `text-base`, `text-lg`, `text-xl`, `text-2xl`, `text-3xl`; weighted variants such as `text-base-medium`
   - Multiline text: `text-p-xs`, `text-p-sm`, `text-p-base`, `text-p-lg`, `text-p-xl`, `text-p-2xl`
 - **TBO theme** (`desk/src/theme.css`, reference mockup: TBO ticket view). It re-points frappe-ui's gray tokens at cool-tinted neutrals and adds:
-  - `brand` (`bg-brand`, `text-brand-on`, `bg-brand-soft`, `text-brand-ink`, `hover:bg-brand-hover`) — the **one accent**, only for the primary action and the current selection. frappe-ui `variant="solid"` buttons render in brand automatically.
+  - `brand` (`bg-brand`, `text-brand-on`, `bg-brand-soft`, `text-brand-ink`, `hover:bg-brand-hover`) — the TBO logo teal (`#3A748D` light, `#6FB4CF` dark; same hex as the mobile app), the **one accent**, only for the primary action and the current selection. frappe-ui `variant="solid"` buttons render in brand automatically.
+  - `highlight` (`ring-highlight`, `border-highlight`) — the logo orange (`#C8641A` light, `#F59A4A` dark), only as a ring or marker: the keyboard focus ring and the calendars' "today" ring. Never a fill, a button or text, and not a status. Full palette and contrast table: `docs/ui-guidelines.md` §8.
   - Status colors `success`, `warning`, `danger`, `info` (each with `-soft` background) — only to convey meaning, and always paired with an icon or text label.
   - `note` / `note-border` for internal notes.
   - `champion` (`text-champion`, `bg-champion-soft`, `border-champion-border`) — warm gold, only for the Scoreboard's champion card.

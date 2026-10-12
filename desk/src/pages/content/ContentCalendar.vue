@@ -49,7 +49,7 @@
           <button
             v-if="auth.canEditContent"
             type="button"
-            class="inline-flex h-8 items-center gap-1.5 rounded-[10px] bg-brand px-3 text-sm font-semibold text-brand-on shadow-sm transition-colors hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 sm:px-4"
+            class="inline-flex h-8 items-center gap-1.5 rounded-[10px] bg-brand px-3 text-sm font-semibold text-brand-on shadow-sm transition-colors hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight focus-visible:ring-offset-2 sm:px-4"
             @click="openAdd()"
           >
             <LucidePlus class="size-4" aria-hidden="true" />
@@ -363,7 +363,7 @@
             v-for="d in weekDays"
             :key="d.date"
             type="button"
-            class="flex min-h-[54px] min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl px-0.5 py-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 sm:h-[54px]"
+            class="flex min-h-[54px] min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl px-0.5 py-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight focus-visible:ring-offset-1 sm:h-[54px]"
             :class="
               d.selected
                 ? 'border-2 border-brand bg-brand-soft'
@@ -385,7 +385,7 @@
                 d.selected
                   ? 'bg-brand text-brand-on'
                   : d.isToday
-                  ? 'font-semibold text-brand-ink'
+                  ? 'font-semibold text-ink-gray-9 ring-2 ring-inset ring-highlight'
                   : 'text-ink-gray-9'
               "
               >{{ d.day }}</span

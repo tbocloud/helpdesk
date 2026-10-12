@@ -24,13 +24,14 @@ Changed pairs are covered too: the settings radios now use `ink-gray-9` on `surf
 
 | Pair | Light | Dark |
 | --- | --- | --- |
-| `brand-ink` on `brand-soft` | 7.42 | 8.23 |
-| `on-brand` on `brand` | 6.24 | 6.09 |
-| `brand` on `surface-base` | 6.24 | 5.96 |
+| `brand-ink` on `brand-soft` | 6.04 | 8.75 |
+| `on-brand` on `brand` | 5.17 | 7.20 |
+| `brand` on `surface-base` | 5.17 | 7.77 |
+| `highlight` (focus and today rings, 3:1) on `surface-base` | 3.97 | 8.19 |
 | `success` on `success-soft` | 5.02 | 7.13 |
 | `warning` on `warning-soft` | 5.20 | 8.34 |
 | `danger` on `danger-soft` | 4.90 | 7.17 |
-| `info` on `info-soft` | 5.27 | 6.68 |
+| `info` on `info-soft` | 5.49 | 6.71 |
 | `ink-gray-9` on `note` | 17.15 | 13.77 |
 | `ink-gray-5` on `surface-base` | 5.44 | 5.37 |
 | `ink-gray-5` on `surface-gray-2` | 4.86 | 4.53 |
