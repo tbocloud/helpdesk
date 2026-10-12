@@ -3442,3 +3442,204 @@ def restrict_tickets_to_teams(test_case):
             "do_not_restrict_tickets_without_an_agent_group": 1,
         },
     )
+
+
+# --- Copilot fixes (Phase 1d) ---
+
+
+def github_pull(
+    repo: str,
+    number: int,
+    head_sha: str,
+    body: str = "",
+    title: str = "Fix the margin rate",
+    draft: bool = False,
+    state: str = "open",
+    merged: bool = False,
+    mergeable_state: str = "clean",
+    author: str = "dev-login",
+    base: str = "main",
+) -> dict:
+    """A GitHub pull request as the REST API and webhooks give it."""
+    return {
+        "number": number,
+        "title": title,
+        "body": body,
+        "draft": draft,
+        "state": state,
+        "merged": merged,
+        "merged_at": "2026-10-12T10:00:00Z" if merged else None,
+        "closed_at": "2026-10-12T10:00:00Z" if state == "closed" else None,
+        "html_url": f"https://github.com/{repo}/pull/{number}",
+        "user": {"login": author},
+        "head": {"sha": head_sha, "ref": f"fix-{number}"},
+        "base": {"ref": base, "repo": {"full_name": repo}},
+        "labels": [],
+        "mergeable_state": mergeable_state,
+        "merge_commit_sha": None,
+    }
+
+
+class FakeGitHub:
+    """GitHub's REST API for Copilot fixes, in memory: pull requests, their files and
+    checks, labels, comments, search and the merge (which refuses a moved head, 409).
+
+    `install(test_case)` routes helpdesk.copilot.github.request here for one test.
+    """
+
+    def __init__(self):
+        self.pulls: dict = {}
+        self.files: dict = {}
+        self.check_runs: dict = {}
+        self.statuses: dict = {}
+        self.repo_settings: dict = {}
+        self.comments: list = []
+        self.calls: list = []
+        self.search_items: list = []
+        self.merge_refusal: tuple | None = None
+        self.merged_with: dict | None = None
+
+    def install(self, test_case):
+        patcher = patch("helpdesk.copilot.github.request", side_effect=self.request)
+        patcher.start()
+        test_case.addCleanup(patcher.stop)
+        return self
+
+    def add_pull(
+        self, repo: str, number: int, head_sha: str, files: list | None = None, **kwargs
+    ) -> dict:
+        pull = github_pull(repo, number, head_sha, **kwargs)
+        self.pulls[(repo, number)] = pull
+        self.files[(repo, number)] = (
+            files
+            if files is not None
+            else [
+                {
+                    "filename": "demo_app/margin.py",
+                    "status": "modified",
+                    "additions": 3,
+                    "deletions": 1,
+                    "patch": "+rate = 0",
+                },
+                {
+                    "filename": "tests/test_margin.py",
+                    "status": "modified",
+                    "additions": 5,
+                    "deletions": 0,
+                    "patch": "+check",
+                },
+            ]
+        )
+        self.set_checks(head_sha, {"tests": "success"})
+        return pull
+
+    def push(self, repo: str, number: int, head_sha: str):
+        self.pulls[(repo, number)]["head"]["sha"] = head_sha
+        self.set_checks(head_sha, {"tests": "success"})
+
+    def set_checks(self, sha: str, conclusions: dict, status: dict | None = None):
+        """`{name: conclusion}`; a conclusion of None means still running."""
+        self.check_runs[sha] = [
+            {
+                "name": name,
+                "status": "completed" if result else "in_progress",
+                "conclusion": result,
+            }
+            for name, result in conclusions.items()
+        ]
+        self.statuses[sha] = status or {"state": "pending", "total_count": 0}
+
+    def labels(self, repo: str, number: int) -> list[str]:
+        return [label["name"] for label in self.pulls[(repo, number)]["labels"]]
+
+    def request(self, method, path, body=None, params=None):
+        import copy
+
+        from helpdesk.copilot.github import GitHubError
+
+        self.calls.append((method, path, body))
+        parts = path.strip("/").split("/")
+        if parts[0] == "search":
+            return {"items": self.search_items}
+        repo, rest = f"{parts[1]}/{parts[2]}", parts[3:]
+        if not rest:
+            return self.repo_settings.get(
+                repo,
+                {
+                    "allow_merge_commit": True,
+                    "allow_squash_merge": True,
+                    "allow_rebase_merge": True,
+                },
+            )
+        if rest[0] == "commits":
+            sha = rest[1]
+            if rest[2] == "check-runs":
+                return {"check_runs": self.check_runs.get(sha, [])}
+            return self.statuses.get(sha, {"state": "pending", "total_count": 0})
+        number = int(rest[1])
+        pull = self.pulls.get((repo, number))
+        if not pull:
+            raise GitHubError(404, "Not Found")
+        if rest[0] == "pulls" and len(rest) == 2:
+            return copy.deepcopy(pull)
+        if rest[0] == "pulls" and rest[2] == "files":
+            return (
+                self.files[(repo, number)]
+                if int((params or {}).get("page", 1)) == 1
+                else []
+            )
+        if rest[0] == "pulls" and rest[2] == "merge":
+            if self.merge_refusal:
+                raise GitHubError(*self.merge_refusal)
+            if body.get("sha") != pull["head"]["sha"]:
+                raise GitHubError(
+                    409, "Head branch was modified. Review and try the merge again."
+                )
+            pull.update(
+                state="closed",
+                merged=True,
+                merged_at="2026-10-12T10:00:00Z",
+                merge_commit_sha="m" + body["sha"],
+            )
+            self.merged_with = body
+            return {"sha": pull["merge_commit_sha"], "merged": True}
+        if rest[0] == "issues" and rest[2] == "labels":
+            if method == "POST":
+                pull["labels"] += [{"name": name} for name in body["labels"]]
+                return []
+            name = rest[3]
+            if name not in self.labels(repo, number):
+                raise GitHubError(404, "Label does not exist")
+            pull["labels"] = [
+                label for label in pull["labels"] if label["name"] != name
+            ]
+            return {}
+        if rest[0] == "issues" and rest[2] == "comments":
+            self.comments.append((repo, number, body["body"]))
+            return {"id": len(self.comments)}
+        raise GitHubError(404, f"no fake route for {method} {path}")
+
+
+def make_hd_pull_request(
+    task: str,
+    repo: str,
+    number: int,
+    head_sha: str,
+    state: str = "Open",
+    link_kind: str = "Closes",
+):
+    """An HD Pull Request row as the GitHub sync makes it, linked to `task`."""
+    return frappe.get_doc(
+        {
+            "doctype": "HD Pull Request",
+            "repo": repo,
+            "number": number,
+            "task": task,
+            "link_kind": link_kind,
+            "state": state,
+            "title": "Fix the margin rate",
+            "url": f"https://github.com/{repo}/pull/{number}",
+            "head_sha": head_sha,
+            "base_branch": "main",
+        }
+    ).insert(ignore_permissions=True)

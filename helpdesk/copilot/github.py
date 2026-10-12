@@ -1,0 +1,164 @@
+# Copyright (c) 2026, Quark Cyber Systems FZC and contributors
+# For license information, please see license.txt
+
+"""GitHub calls for Copilot fixes: read a pull request, its files and its checks,
+hold it with a label, merge it with the approved commit pinned.
+
+Unlike the task sync's helper, every call raises GitHubError with GitHub's own
+status and message: a refused merge must never pass for a network blip.
+"""
+
+from urllib.parse import quote
+
+import requests
+from frappe import _
+
+GITHUB_API = "https://api.github.com"
+TIMEOUT = 15
+# a check run in one of these conclusions does not block a merge (the org merge bot's rule)
+GREEN = {"success", "neutral", "skipped"}
+MAX_FILE_PAGES = 3
+
+
+class GitHubError(Exception):
+    def __init__(self, status: int, message: str):
+        super().__init__(f"GitHub {status}: {message}" if status else message)
+        self.status = status
+        self.message = message
+
+
+def token() -> str:
+    from frappe.utils.password import get_decrypted_password
+
+    value = get_decrypted_password(
+        "HD GitHub Settings",
+        "HD GitHub Settings",
+        "github_token",
+        raise_exception=False,
+    )
+    if not value:
+        raise GitHubError(0, _("No GitHub token is saved in Settings → GitHub."))
+    return value
+
+
+def request(
+    method: str, path: str, body: dict | None = None, params: dict | None = None
+):
+    """One REST call; the parsed JSON, or GitHubError."""
+    try:
+        response = requests.request(
+            method,
+            f"{GITHUB_API}{path}",
+            headers={
+                "Accept": "application/vnd.github+json",
+                "Authorization": f"Bearer {token()}",
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
+            json=body,
+            params=params,
+            timeout=TIMEOUT,
+        )
+    except requests.RequestException as e:
+        raise GitHubError(
+            0, _("GitHub could not be reached: {0}").format(str(e)[:200])
+        ) from e
+    if response.status_code >= 400:
+        try:
+            message = response.json().get("message") or response.text
+        except ValueError:
+            message = response.text
+        raise GitHubError(response.status_code, str(message)[:300])
+    if not response.content:
+        return {}
+    return response.json()
+
+
+def get_pull(repo: str, number: int) -> dict:
+    return request("GET", f"/repos/{repo}/pulls/{int(number)}")
+
+
+def pull_files(repo: str, number: int) -> list[dict]:
+    """The changed files (name, status, additions, deletions, patch), at most 300."""
+    files = []
+    for page in range(1, MAX_FILE_PAGES + 1):
+        batch = request(
+            "GET",
+            f"/repos/{repo}/pulls/{int(number)}/files",
+            params={"per_page": 100, "page": page},
+        )
+        files.extend(batch or [])
+        if len(batch or []) < 100:
+            break
+    return files
+
+
+def checks(repo: str, sha: str) -> dict:
+    """Whether every check on `sha` passed, as the org merge bot decides it.
+
+    Every check run completed as success, neutral or skipped, and the combined
+    commit status success (or no status at all). Returns
+    `{green, total, pending, failing}` with the names of the ones that block.
+    """
+    runs = (
+        request(
+            "GET", f"/repos/{repo}/commits/{sha}/check-runs", params={"per_page": 100}
+        )
+        or {}
+    ).get("check_runs") or []
+    pending = [r.get("name") for r in runs if r.get("status") != "completed"]
+    failing = [
+        r.get("name")
+        for r in runs
+        if r.get("status") == "completed" and r.get("conclusion") not in GREEN
+    ]
+    status = request("GET", f"/repos/{repo}/commits/{sha}/status") or {}
+    if status.get("total_count") and status.get("state") == "pending":
+        pending.append(_("commit status"))
+    elif status.get("total_count") and status.get("state") != "success":
+        failing.append(_("commit status"))
+    return {
+        "green": not pending and not failing,
+        "total": len(runs) + int(status.get("total_count") or 0),
+        "pending": pending,
+        "failing": failing,
+    }
+
+
+def merge_method(repo: str) -> str:
+    """The repository's own method, chosen as the org merge bot chooses it."""
+    settings = request("GET", f"/repos/{repo}") or {}
+    for method, allowed in (
+        ("merge", "allow_merge_commit"),
+        ("squash", "allow_squash_merge"),
+        ("rebase", "allow_rebase_merge"),
+    ):
+        if settings.get(allowed):
+            return method
+    return "merge"
+
+
+def merge(repo: str, number: int, sha: str, title: str = "") -> str:
+    """Merges with `sha` pinned: GitHub refuses (409) if the head moved. Returns the merge commit."""
+    body = {"merge_method": merge_method(repo), "sha": sha}
+    if title:
+        body["commit_title"] = title[:250]
+    result = request("PUT", f"/repos/{repo}/pulls/{int(number)}/merge", body=body)
+    return (result or {}).get("sha") or ""
+
+
+def add_label(repo: str, number: int, label: str):
+    request(
+        "POST", f"/repos/{repo}/issues/{int(number)}/labels", body={"labels": [label]}
+    )
+
+
+def remove_label(repo: str, number: int, label: str):
+    try:
+        request("DELETE", f"/repos/{repo}/issues/{int(number)}/labels/{quote(label)}")
+    except GitHubError as e:
+        if e.status != 404:  # the label was not there
+            raise
+
+
+def comment(repo: str, number: int, text: str):
+    request("POST", f"/repos/{repo}/issues/{int(number)}/comments", body={"body": text})

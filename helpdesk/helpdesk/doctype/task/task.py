@@ -463,13 +463,20 @@ class Task(Document):
         # a merged pull request completes a task without a person
         by = acting_user()
         done_by = frappe.db.get_value("User", by, "full_name") or by
+        # a Copilot fix tells the customer itself once it is deployed
+        from helpdesk.copilot.fixes import is_fix_task
+
+        if is_fix_task(self.name):
+            text = _(
+                "Task {0} ({1}) was completed by {2}. Fix merged: deploy it, then press Mark deployed in the Copilot dialog."
+            )
+        else:
+            text = _("Task {0} ({1}) was completed by {2}. Reply to the customer.")
         comment = frappe.get_doc(
             {
                 "doctype": "HD Ticket Comment",
                 "reference_ticket": ticket.name,
-                "content": _(
-                    "Task {0} ({1}) was completed by {2}. Reply to the customer."
-                ).format(
+                "content": text.format(
                     frappe.bold(self.name),
                     frappe.utils.escape_html(self.subject or ""),
                     done_by,

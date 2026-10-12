@@ -44,9 +44,17 @@ A run is Copilot's work on one ticket. It starts when a ticket of a customer wit
 | Explaining | Answered | hub, agent | the agent sent the reply |
 | Answered, Handed Over | Closed | customer, agent, hub | the customer confirmed |
 | Answered, Preparing Fix, Handed Over | Escalated | customer, agent | the customer reopened; a person takes over |
-| any active state | Cancelled | agent | Cancel |
+| Preparing Fix | Awaiting Approval | hub | the fix's pull request is ready for review (see **The fix**) |
+| Awaiting Approval | Approved | agent | the one approval |
+| Awaiting Approval, Approved | Preparing Fix | agent, hub | rejected with a reason; the pull request went back to draft or was closed |
+| Approved | Awaiting Approval | hub | new commits arrived after the approval |
+| Approved | Merged | hub | the hub merged it |
+| Preparing Fix, Awaiting Approval | Merged | hub | merged on GitHub without the approval (recorded, the Agent Managers told) |
+| Merged | Resolved | agent | Mark deployed, after an engineer deployed it |
+| Resolved | Closed, Escalated | customer, agent | the customer confirmed, or reopened |
+| any active state up to Approved | Cancelled | agent | Cancel |
 
-Later phases add Awaiting Approval, Approved, Merging, Merged, Deploying, Verifying, Resolved and Rejected.
+Later phases add Deploying and Verifying (Phase 2).
 
 A run started while **Shadow mode** is on is a shadow run (`shadow`) for its whole life, whatever the setting says later. `base_app` and `base_commit` (set with `start_run(..., base_commit=, base_app=)`) make the worker read that app at that commit instead of the deployed code; the evaluation uses them to put Copilot in front of the code as it was before a known fix.
 
@@ -95,6 +103,21 @@ Every diagnosis is an internal note on the ticket (category, confidence, summary
 **The agent's Copilot button** (HD Form Script "Helpdesk Copilot Actions", installed with the AI one by `helpdesk/setup/form_scripts.py`): start a run, see the state, root cause, diagnosis, evidence, model and tokens and latest events, rate the diagnosis, cancel it, start again. API: `helpdesk.api.copilot.start_run`, `get_run`, `review_diagnosis`, `cancel_run` (agents).
 
 **Connections** record `client_version` and `client_capabilities` from registration and the daily health check (`helpdesk/client_api.py`: `call`, `hub_api`, `supports`).
+
+## The fix (`helpdesk/copilot/fixes.py`, `approvals.py`, `risk.py`, `github.py`)
+
+A run at Preparing Fix needs a code change. Until the worker can open pull requests (Phase 1c-2), a developer makes the change; the hub holds it, asks one person to approve it, merges it, and tells the customer once it is deployed.
+
+1. **The fix task.** A live run gets a Task "Copilot fix: <subject>" in the customer's open project (else the hand-over project), assigned to the customer's **Assigned developer**, with the diagnosis and the instruction to open a pull request that says `Closes TASK-…`. A shadow run gets it from **Create fix task** in the Copilot dialog. With no project at all the run says so on the ticket.
+2. **The pull request.** The GitHub sync links it to the task and calls `fixes.on_pull_request`. The hub puts the **hold label** (`no-auto-merge`, a setting) on it: the org merge bot and the repository's auto-merge workflow skip pull requests with that label, so nothing merges it before the approval. A draft waits; when it is ready, an **HDS Copilot Approval** is opened for its head commit, with the changed files, the risk and the checks, and assigned. One pull request per fix: while the run's own is open, another that closes the same task is left alone (an event says so) and is followed once the first is closed.
+3. **The risk** (`risk.py`, fixed rules on the changed files): accounting and tax, stock, payroll, permissions, migrations, `hooks.py`, doctype JSON, raw SQL writes, dependencies or CI make it **high** and **sensitive**; more than 300 changed lines make it high; no test makes it medium; otherwise low. Each reason is listed on the card.
+4. **Who approves.** HDS Copilot Settings → **Approvers** (user, senior, active). The customer's developer when allowed, else the approver with the fewest pending approvals; a sensitive fix only a **senior** (with no senior listed, the Agent Managers act as seniors); never the people the fix task is assigned to. The approver hears it by chat or email with a link to the ticket; a sensitive one, and any approval that waits past **Escalate after**, also goes to the team's channel.
+5. **Deciding** (`approvals.decide`, row lock): the first decision wins. **Approve** with the planned deploy date: the hub re-reads the pull request, and if new commits arrived the approval is superseded and a new one opened. **Reject** needs a reason, which goes to the task and the pull request; the run goes back to Preparing Fix, and the rejected commit is not asked again: the developer's next push opens a new approval.
+6. **The merge** (`fixes.try_merge`): when the head is still the approved commit, every check run passed (success, neutral or skipped) with the commit status green or absent, and GitHub calls the merge clean, the hub merges with the approved commit pinned (GitHub refuses with 409 if the head moved), using the repository's own method as the org merge bot chooses it (merge commit where allowed, else squash, else rebase). It retries on every check webhook and the 10-minute refresh. A lasting block (failing checks, merge conflicts, a branch behind its base, a review GitHub requires) is told to the approver and the developer once, in plain words; GitHub still settling the merge state (`unknown`, `unstable`) is a quiet wait. Each finished workflow also updates the checks on the card. After merging, the hub replays the merged pull request through the task sync, so the fix task completes at once; GitHub's own webhook arriving later changes nothing, because the sync acts once per change of state. The customer then sees **Fix scheduled** with the planned date.
+7. **Merged elsewhere.** A pull request merged on GitHub without the approval moves the run to Merged too, with a note on the ticket, an event and the Agent Managers told.
+8. **Mark deployed.** After an engineer deploys the merged fix through Press, **Mark deployed** in the dialog resolves the run; the customer is asked to confirm (Resolved), as in Phase 1a.
+
+The GitHub token in Settings → GitHub needs Contents write (to merge) and pull-request write (labels, comments) on the repositories Copilot fixes, and those repositories must be allowed in the sync. Copilot follows pull requests only while the GitHub sync is on: switched off, the refresh says so and nothing acts on GitHub's events. Crons: `fixes.refresh_open` every 10 minutes (reads every open fix's pull request from GitHub and replays it as its webhook would have; finds one that says `Closes TASK-…` but never reached the hub, and moves on to a new pull request when the run's was closed), `approvals.remind_and_escalate` every 15 minutes (a reminder after **Remind after** hours, then a senior or the Agent Managers after **Escalate after** hours). API (agents): `helpdesk.api.copilot.create_fix_task`, `decide_fix(ticket, approve, note, deploy_date)`, `refresh_fix`, `mark_deployed`; `get_run` returns the fix card. When the Task of a Copilot fix completes on the merge, its note on the ticket says to deploy and press Mark deployed instead of "Reply to the customer".
 
 ## MCP server (`helpdesk/api/copilot_mcp.py`, `helpdesk/copilot/mcp/`)
 

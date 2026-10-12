@@ -173,6 +173,9 @@ function showCopilotRunDialog(info, doc, call, toast, $dialog) {
     }
     html += "</ul></div>";
   }
+  if (info.fix) {
+    html += copilotFixSummary(info.fix);
+  }
   if (info.events && info.events.length) {
     html +=
       '<div style="margin-top:8px"><b>Latest events</b><ul style="margin:4px 0 0 16px;color:#6b7280">';
@@ -202,6 +205,61 @@ function showCopilotRunDialog(info, doc, call, toast, $dialog) {
       onClick: function (_ref) {
         _ref.close();
         showCopilotReviewDialog(info, doc, call, toast, $dialog);
+      },
+    });
+  }
+  var fix = info.fix || {};
+  if (fix.can_create_task) {
+    actions.push({
+      label: "Create fix task",
+      variant: "subtle",
+      onClick: async function (_ref) {
+        try {
+          await call("helpdesk.api.copilot.create_fix_task", {
+            ticket: doc.name,
+          });
+          toast.success("Fix task created for the developer.");
+          _ref.close();
+        } catch (error) {
+          toast.error(copilotError(error, "Failed to create the fix task"));
+          console.error("Copilot fix task error:", error);
+        }
+      },
+    });
+  }
+  if (fix.approval && fix.approval.status === "Pending") {
+    actions.push({
+      label: "Review fix",
+      variant: "solid",
+      onClick: function (_ref) {
+        _ref.close();
+        showCopilotFixReview(info, doc, call, toast, $dialog);
+      },
+    });
+  }
+  if (fix.can_refresh) {
+    actions.push({
+      label: "Refresh fix",
+      onClick: async function (_ref) {
+        try {
+          var result = await call("helpdesk.api.copilot.refresh_fix", {
+            ticket: doc.name,
+          });
+          toast.success("GitHub: " + ((result && result.refresh) || "read"));
+          _ref.close();
+        } catch (error) {
+          toast.error(copilotError(error, "Failed to read the pull request"));
+        }
+      },
+    });
+  }
+  if (fix.can_mark_deployed) {
+    actions.push({
+      label: "Mark deployed",
+      variant: "solid",
+      onClick: function (_ref) {
+        _ref.close();
+        showCopilotMarkDeployed(doc, call, toast, $dialog);
       },
     });
   }
@@ -332,6 +390,301 @@ function showCopilotReviewDialog(info, doc, call, toast, $dialog) {
         theme: "red",
         onClick: function (_ref) {
           save("Wrong", _ref);
+        },
+      },
+      {
+        label: "Cancel",
+        onClick: function (_ref) {
+          _ref.close();
+        },
+      },
+    ],
+  });
+}
+
+// The fix: its task, its pull request and its approval, inside the run dialog.
+function copilotFixSummary(fix) {
+  var rows = [];
+  if (fix.task) {
+    rows.push(["Fix task", fix.task.name + " (" + fix.task.status + ")"]);
+  }
+  if (fix.pull_request) {
+    var pr = fix.pull_request;
+    rows.push([
+      "Pull request",
+      pr.repo +
+        "#" +
+        pr.number +
+        " · " +
+        pr.state +
+        (pr.ci_state && pr.ci_state !== "None" ? " · CI " + pr.ci_state : ""),
+    ]);
+  }
+  var a = fix.approval;
+  if (a) {
+    rows.push([
+      "Approval",
+      a.status + (a.assigned_name ? " · " + a.assigned_name : ""),
+    ]);
+    rows.push([
+      "Risk",
+      a.risk_level + (a.sensitive ? " · needs a senior approver" : ""),
+    ]);
+    if (a.decided_by) {
+      rows.push([
+        "Decided",
+        a.decided_by + (a.decided_at ? ", " + a.decided_at : ""),
+      ]);
+    }
+    if (a.deploy_date) {
+      rows.push(["Planned deploy", a.deploy_date]);
+    }
+  }
+  if (fix.merge_commit) {
+    rows.push(["Merge commit", String(fix.merge_commit).slice(0, 12)]);
+  }
+  if (fix.deployed_at) {
+    rows.push(["Deployed", fix.deployed_at]);
+  }
+  if (!rows.length) {
+    return "";
+  }
+  var html =
+    '<div style="margin-top:8px"><b>Fix</b><table style="width:100%;font-size:13px">';
+  for (var i = 0; i < rows.length; i++) {
+    html +=
+      '<tr><td style="color:#6b7280;padding:2px 8px 2px 0;white-space:nowrap">' +
+      copilotEscape(rows[i][0]) +
+      "</td><td>" +
+      copilotEscape(rows[i][1]) +
+      "</td></tr>";
+  }
+  html += "</table>";
+  if (a && a.merge_error) {
+    html +=
+      '<div style="color:#b91c1c">Cannot merge yet: ' +
+      copilotEscape(a.merge_error) +
+      "</div>";
+  }
+  return html + "</div>";
+}
+
+// Tomorrow in the agent's own time zone (toISOString would give the UTC date).
+function copilotTomorrow() {
+  var d = new Date();
+  d.setDate(d.getDate() + 1);
+  var month = String(d.getMonth() + 1).padStart(2, "0");
+  var day = String(d.getDate()).padStart(2, "0");
+  return d.getFullYear() + "-" + month + "-" + day;
+}
+
+// The server's own reason when it gave one (e.g. "already approved by …").
+function copilotError(error, fallback) {
+  var messages = (error && error.messages) || [];
+  return messages.length ? fallback + ": " + messages.join(" ") : fallback;
+}
+
+// The one approval: what changes, how risky it is, what the checks say, and the decision.
+function showCopilotFixReview(info, doc, call, toast, $dialog) {
+  var a = info.fix.approval;
+  var pr = info.fix.pull_request || {};
+  var field =
+    "width:100%;padding:6px;border:1px solid #d1d5db;border-radius:4px;font-size:13px";
+  var html = '<div style="padding:8px;font-size:13px">';
+  html +=
+    "<div><b>Cause</b> (" +
+    copilotEscape(info.root_cause) +
+    "): " +
+    copilotEscape(info.summary || "") +
+    "</div>";
+  html +=
+    '<div style="margin-top:8px"><b>Pull request</b> ' +
+    copilotEscape((pr.repo || "") + "#" + (pr.number || "")) +
+    ": " +
+    copilotEscape(pr.title || "") +
+    ' <span style="color:#6b7280">at ' +
+    copilotEscape(String(a.head_sha || "").slice(0, 12)) +
+    "</span></div>";
+  if (a.files && a.files.length) {
+    html += '<ul style="margin:4px 0 0 16px">';
+    var files = a.files.slice(0, 20);
+    for (var i = 0; i < files.length; i++) {
+      html +=
+        "<li>" +
+        copilotEscape(files[i].filename) +
+        ' <span style="color:#6b7280">+' +
+        copilotEscape(files[i].additions) +
+        " −" +
+        copilotEscape(files[i].deletions) +
+        "</span></li>";
+    }
+    if (a.files.length > 20) {
+      html += "<li>… " + copilotEscape(a.files.length - 20) + " more</li>";
+    }
+    html += "</ul>";
+  }
+  var riskColor =
+    a.risk_level === "high"
+      ? "#b91c1c"
+      : a.risk_level === "medium"
+      ? "#b45309"
+      : "#047857";
+  html +=
+    '<div style="margin-top:8px"><b>Risk:</b> <span style="color:' +
+    riskColor +
+    '">' +
+    copilotEscape(a.risk_level) +
+    "</span>" +
+    (a.sensitive ? " · needs a senior approver" : "") +
+    "</div>";
+  if (a.reasons && a.reasons.length) {
+    html += '<ul style="margin:4px 0 0 16px;color:#4b5563">';
+    for (var j = 0; j < a.reasons.length; j++) {
+      html += "<li>" + copilotEscape(a.reasons[j]) + "</li>";
+    }
+    html += "</ul>";
+  }
+  var checks = a.checks || {};
+  var checkText =
+    checks.total === 0
+      ? "no checks ran on this commit"
+      : checks.green
+      ? "all " + checks.total + " passed"
+      : (checks.failing && checks.failing.length
+          ? "failing: " + checks.failing.join(", ") + ". "
+          : "") +
+        (checks.pending && checks.pending.length
+          ? "running: " + checks.pending.join(", ")
+          : "");
+  html +=
+    '<div style="margin-top:8px"><b>Checks:</b> ' +
+    copilotEscape(checkText || "not read yet") +
+    ' <span style="color:#6b7280">(the hub merges only when they pass)</span></div>';
+  if (a.why_not_me) {
+    html +=
+      '<div style="margin-top:8px;color:#b91c1c">' +
+      copilotEscape(a.why_not_me) +
+      "</div>";
+  }
+  html +=
+    '<div style="margin-top:12px"><label for="copilot-fix-date">Planned deploy date (the customer is told)</label>' +
+    '<input id="copilot-fix-date" type="date" style="' +
+    field +
+    '" value="' +
+    copilotTomorrow() +
+    '"></div>' +
+    '<div style="margin-top:8px"><label for="copilot-fix-note">Note (needed to reject)</label>' +
+    '<textarea id="copilot-fix-note" rows="3" style="' +
+    field +
+    '" placeholder="What is wrong, or anything the developer should know"></textarea></div></div>';
+
+  function decide(approve, _ref) {
+    var dateEl = document.getElementById("copilot-fix-date");
+    var noteEl = document.getElementById("copilot-fix-note");
+    var note = noteEl ? noteEl.value : "";
+    if (!approve && !note.trim()) {
+      toast.error("Please say why the fix is rejected.");
+      return;
+    }
+    call("helpdesk.api.copilot.decide_fix", {
+      ticket: doc.name,
+      approve: approve ? 1 : 0,
+      note: note,
+      deploy_date: dateEl ? dateEl.value : null,
+    })
+      .then(function (result) {
+        var decision = (result && result.decision) || {};
+        if (decision.outcome === "superseded") {
+          toast.error(
+            decision.message ||
+              "The pull request changed; review the new version."
+          );
+        } else if (decision.outcome === "approved") {
+          toast.success(
+            decision.merge === "merged"
+              ? "Approved and merged."
+              : "Approved: the hub merges it when the checks pass."
+          );
+        } else {
+          toast.success("Rejected: the developer gets your reason.");
+        }
+        _ref.close();
+      })
+      .catch(function (error) {
+        toast.error(copilotError(error, "Failed to record the decision"));
+        console.error("Copilot fix decision error:", error);
+      });
+  }
+
+  var actions = [];
+  if (!a.why_not_me) {
+    actions.push({
+      label: "Approve",
+      variant: "solid",
+      onClick: function (_ref) {
+        decide(true, _ref);
+      },
+    });
+    actions.push({
+      label: "Reject",
+      theme: "red",
+      onClick: function (_ref) {
+        decide(false, _ref);
+      },
+    });
+  }
+  if (a.url) {
+    actions.push({
+      label: "Open PR",
+      onClick: function () {
+        window.open(a.url, "_blank", "noopener");
+      },
+    });
+  }
+  actions.push({
+    label: "Close",
+    onClick: function (_ref) {
+      _ref.close();
+    },
+  });
+  $dialog({
+    title: "Review fix - Ticket #" + doc.name,
+    html: html,
+    actions: actions,
+  });
+}
+
+// After an engineer deployed the merged fix through Press: the customer is asked to confirm.
+function showCopilotMarkDeployed(doc, call, toast, $dialog) {
+  var field =
+    "width:100%;padding:6px;border:1px solid #d1d5db;border-radius:4px;font-size:13px";
+  $dialog({
+    title: "Mark deployed - Ticket #" + doc.name,
+    html:
+      '<div style="padding:8px;font-size:13px"><div>Press this once the merged fix is live on the customer\'s site. The customer is then asked to confirm it.</div>' +
+      '<div style="margin-top:8px"><label for="copilot-deploy-note">Note for the customer (optional)</label>' +
+      '<textarea id="copilot-deploy-note" rows="2" style="' +
+      field +
+      '"></textarea></div></div>',
+    actions: [
+      {
+        label: "Mark deployed",
+        variant: "solid",
+        onClick: function (_ref) {
+          var noteEl = document.getElementById("copilot-deploy-note");
+          call("helpdesk.api.copilot.mark_deployed", {
+            ticket: doc.name,
+            note: noteEl ? noteEl.value : "",
+          })
+            .then(function () {
+              toast.success(
+                "Marked deployed; the customer is asked to confirm."
+              );
+              _ref.close();
+            })
+            .catch(function (error) {
+              toast.error(copilotError(error, "Failed to mark it deployed"));
+            });
         },
       },
       {

@@ -1,0 +1,298 @@
+{
+	"actions": [],
+	"autoname": "TBO-APR-.YYYY.-.#####",
+	"creation": "2026-10-12 12:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"run",
+		"ticket",
+		"status",
+		"column_break_pr",
+		"pull_request",
+		"repo",
+		"number",
+		"head_sha",
+		"base_branch",
+		"pr_url",
+		"risk_section",
+		"risk_level",
+		"sensitive",
+		"reasons",
+		"column_break_risk",
+		"payload",
+		"payload_hash",
+		"decision_section",
+		"assigned_to",
+		"assigned_at",
+		"reminded_at",
+		"escalated_at",
+		"column_break_decision",
+		"decided_by",
+		"decided_at",
+		"decided_via",
+		"note",
+		"deploy_date",
+		"merge_section",
+		"merge_commit",
+		"merged_at",
+		"column_break_merge",
+		"merge_error"
+	],
+	"fields": [
+		{
+			"fieldname": "run",
+			"fieldtype": "Link",
+			"in_list_view": 1,
+			"label": "Run",
+			"options": "HDS Copilot Run",
+			"read_only": 1,
+			"reqd": 1,
+			"search_index": 1
+		},
+		{
+			"fieldname": "ticket",
+			"fieldtype": "Link",
+			"in_list_view": 1,
+			"label": "Ticket",
+			"options": "HD Ticket",
+			"read_only": 1,
+			"reqd": 1,
+			"search_index": 1
+		},
+		{
+			"default": "Pending",
+			"fieldname": "status",
+			"fieldtype": "Select",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"label": "Status",
+			"options": "Pending\nApproved\nRejected\nSuperseded\nMerged",
+			"read_only": 1
+		},
+		{
+			"fieldname": "column_break_pr",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "pull_request",
+			"fieldtype": "Link",
+			"label": "Pull Request",
+			"options": "HD Pull Request",
+			"read_only": 1
+		},
+		{
+			"fieldname": "repo",
+			"fieldtype": "Data",
+			"label": "Repository",
+			"read_only": 1
+		},
+		{
+			"fieldname": "number",
+			"fieldtype": "Int",
+			"label": "Number",
+			"read_only": 1
+		},
+		{
+			"description": "The commit this approval is for; any other commit needs a new approval",
+			"fieldname": "head_sha",
+			"fieldtype": "Data",
+			"label": "Head Commit",
+			"read_only": 1
+		},
+		{
+			"fieldname": "base_branch",
+			"fieldtype": "Data",
+			"label": "Base Branch",
+			"read_only": 1
+		},
+		{
+			"fieldname": "pr_url",
+			"fieldtype": "Data",
+			"label": "Pull Request URL",
+			"options": "URL",
+			"read_only": 1
+		},
+		{
+			"fieldname": "risk_section",
+			"fieldtype": "Section Break",
+			"label": "Risk"
+		},
+		{
+			"fieldname": "risk_level",
+			"fieldtype": "Select",
+			"in_list_view": 1,
+			"label": "Risk Level",
+			"options": "low\nmedium\nhigh\nunknown",
+			"read_only": 1
+		},
+		{
+			"default": "0",
+			"description": "Only a senior approver may approve",
+			"fieldname": "sensitive",
+			"fieldtype": "Check",
+			"label": "Sensitive",
+			"read_only": 1
+		},
+		{
+			"fieldname": "reasons",
+			"fieldtype": "Small Text",
+			"label": "Reasons",
+			"read_only": 1
+		},
+		{
+			"fieldname": "column_break_risk",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "payload",
+			"fieldtype": "Code",
+			"label": "Payload",
+			"options": "JSON",
+			"read_only": 1
+		},
+		{
+			"fieldname": "payload_hash",
+			"fieldtype": "Data",
+			"label": "Payload Hash",
+			"read_only": 1
+		},
+		{
+			"fieldname": "decision_section",
+			"fieldtype": "Section Break",
+			"label": "Decision"
+		},
+		{
+			"fieldname": "assigned_to",
+			"fieldtype": "Link",
+			"in_list_view": 1,
+			"label": "Assigned To",
+			"options": "User",
+			"read_only": 1
+		},
+		{
+			"fieldname": "assigned_at",
+			"fieldtype": "Datetime",
+			"label": "Assigned At",
+			"read_only": 1
+		},
+		{
+			"fieldname": "reminded_at",
+			"fieldtype": "Datetime",
+			"label": "Reminded At",
+			"read_only": 1
+		},
+		{
+			"fieldname": "escalated_at",
+			"fieldtype": "Datetime",
+			"label": "Escalated At",
+			"read_only": 1
+		},
+		{
+			"fieldname": "column_break_decision",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "decided_by",
+			"fieldtype": "Link",
+			"label": "Decided By",
+			"options": "User",
+			"read_only": 1
+		},
+		{
+			"fieldname": "decided_at",
+			"fieldtype": "Datetime",
+			"label": "Decided At",
+			"read_only": 1
+		},
+		{
+			"fieldname": "decided_via",
+			"fieldtype": "Data",
+			"label": "Decided Via",
+			"read_only": 1
+		},
+		{
+			"fieldname": "note",
+			"fieldtype": "Small Text",
+			"label": "Note",
+			"read_only": 1
+		},
+		{
+			"fieldname": "deploy_date",
+			"fieldtype": "Date",
+			"label": "Planned Deploy Date",
+			"read_only": 1
+		},
+		{
+			"fieldname": "merge_section",
+			"fieldtype": "Section Break",
+			"label": "Merge"
+		},
+		{
+			"fieldname": "merge_commit",
+			"fieldtype": "Data",
+			"label": "Merge Commit",
+			"read_only": 1
+		},
+		{
+			"fieldname": "merged_at",
+			"fieldtype": "Datetime",
+			"label": "Merged At",
+			"read_only": 1
+		},
+		{
+			"fieldname": "column_break_merge",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "merge_error",
+			"fieldtype": "Small Text",
+			"label": "Merge Error",
+			"read_only": 1
+		}
+	],
+	"links": [],
+	"modified": "2026-10-12 12:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HDS Copilot Approval",
+	"naming_rule": "Expression (old style)",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "System Manager",
+			"share": 1,
+			"write": 1
+		},
+		{
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "Agent Manager",
+			"share": 1
+		},
+		{
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "Agent",
+			"share": 1
+		}
+	],
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": [],
+	"title_field": "ticket",
+	"track_changes": 1
+}

@@ -37,6 +37,13 @@
 		"investigation",
 		"evidence",
 		"proposal",
+		"fix_section",
+		"pull_request",
+		"approval",
+		"merge_commit",
+		"column_break_fix",
+		"deployed_at",
+		"deployed_by",
 		"review_section",
 		"review_verdict",
 		"reviewed_root_cause",
@@ -265,6 +272,48 @@
 			"read_only": 1
 		},
 		{
+			"fieldname": "fix_section",
+			"fieldtype": "Section Break",
+			"label": "Fix"
+		},
+		{
+			"fieldname": "pull_request",
+			"fieldtype": "Link",
+			"label": "Pull Request",
+			"options": "HD Pull Request",
+			"read_only": 1
+		},
+		{
+			"fieldname": "approval",
+			"fieldtype": "Link",
+			"label": "Approval",
+			"options": "HDS Copilot Approval",
+			"read_only": 1
+		},
+		{
+			"fieldname": "merge_commit",
+			"fieldtype": "Data",
+			"label": "Merge Commit",
+			"read_only": 1
+		},
+		{
+			"fieldname": "column_break_fix",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "deployed_at",
+			"fieldtype": "Datetime",
+			"label": "Deployed At",
+			"read_only": 1
+		},
+		{
+			"fieldname": "deployed_by",
+			"fieldtype": "Link",
+			"label": "Deployed By",
+			"options": "User",
+			"read_only": 1
+		},
+		{
 			"fieldname": "review_section",
 			"fieldtype": "Section Break",
 			"label": "Team Review"
@@ -342,7 +391,7 @@
 		}
 	],
 	"links": [],
-	"modified": "2026-10-09 13:06:11.000000",
+	"modified": "2026-10-12 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Copilot Run",

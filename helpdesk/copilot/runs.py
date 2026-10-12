@@ -53,6 +53,20 @@ TRANSITIONS = {
     ("Handed Over", "Escalated"): {CUSTOMER, AGENT},
     ("Handed Over", "Closed"): {CUSTOMER, AGENT, SYSTEM},
     ("Escalated", "Closed"): {CUSTOMER, AGENT, SYSTEM},
+    # the fix (helpdesk.copilot.fixes and approvals): one approval per head commit, then the merge
+    ("Preparing Fix", "Awaiting Approval"): {SYSTEM},
+    ("Awaiting Approval", "Approved"): {AGENT},
+    ("Awaiting Approval", "Preparing Fix"): {SYSTEM, AGENT},
+    ("Approved", "Awaiting Approval"): {SYSTEM},
+    ("Approved", "Preparing Fix"): {SYSTEM, AGENT},
+    ("Approved", "Merged"): {SYSTEM},
+    # merged on GitHub before (or without) the approval: recorded, and the managers told
+    ("Awaiting Approval", "Merged"): {SYSTEM},
+    ("Preparing Fix", "Merged"): {SYSTEM},
+    # an engineer deployed it (by hand, until Phase 2); the customer then confirms or reopens
+    ("Merged", "Resolved"): {AGENT},
+    ("Resolved", "Closed"): {CUSTOMER, AGENT, SYSTEM},
+    ("Resolved", "Escalated"): {CUSTOMER, AGENT},
 }
 CANCELLABLE = (
     "Queued",
@@ -61,6 +75,8 @@ CANCELLABLE = (
     "Answered",
     "Preparing Fix",
     "Handed Over",
+    "Awaiting Approval",
+    "Approved",
 )
 
 # the stage the customer sees when a run enters a state; the router sets the others

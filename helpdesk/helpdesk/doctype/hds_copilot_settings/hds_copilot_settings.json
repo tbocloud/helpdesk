@@ -15,6 +15,12 @@
 		"mcp_enabled",
 		"column_break_mcp",
 		"mcp_calls_per_minute",
+		"approval_section",
+		"approvers",
+		"column_break_approval",
+		"approval_reminder_hours",
+		"approval_escalate_hours",
+		"hold_label",
 		"templates_section",
 		"message_templates"
 	],
@@ -89,6 +95,41 @@
 			"label": "MCP Calls per Minute"
 		},
 		{
+			"fieldname": "approval_section",
+			"fieldtype": "Section Break",
+			"label": "Fix Approval"
+		},
+		{
+			"description": "Who may approve a Copilot fix. Changes to sensitive areas need a senior; with no senior in the list, Agent Managers act as seniors",
+			"fieldname": "approvers",
+			"fieldtype": "Table",
+			"label": "Approvers",
+			"options": "HDS Copilot Approver"
+		},
+		{
+			"fieldname": "column_break_approval",
+			"fieldtype": "Column Break"
+		},
+		{
+			"default": "4",
+			"fieldname": "approval_reminder_hours",
+			"fieldtype": "Int",
+			"label": "Remind After (Hours)"
+		},
+		{
+			"default": "24",
+			"fieldname": "approval_escalate_hours",
+			"fieldtype": "Int",
+			"label": "Escalate After (Hours)"
+		},
+		{
+			"default": "no-auto-merge",
+			"description": "Put on every Copilot pull request until the hub merges it; the org merge bot and the auto-merge workflow skip pull requests with this label",
+			"fieldname": "hold_label",
+			"fieldtype": "Data",
+			"label": "Hold Label"
+		},
+		{
 			"fieldname": "templates_section",
 			"fieldtype": "Section Break",
 			"label": "Messages to the Customer"
@@ -103,7 +144,7 @@
 	],
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-10-09 13:06:11.000000",
+	"modified": "2026-10-12 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Copilot Settings",

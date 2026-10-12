@@ -51,6 +51,8 @@ scheduler_events = {
         "*/15 * * * *": [
             "helpdesk.follow_ups.run",
             "helpdesk.helpdesk.doctype.hd_meeting.hd_meeting.sync_with_outlook",
+            # Copilot fix approvals: remind the approver, then hand to a senior
+            "helpdesk.copilot.approvals.remind_and_escalate",
         ],
         "*/5 * * * *": [
             "helpdesk.tasks.push_ticket_statuses",
@@ -62,6 +64,8 @@ scheduler_events = {
         # every 10 minutes: new hub errors to the team's chat channel
         "*/10 * * * *": [
             "helpdesk.error_alerts.post_error_digest",
+            # Copilot fixes read their pull requests, so a missed webhook never strands an approval
+            "helpdesk.copilot.fixes.refresh_open",
         ],
         # every 10 minutes, off the error digest's minutes: ask GitHub to run the org
         # merge bot, whose own schedule doesn't fire (off by default; docs/github-sync.md)

@@ -105,7 +105,153 @@ def get_run(ticket: str | int) -> dict:
         },
         "can_review": bool(run.root_cause_category),
         "categories": list(router.CATEGORIES),
+        "fix": _fix_card(run),
     }
+
+
+def _fix_card(run) -> dict | None:
+    """The fix as the Copilot dialog shows it: the task, the pull request, the approval and what may be done."""
+    from helpdesk.copilot import approvals, fixes
+
+    if run.state not in fixes.FOLLOWED + ("Resolved",) and not run.task:
+        return None
+    user = frappe.session.user
+    task = (
+        frappe.db.get_value(
+            "Task", run.task, ["name", "subject", "status"], as_dict=True
+        )
+        if run.task
+        else None
+    )
+    pull = (
+        frappe.db.get_value(
+            "HD Pull Request",
+            run.pull_request,
+            [
+                "repo",
+                "number",
+                "title",
+                "url",
+                "state",
+                "head_sha",
+                "ci_state",
+                "review_state",
+            ],
+            as_dict=True,
+        )
+        if run.pull_request
+        else None
+    )
+    approval = (
+        frappe.get_doc("HDS Copilot Approval", run.approval) if run.approval else None
+    )
+    card = None
+    if approval:
+        payload = json.loads(approval.payload or "{}")
+        card = {
+            "name": approval.name,
+            "status": approval.status,
+            "head_sha": approval.head_sha,
+            "risk_level": approval.risk_level,
+            "sensitive": bool(approval.sensitive),
+            "reasons": [r for r in (approval.reasons or "").split("\n") if r],
+            "files": payload.get("files") or [],
+            "checks": payload.get("checks") or {},
+            "assigned_to": approval.assigned_to,
+            "assigned_name": get_fullname(approval.assigned_to)
+            if approval.assigned_to
+            else None,
+            "decided_by": get_fullname(approval.decided_by)
+            if approval.decided_by
+            else None,
+            "decided_at": str(approval.decided_at)[:16]
+            if approval.decided_at
+            else None,
+            "note": approval.note,
+            "deploy_date": str(approval.deploy_date) if approval.deploy_date else None,
+            "merge_error": approval.merge_error,
+            "url": approval.pr_url,
+            "why_not_me": approvals.may_decide(approval, user)
+            if approval.status == "Pending"
+            else None,
+        }
+    return {
+        "task": task,
+        "pull_request": pull,
+        "approval": card,
+        "hold_label": fixes.hold_label(),
+        "can_create_task": run.state == "Preparing Fix"
+        and not (task and task.status not in ("Completed", "Cancelled")),
+        "can_decide": bool(
+            card and card["status"] == "Pending" and not card["why_not_me"]
+        ),
+        "can_refresh": run.state in fixes.FIX_STATES and bool(run.task),
+        "can_mark_deployed": run.state == "Merged",
+        "merge_commit": run.merge_commit,
+        "deployed_at": str(run.deployed_at)[:16] if run.deployed_at else None,
+    }
+
+
+def _run_of(ticket: str | int):
+    run = customer.latest_run(str(ticket))
+    if not run:
+        frappe.throw(_("Copilot has no run on this ticket."))
+    return run
+
+
+@frappe.whitelist(methods=["POST"])
+@agent_only
+def create_fix_task(ticket: str | int) -> dict:
+    """A fix task for the run's diagnosis (live runs get one by themselves)."""
+    from helpdesk.copilot import fixes
+
+    frappe.has_permission("HD Ticket", "write", str(ticket), throw=True)
+    fixes.create_fix_task(_run_of(ticket), actor=runs.AGENT)
+    return get_run(ticket)
+
+
+@frappe.whitelist(methods=["POST"])
+@agent_only
+def decide_fix(
+    ticket: str | int,
+    approve: bool | int | str,
+    note: str = "",
+    deploy_date: str | None = None,
+) -> dict:
+    """Approve (with the planned deploy date) or reject (with a reason) the fix waiting for approval."""
+    from helpdesk.copilot import approvals
+
+    frappe.has_permission("HD Ticket", "read", str(ticket), throw=True)
+    run = _run_of(ticket)
+    approval = approvals.current(run)
+    if not approval or approval.status != "Pending":
+        frappe.throw(_("No fix is waiting for approval on this ticket."))
+    decision = approvals.decide(
+        approval.name, frappe.session.user, bool(sbool(approve)), note, deploy_date
+    )
+    return {**get_run(ticket), "decision": decision}
+
+
+@frappe.whitelist(methods=["POST"])
+@agent_only
+def refresh_fix(ticket: str | int) -> dict:
+    """Read the fix's pull request from GitHub now."""
+    from helpdesk.copilot import fixes
+
+    frappe.has_permission("HD Ticket", "read", str(ticket), throw=True)
+    outcome = fixes.refresh(_run_of(ticket))
+    return {**get_run(ticket), "refresh": outcome}
+
+
+@frappe.whitelist(methods=["POST"])
+@agent_only
+def mark_deployed(ticket: str | int, note: str = "") -> dict:
+    """The merged fix is live: the run is Resolved and the customer is asked to confirm."""
+    from helpdesk.copilot import fixes
+
+    frappe.has_permission("HD Ticket", "write", str(ticket), throw=True)
+    fixes.mark_deployed(_run_of(ticket), frappe.session.user, note)
+    return get_run(ticket)
 
 
 @frappe.whitelist(methods=["POST"])

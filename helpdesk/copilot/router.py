@@ -148,8 +148,41 @@ def route(run, result: dict):
             doc,
             investigation["summary"] or _("Copilot found an issue in the core system"),
         )
+    elif doc.state == "Preparing Fix" and not doc.shadow:
+        _fix_task(doc)
     customer.send_stage(doc, STAGE_FOR_CATEGORY[effective])
     return doc
+
+
+def _fix_task(run):
+    """A live run that needs a code fix gets its fix task at once; a failure never undoes the routing."""
+    from helpdesk.copilot import fixes
+
+    frappe.db.savepoint("copilot_fix_task")
+    try:
+        fixes.create_fix_task(run)
+    except fixes.NoProject:
+        # a setup gap, not a failure: the agents see it on the ticket and can create the task later
+        frappe.db.rollback(save_point="copilot_fix_task")
+        frappe.clear_last_message()
+        runs.add_event(run, "fix_task_missing", {"reason": "no project"}, runs.SYSTEM)
+        customer.comment(
+            run.ticket,
+            _(
+                "Copilot could not create the fix task: the customer has no open project and no hand-over project is set."
+            ),
+        )
+    except Exception:
+        frappe.db.rollback(save_point="copilot_fix_task")
+        frappe.log_error(
+            title=_("Copilot could not create the fix task for {0}").format(run.ticket)
+        )
+        runs.tell_people(
+            run,
+            _("Copilot could not create the fix task for ticket {0}").format(
+                run.ticket
+            ),
+        )
 
 
 def explanation_text(investigation: dict, category: str) -> str:

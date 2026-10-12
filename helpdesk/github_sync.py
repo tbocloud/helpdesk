@@ -230,11 +230,29 @@ def handle_workflow_run(repo: str, action: str, run: dict) -> bool:
     rows = frappe.qb.get_query(PULL_REQUEST, fields=["name"], filters=filters).run(
         pluck="name"
     )
+    links = []
     for name in rows:
         link = PullRequestLink(frappe.get_doc(PULL_REQUEST, name))
         link.record_ci(result, run.get("head_sha") or "", run.get("name") or "")
         link.save()
+        links.append(link.row)
+    if links:
+        tell_copilot("on_checks", repo, run.get("head_sha") or "", links)
     return bool(rows)
+
+
+def tell_copilot(handler: str, *args):
+    """Copilot fixes follow their pull requests (helpdesk.copilot.fixes); its failure never fails the sync."""
+    from helpdesk.copilot import fixes
+
+    # a name of its own: the hub's merge replays the pull request through this sync again
+    savepoint = f"copilot_fix_{frappe.generate_hash(length=8)}"
+    frappe.db.savepoint(savepoint)
+    try:
+        getattr(fixes, handler)(*args)
+    except Exception:
+        frappe.db.rollback(save_point=savepoint)
+        frappe.log_error(title=_("Copilot could not follow a pull request"))
 
 
 class PullRequestLink:
@@ -411,9 +429,13 @@ class PullRequestSync:
                 "url": self.pr.get("html_url"),
                 "author": (self.pr.get("user") or {}).get("login"),
                 "head_branch": (self.pr.get("head") or {}).get("ref"),
+                "head_sha": (self.pr.get("head") or {}).get("sha"),
+                "base_branch": (self.pr.get("base") or {}).get("ref"),
                 "state": self.state,
             }
         )
+        if self.state == "Merged" and self.pr.get("merge_commit_sha"):
+            row.merge_commit_sha = self.pr["merge_commit_sha"]
         if self.pr.get("merged_at"):
             row.merged_at = github_time(self.pr["merged_at"])
         if self.pr.get("closed_at"):
@@ -432,6 +454,7 @@ class PullRequestSync:
         for link in links:
             self.apply_pull_request(action, link)
             link.save()
+        tell_copilot("on_pull_request", self.pr, action, [link.row for link in links])
         return True
 
     def apply_pull_request(self, action: str, link: PullRequestLink):
