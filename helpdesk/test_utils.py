@@ -1093,6 +1093,27 @@ def make_done_ticket_task(project: str, subject: str, assignee: str, completed_o
     return ticket, task
 
 
+def make_team_champion(
+    period_type: str, start, end, user: str, score: float, department=None, **kwargs
+):
+    """Stores an HD Team Champion as if `close_period` had kept it, with a
+    one-line breakdown; for reading closed periods back."""
+    breakdown = [{"key": "tasks", "points": score, "detail": "Tasks done: 2"}]
+    return frappe.get_doc(
+        {
+            "doctype": "HD Team Champion",
+            "period_type": period_type,
+            "period_start": start,
+            "period_end": end,
+            "department": department,
+            "user": user,
+            "score": score,
+            "breakdown": json.dumps(breakdown),
+            **kwargs,
+        }
+    ).insert(ignore_permissions=True)
+
+
 def make_member_day(project: str, member: str, lead: str, teammate: str) -> dict:
     """A project member's open work like the day that showed a false "All clear" on
     Home: eight tasks `lead` gave `member` (one overdue, one due today, a key task
