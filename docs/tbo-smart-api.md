@@ -536,7 +536,7 @@ off):
 | `get_approvals` | – | `[Approval]` (kind review) | Managers, leads and coordinators of projects; others get 403. Decide with `review_task`. Fixture `get_approvals.json` |
 | `get_projects_health` | – | `[ProjectHealth]` | Same as `get_team` (the portfolio). Fixture `get_projects_health.json` |
 | `get_sla_summary` | – | `{open, new_today, breached, first_reply_overdue, breaching_soon, unassigned, waiting_on_customer, oldest_unassigned}` | Same as `get_team`. Fixture `get_sla_summary.json` |
-| `get_scoreboard` | `period` (today, week, month, quarter, half, year), `department?` or `group?` (a main department with its sub-departments, e.g. `ERP`) | `{period, period_label, range, department, group, groups, champion, me, leaders (top 10), departments}` | Every agent (the Scoreboard is open to all). Lines carry `weighted_work` next to `tasks_done`; `groups` is `[{group, departments}]`; `departments` rows have `kind` (`group` or `department`), `parent` (a department's group) and `weighted_work`, a group row first with its departments under it. Fixture `get_scoreboard.json` |
+| `get_scoreboard` | `period` (today, week, month, quarter, half, year), `department?` or `group?` (a main department with its sub-departments, e.g. `ERP`), `day?` (a past day: its period; a future day is refused) | `{period, period_label, range, department, group, groups, closed, champion, previous_champion, months, me, leaders (top 10), departments}` | Every agent (the Scoreboard is open to all). Weeks are clipped to their month and every month starts on the 1st ([team-dashboard.md](team-dashboard.md#periods)). A closed period's `champion` is the one stored when it closed (`stored: true`); `previous_champion` is the period before's stored champion (e.g. last month's), with `start`, `end` and `reasons`; `months` (year only) is the twelve months side by side (`month`, `future`, `tasks`, `weight`, `on_time_pct`, `quality`, `champion`). Lines carry `weighted_work` next to `tasks_done`; `groups` is `[{group, departments}]`; `departments` rows have `kind` (`group` or `department`), `parent` (a department's group) and `weighted_work`, a group row first with its departments under it. Fixture `get_scoreboard.json` |
 
 `Task.quality` (from `get_task`): `{weight, weight_reasons, quality, quality_reasons, rating,
 rated_by, rated_by_name, rated_on, can_rate, self_made}`, e.g. `weight 3.25` with
@@ -568,7 +568,7 @@ due}], waiting_on ("Client approval", …, or null), is_missed, at_risk}`. Rules
 
 | Method | Params | Returns | Who / notes |
 | --- | --- | --- | --- |
-| `get_competition` | `period` (today, week, month, quarter, half, year; default week), `limit` (1–50, default 10) | `Competition` | Every agent. The boards are public, as on the web Scoreboard: every active department, past the DM/ERP department walls (`viewer_access`). Streaks, bests, badges and `move_up` are the user's own. Fixture `get_competition.json` |
+| `get_competition` | `period` (today, week, month, quarter, half, year; default week), `limit` (1–50, default 10), `day?` (a past day: that period's boards) | `Competition` | Every agent. The boards are public, as on the web Scoreboard: every active department, past the DM/ERP department walls (`viewer_access`). Streaks, bests, badges and `move_up` are the user's own. Fixture `get_competition.json` |
 
 Everything is derived from the Scoreboard (`helpdesk.team_dashboard`: `collect`, `tally`,
 `rank`, `score()`) and the tasks' due dates; **there is no second scoring formula**
@@ -578,6 +578,9 @@ Everything is derived from the Scoreboard (`helpdesk.team_dashboard`: `collect`,
 
 - `period`, `period_label`, `range` {start, end}, `compare` {start, end}: the comparison is
   the previous period **up to the same point** (`comparison_bounds`), as the web tiles.
+- `closed` (a past period picked with `day`: its boards' champions are the stored ones and
+  `move_up` is null) and `previous_champion` (the period before's stored whole-team champion,
+  or null).
 - `me`: the user's line on the whole team's board (below), or null.
 - `team`, `groups` (one per department group, e.g. ERP with GrowthX and Internal / R&D) and
   `departments` (one per active department): `{department, group, champion (user or
