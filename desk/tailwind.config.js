@@ -21,6 +21,7 @@ export default {
           ink: "var(--brand-ink)",
           on: "var(--on-brand)",
         },
+        highlight: "var(--highlight)",
         note: {
           DEFAULT: "var(--note)",
           border: "var(--note-border)",

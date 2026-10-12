@@ -135,13 +135,13 @@
               class="mb-1.5 flex items-center gap-2 text-sm text-ink-gray-6"
             >
               <span
-                :class="day.isToday ? 'text-base-medium text-brand-ink' : ''"
+                :class="day.isToday ? 'text-base-medium text-ink-gray-9' : ''"
               >
                 {{ day.label }}
               </span>
               <span
                 v-if="day.isToday"
-                class="rounded bg-brand-soft px-1.5 text-xs text-brand-ink"
+                class="rounded px-1.5 text-xs text-ink-gray-8 ring-1 ring-inset ring-highlight"
               >
                 {{ __("Today") }}
               </span>
@@ -797,9 +797,10 @@ function open(route: RouteLocationRaw | null, close: () => void) {
 </script>
 
 <style scoped>
-/* today's date is the calendar's one highlighted day: brand, not black */
+/* today's date is the calendar's one marked day: a logo-orange ring, not a black fill */
 .work-calendar :deep(.bg-surface-gray-10.size-\[25px\]) {
-  background-color: var(--brand);
-  color: var(--on-brand);
+  background-color: transparent;
+  color: var(--ink-gray-9);
+  box-shadow: inset 0 0 0 2px var(--highlight);
 }
 </style>

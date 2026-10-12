@@ -383,7 +383,7 @@ still maps "Client Approved" straight to Approved (old calendars, already past b
 
 ## Colour rules
 
-From `desk/src/theme.css`: the brand violet is only for the primary action (Add entry), the
-selected view/period/chip and today's date. Status colours appear only where they mean
+From `desk/src/theme.css`: the brand teal is only for the primary action (Add entry) and the
+selected view/period/chip; today's date gets a logo-orange ring (`highlight`). Status colours appear only where they mean
 something and always with a label or icon. Numbers, dates and times use Geist Mono with
 tabular figures.

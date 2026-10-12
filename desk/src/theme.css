@@ -2,8 +2,9 @@
  * TBO Support theme.
  *
  * Re-points frappe-ui's semantic tokens at the TBO palette: cool-tinted
- * neutrals (hue ~265) instead of pure grays, one violet brand accent for
- * primary actions and selection, and Geist type. Lightness steps follow
+ * neutrals (hue ~265) instead of pure grays, one teal brand accent (the TBO
+ * logo's teal) for primary actions and selection, the logo's orange only for
+ * the focus ring and the "today" ring, and Geist type. Lightness steps follow
  * frappe-ui's own scale so every existing component keeps its contrast
  * relationships; ink-gray-5 is darkened slightly so secondary text passes
  * WCAG AA (4.5:1) on white.
@@ -17,11 +18,21 @@
     sans-serif;
   --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
-  --brand: oklch(0.513 0.223 282);
-  --brand-hover: oklch(0.46 0.219 280);
-  --brand-soft: oklch(0.952 0.021 292);
-  --brand-ink: oklch(0.439 0.213 279);
-  --on-brand: oklch(1 0 0);
+  /*
+   * brand: the logo teal, the same hex values as the TBO mobile app.
+   * Contrast table in docs/ui-guidelines.md §8.
+   */
+  --brand: #3a748d;
+  --brand-hover: #2a5766;
+  --brand-soft: #e6f0f4;
+  --brand-ink: #2c5f75;
+  --on-brand: #ffffff;
+  /*
+   * highlight: the logo orange, only as a ring or marker (the keyboard focus
+   * ring and the calendars' "today" ring). Never a fill, a button or text, so
+   * it never reads as warning (brown text on cream).
+   */
+  --highlight: #c8641a;
   --note: oklch(0.985 0.03 95);
   --note-border: oklch(0.89 0.08 95);
   /* status: meaning only, always paired with an icon or label */
@@ -31,8 +42,9 @@
   --warning-soft: #fdf2de;
   --danger: #bf3328;
   --danger-soft: #fdebe9;
-  --info: #1e5fbf;
-  --info-soft: #e7effb;
+  /* info sits at hue ~225, clear of the teal brand (~198) */
+  --info: #2f56c6;
+  --info-soft: #e8edfb;
   /*
    * champion: the Scoreboard's champion card only. A warm gold says "award"
    * without reusing warning (a problem) or note (internal notes).
@@ -98,11 +110,12 @@
 }
 
 :root[data-theme="dark"] {
-  --brand: oklch(0.683 0.176 286);
-  --brand-hover: oklch(0.73 0.15 287);
-  --brand-soft: oklch(0.262 0.06 287);
-  --brand-ink: oklch(0.802 0.107 289);
-  --on-brand: oklch(0.2 0.06 285);
+  --brand: #6fb4cf;
+  --brand-hover: #8dc5da;
+  --brand-soft: #15303b;
+  --brand-ink: #a6d5e6;
+  --on-brand: #0b2129;
+  --highlight: #f59a4a;
   --note: oklch(0.25 0.03 95);
   --note-border: oklch(0.36 0.05 95);
   --success: #52c48d;
@@ -111,8 +124,8 @@
   --warning-soft: #2d2311;
   --danger: #ff8c82;
   --danger-soft: #34191a;
-  --info: #72aaff;
-  --info-soft: #15233a;
+  --info: #8da6ff;
+  --info-soft: #16233f;
   --champion: #f0bf5e;
   --champion-soft: #2a2213;
   --champion-border: #4f3f1c;
@@ -188,7 +201,7 @@ kbd {
 }
 
 :focus-visible {
-  outline: 2px solid var(--brand);
+  outline: 2px solid var(--highlight);
   outline-offset: 2px;
 }
 
@@ -248,7 +261,7 @@ kbd {
 /* frappe-ui strips the inner control's outline; ring the whole row instead. */
 [data-slot="sidebar"]
   [data-slot="sidebar-item"]:has(> :is(a, button):focus-visible) {
-  outline: 2px solid var(--brand);
+  outline: 2px solid var(--highlight);
   outline-offset: 1px;
 }
 [data-slot="sidebar"] .tbo-nav-icon {

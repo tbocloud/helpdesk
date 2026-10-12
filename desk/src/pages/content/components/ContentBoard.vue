@@ -229,7 +229,11 @@
         <!-- a calendar page: month band, date, weekday -->
         <div
           class="w-[64px] shrink-0 overflow-hidden rounded-[10px] border bg-surface-base pb-1 text-center shadow-sm"
-          :class="day.date === today ? 'border-brand' : 'border-outline-gray-2'"
+          :class="
+            day.date === today
+              ? 'border-highlight ring-1 ring-highlight'
+              : 'border-outline-gray-2'
+          "
           aria-hidden="true"
         >
           <div
@@ -238,8 +242,7 @@
             {{ dayjs(day.date).format("MMM") }}
           </div>
           <div
-            class="font-mono text-[22px] font-medium tabular-nums leading-tight"
-            :class="day.date === today ? 'text-brand-ink' : 'text-ink-gray-9'"
+            class="font-mono text-[22px] font-medium tabular-nums leading-tight text-ink-gray-9"
           >
             {{ dayjs(day.date).format("D") }}
           </div>
@@ -594,7 +597,7 @@ const PERIOD_TEXT = {
 };
 
 const PRIMARY_BTN =
-  "inline-flex h-8 items-center gap-1.5 rounded-[10px] bg-brand px-3 text-sm font-semibold text-brand-on shadow-sm transition-colors hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2";
+  "inline-flex h-8 items-center gap-1.5 rounded-[10px] bg-brand px-3 text-sm font-semibold text-brand-on shadow-sm transition-colors hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight focus-visible:ring-offset-2";
 const OUTLINE_BTN =
   "inline-flex h-8 items-center gap-1.5 rounded-[10px] border border-outline-gray-2 bg-surface-base px-3 text-sm font-medium text-ink-gray-8 transition-colors hover:bg-surface-gray-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4";
 
