@@ -3,12 +3,42 @@ import { dayjs } from "frappe-ui";
 
 /** The periods the server knows (helpdesk.team_dashboard.PERIODS), in order. */
 export const PERIODS = [
-  { key: "today", label: __("Today"), previous: __("yesterday") },
-  { key: "week", label: __("This week"), previous: __("last week") },
-  { key: "month", label: __("This month"), previous: __("last month") },
-  { key: "quarter", label: __("This quarter"), previous: __("last quarter") },
-  { key: "half", label: __("Half year"), previous: __("the last half") },
-  { key: "year", label: __("This year"), previous: __("last year") },
+  {
+    key: "today",
+    label: __("Today"),
+    previous: __("yesterday"),
+    current: __("today"),
+  },
+  {
+    key: "week",
+    label: __("This week"),
+    previous: __("last week"),
+    current: __("this week"),
+  },
+  {
+    key: "month",
+    label: __("This month"),
+    previous: __("last month"),
+    current: __("this month"),
+  },
+  {
+    key: "quarter",
+    label: __("This quarter"),
+    previous: __("last quarter"),
+    current: __("this quarter"),
+  },
+  {
+    key: "half",
+    label: __("Half year"),
+    previous: __("the last half"),
+    current: __("this half year"),
+  },
+  {
+    key: "year",
+    label: __("This year"),
+    previous: __("last year"),
+    current: __("this year"),
+  },
 ] as const;
 export type PeriodKey = (typeof PERIODS)[number]["key"];
 
@@ -16,6 +46,7 @@ export const VIEWS = [
   { key: "departments", label: __("Departments") },
   { key: "people", label: __("People") },
   { key: "projects", label: __("Projects") },
+  { key: "repeats", label: __("Repeat issues") },
 ] as const;
 export type ViewKey = (typeof VIEWS)[number]["key"];
 
@@ -144,6 +175,75 @@ export interface Dashboard {
   trend: { bucket: "day" | "week" | "month"; dates: string[]; values: number[] } | null;
   history: HistoryRow[];
   analysis: Analysis | null;
+}
+
+/** One ticket or task in a repeat issue. */
+export interface RepeatItem {
+  kind: "ticket" | "task";
+  doctype: string;
+  name: string;
+  subject: string;
+  date: string;
+  status: string;
+  project: string | null;
+  in_period: boolean;
+}
+
+/** Look-alike tickets and tasks one customer keeps raising (helpdesk.repeat_issues). */
+export interface RepeatCluster {
+  id: string;
+  customer: string;
+  title: string;
+  title_source: "ai" | "subjects";
+  cause: string | null;
+  fix: string | null;
+  subject: string;
+  tickets: number;
+  tasks: number;
+  in_period: number;
+  earlier: number;
+  total: number;
+  first_seen: string;
+  last_seen: string;
+  trend: "rising" | "steady";
+  kinds: { label: string; count: number }[];
+  people: { user: string; name: string; count: number }[];
+  avg_resolution_hours: number | null;
+  departments: string[];
+  items: RepeatItem[];
+  article: { name: string; title: string; status: string } | null;
+  root_cause: {
+    issue: string;
+    task: string;
+    subject: string | null;
+    status: string | null;
+    project: string | null;
+  } | null;
+}
+
+export interface RepeatCustomer {
+  customer: string;
+  issues: number;
+  in_period: number;
+  total: number;
+  rising: number;
+  projects: { name: string; project_name: string; department: string | null }[];
+  clusters: RepeatCluster[];
+}
+
+export interface RepeatIssues {
+  period: { key: PeriodKey; start: string; end: string; lookback_start: string };
+  rules: { lookback_days: number; min_occurrences: number; min_in_period: number };
+  summary: {
+    issues: number;
+    customers: number;
+    rising: number;
+    tickets_in_period: number;
+    tasks_in_period: number;
+  };
+  customers: RepeatCustomer[];
+  department: string | null;
+  access: { can_act: boolean; can_draft_kb: boolean };
 }
 
 /** "5 – 11 Oct 2026", or one day. */
