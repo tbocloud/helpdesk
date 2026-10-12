@@ -326,6 +326,15 @@ export interface TaskTimer {
   elapsed: number;
 }
 
+/** Tracked time: "2h 01m 05s" on a ticking board, "2h 01m" in lists that refresh by the minute. */
+export function formatElapsed(s: number, withSeconds = true) {
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const hm = `${h > 0 ? h + "h " : ""}${String(m).padStart(2, "0")}m`;
+  if (!withSeconds) return hm;
+  return `${hm} ${String(Math.floor(s % 60)).padStart(2, "0")}s`;
+}
+
 /**
  * A task's timer, from the server's fields alone. It runs only while the task is
  * in progress with a start time; otherwise banked time shows as paused. Pausing

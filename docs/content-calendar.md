@@ -12,6 +12,9 @@ plans, staffs and ships social posts (`HD Content Post`) for customers.
   `helpdesk.api.content_board.get_occasions`. Every number on the page is worked out in the
   browser from the posts loaded for the period and filters on screen; there is no separate
   stats call.
+- Posts in production (Drafting to Approved, not yet published) also show on the **In
+  progress** page, next to the started tasks of every project, with the part each post waits
+  on and who has it; see [workspace-pages.md](workspace-pages.md#in-progress-in-progress).
 
 ## Filters and navigation
 

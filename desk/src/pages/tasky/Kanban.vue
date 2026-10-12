@@ -549,6 +549,7 @@ import {
   assignedByName,
   blockedMessage,
   blocksMove,
+  formatElapsed,
   holdDays,
   holdDurationLabel,
   initials,
@@ -1011,14 +1012,5 @@ function moveToColumn(task: Task, newStatus: string, insertAt: number = -1) {
   } else {
     columnTasks.value[newStatus].push(task);
   }
-}
-
-function formatElapsed(s: number) {
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const sec = Math.floor(s % 60);
-  return `${h > 0 ? h + "h " : ""}${String(m).padStart(2, "0")}m ${String(
-    sec
-  ).padStart(2, "0")}s`;
 }
 </script>

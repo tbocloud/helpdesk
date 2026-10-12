@@ -3160,3 +3160,25 @@ def get_recurring_tasks_created(recurring_task: str) -> list[dict]:
         fields=["name", "subject", "exp_end_date", "custom_recurrence_date", "_assign"],
         order_by="custom_recurrence_date asc",
     )
+
+
+def make_started_task(
+    project: str,
+    subject: str,
+    assignee: str,
+    status: str = "Working",
+    due=None,
+    **values,
+) -> str:
+    """Creates a Task in `project` assigned to `assignee`, due on `due`, and puts it in
+    `status` (Working, Pending Review, On Hold…) with any other `values` (e.g.
+    escalation_level) straight in the database; returns its name. For In progress tests."""
+    task = make_task(project, subject, due).name
+    make_assignment("Task", task, assignee)
+    frappe.db.set_value("Task", task, {"status": status, **values})
+    return task
+
+
+def get_in_progress_as(user: str, **filters) -> dict:
+    """The In progress page's answer (helpdesk.api.in_progress.get_in_progress) for `user`."""
+    return call_as_user(user, "helpdesk.api.in_progress.get_in_progress", **filters)

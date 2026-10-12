@@ -33,7 +33,7 @@ from frappe.utils import (
 from helpdesk import competition, follow_ups, task_activity
 from helpdesk import team_dashboard as td
 from helpdesk import team_insights
-from helpdesk.api import home, project_files
+from helpdesk.api import home, in_progress, project_files
 from helpdesk.api.content_board import user_full_names
 from helpdesk.api.doc import remove_assignments
 from helpdesk.api.follow_ups import check_admin
@@ -1384,6 +1384,31 @@ def get_team_member(
         [i for i in get_my_work(user=user)["items"] if i["kind"] == "task"]
     )
     return _paged(tasks, cursor, limit)
+
+
+@frappe.whitelist()
+@agent_only
+def get_in_progress(
+    group_by: str = "project",
+    department: str | None = None,
+    customer: str | None = None,
+    person: str | None = None,
+    only_overdue: bool | int | str = False,
+    hide_on_hold: bool | int | str = False,
+) -> dict:
+    """Everything started, in lanes, as the web's In progress page shows it
+    (helpdesk.api.in_progress): the people who run projects see their projects'
+    tasks, everyone else their own; content posts only for the content team."""
+    return _one(
+        in_progress.get_in_progress(
+            group_by=group_by,
+            department=department,
+            customer=customer,
+            person=person,
+            only_overdue=only_overdue,
+            hide_on_hold=hide_on_hold,
+        )
+    )
 
 
 @frappe.whitelist()
