@@ -279,6 +279,7 @@
 
 <script setup lang="ts">
 import { Link } from "@/components";
+import { useListUpdate } from "@/composables/realtime";
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import SectionCard from "@/components/SectionCard.vue";
 import TaskyBadge from "@/components/TaskyBadge.vue";
@@ -401,7 +402,9 @@ watch([group, () => ({ ...filters })], ([g, f]) => {
   resource.reload();
 });
 
-// live-ish: coming back to the tab fetches again; tasks publish no realtime events
+// live: a task's status, timer or assignee changing reloads the page (debounced);
+// coming back to the tab fetches again in case the socket was down
+useListUpdate("Task", resource);
 useEventListener(window, "focus", () => {
   if (!resource.loading) resource.reload();
 });

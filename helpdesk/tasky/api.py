@@ -1272,7 +1272,9 @@ def _reassign(
 @frappe.whitelist()
 def approve_task(task: str, rating: str | None = None) -> dict:
     """The lead, a manager or a coordinator signs off a reviewed task, optionally
-    with its quality rating (Needs rework, Good, Excellent)."""
+    with its quality rating (Needs rework, Good, Excellent). `quality` in the
+    answer says whether the approver may still rate it, so a one-click Approve
+    can offer the rating afterwards."""
     doc = _get_managed_task(task)
     if doc.status != "Pending Review":
         frappe.throw(_("Only tasks waiting for review can be approved."))
@@ -1282,7 +1284,7 @@ def approve_task(task: str, rating: str | None = None) -> dict:
         doc.set_quality_rating(rating)
     doc.save()
     doc.add_comment("Info", _("Approved."))
-    return _format_task(_task_dict(doc))
+    return {**_format_task(_task_dict(doc)), "quality": task_quality_info(doc)}
 
 
 @frappe.whitelist(methods=["POST"])
@@ -2138,6 +2140,7 @@ def start_timer(task: str):
         frappe.throw(_("Start the task first; its timer runs while it's in progress."))
     if not running:
         frappe.db.set_value("Task", task_id, "custom_timer_start", frappe.utils.now())
+        notify_task_list(task_id)
     return {"ok": 1}
 
 
@@ -2159,6 +2162,7 @@ def stop_timer(task: str):
     frappe.db.set_value(
         "Task", task_id, "custom_timer_elapsed", paused + round(elapsed, 2)
     )
+    notify_task_list(task_id)
     return {"elapsed": round(elapsed, 2)}
 
 
@@ -2218,6 +2222,26 @@ def get_timer(task: str):
         "elapsed": round(elapsed, 2),
         "timer_start": str(doc.custom_timer_start),
     }
+
+
+def notify_task_list(task: str):
+    """Frappe's `list_update` for a Task changed without a save (its timer, its
+    assignment), as a save sends it: open In progress and Overview pages reload.
+    Sent once per request after the commit, and the pages debounce it."""
+    frappe.publish_realtime(
+        "list_update",
+        {"doctype": "Task", "name": task, "user": frappe.session.user},
+        # the doctype's room: only sockets allowed to read Task joined it
+        doctype="Task",
+        after_commit=True,
+    )
+
+
+def notify_task_assignment(doc, method=None):
+    """ToDo hook: an assignment given, handed over or removed changes the task's
+    `_assign` without saving the task."""
+    if doc.reference_type == "Task" and doc.reference_name:
+        notify_task_list(doc.reference_name)
 
 
 def _timer_hours(timer_start) -> float:

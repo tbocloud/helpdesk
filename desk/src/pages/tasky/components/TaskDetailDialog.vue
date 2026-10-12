@@ -79,7 +79,10 @@
         <dl class="grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
           <div v-for="row in detailRows" :key="row.label">
             <dt class="text-xs text-ink-gray-5">{{ row.label }}</dt>
-            <dd class="mt-1 flex items-center gap-1.5 text-ink-gray-8">
+            <dd
+              class="mt-1 flex items-center gap-1.5 text-ink-gray-8"
+              :class="row.numeric ? 'tabular-nums' : ''"
+            >
               <component
                 :is="row.icon"
                 v-if="row.icon"
@@ -170,6 +173,7 @@ import { __ } from "@/translation";
 import { errorText, sanitizeRichText } from "@/utils";
 import { Dialog, createResource, dayjs, toast } from "frappe-ui";
 import { computed, ref, watch, type Ref } from "vue";
+import { useIntervalFn } from "@vueuse/core";
 import { useRouter } from "vue-router";
 import LucideArrowRight from "~icons/lucide/arrow-right";
 import LucideCalendarClock from "~icons/lucide/calendar-clock";
@@ -373,9 +377,24 @@ function statusMeta(status: string) {
   return { label: __(meta.label), icon: meta.icon };
 }
 
-// the time on the task's timer when the dialog opened
+// a running timer ticks while the dialog shows it, and stops when it closes
+const now = ref(dayjs());
+const ticker = useIntervalFn(() => (now.value = dayjs()), 1000, {
+  immediate: false,
+});
+watch(
+  () =>
+    dialogOpen.value && !!detail.value && !!taskTimer(detail.value)?.running,
+  (running) => {
+    now.value = dayjs();
+    if (running) ticker.resume();
+    else ticker.pause();
+  },
+  { immediate: true }
+);
+
 function timerLabel(d: TaskDetail) {
-  const timer = taskTimer(d);
+  const timer = taskTimer(d, now.value);
   if (!timer) return "—";
   return `${formatElapsed(timer.elapsed)} · ${
     timer.running ? __("running") : __("paused")
@@ -414,7 +433,12 @@ const detailRows = computed(() => {
       label: __("Estimate"),
       value: d.estimated_hours ? __("{0} hrs", String(d.estimated_hours)) : "—",
     },
-    { label: __("Timer"), value: timerLabel(d), icon: LucideTimer },
+    {
+      label: __("Timer"),
+      value: timerLabel(d),
+      icon: LucideTimer,
+      numeric: true,
+    },
   ];
 });
 
@@ -429,10 +453,14 @@ const handingOverTask = ref<TaskDetail | null>(null);
 const movingTask = ref<TaskDetail | null>(null);
 const recurringFrom = ref<TaskDetail | null>(null);
 
-const { approve } = useApproveTask(() => {
-  close();
-  changed();
-});
+// the rating sits next to Approve here, so the toast doesn't offer it again
+const { approve } = useApproveTask(
+  () => {
+    close();
+    changed();
+  },
+  { offerRating: false }
+);
 
 const dialogActions = computed(() => {
   const d = detail.value;

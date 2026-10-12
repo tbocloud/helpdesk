@@ -164,6 +164,7 @@ assignee, department)`. Project managers and project leads only.
   from the bucket's items.
 - The bucket and filters live in the URL (`bucket`, `project`, `customer`, `assignee`,
   `department`).
+- **Live**: reloads on Task `list_update`, debounced, as In progress does (see there).
 - **Follow-ups** (System Managers and Agent Managers): escalated (L2+), breached and overdue
   counts, the escalated items, the oldest overdue tasks and who has the most open escalations
   (`FollowUpControl.vue`, see [follow-ups.md](follow-ups.md#where-escalation-shows)).
@@ -228,8 +229,17 @@ Team too); Home's Your day "In progress" part links here.
   content calendar is the Digital team's. The person filter matches tasks through ToDos
   (`assigned_to_filter`) and posts by everyone on them.
 - **Compact**: a lane shows 6 rows, then "Show all N".
-- **Live-ish**: the page loads again when the window regains focus, and on Refresh. Tasks
-  publish no realtime events, so there's no push.
+- **Live**: the page reloads when a task changes, through Frappe's `list_update` for Task
+  (`useListUpdate("Task", …)` in `desk/src/composables/realtime.ts`, which joins the
+  `doctype:Task` room). Frappe already sends it on every Task save (status, hold, complete,
+  approve); changes made without a save send it from `helpdesk.tasky.api.notify_task_list`:
+  the timer (`start_timer`, `stop_timer`) and assignments (the ToDo `on_update` hook,
+  `notify_task_assignment`). It goes out once per request after the commit, carries only the
+  task's name, and reaches only sockets allowed to read Task. The page waits 1.5 seconds
+  after the last event (at most 10 seconds under a steady stream); an event that arrives
+  while a load is running reloads once more when it ends, since that answer may predate the
+  change, and nothing reloads after the page is left. It still loads again when the window regains focus (in case the socket was
+  down), and on Refresh. Content posts send nothing, so they still refresh only that way.
 - **Performance**: one call; tasks capped at 1000 and posts at 500 (`truncated` says so and the
   page asks to filter). Project names, customers and departments, assignee and pending people's
   names, holders' names, open dependencies, the posts' teams and their role tasks each come
@@ -444,8 +454,10 @@ team member's work, for leads and managers of their projects (the Team page link
   dialog only the lead's and manager's steps.
 - **Task details** (`desk/src/pages/tasky/components/TaskDetailDialog.vue`): the one task panel,
   shared with My Tasks (`/my-tasks`) and the Content Calendar's role boxes. Hold and dependency notices, status, priority, project,
-  phase, assigned to, assigned by, due, estimate, timer (the time tracked when it opened,
-  running or paused, from `taskTimer`), description, pull requests and meetings. Its
+  phase, assigned to, assigned by, due, estimate, timer (from `taskTimer` and
+  `formatElapsed`: a running timer ticks every second while the dialog shows it, a paused one
+  stays still; the ticker stops when the dialog closes or the timer stops), description,
+  pull requests and meetings. Its
   actions follow `mine`: the assignee may edit, complete, hold or resume, ask for help and hand
   over; the project's manager, lead or coordinator may edit, plan, approve and send back, and also hold, resume and hand it over. "Move to
   project…" shows when the task says `can_move` (see [Moving a task](#moving-a-task-to-another-project)).

@@ -1,6 +1,7 @@
 import { useAuthStore } from "@/stores/auth";
 import { globalStore } from "@/stores/globalStore";
-import { reactive, ref, watch } from "vue";
+import { useDebounceFn } from "@vueuse/core";
+import { onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 
 const currentViewers = reactive<Record<string, string[]> | null>({});
 
@@ -144,4 +145,60 @@ export function useTyping(ticketId: string) {
     typingUsers,
     cleanup,
   };
+}
+
+// how many mounted pages listen to each doctype's room, so the last one leaves it
+const listRooms: Record<string, number> = {};
+
+/**
+ * Reloads `resource`, debounced, when a record of `doctype` changes: Frappe's
+ * `list_update`, sent on every save, and by helpdesk.tasky.api.notify_task_list
+ * for task changes made without one (timer, assignment). A change arriving
+ * while it loads reloads it once more afterwards, since that answer may predate
+ * it. Joins the doctype's room while the calling component is mounted, and
+ * again after a reconnect.
+ */
+export function useListUpdate(
+  doctype: string,
+  resource: { loading: boolean; reload: () => unknown },
+  wait = 1500
+) {
+  const { $socket } = globalStore();
+  let mounted = false;
+  let pending = false;
+  function onUpdate() {
+    if (!mounted) return;
+    if (resource.loading) pending = true;
+    else resource.reload();
+  }
+  watch(
+    () => resource.loading,
+    (loading) => {
+      if (loading || !pending || !mounted) return;
+      pending = false;
+      resource.reload();
+    }
+  );
+  // a burst of changes is one reload, and a steady stream still reloads
+  const reload = useDebounceFn(onUpdate, wait, { maxWait: 10_000 });
+  const subscribe = () => $socket.emit("doctype_subscribe", doctype);
+  const onListUpdate = (data: { doctype?: string }) => {
+    if (data?.doctype === doctype) reload();
+  };
+
+  onMounted(() => {
+    mounted = true;
+    listRooms[doctype] = (listRooms[doctype] || 0) + 1;
+    subscribe();
+    $socket.on("connect", subscribe);
+    $socket.on("list_update", onListUpdate);
+  });
+  onBeforeUnmount(() => {
+    // a debounced reload may still be waiting
+    mounted = false;
+    $socket.off("connect", subscribe);
+    $socket.off("list_update", onListUpdate);
+    listRooms[doctype] -= 1;
+    if (!listRooms[doctype]) $socket.emit("doctype_unsubscribe", doctype);
+  });
 }
