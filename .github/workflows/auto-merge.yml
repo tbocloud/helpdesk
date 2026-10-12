@@ -18,6 +18,12 @@ permissions:
   contents: write
   pull-requests: write
 
+# one run per PR at a time, newest wins, so an older run can't re-enable
+# auto-merge after a retarget run switched it off
+concurrency:
+  group: auto-merge-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   auto-merge:
     # same-repo PRs only: a fork's token can't enable auto-merge. Label events
@@ -37,9 +43,11 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR: ${{ github.event.pull_request.html_url }}
           HOLD: ${{ contains(github.event.pull_request.labels.*.name, 'no-auto-merge') }}
-          INTO_DEFAULT: ${{ github.event.pull_request.base.ref == github.event.repository.default_branch }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
-          if [ "$HOLD" = "true" ] || [ "$INTO_DEFAULT" != "true" ]; then
+          # the live base, not the event payload's, which may be stale
+          BASE=$(gh pr view "$PR" --json baseRefName --jq .baseRefName)
+          if [ "$HOLD" = "true" ] || [ "$BASE" != "$DEFAULT_BRANCH" ]; then
             gh pr merge --disable-auto "$PR" || true
           else
             gh pr merge --auto --merge "$PR"
