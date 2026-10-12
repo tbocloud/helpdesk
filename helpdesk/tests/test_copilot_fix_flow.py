@@ -297,6 +297,14 @@ class TestDecision(FixCase):
         )
         self.assertIsNone(self.github.merged_with)
 
+    def test_a_token_without_check_runs_merges_on_green_actions(self):
+        self.github.check_runs_refused = True
+
+        result = self.decide(self.approver)
+
+        self.assertEqual(result["decision"], {"outcome": "approved", "merge": "merged"})
+        self.assertTrue(json.loads(self.approval().payload)["checks"]["partial"])
+
     def test_github_still_settling_the_merge_state_is_a_quiet_wait(self):
         self.github.pulls[(REPO, 7)]["mergeable_state"] = "unstable"
 

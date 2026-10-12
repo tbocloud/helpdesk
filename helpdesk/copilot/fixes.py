@@ -421,6 +421,15 @@ def try_merge(run) -> str:
     if merge_state in ("", "unknown", "unstable"):
         # GitHub is still working it out (unstable: it has not caught up with the
         # passed checks yet); the next check or refresh tries again
+        if merge_state == "unstable" and result.get("partial"):
+            _blocked(
+                approval,
+                run,
+                _(
+                    "GitHub reports a check that has not passed, outside the GitHub Actions this token can read"
+                ),
+                lasting=False,
+            )
         return "waiting"
     if merge_state != "clean":
         _blocked(approval, run, _merge_state_reason(merge_state))

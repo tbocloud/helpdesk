@@ -556,6 +556,9 @@ function showCopilotFixReview(info, doc, call, toast, $dialog) {
         (checks.pending && checks.pending.length
           ? "running: " + checks.pending.join(", ")
           : "");
+  if (checkText && checks.partial) {
+    checkText += " (GitHub Actions only: this token cannot read other checks)";
+  }
   html +=
     '<div style="margin-top:8px"><b>Checks:</b> ' +
     copilotEscape(checkText || "not read yet") +

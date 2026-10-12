@@ -90,6 +90,37 @@ class TestRequests(FrappeTestCase):
                     github.checks("o/r", "s")["green"], green, (runs, status)
                 )
 
+    def test_a_token_that_may_not_read_check_runs_reads_the_actions_runs(self):
+        def answer(method, path, body=None, params=None):
+            if path.endswith("check-runs"):
+                raise GitHubError(
+                    403, "Resource not accessible by personal access token"
+                )
+            if path.endswith("actions/runs"):
+                ci = {"name": "ci", "workflow_id": 1, "event": "pull_request"}
+                return {
+                    "workflow_runs": [
+                        dict(
+                            ci, status="completed", conclusion="failure", created_at="1"
+                        ),
+                        dict(
+                            ci, status="completed", conclusion="success", created_at="2"
+                        ),
+                    ]
+                }
+            return {"state": "pending", "total_count": 0}
+
+        with patch.object(github, "request", side_effect=answer):
+            result = github.checks("o/r", "s")
+        self.assertEqual((result["green"], result["partial"]), (True, True))
+
+    def test_a_token_that_reads_neither_is_told_plainly(self):
+        refused = GitHubError(403, "Resource not accessible by personal access token")
+        with patch.object(github, "request", side_effect=refused):
+            with self.assertRaises(GitHubError) as caught:
+                github.checks("o/r", "s")
+        self.assertIn("Actions read", caught.exception.message)
+
     def test_removing_a_missing_label_is_fine(self):
         with patch.object(
             github, "request", side_effect=GitHubError(404, "Label does not exist")

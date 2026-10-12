@@ -97,14 +97,10 @@ def checks(repo: str, sha: str) -> dict:
 
     Every check run completed as success, neutral or skipped, and the combined
     commit status success (or no status at all). Returns
-    `{green, total, pending, failing}` with the names of the ones that block.
+    `{green, total, pending, failing, partial}` with the names of the ones that
+    block; `partial` when only GitHub Actions could be read (see `_check_runs`).
     """
-    runs = (
-        request(
-            "GET", f"/repos/{repo}/commits/{sha}/check-runs", params={"per_page": 100}
-        )
-        or {}
-    ).get("check_runs") or []
+    runs, partial = _check_runs(repo, sha)
     pending = [r.get("name") for r in runs if r.get("status") != "completed"]
     failing = [
         r.get("name")
@@ -121,7 +117,56 @@ def checks(repo: str, sha: str) -> dict:
         "total": len(runs) + int(status.get("total_count") or 0),
         "pending": pending,
         "failing": failing,
+        "partial": partial,
     }
+
+
+def _check_runs(repo: str, sha: str) -> tuple[list[dict], bool]:
+    """The commit's check runs, and whether they are only part of them.
+
+    GitHub lets no fine-grained personal token read check runs (only GitHub Apps
+    and classic tokens); refused that way, the commit's GitHub Actions workflow
+    runs stand in, which a fine-grained token with Actions read may see.
+    """
+    try:
+        found = request(
+            "GET", f"/repos/{repo}/commits/{sha}/check-runs", params={"per_page": 100}
+        )
+        return (found or {}).get("check_runs") or [], False
+    except GitHubError as e:
+        if e.status != 403:
+            raise
+    try:
+        found = request(
+            "GET",
+            f"/repos/{repo}/actions/runs",
+            params={"head_sha": sha, "per_page": 100},
+        )
+    except GitHubError as e:
+        if e.status in (403, 404):
+            raise GitHubError(
+                e.status,
+                _(
+                    "This GitHub token cannot read test results: give it Actions read (a fine-grained token cannot read check runs)."
+                ),
+            ) from e
+        raise
+    latest = {}
+    for run in (found or {}).get("workflow_runs") or []:
+        key = (run.get("workflow_id"), run.get("event"))  # a re-run replaces its run
+        if (run.get("created_at") or "") >= (
+            latest.get(key, {}).get("created_at") or ""
+        ):
+            latest[key] = run
+    runs = [
+        {
+            "name": r.get("name"),
+            "status": r.get("status"),
+            "conclusion": r.get("conclusion"),
+        }
+        for r in latest.values()
+    ]
+    return runs, True
 
 
 def merge_method(repo: str) -> str:

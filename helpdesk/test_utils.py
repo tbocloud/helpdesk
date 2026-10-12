@@ -3498,6 +3498,8 @@ class FakeGitHub:
         self.search_items: list = []
         self.merge_refusal: tuple | None = None
         self.merged_with: dict | None = None
+        # a fine-grained personal token may not read check runs: GitHub says 403
+        self.check_runs_refused = False
 
     def install(self, test_case):
         patcher = patch("helpdesk.copilot.github.request", side_effect=self.request)
@@ -3549,6 +3551,13 @@ class FakeGitHub:
         ]
         self.statuses[sha] = status or {"state": "pending", "total_count": 0}
 
+    def workflow_runs(self, sha: str) -> list[dict]:
+        """The check runs again, as the GitHub Actions workflow runs of `sha`."""
+        return [
+            dict(run, workflow_id=i, event="pull_request", created_at="2026-10-12")
+            for i, run in enumerate(self.check_runs.get(sha, []))
+        ]
+
     def labels(self, repo: str, number: int) -> list[str]:
         return [label["name"] for label in self.pulls[(repo, number)]["labels"]]
 
@@ -3571,9 +3580,15 @@ class FakeGitHub:
                     "allow_rebase_merge": True,
                 },
             )
+        if rest[0] == "actions":
+            return {"workflow_runs": self.workflow_runs((params or {})["head_sha"])}
         if rest[0] == "commits":
             sha = rest[1]
             if rest[2] == "check-runs":
+                if self.check_runs_refused:
+                    raise GitHubError(
+                        403, "Resource not accessible by personal access token"
+                    )
                 return {"check_runs": self.check_runs.get(sha, [])}
             return self.statuses.get(sha, {"state": "pending", "total_count": 0})
         number = int(rest[1])
