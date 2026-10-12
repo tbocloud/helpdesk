@@ -4,7 +4,9 @@
   <div
     class="relative grid w-full grid-cols-[1fr_auto] items-center gap-x-4 gap-y-1 px-4 py-3 text-left transition-colors"
     :class="[
-      to ? 'hover:bg-surface-gray-1 focus-within:bg-surface-gray-1' : '',
+      to || opens
+        ? 'hover:bg-surface-gray-1 focus-within:bg-surface-gray-1'
+        : '',
       showAssignees
         ? $slots.actions
           ? 'md:grid-cols-[1fr_9rem_8rem_15rem]'
@@ -21,17 +23,27 @@
         aria-hidden="true"
       />
       <div class="min-w-0">
-        <div class="flex min-w-0 items-center gap-1.5">
+        <div
+          class="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 md:flex-nowrap"
+        >
           <span class="sr-only">{{
             item.kind === "ticket" ? __("Ticket") : __("Task")
           }}</span>
           <RouterLink
             v-if="to"
             :to="to"
-            class="truncate text-base text-ink-gray-9 after:absolute after:inset-0 after:content-[''] focus-visible:outline-none"
+            class="max-w-full truncate text-base text-ink-gray-9 after:absolute after:inset-0 after:content-[''] focus-visible:outline-none"
           >
             {{ item.title }}
           </RouterLink>
+          <button
+            v-else-if="opens"
+            type="button"
+            class="max-w-full truncate text-left text-base text-ink-gray-9 after:absolute after:inset-0 after:rounded after:content-[''] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-highlight"
+            @click="emit('open')"
+          >
+            {{ item.title }}
+          </button>
           <span v-else class="truncate text-base text-ink-gray-9">
             {{ item.title }}
           </span>
@@ -61,7 +73,9 @@
         >
           <span v-if="context" class="truncate">{{ context }}</span>
           <span v-if="context" aria-hidden="true">·</span>
-          <span class="font-mono text-xs tabular-nums">{{ reference }}</span>
+          <span class="whitespace-nowrap font-mono text-xs tabular-nums">{{
+            reference
+          }}</span>
           <template v-if="item.kind === 'task' && item.hd_ticket">
             <span aria-hidden="true">·</span>
             <span class="inline-flex items-center gap-1">
@@ -81,6 +95,13 @@
           <template v-if="item.kind === 'task' && item.waiting_on">
             <span aria-hidden="true">·</span>
             <WaitingOn :subject="item.waiting_on" />
+          </template>
+          <!-- the assignee column is hidden on phones, so its name moves here -->
+          <template v-if="showAssignees && item.assignees.length">
+            <span class="md:hidden" aria-hidden="true">·</span>
+            <span class="truncate md:hidden" :title="allAssignees">
+              {{ assigneeLabel }}
+            </span>
           </template>
           <span class="md:hidden" aria-hidden="true">·</span>
           <span class="md:hidden" :class="onHold ? 'min-w-0 max-w-full' : ''">
@@ -169,7 +190,10 @@
       />
     </div>
 
-    <div class="flex items-center justify-end gap-2">
+    <!-- stacked on phones so the title keeps its width -->
+    <div
+      class="flex flex-col items-end gap-1 sm:flex-row sm:items-center sm:justify-end sm:gap-2"
+    >
       <div
         v-if="onHold"
         class="flex items-center justify-end gap-1 whitespace-nowrap text-sm tabular-nums text-ink-gray-5"
@@ -237,7 +261,11 @@ import {
 const props = defineProps<{
   item: WorkItem;
   showAssignees?: boolean;
+  /** The row opens the item in place (emits `open`) instead of linking to its page. */
+  opens?: boolean;
 }>();
+
+const emit = defineEmits<{ open: [] }>();
 
 defineSlots<{
   /** Buttons for the item, kept clickable above the row's link. */
@@ -246,7 +274,7 @@ defineSlots<{
 
 const userStore = useUserStore();
 
-const to = computed(() => itemRoute(props.item));
+const to = computed(() => (props.opens ? null : itemRoute(props.item)));
 
 const pullRequests = computed(() =>
   props.item.kind === "task" ? props.item.pull_requests ?? [] : []

@@ -326,14 +326,13 @@ export interface TaskTimer {
   elapsed: number;
 }
 
-/** Seconds tracked, as "1h 05m 09s". */
-export function formatElapsed(s: number) {
+/** Tracked time: "2h 01m 05s" on a ticking board, "2h 01m" in lists that refresh by the minute. */
+export function formatElapsed(s: number, withSeconds = true) {
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
-  const sec = Math.floor(s % 60);
-  return `${h > 0 ? h + "h " : ""}${String(m).padStart(2, "0")}m ${String(
-    sec
-  ).padStart(2, "0")}s`;
+  const hm = `${h > 0 ? h + "h " : ""}${String(m).padStart(2, "0")}m`;
+  if (!withSeconds) return hm;
+  return `${hm} ${String(Math.floor(s % 60)).padStart(2, "0")}s`;
 }
 
 /**

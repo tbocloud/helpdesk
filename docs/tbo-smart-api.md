@@ -528,6 +528,7 @@ off):
 | --- | --- | --- | --- |
 | `get_team` | – | `{people: [TeamMember], totals}` | Project managers, leads and admins (`get_team_workload`); others get 403. Fixture `get_team.json` |
 | `get_team_member` | `user`, `cursor`, `limit` | page of `Task` | The same people, for someone on their projects (`get_my_work(user)`). Fixture `get_team_member.json` |
+| `get_in_progress` | `group_by` (project, person, department; default project), `department?`, `customer?`, `person?`, `only_overdue` (bool), `hide_on_hold` (bool) | `InProgress` | **Every agent**, not only managers: the web's In progress page (`helpdesk.api.in_progress`). Tasks follow #94 (people who run a project get its tasks, everyone else their own); posts only for the content team, and outside the content leads only the posts they're on. Not paged: one lane list, tasks capped at 1000 and posts at 500 (`truncated`). Fixture `get_in_progress.json` |
 | `get_escalations` | `cursor`, `limit` | page of `Escalation` (L2+, highest level and longest wait first) | System and Agent Managers, like Overview → Follow-ups. Fixture `get_escalations.json` |
 | `nudge` POST | `doctype` (Task, HD Ticket), `name`, `message` (≤500) | `{notified}` | Admins for anything; a project's manager, lead or coordinator for its tasks. The owners get a Reminder (bell, chat or email, push) and the item gets a note. Fixture `nudge.json` |
 | `reassign` POST | `doctype`, `name`, `to`, `reason` (required for tasks) | as `hand_over_task` / `assign_ticket` | Tasks go through `hand_over_task` (the lead or coordinator hands over the whole task); tickets through `assign_ticket` |
@@ -539,6 +540,20 @@ off):
 `TeamMember`: `user`, `full_name`, `image`, `on_leave`, `leave` {to_date, half_day},
 `open_tasks`, `working`, `in_review`, `on_hold`, `overdue`, `due_this_week`, `done_this_week`,
 `tickets`, `sla_breached`, `working_on`, `next_due`.
+
+`InProgress`: `scope` ("team" or "own"), `group_by`, `summary` (`InProgressCounts`, over the
+whole view before `only_overdue` and `hide_on_hold`), `lanes`, `truncated`. A lane is `{key,
+kind (project, person, department, content), title, subtitle (the project's customer), tasks,
+posts, counts}`. `InProgressCounts`: `in_progress` (Working), `review`, `on_hold`, `overdue`,
+`escalated`, `posts`, `missed`, `at_risk`. A task is the web's work item (`name`, `title`,
+`project`, `project_name`, `customer`, `department`, `status`, `deadline`, `is_overdue`,
+`is_key`, `escalation_level`, `hold_reason`, `hold_note`, `hold_by_name`, `hold_days`,
+`waiting_on`, `risks`, `assignees`, `assignee_names` {user: full name}) plus the timer fields
+`custom_timer_start` (site time, or null while paused) and `custom_timer_elapsed` (banked
+hours) and `estimated_hours`. A post is `{name, title, customer, status, publish_on,
+platforms, format, pending: [{role, label, people: [{user, full_name}], task, task_status,
+due}], waiting_on ("Client approval", …, or null), is_missed, at_risk}`. Rules in
+[workspace-pages.md](workspace-pages.md#in-progress-in-progress).
 
 `Escalation`: `id` (`Task:TASK-…`), `kind` (task, ticket), `doctype`, `ref`, `title`, `owners`,
 `level`, `level_label`, `days`, `severity`, `reason`, `route`, `app_route`.

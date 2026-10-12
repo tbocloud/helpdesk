@@ -43,6 +43,7 @@ export const CONTENT_TEAM_ROUTES = new Set([
   "TaskyMyTasks",
   "MyWork",
   "MyBoard",
+  "InProgress",
   "WorkCalendar",
   "TaskyTimesheets",
   "Notifications",

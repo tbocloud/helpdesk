@@ -1,4 +1,4 @@
-# Workspace pages: Overview, Scoreboard, Team, Summaries, Projects, My Work, Timesheets
+# Workspace pages: Overview, In progress, Scoreboard, Team, Summaries, Projects, My Work, Timesheets
 
 Pages for the people who run projects (what's late, who is doing what, what each customer was
 told) and for everyone doing the work (their projects, what to do next, the hours logged). They follow [ui-guidelines.md](ui-guidelines.md): neutral tiles, colour only
@@ -167,6 +167,80 @@ assignee, department)`. Project managers and project leads only.
 - **Follow-ups** (System Managers and Agent Managers): escalated (L2+), breached and overdue
   counts, the escalated items, the oldest overdue tasks and who has the most open escalations
   (`FollowUpControl.vue`, see [follow-ups.md](follow-ups.md#where-escalation-shows)).
+
+## In progress (`/in-progress`)
+
+`desk/src/pages/work/InProgress.vue` (route `InProgress`); API
+`helpdesk.api.in_progress.get_in_progress(group_by, department, customer, person,
+only_overdue, hide_on_hold)`. One answer to "what is being worked on right now, across every
+project and the content calendar?". In the sidebar after Overview, for everyone (the Content
+Team too); Home's Your day "In progress" part links here.
+
+- **What's in it**: tasks that have started and aren't finished, status Working, Pending
+  Review or On Hold (`IN_PROGRESS_STATUSES`); not Open ones, which nobody has started. And
+  content posts in production, status Drafting, Design, Internal Review, Client Review, Changes
+  Requested, Head Review or Approved (`PRODUCTION_STATUSES`); not Idea (not started), Scheduled
+  (ready to go out), Published or Cancelled.
+- **Who sees what** (all on the server): tasks come through `frappe.get_list`, so
+  [the #94 rule](#who-sees-which-tasks) decides: admins see every project, a project's
+  managers, lead and coordinators (and Project Managers on its team, the DM leads for Digital
+  and content projects) see its tasks, everyone else only their own; the department walls and
+  the content team rule apply on top. Posts come through `frappe.get_list` on HD Content Post,
+  so only the content team gets any ([content-calendar.md](content-calendar.md#who-sees-the-content-calendar));
+  outside the content leads (`_is_content_lead`: Project Managers, DM Coordinators, the Digital
+  Marketing Head, admins) only the posts the viewer is on or created, even where the post
+  permission would show a client's every post. `scope` is `"team"` for people who run some
+  work beyond their own (admins, project managers, leads, coordinators, the DM leads) and
+  `"own"` otherwise; it only changes the page's wording and hides the Person filter.
+- **Lanes** (`group_by`): by project (the default: one lane per project, its customer under the
+  name, plus one "Content calendar" lane for the posts), by person (a task shared by two
+  people sits in both their lanes; a post sits with whoever has its pending part, and posts
+  waiting on a reviewer or the client go to the "Content calendar" lane), by department (the
+  project's department, "No department" for none; posts in the Digital lane). Lanes with the
+  most overdue and missed work come first, then the biggest.
+- **Lane counts**: in progress (Working), in review, on hold, overdue, escalated; for posts in
+  production, missed and "not approved, live soon". Shown as badges with icons, only when
+  above zero.
+- **Task rows** (`WorkItemRow` with `opens`): subject, key star, escalation badge, project and
+  ID, assignee (avatar and name; on phones the name moves into the second line), status or the
+  hold reason with `HoldNote`, the due label (red when overdue, the hub's `is_task_overdue`),
+  and the timer from the server's fields (`taskTimer`): "Tracking 2h 01m" or "Paused 1h 24m",
+  refreshed every 30 seconds. Clicking opens `TaskDetailDialog` in place (`mine` when the
+  viewer is an assignee), so every step the viewer may take is there.
+- **Post rows** (`components/InProgressPostRow.vue`): title, "Not approved yet" when it goes
+  live within 2 days unapproved (`REMINDER_WINDOW_HOURS`, the board's rule), customer, platform
+  icons (`ChannelIcon`), format, who has the pending part and which part, the stage
+  (`StatusPill`, which adds Missed) and when it goes live ("Missed · 11 Oct" in red once its
+  time has passed). Clicking opens `PostDialog` in place.
+- **Pending part** (`_pending_parts`): the parts the post's stage waits on, the same people
+  `NEXT_PERSON` notifies: the writer in Drafting, the designer and video editor in Design, all
+  three in Changes Requested, the marketer once Approved. A part whose task is done (by
+  `task_for_role`, as the board reads it) no longer waits, except in Changes Requested, which
+  reopens the work. Internal Review, Client Review and Head Review wait on no one's part:
+  `waiting_on` says "Internal review", "Client approval" or "Head approval".
+- **Summary line**: "4 in progress · 1 in review · 1 overdue · 1 escalated · 4 content posts in
+  production · 1 on hold" (the posts part only for the content team). It counts the view under
+  department, customer and person, before the two switches, so hiding held work still says how
+  much is on hold.
+- **Filters** (in the URL): `group` (`person`, `department`; project is the default and left
+  out), `department`, `customer`, `person`, `overdue=1` (only overdue or escalated tasks, and
+  missed posts) and `hold=hide`. A department other than Digital leaves the posts out, since the
+  content calendar is the Digital team's. The person filter matches tasks through ToDos
+  (`assigned_to_filter`) and posts by everyone on them.
+- **Compact**: a lane shows 6 rows, then "Show all N".
+- **Live-ish**: the page loads again when the window regains focus, and on Refresh. Tasks
+  publish no realtime events, so there's no push.
+- **Performance**: one call; tasks capped at 1000 and posts at 500 (`truncated` says so and the
+  page asks to filter). Project names, customers and departments, assignee and pending people's
+  names, holders' names, open dependencies, the posts' teams and their role tasks each come
+  from one query for the whole list, never per row.
+- **States**: skeleton lanes on first load; an error with Retry; "Nothing in progress" or
+  "Nothing matches these filters" with Clear filters.
+- The TBO Smart app gets the same answer from `helpdesk.api.mobile.get_in_progress`
+  ([tbo-smart-api.md](tbo-smart-api.md#manager-views)).
+- Shared with the Overview: `scoped_task_filters` in `helpdesk/api/work.py` (the status,
+  project, customer, assignee and department filters on tasks).
+- Tests: `helpdesk/tests/test_in_progress.py`.
 
 ## Scoreboard (`/team-dashboard`)
 

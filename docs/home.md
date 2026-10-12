@@ -119,7 +119,9 @@ Three to five numbered steps for today, shown above Your day with a skeleton whi
 Built from `helpdesk.api.work.get_my_work` (the user's open tasks and tickets, with
 `assigned_by_name` and `can_plan`) plus a few grouped queries; no per-task lookups. Each part
 is `{count, items}` with at most 6 items; only parts with items are shown, with "See all N"
-to My Work with a tab in the URL (`?tab=overdue`, `task`, `ticket`). An empty day shows one
+to My Work with a tab in the URL (`?tab=overdue`, `task`, `ticket`), except In progress,
+whose "See all" opens the **In progress** page (`/helpdesk/in-progress`, see
+[workspace-pages.md](workspace-pages.md#in-progress-in-progress)). An empty day shows one
 calm line instead.
 
 Every open task of the user lands in exactly one task section, the first that fits, in the
