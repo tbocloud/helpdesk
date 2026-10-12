@@ -90,6 +90,14 @@
             </dd>
           </div>
         </dl>
+        <TaskQuality
+          v-if="detail.quality"
+          v-model:pending="pendingRating"
+          :task="detail.name"
+          :quality="detail.quality"
+          :reviewing="isPendingReview(detail)"
+          @rated="changed"
+        />
         <div>
           <div class="mb-1 flex items-center gap-2 text-xs text-ink-gray-5">
             {{ __("Description") }}
@@ -208,6 +216,7 @@ import EscalationBadge from "@/components/EscalationBadge.vue";
 import TaskActivity from "./TaskActivity.vue";
 import TaskPlanDialog from "./TaskPlanDialog.vue";
 import TaskPullRequests from "./TaskPullRequests.vue";
+import TaskQuality, { type TaskQualityInfo } from "./TaskQuality.vue";
 
 /** What the opener knows about the task; the dialog loads the rest. */
 export interface TaskRef {
@@ -253,6 +262,7 @@ interface TaskDetail {
   can_move?: boolean;
   custom_recurring_task?: string | null;
   content_post?: string | null;
+  quality?: TaskQualityInfo;
 }
 
 const props = withDefaults(
@@ -325,9 +335,12 @@ const canCoordinate = computed(
   () => projectLoaded.value && !!projectAccess.data?.can_coordinate
 );
 
+// a rating picked for Approve belongs to one task
+const pendingRating = ref("");
 watch(
   () => props.task?.name,
   (name) => {
+    pendingRating.value = "";
     if (name) taskDetail.submit({ task: name });
   },
   { immediate: true }
@@ -446,7 +459,7 @@ const dialogActions = computed(() => {
           label: __("Approve"),
           iconLeft: LucideCheckCheck,
           variant: "subtle",
-          onClick: () => approve(d),
+          onClick: () => approve(d, pendingRating.value),
         }
       );
     }

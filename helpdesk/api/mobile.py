@@ -431,13 +431,25 @@ def request_help(
 
 @frappe.whitelist(methods=["POST"])
 @agent_only
-def review_task(task: str, approve: bool, note: str = "") -> dict:
-    """Sign off a task waiting for review, or send it back with what still needs doing."""
+def review_task(
+    task: str, approve: bool, note: str = "", rating: str | None = None
+) -> dict:
+    """Sign off a task waiting for review, optionally with its quality rating, or
+    send it back with what still needs doing."""
     frappe.has_permission("Task", "read", str(task), throw=True)
     if approve:
-        tasky.approve_task(task)
+        tasky.approve_task(task, rating or None)
     else:
         tasky.send_back_task(task, note)
+    return _one(_task_detail(task))
+
+
+@frappe.whitelist(methods=["POST"])
+@agent_only
+def rate_task(task: str, rating: str | None = None) -> dict:
+    """Rate a completed task Needs rework, Good or Excellent (none clears it). For
+    whoever assigned or reviews it and its department's heads, never its doers."""
+    tasky.rate_task(task, rating or None)
     return _one(_task_detail(task))
 
 
@@ -558,6 +570,8 @@ def _task_detail(task: str) -> dict:
         "description": detail.description or "",
         "activity": [_activity_item(item, i) for i, item in enumerate(activity)],
         "pull_requests": detail.pull_requests or [],
+        # its weight and quality on the Scoreboard, and whether the user may rate it
+        "quality": detail.quality,
     }
 
 
@@ -712,6 +726,7 @@ def get_my_stats(period: str = "week") -> dict:
                 "end": str(end),
                 "label": td.period_label(period, start, end),
                 "done": stats["tasks"],
+                "weighted_work": round(stats["weight"], 1),
                 "on_time": stats["on_time"],
                 "dated": stats["dated"],
                 "on_time_pct": td.pct(stats["on_time"], stats["dated"]),
@@ -1598,10 +1613,13 @@ def get_sla_summary() -> dict:
 
 @frappe.whitelist()
 @agent_only
-def get_scoreboard(period: str = "week", department: str | None = None) -> dict:
+def get_scoreboard(
+    period: str = "week", department: str | None = None, group: str | None = None
+) -> dict:
     """The Scoreboard (helpdesk.api.team_dashboard), which every agent sees: the
-    champion, the user's own line, the leaders and the departments."""
-    board = get_team_dashboard(period, department)
+    champion, the user's own line, the leaders and the departments with their
+    groups, for the whole team, a department or a department group."""
+    board = get_team_dashboard(period, department, group)
     user = frappe.session.user
     people = board["people"]
     mine = next((p for p in people if p["user"] == user), None)
@@ -1611,6 +1629,9 @@ def get_scoreboard(period: str = "week", department: str | None = None) -> dict:
             "period": period,
             "period_label": td.period_label(period, start, end),
             "range": {"start": start, "end": end},
+            "department": board["department"],
+            "group": board["group"],
+            "groups": board["access"]["groups"],
             "champion": board["champion"],
             "me": (
                 {**_score_line(mine), "of": len(people), "breakdown": mine["breakdown"]}
@@ -1621,8 +1642,11 @@ def get_scoreboard(period: str = "week", department: str | None = None) -> dict:
             "departments": [
                 {
                     "department": d["department"],
+                    "kind": d["kind"],
+                    "parent": d["parent"],
                     "people": d["people"],
                     "done": d["tasks"],
+                    "weighted_work": d["weight"],
                     "on_time_pct": d["on_time_pct"],
                     "overdue": d["overdue"],
                     "hours": d["hours"],
@@ -1643,6 +1667,7 @@ def _score_line(p: dict) -> dict:
         "rank": p["rank"],
         "score": p["score"],
         "tasks_done": p["tasks"],
+        "weighted_work": p["weight"],
         "key_tasks": p["key"],
         "on_time_pct": p["on_time_pct"],
         "hours": p["hours"],

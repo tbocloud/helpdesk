@@ -1052,6 +1052,47 @@ def make_done_task(
     return task
 
 
+def make_self_made_done_task(
+    project: str, subject: str, user: str, completed_on, due=None, **kwargs
+) -> str:
+    """Creates a Task that `user` makes and takes themselves (they create it and
+    assign it to themselves), due on `due` and Completed on `completed_on`;
+    returns its name. The Scoreboard weighs such tasks half."""
+    task = make_assigned_task(project, subject, user, user, **kwargs)
+    frappe.db.set_value(
+        "Task",
+        task,
+        {"status": "Completed", "completed_on": completed_on, "exp_end_date": due},
+    )
+    return task
+
+
+def score_stats(**values) -> dict:
+    """A person's Scoreboard numbers (team_dashboard.blank) with `values` set.
+    Unless given, the quality-weighted values equal the weights (unrated work)."""
+    from helpdesk.team_dashboard import blank
+
+    values.setdefault("value", values.get("weight", 0.0))
+    values.setdefault("value_on_time", values.get("weight_on_time", 0.0))
+    return {**blank(), **values}
+
+
+def rate_task_as(user: str, task: str, rating: str | None):
+    """`user` gives a completed task its quality rating through the API."""
+    return call_as_user(user, "helpdesk.tasky.api.rate_task", task=task, rating=rating)
+
+
+def make_done_ticket_task(project: str, subject: str, assignee: str, completed_on):
+    """Creates a resolved HD Ticket and a completed Task made from it (hd_ticket),
+    assigned to `assignee`; returns (ticket name, task name)."""
+    ticket = make_ticket(subject=subject).name
+    frappe.db.set_value(
+        "HD Ticket", ticket, {"status": "Resolved", "status_category": "Resolved"}
+    )
+    task = make_done_task(project, subject, assignee, completed_on, hd_ticket=ticket)
+    return ticket, task
+
+
 def make_member_day(project: str, member: str, lead: str, teammate: str) -> dict:
     """A project member's open work like the day that showed a false "All clear" on
     Home: eight tasks `lead` gave `member` (one overdue, one due today, a key task

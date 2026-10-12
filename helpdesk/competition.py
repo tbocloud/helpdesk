@@ -404,19 +404,21 @@ def previous_positions(prev_people: dict, period: str) -> dict[str, int]:
     return {r["user"]: i for i, r in enumerate(td.rank(active, period), start=1)}
 
 
-def leaderboard(data, prev, period, department, by_department, limit, user):
-    """One scope's board, ranked as the web Scoreboard's People view, with each
-    person's rank change since the comparison period; and the ranked rows."""
+def leaderboard(data, prev, period, scope, by_department, limit, user):
+    """One scope's board (the whole team, a department or a department group, as
+    team_dashboard.scope_of gives it), ranked as the web Scoreboard's People view,
+    with each person's rank change since the comparison period; and the ranked
+    rows."""
     from helpdesk.api.team_dashboard import (
         department_members,
-        in_scope,
         people_rows,
         ranked_people,
     )
 
-    keep = in_scope(department)
-    members = department_members(department)
-    ranked = ranked_people(data, period, department, members)
+    departments = scope.departments
+    keep = td.scope_filter(departments)
+    members = department_members(departments)
+    ranked = ranked_people(data, period, departments, members)
     champion = td.champion_of(ranked)
     prev_people = td.tally(prev, lambda r: True if keep(r) else None)[True]
     before = previous_positions(prev_people, period)
@@ -433,13 +435,15 @@ def leaderboard(data, prev, period, department, by_department, limit, user):
             else None,
             "is_champion": bool(champion and champion["user"] == p["user"]),
             "tasks_done": p["tasks"],
+            "weighted_work": p["weight"],
             "on_time_pct": p["on_time_pct"],
             "overdue": p["overdue"],
         }
         for p in people_rows(ranked, by_department, members)
     ]
     board = {
-        "department": department,
+        "department": scope.department,
+        "group": scope.group,
         "champion": champion and champion["user"],
         "of": len(rows),
         "leaders": rows[:limit],
@@ -448,24 +452,34 @@ def leaderboard(data, prev, period, department, by_department, limit, user):
     return board, ranked
 
 
-def task_gain(stats: dict, task: dict, period: str, today) -> dict | None:
+def task_gain(stats: dict, task: dict, period: str, today, user: str) -> dict | None:
     """What finishing one open task now adds to the user's score: score() with the
     task done minus score() as it is. Held or in-review work can't be finished now."""
     if task["status"] in WAITING_STATUSES:
         return None
     due = getdate(task["exp_end_date"]) if task.get("exp_end_date") else None
     key = bool(task.get("is_key") or task.get("is_milestone"))
-    weight = td.task_weight({"key": key, "estimate": flt(task.get("expected_hours"))})
+    # an open task has no rating or comebacks yet: quality 1, its weight alone
+    weight = td.task_weight(
+        {
+            "key": key,
+            "estimate": flt(task.get("expected_hours")),
+            "priority": task.get("priority"),
+            "self_made": (task.get("assigned_by") or {}).get("user") == user,
+        }
+    )["weight"]
     on_time = bool(due and due >= getdate(today))
     overdue = bool(due and not on_time and task["status"] in td.OPEN_STATUSES)
     after = dict(stats)
     after["tasks"] += 1
     after["key"] += key
     after["weight"] += weight
+    after["value"] += weight
     after["dated"] += bool(due)
     if on_time:
         after["on_time"] += 1
         after["weight_on_time"] += weight
+        after["value_on_time"] += weight
     if overdue and after["overdue"]:
         after["overdue"] -= 1
     points = round(
@@ -496,7 +510,7 @@ def move_up(ranked: list[dict], user: str, tasks: list[dict], period: str, today
     me = ranked[position]
     ahead = ranked[position - 1] if position else None
     gap = round(ahead["score"] - me["score"], 1) if ahead else None
-    gains = (task_gain(me["stats"], t, period, today) for t in tasks)
+    gains = (task_gain(me["stats"], t, period, today, user) for t in tasks)
     actions = sorted(
         (g for g in gains if g and g["points"] > 0),
         key=lambda g: (-g["points"], g["due"] or "9999-12-31"),
@@ -522,7 +536,7 @@ def competition(user: str, period: str, limit: int, today, tasks: list[dict]) ->
     """Everything the app's Compete screen shows. The boards are public, as on the
     web Scoreboard (every active department, past the DM/ERP walls); streaks, bests,
     badges and how to move up are the user's own. `tasks` are the user's open tasks."""
-    from helpdesk.api.team_dashboard import NO_DEPARTMENT, viewer_access
+    from helpdesk.api.team_dashboard import NO_DEPARTMENT, scope_of, viewer_access
 
     access = viewer_access(user)
     start, end = td.period_bounds(period, today)
@@ -531,10 +545,11 @@ def competition(user: str, period: str, limit: int, today, tasks: list[dict]) ->
     prev = td.collect(c_start, c_end, with_overdue=False, today=today)
     by_department = td.tally(data, lambda r: r["department"] or NO_DEPARTMENT)
 
-    def board(department):
-        return leaderboard(data, prev, period, department, by_department, limit, user)
+    def board(department=None, group=None):
+        scope = scope_of(access, department, group)
+        return leaderboard(data, prev, period, scope, by_department, limit, user)
 
-    team, ranked = board(None)
+    team, ranked = board()
     streaks = my_streaks(user, today)
     return {
         "period": period,
@@ -543,6 +558,7 @@ def competition(user: str, period: str, limit: int, today, tasks: list[dict]) ->
         "compare": {"start": str(c_start), "end": str(c_end)},
         "me": team["me"],
         "team": team,
+        "groups": [board(group=g)[0] for g in access.groups],
         "departments": [board(d)[0] for d in access.departments],
         "streaks": streaks,
         "personal_bests": personal_bests(user, today, streaks["best_on_time_days"]),

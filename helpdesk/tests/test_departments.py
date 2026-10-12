@@ -10,7 +10,9 @@ from frappe.tests.utils import FrappeTestCase
 from helpdesk.api import departments
 from helpdesk.helpdesk.doctype.hd_department.hd_department import (
     DEFAULT_DEPARTMENTS,
+    DEFAULT_GROUPS,
     ensure_default_departments,
+    set_default_groups,
 )
 from helpdesk.setup.install import get_custom_fields
 from helpdesk.tasky import api as tasky
@@ -51,6 +53,54 @@ class TestDepartments(FrappeTestCase):
         self.assertEqual(ensure_default_departments(), [])
         for name in DEFAULT_DEPARTMENTS:
             self.assertEqual(frappe.db.count("HD Department", {"name": name}), 1)
+
+    def test_default_groups_fill_only_empty_ones_and_run_once(self):
+        ensure_default_departments()
+        for name in DEFAULT_GROUPS:
+            frappe.db.set_value("HD Department", name, "parent_department", None)
+        # someone put Creative under ERP on purpose: that stays
+        frappe.db.set_value("HD Department", "Creative", "parent_department", "ERP")
+
+        self.assertEqual(set(set_default_groups()), {"GrowthX", "Internal / R&D"})
+        self.assertEqual(set_default_groups(), [])
+        parents = dict(
+            frappe.get_all(
+                "HD Department",
+                filters={"name": ("in", list(DEFAULT_GROUPS))},
+                fields=["name", "parent_department"],
+                as_list=True,
+            )
+        )
+        self.assertEqual(
+            parents,
+            {"GrowthX": "ERP", "Internal / R&D": "ERP", "Creative": "ERP"},
+        )
+
+    def test_groups_are_one_level_deep(self):
+        make_department(USED)
+        make_department(SPARE)
+        departments.set_department_parent(SPARE, USED)
+        self.assertEqual(
+            frappe.db.get_value("HD Department", SPARE, "parent_department"), USED
+        )
+        # a main department with sub-departments can't join a group itself
+        self.assertRaises(
+            frappe.ValidationError, departments.set_department_parent, USED, SPARE
+        )
+        self.assertRaises(
+            frappe.ValidationError, departments.set_department_parent, USED, USED
+        )
+        self.assertRaises(frappe.ValidationError, departments.delete_department, USED)
+        departments.set_department_parent(SPARE, None)
+        self.assertIsNone(
+            frappe.db.get_value("HD Department", SPARE, "parent_department")
+        )
+        self.assertRaises(
+            frappe.PermissionError,
+            run_as_user,
+            AGENT[0],
+            lambda: departments.set_department_parent(SPARE, USED),
+        )
 
     def test_departments_are_listed_in_order_and_can_be_moved(self):
         make_department(USED)

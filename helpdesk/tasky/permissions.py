@@ -386,6 +386,28 @@ def get_assigners(assignees: dict[str, str]) -> dict[str, str]:
     return found
 
 
+def can_rate_task(doc, user: str | None = None) -> bool:
+    """May give the task its quality rating: whoever assigned it, the project's
+    managers, lead and coordinators (who review it), the heads of its project's
+    department and admins. Never anyone it is assigned to: nobody rates their own
+    work."""
+    user = user or frappe.session.user
+    try:
+        assignees = json.loads(doc.get("_assign") or "[]")
+    except (json.JSONDecodeError, TypeError):
+        assignees = []
+    if user in assignees:
+        return False
+    if is_tasky_admin(user) or can_coordinate_project(doc.project, user):
+        return True
+    if any(get_assigners({doc.name: a}).get(doc.name) == user for a in assignees):
+        return True
+    department = doc.project and frappe.db.get_value(
+        "Project", doc.project, "custom_department"
+    )
+    return bool(department) and user in department_heads(department)
+
+
 def is_assigner(assigner: str | None, assignees: list[str], user: str) -> bool:
     """`user` gave the task to someone else. Someone who took the task themselves
     is its assignee, not its assigner."""

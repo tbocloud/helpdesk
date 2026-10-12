@@ -35,6 +35,12 @@
 		"completed_on",
 		"ai_estimated",
 		"estimate_note",
+		"quality_section",
+		"quality_rating",
+		"rated_by",
+		"column_break_quality",
+		"rated_on",
+		"reopen_count",
 		"details_section",
 		"description"
 	],
@@ -239,6 +245,49 @@
 			"depends_on": "ai_estimated"
 		},
 		{
+			"fieldname": "quality_section",
+			"fieldtype": "Section Break",
+			"label": "Quality",
+			"collapsible": 1
+		},
+		{
+			"fieldname": "quality_rating",
+			"fieldtype": "Select",
+			"label": "Quality Rating",
+			"options": "\nNeeds rework\nGood\nExcellent",
+			"read_only": 1,
+			"no_copy": 1,
+			"description": "Given by whoever assigned or reviewed the task, never by the person who did it. Set from the task in the helpdesk."
+		},
+		{
+			"fieldname": "rated_by",
+			"fieldtype": "Link",
+			"label": "Rated By",
+			"options": "User",
+			"read_only": 1,
+			"no_copy": 1
+		},
+		{
+			"fieldname": "column_break_quality",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "rated_on",
+			"fieldtype": "Date",
+			"label": "Rated On",
+			"read_only": 1,
+			"no_copy": 1
+		},
+		{
+			"fieldname": "reopen_count",
+			"fieldtype": "Int",
+			"label": "Came Back",
+			"default": "0",
+			"read_only": 1,
+			"no_copy": 1,
+			"description": "Times the task was reopened after it was done, or its ticket was reopened by the customer."
+		},
+		{
 			"fieldname": "content_post",
 			"fieldtype": "Link",
 			"label": "Content Post",
@@ -259,7 +308,7 @@
 	],
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-10-10 09:00:00.000000",
+	"modified": "2026-10-12 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "Task",

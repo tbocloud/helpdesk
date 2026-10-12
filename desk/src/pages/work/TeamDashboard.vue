@@ -23,10 +23,23 @@
         <p class="text-p-sm text-ink-gray-6">
           {{
             __(
-              "Who finished what, on time, and who is champion. Scores come from work delivered by its due date; hours count only a little."
+              "Who finished what, on time, and who is champion. Each task counts by its weight and how well it was done, by its due date; hours count only a little."
             )
           }}
+          <button
+            v-if="data"
+            type="button"
+            class="rounded text-ink-gray-8 underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+            @click="showRules = true"
+          >
+            {{ __("How weight works") }}
+          </button>
         </p>
+        <ScoreRulesDialog
+          v-if="data"
+          v-model:open="showRules"
+          :rules="data.rules"
+        />
 
         <!-- period and department: everything below follows them -->
         <div
@@ -114,6 +127,7 @@
                 :icon="LucideCircleCheck"
                 icon-tone="success"
                 :loading="!data"
+                :sub="__('{0} weighted work', weightText(data?.summary.weight))"
                 v-bind="change('tasks')"
               />
               <StatTile
@@ -178,7 +192,9 @@
               <TeamDepartmentList
                 v-else-if="view === 'departments'"
                 :departments="data.departments"
+                :groups="data.access.groups"
                 @open="openDepartment"
+                @open-group="openGroup"
               />
               <TeamPeopleList
                 v-else-if="view === 'people'"
@@ -194,7 +210,7 @@
               <TeamRepeatIssues
                 v-else
                 :period="period"
-                :department="department"
+                :department="scope.department"
               />
             </div>
 
@@ -205,6 +221,7 @@
                 :analysis="data.analysis"
                 :period="period"
                 :department="data.department"
+                :group="data.group"
                 :can-refresh="data.access.can_refresh"
               />
               <SectionCard v-if="data?.trend" :title="__('Tasks finished')">
@@ -288,6 +305,7 @@ import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideClock from "~icons/lucide/clock";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import ChampionCard from "./components/ChampionCard.vue";
+import ScoreRulesDialog from "./components/ScoreRulesDialog.vue";
 import TeamAnalysis from "./components/TeamAnalysis.vue";
 import TeamDepartmentList from "./components/TeamDepartmentList.vue";
 import TeamPeopleList from "./components/TeamPeopleList.vue";
@@ -296,11 +314,13 @@ import TeamRepeatIssues from "./components/TeamRepeatIssues.vue";
 import TeamTrendChart from "./components/TeamTrendChart.vue";
 import {
   delta,
+  GROUP_PREFIX,
   historyLabel,
   hoursText,
   PERIODS,
   rangeText,
   VIEWS,
+  weightText,
   type Dashboard,
   type PeriodKey,
   type ViewKey,
@@ -316,7 +336,16 @@ const period = ref<PeriodKey>(
     ? (query("period") as PeriodKey)
     : "week"
 );
-const department = ref(query("department"));
+// one filter for both: a department's name, or GROUP_PREFIX and a group's name
+const department = ref(
+  query("group") ? GROUP_PREFIX + query("group") : query("department")
+);
+const scope = computed(() =>
+  department.value.startsWith(GROUP_PREFIX)
+    ? { department: "", group: department.value.slice(GROUP_PREFIX.length) }
+    : { department: department.value, group: "" }
+);
+const showRules = ref(false);
 const view = ref<ViewKey>(
   VIEWS.some((v) => v.key === query("view"))
     ? (query("view") as ViewKey)
@@ -329,7 +358,8 @@ const dashboard = createResource({
   url: "helpdesk.api.team_dashboard.get_team_dashboard",
   makeParams: () => ({
     period: period.value,
-    department: department.value || null,
+    department: scope.value.department || null,
+    group: scope.value.group || null,
   }),
   auto: true,
 });
@@ -343,17 +373,26 @@ const departmentOptions = computed(() => {
   if (!access) return [];
   return [
     { label: __("Whole team"), value: "" },
+    ...access.groups.map((g) => ({
+      label: __("{0} group", g.group),
+      value: GROUP_PREFIX + g.group,
+    })),
     ...access.departments.map((d) => ({ label: d, value: d })),
   ];
 });
 
-const championTitle = computed(() => {
-  const scope = data.value?.department;
-  return scope ? __("{0} champion", scope) : __("Champion");
+// "ERP group", "GrowthX" or nothing for the whole team
+const scopeName = computed(() => {
+  const d = data.value;
+  if (d?.group) return __("{0} group", d.group);
+  return d?.department || "";
 });
+const championTitle = computed(() =>
+  scopeName.value ? __("{0} champion", scopeName.value) : __("Champion")
+);
 const historyNote = computed(() =>
-  data.value?.department
-    ? __("{0}, kept when each period ends.", data.value.department)
+  scopeName.value
+    ? __("{0}, kept when each period ends.", scopeName.value)
     : __("The whole team, kept when each period ends.")
 );
 
@@ -389,6 +428,11 @@ function openDepartment(name: string) {
   view.value = "people";
 }
 
+function openGroup(name: string) {
+  department.value = GROUP_PREFIX + name;
+  view.value = "people";
+}
+
 watch([period, department], () => {
   person.value = "";
   dashboard.reload();
@@ -398,7 +442,8 @@ watch([period, department, view, person, project], () => {
   router.replace({
     query: {
       period: period.value,
-      ...(department.value ? { department: department.value } : {}),
+      ...(scope.value.department ? { department: scope.value.department } : {}),
+      ...(scope.value.group ? { group: scope.value.group } : {}),
       ...(view.value !== "departments" ? { view: view.value } : {}),
       ...(person.value ? { person: person.value } : {}),
       ...(project.value ? { project: project.value } : {}),

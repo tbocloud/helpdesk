@@ -67,6 +67,8 @@ export interface Champion {
 
 export interface Totals {
   tasks: number;
+  /** The tasks' weights added up (helpdesk.team_dashboard.task_weight). */
+  weight: number;
   key: number;
   on_time_pct: number | null;
   hours: number;
@@ -75,6 +77,7 @@ export interface Totals {
   posts_missed: number;
   previous: {
     tasks: number;
+    weight: number;
     on_time_pct: number | null;
     hours: number;
     posts: number;
@@ -83,6 +86,10 @@ export interface Totals {
 
 export interface DepartmentRow extends Partial<Totals> {
   department: string | null;
+  /** A group row adds up a main department and its sub-departments. */
+  kind: "group" | "department";
+  /** The group a department row sits under. */
+  parent: string | null;
   people?: number;
   champion: Champion | null;
 }
@@ -98,13 +105,19 @@ export interface PersonRow {
   breakdown: BreakdownPart[];
   reasons: string[];
   tasks: number;
+  weight: number;
   key: number;
+  self_made: number;
   on_time_pct: number | null;
   dated: number;
   hours: number;
   overdue: number;
   slips: number;
+  excellent: number;
+  good: number;
+  rework: number;
   sent_back: number;
+  came_back: number;
   posts_on_time: number;
   posts_late: number;
   posts_missed: number;
@@ -127,6 +140,7 @@ export interface ProjectRow {
     name: string;
     image: string | null;
     tasks: number;
+    weight: number;
     hours: number;
     overdue: number;
   }[];
@@ -164,9 +178,12 @@ export interface Dashboard {
   };
   access: {
     departments: string[];
+    /** Main departments with their sub-departments, the main one first. */
+    groups: { group: string; departments: string[] }[];
     can_refresh: boolean;
   };
   department: string | null;
+  group: string | null;
   summary: Totals;
   champion: Champion | null;
   departments: DepartmentRow[];
@@ -175,6 +192,39 @@ export interface Dashboard {
   trend: { bucket: "day" | "week" | "month"; dates: string[]; values: number[] } | null;
   history: HistoryRow[];
   analysis: Analysis | null;
+  rules: ScoreRules;
+}
+
+/** The numbers behind weight, quality and the score (team_dashboard.score_rules). */
+export interface ScoreRules {
+  weight: {
+    base: number;
+    self_made_base: number;
+    key: number;
+    size_per_hour: number;
+    size_cap: number;
+    self_made_size_cap: number;
+    priority: Record<string, number>;
+    min: number;
+    max: number;
+  };
+  quality: {
+    rating: Record<string, number>;
+    unrated: number;
+    sent_back: number;
+    came_back: number;
+    floor: number;
+    ceiling: number;
+  };
+  score: {
+    done_share: number;
+    overdue: number;
+    slip: number;
+    hour: number;
+    hours_cap_share: number;
+  };
+  champion_minimum: number;
+  min_delivered: number;
 }
 
 /** One ticket or task in a repeat issue. */
@@ -288,3 +338,12 @@ export function hoursText(value: number) {
 export function departmentLabel(department: string | null) {
   return department || __("No department");
 }
+
+/** "31" or "4.5": weighted work never shows a trailing ".0". */
+export function weightText(value: number | undefined) {
+  const v = value ?? 0;
+  return Number.isInteger(v) ? String(v) : v.toFixed(1);
+}
+
+/** The department filter's value for a group, so it can't clash with a department. */
+export const GROUP_PREFIX = "group:";

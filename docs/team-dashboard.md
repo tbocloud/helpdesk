@@ -10,8 +10,9 @@ already exist.
   `/helpdesk/team-dashboard`), sidebar item right after Overview, open to every agent
   (`agent_only`; Content Team members who aren't agents don't get it). Parts in `desk/src/pages/work/components/` (`ChampionCard`,
   `ScoreBreakdown`, `TeamDepartmentList`, `TeamPeopleList`, `TeamProjectList`,
-  `TeamRepeatIssues`, `RepeatIssueCard`, `TeamAnalysis`, `TeamTrendChart`); types and labels
-  in `teamDashboardMeta.ts`.
+  `TeamRepeatIssues`, `RepeatIssueCard`, `TeamAnalysis`, `TeamTrendChart`, `ScoreRulesDialog`);
+  types and labels in `teamDashboardMeta.ts`. A task's weight and quality show in the task
+  dialog (`desk/src/pages/tasky/components/TaskQuality.vue`).
 - Numbers and scoring: `helpdesk/team_dashboard.py`. Who sees what and the page's API:
   `helpdesk/api/team_dashboard.py`. Closed periods: doctype **HD Team Champion**.
 - Repeat issues: `helpdesk/repeat_issues.py` (detection), `helpdesk/api/repeat_issues.py`
@@ -31,7 +32,7 @@ Tasks finished and Posts published success, On time by its rate (`onTimeTone`), 
 logged info. The period and Departments / People / Projects switches are frappe-ui
 `TabButtons`.
 
-The URL keeps `period`, `department`, `view` (`people`, `projects`, `repeats`; Departments is the default),
+The URL keeps `period`, `department` or `group`, `view` (`people`, `projects`, `repeats`; Departments is the default),
 `person` (the open score breakdown) and `project` (highlighted in Projects).
 
 ## What is counted
@@ -47,7 +48,8 @@ day, so a late edit to an old task shows within the hour.
 | Tasks done | Tasks with status Completed and `completed_on` in the period; credited to everyone in `_assign` (a shared task counts in full for each person, once in team totals) |
 | On time | Completed on or before `exp_end_date`. Tasks without a due date count as done but not as on time, and are left out of the on-time % |
 | Key | `is_key` or `is_milestone` |
-| Approved first time | Completed tasks in projects with **Review before done**, without a "Sent back: …" comment (`send_back_task`) |
+| Weight | Each completed task's weight (`task_weight`, [below](#weight-and-quality)); **weighted work** is their sum. A shared task counts in full for each person, once in team totals |
+| Quality | Each completed task's close rating (`quality_rating`), send-backs ("Sent back: …" comments from `send_back_task`) and comebacks (`reopen_count`) |
 | Slips | `slip_count` of the tasks completed in the period |
 | Overdue now | Open tasks (Open, Working, Overdue) past their due date today. On Hold and Pending Review are left out: they wait on someone else |
 | Hours | Time logs of draft and submitted Timesheets in the period, by the timesheet's owner (as `get_timesheet_summary` does) |
@@ -59,40 +61,135 @@ its tasks' project. Rows without one fall under **No department**.
 ## Score and champion
 
 `score(stats, period)` in `helpdesk/team_dashboard.py` is the single source of truth: the
-dashboard, the stored champions and the AI all use it. Weights (`WEIGHTS`):
+dashboard, the stored champions, the AI and the app's Compete screen all use it, with
+`task_weight()` and `task_quality()` for each task. Points (`WEIGHTS`):
 
 | Part | Points |
 | --- | --- |
-| Each completed task | worth `1` + `1` if key or milestone + `0.125` per estimated hour (capped at `2`, i.e. 16 h); half of that worth for finishing it |
-| On time | the other half of the task's worth, only when finished by its due date |
-| Approved first time | `+0.5` per reviewed task not sent back |
+| Each completed task (`tasks`) | half of its **weight** for finishing it |
+| On time (`on_time`) | the other half of its weight, only when finished by its due date |
+| Quality (`quality`) | what the task's quality adds or takes away: (quality − 1) × the task's points above. So each task earns weight × quality in all |
 | Posts | `+1` on time, `+0.5` late, `−1` missed |
 | Overdue now | `−1` per task |
 | Slips | `−0.5` per due-date move |
 | Hours | `+0.05` per hour, **capped at a tenth of the points earned by delivering**, so hours alone score 0 and long hours never beat on-time delivery (the owner's rule: task control, not time tracking) |
 
-- **Minimum activity** before anyone can be champion (tasks done plus posts published):
-  Today 2, week 3, month 5, quarter 8, half year 12, year 20. One lucky task doesn't win.
+- **Minimum activity** before anyone can be champion: **weighted work** (the tasks' weights
+  plus posts published) of Today 2, week 3, month 5, quarter 8, half year 12, year 20, from
+  at least 2 tasks or posts (`MIN_DELIVERED`). Weighted, so a pile of tiny self-assigned
+  tasks doesn't qualify sooner than a few real ones; and one big task alone never wins.
 - **Ties** go to the better on-time rate, then more tasks done, then fewer overdue.
 - **Why**: each score carries its breakdown (`breakdown`: part, points, words) and the three
   biggest positive parts as `reasons`. The champion card (`ChampionCard`, the one place
   the gold `champion` tokens are used) shows a trophy label ("Champion · This week"), a
   rosette badge, the avatar, name and score, the reasons as a checked list and "How the
-  score adds up"; a People row opens to the same breakdown.
+  score adds up"; a People row opens to the same breakdown. The breakdown names the weight
+  ("Tasks done: 12, weighted work 31 (3 key or milestones, 2 self-assigned at half
+  weight)") and the quality ("Quality: 4 rated excellent, sent back 1×").
+- **How weight works**: a link under the page's intro opens `ScoreRulesDialog`, which
+  explains weight, quality and the score with a worked example. Its numbers come from the
+  server (`score_rules()`, the page's `rules`), so it can't drift from the formula.
+
+## Weight and quality
+
+The owner's rule: the Scoreboard must look at **what** was finished and **how well**, not
+only how many tasks, or whoever makes many small tasks and closes them wins. Weight and
+quality are both worked out by the system; nobody types a weight.
+
+### Weight (`task_weight`, `TASK_WEIGHT`)
+
+| Part | Weight |
+| --- | --- |
+| Every task | `1` |
+| Key task or milestone | `+1` |
+| Estimate (`custom_estimated_hours`) | `+0.125` per hour, up to `+2` (16 hours) |
+| Priority | High `+0.25`, Urgent `+0.5` |
+| **Self-assigned** (the doer created it and gave it to themselves: its creator is an assignee and `get_assigners` names them) | starts at `0.5`; key and priority don't count; the estimate counts up to `+0.5` (4 hours) |
+
+Weight runs from **0.5** (a self-assigned task) to **4.5** (a key, Urgent task estimated at
+16 hours or more). Each task's weight comes with its reasons, e.g. "Weight 3.25 — key, 8h
+estimate, High priority".
+
+- **Against gaming**: nothing the doer alone sets can inflate their own task. On a task
+  they made for themselves the key flag and priority are ignored and the estimate is capped
+  at 4 hours (an AI estimate is treated the same, since the doer wrote the description it
+  reads). Ten tiny self-assigned tasks weigh 5; two key tasks of 8 hours at High priority
+  weigh 6.5 (`test_ten_tiny_own_tasks_dont_beat_two_big_key_tasks`). Work that matters gets
+  assigned by a lead, a manager or a teammate and counts in full.
+- **Not used**: logged hours (task control, not time tracking: long hours never make a
+  task heavier); the category (a kind of work, not a size, and weighting development over
+  design would set ERP against Digital); subtasks and checklists (Task has neither; a
+  template's checklist is separate tasks, each with its own weight).
+
+### Quality (`task_quality`, `QUALITY`)
+
+| Part | Quality |
+| --- | --- |
+| Rated Excellent | `×1.25` |
+| Rated Good | `×1` |
+| Rated Needs rework | `×0.5` |
+| Not rated | `×1` (no penalty, no bonus) |
+| Each send-back on review | `−0.15` |
+| Each comeback (the task reopened after it was done, or its ticket reopened) | `−0.25` |
+
+Quality stays between **0.25** and **1.25**. Examples: Good and sent back once is 0.85;
+Excellent, sent back once and reopened once is 0.85; Needs rework that came back three
+times is 0.25.
+
+- **The rating** (`quality_rating`, `rated_by`, `rated_on` on Task) is optional and never
+  needed to close a task. Who may rate (`can_rate_task` in `helpdesk/tasky/permissions.py`):
+  whoever assigned it, the project's managers, lead and coordinators (its reviewers), the
+  heads of its project's department and admins; **never an assignee of the task**, so
+  nobody rates their own work. It is given in the task dialog (`TaskQuality`): on a
+  completed task the choice is saved at once (`rate_task`, POST); on a task waiting for
+  review it goes with **Approve** (`approve_task(task, rating)`). The doer's Complete dialog
+  has no rating, since the doer can't rate. A form or Desk save can't change the rating
+  (`Task.guard_quality_rating`): only those calls set it (`Task.set_quality_rating`).
+- **Comebacks** (`reopen_count`, shown as "Came Back"): `Task.track_reopen` counts a
+  Completed task moved back to an open status (a send-back isn't one: the task wasn't done
+  yet), and the HD Ticket hook `count_ticket_comeback` counts a ticket reopened after it
+  was resolved (Resolved → Open status category) against the completed tasks made from it
+  (`hd_ticket`): the customer came back.
+- **Repeat issues** don't lower a task's quality beyond that: a repeat cluster is per
+  customer and by look-alike words, not per task, so blaming one task's doer for it would be
+  unfair (see [Fairness](#fairness)). The same ticket coming back is the per-task form of a
+  repeat, and it counts.
+- **Slips** aren't in quality: each due-date move already costs `−0.5` in the score
+  whatever the task's size; counting it again would charge twice.
+- **Approved first time** (`+0.5` per reviewed task not sent back) was removed: a
+  send-back now lowers that task's quality instead, so it isn't counted twice.
+
+### Worked example
+
+A key task estimated at 8 hours, High priority, weighs `1 + 1 + 1 + 0.25 = 3.25`. Rated
+Excellent and finished on time it earns `3.25 × 1.25 = 4.1` (1.6 finishing, 1.6 on time,
+0.8 quality); finished late, half of that, 2.0. The same task rated Needs rework and on
+time earns 1.6. A self-assigned task with no estimate earns 0.5 on time.
 
 ## Views
 
-- **Departments**: one row per department the viewer may see (people, done, on time,
-  overdue, hours, champion); a row opens that department's People. A **No department** row
-  shows when such work exists. People = members of the department's open
-  projects plus anyone with work in it this period.
-- **People**: everyone in scope, best score first (sort by score, done, on time, overdue,
-  hours or name): score, done, on time, key, overdue, slips, posts (only when someone has
-  posts) and hours. Below `lg` each row is two lines. A row expands to its breakdown. With no
+- **Departments**: one row per department the viewer may see (people, done, **weighted**,
+  on time, overdue, hours, champion), so "12 done · 31 weighted"; a row opens that
+  department's People. Each **department group** (a main department with its
+  sub-departments, [departments.md](departments.md#department-groups)) comes first as a row
+  of its own ("ERP group", its totals and its champion), with its departments indented under
+  it; the main department's own row reads "ERP, own projects". Departments in no group
+  follow, then a **No department** row when such work exists. People = members of the
+  department's open projects plus anyone with work in it this period.
+- **The department filter** lists the whole team, each group ("ERP group") and each
+  department. A group shows its departments together: summary, people, projects, champion,
+  history and analysis (`group` in the URL and the API; `department` and `group` can't both
+  be given). Repeat issues follow a department; with a group picked they show the whole
+  team.
+- **People**: everyone in scope, best score first (sort by score, done, weighted work, on
+  time, overdue, hours or name): score, done, weighted, on time, key, overdue, slips, posts
+  (only when someone has posts) and hours. Below `lg` each row is two lines. A row expands to its breakdown. With no
   department picked, active agents with nothing this period are listed too.
 - **Projects**: projects in scope with more than one member that are open or had work in the
   period: progress (done of all tasks), done this period, overdue, hours, and each
   contributor's done, hours and overdue.
+- The **Tasks finished** tile shows the weighted work under the count ("141.5 weighted
+  work").
 - Side column: the **analysis**, a **Tasks finished** trend (per day for a week or month,
   per week for a quarter or half, per month for a year; none for Today) and **Champions this
   year** (stored weekly and longer champions of the department, or of the whole team).
@@ -200,7 +297,8 @@ page writes through the API only.
 ### Fairness
 
 Repeats are a **customer and process insight**. They never change anyone's score or the
-champion: handling a repeat counts like any other ticket or task. The optional "Root cause
+champion as clusters: handling a repeat counts like any other ticket or task, and only the
+same ticket reopened lowers a task's quality ([Quality](#quality-task_quality-quality)). The optional "Root cause
 fixed" credit (rewarding the person whose root-cause task stops an issue for 30 days) is
 **not implemented**: it would add a second scoring input that is hard to explain and easy to
 game (a task closed just before a quiet month), and `score()` stays the one formula. No
@@ -234,15 +332,18 @@ Both rules live in `viewer_access` and `scope_department` in `helpdesk/api/team_
 
 `close_periods()` runs at 00:30 every day (`hooks.py` cron) and queues `close_period()` for
 each period that ended yesterday (a day, and on Mondays a week, on the 1st a month, …). For
-the whole team and each active department it stores one **HD Team Champion** (period type,
-start, end, department or empty for the whole team, champion or empty when nobody reached the
-minimum, score, breakdown, analysis). The record name is derived from period and department,
+the whole team, each department group and each active department it stores one **HD Team
+Champion** (period type, start, end, department or empty for the whole team, `is_group` for a
+group's record, champion or empty when nobody reached the minimum, score, breakdown,
+analysis). A group's record is named `…-group_<department>` so it never clashes with its main
+department's own (`HDTeamChampion.record_name`). The record name is derived from period and department,
 so a second run finds the first and changes nothing; the history never shifts when tasks are
 edited later. Overdue counts as of the day after the period.
 
 Every closed period's champion, a day's included, is told once through `notify_users`
-(helpdesk panel plus Teams or email): "You're the ERP champion for 9 Oct 2026", "… for the
-week of 5 Oct 2026". So are the department's heads ("Anu Menon is the ERP champion for …"),
+(helpdesk panel plus Teams or email): "You're the ERP champion for 9 Oct 2026", "You're the
+ERP group champion for the week of 5 Oct 2026". So are the department's heads (a group's:
+its main department's heads) ("Anu Menon is the ERP champion for …"),
 or the Agent Managers for the whole team. Heads come from `department_heads()` in
 `helpdesk/tasky/permissions.py`: the department's **Heads** setting (Settings → Departments,
 see [departments.md](departments.md#department-heads)) plus holders of a role in
@@ -262,8 +363,9 @@ bests, the weekly challenge and how to move up, all derived from `score()`; see
 ## AI analysis
 
 `write_analysis()` sends `analysis_facts()` (the scope's totals, the champion with score and
-reasons, and up to 15 people with score, done, key, on time, overdue, slips, posts and
-send-backs; never hours as a judgement) to the hub's AI through `ai_engine.call_haiku`, the
+reasons, and up to 15 people with score, done, weighted work, key, on time, overdue, slips,
+posts, send-backs, comebacks and ratings; never hours as a judgement) to the hub's AI through
+`ai_engine.call_haiku`, the
 same client as task descriptions and weekly summaries. The model returns a summary, risks and
 who could use help. `clean_analysis()` keeps plain text and **drops any sentence or item with
 a number that isn't in the facts**, so it can't invent figures.
@@ -285,8 +387,13 @@ a number that isn't in the facts**, so it can't invent figures.
 
 | Method | HTTP | What |
 | --- | --- | --- |
-| `get_team_dashboard(period="week", department=None)` | GET | `period` (dates and comparison), `access` (departments, can_refresh), `summary` (with `previous`), `champion`, `departments`, `people`, `projects`, `trend`, `history`, `analysis` |
-| `refresh_analysis(period="week", department=None)` | POST | A new analysis for the period in progress (System and Agent Managers) |
+| `get_team_dashboard(period="week", department=None, group=None)` | GET | `period` (dates and comparison), `access` (departments, `groups` [{group, departments}], can_refresh), `department`, `group`, `summary` (with `weight` and `previous`), `champion`, `departments` (rows with `kind`, `parent`, `weight`), `people` (with `weight`, `self_made`, `excellent`, `good`, `rework`, `sent_back`, `came_back`), `projects`, `trend`, `history`, `analysis`, `rules` (`score_rules()`) |
+| `refresh_analysis(period="week", department=None, group=None)` | POST | A new analysis for the period in progress (System and Agent Managers) |
+
+`helpdesk/tasky/api.py`: `rate_task(task, rating=None)` (POST; a completed task's rating, or
+none to clear it; returns the task's `quality`), `approve_task(task, rating=None)` and
+`get_task_detail(task)`, whose `quality` is `{weight, weight_reasons, quality,
+quality_reasons, rating, rated_by, rated_by_name, rated_on, can_rate, self_made}`.
 
 `helpdesk/api/repeat_issues.py`, agents only:
 
@@ -313,5 +420,16 @@ The app reads the same answer through `helpdesk.api.mobile.get_repeat_issues`
   their department's champion. The Digital Marketing Head role still counts as a head of
   Digital, so the content calendar's approver needs no extra setup.
 - **Weights didn't change** when daily champions started being announced (2026-10-10).
+- **Weight and quality (2026-10-12)** replaced "1 + key + estimate" and the "approved first
+  time" bonus. **The new formula applies from the deploy on.** Champions of closed periods
+  are stored records (HD Team Champion: score and breakdown as they were) and are never
+  recomputed, so the history doesn't move; badges already awarded stay too. The period in
+  progress is scored with the new formula as soon as it is deployed (the cached numbers are
+  versioned, `CACHE_VERSION`, so no old-shaped rows are read). Existing tasks have no
+  rating and no comebacks, so their quality is 1.
+- **Weight is automatic only** (the owner's decision): no field to type, so nobody argues
+  about it and nobody can inflate it.
+- **The rating is optional** and given by someone other than the doer; unrated work is
+  neutral, so nobody is punished because a lead didn't rate.
 - **Period ranges are computed on the server only**, so the page and the stored champions
   can't disagree about where a week or quarter starts.

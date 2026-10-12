@@ -37,6 +37,7 @@
         <span>{{ __("Person") }}</span>
         <span class="text-right">{{ __("Score") }}</span>
         <span class="text-right">{{ __("Done") }}</span>
+        <span class="text-right">{{ __("Weighted") }}</span>
         <span class="text-right">{{ __("On time") }}</span>
         <span class="text-right">{{ __("Key") }}</span>
         <span class="text-right">{{ __("Overdue") }}</span>
@@ -96,7 +97,13 @@
             <span
               class="flex flex-wrap gap-x-3 gap-y-0.5 pl-9 text-p-sm tabular-nums text-ink-gray-6 lg:hidden"
             >
-              <span>{{ __("{0} done", String(person.tasks)) }}</span>
+              <span>{{
+                __(
+                  "{0} done · {1} weighted",
+                  String(person.tasks),
+                  weightText(person.weight)
+                )
+              }}</span>
               <span>{{ __("{0} on time", pctText(person.on_time_pct)) }}</span>
               <span
                 v-if="person.overdue"
@@ -119,6 +126,19 @@
             </span>
             <span class="hidden text-right font-mono tabular-nums lg:block">
               {{ person.tasks }}
+            </span>
+            <span
+              class="hidden text-right font-mono tabular-nums text-ink-gray-9 lg:block"
+              :title="
+                person.self_made
+                  ? __(
+                      '{0} of the tasks were self-assigned and count half',
+                      String(person.self_made)
+                    )
+                  : undefined
+              "
+            >
+              {{ weightText(person.weight) }}
             </span>
             <span
               class="hidden text-right font-mono tabular-nums lg:block"
@@ -186,7 +206,7 @@
             >
               {{
                 __(
-                  "Not enough finished yet this period to be champion; the minimum keeps one lucky task from winning."
+                  "Not enough weighted work finished yet this period to be champion; the minimum keeps one lucky task from winning."
                 )
               }}
             </p>
@@ -211,6 +231,7 @@ import LucideUsers from "~icons/lucide/users";
 import {
   departmentLabel,
   hoursText,
+  weightText,
   type PersonRow,
 } from "../teamDashboardMeta";
 import ScoreBreakdown from "./ScoreBreakdown.vue";
@@ -225,6 +246,7 @@ const emit = defineEmits<{ toggle: [user: string] }>();
 const SORTS = [
   { label: __("Best score"), value: "score" },
   { label: __("Most done"), value: "tasks" },
+  { label: __("Most weighted work"), value: "weight" },
   { label: __("Best on time"), value: "on_time" },
   { label: __("Most overdue"), value: "overdue" },
   { label: __("Most hours"), value: "hours" },
@@ -238,8 +260,8 @@ const showPosts = computed(() =>
 );
 const grid = computed(() =>
   showPosts.value
-    ? "lg:grid-cols-[minmax(0,2.4fr)_repeat(8,minmax(0,0.7fr))]"
-    : "lg:grid-cols-[minmax(0,2.4fr)_repeat(7,minmax(0,0.7fr))]"
+    ? "lg:grid-cols-[minmax(0,2.4fr)_repeat(9,minmax(0,0.7fr))]"
+    : "lg:grid-cols-[minmax(0,2.4fr)_repeat(8,minmax(0,0.7fr))]"
 );
 
 const sorted = computed(() => {
@@ -248,6 +270,7 @@ const sorted = computed(() => {
     // the server's order: score, then on-time rate, tasks and overdue
     score: () => 0,
     tasks: (a, b) => b.tasks - a.tasks,
+    weight: (a, b) => b.weight - a.weight,
     on_time: (a, b) => (b.on_time_pct ?? -1) - (a.on_time_pct ?? -1),
     overdue: (a, b) => b.overdue - a.overdue,
     hours: (a, b) => b.hours - a.hours,

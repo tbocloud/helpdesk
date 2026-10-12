@@ -2,7 +2,8 @@ import { errorText } from "@/utils";
 import { __ } from "@/translation";
 import { createResource, toast } from "frappe-ui";
 
-/** One-click sign-off for a task in Pending Review (project managers and leads). */
+/** One-click sign-off for a task in Pending Review (project managers and leads),
+ * optionally with its quality rating (Needs rework, Good, Excellent). */
 export function useApproveTask(onDone: (task?: Record<string, any>) => void) {
   const resource = createResource({
     url: "helpdesk.tasky.api.approve_task",
@@ -16,9 +17,9 @@ export function useApproveTask(onDone: (task?: Record<string, any>) => void) {
     },
   });
 
-  function approve(task: { name: string }) {
+  function approve(task: { name: string }, rating?: string) {
     if (resource.loading) return;
-    return resource.submit({ task: task.name });
+    return resource.submit({ task: task.name, rating: rating || null });
   }
 
   return { approve, resource };

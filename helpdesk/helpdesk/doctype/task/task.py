@@ -4,6 +4,7 @@
 import frappe
 from frappe import _
 from frappe.model.document import Document
+from frappe.query_builder.functions import Coalesce
 from frappe.utils import add_days, formatdate, get_datetime, getdate, now, nowdate
 
 from helpdesk.automation import acting_user
@@ -24,6 +25,8 @@ class Task(Document):
         self.track_hold()
         self.route_completion_to_review()
         self.track_slip()
+        self.track_reopen()
+        self.guard_quality_rating()
         self.set_completed_on()
         self.clear_escalation()
         self.unmark_ai_description_when_edited()
@@ -268,6 +271,40 @@ class Task(Document):
         self.slip_count = (self.slip_count or 0) + 1
         self.flags.slipped = {"old_due": before.exp_end_date}
 
+    def track_reopen(self):
+        """Done work that comes back lowers the task's quality on the Scoreboard
+        (team_dashboard.task_quality). A send-back from review isn't a reopen:
+        the task wasn't done yet, and send-backs count on their own."""
+        before = self.get_doc_before_save()
+        if before and before.status == "Completed" and self.status not in DONE:
+            self.reopen_count = (self.reopen_count or 0) + 1
+
+    def guard_quality_rating(self):
+        """The rating changes only through rate_task, approve_task or
+        complete_task, which check who may rate (tasky.permissions.can_rate_task):
+        never the person who did the work."""
+        if self.flags.quality_rated:
+            return
+        before = self.get_doc_before_save()
+        was = before.get("quality_rating") if before else None
+        # an empty Select may come back as "" or None: both mean unrated
+        if (self.get("quality_rating") or None) != (was or None):
+            frappe.throw(
+                _("Rate the task from its Quality control in the helpdesk."),
+                frappe.PermissionError,
+            )
+
+    def set_quality_rating(self, rating: str | None):
+        """Record the close rating and who gave it; the caller checked who may."""
+        from helpdesk.team_dashboard import RATINGS
+
+        if rating and rating not in RATINGS:
+            frappe.throw(_("Rate the task {0}.").format(" / ".join(RATINGS)))
+        self.quality_rating = rating or None
+        self.rated_by = frappe.session.user if rating else None
+        self.rated_on = nowdate() if rating else None
+        self.flags.quality_rated = True
+
     def record_slip(self):
         from helpdesk.work_reminders import notify_users
 
@@ -478,3 +515,27 @@ class Task(Document):
             }
         )
         comment.insert(ignore_permissions=True)
+
+
+def count_ticket_comeback(ticket, method=None):
+    """HD Ticket on_update: a ticket reopened after it was resolved (the customer
+    came back) counts against the quality of the completed tasks made from it
+    (Task.hd_ticket), as a reopened task would (Task.track_reopen)."""
+    from helpdesk.team_dashboard import clear_cache
+
+    before = ticket.get_doc_before_save()
+    if not before or before.status_category != "Resolved":
+        return
+    if ticket.status_category != "Open":
+        return
+    task = frappe.qb.DocType("Task")
+    done = (task.hd_ticket == str(ticket.name)) & (task.status == "Completed")
+    if not frappe.qb.from_(task).select(task.name).where(done).limit(1).run():
+        return
+    (
+        frappe.qb.update(task)
+        .set(task.reopen_count, Coalesce(task.reopen_count, 0) + 1)
+        .where(done)
+        .run()
+    )
+    clear_cache()
