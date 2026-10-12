@@ -65,7 +65,37 @@ left out. Segments with nothing in them are hidden.
 
 The chips below filter the list: All, Missed, Upcoming, Published, Cancelled, each with its
 count; empty ones are hidden unless selected. A red banner offers "Show them" when posts are
-missed.
+missed. **Upcoming** is only posts that aren't published or cancelled and haven't passed their
+time, so it already lists today onward, in date order.
+
+### Opening on today (owner's feedback, 2026-10-12)
+
+The month list starts on the 1st, so on the 12th the team landed on past days and the posts
+for the 15th and 20th sat below the fold. The board now opens on what's next. The rules are
+pure functions in `desk/src/pages/content/dayFocus.ts` (`planDays`, `firstFromToday`); the
+frontend has no test runner, so they were checked with a scratch Node script.
+
+- **Coming up strip** (Week and Month, between the banner and the chips): the next 7 upcoming
+  posts as small cards: date and time ("Today" for today), status pill, client · copy. Pressing
+  one scrolls to its entry, outlines it in `brand` for 2 seconds and focuses its copy button
+  (switching the filter back to All if the entry was filtered out). **View all upcoming** (with
+  the count) turns on the Upcoming chip. Cards are 44px tall and the strip scrolls sideways
+  inside itself on phones.
+- **Earlier this month / week:** with the All chip, past days fold into one row ("Earlier this
+  month · N entries · published or cancelled", **Show** / **Hide**). A past day with a missed
+  post stays listed, because the "needs action" banner points at it. Nothing folds when no day
+  is today or later (a past month, or a month with nothing left), with Missed, Published or
+  Cancelled on, or in Day view.
+- **Today marker:** when today is in the period and has no posts (All or Upcoming), a slim row
+  sits where today would be: "Today: nothing scheduled · Next: Thu 15 Oct" (or "Nothing else
+  this month"), with the orange today ring.
+- **Scroll on open:** once per period, after the posts load, the list scrolls to today, else the
+  marker, else the next day with entries, but only when that is in the lower 40% of the screen
+  or below (`revealIfLow`), so it doesn't jump away from the summary when today is already in
+  view. Reloads after an action don't scroll again.
+- **Sheet:** opens on the first row from today on, by the same rule. It lists every row, so
+  nothing folds.
+- **Calendar:** unaffected; the month grid shows every day at once.
 
 ### Entry cards
 
@@ -85,12 +115,26 @@ screens the day's date column stays pinned at the top of the list while its card
   written yet" / "No description yet" when empty).
 - **Roles** (`RoleBox.vue`): Writer, Designer, Video editor, Digital marketer. Each assigned
   person shows with a role-coloured initial tile, their name and task status (and "late" when
-  the task is past due); an empty role shows a dashed **+ Assign** box in the card's tone.
-  Either opens the assign dialog. People who can't edit content get plain, non-interactive
-  boxes instead: the same names and statuses, and **Not assigned** for an empty role. The filled
-  box is a native `<button>` for editors and a plain `<div>` for everyone else, not
-  `<component :is="'button'">`, which resolves to frappe-ui's global `Button` and clipped the
-  names to its fixed height.
+  the task is past due); an empty role shows a dashed **+ Assign** box in the card's tone,
+  which opens the assign dialog. People who can't edit content see **Not assigned** instead.
+  - **Open the task in place** (owner's feedback, 2026-10-12: "to know what that task is we
+    have to go back into the project"): pressing the people in a filled box opens the role's
+    linked Task (`task` from `get_team_task_status`, already in the payload, so no API change)
+    in the shared task dialog (`TaskDetailDialog.vue`), without leaving the page: subject,
+    status, due date, timer, hold note, description and activity, with the same actions as
+    everywhere else. `mine` is set when the viewer is one of the role's people, so the
+    assignee gets Complete, hold/resume, help and hand-over; the project's manager, lead or
+    coordinator get theirs from the project. **Open project board** in the dialog goes to the
+    full project view. A task change reloads the posts (`changed`). A clipboard icon marks the
+    button, whose accessible name is "Open Designer task for Avera IoT · World Mental Health
+    Day" (the names and statuses stay as its description). Everyone who can see the board can
+    open it; the server decides what the task shows.
+  - **Change who is on it:** editors get a separate small person-pen button (32px, 44px to
+    press), "Change who is on Designer · …", which opens the assign dialog as the whole box
+    used to. A role with people but no task (e.g. the customer has no project yet) shows the
+    people as plain text, plus the Change button for editors.
+  - The buttons are native `<button>`s, not `<component :is="'button'">`, which resolves to
+    frappe-ui's global `Button` and clipped the names to its fixed height.
 - **Footer:** "Goes live …" (or the published / missed / cancelled line), then **Mark
   published** (primary), **Postpone**, and a cancel icon button, all through
   `EntryActionDialog.vue`. Published posts link to the live post instead.

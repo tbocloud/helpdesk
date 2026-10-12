@@ -46,8 +46,9 @@
         </tr>
         <tr
           v-for="post in rows"
+          :id="post.name === startRow ? 'sheet-from-today' : undefined"
           :key="post.name"
-          class="cursor-pointer border-t border-outline-gray-1 hover:bg-surface-gray-1 focus-within:bg-surface-gray-1"
+          class="scroll-mt-2 cursor-pointer border-t border-outline-gray-1 hover:bg-surface-gray-1 focus-within:bg-surface-gray-1"
           @click="emit('open', post.name)"
         >
           <td
@@ -108,7 +109,7 @@
 <script setup lang="ts">
 import { __ } from "@/translation";
 import { createResource, dayjs } from "frappe-ui";
-import { computed, watch } from "vue";
+import { computed, nextTick, watch } from "vue";
 import {
   type ContentPost,
   platformsOf,
@@ -116,6 +117,7 @@ import {
   TEAM_ROLES,
   type TeamRole,
 } from "../constants";
+import { firstFromToday, revealIfLow } from "../dayFocus";
 import SpecialDayBadge from "./SpecialDayBadge.vue";
 import StatusPill from "./StatusPill.vue";
 
@@ -124,6 +126,8 @@ const props = defineProps<{
   loading?: boolean;
   filtersCustomer?: string;
   period?: "day" | "week" | "month";
+  /** The period on screen, so the sheet opens on today once per period. */
+  month?: string;
 }>();
 
 // the list carries each role's main person; this adds everyone else on it
@@ -148,5 +152,25 @@ const rows = computed(() =>
   props.posts
     .filter((p) => p.publish_on)
     .sort((a, b) => (a.publish_on! < b.publish_on! ? -1 : 1))
+);
+
+// like the board, open on the first post from today on instead of the 1st of the month
+const today = dayjs().format("YYYY-MM-DD");
+const dayOf = (post: ContentPost) =>
+  dayjs(post.publish_on).format("YYYY-MM-DD");
+const startRow = computed(() => {
+  const start = firstFromToday(rows.value.map(dayOf), today);
+  return start ? rows.value.find((p) => dayOf(p) === start)?.name : undefined;
+});
+let openedOn: string | undefined;
+watch(
+  () => [props.month, props.loading, startRow.value] as const,
+  async ([month, loading, row]) => {
+    if (loading || !row || openedOn === month) return;
+    openedOn = month;
+    await nextTick();
+    revealIfLow(document.getElementById("sheet-from-today"));
+  },
+  { immediate: true }
 );
 </script>
