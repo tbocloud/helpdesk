@@ -3483,11 +3483,18 @@ class FakeWorker:
 
 
 def run_fake_worker(
-    category: str = "question", abandon: bool = False, ticket: str | None = None
+    category: str = "question",
+    abandon: bool = False,
+    ticket: str | None = None,
+    change_set: dict | str | None = None,
 ) -> dict:
     """`bench execute` demo: claims the oldest queued run (or starts one for `ticket`) and reports `category`.
 
-    With `abandon` it claims and stops, so the lease expiry can be watched.
+    With `abandon` it claims and stops, so the lease expiry can be watched. With
+    `change_set` (an object, or its JSON) it reports that correction too, as the
+    worker would for a wrong setting or damaged data, e.g.
+    `{'summary': ..., 'customer_note': ..., 'changes': [{'doctype': 'Selling Settings',
+    'name': 'Selling Settings', 'values': {'selling_price_list': 'Standard Selling'}}]}`.
     """
     from helpdesk.copilot.runs import AGENT, start_run
 
@@ -3507,7 +3514,8 @@ def run_fake_worker(
             }
         ]
     )
-    return {"claimed": worker.run, **worker.report(category)}
+    extra = {"change_set": frappe.parse_json(change_set)} if change_set else {}
+    return {"claimed": worker.run, **worker.report(category, **extra)}
 
 
 def mcp_message(
