@@ -7,6 +7,7 @@ from helpdesk.helpdesk.doctype.timesheet.timesheet import Timesheet
 from helpdesk.tasky import api as tasky
 from helpdesk.test_utils import (
     get_task_timesheets,
+    hold_commits,
     make_assignment,
     make_employee,
     make_project,
@@ -23,11 +24,8 @@ OTHER_DEV = ("other.complete@complete-task.example", "Vivek Kumar")
 
 class TestCompleteTask(FrappeTestCase):
     def setUp(self):
-        self.addCleanup(frappe.db.rollback)
+        hold_commits(self)
         self.addCleanup(frappe.set_user, "Administrator")
-        commit = patch.object(frappe.db, "commit")
-        commit.start()
-        self.addCleanup(commit.stop)
 
         make_tasky_user(*PM, roles=("Project Manager",))
         for user in (LEAD, DEV, OTHER_DEV):
@@ -134,6 +132,21 @@ class TestCompleteTask(FrappeTestCase):
         run_as_user(LEAD[0], lambda: tasky.approve_task(task=self.task))
         self.assertEqual(frappe.db.get_value("Task", self.task, "status"), "Completed")
         self.assertEqual(len(get_task_timesheets(self.task)), 1)
+
+    def test_one_click_approve_offers_the_rating_only_to_a_rater(self):
+        frappe.db.set_value("Task", self.task, "status", "Pending Review")
+        result = run_as_user(LEAD[0], lambda: tasky.approve_task(task=self.task))
+        # the lead reviews it, so may still rate it; nothing is rated yet
+        self.assertTrue(result["quality"]["can_rate"])
+        self.assertIsNone(result["quality"]["rating"])
+
+        # someone who worked on it may approve it but never rate it
+        own = make_task(self.project, "Import opening balances").name
+        make_assignment("Task", own, LEAD[0])
+        frappe.db.set_value("Task", own, "status", "Pending Review")
+        result = run_as_user(LEAD[0], lambda: tasky.approve_task(task=own))
+        self.assertEqual(result["status"], "Completed")
+        self.assertFalse(result["quality"]["can_rate"])
 
     def test_failed_timesheet_fails_the_completion(self):
         with patch.object(

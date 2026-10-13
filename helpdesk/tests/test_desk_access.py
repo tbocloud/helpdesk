@@ -4,10 +4,12 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from helpdesk.desk_access import redirect_desk_to_helpdesk
-from helpdesk.test_utils import make_tasky_user
+from helpdesk.test_utils import create_user, make_tasky_user
+from helpdesk.utils import is_agent
 
 AGENT = ("desk.agent@desk-access.example", "Desk Agent")
 MANAGER = ("desk.admin@desk-access.example", "Desk Admin")
+OUTSIDER = "desk.outsider@desk-access.example"
 
 
 class TestDeskAccess(FrappeTestCase):
@@ -39,3 +41,23 @@ class TestDeskAccess(FrappeTestCase):
     def test_other_pages_are_untouched(self):
         for path in ("/helpdesk/tickets", "/api/method/ping", "/application", "/login"):
             self.visit(AGENT[0], path)
+
+
+class TestIsAgent(FrappeTestCase):
+    """is_agent(user) answers for `user`, not for whoever is signed in."""
+
+    def setUp(self):
+        self.addCleanup(frappe.db.rollback)
+        self.addCleanup(frappe.set_user, "Administrator")
+        make_tasky_user(*AGENT)
+        create_user(OUTSIDER)
+
+    def test_answers_for_the_given_user(self):
+        # signed in as Administrator, another user is not an admin by association
+        frappe.set_user("Administrator")
+        self.assertTrue(is_agent(AGENT[0]))
+        self.assertFalse(is_agent(OUTSIDER))
+        # signed in as a non-admin agent, Administrator still counts
+        frappe.set_user(AGENT[0])
+        self.assertTrue(is_agent("Administrator"))
+        self.assertFalse(is_agent(OUTSIDER))

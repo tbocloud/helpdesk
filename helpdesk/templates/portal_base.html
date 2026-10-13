@@ -19,19 +19,20 @@
       /* TBO palette, mirrored from desk/src/theme.css */
       :root {
         color-scheme: light;
-        --brand: oklch(0.513 0.223 282);
-        --brand-hover: oklch(0.46 0.219 280);
-        --brand-soft: oklch(0.952 0.021 292);
-        --brand-ink: oklch(0.439 0.213 279);
-        --on-brand: oklch(1 0 0);
+        --brand: #3a748d;
+        --brand-hover: #2a5766;
+        --brand-soft: #e6f0f4;
+        --brand-ink: #2c5f75;
+        --on-brand: #ffffff;
+        --highlight: #c8641a;
         --success: #1c7547;
         --success-soft: #e6f4ec;
         --warning: #955700;
         --warning-soft: #fdf2de;
         --danger: #bf3328;
         --danger-soft: #fdebe9;
-        --info: #1e5fbf;
-        --info-soft: #e7effb;
+        --info: #2f56c6;
+        --info-soft: #e8edfb;
         --bg: oklch(0.976 0.003 265);
         --surface: oklch(1 0 0);
         --surface-2: oklch(0.961 0.004 268);
@@ -50,19 +51,20 @@
       @media (prefers-color-scheme: dark) {
         :root:not([data-theme="light"]) {
           color-scheme: dark;
-          --brand: oklch(0.683 0.176 286);
-          --brand-hover: oklch(0.73 0.15 287);
-          --brand-soft: oklch(0.262 0.06 287);
-          --brand-ink: oklch(0.802 0.107 289);
-          --on-brand: oklch(0.2 0.06 285);
+          --brand: #6fb4cf;
+          --brand-hover: #8dc5da;
+          --brand-soft: #15303b;
+          --brand-ink: #a6d5e6;
+          --on-brand: #0b2129;
+          --highlight: #f59a4a;
           --success: #52c48d;
           --success-soft: #14281e;
           --warning: #e3a33b;
           --warning-soft: #2e2211;
           --danger: #f0776c;
           --danger-soft: #331715;
-          --info: #7fb0f5;
-          --info-soft: #14233a;
+          --info: #8da6ff;
+          --info-soft: #16233f;
           --bg: oklch(0.18 0.008 268);
           --surface: oklch(0.215 0.01 268);
           --surface-2: oklch(0.25 0.012 266);
@@ -109,7 +111,7 @@
         color: inherit;
       }
       :focus-visible {
-        outline: 2px solid var(--brand);
+        outline: 2px solid var(--highlight);
         outline-offset: 2px;
       }
       /* pieces shared by the portal pages */

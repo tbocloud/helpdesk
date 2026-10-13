@@ -47,9 +47,10 @@ one concept exist, pick the canonical one and consolidate when it's safe.
 ## 4. Design system first
 
 Use the TBO theme:
-- **Colours:** v2 tokens `bg-surface-*`, `text-ink-*`, `border-outline-*`; `brand` for the
-  one accent; `success`, `warning`, `danger` and `info` (plus their soft variants) for
-  meaning.
+- **Colours:** v2 tokens `bg-surface-*`, `text-ink-*`, `border-outline-*`; `brand` (the TBO
+  logo teal) for the one accent; `highlight` (the logo orange) only for the focus ring and
+  the calendars' "today" ring; `success`, `warning`, `danger` and `info` (plus their soft variants) for
+  meaning. Values and contrast are in §8.
 - **Fonts:** Geist, and Geist Mono with `tabular-nums` for numbers.
 - **Radii and icons:** the existing radii; Lucide icons.
 
@@ -83,6 +84,10 @@ The happy path alone is not a finished UI.
 
 - **Brand** is only for the primary action, the current selection and key interaction
   states.
+- **Highlight** (the logo orange) is only a ring or marker: the keyboard `focus-visible`
+  ring and the "today" ring on calendars (the Content board's date page, the Content week
+  strip and the Work calendar). Never a fill, a button or text, so it can't be read as
+  `warning` (brown text on cream).
 - **Red** only for errors, destructive actions and overdue work. **Green** only for success
   and done.
 - **Never colour alone:** always pair colour with an icon, text or shape. Keep contrast
@@ -90,6 +95,44 @@ The happy path alone is not a finished UI.
 - **Avoid:** purple-to-blue gradients, gradient text, decorative blobs, **pastel icon tiles**
   (a soft-coloured square behind every icon), rainbow stat cards and colour used as
   decoration.
+
+### The TBO palette (2026-10-12)
+
+The owner asked for the logo's colours: its teal is the brand, its orange a small highlight.
+The hex values are the same as the TBO mobile app's. The tokens live in
+`desk/src/theme.css` (mirrored in `helpdesk/templates/portal_base.html`). `info` moved from
+hue ~216 toward indigo (~225) so it stays clearly blue next to the teal (~198).
+
+| Token | Light | Dark |
+| --- | --- | --- |
+| `brand` | `#3a748d` | `#6fb4cf` |
+| `brand-hover` (hover and pressed) | `#2a5766` | `#8dc5da` |
+| `brand-soft` | `#e6f0f4` | `#15303b` |
+| `brand-ink` | `#2c5f75` | `#a6d5e6` |
+| `on-brand` | `#ffffff` | `#0b2129` |
+| `highlight` | `#c8641a` | `#f59a4a` |
+| `info` / `info-soft` | `#2f56c6` / `#e8edfb` | `#8da6ff` / `#16233f` |
+
+WCAG contrast (`surface-base` is `#ffffff` light, `#16171b` dark; the light sidebar is
+`#f6f7f9`):
+
+| Pair | Light | Dark |
+| --- | --- | --- |
+| `on-brand` on `brand` (buttons, selected chips) | 5.17 | 7.20 |
+| `on-brand` on `brand-hover` | 7.91 | 8.81 |
+| `on-brand` on `brand-ink` (pressed frappe-ui button) | 7.00 | 10.51 |
+| `brand-ink` on `brand-soft` | 6.04 | 8.75 |
+| `brand-ink` on `surface-base` | 7.00 | 11.33 |
+| `brand` on `surface-base` (borders, selection rings) | 5.17 | 7.77 |
+| `brand` on the sidebar background | 4.82 | 8.31 |
+| `highlight` ring on `surface-base` (3:1 needed) | 3.97 | 8.19 |
+| `highlight` ring on `surface-gray-2` | 3.54 | 7.63 |
+| `highlight` ring on `brand-soft` | 3.43 | 6.33 |
+| `info` on `info-soft` | 5.49 | 6.71 |
+
+Every text pair passes 4.5:1 and every ring passes 3:1. `highlight` is only ever a ring, so
+it never needs text contrast, and today is always labelled too ("Today", or in the day's
+accessible label).
 
 ### The owner's exception: soft status circles (2026-10-10)
 
@@ -112,7 +155,7 @@ means nothing is noise. The mapping is fixed:
   card (`surface-base`, hairline) with its icon in a `brand` tile (`on-brand` icon).
 - **Sidebar icon tiles** are the owner's mockup, an exception to "no pastel icon tiles": each
   app sidebar icon sits in a tile tinted by page group (`--nav-*` in `theme.css`, `tone` in
-  `layoutSettings.ts`): blue for Home, Overview, Scoreboard, Performance, Customers and Help;
+  `layoutSettings.ts`): blue for Home, Overview, In progress, Scoreboard, Performance, Customers and Help;
   teal for Team, Summaries, Customer report and Contacts; orange for Notifications, Support
   hours and Tickets; purple for Projects, My Work, Board, Content and Templates; green for
   Calendar, Timesheets and Knowledge base; gray for the pin control and the collapsed

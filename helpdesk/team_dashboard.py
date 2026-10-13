@@ -1,10 +1,12 @@
 """Team dashboard: who delivered what in a period, and who the champion is.
 
 The numbers come from the hub's own records: Tasks (completion date, due date,
-key/milestone, estimate, slips, send-backs on review), Timesheets (hours) and
-the content calendar (posts published on time). `score()` is the one place a
-person's score is worked out; the dashboard, the champions and the AI analysis
-all use it. See docs/team-dashboard.md for the formula and its reasons.
+key/milestone, estimate, priority, who made it, slips, the close rating,
+send-backs on review, comebacks), Timesheets (hours) and the content calendar
+(posts published on time). `task_weight()` and `task_quality()` say what one
+task is worth; `score()` is the one place a person's score is worked out; the
+dashboard, the champions and the AI analysis all use them. See
+docs/team-dashboard.md for the formulas and their reasons.
 
 Who may see which part of it is decided in helpdesk.api.team_dashboard.
 """
@@ -25,7 +27,8 @@ from helpdesk.api.content_performance import members, scored_posts
 from helpdesk.api.ticket_ai import truncate
 from helpdesk.work_reminders import SKIP, notify_users
 
-# period key -> (HD Team Champion period type, least work delivered to be champion)
+# period key -> (HD Team Champion period type, least weighted work delivered to be
+# champion: the tasks' weights plus posts published)
 PERIODS = {
     "today": ("Day", 2),
     "week": ("Week", 3),
@@ -34,20 +37,15 @@ PERIODS = {
     "half": ("Half year", 12),
     "year": ("Year", 20),
 }
+# and at least this many tasks and posts, so one big task alone never wins
+MIN_DELIVERED = 2
 # no AI analysis for a day (cost): not at close, and no refresh on the page
 QUIET_PERIODS = ("today",)
 
 WEIGHTS = {
-    # every completed task is worth 1, a key task or milestone 1 more, and a
-    # bigger task (by its estimate) up to 2 more
-    "task": 1.0,
-    "key": 1.0,
-    "size_per_hour": 0.125,
-    "size_cap": 2.0,
-    # half of a task's worth is for doing it, half for doing it by its due date
+    # half of a task's worth (its weight times its quality) is for doing it, half
+    # for doing it by its due date
     "done_share": 0.5,
-    # approved on review without being sent back
-    "first_time": 0.5,
     "post_on_time": 1.0,
     "post_late": 0.5,
     "post_missed": -1.0,
@@ -58,9 +56,39 @@ WEIGHTS = {
     "hours_cap_share": 0.1,
 }
 
+# A task's weight (task_weight), worked out by the system: nobody types it. From
+# 0.5 (a task the doer made and took themselves) to 4.5 (a key task, 16 hours or
+# more estimated, Urgent). Logged hours never count: that would be time tracking.
+TASK_WEIGHT = {
+    "base": 1.0,
+    # made and taken by the doer: nobody else asked for it, so it counts half, and
+    # what the doer alone sets (key, priority, a long estimate) adds nothing more
+    "self_made_base": 0.5,
+    "key": 1.0,
+    "size_per_hour": 0.125,
+    "size_cap": 2.0,
+    "self_made_size_cap": 0.5,
+    "priority": {"High": 0.25, "Urgent": 0.5},
+}
+
+# A task's quality (task_quality): the close rating, less what happened to the
+# work afterwards. Between 0.25 and 1.25; unrated work is 1 (no penalty, no
+# bonus). Slips aren't here: they already cost points of their own (WEIGHTS).
+QUALITY = {
+    "rating": {"Excellent": 1.25, "Good": 1.0, "Needs rework": 0.5},
+    "unrated": 1.0,
+    "sent_back": -0.15,
+    "came_back": -0.25,
+    "floor": 0.25,
+    "ceiling": 1.25,
+}
+RATINGS = tuple(QUALITY["rating"])
+
 OPEN_STATUSES = ("Open", "Working", "Overdue")
 SENT_BACK = "Sent back:%"
 CACHE_PREFIX = "team_dashboard"
+# bumped when a cached task row changes shape, so a deploy never reads old rows
+CACHE_VERSION = 2
 CACHE_SECONDS = 300
 # a closed period's numbers (later edits to old tasks show within the hour)
 CLOSED_CACHE_SECONDS = 60 * 60
@@ -88,14 +116,18 @@ Reply with JSON only: {"summary": "...", "risks": ["..."], "needs_help": ["..."]
 def period_bounds(period: str, day=None) -> tuple[date, date]:
     """First and last day of the period that `day` (today by default) falls in.
 
-    Weeks run Monday to Sunday; halves are January-June and July-December.
+    Everything lives inside the calendar month (the owner's rule): a week runs
+    Monday to Sunday **clipped to its month**, so a month's weeks partition it
+    exactly (October 2026: 1-4, 5-11, 12-18, 19-25, 26-31) and every month starts
+    fresh on the 1st. Halves are January-June and July-December.
     """
     day = getdate(day or nowdate())
     if period == "today":
         return day, day
     if period == "week":
         start = day - timedelta(days=day.weekday())
-        return start, start + timedelta(days=6)
+        end = start + timedelta(days=6)
+        return max(start, day.replace(day=1)), min(end, get_last_day(day))
     if period == "month":
         return day.replace(day=1), get_last_day(day)
     if period in ("quarter", "half"):
@@ -110,11 +142,19 @@ def period_bounds(period: str, day=None) -> tuple[date, date]:
 
 def comparison_bounds(period: str, start, end, day=None) -> tuple[date, date]:
     """The previous period up to the same point: a week in progress on Wednesday is
-    compared with Monday to Wednesday of the week before, not the whole week."""
+    compared with Monday to Wednesday of the week before, not the whole week.
+
+    A day or a week is compared with the same weekdays 1 or 7 days earlier, so a
+    week clipped to its month (Thursday 1 to Sunday 4 October) is compared with
+    the same four days of the week before, never with a shorter piece of it."""
     day = getdate(day or nowdate())
+    start, end = getdate(start), getdate(end)
+    upto = max(min(day, end), start)
+    if period in ("today", "week"):
+        shift = timedelta(days=1 if period == "today" else 7)
+        return start - shift, upto - shift
     prev_start, prev_end = period_bounds(period, add_days(start, -1))
-    elapsed = (min(day, getdate(end)) - getdate(start)).days
-    return prev_start, min(prev_start + timedelta(days=max(elapsed, 0)), prev_end)
+    return prev_start, min(prev_start + (upto - start), prev_end)
 
 
 def recent_periods(period: str, count: int, day=None) -> list[tuple[date, date]]:
@@ -138,7 +178,10 @@ def collect(start, end, with_overdue: bool = True, today=None) -> dict:
     # a closed period without today's overdue no longer depends on the day: keep it
     # longer, so 8-period trends don't recount years every few minutes
     closed = not with_overdue and getdate(end) < today
-    key = f"{CACHE_PREFIX}:{start}:{end}:{int(with_overdue)}:{'' if closed else today}"
+    key = (
+        f"{CACHE_PREFIX}:{CACHE_VERSION}:{start}:{end}:{int(with_overdue)}:"
+        f"{'' if closed else today}"
+    )
     cached = frappe.cache.get_value(key, expires=True)
     if cached is not None:
         return cached
@@ -168,7 +211,17 @@ def assignees(raw) -> list[str]:
 
 
 def completed_tasks(start, end) -> list[dict]:
-    """Tasks completed in the period, with their project's department and send-backs."""
+    """Tasks completed in the period, each with its weight and quality."""
+    task = frappe.qb.DocType("Task")
+    return scored_tasks(
+        (task.status == "Completed") & task.completed_on.between(start, end)
+    )
+
+
+def scored_tasks(condition) -> list[dict]:
+    """The tasks `condition` picks, as the Scoreboard counts them: department,
+    assignees, dates, weight (task_weight) and quality (task_quality). A few
+    grouped queries for any number of tasks."""
     task = frappe.qb.DocType("Task")
     project = frappe.qb.DocType("Project")
     rows = (
@@ -178,61 +231,82 @@ def completed_tasks(start, end) -> list[dict]:
         .select(
             task.name,
             task.project,
+            task.owner,
             task["_assign"],
             task.exp_end_date,
             task.completed_on,
             task.is_key,
             task.is_milestone,
+            task.priority,
             task.custom_estimated_hours,
             task.slip_count,
+            task.quality_rating,
+            task.reopen_count,
             project.custom_department.as_("department"),
-            project.review_before_done,
         )
-        .where((task.status == "Completed") & task.completed_on.between(start, end))
+        .where(condition)
         .run(as_dict=True)
     )
-    sent_back = send_backs(start, end)
-    return [
-        {
+    names = [r.name for r in rows]
+    sent_back = send_backs(names)
+    self_made = self_made_tasks(rows)
+    out = []
+    for r in rows:
+        row = {
             "name": r.name,
             "project": r.project,
             "department": r.department,
             "users": assignees(r._assign),
-            "completed_on": getdate(r.completed_on),
+            "completed_on": getdate(r.completed_on) if r.completed_on else None,
             "dated": bool(r.exp_end_date),
             "on_time": bool(
-                r.exp_end_date and getdate(r.completed_on) <= getdate(r.exp_end_date)
+                r.completed_on
+                and r.exp_end_date
+                and getdate(r.completed_on) <= getdate(r.exp_end_date)
             ),
             "key": bool(r.is_key or r.is_milestone),
+            "priority": r.priority,
             "estimate": flt(r.custom_estimated_hours),
+            "self_made": r.name in self_made,
             "slips": r.slip_count or 0,
-            "reviewed": bool(r.review_before_done),
+            "rating": r.quality_rating or None,
             "sent_back": sent_back.get(r.name, 0),
+            "came_back": r.reopen_count or 0,
         }
-        for r in rows
-    ]
+        row["weight"] = task_weight(row)["weight"]
+        row["quality"] = task_quality(row)["quality"]
+        out.append(row)
+    return out
 
 
-def send_backs(start, end) -> dict[str, int]:
-    """How often each task completed in the period was sent back on review
+def send_backs(names: list[str]) -> dict[str, int]:
+    """How often each task was sent back on review
     (helpdesk.tasky.api.send_back_task leaves a "Sent back: ..." comment)."""
-    task = frappe.qb.DocType("Task")
+    if not names:
+        return {}
     comment = frappe.qb.DocType("Comment")
     return dict(
         frappe.qb.from_(comment)
-        .join(task)
-        .on(task.name == comment.reference_name)
         .select(comment.reference_name, Count("*"))
         .where(
             (comment.reference_doctype == "Task")
+            & comment.reference_name.isin(names)
             & (comment.comment_type == "Info")
             & comment.content.like(SENT_BACK)
-            & (task.status == "Completed")
-            & task.completed_on.between(start, end)
         )
         .groupby(comment.reference_name)
         .run()
     )
+
+
+def self_made_tasks(rows) -> set[str]:
+    """Tasks the doer made and took themselves: whoever created the task is one of
+    its assignees, and nobody else gave it to them (tasky.permissions.get_assigners
+    names the creator when no one assigned it)."""
+    from helpdesk.tasky.permissions import get_assigners
+
+    own = {r.name: r.owner for r in rows if r.owner in assignees(r._assign)}
+    return {name for name, by in get_assigners(own).items() if by == own[name]}
 
 
 def overdue_tasks(today) -> list[dict]:
@@ -342,10 +416,18 @@ def blank() -> dict:
         "dated": 0,
         "on_time": 0,
         "key": 0,
+        # weighted work: the tasks' weights added up (task_weight)
         "weight": 0.0,
         "weight_on_time": 0.0,
-        "reviewed": 0,
-        "first_time": 0,
+        # the same, each task's weight times its quality (task_quality)
+        "value": 0.0,
+        "value_on_time": 0.0,
+        "self_made": 0,
+        "excellent": 0,
+        "good": 0,
+        "rework": 0,
+        "sent_back": 0,
+        "came_back": 0,
         "slips": 0,
         "overdue": 0,
         "hours": 0.0,
@@ -355,10 +437,80 @@ def blank() -> dict:
     }
 
 
-def task_weight(task: dict) -> float:
-    """What one completed task is worth before the on-time share."""
-    size = min(task["estimate"] * WEIGHTS["size_per_hour"], WEIGHTS["size_cap"])
-    return WEIGHTS["task"] + (WEIGHTS["key"] if task["key"] else 0) + size
+def task_weight(task: dict) -> dict:
+    """How much one task counts, worked out from the task itself (nobody types a
+    weight), and why: {"weight": 0.5 to 4.5, "reasons": ["key", "8h estimate"]}.
+
+    `task` has `key` (key task or milestone), `estimate` (estimated hours),
+    `priority` and `self_made` (the doer made it and took it themselves). A
+    self-made task counts half, and its key flag, priority and estimate beyond
+    4 hours are ignored: the doer alone set them, so many small tasks of one's
+    own can't outweigh a few real ones. Logged hours are never part of it.
+    """
+    w = TASK_WEIGHT
+    self_made = bool(task.get("self_made"))
+    weight = w["self_made_base"] if self_made else w["base"]
+    reasons = [_("self-assigned, counts half")] if self_made else []
+    if task.get("key") and not self_made:
+        weight += w["key"]
+        reasons.append(_("key"))
+    hours = flt(task.get("estimate"))
+    cap = w["self_made_size_cap"] if self_made else w["size_cap"]
+    size = min(hours * w["size_per_hour"], cap)
+    if size:
+        weight += size
+        reasons.append(
+            _("{0}h estimate").format(f"{hours:g}")
+            if size < cap
+            else _("{0}h estimate (counts up to {1}h)").format(
+                f"{hours:g}", f"{cap / w['size_per_hour']:g}"
+            )
+        )
+    bonus = 0 if self_made else w["priority"].get(task.get("priority"), 0)
+    if bonus:
+        weight += bonus
+        reasons.append(_("{0} priority").format(_(task["priority"])))
+    return {"weight": round(weight, 3), "reasons": reasons}
+
+
+def task_quality(task: dict) -> dict:
+    """How well one task was done, as a factor on its weight, and why:
+    {"quality": 0.25 to 1.25, "reasons": [...]}.
+
+    The close rating (`rating`: Excellent 1.25, Good 1, Needs rework 0.5; unrated
+    is 1, no penalty and no bonus), less 0.15 per send-back on review
+    (`sent_back`) and 0.25 each time the task or its ticket came back after it
+    was done (`came_back`).
+    """
+    q = QUALITY
+    rating = task.get("rating")
+    quality = q["rating"].get(rating, q["unrated"])
+    reasons = [_("rated {0}").format(_(rating))] if rating in q["rating"] else []
+    if task.get("sent_back"):
+        quality += task["sent_back"] * q["sent_back"]
+        reasons.append(_("sent back {0}×").format(task["sent_back"]))
+    if task.get("came_back"):
+        quality += task["came_back"] * q["came_back"]
+        reasons.append(_("came back {0}×").format(task["came_back"]))
+    quality = min(max(quality, q["floor"]), q["ceiling"])
+    return {"quality": round(quality, 3), "reasons": reasons or [_("not rated")]}
+
+
+def score_rules(period: str) -> dict:
+    """The numbers behind weight, quality and the score, for the page's "How
+    weight works": the page shows these, so it can't drift from the formula."""
+    w = TASK_WEIGHT
+    return {
+        "weight": {
+            **w,
+            "min": w["self_made_base"],
+            "max": w["base"] + w["key"] + w["size_cap"] + max(w["priority"].values()),
+        },
+        "quality": QUALITY,
+        "score": WEIGHTS,
+        "champion_minimum": PERIODS[period][1],
+        "min_delivered": MIN_DELIVERED,
+    }
 
 
 def tally(data: dict, group) -> dict:
@@ -366,11 +518,12 @@ def tally(data: dict, group) -> dict:
     in (e.g. its department), or None to leave it out. A task shared by several
     people counts in full for each of them."""
     out = defaultdict(lambda: defaultdict(blank))
+    rating_field = {"Excellent": "excellent", "Good": "good", "Needs rework": "rework"}
     for t in data["tasks"]:
         g = group(t)
         if g is None:
             continue
-        weight = task_weight(t)
+        weight, value = t["weight"], t["weight"] * t["quality"]
         for user in t["users"]:
             s = out[g][user]
             s["tasks"] += 1
@@ -378,11 +531,16 @@ def tally(data: dict, group) -> dict:
             s["on_time"] += t["on_time"]
             s["key"] += t["key"]
             s["weight"] += weight
-            s["weight_on_time"] += weight if t["on_time"] else 0
+            s["value"] += value
+            if t["on_time"]:
+                s["weight_on_time"] += weight
+                s["value_on_time"] += value
+            s["self_made"] += t["self_made"]
+            if t["rating"] in rating_field:
+                s[rating_field[t["rating"]]] += 1
+            s["sent_back"] += t["sent_back"]
+            s["came_back"] += t["came_back"]
             s["slips"] += t["slips"]
-            if t["reviewed"]:
-                s["reviewed"] += 1
-                s["first_time"] += not t["sent_back"]
     for t in data["overdue"]:
         g = group(t)
         if g is None:
@@ -410,22 +568,40 @@ def pct(part, whole) -> int | None:
 
 
 def delivered(stats: dict) -> int:
-    """Tasks completed and posts published: what the minimum activity counts."""
+    """How many tasks were completed and posts published."""
     return stats["tasks"] + stats["posts_on_time"] + stats["posts_late"]
+
+
+def eligible(stats: dict, period: str, total: float) -> bool:
+    """Did enough to be champion: weighted work (task weights plus posts
+    published) of at least the period's minimum, from at least MIN_DELIVERED
+    tasks and posts, and a positive score. Weighted, so a pile of tiny tasks of
+    one's own doesn't qualify sooner than a few real ones."""
+    weighted = stats["weight"] + stats["posts_on_time"] + stats["posts_late"]
+    return (
+        weighted >= PERIODS[period][1]
+        and delivered(stats) >= MIN_DELIVERED
+        and total > 0
+    )
 
 
 def score(stats: dict, period: str) -> dict:
     """A person's score for the period, with each part of it and the reasons.
 
-    The single source of truth for the champion. Hours are added last and capped
-    at a tenth of the points earned by delivering, so long hours never beat
-    delivering on time, and hours alone score nothing.
+    The single source of truth for the champion. Each task is worth its weight
+    times its quality: half for finishing it, half for finishing it by its due
+    date. `tasks` and `on_time` are the weights alone; `quality` is what the
+    ratings, send-backs and comebacks add or take away. Hours are added last and
+    capped at a tenth of the points earned by delivering, so long hours never
+    beat delivering on time, and hours alone score nothing.
     """
     w = WEIGHTS
+    done, on_time = w["done_share"], 1 - w["done_share"]
     parts = {
-        "tasks": stats["weight"] * w["done_share"],
-        "on_time": stats["weight_on_time"] * (1 - w["done_share"]),
-        "first_time": stats["first_time"] * w["first_time"],
+        "tasks": stats["weight"] * done,
+        "on_time": stats["weight_on_time"] * on_time,
+        "quality": (stats["value"] - stats["weight"]) * done
+        + (stats["value_on_time"] - stats["weight_on_time"]) * on_time,
         "posts": stats["posts_on_time"] * w["post_on_time"]
         + stats["posts_late"] * w["post_late"],
         "missed_posts": stats["posts_missed"] * w["post_missed"],
@@ -447,7 +623,7 @@ def score(stats: dict, period: str) -> dict:
     ][:3]
     return {
         "score": total,
-        "eligible": delivered(stats) >= PERIODS[period][1] and total > 0,
+        "eligible": eligible(stats, period, total),
         "breakdown": breakdown,
         "reasons": reasons,
     }
@@ -456,18 +632,21 @@ def score(stats: dict, period: str) -> dict:
 def part_detail(key: str, s: dict) -> str:
     """What one part of the score stands for, in words."""
     if key == "tasks":
-        text = _("Tasks done: {0}").format(s["tasks"])
+        text = _("Tasks done: {0}, weighted work {1}").format(
+            s["tasks"], round(s["weight"], 1)
+        )
+        extra = []
         if s["key"]:
-            text += " " + _("({0} key or milestones)").format(s["key"])
-        return text
+            extra.append(_("{0} key or milestones").format(s["key"]))
+        if s["self_made"]:
+            extra.append(_("{0} self-assigned at half weight").format(s["self_made"]))
+        return f"{text} ({', '.join(extra)})" if extra else text
     if key == "on_time":
         return _("On time: {0}% ({1} of {2} with a due date)").format(
             pct(s["on_time"], s["dated"]), s["on_time"], s["dated"]
         )
-    if key == "first_time":
-        return _("Approved without a send-back: {0} of {1}").format(
-            s["first_time"], s["reviewed"]
-        )
+    if key == "quality":
+        return _("Quality: {0}").format(", ".join(quality_words(s)))
     if key == "posts":
         return _("Posts published: {0} on time, {1} late").format(
             s["posts_on_time"], s["posts_late"]
@@ -479,6 +658,22 @@ def part_detail(key: str, s: dict) -> str:
     if key == "slips":
         return _("Due dates moved: {0}").format(s["slips"])
     return _("Hours logged: {0} (count lightly, capped)").format(round(s["hours"], 1))
+
+
+def quality_words(s: dict) -> list[str]:
+    """The ratings and signals behind a person's quality points."""
+    words = [
+        text.format(s[field])
+        for field, text in (
+            ("excellent", _("{0} rated excellent")),
+            ("good", _("{0} rated good")),
+            ("rework", _("{0} rated needs rework")),
+            ("sent_back", _("sent back {0}×")),
+            ("came_back", _("came back {0}×")),
+        )
+        if s[field]
+    ]
+    return words or [_("nothing rated")]
 
 
 def rank(people: dict, period: str) -> list[dict]:
@@ -510,8 +705,13 @@ def totals(data: dict, keep) -> dict:
     tasks = [t for t in data["tasks"] if keep(t)]
     dated = [t for t in tasks if t["dated"]]
     posts = [p for p in data["posts"] if keep(p)]
+    weight = sum(t["weight"] for t in tasks)
+    value = sum(t["weight"] * t["quality"] for t in tasks)
     return {
         "tasks": len(tasks),
+        "weight": round(weight, 1),
+        # the tasks' average quality, weighted by their weight
+        "quality": round(value / weight, 2) if weight else None,
         "key": sum(t["key"] for t in tasks),
         "on_time_pct": pct(sum(t["on_time"] for t in dated), len(dated)),
         "hours": round(sum(r["hours"] for r in data["hours"] if keep(r)), 1),
@@ -581,13 +781,17 @@ def analysis_facts(title: str, period_label: str, ranked: list, team: dict) -> d
                 "score": r["score"],
                 "tasks_done": r["stats"]["tasks"],
                 "key_tasks_done": r["stats"]["key"],
+                "weighted_work": round(r["stats"]["weight"], 1),
                 "on_time_pct": pct(r["stats"]["on_time"], r["stats"]["dated"]),
                 "overdue_now": r["stats"]["overdue"],
                 "due_date_moves": r["stats"]["slips"],
                 "posts_on_time": r["stats"]["posts_on_time"],
                 "posts_late": r["stats"]["posts_late"],
                 "posts_missed": r["stats"]["posts_missed"],
-                "sent_back": r["stats"]["reviewed"] - r["stats"]["first_time"],
+                "sent_back": r["stats"]["sent_back"],
+                "came_back": r["stats"]["came_back"],
+                "rated_excellent": r["stats"]["excellent"],
+                "rated_needs_rework": r["stats"]["rework"],
             }
             for r in shown
         ],
@@ -660,8 +864,11 @@ def clean_analysis(response, facts: dict) -> dict | None:
     }
 
 
-def analysis_cache_key(period: str, start, department: str | None) -> str:
-    return f"{CACHE_PREFIX}_analysis:{period}:{start}:{department or ''}"
+def analysis_cache_key(
+    period: str, start, department: str | None, is_group: bool = False
+) -> str:
+    scope = f"group:{department}" if is_group else department or ""
+    return f"{CACHE_PREFIX}_analysis:{period}:{start}:{scope}"
 
 
 # --- closing a period --------------------------------------------------------
@@ -669,7 +876,7 @@ def analysis_cache_key(period: str, start, department: str | None) -> str:
 
 def close_periods():
     """Scheduler, just after midnight: every period that ended yesterday gets its
-    champions, one background job per period."""
+    champions, one background job per period; then the repeat issues are worked out."""
     yesterday = add_days(getdate(nowdate()), -1)
     for period in PERIODS:
         start, end = period_bounds(period, yesterday)
@@ -686,10 +893,20 @@ def close_periods():
             start=str(start),
             end=str(end),
         )
+    # the Scoreboard's repeat issues, ready with their AI titles for the first visit
+    frappe.enqueue(
+        "helpdesk.repeat_issues.precompute",
+        queue="long",
+        timeout=JOB_TIMEOUT,
+        job_id=f"repeat-issues-{yesterday}",
+        deduplicate=True,
+        now=frappe.flags.in_test,
+    )
 
 
 def close_period(period: str, start: str, end: str):
-    """Champions of a closed period: the whole team and each active department.
+    """Champions of a closed period: the whole team, each department group (a
+    main department with its sub-departments) and each active department.
 
     A period already closed is left as it was, so a re-run sends nobody a second
     notification and the history never changes. The badges earned in the period
@@ -699,32 +916,43 @@ def close_period(period: str, start: str, end: str):
 
     data = collect(start, end, with_overdue=True, today=add_days(end, 1))
     label = period_label(period, start, end)
-    for department in [None, *active_departments()]:
+    save_champion(period, start, end, None, data, label)
+    for group, in_group in department_groups().items():
+        save_champion(period, start, end, group, data, label, in_group)
+    for department in active_departments():
         save_champion(period, start, end, department, data, label)
     award_badges(period, start, end, data)
 
 
-def save_champion(period: str, start, end, department: str | None, data, label):
+def save_champion(
+    period: str,
+    start,
+    end,
+    department: str | None,
+    data,
+    label,
+    in_group: list[str] | None = None,
+):
+    """Stores one scope's champion: the whole team (no department), a department,
+    or, with `in_group` (its departments), the group that `department` heads."""
     from helpdesk.helpdesk.doctype.hd_team_champion.hd_team_champion import (
         HDTeamChampion,
     )
 
     period_type = PERIODS[period][0]
+    is_group = in_group is not None
     if frappe.db.exists(
-        "HD Team Champion", HDTeamChampion.record_name(period_type, start, department)
+        "HD Team Champion",
+        HDTeamChampion.record_name(period_type, start, department, is_group),
     ):
         return None
-    keep = (
-        (lambda r: True)
-        if department is None
-        else (lambda r: r["department"] == department)
-    )
+    keep = scope_filter(None if department is None else in_group or [department])
     ranked = rank(tally(data, lambda r: "scope" if keep(r) else None)["scope"], period)
     champion = champion_of(ranked)
     analysis = None
     if period not in QUIET_PERIODS and ranked:
         facts = analysis_facts(
-            department or _("Whole team"), label, ranked, totals(data, keep)
+            scope_title(department, is_group), label, ranked, totals(data, keep)
         )
         analysis = write_analysis(facts)
     doc = frappe.get_doc(
@@ -734,11 +962,12 @@ def save_champion(period: str, start, end, department: str | None, data, label):
             "period_start": start,
             "period_end": end,
             "department": department,
+            "is_group": int(is_group),
             "user": champion and champion["user"],
             "score": champion["score"] if champion else 0,
-            "breakdown": json.dumps(champion["breakdown"], indent=1)
-            if champion
-            else None,
+            "breakdown": (
+                json.dumps(champion["breakdown"], indent=1) if champion else None
+            ),
             "analysis": json.dumps(analysis, indent=1) if analysis else None,
             "generated_by_ai": int(bool(analysis and analysis["status"] == "ready")),
         }
@@ -748,17 +977,31 @@ def save_champion(period: str, start, end, department: str | None, data, label):
     return doc
 
 
+def scope_filter(departments: list[str] | None):
+    """Rows of these departments; every row when None (the whole team)."""
+    if departments is None:
+        return lambda r: True
+    wanted = set(departments)
+    return lambda r: r["department"] in wanted
+
+
+def scope_title(department: str | None, is_group: bool = False) -> str:
+    """How a scope is named: "Whole team", "ERP", or "ERP group"."""
+    if not department:
+        return _("Whole team")
+    return _("{0} group").format(department) if is_group else department
+
+
 def announce(doc, label: str):
-    """Tells the champion, and the department's heads (Agent Managers for the
-    whole team), once."""
+    """Tells the champion, and the department's heads (a group's: its main
+    department's heads; Agent Managers for the whole team), once."""
     from helpdesk.tasky.permissions import department_heads
 
-    team = doc.department or _("whole team")
-    link = (
-        f"/team-dashboard?department={quote(doc.department)}"
-        if doc.department
-        else "/team-dashboard"
-    )
+    team = scope_title(doc.department, doc.is_group) if doc.department else None
+    team = team or _("whole team")
+    link = "/team-dashboard"
+    if doc.department:
+        link += f"?{'group' if doc.is_group else 'department'}={quote(doc.department)}"
     notify_users(
         [doc.user],
         "HD Team Champion",
@@ -805,6 +1048,42 @@ def active_departments() -> list[str]:
         .orderby(department.sort_order)
         .run(pluck=True)
     )
+
+
+def department_groups() -> dict[str, list[str]]:
+    """The main departments that have active sub-departments, in display order:
+    {"ERP": ["ERP", "GrowthX", "Internal / R&D"]}, the main department first. A
+    sub-department of an inactive department isn't in any group."""
+    department = frappe.qb.DocType("HD Department")
+    rows = (
+        frappe.qb.from_(department)
+        .select(department.name, department.parent_department)
+        .where(department.is_active == 1)
+        .orderby(department.sort_order)
+        .run()
+    )
+    active = {name for name, _parent in rows}
+    groups: dict[str, list[str]] = {}
+    for name, parent in rows:
+        if parent in active:
+            groups.setdefault(parent, [parent]).append(name)
+    return {name: groups[name] for name, _parent in rows if name in groups}
+
+
+def task_score(name: str) -> dict:
+    """One task's weight and quality with their reasons, for the task dialog."""
+    task = frappe.qb.DocType("Task")
+    row = next(iter(scored_tasks(task.name == name)), None)
+    if not row:
+        return {}
+    weight, quality = task_weight(row), task_quality(row)
+    return {
+        "weight": round(weight["weight"], 2),
+        "weight_reasons": weight["reasons"],
+        "quality": round(quality["quality"], 2),
+        "quality_reasons": quality["reasons"],
+        "self_made": row["self_made"],
+    }
 
 
 def people_info(users) -> dict[str, dict]:

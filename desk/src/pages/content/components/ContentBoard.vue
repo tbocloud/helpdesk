@@ -1,4 +1,33 @@
 <template>
+  <DefineTodayMarker>
+    <p
+      id="day-today"
+      class="flex scroll-mt-2 flex-wrap items-center gap-x-2 gap-y-0.5 rounded-xl border border-dashed border-outline-gray-3 px-3 py-2 text-sm text-ink-gray-7"
+    >
+      <!-- the same orange ring that marks today on the date pages -->
+      <span
+        class="size-2.5 shrink-0 rounded-full ring-2 ring-highlight"
+        aria-hidden="true"
+      />
+      <span
+        ><span class="font-medium text-ink-gray-9">{{ __("Today") }}:</span>
+        {{
+          filter === "upcoming"
+            ? __("nothing else coming up")
+            : __("nothing scheduled")
+        }}</span
+      >
+      <span aria-hidden="true">·</span>
+      <span>{{
+        plan.next
+          ? __("Next: {0}", dayjs(plan.next).format("ddd D MMM"))
+          : period === "week"
+          ? __("Nothing else this week")
+          : __("Nothing else this month")
+      }}</span>
+    </p>
+  </DefineTodayMarker>
+
   <div class="flex flex-col gap-3">
     <section
       class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4"
@@ -152,6 +181,68 @@
       </button>
     </div>
 
+    <!-- the next posts at a glance, so later days are never only below the fold -->
+    <section
+      v-if="comingUp.length && period !== 'day'"
+      class="flex min-w-0 flex-col gap-1.5"
+      :aria-labelledby="comingUpId"
+    >
+      <div class="flex items-center justify-between gap-2">
+        <h2 :id="comingUpId" class="text-sm font-medium text-ink-gray-7">
+          {{ __("Coming up") }}
+        </h2>
+        <button
+          v-if="filter !== 'upcoming'"
+          type="button"
+          class="relative inline-flex h-8 items-center rounded-[8px] px-2 text-sm font-medium text-ink-gray-7 transition-colors after:absolute after:-inset-1.5 hover:bg-surface-gray-2 hover:text-ink-gray-9 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+          @click="filter = 'upcoming'"
+        >
+          {{ __("View all upcoming") }}
+          <span class="ml-1 font-mono tabular-nums text-ink-gray-5">{{
+            upcoming.length
+          }}</span>
+        </button>
+      </div>
+      <ul class="-mx-1 flex gap-2 overflow-x-auto px-1 py-1">
+        <li v-for="p in comingUp" :key="p.name" class="shrink-0">
+          <button
+            type="button"
+            class="flex min-h-[44px] w-[272px] flex-col gap-0.5 rounded-xl border border-outline-gray-2 bg-surface-base px-3 py-1.5 text-left transition-colors hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+            :aria-label="
+              __(
+                'Go to {0}: {1}, {2}, {3}',
+                dayjs(p.publish_on).format('ddd D MMM, h:mm A'),
+                p.customer,
+                p.title,
+                __(p.status)
+              )
+            "
+            @click="jumpTo(p)"
+          >
+            <span class="flex items-center gap-2" aria-hidden="true">
+              <span
+                class="whitespace-nowrap font-mono text-xs tabular-nums text-ink-gray-6"
+                :class="dateOf(p) === today && 'font-semibold text-ink-gray-8'"
+                >{{
+                  dateOf(p) === today
+                    ? __("Today")
+                    : dayjs(p.publish_on).format("ddd D MMM")
+                }}
+                · {{ dayjs(p.publish_on).format("h:mm A") }}</span
+              >
+              <StatusPill :post="p" class="ml-auto" />
+            </span>
+            <span class="truncate text-sm" aria-hidden="true">
+              <span class="font-semibold text-ink-gray-9">{{
+                p.customer
+              }}</span>
+              <span class="text-ink-gray-7"> · {{ p.title }}</span>
+            </span>
+          </button>
+        </li>
+      </ul>
+    </section>
+
     <div
       class="flex flex-wrap items-center gap-2"
       role="group"
@@ -217,335 +308,449 @@
       </Button>
     </div>
 
-    <section
-      v-for="day in days"
-      :key="day.date"
-      class="flex flex-col gap-2 sm:flex-row sm:gap-4"
-      :aria-label="dayjs(day.date).format('dddd D MMMM')"
+    <!-- past days with nothing left to do fold away; missed ones stay listed -->
+    <div
+      v-if="plan.earlier.length"
+      class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-outline-gray-2 bg-surface-base px-3 py-1.5 text-sm"
     >
-      <div
-        class="flex shrink-0 flex-wrap items-center gap-2 sm:sticky sm:top-0 sm:w-[88px] sm:flex-col sm:flex-nowrap sm:items-stretch sm:self-start"
+      <LucideHistory
+        class="size-4 shrink-0 text-ink-gray-5"
+        aria-hidden="true"
+      />
+      <p class="min-w-0 flex-1 text-ink-gray-7">
+        <span class="font-medium text-ink-gray-9">{{
+          period === "week" ? __("Earlier this week") : __("Earlier this month")
+        }}</span>
+        ·
+        <span class="font-mono tabular-nums">{{ earlierCount }}</span>
+        {{ earlierCount === 1 ? __("entry") : __("entries") }}
+        <span class="hidden sm:inline">
+          · {{ __("published or cancelled") }}</span
+        >
+      </p>
+      <button
+        type="button"
+        :class="[OUTLINE_BTN, 'relative after:absolute after:-inset-1.5']"
+        :aria-expanded="showEarlier"
+        @click="showEarlier = !showEarlier"
       >
-        <!-- a calendar page: month band, date, weekday -->
-        <div
-          class="w-[64px] shrink-0 overflow-hidden rounded-[10px] border bg-surface-base pb-1 text-center shadow-sm"
-          :class="day.date === today ? 'border-brand' : 'border-outline-gray-2'"
-          aria-hidden="true"
-        >
-          <div
-            class="grid h-6 place-items-center bg-brand text-[11px] font-bold uppercase tracking-[0.1em] text-brand-on"
-          >
-            {{ dayjs(day.date).format("MMM") }}
-          </div>
-          <div
-            class="font-mono text-[22px] font-medium tabular-nums leading-tight"
-            :class="day.date === today ? 'text-brand-ink' : 'text-ink-gray-9'"
-          >
-            {{ dayjs(day.date).format("D") }}
-          </div>
-          <div
-            class="text-[11px] font-semibold uppercase tracking-wide text-ink-gray-6"
-          >
-            {{ dayjs(day.date).format("ddd") }}
-          </div>
-        </div>
-        <div class="flex flex-col gap-1.5 sm:items-start">
-          <span class="text-[13px] text-ink-gray-6">
-            <template v-if="day.date === today"
-              ><span class="font-medium text-ink-gray-8 sm:block">{{
-                __("Today")
-              }}</span
-              ><span class="sm:hidden"> · </span></template
-            >
-            {{
-              day.total === 1
-                ? __("1 entry")
-                : __("{0} entries", String(day.total))
-            }}
-          </span>
-          <SpecialDayBadge
-            v-for="name in day.specialDays"
-            :key="name"
-            :name="name"
-          />
-        </div>
-      </div>
+        {{ showEarlier ? __("Hide") : __("Show") }}
+      </button>
+    </div>
 
-      <div class="flex min-w-0 flex-1 flex-col gap-3">
-        <article
-          v-for="post in day.posts"
-          :key="post.name"
-          class="entry overflow-hidden rounded-[16px] border"
-          :class="`entry-${entryTone(post)}`"
-          :aria-labelledby="`client-${post.name} entry-${post.name}`"
+    <template v-for="day in listedDays" :key="day.date">
+      <TodayMarker v-if="plan.todayMarker && day.date === plan.next" />
+      <section
+        :id="`day-${day.date}`"
+        class="flex scroll-mt-2 flex-col gap-2 sm:flex-row sm:gap-4"
+        :aria-label="dayjs(day.date).format('dddd D MMMM')"
+      >
+        <div
+          class="flex shrink-0 flex-wrap items-center gap-2 sm:sticky sm:top-0 sm:w-[88px] sm:flex-col sm:flex-nowrap sm:items-stretch sm:self-start"
         >
-          <header class="flex flex-wrap items-start gap-x-3 gap-y-2 px-4 pt-3">
-            <div class="flex min-w-0 flex-1 basis-72 gap-3">
-              <span
-                class="grid size-10 shrink-0 place-items-center rounded-[10px] border border-outline-gray-2 bg-surface-base text-ink-gray-7 shadow-sm"
-                aria-hidden="true"
+          <!-- a calendar page: month band, date, weekday -->
+          <div
+            class="w-[64px] shrink-0 overflow-hidden rounded-[10px] border bg-surface-base pb-1 text-center shadow-sm"
+            :class="
+              day.date === today
+                ? 'border-highlight ring-1 ring-highlight'
+                : 'border-outline-gray-2'
+            "
+            aria-hidden="true"
+          >
+            <div
+              class="grid h-6 place-items-center bg-brand text-[11px] font-bold uppercase tracking-[0.1em] text-brand-on"
+            >
+              {{ dayjs(day.date).format("MMM") }}
+            </div>
+            <div
+              class="font-mono text-[22px] font-medium tabular-nums leading-tight text-ink-gray-9"
+            >
+              {{ dayjs(day.date).format("D") }}
+            </div>
+            <div
+              class="text-[11px] font-semibold uppercase tracking-wide text-ink-gray-6"
+            >
+              {{ dayjs(day.date).format("ddd") }}
+            </div>
+          </div>
+          <div class="flex flex-col gap-1.5 sm:items-start">
+            <span class="text-[13px] text-ink-gray-6">
+              <template v-if="day.date === today"
+                ><span class="font-medium text-ink-gray-8 sm:block">{{
+                  __("Today")
+                }}</span
+                ><span class="sm:hidden"> · </span></template
               >
-                <LucideBuilding2 class="size-[18px]" />
-              </span>
-              <div class="min-w-0 flex-1">
-                <!-- the client leads, shown even when filtered, so every card says whose it is -->
-                <p
-                  v-if="post.customer"
-                  :id="`client-${post.name}`"
-                  class="truncate text-lg font-semibold text-ink-gray-9"
-                  :title="post.customer"
+              {{
+                day.total === 1
+                  ? __("1 entry")
+                  : __("{0} entries", String(day.total))
+              }}
+            </span>
+            <SpecialDayBadge
+              v-for="name in day.specialDays"
+              :key="name"
+              :name="name"
+            />
+          </div>
+        </div>
+
+        <div class="flex min-w-0 flex-1 flex-col gap-3">
+          <!-- a Coming up chip outlines its entry inside the card's edge, where the
+             list's scroll box can't clip it -->
+          <article
+            v-for="post in day.posts"
+            :key="post.name"
+            :id="`post-${post.name}`"
+            class="entry scroll-mt-4 overflow-hidden rounded-[16px] border"
+            :class="[
+              `entry-${entryTone(post)}`,
+              flashed === post.name &&
+                'outline outline-2 -outline-offset-2 outline-brand',
+            ]"
+            :aria-labelledby="`client-${post.name} entry-${post.name}`"
+          >
+            <header
+              class="flex flex-wrap items-start gap-x-3 gap-y-2 px-4 pt-3"
+            >
+              <div class="flex min-w-0 flex-1 basis-72 gap-3">
+                <span
+                  class="grid size-10 shrink-0 place-items-center rounded-[10px] border border-outline-gray-2 bg-surface-base text-ink-gray-7 shadow-sm"
+                  aria-hidden="true"
                 >
-                  {{ post.customer }}
-                </p>
-                <p
-                  class="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1"
+                  <LucideBuilding2 class="size-[18px]" />
+                </span>
+                <div class="min-w-0 flex-1">
+                  <!-- the client leads, shown even when filtered, so every card says whose it is -->
+                  <p
+                    v-if="post.customer"
+                    :id="`client-${post.name}`"
+                    class="truncate text-lg font-semibold text-ink-gray-9"
+                    :title="post.customer"
+                  >
+                    {{ post.customer }}
+                  </p>
+                  <p
+                    class="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1"
+                  >
+                    <button
+                      :id="`entry-${post.name}`"
+                      type="button"
+                      class="min-w-0 max-w-full truncate rounded text-left text-base text-ink-gray-7 hover:text-ink-gray-9 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+                      :title="post.title"
+                      @click="emit('open', post.name)"
+                    >
+                      {{ post.title }}
+                    </button>
+                    <span
+                      v-if="post.format"
+                      class="inline-flex h-5 items-center rounded-[6px] border border-outline-gray-2 bg-surface-base px-1.5 text-xs text-ink-gray-7"
+                      >{{ post.format }}</span
+                    >
+                  </p>
+                  <SpecialDayBadge
+                    v-if="post.special_day"
+                    :name="post.special_day"
+                    class="mt-1.5"
+                  />
+                  <p
+                    v-if="needsApprovalSoon(post, now)"
+                    class="mt-1.5 inline-flex items-center gap-1.5 rounded-md bg-danger-soft px-2 py-0.5 text-sm text-danger"
+                  >
+                    <LucideTriangleAlert
+                      class="size-3.5 shrink-0"
+                      aria-hidden="true"
+                    />
+                    {{ __("Goes live within 2 days and isn't approved yet.") }}
+                  </p>
+                </div>
+              </div>
+              <div class="flex flex-wrap items-center gap-2">
+                <ul
+                  class="flex flex-wrap items-center gap-2"
+                  :aria-label="__('Platforms')"
+                >
+                  <li
+                    v-for="p in platformsOf(post)"
+                    :key="p"
+                    class="inline-flex h-7 items-center gap-1.5 rounded-full border border-outline-gray-2 bg-surface-base px-2.5 text-sm text-ink-gray-8"
+                  >
+                    <ChannelIcon :channel="p" class="size-[15px] shrink-0" />{{
+                      __(p)
+                    }}
+                  </li>
+                </ul>
+                <span
+                  class="inline-flex h-7 items-center gap-1.5 rounded-full border border-outline-gray-2 bg-surface-base px-2.5 font-mono text-sm tabular-nums text-ink-gray-8"
+                >
+                  <LucideClock
+                    class="size-3.5 shrink-0 text-ink-gray-5"
+                    aria-hidden="true"
+                  /><span class="sr-only">{{ __("Time:") }}</span
+                  ><time :datetime="post.publish_on">{{
+                    dayjs(post.publish_on).format("h:mm A")
+                  }}</time></span
+                >
+                <StatusPill :post="post" size="md" />
+                <Tooltip
+                  :text="
+                    auth.canEditContent
+                      ? __('Edit entry')
+                      : __('Open to add files')
+                  "
                 >
                   <button
-                    :id="`entry-${post.name}`"
                     type="button"
-                    class="min-w-0 max-w-full truncate rounded text-left text-base text-ink-gray-7 hover:text-ink-gray-9 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
-                    :title="post.title"
+                    class="grid size-7 place-items-center rounded-full border border-outline-gray-2 bg-surface-base text-ink-gray-7 transition-colors hover:bg-surface-gray-2 hover:text-ink-gray-9 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+                    :aria-label="
+                      auth.canEditContent
+                        ? __('Edit {0}', post.title)
+                        : __('Open {0} to add files', post.title)
+                    "
                     @click="emit('open', post.name)"
                   >
-                    {{ post.title }}
+                    <LucidePencil
+                      v-if="auth.canEditContent"
+                      class="size-3.5"
+                      aria-hidden="true"
+                    />
+                    <LucidePaperclip
+                      v-else
+                      class="size-3.5"
+                      aria-hidden="true"
+                    />
                   </button>
-                  <span
-                    v-if="post.format"
-                    class="inline-flex h-5 items-center rounded-[6px] border border-outline-gray-2 bg-surface-base px-1.5 text-xs text-ink-gray-7"
-                    >{{ post.format }}</span
-                  >
-                </p>
-                <SpecialDayBadge
-                  v-if="post.special_day"
-                  :name="post.special_day"
-                  class="mt-1.5"
-                />
+                </Tooltip>
+              </div>
+            </header>
+
+            <div
+              class="grid grid-cols-1 gap-2 px-4 pt-2.5 md:grid-cols-[1.65fr_1fr]"
+            >
+              <div
+                class="min-w-0 rounded-xl border border-outline-gray-2 bg-surface-base px-3 py-2"
+              >
+                <p class="text-[13px] text-ink-gray-6">{{ __("Sub copy") }}</p>
                 <p
-                  v-if="needsApprovalSoon(post, now)"
-                  class="mt-1.5 inline-flex items-center gap-1.5 rounded-md bg-danger-soft px-2 py-0.5 text-sm text-danger"
+                  class="mt-0.5 line-clamp-2 whitespace-pre-line text-sm leading-snug"
+                  :class="
+                    captionOf(post)
+                      ? 'text-ink-gray-9'
+                      : 'italic text-ink-gray-5'
+                  "
                 >
-                  <LucideTriangleAlert
-                    class="size-3.5 shrink-0"
-                    aria-hidden="true"
-                  />
-                  {{ __("Goes live within 2 days and isn't approved yet.") }}
+                  {{ captionOf(post) || __("Not written yet") }}
+                </p>
+              </div>
+              <div
+                class="min-w-0 rounded-xl border border-outline-gray-2 bg-surface-base px-3 py-2"
+              >
+                <p class="text-[13px] text-ink-gray-6">
+                  {{ __("Description") }}
+                </p>
+                <p
+                  class="mt-0.5 line-clamp-2 whitespace-pre-line text-sm leading-snug"
+                  :class="
+                    post.brief ? 'text-ink-gray-9' : 'italic text-ink-gray-5'
+                  "
+                >
+                  {{ post.brief || __("No description yet") }}
                 </p>
               </div>
             </div>
-            <div class="flex flex-wrap items-center gap-2">
-              <ul
-                class="flex flex-wrap items-center gap-2"
-                :aria-label="__('Platforms')"
-              >
-                <li
-                  v-for="p in platformsOf(post)"
-                  :key="p"
-                  class="inline-flex h-7 items-center gap-1.5 rounded-full border border-outline-gray-2 bg-surface-base px-2.5 text-sm text-ink-gray-8"
-                >
-                  <ChannelIcon :channel="p" class="size-[15px] shrink-0" />{{
-                    __(p)
-                  }}
-                </li>
-              </ul>
-              <span
-                class="inline-flex h-7 items-center gap-1.5 rounded-full border border-outline-gray-2 bg-surface-base px-2.5 font-mono text-sm tabular-nums text-ink-gray-8"
-              >
-                <LucideClock
-                  class="size-3.5 shrink-0 text-ink-gray-5"
-                  aria-hidden="true"
-                /><span class="sr-only">{{ __("Time:") }}</span
-                ><time :datetime="post.publish_on">{{
-                  dayjs(post.publish_on).format("h:mm A")
-                }}</time></span
-              >
-              <StatusPill :post="post" size="md" />
-              <Tooltip
-                :text="
-                  auth.canEditContent
-                    ? __('Edit entry')
-                    : __('Open to add files')
-                "
-              >
-                <button
-                  type="button"
-                  class="grid size-7 place-items-center rounded-full border border-outline-gray-2 bg-surface-base text-ink-gray-7 transition-colors hover:bg-surface-gray-2 hover:text-ink-gray-9 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
-                  :aria-label="
-                    auth.canEditContent
-                      ? __('Edit {0}', post.title)
-                      : __('Open {0} to add files', post.title)
-                  "
-                  @click="emit('open', post.name)"
-                >
-                  <LucidePencil
-                    v-if="auth.canEditContent"
-                    class="size-3.5"
-                    aria-hidden="true"
-                  />
-                  <LucidePaperclip v-else class="size-3.5" aria-hidden="true" />
-                </button>
-              </Tooltip>
-            </div>
-          </header>
 
-          <div
-            class="grid grid-cols-1 gap-2 px-4 pt-2.5 md:grid-cols-[1.65fr_1fr]"
-          >
             <div
-              class="min-w-0 rounded-xl border border-outline-gray-2 bg-surface-base px-3 py-2"
+              class="grid grid-cols-1 gap-2 px-4 pt-2 min-[420px]:grid-cols-2 lg:grid-cols-4"
             >
-              <p class="text-[13px] text-ink-gray-6">{{ __("Sub copy") }}</p>
-              <p
-                class="mt-0.5 line-clamp-2 whitespace-pre-line text-sm leading-snug"
-                :class="
-                  captionOf(post) ? 'text-ink-gray-9' : 'italic text-ink-gray-5'
+              <RoleBox
+                v-for="role in TEAM_ROLES"
+                :key="role.field"
+                :label="role.label"
+                :role="role.field"
+                :people="peopleOf(post, role.field)"
+                :can-edit="auth.canEditContent"
+                :context="`${post.customer} · ${post.title}`"
+                :step="boxStep(roleTask(post, role.field))"
+                :busy="
+                  !!stepBusy && stepBusy === roleTaskName(post, role.field)
                 "
-              >
-                {{ captionOf(post) || __("Not written yet") }}
-              </p>
+                @assign="emit('action', post, 'assign', role.field)"
+                @open-task="showTask(post, role.field, $event)"
+                @step="runStep($event, roleTask(post, role.field)!)"
+              />
             </div>
-            <div
-              class="min-w-0 rounded-xl border border-outline-gray-2 bg-surface-base px-3 py-2"
-            >
-              <p class="text-[13px] text-ink-gray-6">{{ __("Description") }}</p>
-              <p
-                class="mt-0.5 line-clamp-2 whitespace-pre-line text-sm leading-snug"
-                :class="
-                  post.brief ? 'text-ink-gray-9' : 'italic text-ink-gray-5'
-                "
-              >
-                {{ post.brief || __("No description yet") }}
-              </p>
-            </div>
-          </div>
 
-          <div
-            class="grid grid-cols-1 gap-2 px-4 pt-2 min-[420px]:grid-cols-2 lg:grid-cols-4"
-          >
-            <RoleBox
-              v-for="role in TEAM_ROLES"
-              :key="role.field"
-              :label="role.label"
-              :role="role.field"
-              :people="peopleOf(post, role.field)"
-              :can-edit="auth.canEditContent"
-              @assign="emit('action', post, 'assign', role.field)"
-            />
-          </div>
-
-          <footer
-            class="entry-footer mt-3 flex flex-wrap items-center gap-2 border-t px-4 py-2"
-          >
+            <!-- how far the post's parts are and who it waits on, from its role tasks -->
             <p
-              class="flex flex-1 basis-48 items-center gap-2 text-base"
-              :class="isMissed(post, now) ? 'text-danger' : 'text-ink-gray-7'"
+              v-if="progressLines[post.name]"
+              class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 px-4 pt-2 text-sm text-ink-gray-7"
             >
-              <component
-                :is="statusIcon(post)"
-                class="size-[15px] shrink-0"
+              <LucideListChecks
+                class="size-4 shrink-0 text-ink-gray-5"
                 aria-hidden="true"
               />
-              {{ statusLine(post) }}
-            </p>
-            <template v-if="!CLOSED_STATUSES.includes(post.status)">
-              <!-- waiting on the head: only they move it on, so no Mark published -->
-              <template v-if="post.status === HEAD_REVIEW">
-                <template v-if="auth.isDmHead">
-                  <button
-                    type="button"
-                    :class="PRIMARY_BTN"
-                    @click="emit('action', post, 'head_approve')"
-                  >
-                    <LucideCheck class="size-4" aria-hidden="true" />
-                    {{ __("Approve") }}
-                  </button>
-                  <button
-                    type="button"
-                    :class="OUTLINE_BTN"
-                    @click="emit('action', post, 'head_send_back')"
-                  >
-                    <LucideUndo2
-                      class="size-4 text-ink-gray-6"
-                      aria-hidden="true"
-                    />
-                    {{ __("Send back") }}
-                  </button>
-                </template>
+              <span>{{ progressLines[post.name].parts }}</span>
+              <template v-if="progressLines[post.name].waiting">
+                <span aria-hidden="true">·</span>
+                <span
+                  >{{ progressLines[post.name].waiting
+                  }}<template v-if="progressLines[post.name].due"
+                    >,</template
+                  ></span
+                >
+                <span
+                  v-if="progressLines[post.name].due"
+                  class="inline-flex items-center gap-1"
+                  :class="
+                    progressLines[post.name].late && 'font-medium text-danger'
+                  "
+                >
+                  <LucideCircleAlert
+                    v-if="progressLines[post.name].late"
+                    class="size-3.5"
+                    aria-hidden="true"
+                  />{{ progressLines[post.name].due }}</span
+                >
               </template>
-              <!-- a post with the client can't be published until they and the head approve -->
-              <button
-                v-else-if="
-                  post.status !== 'Client Review' && auth.canEditContent
-                "
-                type="button"
-                :class="PRIMARY_BTN"
-                @click="emit('action', post, 'publish')"
+            </p>
+
+            <footer
+              class="entry-footer mt-3 flex flex-wrap items-center gap-2 border-t px-4 py-2"
+            >
+              <p
+                class="flex flex-1 basis-48 items-center gap-2 text-base"
+                :class="isMissed(post, now) ? 'text-danger' : 'text-ink-gray-7'"
               >
-                <LucideSend class="size-4" aria-hidden="true" />
-                {{ __("Mark published") }}
-              </button>
-              <button
-                v-if="auth.canEditContent"
-                type="button"
-                :class="OUTLINE_BTN"
-                @click="emit('action', post, 'postpone')"
-              >
-                <LucideCalendarClock
-                  class="size-4 text-ink-gray-6"
+                <component
+                  :is="statusIcon(post)"
+                  class="size-[15px] shrink-0"
                   aria-hidden="true"
                 />
-                {{ __("Postpone") }}
-              </button>
-              <Tooltip v-if="auth.canEditContent" :text="__('Cancel post')">
+                {{ statusLine(post) }}
+              </p>
+              <template v-if="!CLOSED_STATUSES.includes(post.status)">
+                <!-- waiting on the head: only they move it on, so no Mark published -->
+                <template v-if="post.status === HEAD_REVIEW">
+                  <template v-if="auth.isDmHead">
+                    <button
+                      type="button"
+                      :class="PRIMARY_BTN"
+                      @click="emit('action', post, 'head_approve')"
+                    >
+                      <LucideCheck class="size-4" aria-hidden="true" />
+                      {{ __("Approve") }}
+                    </button>
+                    <button
+                      type="button"
+                      :class="OUTLINE_BTN"
+                      @click="emit('action', post, 'head_send_back')"
+                    >
+                      <LucideUndo2
+                        class="size-4 text-ink-gray-6"
+                        aria-hidden="true"
+                      />
+                      {{ __("Send back") }}
+                    </button>
+                  </template>
+                </template>
+                <!-- a post with the client can't be published until they and the head approve -->
                 <button
+                  v-else-if="
+                    post.status !== 'Client Review' && auth.canEditContent
+                  "
                   type="button"
-                  class="grid size-8 place-items-center rounded-full border border-outline-gray-2 bg-surface-base text-ink-gray-6 transition-colors hover:bg-surface-gray-2 hover:text-ink-gray-9 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
-                  :aria-label="__('Cancel post')"
-                  @click="emit('action', post, 'cancel')"
+                  :class="PRIMARY_BTN"
+                  @click="emit('action', post, 'publish')"
                 >
-                  <LucideBan class="size-4" aria-hidden="true" />
+                  <LucideSend class="size-4" aria-hidden="true" />
+                  {{ __("Mark published") }}
                 </button>
-              </Tooltip>
-            </template>
-            <a
-              v-else-if="post.status === 'Published' && post.published_url"
-              :href="post.published_url"
-              target="_blank"
-              rel="noopener"
-              class="inline-flex items-center gap-1 rounded text-sm text-success hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
-            >
-              <LucideExternalLink class="size-3.5" aria-hidden="true" />{{
-                __("View post")
-              }}
-            </a>
-          </footer>
-        </article>
+                <button
+                  v-if="auth.canEditContent"
+                  type="button"
+                  :class="OUTLINE_BTN"
+                  @click="emit('action', post, 'postpone')"
+                >
+                  <LucideCalendarClock
+                    class="size-4 text-ink-gray-6"
+                    aria-hidden="true"
+                  />
+                  {{ __("Postpone") }}
+                </button>
+                <Tooltip v-if="auth.canEditContent" :text="__('Cancel post')">
+                  <button
+                    type="button"
+                    class="grid size-8 place-items-center rounded-full border border-outline-gray-2 bg-surface-base text-ink-gray-6 transition-colors hover:bg-surface-gray-2 hover:text-ink-gray-9 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+                    :aria-label="__('Cancel post')"
+                    @click="emit('action', post, 'cancel')"
+                  >
+                    <LucideBan class="size-4" aria-hidden="true" />
+                  </button>
+                </Tooltip>
+              </template>
+              <a
+                v-else-if="post.status === 'Published' && post.published_url"
+                :href="post.published_url"
+                target="_blank"
+                rel="noopener"
+                class="inline-flex items-center gap-1 rounded text-sm text-success hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+              >
+                <LucideExternalLink class="size-3.5" aria-hidden="true" />{{
+                  __("View post")
+                }}
+              </a>
+            </footer>
+          </article>
 
-        <div v-if="auth.canEditContent">
-          <Button
-            size="sm"
-            variant="ghost"
-            :label="__('Add entry for this day')"
-            @click="emit('add', day.date)"
-          >
-            <template #prefix
-              ><LucidePlus class="size-3.5" aria-hidden="true"
-            /></template>
-          </Button>
+          <div v-if="auth.canEditContent">
+            <Button
+              size="sm"
+              variant="ghost"
+              :label="__('Add entry for this day')"
+              @click="emit('add', day.date)"
+            >
+              <template #prefix
+                ><LucidePlus class="size-3.5" aria-hidden="true"
+              /></template>
+            </Button>
+          </div>
         </div>
-      </div>
-    </section>
+      </section>
+    </template>
+    <TodayMarker v-if="plan.todayMarker && !plan.next" />
+
+    <TaskDetailDialog
+      v-model:task="dialogTask"
+      :action="dialogAction"
+      :mine="dialogMine"
+      @changed="emit('changed')"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { __ } from "@/translation";
+import TaskDetailDialog from "@/pages/tasky/components/TaskDetailDialog.vue";
+import { createReusableTemplate } from "@vueuse/core";
 import { Button, createResource, dayjs, Tooltip } from "frappe-ui";
-import { type Component, computed, markRaw, ref, watch } from "vue";
+import {
+  type Component,
+  computed,
+  markRaw,
+  nextTick,
+  onBeforeUnmount,
+  ref,
+  useId,
+  watch,
+} from "vue";
 import LucideBan from "~icons/lucide/ban";
 import LucideCalendarClock from "~icons/lucide/calendar-clock";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideClock from "~icons/lucide/clock";
 import LucideExternalLink from "~icons/lucide/external-link";
+import LucideHistory from "~icons/lucide/history";
+import LucideListChecks from "~icons/lucide/list-checks";
 import LucidePlus from "~icons/lucide/plus";
 import LucideSend from "~icons/lucide/send";
 import LucideBuilding2 from "~icons/lucide/building-2";
@@ -568,6 +773,16 @@ import {
   TEAM_ROLES,
   type TeamRole,
 } from "../constants";
+import {
+  boxStep,
+  type ContentTask,
+  type ContentTasksData,
+  dueText,
+  partsText,
+  useContentTaskSteps,
+  waitingText,
+} from "../contentTasks";
+import { planDays, prefersMotion, revealIfLow } from "../dayFocus";
 import ChannelIcon from "./ChannelIcon.vue";
 import RoleBox from "./RoleBox.vue";
 import SpecialDayBadge from "./SpecialDayBadge.vue";
@@ -594,7 +809,7 @@ const PERIOD_TEXT = {
 };
 
 const PRIMARY_BTN =
-  "inline-flex h-8 items-center gap-1.5 rounded-[10px] bg-brand px-3 text-sm font-semibold text-brand-on shadow-sm transition-colors hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2";
+  "inline-flex h-8 items-center gap-1.5 rounded-[10px] bg-brand px-3 text-sm font-semibold text-brand-on shadow-sm transition-colors hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight focus-visible:ring-offset-2";
 const OUTLINE_BTN =
   "inline-flex h-8 items-center gap-1.5 rounded-[10px] border border-outline-gray-2 bg-surface-base px-3 text-sm font-medium text-ink-gray-8 transition-colors hover:bg-surface-gray-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4";
 
@@ -612,12 +827,19 @@ const props = defineProps<{
   day?: string;
   loading?: boolean;
   filtersCustomer?: string;
+  /** The period's role tasks: each card's parts line and the viewer's step in a role box. */
+  taskData?: ContentTasksData | null;
 }>();
 const emit = defineEmits<{
   (e: "open", name: string): void;
   (e: "add", date?: string): void;
   (e: "action", post: ContentPost, action: EntryAction, role?: TeamRole): void;
+  /** A task opened from a role box changed: reload the posts. */
+  (e: "changed"): void;
 }>();
+
+const [DefineTodayMarker, TodayMarker] = createReusableTemplate();
+const comingUpId = useId();
 
 // everyone on each post's roles, with their task's status; reloaded with the posts
 const team = createResource({
@@ -639,9 +861,13 @@ function peopleOf(post: ContentPost, role: TeamRole): RolePerson[] {
 
 type FilterKey = "all" | "missed" | "upcoming" | "published" | "cancelled";
 const filter = ref<FilterKey>("all");
+const showEarlier = ref(false);
 watch(
   () => props.month,
-  () => (filter.value = "all")
+  () => {
+    filter.value = "all";
+    showEarlier.value = false;
+  }
 );
 
 const today = dayjs().format("YYYY-MM-DD");
@@ -832,6 +1058,9 @@ function entryTone(post: ContentPost) {
   return "info";
 }
 
+const dateOf = (post: ContentPost) =>
+  dayjs(post.publish_on).format("YYYY-MM-DD");
+
 const days = computed(() => {
   const byDay = new Map<
     string,
@@ -851,11 +1080,128 @@ const days = computed(() => {
     .map((d) => ({
       ...d,
       posts: d.posts.sort((a, b) => (a.publish_on! < b.publish_on! ? -1 : 1)),
+      needsAction: d.posts.some((p) => isMissed(p, now.value)),
       // each special day once, so the day heading names them
       specialDays: [
         ...new Set(d.posts.map((p) => p.special_day).filter(Boolean)),
       ] as string[],
     }));
+});
+
+// the period on screen is "<period>:<first day>" (the month prop)
+const todayInPeriod = computed(() => {
+  const start = dayjs(props.month.split(":")[1]);
+  return (
+    today >= start.format("YYYY-MM-DD") &&
+    today <= start.endOf(props.period || "month").format("YYYY-MM-DD")
+  );
+});
+// Day view is a single day, so it neither folds nor marks anything
+const plan = computed(() =>
+  planDays(days.value, today, {
+    collapsePast: filter.value === "all" && props.period !== "day",
+    markToday:
+      props.period !== "day" &&
+      todayInPeriod.value &&
+      (filter.value === "all" || filter.value === "upcoming"),
+  })
+);
+const listedDays = computed(() =>
+  showEarlier.value ? days.value : plan.value.shown
+);
+const earlierCount = computed(() =>
+  plan.value.earlier.reduce((n, d) => n + d.total, 0)
+);
+
+// open on today (or the marker, or the next day) once per period, not after every reload
+let openedOn = "";
+watch(
+  () => [props.month, props.loading, plan.value.target] as const,
+  async ([month, loading, target]) => {
+    if (loading || !target || openedOn === month) return;
+    openedOn = month;
+    await nextTick();
+    revealIfLow(document.getElementById(`day-${target}`));
+  },
+  { immediate: true }
+);
+
+const comingUp = computed(() =>
+  [...upcoming.value]
+    .sort((a, b) => (a.publish_on! < b.publish_on! ? -1 : 1))
+    .slice(0, 7)
+);
+
+// a Coming up chip scrolls to its entry and outlines it for a moment
+const flashed = ref("");
+let flashTimer: ReturnType<typeof setTimeout> | undefined;
+async function jumpTo(post: ContentPost) {
+  if (!MATCHERS[filter.value](post)) filter.value = "all";
+  await nextTick();
+  document.getElementById(`post-${post.name}`)?.scrollIntoView({
+    block: "center",
+    behavior: prefersMotion() ? "smooth" : "auto",
+  });
+  document.getElementById(`entry-${post.name}`)?.focus({ preventScroll: true });
+  flashed.value = post.name;
+  clearTimeout(flashTimer);
+  flashTimer = setTimeout(() => (flashed.value = ""), 2000);
+}
+onBeforeUnmount(() => clearTimeout(flashTimer));
+
+// a role's task opens here; the assignee gets their own steps (complete, hold, ...)
+const {
+  busy: stepBusy,
+  dialogTask,
+  dialogAction,
+  dialogMine,
+  open: openTaskDialog,
+  run: runStep,
+} = useContentTaskSteps(() => emit("changed"));
+function showTask(post: ContentPost, role: TeamRole, task: string) {
+  openTaskDialog(
+    { name: task },
+    peopleOf(post, role).some((p) => p.user === auth.userId)
+  );
+}
+
+// the role's task as the Tasks view has it: there only when the viewer may read it
+const tasksByName = computed(
+  () =>
+    new Map<string, ContentTask>(
+      (props.taskData?.tasks ?? []).map((t) => [t.name, t])
+    )
+);
+function roleTaskName(post: ContentPost, role: TeamRole) {
+  return peopleOf(post, role).find((p) => p.task)?.task;
+}
+function roleTask(post: ContentPost, role: TeamRole) {
+  const name = roleTaskName(post, role);
+  return name ? tasksByName.value.get(name) : undefined;
+}
+
+/** "3 of 4 parts done · waiting on Writer (Ajmal) · due tomorrow", for posts still open. */
+const progressLines = computed(() => {
+  const lines: Record<
+    string,
+    { parts: string; waiting: string; due: string; late: boolean }
+  > = {};
+  for (const [name, post] of Object.entries(props.taskData?.posts ?? {})) {
+    const progress = post.progress;
+    if (!progress.parts || CLOSED_STATUSES.includes(post.status)) continue;
+    const waiting = progress.waiting_on;
+    const due =
+      waiting?.kind === "part"
+        ? dueText(waiting.due)
+        : { text: "", late: false };
+    lines[name] = {
+      parts: partsText(progress),
+      waiting: waiting ? waitingText(waiting) : "",
+      due: due.text,
+      late: due.late,
+    };
+  }
+  return lines;
 });
 
 function captionOf(post: ContentPost) {

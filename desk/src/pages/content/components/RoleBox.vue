@@ -31,16 +31,26 @@
         >
         <span
           v-if="person.status || isTaskLate(person)"
-          class="block truncate text-xs"
+          class="flex min-w-0 items-center gap-1 text-xs"
           :class="statusClass(person)"
           :title="person.task"
         >
-          <template v-if="person.status">{{
-            __(taskStatusMeta(person.status).label)
-          }}</template>
-          <template v-if="isTaskLate(person)">
-            <template v-if="person.status"> · </template>{{ __("late") }}
-          </template>
+          <!-- the status's icon too, so it never rests on colour alone -->
+          <component
+            :is="taskStatusMeta(person.status).icon"
+            v-if="person.status"
+            class="size-3 shrink-0"
+            aria-hidden="true"
+          />
+          <span class="truncate"
+            ><template v-if="person.status">{{
+              __(taskStatusMeta(person.status).label)
+            }}</template
+            ><template v-if="isTaskLate(person)"
+              ><template v-if="person.status"> · </template
+              >{{ __("late") }}</template
+            ></span
+          >
         </span>
       </span>
     </span>
@@ -87,27 +97,70 @@
     </span>
   </div>
 
-  <!-- everyone on the role, each with how far their task is; a button only for
-       editors, so people who can't reassign get plain text, not a disabled control.
-       Not <component :is="'button'">: that resolves to frappe-ui's global Button,
-       whose fixed height clipped the names. -->
-  <button
-    v-else-if="canEdit"
-    type="button"
-    class="flex min-h-[52px] min-w-0 flex-col justify-center gap-2.5 rounded-xl border border-outline-gray-2 bg-surface-base px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4 hover:bg-surface-gray-1"
-    :title="__('Change who is on this')"
-    @click="emit('assign')"
-  >
-    <ReusePeople />
-    <!-- the names stay in the accessible name; this says what pressing it does -->
-    <span class="sr-only">{{ __("Change who is on this") }}</span>
-  </button>
-
+  <!-- everyone on the role, each with how far their task is. Pressing the people opens
+       the role's task in place; editors change who is on it with the small button. Not
+       <component :is="'button'">: that resolves to frappe-ui's global Button, whose
+       fixed height clipped the names. -->
   <div
     v-else
-    class="flex min-h-[52px] min-w-0 flex-col justify-center gap-2.5 rounded-xl border border-outline-gray-2 bg-surface-base px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+    class="flex min-h-[52px] min-w-0 items-stretch rounded-xl border border-outline-gray-2 bg-surface-base"
   >
-    <ReusePeople />
+    <button
+      v-if="task"
+      type="button"
+      class="group flex min-w-0 flex-1 items-center gap-2 rounded-[11px] px-3 py-2 text-left transition-colors hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+      :aria-label="openLabel"
+      :aria-describedby="peopleId"
+      :title="__('Open task')"
+      @click="emit('open-task', task)"
+    >
+      <span :id="peopleId" class="flex min-w-0 flex-1 flex-col gap-2.5">
+        <ReusePeople />
+      </span>
+      <LucideClipboardList
+        class="size-4 shrink-0 self-start text-ink-gray-5 transition-colors group-hover:text-ink-gray-8"
+        aria-hidden="true"
+      />
+    </button>
+    <div
+      v-else
+      class="flex min-w-0 flex-1 flex-col justify-center gap-2.5 px-3 py-2"
+    >
+      <ReusePeople />
+    </div>
+    <!-- the assignee's one next step, so they needn't open the task; 32px tall, 44px to press -->
+    <button
+      v-if="stepMeta"
+      type="button"
+      class="relative mx-1.5 inline-flex h-8 shrink-0 items-center gap-1 self-center rounded-lg bg-brand px-2.5 text-sm font-semibold text-brand-on shadow-sm transition-colors after:absolute after:-inset-1.5 hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight focus-visible:ring-offset-1 disabled:opacity-60"
+      :aria-label="stepLabel"
+      :disabled="busy"
+      @click="emit('step', step!)"
+    >
+      <LucideLoaderCircle
+        v-if="busy"
+        class="size-3.5 animate-spin"
+        aria-hidden="true"
+      />
+      <component
+        :is="stepMeta.icon"
+        v-else
+        class="size-3.5"
+        aria-hidden="true"
+      />
+      {{ __(stepMeta.label) }}
+    </button>
+    <!-- 32px to look at, 44px to press -->
+    <button
+      v-if="canEdit"
+      type="button"
+      class="relative mr-1.5 grid size-8 shrink-0 place-items-center self-center rounded-lg text-ink-gray-6 transition-colors after:absolute after:-inset-1.5 hover:bg-surface-gray-2 hover:text-ink-gray-9 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+      :aria-label="__('Change who is on {0}', changeTarget)"
+      :title="__('Change who is on this')"
+      @click="emit('assign')"
+    >
+      <LucideUserPen class="size-4" aria-hidden="true" />
+    </button>
   </div>
 </template>
 
@@ -116,25 +169,28 @@ import { __ } from "@/translation";
 import { taskStatusMeta } from "@/pages/tasky/taskMeta";
 import { createReusableTemplate } from "@vueuse/core";
 import { dayjs } from "frappe-ui";
-import { computed } from "vue";
+import { computed, useId } from "vue";
 import LucideCheck from "~icons/lucide/check";
+import LucideClipboardList from "~icons/lucide/clipboard-list";
+import LucideLoaderCircle from "~icons/lucide/loader-circle";
 import LucidePlus from "~icons/lucide/plus";
-import type { RolePerson, TeamRole } from "../constants";
+import LucideUserPen from "~icons/lucide/user-pen";
+import { ROLE_TONES, type RolePerson, type TeamRole } from "../constants";
+import { STEPS, type TaskStep } from "../contentTasks";
 
 const props = defineProps<{
   label: string;
   people: RolePerson[];
   canEdit: boolean;
   role?: TeamRole;
+  /** The post, as "customer · copy", so each role's buttons say whose task they open. */
+  context?: string;
+  /** The viewer's one next step on their own task here (Start, Pause or Complete). */
+  step?: TaskStep | null;
+  /** That step is running. */
+  busy?: boolean;
 }>();
 
-// full class strings so Tailwind's scanner keeps them; each role keeps its colour across cards
-const ROLE_TONES: Record<TeamRole, string> = {
-  writer: "bg-brand-soft text-brand-ink",
-  designer: "bg-info-soft text-info",
-  marketer: "bg-success-soft text-success",
-  video_editor: "bg-warning-soft text-warning",
-};
 const avatarTone = computed(() =>
   props.role ? ROLE_TONES[props.role] : "bg-surface-gray-2 text-ink-gray-7"
 );
@@ -142,7 +198,30 @@ const avatarTone = computed(() =>
 function initialOf(name: string) {
   return (name || "?").trim().charAt(0).toUpperCase();
 }
-const emit = defineEmits<{ (e: "assign"): void }>();
+const emit = defineEmits<{
+  (e: "assign"): void;
+  (e: "open-task", task: string): void;
+  (e: "step", step: TaskStep): void;
+}>();
+
+const stepMeta = computed(() => (props.step ? STEPS[props.step] : null));
+const stepLabel = computed(() =>
+  stepMeta.value
+    ? `${__(stepMeta.value.label)}: ${changeTarget.value}`
+    : undefined
+);
+
+// everyone on a role shares its one task
+const task = computed(() => props.people.find((p) => p.task)?.task);
+const peopleId = useId();
+const changeTarget = computed(() =>
+  props.context ? `${__(props.label)} · ${props.context}` : __(props.label)
+);
+const openLabel = computed(() =>
+  props.context
+    ? __("Open {0} task for {1}", __(props.label), props.context)
+    : __("Open {0} task", __(props.label))
+);
 
 const [DefinePeople, ReusePeople] = createReusableTemplate();
 

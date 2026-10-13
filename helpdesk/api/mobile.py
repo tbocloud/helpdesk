@@ -33,11 +33,12 @@ from frappe.utils import (
 from helpdesk import competition, follow_ups, task_activity
 from helpdesk import team_dashboard as td
 from helpdesk import team_insights
-from helpdesk.api import home, project_files
+from helpdesk.api import content_tasks, home, in_progress, project_files
 from helpdesk.api.content_board import user_full_names
 from helpdesk.api.doc import remove_assignments
 from helpdesk.api.follow_ups import check_admin
-from helpdesk.api.team_dashboard import check_period, get_team_dashboard
+from helpdesk.api.repeat_issues import get_repeat_issues as repeat_issues_view
+from helpdesk.api.team_dashboard import anchor_day, check_period, get_team_dashboard
 from helpdesk.api.ticket import assign_ticket_to_agent
 from helpdesk.api.work import (
     ON_HOLD,
@@ -430,13 +431,25 @@ def request_help(
 
 @frappe.whitelist(methods=["POST"])
 @agent_only
-def review_task(task: str, approve: bool, note: str = "") -> dict:
-    """Sign off a task waiting for review, or send it back with what still needs doing."""
+def review_task(
+    task: str, approve: bool, note: str = "", rating: str | None = None
+) -> dict:
+    """Sign off a task waiting for review, optionally with its quality rating, or
+    send it back with what still needs doing."""
     frappe.has_permission("Task", "read", str(task), throw=True)
     if approve:
-        tasky.approve_task(task)
+        tasky.approve_task(task, rating or None)
     else:
         tasky.send_back_task(task, note)
+    return _one(_task_detail(task))
+
+
+@frappe.whitelist(methods=["POST"])
+@agent_only
+def rate_task(task: str, rating: str | None = None) -> dict:
+    """Rate a completed task Needs rework, Good or Excellent (none clears it). For
+    whoever assigned or reviews it and its department's heads, never its doers."""
+    tasky.rate_task(task, rating or None)
     return _one(_task_detail(task))
 
 
@@ -557,6 +570,8 @@ def _task_detail(task: str) -> dict:
         "description": detail.description or "",
         "activity": [_activity_item(item, i) for i, item in enumerate(activity)],
         "pull_requests": detail.pull_requests or [],
+        # its weight and quality on the Scoreboard, and whether the user may rate it
+        "quality": detail.quality,
     }
 
 
@@ -711,6 +726,7 @@ def get_my_stats(period: str = "week") -> dict:
                 "end": str(end),
                 "label": td.period_label(period, start, end),
                 "done": stats["tasks"],
+                "weighted_work": round(stats["weight"], 1),
                 "on_time": stats["on_time"],
                 "dated": stats["dated"],
                 "on_time_pct": td.pct(stats["on_time"], stats["dated"]),
@@ -1388,6 +1404,56 @@ def get_team_member(
 
 @frappe.whitelist()
 @agent_only
+def get_in_progress(
+    group_by: str = "project",
+    department: str | None = None,
+    customer: str | None = None,
+    person: str | None = None,
+    only_overdue: bool | int | str = False,
+    hide_on_hold: bool | int | str = False,
+) -> dict:
+    """Everything started, in lanes, as the web's In progress page shows it
+    (helpdesk.api.in_progress): the people who run projects see their projects'
+    tasks, everyone else their own; content posts only for the content team."""
+    return _one(
+        in_progress.get_in_progress(
+            group_by=group_by,
+            department=department,
+            customer=customer,
+            person=person,
+            only_overdue=only_overdue,
+            hide_on_hold=hide_on_hold,
+        )
+    )
+
+
+@frappe.whitelist()
+@agent_only
+def get_content_tasks(
+    start: str,
+    end: str,
+    customer: str | None = None,
+    channel: str | None = None,
+    status: str | None = None,
+    person: str | None = None,
+) -> dict:
+    """The content calendar's Tasks view for posts going live between two dates
+    (helpdesk.api.content_tasks): content writers, designers and marketers get their
+    own tasks, the content leads every content task; outside the content team, 403."""
+    return _one(
+        content_tasks.get_content_tasks(
+            start=start,
+            end=end,
+            customer=customer,
+            channel=channel,
+            status=status,
+            person=person,
+        )
+    )
+
+
+@frappe.whitelist()
+@agent_only
 def get_escalations(cursor: int | str | None = None, limit: int | str = 20) -> dict:
     """Work escalated to L2 or above (helpdesk.follow_ups), for System and Agent
     Managers, like Overview → Follow-ups."""
@@ -1572,10 +1638,18 @@ def get_sla_summary() -> dict:
 
 @frappe.whitelist()
 @agent_only
-def get_scoreboard(period: str = "week", department: str | None = None) -> dict:
+def get_scoreboard(
+    period: str = "week",
+    department: str | None = None,
+    group: str | None = None,
+    day: str | None = None,
+) -> dict:
     """The Scoreboard (helpdesk.api.team_dashboard), which every agent sees: the
-    champion, the user's own line, the leaders and the departments."""
-    board = get_team_dashboard(period, department)
+    champion, the user's own line, the leaders and the departments with their
+    groups, for the whole team, a department or a department group. `day` picks a
+    past period (e.g. any day of last month); a closed period shows the champions
+    stored when it closed."""
+    board = get_team_dashboard(period, department, group, day)
     user = frappe.session.user
     people = board["people"]
     mine = next((p for p in people if p["user"] == user), None)
@@ -1585,7 +1659,13 @@ def get_scoreboard(period: str = "week", department: str | None = None) -> dict:
             "period": period,
             "period_label": td.period_label(period, start, end),
             "range": {"start": start, "end": end},
+            "department": board["department"],
+            "group": board["group"],
+            "groups": board["access"]["groups"],
+            "closed": board["period"]["closed"],
             "champion": board["champion"],
+            "previous_champion": board["previous_champion"],
+            "months": board["months"],
             "me": (
                 {**_score_line(mine), "of": len(people), "breakdown": mine["breakdown"]}
                 if mine
@@ -1595,8 +1675,11 @@ def get_scoreboard(period: str = "week", department: str | None = None) -> dict:
             "departments": [
                 {
                     "department": d["department"],
+                    "kind": d["kind"],
+                    "parent": d["parent"],
                     "people": d["people"],
                     "done": d["tasks"],
+                    "weighted_work": d["weight"],
                     "on_time_pct": d["on_time_pct"],
                     "overdue": d["overdue"],
                     "hours": d["hours"],
@@ -1617,6 +1700,7 @@ def _score_line(p: dict) -> dict:
         "rank": p["rank"],
         "score": p["score"],
         "tasks_done": p["tasks"],
+        "weighted_work": p["weight"],
         "key_tasks": p["key"],
         "on_time_pct": p["on_time_pct"],
         "hours": p["hours"],
@@ -1626,16 +1710,21 @@ def _score_line(p: dict) -> dict:
 
 @frappe.whitelist()
 @agent_only
-def get_competition(period: str = "week", limit: int | str = 10) -> dict:
+def get_competition(
+    period: str = "week", limit: int | str = 10, day: str | None = None
+) -> dict:
     """The Compete screen (helpdesk.competition): the user's rank and its change, the
     whole team's and each department's leaders, streaks, personal bests, badges, the
-    weekly challenge and how to move up. The boards are public, as on the web."""
+    weekly challenge and how to move up. The boards are public, as on the web.
+    `day` picks a past period's boards (e.g. any day of last month)."""
     check_period(period)
     limit = min(max(cint(limit) or 10, 1), MAX_BOARD_LIMIT)
+    today = getdate(nowdate())
+    anchor = anchor_day(day, today)
     tasks = _task_rows([i for i in get_my_work()["items"] if i["kind"] == "task"])
     return _one(
         competition.competition(
-            frappe.session.user, period, limit, getdate(nowdate()), tasks
+            frappe.session.user, period, limit, today, tasks, day=anchor
         )
     )
 
@@ -1652,3 +1741,13 @@ def get_insights(period: str = "week", department: str | None = None) -> dict:
             frappe.session.user, period, department or None, getdate(nowdate())
         )
     )
+
+
+@frappe.whitelist()
+@agent_only
+def get_repeat_issues(period: str = "week", department: str | None = None) -> dict:
+    """The Scoreboard's repeat issues (helpdesk.repeat_issues), as on the web: the
+    same issues tickets and tasks keep raising per customer, read-only. Every agent,
+    past the DM/ERP walls like the Scoreboard; `access` says which web actions the
+    user could take."""
+    return _one(repeat_issues_view(period, department or None))

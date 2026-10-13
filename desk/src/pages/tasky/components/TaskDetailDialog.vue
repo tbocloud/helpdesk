@@ -79,7 +79,10 @@
         <dl class="grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
           <div v-for="row in detailRows" :key="row.label">
             <dt class="text-xs text-ink-gray-5">{{ row.label }}</dt>
-            <dd class="mt-1 flex items-center gap-1.5 text-ink-gray-8">
+            <dd
+              class="mt-1 flex items-center gap-1.5 text-ink-gray-8"
+              :class="row.numeric ? 'tabular-nums' : ''"
+            >
               <component
                 :is="row.icon"
                 v-if="row.icon"
@@ -90,6 +93,14 @@
             </dd>
           </div>
         </dl>
+        <TaskQuality
+          v-if="detail.quality"
+          v-model:pending="pendingRating"
+          :task="detail.name"
+          :quality="detail.quality"
+          :reviewing="isPendingReview(detail)"
+          @rated="changed"
+        />
         <div>
           <div class="mb-1 flex items-center gap-2 text-xs text-ink-gray-5">
             {{ __("Description") }}
@@ -162,6 +173,7 @@ import { __ } from "@/translation";
 import { errorText, sanitizeRichText } from "@/utils";
 import { Dialog, createResource, dayjs, toast } from "frappe-ui";
 import { computed, ref, watch, type Ref } from "vue";
+import { useIntervalFn } from "@vueuse/core";
 import { useRouter } from "vue-router";
 import LucideArrowRight from "~icons/lucide/arrow-right";
 import LucideCalendarClock from "~icons/lucide/calendar-clock";
@@ -174,11 +186,13 @@ import LucidePause from "~icons/lucide/pause";
 import LucidePencil from "~icons/lucide/pencil";
 import LucidePlay from "~icons/lucide/play";
 import LucideRepeat from "~icons/lucide/repeat";
+import LucideTimer from "~icons/lucide/timer";
 import LucideUndo2 from "~icons/lucide/undo-2";
 import LucideUserPlus from "~icons/lucide/user-plus";
 import type { TaskPullRequest } from "../pullRequestMeta";
 import {
   assignedByName,
+  formatElapsed,
   holdByLabel,
   holdDays,
   holdDurationLabel,
@@ -187,6 +201,7 @@ import {
   isPendingReview,
   priorityIcon,
   taskStatusMeta,
+  taskTimer,
   waitingOnLabel,
 } from "../taskMeta";
 import { useApproveTask } from "../useApproveTask";
@@ -205,6 +220,7 @@ import EscalationBadge from "@/components/EscalationBadge.vue";
 import TaskActivity from "./TaskActivity.vue";
 import TaskPlanDialog from "./TaskPlanDialog.vue";
 import TaskPullRequests from "./TaskPullRequests.vue";
+import TaskQuality, { type TaskQualityInfo } from "./TaskQuality.vue";
 
 /** What the opener knows about the task; the dialog loads the rest. */
 export interface TaskRef {
@@ -250,6 +266,7 @@ interface TaskDetail {
   can_move?: boolean;
   custom_recurring_task?: string | null;
   content_post?: string | null;
+  quality?: TaskQualityInfo;
 }
 
 const props = withDefaults(
@@ -322,9 +339,12 @@ const canCoordinate = computed(
   () => projectLoaded.value && !!projectAccess.data?.can_coordinate
 );
 
+// a rating picked for Approve belongs to one task
+const pendingRating = ref("");
 watch(
   () => props.task?.name,
   (name) => {
+    pendingRating.value = "";
     if (name) taskDetail.submit({ task: name });
   },
   { immediate: true }
@@ -355,6 +375,30 @@ function close() {
 function statusMeta(status: string) {
   const meta = taskStatusMeta(status);
   return { label: __(meta.label), icon: meta.icon };
+}
+
+// a running timer ticks while the dialog shows it, and stops when it closes
+const now = ref(dayjs());
+const ticker = useIntervalFn(() => (now.value = dayjs()), 1000, {
+  immediate: false,
+});
+watch(
+  () =>
+    dialogOpen.value && !!detail.value && !!taskTimer(detail.value)?.running,
+  (running) => {
+    now.value = dayjs();
+    if (running) ticker.resume();
+    else ticker.pause();
+  },
+  { immediate: true }
+);
+
+function timerLabel(d: TaskDetail) {
+  const timer = taskTimer(d, now.value);
+  if (!timer) return "—";
+  return `${formatElapsed(timer.elapsed)} · ${
+    timer.running ? __("running") : __("paused")
+  }`;
 }
 
 const detailRows = computed(() => {
@@ -389,6 +433,12 @@ const detailRows = computed(() => {
       label: __("Estimate"),
       value: d.estimated_hours ? __("{0} hrs", String(d.estimated_hours)) : "—",
     },
+    {
+      label: __("Timer"),
+      value: timerLabel(d),
+      icon: LucideTimer,
+      numeric: true,
+    },
   ];
 });
 
@@ -403,10 +453,14 @@ const handingOverTask = ref<TaskDetail | null>(null);
 const movingTask = ref<TaskDetail | null>(null);
 const recurringFrom = ref<TaskDetail | null>(null);
 
-const { approve } = useApproveTask(() => {
-  close();
-  changed();
-});
+// the rating sits next to Approve here, so the toast doesn't offer it again
+const { approve } = useApproveTask(
+  () => {
+    close();
+    changed();
+  },
+  { offerRating: false }
+);
 
 const dialogActions = computed(() => {
   const d = detail.value;
@@ -433,7 +487,7 @@ const dialogActions = computed(() => {
           label: __("Approve"),
           iconLeft: LucideCheckCheck,
           variant: "subtle",
-          onClick: () => approve(d),
+          onClick: () => approve(d, pendingRating.value),
         }
       );
     }

@@ -16,6 +16,7 @@ from helpdesk.tasky.permissions import (
     can_coordinate_project,
     can_manage_project,
     can_move_task,
+    can_rate_task,
     check_can_take_content_task,
     get_assigners,
     is_assigner,
@@ -701,6 +702,7 @@ def get_task_detail(task: str):
     return {
         **add_assigners([_format_task(_task_dict(doc))])[0],
         "pull_requests": get_pull_requests([doc.name]).get(doc.name, []),
+        "quality": task_quality_info(doc),
     }
 
 
@@ -1268,15 +1270,70 @@ def _reassign(
 
 
 @frappe.whitelist()
-def approve_task(task: str) -> dict:
-    """The lead, a manager or a coordinator signs off a reviewed task."""
+def approve_task(task: str, rating: str | None = None) -> dict:
+    """The lead, a manager or a coordinator signs off a reviewed task, optionally
+    with its quality rating (Needs rework, Good, Excellent). `quality` in the
+    answer says whether the approver may still rate it, so a one-click Approve
+    can offer the rating afterwards."""
     doc = _get_managed_task(task)
     if doc.status != "Pending Review":
         frappe.throw(_("Only tasks waiting for review can be approved."))
     doc.status = "Completed"
+    if rating:
+        _check_can_rate(doc)
+        doc.set_quality_rating(rating)
     doc.save()
     doc.add_comment("Info", _("Approved."))
-    return _format_task(_task_dict(doc))
+    return {**_format_task(_task_dict(doc)), "quality": task_quality_info(doc)}
+
+
+@frappe.whitelist(methods=["POST"])
+def rate_task(task: str, rating: str | None = None) -> dict:
+    """Give a completed task its quality rating (Needs rework, Good, Excellent),
+    or clear it with no `rating`. Optional and never needed to close a task. For
+    whoever assigned it, the project's managers, lead and coordinators, its
+    department's heads and admins; never the people who did it."""
+    from helpdesk.team_dashboard import clear_cache
+
+    doc = frappe.get_doc("Task", str(task))
+    _check_can_rate(doc)
+    if doc.status != "Completed":
+        frappe.throw(_("Rate a task once it's completed."))
+    doc.set_quality_rating(rating)
+    # can_rate_task is the permission decision: a department head may rate a
+    # task they couldn't edit
+    doc.flags.ignore_permissions = True
+    doc.save()
+    clear_cache()
+    return task_quality_info(doc)
+
+
+def _check_can_rate(doc):
+    if not can_rate_task(doc):
+        frappe.throw(
+            _(
+                "Only whoever assigned or reviews this task, or its department's head, can rate it. Nobody rates their own work."
+            ),
+            frappe.PermissionError,
+        )
+
+
+def task_quality_info(doc) -> dict:
+    """The task's weight and quality on the Scoreboard with their reasons, its
+    rating and whether the viewer may rate it."""
+    from helpdesk.team_dashboard import task_score
+
+    return {
+        **task_score(doc.name),
+        "rating": doc.get("quality_rating") or None,
+        "rated_by": doc.get("rated_by"),
+        "rated_by_name": frappe.utils.get_fullname(doc.rated_by)
+        if doc.get("rated_by")
+        else None,
+        "rated_on": doc.get("rated_on"),
+        "can_rate": doc.status in ("Completed", PENDING_REVIEW_STATUS)
+        and can_rate_task(doc),
+    }
 
 
 @frappe.whitelist()
@@ -2083,6 +2140,7 @@ def start_timer(task: str):
         frappe.throw(_("Start the task first; its timer runs while it's in progress."))
     if not running:
         frappe.db.set_value("Task", task_id, "custom_timer_start", frappe.utils.now())
+        notify_task_list(task_id)
     return {"ok": 1}
 
 
@@ -2104,6 +2162,7 @@ def stop_timer(task: str):
     frappe.db.set_value(
         "Task", task_id, "custom_timer_elapsed", paused + round(elapsed, 2)
     )
+    notify_task_list(task_id)
     return {"elapsed": round(elapsed, 2)}
 
 
@@ -2163,6 +2222,26 @@ def get_timer(task: str):
         "elapsed": round(elapsed, 2),
         "timer_start": str(doc.custom_timer_start),
     }
+
+
+def notify_task_list(task: str):
+    """Frappe's `list_update` for a Task changed without a save (its timer, its
+    assignment), as a save sends it: open In progress and Overview pages reload.
+    Sent once per request after the commit, and the pages debounce it."""
+    frappe.publish_realtime(
+        "list_update",
+        {"doctype": "Task", "name": task, "user": frappe.session.user},
+        # the doctype's room: only sockets allowed to read Task joined it
+        doctype="Task",
+        after_commit=True,
+    )
+
+
+def notify_task_assignment(doc, method=None):
+    """ToDo hook: an assignment given, handed over or removed changes the task's
+    `_assign` without saving the task."""
+    if doc.reference_type == "Task" and doc.reference_name:
+        notify_task_list(doc.reference_name)
 
 
 def _timer_hours(timer_start) -> float:

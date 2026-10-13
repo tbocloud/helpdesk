@@ -150,6 +150,6 @@ export function replayMarkerColors(): Record<string, string> {
   return {
     "frappe-call-error": token("--danger", "#bf3328"),
     "frappe-msgprint": token("--warning", "#955700"),
-    "raise-ticket": token("--brand", "#4f46e5"),
+    "raise-ticket": token("--brand", "#3a748d"),
   };
 }

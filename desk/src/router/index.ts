@@ -230,6 +230,12 @@ const portalRoutes = [
     name: "MyWork",
     component: () => import("@/pages/work/MyWork.vue"),
   },
+  // everyone may open it: the server gives members their own work only
+  {
+    path: "/in-progress",
+    name: "InProgress",
+    component: () => import("@/pages/work/InProgress.vue"),
+  },
   {
     path: "/overview",
     name: "WorkOverview",

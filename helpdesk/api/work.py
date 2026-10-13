@@ -415,25 +415,15 @@ def get_overview(
     today = getdate(nowdate())
     soon = add_days(today, DUE_SOON_DAYS)
 
-    task_filters = {"status": OPEN_TASK_FILTER}
+    task_filters = scoped_task_filters(
+        OPEN_TASK_FILTER, project, customer, assignee, department
+    )
     ticket_filters = {"status_category": ("in", ["Open", "Paused"])}
-    if project:
-        task_filters["project"] = project
     if customer:
         ticket_filters["customer"] = customer
-        task_filters["project"] = (
-            "in",
-            frappe.get_all("Project", filters={"customer": customer}, pluck="name")
-            or [""],
-        )
     if assignee:
-        task_filters["name"] = assigned_to_filter("Task", assignee)
         ticket_filters["name"] = assigned_to_filter(
             "HD Ticket", assignee, finished=False
-        )
-    if department:
-        task_filters["project"] = _in_department(
-            task_filters.get("project"), department
         )
 
     tasks = frappe.get_list(
@@ -520,6 +510,32 @@ def _open_project_count(task_filters: dict, by_assignee: bool) -> int:
         filters["name"] = task_filters["project"]
     rows = frappe.get_list("Project", filters=filters, fields=["count(name) as count"])
     return rows[0].count if rows else 0
+
+
+def scoped_task_filters(
+    status,
+    project: str | None = None,
+    customer: str | None = None,
+    assignee: str | None = None,
+    department: str | None = None,
+) -> dict:
+    """Task filters for the cross-project pages (Overview, In progress): a status
+    filter narrowed to a project, a customer's projects, one person's tasks and a
+    department's projects. A customer replaces the project, as the Overview always did."""
+    filters = {"status": status}
+    if project:
+        filters["project"] = project
+    if customer:
+        filters["project"] = (
+            "in",
+            frappe.get_all("Project", filters={"customer": customer}, pluck="name")
+            or [""],
+        )
+    if assignee:
+        filters["name"] = assigned_to_filter("Task", assignee)
+    if department:
+        filters["project"] = _in_department(filters.get("project"), department)
+    return filters
 
 
 def _in_department(project_filter, department: str) -> tuple:

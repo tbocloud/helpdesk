@@ -10,6 +10,7 @@
 		"sort_order",
 		"column_break_1",
 		"is_active",
+		"parent_department",
 		"heads",
 		"description_section",
 		"description"
@@ -44,6 +45,14 @@
 			"description": "Inactive departments can't be picked for projects; projects already in one keep it."
 		},
 		{
+			"fieldname": "parent_department",
+			"fieldtype": "Link",
+			"label": "Part Of",
+			"options": "HD Department",
+			"in_list_view": 1,
+			"description": "Leave empty for a main department. The Scoreboard adds a main department's sub-departments up into its group."
+		},
+		{
 			"fieldname": "heads",
 			"fieldtype": "Table MultiSelect",
 			"label": "Heads",
@@ -62,7 +71,7 @@
 	],
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-10-10 10:00:00.000000",
+	"modified": "2026-10-12 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Department",

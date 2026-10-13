@@ -23,10 +23,23 @@
         <p class="text-p-sm text-ink-gray-6">
           {{
             __(
-              "Who finished what, on time, and who is champion. Scores come from work delivered by its due date; hours count only a little."
+              "Who finished what, on time, and who is champion. Each task counts by its weight and how well it was done, by its due date; hours count only a little."
             )
           }}
+          <button
+            v-if="data"
+            type="button"
+            class="rounded text-ink-gray-8 underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+            @click="showRules = true"
+          >
+            {{ __("How weight works") }}
+          </button>
         </p>
+        <ScoreRulesDialog
+          v-if="data"
+          v-model:open="showRules"
+          :rules="data.rules"
+        />
 
         <!-- period and department: everything below follows them -->
         <div
@@ -53,6 +66,57 @@
             type="select"
             :aria-label="__('Department')"
             :options="departmentOptions"
+          />
+        </div>
+        <!-- which period: step back and forth, or pick a month; every month starts fresh on the 1st -->
+        <div
+          v-if="data"
+          class="mt-3 flex flex-wrap items-center gap-x-2 gap-y-2"
+          role="group"
+          :aria-label="__('Choose the period')"
+        >
+          <div class="flex min-w-0 items-center gap-1">
+            <Button
+              variant="ghost"
+              :aria-label="__('Previous')"
+              :tooltip="__('Previous')"
+              @click="step(-1)"
+            >
+              <template #icon>
+                <LucideChevronLeft class="size-4" aria-hidden="true" />
+              </template>
+            </Button>
+            <h2
+              class="min-w-0 truncate px-1 text-base-medium tabular-nums text-ink-gray-9"
+              aria-live="polite"
+            >
+              {{ periodName }}
+            </h2>
+            <Button
+              variant="ghost"
+              :aria-label="__('Next')"
+              :tooltip="__('Next')"
+              :disabled="data.period.current"
+              @click="step(1)"
+            >
+              <template #icon>
+                <LucideChevronRight class="size-4" aria-hidden="true" />
+              </template>
+            </Button>
+          </div>
+          <Button
+            v-if="!data.period.current"
+            variant="subtle"
+            :label="__('Back to {0}', periodMeta.current)"
+            @click="day = ''"
+          />
+          <FormControl
+            v-if="MONTH_PERIODS.includes(period)"
+            v-model="pickedMonth"
+            class="w-full sm:ms-auto sm:w-48"
+            type="select"
+            :aria-label="__('Month')"
+            :options="monthOptions(data.period.earliest, today)"
           />
         </div>
         <p v-if="data" class="mt-2 text-p-sm tabular-nums text-ink-gray-5">
@@ -98,12 +162,53 @@
           <div
             class="mt-5 grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]"
           >
-            <ChampionCard
-              :title="championTitle"
-              :period="periodMeta.label"
-              :champion="data?.champion ?? null"
-              :loading="!data"
-            />
+            <div class="flex min-w-0 flex-col gap-3">
+              <ChampionCard
+                :title="championTitle"
+                :period="periodName"
+                :champion="data?.champion ?? null"
+                :closed="data?.period.closed"
+                :loading="!data"
+              />
+              <!-- the period before's champion, as kept when it closed -->
+              <NativeButton
+                v-if="data?.previous_champion"
+                type="button"
+                class="flex min-w-0 items-center gap-3 rounded-xl border border-outline-gray-2 bg-surface-base px-4 py-3 text-left transition-colors hover:border-outline-gray-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+                :aria-label="
+                  __(
+                    'Show {0}: champion {1}, score {2}',
+                    previousName,
+                    data.previous_champion.name,
+                    String(data.previous_champion.score)
+                  )
+                "
+                @click="showPrevious"
+              >
+                <LucideTrophy
+                  class="size-4 shrink-0 text-ink-gray-5"
+                  aria-hidden="true"
+                />
+                <span class="flex min-w-0 flex-1 flex-col">
+                  <span class="truncate text-sm text-ink-gray-8">
+                    <span class="text-ink-gray-6">{{ previousName }}:</span>
+                    {{ data.previous_champion.name }}
+                    <span class="font-mono tabular-nums text-ink-gray-6">
+                      · {{ data.previous_champion.score }}
+                    </span>
+                  </span>
+                  <span
+                    v-if="data.previous_champion.reasons.length"
+                    class="truncate text-xs text-ink-gray-5"
+                    >{{ data.previous_champion.reasons[0] }}</span
+                  >
+                </span>
+                <LucideChevronRight
+                  class="size-4 shrink-0 text-ink-gray-4"
+                  aria-hidden="true"
+                />
+              </NativeButton>
+            </div>
             <div
               class="grid grid-cols-2 gap-3"
               :class="showPosts ? 'xl:grid-cols-3' : ''"
@@ -114,6 +219,7 @@
                 :icon="LucideCircleCheck"
                 icon-tone="success"
                 :loading="!data"
+                :sub="__('{0} weighted work', weightText(data?.summary.weight))"
                 v-bind="change('tasks')"
               />
               <StatTile
@@ -125,6 +231,7 @@
                 v-bind="change('on_time_pct', ' pts')"
               />
               <StatTile
+                v-if="!data?.period.closed"
                 :label="__('Overdue now')"
                 :value="data?.summary.overdue ?? 0"
                 :icon="LucideAlarmClock"
@@ -158,14 +265,24 @@
           >
             <!-- the list: departments, people or projects -->
             <div class="flex min-w-0 flex-col gap-4">
-              <TabButtons
-                v-model="view"
-                class="self-start"
-                size="md"
-                :aria-label="__('Show')"
-                :options="VIEWS.map((v) => ({ label: v.label, value: v.key }))"
-              />
+              <div
+                class="-mx-1 max-w-full self-start overflow-x-auto px-1 pb-1"
+              >
+                <TabButtons
+                  v-model="view"
+                  size="md"
+                  :aria-label="__('Show')"
+                  :options="
+                    VIEWS.map((v) => ({ label: v.label, value: v.key }))
+                  "
+                />
+              </div>
 
+              <TeamYearMonths
+                v-if="data?.months"
+                :months="data.months"
+                @open="openMonth"
+              />
               <div
                 v-if="!data"
                 class="h-64 animate-pulse rounded-lg bg-surface-gray-2"
@@ -173,7 +290,9 @@
               <TeamDepartmentList
                 v-else-if="view === 'departments'"
                 :departments="data.departments"
+                :groups="data.access.groups"
                 @open="openDepartment"
+                @open-group="openGroup"
               />
               <TeamPeopleList
                 v-else-if="view === 'people'"
@@ -182,9 +301,16 @@
                 @toggle="person = $event"
               />
               <TeamProjectList
-                v-else
+                v-else-if="view === 'projects'"
                 :projects="data.projects"
                 :highlight="project"
+              />
+              <TeamRepeatIssues
+                v-else
+                :period="period"
+                :department="scope.department"
+                :group="scope.group"
+                :day="day"
               />
             </div>
 
@@ -195,6 +321,7 @@
                 :analysis="data.analysis"
                 :period="period"
                 :department="data.department"
+                :group="data.group"
                 :can-refresh="data.access.can_refresh"
               />
               <SectionCard v-if="data?.trend" :title="__('Tasks finished')">
@@ -265,6 +392,7 @@ import {
   Avatar,
   Button,
   createResource,
+  dayjs,
   FormControl,
   TabButtons,
 } from "frappe-ui";
@@ -278,18 +406,29 @@ import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideClock from "~icons/lucide/clock";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import ChampionCard from "./components/ChampionCard.vue";
+import ScoreRulesDialog from "./components/ScoreRulesDialog.vue";
 import TeamAnalysis from "./components/TeamAnalysis.vue";
 import TeamDepartmentList from "./components/TeamDepartmentList.vue";
 import TeamPeopleList from "./components/TeamPeopleList.vue";
 import TeamProjectList from "./components/TeamProjectList.vue";
+import TeamRepeatIssues from "./components/TeamRepeatIssues.vue";
 import TeamTrendChart from "./components/TeamTrendChart.vue";
+import TeamYearMonths from "./components/TeamYearMonths.vue";
+import NativeButton from "@/components/NativeButton";
+import LucideChevronLeft from "~icons/lucide/chevron-left";
+import LucideChevronRight from "~icons/lucide/chevron-right";
+import LucideTrophy from "~icons/lucide/trophy";
 import {
   delta,
+  GROUP_PREFIX,
   historyLabel,
   hoursText,
+  monthOptions,
+  periodTitle,
   PERIODS,
   rangeText,
   VIEWS,
+  weightText,
   type Dashboard,
   type PeriodKey,
   type ViewKey,
@@ -305,7 +444,21 @@ const period = ref<PeriodKey>(
     ? (query("period") as PeriodKey)
     : "week"
 );
-const department = ref(query("department"));
+// one filter for both: a department's name, or GROUP_PREFIX and a group's name
+const department = ref(
+  query("group") ? GROUP_PREFIX + query("group") : query("department")
+);
+const scope = computed(() =>
+  department.value.startsWith(GROUP_PREFIX)
+    ? { department: "", group: department.value.slice(GROUP_PREFIX.length) }
+    : { department: department.value, group: "" }
+);
+const showRules = ref(false);
+// a past day whose period the page shows; empty for the period in progress
+const day = ref(/^\d{4}-\d{2}-\d{2}$/.test(query("day")) ? query("day") : "");
+const today = dayjs().format("YYYY-MM-DD");
+// the periods the month picker applies to: they live inside a month
+const MONTH_PERIODS: string[] = ["today", "week", "month"];
 const view = ref<ViewKey>(
   VIEWS.some((v) => v.key === query("view"))
     ? (query("view") as ViewKey)
@@ -318,7 +471,9 @@ const dashboard = createResource({
   url: "helpdesk.api.team_dashboard.get_team_dashboard",
   makeParams: () => ({
     period: period.value,
-    department: department.value || null,
+    department: scope.value.department || null,
+    group: scope.value.group || null,
+    day: day.value || null,
   }),
   auto: true,
 });
@@ -332,17 +487,26 @@ const departmentOptions = computed(() => {
   if (!access) return [];
   return [
     { label: __("Whole team"), value: "" },
+    ...access.groups.map((g) => ({
+      label: __("{0} group", g.group),
+      value: GROUP_PREFIX + g.group,
+    })),
     ...access.departments.map((d) => ({ label: d, value: d })),
   ];
 });
 
-const championTitle = computed(() => {
-  const scope = data.value?.department;
-  return scope ? __("{0} champion", scope) : __("Champion");
+// "ERP group", "GrowthX" or nothing for the whole team
+const scopeName = computed(() => {
+  const d = data.value;
+  if (d?.group) return __("{0} group", d.group);
+  return d?.department || "";
 });
+const championTitle = computed(() =>
+  scopeName.value ? __("{0} champion", scopeName.value) : __("Champion")
+);
 const historyNote = computed(() =>
-  data.value?.department
-    ? __("{0}, kept when each period ends.", data.value.department)
+  scopeName.value
+    ? __("{0}, kept when each period ends.", scopeName.value)
     : __("The whole team, kept when each period ends.")
 );
 
@@ -373,21 +537,78 @@ const postsChange = computed(() => {
   return { sub: __("{0} missed their date", String(s.posts_missed)) };
 });
 
+const periodName = computed(() => {
+  const p = data.value?.period;
+  if (!p) return periodMeta.value.label;
+  return periodTitle(p.key, p.start, p.end, p.current);
+});
+
+/** A day of the period before or after; the period in progress needs no day. */
+function step(direction: -1 | 1) {
+  const p = data.value?.period;
+  if (!p) return;
+  const target =
+    direction < 0
+      ? dayjs(p.start).subtract(1, "day")
+      : dayjs(p.end).add(1, "day");
+  day.value = target.isBefore(dayjs(today), "day")
+    ? target.format("YYYY-MM-DD")
+    : "";
+}
+
+/** The month the page is in; picking one shows its last day's period (today in this month). */
+const pickedMonth = computed({
+  get: () => dayjs(data.value?.period.start).format("YYYY-MM"),
+  set: (month: string) => {
+    const last = dayjs(`${month}-01`).endOf("month");
+    day.value = last.isBefore(dayjs(today), "day")
+      ? last.format("YYYY-MM-DD")
+      : "";
+  },
+});
+
+const previousName = computed(() => {
+  const c = data.value?.previous_champion;
+  const p = data.value?.period;
+  if (!c?.start || !c.end || !p) return "";
+  return periodTitle(p.key, c.start, c.end);
+});
+
+function showPrevious() {
+  const c = data.value?.previous_champion;
+  if (c?.end) day.value = c.end;
+}
+
+function openMonth(month: string) {
+  const last = dayjs(month).endOf("month");
+  period.value = "month";
+  day.value = last.isBefore(dayjs(today), "day")
+    ? last.format("YYYY-MM-DD")
+    : "";
+}
+
 function openDepartment(name: string) {
   department.value = name;
   view.value = "people";
 }
 
-watch([period, department], () => {
+function openGroup(name: string) {
+  department.value = GROUP_PREFIX + name;
+  view.value = "people";
+}
+
+watch([period, department, day], () => {
   person.value = "";
   dashboard.reload();
 });
 
-watch([period, department, view, person, project], () => {
+watch([period, department, day, view, person, project], () => {
   router.replace({
     query: {
       period: period.value,
-      ...(department.value ? { department: department.value } : {}),
+      ...(scope.value.department ? { department: scope.value.department } : {}),
+      ...(scope.value.group ? { group: scope.value.group } : {}),
+      ...(day.value ? { day: day.value } : {}),
       ...(view.value !== "departments" ? { view: view.value } : {}),
       ...(person.value ? { person: person.value } : {}),
       ...(project.value ? { project: project.value } : {}),

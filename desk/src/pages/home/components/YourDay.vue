@@ -210,7 +210,7 @@ const sections = computed<Section[]>(() => {
       key: "in_progress",
       label: __("In progress"),
       icon: LucideTimer,
-      to: myWork("task"),
+      to: { name: "InProgress" },
       ...part("in_progress"),
     },
     {

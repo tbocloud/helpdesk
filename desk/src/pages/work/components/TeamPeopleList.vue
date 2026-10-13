@@ -37,6 +37,7 @@
         <span>{{ __("Person") }}</span>
         <span class="text-right">{{ __("Score") }}</span>
         <span class="text-right">{{ __("Done") }}</span>
+        <span class="text-right">{{ __("Weighted") }}</span>
         <span class="text-right">{{ __("On time") }}</span>
         <span class="text-right">{{ __("Key") }}</span>
         <span class="text-right">{{ __("Overdue") }}</span>
@@ -96,7 +97,13 @@
             <span
               class="flex flex-wrap gap-x-3 gap-y-0.5 pl-9 text-p-sm tabular-nums text-ink-gray-6 lg:hidden"
             >
-              <span>{{ __("{0} done", String(person.tasks)) }}</span>
+              <span>{{
+                __(
+                  "{0} done · {1} weighted",
+                  String(person.tasks),
+                  weightText(person.weight)
+                )
+              }}</span>
               <span>{{ __("{0} on time", pctText(person.on_time_pct)) }}</span>
               <span
                 v-if="person.overdue"
@@ -119,6 +126,19 @@
             </span>
             <span class="hidden text-right font-mono tabular-nums lg:block">
               {{ person.tasks }}
+            </span>
+            <span
+              class="hidden text-right font-mono tabular-nums text-ink-gray-9 lg:block"
+              :title="
+                person.self_made
+                  ? __(
+                      '{0} of the tasks were self-assigned and count half',
+                      String(person.self_made)
+                    )
+                  : undefined
+              "
+            >
+              {{ weightText(person.weight) }}
             </span>
             <span
               class="hidden text-right font-mono tabular-nums lg:block"
@@ -180,13 +200,38 @@
             <p v-else class="text-p-sm text-ink-gray-6">
               {{ __("Nothing finished or overdue in this period yet.") }}
             </p>
+            <!-- in the year: the person's months side by side -->
+            <div v-if="person.months" class="mt-3 max-w-lg">
+              <h3 class="text-xs text-ink-gray-5">
+                {{ __("Month by month") }}
+              </h3>
+              <ol
+                class="mt-1 grid grid-cols-4 gap-1 text-xs sm:grid-cols-6"
+                role="list"
+              >
+                <li
+                  v-for="(entry, i) in person.months"
+                  :key="i"
+                  class="flex flex-col rounded border border-outline-gray-1 bg-surface-base px-2 py-1"
+                  :aria-label="monthLabel(entry, i)"
+                >
+                  <span class="text-ink-gray-5">{{ monthShort(i) }}</span>
+                  <span
+                    class="font-mono tabular-nums"
+                    :class="entry ? 'text-ink-gray-9' : 'text-ink-gray-4'"
+                  >
+                    {{ entry ? entry.score : "—" }}
+                  </span>
+                </li>
+              </ol>
+            </div>
             <p
               v-if="person.score > 0 && !person.eligible"
               class="mt-2 text-p-sm text-ink-gray-6"
             >
               {{
                 __(
-                  "Not enough finished yet this period to be champion; the minimum keeps one lucky task from winning."
+                  "Not enough weighted work finished yet this period to be champion; the minimum keeps one lucky task from winning."
                 )
               }}
             </p>
@@ -203,7 +248,7 @@ import SectionCard from "@/components/SectionCard.vue";
 import TaskyState from "@/components/TaskyState.vue";
 import { onTimeClass, pctText } from "@/pages/performance/performanceMeta";
 import { __ } from "@/translation";
-import { Avatar, FormControl } from "frappe-ui";
+import { Avatar, dayjs, FormControl } from "frappe-ui";
 import { computed, ref } from "vue";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
 import LucideChevronDown from "~icons/lucide/chevron-down";
@@ -211,6 +256,8 @@ import LucideUsers from "~icons/lucide/users";
 import {
   departmentLabel,
   hoursText,
+  weightText,
+  type PersonMonth,
   type PersonRow,
 } from "../teamDashboardMeta";
 import ScoreBreakdown from "./ScoreBreakdown.vue";
@@ -225,6 +272,7 @@ const emit = defineEmits<{ toggle: [user: string] }>();
 const SORTS = [
   { label: __("Best score"), value: "score" },
   { label: __("Most done"), value: "tasks" },
+  { label: __("Most weighted work"), value: "weight" },
   { label: __("Best on time"), value: "on_time" },
   { label: __("Most overdue"), value: "overdue" },
   { label: __("Most hours"), value: "hours" },
@@ -232,14 +280,30 @@ const SORTS = [
 ];
 const sort = ref("score");
 
+function monthShort(index: number) {
+  return dayjs().startOf("year").month(index).format("MMM");
+}
+
+function monthLabel(entry: PersonMonth, index: number) {
+  const month = dayjs().startOf("year").month(index).format("MMMM");
+  if (!entry) return __("{0}: not started", month);
+  return __(
+    "{0}: score {1}, {2} done, {3} weighted",
+    month,
+    String(entry.score),
+    String(entry.tasks),
+    weightText(entry.weight)
+  );
+}
+
 const postsOf = (p: PersonRow) => p.posts_on_time + p.posts_late;
 const showPosts = computed(() =>
   props.people.some((p) => postsOf(p) || p.posts_missed)
 );
 const grid = computed(() =>
   showPosts.value
-    ? "lg:grid-cols-[minmax(0,2.4fr)_repeat(8,minmax(0,0.7fr))]"
-    : "lg:grid-cols-[minmax(0,2.4fr)_repeat(7,minmax(0,0.7fr))]"
+    ? "lg:grid-cols-[minmax(0,2.4fr)_repeat(9,minmax(0,0.7fr))]"
+    : "lg:grid-cols-[minmax(0,2.4fr)_repeat(8,minmax(0,0.7fr))]"
 );
 
 const sorted = computed(() => {
@@ -248,6 +312,7 @@ const sorted = computed(() => {
     // the server's order: score, then on-time rate, tasks and overdue
     score: () => 0,
     tasks: (a, b) => b.tasks - a.tasks,
+    weight: (a, b) => b.weight - a.weight,
     on_time: (a, b) => (b.on_time_pct ?? -1) - (a.on_time_pct ?? -1),
     overdue: (a, b) => b.overdue - a.overdue,
     hours: (a, b) => b.hours - a.hours,

@@ -136,8 +136,9 @@ through the same permissions, so they show up for the ERP team too.
   unique, also the record name via `field:department_name`, renamable), `sort_order` (Int, new
   departments go to the end), `is_active` (Check, default 1), `heads` (Table MultiSelect of
   users, reusing the child doctype **HD Content Alert Recipient**: one `user` link per row),
-  `description`. System Manager and Agent Manager have full access; Agent and Project Manager
-  can read.
+  `description`, `parent_department` (Link → HD Department, "Part Of": the main department
+  whose group this one is in; empty for a main department). System Manager and Agent Manager
+  have full access; Agent and Project Manager can read.
 - **Project.custom_department**: Link → HD Department, defined in
   `helpdesk/setup/install.py` `get_custom_fields()` and applied on install and on every
   migrate. It is a standard filter.
@@ -152,13 +153,14 @@ through the same permissions, so they show up for the ERP team too.
 
 | Method | HTTP | Permission | What it does |
 | --- | --- | --- | --- |
-| `get_departments(include_inactive=False)` | GET | read | Departments in order, each with `project_count`, `heads` (`user`, `full_name`) and `head_roles` |
+| `get_departments(include_inactive=False)` | GET | read | Departments in order, each with `parent_department`, `project_count`, `heads` (`user`, `full_name`) and `head_roles` |
+| `set_department_parent(department, parent=None)` | POST | write | Puts the department in `parent`'s group, or makes it a main department again (no `parent`); one level only |
 | `add_department(department_name, description=None)` | POST | create | Adds one at the end |
 | `rename_department(department, new_name)` | POST | write | `frappe.rename_doc`; projects follow |
 | `move_department(department, direction)` | POST | write | `up`/`down`; locks the rows (`FOR UPDATE`) and renumbers all to 1..n |
 | `set_department_active(department, is_active)` | POST | write | Activates or deactivates |
 | `set_department_heads(department, heads)` | POST | write | Replaces the department's heads (a list of users, duplicates dropped; disabled or unknown accounts refused) |
-| `delete_department(department)` | POST | delete | Turns Frappe's `LinkExistsError` into a clear message |
+| `delete_department(department)` | POST | delete | Refuses a main department with sub-departments; turns Frappe's `LinkExistsError` into a clear message |
 | `get_department_walls(users)` | GET | System / Agent Manager | `{user: [wall roles]}` for Settings → Agents |
 | `set_department_wall(user, role=None)` | POST | System / Agent Manager | Gives the agent DM Employee, ERP Employee or neither |
 | `get_content_team(users)` | GET | System / Agent Manager | Which of `users` are in the content team, for the badge |
@@ -200,6 +202,37 @@ finished tasks of the same category yet, the new categories use `CATEGORY_TYPICA
 (Digital Marketing 2, Social Media 1, Content Writing 1, Graphic Design 1, Video 3, Motion
 Graphics 3, Coordination 1 working days) before the per-project-type default. The AI prompt
 also gives rough durations for designs and videos.
+
+## Department groups
+
+TBO has two main departments: **ERP** (with **GrowthX** and **Internal / R&D** under it) and
+**Digital** (with **Creative**). A department can be **part of** a main department
+(`HD Department.parent_department`); a main department and its sub-departments form a
+**group**, named after the main department.
+
+- **Settings → Departments**: each row says "Part of ERP", "Main department of GrowthX,
+  Internal / R&D" or "Main department". **Set group** (the network button) opens the row as a
+  form: pick the main department, or "No group: a main department", then **Save group**. A
+  main department that has sub-departments stays one (the form says so). System Managers
+  and Agent Managers only.
+- **One level** (`HDDepartment.validate_parent_department`): a department can't be part of
+  itself or of a department that is itself part of another, and a main department with
+  sub-departments can't join a group. A main department with sub-departments can't be
+  deleted until they move out (or it can be deactivated).
+- **Where groups count**: only the Scoreboard ([team-dashboard.md](team-dashboard.md)): the
+  Departments view shows each group with its departments under it, the department filter
+  takes a group, and every closed period stores a champion per group as well as per
+  department. Projects keep exactly one department, and the Projects page, the Overview
+  filter and every other list still go by department.
+- **The walls are unchanged**: `HIDDEN_DEPARTMENTS` still names single departments (ERP,
+  Digital), so putting Creative in the Digital group doesn't hide Creative from ERP
+  Employees, and GrowthX stays visible to DM Employees.
+- **Setting the owner's groups**: `DEFAULT_GROUPS` in `hd_department.py`; `set_default_groups()`
+  puts GrowthX and Internal / R&D under ERP and Creative under Digital, only where a
+  department has no group yet and both exist (a group someone set stays, and a renamed
+  department is left alone). New sites get it on install (`ensure_default_departments`);
+  existing sites from the patch `helpdesk.patches.v16_0_2.set_department_groups`, which runs
+  once on deploy.
 
 ## Department heads
 

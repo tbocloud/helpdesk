@@ -162,6 +162,8 @@ doc_events = {
     "ToDo": {
         # nobody is given a task in a department their team keeps out of
         "validate": "helpdesk.tasky.permissions.check_assignment_department",
+        # In progress and Overview reload when a task changes hands
+        "on_update": "helpdesk.tasky.api.notify_task_assignment",
     },
     "File": {
         "after_insert": "helpdesk.storage.s3.after_insert",
@@ -205,6 +207,8 @@ doc_events = {
         "on_update": [
             "helpdesk.chatwoot_bridge.on_ticket_update",
             "helpdesk.kb_drafts.on_ticket_update",
+            # the customer came back: counts against the tasks made from the ticket
+            "helpdesk.helpdesk.doctype.task.task.count_ticket_comeback",
         ],
     },
     "Communication": {

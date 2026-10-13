@@ -11,16 +11,23 @@ plans, staffs and ships social posts (`HD Content Post`) for customers.
   `helpdesk.api.content_board.get_team_task_status`, occasions from
   `helpdesk.api.content_board.get_occasions`. Every number on the page is worked out in the
   browser from the posts loaded for the period and filters on screen; there is no separate
-  stats call.
+  stats call. The role tasks of the posts on screen come from one call,
+  `helpdesk.api.content_tasks.get_content_tasks`, which feeds the Tasks view, the "Your tasks"
+  strip, the role boxes' Start / Pause / Complete and each card's parts line (see
+  [Tasks view](#tasks-view)).
+- Posts in production (Drafting to Approved, not yet published) also show on the **In
+  progress** page, next to the started tasks of every project, with the part each post waits
+  on and who has it; see [workspace-pages.md](workspace-pages.md#in-progress-in-progress).
 
 ## Filters and navigation
 
 The filter bar (customer, channel, status, person, **My posts**, Clear) applies to every view.
 Cancelled posts are hidden unless the status filter asks for them; the Board and Sheet views
-load them and show them behind their own chip.
+load them and show them behind their own chip. In the Tasks view the person filter keeps the
+tasks assigned to that person, and **My posts** reads **My tasks**.
 
-Board and Sheet have a **Day / Week / Month** period switch, Today, previous/next (← / →, T for
-today) and a date picker. The Calendar view has its own navigation.
+Board, Sheet and Tasks have a **Day / Week / Month** period switch, Today, previous/next (← / →,
+T for today) and a date picker. The Calendar view has its own navigation.
 
 ## Views
 
@@ -29,6 +36,7 @@ today) and a date picker. The Calendar view has its own navigation.
 | **Board** (default) | Stat tiles, a progress bar and a day-grouped list of entry cards for the period. Follows the owner's mockup in the TBO light theme. |
 | **Calendar** | frappe-ui month/week calendar. Drag a post to reschedule it; click an empty cell to add an entry. |
 | **Sheet** | A table of the period's posts. |
+| **Tasks** | The period's role tasks as a work queue by stage, worked in place. See [Tasks view](#tasks-view). |
 
 The chosen view and period are remembered per browser.
 
@@ -62,7 +70,37 @@ left out. Segments with nothing in them are hidden.
 
 The chips below filter the list: All, Missed, Upcoming, Published, Cancelled, each with its
 count; empty ones are hidden unless selected. A red banner offers "Show them" when posts are
-missed.
+missed. **Upcoming** is only posts that aren't published or cancelled and haven't passed their
+time, so it already lists today onward, in date order.
+
+### Opening on today (owner's feedback, 2026-10-12)
+
+The month list starts on the 1st, so on the 12th the team landed on past days and the posts
+for the 15th and 20th sat below the fold. The board now opens on what's next. The rules are
+pure functions in `desk/src/pages/content/dayFocus.ts` (`planDays`, `firstFromToday`); the
+frontend has no test runner, so they were checked with a scratch Node script.
+
+- **Coming up strip** (Week and Month, between the banner and the chips): the next 7 upcoming
+  posts as small cards: date and time ("Today" for today), status pill, client · copy. Pressing
+  one scrolls to its entry, outlines it in `brand` for 2 seconds and focuses its copy button
+  (switching the filter back to All if the entry was filtered out). **View all upcoming** (with
+  the count) turns on the Upcoming chip. Cards are 44px tall and the strip scrolls sideways
+  inside itself on phones.
+- **Earlier this month / week:** with the All chip, past days fold into one row ("Earlier this
+  month · N entries · published or cancelled", **Show** / **Hide**). A past day with a missed
+  post stays listed, because the "needs action" banner points at it. Nothing folds when no day
+  is today or later (a past month, or a month with nothing left), with Missed, Published or
+  Cancelled on, or in Day view.
+- **Today marker:** when today is in the period and has no posts (All or Upcoming), a slim row
+  sits where today would be: "Today: nothing scheduled · Next: Thu 15 Oct" (or "Nothing else
+  this month"), with the orange today ring.
+- **Scroll on open:** once per period, after the posts load, the list scrolls to today, else the
+  marker, else the next day with entries, but only when that is in the lower 40% of the screen
+  or below (`revealIfLow`), so it doesn't jump away from the summary when today is already in
+  view. Reloads after an action don't scroll again.
+- **Sheet:** opens on the first row from today on, by the same rule. It lists every row, so
+  nothing folds.
+- **Calendar:** unaffected; the month grid shows every day at once.
 
 ### Entry cards
 
@@ -82,12 +120,42 @@ screens the day's date column stays pinned at the top of the list while its card
   written yet" / "No description yet" when empty).
 - **Roles** (`RoleBox.vue`): Writer, Designer, Video editor, Digital marketer. Each assigned
   person shows with a role-coloured initial tile, their name and task status (and "late" when
-  the task is past due); an empty role shows a dashed **+ Assign** box in the card's tone.
-  Either opens the assign dialog. People who can't edit content get plain, non-interactive
-  boxes instead: the same names and statuses, and **Not assigned** for an empty role. The filled
-  box is a native `<button>` for editors and a plain `<div>` for everyone else, not
-  `<component :is="'button'">`, which resolves to frappe-ui's global `Button` and clipped the
-  names to its fixed height.
+  the task is past due); an empty role shows a dashed **+ Assign** box in the card's tone,
+  which opens the assign dialog. People who can't edit content see **Not assigned** instead.
+  - **Open the task in place** (owner's feedback, 2026-10-12: "to know what that task is we
+    have to go back into the project"): pressing the people in a filled box opens the role's
+    linked Task (`task` from `get_team_task_status`, already in the payload, so no API change)
+    in the shared task dialog (`TaskDetailDialog.vue`), without leaving the page: subject,
+    status, due date, timer, hold note, description and activity, with the same actions as
+    everywhere else. `mine` is set when the viewer is one of the role's people, so the
+    assignee gets Complete, hold/resume, help and hand-over; the project's manager, lead or
+    coordinator get theirs from the project. **Open project board** in the dialog goes to the
+    full project view. A task change reloads the posts (`changed`). A clipboard icon marks the
+    button, whose accessible name is "Open Designer task for Avera IoT · World Mental Health
+    Day" (the names and statuses stay as its description). Everyone who can see the board can
+    open it; the server decides what the task shows.
+  - **Change who is on it:** editors get a separate small person-pen button (32px, 44px to
+    press), "Change who is on Designer · …", which opens the assign dialog as the whole box
+    used to. A role with people but no task (e.g. the customer has no project yet) shows the
+    people as plain text, plus the Change button for editors.
+  - The buttons are native `<button>`s, not `<component :is="'button'">`, which resolves to
+    frappe-ui's global `Button` and clipped the names to its fixed height.
+  - **The assignee's one step** (owner's request, 2026-10-12): when the viewer is assigned
+    the role's task, the box shows one small primary button, picked by the task's state:
+    **Start** an open task (`move_task` to In progress, which starts the timer), **Pause** a
+    running timer (`stop_timer`), **Complete** a task in progress with its timer paused (the
+    task dialog's Complete step, so hours and review rules apply). Its name says whose
+    ("Pause: Designer · Avera IoT · Global Handwashing Day"); 32px, 44px to press. It comes
+    from the task's `actions` in `get_content_tasks` (`boxStep` in `contentTasks.ts`), so it
+    only shows when the server allows the step. Resuming a paused timer and holding are on
+    the Tasks view's card and in the task dialog; the open-task and Change buttons stay.
+  - Each person's task status shows with its icon as well as its text (`taskStatusMeta`),
+    never colour alone.
+- **Parts line:** under the roles, "3 of 4 parts done · waiting on Writer (Ajmal), due
+  tomorrow" (or "waiting on the client's approval"), from the post's `progress` in
+  `get_content_tasks` (see [Who a post waits on](#who-a-post-waits-on)). A late part reads
+  "2 days late" in red with an alert icon. Hidden on published and cancelled posts and on
+  posts with nobody on them.
 - **Footer:** "Goes live …" (or the published / missed / cancelled line), then **Mark
   published** (primary), **Postpone**, and a cancel icon button, all through
   `EntryActionDialog.vue`. Published posts link to the live post instead.
@@ -102,6 +170,168 @@ same thing:
 | Green (success) | Published |
 | Neutral gray | Cancelled |
 | Blue (info) | Anything else still upcoming |
+
+## Tasks view
+
+Owner's request (2026-10-12): writers, designers, video editors and digital marketers do their
+work as Tasks, but had to leave the calendar for Projects to work them. The **Tasks** view
+(`components/ContentTasks.vue`, cards in `components/ContentTaskCard.vue`, shared logic in
+`contentTasks.ts`) shows the role tasks of the posts going live in the period and filters on
+screen as a work queue, and every step is taken in place.
+
+### Data: `helpdesk.api.content_tasks.get_content_tasks`
+
+`get_content_tasks(start, end, customer?, channel?, status?, person?)`, dates inclusive, at
+most 62 days (a calendar month grid shows six weeks). One call for the Tasks view, the strip,
+the role boxes' step and the cards' parts line; the page loads it for the period on screen (the
+Calendar view's grid range in Calendar view) and doesn't pass `person`, which it applies in
+the browser, so one answer serves every part.
+
+- **Who gets what** (all on the server):
+  - Outside the content team (`in_content_team`, so ERP Employees too, whatever other role
+    they hold) the call is refused with a PermissionError: the calendar is opt-in.
+  - Posts come through `frappe.get_list` on HD Content Post (the calendar's own rule), with the
+    calendar's filters: customer, a platform (`platforms` like the channel) and status;
+    Cancelled posts are left out unless the status asks for them.
+  - Tasks come through `frappe.get_list` on Task (`content_post` in those posts, a
+    `content_role` set, not Cancelled or Template), so [the #94 rule](workspace-pages.md#who-sees-which-tasks)
+    decides: writers, designers and marketers get their own tasks (assigned to them, given out
+    or created by them); the Digital Marketing Head and DM Coordinators get every task of
+    content calendar and Digital projects; a project's managers, lead and coordinators get
+    their project's. `sees_all` is `_is_content_lead` (heads, coordinators, Project Managers,
+    admins) and only words the page. `person` keeps the tasks assigned to that person
+    (`assigned_to_filter`, exact ToDo match).
+  - The newest task per post and part counts, as on the role boxes.
+- **No per-row queries:** posts, teams (`role_teams_of`), every part's task (`role_tasks`),
+  the visible tasks, open dependencies, holders' names, people's names and project names are
+  one query each; whether the viewer runs a task's project (`can_coordinate_project`) is
+  asked once per project.
+- **Answer:** `{sees_all, can_edit, tasks, counts {todo, in_progress, review, on_hold,
+  done}, posts {name: post}, truncated}`. 1,000 posts and 1,000 tasks at most (`truncated`).
+  - A task: `name`, `subject`, `status`, `stage`, `review_label`, `role` (the post's field, or
+    null for the one task shared by the whole post, `role_label` "Whole post"), `role_label`,
+    `post`, `publish_on`, `project`, `project_name`, `assignees`, `assignee_names`, `mine`,
+    `due`, `is_overdue` (the hub's rule, `is_task_overdue`), `hold_reason`, `hold_note`,
+    `hold_by_name`, `hold_days`, `custom_timer_start`, `custom_timer_elapsed`,
+    `estimated_hours`, `escalation_level`, `waiting_on` (the open task it depends on) and
+    `actions`. Sorted by stage, overdue first, then due date.
+  - A post: the calendar's fields (title, customer, status, publish_on, channel, platforms,
+    format, special_day, the four role fields and their hours, so Reassign can open the assign
+    dialog), `is_missed`, and `progress` (below). Every post in the period is answered,
+    whatever `person` is, so every board card gets its line.
+
+### Stages
+
+`task_stage(status, post_status, running)`:
+
+| Column | Tasks |
+| --- | --- |
+| **To do** | Open (or the old Overdue status), not started |
+| **In progress** | Working, timer running or paused |
+| **In review** | Pending Review ("Waiting on the lead's review"), or **not started while the post sits in Internal Review, Client Review or Head Review**: that part waits on the review, not on its person ("Waiting on the client's approval") |
+| **On hold** | On Hold, with the reason, note and who held it |
+| **Done** | Completed, in the period. Folded by default ("Done in October 2026 · 6 tasks", Show / Hide) and folded again when the period changes |
+
+A task someone has started stays In progress even while its post is in a review stage.
+
+### Who a post waits on
+
+`post_progress` gives each post `{parts, done, waiting_on}`. `parts` counts the roles with
+someone on them and `done` those whose task is Completed (the role's task as the role boxes
+pick it, `task_for_role`). `waiting_on` is, in order:
+
+1. nothing once the post is published or cancelled;
+2. `{kind: "review", label}` in Internal Review, Client Review or Head Review (`waiting_review`:
+   "internal review", "the client's approval", "the Digital Marketing Head's approval");
+3. the first part the post's stage waits on and isn't finished (the In progress page's rule,
+   `_pending_parts`: the writer while drafting, the designer and video editor in design, the
+   marketer once approved; on Changes Requested every creative part again);
+4. else the first staffed part, in role order, whose task isn't done.
+
+A part is `{kind: "part", role, label, people [{user, full_name}], task, task_status, due}`
+(`in_progress.part_item`). Like the role boxes, this reads every part's task whatever the
+viewer's Task access, so a member sees how their teammates' parts stand; only the status and
+due date leave the server.
+
+### Cards
+
+Each card (`ContentTaskCard.vue`): the role chip (the role boxes' colours, `ROLE_TONES` in
+`constants.ts`, always with the role's name), the due chip ("Due tomorrow", "Due Thu 15 Oct";
+red with an alert icon when the task is overdue, "Past its estimate" when it's due today and
+worked past its estimate, or its post was missed), the post's copy, the customer and the
+platform icons (named for screen readers), "Goes live Thu 15 Oct, 10:00 AM" (red "Missed · was
+due …" once the post passed its time unpublished, `is_missed`), one line saying what it waits on
+(the review, the task it depends on, or "The post is waiting on Writer (Ajmal)" for a part not
+started while another comes first), the hold badge and `HoldNote`, the people (avatar and name,
+"You" for the viewer), and the timer as on In progress (`taskTimer`, `formatElapsed`, a
+`TaskyBadge`: tracking in info blue, paused neutral; the list ticks every 30 seconds).
+
+- **Pressing the card** (its title button stretches over it) opens `TaskDetailDialog` in place,
+  `mine` for the assignee, so every step the viewer may take is there.
+- **Steps on the card**, only those in the task's `actions` (`task_actions`, which follows the
+  task APIs' rules):
+  - the assignee: **Start** an open task (`move_task` to Working); while it's in progress a
+    **Pause** / **Resume timer** icon button (`stop_timer` / `start_timer`) next to
+    **Complete**; **Resume** a held task; **Put on hold** in the menu. Complete, Put on hold
+    and Resume open the task dialog straight on that step (`TaskDetailDialog` `action`), so
+    hours, notes, review-before-done and the hold reasons are the existing flows. A task
+    waiting on another can't start or complete, as the server refuses both;
+  - whoever runs the task's project (`can_coordinate_project`): Put on hold, Resume, and
+    **Approve** a task in review (`useApproveTask`, with its rating offer);
+  - content editors (`can_edit_content`): **Reassign**, the role's assign dialog
+    (`EntryActionDialog`, `content_board.assign`). Not offered on a whole-post task or a
+    finished one;
+  - everyone: **Open task** and **View post** (opens the post dialog) in the "More" menu.
+  No step adds a new mutation path: they are the task APIs the boards already use.
+- Buttons are 32px with a 44px press area, and the card's buttons sit above its title button.
+
+### Layout and states
+
+- **Desktop** (`lg` up): four columns side by side, To do, In progress, In review, On hold,
+  each with its icon (`taskStatusMeta`) and count, an empty column saying so ("Nothing on
+  hold"); Done folded below. **Phones and tablets:** one stage at a time, picked with
+  frappe-ui `TabButtons` (with counts), opening on the first stage with work in it.
+- **Defaults:** the view opens on **My tasks** (the person filter set to the viewer) for
+  content people who don't lead the team, and on **Everyone** for heads, coordinators and
+  admins (`canEditContent` or `isDmHead`). The person filter switches between them; a filter
+  the view set by itself is dropped again when the viewer leaves the view, so the Board isn't
+  left on "My posts".
+- **States:** skeleton columns while loading; an error with "Try again"; "Nothing on your
+  plate" when the viewer has no tasks in the period (with "Show everyone's tasks" for leads);
+  "No content tasks in October 2026" when the period has none; "No tasks match these filters"
+  with Clear filters when the person filter hides them all; and "Nothing on your plate:
+  everything in October 2026 is done" above Done when only finished work is left.
+- **Live:** the page reloads the call on Task `list_update` (`useListUpdate`, debounced), so
+  a teammate starting, pausing or finishing a task shows without a reload, and after every
+  step taken on the page.
+
+### "Your tasks" strip
+
+`components/YourTasksStrip.vue`, one line at the top of the Board, Calendar and Sheet views,
+above the scrolling list so it stays in view: "Your tasks: 2 to do · 2 in progress · 1 on hold
+· ⚠ 1 overdue · next: Designer · Festive offer reel, 5 days late". It counts the viewer's own
+open tasks (`mine`, not Done) in the period on screen, whatever the person filter; overdue is
+red with an icon; next is the soonest-due task to do or in progress. Pressing it (44px on
+phones) opens the Tasks view filtered to the viewer. It is hidden when they have no open
+tasks in the period, and the whole page is only for the content team.
+
+### Decisions (owner away, "do the recommended way")
+
+- **A new module, not `content_board`:** `content_tasks.py` reuses the In progress page's
+  part rules (`_pending_parts`, `part_item`) and `in_progress` already imports
+  `content_board`, so adding it there would have made a circular import.
+- **One call, filtered in the browser by person:** the strip and the cards' lines need the
+  viewer's tasks and every post whatever the person filter, so the page loads the period once
+  and the Tasks view narrows by person locally. The app can pass `person`.
+- **The period on screen, not all open work:** the strip and the view follow the period and
+  filters like the rest of the page, so the numbers always match what's on screen; an overdue
+  task of a post in an earlier month shows when that month is on screen (and on My Work).
+- **A not-started part of a post in review is "In review":** it waits on the review, not on
+  its person, and that's what the owner asked the column to show.
+- **The role box's step is Start, Pause or Complete only:** as asked; a paused timer offers
+  Complete there, and Resume timer lives on the Tasks card, one click away through the strip.
+- **Refused outside the content team** rather than an empty answer, as the calendar's other
+  calls (`get_content_performance`) do; the page itself is never shown to them.
 
 ## Adding and editing a post
 
@@ -383,7 +613,7 @@ still maps "Client Approved" straight to Approved (old calendars, already past b
 
 ## Colour rules
 
-From `desk/src/theme.css`: the brand violet is only for the primary action (Add entry), the
-selected view/period/chip and today's date. Status colours appear only where they mean
+From `desk/src/theme.css`: the brand teal is only for the primary action (Add entry) and the
+selected view/period/chip; today's date gets a logo-orange ring (`highlight`). Status colours appear only where they mean
 something and always with a label or icon. Numbers, dates and times use Geist Mono with
 tabular figures.

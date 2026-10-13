@@ -17,6 +17,7 @@ import LucideFileSpreadsheet from "~icons/lucide/file-spreadsheet";
 import LucideCalendarClock from "~icons/lucide/calendar-clock";
 import LucideHourglass from "~icons/lucide/hourglass";
 import LucideTrophy from "~icons/lucide/trophy";
+import LucideActivity from "~icons/lucide/activity";
 import { __ } from "@/translation";
 
 export const agentPortalSidebarOptions = [
@@ -34,6 +35,14 @@ export const agentPortalSidebarOptions = [
     tone: "blue",
     section: "Workspace",
     overviewOnly: true,
+  },
+  // everyone: what's started across projects and content; members see their own
+  {
+    label: __("In progress"),
+    icon: LucideActivity,
+    to: "InProgress",
+    tone: "blue",
+    section: "Workspace",
   },
   // everyone: their own numbers and the champions; the server decides the rest
   {

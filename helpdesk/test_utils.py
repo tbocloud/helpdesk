@@ -1052,6 +1052,68 @@ def make_done_task(
     return task
 
 
+def make_self_made_done_task(
+    project: str, subject: str, user: str, completed_on, due=None, **kwargs
+) -> str:
+    """Creates a Task that `user` makes and takes themselves (they create it and
+    assign it to themselves), due on `due` and Completed on `completed_on`;
+    returns its name. The Scoreboard weighs such tasks half."""
+    task = make_assigned_task(project, subject, user, user, **kwargs)
+    frappe.db.set_value(
+        "Task",
+        task,
+        {"status": "Completed", "completed_on": completed_on, "exp_end_date": due},
+    )
+    return task
+
+
+def score_stats(**values) -> dict:
+    """A person's Scoreboard numbers (team_dashboard.blank) with `values` set.
+    Unless given, the quality-weighted values equal the weights (unrated work)."""
+    from helpdesk.team_dashboard import blank
+
+    values.setdefault("value", values.get("weight", 0.0))
+    values.setdefault("value_on_time", values.get("weight_on_time", 0.0))
+    return {**blank(), **values}
+
+
+def rate_task_as(user: str, task: str, rating: str | None):
+    """`user` gives a completed task its quality rating through the API."""
+    return call_as_user(user, "helpdesk.tasky.api.rate_task", task=task, rating=rating)
+
+
+def make_done_ticket_task(project: str, subject: str, assignee: str, completed_on):
+    """Creates a resolved HD Ticket and a completed Task made from it (hd_ticket),
+    assigned to `assignee`; returns (ticket name, task name)."""
+    ticket = make_ticket(subject=subject).name
+    frappe.db.set_value(
+        "HD Ticket", ticket, {"status": "Resolved", "status_category": "Resolved"}
+    )
+    task = make_done_task(project, subject, assignee, completed_on, hd_ticket=ticket)
+    return ticket, task
+
+
+def make_team_champion(
+    period_type: str, start, end, user: str, score: float, department=None, **kwargs
+):
+    """Stores an HD Team Champion as if `close_period` had kept it, with a
+    one-line breakdown; for reading closed periods back."""
+    breakdown = [{"key": "tasks", "points": score, "detail": "Tasks done: 2"}]
+    return frappe.get_doc(
+        {
+            "doctype": "HD Team Champion",
+            "period_type": period_type,
+            "period_start": start,
+            "period_end": end,
+            "department": department,
+            "user": user,
+            "score": score,
+            "breakdown": json.dumps(breakdown),
+            **kwargs,
+        }
+    ).insert(ignore_permissions=True)
+
+
 def make_member_day(project: str, member: str, lead: str, teammate: str) -> dict:
     """A project member's open work like the day that showed a false "All clear" on
     Home: eight tasks `lead` gave `member` (one overdue, one due today, a key task
@@ -1139,6 +1201,57 @@ def call_team_dashboard(user: str, today, method: str = "get_team_dashboard", **
             user,
             lambda: frappe.call(f"helpdesk.api.team_dashboard.{method}", **kwargs),
         )
+
+
+def call_repeat_issues(
+    user: str,
+    today,
+    method: str = "helpdesk.api.repeat_issues.get_repeat_issues",
+    **kwargs,
+):
+    """Calls a repeat issues endpoint (the web's, or the app's with `method`) as `user`
+    with today fixed, so only the test's records fall in the window, and no detected
+    clusters cached by an earlier call carry over."""
+    from helpdesk.repeat_issues import CACHE_PREFIX
+
+    frappe.cache.delete_keys(f"{CACHE_PREFIX}:")
+    with patch("helpdesk.api.repeat_issues.nowdate", return_value=str(today)):
+        return run_as_user(user, lambda: frappe.call(method, **kwargs))
+
+
+def use_support_department(name: str | None):
+    """Patches Settings → Follow-ups so tickets belong to the department `name`
+    (None for no support department); use it as a context manager."""
+    return patch(
+        "helpdesk.follow_ups.get_settings",
+        return_value=frappe._dict(ticket_department=name),
+    )
+
+
+def capture_list_updates(fn, doctype: str = "Task") -> list[str]:
+    """Runs `fn()` and returns the names of the `doctype` records it announced
+    through the `list_update` realtime event (Frappe's own on save, or ours)."""
+    sent = []
+    publish = frappe.publish_realtime
+
+    def record(event=None, message=None, *args, **kwargs):
+        if event == "list_update" and (message or {}).get("doctype") == doctype:
+            sent.append(message["name"])
+        return publish(event, message, *args, **kwargs)
+
+    with patch("frappe.publish_realtime", side_effect=record):
+        fn()
+    return sent
+
+
+def make_task_created_on(project: str, subject: str, day, **values) -> str:
+    """Creates an open Task in `project` that reads as created on `day` (creation is
+    written straight to the database), plus any other `values`; returns its name."""
+    task = make_task(project, subject).name
+    frappe.db.set_value(
+        "Task", task, {"creation": f"{day} 10:00:00", **values}, update_modified=False
+    )
+    return task
 
 
 def record_versions(test_case):
@@ -1260,6 +1373,18 @@ def get_content_task(post: str, role: str) -> str | None:
     """The Task a content post made for one role ("Writer", "Designer", …)."""
     return frappe.db.get_value(
         "Task", {"content_post": post, "content_role": role}, "name"
+    )
+
+
+def get_content_tasks_as(user: str, start, end, **filters) -> dict:
+    """The content calendar's Tasks view (helpdesk.api.content_tasks.get_content_tasks)
+    for `user`: the role tasks of the posts going live between `start` and `end`."""
+    return call_as_user(
+        user,
+        "helpdesk.api.content_tasks.get_content_tasks",
+        start=str(start),
+        end=str(end),
+        **filters,
     )
 
 
@@ -3658,3 +3783,25 @@ def make_hd_pull_request(
             "base_branch": "main",
         }
     ).insert(ignore_permissions=True)
+
+
+def make_started_task(
+    project: str,
+    subject: str,
+    assignee: str,
+    status: str = "Working",
+    due=None,
+    **values,
+) -> str:
+    """Creates a Task in `project` assigned to `assignee`, due on `due`, and puts it in
+    `status` (Working, Pending Review, On Hold…) with any other `values` (e.g.
+    escalation_level) straight in the database; returns its name. For In progress tests."""
+    task = make_task(project, subject, due).name
+    make_assignment("Task", task, assignee)
+    frappe.db.set_value("Task", task, {"status": status, **values})
+    return task
+
+
+def get_in_progress_as(user: str, **filters) -> dict:
+    """The In progress page's answer (helpdesk.api.in_progress.get_in_progress) for `user`."""
+    return call_as_user(user, "helpdesk.api.in_progress.get_in_progress", **filters)
