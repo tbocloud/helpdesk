@@ -16,6 +16,7 @@ from helpdesk.copilot.mcp import registry
 from helpdesk.copilot.mcp.auth import WORKER, Caller, identify_from
 from helpdesk.copilot.mcp.tools_worker import MAX_SITE_RESULT_CHARS
 from helpdesk.test_utils import (
+    FakeCustomerSite,
     create_agent,
     create_customer,
     create_user,
@@ -173,6 +174,36 @@ class TestWorkerTools(WorkerCase):
         is_error, text = self.call("customer_erp_read", tool="get_site_info")
         self.assertTrue(is_error)
         self.assertIn("No customer site", text)
+
+    def test_submit_investigation_carries_a_correction_to_the_sites_check(self):
+        site = FakeCustomerSite().install(self)
+        site.add(
+            "Selling Settings", "Selling Settings", {"selling_price_list": "Wholesale"}
+        )
+        result = fake_investigation(
+            "wrong_setting",
+            change_set={
+                "summary": "the wrong default price list",
+                "changes": [
+                    {
+                        "doctype": "Selling Settings",
+                        "name": "Selling Settings",
+                        "values": {"selling_price_list": "Standard Selling"},
+                    }
+                ],
+            },
+        )
+        result.pop("kind")
+        is_error, data = self.call("submit_investigation", **result)
+        self.assertFalse(is_error, data)
+        frappe.set_user("Administrator")
+        change_set = frappe.db.get_value("HDS Copilot Run", self.run, "change_set")
+        self.assertEqual(
+            frappe.db.get_value(
+                "HDS Copilot Change Set", change_set, ["status", "ready_count"]
+            ),
+            ("Checked", 1),
+        )
 
     def test_submit_investigation_routes_the_run_and_ends_the_lease(self):
         result = fake_investigation("bug")

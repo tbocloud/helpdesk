@@ -57,6 +57,7 @@ def submit_investigation(
     customer_message: str = "",
     questions: list | None = None,
     cost: dict | None = None,
+    change_set: dict | None = None,
 ) -> dict:
     if runs.fixing(_run(caller)):
         frappe.throw(
@@ -75,6 +76,7 @@ def submit_investigation(
             "customer_message": customer_message,
             "questions": questions or [],
             "cost": cost or {},
+            "change_set": change_set,
         },
     )
     # the lease ends with the investigation: this token stops working now
@@ -187,6 +189,12 @@ register_tool(
         "customer_message": {"type": "string", "maxLength": 4000},
         "questions": {"type": "array"},
         "cost": {"type": "object"},
+        "change_set": {
+            "type": "object",
+            "description": "For a wrong setting or wrong data: {summary, customer_note, found_by, "
+            "changes: [{action: update|create, doctype, name, values, rows, add_rows, why}], "
+            "set_aside: [{doctype, name, why}]}. Never deletes; submitted documents go in set_aside.",
+        },
     },
     required=["root_cause_category", "confidence"],
     read_only=False,

@@ -3951,3 +3951,171 @@ def site_tool_replies(replies: dict):
         return {"content": [{"type": "text", "text": _json.dumps(value)}]}
 
     return call_tool
+
+
+class FakeCustomerSite:
+    """The customer's site as Copilot's corrections reach it, in memory: its records,
+    `check_change` and `apply_change`, and its guard on the hub's signed approval
+    (the connection's approval key, the record, its exact values).
+
+    `install(test_case)` routes helpdesk.mcp_client.MCPClient here for one test.
+    """
+
+    def __init__(self, key: str = "site-approval-key", environment: str = "Production"):
+        self.key = key
+        self.environment = environment
+        self.records: dict = {}
+        self.problems: dict = {}  # (doctype, name) -> what the site's check says
+        self.refusals: dict = {}  # (doctype, name) -> why the site refuses to apply
+        self.created: list = []
+        self.approvals: list = []
+        self.calls: list = []
+
+    def install(self, test_case):
+        patcher = patch("helpdesk.mcp_client.MCPClient")
+        mocked = patcher.start()
+        test_case.addCleanup(patcher.stop)
+        mocked.return_value.call_tool.side_effect = self.call_tool
+        return self
+
+    def add(self, doctype: str, name: str, values: dict, docstatus: int = 0, rows=None):
+        self.records[(doctype, name)] = {
+            "values": dict(values),
+            "rows": {row: dict(v) for row, v in (rows or {}).items()},
+            "docstatus": docstatus,
+        }
+
+    def value(self, doctype: str, name: str, field: str):
+        return self.records[(doctype, name)]["values"].get(field)
+
+    def call_tool(self, tool, arguments=None, ticket_id=None, session_id=None):
+        import json as _json
+
+        self.calls.append((tool, arguments))
+        try:
+            result = getattr(self, tool)(**(arguments or {}))
+        except LookupError as e:
+            return {
+                "content": [{"type": "text", "text": f"Error executing {tool}: {e}"}],
+                "isError": True,
+            }
+        return {"content": [{"type": "text", "text": _json.dumps(result, default=str)}]}
+
+    def _current(self, change: dict) -> dict:
+        record = self.records[(change["doctype"], change.get("name") or "")]
+        return {
+            "values": {f: record["values"].get(f) for f in change.get("values") or {}},
+            "rows": {
+                row["name"]: {
+                    f: record["rows"].get(row["name"], {}).get(f)
+                    for f in row.get("values") or {}
+                }
+                for row in change.get("rows") or []
+            },
+        }
+
+    def check_change(self, change: dict):
+        key = (change["doctype"], change.get("name") or "")
+        if (change.get("action") or "update") == "create":
+            return {
+                "ok": True,
+                "problems": [],
+                "current": {},
+                "docstatus": 0,
+                "environment": self.environment,
+            }
+        if key not in self.records:
+            raise LookupError(f"{key[0]} {key[1]} not found")
+        problems = [self.problems[key]] if key in self.problems else []
+        return {
+            "ok": not problems,
+            "problems": problems,
+            "current": self._current(change),
+            "docstatus": self.records[key]["docstatus"],
+            "environment": self.environment,
+        }
+
+    def _guard(self, change: dict, expect, token):
+        import base64
+        import hashlib
+        import hmac
+        import json as _json
+        import time
+
+        from helpdesk.copilot.approval_key import change_digest
+
+        if not token:
+            if self.environment == "Production":
+                raise LookupError(
+                    "On a Production site every write from TBO Support needs its signed approval."
+                )
+            return {}
+        body, _sep, signature = token.partition(".")
+        expected = (
+            base64.urlsafe_b64encode(
+                hmac.new(self.key.encode(), body.encode(), hashlib.sha256).digest()
+            )
+            .decode()
+            .rstrip("=")
+        )
+        if signature != expected:
+            raise LookupError("The approval's signature is not valid.")
+        payload = _json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))
+        if payload["exp"] < time.time():
+            raise LookupError("The approval has expired.")
+        wanted = (
+            change.get("item"),
+            change["doctype"],
+            change.get("name") or "",
+            change.get("action") or "update",
+            change_digest(change, expect),
+        )
+        if not any(
+            (
+                r.get("item"),
+                r["doctype"],
+                r.get("name") or "",
+                r["action"],
+                r.get("digest"),
+            )
+            == wanted
+            for r in payload["records"]
+        ):
+            raise LookupError("The approval does not cover this record and its values.")
+        self.approvals.append(payload)
+        return payload
+
+    def apply_change(self, change: dict, expect=None, approval=None):
+        self._guard(change, expect, approval)
+        key = (change["doctype"], change.get("name") or "")
+        if key in self.refusals:
+            raise LookupError(self.refusals[key])
+        if (change.get("action") or "update") == "create":
+            name = f"{change['doctype']}-NEW-{len(self.created) + 1}"
+            self.created.append((change["doctype"], name, change.get("values")))
+            return {
+                "status": "applied",
+                "doctype": change["doctype"],
+                "name": name,
+                "old": {},
+                "new": {"values": change.get("values")},
+            }
+        before = self._current(change)
+        if before != {
+            "values": (expect or {}).get("values") or {},
+            "rows": (expect or {}).get("rows") or {},
+        }:
+            raise LookupError(
+                f"{key[0]} {key[1]} changed since it was checked; it was left as it is."
+            )
+        record = self.records[key]
+        record["values"].update(change.get("values") or {})
+        for row in change.get("rows") or []:
+            record["rows"].setdefault(row["name"], {}).update(row.get("values") or {})
+        return {
+            "status": "applied",
+            "doctype": key[0],
+            "name": key[1],
+            "old": before,
+            "new": self._current(change),
+        }

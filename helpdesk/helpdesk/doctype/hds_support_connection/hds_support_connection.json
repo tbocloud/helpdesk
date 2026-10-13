@@ -15,6 +15,7 @@
 		"credentials_section",
 		"api_key",
 		"api_secret",
+		"approval_key",
 		"column_break_cred",
 		"last_token_update",
 		"support_user",
@@ -92,6 +93,13 @@
 			"fieldname": "api_secret",
 			"fieldtype": "Password",
 			"label": "API Secret"
+		},
+		{
+			"description": "Made by the customer site when it was connected; Copilot signs approved changes with it. The site connects again to replace it.",
+			"fieldname": "approval_key",
+			"fieldtype": "Password",
+			"label": "Approval key",
+			"read_only": 1
 		},
 		{
 			"fieldname": "column_break_cred",
@@ -184,7 +192,7 @@
 		}
 	],
 	"links": [],
-	"modified": "2026-10-09 13:00:00.000000",
+	"modified": "2026-10-13 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Support Connection",

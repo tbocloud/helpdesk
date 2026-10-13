@@ -73,6 +73,9 @@ def validate_investigation(result: dict) -> dict:
         )
     if not isinstance(proposal, dict):
         frappe.throw(_("The proposal must be an object"))
+    from helpdesk.copilot import changes
+
+    change_set = changes.validate_report(result.get("change_set"))
     cost = result.get("cost") if isinstance(result.get("cost"), dict) else {}
     return {
         "root_cause_category": category,
@@ -87,6 +90,7 @@ def validate_investigation(result: dict) -> dict:
         },
         "questions": [_text(q, LIMITS["text"]) for q in questions],
         "cost": _cost(cost),
+        "change_set": change_set,
     }
 
 
@@ -120,6 +124,10 @@ def route(run, result: dict):
     threshold = flt(copilot_settings.get_settings().min_confidence or 0)
     category = investigation["root_cause_category"]
     effective = category if investigation["confidence"] >= threshold else "unclear"
+    change_set = investigation.pop("change_set", None)
+    if change_set:
+        # the records live on the change set; the run keeps how many
+        investigation["change_set_records"] = len(change_set["changes"])
     doc = runs.transition(
         run,
         STATE_FOR_CATEGORY[effective],
@@ -148,8 +156,17 @@ def route(run, result: dict):
             doc,
             investigation["summary"] or _("Copilot found an issue in the core system"),
         )
-    elif doc.state == "Preparing Fix" and not doc.shadow:
-        _fix_task(doc)
+    elif doc.state == "Preparing Fix":
+        corrected = bool(
+            change_set and effective in ("wrong_setting", "data_damaged_by_bug")
+        )
+        if corrected:
+            from helpdesk.copilot import changes
+
+            changes.prepare(doc, change_set, effective)
+        # a wrong setting with its correction needs no developer; damaged data needs the code fix first
+        if not doc.shadow and not (corrected and effective == "wrong_setting"):
+            _fix_task(doc)
     customer.send_stage(doc, STAGE_FOR_CATEGORY[effective])
     return doc
 

@@ -548,11 +548,13 @@ def pair_client(
     api_secret: str,
     client_app: str = "helpdesk_client",
     support_user: str = "",
+    approval_key: str = "",
 ) -> dict:
     """Called by the customer site with a connection code and the API key it just made for the hub.
 
     The code must be unused, unexpired and issued for this site URL; the hub then
-    runs the normal registration against that URL to prove the key works.
+    runs the normal registration against that URL to prove the key works. A site
+    that checks writes itself also sends the key Copilot signs approved corrections with.
     """
     from helpdesk.utils import normalize_site_url
 
@@ -583,6 +585,8 @@ def pair_client(
     conn.api_secret = api_secret
     conn.client_app = client_app or conn.client_app
     conn.support_user = support_user or conn.support_user
+    if approval_key:
+        conn.approval_key = approval_key
     conn.pairing_code_hash = None
     conn.pairing_code_expires = None
     conn.save(ignore_permissions=True)

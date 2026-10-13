@@ -74,6 +74,10 @@ TRANSITIONS = {
     ("Merged", "Escalated"): {SYSTEM},
     ("Deploying", "Escalated"): {SYSTEM},
     ("Verifying", "Escalated"): {SYSTEM},
+    # a correction (helpdesk.copilot.changes): applied after a senior's approval, or stopped
+    ("Approved", "Applying"): {SYSTEM},
+    ("Applying", "Resolved"): {SYSTEM},
+    ("Applying", "Escalated"): {SYSTEM},
 }
 CANCELLABLE = (
     "Queued",

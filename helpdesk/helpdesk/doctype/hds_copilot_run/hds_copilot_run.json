@@ -52,6 +52,7 @@
 		"column_break_copilot_fix",
 		"change",
 		"deploy_request",
+		"change_set",
 		"reverts",
 		"review_section",
 		"review_verdict",
@@ -113,7 +114,7 @@
 			"in_list_view": 1,
 			"in_standard_filter": 1,
 			"label": "State",
-			"options": "Queued\nInvestigating\nExplaining\nAnswered\nPreparing Fix\nAwaiting Approval\nApproved\nMerging\nMerged\nDeploying\nVerifying\nResolved\nClosed\nRejected\nEscalated\nHanded Over\nFailed\nCancelled"
+			"options": "Queued\nInvestigating\nExplaining\nAnswered\nPreparing Fix\nAwaiting Approval\nApproved\nMerging\nMerged\nDeploying\nVerifying\nApplying\nResolved\nClosed\nRejected\nEscalated\nHanded Over\nFailed\nCancelled"
 		},
 		{
 			"default": "0",
@@ -375,6 +376,13 @@
 			"read_only": 1
 		},
 		{
+			"fieldname": "change_set",
+			"fieldtype": "Link",
+			"label": "Change set",
+			"options": "HDS Copilot Change Set",
+			"read_only": 1
+		},
+		{
 			"fieldname": "reverts",
 			"fieldtype": "Link",
 			"label": "Reverts the fix of",
@@ -459,7 +467,7 @@
 		}
 	],
 	"links": [],
-	"modified": "2026-10-13 02:00:00.000000",
+	"modified": "2026-10-13 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Copilot Run",

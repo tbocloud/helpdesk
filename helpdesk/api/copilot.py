@@ -112,9 +112,13 @@ def get_run(ticket: str | int) -> dict:
 
 def _fix_card(run) -> dict | None:
     """The fix as the Copilot dialog shows it: the task, the pull request, the approval and what may be done."""
-    from helpdesk.copilot import approvals, deploy, fixes, press
+    from helpdesk.copilot import approvals, changes, deploy, fixes, press
 
-    if run.state not in fixes.FOLLOWED + ("Resolved",) and not run.task:
+    if (
+        run.state not in fixes.FOLLOWED + ("Resolved", "Applying")
+        and not run.task
+        and not run.get("change_set")
+    ):
         return None
     user = frappe.session.user
     attempts = copilot_settings.get_settings().get("max_fix_attempts") or 2
@@ -153,6 +157,8 @@ def _fix_card(run) -> dict | None:
         card = {
             "name": approval.name,
             "status": approval.status,
+            "kind": approval.get("kind") or "Code Change",
+            "change_set": approval.get("change_set"),
             "head_sha": approval.head_sha,
             "risk_level": approval.risk_level,
             "sensitive": bool(approval.sensitive),
@@ -217,6 +223,9 @@ def _fix_card(run) -> dict | None:
         and (run.fix_attempts or 0) < attempts,
         "merge_commit": run.merge_commit,
         "deployed_at": str(run.deployed_at)[:16] if run.deployed_at else None,
+        "change_set": changes.card(frappe.get_doc(changes.CHANGE_SET, run.change_set))
+        if run.get("change_set")
+        else None,
     }
 
 
@@ -340,6 +349,32 @@ def undo_fix(ticket: str | int, reason: str) -> dict:
         )
     fixes.undo(_run_of(ticket), frappe.session.user, reason)
     return get_run(ticket)
+
+
+@frappe.whitelist(methods=["POST"])
+@agent_only
+def change_set_applied_by_hand(ticket: str | int) -> dict:
+    """A senior applied the correction by hand: Copilot reads every record back from the site."""
+    from helpdesk.copilot import changes
+
+    frappe.has_permission("HD Ticket", "write", str(ticket), throw=True)
+    run = _run_of(ticket)
+    if not run.get("change_set"):
+        frappe.throw(_("This ticket has no correction from Copilot."))
+    changes.applied_by_hand(run.change_set, frappe.session.user)
+    return get_run(ticket)
+
+
+@frappe.whitelist(methods=["GET"])
+def download_change_set(change_set: str):
+    """Every record of a correction, with its old and new values, as CSV."""
+    from helpdesk.copilot import changes
+
+    frappe.has_permission(changes.CHANGE_SET, "read", change_set, throw=True)
+    doc = frappe.get_doc(changes.CHANGE_SET, change_set)
+    frappe.response["result"] = changes.as_csv(doc)
+    frappe.response["type"] = "csv"
+    frappe.response["doctype"] = doc.name
 
 
 @frappe.whitelist(methods=["POST"])

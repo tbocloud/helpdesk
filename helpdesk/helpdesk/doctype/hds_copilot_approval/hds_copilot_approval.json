@@ -8,6 +8,8 @@
 		"run",
 		"ticket",
 		"status",
+		"kind",
+		"change_set",
 		"column_break_pr",
 		"pull_request",
 		"repo",
@@ -68,6 +70,22 @@
 			"in_standard_filter": 1,
 			"label": "Status",
 			"options": "Pending\nApproved\nRejected\nSuperseded\nMerged",
+			"read_only": 1
+		},
+		{
+			"default": "Code Change",
+			"fieldname": "kind",
+			"fieldtype": "Select",
+			"in_list_view": 1,
+			"label": "Kind",
+			"options": "Code Change\nConfig Change\nData Fix\nCode + Data",
+			"read_only": 1
+		},
+		{
+			"fieldname": "change_set",
+			"fieldtype": "Link",
+			"label": "Change set",
+			"options": "HDS Copilot Change Set",
 			"read_only": 1
 		},
 		{
@@ -252,7 +270,7 @@
 		}
 	],
 	"links": [],
-	"modified": "2026-10-12 12:00:00.000000",
+	"modified": "2026-10-13 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Copilot Approval",

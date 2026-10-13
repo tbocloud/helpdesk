@@ -21,7 +21,7 @@ class TestClientPairing(FrappeTestCase):
             CUSTOMER, site_url=SITE, connection_status="Pending"
         ).name
 
-    def pair(self, code, site_url=SITE):
+    def pair(self, code, site_url=SITE, **extra):
         frappe.set_user("Guest")
         try:
             return api.pair_client(
@@ -30,6 +30,7 @@ class TestClientPairing(FrappeTestCase):
                 api_key="key123",
                 api_secret="secret456",
                 support_user="support@teambackoffice.com",
+                **extra,
             )
         finally:
             frappe.set_user("Administrator")
@@ -57,6 +58,13 @@ class TestClientPairing(FrappeTestCase):
         self.assertEqual(conn.support_user, "support@teambackoffice.com")
         self.assertFalse(conn.pairing_code_hash)
         self.assertTrue(call.call_args.args[2].endswith("api.register_connection"))
+
+    def test_the_sites_approval_key_is_kept_for_signing_corrections(self):
+        code = api.create_pairing_code(self.conn)["code"]
+        with self.registered():
+            self.pair(code, approval_key="made-by-the-site")
+        conn = frappe.get_doc("HDS Support Connection", self.conn)
+        self.assertEqual(conn.get_password("approval_key"), "made-by-the-site")
 
     def test_code_works_once(self):
         code = api.create_pairing_code(self.conn)["code"]

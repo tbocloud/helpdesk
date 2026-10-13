@@ -72,6 +72,8 @@ def authors(run, approval=None) -> set[str]:
     When Copilot alone made it (the App opened the pull request and wrote every
     commit), nobody on the task wrote it, so the customer's developer may approve.
     """
+    if approval and approval.get("kind") in ("Config Change", "Data Fix"):
+        return set()  # Copilot prepared the correction; nobody on a task wrote it
     if approval and (frappe.parse_json(approval.payload or "{}") or {}).get(
         "copilot_only"
     ):
@@ -132,7 +134,10 @@ def pick_approver(
 
 def payload_hash(payload: dict) -> str:
     keys = ("repo", "number", "head_sha", "base_branch")
-    canonical = json.dumps({key: payload.get(key) for key in keys}, sort_keys=True)
+    content = {key: payload.get(key) for key in keys}
+    if payload.get("change_set_digest"):
+        content["change_set_digest"] = payload["change_set_digest"]
+    canonical = json.dumps(content, sort_keys=True)
     return hashlib.sha256(canonical.encode()).hexdigest()
 
 
@@ -232,6 +237,142 @@ def open_approval(
     return doc
 
 
+def open_change_set_approval(run, change_set):
+    """A Pending approval for a checked correction: always a senior's, announced like a fix."""
+    from helpdesk.copilot import changes
+
+    ready = [item for item in change_set.items if item.check_result == "ready"]
+    payload = {
+        "kind": change_set.kind,
+        "change_set": change_set.name,
+        "summary": change_set.summary,
+        "customer_note": change_set.customer_note,
+        "records": [
+            {
+                "item": item.name,
+                "doctype": item.ref_doctype,
+                "name": item.ref_name,
+                "action": item.action,
+                "change": changes.change_of(item),
+                "old": changes.expect_of(item),
+            }
+            for item in ready[:100]
+        ],
+        "ready": len(ready),
+        "total": change_set.total,
+        "risk": {
+            "level": change_set.risk_level,
+            "reasons": [r for r in (change_set.risk_reasons or "").split("\n") if r],
+        },
+        "change_set_digest": changes.digest_of(change_set),
+    }
+    approver = pick_approver(run, True)
+    doc = frappe.get_doc(
+        {
+            "doctype": APPROVAL,
+            "run": run.name,
+            "ticket": run.ticket,
+            "status": "Pending",
+            "kind": change_set.kind,
+            "change_set": change_set.name,
+            "risk_level": change_set.risk_level or "medium",
+            "sensitive": 1,
+            "reasons": change_set.risk_reasons,
+            "payload": json.dumps(payload, indent=1, default=str),
+            "payload_hash": payload_hash(payload),
+            "assigned_to": approver,
+            "assigned_at": now_datetime(),
+        }
+    ).insert(ignore_permissions=True)
+    change_set.db_set("approval", doc.name, update_modified=False)
+    run.db_set("approval", doc.name, update_modified=False)
+    run = runs.transition(
+        run, "Awaiting Approval", runs.SYSTEM, note="the correction waits for a senior"
+    )
+    runs.add_event(
+        run,
+        "approval_opened",
+        {
+            "approval": doc.name,
+            "change_set": change_set.name,
+            "records": len(ready),
+            "approver": approver,
+        },
+        runs.SYSTEM,
+    )
+    announce(
+        doc,
+        _("A Copilot correction waits for your approval on ticket {0}").format(
+            run.ticket
+        ),
+    )
+    return doc
+
+
+def _decide_change_set(approval, run, user: str, approve: bool, note: str, via: str):
+    """A correction: rejected with a reason, or approved and applied at once in the background."""
+    from helpdesk.copilot import changes, customer
+
+    change_set = frappe.get_doc(changes.CHANGE_SET, approval.change_set)
+    decided = {
+        "decided_by": user,
+        "decided_at": now_datetime(),
+        "decided_via": via,
+        "note": note,
+    }
+    if not approve:
+        if not note:
+            frappe.throw(_("Please say why the correction is rejected."))
+        approval.db_set({"status": "Rejected", **decided}, update_modified=False)
+        change_set.db_set("status", "Rejected")
+        runs.add_event(
+            run,
+            "approval_rejected",
+            {"approval": approval.name, "by": user, "note": note},
+            runs.AGENT,
+        )
+        runs.transition(
+            run, "Preparing Fix", runs.AGENT, note=f"rejected: {note}"[:140]
+        )
+        customer.comment(
+            run.ticket,
+            frappe.utils.escape_html(
+                _("Copilot's correction {0} was rejected by {1}: {2}").format(
+                    change_set.name, frappe.utils.get_fullname(user), note
+                )
+            ),
+        )
+        return {"outcome": "rejected"}
+    payload = frappe.parse_json(approval.payload or "{}") or {}
+    if payload.get("change_set_digest") != changes.digest_of(change_set):
+        supersede(approval, _("the correction was checked again"))
+        return {
+            "outcome": "superseded",
+            "message": _(
+                "The correction changed after this card was made. Please review the new version."
+            ),
+        }
+    approval.db_set({"status": "Approved", **decided}, update_modified=False)
+    change_set.db_set("status", "Approved")
+    run = runs.transition(run, "Approved", runs.AGENT, note=f"approved by {user}")
+    runs.add_event(
+        run,
+        "approval_approved",
+        {"approval": approval.name, "by": user, "change_set": change_set.name},
+        runs.AGENT,
+    )
+    # the decision stands whatever applying does; applying runs in the background
+    frappe.db.commit()  # nosemgrep
+    frappe.enqueue(
+        "helpdesk.copilot.changes.apply",
+        queue="long",
+        change_set=change_set.name,
+        user=user,
+        now=frappe.flags.in_test,
+    )
+    return {"outcome": "approved", "apply": "started"}
+
+
 def supersede(approval, reason: str):
     if approval.status not in OPEN:
         return
@@ -280,6 +421,8 @@ def decide(
         frappe.throw(reason, frappe.PermissionError)
     note = (note or "").strip()[:1000]
     run = frappe.get_doc("HDS Copilot Run", approval.run)
+    if approval.get("kind") in ("Config Change", "Data Fix"):
+        return _decide_change_set(approval, run, user, approve, note, via)
 
     if not approve:
         if not note:

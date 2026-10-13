@@ -247,12 +247,17 @@ function showCopilotRunDialog(info, doc, call, toast, $dialog) {
     });
   }
   if (fix.approval && fix.approval.status === "Pending") {
+    var correction = fix.change_set && fix.approval.change_set;
     actions.push({
-      label: "Review fix",
+      label: correction ? "Review correction" : "Review fix",
       variant: "solid",
       onClick: function (_ref) {
         _ref.close();
-        showCopilotFixReview(info, doc, call, toast, $dialog);
+        if (correction) {
+          showCopilotCorrectionReview(info, doc, call, toast, $dialog);
+        } else {
+          showCopilotFixReview(info, doc, call, toast, $dialog);
+        }
       },
     });
   }
@@ -512,6 +517,20 @@ function copilotFixSummary(fix) {
     if (a.deploy_date) {
       rows.push(["Planned deploy", a.deploy_date]);
     }
+  }
+  var cs = fix.change_set;
+  if (cs) {
+    var done =
+      cs.status === "Applied" || cs.status === "Stopped"
+        ? " · " +
+          cs.applied +
+          " applied, " +
+          cs.skipped +
+          " left as changed since, " +
+          cs.refused +
+          " refused"
+        : " · " + (cs.ready || 0) + " of " + (cs.total || 0) + " ready";
+    rows.push(["Correction", cs.name + " · " + cs.status + done]);
   }
   if (fix.merge_commit) {
     rows.push(["Merge commit", String(fix.merge_commit).slice(0, 12)]);
@@ -817,6 +836,201 @@ function showCopilotFixReview(info, doc, call, toast, $dialog) {
   });
   $dialog({
     title: "Review fix - Ticket #" + doc.name,
+    html: html,
+    actions: actions,
+  });
+}
+
+// A correction Copilot prepared (settings or data): every record with its old and new value,
+// checked by the customer's site; a senior approves and the hub applies it at once.
+function showCopilotCorrectionReview(info, doc, call, toast, $dialog) {
+  var a = info.fix.approval;
+  var cs = info.fix.change_set;
+  var field =
+    "width:100%;padding:6px;border:1px solid #d1d5db;border-radius:4px;font-size:13px";
+  var html = '<div style="padding:8px;font-size:13px">';
+  html +=
+    "<div><b>Cause</b> (" +
+    copilotEscape(info.root_cause) +
+    "): " +
+    copilotEscape(info.summary || "") +
+    "</div>";
+  html +=
+    '<div style="margin-top:8px"><b>' +
+    copilotEscape(cs.kind) +
+    "</b> " +
+    copilotEscape(cs.name) +
+    ": " +
+    copilotEscape(cs.summary || "") +
+    "</div>";
+  if (cs.found_by) {
+    html +=
+      '<div style="color:#4b5563">How the records were found: ' +
+      copilotEscape(cs.found_by) +
+      "</div>";
+  }
+  html +=
+    '<div style="margin-top:8px"><b>Risk:</b> ' +
+    copilotEscape(cs.risk || "medium") +
+    " · a senior approves every correction" +
+    (cs.environment ? " · the site is " + copilotEscape(cs.environment) : "") +
+    "</div>";
+  if (cs.risk_reasons && cs.risk_reasons.length) {
+    html += '<ul style="margin:4px 0 0 16px;color:#4b5563">';
+    for (var r = 0; r < cs.risk_reasons.length; r++) {
+      html += "<li>" + copilotEscape(cs.risk_reasons[r]) + "</li>";
+    }
+    html += "</ul>";
+  }
+  html +=
+    '<div style="margin-top:8px"><b>Records</b> (' +
+    copilotEscape(cs.ready) +
+    " of " +
+    copilotEscape(cs.total) +
+    " ready; the site checked each one without saving)</div>";
+  html += '<ul style="margin:4px 0 0 16px">';
+  for (var i = 0; i < cs.records.length; i++) {
+    var rec = cs.records[i];
+    var parts = [];
+    for (var k = 0; k < rec.changes.length; k++) {
+      var ch = rec.changes[k];
+      parts.push(
+        copilotEscape(ch.field) +
+          ": " +
+          copilotEscape(ch.old || "(empty)") +
+          " → " +
+          copilotEscape(ch.new)
+      );
+    }
+    html +=
+      "<li>" +
+      copilotEscape(rec.doctype + " " + rec.name) +
+      (rec.action === "create" ? " (new)" : "") +
+      ": " +
+      parts.join("; ") +
+      (rec.check && rec.check !== "ready"
+        ? ' <span style="color:#b45309">' +
+          copilotEscape(rec.check + (rec.note ? ": " + rec.note : "")) +
+          "</span>"
+        : "") +
+      "</li>";
+  }
+  html += "</ul>";
+  if (cs.more) {
+    html +=
+      '<div style="color:#4b5563">… ' +
+      copilotEscape(cs.more) +
+      " more records: download them all below.</div>";
+  }
+  if (cs.set_aside && cs.set_aside.length) {
+    html +=
+      '<div style="margin-top:8px"><b>Left for a person</b> (Copilot does not change these)</div><ul style="margin:4px 0 0 16px;color:#4b5563">';
+    for (var s = 0; s < cs.set_aside.length; s++) {
+      var aside = cs.set_aside[s];
+      html +=
+        "<li>" +
+        copilotEscape((aside.doctype || "") + " " + (aside.name || "")) +
+        (aside.why ? ": " + copilotEscape(aside.why) : "") +
+        "</li>";
+    }
+    html += "</ul>";
+  }
+  if (cs.customer_note) {
+    html +=
+      '<div style="margin-top:8px"><b>The customer is told</b> once it is applied: ' +
+      copilotEscape(cs.customer_note) +
+      "</div>";
+  }
+  if (a.why_not_me) {
+    html +=
+      '<div style="margin-top:8px;color:#b91c1c">' +
+      copilotEscape(a.why_not_me) +
+      "</div>";
+  }
+  html +=
+    '<div style="margin-top:8px"><label for="copilot-correction-note">Note (needed to reject)</label>' +
+    '<textarea id="copilot-correction-note" rows="3" style="' +
+    field +
+    '"></textarea></div></div>';
+
+  function decide(approve, _ref) {
+    var noteEl = document.getElementById("copilot-correction-note");
+    var note = noteEl ? noteEl.value : "";
+    if (!approve && !note.trim()) {
+      toast.error("Please say why the correction is rejected.");
+      return;
+    }
+    call("helpdesk.api.copilot.decide_fix", {
+      ticket: doc.name,
+      approve: approve ? 1 : 0,
+      note: note,
+    })
+      .then(function (result) {
+        var decision = (result && result.decision) || {};
+        if (decision.outcome === "superseded") {
+          toast.error(
+            decision.message || "The correction changed; review it again."
+          );
+        } else if (decision.outcome === "approved") {
+          toast.success(
+            "Approved: Copilot is applying it on the customer's site."
+          );
+        } else {
+          toast.success("Rejected.");
+        }
+        _ref.close();
+      })
+      .catch(function (error) {
+        toast.error(copilotError(error, "Failed to record the decision"));
+      });
+  }
+
+  var actions = [];
+  if (!a.why_not_me) {
+    actions.push({
+      label: "Approve and apply",
+      variant: "solid",
+      onClick: function (_ref) {
+        decide(true, _ref);
+      },
+    });
+    actions.push({
+      label: "Reject",
+      theme: "red",
+      onClick: function (_ref) {
+        decide(false, _ref);
+      },
+    });
+    actions.push({
+      label: "Applied by hand",
+      onClick: function (_ref) {
+        call("helpdesk.api.copilot.change_set_applied_by_hand", {
+          ticket: doc.name,
+        })
+          .then(function () {
+            toast.success("Copilot read the records back from the site.");
+            _ref.close();
+          })
+          .catch(function (error) {
+            toast.error(copilotError(error, "Failed to read the records back"));
+          });
+      },
+    });
+  }
+  actions.push({
+    label: "Download all (CSV)",
+    onClick: function () {
+      window.open(cs.csv_url, "_blank", "noopener");
+    },
+  });
+  actions.push({
+    label: "Close",
+    onClick: function (_ref) {
+      _ref.close();
+    },
+  });
+  $dialog({
+    title: "Review correction - Ticket #" + doc.name,
     html: html,
     actions: actions,
   });
