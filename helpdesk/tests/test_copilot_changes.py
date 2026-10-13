@@ -15,7 +15,7 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from helpdesk.api import copilot as api
-from helpdesk.copilot import approval_key, changes, customer, router, runs
+from helpdesk.copilot import approval_key, changes, customer, fixes, router, runs
 from helpdesk.test_utils import (
     FakeCustomerSite,
     create_agent,
@@ -27,6 +27,8 @@ from helpdesk.test_utils import (
     make_support_connection,
     make_ticket,
 )
+from helpdesk.tests.test_copilot_deploy import MERGED, DeployCase
+from helpdesk.tests.test_copilot_fix_flow import FixCase
 
 KEY = "site-approval-key"
 SETTINGS = "Selling Settings"
@@ -457,3 +459,218 @@ class TestTheSiteReadsOurSignature(FrappeTestCase):
         token = approval_key.sign(KEY, {"v": 1, "exp": time.time() + 60, "records": []})
         with patch.object(write_guard, "approval_key", return_value=KEY):
             self.assertEqual(write_guard.read_approval(token)["v"], 1)
+
+
+class TestUndoTheChange(ChangeCase):
+    def applied(self):
+        self.diagnosed()
+        self.decide(self.senior)
+        self.assertEqual(self.current_run().state, "Resolved")
+        return self.current_run()
+
+    def test_the_reverse_goes_through_a_senior_and_puts_the_old_values_back(self):
+        fixed = self.applied()
+        self.assertTrue(changes.can_undo(fixed))
+        with self.assertRaises(frappe.ValidationError):
+            changes.undo(fixed, self.senior, " ")
+
+        revert = changes.undo(fixed, self.senior, "the customer wants Wholesale back")
+
+        self.assertEqual((revert.kind, revert.reverts), ("revert", fixed.name))
+        self.assertEqual(self.current_run().name, revert.name)  # the card follows it
+        reverse = self.change_set()
+        self.assertEqual(reverse.undo_of, fixed.change_set)
+        self.assertEqual(
+            json.loads(reverse.items[0].values), {"selling_price_list": "Wholesale"}
+        )
+        self.assertEqual(self.current_run().state, "Awaiting Approval")
+
+        self.decide(self.senior)
+
+        self.assertEqual(
+            self.site.value(SETTINGS, SETTINGS, "selling_price_list"), "Wholesale"
+        )
+        self.assertEqual(
+            frappe.db.get_value(changes.CHANGE_SET, fixed.change_set, "status"),
+            "Undone",
+        )
+        self.assertFalse(any(stage["pushed"] for stage in self.events("stage")))
+        self.assertFalse(
+            changes.can_undo(frappe.get_doc("HDS Copilot Run", fixed.name))
+        )
+
+    def test_created_records_are_left_for_a_person(self):
+        self.diagnosed(
+            [
+                {
+                    "action": "create",
+                    "doctype": "Item Price",
+                    "values": {"item_code": "ITEM-1", "price_list_rate": 15},
+                },
+                {
+                    "doctype": SETTINGS,
+                    "name": SETTINGS,
+                    "values": {"selling_price_list": "Standard Selling"},
+                },
+            ]
+        )
+        self.decide(self.senior)
+        changes.undo(self.current_run(), self.senior, "not needed after all")
+
+        reverse = self.change_set()
+        self.assertEqual(len(reverse.items), 1)
+        self.assertIn("Item Price-NEW-1", reverse.set_aside)
+
+    def test_only_approvers_and_managers_may_undo(self):
+        self.applied()
+        frappe.set_user(create_agent("change.other@example.com").name)
+        try:
+            with self.assertRaises(frappe.PermissionError):
+                api.undo_change(self.ticket.name, "no")
+        finally:
+            frappe.set_user("Administrator")
+
+
+class TestACustomersOwnMistake(ChangeCase):
+    def explained(self):
+        run = runs.start_run(self.ticket.name)
+        run = runs.transition(run, "Investigating", runs.WORKER)
+        run = router.route(run, fake_investigation("customer_mistake", 0.9))
+        self.assertEqual(run.state, "Explaining")
+        return runs.transition(run, "Answered", runs.AGENT)
+
+    def test_an_agent_asks_and_a_senior_approves_the_correction(self):
+        self.explained()
+        frappe.set_user(self.approver)
+        try:
+            info = api.get_run(self.ticket.name)
+            self.assertTrue(info["can_prepare_correction"])
+            api.prepare_correction(self.ticket.name)
+        finally:
+            frappe.set_user("Administrator")
+        asked = self.current_run()
+        self.assertEqual(
+            (asked.kind, asked.prepare_correction, asked.state),
+            ("followup", 1, "Queued"),
+        )
+        self.assertTrue(runs.run_context(asked)["prepare_correction"])
+
+        self.prices("IP-1")
+        run = runs.transition(asked, "Investigating", runs.WORKER)
+        router.route(
+            run,
+            fake_investigation(
+                "customer_mistake",
+                0.9,
+                change_set={
+                    "summary": "a rate typed with an extra zero",
+                    "changes": [price("IP-1", 15)],
+                },
+            ),
+        )
+
+        run = self.current_run()
+        self.assertEqual(
+            (run.state, self.change_set().kind, run.task),
+            ("Awaiting Approval", "Data Fix", None),
+        )
+
+    def test_without_being_asked_a_mistake_is_only_explained(self):
+        self.prices("IP-1")
+        run = runs.start_run(self.ticket.name)
+        run = runs.transition(run, "Investigating", runs.WORKER)
+        run = router.route(
+            run,
+            fake_investigation(
+                "customer_mistake",
+                0.9,
+                change_set={"summary": "x", "changes": [price("IP-1", 15)]},
+            ),
+        )
+        self.assertEqual((run.state, run.change_set), ("Explaining", None))
+
+
+class CodeAndData:
+    """A bug that damaged data: the code fix and the data correction on one approval."""
+
+    def damaged(self):
+        connection = make_support_connection(self.customer)
+        connection.approval_key = KEY
+        connection.save(ignore_permissions=True)
+        self.site = FakeCustomerSite(key=KEY).install(self)
+        self.site.add("Item Price", "IP-1", {"price_list_rate": 10})
+        run = runs.start_run(self.ticket.name)
+        run = runs.transition(run, "Investigating", runs.WORKER)
+        return router.route(
+            run,
+            fake_investigation(
+                "data_damaged_by_bug",
+                0.9,
+                change_set={
+                    "summary": "the bug saved a wrong rate",
+                    "customer_note": "We also corrected the rate the bug had saved.",
+                    "changes": [price("IP-1", 15)],
+                },
+            ),
+        )
+
+
+class TestCodeAndDataMarkedDeployed(CodeAndData, FixCase):
+    def test_one_approval_by_a_senior_then_the_data_once_the_code_is_live(self):
+        self.damaged()
+        data = frappe.get_doc(changes.CHANGE_SET, self.current_run().change_set)
+        self.assertEqual((data.status, self.current_run().approval), ("Checked", None))
+
+        self.opened()
+        approval = self.approval()
+        self.assertEqual(
+            (approval.kind, approval.change_set, approval.sensitive),
+            ("Code + Data", data.name, 1),
+        )
+        with self.assertRaises(frappe.PermissionError):
+            self.decide(self.approver)
+        self.decide(self.senior)
+
+        self.assertEqual(self.current_run().state, "Merged")
+        self.assertEqual(self.site.value("Item Price", "IP-1", "price_list_rate"), 10)
+
+        fixes.mark_deployed(self.current_run(), self.senior)
+
+        self.assertEqual(self.site.value("Item Price", "IP-1", "price_list_rate"), 15)
+        self.assertEqual(self.current_run().state, "Resolved")
+        self.assertIn(
+            "The fix is live. We also corrected the rate",
+            self.events("stage")[-1]["message"],
+        )
+
+
+class TestCodeAndDataThroughPress(CodeAndData, DeployCase):
+    def diagnosed(self):
+        return self.damaged()
+
+    def decide(self, user, *args, **kwargs):
+        return super().decide(self.senior, *args, **kwargs)  # code and data: a senior's
+
+    def test_the_data_is_corrected_after_the_deploys_check(self):
+        self.site.replies.update(
+            {
+                "get_code_identity": [{"app": "demo_app", "commit": MERGED}],
+                "get_deploy_status": {
+                    "scheduler_enabled": True,
+                    "maintenance_mode": False,
+                    "errors": {"top": []},
+                },
+                "get_error_log": [],
+            }
+        )
+        self.request(self.senior, "now")
+        self.cron()
+        self.press.finish("Success")
+        self.cron()
+        self.assertEqual(self.current_run().state, "Verifying")
+        self.assertEqual(self.site.value("Item Price", "IP-1", "price_list_rate"), 10)
+
+        self.cron()  # the check after the deploy, then the data
+
+        self.assertEqual(self.site.value("Item Price", "IP-1", "price_list_rate"), 15)
+        self.assertEqual(self.current_run().state, "Resolved")

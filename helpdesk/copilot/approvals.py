@@ -204,6 +204,8 @@ def open_approval(
             "run": run.name,
             "ticket": run.ticket,
             "status": "Pending",
+            "kind": "Code + Data" if payload.get("change_set") else "Code Change",
+            "change_set": payload.get("change_set"),
             "pull_request": pull_request,
             "repo": pull.get("repo"),
             "number": pull.get("number"),
@@ -448,6 +450,21 @@ def decide(
         fixes.on_rejected(run, approval, note)
         return {"outcome": "rejected"}
 
+    if approval.get("change_set"):
+        from helpdesk.copilot import changes
+
+        data = frappe.get_doc(changes.CHANGE_SET, approval.change_set)
+        payload = frappe.parse_json(approval.payload or "{}") or {}
+        if payload.get("change_set_digest") != changes.digest_of(data):
+            fixes.reopen_for_new_head(
+                run, approval, _("the data correction was checked again")
+            )
+            return {
+                "outcome": "superseded",
+                "message": _(
+                    "The data correction changed after this card was made. Please review the new version."
+                ),
+            }
     head = fixes.live_head(approval)
     if head and head != approval.head_sha:
         # not an error: raising would roll back the new approval opened for the new commits
@@ -478,6 +495,13 @@ def decide(
         {"approval": approval.name, "by": user, "head_sha": approval.head_sha},
         runs.AGENT,
     )
+    if approval.get("change_set"):
+        # the data waits for the code: applied once the deploy's check passes
+        frappe.db.set_value(
+            "HDS Copilot Change Set",
+            approval.change_set,
+            {"status": "Approved", "approval": approval.name},
+        )
     # the decision stands whatever the merge attempt does; the refresh retries a failed one
     frappe.db.commit()  # nosemgrep
     try:

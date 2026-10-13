@@ -78,6 +78,9 @@ TRANSITIONS = {
     ("Approved", "Applying"): {SYSTEM},
     ("Applying", "Resolved"): {SYSTEM},
     ("Applying", "Escalated"): {SYSTEM},
+    # code and data together: the data is corrected once the code is live
+    ("Verifying", "Applying"): {SYSTEM},
+    ("Merged", "Applying"): {AGENT},
 }
 CANCELLABLE = (
     "Queued",
@@ -546,12 +549,16 @@ def run_context(run) -> dict:
         if run.customer
         else None
     )
-    from helpdesk.copilot import fixes
+    from helpdesk.copilot import changes, fixes
 
     return {
         "run": run.name,
         "kind": "fix" if fixing(run) else run.kind,
         "shadow": bool(run.shadow),
+        # an agent asked Copilot to prepare the correction of the customer's own mistake
+        "prepare_correction": bool(run.get("prepare_correction")),
+        # corrections on this ticket so far: a new look prepares only what they missed
+        "corrections": changes.earlier_corrections(run.ticket),
         # what the investigation found, for the fix job (and for a follow-up run)
         "diagnosis": {
             "root_cause_category": run.root_cause_category,

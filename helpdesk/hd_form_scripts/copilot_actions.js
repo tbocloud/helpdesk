@@ -303,6 +303,16 @@ function showCopilotRunDialog(info, doc, call, toast, $dialog) {
       },
     });
   }
+  if (fix.can_undo_change) {
+    actions.push({
+      label: "Undo the change",
+      theme: "red",
+      onClick: function (_ref) {
+        _ref.close();
+        showCopilotUndoChange(doc, call, toast, $dialog);
+      },
+    });
+  }
   if (fix.can_undo) {
     actions.push({
       label: "Undo the fix",
@@ -333,6 +343,24 @@ function showCopilotRunDialog(info, doc, call, toast, $dialog) {
           _ref.close();
         } catch (error) {
           toast.error("Failed to cancel the run");
+        }
+      },
+    });
+  }
+  if (info.can_prepare_correction) {
+    actions.push({
+      label: "Let Copilot prepare the correction",
+      onClick: async function (_ref) {
+        try {
+          await call("helpdesk.api.copilot.prepare_correction", {
+            ticket: doc.name,
+          });
+          toast.success(
+            "Copilot will prepare the correction; a senior approves it before anything changes."
+          );
+          _ref.close();
+        } catch (error) {
+          toast.error(copilotError(error, "Failed to ask Copilot"));
         }
       },
     });
@@ -747,6 +775,13 @@ function showCopilotFixReview(info, doc, call, toast, $dialog) {
     copilotEscape(checkText || "not read yet") +
     ' <span style="color:#6b7280">(the hub merges only when they pass)</span></div>';
   html += copilotTestedByCopilot(a);
+  if (a.kind === "Code + Data" && info.fix.change_set) {
+    html +=
+      '<div style="margin-top:8px"><b>With a data correction</b>: once the fix is live, Copilot applies it to the records below (' +
+      copilotEscape(info.fix.change_set.name) +
+      ").</div>";
+    html += copilotRecordsHtml(info.fix.change_set);
+  }
   if (a.why_not_me) {
     html +=
       '<div style="margin-top:8px;color:#b91c1c">' +
@@ -841,6 +876,99 @@ function showCopilotFixReview(info, doc, call, toast, $dialog) {
   });
 }
 
+// The records of a correction, old → new, with what the site's check said.
+function copilotRecordsHtml(cs) {
+  var html =
+    '<div style="margin-top:8px"><b>Records</b> (' +
+    copilotEscape(cs.ready) +
+    " of " +
+    copilotEscape(cs.total) +
+    " ready; the site checked each one without saving)</div>";
+  html += '<ul style="margin:4px 0 0 16px">';
+  for (var i = 0; i < cs.records.length; i++) {
+    var rec = cs.records[i];
+    var parts = [];
+    for (var k = 0; k < rec.changes.length; k++) {
+      var ch = rec.changes[k];
+      parts.push(
+        copilotEscape(ch.field) +
+          ": " +
+          copilotEscape(ch.old || "(empty)") +
+          " → " +
+          copilotEscape(ch.new)
+      );
+    }
+    html +=
+      "<li>" +
+      copilotEscape(rec.doctype + " " + rec.name) +
+      (rec.action === "create" ? " (new)" : "") +
+      ": " +
+      parts.join("; ") +
+      (rec.check && rec.check !== "ready"
+        ? ' <span style="color:#b45309">' +
+          copilotEscape(rec.check + (rec.note ? ": " + rec.note : "")) +
+          "</span>"
+        : "") +
+      "</li>";
+  }
+  html += "</ul>";
+  if (cs.more) {
+    html +=
+      '<div style="color:#4b5563">… ' +
+      copilotEscape(cs.more) +
+      " more records: download them all.</div>";
+  }
+  return html;
+}
+
+// Undo an applied correction: the reverse change set (the old values), approved by a senior.
+function showCopilotUndoChange(doc, call, toast, $dialog) {
+  var field =
+    "width:100%;padding:6px;border:1px solid #d1d5db;border-radius:4px;font-size:13px";
+  $dialog({
+    title: "Undo the change - Ticket #" + doc.name,
+    html:
+      '<div style="padding:8px;font-size:13px"><p>Copilot prepares the reverse of the correction from the values it replaced. The site checks it, a senior approves it, and then it is applied. The customer is not told. Records the correction created are listed for a person to remove.</p>' +
+      '<label for="copilot-undo-change-reason">Why undo it (needed)</label>' +
+      '<textarea id="copilot-undo-change-reason" rows="3" style="' +
+      field +
+      '"></textarea></div>',
+    actions: [
+      {
+        label: "Undo the change",
+        theme: "red",
+        onClick: function (_ref) {
+          var reasonEl = document.getElementById("copilot-undo-change-reason");
+          var reason = reasonEl ? reasonEl.value.trim() : "";
+          if (!reason) {
+            toast.error("Please say why the correction is undone.");
+            return;
+          }
+          call("helpdesk.api.copilot.undo_change", {
+            ticket: doc.name,
+            reason: reason,
+          })
+            .then(function () {
+              toast.success(
+                "The reverse correction is being checked; a senior approves it."
+              );
+              _ref.close();
+            })
+            .catch(function (error) {
+              toast.error(copilotError(error, "Failed to undo the change"));
+            });
+        },
+      },
+      {
+        label: "Cancel",
+        onClick: function (_ref) {
+          _ref.close();
+        },
+      },
+    ],
+  });
+}
+
 // A correction Copilot prepared (settings or data): every record with its old and new value,
 // checked by the customer's site; a senior approves and the hub applies it at once.
 function showCopilotCorrectionReview(info, doc, call, toast, $dialog) {
@@ -882,46 +1010,7 @@ function showCopilotCorrectionReview(info, doc, call, toast, $dialog) {
     }
     html += "</ul>";
   }
-  html +=
-    '<div style="margin-top:8px"><b>Records</b> (' +
-    copilotEscape(cs.ready) +
-    " of " +
-    copilotEscape(cs.total) +
-    " ready; the site checked each one without saving)</div>";
-  html += '<ul style="margin:4px 0 0 16px">';
-  for (var i = 0; i < cs.records.length; i++) {
-    var rec = cs.records[i];
-    var parts = [];
-    for (var k = 0; k < rec.changes.length; k++) {
-      var ch = rec.changes[k];
-      parts.push(
-        copilotEscape(ch.field) +
-          ": " +
-          copilotEscape(ch.old || "(empty)") +
-          " → " +
-          copilotEscape(ch.new)
-      );
-    }
-    html +=
-      "<li>" +
-      copilotEscape(rec.doctype + " " + rec.name) +
-      (rec.action === "create" ? " (new)" : "") +
-      ": " +
-      parts.join("; ") +
-      (rec.check && rec.check !== "ready"
-        ? ' <span style="color:#b45309">' +
-          copilotEscape(rec.check + (rec.note ? ": " + rec.note : "")) +
-          "</span>"
-        : "") +
-      "</li>";
-  }
-  html += "</ul>";
-  if (cs.more) {
-    html +=
-      '<div style="color:#4b5563">… ' +
-      copilotEscape(cs.more) +
-      " more records: download them all below.</div>";
-  }
+  html += copilotRecordsHtml(cs);
   if (cs.set_aside && cs.set_aside.length) {
     html +=
       '<div style="margin-top:8px"><b>Left for a person</b> (Copilot does not change these)</div><ul style="margin:4px 0 0 16px;color:#4b5563">';

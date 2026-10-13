@@ -664,6 +664,21 @@ def succeed(request, results: list[dict]):
         }
     )
     _release_lock(request.name)
+    from helpdesk.copilot import changes
+
+    data = changes.approved_with_code(frappe.get_doc("HDS Copilot Run", request.run))
+    if data:
+        run = runs.transition(
+            request.run,
+            "Applying",
+            runs.SYSTEM,
+            note="deployed and checked; correcting the data",
+            deployed_at=now_datetime(),
+            deployed_by=request.requested_by,
+        )
+        runs.add_event(run, "deploy_checked", {"request": request.name}, runs.SYSTEM)
+        changes.apply_after_code(data, request.requested_by)
+        return
     run = runs.transition(
         request.run,
         "Resolved",

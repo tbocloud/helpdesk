@@ -3,6 +3,8 @@
 
 """An action request is decided once and executed once, whoever clicks twice."""
 
+import base64
+import json
 from unittest.mock import MagicMock, patch
 
 import frappe
@@ -72,3 +74,26 @@ class TestApprovalLock(FrappeTestCase):
             with self.assertRaises(frappe.ValidationError):
                 approval.execute_approved_actions(self.request)
         self.assertEqual(mcp.call_tool.call_count, 1)
+
+    def test_a_site_that_checks_writes_gets_the_approved_actions_signed(self):
+        conn = frappe.get_doc("HDS Support Connection", self.conn)
+        conn.approval_key = "site-key"
+        conn.save(ignore_permissions=True)
+        approval.approve_actions(self.request)
+        sent = []
+
+        def call_tool(tool, args):
+            sent.append(args)
+            return {"content": [{"type": "text", "text": "ok"}], "isError": False}
+
+        mcp = MagicMock()
+        mcp.call_tool.side_effect = call_tool
+        with patch.object(approval, "MCPClient", return_value=mcp):
+            approval.execute_approved_actions(self.request)
+
+        body = sent[0]["approval"].partition(".")[0]
+        payload = json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))
+        self.assertEqual(
+            payload["records"], [{"doctype": "Item", "name": "X", "action": "update"}]
+        )
+        self.assertEqual(payload["change_set"], self.request)

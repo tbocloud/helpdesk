@@ -633,6 +633,20 @@ def open_for(run, row_name: str, pull: dict):
         extra["change"]["tested_commit"] = change.get("head_sha")
     with contextlib.suppress(GitHubError):
         extra["copilot_only"] = github.copilot_only(pull["repo"], pull, commit_email())
+    from helpdesk.copilot import changes
+
+    data = changes.waiting_for_code(run)
+    if data:
+        # code and data on one approval: a senior's, for this commit and these records
+        found["sensitive"] = True
+        found["reasons"] = [
+            *(found.get("reasons") or []),
+            _("it also corrects {0} records on the customer's site").format(
+                data.ready_count
+            ),
+        ]
+        extra["change_set"] = data.name
+        extra["change_set_digest"] = changes.digest_of(data)
     approval = approvals.open_approval(run, row_name, pull, files, found, checks, extra)
     if run.state != "Awaiting Approval":
         runs.transition(
@@ -1083,6 +1097,20 @@ def mark_deployed(run, user: str, note: str = ""):
             )
         )
     note = (note or "").strip()[:500]
+    from helpdesk.copilot import changes
+
+    data = changes.approved_with_code(run)
+    if data:
+        run = runs.transition(
+            run,
+            "Applying",
+            runs.AGENT,
+            note=f"deployed by {user}; correcting the data",
+            deployed_at=now_datetime(),
+            deployed_by=user,
+        )
+        changes.apply_after_code(data, user)
+        return frappe.get_doc("HDS Copilot Run", run.name)
     run = runs.transition(
         run,
         "Resolved",

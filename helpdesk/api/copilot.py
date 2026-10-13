@@ -89,6 +89,10 @@ def get_run(ticket: str | int) -> dict:
         "events": events,
         "can_cancel": run.state in runs.CANCELLABLE,
         "can_start": runs.active_run(run.ticket) is None,
+        # the customer asked TBO to correct their own entries, after Copilot's explanation
+        "can_prepare_correction": run.root_cause_category == "customer_mistake"
+        and run.get("kind") != "revert"
+        and runs.active_run(run.ticket) is None,
         "shadow": bool(run.shadow),
         "base_app": run.base_app,
         "base_commit": run.base_commit,
@@ -226,6 +230,7 @@ def _fix_card(run) -> dict | None:
         "change_set": changes.card(frappe.get_doc(changes.CHANGE_SET, run.change_set))
         if run.get("change_set")
         else None,
+        "can_undo_change": changes.can_undo(run) and deploy.may_deploy(user),
     }
 
 
@@ -362,6 +367,35 @@ def change_set_applied_by_hand(ticket: str | int) -> dict:
     if not run.get("change_set"):
         frappe.throw(_("This ticket has no correction from Copilot."))
     changes.applied_by_hand(run.change_set, frappe.session.user)
+    return get_run(ticket)
+
+
+@frappe.whitelist(methods=["POST"])
+@agent_only
+def undo_change(ticket: str | int, reason: str) -> dict:
+    """Undo an applied correction: the reverse change set, through a senior's approval."""
+    from helpdesk.copilot import changes, deploy
+
+    frappe.has_permission("HD Ticket", "write", str(ticket), throw=True)
+    if not deploy.may_deploy(frappe.session.user):
+        frappe.throw(
+            _(
+                "Only the Copilot approvers and the Agent Managers may undo corrections."
+            ),
+            frappe.PermissionError,
+        )
+    changes.undo(_run_of(ticket), frappe.session.user, reason)
+    return get_run(ticket)
+
+
+@frappe.whitelist(methods=["POST"])
+@agent_only
+def prepare_correction(ticket: str | int) -> dict:
+    """The customer asked TBO to correct their own entries: Copilot prepares the change set."""
+    from helpdesk.copilot import changes
+
+    frappe.has_permission("HD Ticket", "write", str(ticket), throw=True)
+    changes.prepare_correction(str(ticket), frappe.session.user)
     return get_run(ticket)
 
 

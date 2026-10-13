@@ -3970,6 +3970,8 @@ class FakeCustomerSite:
         self.created: list = []
         self.approvals: list = []
         self.calls: list = []
+        # other tools the site answers (the deploy's check): {tool: reply or function of the arguments}
+        self.replies: dict = {}
 
     def install(self, test_case):
         patcher = patch("helpdesk.mcp_client.MCPClient")
@@ -3992,6 +3994,12 @@ class FakeCustomerSite:
         import json as _json
 
         self.calls.append((tool, arguments))
+        if tool in self.replies:
+            reply = self.replies[tool]
+            reply = reply(arguments or {}) if callable(reply) else reply
+            return {
+                "content": [{"type": "text", "text": _json.dumps(reply, default=str)}]
+            }
         try:
             result = getattr(self, tool)(**(arguments or {}))
         except LookupError as e:

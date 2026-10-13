@@ -381,10 +381,55 @@ def check_and_ask(change_set: str):
             _("Copilot's correction for ticket {0} needs a person").format(run.ticket),
         )
         return
-    if run.root_cause_category == "data_damaged_by_bug":
-        return  # the code fix goes first; its approval carries this change set (Phase 3, H14)
+    if run.root_cause_category == "data_damaged_by_bug" and run.get("kind") != "revert":
+        # the code fix goes first; its approval carries this change set
+        pending = approvals.current(run)
+        if pending and pending.status == "Pending" and not pending.get("change_set"):
+            from helpdesk.copilot import fixes
+
+            fixes.reopen_for_new_head(
+                run, pending, _("the data correction is ready to go with the code")
+            )
+        return
     if run.state == "Preparing Fix":
         approvals.open_change_set_approval(run, doc)
+
+
+# --- code and data together ---------------------------------------------------------------
+
+
+def waiting_for_code(run):
+    """The checked correction a code fix's approval must carry (damaged data), if any."""
+    if (
+        run.shadow
+        or run.get("kind") == "revert"
+        or run.root_cause_category != "data_damaged_by_bug"
+    ):
+        return None
+    if not run.get("change_set"):
+        return None
+    doc = frappe.get_doc(CHANGE_SET, run.change_set)
+    return doc if doc.status == "Checked" and doc.ready_count else None
+
+
+def approved_with_code(run):
+    """The correction approved together with the run's code fix, waiting for the code to go live."""
+    if not run.get("change_set"):
+        return None
+    doc = frappe.get_doc(CHANGE_SET, run.change_set)
+    return doc if doc.status == "Approved" and doc.approval else None
+
+
+def apply_after_code(doc, user: str):
+    """The code is live: the data correction is applied in the background, as approved."""
+    frappe.enqueue(
+        "helpdesk.copilot.changes.apply",
+        queue="long",
+        change_set=doc.name,
+        user=user,
+        enqueue_after_commit=True,
+        now=frappe.flags.in_test,
+    )
 
 
 # --- applying -----------------------------------------------------------------------------
@@ -520,6 +565,8 @@ def _finish(doc, run, user: str, stopped: str):
         )
         return
     runs.add_event(run, "change_set_applied", summary, runs.SYSTEM)
+    if doc.undo_of:
+        frappe.db.set_value(CHANGE_SET, doc.undo_of, "status", "Undone")
     customer.comment(
         run.ticket,
         frappe.utils.escape_html(
@@ -537,11 +584,10 @@ def _finish(doc, run, user: str, stopped: str):
             deployed_at=now_datetime(),
             deployed_by=user,
         )
-        customer.send_stage(
-            run,
-            "Resolved",
-            {"resolution": doc.customer_note or _("We corrected it on your site.")},
-        )
+        note = doc.customer_note or _("We corrected it on your site.")
+        if run.merge_commit:
+            note = _("The fix is live.") + " " + note
+        customer.send_stage(run, "Resolved", {"resolution": note})
 
 
 def applied_by_hand(change_set: str, user: str):
@@ -618,6 +664,193 @@ def _holds(current: dict, change: dict) -> bool:
         for row in change["rows"]
         for field, value in (row.get("values") or {}).items()
     )
+
+
+# --- undo ------------------------------------------------------------------------------
+
+
+def can_undo(run) -> bool:
+    from helpdesk.copilot import fixes
+
+    if run.get("kind") == "revert" or not run.get("change_set"):
+        return False
+    doc = frappe.get_doc(CHANGE_SET, run.change_set)
+    return bool(
+        doc.status in ("Applied", "Stopped")
+        and any(item.apply_result == "applied" for item in doc.items)
+        and not fixes.revert_run_of(run)
+    )
+
+
+def undo(run, user: str, reason: str):
+    """Undo an applied correction: a revert run with the reverse change set (the stored old values).
+
+    It is checked and approved by a senior like any correction; the customer hears
+    nothing from it. Records the correction created, and table rows it added, are
+    listed for a person to remove.
+    """
+    run = frappe.get_doc("HDS Copilot Run", run.name)
+    reason = (reason or "").strip()[:500]
+    if not reason:
+        frappe.throw(_("Please say why the correction is undone."))
+    if not can_undo(run):
+        frappe.throw(_("Only an applied correction can be undone, once."))
+    original = frappe.get_doc(CHANGE_SET, run.change_set)
+    items, aside = [], []
+    for item in original.items:
+        if item.apply_result != "applied":
+            continue
+        if item.action == "create":
+            aside.append(
+                {
+                    "doctype": item.ref_doctype,
+                    "name": item.new_name,
+                    "why": _(
+                        "created by {0}: a person removes it if it must go"
+                    ).format(original.name),
+                }
+            )
+            continue
+        before = expect_of(item) or {}
+        tables = {row.get("name"): row.get("table") for row in _loads(item.rows, [])}
+        rows = [
+            {"table": tables.get(name), "name": name, "values": values}
+            for name, values in (before.get("rows") or {}).items()
+            if tables.get(name)
+        ]
+        if not before.get("values") and not rows:
+            continue
+        items.append(
+            {
+                "action": "update",
+                "ref_doctype": item.ref_doctype,
+                "ref_name": item.ref_name,
+                "values": json.dumps(before.get("values") or {}, indent=1, default=str),
+                "rows": json.dumps(rows, indent=1, default=str) if rows else None,
+                "why": _("back to the value before {0}").format(original.name),
+            }
+        )
+        if _loads(item.add_rows, []):
+            aside.append(
+                {
+                    "doctype": item.ref_doctype,
+                    "name": item.ref_name,
+                    "why": _("table rows added by {0}: a person removes them").format(
+                        original.name
+                    ),
+                }
+            )
+    revert = frappe.get_doc(
+        {
+            "doctype": "HDS Copilot Run",
+            "ticket": run.ticket,
+            "customer": run.customer,
+            "connection": run.connection,
+            "registry": run.registry,
+            "kind": "revert",
+            "state": "Preparing Fix",
+            "shadow": run.shadow,
+            "reverts": run.name,
+            "root_cause_category": run.root_cause_category,
+            "summary": _("Undo the correction {0}: {1}").format(original.name, reason),
+            "queued_at": now_datetime(),
+        }
+    ).insert(ignore_permissions=True)
+    runs.add_event(
+        revert, "state_change", {"from": None, "to": "Preparing Fix"}, runs.AGENT
+    )
+    runs.update_ticket(revert)  # the ticket's card follows the undo from now on
+    doc = frappe.get_doc(
+        {
+            "doctype": CHANGE_SET,
+            "run": revert.name,
+            "ticket": run.ticket,
+            "connection": run.connection,
+            "kind": original.kind,
+            "status": "Prepared",
+            "undo_of": original.name,
+            "summary": _("Undo {0}: {1}").format(original.name, reason),
+            "found_by": _("the old values {0} replaced").format(original.name),
+            "set_aside": json.dumps(aside, indent=1) if aside else None,
+            "total": len(items),
+            "items": items,
+        }
+    )
+    doc.risk_level, doc.risk_reasons = _risk(doc)
+    doc.insert(ignore_permissions=True)
+    revert.db_set("change_set", doc.name, update_modified=False)
+    runs.add_event(
+        run,
+        "undo_requested",
+        {
+            "by": user,
+            "reason": reason,
+            "revert_run": revert.name,
+            "change_set": doc.name,
+        },
+        runs.AGENT,
+    )
+    from helpdesk.copilot import customer
+
+    customer.comment(
+        run.ticket,
+        frappe.utils.escape_html(
+            _("Undo requested for the correction {0}: {1}").format(
+                original.name, reason
+            )
+        ),
+    )
+    frappe.enqueue(
+        "helpdesk.copilot.changes.check_and_ask",
+        queue="long",
+        change_set=doc.name,
+        enqueue_after_commit=True,
+        now=frappe.flags.in_test,
+    )
+    return frappe.get_doc("HDS Copilot Run", revert.name)
+
+
+# --- a customer's own mistake -----------------------------------------------------------
+
+
+def prepare_correction(ticket: str, user: str):
+    """The customer asked TBO to correct their own entries: a follow-up run asks Copilot for a change set."""
+    from helpdesk.copilot import customer
+
+    latest = customer.latest_run(ticket)
+    if not latest or latest.root_cause_category != "customer_mistake":
+        frappe.throw(
+            _("Copilot prepares a correction for a customer's own mistake only.")
+        )
+    if runs.active_run(ticket):
+        frappe.throw(
+            _("Send Copilot's explanation first; then it can prepare the correction.")
+        )
+    run = runs.start_run(ticket, kind="followup", actor=runs.AGENT)
+    run.db_set("prepare_correction", 1, update_modified=False)
+    runs.add_event(run, "correction_requested", {"by": user}, runs.AGENT)
+    return run
+
+
+def earlier_corrections(ticket: str) -> list[dict]:
+    """The ticket's corrections so far, for the worker: what was found, how, and what happened."""
+    return [
+        {
+            "change_set": row.name,
+            "status": row.status,
+            "summary": row.summary,
+            "found_by": row.found_by,
+            "applied_at": str(row.applied_at or ""),
+            "records": row.total,
+        }
+        for row in frappe.get_all(
+            CHANGE_SET,
+            filters={"ticket": ticket},
+            fields=["name", "status", "summary", "found_by", "applied_at", "total"],
+            order_by="creation asc",
+            limit=10,
+        )
+    ]
 
 
 # --- what people see ----------------------------------------------------------------------

@@ -172,6 +172,36 @@ API (agents): `helpdesk.api.copilot.request_deploy(ticket, when)`, `cancel_deplo
 4. **Data changed by a failed patch:** only a person restores from Press's backup (the site's Backups on Press), after telling the customer.
 5. A deploy stuck in Deploying fails by itself after 2 hours; a lock left by a crash frees itself after 3 hours.
 
+## Corrections to settings and data (Phase 3: `changes.py`, `approval_key.py`)
+
+When the cause is a wrong setting (`wrong_setting`) or data a bug damaged (`data_damaged_by_bug`), the worker's report can carry a **change set**: each record with its new values and why, how the records were found, a note for the customer, and the records it leaves to a person. The worker reports it in `submit_investigation` (`change_set`) or `submit_result`. A change set has at most 1,000 records; each one updates fields (and existing table rows, or adds rows) or creates a missing record. Deletes are refused, and so are users, roles and permissions, system and email settings, scripts and scheduled jobs, custom fields, property setters, workflows and print formats.
+
+1. **The check.** The hub keeps the change set (`HDS Copilot Change Set`, `TBO-CHG-.YYYY.-.#####`) and, in the background, asks the customer's site about every record with the connector's `check_change`. The site writes nothing and runs none of its own code; it says whether its guard would allow the change, what is wrong with the fields or values, and what the record holds now (the old values). A submitted document is set aside for a person (cancel and amend, or a return or credit note where e-invoicing forbids cancelling). A wrong setting with a change set needs no developer, so no fix task is made.
+2. **The approval.** When any record is ready, an approval opens (kind **Config Change** or **Data Fix**) for a **senior** approver, always. The card lists the first 20 records with old → new, the records set aside and why, the note the customer will get, and **Download all (CSV)**. The approval stands for exactly the checked content: if the change set is checked again with other old values, the approval is superseded. A shadow run's change set is checked and shown, never approved.
+3. **Applying.** **Approve and apply** applies it at once, in the background (the run goes Approved → Applying). The hub signs one approval per batch of 200 records with the site's **approval key** and sends each record with `apply_change` and the old values it was approved for. The site refuses a record whose changed fields no longer hold those values (someone edited it since): that record is skipped and listed. The first other refusal stops the change set: the records not applied stay as they were, the run is Escalated and the Agent Managers are told. When it is done, the run is Resolved and the customer sees Resolved with the approved note.
+4. **Applied by hand.** A senior may apply the records by hand on the site instead and press **Applied by hand**. That counts as their approval; the hub reads every record back and marks those that hold the new values.
+5. **Rejected** with a reason: the run goes back to Preparing Fix and nothing is changed.
+
+**Code and data together.** For `data_damaged_by_bug` the code fix goes first: the fix task and the pull request as in Phase 1d. The change set is checked when it arrives, and the pull request's approval carries it (kind **Code + Data**, one approval, by a senior). After the deploy's check passes (or **Mark deployed**), the run goes to Applying and the change set is applied with the old values it was approved for, then the run is Resolved ("The fix is live" and the note). Records the bug damaged after Copilot looked are found by starting Copilot again on the ticket: the worker sees the earlier corrections and prepares only the new ones, under their own approval.
+
+**Undo the change.** On a run whose correction was applied, an approver or Agent Manager presses **Undo the change** with a reason. Copilot starts a revert run with the reverse change set (the stored old values), checked and approved by a senior like any correction; the customer hears nothing from it. Records the correction created, and table rows it added, are listed for a person to remove.
+
+**Customer mistakes.** Copilot explains the ERP way, as before. When the customer asks TBO to correct it, an agent presses **Let Copilot prepare the correction** (after the explanation was sent): a follow-up run asks the worker for a change set, which goes through the same check and senior approval.
+
+**The approval key.** The customer's site makes it when its System Manager connects the site (`connect_to_hub`) and hands it over with `pair_client`; the hub keeps it on the HDS Support Connection (`approval_key`, Password). The hub's own API key can never set it. A site connected before this version connects once more to get one; until then a Production site takes no correction (the change set stops and says so). A signed approval names the change set, the ticket (the customer's own ticket number when known), who approved it and when, its expiry (2 hours), and each record with the digest of its exact new and old values. The older write path of the AI support sessions (HDS Support Action Request) signs its approved actions the same way.
+
+**On the customer's site** (helpdesk_client): the site checks every write itself: its write switch, its **Write List** (doctypes and actions), the never list, and on Production the signed approval. Every write, applied or refused, is a row in its **HDS Change Log**, and each changed record gets a note on its timeline. The write list starts empty.
+
+API (agents): `helpdesk.api.copilot.decide_fix` (also for corrections), `change_set_applied_by_hand(ticket)`, `download_change_set(change_set)` (CSV), `undo_change(ticket, reason)`, `prepare_correction(ticket)`; `get_run` adds the change set to the fix card.
+
+**When a correction goes wrong (runbook)**
+
+1. Read the card: the record that was refused and the site's reason, or the check's findings.
+2. **Refused while applying:** the records before it are changed, the rest are not. Fix the cause (often the site's write list, or a validation of the site), then start Copilot again on the ticket for the rest, or apply them by hand.
+3. **Wrong values applied:** **Undo the change** prepares the reverse; a senior approves it.
+4. **Submitted documents set aside:** a person corrects them the ERP way. Copilot does not touch them.
+5. **No approval key:** the customer's System Manager connects the site again with a connection code from TBO Support.
+
 ## MCP server (`helpdesk/api/copilot_mcp.py`, `helpdesk/copilot/mcp/`)
 
 TBO staff use tickets, tasks and the knowledge base from the TBO Copilot desktop app, or any MCP client, **as themselves, with their own permissions** (TASK-2026-00013).

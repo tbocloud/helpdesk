@@ -128,9 +128,19 @@ def route(run, result: dict):
     if change_set:
         # the records live on the change set; the run keeps how many
         investigation["change_set_records"] = len(change_set["changes"])
+    target = STATE_FOR_CATEGORY[effective]
+    asked = frappe.db.get_value(
+        "HDS Copilot Run",
+        run if isinstance(run, str) else run.name,
+        "prepare_correction",
+    )
+    if effective == "customer_mistake" and asked and change_set:
+        target = (
+            "Preparing Fix"  # an agent asked for the correction: a senior approves it
+        )
     doc = runs.transition(
         run,
-        STATE_FOR_CATEGORY[effective],
+        target,
         runs.SYSTEM,
         note=f"root cause: {effective}"
         + ("" if effective == category else f" (reported {category})"),
@@ -158,14 +168,18 @@ def route(run, result: dict):
         )
     elif doc.state == "Preparing Fix":
         corrected = bool(
-            change_set and effective in ("wrong_setting", "data_damaged_by_bug")
+            change_set
+            and effective
+            in ("wrong_setting", "data_damaged_by_bug", "customer_mistake")
         )
         if corrected:
             from helpdesk.copilot import changes
 
             changes.prepare(doc, change_set, effective)
-        # a wrong setting with its correction needs no developer; damaged data needs the code fix first
-        if not doc.shadow and not (corrected and effective == "wrong_setting"):
+        # a setting or a customer's entries need no developer; damaged data needs the code fix first
+        if not doc.shadow and not (
+            corrected and effective in ("wrong_setting", "customer_mistake")
+        ):
             _fix_task(doc)
     customer.send_stage(doc, STAGE_FOR_CATEGORY[effective])
     return doc
