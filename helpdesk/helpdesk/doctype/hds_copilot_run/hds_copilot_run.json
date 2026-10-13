@@ -51,6 +51,8 @@
 		"fix_requested_by",
 		"column_break_copilot_fix",
 		"change",
+		"deploy_request",
+		"reverts",
 		"review_section",
 		"review_verdict",
 		"reviewed_root_cause",
@@ -366,6 +368,20 @@
 			"read_only": 1
 		},
 		{
+			"fieldname": "deploy_request",
+			"fieldtype": "Link",
+			"label": "Deploy request",
+			"options": "HDS Deploy Request",
+			"read_only": 1
+		},
+		{
+			"fieldname": "reverts",
+			"fieldtype": "Link",
+			"label": "Reverts the fix of",
+			"options": "HDS Copilot Run",
+			"read_only": 1
+		},
+		{
 			"fieldname": "review_section",
 			"fieldtype": "Section Break",
 			"label": "Team Review"
@@ -443,7 +459,7 @@
 		}
 	],
 	"links": [],
-	"modified": "2026-10-13 01:00:00.000000",
+	"modified": "2026-10-13 02:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Copilot Run",

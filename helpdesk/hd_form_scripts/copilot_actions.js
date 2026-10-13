@@ -272,6 +272,42 @@ function showCopilotRunDialog(info, doc, call, toast, $dialog) {
       },
     });
   }
+  if (fix.can_deploy) {
+    actions.push({
+      label: "Deploy",
+      variant: "solid",
+      onClick: function (_ref) {
+        _ref.close();
+        showCopilotDeploy(fix, doc, call, toast, $dialog);
+      },
+    });
+  }
+  if (fix.deploy && fix.deploy.can_cancel) {
+    actions.push({
+      label: "Cancel deploy",
+      onClick: async function (_ref) {
+        try {
+          await call("helpdesk.api.copilot.cancel_deploy", {
+            ticket: doc.name,
+          });
+          toast.success("The deploy is cancelled.");
+          _ref.close();
+        } catch (error) {
+          toast.error(copilotError(error, "Failed to cancel the deploy"));
+        }
+      },
+    });
+  }
+  if (fix.can_undo) {
+    actions.push({
+      label: "Undo the fix",
+      theme: "red",
+      onClick: function (_ref) {
+        _ref.close();
+        showCopilotUndo(doc, call, toast, $dialog);
+      },
+    });
+  }
   if (fix.can_mark_deployed) {
     actions.push({
       label: "Mark deployed",
@@ -480,6 +516,41 @@ function copilotFixSummary(fix) {
   if (fix.merge_commit) {
     rows.push(["Merge commit", String(fix.merge_commit).slice(0, 12)]);
   }
+  if (fix.reverts) {
+    rows.push(["Undoes", "the fix of " + fix.reverts]);
+  }
+  if (fix.revert_run) {
+    rows.push(["Undone by", fix.revert_run]);
+  }
+  var d = fix.deploy;
+  if (d) {
+    rows.push([
+      "Deploy",
+      d.status +
+        (d.scheduled_for && d.status !== "Succeeded"
+          ? " · " + d.when + ", " + d.scheduled_for
+          : ""),
+    ]);
+    if (d.sites && d.sites.length) {
+      rows.push([
+        "Sites",
+        d.sites
+          .map(function (s) {
+            return s.site + (s.status ? " (" + s.status + ")" : "");
+          })
+          .join(", "),
+      ]);
+    }
+    for (var k = 0; k < (d.check || []).length; k++) {
+      var c = d.check[k];
+      rows.push([
+        k === 0 ? "Check after" : "",
+        (c.result === "pass" ? "✓ " : c.result === "fail" ? "✗ " : "– ") +
+          c.check +
+          (c.detail ? " (" + c.detail + ")" : ""),
+      ]);
+    }
+  }
   if (fix.deployed_at) {
     rows.push(["Deployed", fix.deployed_at]);
   }
@@ -497,6 +568,10 @@ function copilotFixSummary(fix) {
       "</td></tr>";
   }
   html += "</table>";
+  if (d && d.error && d.status !== "Succeeded") {
+    html +=
+      '<div style="color:#b91c1c">Deploy: ' + copilotEscape(d.error) + "</div>";
+  }
   if (a && a.merge_error) {
     html +=
       '<div style="color:#b91c1c">Cannot merge yet: ' +
@@ -743,6 +818,107 @@ function showCopilotFixReview(info, doc, call, toast, $dialog) {
   $dialog({
     title: "Review fix - Ticket #" + doc.name,
     html: html,
+    actions: actions,
+  });
+}
+
+// Undo a merged fix that went wrong: GitHub's revert pull request, through the same one approval.
+function showCopilotUndo(doc, call, toast, $dialog) {
+  var field =
+    "width:100%;padding:6px;border:1px solid #d1d5db;border-radius:4px;font-size:13px";
+  $dialog({
+    title: "Undo the fix - Ticket #" + doc.name,
+    html:
+      '<div style="padding:8px;font-size:13px"><p>TBO Support asks GitHub to revert the merged pull request. The revert goes through the same one approval and then Deploy. The customer is not told; the ticket stays with a person. A database restore, if needed, is a person\'s decision.</p>' +
+      '<label for="copilot-undo-reason">Why undo it (needed)</label>' +
+      '<textarea id="copilot-undo-reason" rows="3" style="' +
+      field +
+      '"></textarea></div>',
+    actions: [
+      {
+        label: "Undo the fix",
+        theme: "red",
+        onClick: function (_ref) {
+          var reasonEl = document.getElementById("copilot-undo-reason");
+          var reason = reasonEl ? reasonEl.value.trim() : "";
+          if (!reason) {
+            toast.error("Please say why the fix is undone.");
+            return;
+          }
+          call("helpdesk.api.copilot.undo_fix", {
+            ticket: doc.name,
+            reason: reason,
+          })
+            .then(function () {
+              toast.success(
+                "The revert pull request is open; it waits for the one approval."
+              );
+              _ref.close();
+            })
+            .catch(function (error) {
+              toast.error(copilotError(error, "Failed to undo the fix"));
+            });
+        },
+      },
+      {
+        label: "Cancel",
+        onClick: function (_ref) {
+          _ref.close();
+        },
+      },
+    ],
+  });
+}
+
+// Deploy through Press: tonight in the deploy window, or now (senior approvers and Agent Managers).
+function showCopilotDeploy(fix, doc, call, toast, $dialog) {
+  function request(when, _ref) {
+    call("helpdesk.api.copilot.request_deploy", {
+      ticket: doc.name,
+      when: when,
+    })
+      .then(function (result) {
+        var d = (result && result.fix && result.fix.deploy) || {};
+        toast.success(
+          when === "now"
+            ? "Deploying now through Press."
+            : "Scheduled for " + (d.scheduled_for || "tonight") + "."
+        );
+        _ref.close();
+      })
+      .catch(function (error) {
+        toast.error(copilotError(error, "Failed to schedule the deploy"));
+      });
+  }
+  var actions = [
+    {
+      label: "Deploy tonight",
+      variant: "solid",
+      onClick: function (_ref) {
+        request("tonight", _ref);
+      },
+    },
+  ];
+  if (fix.can_deploy_now) {
+    actions.push({
+      label: "Deploy now",
+      theme: "red",
+      onClick: function (_ref) {
+        request("now", _ref);
+      },
+    });
+  }
+  actions.push({
+    label: "Cancel",
+    onClick: function (_ref) {
+      _ref.close();
+    },
+  });
+  $dialog({
+    title: "Deploy the fix - Ticket #" + doc.name,
+    html:
+      '<div style="padding:8px;font-size:13px"><p>TBO Support updates only this customer\'s sites through Press (Press takes a backup first), then checks that the site runs the merged fix without new errors, and asks the customer to confirm.</p>' +
+      "<p><b>Tonight</b> waits for the deploy window. <b>Now</b> is for urgent fixes and only for senior approvers and Agent Managers. One deploy runs at a time.</p></div>",
     actions: actions,
   });
 }

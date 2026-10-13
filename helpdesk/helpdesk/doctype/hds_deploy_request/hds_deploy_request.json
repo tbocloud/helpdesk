@@ -1,0 +1,229 @@
+{
+	"actions": [],
+	"autoname": "TBO-DEP-.YYYY.-.#####",
+	"creation": "2026-10-13 02:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"run",
+		"ticket",
+		"approval",
+		"column_break_request",
+		"status",
+		"when",
+		"scheduled_for",
+		"requested_by",
+		"requested_at",
+		"press_section",
+		"release_group",
+		"press_reference",
+		"other_sites",
+		"column_break_press",
+		"waiting_since",
+		"started_at",
+		"finished_at",
+		"sites_section",
+		"sites",
+		"apps",
+		"check_section",
+		"check_results",
+		"error"
+	],
+	"fields": [
+		{
+			"fieldname": "run",
+			"fieldtype": "Link",
+			"in_list_view": 1,
+			"label": "Copilot run",
+			"options": "HDS Copilot Run",
+			"read_only": 1,
+			"reqd": 1,
+			"search_index": 1
+		},
+		{
+			"fieldname": "ticket",
+			"fieldtype": "Link",
+			"in_list_view": 1,
+			"label": "Ticket",
+			"options": "HD Ticket",
+			"read_only": 1,
+			"search_index": 1
+		},
+		{
+			"fieldname": "approval",
+			"fieldtype": "Link",
+			"label": "Approval",
+			"options": "HDS Copilot Approval",
+			"read_only": 1
+		},
+		{
+			"fieldname": "column_break_request",
+			"fieldtype": "Column Break"
+		},
+		{
+			"default": "Scheduled",
+			"fieldname": "status",
+			"fieldtype": "Select",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"label": "Status",
+			"options": "Scheduled\nWaiting for Press\nDeploying\nChecking\nSucceeded\nFailed\nCancelled",
+			"read_only": 1,
+			"search_index": 1
+		},
+		{
+			"default": "Tonight",
+			"fieldname": "when",
+			"fieldtype": "Select",
+			"label": "When",
+			"options": "Tonight\nNow",
+			"read_only": 1
+		},
+		{
+			"fieldname": "scheduled_for",
+			"fieldtype": "Datetime",
+			"in_list_view": 1,
+			"label": "Scheduled for",
+			"read_only": 1
+		},
+		{
+			"fieldname": "requested_by",
+			"fieldtype": "Link",
+			"label": "Requested by",
+			"options": "User",
+			"read_only": 1
+		},
+		{
+			"fieldname": "requested_at",
+			"fieldtype": "Datetime",
+			"label": "Requested at",
+			"read_only": 1
+		},
+		{
+			"fieldname": "press_section",
+			"fieldtype": "Section Break",
+			"label": "Press"
+		},
+		{
+			"fieldname": "release_group",
+			"fieldtype": "Data",
+			"label": "Release group (bench)",
+			"read_only": 1
+		},
+		{
+			"fieldname": "press_reference",
+			"fieldtype": "Data",
+			"label": "Press deploy",
+			"read_only": 1
+		},
+		{
+			"fieldname": "other_sites",
+			"fieldtype": "Small Text",
+			"label": "Other sites on the bench",
+			"read_only": 1
+		},
+		{
+			"fieldname": "column_break_press",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "waiting_since",
+			"fieldtype": "Datetime",
+			"label": "Waiting for Press since",
+			"read_only": 1
+		},
+		{
+			"fieldname": "started_at",
+			"fieldtype": "Datetime",
+			"label": "Started at",
+			"read_only": 1
+		},
+		{
+			"fieldname": "finished_at",
+			"fieldtype": "Datetime",
+			"label": "Finished at",
+			"read_only": 1
+		},
+		{
+			"fieldname": "sites_section",
+			"fieldtype": "Section Break",
+			"label": "Sites and apps"
+		},
+		{
+			"fieldname": "sites",
+			"fieldtype": "Table",
+			"label": "Sites",
+			"options": "HDS Deploy Site",
+			"read_only": 1
+		},
+		{
+			"fieldname": "apps",
+			"fieldtype": "Table",
+			"label": "Apps",
+			"options": "HDS Deploy App",
+			"read_only": 1
+		},
+		{
+			"fieldname": "check_section",
+			"fieldtype": "Section Break",
+			"label": "The check after"
+		},
+		{
+			"fieldname": "check_results",
+			"fieldtype": "Code",
+			"label": "Check results",
+			"options": "JSON",
+			"read_only": 1
+		},
+		{
+			"fieldname": "error",
+			"fieldtype": "Small Text",
+			"label": "Error",
+			"read_only": 1
+		}
+	],
+	"links": [],
+	"modified": "2026-10-13 02:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HDS Deploy Request",
+	"naming_rule": "Expression (old style)",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "System Manager",
+			"share": 1,
+			"write": 1
+		},
+		{
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "Agent Manager",
+			"share": 1
+		},
+		{
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "Agent",
+			"share": 1
+		}
+	],
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": [],
+	"title_field": "ticket",
+	"track_changes": 1
+}

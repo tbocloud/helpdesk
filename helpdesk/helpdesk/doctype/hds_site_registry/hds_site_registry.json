@@ -12,6 +12,7 @@
 		"site_url",
 		"press_site",
 		"press_release_group",
+		"group_sites",
 		"shared_group",
 		"apps_section",
 		"apps",
@@ -67,6 +68,13 @@
 			"label": "Press Release Group"
 		},
 		{
+			"description": "The other sites on this bench, as Press lists them (Refresh from Press): a deploy moves code they share.",
+			"fieldname": "group_sites",
+			"fieldtype": "Small Text",
+			"label": "Other sites on the bench",
+			"read_only": 1
+		},
+		{
 			"default": "0",
 			"description": "Other customers' sites move with this group's builds",
 			"fieldname": "shared_group",
@@ -92,7 +100,7 @@
 		}
 	],
 	"links": [],
-	"modified": "2026-10-08 12:00:00.000000",
+	"modified": "2026-10-13 03:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Site Registry",

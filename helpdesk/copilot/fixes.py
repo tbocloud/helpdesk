@@ -26,6 +26,7 @@ from helpdesk.copilot.github import GitHubError
 FIX_STATES = ("Preparing Fix", "Awaiting Approval", "Approved")
 FOLLOWED = FIX_STATES + ("Merged",)
 FIX_TASK_PREFIX = "Copilot fix: "
+REVERT_TASK_PREFIX = "Copilot revert: "
 DEFAULT_COMMIT_EMAIL = "copilot@teambackoffice.com"
 EVIDENCE_RESULTS = ("pass", "fail", "not_run")
 DEFAULT_HOLD_LABEL = "no-auto-merge"
@@ -66,7 +67,9 @@ def sync_on() -> bool:
 # --- the fix task -----------------------------------------------------------------
 
 
-def create_fix_task(run, actor: str = runs.SYSTEM) -> str:
+def create_fix_task(
+    run, actor: str = runs.SYSTEM, prefix: str = FIX_TASK_PREFIX
+) -> str:
     """A Task for the fix in the customer's project, for the customer's developer; returns its name."""
     from helpdesk.api.work import create_task_from_ticket
     from helpdesk.copilot import customer
@@ -102,7 +105,7 @@ def create_fix_task(run, actor: str = runs.SYSTEM) -> str:
         result = create_task_from_ticket(
             ticket.name,
             project,
-            task_name=(FIX_TASK_PREFIX + (ticket.subject or ticket.name))[:140],
+            task_name=(prefix + (ticket.subject or ticket.name))[:140],
             description=_task_description(run),
             assigned_to=assignee,
             pause_ticket=False,
@@ -910,6 +913,10 @@ def on_merged(run, pull: dict, by_hub: bool = False):
         "Fix scheduled",
         {"date": formatdate(when) if when else _("our next update")},
     )
+    if approved:
+        from helpdesk.copilot import deploy
+
+        deploy.auto_request(run, approval)
 
 
 def on_closed(run, pull: dict):
@@ -955,6 +962,108 @@ def on_rejected(run, approval, note: str):
         )
 
 
+def revert_run_of(run):
+    """The undo of this run's fix, while it is still under way."""
+    name = frappe.db.get_value(
+        "HDS Copilot Run",
+        {"reverts": run.name, "state": ["not in", ("Closed", "Cancelled", "Failed")]},
+        "name",
+    )
+    return frappe.get_doc("HDS Copilot Run", name) if name else None
+
+
+def can_undo(run) -> bool:
+    return bool(
+        run.merge_commit
+        and run.get("kind") != "revert"
+        and run.state in ("Escalated", "Resolved")
+        and run.approval
+        and not revert_run_of(run)
+    )
+
+
+def undo(run, user: str, reason: str):
+    """Undo a merged fix: GitHub's revert pull request, followed by a revert run through the same one approval.
+
+    The revert run has its own task; its pull request goes through the hold, the
+    approval and the merge like any fix, then Deploy. The customer hears nothing
+    from it: the ticket stays with a person.
+    """
+    from helpdesk.copilot import customer
+
+    run = frappe.get_doc("HDS Copilot Run", run.name)
+    reason = (reason or "").strip()[:500]
+    if not reason:
+        frappe.throw(_("Please say why the fix is undone."))
+    if not can_undo(run):
+        frappe.throw(_("Only a merged fix that went wrong can be undone, once."))
+    approval = frappe.get_doc("HDS Copilot Approval", run.approval)
+    revert = frappe.get_doc(
+        {
+            "doctype": "HDS Copilot Run",
+            "ticket": run.ticket,
+            "customer": run.customer,
+            "connection": run.connection,
+            "registry": run.registry,
+            "kind": "revert",
+            "state": "Preparing Fix",
+            "shadow": run.shadow,
+            "reverts": run.name,
+            "root_cause_category": run.root_cause_category,
+            "summary": _("Undo the fix of {0}: {1}").format(run.name, reason),
+            "queued_at": now_datetime(),
+        }
+    ).insert(ignore_permissions=True)
+    runs.add_event(
+        revert, "state_change", {"from": None, "to": "Preparing Fix"}, runs.AGENT
+    )
+    runs.update_ticket(revert)  # the ticket's card follows the undo from now on
+    task = create_fix_task(revert, runs.AGENT, prefix=REVERT_TASK_PREFIX)
+    pull = github.revert_pull(
+        approval.repo,
+        approval.number,
+        title=f"{task}: revert {approval.repo}#{approval.number}"[:250],
+        body="\n".join(
+            [
+                _("Reverts {0}#{1}, the Copilot fix of ticket {2}: {3}").format(
+                    approval.repo, approval.number, run.ticket, reason
+                ),
+                "",
+                f"Closes {task}",
+                f"Ticket: {run.ticket}",
+                f"Copilot-Run: {revert.name}",
+            ]
+        ),
+    )
+    runs.add_event(
+        run,
+        "undo_requested",
+        {
+            "by": user,
+            "reason": reason,
+            "revert_run": revert.name,
+            "pull": pull["number"],
+        },
+        runs.AGENT,
+    )
+    runs.add_event(revert, "revert_opened", {"reverts": run.name, **pull}, runs.AGENT)
+    customer.comment(
+        run.ticket,
+        '{0} <a href="{1}">{2}#{3}</a>'.format(
+            escape_html(_("Undo requested: the revert pull request")),
+            escape_html(pull["url"]),
+            escape_html(approval.repo),
+            pull["number"],
+        ),
+    )
+    if sync_on():
+        with contextlib.suppress(GitHubError):
+            refresh(frappe.get_doc("HDS Copilot Run", revert.name))
+    revert = frappe.get_doc("HDS Copilot Run", revert.name)
+    runs.publish_run(revert)
+    return revert
+
+
 def mark_deployed(run, user: str, note: str = ""):
     """An engineer deployed the merged fix: the run is Resolved and the customer is asked to confirm."""
     from helpdesk.copilot import customer
@@ -963,6 +1072,14 @@ def mark_deployed(run, user: str, note: str = ""):
         frappe.throw(
             _("Only a merged fix can be marked deployed (this run is {0}).").format(
                 run.state
+            )
+        )
+    from helpdesk.copilot import deploy
+
+    if deploy.open_request(run):
+        frappe.throw(
+            _(
+                "A Copilot deploy of this fix is waiting or running; cancel it first, or let it finish."
             )
         )
     note = (note or "").strip()[:500]

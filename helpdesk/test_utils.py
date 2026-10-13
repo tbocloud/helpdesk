@@ -3602,6 +3602,7 @@ def github_pull(
         "labels": [],
         "mergeable_state": mergeable_state,
         "merge_commit_sha": None,
+        "node_id": f"PR_{repo}_{number}",
     }
 
 
@@ -3623,6 +3624,7 @@ class FakeGitHub:
         self.search_items: list = []
         self.merge_refusal: tuple | None = None
         self.merged_with: dict | None = None
+        self.reverted: list = []
         # a fine-grained personal token may not read check runs: GitHub says 403
         self.check_runs_refused = False
 
@@ -3695,6 +3697,29 @@ class FakeGitHub:
         parts = path.strip("/").split("/")
         if parts[0] == "search":
             return {"items": self.search_items}
+        if parts[0] == "graphql":
+            # GitHub's revert of a merged pull request: a new pull request that undoes it
+            variables = body["variables"]
+            original = next(
+                (key, pull)
+                for key, pull in self.pulls.items()
+                if pull.get("node_id") == variables["id"]
+            )
+            repo, number = original[0][0], 100 + len(self.pulls)
+            self.add_pull(
+                repo, number, "r" * 40, body=variables["body"], title=variables["title"]
+            )
+            self.reverted.append(original[0])
+            return {
+                "data": {
+                    "revertPullRequest": {
+                        "revertPullRequest": {
+                            "number": number,
+                            "url": f"https://github.com/{repo}/pull/{number}",
+                        }
+                    }
+                }
+            }
         repo, rest = f"{parts[1]}/{parts[2]}", parts[3:]
         if not rest:
             return self.repo_settings.get(
@@ -3805,3 +3830,124 @@ def make_started_task(
 def get_in_progress_as(user: str, **filters) -> dict:
     """The In progress page's answer (helpdesk.api.in_progress.get_in_progress) for `user`."""
     return call_as_user(user, "helpdesk.api.in_progress.get_in_progress", **filters)
+
+
+# --- Copilot deploys through Press (Phase 2) ---
+
+
+class FakePress:
+    """TBO's Press for Copilot deploys, in memory: one bench with its apps and sites,
+    the deploys asked for and the site updates they make. `finish(status)` ends them.
+
+    `install(test_case)` routes helpdesk.copilot.press.call here for one test.
+    """
+
+    def __init__(
+        self,
+        group: str = "bench-1",
+        sites: tuple = ("site1.example.com",),
+        app: str = "demo_app",
+        current: str = "o" * 40,
+        next_hash: str | None = None,
+    ):
+        self.group = group
+        self.apps = [
+            {
+                "app": app,
+                "source": "SRC-1",
+                "release": "REL-1",
+                "hash": current,
+                "next_release": "REL-2",
+                "next_hash": next_hash or current,
+            }
+        ]
+        self.sites = [
+            {"name": site, "server": "f1.example.com", "bench": f"{group}-old"}
+            for site in sites
+        ]
+        self.deploy_in_progress = False
+        self.deploys: list = []
+        self.fetched: list = []
+        self.site_updates: list = []
+        self.on_fetch = None
+
+    def install(self, test_case):
+        patcher = patch("helpdesk.copilot.press.call", side_effect=self.call)
+        patcher.start()
+        test_case.addCleanup(patcher.stop)
+        return self
+
+    def finish(self, status: str = "Success"):
+        for update in self.site_updates:
+            update["status"] = status
+        if status == "Success":
+            self.apps[0]["hash"] = self.apps[0]["next_hash"]
+
+    def call(self, method, **args):
+        import copy
+
+        from helpdesk.copilot.press import PressError
+
+        name = method.rsplit(".", 1)[-1]
+        if name == "deploy_information":
+            return {
+                "apps": copy.deepcopy(self.apps),
+                "sites": copy.deepcopy(self.sites),
+                "deploy_in_progress": self.deploy_in_progress,
+                "has_running_release_pipeline": False,
+            }
+        if name == "fetch_latest_app_update":
+            self.fetched.append(args["app"])
+            if self.on_fetch:
+                self.on_fetch()
+            return None
+        if name == "deploy_and_update":
+            self.deploys.append(copy.deepcopy(args))
+            for site in args["sites"]:
+                self.site_updates.insert(
+                    0,
+                    {
+                        "name": f"SU-{len(self.site_updates) + 1}",
+                        "site": site["name"],
+                        "status": "Running",
+                        "creation": str(now_datetime()),
+                        "site_backup": f"BKP-{len(self.site_updates) + 1}",
+                    },
+                )
+            return f"DC-{len(self.deploys)}"
+        if name == "get_list" and args.get("doctype") == "Site Update":
+            if "name" in args["filters"]:
+                return [
+                    dict(update)
+                    for update in self.site_updates
+                    if update["name"] == args["filters"]["name"]
+                ]
+            wanted = set(args["filters"]["site"][1])
+            return [
+                dict(update) for update in self.site_updates if update["site"] in wanted
+            ]
+        raise PressError(404, f"no fake route for {method}")
+
+
+def site_tool_replies(replies: dict):
+    """A patched MCPClient whose call_tool answers each customer-site tool with `replies[tool]` (JSON), or an error.
+
+    A reply may be a function of the call's arguments; raising LookupError refuses that call.
+    """
+    import json as _json
+
+    def refused(text):
+        return {"content": [{"type": "text", "text": text}], "isError": True}
+
+    def call_tool(tool, arguments=None, session_id=None):
+        if tool not in replies:
+            return refused(f"{tool} refused")
+        value = replies[tool]
+        if callable(value):
+            try:
+                value = value(arguments or {})
+            except LookupError as e:
+                return refused(str(e))
+        return {"content": [{"type": "text", "text": _json.dumps(value)}]}
+
+    return call_tool

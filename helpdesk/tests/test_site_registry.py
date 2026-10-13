@@ -9,8 +9,10 @@ from unittest.mock import patch
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
+from helpdesk.api.copilot import refresh_site_card_from_press
 from helpdesk.copilot.registry import apps_for, refresh_from_site, registry_for_ticket
 from helpdesk.test_utils import (
+    FakePress,
     create_customer,
     hold_commits,
     make_site_registry,
@@ -108,9 +110,7 @@ class TestRefreshFromSite(FrappeTestCase):
                     "app": "billing_app",
                     "branch": "version-15.01",
                     "commit": "s" * 40,
-                    "remotes": {
-                        "origin": "https://github.com/acme/billing-app"
-                    },
+                    "remotes": {"origin": "https://github.com/acme/billing-app"},
                     "dirty": True,
                 },
             ]
@@ -144,3 +144,56 @@ class TestRefreshFromSite(FrappeTestCase):
             ],
             ["old"],
         )
+
+
+class TestRefreshFromPress(FrappeTestCase):
+    def setUp(self):
+        hold_commits(self)
+        self.customer = create_customer("Registry Co").name
+        self.press = FakePress(sites=("site1.example.com", "other.example.com"))
+        self.press.install(self)
+        self.press.apps.append(
+            {
+                "app": "erpnext",
+                "source": "SRC-2",
+                "hash": "e" * 40,
+                "next_hash": "e" * 40,
+            }
+        )
+
+    def test_presss_commits_and_the_other_sites_on_the_bench(self):
+        card = make_site_registry(
+            self.customer,
+            press_site="site1.example.com",
+            press_release_group="bench-1",
+            apps=[
+                {
+                    "app": "demo_app",
+                    "repository": "tbocloud/demo_app",
+                    "branch": "main",
+                    "deployed_commit": "c" * 40,
+                }
+            ],
+        )
+
+        found = refresh_site_card_from_press(card.name)
+
+        card.reload()
+        rows = {row.app: row for row in card.apps}
+        self.assertEqual(found["drift"], ["demo_app"])
+        # the commit the site itself reported stays; Press's differs, so it is drift
+        self.assertEqual(
+            (rows["demo_app"].deployed_commit, rows["demo_app"].drift_status),
+            ("c" * 40, "Drift"),
+        )
+        self.assertEqual(
+            (rows["erpnext"].deployed_commit, rows["erpnext"].drift_status),
+            ("e" * 40, "In sync"),
+        )
+        self.assertEqual(card.group_sites, "other.example.com")
+        self.assertTrue(card.last_synced)
+
+    def test_a_card_without_a_bench_says_so(self):
+        card = make_site_registry(self.customer)
+        with self.assertRaises(frappe.ValidationError):
+            refresh_site_card_from_press(card.name)

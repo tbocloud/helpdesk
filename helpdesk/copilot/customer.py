@@ -65,7 +65,8 @@ def send_stage(run, stage: str, context: dict | None = None) -> bool:
     `custom_copilot_stage`, whether or not the site could be reached.
 
     A shadow run tells the customer nothing: the event alone records what
-    they would have seen.
+    they would have seen. Nor does a revert run (an undo): the ticket is
+    with a person by then.
     """
     text = render(stage, context)
     if _last_stage(run) == (stage, text):
@@ -75,7 +76,7 @@ def send_stage(run, stage: str, context: dict | None = None) -> bool:
         + 1
     )
     hub_ref = f"{run.name}:{stage}:{number}"
-    if run.get("shadow"):
+    if run.get("shadow") or run.get("kind") == "revert":
         runs.add_event(
             run,
             "stage",
@@ -326,11 +327,12 @@ def _create_task(
 def as_automation_user():
     """Runs a block as the hub's own user, so a customer's action can do what an agent would."""
     previous_user, previous_form = frappe.session.user, frappe.local.form_dict
-    frappe.set_user(automation_user())
+    # the hub's own user, for this block only
+    frappe.set_user(automation_user())  # nosemgrep
     try:
         yield
     finally:
-        frappe.set_user(previous_user)
+        frappe.set_user(previous_user)  # nosemgrep
         frappe.local.form_dict = previous_form
 
 

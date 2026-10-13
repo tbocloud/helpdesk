@@ -51,6 +51,11 @@ def _managers() -> list[str]:
     )
 
 
+def managers() -> list[str]:
+    """The enabled Agent Managers."""
+    return _managers()
+
+
 def seniors() -> list[str]:
     """Senior approvers; with none in the list, the Agent Managers act as seniors."""
     listed = [row.user for row in _approver_rows() if row.senior]

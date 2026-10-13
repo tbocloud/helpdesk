@@ -112,7 +112,7 @@ def get_run(ticket: str | int) -> dict:
 
 def _fix_card(run) -> dict | None:
     """The fix as the Copilot dialog shows it: the task, the pull request, the approval and what may be done."""
-    from helpdesk.copilot import approvals, fixes
+    from helpdesk.copilot import approvals, deploy, fixes, press
 
     if run.state not in fixes.FOLLOWED + ("Resolved",) and not run.task:
         return None
@@ -195,7 +195,16 @@ def _fix_card(run) -> dict | None:
             card and card["status"] == "Pending" and not card["why_not_me"]
         ),
         "can_refresh": run.state in fixes.FIX_STATES and bool(run.task),
-        "can_mark_deployed": run.state == "Merged",
+        "can_mark_deployed": run.state == "Merged" and not deploy.open_request(run),
+        "deploy": _deploy_card(run),
+        "can_deploy": run.state == "Merged"
+        and not deploy.open_request(run)
+        and press.configured()
+        and deploy.may_deploy(user),
+        "can_deploy_now": deploy.may_deploy_now(user),
+        "can_undo": fixes.can_undo(run) and deploy.may_deploy(user),
+        "reverts": run.get("reverts"),
+        "revert_run": (fixes.revert_run_of(run) or frappe._dict()).get("name"),
         "copilot": {
             "requested": bool(run.fix_requested),
             "status": run.fix_status or None,
@@ -208,6 +217,30 @@ def _fix_card(run) -> dict | None:
         and (run.fix_attempts or 0) < attempts,
         "merge_commit": run.merge_commit,
         "deployed_at": str(run.deployed_at)[:16] if run.deployed_at else None,
+    }
+
+
+def _deploy_card(run) -> dict | None:
+    """The run's latest deploy through Press, as the dialog shows it."""
+    from helpdesk.copilot import deploy
+
+    if not run.deploy_request:
+        return None
+    request = frappe.get_doc(deploy.DEPLOY, run.deploy_request)
+    return {
+        "name": request.name,
+        "status": request.status,
+        "when": request.when,
+        "scheduled_for": deploy.local_time(request.scheduled_for)
+        if request.scheduled_for
+        else None,
+        "sites": [
+            {"site": row.site, "status": row.status or ""} for row in request.sites
+        ],
+        "other_sites": [s for s in (request.other_sites or "").split("\n") if s],
+        "error": request.error,
+        "check": json.loads(request.check_results or "[]"),
+        "can_cancel": request.status in deploy.WAITING,
     }
 
 
@@ -280,6 +313,53 @@ def refresh_fix(ticket: str | int) -> dict:
     frappe.has_permission("HD Ticket", "read", str(ticket), throw=True)
     outcome = fixes.refresh(_run_of(ticket))
     return {**get_run(ticket), "refresh": outcome}
+
+
+@frappe.whitelist(methods=["POST"])
+@agent_only
+def request_deploy(ticket: str | int, when: str = "tonight") -> dict:
+    """Deploy the merged fix through Press: tonight (the next window), or now (seniors and Agent Managers)."""
+    from helpdesk.copilot import deploy
+
+    frappe.has_permission("HD Ticket", "write", str(ticket), throw=True)
+    deploy.request_deploy(_run_of(ticket), when, frappe.session.user)
+    return get_run(ticket)
+
+
+@frappe.whitelist(methods=["POST"])
+@agent_only
+def undo_fix(ticket: str | int, reason: str) -> dict:
+    """Undo a merged fix that went wrong: GitHub's revert pull request, through the same one approval."""
+    from helpdesk.copilot import deploy, fixes
+
+    frappe.has_permission("HD Ticket", "write", str(ticket), throw=True)
+    if not deploy.may_deploy(frappe.session.user):
+        frappe.throw(
+            _("Only the Copilot approvers and the Agent Managers may undo fixes."),
+            frappe.PermissionError,
+        )
+    fixes.undo(_run_of(ticket), frappe.session.user, reason)
+    return get_run(ticket)
+
+
+@frappe.whitelist(methods=["POST"])
+def refresh_site_card_from_press(registry: str) -> dict:
+    """The bench's apps and commits as Press knows them, and the other sites on the bench."""
+    from helpdesk.copilot.registry import refresh_from_press
+
+    frappe.has_permission("HDS Site Registry", "write", registry, throw=True)
+    return refresh_from_press(frappe.get_doc("HDS Site Registry", registry))
+
+
+@frappe.whitelist(methods=["POST"])
+@agent_only
+def cancel_deploy(ticket: str | int) -> dict:
+    """Cancel a deploy that has not started."""
+    from helpdesk.copilot import deploy
+
+    frappe.has_permission("HD Ticket", "write", str(ticket), throw=True)
+    deploy.cancel_deploy(_run_of(ticket), frappe.session.user)
+    return get_run(ticket)
 
 
 @frappe.whitelist(methods=["POST"])

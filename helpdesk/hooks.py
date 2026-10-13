@@ -55,6 +55,8 @@ scheduler_events = {
             "helpdesk.copilot.approvals.remind_and_escalate",
         ],
         "*/5 * * * *": [
+            # Copilot deploys through Press: start, follow, check (helpdesk.copilot.deploy)
+            "helpdesk.copilot.deploy.run_due",
             "helpdesk.tasks.push_ticket_statuses",
             "helpdesk.tasks.sync_conversations",
             "helpdesk.content_sync.sync_content_approvals",

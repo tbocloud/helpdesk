@@ -1,0 +1,677 @@
+# Copyright (c) 2026, Quark Cyber Systems FZC and contributors
+# For license information, please see license.txt
+
+"""Deploying a merged Copilot fix through Press (Phase 2).
+
+A person presses Deploy on the ticket: Tonight (the next deploy window) or
+Now (senior approvers and Agent Managers only). A cron every five minutes
+moves each deploy request along: it waits for Press (one Copilot deploy at a
+time, none while Press is deploying the bench, the merged commit registered
+on the bench), asks Press to update only the customer's sites (Press takes
+its own backups first and restores a site whose update fails), follows Press
+until the sites are updated, then hands over to the check after
+(helpdesk.copilot.verify). A failure escalates the run with Press's reason.
+"""
+
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
+import frappe
+from frappe import _
+from frappe.utils import get_datetime, get_system_timezone, now_datetime
+
+from helpdesk.copilot import approvals, press, runs
+from helpdesk.copilot import settings as copilot_settings
+from helpdesk.copilot.press import PressError
+
+DEPLOY = "HDS Deploy Request"
+WAITING = ("Scheduled", "Waiting for Press")
+OPEN = WAITING + ("Deploying", "Checking")
+LOCK_KEY = "copilot_deploy_lock"
+LOCK_SECONDS = 3 * 3600
+PRESS_HOURS = 2
+# Press's Site Update statuses: done, and done badly (Press restores a site whose update fails)
+SITE_DONE = {"Success"}
+SITE_FAILED = {"Failure", "Fatal", "Recovered", "Recovery Failed"}
+DEFAULT_WINDOW = ("21:00", "06:00", "Asia/Riyadh")
+
+
+# --- the window --------------------------------------------------------------------
+
+
+def _hm(value: str | None, fallback: str) -> tuple[int, int]:
+    try:
+        hours, minutes = (int(part) for part in (value or fallback).strip().split(":"))
+        if 0 <= hours < 24 and 0 <= minutes < 60:
+            return hours, minutes
+    except ValueError:
+        pass
+    hours, minutes = (int(part) for part in fallback.split(":"))
+    return hours, minutes
+
+
+def _window() -> tuple[tuple[int, int], tuple[int, int], ZoneInfo]:
+    settings = copilot_settings.get_settings()
+    try:
+        zone = ZoneInfo((settings.get("deploy_timezone") or DEFAULT_WINDOW[2]).strip())
+    except (KeyError, ValueError):
+        zone = ZoneInfo(DEFAULT_WINDOW[2])
+    return (
+        _hm(settings.get("deploy_window_start"), DEFAULT_WINDOW[0]),
+        _hm(settings.get("deploy_window_end"), DEFAULT_WINDOW[1]),
+        zone,
+    )
+
+
+def _aware(moment: datetime) -> datetime:
+    """A naive datetime in the site's own timezone, made aware."""
+    return moment.replace(tzinfo=ZoneInfo(get_system_timezone()))
+
+
+def _naive(moment: datetime) -> datetime:
+    return moment.astimezone(ZoneInfo(get_system_timezone())).replace(tzinfo=None)
+
+
+def in_window(moment: datetime | None = None) -> bool:
+    (sh, sm), (eh, em), zone = _window()
+    local = _aware(moment or now_datetime()).astimezone(zone)
+    minutes, start, end = local.hour * 60 + local.minute, sh * 60 + sm, eh * 60 + em
+    if start > end:  # over midnight, e.g. 21:00 to 06:00
+        return minutes >= start or minutes < end
+    return start <= minutes < end
+
+
+def next_opening(moment: datetime | None = None, now_counts: bool = True) -> datetime:
+    """When Tonight starts: now, when inside the window (and `now_counts`), else the window's next start."""
+    moment = moment or now_datetime()
+    if now_counts and in_window(moment):
+        return moment
+    (sh, sm), _end, zone = _window()
+    local = _aware(moment).astimezone(zone)
+    start = local.replace(hour=sh, minute=sm, second=0, microsecond=0)
+    if start <= local:
+        start += timedelta(days=1)
+    return _naive(start)
+
+
+def local_time(moment) -> str:
+    """A time as the customer and the team read it: in the window's timezone."""
+    _start, _end, zone = _window()
+    return _aware(get_datetime(moment)).astimezone(zone).strftime("%d %b %Y %H:%M (%Z)")
+
+
+# --- who may deploy, where ------------------------------------------------------------
+
+
+def may_deploy(user: str) -> bool:
+    return user in (
+        set(approvals.approvers())
+        | set(approvals.seniors())
+        | set(approvals.managers())
+    )
+
+
+def may_deploy_now(user: str) -> bool:
+    return user in set(approvals.seniors()) | set(approvals.managers())
+
+
+def open_request(run):
+    name = frappe.db.get_value(
+        DEPLOY,
+        {"run": run.name, "status": ["in", OPEN]},
+        "name",
+        order_by="creation desc",
+    )
+    return frappe.get_doc(DEPLOY, name) if name else None
+
+
+def target(run) -> tuple[str, list[str]]:
+    """The bench and the customer's own sites on it, from their site cards."""
+    card = (
+        frappe.db.get_value(
+            "HDS Site Registry",
+            run.registry,
+            ["customer_name", "press_site", "press_release_group"],
+            as_dict=True,
+        )
+        if run.registry
+        else None
+    )
+    if not (card and card.press_site and card.press_release_group):
+        frappe.throw(
+            _(
+                "The customer's site card needs its Press site and release group (bench) to deploy through Press. For a site outside Press, deploy by hand and press Mark deployed."
+            )
+        )
+    sites = frappe.get_all(
+        "HDS Site Registry",
+        filters={
+            "customer_name": card.customer_name,
+            "environment": "Production",
+            "press_release_group": card.press_release_group,
+            "press_site": ["is", "set"],
+        },
+        pluck="press_site",
+    )
+    return card.press_release_group, sorted(set(sites) | {card.press_site})
+
+
+def _app_of(run, approval) -> dict:
+    """The app the fix changes, from the site card row of the pull request's repository."""
+    from helpdesk.copilot.fixes import _repo_name
+
+    for row in frappe.get_all(
+        "HDS Site App",
+        filters={"parent": run.registry, "parenttype": "HDS Site Registry"},
+        fields=["app", "repository", "deployed_commit"],
+    ):
+        if _repo_name(row.repository) == (approval.repo or "").lower():
+            return row
+    frappe.throw(
+        _("The site card lists no app for {0}; refresh it from the site first.").format(
+            approval.repo
+        )
+    )
+
+
+# --- asking for a deploy --------------------------------------------------------------
+
+
+def request_deploy(run, when: str, user: str, auto: bool = False):
+    """Deploy the merged fix Tonight (the next window) or Now (seniors and Agent Managers).
+
+    `auto`: asked by Auto-deploy categories on the approver's behalf, never for a shared bench.
+    """
+    from helpdesk.copilot import customer
+
+    run = frappe.get_doc("HDS Copilot Run", run.name)
+    if run.state != "Merged":
+        frappe.throw(
+            _("Only a merged fix can be deployed (this run is {0}).").format(run.state)
+        )
+    if open_request(run):
+        frappe.throw(_("This fix already has a deploy waiting or running."))
+    if not press.configured():
+        frappe.throw(_("Press is not set up in HDS Copilot Settings."))
+    if not may_deploy(user):
+        frappe.throw(
+            _("Only the Copilot approvers and the Agent Managers may deploy fixes."),
+            frappe.PermissionError,
+        )
+    now = str(when).strip().lower() == "now"
+    if now and not may_deploy_now(user):
+        frappe.throw(
+            _(
+                "Only senior approvers and Agent Managers may deploy now; schedule it for tonight."
+            ),
+            frappe.PermissionError,
+        )
+    approval = frappe.get_doc("HDS Copilot Approval", run.approval)
+    app = _app_of(run, approval)
+    group, sites = target(run)
+    try:
+        info = press.deploy_information(group)
+    except PressError as e:
+        frappe.throw(_("Press: {0}").format(e.message))
+    on_bench = [site.get("name") for site in info.get("sites") or []]
+    missing = [site for site in sites if site not in on_bench]
+    if missing:
+        frappe.throw(
+            _("Press does not list {0} on the bench {1}.").format(
+                ", ".join(missing), group
+            )
+        )
+    others = [site for site in on_bench if site not in sites]
+    if others and (auto or user not in approvals.seniors()):
+        frappe.throw(
+            _(
+                "Other sites share this bench ({0}); only a senior approver may deploy it."
+            ).format(", ".join(others[:5])),
+            frappe.PermissionError,
+        )
+    at = now_datetime() if now else next_opening()
+    doc = frappe.get_doc(
+        {
+            "doctype": DEPLOY,
+            "run": run.name,
+            "ticket": run.ticket,
+            "approval": approval.name,
+            "status": "Scheduled",
+            "when": "Now" if now else "Tonight",
+            "scheduled_for": at,
+            "requested_by": user,
+            "requested_at": now_datetime(),
+            "release_group": group,
+            "other_sites": "\n".join(others),
+            "sites": [{"site": site} for site in sites],
+            "apps": [
+                {
+                    "app": app.app,
+                    "repository": approval.repo,
+                    "from_commit": app.deployed_commit,
+                    "to_commit": run.merge_commit,
+                }
+            ],
+        }
+    ).insert(ignore_permissions=True)
+    run.db_set("deploy_request", doc.name, update_modified=False)
+    runs.add_event(
+        run,
+        "deploy_requested",
+        {
+            "request": doc.name,
+            "when": doc.when,
+            "at": str(at),
+            "sites": sites,
+            "by": user,
+            "auto": auto,
+        },
+        runs.SYSTEM if auto else runs.AGENT,
+    )
+    customer.send_stage(run, "Fix scheduled", {"date": local_time(at)})
+    runs.publish_run(run)
+    return doc
+
+
+def auto_categories() -> set[str]:
+    text = copilot_settings.get_settings().get("auto_deploy_categories") or ""
+    return {line.strip().lower() for line in text.splitlines() if line.strip()}
+
+
+def auto_request(run, approval):
+    """Schedules a merged fix for the next window by itself when its root cause or risk is
+    listed in Auto-deploy categories (empty in the pilot).
+
+    Never a sensitive or high-risk fix, an undo, or a bench other sites share; whatever
+    stops it is noted on the run and leaves Deploy to a person.
+    """
+    wanted = auto_categories()
+    risk = (approval.risk_level or "").lower()
+    if (
+        not wanted
+        or run.get("kind") == "revert"
+        or approval.sensitive
+        or risk == "high"
+        or not ({(run.root_cause_category or "").lower(), risk} & wanted)
+        or not press.configured()
+    ):
+        return None
+    try:
+        return request_deploy(run, "tonight", approval.decided_by, auto=True)
+    except Exception as e:
+        frappe.clear_last_message()  # the approver's click merged the fix; this is no error of theirs
+        if not isinstance(e, (frappe.ValidationError, frappe.PermissionError)):
+            frappe.log_error(
+                title=_("Copilot automatic deploy of {0}").format(run.name)
+            )
+        runs.add_event(
+            run, "auto_deploy_skipped", {"reason": str(e)[:300]}, runs.SYSTEM
+        )
+        return None
+
+
+def cancel_deploy(run, user: str):
+    request = open_request(run)
+    if not request or request.status not in WAITING:
+        frappe.throw(_("Only a deploy that has not started can be cancelled."))
+    request.db_set({"status": "Cancelled", "finished_at": now_datetime()})
+    _release_lock(request.name)
+    runs.add_event(
+        run, "deploy_cancelled", {"request": request.name, "by": user}, runs.AGENT
+    )
+    runs.publish_run(run)
+
+
+# --- one at a time ----------------------------------------------------------------------
+
+
+def _lock_key() -> str:
+    return frappe.cache().make_key(LOCK_KEY)
+
+
+def _lock_holder() -> str | None:
+    held = frappe.cache().get(_lock_key())  # the site's own key (make_key) - nosemgrep
+    return held.decode() if isinstance(held, bytes) else held
+
+
+def _take_lock(owner: str) -> bool:
+    """One Copilot deploy at a time: Redis SET NX with an expiry, so a crash cannot hold it for ever."""
+    if frappe.cache().set(  # SET NX needs the raw call; the key is the site's own - nosemgrep
+        _lock_key(), owner, ex=LOCK_SECONDS, nx=True
+    ):
+        return True
+    return _lock_holder() == owner
+
+
+def _release_lock(owner: str):
+    if _lock_holder() == owner:
+        frappe.cache().delete(_lock_key())
+
+
+# --- the cron -----------------------------------------------------------------------
+
+
+def run_due():
+    """Cron: every open deploy request takes its next step, one at a time, each in its own transaction."""
+    for name in frappe.get_all(
+        DEPLOY,
+        filters={"status": ["in", OPEN]},
+        order_by="scheduled_for asc",
+        pluck="name",
+    ):
+        try:
+            step(frappe.get_doc(DEPLOY, name))
+            frappe.db.commit()  # one request at a time - nosemgrep
+        except Exception:
+            frappe.db.rollback()
+            frappe.log_error(
+                title=_("Copilot deploy {0} could not move on").format(name)
+            )
+
+
+def step(request):
+    if request.status in WAITING:
+        if get_datetime(request.scheduled_for) <= now_datetime():
+            _start(request)
+    elif request.status == "Deploying":
+        _follow(request)
+    elif request.status == "Checking":
+        from helpdesk.copilot import verify
+
+        verify.step(request)
+
+
+def _press_app(info: dict, app: str) -> dict | None:
+    return next(
+        (
+            row
+            for row in info.get("apps") or []
+            if (row.get("app") or row.get("name")) == app
+        ),
+        None,
+    )
+
+
+def _start(request):
+    run = frappe.get_doc("HDS Copilot Run", request.run)
+    app = request.apps[0]
+    if not _take_lock(request.name):
+        return _wait(request, _("another Copilot deploy is running"))
+    try:
+        info = press.deploy_information(request.release_group)
+        row = _press_app(info, app.app)
+        if info.get("deploy_in_progress") or info.get("has_running_release_pipeline"):
+            _release_lock(request.name)
+            return _wait(request, _("Press is already deploying this bench"))
+        if not row:
+            return fail(
+                request,
+                _("Press's bench {0} has no app {1}").format(
+                    request.release_group, app.app
+                ),
+            )
+        if (row.get("hash") or "").startswith(app.to_commit or "-"):
+            # the site already runs it (deployed by hand): straight to the check
+            request.db_set(
+                {
+                    "status": "Checking",
+                    "started_at": now_datetime(),
+                    "waiting_since": None,
+                }
+            )
+            runs.transition(run, "Deploying", runs.SYSTEM, note="already on Press")
+            runs.transition(
+                run, "Verifying", runs.SYSTEM, note="the bench already runs the commit"
+            )
+            return
+        if not (row.get("next_hash") or "").startswith(app.to_commit or "-"):
+            press.fetch_latest_app_update(request.release_group, app.app)
+            _release_lock(request.name)
+            return _wait(
+                request,
+                _(
+                    "Press does not offer the merged commit {0} yet (it offers {1})"
+                ).format(
+                    (app.to_commit or "")[:12], (row.get("next_hash") or "none")[:12]
+                ),
+            )
+        wanted = {site.site for site in request.sites}
+        sites = [
+            {**site, "skip_failing_patches": False, "skip_backups": False}
+            for site in info.get("sites") or []
+            if site.get("name") in wanted
+        ]
+        if len(sites) != len(wanted):
+            return fail(
+                request,
+                _("Press no longer lists every site of this deploy on the bench"),
+            )
+        reference = press.deploy_and_update(
+            request.release_group,
+            [
+                {
+                    "app": app.app,
+                    "source": row.get("source"),
+                    "release": row.get("next_release"),
+                    "hash": row.get("next_hash"),
+                }
+            ],
+            sites,
+        )
+    except PressError as e:
+        _release_lock(request.name)
+        return _wait(request, _("Press: {0}").format(e.message))
+    request.db_set(
+        {
+            "status": "Deploying",
+            "started_at": now_datetime(),
+            "press_reference": str(reference or "")[:140],
+            "waiting_since": None,
+            "error": None,
+        }
+    )
+    runs.transition(run, "Deploying", runs.SYSTEM, note=f"Press {reference}")
+    runs.add_event(
+        run,
+        "deploy_started",
+        {
+            "request": request.name,
+            "press": reference,
+            "sites": [s["name"] for s in sites],
+        },
+        runs.SYSTEM,
+    )
+
+
+def _wait(request, reason: str):
+    """Press cannot take it yet: wait, and after the allowed wait move it to the next window."""
+    now = now_datetime()
+    since = get_datetime(request.waiting_since) if request.waiting_since else now
+    limit = copilot_settings.get_settings().get("deploy_start_wait_minutes") or 60
+    if (now - since).total_seconds() / 60 > limit:
+        request.db_set(
+            {
+                "status": "Scheduled",
+                "scheduled_for": next_opening(
+                    now + timedelta(hours=1), now_counts=False
+                ),
+                "waiting_since": None,
+                "error": str(reason)[:1000],
+            }
+        )
+        runs.add_event(
+            request.run,
+            "deploy_rescheduled",
+            {
+                "request": request.name,
+                "reason": reason,
+                "to": str(request.scheduled_for),
+            },
+            runs.SYSTEM,
+        )
+        return
+    request.db_set(
+        {
+            "status": "Waiting for Press",
+            "waiting_since": since,
+            "error": str(reason)[:1000],
+        }
+    )
+
+
+def _follow(request):
+    """Follows Press's site updates until every site is updated, or one fails."""
+    started = get_datetime(request.started_at)
+    if (now_datetime() - started).total_seconds() > PRESS_HOURS * 3600:
+        return fail(
+            request, _("Press did not finish within {0} hours").format(PRESS_HOURS)
+        )
+    names = [row.site for row in request.sites]
+    try:
+        updates = press.get_list(
+            "Site Update",
+            filters={
+                "site": ["in", names],
+                "creation": [">=", str(started - timedelta(minutes=5))],
+            },
+            fields=["name", "site", "status", "creation"],
+            limit=50,
+        )
+    except PressError:
+        return  # Press could not be asked this time; the next run tries again
+    latest = {}
+    for update in updates:
+        latest.setdefault(update.get("site"), update)
+    for row in request.sites:
+        if update := latest.get(row.site):
+            row.site_update, row.status = update.get("name"), update.get("status")
+            if not row.backup and row.status in SITE_DONE | SITE_FAILED:
+                row.backup = _backup_of(row.site_update)
+    request.save(ignore_permissions=True)
+    failed = [row for row in request.sites if row.status in SITE_FAILED]
+    if failed:
+        return fail(
+            request,
+            _(
+                "Press could not update {0} ({1}); Press puts a site back on its old code when its update fails"
+            ).format(
+                ", ".join(row.site for row in failed),
+                ", ".join(sorted({row.status for row in failed})),
+            ),
+        )
+    if all(row.status in SITE_DONE for row in request.sites):
+        request.db_set({"status": "Checking"})
+        run = runs.transition(
+            request.run, "Verifying", runs.SYSTEM, note="Press updated the sites"
+        )
+        runs.add_event(run, "deploy_updated", {"request": request.name}, runs.SYSTEM)
+
+
+def _backup_of(site_update: str) -> str | None:
+    """The backup Press took before the update, when Press says which (best effort)."""
+    try:
+        rows = press.get_list(
+            "Site Update",
+            filters={"name": site_update},
+            fields=["name", "site_backup"],
+            limit=1,
+        )
+    except PressError:
+        return None
+    return ((rows or [{}])[0] or {}).get("site_backup") or None
+
+
+def _press_links(request) -> str:
+    """Each site's update on Press, with the backup Press took first, for the people told."""
+    url = (copilot_settings.get_settings().get("press_url") or "").rstrip("/")
+    escape = frappe.utils.escape_html
+    return ", ".join(
+        '<a href="{0}/app/site-update/{1}">{2}</a>{3}'.format(
+            escape(url),
+            escape(row.site_update),
+            escape(row.site),
+            " ({0} {1})".format(escape(_("backup")), escape(row.backup))
+            if row.backup
+            else "",
+        )
+        for row in request.sites
+        if row.site_update
+    )
+
+
+# --- the end --------------------------------------------------------------------------
+
+
+def fail(request, reason: str):
+    """The deploy did not work: the run is escalated with Press's reason, the people told."""
+    from helpdesk.copilot import customer
+
+    reason = str(reason)[:1000]
+    request.db_set({"status": "Failed", "error": reason, "finished_at": now_datetime()})
+    _release_lock(request.name)
+    run = frappe.get_doc("HDS Copilot Run", request.run)
+    if run.state in ("Merged", "Deploying", "Verifying"):
+        run = runs.transition(
+            run, "Escalated", runs.SYSTEM, note=f"deploy failed: {reason}"[:140]
+        )
+    runs.add_event(
+        run, "deploy_failed", {"request": request.name, "reason": reason}, runs.SYSTEM
+    )
+    links = _press_links(request)
+    customer.comment(
+        run.ticket,
+        frappe.utils.escape_html(
+            _("The deploy of the Copilot fix failed: {0}").format(reason)
+        )
+        + (
+            "<br>{0} {1}".format(frappe.utils.escape_html(_("Press:")), links)
+            if links
+            else ""
+        ),
+    )
+    from helpdesk.work_reminders import notify_users
+
+    approval = (
+        frappe.db.get_value("HDS Copilot Approval", request.approval, "decided_by")
+        if request.approval
+        else None
+    )
+    people = [p for p in (approval, request.requested_by) if p] + approvals.managers()
+    notify_users(
+        list(dict.fromkeys(people)),
+        "HD Ticket",
+        run.ticket,
+        _("The deploy of the Copilot fix for ticket {0} failed: {1}").format(
+            run.ticket, reason[:160]
+        ),
+        escalate=True,
+        once=False,
+    )
+    return None
+
+
+def succeed(request, results: list[dict]):
+    """The check passed: the run is Resolved and the customer is asked to confirm."""
+    import json
+
+    from helpdesk.copilot import customer
+
+    request.db_set(
+        {
+            "status": "Succeeded",
+            "finished_at": now_datetime(),
+            "check_results": json.dumps(results, indent=1),
+        }
+    )
+    _release_lock(request.name)
+    run = runs.transition(
+        request.run,
+        "Resolved",
+        runs.SYSTEM,
+        note="deployed and checked",
+        deployed_at=now_datetime(),
+        deployed_by=request.requested_by,
+    )
+    runs.add_event(run, "deploy_checked", {"request": request.name}, runs.SYSTEM)
+    if run.get("kind") != "revert":
+        customer.send_stage(run, "Resolved", {"resolution": _("The fix is live.")})

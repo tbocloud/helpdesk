@@ -263,6 +263,32 @@ def copilot_only(repo: str, pull: dict, email: str) -> bool:
     )
 
 
+REVERT = (
+    "mutation($id: ID!, $title: String, $body: String) {"
+    " revertPullRequest(input: {pullRequestId: $id, title: $title, body: $body})"
+    " { revertPullRequest { number url } } }"
+)
+
+
+def revert_pull(repo: str, number: int, title: str, body: str) -> dict:
+    """GitHub's own revert of a merged pull request (as its Revert button): `{number, url}` of the new pull request."""
+    node = get_pull(repo, number).get("node_id")
+    result = request(
+        "POST",
+        "/graphql",
+        body={"query": REVERT, "variables": {"id": node, "title": title, "body": body}},
+        owner=repo.split("/")[0],
+    )
+    if (result or {}).get("errors"):
+        raise GitHubError(422, str(result["errors"][0].get("message"))[:300])
+    created = (((result or {}).get("data") or {}).get("revertPullRequest") or {}).get(
+        "revertPullRequest"
+    ) or {}
+    if not created.get("number"):
+        raise GitHubError(0, _("GitHub did not create the revert pull request."))
+    return {"number": int(created["number"]), "url": created.get("url") or ""}
+
+
 def add_label(repo: str, number: int, label: str):
     request(
         "POST", f"/repos/{repo}/issues/{int(number)}/labels", body={"labels": [label]}

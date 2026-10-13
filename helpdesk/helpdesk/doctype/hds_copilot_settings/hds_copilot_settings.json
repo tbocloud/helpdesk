@@ -31,6 +31,20 @@
 		"github_app_id",
 		"column_break_github_app",
 		"github_app_private_key",
+		"press_section",
+		"press_url",
+		"press_api_key",
+		"column_break_press",
+		"press_api_secret",
+		"press_team",
+		"deploy_section",
+		"deploy_window_start",
+		"deploy_window_end",
+		"deploy_timezone",
+		"column_break_deploy",
+		"deploy_start_wait_minutes",
+		"deploy_check_minutes",
+		"auto_deploy_categories",
 		"templates_section",
 		"message_templates"
 	],
@@ -201,6 +215,88 @@
 			"label": "GitHub App private key"
 		},
 		{
+			"fieldname": "press_section",
+			"fieldtype": "Section Break",
+			"label": "Press"
+		},
+		{
+			"description": "TBO's Press, for example https://tbocloud.in. Copilot deploys merged fixes through it.",
+			"fieldname": "press_url",
+			"fieldtype": "Data",
+			"label": "Press URL"
+		},
+		{
+			"description": "The API key of Copilot's own Press user in TBO's Press team.",
+			"fieldname": "press_api_key",
+			"fieldtype": "Data",
+			"label": "Press API key"
+		},
+		{
+			"fieldname": "column_break_press",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "press_api_secret",
+			"fieldtype": "Password",
+			"label": "Press API secret"
+		},
+		{
+			"description": "Copilot's team on Press, when its user belongs to more than one (sent as X-Press-Team).",
+			"fieldname": "press_team",
+			"fieldtype": "Data",
+			"label": "Press team"
+		},
+		{
+			"fieldname": "deploy_section",
+			"fieldtype": "Section Break",
+			"label": "Deploys"
+		},
+		{
+			"default": "21:00",
+			"description": "Deploy Tonight goes out from this time (HH:MM, in the timezone below).",
+			"fieldname": "deploy_window_start",
+			"fieldtype": "Data",
+			"label": "Deploy window starts"
+		},
+		{
+			"default": "06:00",
+			"fieldname": "deploy_window_end",
+			"fieldtype": "Data",
+			"label": "Deploy window ends"
+		},
+		{
+			"default": "Asia/Riyadh",
+			"fieldname": "deploy_timezone",
+			"fieldtype": "Data",
+			"label": "Deploy window timezone"
+		},
+		{
+			"fieldname": "column_break_deploy",
+			"fieldtype": "Column Break"
+		},
+		{
+			"default": "60",
+			"description": "How long a deploy waits for Press (another deploy running, the merged commit not yet on the bench) before it moves to the next window.",
+			"fieldname": "deploy_start_wait_minutes",
+			"fieldtype": "Int",
+			"label": "Wait for Press (minutes)",
+			"non_negative": 1
+		},
+		{
+			"default": "30",
+			"description": "How long the check after a deploy may take before it counts as failed.",
+			"fieldname": "deploy_check_minutes",
+			"fieldtype": "Int",
+			"label": "Check after deploy (minutes)",
+			"non_negative": 1
+		},
+		{
+			"description": "Root-cause categories or risk levels whose approved fixes deploy in the window without anyone pressing Deploy, one per line. Empty in the pilot.",
+			"fieldname": "auto_deploy_categories",
+			"fieldtype": "Small Text",
+			"label": "Auto-deploy categories"
+		},
+		{
 			"fieldname": "templates_section",
 			"fieldtype": "Section Break",
 			"label": "Messages to the Customer"
@@ -215,7 +311,7 @@
 	],
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-10-13 01:00:00.000000",
+	"modified": "2026-10-13 02:10:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Copilot Settings",

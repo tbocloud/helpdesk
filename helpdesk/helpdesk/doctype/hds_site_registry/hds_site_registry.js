@@ -3,6 +3,26 @@
 
 frappe.ui.form.on("HDS Site Registry", {
   refresh(frm) {
+    if (!frm.is_new() && frm.doc.press_release_group) {
+      // the bench's apps and commits as Press knows them, and its other sites
+      frm.add_custom_button(__("Refresh from Press"), () =>
+        frappe
+          .call({
+            method: "helpdesk.api.copilot.refresh_site_card_from_press",
+            args: { registry: frm.doc.name },
+            freeze: true,
+            freeze_message: __("Reading the bench from Press…"),
+          })
+          .then((r) => {
+            const found = r.message || {};
+            frappe.show_alert({
+              message: __("{0} apps read from Press", [found.apps || 0]),
+              indicator: (found.drift || []).length ? "orange" : "green",
+            });
+            frm.reload_doc();
+          })
+      );
+    }
     if (frm.is_new() || !frm.doc.connection) {
       return;
     }

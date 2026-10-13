@@ -67,6 +67,13 @@ TRANSITIONS = {
     ("Merged", "Resolved"): {AGENT},
     ("Resolved", "Closed"): {CUSTOMER, AGENT, SYSTEM},
     ("Resolved", "Escalated"): {CUSTOMER, AGENT},
+    # deployed through Press (helpdesk.copilot.deploy and verify): updated, checked, or escalated
+    ("Merged", "Deploying"): {SYSTEM},
+    ("Deploying", "Verifying"): {SYSTEM},
+    ("Verifying", "Resolved"): {SYSTEM},
+    ("Merged", "Escalated"): {SYSTEM},
+    ("Deploying", "Escalated"): {SYSTEM},
+    ("Verifying", "Escalated"): {SYSTEM},
 }
 CANCELLABLE = (
     "Queued",

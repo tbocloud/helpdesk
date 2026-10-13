@@ -15,6 +15,11 @@ Code: `helpdesk/copilot/` (one module per concern), `helpdesk/api/copilot*.py` (
 | Max lease losses | After this many lost leases the run fails and a person is told (default 3) |
 | Min confidence | An investigation below this confidence (0 to 1) is treated as unclear (default 0.6) |
 | Messages to the customer | One row per stage (Received, Working on it, Fix scheduled, Resolved, With our team, Waiting for you); an empty or missing row uses the built-in text in `helpdesk/copilot/settings.py`. Placeholders: `{date}`, `{resolution}` |
+| Press URL, API key and secret, team | Copilot's own Press user in TBO's Press team, for deploys (see **Deploying through Press**). Without them Deploy is refused and Mark deployed stays the way |
+| Deploy window starts, ends, timezone | Deploy Tonight goes out in this window (default 21:00 to 06:00, Asia/Riyadh) |
+| Wait for Press (minutes) | How long a deploy waits for Press (another deploy running, the merged commit not yet on the bench) before it moves to the next window (default 60) |
+| Check after deploy (minutes) | How long the check after a deploy may keep asking a site that does not answer (default 30) |
+| Auto-deploy categories | Empty in the pilot. Root-cause categories or risk levels, one per line, whose approved fixes are scheduled for the window by themselves |
 
 `helpdesk/copilot/settings.py`: `get_settings()`, `is_enabled()`, `is_shadow()`, `template_for(stage)`.
 
@@ -26,7 +31,7 @@ One row per customer site and environment (Production, UAT, Sandbox): the custom
 
 `helpdesk/copilot/registry.py`: `registry_for_ticket(ticket)` finds the Production site by the ticket's connection, else by its customer; `apps_for(registry)` hands the apps to a worker as plain dicts.
 
-A row is created by hand; then **Refresh from the site** on the form (`helpdesk.api.copilot.refresh_site_card`, System Manager) reads every app the site runs through its connection (`get_code_identity`): the repository (from the git remote; an app reported without one keeps the repository already on the card), the branch, the deployed commit, and Drift when the site's code has uncommitted changes. A sandbox copy needs all of them. Press deployment (Phase 2) fills `press_site` and `press_release_group` and syncs the apps from Press.
+A row is created by hand; then **Refresh from the site** on the form (`helpdesk.api.copilot.refresh_site_card`, System Manager) reads every app the site runs through its connection (`get_code_identity`): the repository (from the git remote; an app reported without one keeps the repository already on the card), the branch, the deployed commit, and Drift when the site's code has uncommitted changes. A sandbox copy needs all of them. For a site on TBO's Press, its Press site name and release group (the bench) are typed in once. **Refresh from Press** (`helpdesk.api.copilot.refresh_site_card_from_press`, write access to the card) then reads the bench from Press: an app the card lacks is added with Press's commit, an app whose Press commit differs from the one the site reported is marked Drift (the site's own commit stays), and **Other sites on the bench** lists the sites that share its code.
 
 ## Runs (`HDS Copilot Run`, `helpdesk/copilot/runs.py`)
 
@@ -51,10 +56,14 @@ A run is Copilot's work on one ticket. It starts when a ticket of a customer wit
 | Approved | Merged | hub | the hub merged it |
 | Preparing Fix, Awaiting Approval | Merged | hub | merged on GitHub without the approval (recorded, the Agent Managers told) |
 | Merged | Resolved | agent | Mark deployed, after an engineer deployed it |
+| Merged | Deploying | hub | Press started the deploy (or the bench already runs the merged commit) |
+| Deploying | Verifying | hub | Press updated every site |
+| Verifying | Resolved | hub | the check after the deploy passed |
+| Merged, Deploying, Verifying | Escalated | hub | the deploy or the check failed |
 | Resolved | Closed, Escalated | customer, agent | the customer confirmed, or reopened |
 | any active state up to Approved | Cancelled | agent | Cancel |
 
-Later phases add Deploying and Verifying (Phase 2).
+An undo is a run of its own (`kind` revert, `reverts` the run it undoes); see **Deploying through Press**.
 
 A run started while **Shadow mode** is on is a shadow run (`shadow`) for its whole life, whatever the setting says later. `base_app` and `base_commit` (set with `start_run(..., base_commit=, base_app=)`) make the worker read that app at that commit instead of the deployed code; the evaluation uses them to put Copilot in front of the code as it was before a known fix.
 
@@ -115,9 +124,9 @@ A run at Preparing Fix needs a code change. Until the worker can open pull reque
 5. **Deciding** (`approvals.decide`, row lock): the first decision wins. **Approve** with the planned deploy date: the hub re-reads the pull request, and if new commits arrived the approval is superseded and a new one opened. **Reject** needs a reason, which goes to the task and the pull request; the run goes back to Preparing Fix, and the rejected commit is not asked again: the developer's next push opens a new approval.
 6. **The merge** (`fixes.try_merge`): when the head is still the approved commit, every check run passed (success, neutral or skipped) with the commit status green or absent, and GitHub calls the merge clean, the hub merges with the approved commit pinned (GitHub refuses with 409 if the head moved), using the repository's own method as the org merge bot chooses it (merge commit where allowed, else squash, else rebase). It retries on every check webhook and the 10-minute refresh. A lasting block (failing checks, merge conflicts, a branch behind its base, a review GitHub requires) is told to the approver and the developer once, in plain words; GitHub still settling the merge state (`unknown`, `unstable`) is a quiet wait. Each finished workflow also updates the checks on the card. After merging, the hub replays the merged pull request through the task sync, so the fix task completes at once; GitHub's own webhook arriving later changes nothing, because the sync acts once per change of state. The customer then sees **Fix scheduled** with the planned date.
 7. **Merged elsewhere.** A pull request merged on GitHub without the approval moves the run to Merged too, with a note on the ticket, an event and the Agent Managers told.
-8. **Mark deployed.** After an engineer deploys the merged fix through Press, **Mark deployed** in the dialog resolves the run; the customer is asked to confirm (Resolved), as in Phase 1a.
+8. **Deploy, or Mark deployed.** A site on TBO's Press is updated with **Deploy** (see **Deploying through Press**). Otherwise, after an engineer deploys the merged fix by hand, **Mark deployed** in the dialog resolves the run; the customer is asked to confirm (Resolved), as in Phase 1a. Mark deployed is refused while a deploy is waiting or running.
 
-The GitHub token in Settings → GitHub needs, on the repositories Copilot fixes: Contents read and write (to merge), Pull requests read and write (the pull request, labels, comments), Commit statuses read, and Checks read. GitHub gives no fine-grained personal token Checks read; with one, give it Actions read instead: the hub then reads the commit's GitHub Actions workflow runs, the card says that only those were seen, and GitHub's own merge state still has to be clean. Those repositories must also be allowed in the sync. Copilot follows pull requests only while the GitHub sync is on: switched off, the refresh says so and nothing acts on GitHub's events. Crons: `fixes.refresh_open` every 10 minutes (reads every open fix's pull request from GitHub and replays it as its webhook would have; finds one that says `Closes TASK-…` but never reached the hub, and moves on to a new pull request when the run's was closed), `approvals.remind_and_escalate` every 15 minutes (a reminder after **Remind after** hours, then a senior or the Agent Managers after **Escalate after** hours). API (agents): `helpdesk.api.copilot.create_fix_task`, `decide_fix(ticket, approve, note, deploy_date)`, `refresh_fix`, `mark_deployed`; `get_run` returns the fix card. When the Task of a Copilot fix completes on the merge, its note on the ticket says to deploy and press Mark deployed instead of "Reply to the customer".
+The GitHub token in Settings → GitHub needs, on the repositories Copilot fixes: Contents read and write (to merge), Pull requests read and write (the pull request, labels, comments), Commit statuses read, and Checks read. GitHub gives no fine-grained personal token Checks read; with one, give it Actions read instead: the hub then reads the commit's GitHub Actions workflow runs, the card says that only those were seen, and GitHub's own merge state still has to be clean. Those repositories must also be allowed in the sync. Copilot follows pull requests only while the GitHub sync is on: switched off, the refresh says so and nothing acts on GitHub's events. Crons: `fixes.refresh_open` every 10 minutes (reads every open fix's pull request from GitHub and replays it as its webhook would have; finds one that says `Closes TASK-…` but never reached the hub, and moves on to a new pull request when the run's was closed), `approvals.remind_and_escalate` every 15 minutes (a reminder after **Remind after** hours, then a senior or the Agent Managers after **Escalate after** hours). API (agents): `helpdesk.api.copilot.create_fix_task`, `decide_fix(ticket, approve, note, deploy_date)`, `refresh_fix`, `mark_deployed`; `get_run` returns the fix card (deploys: see below). When the Task of a Copilot fix completes on the merge, its note on the ticket says to deploy and press Mark deployed instead of "Reply to the customer".
 
 ## Copilot's own fix (Phase 1c-2: `fixes.request_copilot_fix`, `github_app.py`)
 
@@ -130,6 +139,38 @@ Copilot can write the fix itself instead of a developer. It does so only when as
 5. **When it fails.** A failure report (`submit_result` with `kind: failure`) sets the fix to Failed. The run stays at Preparing Fix, and the reason goes to the fix task and to its developer. A worker that stops reporting is tried again until **Fix attempts per run** (2) are used, then the same happens.
 
 **The GitHub App** (HDS Copilot Settings: App ID and private key): when it is set up, every Copilot call to GitHub uses an installation key for the repository in question, and the search for an unlinked pull request asks each owner of the site's repositories. Without it, the personal token in Settings, GitHub is used as before. It also lets the hub read check runs, which a fine-grained personal token cannot.
+
+## Deploying through Press (Phase 2: `press.py`, `deploy.py`, `verify.py`)
+
+After the merge, a person presses **Deploy** on the ticket's Copilot card: **Tonight** (the next deploy window; inside the window, at once) or **Now**. The approvers and the Agent Managers may deploy Tonight; only senior approvers and Agent Managers may deploy Now. If other sites share the bench, only a senior may deploy, and they stay on their old code: Press's normal update moves only the sites it is given.
+
+**What moves.** The Press site of each of the customer's Production site cards on that bench, with the merged commit of the app whose repository the fix changed. The request (`HDS Deploy Request`, `TBO-DEP-.YYYY.-.#####`) lists the sites, the app with its old and new commit, and the other sites on the bench.
+
+**The steps** (the cron `deploy.run_due`, every 5 minutes):
+
+1. **Scheduled** until its time.
+2. **Starting.** One Copilot deploy at a time across TBO's Press (a lock, freed after 3 hours at the latest), none while Press is deploying that bench, and the merged commit must be Press's next release for the app (else the hub asks Press to fetch it and waits). While it cannot start it is **Waiting for Press**; after **Wait for Press** minutes it moves to the next window. A bench that already runs the merged commit goes straight to the check.
+3. **Deploying.** `deploy_and_update` for those sites only, with Press's backup first (never skipped) and Press's check that the update will not fail; the run is Deploying. The hub follows each site's Site Update. Failure, Fatal, Recovered or Recovery Failed (Press puts the site back on its old code), or no answer in 2 hours, fails the deploy.
+4. **Checking.** The run is Verifying, and the hub checks the site through the customer's connection: it runs the merged commit; no error signature since the deploy began that the week before did not have (the connector's own left out); the scheduler is on and maintenance mode off; the documents the diagnosis names still open. A site that does not answer is asked again for **Check after deploy** minutes. A ticket without a connection is not checked, and the card says so.
+5. **Succeeded.** The run is Resolved, and the customer sees Resolved ("The fix is live") and is asked to confirm.
+
+**When it fails**, the request is Failed with Press's reason or the failed check, the run is Escalated, a note goes on the ticket, and the approver, the person who pressed Deploy and the Agent Managers are told. **Cancel deploy** works while the request has not started.
+
+**Undo the fix.** On a run whose merged fix went wrong (Escalated or Resolved), an approver or Agent Manager presses **Undo the fix** with a reason. The hub asks GitHub for its own revert of the merged pull request (`revertPullRequest`; with the GitHub App when it is set up) and starts a revert run with its own task ("Copilot revert: …"); the revert pull request says `Closes` that task and goes through the one approval and the merge like any fix, then Deploy (Now, for a senior). The ticket's card follows the revert run. The customer hears nothing from it: its stages are recorded as events only. One undo per run. A database restore from Press's backup stays a person's decision.
+
+**Automatic deploys.** With **Auto-deploy categories** filled (empty in the pilot), a fix whose root cause (for example `bug`) or risk level (`low`, `medium`) is listed is scheduled for the window by itself when it merges, on its approver's behalf. Never a sensitive or high-risk fix, an undo, or a bench other sites share; whatever stops it is an event (`auto_deploy_skipped`) and Deploy stays with a person.
+
+**The Press client** (`press.py`) posts `{Press URL}/api/method/<method>` with `Authorization: token <key>:<secret>` (and `X-Press-Team` when set) and shows Press's own message on a refusal. Press has no narrower role for an API user, so keep the key on the hub and, where Press's web server allows, accept it only from the hub's address.
+
+API (agents): `helpdesk.api.copilot.request_deploy(ticket, when)`, `cancel_deploy(ticket)`, `undo_fix(ticket, reason)`; `get_run` adds the deploy to the fix card (status, time, sites, other sites on the bench, the check, the error).
+
+**When a deploy goes wrong (runbook)**
+
+1. Read the card: Press's reason, or the check that failed.
+2. **Press failed the update** (Recovered): Press put the site back on its old code from its own backup. Open the site to confirm, read Press's Site Update for the step that failed (often a patch), then fix forward with a new fix, or Undo.
+3. **The check failed after a good update:** the site runs the new code. If the customer is hurt, Undo and deploy the revert Now (a senior); otherwise fix forward.
+4. **Data changed by a failed patch:** only a person restores from Press's backup (the site's Backups on Press), after telling the customer.
+5. A deploy stuck in Deploying fails by itself after 2 hours; a lock left by a crash frees itself after 3 hours.
 
 ## MCP server (`helpdesk/api/copilot_mcp.py`, `helpdesk/copilot/mcp/`)
 

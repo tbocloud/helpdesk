@@ -84,6 +84,51 @@ def refresh_from_site(registry) -> dict:
     }
 
 
+def refresh_from_press(registry) -> dict:
+    """The bench's apps and their commits as Press knows them, and the other sites on the bench.
+
+    The commit the site itself reports (Refresh from the site) stays the
+    deployed commit; an app whose Press commit differs is marked Drift.
+    """
+    from helpdesk.copilot import press
+
+    if not registry.press_release_group:
+        frappe.throw(_("This site card has no Press release group (bench)."))
+    try:
+        info = press.deploy_information(registry.press_release_group)
+    except press.PressError as e:
+        frappe.throw(_("Press: {0}").format(e.message))
+    rows = {row.app: row for row in registry.apps}
+    drift = []
+    for app in info.get("apps") or []:
+        name = app.get("app") or app.get("name")
+        commit = app.get("hash") or ""
+        if not name:
+            continue
+        row = rows.get(name) or registry.append("apps", {"app": name})
+        if not row.deployed_commit:
+            row.deployed_commit = commit or None
+        if (
+            commit
+            and row.deployed_commit
+            and not commit.startswith(row.deployed_commit)
+            and not row.deployed_commit.startswith(commit)
+        ):
+            row.drift_status = "Drift"
+            drift.append(name)
+        elif commit:
+            row.drift_status = "In sync"
+    others = [
+        site.get("name")
+        for site in info.get("sites") or []
+        if site.get("name") and site.get("name") != registry.press_site
+    ]
+    registry.group_sites = "\n".join(others)
+    registry.last_synced = now_datetime()
+    registry.save(ignore_permissions=True)
+    return {"apps": len(info.get("apps") or []), "drift": drift, "other_sites": others}
+
+
 def apps_for(registry) -> list[dict]:
     """The apps on a registered site, as plain dicts a worker can be handed."""
     return [
