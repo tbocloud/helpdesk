@@ -348,6 +348,24 @@ class TestSubmit(StandupCase):
         self.assertFalse(past["editable"])
         self.assertEqual(past["standup"]["status"], "Submitted")
 
+    def test_no_stand_up_outside_the_departments_in_it(self):
+        self.task("Bank reconciliation", due=self.today)
+        set_standup_settings(departments=[{"department": OTHER_DEPARTMENT}])
+        mine = call_as_user(DEV[0], "helpdesk.api.standup.get_my_standup")
+        self.assertIsNone(mine["standup"])
+        self.assertFalse(mine["editable"])
+        with self.assertRaises(frappe.ValidationError):
+            call_as_user(DEV[0], "helpdesk.api.standup.save_standup", values={})
+
+    def test_a_left_out_department_keeps_its_stand_up_read_only(self):
+        make_standup(DEV[0], self.today, DEPARTMENT)
+        set_standup_settings(departments=[{"department": OTHER_DEPARTMENT}])
+        mine = call_as_user(DEV[0], "helpdesk.api.standup.get_my_standup")
+        self.assertEqual(mine["standup"]["status"], "Draft")
+        self.assertFalse(mine["editable"])
+        with self.assertRaises(frappe.ValidationError):
+            call_as_user(DEV[0], "helpdesk.api.standup.save_standup", values={})
+
     def test_nothing_is_saved_while_switched_off(self):
         set_standup_settings(enabled=0)
         with self.assertRaises(frappe.ValidationError):
@@ -361,10 +379,9 @@ class TestReminder(StandupCase):
         set_standup_settings(opened_on=self.today)
         settings = standup.get_settings()
         at = datetime.combine(self.today, time(10, 5))
-        calendar = standup_calendar(self.today)
         with patch.object(standup, "post_summaries"):
-            standup.process(settings, at, calendar)
-            standup.process(standup.get_settings(), at, calendar)
+            standup.process(settings, at)
+            standup.process(standup.get_settings(), at)
             standup.send_reminders(standup.get_settings(), self.today)
         self.assertEqual(
             get_standup_notices(DEV[0], draft),
@@ -372,11 +389,36 @@ class TestReminder(StandupCase):
         )
         self.assertEqual(get_standup_notices(DEV2[0], done), [])
 
+    def test_the_long_steps_run_on_the_long_queue(self):
+        at = datetime.combine(self.today, time(10, 45))
+        with patch("frappe.enqueue") as enqueue, patch.object(
+            standup, "send_reminders"
+        ):
+            # a late run: the summary posts in the drafts' own job, after them
+            standup.process(standup.get_settings(), at)
+            set_standup_settings(opened_on=self.today, posted_on=None)
+            standup.process(standup.get_settings(), at)
+        calls = enqueue.call_args_list
+        self.assertEqual(
+            [c.args[0] for c in calls],
+            ["helpdesk.standup.open_drafts_job", "helpdesk.standup.post_summaries_job"],
+        )
+        self.assertTrue(calls[0].kwargs["post"])
+        for call in calls:
+            self.assertEqual(call.kwargs["queue"], "long")
+            self.assertEqual(call.kwargs["day"], str(self.today))
+
+    def test_left_out_departments_get_no_reminder(self):
+        draft = make_standup(DEV[0], self.today, DEPARTMENT).name
+        set_standup_settings(departments=[{"department": OTHER_DEPARTMENT}])
+        standup.send_reminders(standup.get_settings(), self.today)
+        self.assertEqual(get_standup_notices(DEV[0], draft), [])
+
     def test_nothing_runs_before_its_time(self):
         settings = standup.get_settings()
         early = datetime.combine(self.today, time(8, 45))
         with patch.object(standup, "open_drafts") as opened:
-            standup.process(settings, early, standup_calendar(self.today))
+            standup.process(settings, early)
         opened.assert_not_called()
 
 
@@ -475,6 +517,20 @@ class TestSummary(StandupCase):
         self.assertEqual(lines[1], "Anu Varghese configured GST.")
         self.assertEqual(lines[2], "Biju Thomas needs help with the Customer GST file.")
         self.assertNotIn("37 tasks", text)
+
+    def test_departments_left_out_are_not_posted(self):
+        set_standup_settings(departments=[{"department": OTHER_DEPARTMENT}])
+        with patch.object(standup, "call_haiku", side_effect=Exception("down")):
+            posted = standup.post_summaries(standup.get_settings(), self.today)
+        self.assertEqual(posted, {})
+        self.post.assert_not_called()
+        # their drafts stay drafts: nothing went out for them
+        self.assertEqual(
+            frappe.db.get_value(
+                standup.STANDUP, standup.standup_name(DEV[0], self.today), "status"
+            ),
+            "Draft",
+        )
 
     def test_without_a_department_channel_the_escalation_channel(self):
         set_standup_settings(departments=[{"department": DEPARTMENT}])

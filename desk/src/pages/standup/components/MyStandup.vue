@@ -242,21 +242,33 @@ watch(
 const data = computed<MyStandupData | null>(() => resource.data ?? null);
 const form = ref<Standup | null>(null);
 const saved = ref("");
+const dirty = computed(() => !!form.value && snapshot() !== saved.value);
+
+function load(standup: Standup | null | undefined) {
+  form.value = standup ? JSON.parse(JSON.stringify(standup)) : null;
+  saved.value = snapshot();
+}
 watch(
   () => data.value?.standup,
   (standup) => {
-    form.value = standup ? JSON.parse(JSON.stringify(standup)) : null;
-    saved.value = snapshot();
+    // a reload (e.g. after changing a task from a row) must not throw away
+    // unsaved edits to the same stand-up
+    const same =
+      !!standup &&
+      !!form.value &&
+      standup.date === form.value.date &&
+      standup.name === form.value.name;
+    if (same && dirty.value) return;
+    load(standup);
   },
   { immediate: true }
 );
 
-function snapshot() {
-  if (!form.value) return "";
-  const { yesterday, today, blockers, notes, needs_help } = form.value;
+function snapshot(standup: Standup | null | undefined = form.value) {
+  if (!standup) return "";
+  const { yesterday, today, blockers, notes, needs_help } = standup;
   return JSON.stringify({ yesterday, today, blockers, notes, needs_help });
 }
-const dirty = computed(() => !!form.value && snapshot() !== saved.value);
 
 function describe(section: Section) {
   if (section === "yesterday")
@@ -320,6 +332,8 @@ async function save(submit: boolean) {
   if (!form.value || saving.value) return;
   saving.value = submit ? "submit" : "save";
   const { yesterday, today, blockers, notes, needs_help } = form.value;
+  const sent = snapshot();
+  const { date: sentDate, name: sentName } = form.value;
   try {
     const result = await (submit ? submitResource : saveResource).submit({
       values: {
@@ -330,6 +344,27 @@ async function save(submit: boolean) {
         needs_help: needs_help ? 1 : 0,
       },
     });
+    const stored: Standup | null = result.standup;
+    // another day was picked while saving: the answer belongs to a stand-up
+    // that isn't on screen any more
+    const moved =
+      (!!props.date && props.date !== sentDate) ||
+      form.value?.date !== sentDate ||
+      form.value?.name !== sentName;
+    if (moved) {
+      toast.success(submit ? __("Stand-up submitted") : __("Draft saved"));
+      return;
+    }
+    if (snapshot() === sent || !form.value || !stored) {
+      // what was saved is the new starting point
+      load(stored);
+    } else {
+      // edits made while saving stay: the saved copy only becomes the baseline
+      form.value.name = stored.name;
+      form.value.status = stored.status;
+      form.value.submitted_on = stored.submitted_on;
+      saved.value = snapshot(stored);
+    }
     resource.setData(result);
     toast.success(submit ? __("Stand-up submitted") : __("Draft saved"));
   } catch (e) {

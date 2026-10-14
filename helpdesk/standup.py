@@ -76,6 +76,8 @@ MAX_NOTE = 1000
 # per person and section in the Teams summary
 SUMMARY_ITEMS = 4
 HISTORY_LIMIT = 30
+# the long queue's own limit (the cron job runs on the default queue's 300 seconds)
+LONG_JOB_SECONDS = 1500
 TEXT_KINDS = ("plan", "note")
 
 HEADLINE_PROMPT = """You write the first lines of one team's daily stand-up summary at TBO, a company that implements ERPNext, builds apps and websites and runs digital marketing.
@@ -438,6 +440,12 @@ def included_departments(settings) -> list[str]:
     return [row.department for row in settings.get("departments") or []]
 
 
+def takes_part(settings, department: str | None) -> bool:
+    """Whether a department is in the stand-up: every one when none is listed."""
+    included = included_departments(settings)
+    return not included or department in included
+
+
 # --- the run ---------------------------------------------------------------------
 
 
@@ -447,27 +455,57 @@ def run():
     if not cint(settings.enabled):
         return
     now = now_datetime()
-    calendar = WorkCalendar(now.date())
-    if not calendar.is_working_day(now.date()):
+    if not WorkCalendar(now.date()).is_working_day(now.date()):
         return
-    process(settings, now, calendar)
+    process(settings, now)
 
 
-def process(settings, now: datetime, calendar: WorkCalendar) -> None:
+def process(settings, now: datetime) -> None:
     today = now.date()
-    opened = False
-    if is_due(settings, "open_at", "opened_on", now):
+    opening = is_due(settings, "open_at", "opened_on", now)
+    if opening:
         record(settings, "opened_on", today)
-        open_drafts(settings, today, calendar)
-        opened = True
     if is_due(settings, "remind_at", "reminded_on", now):
         record(settings, "reminded_on", today)
         # drafts that only just opened (the server was down) aren't reminded at once
-        if not opened:
+        if not opening:
             send_reminders(settings, today)
-    if is_due(settings, "post_at", "posted_on", now):
+    posting = is_due(settings, "post_at", "posted_on", now)
+    if posting:
         record(settings, "posted_on", today)
-        post_summaries(settings, today, calendar)
+    if opening:
+        # a late run posts in the same job, after the drafts exist: two jobs could
+        # run on two workers at once and post before the drafts were made
+        enqueue_step("open_drafts_job", today, post=posting)
+    elif posting:
+        enqueue_step("post_summaries_job", today)
+
+
+def enqueue_step(method: str, day, **kwargs) -> None:
+    """Filling everyone's draft (a My Work read per person) or composing every
+    summary can outlast the cron job's 300 seconds; on the long queue, a half-done
+    step can't be cut off after its day was recorded."""
+    frappe.enqueue(
+        f"helpdesk.standup.{method}",
+        queue="long",
+        timeout=LONG_JOB_SECONDS,
+        day=str(getdate(day)),
+        **kwargs,
+        enqueue_after_commit=True,
+        now=frappe.flags.in_test,
+    )
+
+
+def open_drafts_job(day: str, post: bool = False) -> None:
+    day = getdate(day)
+    open_drafts(get_settings(), day, WorkCalendar(day))
+    if post:
+        post_summaries(get_settings(), day)
+
+
+def post_summaries_job(day: str) -> None:
+    day = getdate(day)
+    post_summaries(get_settings(), day)
 
 
 def is_due(settings, time_field: str, done_field: str, now: datetime) -> bool:
@@ -493,9 +531,7 @@ def candidates(settings, day) -> tuple[list[str], dict]:
     away = on_leave(day)
     users = [u for u in enabled_users(agents) if u not in away]
     departments = home_departments(users)
-    included = set(included_departments(settings))
-    if included:
-        users = [u for u in users if departments.get(u) in included]
+    users = [u for u in users if takes_part(settings, departments.get(u))]
     return users, departments
 
 
@@ -558,32 +594,42 @@ def send_reminders(settings, day) -> None:
     for draft in frappe.get_all(
         STANDUP,
         filters={"date": getdate(day), "status": DRAFT},
-        fields=["name", "user"],
+        fields=["name", "user", "department"],
         limit_page_length=0,
     ):
-        if draft.user not in away:
+        if draft.user not in away and takes_part(settings, draft.department):
             notify_users([draft.user], STANDUP, draft.name, text, link=PATH)
 
 
-def post_summaries(settings, day, calendar: WorkCalendar | None = None) -> dict:
+def post_summaries(settings, day) -> dict:
     """Drafts become Auto-posted, then each department's summary goes to its channel.
-    Returns {department: text} of what was composed."""
+    Departments left out of the stand-up are neither posted nor changed. Returns
+    {department: text} of what was composed."""
     from helpdesk.chat_notifications import ChatError
     from helpdesk.chat_notifications import is_enabled as chat_enabled
 
-    table = frappe.qb.DocType(STANDUP)
-    (
-        frappe.qb.update(table)
-        .set(table.status, AUTO_POSTED)
-        .where((table.date == getdate(day)) & (table.status == DRAFT))
-        .run()
-    )
+    groups = {
+        department: docs
+        for department, docs in by_department(load_standups(day)).items()
+        if takes_part(settings, department)
+    }
+    drafts = [d for docs in groups.values() for d in docs if d.status == DRAFT]
+    if drafts:
+        table = frappe.qb.DocType(STANDUP)
+        (
+            frappe.qb.update(table)
+            .set(table.status, AUTO_POSTED)
+            .where(table.name.isin([d.name for d in drafts]))
+            .run()
+        )
+    for doc in drafts:
+        doc.status = AUTO_POSTED
     channels = {
         row.department: row.get_password("channel_webhook", raise_exception=False)
         for row in settings.get("departments") or []
     }
     posted = {}
-    for department, docs in by_department(load_standups(day)).items():
+    for department, docs in groups.items():
         text = compose_summary(department, docs, day, settings)
         posted[department] = text
         if not chat_enabled():
@@ -970,15 +1016,18 @@ def my_standup(user: str, date: str | None = None) -> dict:
     calendar = WorkCalendar(day)
     previous = calendar.previous_working_day()
     shape = None
+    department = doc.department if doc else own_department(user, day)
+    # someone whose department is left out writes no stand-up, but keeps their history
+    part = takes_part(settings, department)
     if doc:
         shape = standup_shape(doc, include_hours)
-    elif day == today and enabled:
+    elif day == today and enabled and part:
         filled = autofill(user, day, calendar)
         shape = standup_shape(
             frappe._dict(
                 user=user,
                 date=day,
-                department=own_department(user, day),
+                department=department,
                 status=DRAFT,
                 hours=filled["hours"],
                 **{s: [frappe._dict(r) for r in filled[s]] for s in SECTIONS},
@@ -991,12 +1040,12 @@ def my_standup(user: str, date: str | None = None) -> dict:
         "date": str(day),
         "previous_day": str(previous),
         "is_working_day": bool(calendar.is_working_day(day)),
-        "editable": enabled and day == today,
+        "editable": enabled and day == today and part,
         "post_at": setting_time(settings, "post_at"),
         "posted": bool(settings.posted_on) and getdate(settings.posted_on) == day,
         "standup": shape,
         "teams": teams,
-        "department": (shape or {}).get("department") or own_department(user, day),
+        "department": department,
     }
 
 
@@ -1007,12 +1056,12 @@ def save(user: str, values: dict, submit: bool = False) -> dict:
         frappe.throw(_("The daily stand-up isn't switched on."))
     today = getdate(now_datetime())
     name = standup_name(user, today)
-    if frappe.db.exists(STANDUP, name):
-        doc = frappe.get_doc(STANDUP, name)
-    else:
-        doc = new_standup(
-            user, today, own_department(user, today), autofill(user, today)
-        )
+    doc = frappe.get_doc(STANDUP, name) if frappe.db.exists(STANDUP, name) else None
+    department = doc.department if doc else own_department(user, today)
+    if not takes_part(get_settings(), department):
+        frappe.throw(_("Your department isn't in the daily stand-up."))
+    if not doc:
+        doc = new_standup(user, today, department, autofill(user, today))
     for section in SECTIONS:
         if section in values:
             doc.set(section, edited_rows(doc, section, values.get(section) or []))
