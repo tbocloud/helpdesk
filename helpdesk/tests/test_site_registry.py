@@ -133,6 +133,46 @@ class TestRefreshFromSite(FrappeTestCase):
         self.assertEqual(rows["billing_app"].drift_status, "Drift")
         self.assertEqual(rows["erpnext"].drift_status, "In sync")
 
+    def test_a_local_remote_keeps_the_typed_repository(self):
+        # Press builds apps from a copy in its build context, so the site reports a file path.
+        self.reported(
+            [
+                {
+                    "app": "tax_app",
+                    "commit": "k" * 40,
+                    "remotes": {"origin": "file:///home/frappe/context/apps/tax_app"},
+                },
+                {
+                    "app": "billing_app",
+                    "commit": "s" * 40,
+                    "remotes": {
+                        "origin": "file:///home/frappe/context/apps/billing_app"
+                    },
+                },
+                {
+                    "app": "erpnext",
+                    "commit": "e" * 40,
+                    "remotes": {
+                        "origin": "/home/frappe/context/apps/erpnext",
+                        "upstream": "git@github.com:frappe/erpnext.git",
+                    },
+                },
+            ]
+        )
+
+        refresh_from_site(self.registry)
+
+        rows = {
+            row.app: row
+            for row in frappe.get_doc("HDS Site Registry", self.registry.name).apps
+        }
+        self.assertEqual(rows["tax_app"].repository, "https://github.com/acme/tax_app")
+        self.assertFalse(rows["billing_app"].repository)
+        self.assertEqual(
+            rows["erpnext"].repository, "git@github.com:frappe/erpnext.git"
+        )
+        self.assertEqual(rows["tax_app"].deployed_commit, "k" * 40)
+
     def test_a_site_that_reports_nothing_changes_nothing(self):
         self.reported([])
         with self.assertRaises(frappe.ValidationError):

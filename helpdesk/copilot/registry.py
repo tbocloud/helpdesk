@@ -4,10 +4,15 @@
 """HDS Site Registry: which customer site (and which apps) a ticket belongs to."""
 
 import json
+import re
 
 import frappe
 from frappe import _
 from frappe.utils import now_datetime
+
+# A remote that can be cloned from elsewhere. Press builds each app from a copy in its
+# build context, so a Press site reports a local path (file:///home/frappe/context/apps/...).
+CLONABLE_REMOTE = re.compile(r"^(https?://|ssh://|git@)", re.IGNORECASE)
 
 
 def registry_for_ticket(ticket: str):
@@ -33,8 +38,9 @@ def refresh_from_site(registry) -> dict:
 
     A sandbox copy needs all of them (Frappe, ERPNext, HRMS and the custom
     apps), not only the ones a person typed in. An app the site reports
-    without a remote keeps the repository already on the card; uncommitted
-    changes on the site mark the app as drifted.
+    without a remote that can be cloned (none, or a local path as on Press)
+    keeps the repository already on the card; uncommitted changes on the
+    site mark the app as drifted.
     """
     from helpdesk.mcp_client import MCPClient
 
@@ -56,12 +62,10 @@ def refresh_from_site(registry) -> dict:
         if not isinstance(info, dict) or not info.get("app"):
             continue
         remotes = info.get("remotes") or {}
-        repository = (
-            remotes.get("origin")
-            or remotes.get("upstream")
-            or next(iter(remotes.values()), None)
-            or known.get(info["app"])
-        )
+        candidates = [remotes.get("origin"), remotes.get("upstream"), *remotes.values()]
+        repository = next(
+            (url for url in candidates if url and CLONABLE_REMOTE.match(url)), None
+        ) or known.get(info["app"])
         rows.append(
             {
                 "app": info["app"],
