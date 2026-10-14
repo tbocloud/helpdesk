@@ -153,9 +153,12 @@ def fill_customer_domains(apply: bool = False) -> dict:
         fields=["name", "domain", "email_domains"],
         limit_page_length=0,
     )
-    taken = set().union(
-        *(customer_domains(c.domain, c.email_domains) for c in customers)
-    )
+    # {domain: customer}, including the ones this fill picks as it goes
+    owners = {
+        domain: c.name
+        for c in customers
+        for domain in customer_domains(c.domain, c.email_domains)
+    }
     public = public_email_domains()
     result = {"fill": [], "ambiguous": [], "public": [], "taken": []}
     for customer in customers:
@@ -168,15 +171,29 @@ def fill_customer_domains(apply: bool = False) -> dict:
             result["ambiguous"].append({**row, "domain": ", ".join(sorted(found))})
         elif domain in public:
             result["public"].append(row)
-        elif domain in taken:
+        elif overlaps_another(domain, customer.name, owners):
             result["taken"].append(row)
         else:
-            taken.add(domain)
+            owners[domain] = customer.name
             result["fill"].append(row)
     if apply:
         result["fill"] = [row for row in result["fill"] if fill_empty_domain(**row)]
         clear_domain_cache()
     return result
+
+
+def overlaps_another(domain: str, customer: str, owners: dict[str, str]) -> bool:
+    """Whether another customer has `domain`, a parent of it or a subdomain of it: a
+    sender there would then match both, and new tickets would find neither."""
+    return any(
+        owner != customer
+        and (
+            domain == other
+            or domain.endswith("." + other)
+            or other.endswith("." + domain)
+        )
+        for other, owner in owners.items()
+    )
 
 
 def fill_empty_domain(customer: str, domain: str) -> bool:

@@ -496,7 +496,14 @@ class TestCustomerDetection(IntakeCase):
                 "organization_name": "Acme Intake Set",
                 "website": "other-intake.example",
             },
+            # a subdomain of another customer's domain: its senders would match both
+            {
+                "name": "Acme Intake Shop",
+                "organization_name": "Acme Intake Shop",
+                "website": "shop.kept-intake.example",
+            },
         ]
+        make_domain_customer("Acme Intake Shop")
         method = "helpdesk.api.crm.fill_customer_domains_now"
 
         with patch(FROM_SETTINGS, return_value=crm):
@@ -507,6 +514,9 @@ class TestCustomerDetection(IntakeCase):
             )
             self.assertEqual(
                 [r["customer"] for r in preview["public"]], ["Acme Intake Mail"]
+            )
+            self.assertEqual(
+                [r["customer"] for r in preview["taken"]], ["Acme Intake Shop"]
             )
             self.assertFalse(frappe.db.get_value("HD Customer", CUSTOMER, "domain"))
 

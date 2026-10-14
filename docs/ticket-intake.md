@@ -196,8 +196,10 @@ It runs before `after_insert`, so the customer's ticket owner gets the ticket.
 `helpdesk.api.crm.fill_customer_domains_now`, POST, System and Agent Managers): customers
 without a Domain take their CRM Organization's or ERPNext Customer's website, matched by
 name like the customer sync. Preview first, then Fill. Left empty: two CRM records with
-different websites, a public mail domain, a domain another customer already has. A Domain
-typed in meanwhile is kept (conditional update).
+different websites, a public mail domain, and a domain that another customer already has
+or that is a parent or subdomain of another customer's (including ones this fill picked
+earlier), since a sender there would match both and get neither. A Domain typed in
+meanwhile is kept (conditional update).
 
 ## Client-site tickets (ticket puller)
 

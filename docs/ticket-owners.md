@@ -52,9 +52,11 @@ working**, as in the follow-ups.
 `HDTicket.assign_customer_owner()`:
 
 - **On insert** (`after_insert`), after the customer is resolved (`set_customer` runs in
-  `before_validate`, from the contact, then `set_customer_from_domain` from the sender's
-  email domain; see [ticket-intake.md](ticket-intake.md#customer-detection)). Every channel inserts an HD Ticket, so all of them are
-  covered: email, the customer portal, the agent's New ticket, the API, the hub-client pull
+  `before_validate`, from the contact). A new ticket that still has no customer, isn't an
+  alert and wasn't raised by an agent may then get one from the sender's email domain
+  (`set_customer_from_domain`, see [ticket-intake.md](ticket-intake.md#customer-detection)).
+  Owner assignment itself covers every channel, since every channel inserts an HD Ticket:
+  email, the customer portal, the agent's New ticket, the API, the hub-client pull
   from customer sites (`ticket_puller`) and the Chatwoot bridge (including its stand-in
   default customer, if that customer has an owner).
 - **Customer set later** (`on_update`, `assign_owner_of_customer_set_later`): a ticket that
