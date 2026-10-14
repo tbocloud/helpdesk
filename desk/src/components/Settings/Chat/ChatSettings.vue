@@ -311,6 +311,7 @@ import SecretField, {
   type SecretEdit,
   type SecretStatus,
 } from "../SecretField.vue";
+import { secretValue } from "../secretEdit";
 import SettingsAction from "../SettingsAction.vue";
 
 const TEAMS = "Microsoft Teams";
@@ -399,12 +400,8 @@ const secrets = computed(
 );
 const lastProblem = computed(() => data.value?.last_problem);
 
-/** What a secret's edit sends: a new value, "" to remove it, or nothing. */
 function secretParam(key: Secret): string | undefined {
-  const edit = edits[key];
-  if (edit?.mode === "remove") return "";
-  if (edit?.mode === "replace" && edit.value.trim()) return edit.value.trim();
-  return undefined;
+  return secretValue(edits[key]);
 }
 
 const isDirty = computed(

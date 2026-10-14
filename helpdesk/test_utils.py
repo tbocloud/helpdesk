@@ -2715,12 +2715,19 @@ class FakeChatwootAPI:
     """Stands in for `requests.request` in helpdesk.chatwoot_bridge: records every call and answers like Chatwoot.
 
     GET .../messages returns `messages`; every POST returns a new message id.
-    `fail=True` answers everything with HTTP 500.
+    `fail=True` answers everything with HTTP 500. `answers` maps "METHOD url-suffix"
+    (e.g. "GET /agents") to the JSON to answer with, or to None for HTTP 500.
     """
 
-    def __init__(self, messages: list[dict] | None = None, fail: bool = False):
+    def __init__(
+        self,
+        messages: list[dict] | None = None,
+        fail: bool = False,
+        answers: dict | None = None,
+    ):
         self.messages = messages or []
         self.fail = fail
+        self.answers = answers or {}
         self.calls = []
 
     def __call__(self, method, url, json=None, headers=None, timeout=None, **kwargs):
@@ -2735,12 +2742,23 @@ class FakeChatwootAPI:
             }
         )
         response = MagicMock()
-        if self.fail:
+        # the last matching key wins, so a later override beats a default
+        answer = next(
+            (
+                (value,)
+                for key, value in reversed(list(self.answers.items()))
+                if key.split(" ", 1)[0] == method and url.endswith(key.split(" ", 1)[1])
+            ),
+            None,
+        )
+        if self.fail or (answer and answer[0] is None):
             response.status_code = 500
             response.text = "Internal Server Error"
             return response
         response.status_code = 200
-        if method == "GET":
+        if answer:
+            response.json.return_value = answer[0]
+        elif method == "GET":
             response.json.return_value = {"payload": self.messages}
         else:
             response.json.return_value = {"id": 900000 + len(self.calls)}
@@ -2762,6 +2780,70 @@ class FakeChatwootAPI:
     def statuses(self) -> list[str]:
         """The statuses the bridge toggled conversations to, in order."""
         return [c["body"].get("status") for c in self.calls_to("/toggle_status")]
+
+
+CHATWOOT_TEST_PLATFORM_TOKEN = "test-chatwoot-platform-token"
+CHATWOOT_TEST_SIGN_IN = f"{CHATWOOT_TEST_URL}/app/login?email=x&sso_auth_token=one-time"
+
+
+def enable_chatwoot_sso(**values):
+    """Turns on sign-in through TBO Support (HD Chatwoot Settings) with the bridge's test
+    settings and a test Platform App token, plus any overrides."""
+    return enable_chatwoot_bridge(
+        **{
+            "sso_enabled": 1,
+            "platform_api_token": CHATWOOT_TEST_PLATFORM_TOKEN,
+            "sso_create_users": 1,
+            "sso_default_role": "agent",
+            "sso_managers_as_admins": 1,
+            **values,
+        }
+    )
+
+
+def fake_chatwoot_platform(
+    test_case,
+    agents: list[dict] | None = None,
+    chat_user_id: int = 501,
+    answers: dict | None = None,
+):
+    """Patches Chatwoot for TBO Chat sign-in and returns the FakeChatwootAPI.
+
+    The account has `agents` ({id, email, role}); creating a user answers with
+    `chat_user_id`, and its one-time link is CHATWOOT_TEST_SIGN_IN. `answers`
+    overrides any route, e.g. {"GET /login": None} for an HTTP 500.
+    """
+    api = FakeChatwootAPI(
+        answers={
+            "GET /agents": agents or [],
+            "POST /platform/api/v1/users": {"id": chat_user_id},
+            f"GET /users/{chat_user_id}/login": {"url": CHATWOOT_TEST_SIGN_IN},
+            **(answers or {}),
+        }
+    )
+    request = patch("helpdesk.chatwoot_bridge.requests.request", api)
+    request.start()
+    test_case.addCleanup(request.stop)
+    return api
+
+
+def open_tbo_chat(user: str) -> dict:
+    """Calls helpdesk.api.chatwoot_sso.login as `user` (or "Guest") and returns what it
+    answered: frappe.local.response, a redirect or a page."""
+    from helpdesk.api.chatwoot_sso import login
+
+    frappe.local.response = frappe._dict({"docs": []})
+    frappe.set_user(user)
+    try:
+        login()
+    finally:
+        frappe.set_user("Administrator")
+    return dict(frappe.local.response)
+
+
+def reset_chat_sign_in_limit(user: str):
+    """Forgets `user`'s recent TBO Chat sign-ins, so the per-user limit starts afresh."""
+    frappe.cache.delete(frappe.cache.make_key(f"chatwoot-sso:{user}"))
 
 
 def make_chat_conversation(conversation_id: int, **values):

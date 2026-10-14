@@ -48,6 +48,8 @@ import Departments from "./Departments/Departments.vue";
 import SignoffTemplates from "./Signoff/SignoffTemplates.vue";
 import LucideClipboardCheck from "~icons/lucide/clipboard-check";
 import ChatSettings from "./Chat/ChatSettings.vue";
+import TboChatSettings from "./Chat/TboChatSettings.vue";
+import LucideMessageCircle from "~icons/lucide/message-circle";
 import LucideMessagesSquare from "~icons/lucide/messages-square";
 import GitHubSettings from "./GitHub/GitHubSettings.vue";
 import AIProviderSettings from "./AI/AIProviderSettings.vue";
@@ -216,6 +218,13 @@ export const tabs = computed(() => {
           condition: () => auth.isAdmin || auth.isManager,
         },
         {
+          label: __("TBO Chat"),
+          icon: markRaw(LucideMessageCircle),
+          component: markRaw(TboChatSettings),
+          // HD Chatwoot Settings is writable by System Managers only
+          condition: () => auth.isAdmin,
+        },
+        {
           label: __("GitHub"),
           icon: markRaw(LucideGitPullRequest),
           component: markRaw(GitHubSettings),
@@ -290,6 +299,7 @@ type TabName =
   | "Tasks"
   | "Follow-ups"
   | "Chat & Teams"
+  | "TBO Chat"
   | "GitHub"
   | "AI providers"
   | "Sign-off templates"

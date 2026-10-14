@@ -314,6 +314,9 @@ disables their Microsoft account, and that must end their access to the hub too.
    (user, reason, when) and, once per run, tells the Agent Managers in one notification
    (helpdesk panel plus email or chat). Nothing is unassigned, so tickets and tasks keep
    their history.
+4. **TBO Chat follows.** A User who is disabled (by this job or by hand) or an HD Agent who
+   is deactivated is removed from the Chatwoot account, and an HD Offboarding Log row with
+   action **Removed from TBO Chat** records it. See [chatwoot-sso.md](chatwoot-sso.md).
 
 ### Safety rules
 

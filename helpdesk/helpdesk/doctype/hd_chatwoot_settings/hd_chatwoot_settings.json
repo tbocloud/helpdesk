@@ -19,7 +19,14 @@
 		"max_ai_replies",
 		"column_break_behaviour",
 		"handoff_team_id",
-		"default_customer"
+		"default_customer",
+		"sso_section",
+		"sso_enabled",
+		"platform_api_token",
+		"column_break_sso",
+		"sso_create_users",
+		"sso_default_role",
+		"sso_managers_as_admins"
 	],
 	"fields": [
 		{
@@ -121,12 +128,56 @@
 			"label": "Customer for unknown contacts",
 			"options": "HD Customer",
 			"description": "Optional. New chat contacts that match no existing contact or customer are added to this customer."
+		},
+		{
+			"fieldname": "sso_section",
+			"fieldtype": "Section Break",
+			"label": "Sign-in with Microsoft",
+			"description": "TBO Chat signs agents in through TBO Support, so Microsoft is the only way in (docs/chatwoot-sso.md)."
+		},
+		{
+			"default": "0",
+			"fieldname": "sso_enabled",
+			"fieldtype": "Check",
+			"label": "Sign in through TBO Support",
+			"description": "Open TBO Chat sends an active agent who is signed in here straight into TBO Chat. Needs the Platform App Token and the Bridge User Access Token."
+		},
+		{
+			"fieldname": "platform_api_token",
+			"fieldtype": "Password",
+			"label": "Platform App Token",
+			"description": "Access token of a Chatwoot Platform App (Super Admin console > Platform Apps). It signs agents in, adds new agents and removes people who leave."
+		},
+		{
+			"fieldname": "column_break_sso",
+			"fieldtype": "Column Break"
+		},
+		{
+			"default": "1",
+			"fieldname": "sso_create_users",
+			"fieldtype": "Check",
+			"label": "Add agents who aren't in TBO Chat yet",
+			"description": "Off: only people already in the Chatwoot account can open TBO Chat."
+		},
+		{
+			"default": "agent",
+			"fieldname": "sso_default_role",
+			"fieldtype": "Select",
+			"label": "Role for new agents",
+			"options": "agent\nadministrator"
+		},
+		{
+			"default": "1",
+			"fieldname": "sso_managers_as_admins",
+			"fieldtype": "Check",
+			"label": "Managers join as administrators",
+			"description": "New System Managers and Agent Managers get the administrator role. People already in TBO Chat keep their role."
 		}
 	],
 	"index_web_pages_for_search": 0,
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-09-30 18:00:00.000000",
+	"modified": "2026-10-14 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Chatwoot Settings",
