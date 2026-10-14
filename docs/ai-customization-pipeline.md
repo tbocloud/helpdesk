@@ -77,7 +77,10 @@ with developers; the agent may draft, a developer finishes.
 - Ticket type **Customization** (created on install and by patch
   `v16_0_2.customization_estimates`).
 - AI triage returns `request_type`, `estimate_hours` and `estimate_note`; a customization
-  gets the type and the AI estimate (status *Estimated*) once. An estimate an agent has
+  gets the type and the AI estimate (status *Estimated*) once. The type is set while the
+  ticket still has the default type (empty, Unspecified or HD Settings' default, which is
+  Bug on the hub, so it used to be skipped there; see `routing.is_default_ticket_type` and
+  [ticket-intake.md](ticket-intake.md#routing)). An estimate an agent has
   worked on is never overwritten. Code: `helpdesk/triage.py`,
   `helpdesk/api/customization.py` (`record_triage_estimate`).
 - HD Ticket fields: `custom_estimate_hours`, `custom_estimate_status`

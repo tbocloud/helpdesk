@@ -292,4 +292,5 @@ default_log_clearing_doctypes = {
     "HDS AI Usage Log": 90,
     "HDS Site Login Log": 180,
     "HDS Remote Audit Log": 365,
+    "HD Intake Log": 30,
 }

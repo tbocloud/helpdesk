@@ -18,6 +18,7 @@ from helpdesk.ai_engine import call_haiku
 from helpdesk.ai_suggestion import queue_suggestion
 from helpdesk.api.customization import record_triage_estimate
 from helpdesk.automation import automation_user
+from helpdesk.consts import ALERT_TICKET_TYPE, TRIAGE_CATEGORIES
 from helpdesk.session_replay import TIMELINE_HEADING as SESSION_TIMELINE_HEADING
 from helpdesk.session_replay import build_triage_context
 
@@ -41,7 +42,7 @@ TRIAGE_SYSTEM_PROMPT = """You are an ERPNext/Frappe support triage AI. Analyze t
 
 You must return ONLY valid JSON with these exact fields:
 {
-  "category": "one of: Account, Billing, Configuration, Data, Integration, Performance, Permissions, Print, Report, Stock, Workflow, Other",
+  "category": "one of: __CATEGORIES__",
   "priority": "one of: Low, Medium, High, Critical",
   "complexity": "one of: Functional, Configuration, Data, Dev, Infrastructure",
   "summary": "3-6 sentences: what is happening, the most likely cause (cite the matching error log entries when there are any), and the business impact",
@@ -81,7 +82,9 @@ Rules:
   fields typed in, buttons clicked and the errors or messages shown. Typed values are masked with "•";
   never guess them. If the timeline shows no error, say so in likely_cause instead of inventing one
 - Never invent errors, documents or causes that are not in the ticket, the error logs or the session timeline
-"""
+""".replace(
+    "__CATEGORIES__", ", ".join(TRIAGE_CATEGORIES)
+)
 
 
 def auto_triage_ticket(doc, method):
@@ -97,6 +100,10 @@ def auto_triage_ticket(doc, method):
 
     # Guard: only triage new tickets
     if doc.docstatus != 0:
+        return
+
+    # Guard: a monitoring alert is no customer request (docs/ticket-intake.md)
+    if doc.ticket_type == ALERT_TICKET_TYPE:
         return
 
     # Guard: skip if already triaged
@@ -333,6 +340,8 @@ def run_triage(
 
         frappe.db.commit()  # background job: persist triage progress and failures as they happen - nosemgrep
 
+        _route(ticket_id, triage)
+
         # Post triage comment (with skip_notifications to prevent cascades)
         investigation = (
             _maybe_start_investigation(ticket, triage) if start_investigation else None
@@ -369,6 +378,22 @@ def run_triage(
         frappe.cache.delete_value(lock_key)
         active = frappe.cache.get_value("triage_active_count") or 1
         frappe.cache.set_value("triage_active_count", max(0, active - 1))
+
+
+def _route(ticket_id: str, triage: dict):
+    """Priority, type and team from the triage (helpdesk/routing.py). A failure is
+    logged and undone; the triage result stands."""
+    from helpdesk.routing import apply_triage
+
+    try:
+        apply_triage(ticket_id, triage)
+        frappe.db.commit()  # background job: keep the routing apart from the comment below - nosemgrep
+    except Exception:  # noqa: BLE001 - routing only adds to a finished triage
+        frappe.db.rollback()
+        frappe.log_error(
+            title=f"Triage routing failed for ticket {ticket_id}",
+            message=frappe.get_traceback(),
+        )
 
 
 def _build_triage_input(ticket):

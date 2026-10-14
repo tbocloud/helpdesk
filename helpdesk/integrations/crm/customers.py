@@ -128,6 +128,69 @@ def fill_ticket_owners() -> dict:
     return result
 
 
+def fill_customer_domains(apply: bool = False) -> dict:
+    """Customers without a Domain get their CRM website's domain, once, on request; with
+    `apply` False nothing changes (the Settings preview). Matched by name like the
+    customer sync. Left empty: two CRM records with different websites (`ambiguous`),
+    a public mail domain (`public`), and a domain another customer already has
+    (`taken`), since a domain must point at one customer (docs/ticket-intake.md)."""
+    from helpdesk.helpdesk.doctype.hd_customer.hd_customer import (
+        customer_domains,
+        normalize_domain,
+        public_email_domains,
+    )
+
+    client = CRMClient.from_settings()
+    websites: dict[str, set[str]] = {}
+    for org in client.organizations() + client.erp_customers():
+        domain = normalize_domain(org.get("website"))
+        if domain:
+            name = org.get("organization_name") or org.get("name")
+            websites.setdefault(key(name), set()).add(domain)
+    customers = frappe.get_all(
+        "HD Customer",
+        fields=["name", "domain", "email_domains"],
+        limit_page_length=0,
+    )
+    taken = set().union(
+        *(customer_domains(c.domain, c.email_domains) for c in customers)
+    )
+    public = public_email_domains()
+    result = {"fill": [], "ambiguous": [], "public": [], "taken": []}
+    for customer in customers:
+        found = websites.get(key(customer.name))
+        if customer.domain or not found:
+            continue
+        domain = next(iter(found))
+        row = {"customer": customer.name, "domain": domain}
+        if len(found) > 1:
+            result["ambiguous"].append({**row, "domain": ", ".join(sorted(found))})
+        elif domain in public:
+            result["public"].append(row)
+        elif domain in taken:
+            result["taken"].append(row)
+        else:
+            taken.add(domain)
+            result["fill"].append(row)
+    if apply:
+        result["fill"] = [row for row in result["fill"] if fill_empty_domain(**row)]
+    return result
+
+
+def fill_empty_domain(customer: str, domain: str) -> bool:
+    """Set the domain only while it is still empty, so one typed in meanwhile stays."""
+    table = frappe.qb.DocType("HD Customer")
+    (
+        frappe.qb.update(table)
+        .set(table.domain, domain)
+        .where(
+            (table.name == customer) & (table.domain.isnull() | (table.domain == ""))
+        )
+        .run()
+    )
+    return frappe.db.get_value("HD Customer", customer, "domain") == domain
+
+
 def fill_empty_owner(customer: str, agent: str) -> bool:
     """Set the owner only while it is still empty, so an owner someone set meanwhile
     stays; an active agent on an empty owner is all validate_ticket_owners would check."""

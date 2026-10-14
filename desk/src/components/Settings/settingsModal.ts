@@ -38,6 +38,8 @@ import TaskSettings from "./Tasks/TaskSettings.vue";
 import LucideListChecks from "~icons/lucide/list-checks";
 import FollowUpSettings from "./FollowUps/FollowUpSettings.vue";
 import LucideBellRing from "~icons/lucide/bell-ring";
+import IntakeSettings from "./Intake/IntakeSettings.vue";
+import LucideInbox from "~icons/lucide/inbox";
 import FileStorageSettings from "./FileStorage/FileStorageSettings.vue";
 import CRMSettings from "./CRM/CRMSettings.vue";
 import LucideHandshake from "~icons/lucide/handshake";
@@ -196,6 +198,13 @@ export const tabs = computed(() => {
           // HD Follow Up Settings: System Managers and Agent Managers
           condition: () => auth.isAdmin || auth.isManager,
         },
+        {
+          label: __("Ticket intake"),
+          icon: markRaw(LucideInbox),
+          component: markRaw(IntakeSettings),
+          // HD Intake Settings through helpdesk.api.intake, which checks the roles
+          condition: () => auth.isAdmin || auth.isManager,
+        },
       ],
     },
     {
@@ -280,6 +289,7 @@ type TabName =
   | "Content"
   | "Tasks"
   | "Follow-ups"
+  | "Ticket intake"
   | "Chat & Teams"
   | "GitHub"
   | "Sign-off templates"

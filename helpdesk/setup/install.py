@@ -20,6 +20,7 @@ from helpdesk.helpdesk.doctype.hd_department.hd_department import (
 from helpdesk.helpdesk.doctype.hd_signoff_template.hd_signoff_template import (
     ensure_default_signoff_templates,
 )
+from helpdesk.intake import ensure_intake_defaults
 from helpdesk.setup.default_views import add_default_views
 
 from .default_template import create_default_template
@@ -92,6 +93,7 @@ def after_install():
     ensure_default_signoff_templates()
     ensure_default_content_options()
     ensure_customization_ticket_type()
+    ensure_intake_defaults()
     # Always keep this at last, because sql_ddl makes the db commit
     add_fts_index()
 

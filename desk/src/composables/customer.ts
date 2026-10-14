@@ -86,6 +86,7 @@ export function useCustomer(name: string) {
         state.name = data.customer_name || "";
         state.customerType = data.customer_type || "Company";
         state.domain = data.domain || "";
+        state.emailDomains = data.email_domains || "";
         state.image = data.image || "";
         state.country = data.country || "";
       }
@@ -96,6 +97,7 @@ export function useCustomer(name: string) {
   const isCustomerInfoChanged = computed(() => {
     return (
       state.domain !== (doc.doc?.domain || "") ||
+      state.emailDomains !== (doc.doc?.email_domains || "") ||
       state.image !== (doc.doc?.image || "") ||
       state.country !== (doc.doc?.country || "") ||
       state.customerType !== (doc.doc?.customer_type || "Company")
@@ -139,6 +141,7 @@ export function useCustomerState(name?: string | null) {
     name: name ? name : "",
     customerType: "Company",
     domain: "",
+    emailDomains: "",
     image: "",
     country: "",
   });
@@ -172,7 +175,13 @@ export function useNewCustomerForm() {
   return { state, primaryContact, reset };
 }
 
-type StateKey = "name" | "customerType" | "domain" | "image" | "country";
+type StateKey =
+  | "name"
+  | "customerType"
+  | "domain"
+  | "emailDomains"
+  | "image"
+  | "country";
 
 type PrimaryContactKey = "firstName" | "lastName" | "email" | "mobileNo";
 
@@ -238,5 +247,14 @@ export const customerFields: FieldConfig[] = [
     label: __("Domain"),
     placeholder: "frappe.io",
     prefix: h(LucideGlobe, { class: "size-4" }),
+  },
+  {
+    key: "emailDomains",
+    type: "textarea",
+    label: __("Other email domains"),
+    placeholder: "frappe.cloud",
+    description: __(
+      "One per line, if their people also email from other domains. New tickets from these domains get this customer."
+    ),
   },
 ];

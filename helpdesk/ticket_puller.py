@@ -10,11 +10,14 @@ the only place a credential belongs.
 """
 
 import json
+from email.utils import parseaddr
 
 import frappe
 import requests
+from frappe.utils import validate_email_address
 
-from helpdesk.automation import automation_user
+from helpdesk.automation import as_automation_user, automation_user
+from helpdesk.helpdesk.doctype.hd_customer.hd_customer import add_customer_contact
 from helpdesk.mcp_client import MCPClient
 from helpdesk.session_replay import is_diagnostics_file, is_replay_file
 
@@ -47,6 +50,7 @@ def _pending_tickets(mcp: MCPClient) -> list[dict]:
                 "subject",
                 "description",
                 "raised_by",
+                "owner",
                 "screen_recording",
                 "creation",
             ],
@@ -105,19 +109,31 @@ def _already_imported(connection_name: str, client_ticket: str) -> bool:
 def _create_hd_ticket(connection_name: str, customer: str, ticket: dict) -> str:
     """Create the Helpdesk ticket for a pulled customer request.
 
+    HD Ticket only accepts a customer the contact belongs to unless an agent raises it,
+    and the pull right after a site's ping ran as Guest with no contact: every such
+    import failed with "customer … not linked to the contact None". So the sender
+    becomes a contact of the connection's customer first, and the ticket is inserted
+    as the automation user (docs/ticket-intake.md).
+
     AI triage fires automatically from the HD Ticket after_insert hook
     (see hooks.py doc_events) — do not enqueue it again here.
     """
-    hd = frappe.get_doc(
-        {
-            "doctype": "HD Ticket",
-            "subject": ticket.get("subject") or "Support request",
-            "description": ticket.get("description") or "",
-            "customer": customer,
-            "raised_by": ticket.get("raised_by"),
-            "via_customer_portal": 1,
-        }
-    ).insert(ignore_permissions=True)
+    raised_by = _sender(ticket, customer)
+    if customer and raised_by:
+        add_customer_contact(customer, raised_by)
+    # the hub imports it, so the import is the automation user's, whoever's session
+    # (a scheduler run, a Guest ping) is running
+    with as_automation_user():
+        hd = frappe.get_doc(
+            {
+                "doctype": "HD Ticket",
+                "subject": ticket.get("subject") or "Support request",
+                "description": ticket.get("description") or "",
+                "customer": customer,
+                "raised_by": raised_by,
+                "via_customer_portal": 1,
+            }
+        ).insert(ignore_permissions=True)
 
     frappe.db.set_value(
         "HD Ticket",
@@ -130,6 +146,20 @@ def _create_hd_ticket(connection_name: str, customer: str, ticket: dict) -> str:
     )
 
     return hd.name
+
+
+def _sender(ticket: dict, customer: str | None) -> str | None:
+    """The customer's address for a pulled ticket: its Raised By, else the user who
+    created it on their site, else the customer's own email. A user ID such as
+    Administrator is no address, and the hub would otherwise fill in its own session
+    user (Administrator, or Guest after a ping)."""
+    for value in (ticket.get("raised_by"), ticket.get("owner")):
+        email = validate_email_address(parseaddr(value or "")[1].strip().lower())
+        if email:
+            return email
+    if customer:
+        return frappe.db.get_value("HD Customer", customer, "email_id") or None
+    return None
 
 
 def _attach_recording(

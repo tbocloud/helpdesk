@@ -21,6 +21,7 @@ from frappe.utils import cstr, get_datetime, get_url, now_datetime
 from frappe.utils.html_utils import sanitize_html
 
 from helpdesk.content_sync import post_images
+from helpdesk.helpdesk.doctype.hd_customer.hd_customer import add_customer_contact
 
 SESSION_COOKIE = "hd_content_portal"
 OTP_TTL_SECONDS = 10 * 60
@@ -430,45 +431,5 @@ def send_portal_access(customer: str, email: str) -> dict:
     frappe.utils.validate_email_address(email, throw=True)
     if email not in portal_emails(customer):
         frappe.has_permission("HD Customer", "write", customer, throw=True)
-        add_portal_contact(customer, email)
+        add_customer_contact(customer, email)
     return issue_code(email, customer)
-
-
-def add_portal_contact(customer: str, email: str) -> bool:
-    """Make `email` a contact of `customer` so it can sign in; True if a new Contact was created."""
-    contact = frappe.db.get_value("Contact", {"email_id": email}, "name")
-    created = not contact
-    if created:
-        contact = (
-            frappe.get_doc(
-                {
-                    "doctype": "Contact",
-                    "first_name": email.split("@")[0],
-                    "email_id": email,
-                    "email_ids": [{"email_id": email, "is_primary": 1}],
-                }
-            )
-            .insert(ignore_permissions=True)
-            .name
-        )
-
-    if frappe.db.exists(
-        "HD Customer Member",
-        {"parent": customer, "parenttype": "HD Customer", "contact_name": contact},
-    ):
-        return created
-    # Inserted directly, not through HD Customer.save(): saving grants the HD Customer
-    # role to any existing User with this email, and these emails are often staff.
-    # The content portal only needs the contact link.
-    frappe.get_doc(
-        {
-            "doctype": "HD Customer Member",
-            "parent": customer,
-            "parenttype": "HD Customer",
-            "parentfield": "contacts",
-            "contact_name": contact,
-            "is_manager": 0,
-            "idx": frappe.db.count("HD Customer Member", {"parent": customer}) + 1,
-        }
-    ).db_insert()
-    return created

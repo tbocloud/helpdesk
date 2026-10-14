@@ -1,6 +1,8 @@
 # Copyright (c) 2022, Frappe Technologies and contributors
 # For license information, please see license.txt
 
+import re
+
 import frappe
 from frappe import _
 from frappe.core.api.user_invitation import invite_by_email
@@ -570,3 +572,88 @@ def active_agents(users: list[str]) -> set[str]:
         .run(pluck=True)
     )
     return set(rows)
+
+
+def add_customer_contact(customer: str, email: str) -> bool:
+    """Make `email` a contact of `customer`; True if a new Contact was created.
+
+    The member row is inserted directly, not through HD Customer.save(): saving grants
+    the HD Customer role to any existing User with this email, and these emails are
+    often staff. Ticket intake and the content portal only need the contact link.
+    """
+    contact = frappe.db.get_value("Contact", {"email_id": email}, "name")
+    created = not contact
+    if created:
+        contact = (
+            frappe.get_doc(
+                {
+                    "doctype": "Contact",
+                    "first_name": email.split("@")[0],
+                    "email_id": email,
+                    "email_ids": [{"email_id": email, "is_primary": 1}],
+                }
+            )
+            .insert(ignore_permissions=True)
+            .name
+        )
+
+    if frappe.db.exists(
+        "HD Customer Member",
+        {"parent": customer, "parenttype": "HD Customer", "contact_name": contact},
+    ):
+        return created
+    frappe.get_doc(
+        {
+            "doctype": "HD Customer Member",
+            "parent": customer,
+            "parenttype": "HD Customer",
+            "parentfield": "contacts",
+            "contact_name": contact,
+            "is_manager": 0,
+            "idx": frappe.db.count("HD Customer Member", {"parent": customer}) + 1,
+        }
+    ).db_insert()
+    return created
+
+
+def normalize_domain(value: str | None) -> str:
+    """ "https://www.Example.com/about" → "example.com"; "" when there is none."""
+    text = (value or "").strip().lower()
+    text = text.split("://", 1)[-1].split("/", 1)[0].split("?", 1)[0]
+    text = text.rsplit("@", 1)[-1].split(":", 1)[0].strip(".")
+    return text.removeprefix("www.") if "." in text else ""
+
+
+def customer_domains(domain: str | None, email_domains: str | None) -> set[str]:
+    """A customer's mail domains: Domain plus its Other Email Domains."""
+    values = [domain, *re.split(r"[\s,;]+", email_domains or "")]
+    return {d for d in (normalize_domain(v) for v in values) if d}
+
+
+def public_email_domains() -> set[str]:
+    """Domains anyone can have an address at (Settings → Ticket intake)."""
+    text = frappe.db.get_single_value("HD Intake Settings", "public_email_domains")
+    return {d for d in (normalize_domain(v) for v in (text or "").split()) if d}
+
+
+def customer_for_email(email: str | None) -> str | None:
+    """The one customer whose domains match the sender's (a subdomain counts), or None
+    for a public mail domain, no match or more than one."""
+    domain = normalize_domain((email or "").rpartition("@")[2])
+    if not domain or domain in public_email_domains():
+        return None
+    customers = frappe.get_all(
+        "HD Customer",
+        or_filters={"domain": ("is", "set"), "email_domains": ("is", "set")},
+        fields=["name", "domain", "email_domains"],
+        limit_page_length=0,
+    )
+    matches = {
+        c.name
+        for c in customers
+        if any(
+            domain == d or domain.endswith("." + d)
+            for d in customer_domains(c.domain, c.email_domains)
+        )
+    }
+    return matches.pop() if len(matches) == 1 else None

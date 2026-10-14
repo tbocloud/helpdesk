@@ -55,6 +55,43 @@ class CustomInboundMail(InboundMail):
         self._parent_communication = ""
         return self._parent_communication
 
+    def process(self):
+        """New support mail goes through the intake rules first (helpdesk/intake.py): an
+        ignored mail or a repeat of an open alert is handled there and opens nothing.
+
+        A mail Frappe threads onto an existing ticket by its subject keeps doing so,
+        except a monitor's: its alerts group by their own key, so a new alert never
+        lands on an old, closed alert ticket that had the same subject."""
+        monitor = self.is_new_ticket_mail() and self.is_monitor_mail()
+        if monitor or (self.is_new_ticket_mail() and not self.reference_document()):
+            from helpdesk.intake import handle_new_mail
+
+            if handle_new_mail(self.from_email, self.subject, self.content):
+                return None
+            if monitor:
+                self._reference_document = ""
+        return super().process()
+
+    def is_new_ticket_mail(self) -> bool:
+        """A mail that would open an HD Ticket: not a reply, not already received."""
+        append_to = (
+            self.append_to
+            if self.email_account.use_imap
+            else self.email_account.append_to
+        )
+        return (
+            append_to == "HD Ticket"
+            and not self.parent_communication()
+            and not self.is_sender_same_as_receiver()
+            and not self.is_exist_in_system()
+        )
+
+    def is_monitor_mail(self) -> bool:
+        from helpdesk.intake import IGNORE, decide
+
+        decision = decide(self.from_email, self.subject)
+        return bool(decision) and decision.action != IGNORE
+
 
 class CustomEmailAccount(EmailAccount):
     def get_inbound_mails(self) -> list[InboundMail]:

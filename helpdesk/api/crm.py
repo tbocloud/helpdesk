@@ -6,7 +6,11 @@ import frappe
 from frappe import _
 
 from helpdesk.integrations.crm.client import CRMClient, CRMError
-from helpdesk.integrations.crm.customers import fill_ticket_owners, sync_customers
+from helpdesk.integrations.crm.customers import (
+    fill_customer_domains,
+    fill_ticket_owners,
+    sync_customers,
+)
 from helpdesk.integrations.crm.holidays import sync_holidays_and_leave
 from helpdesk.integrations.crm.users import sync_users
 
@@ -100,6 +104,24 @@ def fill_ticket_owners_now() -> dict:
         message += " " + _(
             "{0} match several CRM customers with different account managers, so they were left empty: {1}"
         ).format(len(result["ambiguous"]), ", ".join(result["ambiguous"][:20]))
+    return {"ok": True, "message": message, **result}
+
+
+@frappe.whitelist(methods=["POST"])
+def fill_customer_domains_now(apply: bool = False) -> dict:
+    """Customers without a Domain get their CRM website's domain, so new tickets find
+    their customer by the sender's domain (docs/ticket-intake.md). Without `apply` it
+    only says what would change."""
+    require_admin()
+    try:
+        result = fill_customer_domains(apply=bool(apply))
+    except CRMError as e:
+        return {"ok": False, "message": str(e)}
+    message = (
+        _("{0} customers got a domain.")
+        if apply
+        else _("{0} customers would get a domain.")
+    ).format(len(result["fill"]))
     return {"ok": True, "message": message, **result}
 
 

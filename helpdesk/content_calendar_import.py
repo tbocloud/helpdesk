@@ -16,11 +16,11 @@ import re
 import frappe
 from frappe.utils import escape_html, get_datetime
 
-from helpdesk.api.content_portal import add_portal_contact
 from helpdesk.helpdesk.doctype.hd_content_settings.hd_content_settings import (
     PLACEHOLDER,
     TEMPLATES,
 )
+from helpdesk.helpdesk.doctype.hd_customer.hd_customer import add_customer_contact
 
 CHANNELS = {
     "instagram": "Instagram",
@@ -101,7 +101,9 @@ def import_clients(summary: dict, dry_run: bool) -> dict[str, str]:
             )
         mapping[client.name] = customer
         summary["customers"][client.name] = customer
-        if client.email and add_portal_contact(customer, client.email.strip().lower()):
+        if client.email and add_customer_contact(
+            customer, client.email.strip().lower()
+        ):
             summary["contacts"] += 1
     return mapping
 

@@ -68,6 +68,10 @@ settings header) and the scrolling content area.
   an icon, and `details` as a label/value list. Disabled with "Save your changes first"
   while the page is `unsaved`. Send a test (Chat & Teams), Test token and Request a merge
   bot run now (GitHub).
+- **`SettingsPreviewAction.vue`**: a one-off change with a dry run. **Preview** lists what
+  would change (rows from a slot), and only then **Apply N changes** appears; the result
+  replaces the list. Both wait while the page is unsaved. Ticket intake's Apply rules to
+  open tickets and Fill customer domains from the CRM.
 - Plain fields use frappe-ui `FormControl` with `label` (above the field) and `description`.
 - The large upstream editors (SLA policy, holiday schedule, assignment rule) keep their own
   layout, with section headings and dividers matched to `SettingsSection`.
@@ -109,6 +113,7 @@ Telephony providers and pending invites.
 | Sign-off templates | List (inactive greyed, question count) and an editor sub-page with Active, Back and Save in the header. See [project-signoff.md](project-signoff.md). |
 | Content, Tasks, File storage, CRM | TBO pages; sections of `SettingRow`s, Save in the header, load errors with Try again. See [content-calendar.md](content-calendar.md), [ai-task-descriptions.md](ai-task-descriptions.md), [project-files.md](project-files.md), [tbo-crm-integration.md](tbo-crm-integration.md). Tasks also has the Support hours section (email the customer when their hours run low; [support-contracts.md](support-contracts.md)). CRM also has the Invoicing section, whose pickers are read live from the CRM site and checked on save ([timesheet-invoicing.md](timesheet-invoicing.md)). |
 | Follow-ups | System Managers and Agent Managers. Enabled in the header; Delivery (digest times, Send me a test digest), Escalation ladder, Task rules and Ticket rules (a switch and threshold per rule), Customer follow-up, Working hours (read from the default SLA) and a Preview of each person's digest. See [follow-ups.md](follow-ups.md). |
+| Ticket intake | System Managers and Agent Managers. Mail rules (ordered, each with On, move and remove), the built-in filter (HD Settings), Post monitor alerts, Apply rules to open tickets (Preview, then Apply), Recently kept out, Routing (Apply AI triage, default team, team per triage category, warnings for teams that would leave tickets unassigned), Customer detection (public mail domains, Fill customer domains from the CRM) and Customer feedback. See [ticket-intake.md](ticket-intake.md). |
 | Chat & Teams | System Managers and Agent Managers. Every HD Chat Settings field; secrets masked, with Send me a test and Send a test to the channel. See [Chat & Teams](#chat--teams) below. |
 | GitHub | System Managers and Agent Managers. Every HD GitHub Settings field: the webhook (Payload URL with Copy, events, secret), the task sync, the org merge bot with Test token and Request a merge bot run now, the last webhook delivery and setup help. Secrets masked as on Chat & Teams. See [github-sync.md](github-sync.md#the-settings-page). |
 | Telephony | Default medium, then Twilio and Exotel as list rows that open their sub-pages. |
