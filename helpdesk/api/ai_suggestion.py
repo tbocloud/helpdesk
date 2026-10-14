@@ -31,7 +31,9 @@ def regenerate_suggestion(ticket: str | int, instructions: str = "") -> dict:
     ticket = str(ticket)
     frappe.has_permission("HD Ticket", "write", ticket, throw=True)
     if not is_ai_configured():
-        frappe.throw(_("AI isn't set up yet. Add an AI provider in HDS Hub Settings."))
+        frappe.throw(
+            _("AI isn't set up yet. Add an AI provider in Settings → AI providers.")
+        )
     if not is_open_ticket(ticket):
         frappe.throw(_("This ticket is closed, so there is no reply to draft."))
     instructions = truncate((instructions or "").strip(), MAX_INSTRUCTIONS_CHARS)

@@ -28,6 +28,7 @@
 </template>
 
 <script setup lang="ts">
+import { providerLabel } from "@/components/aiProviders";
 import type { Tone } from "@/components/tone";
 import TaskyBadge from "@/components/TaskyBadge.vue";
 import { __ } from "@/translation";
@@ -104,7 +105,13 @@ const rows = computed<SystemRow[]>(() => {
   result.push({
     key: "ai",
     label: __("AI triage"),
-    detail: __("{0} AI calls today", String(s.ai.calls_today)),
+    detail: s.ai.providers.in_use
+      ? __(
+          "{0} AI calls today · {1}",
+          String(s.ai.calls_today),
+          providerLabel(s.ai.providers, s.ai.providers.in_use)
+        )
+      : __("{0} AI calls today", String(s.ai.calls_today)),
     status: s.ai.triage_failed
       ? __("{0} failed", String(s.ai.triage_failed))
       : __("OK"),

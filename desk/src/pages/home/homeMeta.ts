@@ -1,3 +1,4 @@
+import type { ProviderStatus } from "@/components/aiProviders";
 import type { FollowUpSummary } from "@/components/followUps";
 import type { Tone } from "@/components/tone";
 import type { HealthBrief } from "@/composables/customerHealth";
@@ -179,7 +180,11 @@ export interface Systems {
   }[];
   teams: { enabled: boolean; platform: string | null };
   chat: { enabled: boolean; open: number };
-  ai: { calls_today: number; triage_failed: number };
+  ai: {
+    providers: ProviderStatus;
+    calls_today: number;
+    triage_failed: number;
+  };
 }
 
 /** helpdesk.api.home._calendar: holidays and leave synced from the CRM site */

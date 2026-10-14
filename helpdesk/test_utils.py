@@ -2768,6 +2768,113 @@ def ai_description_answer(description: str) -> dict:
     return {"response": {"description": description}, "usage": {}, "cost": 0}
 
 
+# test-only keys: never real ones
+OPENAI_TEST_KEY = "sk-proj-not-a-real-key"
+ANTHROPIC_TEST_KEY = "sk-not-a-real-kimi-key"
+
+
+def make_ai_provider(slot: str = "OpenAI", **values):
+    """An ai_engine.AIProvider for one settings section (OpenAI or
+    Anthropic-compatible) with test keys, without touching HDS Hub Settings."""
+    from helpdesk.ai_engine import AIProvider
+
+    defaults = {
+        "OpenAI": {
+            "kind": "OpenAI",
+            "base_url": "https://api.openai.com/v1",
+            "model": "gpt-test-model",
+            "api_key": OPENAI_TEST_KEY,
+        },
+        "Anthropic-compatible": {
+            "kind": "Anthropic Compatible",
+            "base_url": "https://api.moonshot.ai/anthropic",
+            "model": "kimi-k2.6",
+            "api_key": ANTHROPIC_TEST_KEY,
+        },
+    }[slot]
+    return AIProvider(slot=slot, **{**defaults, **values})
+
+
+def set_ai_providers(**values):
+    """Sets the AI part of HDS Hub Settings: OpenAI primary with failover, both
+    sections set up with test keys, plus any overrides (None clears a field).
+    Forgets every pause and failure so each test starts clean."""
+    from helpdesk.ai_engine import reset_provider_state
+
+    doc = frappe.get_doc("HDS Hub Settings")
+    doc.update(
+        {
+            "primary_ai_provider": "OpenAI",
+            "ai_failover": 1,
+            "openai_base_url": "https://api.openai.com/v1",
+            "openai_model": "gpt-test-model",
+            "openai_api_key": OPENAI_TEST_KEY,
+            "ai_provider": "Anthropic Compatible",
+            "ai_base_url": "https://api.moonshot.ai/anthropic",
+            "default_triage_model": "kimi-k2.6",
+            "anthropic_api_key": ANTHROPIC_TEST_KEY,
+            **values,
+        }
+    )
+    doc.save(ignore_permissions=True)
+    reset_provider_state()
+    clear_ai_alerts()
+    return doc
+
+
+def clear_ai_alerts():
+    """Forgets which providers were alerted about and the outage mark."""
+    from helpdesk.ai_engine import ALERT_KEY, OUTAGE_KEY, SLOTS
+
+    frappe.cache.delete_value([OUTAGE_KEY, *(ALERT_KEY.format(slot) for slot in SLOTS)])
+
+
+def openai_http_response(status: int = 200, body: dict | None = None, text=""):
+    """A requests.Response stand-in for the OpenAI API: `body` as its JSON, or
+    an answer with `text` and token counts when no body is given."""
+    from unittest.mock import MagicMock
+
+    if body is None:
+        body = {
+            "choices": [{"message": {"content": text}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 78, "completion_tokens": 40},
+        }
+    return MagicMock(
+        ok=status < 400,
+        status_code=status,
+        reason="Error" if status >= 400 else "OK",
+        json=MagicMock(return_value=body),
+    )
+
+
+def anthropic_status_error(status: int, body: dict | None = None):
+    """The Anthropic SDK's APIStatusError for an HTTP `status` with an error
+    `body`, built without an HTTP response (the SDK's HTTP client varies by version)."""
+    import anthropic
+
+    error = anthropic.APIStatusError.__new__(anthropic.APIStatusError)
+    Exception.__init__(error, f"Error code: {status}")
+    error.status_code = status
+    error.body = body
+    error.message = f"Error code: {status}"
+    return error
+
+
+def anthropic_answer(text: str, stop_reason: str = "end_turn"):
+    """A Messages API response with one text block and token counts."""
+    from unittest.mock import MagicMock
+
+    response = MagicMock(stop_reason=stop_reason)
+    response.content = [MagicMock(type="text", text=text)]
+    response.usage = MagicMock(
+        input_tokens=10,
+        output_tokens=5,
+        cache_read_input_tokens=0,
+        cache_creation_input_tokens=0,
+    )
+    return response
+
+
 def make_email_account(email_id: str, **kwargs):
     """Creates an Email Account for `email_id` on a fake server: send-only unless kwargs enable incoming."""
     name = kwargs.pop("email_account_name", email_id)

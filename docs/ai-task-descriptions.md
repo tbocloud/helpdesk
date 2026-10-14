@@ -55,15 +55,16 @@ Settings is writable by them only), next to "AI sets the time for new tasks" and
 estimate. The setting only controls the background job; **Write with AI** works whenever AI is
 set up.
 
-"AI is set up" means HDS Hub Settings has an AI key (`helpdesk.ai_suggestion.is_ai_configured`).
+"AI is set up" means a provider `call_haiku` would try has a key and model
+(`helpdesk.ai_suggestion.is_ai_configured`, see [ai-providers.md](ai-providers.md)).
 Without one: no background job is queued, the dialog button is disabled with the reason, and
 the endpoint refuses with "AI isn't set up…".
 
 ## AI call
 
-Reuses the hub's AI plumbing: `helpdesk.ai_engine.call_haiku` (the triage model and provider
-from HDS Hub Settings, its retry with a larger token budget, JSON parsing and
-**HDS AI Usage Log** usage logging). No new provider or key.
+Reuses the hub's AI plumbing: `helpdesk.ai_engine.call_haiku` (the primary provider and its
+fallback from Settings → AI providers, the retry with a larger token budget, JSON parsing and
+**HDS AI Usage Log** usage logging; see [ai-providers.md](ai-providers.md)).
 
 ### Prompt outline (`SYSTEM_PROMPT`)
 

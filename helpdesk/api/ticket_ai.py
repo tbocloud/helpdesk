@@ -44,9 +44,7 @@ def draft_reply(ticket: str, instructions: str = "", current_draft: str = "") ->
             title="Draft reply with AI failed", message=frappe.get_traceback()
         )
         frappe.throw(
-            _(
-                "AI drafting is unavailable right now. Check the AI provider in HDS Hub Settings."
-            )
+            _("AI drafting is unavailable right now. Check Settings → AI providers.")
         )
 
     response = result.get("response") or {}

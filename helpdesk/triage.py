@@ -9,12 +9,11 @@ Model: Claude Haiku 4.5 (~$0.003 per ticket)
 
 import json
 
-import anthropic
 import frappe
 from frappe import _
 from frappe.utils import now_datetime
 
-from helpdesk.ai_engine import call_haiku
+from helpdesk.ai_engine import AIProviderError, call_haiku
 from helpdesk.ai_suggestion import queue_suggestion
 from helpdesk.api.customization import record_triage_estimate
 from helpdesk.automation import automation_user
@@ -341,8 +340,9 @@ def run_triage(
         # a draft reply for the agent to review; it is never sent on its own
         queue_suggestion(ticket_id)
 
-    except anthropic.APIError as e:
-        # API rate limit or error - mark failed, no retry
+    except AIProviderError as e:
+        # every provider failed or the request was rejected: mark failed; the
+        # daily retry, or the providers' recovery, runs it again
         frappe.db.set_value(
             "HD Ticket",
             ticket_id,
