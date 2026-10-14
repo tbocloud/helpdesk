@@ -1,0 +1,132 @@
+{
+  "v": 1,
+  "data": {
+    "team": "ERP",
+    "teams": ["ERP"],
+    "can_lead": true,
+    "date": "2026-10-14",
+    "previous_day": "2026-10-13",
+    "editable": true,
+    "post_at": "10:30",
+    "posted": false,
+    "people": [
+      {
+        "name": "SU-2026-10-14-anu@tbo.example",
+        "user": "anu@tbo.example",
+        "full_name": "Anu Varghese",
+        "date": "2026-10-14",
+        "department": "ERP",
+        "status": "Submitted",
+        "submitted_on": "2026-10-14 09:12:40",
+        "needs_help": true,
+        "hours": 6.5,
+        "yesterday": [
+          {
+            "id": "c1a2b3d4e5",
+            "kind": "task",
+            "title": "Configure GST settings for the Kochi branch",
+            "detail": "Completed",
+            "reference_doctype": "Task",
+            "reference_name": "TASK-2026-00412",
+            "project": "PROJ-0012",
+            "auto": true,
+            "route": "/projects/PROJ-0012",
+            "helper": null,
+            "helper_name": null,
+            "help_task": null,
+            "app_route": "/task/TASK-2026-00412"
+          }
+        ],
+        "today": [
+          {
+            "id": "c1a2b3d4e7",
+            "kind": "task",
+            "title": "Bank reconciliation for September",
+            "detail": "Due today",
+            "reference_doctype": "Task",
+            "reference_name": "TASK-2026-00420",
+            "project": "PROJ-0012",
+            "auto": true,
+            "route": "/projects/PROJ-0012",
+            "helper": null,
+            "helper_name": null,
+            "help_task": null,
+            "app_route": "/task/TASK-2026-00420"
+          }
+        ],
+        "blockers": [
+          {
+            "id": "c1a2b3d4e9",
+            "kind": "task",
+            "title": "Customer GST file for Kerala Agro Foods",
+            "detail": "On hold 3 day(s): Waiting on customer",
+            "reference_doctype": "Task",
+            "reference_name": "TASK-2026-00377",
+            "project": "PROJ-0012",
+            "auto": true,
+            "route": "/projects/PROJ-0012",
+            "helper": "reshma@tbo.example",
+            "helper_name": "Reshma Nair",
+            "help_task": null,
+            "app_route": "/task/TASK-2026-00377"
+          }
+        ],
+        "notes": { "yesterday": "", "today": "" },
+        "plan_vs_done": { "planned": 3, "done": 2, "unplanned": 1 }
+      },
+      {
+        "name": "SU-2026-10-14-biju@tbo.example",
+        "user": "biju@tbo.example",
+        "full_name": "Biju Thomas",
+        "date": "2026-10-14",
+        "department": "ERP",
+        "status": "Draft",
+        "submitted_on": null,
+        "needs_help": false,
+        "hours": 5.5,
+        "yesterday": [],
+        "today": [],
+        "blockers": [],
+        "notes": { "yesterday": "", "today": "" },
+        "plan_vs_done": null
+      }
+    ],
+    "blockers": [
+      {
+        "standup": "SU-2026-10-14-anu@tbo.example",
+        "user": "anu@tbo.example",
+        "full_name": "Anu Varghese",
+        "needs_help": true,
+        "id": "c1a2b3d4e9",
+        "kind": "task",
+        "title": "Customer GST file for Kerala Agro Foods",
+        "detail": "On hold 3 day(s): Waiting on customer",
+        "reference_doctype": "Task",
+        "reference_name": "TASK-2026-00377",
+        "project": "PROJ-0012",
+        "auto": true,
+        "route": "/projects/PROJ-0012",
+        "helper": "reshma@tbo.example",
+        "helper_name": "Reshma Nair",
+        "help_task": null,
+        "app_route": "/task/TASK-2026-00377"
+      }
+    ],
+    "needs_help": ["Anu Varghese"],
+    "counts": {
+      "people": 2,
+      "submitted": 1,
+      "pending": 1,
+      "auto": 0,
+      "blockers": 1
+    },
+    "on_leave": [
+      {
+        "user": "vishnu@tbo.example",
+        "full_name": "Vishnu Prasad",
+        "to_date": "2026-10-15",
+        "half_day": false
+      }
+    ]
+  }
+}

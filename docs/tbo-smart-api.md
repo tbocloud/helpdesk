@@ -587,6 +587,37 @@ due}], waiting_on ("Client approval", …, or null), is_missed, at_risk}`. Rules
 `Escalation`: `id` (`Task:TASK-…`), `kind` (task, ticket), `doctype`, `ref`, `title`, `owners`,
 `level`, `level_label`, `days`, `severity`, `reason`, `route`, `app_route`.
 
+### Stand-up
+
+The async daily stand-up ([standup.md](standup.md)), as on `/helpdesk/standup`. The app opens
+it from the "Your stand-up is ready" notification (`reference_doctype` HD Standup).
+
+| Method | Params | Returns | Who / notes |
+| --- | --- | --- | --- |
+| `get_my_standup` | `date?` (YYYY-MM-DD, default today) | `MyStandup` | Any agent, their own. Today without a stored stand-up: a fresh draft from their work, `standup.name` null, not saved until `save_standup`. A future date is refused. Fixture `get_my_standup.json` |
+| `save_standup` POST | `values` (JSON: `yesterday`, `today`, `blockers` as rows, `notes` {yesterday, today}, `needs_help`; a section left out stays) | `MyStandup` | Today only, while the stand-up is on. Linked rows can only be kept or removed; a row without `reference_name` is text (≤300 chars). Status unchanged. Fixture `save_standup.json` |
+| `submit_standup` POST | `values?` as above | `MyStandup` with status Submitted | Same; may be sent again to update. Fixture `save_standup.json` |
+| `get_team_standup` | `team?` (a department; `__none__` for none), `date?` | `TeamStandup` | Heads, leads, coordinators and managers of the department (per the settings) get `can_lead: true` with `plan_vs_done` and `on_leave`; a member gets their own department read-only; any other department is 403. Fixture `get_team_standup.json` |
+
+`MyStandup`: `enabled`, `date`, `previous_day` (the previous working day, "yesterday"),
+`is_working_day`, `editable`, `post_at` ("10:30"), `posted`, `teams` (departments the user
+leads), `department`, `standup` (`Standup` or null).
+
+`Standup`: `name`, `user`, `full_name`, `date`, `department`, `status` (Draft, Submitted,
+Auto-posted), `submitted_on`, `needs_help`, `hours` (null when hidden), `yesterday`, `today`,
+`blockers` (`[StandupItem]`), `notes` {yesterday, today}; in a team view for leads also
+`plan_vs_done` {planned, done, unplanned} or null.
+
+`StandupItem`: `id` (row id, null before saving), `kind` (task, ticket, post, plan, note),
+`title`, `detail`, `reference_doctype`, `reference_name`, `project`, `auto`, `route` (web),
+`app_route`, `helper`, `helper_name`, `help_task`.
+
+`TeamStandup`: `team`, `teams`, `can_lead`, `date`, `previous_day`, `editable`, `post_at`,
+`posted`, `people` (`[Standup]`), `blockers` (`StandupItem` plus `standup`, `user`,
+`full_name`, `needs_help`), `needs_help` (names), `counts` {people, submitted, pending, auto,
+blockers}, `on_leave` ([{user, full_name, to_date, half_day}]). The team's actions (nudge,
+assign help, create a task) are web-only for now: `helpdesk.api.standup`.
+
 ### Compete (Scoreboard for the app)
 
 | Method | Params | Returns | Who / notes |

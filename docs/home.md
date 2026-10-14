@@ -27,6 +27,7 @@ who is champion is on the **Scoreboard** (`/helpdesk/team-dashboard`, see
 | Next holiday | Everyone, when the hub has one within a year | `calendar.next_holiday` |
 | On leave today | People who can see the Overview | `calendar.on_leave_today` |
 | Follow-ups strip | Everyone with overdue, escalated or waiting work | `follow_ups` |
+| Stand-up card | Everyone whose stand-up for today is still a draft, while the stand-up is on ([standup.md](standup.md)) | `standup` |
 | AI provider banner | Admins, only while the primary AI provider fails: its reason, since when, which provider answers instead, and **Open AI providers** ([ai-providers.md](ai-providers.md#home)) | `systems.ai.providers` |
 | Your action plan | Everyone with open work | `get_action_plan` |
 | Your day | Everyone | `day` |
@@ -76,6 +77,11 @@ to L2 or above, own breached tickets, and items waiting on them as reviewer, lea
 linking to My Work. It stays until the work moves, and the same strip sits at the bottom of the
 sidebar. The plan for today below is also the first part of the person's first Teams digest of
 the day. See [follow-ups.md](follow-ups.md).
+
+Below it, in the morning, the **stand-up card** ("Your stand-up is ready … it goes to your
+team at 10:30", **Open stand-up**) while today's stand-up is a draft. The stand-up reuses
+today's action plan below when Home already wrote one, without calling the AI. See
+[standup.md](standup.md).
 
 **Why the old line said "All clear" wrongly (fixed):** the header and Your day counted only
 tasks that were overdue, due today or at risk. On-hold tasks, tasks in progress due later,
