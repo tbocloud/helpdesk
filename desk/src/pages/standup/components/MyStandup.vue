@@ -333,6 +333,7 @@ async function save(submit: boolean) {
   saving.value = submit ? "submit" : "save";
   const { yesterday, today, blockers, notes, needs_help } = form.value;
   const sent = snapshot();
+  const { date: sentDate, name: sentName } = form.value;
   try {
     const result = await (submit ? submitResource : saveResource).submit({
       values: {
@@ -344,6 +345,16 @@ async function save(submit: boolean) {
       },
     });
     const stored: Standup | null = result.standup;
+    // another day was picked while saving: the answer belongs to a stand-up
+    // that isn't on screen any more
+    const moved =
+      (!!props.date && props.date !== sentDate) ||
+      form.value?.date !== sentDate ||
+      form.value?.name !== sentName;
+    if (moved) {
+      toast.success(submit ? __("Stand-up submitted") : __("Draft saved"));
+      return;
+    }
     if (snapshot() === sent || !form.value || !stored) {
       // what was saved is the new starting point
       load(stored);
