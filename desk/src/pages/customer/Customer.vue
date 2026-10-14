@@ -68,9 +68,7 @@
       </PageInfo>
 
       <p
-        v-if="
-          connection?.connection_status === 'Error' && connection.last_error
-        "
+        v-if="connectionError"
         class="mx-5 flex items-start gap-2 rounded-lg border border-outline-gray-2 px-3 py-2 text-p-sm text-ink-gray-7"
         role="status"
       >
@@ -79,7 +77,11 @@
           aria-hidden="true"
         />
         <span class="min-w-0 break-words">
-          {{ __("ERP connection error: {0}", connection.last_error) }}
+          {{
+            connection?.connection_status === "Unreachable"
+              ? __("ERP unreachable: {0}", connectionError)
+              : __("ERP connection error: {0}", connectionError)
+          }}
         </span>
       </p>
 
@@ -192,7 +194,11 @@ import LayoutHeader from "@/components/LayoutHeader.vue";
 import PageInfo from "@/components/PageInfo.vue";
 import TaskyBadge from "@/components/TaskyBadge.vue";
 import TaskyState from "@/components/TaskyState.vue";
-import { connectionBadge, useCustomer } from "@/composables/customer";
+import {
+  connectionBadge,
+  connectionProblem,
+  useCustomer,
+} from "@/composables/customer";
 import { healthBadge, type CustomerHealth } from "@/composables/customerHealth";
 import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
@@ -269,12 +275,16 @@ const connections = createListResource({
     "site_url",
     "last_health_check",
     "last_error",
+    "next_attempt_at",
   ],
   orderBy: "modified desc",
   pageLength: 1,
   auto: true,
 });
 const connection = computed(() => connections.data?.[0] ?? null);
+const connectionError = computed(() =>
+  connection.value ? connectionProblem(connection.value) : null
+);
 
 // the header badge and the Health tab (docs/customer-health.md)
 const health = createResource({

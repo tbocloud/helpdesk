@@ -25,7 +25,10 @@
 		"last_health_check",
 		"column_break_health",
 		"mcp_client_installed",
-		"last_error"
+		"last_error",
+		"consecutive_failures",
+		"unreachable_since",
+		"next_attempt_at"
 	],
 	"fields": [
 		{
@@ -112,7 +115,7 @@
 			"in_list_view": 1,
 			"in_standard_filter": 1,
 			"label": "Connection Status",
-			"options": "Pending\nConnected\nDisconnected\nError"
+			"options": "Pending\nConnected\nDisconnected\nError\nUnreachable"
 		},
 		{
 			"fieldname": "last_health_check",
@@ -135,6 +138,26 @@
 			"fieldname": "last_error",
 			"fieldtype": "Small Text",
 			"label": "Last Error",
+			"read_only": 1
+		},
+		{
+			"default": "0",
+			"description": "Failed calls in a row; from 3 the hub backs off (docs/client-site-sync.md).",
+			"fieldname": "consecutive_failures",
+			"fieldtype": "Int",
+			"label": "Consecutive Failures",
+			"read_only": 1
+		},
+		{
+			"fieldname": "unreachable_since",
+			"fieldtype": "Datetime",
+			"label": "Unreachable Since",
+			"read_only": 1
+		},
+		{
+			"fieldname": "next_attempt_at",
+			"fieldtype": "Datetime",
+			"label": "Next Attempt At",
 			"read_only": 1
 		},
 		{
@@ -161,7 +184,7 @@
 		}
 	],
 	"links": [],
-	"modified": "2026-09-30 11:00:00.000000",
+	"modified": "2026-10-14 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Support Connection",
