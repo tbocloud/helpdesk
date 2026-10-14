@@ -57,7 +57,7 @@
   </DefinePeople>
 
   <button
-    v-if="!people.length && canEdit"
+    v-if="!people.length && canEdit && !readonly"
     type="button"
     class="assign-box flex min-h-[52px] min-w-0 items-center gap-2.5 rounded-xl bg-transparent px-3 py-2 text-left transition-colors hover:bg-surface-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
     :aria-label="__('Assign {0}', __(label))"
@@ -130,7 +130,7 @@
     </div>
     <!-- the assignee's one next step, so they needn't open the task; 32px tall, 44px to press -->
     <button
-      v-if="stepMeta"
+      v-if="stepMeta && !readonly"
       type="button"
       class="relative mx-1.5 inline-flex h-8 shrink-0 items-center gap-1 self-center rounded-lg bg-brand px-2.5 text-sm font-semibold text-brand-on shadow-sm transition-colors after:absolute after:-inset-1.5 hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight focus-visible:ring-offset-1 disabled:opacity-60"
       :aria-label="stepLabel"
@@ -152,7 +152,7 @@
     </button>
     <!-- 32px to look at, 44px to press -->
     <button
-      v-if="canEdit"
+      v-if="canEdit && !readonly"
       type="button"
       class="relative mr-1.5 grid size-8 shrink-0 place-items-center self-center rounded-lg text-ink-gray-6 transition-colors after:absolute after:-inset-1.5 hover:bg-surface-gray-2 hover:text-ink-gray-9 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
       :aria-label="__('Change who is on {0}', changeTarget)"
@@ -189,6 +189,8 @@ const props = defineProps<{
   step?: TaskStep | null;
   /** That step is running. */
   busy?: boolean;
+  /** Only who did it: nothing to assign, change, open or step (a published post). */
+  readonly?: boolean;
 }>();
 
 const avatarTone = computed(() =>
@@ -212,7 +214,9 @@ const stepLabel = computed(() =>
 );
 
 // everyone on a role shares its one task
-const task = computed(() => props.people.find((p) => p.task)?.task);
+const task = computed(() =>
+  props.readonly ? null : props.people.find((p) => p.task)?.task
+);
 const peopleId = useId();
 const changeTarget = computed(() =>
   props.context ? `${__(props.label)} · ${props.context}` : __(props.label)

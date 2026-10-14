@@ -175,21 +175,22 @@
                 </button>
               </div>
             </div>
-            <FormControl
-              v-model="aiBrief"
-              :placeholder="
-                __(
-                  'Brief for AI (optional), e.g. 20% off until 5 Nov, family audience'
-                )
-              "
-              :aria-label="__('Brief for AI')"
-            />
+            <!-- the caption sits right under its label: the AI brief used to sit there, looked
+                 like the Sub Copy, and what was typed in it was never saved -->
             <FormControl
               id="post-caption"
               v-model="form.caption"
               type="textarea"
               :rows="6"
               :placeholder="__('Write the caption…')"
+            />
+            <label for="post-ai-brief" class="mt-1 text-xs text-ink-gray-5">
+              {{ __("Brief for AI (optional, not saved with the post)") }}
+            </label>
+            <FormControl
+              id="post-ai-brief"
+              v-model="aiBrief"
+              :placeholder="__('e.g. 20% off until 5 Nov, family audience')"
             />
             <p v-if="aiError" class="text-xs text-danger" role="alert">
               {{ aiError }}
