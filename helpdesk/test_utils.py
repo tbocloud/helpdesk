@@ -2952,9 +2952,10 @@ def open_tbo_chat(user: str, referer: str | None = None, **query) -> dict:
     )
     previous = (getattr(frappe.local, "request", None), frappe.local.form_dict)
     frappe.local.request = Request(builder.get_environ())
-    frappe.local.form_dict = frappe._dict(query)
     frappe.local.response = frappe._dict({"docs": []})
     frappe.set_user(user)
+    # after set_user, which empties form_dict
+    frappe.local.form_dict = frappe._dict(query)
     try:
         login()
     finally:
