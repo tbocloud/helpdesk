@@ -32,6 +32,7 @@
           "helper": null,
           "helper_name": null,
           "help_task": null,
+          "content": null,
           "app_route": "/task/TASK-2026-00412"
         },
         {
@@ -47,6 +48,7 @@
           "helper": null,
           "helper_name": null,
           "help_task": null,
+          "content": null,
           "app_route": "/ticket/4821"
         }
       ],
@@ -64,6 +66,7 @@
           "helper": null,
           "helper_name": null,
           "help_task": null,
+          "content": null,
           "app_route": "/task/TASK-2026-00420"
         },
         {
@@ -79,6 +82,7 @@
           "helper": null,
           "helper_name": null,
           "help_task": null,
+          "content": null,
           "app_route": null
         }
       ],
@@ -96,6 +100,7 @@
           "helper": null,
           "helper_name": null,
           "help_task": null,
+          "content": null,
           "app_route": "/task/TASK-2026-00377"
         }
       ],

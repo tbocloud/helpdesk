@@ -2,6 +2,18 @@ import type { Tone } from "@/components/tone";
 import { __ } from "@/translation";
 import { dayjs } from "frappe-ui";
 
+/** A content line's post (helpdesk.standup_content.content_shape). */
+export interface StandupContent {
+  post: string;
+  /** writer, designer, video_editor, marketer; null for the post itself */
+  part: string | null;
+  part_label: string | null;
+  client: string | null;
+  go_live: string | null;
+  /** the post's status when the line was filled in */
+  stage: string | null;
+}
+
 /** One line of a stand-up (helpdesk.standup.item_shape). */
 export interface StandupItem {
   id: string | null;
@@ -17,6 +29,8 @@ export interface StandupItem {
   helper: string | null;
   helper_name: string | null;
   help_task: string | null;
+  /** set on content calendar lines: a role part or a post */
+  content: StandupContent | null;
 }
 
 export type Section = "yesterday" | "today" | "blockers";
@@ -65,6 +79,21 @@ export interface TeamBlocker extends StandupItem {
   needs_help: boolean;
 }
 
+export type ContentState = "missed" | "at_risk" | "published" | "ready";
+
+/** A post in the team's Content today (helpdesk.standup_content.content_today). */
+export interface ContentTodayPost {
+  post: string;
+  title: string;
+  client: string | null;
+  go_live: string;
+  channels: string[];
+  stage: string;
+  state: ContentState;
+  people: { user: string; full_name: string }[];
+  route: string;
+}
+
 export interface TeamStandupData {
   team: string;
   teams: string[];
@@ -90,6 +119,9 @@ export interface TeamStandupData {
     to_date: string;
     half_day: boolean;
   }[];
+  /** null when the department has no content work, the setting is off or the
+   * viewer isn't in the content team */
+  content_today: ContentTodayPost[] | null;
 }
 
 export interface HistoryRow {

@@ -57,7 +57,8 @@ what they may open is listed, the department walls included):
   (or Saturday when it is worked) on a Monday, the day before a holiday after it.
   - tasks they completed that day (`completed_on`, matched through ToDos like My Work);
   - tickets they resolved (`resolution_date`) or replied to (a sent Communication they wrote);
-  - content posts whose stage they changed (the post's history);
+  - content posts whose stage they changed (the post's history; for the content team,
+    worded with the client and "Published", see [Content calendar](#content-calendar));
   - hours logged that day (the Scoreboard's `logged_hours`), as a fact.
 - **Today**, from `get_my_work` and Home's timers, in this order: overdue tasks, due today,
   in progress (with "timer running"), due on the next working day; then **today's Home plan
@@ -67,7 +68,66 @@ what they may open is listed, the department walls included):
   task ("Waiting on …"), overdue key tasks, and tickets in *Waiting on Task*.
 - A task lands in one place at most; tasks in review wait on the reviewer and aren't listed.
 - Every linked item opens its record: tasks open in place (the task dialog), tickets go to
-  the ticket, posts to the content calendar.
+  the ticket, posts to the content calendar on that post (`/content?post=…`).
+
+## Content calendar
+
+Owner's request (2026-10-14): "standup also need Content Calendar, Digital team." Writers,
+designers, video editors and digital marketers work on content posts, so their stand-up
+shows each part with its post, not as a bare task. `helpdesk/standup_content.py`
+(`ContentDay`), called by `autofill` **as the person**, so the calendar's walls apply:
+
+- **Who:** anyone in the content team (`content_team.in_content_team`), when their
+  department's switch is on (Settings → Stand-up, below). Outside the content team (ERP
+  Employees included, whatever other role they hold) nothing is added.
+- **Yesterday:**
+  - their role parts completed that day: "Designer · Global Handwashing Day (Avera IoT)",
+    *Done*;
+  - the posts they published or moved on (the post's history): "Diwali offer (Avera IoT)",
+    *Published* or *Moved to Design*. A move that came with their own finished part on the
+    same post isn't listed again (finishing the part moves the post).
+- **Today**, after the generic plan:
+  - their open parts in the plan's order (overdue, due today, in progress, due on the next
+    working day), worded as parts; when none of them is on the list, **the next part due**
+    ("Next: due Fri 16 Oct");
+  - the open posts they're on **going live today and tomorrow** (calendar days, as posts go
+    out at weekends too): "Goes live today, 10:00 · Instagram, LinkedIn · Approved";
+  - for the **Digital Marketing Head and DM Coordinators** (`CONTENT_LEAD_ROLES`), every
+    post going live today that they may see, not only their own.
+- **Blockers**, one line per post they're on, the most pressing reason only:
+  1. **missed**: its time passed and it isn't published or cancelled (the board's
+     `isMissed`): "Missed · was due Tue 13 Oct, 10:00";
+  2. going live **within 24 hours without approval** (not Approved, Scheduled or
+     Published): "Goes live Wed 14 Oct, 17:00, not approved yet (Client Review)";
+  3. **Changes Requested**, with the head's or the client's note;
+  4. **Client Review for more than N days**, N being HD Content Settings'
+     `client_reminder_days` (2 when unset): "Waiting on the client's approval for 3 days";
+  5. and their **parts waiting on someone else's part**: a part not started while the post
+     waits on another part first (the Tasks view's `post_progress`, #131): "Waiting on
+     Writer (Ajmal)". Such a part is a blocker, not today's plan.
+- **Each task once:** a role task is also on My Work, so it would show as a plain task; it
+  shows once, as its part with the post around it (the generic row is rewritten, never
+  added twice).
+- **Lines keep their post:** a content line stores `content_post`, `content_role`,
+  `customer`, `go_live` and `stage` (HD Standup Item), which the page and the app get as
+  `content` ({post, part, part_label, client, go_live, stage}). A part's line is still a
+  Task line (opens the task dialog, with "Goes live …" under it); a post's line opens the
+  post on the calendar. Like any linked row they can only be kept or removed.
+- **Missed posts** are looked at for a week back (`MISSED_DAYS`); older ones are the
+  board's to chase.
+
+### Decisions (owner away, "no questions, recommended way")
+
+- **Reuse, not a second rule:** missed is the board's rule, "waiting on" the Tasks view's
+  `post_progress`, the part names `in_progress._role_label`, the channels
+  `in_progress._platforms`, the team `role_teams_of`, the client wait the client reminder's
+  setting. The only new number is the **24-hour** approval window the owner asked for (the
+  board's amber "needs approval soon" stays 48 hours).
+- **A new module, not `standup.py`:** the content rules sit in `standup_content.py`, which
+  imports the stand-up's row helpers; `standup.py` imports it inside functions, so there's
+  no import cycle.
+- **Snapshots:** a stand-up keeps what was true when it was filled in (stage, go-live);
+  the content calendar is where to see the post now.
 
 ## Editing (My stand-up)
 
@@ -109,6 +169,11 @@ cards show it:
 - Anu Varghese (needs help): [Customer GST file](…/projects/PROJ-0012): On hold 3 day(s): Waiting on customer
 - Biju Thomas: Waiting for VPN access from Cochin Ship Supplies
 
+**Content today (3)**            (departments with content work only)
+- Missed: [Teachers' Day](…/content?post=…) · Avera IoT · was due Tue 13 Oct, 10:00 · Jasir
+- Not approved: 17:00 [Flash sale](…) · Kerala Agro Foods · Instagram · Client Review · Ajmal
+- 18:30 [World Food Day](…) · Kerala Agro Foods · Instagram, LinkedIn · Scheduled
+
 **Anu Varghese**
 Yesterday: [Configure GST settings](…) (Completed); [Sales invoice PDF …](…/tickets/4821) (Resolved) · 7h logged
 Today: [Bank reconciliation](…) (Due today)
@@ -121,6 +186,12 @@ Today: [Bank reconciliation](…) (Due today)
 
 - **Blockers and help needed come first**, with names; someone who ticked "I need help"
   without a blocker is listed too.
+- **Content today** comes next, for a department with content work (Digital, or one with
+  Content Calendar projects or post tasks) whose switch is on: the posts going live that day
+  that the department's people (those with a stand-up) are on, and their posts missed in
+  the week before, **missed and not-approved first, with first names**; at most 8 lines
+  ("and 2 more"). Left out when there is nothing. It is composed whole (the summary goes to
+  the department's own channel).
 - Then each person: Yesterday and Today, at most 4 items each ("and 3 more"), plus their note.
 - **The AI headline** goes through `ai_engine.call_haiku` (OpenAI first, with failover,
   [ai-providers.md](ai-providers.md)) with names, titles and counts only, never hours. The
@@ -145,6 +216,13 @@ Today: [Bank reconciliation](…) (Due today)
   - **Everyone**: status, plan against done ("2 of 3 planned done · 1 more": the linked work
     on their previous stand-up's Today, how much of it is in today's Yesterday, and what else
     they did), hours as a fact when shown, Yesterday and Today side by side, and **History**.
+- **Content today** (`components/ContentToday.vue`), under the blockers for departments with
+  content work, for leads and members alike: each post's time (Geist Mono), title (opens the
+  post on the calendar), client, channels and people, with a badge: **Missed** (red, alert
+  icon, "Was due …"), **Not approved · Client Review** (amber, warning icon), **Published**
+  (green, check) or the stage in gray. "Nothing goes live today and nothing was missed this
+  week." when empty; **Open content calendar** in the card's header. Read as the viewer
+  (`frappe.get_list`), so they only see posts they may open.
 - **Assign help** (`assign_help`): the helper is told ("Celine Joseph asked you to help Anu
   Varghese: …"). When the blocker is a task the lead may change, the helper also joins its
   assignees (the department-wall ToDo hook still applies); a blocker in words, or a task the
@@ -158,7 +236,9 @@ Today: [Bank reconciliation](…) (Due today)
 - **Plain members** see their own department's view read-only: the same content as the Teams
   channel, without plan against done, Nudge or actions. Any other department is refused.
 - **Walls:** rows linked to a project in a department hidden from the viewer are left out of
-  what they see (`walled_projects`).
+  what they see (`walled_projects`), and someone outside the content team (an ERP Employee
+  heading a mixed department) gets no content lines and no Content today
+  (`content_today: null`).
 
 ## History
 
@@ -180,6 +260,12 @@ Managers (`helpdesk.api.standup.get_settings` / `save_settings`, which check the
   workflow URL (a secret: masked once saved, sent only to replace or remove it, checked like
   Chat & Teams' URLs). None listed: everyone, posted to the escalation channel.
 - **Team view:** department heads, project leads and coordinators, project managers (each on).
+- **Content calendar:** "Include content calendar" per department, listed for every active
+  department with content work (Digital, and the departments of Content Calendar projects
+  and of projects with post tasks, `content_departments`), **on by default**. Off leaves
+  the content lines out of that department's drafts (a stand-up already filled in keeps
+  them) and Content today out of its summary and team view. Stored as the departments
+  switched off (`content_off`), so a department that later gets content work starts on.
 
 The patch `v16_0_2.seed_standup_settings` stores the defaults on existing sites.
 
@@ -196,15 +282,16 @@ keeps the department it was posted to.
 `submit_standup(values?)` POST, `get_team_standup(team?, date?)`, `get_standup_history(user?,
 limit?)`, `nudge(name)` POST, `assign_help(name, row, helper)` POST,
 `create_task_from_blocker(name, row, project, subject, assigned_to?, due_date?)` POST,
-`get_settings()`, `save_settings(values)` POST.
+`get_settings()` (with `content`: [{department, include}]), `save_settings(values)` POST
+(`content_off`: the departments switched off).
 
 `values`: `yesterday`, `today`, `blockers` (rows as returned; a row without
 `reference_name` is text), `notes` {yesterday, today}, `needs_help`. A section left out is
 kept as it is.
 
 The TBO Smart app gets `get_my_standup`, `save_standup`, `submit_standup` and
-`get_team_standup` in `helpdesk.api.mobile`, each row with `app_route`
-([tbo-smart-api.md](tbo-smart-api.md#stand-up)).
+`get_team_standup` in `helpdesk.api.mobile`, each row with `app_route` and `content`, and the
+team view with `content_today` ([tbo-smart-api.md](tbo-smart-api.md#stand-up)).
 
 ## Data
 
@@ -213,21 +300,26 @@ The TBO Smart app gets `get_my_standup`, `save_standup`, `submit_standup` and
   yesterday_note, today_note. System Manager full, Agent Manager read; written through the
   API only.
 - **HD Standup Item**: kind (task, ticket, post, plan, note), title, detail,
-  reference_doctype, reference_name, project, auto, helper, help_task.
+  reference_doctype, reference_name, project, auto, helper, help_task; on content lines
+  content_post, content_role, customer, go_live, stage.
 - **HD Standup Settings** (Single) with **HD Standup Department** rows (department,
-  channel_webhook).
+  channel_webhook) and `content_off` (Table MultiSelect of **HD Standup Content Off**,
+  department): the departments without the content calendar.
 
 ## Files
 
-- Engine `helpdesk/standup.py`; API `helpdesk/api/standup.py`; mobile in
+- Engine `helpdesk/standup.py`, content `helpdesk/standup_content.py`; API
+  `helpdesk/api/standup.py`; mobile in
   `helpdesk/api/mobile.py`; `WorkCalendar.previous_working_day` in `helpdesk/follow_ups.py`;
   `chat_notifications.teams_post_url` (a channel's own URL).
 - UI `desk/src/pages/standup/` (`Standup.vue`, `MyStandup.vue`, `TeamStandup.vue`,
-  `StandupItems.vue`, `BlockerDialog.vue`, `StandupHistory.vue`, `standupMeta.ts`),
+  `StandupItems.vue`, `BlockerDialog.vue`, `StandupHistory.vue`, `ContentToday.vue`,
+  `standupMeta.ts`),
   `pages/home/components/StandupCard.vue`, `components/Settings/Standup/StandupSettings.vue`;
   `AssignPicker.vue` gained `label` and `touch`.
-- Tests `helpdesk/tests/test_standup.py`; helpers in `helpdesk/test_utils.py`
-  (`set_standup_settings`, `standup_calendar`, `make_standup`, `get_standup_notices`).
+- Tests `helpdesk/tests/test_standup.py` and `test_standup_content.py`; helpers in
+  `helpdesk/test_utils.py` (`set_standup_settings`, `standup_calendar`, `make_standup`,
+  `get_standup_notices`, `make_content_post_at`, `log_post_move`, `complete_task_on`).
 
 ## After deploy (owner)
 
@@ -238,3 +330,8 @@ The TBO Smart app gets `get_my_standup`, `save_standup`, `submit_standup` and
    reminder messages) and the escalation channel (the fallback for departments without one).
 3. Settings → Departments: set each department's heads, and give projects a department.
 4. Optional: AI providers set up for the headline (the summary works without it).
+5. Content calendar: on for every department with content work. Switch it off per
+   department in Settings → Stand-up → Content calendar if a team doesn't want it. Give
+   content projects a department (Digital) so the right summary carries Content today, and
+   check HD Content Settings' client reminder days (the stand-up's "waiting on the client"
+   threshold).

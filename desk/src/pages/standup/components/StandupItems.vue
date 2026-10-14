@@ -29,10 +29,16 @@
         </RouterLink>
         <span v-else class="text-p-base text-ink-gray-9">{{ item.title }}</span>
         <p
-          v-if="item.detail || item.helper_name || item.help_task"
+          v-if="
+            item.detail || item.helper_name || item.help_task || goLive(item)
+          "
           class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-p-sm text-ink-gray-6"
         >
           <span v-if="item.detail">{{ item.detail }}</span>
+          <span v-if="goLive(item)" class="inline-flex items-center gap-1">
+            <LucideCalendarClock class="size-3.5" aria-hidden="true" />
+            {{ goLive(item) }}
+          </span>
           <span v-if="item.helper_name" class="inline-flex items-center gap-1">
             <LucideHandHelping class="size-3.5" aria-hidden="true" />
             {{ __("Help asked of {0}", item.helper_name) }}
@@ -63,8 +69,9 @@
 <script setup lang="ts">
 import NativeButton from "@/components/NativeButton";
 import { __ } from "@/translation";
-import { Button } from "frappe-ui";
+import { Button, dayjs } from "frappe-ui";
 import { RouterLink } from "vue-router";
+import LucideCalendarClock from "~icons/lucide/calendar-clock";
 import LucideHandHelping from "~icons/lucide/hand-helping";
 import LucideListChecks from "~icons/lucide/list-checks";
 import LucideListOrdered from "~icons/lucide/list-ordered";
@@ -96,6 +103,13 @@ const KIND_ICONS = {
   plan: LucideListOrdered,
   note: LucidePencilLine,
 };
+
+/** A role part's post goes live: "Goes live Thu 15 Oct, 10:00". A post's own row
+ * already says when in its detail. */
+function goLive(item: StandupItem) {
+  const at = item.kind === "task" ? item.content?.go_live : null;
+  return at ? __("Goes live {0}", dayjs(at).format("ddd D MMM, HH:mm")) : "";
+}
 
 function kindLabel(kind: StandupItem["kind"]) {
   return {

@@ -3492,6 +3492,52 @@ def get_standup_notices(user: str, standup: str) -> list[str]:
     )
 
 
+def make_content_post_at(
+    title: str, customer: str, publish_on, team: dict | None = None, **values
+) -> str:
+    """Creates a Drafting HD Content Post going live at `publish_on` with `team` (e.g.
+    {"writer": user, "designer": user}), so its role tasks are made and given out, then
+    sets `values` (a later status such as Client Review or Changes Requested,
+    client_review_since, head_feedback …) straight in the database, past the post's
+    approval guards. Returns the post's name."""
+    post = make_content_post(
+        title,
+        customer,
+        status="Drafting",
+        publish_on=str(publish_on),
+        **(team or {}),
+    ).name
+    if values:
+        frappe.db.set_value("HD Content Post", post, values, update_modified=False)
+    return post
+
+
+def log_post_move(post: str, user: str, day, old: str, new: str) -> str:
+    """Records in the post's history (a Version) that `user` changed its status from
+    `old` to `new` on `day` at 11:00, as the stand-up's "moved yesterday" reads it."""
+    version = frappe.get_doc(
+        {
+            "doctype": "Version",
+            "ref_doctype": "HD Content Post",
+            "docname": post,
+            "data": json.dumps({"changed": [["status", old, new]]}),
+        }
+    ).insert(ignore_permissions=True)
+    frappe.db.set_value(
+        "Version",
+        version.name,
+        {"owner": user, "creation": f"{getdate(day)} 11:00:00"},
+        update_modified=False,
+    )
+    return version.name
+
+
+def complete_task_on(task: str, day) -> None:
+    """Marks a Task Completed on `day` straight in the database, as if its assignee
+    finished it that day (its ToDos stay as they are)."""
+    frappe.db.set_value("Task", task, {"status": "Completed", "completed_on": day})
+
+
 def enable_invoicing(**values):
     """Turns invoicing on in HD CRM Settings with FakeCRM's company and item and a
     default rate of 1000 INR an hour, without checking them (pair with a patched FakeCRM).

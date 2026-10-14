@@ -131,6 +131,32 @@
         </SettingsSection>
 
         <SettingsSection
+          v-if="content.length"
+          :title="__('Content calendar')"
+          :description="
+            __(
+              'For the content team: their parts on posts, the posts going live, missed and unapproved posts, and Content today in the summary. Departments with content work are listed.'
+            )
+          "
+        >
+          <SettingRow
+            v-for="row in content"
+            :key="row.department"
+            v-slot="{ id }"
+            :label="row.department"
+            :description="__('Include content calendar')"
+          >
+            <Switch
+              :id="id"
+              v-model="row.include"
+              :aria-label="
+                __('Include content calendar for {0}', row.department)
+              "
+            />
+          </SettingRow>
+        </SettingsSection>
+
+        <SettingsSection
           :title="__('Team view')"
           :description="
             __(
@@ -173,7 +199,14 @@ import SettingsSection from "../SettingsSection.vue";
 interface SettingsData {
   settings: Record<string, any>;
   departments: { department: string; channel: SecretStatus }[];
+  /** departments with content work, and whether their stand-up shows it */
+  content: ContentRow[];
   chat: { enabled: boolean; platform: string; fallback_channel: boolean };
+}
+
+interface ContentRow {
+  department: string;
+  include: boolean;
 }
 
 interface Row {
@@ -237,6 +270,7 @@ const TEAM_FLAGS = [
 
 const form = ref<Record<string, any> | null>(null);
 const rows = ref<Row[]>([]);
+const content = ref<ContentRow[]>([]);
 const initial = ref("");
 let nextKey = 0;
 
@@ -250,6 +284,7 @@ function load(data: SettingsData) {
     status: d.channel,
     edit: { mode: "keep", value: "" },
   }));
+  content.value = data.content.map((c) => ({ ...c }));
   initial.value = snapshot();
 }
 
@@ -257,6 +292,7 @@ function snapshot() {
   return JSON.stringify([
     form.value,
     rows.value.map((r) => [r.department, secretValue(r.edit)]),
+    content.value,
   ]);
 }
 
@@ -290,6 +326,9 @@ const save = createResource({
           ? { department: r.department }
           : { department: r.department, channel_webhook: webhook };
       });
+    values.content_off = content.value
+      .filter((c) => !c.include)
+      .map((c) => c.department);
     return { values };
   },
   onSuccess(saved: SettingsData) {

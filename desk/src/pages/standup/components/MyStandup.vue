@@ -275,7 +275,9 @@ function describe(section: Section) {
     return __("Filled in from what you finished and replied to.");
   if (section === "today")
     return __("Due today, in progress and due next, plus your plan for today.");
-  return __("Held work, work waiting on someone, and late key tasks.");
+  return __(
+    "Held work, work waiting on someone, late key tasks and stuck content posts."
+  );
 }
 
 function emptyText(section: Section) {

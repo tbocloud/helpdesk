@@ -34,6 +34,7 @@
             "helper": null,
             "helper_name": null,
             "help_task": null,
+            "content": null,
             "app_route": "/task/TASK-2026-00412"
           }
         ],
@@ -51,6 +52,7 @@
             "helper": null,
             "helper_name": null,
             "help_task": null,
+            "content": null,
             "app_route": "/task/TASK-2026-00420"
           }
         ],
@@ -68,6 +70,7 @@
             "helper": "reshma@tbo.example",
             "helper_name": "Reshma Nair",
             "help_task": null,
+            "content": null,
             "app_route": "/task/TASK-2026-00377"
           }
         ],
@@ -109,6 +112,7 @@
         "helper": "reshma@tbo.example",
         "helper_name": "Reshma Nair",
         "help_task": null,
+        "content": null,
         "app_route": "/task/TASK-2026-00377"
       }
     ],
@@ -127,6 +131,7 @@
         "to_date": "2026-10-15",
         "half_day": false
       }
-    ]
+    ],
+    "content_today": null
   }
 }

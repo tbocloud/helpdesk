@@ -1,7 +1,7 @@
 {
 	"actions": [],
 	"creation": "2026-10-14 09:00:00.000000",
-	"description": "One line of a stand-up: a task, ticket or content post filled in from the person's work, a step of their Home plan, or their own text.",
+	"description": "One line of a stand-up: a task, ticket or content post filled in from the person's work, a step of their Home plan, or their own text. A content line also carries its post, part, client, go-live time and stage.",
 	"doctype": "DocType",
 	"engine": "InnoDB",
 	"field_order": [
@@ -13,7 +13,13 @@
 		"project",
 		"auto",
 		"helper",
-		"help_task"
+		"help_task",
+		"content_section",
+		"content_post",
+		"content_role",
+		"customer",
+		"go_live",
+		"stage"
 	],
 	"fields": [
 		{
@@ -77,11 +83,47 @@
 			"fieldtype": "Link",
 			"label": "Help Task",
 			"options": "Task"
+		},
+		{
+			"fieldname": "content_section",
+			"fieldtype": "Section Break",
+			"label": "Content calendar"
+		},
+		{
+			"description": "The content post this line is about: a role part's post, or the post itself",
+			"fieldname": "content_post",
+			"fieldtype": "Link",
+			"label": "Content Post",
+			"options": "HD Content Post"
+		},
+		{
+			"description": "The part on the post: writer, designer, video_editor or marketer",
+			"fieldname": "content_role",
+			"fieldtype": "Data",
+			"label": "Content Part"
+		},
+		{
+			"fieldname": "customer",
+			"fieldtype": "Link",
+			"label": "Client",
+			"options": "HD Customer"
+		},
+		{
+			"description": "When the post goes live",
+			"fieldname": "go_live",
+			"fieldtype": "Datetime",
+			"label": "Go Live"
+		},
+		{
+			"description": "The post's stage (its status) when the line was filled in",
+			"fieldname": "stage",
+			"fieldtype": "Data",
+			"label": "Stage"
 		}
 	],
 	"istable": 1,
 	"links": [],
-	"modified": "2026-10-14 09:00:00.000000",
+	"modified": "2026-10-14 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Standup Item",
