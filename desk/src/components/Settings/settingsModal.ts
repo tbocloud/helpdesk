@@ -37,6 +37,7 @@ import ContentSettings from "./Content/ContentSettings.vue";
 import TaskSettings from "./Tasks/TaskSettings.vue";
 import LucideListChecks from "~icons/lucide/list-checks";
 import FollowUpSettings from "./FollowUps/FollowUpSettings.vue";
+import StandupSettings from "./Standup/StandupSettings.vue";
 import LucideBellRing from "~icons/lucide/bell-ring";
 import IntakeSettings from "./Intake/IntakeSettings.vue";
 import LucideInbox from "~icons/lucide/inbox";
@@ -203,6 +204,13 @@ export const tabs = computed(() => {
           condition: () => auth.isAdmin || auth.isManager,
         },
         {
+          label: __("Stand-up"),
+          icon: markRaw(LucideMessagesSquare),
+          component: markRaw(StandupSettings),
+          // HD Standup Settings through helpdesk.api.standup, which checks the roles
+          condition: () => auth.isAdmin || auth.isManager,
+        },
+        {
           label: __("Ticket intake"),
           icon: markRaw(LucideInbox),
           component: markRaw(IntakeSettings),
@@ -307,6 +315,7 @@ type TabName =
   | "Content"
   | "Tasks"
   | "Follow-ups"
+  | "Stand-up"
   | "Ticket intake"
   | "Chat & Teams"
   | "TBO Chat"

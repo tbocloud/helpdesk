@@ -1,0 +1,40 @@
+{
+	"actions": [],
+	"creation": "2026-10-14 09:00:00.000000",
+	"description": "A department in the stand-up and the Teams channel its summary goes to.",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"department",
+		"channel_webhook"
+	],
+	"fields": [
+		{
+			"fieldname": "department",
+			"fieldtype": "Link",
+			"in_list_view": 1,
+			"label": "Department",
+			"options": "HD Department",
+			"reqd": 1
+		},
+		{
+			"description": "The department's Teams channel workflow URL. Empty: the escalation channel in Chat & Teams",
+			"fieldname": "channel_webhook",
+			"fieldtype": "Password",
+			"in_list_view": 1,
+			"label": "Teams Channel Workflow URL",
+			"length": 1000
+		}
+	],
+	"istable": 1,
+	"links": [],
+	"modified": "2026-10-14 09:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD Standup Department",
+	"owner": "Administrator",
+	"permissions": [],
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": []
+}

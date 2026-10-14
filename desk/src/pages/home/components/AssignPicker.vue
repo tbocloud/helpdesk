@@ -1,5 +1,6 @@
 <template>
-  <!-- "Assign" next to "Take it": hand an unassigned ticket to someone else -->
+  <!-- "Assign" next to "Take it": hand an unassigned ticket to someone else;
+       the stand-up's "Assign help" uses it with its own label -->
   <Combobox
     v-model:open="open"
     :model-value="null"
@@ -12,14 +13,18 @@
   >
     <template #trigger>
       <!-- frappe-ui's Button swaps aria-label for `label`: the name is sr-only text -->
-      <Button size="sm" :loading="loading">
+      <Button size="sm" :class="{ '!h-11': touch }" :loading="loading">
         <template #prefix>
           <LucideUsers class="size-4" aria-hidden="true" />
         </template>
-        <!-- phones keep the row on one line: the icon alone -->
-        <span class="max-sm:hidden" aria-hidden="true">{{ __("Assign") }}</span>
+        <!-- phones keep Home's row on one line: the icon alone -->
+        <span :class="{ 'max-sm:hidden': !label }" aria-hidden="true">{{
+          label || __("Assign")
+        }}</span>
         <span class="sr-only">{{
-          __("Assign to someone else: {0}", title)
+          label
+            ? __("{0}: {1}", label, title)
+            : __("Assign to someone else: {0}", title)
         }}</span>
       </Button>
     </template>
@@ -50,8 +55,12 @@ import LucideUsers from "~icons/lucide/users";
 const props = defineProps<{
   /** the ticket's subject, for the button's accessible name */
   title: string;
+  /** the button's text instead of "Assign" */
+  label?: string;
   customer?: string | null;
   loading?: boolean;
+  /** a 44px button, where it is the row's main action on a phone */
+  touch?: boolean;
 }>();
 const emit = defineEmits<{ pick: [user: string, name: string] }>();
 

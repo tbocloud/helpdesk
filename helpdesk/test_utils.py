@@ -3417,6 +3417,61 @@ def make_hd_leave(
     ).insert(ignore_permissions=True)
 
 
+def set_standup_settings(**values):
+    """Saves HD Standup Settings (the async stand-up) with `values`, on by default."""
+    doc = frappe.get_doc("HD Standup Settings")
+    doc.update({"enabled": 1, **values})
+    doc.save(ignore_permissions=True)
+    frappe.clear_document_cache("HD Standup Settings", "HD Standup Settings")
+    return doc
+
+
+def standup_calendar(today, holidays=()):
+    """A follow-ups WorkCalendar at `today` on a Monday-to-Saturday week with Sundays
+    and `holidays` off and no SLA hours: what the stand-up counts working days with."""
+    from helpdesk import follow_ups
+
+    holidays = {getdate(day) for day in holidays}
+    with patch.object(
+        follow_ups,
+        "working_day_checker",
+        return_value=lambda day: day.weekday() != 6 and day not in holidays,
+    ):
+        calendar = follow_ups.WorkCalendar(getdate(today))
+    calendar.sla = None
+    return calendar
+
+
+def make_standup(user: str, day, department: str | None = None, **values):
+    """Creates `user`'s HD Standup for `day` directly, a Draft unless `values` says
+    otherwise; `values` may hold the yesterday, today and blockers rows (dicts with
+    kind and title, and reference_doctype, reference_name and project for linked work)."""
+    return frappe.get_doc(
+        {
+            "doctype": "HD Standup",
+            "user": user,
+            "date": getdate(day),
+            "department": department,
+            "status": "Draft",
+            **values,
+        }
+    ).insert(ignore_permissions=True)
+
+
+def get_standup_notices(user: str, standup: str) -> list[str]:
+    """The messages of the HD Notifications `user` got about a stand-up, oldest first."""
+    return frappe.get_all(
+        "HD Notification",
+        filters={
+            "user_to": user,
+            "reference_doctype": "HD Standup",
+            "reference_name": standup,
+        },
+        order_by="creation asc",
+        pluck="message",
+    )
+
+
 def enable_invoicing(**values):
     """Turns invoicing on in HD CRM Settings with FakeCRM's company and item and a
     default rate of 1000 INR an hour, without checking them (pair with a patched FakeCRM).

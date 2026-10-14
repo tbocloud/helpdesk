@@ -229,6 +229,16 @@ class WorkCalendar:
             day = add_days(day, 1)
         return day
 
+    def previous_working_day(self):
+        """The last working day before today: Friday's work on a Monday, the day
+        before a holiday after it (the stand-up's "yesterday")."""
+        day = add_days(self.today, -1)
+        for _step in range(LOOKBACK_DAYS):
+            if self.is_working_day(day):
+                return day
+            day = add_days(day, -1)
+        return add_days(self.today, -1)
+
     def in_working_hours(self, moment) -> bool:
         moment = get_datetime(moment)
         if not self.is_working_day(moment.date()):

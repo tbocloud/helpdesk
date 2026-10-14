@@ -1,0 +1,120 @@
+{
+  "request": {
+    "values": {
+      "today": [
+        {
+          "kind": "task",
+          "title": "Bank reconciliation for September",
+          "reference_doctype": "Task",
+          "reference_name": "TASK-2026-00420"
+        },
+        { "title": "Call Malabar Traders about the GST file" }
+      ],
+      "blockers": [
+        {
+          "kind": "task",
+          "title": "Customer GST file for Kerala Agro Foods",
+          "reference_doctype": "Task",
+          "reference_name": "TASK-2026-00377"
+        },
+        { "title": "Waiting for VPN access from Cochin Ship Supplies" }
+      ],
+      "notes": { "yesterday": "Helped Reshma with the payroll export" },
+      "needs_help": 1
+    }
+  },
+  "response": {
+    "v": 1,
+    "data": {
+      "enabled": true,
+      "date": "2026-10-14",
+      "previous_day": "2026-10-13",
+      "is_working_day": true,
+      "editable": true,
+      "post_at": "10:30",
+      "posted": false,
+      "standup": {
+        "name": "SU-2026-10-14-anu@tbo.example",
+        "user": "anu@tbo.example",
+        "full_name": "Anu Varghese",
+        "date": "2026-10-14",
+        "department": "ERP",
+        "status": "Submitted",
+        "submitted_on": "2026-10-14 09:12:40",
+        "needs_help": true,
+        "hours": 6.5,
+        "yesterday": [],
+        "today": [
+          {
+            "id": "d2b3c4e5f6",
+            "kind": "task",
+            "title": "Bank reconciliation for September",
+            "detail": "Due today",
+            "reference_doctype": "Task",
+            "reference_name": "TASK-2026-00420",
+            "project": "PROJ-0012",
+            "auto": true,
+            "route": "/projects/PROJ-0012",
+            "helper": null,
+            "helper_name": null,
+            "help_task": null,
+            "app_route": "/task/TASK-2026-00420"
+          },
+          {
+            "id": "d2b3c4e5f7",
+            "kind": "note",
+            "title": "Call Malabar Traders about the GST file",
+            "detail": null,
+            "reference_doctype": null,
+            "reference_name": null,
+            "project": null,
+            "auto": false,
+            "route": null,
+            "helper": null,
+            "helper_name": null,
+            "help_task": null,
+            "app_route": null
+          }
+        ],
+        "blockers": [
+          {
+            "id": "d2b3c4e5f8",
+            "kind": "task",
+            "title": "Customer GST file for Kerala Agro Foods",
+            "detail": "On hold 3 day(s): Waiting on customer · They send it on Friday",
+            "reference_doctype": "Task",
+            "reference_name": "TASK-2026-00377",
+            "project": "PROJ-0012",
+            "auto": true,
+            "route": "/projects/PROJ-0012",
+            "helper": null,
+            "helper_name": null,
+            "help_task": null,
+            "app_route": "/task/TASK-2026-00377"
+          },
+          {
+            "id": "d2b3c4e5f9",
+            "kind": "note",
+            "title": "Waiting for VPN access from Cochin Ship Supplies",
+            "detail": null,
+            "reference_doctype": null,
+            "reference_name": null,
+            "project": null,
+            "auto": false,
+            "route": null,
+            "helper": null,
+            "helper_name": null,
+            "help_task": null,
+            "app_route": null
+          }
+        ],
+        "notes": {
+          "yesterday": "Helped Reshma with the payroll export",
+          "today": ""
+        }
+      },
+      "teams": [],
+      "department": "ERP"
+    }
+  }
+}

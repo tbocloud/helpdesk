@@ -1,0 +1,107 @@
+{
+  "v": 1,
+  "data": {
+    "enabled": true,
+    "date": "2026-10-14",
+    "previous_day": "2026-10-13",
+    "is_working_day": true,
+    "editable": true,
+    "post_at": "10:30",
+    "posted": false,
+    "standup": {
+      "name": "SU-2026-10-14-anu@tbo.example",
+      "user": "anu@tbo.example",
+      "full_name": "Anu Varghese",
+      "date": "2026-10-14",
+      "department": "ERP",
+      "status": "Draft",
+      "submitted_on": null,
+      "needs_help": false,
+      "hours": 6.5,
+      "yesterday": [
+        {
+          "id": "c1a2b3d4e5",
+          "kind": "task",
+          "title": "Configure GST settings for the Kochi branch",
+          "detail": "Completed",
+          "reference_doctype": "Task",
+          "reference_name": "TASK-2026-00412",
+          "project": "PROJ-0012",
+          "auto": true,
+          "route": "/projects/PROJ-0012",
+          "helper": null,
+          "helper_name": null,
+          "help_task": null,
+          "app_route": "/task/TASK-2026-00412"
+        },
+        {
+          "id": "c1a2b3d4e6",
+          "kind": "ticket",
+          "title": "Sales invoice PDF prints the wrong GSTIN",
+          "detail": "Resolved",
+          "reference_doctype": "HD Ticket",
+          "reference_name": "4821",
+          "project": null,
+          "auto": true,
+          "route": "/tickets/4821",
+          "helper": null,
+          "helper_name": null,
+          "help_task": null,
+          "app_route": "/ticket/4821"
+        }
+      ],
+      "today": [
+        {
+          "id": "c1a2b3d4e7",
+          "kind": "task",
+          "title": "Bank reconciliation for September",
+          "detail": "Due today",
+          "reference_doctype": "Task",
+          "reference_name": "TASK-2026-00420",
+          "project": "PROJ-0012",
+          "auto": true,
+          "route": "/projects/PROJ-0012",
+          "helper": null,
+          "helper_name": null,
+          "help_task": null,
+          "app_route": "/task/TASK-2026-00420"
+        },
+        {
+          "id": "c1a2b3d4e8",
+          "kind": "plan",
+          "title": "Finish the bank reconciliation first: it is due today.",
+          "detail": null,
+          "reference_doctype": null,
+          "reference_name": null,
+          "project": null,
+          "auto": true,
+          "route": null,
+          "helper": null,
+          "helper_name": null,
+          "help_task": null,
+          "app_route": null
+        }
+      ],
+      "blockers": [
+        {
+          "id": "c1a2b3d4e9",
+          "kind": "task",
+          "title": "Customer GST file for Kerala Agro Foods",
+          "detail": "On hold 3 day(s): Waiting on customer · They send it on Friday",
+          "reference_doctype": "Task",
+          "reference_name": "TASK-2026-00377",
+          "project": "PROJ-0012",
+          "auto": true,
+          "route": "/projects/PROJ-0012",
+          "helper": null,
+          "helper_name": null,
+          "help_task": null,
+          "app_route": "/task/TASK-2026-00377"
+        }
+      ],
+      "notes": { "yesterday": "", "today": "" }
+    },
+    "teams": [],
+    "department": "ERP"
+  }
+}

@@ -155,7 +155,7 @@ means nothing is noise. The mapping is fixed:
   card (`surface-base`, hairline) with its icon in a `brand` tile (`on-brand` icon).
 - **Sidebar icon tiles** are the owner's mockup, an exception to "no pastel icon tiles": each
   app sidebar icon sits in a tile tinted by page group (`--nav-*` in `theme.css`, `tone` in
-  `layoutSettings.ts`): blue for Home, Overview, In progress, Scoreboard, Performance, Customers and Help;
+  `layoutSettings.ts`): blue for Home, Overview, In progress, Stand-up, Scoreboard, Performance, Customers and Help;
   teal for Team, Summaries, Customer report and Contacts; orange for Notifications, Support
   hours and Tickets; purple for Projects, My Work, Board, Content and Templates; green for
   Calendar, Timesheets and Knowledge base; gray for the pin control and the collapsed
