@@ -81,7 +81,21 @@ Home, the project cards' stats, the timesheet task pickers and task details.
 `get_project_detail` returns it as `sees_all_tasks`. "Assigned to" and "given out by" come
 from the task's ToDos (`allocated_to`, `assigned_by`), matched exactly: a LIKE on `_assign`
 would read `_` in a user ID as a wildcard. A finished assignment (Closed ToDo) still counts,
-so people keep seeing the tasks they completed; a withdrawn one (Cancelled) doesn't. The
+so people keep seeing the tasks they completed; a withdrawn one (Cancelled) doesn't.
+
+**A finished task's ToDos close.** When a task becomes Completed or Cancelled,
+`Task.close_assignments` sets its open ToDos to Closed; when it goes back to an open status,
+`Task.reopen_assignments` opens the latest closed ToDo of each current assignee who has no
+open one. Closed, not Cancelled, so the assigner (`get_assigners`) and visibility still read
+them. The status is written straight to the ToDo table rather than through Frappe's
+`assign_to`, because Frappe rebuilds `_assign` from the open ToDos: `_assign` keeps naming
+who did the task, which the Scoreboard, the Team page and Capacity read. The patch
+`close_finished_task_todos` closed the ToDos of tasks finished before this. Every count of
+someone's work still filters on the task's status (sidebar My tasks, Home, Capacity,
+follow-ups, In progress, Team, Scoreboard); what changes is Frappe's own ToDo list and
+anything reading open ToDos, such as who gets the daily plan (`follow_ups.open_work_owners`).
+The ticket list's "Assigned to" filter counts a task's closed assignments as tasks do
+everywhere else. The
 department walls ([departments.md](departments.md)) apply on top of every row except admins,
 and so does the content team rule: outside the content team, a content post's tasks are only
 seen when they're the person's own, whatever the row

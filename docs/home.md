@@ -206,7 +206,8 @@ through `frappe.desk.form.assign_to.add`, the same endpoint as the ticket page.
 - **Team load**: the 10 busiest people from the portfolio with their open and in-progress
   counts and projects; admins also see who has no open project work ("Free: …").
 - **Systems** (admins): customer ERP connections, mailboxes, Teams notifications, TBO Chat
-  and AI triage health.
+  and AI triage health. A connection in Error or Unreachable shows its last error, and an
+  Unreachable one when the hub calls it next ([client-site-sync.md](client-site-sync.md)).
 
 ## Compatibility
 

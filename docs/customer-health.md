@@ -20,7 +20,7 @@ without a support contract isn't penalised for it.
 | Project work (`work`) | Open tasks in the customer's projects that aren't Completed or Cancelled, judged like the Overview (`_task_item` in `helpdesk/api/work.py`): overdue, key and at risk | an overdue task, or a key task at risk | 3 overdue tasks, or an overdue key task | no open task | 2 |
 | Support hours (`contract`) | The current period of the contract running today (`helpdesk/support_contracts.py`): % of hours used against % of the period gone | 50% or more used and 20 points ahead of the time gone | hours used up (100% or more) | no contract running today | 2 |
 | Sign-offs (`signoff`) | Sign-offs in progress (Sent, In progress, Needs clarification, Ready to sign, Reopened) | one Needs clarification | an item Escalated | no sign-off in progress | 2 |
-| ERP connection (`erp`) | The latest `HDS Support Connection` | Disconnected | Error | no connection | 1 |
+| ERP connection (`erp`) | The latest `HDS Support Connection` | Disconnected | Error or Unreachable | no connection | 1 |
 
 ## Status
 

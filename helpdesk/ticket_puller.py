@@ -13,8 +13,12 @@ import json
 
 import frappe
 import requests
+from frappe.utils import now_datetime
 
 from helpdesk.automation import automation_user
+from helpdesk.helpdesk.doctype.hds_support_connection.hds_support_connection import (
+    UNREACHABLE,
+)
 from helpdesk.mcp_client import MCPClient
 from helpdesk.session_replay import is_diagnostics_file, is_replay_file
 
@@ -251,37 +255,55 @@ def _push_back(mcp: MCPClient, client_ticket: str, values: dict) -> None:
 
 
 # "Error" is retried every run so a brief outage on the customer site (e.g. during
-# its own update) doesn't stop tickets for the rest of the day
-PULLABLE_STATUSES = ("Connected", "Error")
+# its own update) doesn't stop tickets for the rest of the day; "Unreachable" once its
+# backoff is over (HDSSupportConnection.record_failure, docs/client-site-sync.md)
+PULLABLE_STATUSES = ("Connected", "Error", UNREACHABLE)
+
+
+def due_connections(statuses) -> list[str]:
+    """The connections in `statuses` whose backoff, if any, is over."""
+    conn = frappe.qb.DocType("HDS Support Connection")
+    return (
+        frappe.qb.from_(conn)
+        .select(conn.name)
+        .where(
+            conn.connection_status.isin(list(statuses))
+            & (conn.next_attempt_at.isnull() | (conn.next_attempt_at <= now_datetime()))
+        )
+        .orderby(conn.name)
+        .run(pluck=True)
+    )
+
+
+def unreachable_connections() -> set[str]:
+    """Connections in an outage: the per-minute pull probes them, the other jobs skip them."""
+    return set(
+        frappe.get_all(
+            "HDS Support Connection",
+            filters={"connection_status": UNREACHABLE},
+            pluck="name",
+        )
+    )
 
 
 def pull_client_tickets() -> int:
     """Scheduled: turn Pending client tickets into HD Tickets."""
-    connections = frappe.get_all(
-        "HDS Support Connection",
-        filters={"connection_status": ("in", PULLABLE_STATUSES)},
-        fields=["name", "customer_name"],
-    )
-    return sum(pull_connection(conn.name, conn.customer_name) for conn in connections)
+    return sum(pull_connection(name) for name in due_connections(PULLABLE_STATUSES))
 
 
-def pull_connection(connection: str, customer_name: str | None = None) -> int:
-    """Import one customer site's Pending tickets; also used right after the site pings us."""
-    if customer_name is None:
-        customer_name = frappe.db.get_value(
-            "HDS Support Connection", connection, "customer_name"
-        )
+def pull_connection(connection: str) -> int:
+    """Import one customer site's Pending tickets. Also run right after the site pings
+    us, which shows it is up, so that pull doesn't wait for a backoff."""
+    conn = frappe.get_doc("HDS Support Connection", connection)
     try:
         mcp = MCPClient(connection)
         tickets = _pending_tickets(mcp)
     except Exception as e:
-        frappe.log_error(
-            title=f"Ticket pull failed for {connection}",
-            message=frappe.get_traceback(),
-        )
-        _set_connection_health(connection, error=str(e)[:500])
+        # one Error Log per outage, not one per failed minute
+        conn.record_failure(str(e))
         return 0
-    _set_connection_health(connection)
+    conn.record_success()
+    customer_name = conn.customer_name
 
     created = 0
     for ticket in tickets:
@@ -324,25 +346,16 @@ def pull_connection(connection: str, customer_name: str | None = None) -> int:
     return created
 
 
-def _set_connection_health(connection: str, error: str | None = None):
-    status = "Error" if error else "Connected"
-    current = frappe.db.get_value(
-        "HDS Support Connection",
-        connection,
-        ["connection_status", "last_error"],
-        as_dict=True,
-    )
-    if current and (current.connection_status, current.last_error or "") == (
-        status,
-        error or "",
-    ):
-        return
-    frappe.db.set_value(
-        "HDS Support Connection",
-        connection,
-        {"connection_status": status, "last_error": error or ""},
-        update_modified=False,
-    )
+def _connect(connection: str) -> MCPClient | None:
+    """An MCP session with the site, or None when it can't be reached. No Error Log
+    per run and no extra failure count: the per-minute pull probes the site and keeps
+    its backoff (counting here too would reach Unreachable early)."""
+    try:
+        return MCPClient(connection)
+    except Exception:
+        if not frappe.db.exists("HDS Support Connection", connection):
+            frappe.log_error(title=f"Ticket sync failed for {connection}")
+        return None
 
 
 def push_ticket_statuses() -> int:
@@ -368,14 +381,12 @@ def push_ticket_statuses() -> int:
         by_connection.setdefault(row.custom_qcs_connection, []).append(row)
 
     pushed = 0
+    skip = unreachable_connections()
     for connection_name, tickets in by_connection.items():
-        try:
-            mcp = MCPClient(connection_name)
-        except Exception:
-            frappe.log_error(
-                title=f"Status push failed for {connection_name}",
-                message=frappe.get_traceback(),
-            )
+        if connection_name in skip:
+            continue
+        mcp = _connect(connection_name)
+        if not mcp:
             continue
 
         for row in tickets:
@@ -443,19 +454,17 @@ def sync_conversations() -> int:
         by_conn.setdefault(r.custom_qcs_connection, []).append(r)
 
     synced = 0
+    skip = unreachable_connections()
     for conn_name, tickets in by_conn.items():
+        if conn_name in skip:
+            continue
         # comments the hub itself wrote on the customer site aren't pulled back
         support_user = (
             frappe.db.get_value("HDS Support Connection", conn_name, "support_user")
             or "support@quarkcs.com"
         )
-        try:
-            mcp = MCPClient(conn_name)
-        except Exception:
-            frappe.log_error(
-                title=f"Conversation sync failed for {conn_name}",
-                message=frappe.get_traceback(),
-            )
+        mcp = _connect(conn_name)
+        if not mcp:
             continue
 
         for row in tickets:

@@ -44,6 +44,78 @@ class Task(Document):
         self.clarify_signoff_item()
         self.tell_assigner_it_is_done()
         self.refresh_follow_ups()
+        self.sync_assignments_with_status()
+
+    def sync_assignments_with_status(self):
+        """Finished work leaves the assignees' open ToDos; reopened work comes back to them."""
+        if not self.status_changed():
+            return
+        before = self.get_doc_before_save()
+        was_done = bool(before) and before.status in DONE
+        if self.status in DONE and not was_done:
+            self.close_assignments()
+        elif was_done and self.status not in DONE:
+            self.reopen_assignments()
+
+    def close_assignments(self) -> int:
+        """Close the task's open ToDos; returns how many.
+
+        Closed, not Cancelled: a closed ToDo still names who did the work and who gave
+        it (tasky.permissions.get_assigners, task visibility). Written straight to the
+        table, so Frappe doesn't rebuild `_assign` from the open ToDos: `_assign` keeps
+        listing who did the task, which the Scoreboard and the Team page credit.
+        """
+        todo = frappe.qb.DocType("ToDo")
+        open_todos = (
+            (todo.reference_type == "Task")
+            & (todo.reference_name == self.name)
+            & (todo.status == "Open")
+        )
+        names = (
+            frappe.qb.from_(todo).select(todo.name).where(open_todos).run(pluck=True)
+        )
+        if names:
+            self.set_todo_status(names, "Closed")
+        return len(names)
+
+    def reopen_assignments(self) -> int:
+        """Open again the latest closed ToDo of each current assignee who has no open one;
+        returns how many."""
+        assignees = self.assignees()
+        if not assignees:
+            return 0
+        todo = frappe.qb.DocType("ToDo")
+        rows = (
+            frappe.qb.from_(todo)
+            .select(todo.name, todo.allocated_to, todo.status)
+            .where(
+                (todo.reference_type == "Task")
+                & (todo.reference_name == self.name)
+                & todo.allocated_to.isin(assignees)
+                & todo.status.isin(["Open", "Closed"])
+            )
+            .orderby(todo.creation, order=frappe.qb.desc)
+            .run(as_dict=True)
+        )
+        has_open = {r.allocated_to for r in rows if r.status == "Open"}
+        latest = {}
+        for row in rows:
+            if row.status == "Closed" and row.allocated_to not in has_open:
+                latest.setdefault(row.allocated_to, row.name)
+        if latest:
+            self.set_todo_status(list(latest.values()), "Open")
+        return len(latest)
+
+    def set_todo_status(self, names: list[str], status: str):
+        todo = frappe.qb.DocType("ToDo")
+        (
+            frappe.qb.update(todo)
+            .set(todo.status, status)
+            .set(todo.modified, now())
+            .set(todo.modified_by, frappe.session.user)
+            .where(todo.name.isin(names))
+            .run()
+        )
 
     def clear_escalation(self):
         """Done, cancelled or on hold: off the follow-up ladder (docs/follow-ups.md)."""
