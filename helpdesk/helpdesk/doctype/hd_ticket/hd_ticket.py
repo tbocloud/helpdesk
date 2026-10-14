@@ -498,7 +498,9 @@ class HDTicket(Document):
         Removes the assignment if the agent is not in the team.
         Should be called inside on_update
         """
-        if self.is_new():
+        # a new ticket has no team change; its customer's ticket owner may be outside
+        # the team (docs/ticket-owners.md)
+        if self.is_new() or self.flags.in_insert:
             return
         if not self.agent_group or (hasattr(self, "_assign") and not self._assign):
             return

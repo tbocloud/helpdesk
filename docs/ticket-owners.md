@@ -86,7 +86,10 @@ assignment is never replaced.
 
 **Team:** a ticket with a team (agent group) still goes to the owner even when the owner
 isn't in that team. The owner knows the customer; the team stays on the ticket. The existing
-`remove_assignment_if_not_in_team` only acts when someone changes the team later, as before.
+`remove_assignment_if_not_in_team` only acts when someone changes the team later: it now
+also returns during the insert (`flags.in_insert`), where it used to return only because
+the in-memory `_assign` was still empty. `assign_customer_owner` keeps that copy in step with
+the database, so without the guard it would have taken the owner off on insert.
 
 ### What is recorded
 
