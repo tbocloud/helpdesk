@@ -480,7 +480,10 @@ The app words each type the way the web's activity list does.
 `status_category` (Open = waiting on us, Paused = waiting on the customer or a task),
 `sla_due`, `sla_kind` (first_response until the first reply, then resolution), `sla_breached`,
 `sla_due_soon` (within 4 hours), `assigned_to` (user id), `assignees` [{user, full_name}],
-`team`, `opened_at`, `awaiting_reply`, `escalation_level`.
+`team`, `opened_at`, `awaiting_reply`, `escalation_level`. The detail (`get_ticket` and the
+ticket actions) also has `customer_owner` (`{user, full_name}`, or null when the ticket has no
+customer or its customer no ticket owner): who the customer's new tickets go to (see
+[ticket-owners.md](ticket-owners.md)); the list rows don't carry it.
 
 Conversation message: `{id, kind: customer|agent|note, author, author_email, at, body (plain
 text), body_html, attachments: [{name, file_name, file_url}]}`, oldest first.
@@ -752,7 +755,7 @@ Decided per field; "app" means change `types.ts`, "hub" means a later hub change
 | `HoldReason` | the hub's list is `Laptop / system issue`, `Leave`, `Waiting on customer`, `Waiting on another task`, `Other` | app: use the hub's options (they drive reports) |
 | `TaskActivity` | `{id, at, who, kind, type, text, data}`; `text` only on comments and notes; kind `hold`/`escalation` don't exist (holds are status changes) | app: word items from `type` + `data` |
 | `askForHelp(name, to, note)` | `request_help` needs `task_name` (the helper task's title) | app: add a title field |
-| `Ticket` | `assigned_to` is a user id, not a full name (the mocks compare with `full_name`); adds `assignees`, `status_category`, `sla_kind`, `sla_breached`, `sla_due_soon`; `conversation` only in `get_ticket` | app |
+| `Ticket` | `assigned_to` is a user id, not a full name (the mocks compare with `full_name`); adds `assignees`, `status_category`, `sla_kind`, `sla_breached`, `sla_due_soon`; `conversation` and `customer_owner` only in the detail | app (additive) |
 | `TicketStatus` | statuses come from the hub (`statuses` in `get_ticket`), not a fixed union | app |
 | `TicketMessage` | adds `author_email`, `body_html`; attachments are `{name, file_name, file_url}`, no `size` | app |
 | `TicketView` | the hub adds `all-open` | app (additive) |

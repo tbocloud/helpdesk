@@ -1,5 +1,5 @@
 <template>
-  <!-- the Customers and Contacts lists: link rows, bulk delete, paging and every state -->
+  <!-- the Customers and Contacts lists: link rows, bulk actions, paging and every state -->
   <div
     class="overflow-hidden rounded-lg border border-outline-gray-2 bg-surface-base"
   >
@@ -18,23 +18,30 @@
         @click="selectAll"
       />
       <Button variant="ghost" :label="__('Clear')" @click="clearSelection" />
-      <Button
-        class="ml-auto"
-        theme="red"
-        variant="subtle"
-        :label="__('Delete {0}', String(selected.size))"
-        @click="confirmOpen = true"
-      >
-        <template #prefix>
-          <LucideTrash2 class="size-4" aria-hidden="true" />
-        </template>
-      </Button>
+      <div class="ml-auto flex flex-wrap items-center gap-2">
+        <slot
+          name="selection-actions"
+          :selected="[...selected]"
+          :clear="clearSelection"
+        />
+        <Button
+          v-if="deletable"
+          theme="red"
+          variant="subtle"
+          :label="__('Delete {0}', String(selected.size))"
+          @click="confirmOpen = true"
+        >
+          <template #prefix>
+            <LucideTrash2 class="size-4" aria-hidden="true" />
+          </template>
+        </Button>
+      </div>
     </div>
     <div
       v-else-if="rows.length"
       class="hidden items-center gap-3 border-b border-outline-gray-2 bg-surface-gray-1 px-4 py-2 text-xs text-ink-gray-5 md:flex"
     >
-      <span v-if="deletable" class="flex w-5 shrink-0 items-center">
+      <span v-if="canSelect" class="flex w-5 shrink-0 items-center">
         <input
           type="checkbox"
           class="size-4 rounded border-outline-gray-4 text-ink-gray-9 focus-visible:ring-2 focus-visible:ring-outline-gray-4"
@@ -96,7 +103,7 @@
           :aria-label="rowLabel(row)"
         />
         <span
-          v-if="deletable"
+          v-if="canSelect"
           class="relative z-[1] hidden w-5 shrink-0 items-center md:flex"
         >
           <input
@@ -198,6 +205,8 @@ const props = defineProps<{
   errorTitle: string;
   /** shows checkboxes and bulk delete; the server still checks permission */
   deletable?: boolean;
+  /** shows checkboxes for the `selection-actions` slot without bulk delete */
+  selectable?: boolean;
   doctype: string;
   /** e.g. "customers": used in the delete dialog */
   noun: string;
@@ -212,6 +221,7 @@ const emit = defineEmits<{
 // frappe's delete_items queues more than this many in the background
 const SYNC_DELETE_LIMIT = 10;
 
+const canSelect = computed(() => props.deletable || props.selectable);
 const selected = reactive(new Set<string>());
 const confirmOpen = ref(false);
 const deleting = ref(false);

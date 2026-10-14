@@ -13,11 +13,20 @@ from frappe.desk.form.assign_to import get as get_assignees
 from frappe.model.document import Document
 from frappe.permissions import add_permission, update_permission_property
 from frappe.query_builder import DocType, Order
-from frappe.utils import add_to_date, cint, getdate, now_datetime
+from frappe.utils import (
+    add_to_date,
+    cint,
+    format_datetime,
+    formatdate,
+    get_fullname,
+    getdate,
+    now_datetime,
+)
 from pypika.functions import Count
 from pypika.queries import Query
 from pypika.terms import Criterion
 
+from helpdesk.automation import automation_user
 from helpdesk.content_team import sees_no_tickets
 from helpdesk.helpdesk.doctype.hd_settings.helpers import (
     get_default_email_content,
@@ -31,6 +40,7 @@ from helpdesk.helpdesk.utils.email import (
     default_ticket_outgoing_email_account,
 )
 from helpdesk.utils import (
+    add_assignment,
     capture_event,
     get_agents_team,
     get_customers,
@@ -39,6 +49,7 @@ from helpdesk.utils import (
     is_agent,
     is_chat_placeholder_email,
     publish_event,
+    remove_assignment,
     strip_chat_placeholders,
 )
 from helpdesk.work_reminders import _agent_managers, _assignees, notify_users
@@ -197,6 +208,8 @@ class HDTicket(Document):
         ):
             self.send_acknowledgement_email()
 
+        self.assign_customer_owner()
+
     def capture_ticket_created_telemetry_events(self):
         if self.subject == "Welcome to Helpdesk":
             return
@@ -229,6 +242,7 @@ class HDTicket(Document):
                         self.notify_agent(agent.name, "Reaction")
 
         self.remove_assignment_if_not_in_team()
+        self.assign_owner_of_customer_set_later()
         self.alert_low_rating()
         self.publish_update()
         self.capture_update_telemetry_events()
@@ -484,7 +498,9 @@ class HDTicket(Document):
         Removes the assignment if the agent is not in the team.
         Should be called inside on_update
         """
-        if self.is_new():
+        # a new ticket has no team change; its customer's ticket owner may be outside
+        # the team (docs/ticket-owners.md)
+        if self.is_new() or self.flags.in_insert:
             return
         if not self.agent_group or (hasattr(self, "_assign") and not self._assign):
             return
@@ -540,6 +556,115 @@ class HDTicket(Document):
 
         if frappe.session.user != agent:
             self.notify_agent(agent, "Assignment")
+
+    def assign_customer_owner(self):
+        """Give a new ticket to its customer's ticket owner, or the backup while the
+        owner is away (docs/ticket-owners.md).
+
+        Runs in after_insert, before Frappe's Assignment Rules (an on_update doc event),
+        which skip a ticket that already has an open assignment, so the owner wins over
+        the team round robin without a second ToDo. A rule's assignment that got in first
+        is withdrawn; a person's is kept.
+        """
+        if not self.customer:
+            return
+        customer = frappe.get_doc("HD Customer", self.customer)
+        pick = customer.ticket_owner_today()
+        if not pick:
+            return
+        open_todos = self.open_assignments()
+        if any(not todo.assignment_rule for todo in open_todos):
+            return
+        # every rule ToDo goes, even one for the owner, so the assignment is the owner's
+        for todo in open_todos:
+            remove_assignment(
+                "HD Ticket", self.name, todo.allocated_to, ignore_permissions=True
+            )
+        add_assignment(
+            {
+                "assign_to": [pick["user"]],
+                "doctype": "HD Ticket",
+                "name": self.name,
+                "assigned_by": automation_user(),
+            },
+            ignore_permissions=True,
+        )
+        # the ToDo wrote _assign to the database; keep this copy in step with it, so a
+        # later save of this document in the same request doesn't write the old value back
+        self.update({"_assign": frappe.db.get_value("HD Ticket", self.name, "_assign")})
+        self.log_owner_assignment(pick, customer.name)
+        self.notify_ticket_owner(pick)
+
+    def assign_owner_of_customer_set_later(self):
+        """A ticket that came in without a customer and is still unassigned gets the
+        owner once, when its customer is first set; later changes never reassign."""
+        if self.flags.in_insert:
+            return
+        previous = self.get_doc_before_save()
+        if not previous or previous.customer or not self.customer:
+            return
+        if self.open_assignments():
+            return
+        self.assign_customer_owner()
+
+    def open_assignments(self) -> list:
+        return frappe.get_all(
+            "ToDo",
+            filters={
+                "reference_type": "HD Ticket",
+                "reference_name": str(self.name),
+                "status": "Open",
+            },
+            fields=["allocated_to", "assignment_rule"],
+        )
+
+    def log_owner_assignment(self, pick: dict, customer: str):
+        """The activity line, credited to the automation user, not whoever's session
+        created the ticket (a portal customer, an email, a job)."""
+        name = get_fullname(pick["user"])
+        if not pick["backup"]:
+            action = _("assigned {0}, ticket owner of {1}").format(name, customer)
+        elif pick["until"]:
+            action = _(
+                "assigned {0}, backup ticket owner of {1} ({2} is on leave until {3})"
+            ).format(
+                name,
+                customer,
+                get_fullname(pick["away"]),
+                formatdate(pick["until"], "EEE d MMM"),
+            )
+        else:
+            action = _(
+                "assigned {0}, backup ticket owner of {1} ({2} is inactive)"
+            ).format(name, customer, get_fullname(pick["away"]))
+        activity = log_ticket_activity(self.name, action)
+        activity.db_set("owner", automation_user(), update_modified=False)
+
+    def notify_ticket_owner(self, pick: dict):
+        """The owner's notice: the helpdesk panel plus a Teams DM (or email) through
+        notify_users. A plain assignment sends no chat message, so this is the only one.
+        """
+        lines = [
+            _("New ticket #{0} from {1} assigned to you: {2}").format(
+                self.name, self.customer, self.subject
+            )
+        ]
+        details = [_("Priority: {0}").format(self.priority)] if self.priority else []
+        if self.response_by:
+            details.append(
+                _("First response due {0}").format(
+                    format_datetime(self.response_by, "d MMM, HH:mm")
+                )
+            )
+        if details:
+            lines.append(" · ".join(details))
+        if pick["backup"]:
+            lines.append(
+                _("You're the backup owner while {0} is away.").format(
+                    get_fullname(pick["away"])
+                )
+            )
+        notify_users([pick["user"]], "HD Ticket", self.name, "\n".join(lines))
 
     def get_assigned_agents(self):
         assignees = get_assignees({"doctype": "HD Ticket", "name": self.name})

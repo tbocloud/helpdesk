@@ -1,11 +1,12 @@
 """Settings → CRM: test the connection to the TBO CRM site, sync users, customers,
-holidays and leave now, and read the invoicing and holiday list pickers from it."""
+holidays and leave now, fill empty ticket owners from its account managers, and read
+the invoicing and holiday list pickers from it."""
 
 import frappe
 from frappe import _
 
 from helpdesk.integrations.crm.client import CRMClient, CRMError
-from helpdesk.integrations.crm.customers import sync_customers
+from helpdesk.integrations.crm.customers import fill_ticket_owners, sync_customers
 from helpdesk.integrations.crm.holidays import sync_holidays_and_leave
 from helpdesk.integrations.crm.users import sync_users
 
@@ -79,6 +80,27 @@ def sync_now() -> dict:
         "users": users,
         "customers": customers,
     }
+
+
+@frappe.whitelist(methods=["POST"])
+def fill_ticket_owners_now() -> dict:
+    """Customers without a ticket owner get their ERPNext Account Manager from the CRM
+    site, when that person is an active agent here (docs/ticket-owners.md)."""
+    require_admin()
+    try:
+        result = fill_ticket_owners()
+    except CRMError as e:
+        return {"ok": False, "message": str(e)}
+    message = _("{0} customers got a ticket owner.").format(len(result["filled"]))
+    if result["not_an_agent"]:
+        message += " " + _(
+            "{0} have an account manager who isn't an active agent here: {1}"
+        ).format(len(result["not_an_agent"]), ", ".join(result["not_an_agent"][:20]))
+    if result["ambiguous"]:
+        message += " " + _(
+            "{0} match several CRM customers with different account managers, so they were left empty: {1}"
+        ).format(len(result["ambiguous"]), ", ".join(result["ambiguous"][:20]))
+    return {"ok": True, "message": message, **result}
 
 
 @frappe.whitelist()

@@ -33,6 +33,42 @@
           </div>
         </template>
 
+        <!-- who the customer's new tickets go to (docs/ticket-owners.md) -->
+        <div
+          v-if="ticket.doc?.customer"
+          class="grid min-h-8 grid-cols-[96px_minmax(0,1fr)] items-center gap-2"
+        >
+          <span class="truncate text-xs font-medium text-ink-gray-6">
+            {{ __("Customer owner") }}
+          </span>
+          <span
+            v-if="ownerOfCustomer.error"
+            class="flex min-w-0 items-center gap-1 px-2 text-sm text-ink-gray-6"
+            role="alert"
+          >
+            {{ __("Couldn't load") }}
+            <Button
+              variant="ghost"
+              size="sm"
+              :label="__('Retry')"
+              @click="loadCustomerOwner(ticket.doc.customer)"
+            />
+          </span>
+          <span
+            v-else
+            class="truncate px-2 text-base"
+            :class="customerOwner ? 'text-ink-gray-8' : 'text-ink-gray-4'"
+          >
+            {{
+              ownerOfCustomer.loading && !ownerOfCustomer.data
+                ? "…"
+                : customerOwner
+                ? nameOf(customerOwner)
+                : __("Not set")
+            }}
+          </span>
+        </div>
+
         <div
           class="grid min-h-8 grid-cols-[96px_minmax(0,1fr)] items-center gap-2"
         >
@@ -163,9 +199,10 @@ import {
   TicketSymbol,
 } from "@/types";
 import { __ } from "@/translation";
+import { useAssignablePeople } from "@/composables/assignablePeople";
 import { useStorage } from "@vueuse/core";
-import { dayjs } from "frappe-ui";
-import { computed, inject, nextTick, ref } from "vue";
+import { Button, createResource, dayjs } from "frappe-ui";
+import { computed, inject, nextTick, ref, watch } from "vue";
 import LucideSparkles from "~icons/lucide/sparkles";
 import TicketField from "../TicketField.vue";
 import MeetingsCard from "@/components/meetings/MeetingsCard.vue";
@@ -188,6 +225,27 @@ const recentSimilarTickets = inject(RecentSimilarTicketsSymbol)!;
 const { getFields, getField } = getMeta("HD Ticket");
 const { notifyTicketUpdate } = useNotifyTicketUpdate(ticket.value?.name);
 const ticketId = computed(() => String(ticket.value?.doc?.name ?? ""));
+
+// the ticket owner of the ticket's customer, read again when the customer changes
+const { nameOf } = useAssignablePeople();
+const ownerOfCustomer = createResource({
+  url: "frappe.client.get_value",
+  onError() {},
+});
+function loadCustomerOwner(customer: string | undefined) {
+  if (!customer) return;
+  ownerOfCustomer.submit({
+    doctype: "HD Customer",
+    filters: customer,
+    fieldname: "ticket_owner",
+  });
+}
+watch(() => ticket.value?.doc?.customer, loadCustomerOwner, {
+  immediate: true,
+});
+const customerOwner = computed<string>(
+  () => ownerOfCustomer.data?.ticket_owner || ""
+);
 
 const dateFormat = window.date_format;
 const { getStatus, colorMap } = useTicketStatusStore();

@@ -923,7 +923,19 @@ def _ticket_detail(ticket) -> dict:
         for c in get_comments(name)
     ]
     conversation.sort(key=lambda m: m["at"])
-    return {**rows[0], "conversation": conversation, "statuses": _ticket_statuses()}
+    customer = rows[0]["customer"]
+    # who owns the customer's tickets (docs/ticket-owners.md)
+    owner = (
+        frappe.db.get_value("HD Customer", customer, "ticket_owner")
+        if customer
+        else None
+    )
+    return {
+        **rows[0],
+        "customer_owner": _person(owner),
+        "conversation": conversation,
+        "statuses": _ticket_statuses(),
+    }
 
 
 def _message(name, kind: str, user: dict, at, content, attachments) -> dict:
