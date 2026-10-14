@@ -72,6 +72,10 @@ export const useAuthStore = defineStore("auth", () => {
   const canSeeCustomerReport: ComputedRef<boolean> = computed(
     () => !!(user__.value.is_manager || user__.value.is_project_manager)
   );
+  // managers, Project Managers and department heads set customers' ticket owners
+  const canSetTicketOwner: ComputedRef<boolean> = computed(
+    () => !!user__.value.can_set_ticket_owner
+  );
   const telephonyInstalled: ComputedRef<boolean> = computed(
     () => !!user__.value.telephony_installed
   );
@@ -139,6 +143,7 @@ export const useAuthStore = defineStore("auth", () => {
     isProjectManager,
     canSeeOverview,
     canSeeCustomerReport,
+    canSetTicketOwner,
     isContentTeam,
     isDmHead,
     canEditContent,

@@ -144,6 +144,15 @@ class CRMClient:
             [["disabled", "=", 0]],
         )
 
+    def customer_account_managers(self) -> list[dict]:
+        """Enabled ERPNext Customers that have an Account Manager (a user on the CRM
+        site); raises CRMError when the site can't list them (no ERPNext there)."""
+        return self.get_list(
+            "Customer",
+            ["name", "customer_name", "account_manager"],
+            [["disabled", "=", 0], ["account_manager", "is", "set"]],
+        )
+
     def create_organization(self, name: str, website: str | None = None) -> dict:
         data = self.request(
             "POST",

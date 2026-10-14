@@ -79,3 +79,45 @@ def record(result: dict):
     frappe.db.set_single_value(
         "HD CRM Settings", "last_sync_result", f"{users_part} {text}".strip()
     )
+
+
+def fill_ticket_owners() -> dict:
+    """Once, on request: customers without a ticket owner get the Account Manager that
+    ERPNext on the CRM site names for them, when that person is an active agent here
+    (matched by email, ignoring case). Owners already set are never changed.
+
+    CRM Organizations have no account owner, so only ERPNext Customers count.
+    """
+    from helpdesk.helpdesk.doctype.hd_customer.hd_customer import active_agents
+
+    managers = {
+        key(c.get("customer_name") or c.get("name")): (c.get("account_manager") or "")
+        .strip()
+        .casefold()
+        for c in CRMClient.from_settings().customer_account_managers()
+    }
+    agents = {
+        agent.casefold(): agent
+        for agent in active_agents(
+            frappe.get_all("HD Agent", pluck="name", limit_page_length=0)
+        )
+    }
+    result = {"filled": [], "not_an_agent": []}
+    unowned = frappe.get_all(
+        "HD Customer",
+        filters={"ticket_owner": ("is", "not set")},
+        pluck="name",
+        limit_page_length=0,
+    )
+    for customer in unowned:
+        manager = managers.get(key(customer))
+        if not manager:
+            continue
+        agent = agents.get(manager)
+        if not agent:
+            result["not_an_agent"].append(customer)
+            continue
+        # an active agent filling an empty owner: all validate_ticket_owners would check
+        frappe.db.set_value("HD Customer", customer, "ticket_owner", agent)
+        result["filled"].append(customer)
+    return result

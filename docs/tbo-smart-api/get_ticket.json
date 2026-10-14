@@ -24,6 +24,10 @@
     "opened_at": "2026-10-09 16:02:11.402113",
     "awaiting_reply": true,
     "escalation_level": 0,
+    "customer_owner": {
+      "user": "najath@teambackoffice.com",
+      "full_name": "Najath Thekkeyil"
+    },
     "conversation": [
       {
         "id": "c3f1a9b2",

@@ -33,6 +33,22 @@
           </div>
         </template>
 
+        <!-- who the customer's new tickets go to (docs/ticket-owners.md) -->
+        <div
+          v-if="ticket.doc?.customer"
+          class="grid min-h-8 grid-cols-[96px_minmax(0,1fr)] items-center gap-2"
+        >
+          <span class="truncate text-xs font-medium text-ink-gray-6">
+            {{ __("Customer owner") }}
+          </span>
+          <span
+            class="truncate px-2 text-base"
+            :class="customerOwner ? 'text-ink-gray-8' : 'text-ink-gray-4'"
+          >
+            {{ customerOwner ? nameOf(customerOwner) : __("Not set") }}
+          </span>
+        </div>
+
         <div
           class="grid min-h-8 grid-cols-[96px_minmax(0,1fr)] items-center gap-2"
         >
@@ -163,9 +179,10 @@ import {
   TicketSymbol,
 } from "@/types";
 import { __ } from "@/translation";
+import { useAssignablePeople } from "@/composables/assignablePeople";
 import { useStorage } from "@vueuse/core";
-import { dayjs } from "frappe-ui";
-import { computed, inject, nextTick, ref } from "vue";
+import { createResource, dayjs } from "frappe-ui";
+import { computed, inject, nextTick, ref, watch } from "vue";
 import LucideSparkles from "~icons/lucide/sparkles";
 import TicketField from "../TicketField.vue";
 import MeetingsCard from "@/components/meetings/MeetingsCard.vue";
@@ -188,6 +205,28 @@ const recentSimilarTickets = inject(RecentSimilarTicketsSymbol)!;
 const { getFields, getField } = getMeta("HD Ticket");
 const { notifyTicketUpdate } = useNotifyTicketUpdate(ticket.value?.name);
 const ticketId = computed(() => String(ticket.value?.doc?.name ?? ""));
+
+// the ticket owner of the ticket's customer, read again when the customer changes
+const { nameOf } = useAssignablePeople();
+const ownerOfCustomer = createResource({
+  url: "frappe.client.get_value",
+  onError() {},
+});
+watch(
+  () => ticket.value?.doc?.customer,
+  (customer) => {
+    if (customer)
+      ownerOfCustomer.submit({
+        doctype: "HD Customer",
+        filters: customer,
+        fieldname: "ticket_owner",
+      });
+  },
+  { immediate: true }
+);
+const customerOwner = computed<string>(
+  () => ownerOfCustomer.data?.ticket_owner || ""
+);
 
 const dateFormat = window.date_format;
 const { getStatus, colorMap } = useTicketStatusStore();

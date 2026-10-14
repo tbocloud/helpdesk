@@ -176,6 +176,44 @@ def make_customer_ticket(customer: str, subject: str, **values) -> str:
     return str(name)
 
 
+def make_owned_customer(name: str, owner: str | None = None, backup: str | None = None):
+    """Creates (or updates) an HD Customer whose new tickets go to `owner`, and to
+    `backup` while the owner is away. Saved as the session user (Administrator in
+    tests, who may set ticket owners)."""
+    if frappe.db.exists("HD Customer", name):
+        doc = frappe.get_doc("HD Customer", name)
+    else:
+        doc = frappe.get_doc({"doctype": "HD Customer", "customer_name": name})
+    doc.ticket_owner = owner
+    doc.backup_ticket_owner = backup
+    doc.save(ignore_permissions=True)
+    return doc
+
+
+def get_open_assignees(ticket) -> list[str]:
+    """The users a ticket is assigned to now (its open ToDos), sorted."""
+    return sorted(
+        frappe.get_all(
+            "ToDo",
+            filters={
+                "reference_type": "HD Ticket",
+                "reference_name": str(ticket),
+                "status": "Open",
+            },
+            pluck="allocated_to",
+        )
+    )
+
+
+def get_ticket_owner_activity(ticket) -> list[str]:
+    """The ticket's activity lines that record a ticket owner (or backup) assignment."""
+    return frappe.get_all(
+        "HD Ticket Activity",
+        filters={"ticket": str(ticket), "action": ("like", "%ticket owner of%")},
+        pluck="action",
+    )
+
+
 def create_agent(
     email: str, first_name: str | None = None, last_name: str | None = None
 ):
@@ -2828,6 +2866,8 @@ class FakeCRM:
         self.role_calls: list[tuple[tuple, str]] = []
         self.orgs = [{"name": o, "organization_name": o} for o in organizations or []]
         self.erp = list(erp_customers or [])
+        # {ERPNext Customer: its Account Manager}, for filling empty ticket owners
+        self.account_managers: dict[str, str] = {}
         # ERPNext on the CRM site, for invoicing: one company and its records
         self.company_rows = [{"name": FAKE_COMPANY, "default_currency": "INR"}]
         self.item_rows = [{"name": FAKE_ITEM, "item_name": "Support hours"}]
@@ -2897,6 +2937,12 @@ class FakeCRM:
 
     def customers(self):
         return [{"name": c, "customer_name": c} for c in self.erp]
+
+    def customer_account_managers(self):
+        return [
+            {"name": c, "customer_name": c, "account_manager": manager}
+            for c, manager in self.account_managers.items()
+        ]
 
     def companies(self):
         return list(self.company_rows)

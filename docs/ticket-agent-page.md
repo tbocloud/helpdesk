@@ -70,8 +70,9 @@ agent needs them. Every section heading is `PanelSection.vue` (eyebrow title, op
 count, header actions, optionally collapsible with `aria-expanded`); the AI cards are level-3
 sections inside the AI group.
 
-1. **Details**: Type, Priority, Customer, Team as quiet selects (T, P, ⇧T open them), and the
-   assignee (A). Status is the header's menu.
+1. **Details**: Type, Priority, Customer, Team as quiet selects (T, P, ⇧T open them), the
+   customer's ticket owner (read-only "Customer owner", see [ticket-owners.md](ticket-owners.md))
+   and the assignee (A). Status is the header's menu.
 2. **Contact**: name, email, email/call buttons (with telephony), open the contact, and how many
    unresolved tickets the contact (or sender) has.
 3. **SLA** (`TicketSlaSection.vue`, when the ticket has a deadline): the policy, First response and

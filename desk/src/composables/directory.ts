@@ -33,7 +33,7 @@ interface DirectoryRequest {
   id: number;
   search: string;
   sort: string;
-  filter: string;
+  filters: Record<string, string>;
   start: number;
 }
 
@@ -46,21 +46,21 @@ interface DirectoryPage<T> {
 interface DirectoryOptions {
   /** the sorts this list offers; DIRECTORY_SORTS by default */
   sorts?: readonly SortOption[];
-  /** one more filter, kept in the URL and sent to the API under this name */
-  filterKey?: string;
+  /** more filters, each kept in the URL and sent to the API under its name */
+  filterKeys?: readonly string[];
 }
 
 /**
  * One of the directory lists (helpdesk.api.directory): search, sort and the
- * optional filter kept in the URL as `q`, `sort` and `filterKey`, and "Show
- * more" adding the next page.
+ * optional filters kept in the URL as `q`, `sort` and each of `filterKeys`, and
+ * "Show more" adding the next page.
  */
 export function useDirectory<T extends { name: string }>(
   url: string,
   options: DirectoryOptions = {}
 ) {
   const sorts = options.sorts ?? DIRECTORY_SORTS;
-  const filterKey = options.filterKey;
+  const filterKeys = options.filterKeys ?? [];
   const route = useRoute();
   const router = useRouter();
 
@@ -71,7 +71,11 @@ export function useDirectory<T extends { name: string }>(
   const sort = ref<string>(
     sorts.find((s) => s.value === queryValue("sort"))?.value ?? DEFAULT_SORT
   );
-  const filter = ref(filterKey ? queryValue(filterKey) : "");
+  const filters = Object.fromEntries(
+    filterKeys.map((key) => [key, ref(queryValue(key))])
+  );
+  const filterValues = () =>
+    Object.fromEntries(filterKeys.map((key) => [key, filters[key].value]));
   const rows = ref<T[]>([]) as { value: T[] };
   const total = ref<number>();
   const hasMore = ref(false);
@@ -90,7 +94,7 @@ export function useDirectory<T extends { name: string }>(
       id: ++generation,
       search: search.value.trim(),
       sort: sort.value,
-      filter: filter.value,
+      filters: filterValues(),
       start,
     };
     current = request;
@@ -101,7 +105,7 @@ export function useDirectory<T extends { name: string }>(
       request.id === generation &&
       request.search === search.value.trim() &&
       request.sort === sort.value &&
-      request.filter === filter.value;
+      filterKeys.every((key) => request.filters[key] === filters[key].value);
 
     resource
       .fetch(
@@ -109,7 +113,7 @@ export function useDirectory<T extends { name: string }>(
           search: request.search,
           sort: request.sort,
           start: request.start,
-          ...(filterKey ? { [filterKey]: request.filter } : {}),
+          ...request.filters,
         },
         {
           onSuccess(data: DirectoryPage<T>) {
@@ -139,14 +143,16 @@ export function useDirectory<T extends { name: string }>(
   }
 
   watchDebounced(
-    [search, sort, filter],
+    [search, sort, ...Object.values(filters)],
     () => {
       router.replace({
         query: {
           ...route.query,
           q: search.value.trim() || undefined,
           sort: sort.value === DEFAULT_SORT ? undefined : sort.value,
-          ...(filterKey ? { [filterKey]: filter.value || undefined } : {}),
+          ...Object.fromEntries(
+            filterKeys.map((key) => [key, filters[key].value || undefined])
+          ),
         },
       });
       reload();
@@ -159,7 +165,7 @@ export function useDirectory<T extends { name: string }>(
   return {
     search,
     sort,
-    filter,
+    filters,
     rows,
     total,
     hasMore,

@@ -58,6 +58,13 @@
               :aria-label="__('Filter by health')"
             />
             <FormControl
+              v-model="ownerFilter"
+              type="select"
+              class="min-w-0 flex-1 sm:w-36 sm:flex-none"
+              :options="OWNER_FILTERS"
+              :aria-label="__('Filter by ticket owner')"
+            />
+            <FormControl
               v-model="sort"
               type="select"
               class="min-w-0 flex-1 sm:w-44 sm:flex-none"
@@ -80,12 +87,26 @@
           :row-label="(row) => String(row.customer_name || row.name)"
           :error-title="__('Couldn\'t load customers')"
           :deletable="hasPermission()"
+          :selectable="authStore.canSetTicketOwner"
           doctype="HD Customer"
           :noun="__('customers')"
           @more="more"
           @retry="reload"
           @deleted="reload"
         >
+          <template
+            v-if="authStore.canSetTicketOwner"
+            #selection-actions="{ selected, clear }"
+          >
+            <Button
+              :label="__('Set ticket owner')"
+              @click="openBulkOwner(selected, clear)"
+            >
+              <template #prefix>
+                <LucideUserCheck class="size-4" aria-hidden="true" />
+              </template>
+            </Button>
+          </template>
           <template #row="{ row }">
             <div class="flex min-w-0 items-center gap-3">
               <Avatar
@@ -123,9 +144,20 @@
                   >
                     {{ projectsLabel(row.active_projects as number) }}
                   </span>
+                  <span class="md:hidden" aria-hidden="true">·</span>
+                  <span class="truncate md:hidden">
+                    {{ ownerLabel(row) }}
+                  </span>
                 </div>
               </div>
             </div>
+            <span
+              class="hidden min-w-0 truncate text-sm md:block"
+              :class="row.ticket_owner ? 'text-ink-gray-8' : 'text-ink-gray-4'"
+              :title="ownerLabel(row)"
+            >
+              {{ ownerLabel(row) }}
+            </span>
             <span class="flex min-w-0 flex-col items-end gap-1 md:items-start">
               <TaskyBadge
                 v-if="row.health"
@@ -181,6 +213,21 @@
               <Button :label="__('Clear search')" @click="search = ''" />
             </TaskyState>
             <TaskyState
+              v-else-if="ownerFilter && !health"
+              :icon="LucideUserCheck"
+              :title="__('Every customer has a ticket owner')"
+              :message="
+                __(
+                  'New tickets from each of them go to their owner, or to the backup while the owner is away.'
+                )
+              "
+            >
+              <Button
+                :label="__('Show all customers')"
+                @click="ownerFilter = ''"
+              />
+            </TaskyState>
+            <TaskyState
               v-else-if="health"
               :icon="LucideSearchX"
               :title="__('No customers with this health')"
@@ -217,6 +264,11 @@
       </div>
     </div>
     <NewCustomerDialog v-model="showNewCustomer" />
+    <TicketOwnerDialog
+      v-model="bulkOwner.open"
+      :customers="bulkOwner.customers"
+      @saved="ownersSaved"
+    />
   </div>
 </template>
 
@@ -226,6 +278,7 @@ import DirectoryList, {
 } from "@/components/DirectoryList.vue";
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import NewCustomerDialog from "@/components/customer/NewCustomerDialog.vue";
+import TicketOwnerDialog from "@/components/customer/TicketOwnerDialog.vue";
 import TaskyBadge from "@/components/TaskyBadge.vue";
 import TaskyState from "@/components/TaskyState.vue";
 import { connectionBadge, type Connection } from "@/composables/customer";
@@ -239,20 +292,24 @@ import {
   openTicketsLabel,
   useDirectory,
 } from "@/composables/directory";
+import { useAuthStore } from "@/stores/auth";
 import { hasPermission } from "@/utils";
 import { __ } from "@/translation";
 import { Avatar, Button, FormControl, TextInput, usePageMeta } from "frappe-ui";
-import { ref } from "vue";
+import { reactive, ref } from "vue";
 import LucideBuilding2 from "~icons/lucide/building-2";
 import LucidePlus from "~icons/lucide/plus";
 import LucideSearch from "~icons/lucide/search";
 import LucideSearchX from "~icons/lucide/search-x";
+import LucideUserCheck from "~icons/lucide/user-check";
 
 interface CustomerRow {
   name: string;
   customer_name: string;
   domain: string | null;
   image: string | null;
+  ticket_owner: string | null;
+  ticket_owner_name: string | null;
   open_tickets: number;
   active_projects: number;
   connection: Connection | null;
@@ -261,18 +318,24 @@ interface CustomerRow {
 
 const COLUMNS: DirectoryColumn[] = [
   { key: "customer", label: __("Customer") },
+  { key: "ticket_owner", label: __("Ticket owner") },
   { key: "health", label: __("Health") },
   { key: "open_tickets", label: __("Open tickets"), align: "right" },
   { key: "active_projects", label: __("Active projects"), align: "right" },
   { key: "connection", label: __("ERP connection") },
 ];
 const GRID =
-  "grid-cols-[minmax(0,1fr)_auto] md:grid-cols-[minmax(0,1fr)_11rem_6rem_6rem_8rem]";
+  "grid-cols-[minmax(0,1fr)_auto] md:grid-cols-[minmax(0,1fr)_9rem_11rem_6rem_6rem_8rem]";
+// the owner filter (helpdesk.api.directory.OWNER_FILTERS)
+const OWNER_FILTERS = [
+  { value: "", label: __("Any owner") },
+  { value: "none", label: __("No owner") },
+];
 
 const {
   search,
   sort,
-  filter: health,
+  filters,
   rows,
   total,
   hasMore,
@@ -283,9 +346,35 @@ const {
   more,
 } = useDirectory<CustomerRow>("helpdesk.api.directory.get_customer_directory", {
   sorts: CUSTOMER_SORTS,
-  filterKey: "health",
+  filterKeys: ["health", "owner"],
 });
+const health = filters.health;
+const ownerFilter = filters.owner;
 const showNewCustomer = ref(false);
+const authStore = useAuthStore();
+
+// the bulk "Set ticket owner": the selection, and how to clear it once saved
+const bulkOwner = reactive({
+  open: false,
+  customers: [] as string[],
+  clear: () => {},
+});
+
+function openBulkOwner(selected: string[], clear: () => void) {
+  Object.assign(bulkOwner, { open: true, customers: selected, clear });
+}
+
+function ownersSaved() {
+  bulkOwner.clear();
+  reload();
+}
+
+function ownerLabel(row: {
+  ticket_owner?: unknown;
+  ticket_owner_name?: unknown;
+}) {
+  return String(row.ticket_owner_name || row.ticket_owner || __("No owner"));
+}
 
 function failing(connection: Connection | null) {
   return (

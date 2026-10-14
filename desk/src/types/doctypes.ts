@@ -367,6 +367,10 @@ export interface HDCustomer extends DocType {
   primary_contact?: string;
   /** Country: Link (Country) */
   country?: string;
+  /** Ticket Owner: Link (HD Agent) */
+  ticket_owner?: string;
+  /** Backup Ticket Owner: Link (HD Agent) */
+  backup_ticket_owner?: string;
 }
 
 // Last updated: 2024-03-23 16:03:23.469424

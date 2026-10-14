@@ -17,9 +17,12 @@ from helpdesk.integrations.erpnext.utils import (
     sync_related_fields,
     validate_rename_conflict,
 )
+from helpdesk.tasky.permissions import can_manage_team, is_project_manager
 from helpdesk.utils import agent_only, get_customers, is_agent
+from helpdesk.work_calendar import on_leave
 
 CUSTOMER_ROLES = ("HD Customer", "HD Customer Manager")
+TICKET_OWNER_FIELDS = ("ticket_owner", "backup_ticket_owner")
 
 
 class HDCustomer(Document):
@@ -70,6 +73,61 @@ class HDCustomer(Document):
 
     def validate(self):
         self.validate_contacts()
+        self.validate_ticket_owners()
+
+    def validate_ticket_owners(self):
+        """Only the people who may set ticket owners change them, and both are active
+        agents; the backup needs an owner and is someone else (docs/ticket-owners.md)."""
+        previous = self.get_doc_before_save()
+        changed = [
+            field
+            for field in TICKET_OWNER_FIELDS
+            if (previous.get(field) if previous else None) != self.get(field)
+        ]
+        if not changed:
+            return
+        if not can_set_ticket_owner():
+            frappe.throw(
+                _("Only managers and department heads can set ticket owners."),
+                frappe.PermissionError,
+            )
+        if self.backup_ticket_owner and not self.ticket_owner:
+            frappe.throw(_("Set a ticket owner before a backup."))
+        if self.backup_ticket_owner and self.backup_ticket_owner == self.ticket_owner:
+            frappe.throw(_("The backup must be someone other than the ticket owner."))
+        chosen = [self.get(field) for field in changed if self.get(field)]
+        inactive = set(chosen) - active_agents(chosen)
+        if inactive:
+            frappe.throw(
+                _("{0} isn't an active agent, so they can't own tickets.").format(
+                    ", ".join(sorted(inactive))
+                )
+            )
+
+    def ticket_owner_today(self) -> dict | None:
+        """Who takes this customer's new tickets today: the owner, else the backup while
+        the owner is on approved leave (a half day still counts as working) or inactive.
+        None when neither can, and the assignment rules decide as before.
+
+        Returns {"user", "backup", "away": the owner when the backup takes it, "until":
+        the last day of the owner's leave, or None when the owner is inactive}.
+        """
+        if not self.ticket_owner:
+            return None
+        people = [p for p in (self.ticket_owner, self.backup_ticket_owner) if p]
+        working = active_agents(people)
+        away = on_leave(users=people)
+        if self.ticket_owner in working and self.ticket_owner not in away:
+            return {"user": self.ticket_owner, "backup": False}
+        backup = self.backup_ticket_owner
+        if not backup or backup not in working or backup in away:
+            return None
+        return {
+            "user": backup,
+            "backup": True,
+            "away": self.ticket_owner,
+            "until": away.get(self.ticket_owner),
+        }
 
     def validate_contacts(self):
         if not self.contacts:
@@ -485,3 +543,28 @@ def get_customer_membership(customer: str, user: str) -> dict | None:
         if member.get("name") == customer:
             return member
     return None
+
+
+def can_set_ticket_owner(user: str | None = None) -> bool:
+    """Who sets customers' ticket owners: System and Agent Managers, Project Managers
+    and department heads. Everyone else sees the owners read-only."""
+    user = user or frappe.session.user
+    return is_project_manager(user) or can_manage_team(user)
+
+
+def active_agents(users: list[str]) -> set[str]:
+    """The `users` who can take tickets: an active HD Agent with an enabled account."""
+    users = [u for u in users if u]
+    if not users:
+        return set()
+    agent = frappe.qb.DocType("HD Agent")
+    account = frappe.qb.DocType("User")
+    rows = (
+        frappe.qb.from_(agent)
+        .join(account)
+        .on(account.name == agent.user)
+        .select(agent.name)
+        .where(agent.name.isin(users) & (agent.is_active == 1) & (account.enabled == 1))
+        .run(pluck=True)
+    )
+    return set(rows)

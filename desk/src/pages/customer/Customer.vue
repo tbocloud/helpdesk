@@ -148,6 +148,14 @@
       </div>
     </div>
   </div>
+  <TicketOwnerDialog
+    v-if="customer.doc?.name"
+    v-model="ownerDialog"
+    :customers="[customer.doc.name]"
+    :owner="customer.doc.ticket_owner"
+    :backup="customer.doc.backup_ticket_owner"
+    @saved="customer.reload()"
+  />
   <EditCustomerDialog
     v-if="customerDialog"
     v-model="customerDialog"
@@ -174,6 +182,8 @@ import CustomerHealthTab from "@/components/customer/CustomerHealthTab.vue";
 import CustomerProjectsTab from "@/components/customer/CustomerProjectsTab.vue";
 import CustomerSupportHoursTab from "@/components/customer/CustomerSupportHoursTab.vue";
 import EditCustomerDialog from "@/components/customer/EditCustomerDialog.vue";
+import TicketOwnerDialog from "@/components/customer/TicketOwnerDialog.vue";
+import TicketOwnerInfo from "@/components/customer/TicketOwnerInfo.vue";
 import TicketsTab from "@/components/customer/TicketsTab.vue";
 import TicketStats from "@/components/customer/TicketStats.vue";
 import DeleteWithTicketsDialog from "@/components/DeleteWithTicketsDialog.vue";
@@ -184,6 +194,7 @@ import TaskyBadge from "@/components/TaskyBadge.vue";
 import TaskyState from "@/components/TaskyState.vue";
 import { connectionBadge, useCustomer } from "@/composables/customer";
 import { healthBadge, type CustomerHealth } from "@/composables/customerHealth";
+import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
 import { CustomerResourceSymbol } from "@/types";
 import { errorText, hasPermission } from "@/utils";
@@ -349,6 +360,8 @@ const breadcrumbs = [
 
 const customerDialog = ref(false);
 const showDeleteDialog = ref(false);
+const ownerDialog = ref(false);
+const authStore = useAuthStore();
 
 const dropdownActions = computed(() => [
   {
@@ -420,10 +433,25 @@ const healthInfo = computed(() => {
   );
 });
 
+// who gets the customer's new tickets (docs/ticket-owners.md)
+const ownerInfo = computed(() =>
+  markRaw(
+    h(TicketOwnerInfo, {
+      owner: customer.doc.ticket_owner,
+      backup: customer.doc.backup_ticket_owner,
+      editable: authStore.canSetTicketOwner,
+      onEdit: () => (ownerDialog.value = true),
+    })
+  )
+);
+
 const customerInfo = computed(() => [
   {
     component: healthInfo.value,
     condition: !!healthInfo.value,
+  },
+  {
+    component: ownerInfo.value,
   },
   {
     icon: markRaw(LucideGlobe),

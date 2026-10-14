@@ -17,6 +17,10 @@
   "primary_contact",
   "email_id",
   "mobile_no",
+  "ticket_owner_section",
+  "ticket_owner",
+  "column_break_owner",
+  "backup_ticket_owner",
   "section_break_fxor",
   "contacts",
   "references_tab",
@@ -108,12 +112,36 @@
    "fieldtype": "Link",
    "label": "Country",
    "options": "Country"
+  },
+  {
+   "fieldname": "ticket_owner_section",
+   "fieldtype": "Section Break",
+   "label": "Ticket Owner"
+  },
+  {
+   "description": "New tickets from this customer are assigned to this agent",
+   "fieldname": "ticket_owner",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Ticket Owner",
+   "options": "HD Agent"
+  },
+  {
+   "fieldname": "column_break_owner",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Takes new tickets while the owner is on leave or inactive",
+   "fieldname": "backup_ticket_owner",
+   "fieldtype": "Link",
+   "label": "Backup Ticket Owner",
+   "options": "HD Agent"
   }
  ],
  "image_field": "image",
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-06-20 15:34:00.998330",
+ "modified": "2026-10-14 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "Helpdesk",
  "name": "HD Customer",

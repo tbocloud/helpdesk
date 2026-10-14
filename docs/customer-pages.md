@@ -43,12 +43,15 @@ and `get_contact_directory(search, sort, start)`, agents only.
 - **One page per call**: 50 rows plus `has_more` and `total`; "Show more" appends the next
   page. Search and sort live in the URL as `q` and `sort` (`name`, the default, or `newest`;
   customers also `health`, worst first). Customers also filter by `health` (at risk, watch,
-  healthy, or at risk or watch); see [customer-health.md](customer-health.md).
+  healthy, or at risk or watch); see [customer-health.md](customer-health.md). They also
+  filter by ticket owner (`owner=none`: customers without one); see
+  [ticket-owners.md](ticket-owners.md).
   Each request carries its search, sort, offset and a generation number, and only the latest
   request's answer is used, so a slow "Show more" for an old search can't mix into new results.
 - **Counts respect permissions**: every read is a `frappe.get_list`, so open tickets and
   projects only count what the viewer may see (a plain agent sees the projects they are on).
-- **Customer row**: logo, name, domain; Health (badge and reasons; on phones the badge sits
+- **Customer row**: logo, name, domain; Ticket owner ("No owner" in gray; on phones on
+  the second line); Health (badge and reasons; on phones the badge sits
   on the right, with the ERP badge under it only when the connection is failing); Open
   tickets (Open and Paused), Active projects (not
   Completed or Cancelled) and ERP connection (the latest `HDS Support Connection` for the
@@ -64,6 +67,9 @@ and `get_contact_directory(search, sort, start)`, agents only.
   and a confirm dialog naming how many. It calls `frappe.desk.reportview.delete_items` like
   the old list did: up to 10 are deleted at once and any that refuse (still linked elsewhere)
   are reported and stay selected; more than 10 are queued.
+- **Bulk "Set ticket owner"** (people who may set ticket owners, `md` and up): the same
+  checkboxes (`DirectoryList`'s `selectable` prop) and a selection-bar action; see
+  [ticket-owners.md](ticket-owners.md).
 - **States**: loading skeleton, error with Retry, "No customers match …" (Clear search) and
   "No customers yet" (New customer); the same for contacts.
 - **Primary action**: New customer / New contact (the same dialogs as before; the sidebar's
@@ -78,7 +84,8 @@ a view); search covers name, domain, email and phone instead.
 `desk/src/pages/customer/Customer.vue`.
 
 - **Header** (`components/PageInfo.vue`, shared with the contact page): logo, name, the
-  health badge (a link to the Health tab), domain, email, phone, country and the ERP
+  health badge (a link to the Health tab), the ticket owner and backup with Change / Set owner
+  for those who may set them ([ticket-owners.md](ticket-owners.md)), domain, email, phone, country and the ERP
   connection (badge, site host and when it was last checked). A connection in Error shows its last error under the header. Edit and the menu
   with Delete customer stay for Agent Managers and admins.
 - **Support figures** (`components/customer/TicketStats.vue`, shared with the contact page):
