@@ -523,6 +523,42 @@ class TestCallers(AIProviderCase):
         self.assertTrue(frappe.cache.get_value(ai_engine.OUTAGE_KEY, expires=True))
 
 
+class TestRecoveryRetry(FrappeTestCase):
+    def setUp(self):
+        hold_commits(self)
+
+    @patch("frappe.enqueue")
+    def test_the_scheduled_retry_skips_the_cooldown_but_not_the_limit(self, enqueue):
+        from frappe.utils import now_datetime
+
+        from helpdesk import triage
+
+        ticket = make_ticket(subject="Stock balance report is wrong")
+        frappe.db.set_value(
+            "HD Ticket",
+            ticket.name,
+            {
+                "custom_triage_status": "Failed",
+                "custom_triage_timestamp": now_datetime(),
+            },
+        )
+
+        # seconds after the failure a person must wait; the recovery retry needn't
+        with self.assertRaises(frappe.ValidationError):
+            triage.run_triage_now(str(ticket.name))
+        triage.run_triage_now(str(ticket.name), ignore_cooldown=True)
+        self.assertEqual(enqueue.call_args.kwargs["ticket_id"], str(ticket.name))
+
+        frappe.db.set_value(
+            "HD Ticket",
+            ticket.name,
+            "custom_triage_data",
+            json.dumps({"retry_count": triage.MAX_TRIAGE_RETRIES}),
+        )
+        with self.assertRaises(frappe.ValidationError):
+            triage.run_triage_now(str(ticket.name), ignore_cooldown=True)
+
+
 class TestInvestigationClient(FrappeTestCase):
     """Investigation sessions stay on the Anthropic SDK (tool use)."""
 

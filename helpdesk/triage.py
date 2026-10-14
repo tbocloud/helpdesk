@@ -167,12 +167,13 @@ def retriage_with_session_replay(ticket_id: str):
     )
 
 
-def run_triage_now(ticket_id: str):
-    """Manual trigger with cooldown + retry limit check."""
+def run_triage_now(ticket_id: str, ignore_cooldown: bool = False):
+    """Manual trigger with cooldown + retry limit check. `ignore_cooldown` is for
+    the scheduled retry (tasks.retry_pending_triages); the retry limit still holds."""
     ticket = frappe.get_doc("HD Ticket", ticket_id)
 
     # Guard: cooldown
-    if ticket.custom_triage_timestamp:
+    if ticket.custom_triage_timestamp and not ignore_cooldown:
         elapsed = (now_datetime() - ticket.custom_triage_timestamp).total_seconds()
         if elapsed < TRIAGE_COOLDOWN_SECONDS:
             frappe.throw(

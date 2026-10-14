@@ -114,8 +114,9 @@ mistyped OpenAI model fails over to the other provider and tells the managers.
   tickets whose triage failed before this feature (nine on the hub on 2026-10-14) are
   re-run as soon as the owner adds and tests the OpenAI key.
 - `retry_pending_triages` (also daily) re-queues up to 20 open tickets with triage
-  Pending or Failed through `run_triage_now`, which keeps its 30-second cooldown and its
-  limit of 2 retries per ticket.
+  Pending or Failed through `run_triage_now(ignore_cooldown=True)`: the 30-second cooldown
+  is for people clicking Re-run (a triage that failed seconds before the recovery must run
+  too), while the limit of 2 retries per ticket still holds.
 - Saving the settings forgets every pause and failure (`reset_provider_state`), so a fixed
   key or model is tried at once.
 - The Home action plan and repeat-issue titles keep their own 15-minute back-off after a
