@@ -13,7 +13,7 @@ from frappe import _
 from frappe.utils import get_datetime, now_datetime
 
 from helpdesk.mcp_client import MCPClient
-from helpdesk.ticket_puller import _unwrap
+from helpdesk.ticket_puller import _unwrap, unreachable_connections
 
 APPROVAL_DOCTYPE = "Content Approval"
 IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".gif", ".webp")
@@ -56,7 +56,10 @@ def pull_approval_decisions() -> int:
         ] = post.name
 
     applied = 0
+    skip = unreachable_connections()
     for connection, ref_to_post in by_connection.items():
+        if connection in skip:
+            continue
         try:
             decisions = (
                 _unwrap(
@@ -139,11 +142,12 @@ def push_posts_for_approval() -> int:
         ],
     )
     pushed = 0
+    skip = unreachable_connections()
     for post in posts:
         if not needs_push(post):
             continue
         connection = post.client_connection or get_client_connection(post.customer)
-        if not connection:
+        if not connection or connection in skip:
             continue
         try:
             send_for_approval(frappe.get_doc("HD Content Post", post.name), connection)

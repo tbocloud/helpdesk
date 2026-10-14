@@ -8,44 +8,26 @@ from frappe.utils import now_datetime
 
 from helpdesk.mcp_client import MCPClient
 
+HEALTH_CHECKED_STATUSES = ("Connected", "Disconnected", "Error", "Unreachable")
+
 
 def health_check_connections():
-    """Daily: ping each customer MCP endpoint and update connection status."""
-    connections = frappe.get_all(
-        "HDS Support Connection",
-        filters={"connection_status": ["in", ["Connected", "Disconnected", "Error"]]},
-        fields=["name", "site_url", "customer_name"],
-    )
+    """Daily: ping each customer MCP endpoint and update connection status. A site in
+    an outage is checked once its backoff is over, like the per-minute pull."""
+    from helpdesk.ticket_puller import due_connections
 
-    for conn in connections:
+    for name in due_connections(HEALTH_CHECKED_STATUSES):
+        conn = frappe.get_doc("HDS Support Connection", name)
         try:
-            mcp = MCPClient(conn.name)
-            is_healthy = mcp.health_check()
-
-            frappe.db.set_value(
-                "HDS Support Connection",
-                conn.name,
-                {
-                    "connection_status": "Connected" if is_healthy else "Error",
-                    "last_health_check": now_datetime(),
-                    "last_error": ""
-                    if is_healthy
-                    else "Health check failed: no tools returned",
-                },
-                update_modified=False,
-            )
-
+            healthy = MCPClient(name).health_check()
+            error = "" if healthy else "Health check failed: no tools returned"
         except Exception as e:
-            frappe.db.set_value(
-                "HDS Support Connection",
-                conn.name,
-                {
-                    "connection_status": "Error",
-                    "last_health_check": now_datetime(),
-                    "last_error": str(e)[:200],
-                },
-                update_modified=False,
-            )
+            error = str(e)
+        conn.db_set("last_health_check", now_datetime(), update_modified=False)
+        if error:
+            conn.record_failure(error)
+        else:
+            conn.record_success()
 
     frappe.db.commit()  # scheduled job: keep each connection's health result even if a later one fails - nosemgrep
 

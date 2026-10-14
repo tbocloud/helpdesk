@@ -10,7 +10,7 @@ the customer has no data for it (a skipped signal never counts against them):
 - work: overdue tasks and key tasks at risk in the customer's open projects
 - contract: support hours used against the time gone in the current period
 - signoff: sign-offs that need clarification or have escalated items
-- erp: the customer's ERP connection in Error or Disconnected
+- erp: the customer's ERP connection in Error, Unreachable or Disconnected
 
 A watch signal scores its weight and an at-risk one twice its weight; the
 total decides the status. Everything is computed for all customers at once
@@ -446,7 +446,9 @@ def judge_signoff(
 def judge_erp(status: str | None) -> dict:
     if not status:
         return signal("erp", SKIPPED)
-    state = {"Error": AT_RISK, "Disconnected": WATCH}.get(status, OK)
+    state = {"Error": AT_RISK, "Unreachable": AT_RISK, "Disconnected": WATCH}.get(
+        status, OK
+    )
     return signal("erp", state, status=status)
 
 
@@ -546,7 +548,9 @@ def signal_rule(key: str) -> str:
         "signoff": _(
             "Sign-offs in progress. Watch when one needs clarification; at risk when an item is escalated."
         ),
-        "erp": _("At risk when the connection is in Error; watch when Disconnected."),
+        "erp": _(
+            "At risk when the connection is in Error or Unreachable; watch when Disconnected."
+        ),
     }[key]
 
 

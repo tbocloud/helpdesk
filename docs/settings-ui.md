@@ -132,6 +132,11 @@ System Managers only). No new storage: it is the same Single the desk form edits
 - **Microsoft Teams** (Teams only): Direct Message Workflow URL and Escalation Channel
   Workflow URL. **Slack** (Slack only): Bot Token and Escalation Channel ID.
 - **Error alerts**: post hub errors to the escalation channel, and the titles to ignore.
+  The digest groups titles that differ only by a number into one line with a count
+  (`error_alerts.group_similar`). System Managers also get **Mark old sync errors as seen**
+  (`chat_settings.mark_old_sync_errors_seen`): the customer-site sync errors
+  (`error_alerts.SYNC_ERROR_TITLES`) older than a day are marked seen in the Error Log. It
+  only runs when clicked, never on a schedule ([client-site-sync.md](client-site-sync.md)).
 - **Last delivery problem**: shown only when the Error Log has a chat delivery failure
   (`error_alerts.CHAT_ERROR_TITLES`); its title and time, never the traceback, which can
   hold the URL.

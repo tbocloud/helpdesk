@@ -3,7 +3,6 @@
 
 import frappe
 from frappe import _
-from frappe.desk.form import assign_to
 from frappe.model.document import Document
 from frappe.query_builder import Case, Criterion, Order
 from frappe.utils import (
@@ -182,8 +181,8 @@ class HDContentPost(Document):
                 self.reassign_task(task, wanted[role]["users"])
             else:
                 self.close_task(task, closing or "Cancelled")
+                # the task closes its own ToDos (Task.close_assignments)
                 task.save(ignore_permissions=True)
-                assign_to.close_all_assignments("Task", name, ignore_permissions=True)
         for role, plan in wanted.items():
             if role not in open_tasks and role not in handled:
                 self.create_task(role, plan, project)

@@ -12,7 +12,7 @@ import frappe
 import requests
 from frappe import _
 
-from helpdesk import chat_notifications
+from helpdesk import chat_notifications, error_alerts
 from helpdesk.error_alerts import CHAT_ERROR_TITLES
 from helpdesk.tasky.permissions import is_tasky_admin
 
@@ -116,6 +116,24 @@ def send_test(target: str) -> dict:
     if sent:
         return {"ok": True, "message": sent_message(target)}
     return {"ok": False, "message": not_sent_message(target)}
+
+
+@frappe.whitelist(methods=["POST"])
+def mark_old_sync_errors_seen() -> dict:
+    """System Managers clear the backlog of customer-site sync errors (older than a
+    day) from the Error Log's unseen list. Never run on a schedule."""
+    # only_for is skipped in tests, so check the roles directly
+    if "System Manager" not in frappe.get_roles():
+        frappe.throw(
+            _("Only System Managers can mark errors as seen."), frappe.PermissionError
+        )
+    count = error_alerts.mark_old_sync_errors_seen()
+    return {
+        "ok": True,
+        "message": _("Marked {0} sync error(s) older than a day as seen.").format(
+            count
+        ),
+    }
 
 
 def sent_message(target: str) -> str:
