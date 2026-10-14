@@ -19,9 +19,13 @@ export async function assignTicket(ticket: string, users: string[]) {
     name: ticket,
     assign_to: users,
   });
-  capture("ticket_assigned", { data: { doctype: "HD Ticket" } });
-  // the assignment stands even if its activity line can't be written
+  // the assignment stands even if its activity line or telemetry fails
   await logTicketActivity(ticket, `assigned ${users.join(", ")}`).catch(
     () => undefined
   );
+  try {
+    capture("ticket_assigned", { data: { doctype: "HD Ticket" } });
+  } catch {
+    // telemetry is best effort
+  }
 }
