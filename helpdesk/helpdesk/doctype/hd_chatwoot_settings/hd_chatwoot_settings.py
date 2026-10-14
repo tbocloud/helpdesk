@@ -18,6 +18,7 @@ ACCOUNT = "account"
 class HDChatwootSettings(Document):
     def validate(self):
         self.normalize_base_url()
+        self.check_sign_in()
 
     def normalize_base_url(self):
         """API paths are appended to it, so a trailing slash would double up."""
@@ -25,6 +26,26 @@ class HDChatwootSettings(Document):
         if url and not url.startswith(("https://", "http://")):
             frappe.throw(_("The Chatwoot URL must start with https://"))
         self.base_url = url
+
+    def check_sign_in(self):
+        """Sign-in needs the account and both tokens: the bridge user finds people in
+        the account, the Platform App adds them and makes their one-time sign-in link."""
+        if not self.sso_enabled:
+            return
+        for field in (
+            "base_url",
+            "account_id",
+            "platform_api_token",
+            "api_access_token",
+        ):
+            # a saved password reads as asterisks, a removed one as ""
+            if not self.get(field):
+                label = _(self.meta.get_label(field))
+                frappe.throw(
+                    _(
+                        "{0}: add it before turning on sign-in through TBO Support."
+                    ).format(label)
+                )
 
     def verify_webhook(
         self, source: str, raw: bytes, headers, token: str | None = None

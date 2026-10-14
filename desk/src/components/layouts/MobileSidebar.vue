@@ -45,11 +45,13 @@ import { isCustomerPortal } from "@/utils";
 import { mobileSidebarOpened as sidebarOpened } from "@/composables/mobile";
 import { useApps } from "@/composables/useApps";
 import { useThemeToggle } from "@/composables/useThemeToggle";
+import { useTboChat } from "@/composables/useTboChat";
 import { __ } from "@/translation";
 import AppSidebar from "./AppSidebar.vue";
 import AvailabilityMenuMobile from "../AvailabilityMenuMobile.vue";
 
 const { menuItem: themeMenuItem } = useThemeToggle();
+const { menuItems: chatMenuItems } = useTboChat();
 const { appsMenuOption } = useApps();
 const route = useRoute();
 const router = useRouter();
@@ -81,6 +83,7 @@ const agentPortalDropdown = computed(() => [
       window.open(path.href);
     },
   },
+  ...chatMenuItems.value,
   {
     icon: "lucide-life-buoy",
     label: __("Support"),

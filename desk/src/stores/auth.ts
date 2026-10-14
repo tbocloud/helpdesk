@@ -79,6 +79,10 @@ export const useAuthStore = defineStore("auth", () => {
   const telephonyInstalled: ComputedRef<boolean> = computed(
     () => !!user__.value.telephony_installed
   );
+  // an active agent while TBO Chat sign-in through TBO Support is on
+  const canOpenChat: ComputedRef<boolean> = computed(
+    () => !!user__.value.can_open_chat
+  );
 
   const userId: ComputedRef<string> = computed(() => user__.value.user_id);
   const userImage: ComputedRef<string> = computed(
@@ -152,6 +156,7 @@ export const useAuthStore = defineStore("auth", () => {
     isDmEmployee,
     canWorkTickets,
     telephonyInstalled,
+    canOpenChat,
     isLoggedIn,
     login,
     reloadUser,
