@@ -303,6 +303,13 @@ class TestFailover(AIProviderCase):
         timeout = client_cls.return_value.messages.create.call_args.kwargs["timeout"]
         self.assertEqual(timeout, ai_engine.CALL_SECONDS - 200)
 
+    def test_an_answer_without_choices_fails_over(self):
+        patch_anthropic_sdk(self, anthropic_answer('{"a": 1}'))
+        with patch(POST, return_value=openai_http_response(body={"id": "x"})):
+            self.assertEqual(self.call()["response"], {"a": 1})
+
+        self.assertEqual(ai_engine.provider_down("OpenAI")["kind"], "server")
+
     def test_a_timeout_fails_over(self):
         patch_anthropic_sdk(self, anthropic_answer('{"a": 1}'))
         with patch(POST, side_effect=requests.Timeout("read timed out")):

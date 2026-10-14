@@ -469,9 +469,15 @@ def _openai_chat(
             provider, classify(status, detail), detail or response.reason, status
         )
 
-    data = response.json()
-    choice = (data.get("choices") or [{}])[0]
-    text = (choice.get("message") or {}).get("content") or ""
+    try:
+        data = response.json()
+        choice = data["choices"][0]
+        text = choice["message"].get("content") or ""
+    except (ValueError, KeyError, IndexError, TypeError, AttributeError):
+        # a 200 that isn't an answer is the provider's fault: let the other one try
+        raise AIProviderError(
+            provider, "server", "the answer had no choices or message"
+        ) from None
     usage = data.get("usage") or {}
     return (
         text,

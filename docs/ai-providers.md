@@ -79,7 +79,7 @@ SDK dependency (`requests` only).
 | 401, 403 | `auth` | yes | yes | yes |
 | 404; 400 saying the model doesn't exist | `config` | yes | yes | yes |
 | other 429 | `rate_limit` | yes | no | no (passes in seconds) |
-| 5xx | `server` | yes | no | yes |
+| 5xx; a 200 whose body has no `choices[0].message` or isn't JSON | `server` | yes | no | yes |
 | 408, 504, connection error, timeout | `timeout` | yes | no | yes |
 | other 4xx (400 validation) | `invalid` | **no**: raised and logged ("AI request rejected by …") | no | no |
 
