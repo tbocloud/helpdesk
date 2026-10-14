@@ -174,6 +174,13 @@
               )
             "
           />
+          <!-- the backlog a customer-site outage leaves behind; never cleared on its own -->
+          <SettingsAction
+            v-if="auth.isAdmin"
+            method="helpdesk.api.chat_settings.mark_old_sync_errors_seen"
+            :label="__('Mark old sync errors as seen')"
+            :icon="LucideCheckCheck"
+          />
         </SettingsSection>
 
         <SettingsSection
@@ -290,10 +297,12 @@
 
 <script setup lang="ts">
 import SettingsLayoutBase from "@/components/layouts/SettingsLayoutBase.vue";
+import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
 import { dateFormat, dateTooltipFormat, timeAgo } from "@/utils";
 import { createResource, FormControl, Switch, toast } from "frappe-ui";
 import { computed, reactive, ref } from "vue";
+import LucideCheckCheck from "~icons/lucide/check-check";
 import LucideChevronRight from "~icons/lucide/chevron-right";
 import LucideTriangleAlert from "~icons/lucide/triangle-alert";
 import SettingRow from "../SettingRow.vue";
@@ -307,6 +316,7 @@ import SettingsAction from "../SettingsAction.vue";
 const TEAMS = "Microsoft Teams";
 const SLACK = "Slack";
 const SEND_TEST = "helpdesk.api.chat_settings.send_test";
+const auth = useAuthStore();
 
 // the shape chat_notifications.teams_message posts, plus recipient for direct messages
 const PAYLOAD_SAMPLE = JSON.stringify(

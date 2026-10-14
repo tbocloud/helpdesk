@@ -31,6 +31,11 @@
 import { providerLabel } from "@/components/aiProviders";
 import type { Tone } from "@/components/tone";
 import TaskyBadge from "@/components/TaskyBadge.vue";
+import {
+  connectionBadge,
+  connectionProblem,
+  type Connection,
+} from "@/composables/customer";
 import { __ } from "@/translation";
 import { computed, type Component } from "vue";
 import LucideCircle from "~icons/lucide/circle";
@@ -61,21 +66,19 @@ const TONE_ICON: Record<Tone, Component> = {
 
 const rows = computed<SystemRow[]>(() => {
   const s = props.systems;
-  const result: SystemRow[] = s.connections.map((c) => ({
-    key: `conn-${c.name}`,
-    label: c.customer_name || c.name,
-    detail:
-      c.connection_status === "Connected"
-        ? hostOf(c.site_url)
-        : c.last_error || hostOf(c.site_url),
-    status: __(c.connection_status || "Unknown"),
-    tone:
-      c.connection_status === "Connected"
-        ? "success"
-        : c.connection_status === "Error"
-        ? "danger"
-        : "neutral",
-  }));
+  const result: SystemRow[] = s.connections.map((c) => {
+    const badge = connectionBadge({
+      status: c.connection_status as Connection["status"],
+      site_url: c.site_url,
+    });
+    return {
+      key: `conn-${c.name}`,
+      label: c.customer_name || c.name,
+      detail: connectionProblem(c) || hostOf(c.site_url),
+      status: badge.label,
+      tone: badge.tone,
+    };
+  });
   for (const box of s.mailboxes) {
     result.push({
       key: `mail-${box.name}`,

@@ -967,6 +967,45 @@ def make_support_connection(
     ).insert(ignore_permissions=True)
 
 
+def run_client_pull(connection: str, error: str | None = None) -> int:
+    """Runs one ticket pull of `connection` with the customer site mocked: the call fails
+    with `error`, or the site answers with no pending tickets. Returns tickets made."""
+    from helpdesk import ticket_puller
+
+    client = (
+        patch.object(ticket_puller, "MCPClient", side_effect=RuntimeError(error))
+        if error
+        else patch.object(ticket_puller, "MCPClient")
+    )
+    with client, patch.object(ticket_puller, "_pending_tickets", return_value=[]):
+        return ticket_puller.pull_connection(connection)
+
+
+def get_outage_logs(connection: str) -> list[str]:
+    """Titles of the Error Logs written about `connection` being unreachable."""
+    return frappe.get_all(
+        "Error Log",
+        filters={
+            "reference_doctype": "HDS Support Connection",
+            "reference_name": connection,
+        },
+        pluck="method",
+    )
+
+
+def get_task_todos(task: str) -> list[tuple[str, str]]:
+    """The task's ToDos as (allocated_to, status) pairs, oldest first."""
+    return [
+        (t.allocated_to, t.status)
+        for t in frappe.get_all(
+            "ToDo",
+            filters={"reference_type": "Task", "reference_name": task},
+            fields=["allocated_to", "status"],
+            order_by="creation asc",
+        )
+    ]
+
+
 def make_ticket_communication(
     ticket: str,
     content: str,

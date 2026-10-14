@@ -171,6 +171,8 @@ export interface Systems {
     site_url: string | null;
     connection_status: string | null;
     last_error: string | null;
+    /** an Unreachable site's next call (its backoff) */
+    next_attempt_at: string | null;
   }[];
   mailboxes: {
     name: string;

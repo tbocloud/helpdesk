@@ -86,7 +86,7 @@ a view); search covers name, domain, email and phone instead.
 - **Header** (`components/PageInfo.vue`, shared with the contact page): logo, name, the
   health badge (a link to the Health tab), the ticket owner and backup with Change / Set owner
   for those who may set them ([ticket-owners.md](ticket-owners.md)), domain, email, phone, country and the ERP
-  connection (badge, site host and when it was last checked). A connection in Error shows its last error under the header. Edit and the menu
+  connection (badge, site host and when it was last checked). A connection in Error or Unreachable shows its last error under the header, and an Unreachable one when the hub calls it next ([client-site-sync.md](client-site-sync.md)). Edit and the menu
   with Delete customer stay for Agent Managers and admins.
 - **Support figures** (`components/customer/TicketStats.vue`, shared with the contact page):
   four `compact` `StatTile`s from `helpdesk.api.ticket_stats.get_ticket_stats(dt, dn, period)`: average

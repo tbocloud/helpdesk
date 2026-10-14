@@ -721,6 +721,7 @@ def _systems() -> dict:
                 "connection_status",
                 "last_error",
                 "last_health_check",
+                "next_attempt_at",
             ],
             order_by="customer_name asc",
         ),
