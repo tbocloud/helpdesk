@@ -434,20 +434,31 @@
                   <p
                     class="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1"
                   >
+                    <!-- named like the Sub copy box below, so the copy reads as the post's copy -->
+                    <span
+                      class="shrink-0 text-sm text-ink-gray-5"
+                      aria-hidden="true"
+                      >{{ __("Copy") }}:</span
+                    >
                     <button
                       :id="`entry-${post.name}`"
                       type="button"
-                      class="min-w-0 max-w-full truncate rounded text-left text-base text-ink-gray-7 hover:text-ink-gray-9 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+                      :aria-label="__('Copy: {0}', post.title)"
+                      class="min-w-0 max-w-full truncate rounded text-left text-base font-medium text-ink-gray-8 hover:text-ink-gray-9 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
                       :title="post.title"
                       @click="emit('open', post.name)"
                     >
                       {{ post.title }}
                     </button>
+                    <!-- the post type stands out: a tinted tag with the same icon as the
+                         dialogs' post type chips (owner's request, 2026-10-14) -->
                     <span
                       v-if="post.format"
-                      class="inline-flex h-5 items-center rounded-[6px] border border-outline-gray-2 bg-surface-base px-1.5 text-xs text-ink-gray-7"
-                      >{{ post.format }}</span
+                      class="inline-flex h-7 shrink-0 items-center gap-1.5 self-center rounded-full bg-brand-soft px-2.5 text-sm font-semibold text-brand-ink"
                     >
+                      <PostTypeIcon :post-type="post.format" class="size-4" />
+                      {{ post.format }}
+                    </span>
                   </p>
                   <SpecialDayBadge
                     v-if="post.special_day"
@@ -560,6 +571,7 @@
               </div>
             </div>
 
+            <!-- a published post's work is done: who did it stays, but read-only -->
             <div
               class="grid grid-cols-1 gap-2 px-4 pt-2 min-[420px]:grid-cols-2 lg:grid-cols-4"
             >
@@ -570,6 +582,7 @@
                 :role="role.field"
                 :people="peopleOf(post, role.field)"
                 :can-edit="auth.canEditContent"
+                :readonly="post.status === 'Published'"
                 :context="`${post.customer} · ${post.title}`"
                 :step="boxStep(roleTask(post, role.field))"
                 :busy="
@@ -583,7 +596,7 @@
 
             <!-- how far the post's parts are and who it waits on, from its role tasks -->
             <p
-              v-if="progressLines[post.name]"
+              v-if="post.status !== 'Published' && progressLines[post.name]"
               class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 px-4 pt-2 text-sm text-ink-gray-7"
             >
               <LucideListChecks
@@ -730,6 +743,7 @@
 </template>
 
 <script setup lang="ts">
+import { useToday } from "@/composables/today";
 import { __ } from "@/translation";
 import TaskDetailDialog from "@/pages/tasky/components/TaskDetailDialog.vue";
 import { createReusableTemplate } from "@vueuse/core";
@@ -784,6 +798,7 @@ import {
 } from "../contentTasks";
 import { planDays, prefersMotion, revealIfLow } from "../dayFocus";
 import ChannelIcon from "./ChannelIcon.vue";
+import PostTypeIcon from "./PostTypeIcon.vue";
 import RoleBox from "./RoleBox.vue";
 import SpecialDayBadge from "./SpecialDayBadge.vue";
 import StatusPill from "./StatusPill.vue";
@@ -870,7 +885,7 @@ watch(
   }
 );
 
-const today = dayjs().format("YYYY-MM-DD");
+const today = useToday();
 // re-read the clock whenever posts reload, so a post that just passed its time shows as missed
 const now = computed(() => {
   void props.posts;
@@ -1092,13 +1107,13 @@ const days = computed(() => {
 const todayInPeriod = computed(() => {
   const start = dayjs(props.month.split(":")[1]);
   return (
-    today >= start.format("YYYY-MM-DD") &&
-    today <= start.endOf(props.period || "month").format("YYYY-MM-DD")
+    today.value >= start.format("YYYY-MM-DD") &&
+    today.value <= start.endOf(props.period || "month").format("YYYY-MM-DD")
   );
 });
 // Day view is a single day, so it neither folds nor marks anything
 const plan = computed(() =>
-  planDays(days.value, today, {
+  planDays(days.value, today.value, {
     collapsePast: filter.value === "all" && props.period !== "day",
     markToday:
       props.period !== "day" &&
