@@ -9,11 +9,11 @@ import frappe
 from frappe import _
 
 from helpdesk.helpdesk.doctype.hd_customer.hd_customer import can_set_ticket_owner
-from helpdesk.utils import agent_only
 
 
+# no agent_only: can_set_ticket_owner is the check, and a Project Manager or department
+# head may hold no agent role
 @frappe.whitelist(methods=["POST"])
-@agent_only
 def set_ticket_owner(
     customers: list[str] | str,
     ticket_owner: str = "",

@@ -82,7 +82,9 @@ class HDCustomer(Document):
         changed = [
             field
             for field in TICKET_OWNER_FIELDS
-            if (previous.get(field) if previous else None) != self.get(field)
+            # an empty Link can be None or "": both mean no owner
+            if ((previous.get(field) if previous else None) or None)
+            != (self.get(field) or None)
         ]
         if not changed:
             return

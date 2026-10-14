@@ -42,10 +42,30 @@
             {{ __("Customer owner") }}
           </span>
           <span
+            v-if="ownerOfCustomer.error"
+            class="flex min-w-0 items-center gap-1 px-2 text-sm text-ink-gray-6"
+            role="alert"
+          >
+            {{ __("Couldn't load") }}
+            <Button
+              variant="ghost"
+              size="sm"
+              :label="__('Retry')"
+              @click="loadCustomerOwner(ticket.doc.customer)"
+            />
+          </span>
+          <span
+            v-else
             class="truncate px-2 text-base"
             :class="customerOwner ? 'text-ink-gray-8' : 'text-ink-gray-4'"
           >
-            {{ customerOwner ? nameOf(customerOwner) : __("Not set") }}
+            {{
+              ownerOfCustomer.loading && !ownerOfCustomer.data
+                ? "…"
+                : customerOwner
+                ? nameOf(customerOwner)
+                : __("Not set")
+            }}
           </span>
         </div>
 
@@ -181,7 +201,7 @@ import {
 import { __ } from "@/translation";
 import { useAssignablePeople } from "@/composables/assignablePeople";
 import { useStorage } from "@vueuse/core";
-import { createResource, dayjs } from "frappe-ui";
+import { Button, createResource, dayjs } from "frappe-ui";
 import { computed, inject, nextTick, ref, watch } from "vue";
 import LucideSparkles from "~icons/lucide/sparkles";
 import TicketField from "../TicketField.vue";
@@ -212,18 +232,17 @@ const ownerOfCustomer = createResource({
   url: "frappe.client.get_value",
   onError() {},
 });
-watch(
-  () => ticket.value?.doc?.customer,
-  (customer) => {
-    if (customer)
-      ownerOfCustomer.submit({
-        doctype: "HD Customer",
-        filters: customer,
-        fieldname: "ticket_owner",
-      });
-  },
-  { immediate: true }
-);
+function loadCustomerOwner(customer: string | undefined) {
+  if (!customer) return;
+  ownerOfCustomer.submit({
+    doctype: "HD Customer",
+    filters: customer,
+    fieldname: "ticket_owner",
+  });
+}
+watch(() => ticket.value?.doc?.customer, loadCustomerOwner, {
+  immediate: true,
+});
 const customerOwner = computed<string>(
   () => ownerOfCustomer.data?.ticket_owner || ""
 );

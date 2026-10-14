@@ -267,6 +267,7 @@
     <TicketOwnerDialog
       v-model="bulkOwner.open"
       :customers="bulkOwner.customers"
+      bulk
       @saved="ownersSaved"
     />
   </div>

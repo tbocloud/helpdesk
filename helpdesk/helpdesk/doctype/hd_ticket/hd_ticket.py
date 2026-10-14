@@ -573,8 +573,7 @@ class HDTicket(Document):
         open_todos = self.open_assignments()
         if any(not todo.assignment_rule for todo in open_todos):
             return
-        if any(todo.allocated_to == pick["user"] for todo in open_todos):
-            return
+        # every rule ToDo goes, even one for the owner, so the assignment is the owner's
         for todo in open_todos:
             remove_assignment(
                 "HD Ticket", self.name, todo.allocated_to, ignore_permissions=True

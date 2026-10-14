@@ -2866,8 +2866,8 @@ class FakeCRM:
         self.role_calls: list[tuple[tuple, str]] = []
         self.orgs = [{"name": o, "organization_name": o} for o in organizations or []]
         self.erp = list(erp_customers or [])
-        # {ERPNext Customer: its Account Manager}, for filling empty ticket owners
-        self.account_managers: dict[str, str] = {}
+        # (ERPNext Customer name, its Account Manager), for filling empty ticket owners
+        self.account_managers: list[tuple[str, str]] = []
         # ERPNext on the CRM site, for invoicing: one company and its records
         self.company_rows = [{"name": FAKE_COMPANY, "default_currency": "INR"}]
         self.item_rows = [{"name": FAKE_ITEM, "item_name": "Support hours"}]
@@ -2941,7 +2941,7 @@ class FakeCRM:
     def customer_account_managers(self):
         return [
             {"name": c, "customer_name": c, "account_manager": manager}
-            for c, manager in self.account_managers.items()
+            for c, manager in self.account_managers
         ]
 
     def companies(self):

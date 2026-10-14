@@ -96,6 +96,10 @@ def fill_ticket_owners_now() -> dict:
         message += " " + _(
             "{0} have an account manager who isn't an active agent here: {1}"
         ).format(len(result["not_an_agent"]), ", ".join(result["not_an_agent"][:20]))
+    if result["ambiguous"]:
+        message += " " + _(
+            "{0} match several CRM customers with different account managers, so they were left empty: {1}"
+        ).format(len(result["ambiguous"]), ", ".join(result["ambiguous"][:20]))
     return {"ok": True, "message": message, **result}
 
 

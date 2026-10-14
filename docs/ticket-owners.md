@@ -26,7 +26,7 @@ HD Agent is named after its user, so the value is the user ID the ToDo uses (`as
 - The backup needs an owner and must be someone else.
 
 A customer whose owner was later deactivated can still be saved for other edits; the rule
-only checks the fields that changed.
+only checks the fields that changed (an empty value sent as `""` or `None` is no change).
 
 ## Who may set owners
 
@@ -80,7 +80,8 @@ This needed no flag and no change to Frappe or to the rule override. The alterna
 doctype.
 
 If a rule's assignment is already there when the owner is applied (only possible when the
-method is called on an existing ticket), its ToDos are withdrawn first. A person's
+method is called on an existing ticket), its ToDos are withdrawn first, even one the rule
+gave the owner, so the assignment, activity and notice are the owner's. A person's
 assignment is never replaced.
 
 **Team:** a ticket with a team (agent group) still goes to the owner even when the owner
@@ -128,10 +129,12 @@ when the rules decide instead of the owner.
   has a ticket owner".
 - **Bulk "Set ticket owner"**: people who may set owners get checkboxes (`md` and up, like
   bulk delete); the selection bar's **Set ticket owner** opens the same dialog for all of
-  them. The backup picker defaults to "Keep each customer's backup". `DirectoryList` gained a
+  them (one selected customer too). The backup picker defaults to "Keep each customer's
+  backup". `DirectoryList` gained a
   `selectable` prop and a `selection-actions` slot for this; bulk delete is unchanged.
 - **Ticket page**: the Details panel shows **Customer owner** under the customer (read again
-  when the customer changes).
+  when the customer changes; "Couldn't load" with Retry when the lookup fails, "Not set" only
+  when it succeeded and there is none).
 - **Settings → CRM → Customers**: **Fill ticket owners from CRM account managers** (below).
 
 Shared: `composables/assignablePeople.ts` loads `helpdesk.tasky.api.get_users` once for the
@@ -141,7 +144,7 @@ pickers and names.
 
 | Method | Who | What |
 | --- | --- | --- |
-| `helpdesk.api.ticket_owner.set_ticket_owner` POST (`customers`, `ticket_owner`, `backup_ticket_owner?`) | `can_set_ticket_owner` | Sets the owner of one or many customers, all or none. An empty owner clears both. Without `backup_ticket_owner` each customer keeps its backup, except a backup that is the new owner (cleared). `""` clears the backup. |
+| `helpdesk.api.ticket_owner.set_ticket_owner` POST (no agent-only guard: `can_set_ticket_owner` decides) (`customers`, `ticket_owner`, `backup_ticket_owner?`) | `can_set_ticket_owner` | Sets the owner of one or many customers, all or none. An empty owner clears both. Without `backup_ticket_owner` each customer keeps its backup, except a backup that is the new owner (cleared). `""` clears the backup. |
 | `helpdesk.api.directory.get_customer_directory` | agents | Rows carry `ticket_owner` and `ticket_owner_name`; `owner=none` lists customers without an owner |
 | `helpdesk.api.crm.fill_ticket_owners_now` POST | System and Agent Managers | The CRM fill below |
 | `helpdesk.api.mobile.get_ticket` | agents | `customer_owner` `{user, full_name}` or null ([tbo-smart-api.md](tbo-smart-api.md)) |
@@ -158,8 +161,12 @@ is a one-time action, run when someone clicks it:
 - Only customers **without** a ticket owner are filled; owners already set are never changed.
 - Matched by customer name like the customer sync (ignoring case and extra spaces), and the
   account manager by email (ignoring case) to an **active agent** here.
-- The result says how many were filled, and which customers have an account manager who isn't
-  an active agent here.
+- Two ERPNext Customers with the same name and different account managers: neither is
+  picked; the customer is listed as ambiguous and stays empty.
+- The owner is written only while it is still empty (a conditional update), so an owner
+  someone set meanwhile stays.
+- The result says how many were filled, which customers have an account manager who isn't
+  an active agent here, and which were ambiguous.
 - No ERPNext on the CRM site (or no access): the error is shown and nothing changes.
 
 ## After deploy

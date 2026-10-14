@@ -90,19 +90,22 @@ def fill_ticket_owners() -> dict:
     """
     from helpdesk.helpdesk.doctype.hd_customer.hd_customer import active_agents
 
-    managers = {
-        key(c.get("customer_name") or c.get("name")): (c.get("account_manager") or "")
-        .strip()
-        .casefold()
-        for c in CRMClient.from_settings().customer_account_managers()
-    }
+    # {customer: the account managers of the ERPNext Customers with that name}; two
+    # Customers can share a name, and with different managers neither is picked
+    managers: dict[str, set[str]] = {}
+    for c in CRMClient.from_settings().customer_account_managers():
+        manager = (c.get("account_manager") or "").strip().casefold()
+        if manager:
+            managers.setdefault(
+                key(c.get("customer_name") or c.get("name")), set()
+            ).add(manager)
     agents = {
         agent.casefold(): agent
         for agent in active_agents(
             frappe.get_all("HD Agent", pluck="name", limit_page_length=0)
         )
     }
-    result = {"filled": [], "not_an_agent": []}
+    result = {"filled": [], "not_an_agent": [], "ambiguous": []}
     unowned = frappe.get_all(
         "HD Customer",
         filters={"ticket_owner": ("is", "not set")},
@@ -110,14 +113,32 @@ def fill_ticket_owners() -> dict:
         limit_page_length=0,
     )
     for customer in unowned:
-        manager = managers.get(key(customer))
-        if not manager:
+        found = managers.get(key(customer))
+        if not found:
             continue
-        agent = agents.get(manager)
+        if len(found) > 1:
+            result["ambiguous"].append(customer)
+            continue
+        agent = agents.get(next(iter(found)))
         if not agent:
             result["not_an_agent"].append(customer)
             continue
-        # an active agent filling an empty owner: all validate_ticket_owners would check
-        frappe.db.set_value("HD Customer", customer, "ticket_owner", agent)
-        result["filled"].append(customer)
+        if fill_empty_owner(customer, agent):
+            result["filled"].append(customer)
     return result
+
+
+def fill_empty_owner(customer: str, agent: str) -> bool:
+    """Set the owner only while it is still empty, so an owner someone set meanwhile
+    stays; an active agent on an empty owner is all validate_ticket_owners would check."""
+    table = frappe.qb.DocType("HD Customer")
+    (
+        frappe.qb.update(table)
+        .set(table.ticket_owner, agent)
+        .where(
+            (table.name == customer)
+            & (table.ticket_owner.isnull() | (table.ticket_owner == ""))
+        )
+        .run()
+    )
+    return frappe.db.get_value("HD Customer", customer, "ticket_owner") == agent

@@ -276,10 +276,7 @@ class TestTicketOwners(FrappeTestCase):
     def test_crm_account_managers_fill_only_empty_owners(self):
         make_owned_customer(SECOND)
         crm = FakeCRM()
-        crm.account_managers = {
-            CUSTOMER: OTHER[0],
-            SECOND: PM[0].upper(),
-        }
+        crm.account_managers = [(CUSTOMER, OTHER[0]), (SECOND, PM[0].upper())]
 
         with patch(FROM_SETTINGS, return_value=crm):
             result = call_as_user(MANAGER[0], "helpdesk.api.crm.fill_ticket_owners_now")
@@ -292,3 +289,48 @@ class TestTicketOwners(FrappeTestCase):
         self.assertEqual(
             frappe.db.get_value("HD Customer", CUSTOMER, "ticket_owner"), OWNER[0]
         )
+
+    def test_crm_fill_skips_a_name_with_two_account_managers(self):
+        make_owned_customer(SECOND)
+        crm = FakeCRM()
+        crm.account_managers = [(SECOND, PM[0]), (SECOND, OTHER[0])]
+
+        with patch(FROM_SETTINGS, return_value=crm):
+            result = call_as_user(MANAGER[0], "helpdesk.api.crm.fill_ticket_owners_now")
+
+        self.assertEqual(result["filled"], [])
+        self.assertEqual(result["ambiguous"], [SECOND])
+        self.assertIsNone(frappe.db.get_value("HD Customer", SECOND, "ticket_owner"))
+
+    def test_an_empty_owner_sent_as_blank_is_no_change(self):
+        doc = frappe.get_doc("HD Customer", make_owned_customer(SECOND).name)
+        doc.ticket_owner = ""
+        doc.domain = "adka.example"
+        frappe.set_user(OTHER[0])
+        doc.save(ignore_permissions=True)
+        self.assertEqual(
+            frappe.db.get_value("HD Customer", SECOND, "domain"), "adka.example"
+        )
+
+    def test_the_owner_replaces_a_rule_assignment_to_themselves(self):
+        make_team(TEAM, [OWNER[0]])
+        ticket = frappe.get_doc("HD Ticket", self.ticket(agent_group=TEAM))
+        rule_todo = frappe.get_value(
+            "ToDo",
+            {"reference_name": ticket.name, "status": "Open"},
+            "assignment_rule",
+        )
+        self.assertTrue(rule_todo)
+
+        ticket.customer = CUSTOMER
+        ticket.assign_customer_owner()
+
+        self.assertEqual(get_open_assignees(ticket.name), [OWNER[0]])
+        self.assertIsNone(
+            frappe.get_value(
+                "ToDo",
+                {"reference_name": ticket.name, "status": "Open"},
+                "assignment_rule",
+            )
+        )
+        self.assertEqual(len(get_ticket_owner_activity(ticket.name)), 1)

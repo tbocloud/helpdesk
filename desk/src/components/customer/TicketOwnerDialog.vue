@@ -77,10 +77,12 @@ const NONE = "__none__";
 const KEEP = "__keep__";
 
 const props = defineProps<{
-  /** the customers to set; more than one makes it the bulk dialog */
+  /** the customers to set */
   customers: string[];
   owner?: string | null;
   backup?: string | null;
+  /** a selection from the Customers list, even of one: each keeps its own backup */
+  bulk?: boolean;
 }>();
 
 const emit = defineEmits<{ saved: [] }>();
@@ -90,7 +92,12 @@ const owner = ref("");
 const backup = ref("");
 const error = ref("");
 
-const bulk = computed(() => props.customers.length > 1);
+const bulk = computed(() => !!props.bulk);
+const count = computed(() =>
+  props.customers.length === 1
+    ? __("1 customer")
+    : __("{0} customers", String(props.customers.length))
+);
 const { leaveLabel } = useOnLeave();
 // active agents with enabled accounts: the people the server accepts as owners
 const { people } = useAssignablePeople();
@@ -139,17 +146,12 @@ const backupOptions = computed(() => [
 
 const title = computed(() =>
   bulk.value
-    ? __(
-        "Set the ticket owner of {0} customers",
-        String(props.customers.length)
-      )
+    ? __("Set the ticket owner of {0}", count.value)
     : __("Ticket owner")
 );
 
 const saveLabel = computed(() =>
-  bulk.value
-    ? __("Set owner for {0} customers", String(props.customers.length))
-    : __("Save ticket owner")
+  bulk.value ? __("Set owner for {0}", count.value) : __("Save ticket owner")
 );
 
 const canSave = computed(() =>
@@ -177,10 +179,7 @@ async function submit() {
     });
     toast.success(
       bulk.value
-        ? __(
-            "Ticket owner set for {0} customers",
-            String(props.customers.length)
-          )
+        ? __("Ticket owner set for {0}", count.value)
         : __("Ticket owner saved")
     );
     emit("saved");
