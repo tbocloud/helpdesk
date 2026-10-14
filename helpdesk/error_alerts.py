@@ -40,6 +40,8 @@ SYNC_ERROR_TITLES = (
     "Conversation sync failed for ",
     "File listing failed for ",
     "Media attach failed for ",
+    "Listing client images failed for ",
+    "Sending image ",
     "Content approval pull failed for ",
     "Content approval push failed for ",
     "Applying content decision failed for ",

@@ -28,6 +28,15 @@ class TestClientSyncBackoff(FrappeTestCase):
         self.conn = make_support_connection(
             "Backoff Traders LLC", site_url="https://backoff.example.com"
         ).name
+        # Error Logs outlive a test's rollback, and the rolled-back naming series
+        # gives the next test's connection the same name
+        frappe.db.delete(
+            "Error Log",
+            {
+                "reference_doctype": "HDS Support Connection",
+                "reference_name": self.conn,
+            },
+        )
         notify = patch(NOTIFY)
         self.notify = notify.start()
         self.addCleanup(notify.stop)
