@@ -52,6 +52,8 @@ import LucideClipboardCheck from "~icons/lucide/clipboard-check";
 import ChatSettings from "./Chat/ChatSettings.vue";
 import LucideMessagesSquare from "~icons/lucide/messages-square";
 import GitHubSettings from "./GitHub/GitHubSettings.vue";
+import AIProviderSettings from "./AI/AIProviderSettings.vue";
+import LucideBot from "~icons/lucide/bot";
 import LucideGitPullRequest from "~icons/lucide/git-pull-request";
 
 export const showSettingsModal = ref(false);
@@ -230,6 +232,13 @@ export const tabs = computed(() => {
           condition: () => auth.isAdmin || auth.isManager,
         },
         {
+          label: __("AI providers"),
+          icon: markRaw(LucideBot),
+          component: markRaw(AIProviderSettings),
+          // HDS Hub Settings through helpdesk.api.ai_settings, which checks the roles
+          condition: () => auth.isAdmin || auth.isManager,
+        },
+        {
           label: __("File storage"),
           icon: markRaw(LucideHardDrive),
           component: markRaw(FileStorageSettings),
@@ -292,6 +301,7 @@ type TabName =
   | "Ticket intake"
   | "Chat & Teams"
   | "GitHub"
+  | "AI providers"
   | "Sign-off templates"
   | "File storage"
   | "CRM";

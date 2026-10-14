@@ -61,13 +61,13 @@ settings header) and the scrolling content area.
 - **`ChipListInput.vue`**: picked records as removable chips plus a Link picker to add more
   (File storage's document types, Content's alert recipients).
 - **`SecretField.vue`**: a saved secret shown masked with Replace and, when `removable`,
-  Remove (Undo until saved); the value never comes back from the server. Chat & Teams and
-  GitHub.
+  Remove (Undo until saved); the value never comes back from the server. Chat & Teams,
+  GitHub and AI providers.
 - **`SettingsAction.vue`**: a button that runs a POST action on the saved settings (`method`,
   `params`, `icon`) and shows its `{ok, message, details?}` result in success or danger with
   an icon, and `details` as a label/value list. Disabled with "Save your changes first"
   while the page is `unsaved`. Send a test (Chat & Teams), Test token and Request a merge
-  bot run now (GitHub).
+  bot run now (GitHub), Test connection (AI providers).
 - **`SettingsPreviewAction.vue`**: a one-off change with a dry run. **Preview** lists what
   would change (rows from a slot), and only then **Apply N changes** appears; the result
   replaces the list. Both wait while the page is unsaved. Ticket intake's Apply rules to
@@ -116,6 +116,7 @@ Telephony providers and pending invites.
 | Ticket intake | System Managers and Agent Managers. Mail rules (ordered, each with On, move and remove), the built-in filter (HD Settings), Post monitor alerts, Apply rules to open tickets (Preview, then Apply), Recently kept out, Routing (Apply AI triage, default team, team per triage category, warnings for teams that would leave tickets unassigned), Customer detection (public mail domains, Fill customer domains from the CRM) and Customer feedback. See [ticket-intake.md](ticket-intake.md). |
 | Chat & Teams | System Managers and Agent Managers. Every HD Chat Settings field; secrets masked, with Send me a test and Send a test to the channel. See [Chat & Teams](#chat--teams) below. |
 | GitHub | System Managers and Agent Managers. Every HD GitHub Settings field: the webhook (Payload URL with Copy, events, secret), the task sync, the org merge bot with Test token and Request a merge bot run now, the last webhook delivery and setup help. Secrets masked as on Chat & Teams. See [github-sync.md](github-sync.md#the-settings-page). |
+| AI providers | System Managers and Agent Managers. Banner while the primary fails; primary provider and fallback switch; OpenAI and Anthropic-compatible sections with model, base URL, masked API key and Test connection. See [ai-providers.md](ai-providers.md#settings--ai-providers). |
 | Telephony | Default medium, then Twilio and Exotel as list rows that open their sub-pages. |
 | ERPNext | Enable switch, in-sync / sync-needed status (success or warning soft panel, with icon). |
 

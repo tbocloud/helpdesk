@@ -18,6 +18,7 @@ import frappe
 from frappe.utils import add_days, get_datetime, getdate, now_datetime, nowdate
 
 from helpdesk import home_plan
+from helpdesk.ai_engine import provider_status
 from helpdesk.api.content_board import user_full_names
 from helpdesk.api.work import (
     ON_HOLD,
@@ -746,6 +747,8 @@ def _systems() -> dict:
             ),
         },
         "ai": {
+            # the primary and fallback providers, for the banner while the primary fails
+            "providers": provider_status(),
             "calls_today": frappe.db.count(
                 "HDS AI Usage Log", {"creation": (">=", today)}
             ),

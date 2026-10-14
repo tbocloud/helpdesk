@@ -44,7 +44,7 @@
 			"fieldname": "provider",
 			"fieldtype": "Select",
 			"label": "Provider",
-			"options": "Anthropic"
+			"options": "Anthropic\nAnthropic-compatible\nOpenAI"
 		},
 		{
 			"fieldname": "column_break_header",
@@ -124,7 +124,7 @@
 	],
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-04-23 12:00:00.000000",
+	"modified": "2026-10-14 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Model Pricing",
