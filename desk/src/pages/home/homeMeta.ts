@@ -201,6 +201,8 @@ export interface HomeCalendar {
 export interface HomeData {
   day: YourDay;
   follow_ups: FollowUpSummary;
+  /** today's stand-up while it is still a draft (helpdesk.standup.home_card) */
+  standup: { name: string; date: string; post_at: string } | null;
   calendar: HomeCalendar;
   company: Company | null;
   systems: Systems | null;

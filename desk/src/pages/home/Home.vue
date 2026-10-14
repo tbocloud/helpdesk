@@ -85,6 +85,8 @@
 
         <FollowUpStrip v-if="data" :summary="data.follow_ups" />
 
+        <StandupCard v-if="data?.standup" :standup="data.standup" />
+
         <AIProviderBanner
           v-if="data?.systems?.ai.providers"
           :status="data.systems.ai.providers"
@@ -174,6 +176,7 @@ import ActionPlan from "./components/ActionPlan.vue";
 import HomeSide from "./components/HomeSide.vue";
 import NeedsAttention from "./components/NeedsAttention.vue";
 import PulseStrip from "./components/PulseStrip.vue";
+import StandupCard from "./components/StandupCard.vue";
 import SystemsCard from "./components/SystemsCard.vue";
 import YourDay from "./components/YourDay.vue";
 import YourProjects from "./components/YourProjects.vue";
