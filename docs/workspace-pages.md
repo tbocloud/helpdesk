@@ -579,6 +579,16 @@ already the board's column move, so this one says where it moves to.
   the task's `can_move` is true; `components/MoveTaskDialog.vue` picks the project with a
   Combobox (open projects the user can add tasks to) and explains what will be cleared.
 
+### Back
+
+Every project page (Dashboard, Checklist, Board, Timeline, Overdue, Recurring, Files, Sign-off)
+shares the header in `ProjectNav`, which starts with a **Back** arrow, then the "Projects › name"
+breadcrumb (owner's request, 2026-10-14). Back goes to the **previous page**, one step at a time:
+out of a folder to its parent folder (opening a folder adds a history step), back to the tab or
+list you came from (`router.back()`). When there is no previous page in the app (the page was
+opened directly or in a new tab: `history.state.back` is empty), it goes to the project list
+instead of leaving the app. The "Projects" breadcrumb still goes straight to the list.
+
 ### Recent projects
 
 `record_project_view(project)` (POST) runs when a project page (any tab) loads, from

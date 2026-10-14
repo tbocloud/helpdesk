@@ -1,6 +1,20 @@
 <template>
   <LayoutHeader>
     <template #left-header>
+      <!-- back to the previous page (a parent folder, the last tab, the list you came
+           from); the project list when the page was opened directly (owner's request,
+           2026-10-14) -->
+      <Button
+        variant="ghost"
+        class="me-1 shrink-0"
+        :label="__('Back')"
+        :tooltip="__('Back')"
+        @click="goBack"
+      >
+        <template #icon>
+          <LucideArrowLeft class="size-4" aria-hidden="true" />
+        </template>
+      </Button>
       <nav
         class="flex min-w-0 items-center gap-1.5 text-lg-medium"
         :aria-label="__('Breadcrumb')"
@@ -141,10 +155,11 @@ import LayoutHeader from "@/components/LayoutHeader.vue";
 import { __ } from "@/translation";
 import { Button, call, createResource, Dropdown, toast } from "frappe-ui";
 import { computed, ref, watch } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
 import LucideCalendarRange from "~icons/lucide/calendar-range";
 import LucideChevronDown from "~icons/lucide/chevron-down";
+import LucideArrowLeft from "~icons/lucide/arrow-left";
 import LucideChevronRight from "~icons/lucide/chevron-right";
 import LucideClipboardCheck from "~icons/lucide/clipboard-check";
 import LucideEyeOff from "~icons/lucide/eye-off";
@@ -170,6 +185,14 @@ const props = defineProps<{
 const emit = defineEmits<{ taskCreated: [] }>();
 
 const route = useRoute();
+const router = useRouter();
+
+// vue-router keeps the previous in-app address in history.state.back; with none (a page
+// opened directly, a new tab) there is no previous page here, so go to the project list
+function goBack() {
+  if (window.history.state?.back) router.back();
+  else router.push({ name: "TaskyProjects" });
+}
 const showNewTask = ref(false);
 const showEdit = ref(false);
 
