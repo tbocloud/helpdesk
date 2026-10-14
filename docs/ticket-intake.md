@@ -172,7 +172,7 @@ or "Team X's round robin is off …", with **Open Teams**. The data is
 ## Customer detection
 
 On a **new** ticket that has no customer after `set_customer` (the contact's), with **Match
-customers by email domain** on and not an alert:
+customers by email domain** on, not an alert and not raised by an agent:
 
 - `hd_customer.customer_for_email`: the sender's domain against each customer's **Domain**
   and **Other Email Domains** (new Small Text field on HD Customer, one per line; on the
@@ -181,6 +181,9 @@ customers by email domain** on and not an alert:
 - **Public mail domains** (Settings, one per line; seeded with gmail.com, outlook.com,
   hotmail.com, yahoo.com, icloud.com, live.com and others) never match.
 - A domain two customers share matches neither.
+- The domain → customers map is cached (`hd_customer.domain_customers`, 10 minutes) and
+  cleared whenever an HD Customer is saved, renamed or deleted, and after the CRM fill, so
+  a new ticket doesn't read every customer.
 - The sender then becomes a contact of that customer (`hd_customer.add_customer_contact`,
   moved from the content portal's `add_portal_contact`; it adds the member row without
   saving the customer, so no portal role is granted). Their next ticket finds the customer
