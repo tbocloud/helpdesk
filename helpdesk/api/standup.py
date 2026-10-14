@@ -161,4 +161,3 @@ def default(field: str):
     if field in standup.DEFAULT_TIMES:
         return standup.DEFAULT_TIMES[field]
     return 0 if field == "enabled" else 1
-

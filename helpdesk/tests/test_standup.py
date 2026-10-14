@@ -60,9 +60,7 @@ class StandupCase(FrappeTestCase):
     def setUp(self):
         hold_commits(self)
         self.addCleanup(frappe.set_user, "Administrator")
-        self.addCleanup(
-            frappe.clear_document_cache, standup.SETTINGS, standup.SETTINGS
-        )
+        self.addCleanup(frappe.clear_document_cache, standup.SETTINGS, standup.SETTINGS)
         mail = patch("frappe.sendmail")
         mail.start()
         self.addCleanup(mail.stop)
@@ -276,9 +274,7 @@ class TestDrafts(StandupCase):
 
         self.assertNotIn(mine, self.open())
         self.assertEqual(
-            frappe.db.count(
-                standup.STANDUP, {"user": DEV[0], "date": self.today}
-            ),
+            frappe.db.count(standup.STANDUP, {"user": DEV[0], "date": self.today}),
             1,
         )
         self.assertEqual(len(get_standup_notices(DEV[0], mine)), 1)
@@ -298,20 +294,25 @@ class TestSubmit(StandupCase):
     def test_edit_and_submit(self):
         kept = self.task("Bank reconciliation", due=self.today)
         dropped = self.task("Payroll export", due=self.today)
-        self.task("Customer GST file", status="On Hold", hold_reason="Other", hold_note="x")
+        self.task(
+            "Customer GST file", status="On Hold", hold_reason="Other", hold_note="x"
+        )
         foreign = self.task("Not mine", assignee=DEV2, due=self.today)
         mine = call_as_user(DEV[0], "helpdesk.api.standup.get_my_standup")
         self.assertIsNone(mine["standup"]["name"])
         today = mine["standup"]["today"]
-        self.assertEqual(
-            {r["reference_name"] for r in today}, {kept, dropped}
-        )
+        self.assertEqual({r["reference_name"] for r in today}, {kept, dropped})
 
         values = {
             "today": [
                 next(r for r in today if r["reference_name"] == kept),
                 # linked work that wasn't on the stand-up can't be added
-                {"kind": "task", "title": "Not mine", "reference_doctype": "Task", "reference_name": foreign},
+                {
+                    "kind": "task",
+                    "title": "Not mine",
+                    "reference_doctype": "Task",
+                    "reference_name": foreign,
+                },
                 {"title": "Call Malabar Traders about <b>the</b> GST file"},
             ],
             "blockers": [{"title": "Waiting for VPN access"}],
@@ -447,7 +448,9 @@ class TestSummary(StandupCase):
         )
         self.assertIn("**Biju Thomas**", lines)
         self.assertIn("Today: Bank reconciliation", text)
-        self.assertIn(f"/helpdesk/standup?team=Standup+Delivery&date={self.today}", text)
+        self.assertIn(
+            f"/helpdesk/standup?team=Standup+Delivery&date={self.today}", text
+        )
         self.assertEqual(
             frappe.db.get_value(
                 standup.STANDUP, standup.standup_name(DEV[0], self.today), "status"
@@ -470,9 +473,7 @@ class TestSummary(StandupCase):
         _url, text = self.posted_text()
         lines = [line for line in text.split("\n") if line]
         self.assertEqual(lines[1], "Anu Varghese configured GST.")
-        self.assertEqual(
-            lines[2], "Biju Thomas needs help with the Customer GST file."
-        )
+        self.assertEqual(lines[2], "Biju Thomas needs help with the Customer GST file.")
         self.assertNotIn("37 tasks", text)
 
     def test_without_a_department_channel_the_escalation_channel(self):
@@ -516,9 +517,7 @@ class TestPermissions(StandupCase):
         with self.assertRaises(frappe.PermissionError):
             self.team(DEV2[0], OTHER_DEPARTMENT)
         with self.assertRaises(frappe.PermissionError):
-            call_as_user(
-                DEV2[0], "helpdesk.api.standup.nudge", name=self.mine.name
-            )
+            call_as_user(DEV2[0], "helpdesk.api.standup.nudge", name=self.mine.name)
         with self.assertRaises(frappe.PermissionError):
             call_as_user(
                 DEV2[0],

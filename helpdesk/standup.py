@@ -93,7 +93,7 @@ def is_enabled() -> bool:
 
 
 def setting_time(settings, field: str) -> str:
-    """"09:00": the stored time, or its default on a site that never saved them."""
+    """ "09:00": the stored time, or its default on a site that never saved them."""
     return (settings.get(field) or DEFAULT_TIMES[field]).strip()
 
 
@@ -394,7 +394,9 @@ def home_departments(users) -> dict[str, str | None]:
                 found.setdefault(head, department)
     counts = open_task_departments(users - set(found), order)
     for user, by_department in counts.items():
-        found[user] = max(by_department, key=lambda d: (by_department[d], -order.index(d)))
+        found[user] = max(
+            by_department, key=lambda d: (by_department[d], -order.index(d))
+        )
     members = department_members(order) if users - set(found) else {}
     for department in order:
         for user in members.get(department, set()) & (users - set(found)):
@@ -595,14 +597,14 @@ def post_summaries(settings, day, calendar: WorkCalendar | None = None) -> dict:
 
 def post_summary(text: str, webhook: str | None, path: str) -> None:
     """To the department's own Teams channel, else the escalation channel."""
+    from helpdesk.chat_notifications import TEAMS
+    from helpdesk.chat_notifications import get_settings as chat_settings
     from helpdesk.chat_notifications import (
-        TEAMS,
         helpdesk_url,
         post_to_channel,
         teams_message,
         teams_post_url,
     )
-    from helpdesk.chat_notifications import get_settings as chat_settings
 
     url = helpdesk_url(path)
     if webhook and chat_settings().platform == TEAMS:
@@ -644,7 +646,10 @@ def load_standups(day, department: str | None = False, users=None) -> list:
     )
     rows = frappe.get_all(
         ITEM,
-        filters={"parenttype": STANDUP, "parent": ("in", [d.name for d in docs] or [""])},
+        filters={
+            "parenttype": STANDUP,
+            "parent": ("in", [d.name for d in docs] or [""]),
+        },
         fields=[
             "name",
             "parent",
@@ -737,7 +742,7 @@ def blocker_lines(docs: list) -> list[str]:
 
 
 def compact(rows: list, note: str | None) -> str:
-    """"Fix GST report (Completed); Bank reconciliation (Resolved) and 2 more · note"."""
+    """ "Fix GST report (Completed); Bank reconciliation (Resolved) and 2 more · note"."""
     from helpdesk.chat_notifications import helpdesk_url
 
     parts = []
@@ -895,7 +900,10 @@ def walled_projects(user: str, docs: list) -> set:
     return set(
         frappe.get_all(
             "Project",
-            filters={"name": ("in", list(projects)), "custom_department": ("in", hidden)},
+            filters={
+                "name": ("in", list(projects)),
+                "custom_department": ("in", hidden),
+            },
             pluck="name",
         )
     )
@@ -917,7 +925,8 @@ def item_shape(row, names: dict | None = None) -> dict:
         "auto": bool(cint(row.get("auto"))),
         "route": item_path(row),
         "helper": helper,
-        "helper_name": (names or {}).get(helper) or (get_fullname(helper) if helper else None),
+        "helper_name": (names or {}).get(helper)
+        or (get_fullname(helper) if helper else None),
         "help_task": row.get("help_task"),
     }
 
@@ -1001,7 +1010,9 @@ def save(user: str, values: dict, submit: bool = False) -> dict:
     if frappe.db.exists(STANDUP, name):
         doc = frappe.get_doc(STANDUP, name)
     else:
-        doc = new_standup(user, today, own_department(user, today), autofill(user, today))
+        doc = new_standup(
+            user, today, own_department(user, today), autofill(user, today)
+        )
     for section in SECTIONS:
         if section in values:
             doc.set(section, edited_rows(doc, section, values.get(section) or []))
@@ -1052,7 +1063,13 @@ def edited_rows(doc, section: str, rows: list) -> list[dict]:
         title = clean_text(raw.title, MAX_TEXT)
         if title:
             kind = raw.kind if raw.kind in TEXT_KINDS else "note"
-            kept.append({"kind": kind, "title": title, "auto": cint(raw.auto) if kind == "plan" else 0})
+            kept.append(
+                {
+                    "kind": kind,
+                    "title": title,
+                    "auto": cint(raw.auto) if kind == "plan" else 0,
+                }
+            )
     return kept
 
 
@@ -1076,9 +1093,7 @@ def team_standup(viewer: str, team: str | None = None, date: str | None = None) 
     include_hours = flag(settings, "include_hours")
     calendar = WorkCalendar(day)
     previous = calendar.previous_working_day()
-    planned = (
-        plan_against_done(docs, previous) if lead else {}
-    )
+    planned = plan_against_done(docs, previous) if lead else {}
     people = []
     for doc in docs:
         shape = standup_shape(doc, include_hours, hidden)
@@ -1086,7 +1101,13 @@ def team_standup(viewer: str, team: str | None = None, date: str | None = None) 
             shape["plan_vs_done"] = planned.get(doc.user)
         people.append(shape)
     blockers = [
-        {"standup": p["name"], "user": p["user"], "full_name": p["full_name"], "needs_help": p["needs_help"], **b}
+        {
+            "standup": p["name"],
+            "user": p["user"],
+            "full_name": p["full_name"],
+            "needs_help": p["needs_help"],
+            **b,
+        }
         for p in people
         for b in p["blockers"]
     ]
@@ -1168,9 +1189,7 @@ def history(viewer: str, user: str | None = None, limit: int = HISTORY_LIMIT) ->
         allowed = set(team_departments(viewer))
         rows = [r for r in rows if (r.department or NO_DEPARTMENT) in allowed]
         if not rows and not allowed:
-            frappe.throw(
-                _("You see your own stand-ups only."), frappe.PermissionError
-            )
+            frappe.throw(_("You see your own stand-ups only."), frappe.PermissionError)
     counts = item_counts([r.name for r in rows])
     return {
         "user": user,
@@ -1252,7 +1271,9 @@ def assign_help(viewer: str, standup: str, row: str, helper: str) -> dict:
     doc = team_doc(viewer, standup)
     blocker = blocker_row(doc, row)
     helper = (helper or "").strip()
-    if not frappe.db.exists("HD Agent", {"user": helper, "is_active": 1}) or not enabled_users([helper]):
+    if not frappe.db.exists(
+        "HD Agent", {"user": helper, "is_active": 1}
+    ) or not enabled_users([helper]):
         frappe.throw(_("{0} is not an active agent.").format(helper))
     if helper == doc.user:
         frappe.throw(_("Pick someone other than the person who is blocked."))

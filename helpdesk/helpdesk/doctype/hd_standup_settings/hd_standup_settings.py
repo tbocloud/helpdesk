@@ -64,6 +64,6 @@ class HDStandupSettings(Document):
 
     @staticmethod
     def normalized_time(value) -> str:
-        """"09:00:00" and " 9:00" → "9:00"; the follow-up parser does the rest."""
+        """ "09:00:00" and " 9:00" → "9:00"; the follow-up parser does the rest."""
         value = str(value or "").strip()
         return value[:-3] if value.count(":") == 2 else value
