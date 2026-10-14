@@ -189,8 +189,32 @@ nothing in them are left out. Each group carries its full `count` and at most 5 
 
 Rows show the full title (wrapping to two lines, never cut to one), project or customer
 (task customers come from their project in one query), the reference, assignee, due date
-and risks. Unassigned tickets offer **Take it** to agents, which assigns the ticket to them
-through `frappe.desk.form.assign_to.add`, the same endpoint as the ticket page.
+and risks.
+
+### Take it and Assign (unassigned tickets)
+
+Each unassigned ticket row offers two actions to agents:
+
+- **Take it** (the primary action) assigns the ticket to the viewer.
+- **Assign** (`AssignPicker.vue`) opens a searchable list of active agents
+  (`useAssignablePeople`, i.e. `helpdesk.tasky.api.get_users`) to hand the ticket to someone
+  else. The customer's **ticket owner** and **backup** ([ticket-owners.md](ticket-owners.md),
+  read with `frappe.client.get_value` on first open) sit at the top under "Suggested". Anyone
+  on leave today is marked ("On leave until Thu 15 Oct", from `useOnLeave`). The viewer isn't
+  listed, since Take it covers them. On phones the button shows only its icon, so the row's
+  actions stay on one line.
+
+Both save through `assignTicket` (`desk/src/composables/ticketAssignment.ts`): the ticket
+page's endpoint `frappe.desk.form.assign_to.add`, then the same "assigned …" line in the
+ticket's activity that the ticket page writes. Permission checks, assignment notifications
+(Teams DM) and the activity behave as they do on the ticket page; there is no separate
+mutation path. A toast says "Assigned to you" or "Assigned to Reshma Nair", and Home reloads,
+so the row leaves the group and the counts update.
+
+**Who sees them:** agents (`hasAgentRecord`), the same people who get the assignee control on
+the ticket page. Anyone else who can see Needs attention (a project manager without an agent
+record) sees neither action, because tickets can only be assigned to agents. Home has no
+unassigned *tasks* group, so tasks have no Take it or Assign here.
 
 ## Side column
 

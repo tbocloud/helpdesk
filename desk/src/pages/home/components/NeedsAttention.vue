@@ -44,14 +44,26 @@
         <li v-for="item in group.items" :key="itemKey(item)">
           <HomeItemRow :item="item" show-assignee>
             <template v-if="canTake(group.key, item)" #action>
-              <Button
-                size="sm"
-                :label="__('Take it')"
-                :icon-left="LucideUserPlus"
-                :loading="taking === item.name"
-                :aria-label="__('Assign to me: {0}', item.title)"
-                @click="take(item)"
-              />
+              <div class="flex items-center gap-2">
+                <!-- frappe-ui's Button swaps aria-label for `label`: the name is sr-only text -->
+                <Button
+                  size="sm"
+                  :icon-left="LucideUserPlus"
+                  :loading="saving?.ticket === item.name && saving.self"
+                  @click="assign(item, authStore.userId, '')"
+                >
+                  <span aria-hidden="true">{{ __("Take it") }}</span>
+                  <span class="sr-only">{{
+                    __("Assign to me: {0}", item.title)
+                  }}</span>
+                </Button>
+                <AssignPicker
+                  :title="item.title"
+                  :customer="item.customer"
+                  :loading="saving?.ticket === item.name && !saving.self"
+                  @pick="(user, name) => assign(item, user, name)"
+                />
+              </div>
             </template>
           </HomeItemRow>
         </li>
@@ -61,12 +73,13 @@
 </template>
 
 <script setup lang="ts">
+import { assignTicket } from "@/composables/ticketAssignment";
 import { errorText } from "@/utils";
 import TaskyBadge from "@/components/TaskyBadge.vue";
 import { itemKey, type WorkItem } from "@/pages/work/workMeta";
 import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
-import { Button, createResource, toast } from "frappe-ui";
+import { Button, toast } from "frappe-ui";
 import { ref, useId, type Component } from "vue";
 import { RouterLink } from "vue-router";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
@@ -83,6 +96,7 @@ import {
   type AttentionReason,
 } from "../homeMeta";
 import SectionCard from "@/components/SectionCard.vue";
+import AssignPicker from "./AssignPicker.vue";
 import HomeItemRow from "./HomeItemRow.vue";
 
 defineProps<{ groups: AttentionGroup[] }>();
@@ -97,9 +111,11 @@ const REASON_ICON: Record<AttentionReason, Component> = {
 
 const uid = useId();
 const authStore = useAuthStore();
-const taking = ref<string | null>(null);
+// one assignment at a time; `self` tells which button spins
+const saving = ref<{ ticket: string; self: boolean } | null>(null);
 
-// tickets can only be assigned to agents, so only agents get "Take it"
+// tickets can only be assigned to agents, and every agent may assign a ticket on
+// its page, so agents get both "Take it" and "Assign"
 function canTake(reason: AttentionReason, item: WorkItem) {
   return (
     reason === "unassigned_tickets" &&
@@ -109,27 +125,18 @@ function canTake(reason: AttentionReason, item: WorkItem) {
   );
 }
 
-// the same endpoint the ticket page's assign control uses
-const assign = createResource({
-  url: "frappe.desk.form.assign_to.add",
-  onSuccess() {
-    toast.success(__("Assigned to you"));
-    taking.value = null;
+/** `name` is the assignee's name for the toast; empty when it's the viewer. */
+async function assign(item: WorkItem, user: string, name: string) {
+  if (saving.value) return;
+  saving.value = { ticket: item.name, self: !name };
+  try {
+    await assignTicket(item.name, [user]);
+    toast.success(name ? __("Assigned to {0}", name) : __("Assigned to you"));
     emit("changed");
-  },
-  onError(e: unknown) {
+  } catch (e) {
     toast.error(errorText(e, __("Couldn't assign the ticket.")));
-    taking.value = null;
-  },
-});
-
-function take(item: WorkItem) {
-  if (assign.loading) return;
-  taking.value = item.name;
-  assign.submit({
-    doctype: "HD Ticket",
-    name: item.name,
-    assign_to: [authStore.userId],
-  });
+  } finally {
+    saving.value = null;
+  }
 }
 </script>
