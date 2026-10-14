@@ -13,6 +13,7 @@
 		"include_hours",
 		"departments_section",
 		"departments",
+		"content_off",
 		"team_view_section",
 		"team_view_heads",
 		"team_view_leads",
@@ -76,6 +77,13 @@
 			"options": "HD Standup Department"
 		},
 		{
+			"description": "Departments whose stand-up leaves out the content calendar (role parts, posts going live, missed and unapproved posts, and the summary's Content today). Every other department gets it.",
+			"fieldname": "content_off",
+			"fieldtype": "Table MultiSelect",
+			"label": "Without the Content Calendar",
+			"options": "HD Standup Content Off"
+		},
+		{
 			"fieldname": "team_view_section",
 			"fieldtype": "Section Break",
 			"label": "Team view"
@@ -132,7 +140,7 @@
 	"index_web_pages_for_search": 0,
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-10-14 09:00:00.000000",
+	"modified": "2026-10-14 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Standup Settings",

@@ -1,0 +1,31 @@
+{
+	"actions": [],
+	"creation": "2026-10-14 12:00:00.000000",
+	"description": "A department whose stand-up leaves out the content calendar.",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"department"
+	],
+	"fields": [
+		{
+			"fieldname": "department",
+			"fieldtype": "Link",
+			"in_list_view": 1,
+			"label": "Department",
+			"options": "HD Department",
+			"reqd": 1
+		}
+	],
+	"istable": 1,
+	"links": [],
+	"modified": "2026-10-14 12:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD Standup Content Off",
+	"owner": "Administrator",
+	"permissions": [],
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": []
+}

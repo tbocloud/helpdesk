@@ -97,7 +97,8 @@ def get_settings() -> dict:
 def save_settings(values: dict | str) -> dict:
     """Plain fields as sent. Departments in the order sent; a row's channel URL only
     changes when `channel_webhook` is sent (a value replaces it, "" removes it), since
-    a Teams workflow URL is a secret and never goes back to the browser."""
+    a Teams workflow URL is a secret and never goes back to the browser.
+    `content_off`: the departments whose stand-up leaves out the content calendar."""
     check_admin()
     values = frappe.parse_json(values) or {}
     doc = frappe.get_doc(standup.SETTINGS)
@@ -119,6 +120,15 @@ def save_settings(values: dict | str) -> dict:
                 )
             rows.append({"department": department, "channel_webhook": webhook or ""})
         doc.set("departments", rows)
+    if "content_off" in values:
+        doc.set(
+            "content_off",
+            [
+                {"department": d}
+                for d in dict.fromkeys(values["content_off"] or [])
+                if d
+            ],
+        )
     doc.save(ignore_permissions=True)
     return settings_payload(frappe.get_doc(standup.SETTINGS))
 
@@ -141,6 +151,7 @@ def settings_payload(doc) -> dict:
             }
             for row in doc.departments
         ],
+        "content": content_switches(doc),
         "chat": {
             "enabled": bool(chat.enabled),
             "platform": chat.platform,
@@ -151,6 +162,20 @@ def settings_payload(doc) -> dict:
             ),
         },
     }
+
+
+def content_switches(doc) -> list[dict]:
+    """Settings → Stand-up's "Include content calendar" per department: every active
+    department with content work (on unless switched off), and any switched off."""
+    from helpdesk import team_dashboard as td
+    from helpdesk.standup_content import content_departments
+
+    off = [row.department for row in doc.get("content_off") or []]
+    with_content = content_departments() | set(off)
+    order = td.active_departments()
+    departments = [d for d in order if d in with_content]
+    departments += [d for d in off if d not in departments]
+    return [{"department": d, "include": d not in off} for d in departments]
 
 
 def channel_status(value: str | None) -> dict:

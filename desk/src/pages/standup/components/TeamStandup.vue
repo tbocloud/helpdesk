@@ -168,6 +168,8 @@
         </p>
       </SectionCard>
 
+      <ContentToday v-if="data.content_today" :posts="data.content_today" />
+
       <SectionCard
         v-if="data.can_lead && pending.length && data.editable"
         :title="__('Not submitted yet')"
@@ -328,6 +330,7 @@ import {
   type TeamStandupData,
 } from "../standupMeta";
 import BlockerDialog from "./BlockerDialog.vue";
+import ContentToday from "./ContentToday.vue";
 import StandupItems from "./StandupItems.vue";
 
 const props = defineProps<{ team: string | null; date: string | null }>();

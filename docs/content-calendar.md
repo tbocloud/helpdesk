@@ -355,6 +355,26 @@ tasks in the period, and the whole page is only for the content team.
 - **Refused outside the content team** rather than an empty answer, as the calendar's other
   calls (`get_content_performance`) do; the page itself is never shown to them.
 
+## In the daily stand-up
+
+The async stand-up ([standup.md](standup.md#content-calendar)) carries the content work of
+the content team (`helpdesk/standup_content.py`), read as each person so these walls apply:
+
+- **Their stand-up:** the role parts they finished yesterday ("Designer · Global Handwashing
+  Day (Avera IoT)", Done) and the posts they published or moved on; today their open parts
+  (else the next one due) and the posts they're on going live today and tomorrow, with time,
+  channels and status (the Digital Marketing Head and DM Coordinators also every post going
+  live today); blockers for missed posts, posts going live within 24 hours without approval,
+  Changes Requested, Client Review longer than `client_reminder_days`, and parts waiting on
+  someone else's part (`post_progress`, "Waiting on Writer (Ajmal)"). A role task shows once,
+  as its part.
+- **The department's summary and team view:** a **Content today** block after the blockers:
+  the posts going live that day and the ones missed in the week before, missed and
+  not-approved first, with names.
+- **Settings → Stand-up → Content calendar:** "Include content calendar" per department, on
+  by default for Digital and every department with Content Calendar projects or post tasks.
+- Post lines open the post here (`/content?post=…`); part lines open the task.
+
 ## Adding and editing a post
 
 **Add entry** (`AddEntryDialog.vue`) creates posts through

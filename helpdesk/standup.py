@@ -40,6 +40,7 @@ from helpdesk import home_plan
 from helpdesk import team_dashboard as td
 from helpdesk.ai_engine import call_haiku
 from helpdesk.api.work import ON_HOLD, PENDING_REVIEW, WAITING_ON_TASK
+from helpdesk.content_team import in_content_team
 from helpdesk.follow_ups import WorkCalendar, open_work_owners
 from helpdesk.tasky.permissions import (
     PROJECT_MANAGER_ROLE,
@@ -79,6 +80,8 @@ HISTORY_LIMIT = 30
 # the long queue's own limit (the cron job runs on the default queue's 300 seconds)
 LONG_JOB_SECONDS = 1500
 TEXT_KINDS = ("plan", "note")
+# a content line's post, part, client, go-live and stage (HD Standup Item)
+CONTENT_FIELDS = ("content_post", "content_role", "customer", "go_live", "stage")
 
 HEADLINE_PROMPT = """You write the first lines of one team's daily stand-up summary at TBO, a company that implements ERPNext, builds apps and websites and runs digital marketing.
 Use only the facts in the JSON you are given. Never invent people, tasks, numbers or causes. Every number you write must appear in the facts.
@@ -150,13 +153,19 @@ def task_item(task: dict, detail: str) -> dict:
 
 
 def autofill(
-    user: str, day, calendar: WorkCalendar | None = None, hours: dict | None = None
+    user: str,
+    day,
+    calendar: WorkCalendar | None = None,
+    hours: dict | None = None,
+    content: bool = True,
 ) -> dict:
     """What `user`'s stand-up for `day` starts with, from their own work. Writes
     nothing. `hours` ({user: hours} on the previous working day) saves a query per
-    person when a run fills everyone's; leave it out to read it here."""
+    person when a run fills everyone's; leave it out to read it here. `content`
+    (their department's setting) adds the content calendar for the content team."""
     from helpdesk.api.home import _add_timers
     from helpdesk.api.work import get_my_work
+    from helpdesk.standup_content import content_day
 
     day = getdate(day)
     calendar = calendar or WorkCalendar(day)
@@ -169,7 +178,15 @@ def autofill(
         yesterday = done_on(user, previous)
         tasks = [i for i in work if i["kind"] == "task"]
         _add_timers(tasks)
+        posts = content_day(user, day, work, yesterday) if content else None
+    if posts:
+        # a part waiting on someone else's part is its blocker, not today's plan
+        work = [
+            i for i in work if not (i["kind"] == "task" and i["name"] in posts.blocked)
+        ]
     today, blockers = plan_and_blockers(work, day, calendar.next_working_day())
+    if posts:
+        yesterday, today, blockers = posts.merge(yesterday, today, blockers)
     today += [item("plan", step) for step in stored_plan(user, day)]
     if hours is None:
         hours = hours_by_user(previous)
@@ -446,6 +463,12 @@ def takes_part(settings, department: str | None) -> bool:
     return not included or department in included
 
 
+def content_on(settings, department: str | None) -> bool:
+    """Whether the department's stand-up shows the content calendar: on unless
+    Settings → Stand-up switched it off for that department."""
+    return department not in {r.department for r in settings.get("content_off") or []}
+
+
 # --- the run ---------------------------------------------------------------------
 
 
@@ -546,11 +569,14 @@ def open_drafts(settings, day, calendar: WorkCalendar) -> list[str]:
         if frappe.db.exists(STANDUP, standup_name(user, day)):
             continue
         try:
-            filled = autofill(user, day, calendar, hours)
+            department = departments.get(user)
+            filled = autofill(
+                user, day, calendar, hours, content_on(settings, department)
+            )
             # nothing open and nothing done: no stand-up to write
             if user not in busy and not filled["yesterday"]:
                 continue
-            doc = new_standup(user, day, departments.get(user), filled)
+            doc = new_standup(user, day, department, filled)
             notify_users(
                 [user],
                 STANDUP,
@@ -709,6 +735,7 @@ def load_standups(day, department: str | None = False, users=None) -> list:
             "auto",
             "helper",
             "help_task",
+            *CONTENT_FIELDS,
         ],
         order_by="idx asc",
         limit_page_length=0,
@@ -734,8 +761,10 @@ def by_department(docs: list) -> dict:
 
 def compose_summary(department: str | None, docs: list, day, settings) -> str:
     """The department's summary as Teams Markdown: the headline, blockers and help
-    first (with names), then each person's yesterday and today."""
+    first (with names), the content going live today, then each person's yesterday
+    and today."""
     from helpdesk.chat_notifications import helpdesk_url
+    from helpdesk.standup_content import summary_lines
 
     label = department or _("No department")
     lines = [f"**{_('Stand-up')} · {label} · {formatdate(day, 'EEE d MMM')}**"]
@@ -745,6 +774,9 @@ def compose_summary(department: str | None, docs: list, day, settings) -> str:
     flagged = blocker_lines(docs)
     if flagged:
         lines += ["", f"**{_('Blockers and help needed')} ({len(flagged)})**", *flagged]
+    content = content_block(department, docs, day, settings)
+    if content:
+        lines += ["", *summary_lines(content)]
     hours = flag(settings, "include_hours")
     for doc in docs:
         name = doc.full_name or doc.user
@@ -764,6 +796,22 @@ def compose_summary(department: str | None, docs: list, day, settings) -> str:
         md_link(_("Open the stand-up"), helpdesk_url(team_path(department, day))),
     ]
     return "\n".join(lines)
+
+
+def content_block(
+    department: str | None, docs: list, day, settings, as_viewer: bool = False
+) -> list[dict] | None:
+    """The department's Content today: None when it has no content work or Settings →
+    Stand-up switched the content calendar off for it."""
+    from helpdesk.standup_content import content_departments, content_today
+
+    if (
+        not department
+        or not content_on(settings, department)
+        or department not in content_departments()
+    ):
+        return None
+    return content_today(day, [d.user for d in docs], as_viewer)
 
 
 def blocker_lines(docs: list) -> list[str]:
@@ -825,7 +873,7 @@ def item_path(row) -> str | None:
         project = row.get("project")
         return f"/projects/{project}" if project else "/my-work"
     if doctype == "HD Content Post":
-        return "/content"
+        return f"/content?{urlencode({'post': name})}"
     return helpdesk_path(doctype, name)
 
 
@@ -932,8 +980,15 @@ def check_team(user: str, team: str, day) -> bool:
     )
 
 
-def visible(rows: list, hidden_projects: set) -> list:
-    return [r for r in rows if not (r.project and r.project in hidden_projects)]
+def visible(rows: list, hidden_projects: set, hide_content: bool = False) -> list:
+    """The rows past the viewer's walls: none from a hidden project, and no content
+    line for someone outside the content team."""
+    return [
+        r
+        for r in rows
+        if not (r.project and r.project in hidden_projects)
+        and not (hide_content and r.get("content_post"))
+    ]
 
 
 def walled_projects(user: str, docs: list) -> set:
@@ -959,6 +1014,8 @@ def walled_projects(user: str, docs: list) -> set:
 
 
 def item_shape(row, names: dict | None = None) -> dict:
+    from helpdesk.standup_content import content_shape
+
     helper = row.get("helper")
     return {
         "id": row.get("name"),
@@ -974,10 +1031,16 @@ def item_shape(row, names: dict | None = None) -> dict:
         "helper_name": (names or {}).get(helper)
         or (get_fullname(helper) if helper else None),
         "help_task": row.get("help_task"),
+        "content": content_shape(row),
     }
 
 
-def standup_shape(doc, include_hours: bool, hidden_projects: set | None = None) -> dict:
+def standup_shape(
+    doc,
+    include_hours: bool,
+    hidden_projects: set | None = None,
+    hide_content: bool = False,
+) -> dict:
     hidden_projects = hidden_projects or set()
     return {
         "name": doc.get("name"),
@@ -991,7 +1054,8 @@ def standup_shape(doc, include_hours: bool, hidden_projects: set | None = None) 
         "hours": round(flt(doc.get("hours")), 1) if include_hours else None,
         **{
             section: [
-                item_shape(r) for r in visible(doc.get(section) or [], hidden_projects)
+                item_shape(r)
+                for r in visible(doc.get(section) or [], hidden_projects, hide_content)
             ]
             for section in SECTIONS
         },
@@ -1022,7 +1086,7 @@ def my_standup(user: str, date: str | None = None) -> dict:
     if doc:
         shape = standup_shape(doc, include_hours)
     elif day == today and enabled and part:
-        filled = autofill(user, day, calendar)
+        filled = autofill(user, day, calendar, content=content_on(settings, department))
         shape = standup_shape(
             frappe._dict(
                 user=user,
@@ -1058,10 +1122,12 @@ def save(user: str, values: dict, submit: bool = False) -> dict:
     name = standup_name(user, today)
     doc = frappe.get_doc(STANDUP, name) if frappe.db.exists(STANDUP, name) else None
     department = doc.department if doc else own_department(user, today)
-    if not takes_part(get_settings(), department):
+    settings = get_settings()
+    if not takes_part(settings, department):
         frappe.throw(_("Your department isn't in the daily stand-up."))
     if not doc:
-        doc = new_standup(user, today, department, autofill(user, today))
+        filled = autofill(user, today, content=content_on(settings, department))
+        doc = new_standup(user, today, department, filled)
     for section in SECTIONS:
         if section in values:
             doc.set(section, edited_rows(doc, section, values.get(section) or []))
@@ -1105,6 +1171,7 @@ def edited_rows(doc, section: str, rows: list) -> list[dict]:
                             "auto",
                             "helper",
                             "help_task",
+                            *CONTENT_FIELDS,
                         )
                     }
                 )
@@ -1139,13 +1206,14 @@ def team_standup(viewer: str, team: str | None = None, date: str | None = None) 
     department = None if team == NO_DEPARTMENT else team
     docs = load_standups(day, department)
     hidden = walled_projects(viewer, docs)
+    hide_content = not in_content_team(viewer)
     include_hours = flag(settings, "include_hours")
     calendar = WorkCalendar(day)
     previous = calendar.previous_working_day()
     planned = plan_against_done(docs, previous) if lead else {}
     people = []
     for doc in docs:
-        shape = standup_shape(doc, include_hours, hidden)
+        shape = standup_shape(doc, include_hours, hidden, hide_content)
         if lead:
             shape["plan_vs_done"] = planned.get(doc.user)
         people.append(shape)
@@ -1180,6 +1248,11 @@ def team_standup(viewer: str, team: str | None = None, date: str | None = None) 
             "blockers": len(blockers),
         },
         "on_leave": team_on_leave(department, day) if lead else [],
+        "content_today": (
+            None
+            if hide_content
+            else content_block(department, docs, day, settings, as_viewer=True)
+        ),
     }
 
 
