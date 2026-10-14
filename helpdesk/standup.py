@@ -462,22 +462,26 @@ def run():
 
 def process(settings, now: datetime) -> None:
     today = now.date()
-    opened = False
-    if is_due(settings, "open_at", "opened_on", now):
+    opening = is_due(settings, "open_at", "opened_on", now)
+    if opening:
         record(settings, "opened_on", today)
-        enqueue_step("open_drafts_job", today)
-        opened = True
     if is_due(settings, "remind_at", "reminded_on", now):
         record(settings, "reminded_on", today)
         # drafts that only just opened (the server was down) aren't reminded at once
-        if not opened:
+        if not opening:
             send_reminders(settings, today)
-    if is_due(settings, "post_at", "posted_on", now):
+    posting = is_due(settings, "post_at", "posted_on", now)
+    if posting:
         record(settings, "posted_on", today)
+    if opening:
+        # a late run posts in the same job, after the drafts exist: two jobs could
+        # run on two workers at once and post before the drafts were made
+        enqueue_step("open_drafts_job", today, post=posting)
+    elif posting:
         enqueue_step("post_summaries_job", today)
 
 
-def enqueue_step(method: str, day) -> None:
+def enqueue_step(method: str, day, **kwargs) -> None:
     """Filling everyone's draft (a My Work read per person) or composing every
     summary can outlast the cron job's 300 seconds; on the long queue, a half-done
     step can't be cut off after its day was recorded."""
@@ -486,14 +490,17 @@ def enqueue_step(method: str, day) -> None:
         queue="long",
         timeout=LONG_JOB_SECONDS,
         day=str(getdate(day)),
+        **kwargs,
         enqueue_after_commit=True,
         now=frappe.flags.in_test,
     )
 
 
-def open_drafts_job(day: str) -> None:
+def open_drafts_job(day: str, post: bool = False) -> None:
     day = getdate(day)
     open_drafts(get_settings(), day, WorkCalendar(day))
+    if post:
+        post_summaries(get_settings(), day)
 
 
 def post_summaries_job(day: str) -> None:
@@ -587,35 +594,42 @@ def send_reminders(settings, day) -> None:
     for draft in frappe.get_all(
         STANDUP,
         filters={"date": getdate(day), "status": DRAFT},
-        fields=["name", "user"],
+        fields=["name", "user", "department"],
         limit_page_length=0,
     ):
-        if draft.user not in away:
+        if draft.user not in away and takes_part(settings, draft.department):
             notify_users([draft.user], STANDUP, draft.name, text, link=PATH)
 
 
 def post_summaries(settings, day) -> dict:
     """Drafts become Auto-posted, then each department's summary goes to its channel.
-    Returns {department: text} of what was composed."""
+    Departments left out of the stand-up are neither posted nor changed. Returns
+    {department: text} of what was composed."""
     from helpdesk.chat_notifications import ChatError
     from helpdesk.chat_notifications import is_enabled as chat_enabled
 
-    table = frappe.qb.DocType(STANDUP)
-    (
-        frappe.qb.update(table)
-        .set(table.status, AUTO_POSTED)
-        .where((table.date == getdate(day)) & (table.status == DRAFT))
-        .run()
-    )
+    groups = {
+        department: docs
+        for department, docs in by_department(load_standups(day)).items()
+        if takes_part(settings, department)
+    }
+    drafts = [d for docs in groups.values() for d in docs if d.status == DRAFT]
+    if drafts:
+        table = frappe.qb.DocType(STANDUP)
+        (
+            frappe.qb.update(table)
+            .set(table.status, AUTO_POSTED)
+            .where(table.name.isin([d.name for d in drafts]))
+            .run()
+        )
+    for doc in drafts:
+        doc.status = AUTO_POSTED
     channels = {
         row.department: row.get_password("channel_webhook", raise_exception=False)
         for row in settings.get("departments") or []
     }
     posted = {}
-    for department, docs in by_department(load_standups(day)).items():
-        # a stand-up someone saved from a department left out isn't posted anywhere
-        if not takes_part(settings, department):
-            continue
+    for department, docs in groups.items():
         text = compose_summary(department, docs, day, settings)
         posted[department] = text
         if not chat_enabled():
@@ -1004,7 +1018,7 @@ def my_standup(user: str, date: str | None = None) -> dict:
     shape = None
     department = doc.department if doc else own_department(user, day)
     # someone whose department is left out writes no stand-up, but keeps their history
-    part = bool(doc) or takes_part(settings, department)
+    part = takes_part(settings, department)
     if doc:
         shape = standup_shape(doc, include_hours)
     elif day == today and enabled and part:
@@ -1042,12 +1056,11 @@ def save(user: str, values: dict, submit: bool = False) -> dict:
         frappe.throw(_("The daily stand-up isn't switched on."))
     today = getdate(now_datetime())
     name = standup_name(user, today)
-    if frappe.db.exists(STANDUP, name):
-        doc = frappe.get_doc(STANDUP, name)
-    else:
-        department = own_department(user, today)
-        if not takes_part(get_settings(), department):
-            frappe.throw(_("Your department isn't in the daily stand-up."))
+    doc = frappe.get_doc(STANDUP, name) if frappe.db.exists(STANDUP, name) else None
+    department = doc.department if doc else own_department(user, today)
+    if not takes_part(get_settings(), department):
+        frappe.throw(_("Your department isn't in the daily stand-up."))
+    if not doc:
         doc = new_standup(user, today, department, autofill(user, today))
     for section in SECTIONS:
         if section in values:

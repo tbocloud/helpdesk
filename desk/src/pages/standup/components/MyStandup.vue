@@ -250,23 +250,23 @@ function load(standup: Standup | null | undefined) {
 }
 watch(
   () => data.value?.standup,
-  (standup, before) => {
+  (standup) => {
     // a reload (e.g. after changing a task from a row) must not throw away
     // unsaved edits to the same stand-up
     const same =
       !!standup &&
-      !!before &&
-      standup.date === before.date &&
-      standup.name === before.name;
+      !!form.value &&
+      standup.date === form.value.date &&
+      standup.name === form.value.name;
     if (same && dirty.value) return;
     load(standup);
   },
   { immediate: true }
 );
 
-function snapshot() {
-  if (!form.value) return "";
-  const { yesterday, today, blockers, notes, needs_help } = form.value;
+function snapshot(standup: Standup | null | undefined = form.value) {
+  if (!standup) return "";
+  const { yesterday, today, blockers, notes, needs_help } = standup;
   return JSON.stringify({ yesterday, today, blockers, notes, needs_help });
 }
 
@@ -332,6 +332,7 @@ async function save(submit: boolean) {
   if (!form.value || saving.value) return;
   saving.value = submit ? "submit" : "save";
   const { yesterday, today, blockers, notes, needs_help } = form.value;
+  const sent = snapshot();
   try {
     const result = await (submit ? submitResource : saveResource).submit({
       values: {
@@ -342,8 +343,17 @@ async function save(submit: boolean) {
         needs_help: needs_help ? 1 : 0,
       },
     });
-    // what was saved is the new starting point, edits and all
-    load(result.standup);
+    const stored: Standup | null = result.standup;
+    if (snapshot() === sent || !form.value || !stored) {
+      // what was saved is the new starting point
+      load(stored);
+    } else {
+      // edits made while saving stay: the saved copy only becomes the baseline
+      form.value.name = stored.name;
+      form.value.status = stored.status;
+      form.value.submitted_on = stored.submitted_on;
+      saved.value = snapshot(stored);
+    }
     resource.setData(result);
     toast.success(submit ? __("Stand-up submitted") : __("Draft saved"));
   } catch (e) {
