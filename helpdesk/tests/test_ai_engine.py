@@ -8,6 +8,7 @@ breaker, alerts and recovery (docs/ai-providers.md). HTTP is always mocked.
 """
 
 import json
+import time
 from unittest.mock import MagicMock, patch
 
 import frappe
@@ -25,6 +26,7 @@ from helpdesk.test_utils import (
     make_ai_provider,
     make_ticket,
     openai_http_response,
+    patch_anthropic_sdk,
     set_ai_providers,
 )
 
@@ -60,14 +62,6 @@ class AIProviderCase(FrappeTestCase):
         retry = patch.object(ai_engine, "retry_failed_triages")
         self.retry = retry.start()
         self.addCleanup(retry.stop)
-
-    def anthropic(self, *answers):
-        """Patches the Anthropic SDK; each call returns or raises the next answer."""
-        sdk = patch.object(ai_engine.anthropic, "Anthropic")
-        client_cls = sdk.start()
-        self.addCleanup(sdk.stop)
-        client_cls.return_value.messages.create.side_effect = list(answers)
-        return client_cls
 
 
 class TestOpenAIRequest(AIProviderCase):
@@ -153,7 +147,9 @@ class TestOpenAIRequest(AIProviderCase):
 
 class TestAnthropicRequest(AIProviderCase):
     def test_request_shape(self):
-        client_cls = self.anthropic(anthropic_answer('{"category": "Stock"}'))
+        client_cls = patch_anthropic_sdk(
+            self, anthropic_answer('{"category": "Stock"}')
+        )
 
         text, _usage = ai_engine.complete(
             make_ai_provider("Anthropic-compatible"), JSON_PROMPT, "the ticket"
@@ -180,7 +176,7 @@ class TestAnthropicRequest(AIProviderCase):
         """Kimi and other thinking models can reply with a thinking block before the text."""
         answer = anthropic_answer('{"category": "Billing"}')
         answer.content.insert(0, MagicMock(type="thinking", thinking="let me think"))
-        self.anthropic(answer)
+        patch_anthropic_sdk(self, answer)
         set_ai_providers(primary_ai_provider="Anthropic-compatible")
 
         result = ai_engine.call_haiku("sys", "user")
@@ -191,7 +187,9 @@ class TestAnthropicRequest(AIProviderCase):
         """Kimi can spend the whole budget thinking and return no text; try once more with a larger budget."""
         ran_out = anthropic_answer("", stop_reason="max_tokens")
         ran_out.content = [MagicMock(type="thinking", thinking="long thoughts")]
-        client_cls = self.anthropic(ran_out, anthropic_answer('{"summary": "ok"}'))
+        client_cls = patch_anthropic_sdk(
+            self, ran_out, anthropic_answer('{"summary": "ok"}')
+        )
         set_ai_providers(primary_ai_provider="Anthropic-compatible")
 
         result = ai_engine.call_haiku("sys", "user")
@@ -208,7 +206,7 @@ class TestFailover(AIProviderCase):
         return ai_engine.call_haiku(JSON_PROMPT, "the ticket")
 
     def test_insufficient_balance_fails_over_pauses_and_alerts_once(self):
-        self.anthropic(anthropic_answer('{"category": "Stock"}'))
+        patch_anthropic_sdk(self, anthropic_answer('{"category": "Stock"}'))
         with patch(POST, return_value=openai_http_response(429, QUOTA)):
             result = self.call()
 
@@ -225,7 +223,8 @@ class TestFailover(AIProviderCase):
         self.assertIn("Using Anthropic-compatible (kimi-k2.6)", subject)
 
     def test_a_paused_provider_is_skipped_until_the_pause_ends(self):
-        self.anthropic(
+        patch_anthropic_sdk(
+            self,
             anthropic_answer('{"n": 1}'),
             anthropic_answer('{"n": 2}'),
             anthropic_answer('{"n": 3}'),
@@ -244,7 +243,7 @@ class TestFailover(AIProviderCase):
 
     def test_kimi_out_of_balance_fails_over_to_openai(self):
         set_ai_providers(primary_ai_provider="Anthropic-compatible")
-        self.anthropic(anthropic_status_error(429, KIMI_SUSPENDED))
+        patch_anthropic_sdk(self, anthropic_status_error(429, KIMI_SUSPENDED))
         with patch(POST, return_value=openai_http_response(text='{"a": 1}')):
             result = self.call()
 
@@ -263,7 +262,7 @@ class TestFailover(AIProviderCase):
                 "code": "invalid_api_key",
             }
         }
-        self.anthropic(anthropic_answer("{}"))
+        patch_anthropic_sdk(self, anthropic_answer("{}"))
         with patch(POST, return_value=openai_http_response(401, refused)):
             self.call()
 
@@ -274,15 +273,38 @@ class TestFailover(AIProviderCase):
         self.assertNotIn(OPENAI_TEST_KEY, self.alert.call_args.kwargs["subject"])
 
     def test_a_server_error_fails_over_without_a_pause(self):
-        self.anthropic(anthropic_answer("{}"))
+        patch_anthropic_sdk(self, anthropic_answer("{}"))
         with patch(POST, return_value=openai_http_response(503, {"error": "busy"})):
             self.call()
 
         self.assertEqual(ai_engine.provider_down("OpenAI")["kind"], "server")
         self.assertFalse(ai_engine.circuit_open(make_ai_provider()))
 
+    def test_no_attempt_starts_after_the_calls_deadline(self):
+        """Both providers together stay inside triage's job timeout."""
+        with patch(POST) as post:
+            with self.assertRaises(ai_engine.AIProviderError) as raised:
+                ai_engine.complete(
+                    make_ai_provider(),
+                    JSON_PROMPT,
+                    "x",
+                    deadline=time.monotonic() + 1,
+                )
+        self.assertEqual(raised.exception.kind, "timeout")
+        post.assert_not_called()
+
+    def test_the_fallback_gets_only_the_time_left(self):
+        client_cls = patch_anthropic_sdk(self, anthropic_answer('{"a": 1}'))
+        with patch(POST, side_effect=requests.Timeout("read timed out")), patch.object(
+            ai_engine, "monotonic", side_effect=[0, 0, 200]
+        ):
+            self.call()
+
+        timeout = client_cls.return_value.messages.create.call_args.kwargs["timeout"]
+        self.assertEqual(timeout, ai_engine.CALL_SECONDS - 200)
+
     def test_a_timeout_fails_over(self):
-        self.anthropic(anthropic_answer('{"a": 1}'))
+        patch_anthropic_sdk(self, anthropic_answer('{"a": 1}'))
         with patch(POST, side_effect=requests.Timeout("read timed out")):
             self.assertEqual(self.call()["response"], {"a": 1})
 
@@ -295,7 +317,7 @@ class TestFailover(AIProviderCase):
                 "code": "model_not_found",
             }
         }
-        self.anthropic(anthropic_answer("{}"))
+        patch_anthropic_sdk(self, anthropic_answer("{}"))
         with patch(POST, return_value=openai_http_response(404, missing)):
             self.call()
 
@@ -303,7 +325,7 @@ class TestFailover(AIProviderCase):
         self.assertTrue(ai_engine.circuit_open(make_ai_provider()))
 
     def test_a_rejected_request_does_not_fail_over_and_is_logged(self):
-        client_cls = self.anthropic(anthropic_answer("{}"))
+        client_cls = patch_anthropic_sdk(self, anthropic_answer("{}"))
         invalid = {"error": {"message": "Invalid value for 'messages'."}}
         with patch(POST, return_value=openai_http_response(400, invalid)):
             with self.assertRaises(ai_engine.AIProviderError) as raised:
@@ -323,7 +345,7 @@ class TestFailover(AIProviderCase):
 
     def test_without_failover_only_the_primary_is_tried(self):
         set_ai_providers(ai_failover=0)
-        client_cls = self.anthropic(anthropic_answer("{}"))
+        client_cls = patch_anthropic_sdk(self, anthropic_answer("{}"))
         with patch(POST, return_value=openai_http_response(429, QUOTA)):
             with self.assertRaises(ai_engine.AIProviderError):
                 self.call()
@@ -335,7 +357,7 @@ class TestFailover(AIProviderCase):
 
     def test_an_unconfigured_primary_is_left_out(self):
         set_ai_providers(openai_api_key=None)
-        self.anthropic(anthropic_answer('{"a": 1}'))
+        patch_anthropic_sdk(self, anthropic_answer('{"a": 1}'))
         with patch(POST) as post:
             self.assertEqual(self.call()["response"], {"a": 1})
         post.assert_not_called()
@@ -348,7 +370,8 @@ class TestFailover(AIProviderCase):
                 self.call()
 
     def test_triages_are_retried_when_a_provider_answers_after_an_outage(self):
-        self.anthropic(
+        patch_anthropic_sdk(
+            self,
             anthropic_status_error(500, {"error": "down"}),
             anthropic_answer('{"a": 1}'),
         )
@@ -380,7 +403,7 @@ class TestAlert(FrappeTestCase):
 
 class TestStatus(AIProviderCase):
     def test_status_shows_the_order_and_who_answers(self):
-        self.anthropic(anthropic_answer("{}"))
+        patch_anthropic_sdk(self, anthropic_answer("{}"))
         with patch(POST, return_value=openai_http_response(429, QUOTA)):
             ai_engine.call_haiku(JSON_PROMPT, "x")
 
@@ -461,7 +484,7 @@ class TestCallers(AIProviderCase):
             "summary": "Stock Balance shows a wrong quantity for ABC-001.",
             "recommended_track": "manual",
         }
-        self.anthropic(anthropic_answer(json.dumps(answer)))
+        patch_anthropic_sdk(self, anthropic_answer(json.dumps(answer)))
         with patch(POST, return_value=openai_http_response(429, QUOTA)), patch.object(
             frappe.cache, "set", return_value=True
         ):
@@ -480,7 +503,7 @@ class TestCallers(AIProviderCase):
             subject="Stock balance report is wrong",
             description="The Stock Balance report shows the wrong quantity for ABC-001.",
         )
-        self.anthropic(anthropic_status_error(429, KIMI_SUSPENDED))
+        patch_anthropic_sdk(self, anthropic_status_error(429, KIMI_SUSPENDED))
         with patch(POST, return_value=openai_http_response(429, QUOTA)), patch.object(
             frappe.cache, "set", return_value=True
         ):
@@ -532,6 +555,10 @@ class TestRedact(FrappeTestCase):
 
     def test_billing_words_decide_a_429(self):
         self.assertEqual(ai_engine.classify(429, "insufficient balance"), "billing")
+        # Anthropic's own wording, with HTTP 400
+        self.assertEqual(
+            ai_engine.classify(400, "Your credit balance is too low"), "billing"
+        )
         self.assertEqual(ai_engine.classify(429, "Rate limit reached"), "rate_limit")
         self.assertEqual(ai_engine.classify(402, ""), "billing")
         self.assertEqual(ai_engine.classify(400, "bad messages"), "invalid")

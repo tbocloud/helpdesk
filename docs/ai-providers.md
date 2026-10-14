@@ -54,7 +54,12 @@ without both is left out.
 | Token budget | `max_completion_tokens` (reasoning models count thinking in it) | `max_tokens` |
 | JSON | `response_format: {"type": "json_object"}` when the system prompt mentions JSON (all current callers do; OpenAI requires the word) | prompt only; `parse_json_answer` reads fences and prose |
 | Temperature | never sent: newer OpenAI models refuse anything but the default | not sent |
-| Timeout | 120 s (`REQUEST_TIMEOUT`) | 120 s, SDK retries once (`SDK_MAX_RETRIES`) |
+| Timeout | 120 s per attempt (`REQUEST_TIMEOUT`) | 120 s per attempt; the SDK's own retries are off (`SDK_MAX_RETRIES = 0`): failover replaces them |
+
+One `call_haiku` has 240 seconds in all (`CALL_SECONDS`), both providers included: each
+attempt gets the smaller of 120 seconds and the time left, and none starts with under 5
+seconds left. That keeps the whole failover inside triage's 300-second job timeout, so a
+killed job never hides it.
 
 Both get the thinking-model budget retry: 4096 tokens, then 8192 once when the first answer
 ran out of tokens with no text (`finish_reason: length` / `stop_reason: max_tokens`). A legacy
@@ -70,7 +75,7 @@ SDK dependency (`requests` only).
 
 | HTTP / error | Kind | Fail over | Pause 30 min | Alert and "failing" status |
 | --- | --- | --- | --- | --- |
-| 402; 429 or 403 whose message says balance, quota, billing, credit, payment, insufficient or suspended | `billing` | yes | yes | yes |
+| 402; 400, 403 or 429 whose message says balance, quota, billing, credit, payment, insufficient or suspended (Anthropic sends "credit balance is too low" as a 400) | `billing` | yes | yes | yes |
 | 401, 403 | `auth` | yes | yes | yes |
 | 404; 400 saying the model doesn't exist | `config` | yes | yes | yes |
 | other 429 | `rate_limit` | yes | no | no (passes in seconds) |

@@ -2860,6 +2860,19 @@ def anthropic_status_error(status: int, body: dict | None = None):
     return error
 
 
+def patch_anthropic_sdk(test_case, *answers):
+    """Patches the Anthropic SDK client in helpdesk.ai_engine for `test_case`;
+    each Messages call returns (or raises) the next of `answers`. Returns the
+    patched client class."""
+    from helpdesk import ai_engine
+
+    sdk = patch.object(ai_engine.anthropic, "Anthropic")
+    client_cls = sdk.start()
+    test_case.addCleanup(sdk.stop)
+    client_cls.return_value.messages.create.side_effect = list(answers)
+    return client_cls
+
+
 def anthropic_answer(text: str, stop_reason: str = "end_turn"):
     """A Messages API response with one text block and token counts."""
     from unittest.mock import MagicMock

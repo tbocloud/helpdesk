@@ -6,8 +6,8 @@ prompt caching and token tracking (docs/ai-providers.md)."""
 
 import json
 import re
-import time
 from dataclasses import dataclass, field
+from time import monotonic
 
 import anthropic
 import frappe
@@ -200,10 +200,15 @@ OPENAI_SLOT = "OpenAI"
 SLOTS = (OPENAI_SLOT, ANTHROPIC_SLOT)
 # used when the OpenAI section's Base URL is left empty
 OPENAI_BASE_URL = "https://api.openai.com/v1"
-# a slow answer counts as a failure, so the fallback still answers inside a job's time
+# a slow answer counts as a failure, so the fallback can still answer
 REQUEST_TIMEOUT = 120
-# the Anthropic SDK retries a 429 or 5xx itself; once is enough when a fallback waits
-SDK_MAX_RETRIES = 1
+# every attempt of one call_haiku, both providers included, ends by then: under
+# triage's 300-second job timeout, so a killed job never hides the failover
+CALL_SECONDS = 240
+# an attempt with less time left than this isn't started
+MIN_ATTEMPT_SECONDS = 5
+# failover replaces the SDK's own retries, which would outlast the time left
+SDK_MAX_RETRIES = 0
 TEST_TOKEN_BUDGET = 64
 
 # a provider is skipped this long after a billing, key or model failure
@@ -377,7 +382,9 @@ def classify(status: int, detail: str) -> str:
     """The kind of failure behind an HTTP status and the provider's message."""
     text = (detail or "").lower()
     if status == 402 or (
-        status in (403, 429) and any(word in text for word in BILLING_WORDS)
+        # Anthropic answers "credit balance is too low" with a 400
+        status in (400, 403, 429)
+        and any(word in text for word in BILLING_WORDS)
     ):
         return "billing"
     if status in (401, 403):
@@ -412,7 +419,11 @@ def error_detail(body) -> str:
 
 
 def _openai_chat(
-    provider: AIProvider, system_prompt: str, user_message: str, max_tokens: int
+    provider: AIProvider,
+    system_prompt: str,
+    user_message: str,
+    max_tokens: int,
+    timeout: float,
 ):
     """One /chat/completions call, through requests so there is no openai SDK
     to depend on. Returns (text, _Usage, ran_out_of_tokens).
@@ -443,7 +454,7 @@ def _openai_chat(
                 "Authorization": f"Bearer {provider.api_key}",
                 "Content-Type": "application/json",
             },
-            timeout=REQUEST_TIMEOUT,
+            timeout=timeout,
         )
     except requests.RequestException as e:
         # only the kind: the text can hold the request
@@ -470,7 +481,11 @@ def _openai_chat(
 
 
 def _anthropic_messages(
-    provider: AIProvider, system_prompt: str, user_message: str, max_tokens: int
+    provider: AIProvider,
+    system_prompt: str,
+    user_message: str,
+    max_tokens: int,
+    timeout: float,
 ):
     """One Messages API call (Anthropic or a compatible endpoint such as Kimi).
     Returns (text, usage, ran_out_of_tokens)."""
@@ -489,7 +504,7 @@ def _anthropic_messages(
                 }
             ],
             messages=[{"role": "user", "content": user_message}],
-            timeout=REQUEST_TIMEOUT,
+            timeout=timeout,
         )
     except anthropic.APIStatusError as e:
         detail = error_detail(e.body) or e.message
@@ -514,15 +529,24 @@ def complete(
     user_message: str,
     ticket_name: str | None = None,
     budgets: tuple[int, ...] | None = None,
+    deadline: float | None = None,
 ):
     """One answer from one provider, each attempt logged; AIProviderError if it fails.
 
     Thinking models (Kimi, OpenAI's reasoning models) spend part of the budget
     thinking and can run out before writing the answer: they get room, then more once.
+    No attempt runs past `deadline` (a monotonic() value).
     """
     call = _openai_chat if provider.speaks_openai else _anthropic_messages
+    if deadline is None:
+        deadline = monotonic() + CALL_SECONDS
     for max_tokens in budgets or TRIAGE_TOKEN_BUDGETS:
-        text, usage, ran_out = call(provider, system_prompt, user_message, max_tokens)
+        timeout = min(REQUEST_TIMEOUT, deadline - monotonic())
+        if timeout < MIN_ATTEMPT_SECONDS:
+            raise AIProviderError(provider, "timeout", "no time left for this call")
+        text, usage, ran_out = call(
+            provider, system_prompt, user_message, max_tokens, timeout
+        )
         log_usage(
             provider.model, usage, ticket_name=ticket_name, provider=provider.slot
         )
@@ -688,7 +712,7 @@ def test_provider(slot: str) -> dict:
             "ok": False,
             "message": _("Add the API key and model, save, then test again."),
         }
-    started = time.monotonic()
+    started = monotonic()
     try:
         complete(
             provider,
@@ -712,7 +736,7 @@ def test_provider(slot: str) -> dict:
             {"label": _("Endpoint"), "value": host},
             {
                 "label": _("Time"),
-                "value": f"{round((time.monotonic() - started) * 1000)} ms",
+                "value": f"{round((monotonic() - started) * 1000)} ms",
             },
         ],
     }
@@ -819,9 +843,12 @@ def call_haiku(system_prompt, user_message, ticket_name=None):
         raise AIProviderError(providers[0], "paused", "")
 
     error = None
+    deadline = monotonic() + CALL_SECONDS
     for index, provider in enumerate(ready):
         try:
-            text, usage = complete(provider, system_prompt, user_message, ticket_name)
+            text, usage = complete(
+                provider, system_prompt, user_message, ticket_name, deadline=deadline
+            )
         except AIProviderError as e:
             error = e
             record_failure(e, ready[index + 1] if index + 1 < len(ready) else None)
