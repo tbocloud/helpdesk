@@ -50,6 +50,8 @@ scheduler_events = {
         # digests at their times (docs/follow-ups.md)
         "*/15 * * * *": [
             "helpdesk.follow_ups.run",
+            # the async stand-up: drafts, the reminder and the summaries (docs/standup.md)
+            "helpdesk.standup.run",
             "helpdesk.helpdesk.doctype.hd_meeting.hd_meeting.sync_with_outlook",
         ],
         "*/5 * * * *": [

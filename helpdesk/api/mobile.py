@@ -30,7 +30,7 @@ from frappe.utils import (
     nowdate,
 )
 
-from helpdesk import competition, follow_ups, task_activity
+from helpdesk import competition, follow_ups, standup, task_activity
 from helpdesk import team_dashboard as td
 from helpdesk import team_insights
 from helpdesk.api import content_tasks, home, in_progress, project_files
@@ -985,6 +985,59 @@ def _text_to_html(text: str) -> str:
     if not text:
         frappe.throw(_("Write a message first."))
     return escape_html(text).replace("\n", "<br>")
+
+
+# --- stand-up ------------------------------------------------------------------
+
+
+@frappe.whitelist()
+@agent_only
+def get_my_standup(date: str | None = None) -> dict:
+    """The user's stand-up for `date` (today), as on /helpdesk/standup
+    (helpdesk.standup): the stored one, else today's draft from their work, unsaved."""
+    return _one(_standup_routes(standup.my_standup(frappe.session.user, date)))
+
+
+@frappe.whitelist(methods=["POST"])
+@agent_only
+def save_standup(values: dict | str) -> dict:
+    """Today's stand-up as edited: linked items kept or removed, text items, notes
+    and "I need help". Its status doesn't change."""
+    values = frappe.parse_json(values) or {}
+    return _one(_standup_routes(standup.save(frappe.session.user, values)))
+
+
+@frappe.whitelist(methods=["POST"])
+@agent_only
+def submit_standup(values: dict | str | None = None) -> dict:
+    """save_standup, then Submitted."""
+    values = frappe.parse_json(values) or {}
+    return _one(_standup_routes(standup.save(frappe.session.user, values, True)))
+
+
+@frappe.whitelist()
+@agent_only
+def get_team_standup(team: str | None = None, date: str | None = None) -> dict:
+    """A department's stand-ups for a day: the team view for its heads, leads and
+    managers (`can_lead`), its summary for its own members; others get 403."""
+    view = standup.team_standup(frappe.session.user, team or None, date)
+    for person in view["people"]:
+        _standup_routes({"standup": person})
+    for blocker in view["blockers"]:
+        blocker["app_route"] = app_route(
+            blocker["reference_doctype"], blocker["reference_name"]
+        )
+    return _one(view)
+
+
+def _standup_routes(view: dict) -> dict:
+    """Each item also says which app screen opens it."""
+    for section in standup.SECTIONS:
+        for entry in (view.get("standup") or {}).get(section) or []:
+            entry["app_route"] = app_route(
+                entry["reference_doctype"], entry["reference_name"]
+            )
+    return view
 
 
 # --- projects and files --------------------------------------------------------

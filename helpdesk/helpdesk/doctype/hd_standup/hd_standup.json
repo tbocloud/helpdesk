@@ -1,0 +1,180 @@
+{
+	"actions": [],
+	"creation": "2026-10-14 09:00:00.000000",
+	"description": "One person's async stand-up for one working day: what they did on the previous working day, what they plan today and what blocks them. Filled in from their work, edited and submitted in /helpdesk/standup (helpdesk.standup, docs/standup.md).",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"user",
+		"full_name",
+		"date",
+		"column_break_1",
+		"department",
+		"status",
+		"submitted_on",
+		"needs_help",
+		"yesterday_section",
+		"hours",
+		"yesterday",
+		"yesterday_note",
+		"today_section",
+		"today",
+		"today_note",
+		"blockers_section",
+		"blockers"
+	],
+	"fields": [
+		{
+			"fieldname": "user",
+			"fieldtype": "Link",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"label": "User",
+			"options": "User",
+			"read_only": 1,
+			"reqd": 1,
+			"search_index": 1
+		},
+		{
+			"fetch_from": "user.full_name",
+			"fieldname": "full_name",
+			"fieldtype": "Data",
+			"label": "Full Name",
+			"read_only": 1
+		},
+		{
+			"fieldname": "date",
+			"fieldtype": "Date",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"label": "Date",
+			"read_only": 1,
+			"reqd": 1,
+			"search_index": 1
+		},
+		{
+			"fieldname": "column_break_1",
+			"fieldtype": "Column Break"
+		},
+		{
+			"description": "Where the person's work is: the department they head, else the one with most of their open tasks, else a project they are on",
+			"fieldname": "department",
+			"fieldtype": "Link",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"label": "Department",
+			"options": "HD Department",
+			"read_only": 1,
+			"search_index": 1
+		},
+		{
+			"default": "Draft",
+			"description": "Auto-posted: not submitted when the summary went to the team, so it was posted as filled in",
+			"fieldname": "status",
+			"fieldtype": "Select",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"label": "Status",
+			"options": "Draft\nSubmitted\nAuto-posted",
+			"read_only": 1
+		},
+		{
+			"fieldname": "submitted_on",
+			"fieldtype": "Datetime",
+			"label": "Submitted On",
+			"read_only": 1
+		},
+		{
+			"default": "0",
+			"fieldname": "needs_help",
+			"fieldtype": "Check",
+			"label": "Needs Help"
+		},
+		{
+			"fieldname": "yesterday_section",
+			"fieldtype": "Section Break",
+			"label": "Yesterday"
+		},
+		{
+			"description": "Hours logged on the previous working day, as a fact",
+			"fieldname": "hours",
+			"fieldtype": "Float",
+			"label": "Hours Logged",
+			"precision": "1",
+			"read_only": 1
+		},
+		{
+			"fieldname": "yesterday",
+			"fieldtype": "Table",
+			"label": "Yesterday",
+			"options": "HD Standup Item"
+		},
+		{
+			"fieldname": "yesterday_note",
+			"fieldtype": "Small Text",
+			"label": "Yesterday Note"
+		},
+		{
+			"fieldname": "today_section",
+			"fieldtype": "Section Break",
+			"label": "Today"
+		},
+		{
+			"fieldname": "today",
+			"fieldtype": "Table",
+			"label": "Today",
+			"options": "HD Standup Item"
+		},
+		{
+			"fieldname": "today_note",
+			"fieldtype": "Small Text",
+			"label": "Today Note"
+		},
+		{
+			"fieldname": "blockers_section",
+			"fieldtype": "Section Break",
+			"label": "Blockers"
+		},
+		{
+			"fieldname": "blockers",
+			"fieldtype": "Table",
+			"label": "Blockers",
+			"options": "HD Standup Item"
+		}
+	],
+	"index_web_pages_for_search": 0,
+	"links": [],
+	"modified": "2026-10-14 09:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD Standup",
+	"naming_rule": "By script",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "System Manager",
+			"share": 1,
+			"write": 1
+		},
+		{
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "Agent Manager"
+		}
+	],
+	"sort_field": "date",
+	"sort_order": "DESC",
+	"states": [],
+	"title_field": "full_name",
+	"track_changes": 0
+}

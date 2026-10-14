@@ -143,7 +143,14 @@ def teams_message(text: str, url: str | None) -> dict:
 
 
 def teams_post(webhook_field: str, payload: dict):
-    url = get_settings().get_password(webhook_field, raise_exception=False)
+    teams_post_url(
+        get_settings().get_password(webhook_field, raise_exception=False), payload
+    )
+
+
+def teams_post_url(url: str | None, payload: dict):
+    """Post to a Teams Workflows URL: the settings' own, or another channel's (the
+    stand-up's department channels)."""
     if not url:
         raise ChatError("no_webhook")
     response = requests.post(url, json=payload, timeout=TIMEOUT)

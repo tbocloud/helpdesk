@@ -1,0 +1,166 @@
+{
+	"actions": [],
+	"creation": "2026-10-14 09:00:00.000000",
+	"description": "The async daily stand-up (docs/standup.md): when drafts open, when the reminder goes, when each department's summary posts to Teams, and who sees the team view.",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"enabled",
+		"times_section",
+		"open_at",
+		"remind_at",
+		"post_at",
+		"include_hours",
+		"departments_section",
+		"departments",
+		"team_view_section",
+		"team_view_heads",
+		"team_view_leads",
+		"team_view_project_managers",
+		"bookkeeping_section",
+		"opened_on",
+		"reminded_on",
+		"posted_on"
+	],
+	"fields": [
+		{
+			"default": "0",
+			"description": "Drafts for everyone on working days, a reminder, and each department's summary in Teams.",
+			"fieldname": "enabled",
+			"fieldtype": "Check",
+			"label": "Run the daily stand-up"
+		},
+		{
+			"fieldname": "times_section",
+			"fieldtype": "Section Break",
+			"label": "Times"
+		},
+		{
+			"default": "09:00",
+			"description": "24-hour time on working days: drafts are filled in and everyone is told",
+			"fieldname": "open_at",
+			"fieldtype": "Data",
+			"label": "Drafts open at"
+		},
+		{
+			"default": "10:00",
+			"description": "One reminder to anyone who hasn't submitted",
+			"fieldname": "remind_at",
+			"fieldtype": "Data",
+			"label": "Reminder at"
+		},
+		{
+			"default": "10:30",
+			"description": "Each department's summary goes to its Teams channel; drafts are posted as filled in, marked (auto)",
+			"fieldname": "post_at",
+			"fieldtype": "Data",
+			"label": "Summary posts at"
+		},
+		{
+			"default": "1",
+			"description": "Each person's hours logged on the previous working day, as a fact",
+			"fieldname": "include_hours",
+			"fieldtype": "Check",
+			"label": "Show hours logged"
+		},
+		{
+			"fieldname": "departments_section",
+			"fieldtype": "Section Break",
+			"label": "Departments"
+		},
+		{
+			"description": "The departments in the stand-up, each with its Teams channel. Empty: everyone, posted to the escalation channel",
+			"fieldname": "departments",
+			"fieldtype": "Table",
+			"label": "Departments",
+			"options": "HD Standup Department"
+		},
+		{
+			"fieldname": "team_view_section",
+			"fieldtype": "Section Break",
+			"label": "Team view"
+		},
+		{
+			"default": "1",
+			"description": "The departments they head",
+			"fieldname": "team_view_heads",
+			"fieldtype": "Check",
+			"label": "Department heads"
+		},
+		{
+			"default": "1",
+			"description": "The departments of the projects they lead or coordinate",
+			"fieldname": "team_view_leads",
+			"fieldtype": "Check",
+			"label": "Project leads and coordinators"
+		},
+		{
+			"default": "1",
+			"description": "The departments of the projects they manage",
+			"fieldname": "team_view_project_managers",
+			"fieldtype": "Check",
+			"label": "Project managers"
+		},
+		{
+			"collapsible": 1,
+			"fieldname": "bookkeeping_section",
+			"fieldtype": "Section Break",
+			"label": "Bookkeeping"
+		},
+		{
+			"fieldname": "opened_on",
+			"fieldtype": "Date",
+			"hidden": 1,
+			"label": "Drafts Opened On",
+			"read_only": 1
+		},
+		{
+			"fieldname": "reminded_on",
+			"fieldtype": "Date",
+			"hidden": 1,
+			"label": "Reminder Sent On",
+			"read_only": 1
+		},
+		{
+			"fieldname": "posted_on",
+			"fieldtype": "Date",
+			"hidden": 1,
+			"label": "Summaries Posted On",
+			"read_only": 1
+		}
+	],
+	"index_web_pages_for_search": 0,
+	"issingle": 1,
+	"links": [],
+	"modified": "2026-10-14 09:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD Standup Settings",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"print": 1,
+			"read": 1,
+			"role": "System Manager",
+			"share": 1,
+			"write": 1
+		},
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"print": 1,
+			"read": 1,
+			"role": "Agent Manager",
+			"share": 1,
+			"write": 1
+		}
+	],
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": [],
+	"track_changes": 1
+}

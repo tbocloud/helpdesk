@@ -17,7 +17,7 @@ from collections import Counter
 import frappe
 from frappe.utils import add_days, get_datetime, getdate, now_datetime, nowdate
 
-from helpdesk import home_plan
+from helpdesk import home_plan, standup
 from helpdesk.ai_engine import provider_status
 from helpdesk.api.content_board import user_full_names
 from helpdesk.api.work import (
@@ -110,6 +110,7 @@ def get_home() -> dict:
         "mine": {"counts": mine["counts"], "items": mine["items"][:LIST_LIMIT]},
         "day": day,
         "follow_ups": summary_for(frappe.session.user),
+        "standup": standup.home_card(frappe.session.user),
         "calendar": _calendar(company),
         "company": _company(portfolio) if company else None,
         "systems": _systems() if is_tasky_admin() else None,
