@@ -348,6 +348,15 @@ class TestSubmit(StandupCase):
         self.assertFalse(past["editable"])
         self.assertEqual(past["standup"]["status"], "Submitted")
 
+    def test_no_stand_up_outside_the_departments_in_it(self):
+        self.task("Bank reconciliation", due=self.today)
+        set_standup_settings(departments=[{"department": OTHER_DEPARTMENT}])
+        mine = call_as_user(DEV[0], "helpdesk.api.standup.get_my_standup")
+        self.assertIsNone(mine["standup"])
+        self.assertFalse(mine["editable"])
+        with self.assertRaises(frappe.ValidationError):
+            call_as_user(DEV[0], "helpdesk.api.standup.save_standup", values={})
+
     def test_nothing_is_saved_while_switched_off(self):
         set_standup_settings(enabled=0)
         with self.assertRaises(frappe.ValidationError):
@@ -361,10 +370,9 @@ class TestReminder(StandupCase):
         set_standup_settings(opened_on=self.today)
         settings = standup.get_settings()
         at = datetime.combine(self.today, time(10, 5))
-        calendar = standup_calendar(self.today)
         with patch.object(standup, "post_summaries"):
-            standup.process(settings, at, calendar)
-            standup.process(standup.get_settings(), at, calendar)
+            standup.process(settings, at)
+            standup.process(standup.get_settings(), at)
             standup.send_reminders(standup.get_settings(), self.today)
         self.assertEqual(
             get_standup_notices(DEV[0], draft),
@@ -372,11 +380,25 @@ class TestReminder(StandupCase):
         )
         self.assertEqual(get_standup_notices(DEV2[0], done), [])
 
+    def test_the_long_steps_run_on_the_long_queue(self):
+        at = datetime.combine(self.today, time(10, 45))
+        with patch("frappe.enqueue") as enqueue, patch.object(
+            standup, "send_reminders"
+        ):
+            standup.process(standup.get_settings(), at)
+        self.assertEqual(
+            [c.args[0] for c in enqueue.call_args_list],
+            ["helpdesk.standup.open_drafts_job", "helpdesk.standup.post_summaries_job"],
+        )
+        for call in enqueue.call_args_list:
+            self.assertEqual(call.kwargs["queue"], "long")
+            self.assertEqual(call.kwargs["day"], str(self.today))
+
     def test_nothing_runs_before_its_time(self):
         settings = standup.get_settings()
         early = datetime.combine(self.today, time(8, 45))
         with patch.object(standup, "open_drafts") as opened:
-            standup.process(settings, early, standup_calendar(self.today))
+            standup.process(settings, early)
         opened.assert_not_called()
 
 
@@ -475,6 +497,13 @@ class TestSummary(StandupCase):
         self.assertEqual(lines[1], "Anu Varghese configured GST.")
         self.assertEqual(lines[2], "Biju Thomas needs help with the Customer GST file.")
         self.assertNotIn("37 tasks", text)
+
+    def test_departments_left_out_are_not_posted(self):
+        set_standup_settings(departments=[{"department": OTHER_DEPARTMENT}])
+        with patch.object(standup, "call_haiku", side_effect=Exception("down")):
+            posted = standup.post_summaries(standup.get_settings(), self.today)
+        self.assertEqual(posted, {})
+        self.post.assert_not_called()
 
     def test_without_a_department_channel_the_escalation_channel(self):
         set_standup_settings(departments=[{"department": DEPARTMENT}])

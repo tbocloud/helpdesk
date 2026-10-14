@@ -242,11 +242,24 @@ watch(
 const data = computed<MyStandupData | null>(() => resource.data ?? null);
 const form = ref<Standup | null>(null);
 const saved = ref("");
+const dirty = computed(() => !!form.value && snapshot() !== saved.value);
+
+function load(standup: Standup | null | undefined) {
+  form.value = standup ? JSON.parse(JSON.stringify(standup)) : null;
+  saved.value = snapshot();
+}
 watch(
   () => data.value?.standup,
-  (standup) => {
-    form.value = standup ? JSON.parse(JSON.stringify(standup)) : null;
-    saved.value = snapshot();
+  (standup, before) => {
+    // a reload (e.g. after changing a task from a row) must not throw away
+    // unsaved edits to the same stand-up
+    const same =
+      !!standup &&
+      !!before &&
+      standup.date === before.date &&
+      standup.name === before.name;
+    if (same && dirty.value) return;
+    load(standup);
   },
   { immediate: true }
 );
@@ -256,7 +269,6 @@ function snapshot() {
   const { yesterday, today, blockers, notes, needs_help } = form.value;
   return JSON.stringify({ yesterday, today, blockers, notes, needs_help });
 }
-const dirty = computed(() => !!form.value && snapshot() !== saved.value);
 
 function describe(section: Section) {
   if (section === "yesterday")
@@ -330,6 +342,8 @@ async function save(submit: boolean) {
         needs_help: needs_help ? 1 : 0,
       },
     });
+    // what was saved is the new starting point, edits and all
+    load(result.standup);
     resource.setData(result);
     toast.success(submit ? __("Stand-up submitted") : __("Draft saved"));
   } catch (e) {

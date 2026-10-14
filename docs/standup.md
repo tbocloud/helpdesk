@@ -27,6 +27,13 @@ a day off (the weekly off, Saturdays off and business holidays, through follow-u
   departments. **Skipped:** anyone on approved leave that day (HD Leave, full days; a half
   day still gets one), and anyone with no open task or ticket and nothing done on the
   previous working day.
+- **Departments left out** of Settings → Stand-up (when any are listed) get no draft, can't
+  start one from the page (`takes_part`; their history stays readable), and are never posted,
+  not even to the escalation channel.
+- **Long queue:** filling everyone's draft and composing the summaries run as jobs on the
+  `long` queue (`open_drafts_job`, `post_summaries_job`, 1500 seconds), since the cron job
+  itself runs on the default queue's 300 seconds and a step cut off after its day was
+  recorded would not run again.
 - **Once a day:** each step records its day (`opened_on`, `reminded_on`, `posted_on` on the
   settings) and commits **before** sending, so a job that dies halfway never sends twice.
   The draft's name is `SU-<date>-<user>`, so a second run, or a person saving while the run
@@ -75,6 +82,8 @@ what they may open is listed, the department walls included):
 - **Linked rows can only be kept or removed** (`edited_rows`): the server takes them from the
   stored stand-up, so nobody can link work that isn't theirs. Text rows and notes are cleaned
   of HTML and capped (300 and 1000 characters).
+- A reload (for example after changing a task opened from a row) keeps unsaved edits to the
+  same stand-up; saving makes what was saved the new starting point.
 - Past days are read-only. The day is picked with the date field (kept in the URL as `date`).
 - **Home** shows a card in the morning while today's stand-up is a draft: "Your stand-up is
   ready … it goes to your team at 10:30" with **Open stand-up** (`get_home().standup`,
