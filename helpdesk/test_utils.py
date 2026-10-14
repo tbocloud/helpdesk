@@ -2934,23 +2934,43 @@ def fake_chatwoot_platform(
     return api
 
 
-def open_tbo_chat(user: str) -> dict:
-    """Calls helpdesk.api.chatwoot_sso.login as `user` (or "Guest") and returns what it
-    answered: frappe.local.response, a redirect or a page."""
+def open_tbo_chat(user: str, referer: str | None = None, **query) -> dict:
+    """Calls helpdesk.api.chatwoot_sso.login as `user` (or "Guest") in a GET request
+    carrying `referer` and the `query` arguments, and returns what it answered:
+    frappe.local.response, a redirect or a page."""
+    from werkzeug.test import EnvironBuilder
+    from werkzeug.wrappers import Request
+
+    from helpdesk import chatwoot_sso
     from helpdesk.api.chatwoot_sso import login
 
+    builder = EnvironBuilder(
+        path=chatwoot_sso.LOGIN_PATH,
+        base_url="http://localhost",
+        headers={"Referer": referer} if referer else None,
+        query_string=query or None,
+    )
+    previous = (getattr(frappe.local, "request", None), frappe.local.form_dict)
+    frappe.local.request = Request(builder.get_environ())
     frappe.local.response = frappe._dict({"docs": []})
     frappe.set_user(user)
+    # after set_user, which empties form_dict
+    frappe.local.form_dict = frappe._dict(query)
     try:
         login()
     finally:
         frappe.set_user("Administrator")
+        frappe.local.request, frappe.local.form_dict = previous
     return dict(frappe.local.response)
 
 
 def reset_chat_sign_in_limit(user: str):
-    """Forgets `user`'s recent TBO Chat sign-ins, so the per-user limit starts afresh."""
+    """Forgets `user`'s recent TBO Chat sign-ins, so the per-user limit and the
+    signed-out check start afresh."""
+    from helpdesk import chatwoot_sso
+
     frappe.cache.delete(frappe.cache.make_key(f"chatwoot-sso:{user}"))
+    frappe.cache.delete_value(chatwoot_sso.opened_key(user))
 
 
 def make_chat_conversation(conversation_id: int, **values):

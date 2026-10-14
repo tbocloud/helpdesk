@@ -10,6 +10,7 @@ from urllib.parse import quote
 
 import frappe
 from frappe import _
+from frappe.sessions import get_csrf_token
 from frappe.utils import escape_html, get_url
 
 from helpdesk import chatwoot_sso
@@ -37,6 +38,11 @@ def login() -> None:
     if user == "Guest":
         redirect(f"/login?redirect-to={quote(chatwoot_sso.LOGIN_PATH, safe='')}")
         return
+    if chatwoot_sso.should_pause(
+        user, frappe.form_dict, frappe.get_request_header("Referer")
+    ):
+        show_signed_out()
+        return
     try:
         url = chatwoot_sso.sign_in_url(user)
     except chatwoot_sso.SignInRefused as e:
@@ -49,7 +55,37 @@ def login() -> None:
             primary_label=_("Back to TBO Support"),
         )
         return
+    chatwoot_sso.note_opened(user)
     redirect(url)
+
+
+@frappe.whitelist(methods=["POST"])
+def sign_out() -> None:
+    """The signed-out page's "Sign out of TBO Support too": the hub's own logout, then
+    its sign-in page."""
+    frappe.local.login_manager.logout()
+    redirect("/login")
+
+
+def show_signed_out():
+    """Asks before signing back in, so a sign-out of TBO Chat sticks (docs/chatwoot-sso.md)."""
+    again = f"{chatwoot_sso.LOGIN_PATH}?{chatwoot_sso.CONTINUE}=1"
+    message = escape_html(
+        _(
+            "You're still signed in to TBO Support. Open TBO Chat again, or sign out here too."
+        )
+    )
+    frappe.respond_as_web_page(
+        _("You're signed out of TBO Chat"),
+        f"""<p>{message}</p>
+<div><a href="{again}" class="btn btn-primary btn-sm btn-block">{escape_html(_("Open TBO Chat again"))}</a></div>
+<form method="post" action="/api/method/helpdesk.api.chatwoot_sso.sign_out" style="margin-top: 8px">
+<input type="hidden" name="csrf_token" value="{escape_html(get_csrf_token())}">
+<button type="submit" class="btn btn-default btn-sm btn-block">{escape_html(_("Sign out of TBO Support too"))}</button>
+</form>""",
+        indicator_color="blue",
+        primary_action=None,
+    )
 
 
 def redirect(location: str):

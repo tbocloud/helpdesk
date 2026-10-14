@@ -1,13 +1,15 @@
+from unittest.mock import MagicMock, patch
 from urllib.parse import unquote
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from helpdesk import chatwoot_sso
-from helpdesk.api.chatwoot_sso import get_settings, save_settings
+from helpdesk.api.chatwoot_sso import get_settings, save_settings, sign_out
 from helpdesk.test_utils import (
     CHATWOOT_TEST_PLATFORM_TOKEN,
     CHATWOOT_TEST_SIGN_IN,
+    CHATWOOT_TEST_URL,
     create_user,
     enable_chatwoot_sso,
     fake_chatwoot_platform,
@@ -21,6 +23,7 @@ from helpdesk.test_utils import (
 AGENT = ("anjali@chatsso.example", "Anjali Pillai")
 MANAGER = ("joseph@chatsso.example", "Joseph Thomas")
 OUTSIDER = "visitor@chatsso.example"
+FROM_CHAT = f"{CHATWOOT_TEST_URL}/"
 PLATFORM_USERS = "/platform/api/v1/users"
 ACCOUNT_USERS = "/platform/api/v1/accounts/1/account_users"
 
@@ -156,6 +159,81 @@ class TestChatwootSignIn(FrappeTestCase):
         # someone else isn't held up
         fake_chatwoot_platform(self, agents=[{"id": 501, "email": MANAGER[0]}])
         self.assertEqual(open_tbo_chat(MANAGER[0])["type"], "redirect")
+
+
+class TestChatwootSignOut(FrappeTestCase):
+    """Signing out of TBO Chat sends the person back to the entry point, which must not
+    sign them straight back in."""
+
+    def setUp(self):
+        hold_commits(self)
+        self.addCleanup(frappe.set_user, "Administrator")
+        make_tasky_user(*AGENT)
+        enable_chatwoot_sso()
+        reset_chat_sign_in_limit(AGENT[0])
+        self.addCleanup(reset_chat_sign_in_limit, AGENT[0])
+        self.api = fake_chatwoot_platform(self, agents=[{"id": 501, "email": AGENT[0]}])
+
+    def assertSignedOutPage(self, response):
+        self.assertEqual(response["type"], "page")
+        self.assertIsNone(response.get("http_status_code"))
+        page = frappe.as_json(response) + str(frappe.local.message)
+        self.assertIn(f"{chatwoot_sso.LOGIN_PATH}?continue=1", page)
+        self.assertIn("helpdesk.api.chatwoot_sso.sign_out", page)
+        self.assertIn("csrf_token", page)
+        self.assertNotIn(CHATWOOT_TEST_SIGN_IN, page)
+        self.assertNotIn("sso_auth_token", page)
+        self.assertNotIn(CHATWOOT_TEST_PLATFORM_TOKEN, page)
+
+    def test_chatwoot_sign_out_shows_the_signed_out_page(self):
+        response = open_tbo_chat(AGENT[0], referer=FROM_CHAT, signed_out=1)
+        self.assertSignedOutPage(response)
+        self.assertEqual(self.api.calls, [])
+
+    def test_open_again_signs_in(self):
+        open_tbo_chat(AGENT[0])
+        response = open_tbo_chat(AGENT[0], referer=FROM_CHAT, **{"continue": 1})
+        self.assertEqual(response["type"], "redirect")
+        self.assertEqual(response["location"], CHATWOOT_TEST_SIGN_IN)
+
+    def test_opening_from_the_hub_signs_in(self):
+        for _ in range(2):
+            response = open_tbo_chat(AGENT[0])
+            self.assertEqual(response["location"], CHATWOOT_TEST_SIGN_IN)
+
+    def test_a_first_visit_to_chat_signs_in(self):
+        # an unauthenticated Chatwoot page also navigates to /app/login
+        response = open_tbo_chat(AGENT[0], referer=FROM_CHAT)
+        self.assertEqual(response["location"], CHATWOOT_TEST_SIGN_IN)
+
+    def test_coming_back_from_chat_at_once_shows_the_signed_out_page(self):
+        self.assertEqual(open_tbo_chat(AGENT[0])["type"], "redirect")
+        calls = len(self.api.calls)
+        self.assertSignedOutPage(open_tbo_chat(AGENT[0], referer=FROM_CHAT))
+        self.assertEqual(len(self.api.calls), calls)
+        # another site's referer isn't TBO Chat
+        response = open_tbo_chat(AGENT[0], referer="https://elsewhere.example/")
+        self.assertEqual(response["type"], "redirect")
+
+    def test_guests_still_go_to_the_hub_sign_in(self):
+        response = open_tbo_chat("Guest", referer=FROM_CHAT, signed_out=1)
+        self.assertEqual(response["type"], "redirect")
+        self.assertTrue(response["location"].startswith("/login?redirect-to="))
+        self.assertEqual(self.api.calls, [])
+
+    def test_sign_out_too_ends_the_hub_session(self):
+        frappe.local.response = frappe._dict()
+        with patch.object(frappe.local, "login_manager", MagicMock(), create=True):
+            sign_out()
+            frappe.local.login_manager.logout.assert_called_once()
+        self.assertEqual(frappe.local.response["location"], "/login")
+
+    def test_only_that_a_sign_in_happened_is_remembered(self):
+        open_tbo_chat(AGENT[0])
+        remembered = frappe.cache.get_value(
+            chatwoot_sso.opened_key(AGENT[0]), expires=True
+        )
+        self.assertEqual(remembered, 1)
 
 
 class TestChatwootSignInSettings(FrappeTestCase):
