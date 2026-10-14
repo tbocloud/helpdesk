@@ -217,6 +217,38 @@ class TestContentAutofill(ContentStandupCase):
         )
         self.assertNotIn(fresh, blockers)
 
+    def test_the_head_hears_of_a_post_missed_earlier_today(self):
+        missed = make_content_post_at(
+            "Morning greeting",
+            CUSTOMER,
+            f"{self.today} 00:00:01",
+            team={"designer": DESIGNER[0]},
+            status="Approved",
+        )
+        rows = {r["reference_name"]: r for r in self.fill(CONTENT_HEAD)["today"]}
+        self.assertTrue(rows[missed]["detail"].startswith("Missed · was due "))
+
+    def test_a_post_to_report_opens_a_draft_without_open_work(self):
+        marketer = make_content_user(
+            "marketer.suc@standup.example", "Mufliha Basheer", DM_EMPLOYEE_ROLE
+        )
+        post = make_content_post_at(
+            "Festive offer",
+            CUSTOMER,
+            add_to_date(self.now, hours=-2),
+            team={"marketer": marketer},
+            status="Scheduled",
+        )
+        # their part was done days ago: no open work and nothing done yesterday
+        complete_task_on(get_content_task(post, "Marketer"), add_days(self.today, -3))
+        set_standup_settings(departments=[])
+        created = standup.open_drafts(standup.get_settings(), self.today, self.calendar)
+        self.assertIn(standup.standup_name(marketer, self.today), created)
+        doc = frappe.get_doc(
+            standup.STANDUP, standup.standup_name(marketer, self.today)
+        )
+        self.assertEqual([r.content_post for r in doc.blockers], [post])
+
     def test_the_erp_wall_keeps_content_out(self):
         # an ERP Employee left on a post's team gets no task and no content line
         make_content_post_at(

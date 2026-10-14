@@ -317,12 +317,19 @@ class ContentDay:
                 blockers.append(self.post_row(post, why))
                 continue
             live = getdate(post.publish_on)
-            missed = get_datetime(post.publish_on) < self.now
-            if (mine and live in (self.day, tomorrow)) or (
-                self.lead and live == self.day and not missed
-            ):
+            if mine and live in (self.day, tomorrow):
                 today.append(self.post_row(post, self.going_live(post)))
+            elif self.lead and live == self.day:
+                # a team post of today's that already passed its time is still theirs
+                # to chase, said as missed
+                today.append(self.post_row(post, self.lead_detail(post)))
         return today, blockers
+
+    def lead_detail(self, post) -> str:
+        publish_on = get_datetime(post.publish_on)
+        if publish_on < self.now:
+            return _("Missed · was due {0}").format(when(publish_on))
+        return self.going_live(post)
 
     def post_blocker(self, post) -> str | None:
         """Why a post they're on is stuck, the most pressing reason only."""
@@ -438,7 +445,8 @@ def content_today(day, users, as_viewer: bool) -> list[dict]:
         ],
         fields=POST_FIELDS,
         order_by=ORDER,
-        limit_page_length=POST_LIMIT,
+        # eight days of posts, filtered by people below: a cap could drop theirs
+        limit_page_length=0,
     )
     teams = role_teams_of([r.name for r in rows])
     found = []

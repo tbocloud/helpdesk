@@ -25,8 +25,10 @@ a day off (the weekly off, Saturdays off and business holidays, through follow-u
 
 - **Who gets a draft:** active agents (HD Agent) with an enabled account, in the stand-up's
   departments. **Skipped:** anyone on approved leave that day (HD Leave, full days; a half
-  day still gets one), and anyone with no open task or ticket and nothing done on the
-  previous working day.
+  day still gets one), and anyone with no open task or ticket, nothing done on the
+  previous working day and no content post to report today (a post going live, missed or
+  waiting, see [Content calendar](#content-calendar): their part can be done while the post
+  still needs them).
 - **Departments left out** of Settings → Stand-up (when any are listed) get no draft and
   no reminder, can't start or edit one from the page (`takes_part`; a stand-up made before
   they were left out stays readable, as history), and are never posted, not even to the
@@ -93,7 +95,8 @@ shows each part with its post, not as a bare task. `helpdesk/standup_content.py`
   - the open posts they're on **going live today and tomorrow** (calendar days, as posts go
     out at weekends too): "Goes live today, 10:00 · Instagram, LinkedIn · Approved";
   - for the **Digital Marketing Head and DM Coordinators** (`CONTENT_LEAD_ROLES`), every
-    post going live today that they may see, not only their own.
+    post going live today that they may see, not only their own; one whose time already
+    passed reads "Missed · was due …" (their own missed posts are blockers).
 - **Blockers**, one line per post they're on, the most pressing reason only:
   1. **missed**: its time passed and it isn't published or cancelled (the board's
      `isMissed`): "Missed · was due Tue 13 Oct, 10:00";
@@ -190,7 +193,8 @@ Today: [Bank reconciliation](…) (Due today)
   Content Calendar projects or post tasks) whose switch is on: the posts going live that day
   that the department's people (those with a stand-up) are on, and their posts missed in
   the week before, **missed and not-approved first, with first names**; at most 8 lines
-  ("and 2 more"). Left out when there is nothing. It is composed whole (the summary goes to
+  ("and 2 more"). Every post of those eight days is read (no row cap), since the people
+  filter runs after the query. Left out when there is nothing. It is composed whole (the summary goes to
   the department's own channel).
 - Then each person: Yesterday and Today, at most 4 items each ("and 3 more"), plus their note.
 - **The AI headline** goes through `ai_engine.call_haiku` (OpenAI first, with failover,

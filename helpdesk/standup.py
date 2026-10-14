@@ -573,8 +573,8 @@ def open_drafts(settings, day, calendar: WorkCalendar) -> list[str]:
             filled = autofill(
                 user, day, calendar, hours, content_on(settings, department)
             )
-            # nothing open and nothing done: no stand-up to write
-            if user not in busy and not filled["yesterday"]:
+            # nothing open, nothing done and no post to report: no stand-up to write
+            if user not in busy and not filled["yesterday"] and not has_content(filled):
                 continue
             doc = new_standup(user, day, department, filled)
             notify_users(
@@ -588,6 +588,16 @@ def open_drafts(settings, day, calendar: WorkCalendar) -> list[str]:
         except Exception:  # noqa: BLE001 - one person's draft must not stop the rest
             frappe.log_error(title=f"Stand-up draft failed for {user}")
     return created
+
+
+def has_content(filled: dict) -> bool:
+    """Autofill listed a content post (going live, missed, waiting) for today, which
+    can happen with no open task of theirs left."""
+    return any(
+        row.get("content_post")
+        for section in ("today", "blockers")
+        for row in filled[section]
+    )
 
 
 def new_standup(user: str, day, department: str | None, filled: dict):
