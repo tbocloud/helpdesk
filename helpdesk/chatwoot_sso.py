@@ -6,6 +6,8 @@ sign-in link for any user. TBO Support signs staff in with Microsoft, so it brok
 - Open TBO Chat (`helpdesk.api.chatwoot_sso.login`): an active agent signed in here
   is found in the Chatwoot account by email, added when missing (if allowed), and sent
   to Chatwoot's one-time link. The link is a credential: it is never logged or stored.
+  Someone sent back from TBO Chat after signing out is asked first, not signed straight
+  back in (`should_pause`).
 - Offboarding: a User who is disabled (by hand or by helpdesk.offboarding when the
   Microsoft account goes) or an HD Agent who is deactivated is removed from the
   Chatwoot account, which ends their access there, and the removal is logged in
@@ -16,6 +18,7 @@ Platform App's token adds and removes them and makes the sign-in links.
 """
 
 import secrets
+from urllib.parse import urlparse
 
 import frappe
 from frappe import _
@@ -29,6 +32,13 @@ LOGIN_PATH = "/api/method/helpdesk.api.chatwoot_sso.login"
 # limit also ends that loop
 RATE_LIMIT = 5
 RATE_WINDOW_SECONDS = 60
+# Chatwoot's LOGOUT_REDIRECT_LINK sends a sign-out to LOGIN_PATH with this flag
+SIGNED_OUT = "signed_out"
+# "Open TBO Chat again" on the signed-out page: sign in whatever came before
+CONTINUE = "continue"
+# Chatwoot sends someone back from TBO Chat this soon after a sign-in only when the
+# session ended at once: a sign-out, or a one-time link it refused
+REPEAT_WINDOW_SECONDS = 60
 AGENT = "agent"
 ADMINISTRATOR = "administrator"
 MANAGER_ROLES = ("System Manager", "Agent Manager")
@@ -96,6 +106,32 @@ def sign_in_url(user: str) -> str:
         if added is None:
             raise unavailable()
     return one_time_link(client, chat_user["id"])
+
+
+def should_pause(user: str, form: dict, referer: str | None) -> bool:
+    """True when `user` should see the signed-out page instead of being signed straight
+    back in to TBO Chat."""
+    if cint(form.get(CONTINUE)):
+        return False
+    if cint(form.get(SIGNED_OUT)):
+        return True
+    return came_from_chat(referer) and bool(frappe.cache.exists(opened_key(user)))
+
+
+def came_from_chat(referer: str | None) -> bool:
+    chat_host = urlparse(
+        frappe.db.get_single_value(SETTINGS, "base_url") or ""
+    ).hostname
+    return bool(chat_host) and urlparse(referer or "").hostname == chat_host
+
+
+def note_opened(user: str):
+    """Remembers that `user` was just sent to TBO Chat (not the link, only that it happened)."""
+    frappe.cache.set_value(opened_key(user), 1, expires_in_sec=REPEAT_WINDOW_SECONDS)
+
+
+def opened_key(user: str) -> str:
+    return f"chatwoot-sso-opened:{user}"
 
 
 def is_active_agent(user: str) -> bool:

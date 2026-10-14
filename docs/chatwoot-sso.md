@@ -6,7 +6,7 @@ access.** Chatwoot Community has no Microsoft (Entra) or SAML sign-in (SAML is E
 only; Google is its only social login). TBO Support (the hub) already signs staff in with
 Microsoft, so the hub brokers TBO Chat sign-in through Chatwoot's **Platform API**.
 
-Code: `helpdesk/chatwoot_sso.py` (logic), `helpdesk/api/chatwoot_sso.py` (the entry point and
+Code: `helpdesk/chatwoot_sso.py` (logic), `helpdesk/api/chatwoot_sso.py` (the entry point, the signed-out page and
 the settings API), `ChatwootClient.platform_request` in `helpdesk/chatwoot_bridge.py`,
 `desk/src/components/Settings/Chat/TboChatSettings.vue` (Settings → TBO Chat) and
 `desk/src/composables/useTboChat.ts` (Open TBO Chat in the profile menu). Tests:
@@ -51,10 +51,50 @@ Agent clicks Open TBO Chat (or goes to chat.teambackoffice.com/app/login)
 - **Password:** Chatwoot requires one when creating a user. The hub sends a random 43+ character
   password (with the upper, lower, digit and symbol Chatwoot asks for) that is never stored or
   shown, so nobody knows it.
+- **Signed out of TBO Chat:** with `signed_out=1`, or when the request comes from TBO Chat
+  (`Referer` host is the Chatwoot URL's host) within 60 seconds of the hub last sending that
+  person into TBO Chat, the hub shows "You're signed out of TBO Chat" (200) instead of signing
+  in, with **Open TBO Chat again** (the same address with `continue=1`, which always signs in)
+  and **Sign out of TBO Support too** (a form POST, with the CSRF token, to
+  `helpdesk.api.chatwoot_sso.sign_out`: the hub's own logout, then `/login`). Neither the page
+  nor anything stored holds the one-time link. See [Signing out](#signing-out-of-tbo-chat).
 - **The one-time link** is followed only when it starts with `<Chatwoot URL>/app/login?`; any
   other answer is a 502 page, "Couldn't open TBO Chat". The link is a credential: it is never
   logged, stored or put in a page. Chatwoot keeps the token in Redis for **5 minutes** and it
   works **once**.
+
+### Signing out of TBO Chat
+
+Chatwoot's **Log out** calls `DELETE /auth/sign_out` and then sets `window.location` to the
+installation config `LOGOUT_REDIRECT_LINK` (default `/app/login`; `clearCookiesOnLogout` in
+`app/javascript/dashboard/store/utils/api.js`, v4.18.0). With the default, Caddy sent that
+`/app/login` to the hub, and the hub signed the person straight back in while their hub
+session lasted: logout never stuck.
+
+The `Referer` alone can't tell a sign-out from a first visit. A first visit to
+`chat.teambackoffice.com` without a Chatwoot session loads the app, whose router calls
+`window.location.assign('/app/login')` (`validateAuthenticateRoutePermission` in
+`app/javascript/dashboard/routes/index.js`). Both are full navigations from a Chatwoot page to
+`/app/login`, and after Caddy's cross-origin redirect the browser sends the hub only the origin
+(`https://chat.teambackoffice.com/`) in both cases.
+
+So the hub uses two signals:
+
+1. **`signed_out=1`, the main one.** Chatwoot's `LOGOUT_REDIRECT_LINK` is set to the hub's entry
+   point with this flag (owner step 7), so only a sign-out carries it. Chatwoot also uses that
+   link when a stale session is found (`validityCheck` answers 401), so someone whose Chatwoot
+   session ran out sees the same page; one click opens TBO Chat again.
+2. **Coming back at once, the fallback.** After each successful sign-in the hub keeps a flag
+   for 60 seconds (Redis `chatwoot-sso-opened:<user>`; only that it happened, never the link).
+   A request from TBO Chat (`Referer` host = the Chatwoot URL's host) while that flag is set is
+   a session that ended at once: a sign-out before step 7 is done, or a one-time link Chatwoot
+   refused. Either way the page is shown instead of another sign-in, which also breaks any
+   redirect loop. Opening TBO Chat from the hub menu, a bookmark or a link (no TBO Chat
+   referer) always signs in; so does a first visit to `chat.teambackoffice.com` more than a
+   minute after the last sign-in.
+
+`continue=1` skips both. A guest is sent to the hub sign-in as before, whatever the flags.
+No Caddy change is needed.
 
 ### Why the Platform App can sign in existing users
 
@@ -107,9 +147,8 @@ is what ends access:
   nothing of TBO's data. To wipe the tokens too (a hostile leaver), run on the server:
   `cd /opt/chatwoot && sudo docker compose exec -T rails bundle exec rails runner 'User.find_by!(email: "person@teambackoffice.com").update!(tokens: {})'`.
 - Turning sign-in on does not end anyone's existing Chatwoot session; those stay valid until
-  they sign out or expire. Signing out of Chatwoot leads to `/app/login`, which signs the
-  person straight back in while their hub session lasts: sign out of the hub (or Microsoft)
-  to leave.
+  they sign out or expire. Signing out of Chatwoot ends at the hub's "You're signed out of TBO
+  Chat" page, which also offers to sign out of the hub.
 
 ## Settings
 
@@ -286,6 +325,16 @@ password was rotated use "Forgot password" (now allowed again) to set one.
    the others.
 6. Turn off password sign-in on the hub (System Settings), keeping one break-glass
    Administrator.
+7. **Send Chatwoot's Log out to the hub's signed-out page** (so logout sticks; see
+   [Signing out](#signing-out-of-tbo-chat)):
+   ```sh
+   cd /opt/chatwoot && sudo docker compose exec -T rails bundle exec rails runner \
+     'c = InstallationConfig.find_or_initialize_by(name: "LOGOUT_REDIRECT_LINK"); c.value = "https://teams.teambackoffice.com/api/method/helpdesk.api.chatwoot_sso.login?signed_out=1"; c.locked = false; c.save!; puts GlobalConfig.get_value("LOGOUT_REDIRECT_LINK")'
+   ```
+   Saving clears Chatwoot's config cache; an open Chatwoot tab picks it up on its next full
+   page load. Chatwoot upgrades keep an existing value. To undo, set the value back to
+   `/app/login`. Check: sign in with **Open TBO Chat**, click **Log out** in Chatwoot, and the
+   hub page "You're signed out of TBO Chat" appears.
 
 ## Decisions
 
@@ -297,5 +346,10 @@ password was rotated use "Forgot password" (now allowed again) to set one.
   sender of their past messages; removal keeps history and ends access.
 - **Own per-user rate limit:** Frappe's `rate_limit` keys on IP or a request argument, and
   answers with JSON; this one keys on the signed-in user and shows a page.
+- **Sign-out signal is Chatwoot's `LOGOUT_REDIRECT_LINK`, with a 60-second fallback:** the
+  referer can't tell a sign-out from a first visit (see [Signing out](#signing-out-of-tbo-chat)),
+  and a Caddy rule can't either, because both are the same navigation to `/app/login`. The
+  logout link is a supported Chatwoot setting, so it survives upgrades; the fallback keeps
+  logout working (and loops broken) before it is set.
 - **Removal is not retried automatically:** a failure goes to the Error Log and the error
   alerts; disabling the person again (or deactivating the agent) retries.
