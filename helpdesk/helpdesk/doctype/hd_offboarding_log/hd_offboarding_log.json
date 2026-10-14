@@ -2,13 +2,14 @@
  "actions": [],
  "autoname": "hash",
  "creation": "2026-10-11 12:00:00.000000",
- "description": "Who offboarding from Microsoft disabled, why and when (helpdesk.offboarding).",
+ "description": "Who offboarding disabled in TBO Support or removed from TBO Chat, why and when (helpdesk.offboarding, helpdesk.chatwoot_sso).",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
   "user",
   "full_name",
   "reason",
+  "action",
   "disabled_on"
  ],
  "fields": [
@@ -36,7 +37,18 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Reason",
-   "options": "Disabled in Microsoft\nNot in Microsoft",
+   "options": "Disabled in Microsoft\nNot in Microsoft\nUser disabled\nAgent deactivated\nAgent removed",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "default": "Disabled in TBO Support",
+   "fieldname": "action",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Action",
+   "options": "Disabled in TBO Support\nRemoved from TBO Chat",
    "read_only": 1,
    "reqd": 1
   },
@@ -44,7 +56,7 @@
    "fieldname": "disabled_on",
    "fieldtype": "Datetime",
    "in_list_view": 1,
-   "label": "Disabled on",
+   "label": "On",
    "read_only": 1,
    "reqd": 1
   }
@@ -52,7 +64,7 @@
  "in_create": 1,
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-10-11 12:00:00.000000",
+ "modified": "2026-10-14 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Helpdesk",
  "name": "HD Offboarding Log",

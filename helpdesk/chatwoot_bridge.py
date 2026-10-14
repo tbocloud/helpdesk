@@ -988,12 +988,17 @@ class ChatwootClient:
     """Chatwoot's REST API. Every failure is logged and answered with None, never raised."""
 
     def __init__(self, settings):
-        self.base = f"{(settings.base_url or '').rstrip('/')}/api/v1/accounts/{cint(settings.account_id)}"
+        self.root = (settings.base_url or "").rstrip("/")
+        self.base = f"{self.root}/api/v1/accounts/{cint(settings.account_id)}"
         self.user_token = settings.get_password(
             "api_access_token", raise_exception=False
         )
         self.bot_token = settings.get_password(
             "bot_access_token", raise_exception=False
+        )
+        # the Platform App's token, for TBO Chat sign-in (helpdesk.chatwoot_sso)
+        self.platform_token = settings.get_password(
+            "platform_api_token", raise_exception=False
         )
 
     def get_messages(self, conversation_id: int):
@@ -1045,6 +1050,20 @@ class ChatwootClient:
     ):
         # the bot may only post, toggle and assign; everything else goes through the bridge user
         token = (self.bot_token if as_bot else None) or self.user_token
+        return self.send(method, self.base + path, path, token, body)
+
+    def platform_request(self, method: str, path: str, body: dict | None = None):
+        """Chatwoot's Platform API (/platform/api/v1), with the Platform App's token."""
+        return self.send(
+            method,
+            f"{self.root}/platform/api/v1{path}",
+            f"/platform/api/v1{path}",
+            self.platform_token,
+            body,
+        )
+
+    def send(self, method: str, url: str, path: str, token: str | None, body):
+        # only `path` is logged: never a token, a request body or a successful answer
         if not token:
             frappe.log_error(
                 title=_("TBO Chat request skipped"),
@@ -1054,7 +1073,7 @@ class ChatwootClient:
         try:
             response = requests.request(
                 method,
-                self.base + path,
+                url,
                 json=body,
                 # dashes, not underscores: proxies such as Caddy/nginx drop
                 # underscore header names, and Chatwoot reads both spellings
