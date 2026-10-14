@@ -270,7 +270,7 @@
             <div
               v-if="teamWarnings.length"
               role="status"
-              class="flex flex-col gap-1.5 rounded-lg bg-warning-soft p-3"
+              class="flex flex-col gap-1.5 rounded-lg border border-outline-gray-2 p-3"
             >
               <p
                 v-for="warning in teamWarnings"

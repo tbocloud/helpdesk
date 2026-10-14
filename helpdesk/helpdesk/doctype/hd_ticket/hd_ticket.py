@@ -437,14 +437,16 @@ class HDTicket(Document):
 
     def set_customer_from_domain(self):
         """A new ticket without a customer gets the one whose email domain is the
-        sender's, never for public mail domains (docs/ticket-intake.md)."""
+        sender's, never for public mail domains or an agent's own ticket
+        (docs/ticket-intake.md)."""
         if not self.is_new() or self.customer or self.is_alert():
             return
-        if not frappe.db.get_single_value(
+        email = parseaddr(self.raised_by or "")[1]
+        if is_agent(email) or not frappe.db.get_single_value(
             "HD Intake Settings", "match_customer_by_domain"
         ):
             return
-        self.customer = customer_for_email(parseaddr(self.raised_by or "")[1])
+        self.customer = customer_for_email(email)
         self.flags.customer_from_domain = bool(self.customer)
 
     def link_sender_to_customer(self):

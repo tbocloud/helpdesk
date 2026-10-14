@@ -25,6 +25,8 @@ from helpdesk.work_calendar import on_leave
 
 CUSTOMER_ROLES = ("HD Customer", "HD Customer Manager")
 TICKET_OWNER_FIELDS = ("ticket_owner", "backup_ticket_owner")
+DOMAIN_CACHE_KEY = "helpdesk:customer_domains"
+DOMAIN_CACHE_SECONDS = 600
 
 
 class HDCustomer(Document):
@@ -642,18 +644,37 @@ def customer_for_email(email: str | None) -> str | None:
     domain = normalize_domain((email or "").rpartition("@")[2])
     if not domain or domain in public_email_domains():
         return None
-    customers = frappe.get_all(
+    by_domain = domain_customers()
+    labels = domain.split(".")
+    # the domain itself and each parent: mail.acme.com, acme.com, com
+    matches = set().union(
+        *(by_domain.get(".".join(labels[i:]), ()) for i in range(len(labels)))
+    )
+    return matches.pop() if len(matches) == 1 else None
+
+
+def domain_customers() -> dict[str, list[str]]:
+    """{domain: the customers that have it}, cached until a customer changes
+    (`clear_domain_cache`) or for DOMAIN_CACHE_SECONDS, so a new ticket doesn't read
+    every customer."""
+    cached = frappe.cache.get_value(DOMAIN_CACHE_KEY, expires=True)
+    if cached is not None:
+        return cached
+    by_domain: dict[str, list[str]] = {}
+    for c in frappe.get_all(
         "HD Customer",
         or_filters={"domain": ("is", "set"), "email_domains": ("is", "set")},
         fields=["name", "domain", "email_domains"],
         limit_page_length=0,
+    ):
+        for domain in customer_domains(c.domain, c.email_domains):
+            by_domain.setdefault(domain, []).append(c.name)
+    frappe.cache.set_value(
+        DOMAIN_CACHE_KEY, by_domain, expires_in_sec=DOMAIN_CACHE_SECONDS
     )
-    matches = {
-        c.name
-        for c in customers
-        if any(
-            domain == d or domain.endswith("." + d)
-            for d in customer_domains(c.domain, c.email_domains)
-        )
-    }
-    return matches.pop() if len(matches) == 1 else None
+    return by_domain
+
+
+def clear_domain_cache(doc=None, method=None):
+    """HD Customer doc event, and after the CRM fill writes domains directly."""
+    frappe.cache.delete_value(DOMAIN_CACHE_KEY)

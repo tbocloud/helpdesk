@@ -2338,6 +2338,24 @@ def make_ticket_type(name: str):
     return name
 
 
+def set_ticket_status(ticket, status: str):
+    """Saves `status` on the ticket through the document, so its save hooks run."""
+    doc = frappe.get_doc("HD Ticket", str(ticket))
+    doc.status = status
+    doc.save(ignore_permissions=True)
+    return doc
+
+
+def get_feedback_mails(sendmail_mock) -> list:
+    """The feedback-request mails among the calls a patched frappe.sendmail received."""
+    return [
+        c
+        for c in sendmail_mock.call_args_list
+        if c.kwargs.get("email_headers", {}).get("X-Auto-Generated")
+        == "hd-email-feedback"
+    ]
+
+
 def log_activity_as(user: str, ticket, action: str):
     """Records a ticket activity line (e.g. "set priority to Low") as made by `user`."""
     from helpdesk.helpdesk.doctype.hd_ticket_activity.hd_ticket_activity import (

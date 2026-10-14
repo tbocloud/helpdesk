@@ -191,7 +191,16 @@ def handle_new_mail(sender: str | None, subject: str | None, content: str | None
     """Apply the rules to a new mail (not a reply). True when it was handled here and
     must not open a ticket; False lets Frappe open one (an Alert gets its type in
     HDTicket.apply_intake_rules)."""
-    decision = decide(sender, subject)
+    return handle_mail(decide(sender, subject), sender, subject, content)
+
+
+def handle_mail(
+    decision: Decision | None,
+    sender: str | None,
+    subject: str | None,
+    content: str | None,
+) -> bool:
+    """`handle_new_mail` for a mail the rules were already applied to."""
     if not decision:
         return False
     if decision.action == IGNORE:

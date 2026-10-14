@@ -135,6 +135,7 @@ def fill_customer_domains(apply: bool = False) -> dict:
     a public mail domain (`public`), and a domain another customer already has
     (`taken`), since a domain must point at one customer (docs/ticket-intake.md)."""
     from helpdesk.helpdesk.doctype.hd_customer.hd_customer import (
+        clear_domain_cache,
         customer_domains,
         normalize_domain,
         public_email_domains,
@@ -174,6 +175,7 @@ def fill_customer_domains(apply: bool = False) -> dict:
             result["fill"].append(row)
     if apply:
         result["fill"] = [row for row in result["fill"] if fill_empty_domain(**row)]
+        clear_domain_cache()
     return result
 
 

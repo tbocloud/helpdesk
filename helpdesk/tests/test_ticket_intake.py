@@ -17,12 +17,14 @@ from helpdesk.consts import (
     MONITOR_RESOLVED_STATUS,
 )
 from helpdesk.email_filter import UnwantedTicketEmail
+from helpdesk.helpdesk.doctype.hd_customer.hd_customer import clear_domain_cache
 from helpdesk.overrides.email_account import CustomInboundMail
 from helpdesk.routing import apply_triage
 from helpdesk.test_utils import (
     INTAKE_INBOX,
     FakeCRM,
     call_as_user,
+    get_feedback_mails,
     get_intake_logs,
     get_open_assignees,
     get_ticket_comments,
@@ -38,6 +40,7 @@ from helpdesk.test_utils import (
     make_ticket,
     make_ticket_type,
     set_intake_settings,
+    set_ticket_status,
 )
 from helpdesk.ticket_puller import _create_hd_ticket
 
@@ -85,6 +88,9 @@ class IntakeCase(FrappeTestCase):
             frappe.clear_document_cache, "HD Intake Settings", "HD Intake Settings"
         )
         self.addCleanup(frappe.clear_document_cache, "HD Settings", "HD Settings")
+        # the domain map would otherwise keep customers the rollback removed
+        clear_domain_cache()
+        self.addCleanup(clear_domain_cache)
         mail = patch("frappe.sendmail")
         self.sendmail = mail.start()
         self.addCleanup(mail.stop)
@@ -132,6 +138,11 @@ class TestMailRules(IntakeCase):
         self.assertFalse(ticket.agreement_status)
         self.assertFalse(ticket.resolution_by)
         self.assertNotIn(str(ticket.name), [str(t.name) for t in home._open_tickets()])
+
+    def test_home_still_counts_tickets_without_a_type(self):
+        untyped = make_ticket(subject="Old ticket", status="Open")
+        frappe.db.set_value("HD Ticket", untyped.name, "ticket_type", None)
+        self.assertIn(str(untyped.name), [str(t.name) for t in home._open_tickets()])
 
     def test_a_repeat_is_added_to_the_open_alert(self):
         alert = make_mail_ticket(FIRING, GRAFANA)
@@ -456,6 +467,13 @@ class TestCustomerDetection(IntakeCase):
         make_domain_customer(CUSTOMER, "acme-intake.example")
         self.assertFalse(make_ticket(raised_by="ravi@acme-intake.example").customer)
 
+    def test_an_agents_own_ticket_gets_no_customer(self):
+        make_tasky_user("agent@acme-intake.example", "Acme Agent")
+        make_domain_customer(CUSTOMER, "acme-intake.example")
+        ticket = make_ticket(raised_by="agent@acme-intake.example")
+        self.assertFalse(ticket.customer)
+        self.assertFalse(frappe.db.exists("HD Customer Member", {"parent": CUSTOMER}))
+
     def test_fill_domains_from_the_crm_website(self):
         make_tasky_user(*MANAGER, roles=("Agent Manager",))
         make_domain_customer(CUSTOMER)
@@ -574,50 +592,38 @@ class TestFeedbackOnClose(IntakeCase):
         )
         frappe.clear_document_cache("HD Settings", "HD Settings")
 
-    def set_status(self, ticket, status):
-        doc = frappe.get_doc("HD Ticket", ticket.name)
-        doc.status = status
-        doc.save(ignore_permissions=True)
-        return doc
-
-    def feedback_mails(self):
-        return [
-            c
-            for c in self.sendmail.call_args_list
-            if c.kwargs.get("email_headers", {}).get("X-Auto-Generated")
-            == "hd-email-feedback"
-        ]
-
     def test_closing_without_resolving_asks_once(self):
         ticket = make_ticket(
             subject="Report wrong", raised_by="lina@customer-intake.example"
         )
 
-        self.assertTrue(self.set_status(ticket, "Closed").feedback_requested_on)
-        self.assertEqual(len(self.feedback_mails()), 1)
+        self.assertTrue(set_ticket_status(ticket.name, "Closed").feedback_requested_on)
+        self.assertEqual(len(get_feedback_mails(self.sendmail)), 1)
 
-        self.set_status(ticket, "Open")
-        self.set_status(ticket, "Closed")
-        self.assertEqual(len(self.feedback_mails()), 1)
+        set_ticket_status(ticket.name, "Open")
+        set_ticket_status(ticket.name, "Closed")
+        self.assertEqual(len(get_feedback_mails(self.sendmail)), 1)
 
     def test_a_resolved_ticket_is_not_asked_again_on_close(self):
         ticket = make_ticket(
             subject="Report wrong", raised_by="lina@customer-intake.example"
         )
-        self.set_status(ticket, "Resolved")
-        self.set_status(ticket, "Closed")
-        self.assertEqual(len(self.feedback_mails()), 1)
+        set_ticket_status(ticket.name, "Resolved")
+        set_ticket_status(ticket.name, "Closed")
+        self.assertEqual(len(get_feedback_mails(self.sendmail)), 1)
 
     def test_alerts_and_the_teams_own_tickets_are_never_asked(self):
         make_tasky_user(*AGENT)
-        self.set_status(make_mail_ticket(FIRING, GRAFANA), "Closed")
-        self.set_status(make_ticket(subject="Internal", raised_by=AGENT[0]), "Closed")
-        self.assertEqual(self.feedback_mails(), [])
+        set_ticket_status(make_mail_ticket(FIRING, GRAFANA).name, "Closed")
+        set_ticket_status(
+            make_ticket(subject="Internal", raised_by=AGENT[0]).name, "Closed"
+        )
+        self.assertEqual(get_feedback_mails(self.sendmail), [])
 
     def test_close_path_can_be_switched_off(self):
         set_intake_settings(feedback_on_close=0)
         ticket = make_ticket(
             subject="Report wrong", raised_by="lina@customer-intake.example"
         )
-        self.set_status(ticket, "Closed")
-        self.assertEqual(self.feedback_mails(), [])
+        set_ticket_status(ticket.name, "Closed")
+        self.assertEqual(get_feedback_mails(self.sendmail), [])
