@@ -33,7 +33,9 @@ def health_check_connections():
 
 
 def retry_pending_triages():
-    """Daily: re-enqueue failed/pending triages within retry limit."""
+    """Daily, and when an AI provider recovers (ai_engine.retry_failed_triages):
+    re-enqueue failed/pending triages within the retry limit. The manual cooldown
+    doesn't apply: a triage that failed seconds before the recovery must run too."""
     tickets = frappe.get_all(
         "HD Ticket",
         filters={
@@ -48,7 +50,7 @@ def retry_pending_triages():
         try:
             from helpdesk.triage import run_triage_now
 
-            run_triage_now(str(ticket.name))
+            run_triage_now(str(ticket.name), ignore_cooldown=True)
         except Exception:  # noqa: BLE001 - one ticket must not stop the rest
             frappe.log_error(
                 title=f"Triage retry failed for {ticket.name}",

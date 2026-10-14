@@ -290,7 +290,7 @@ def get_ai_status() -> dict:
     return {
         "available": False,
         "reason": _(
-            "AI isn't set up. An administrator adds the AI key in HDS Hub Settings."
+            "AI isn't set up. An administrator adds an AI key in Settings → AI providers."
         ),
     }
 

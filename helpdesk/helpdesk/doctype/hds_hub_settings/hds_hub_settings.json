@@ -5,6 +5,9 @@
 	"engine": "InnoDB",
 	"field_order": [
 		"api_section",
+		"primary_ai_provider",
+		"ai_failover",
+		"anthropic_section",
 		"ai_provider",
 		"ai_base_url",
 		"investigation_provider",
@@ -14,6 +17,11 @@
 		"column_break_api",
 		"default_triage_model",
 		"default_investigation_model",
+		"openai_section",
+		"openai_base_url",
+		"openai_api_key",
+		"column_break_openai",
+		"openai_model",
 		"limits_section",
 		"max_tool_calls_per_session",
 		"max_session_time_seconds",
@@ -28,24 +36,44 @@
 		"triage_section",
 		"auto_triage_enabled",
 		"auto_investigate",
-		"automation_user",
-		"draft_kb_articles",
 		"column_break_triage",
-		"triage_job_timeout"
+		"triage_job_timeout",
+		"draft_kb_articles",
+		"automation_user"
 	],
 	"fields": [
 		{
 			"fieldname": "api_section",
 			"fieldtype": "Section Break",
-			"label": "AI Provider"
+			"label": "AI Providers"
+		},
+		{
+			"default": "OpenAI",
+			"description": "Tried first for triage, drafts and summaries. Edited in the helpdesk app: Settings → AI providers.",
+			"fieldname": "primary_ai_provider",
+			"fieldtype": "Select",
+			"label": "Primary AI Provider",
+			"options": "OpenAI\nAnthropic-compatible"
+		},
+		{
+			"default": "1",
+			"description": "When the primary runs out of balance or quota, refuses the key, can't find the model, errors (5xx) or times out.",
+			"fieldname": "ai_failover",
+			"fieldtype": "Check",
+			"label": "Fall Back to the Other Provider"
+		},
+		{
+			"fieldname": "anthropic_section",
+			"fieldtype": "Section Break",
+			"label": "Anthropic-compatible Provider"
 		},
 		{
 			"fieldname": "ai_provider",
 			"fieldtype": "Select",
-			"label": "Provider",
+			"label": "Anthropic-compatible API",
 			"options": "Anthropic\nAnthropic Compatible\nOpenAI Compatible",
 			"default": "Anthropic",
-			"description": "Anthropic Compatible: Kimi/Moonshot, GLM/Zhipu — same API shape, set Base URL. OpenAI Compatible: Poolside, Qwen — triage only; investigation sessions need Anthropic or Anthropic Compatible."
+			"description": "Anthropic: api.anthropic.com. Anthropic Compatible: Kimi/Moonshot, GLM/Zhipu — same API shape, set Base URL. OpenAI Compatible (older setting): Poolside, Qwen — use the OpenAI provider for these now."
 		},
 		{
 			"fieldname": "ai_base_url",
@@ -78,8 +106,7 @@
 			"fieldname": "anthropic_api_key",
 			"fieldtype": "Password",
 			"label": "AI API Key",
-			"reqd": 1,
-			"description": "Key for the selected provider. Stored only on the Hub — customer sites never hold an AI credential."
+			"description": "Key for the Anthropic-compatible provider. Stored only on the Hub — customer sites never hold an AI credential."
 		},
 		{
 			"fieldname": "column_break_api",
@@ -96,6 +123,34 @@
 			"fieldname": "default_investigation_model",
 			"fieldtype": "Data",
 			"label": "Investigation Model"
+		},
+		{
+			"fieldname": "openai_section",
+			"fieldtype": "Section Break",
+			"label": "OpenAI Provider"
+		},
+		{
+			"default": "https://api.openai.com/v1",
+			"description": "Leave as is for OpenAI; any OpenAI-compatible Chat Completions endpoint also works.",
+			"fieldname": "openai_base_url",
+			"fieldtype": "Data",
+			"label": "OpenAI Base URL"
+		},
+		{
+			"fieldname": "openai_api_key",
+			"fieldtype": "Password",
+			"label": "OpenAI API Key"
+		},
+		{
+			"fieldname": "column_break_openai",
+			"fieldtype": "Column Break"
+		},
+		{
+			"default": "gpt-5.6-luna",
+			"description": "Must match the model ID in your OpenAI dashboard exactly.",
+			"fieldname": "openai_model",
+			"fieldtype": "Data",
+			"label": "OpenAI Model"
 		},
 		{
 			"fieldname": "limits_section",
@@ -208,7 +263,7 @@
 	],
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-10-02 18:00:00.000000",
+	"modified": "2026-10-14 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Hub Settings",

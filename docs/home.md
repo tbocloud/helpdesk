@@ -27,6 +27,7 @@ who is champion is on the **Scoreboard** (`/helpdesk/team-dashboard`, see
 | Next holiday | Everyone, when the hub has one within a year | `calendar.next_holiday` |
 | On leave today | People who can see the Overview | `calendar.on_leave_today` |
 | Follow-ups strip | Everyone with overdue, escalated or waiting work | `follow_ups` |
+| AI provider banner | Admins, only while the primary AI provider fails: its reason, since when, which provider answers instead, and **Open AI providers** ([ai-providers.md](ai-providers.md#home)) | `systems.ai.providers` |
 | Your action plan | Everyone with open work | `get_action_plan` |
 | Your day | Everyone | `day` |
 | Your projects | Everyone on an open project | `day.projects` |
@@ -230,8 +231,9 @@ unassigned *tasks* group, so tasks have no Take it or Assign here.
 - **Team load**: the 10 busiest people from the portfolio with their open and in-progress
   counts and projects; admins also see who has no open project work ("Free: …").
 - **Systems** (admins): customer ERP connections, mailboxes, Teams notifications, TBO Chat
-  and AI triage health. A connection in Error or Unreachable shows its last error, and an
-  Unreachable one when the hub calls it next ([client-site-sync.md](client-site-sync.md)).
+  and AI triage health (with the AI provider answering now). A connection in Error or
+  Unreachable shows its last error, and an Unreachable one when the hub calls it next
+  ([client-site-sync.md](client-site-sync.md)).
 
 ## Compatibility
 

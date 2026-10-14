@@ -15,9 +15,8 @@ import re
 import frappe
 from frappe.query_builder import Criterion
 from frappe.utils import escape_html, get_url, now_datetime
-from frappe.utils.password import get_decrypted_password
 
-from helpdesk.ai_engine import call_haiku
+from helpdesk.ai_engine import call_haiku, get_providers
 from helpdesk.api.ticket_ai import build_prompt, html_to_text, text_to_html, truncate
 from helpdesk.search import STOPWORDS
 from helpdesk.session_replay import build_triage_context
@@ -213,16 +212,8 @@ def get_suggestion_info(ticket_id: str) -> dict:
 
 
 def is_ai_configured() -> bool:
-    """Whether the hub has an AI key, checked without frappe.throw's user-facing message."""
-    return bool(
-        get_decrypted_password(
-            "HDS Hub Settings",
-            "HDS Hub Settings",
-            "anthropic_api_key",
-            raise_exception=False,
-        )
-        or frappe.conf.get("anthropic_api_key")
-    )
+    """Whether a provider call_haiku would try has a key, checked without frappe.throw's message."""
+    return bool(get_providers())
 
 
 def is_open_ticket(ticket_id: str) -> bool:
