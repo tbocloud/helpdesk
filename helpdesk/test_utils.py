@@ -2299,6 +2299,113 @@ def make_puller_mcp(site_url: str = "https://erp.example.com"):
     return mcp
 
 
+INTAKE_INBOX = "intake-inbox@example.com"
+
+
+def set_intake_settings(rules: list[dict] | None = None, **values):
+    """Overwrite HD Intake Settings for a test: `rules` (dicts of HD Intake Rule fields,
+    enabled unless they say otherwise) replace the rule list when given; other values
+    (apply_triage, default_team, routes, public_email_domains...) are set as they are.
+    Callers roll back afterwards."""
+    doc = frappe.get_single("HD Intake Settings")
+    if rules is not None:
+        doc.set("rules", [{"enabled": 1, **rule} for rule in rules])
+    doc.update(values)
+    doc.save(ignore_permissions=True)
+    frappe.clear_document_cache("HD Intake Settings", "HD Intake Settings")
+
+
+def make_mail_ticket(subject: str, sender: str, **values):
+    """Creates an HD Ticket the way an incoming email opens one: through the intake
+    inbox (an incoming Email Account), so the intake rules and the mail filter apply."""
+    inbox = make_email_account(
+        INTAKE_INBOX, enable_outgoing=0, enable_incoming=1, append_to="HD Ticket"
+    )
+    return make_ticket(
+        subject=subject, raised_by=sender, email_account=inbox.name, **values
+    )
+
+
+def make_intake_mail(subject: str, sender: str, body: str = "Alert details") -> bytes:
+    """A raw incoming email, as the mailbox hands it to Frappe's InboundMail."""
+    return (
+        f"From: {sender}\r\nTo: {INTAKE_INBOX}\r\nSubject: {subject}\r\n"
+        f"Message-ID: <{frappe.generate_hash(length=12)}@mail.example>\r\n"
+        f"Content-Type: text/plain; charset=utf-8\r\n\r\n{body}\r\n"
+    ).encode()
+
+
+def get_intake_logs(sender: str) -> list[dict]:
+    """HD Intake Log rows for `sender`, oldest first: action, rule and ticket."""
+    return frappe.get_all(
+        "HD Intake Log",
+        filters={"sender": sender},
+        fields=["action", "rule", "ticket"],
+        order_by="creation asc",
+    )
+
+
+def get_ticket_comments(ticket) -> list[str]:
+    """The contents of a ticket's HD Ticket Comments, oldest first."""
+    return frappe.get_all(
+        "HD Ticket Comment",
+        filters={"reference_ticket": str(ticket)},
+        pluck="content",
+        order_by="creation asc",
+    )
+
+
+def make_domain_customer(name: str, domain: str = "", email_domains: str = ""):
+    """Creates (or updates) an HD Customer with a Domain and Other Email Domains."""
+    doc = (
+        frappe.get_doc("HD Customer", name)
+        if frappe.db.exists("HD Customer", name)
+        else frappe.get_doc({"doctype": "HD Customer", "customer_name": name})
+    )
+    doc.domain = domain
+    doc.email_domains = email_domains
+    doc.save(ignore_permissions=True)
+    return doc
+
+
+def make_ticket_type(name: str):
+    """Creates an HD Ticket Type if the site doesn't have it yet."""
+    if not frappe.db.exists("HD Ticket Type", name):
+        frappe.get_doc({"doctype": "HD Ticket Type", "name": name}).insert(
+            ignore_permissions=True
+        )
+    return name
+
+
+def set_ticket_status(ticket, status: str):
+    """Saves `status` on the ticket through the document, so its save hooks run."""
+    doc = frappe.get_doc("HD Ticket", str(ticket))
+    doc.status = status
+    doc.save(ignore_permissions=True)
+    return doc
+
+
+def get_feedback_mails(sendmail_mock) -> list:
+    """The feedback-request mails among the calls a patched frappe.sendmail received."""
+    return [
+        c
+        for c in sendmail_mock.call_args_list
+        if c.kwargs.get("email_headers", {}).get("X-Auto-Generated")
+        == "hd-email-feedback"
+    ]
+
+
+def log_activity_as(user: str, ticket, action: str):
+    """Records a ticket activity line (e.g. "set priority to Low") as made by `user`."""
+    from helpdesk.helpdesk.doctype.hd_ticket_activity.hd_ticket_activity import (
+        log_ticket_activity,
+    )
+
+    activity = log_ticket_activity(str(ticket), action)
+    activity.db_set("owner", user, update_modified=False)
+    return activity
+
+
 def set_content_settings(**values):
     """Overwrite HD Content Settings fields for a test (callers roll back afterwards)."""
     frappe.db.set_single_value("HD Content Settings", values)

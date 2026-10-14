@@ -21,13 +21,19 @@ from frappe.utils import (
     get_fullname,
     getdate,
     now_datetime,
+    validate_email_address,
 )
 from pypika.functions import Count
 from pypika.queries import Query
 from pypika.terms import Criterion
 
 from helpdesk.automation import automation_user
+from helpdesk.consts import ALERT_TICKET_TYPE
 from helpdesk.content_team import sees_no_tickets
+from helpdesk.helpdesk.doctype.hd_customer.hd_customer import (
+    add_customer_contact,
+    customer_for_email,
+)
 from helpdesk.helpdesk.doctype.hd_settings.helpers import (
     get_default_email_content,
     is_email_content_empty,
@@ -87,7 +93,7 @@ class HDTicket(Document):
         return self.name
 
     def before_insert(self):
-        self.reject_unwanted_email()
+        self.apply_intake_rules()
         self.generate_key()
 
     def before_validate(self):
@@ -104,6 +110,7 @@ class HDTicket(Document):
         self.validate_portal_contact()
         self.set_contact()
         self.set_customer()
+        self.set_customer_from_domain()
 
     def validate(self):
         self.validate_feedback()
@@ -135,29 +142,7 @@ class HDTicket(Document):
         )
 
     def handle_email_feedback(self):
-        if (
-            self.is_new()
-            or self.via_customer_portal
-            or self.feedback_rating
-            or not self.has_value_changed("status")
-            or not self.key
-            or self.has_chat_only_contact()
-        ):
-            return
-
-        [is_email_feedback_enabled, email_feedback_status] = frappe.get_cached_value(
-            "HD Settings",
-            "HD Settings",
-            ["enable_email_ticket_feedback", "send_email_feedback_on_status"],
-        )
-
-        send_feedback_email = int(is_email_feedback_enabled) and (
-            email_feedback_status == self.status
-            or email_feedback_status == ""
-            and self.status == "Closed"
-        )
-
-        if not send_feedback_email:
+        if not self.should_request_feedback():
             return
 
         last_communication = self.get_last_communication()
@@ -186,6 +171,62 @@ class HDTicket(Document):
             frappe.msgprint(_("Feedback email has been sent to the customer"))
         except Exception as e:
             frappe.throw(_("Could not send feedback email,due to: {0}").format(e))
+        self.feedback_requested_on = now_datetime()
+
+    def should_request_feedback(self) -> bool:
+        """Once per ticket, to a customer's real address: on the feedback status of HD
+        Settings, or, with Ask for Feedback on Close (Settings → Ticket intake), when the
+        ticket is closed without ever reaching that status (docs/ticket-intake.md)."""
+        if (
+            self.is_new()
+            or self.via_customer_portal
+            or self.feedback_rating
+            or self.feedback_requested_on
+            or self.flags.skip_feedback
+            or not self.has_value_changed("status")
+            or not self.key
+            or self.has_chat_only_contact()
+            or not self.is_customer_sender()
+        ):
+            return False
+
+        [is_email_feedback_enabled, email_feedback_status] = frappe.get_cached_value(
+            "HD Settings",
+            "HD Settings",
+            ["enable_email_ticket_feedback", "send_email_feedback_on_status"],
+        )
+        if not cint(is_email_feedback_enabled):
+            return False
+        feedback_status = email_feedback_status or "Closed"
+        if self.status == feedback_status:
+            return True
+        return (
+            self.status == "Closed"
+            and bool(
+                frappe.db.get_single_value("HD Intake Settings", "feedback_on_close")
+            )
+            and not self.reached_status(feedback_status)
+        )
+
+    def is_customer_sender(self) -> bool:
+        """A person outside the team: not an alert, an agent or an automated sender."""
+        from helpdesk.email_filter import is_unwanted_sender
+
+        email = parseaddr(self.raised_by or "")[1]
+        return (
+            not self.is_alert()
+            and bool(validate_email_address(email))
+            and not is_agent(email)
+            and not is_unwanted_sender(email)
+        )
+
+    def reached_status(self, status: str) -> bool:
+        return bool(
+            frappe.db.exists(
+                "HD Ticket Activity",
+                {"ticket": str(self.name), "action": f"set status to {status}"},
+            )
+        )
 
     def after_insert(self):
 
@@ -205,10 +246,13 @@ class HDTicket(Document):
             and not frappe.flags.initial_sync
             and send_ack_email
             and not self.has_chat_only_contact()
+            and not self.is_alert()
         ):
             self.send_acknowledgement_email()
 
+        self.link_sender_to_customer()
         self.assign_customer_owner()
+        self.announce_alert()
 
     def capture_ticket_created_telemetry_events(self):
         if self.subject == "Welcome to Helpdesk":
@@ -391,6 +435,29 @@ class HDTicket(Document):
                     frappe.ValidationError,
                 )
 
+    def set_customer_from_domain(self):
+        """A new ticket without a customer gets the one whose email domain is the
+        sender's, never for public mail domains or an agent's own ticket
+        (docs/ticket-intake.md)."""
+        if not self.is_new() or self.customer or self.is_alert():
+            return
+        email = parseaddr(self.raised_by or "")[1]
+        if is_agent(email) or not frappe.db.get_single_value(
+            "HD Intake Settings", "match_customer_by_domain"
+        ):
+            return
+        self.customer = customer_for_email(email)
+        self.flags.customer_from_domain = bool(self.customer)
+
+    def link_sender_to_customer(self):
+        """The sender of a ticket matched to a customer by domain becomes one of its
+        contacts, so their next ticket finds the customer through the contact."""
+        if not self.flags.customer_from_domain:
+            return
+        email = parseaddr(self.raised_by or "")[1]
+        if email and not is_chat_placeholder_email(email):
+            add_customer_contact(self.customer, email.lower())
+
     def set_priority(self):
         if self.priority:
             return
@@ -500,7 +567,8 @@ class HDTicket(Document):
         """
         # a new ticket has no team change; its customer's ticket owner may be outside
         # the team (docs/ticket-owners.md)
-        if self.is_new() or self.flags.in_insert:
+        # nor does routing after triage, which never takes an assignment away
+        if self.is_new() or self.flags.in_insert or self.flags.keep_assignment:
             return
         if not self.agent_group or (hasattr(self, "_assign") and not self._assign):
             return
@@ -774,13 +842,32 @@ class HDTicket(Document):
         if email_account := default_outgoing_email_account():
             return email_account
 
-    def reject_unwanted_email(self):
-        """Notifications and newsletters in the support mailbox don't become tickets."""
-        from helpdesk.email_filter import UnwantedTicketEmail, is_unwanted_sender
+    def apply_intake_rules(self):
+        """Notifications and newsletters in the support mailbox don't become tickets, and
+        a monitoring alert becomes a ticket of type Alert (helpdesk/intake.py)."""
+        from helpdesk.email_filter import UnwantedTicketEmail
+        from helpdesk.intake import IGNORE, decide, parse_alert
 
         # only tickets opened by an incoming email carry the account it came through
-        if self.email_account and is_unwanted_sender(self.raised_by):
+        if not self.email_account:
+            return
+        decision = decide(self.raised_by, self.subject)
+        if not decision:
+            return
+        if decision.action == IGNORE:
             raise UnwantedTicketEmail
+        self.ticket_type = ALERT_TICKET_TYPE
+        self.alert_key = parse_alert(self.subject).key
+
+    def is_alert(self) -> bool:
+        return self.ticket_type == ALERT_TICKET_TYPE
+
+    def announce_alert(self):
+        if not self.is_alert():
+            return
+        from helpdesk.intake import announce
+
+        announce(self.name, _("Alert opened: {0}").format(self.subject))
 
     def reply_to_address(self, sender_email=None) -> str | None:
         """Where the customer's reply should go: a mailbox we read.
@@ -1096,15 +1183,30 @@ class HDTicket(Document):
 
     def set_sla(self):
         """
-        Find an SLA to apply to this ticket.
+        Find an SLA to apply to this ticket. A monitoring alert has none.
         """
+        if self.is_alert():
+            self.clear_sla()
+            return
         if sla := get_sla(self):
             self.sla = sla.name
+
+    def clear_sla(self):
+        self.update(
+            {
+                "sla": None,
+                "agreement_status": "",
+                "response_by": None,
+                "resolution_by": None,
+            }
+        )
 
     def apply_sla(self):
         """
         Apply SLA if set.
         """
+        if not self.sla:
+            return
         if sla := frappe.get_last_doc("HD Service Level Agreement", {"name": self.sla}):
             sla.apply(self)
 
@@ -1113,6 +1215,8 @@ class HDTicket(Document):
 
     def is_currently_outside_working_hours(self):
         """Return True if current time is outside this SLA's working hours."""
+        if not self.sla:
+            return False
 
         sla = self.get_sla()
         current_date = getdate()

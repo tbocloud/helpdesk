@@ -27,6 +27,7 @@ from frappe.utils import (
     nowdate,
 )
 
+from helpdesk.routing import is_default_ticket_type
 from helpdesk.task_estimates import add_working_days, weekly_off_days
 from helpdesk.utils import agent_only, is_agent
 
@@ -76,7 +77,8 @@ def record_triage_estimate(ticket_id: str, triage: dict):
         return
     ensure_ticket_type()
     updates = {}
-    if ticket.ticket_type in (None, "", "Unspecified"):
+    # the default type (Bug on the hub) was never chosen by anyone, so it counts as unset
+    if is_default_ticket_type(ticket.ticket_type):
         updates["ticket_type"] = CUSTOMIZATION
     hours = flt(triage.get("estimate_hours"))
     # an estimate an agent already worked on is theirs, not the AI's

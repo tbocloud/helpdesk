@@ -53,6 +53,11 @@ on click): customers without a ticket owner take the `account_manager` of the ER
 Customer of the same name, when that person is an active agent here. CRM Organizations have
 no account owner, so only ERPNext Customers count. See [ticket-owners.md](ticket-owners.md).
 
+**Fill customer domains from the CRM** (Settings → Ticket intake → Customer detection,
+one-time, Preview then Fill): customers without a Domain take the domain of their CRM
+Organization's or ERPNext Customer's website, so new tickets find their customer by the
+sender's domain. See [ticket-intake.md](ticket-intake.md#customer-detection).
+
 Code: `helpdesk/integrations/crm/customers.py`.
 
 ## Invoicing (implemented)

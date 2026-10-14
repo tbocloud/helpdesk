@@ -1,0 +1,125 @@
+{
+	"actions": [],
+	"creation": "2026-10-14 12:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"rules_section",
+		"rules",
+		"post_alerts_to_channel",
+		"routing_section",
+		"apply_triage",
+		"default_team",
+		"routes",
+		"customers_section",
+		"match_customer_by_domain",
+		"public_email_domains",
+		"feedback_section",
+		"feedback_on_close"
+	],
+	"fields": [
+		{
+			"fieldname": "rules_section",
+			"fieldtype": "Section Break",
+			"label": "Alert and Vendor Mail"
+		},
+		{
+			"fieldname": "rules",
+			"fieldtype": "Table",
+			"label": "Rules",
+			"options": "HD Intake Rule"
+		},
+		{
+			"default": "0",
+			"description": "Post when a monitoring alert opens and when its monitor resolves it, to the escalation channel of Chat & Teams.",
+			"fieldname": "post_alerts_to_channel",
+			"fieldtype": "Check",
+			"label": "Post Monitor Alerts to the Escalation Channel"
+		},
+		{
+			"fieldname": "routing_section",
+			"fieldtype": "Section Break",
+			"label": "Routing"
+		},
+		{
+			"default": "1",
+			"description": "After AI triage: its priority and ticket type, and the team for its category, unless a person already set them.",
+			"fieldname": "apply_triage",
+			"fieldtype": "Check",
+			"label": "Apply AI Triage"
+		},
+		{
+			"fieldname": "default_team",
+			"fieldtype": "Link",
+			"label": "Default Team",
+			"options": "HD Team"
+		},
+		{
+			"fieldname": "routes",
+			"fieldtype": "Table",
+			"label": "Category Routes",
+			"options": "HD Intake Route"
+		},
+		{
+			"fieldname": "customers_section",
+			"fieldtype": "Section Break",
+			"label": "Customer Detection"
+		},
+		{
+			"default": "1",
+			"description": "A new ticket without a customer gets the customer whose email domain matches the sender's.",
+			"fieldname": "match_customer_by_domain",
+			"fieldtype": "Check",
+			"label": "Match Customers by Email Domain"
+		},
+		{
+			"description": "Never matched to a customer: anyone can have an address there.",
+			"fieldname": "public_email_domains",
+			"fieldtype": "Small Text",
+			"label": "Public Email Domains"
+		},
+		{
+			"fieldname": "feedback_section",
+			"fieldtype": "Section Break",
+			"label": "Customer Feedback"
+		},
+		{
+			"default": "1",
+			"description": "Ask the customer for a rating when a ticket is closed without passing through the feedback status. Once per ticket.",
+			"fieldname": "feedback_on_close",
+			"fieldtype": "Check",
+			"label": "Ask for Feedback on Close"
+		}
+	],
+	"index_web_pages_for_search": 0,
+	"links": [],
+	"modified": "2026-10-14 12:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD Intake Settings",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"role": "System Manager",
+			"read": 1,
+			"print": 1,
+			"email": 1,
+			"share": 1,
+			"write": 1,
+			"create": 1
+		},
+		{
+			"role": "Agent Manager",
+			"read": 1,
+			"print": 1,
+			"email": 1,
+			"share": 1,
+			"write": 1,
+			"create": 1
+		}
+	],
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": [],
+	"issingle": 1
+}

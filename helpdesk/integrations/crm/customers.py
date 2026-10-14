@@ -128,6 +128,88 @@ def fill_ticket_owners() -> dict:
     return result
 
 
+def fill_customer_domains(apply: bool = False) -> dict:
+    """Customers without a Domain get their CRM website's domain, once, on request; with
+    `apply` False nothing changes (the Settings preview). Matched by name like the
+    customer sync. Left empty: two CRM records with different websites (`ambiguous`),
+    a public mail domain (`public`), and a domain another customer already has
+    (`taken`), since a domain must point at one customer (docs/ticket-intake.md)."""
+    from helpdesk.helpdesk.doctype.hd_customer.hd_customer import (
+        clear_domain_cache,
+        customer_domains,
+        normalize_domain,
+        public_email_domains,
+    )
+
+    client = CRMClient.from_settings()
+    websites: dict[str, set[str]] = {}
+    for org in client.organizations() + client.erp_customers():
+        domain = normalize_domain(org.get("website"))
+        if domain:
+            name = org.get("organization_name") or org.get("name")
+            websites.setdefault(key(name), set()).add(domain)
+    customers = frappe.get_all(
+        "HD Customer",
+        fields=["name", "domain", "email_domains"],
+        limit_page_length=0,
+    )
+    # {domain: customer}, including the ones this fill picks as it goes
+    owners = {
+        domain: c.name
+        for c in customers
+        for domain in customer_domains(c.domain, c.email_domains)
+    }
+    public = public_email_domains()
+    result = {"fill": [], "ambiguous": [], "public": [], "taken": []}
+    for customer in customers:
+        found = websites.get(key(customer.name))
+        if customer.domain or not found:
+            continue
+        domain = next(iter(found))
+        row = {"customer": customer.name, "domain": domain}
+        if len(found) > 1:
+            result["ambiguous"].append({**row, "domain": ", ".join(sorted(found))})
+        elif domain in public:
+            result["public"].append(row)
+        elif overlaps_another(domain, customer.name, owners):
+            result["taken"].append(row)
+        else:
+            owners[domain] = customer.name
+            result["fill"].append(row)
+    if apply:
+        result["fill"] = [row for row in result["fill"] if fill_empty_domain(**row)]
+        clear_domain_cache()
+    return result
+
+
+def overlaps_another(domain: str, customer: str, owners: dict[str, str]) -> bool:
+    """Whether another customer has `domain`, a parent of it or a subdomain of it: a
+    sender there would then match both, and new tickets would find neither."""
+    return any(
+        owner != customer
+        and (
+            domain == other
+            or domain.endswith("." + other)
+            or other.endswith("." + domain)
+        )
+        for other, owner in owners.items()
+    )
+
+
+def fill_empty_domain(customer: str, domain: str) -> bool:
+    """Set the domain only while it is still empty, so one typed in meanwhile stays."""
+    table = frappe.qb.DocType("HD Customer")
+    (
+        frappe.qb.update(table)
+        .set(table.domain, domain)
+        .where(
+            (table.name == customer) & (table.domain.isnull() | (table.domain == ""))
+        )
+        .run()
+    )
+    return frappe.db.get_value("HD Customer", customer, "domain") == domain
+
+
 def fill_empty_owner(customer: str, agent: str) -> bool:
     """Set the owner only while it is still empty, so an owner someone set meanwhile
     stays; an active agent on an empty owner is all validate_ticket_owners would check."""

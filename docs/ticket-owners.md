@@ -52,8 +52,11 @@ working**, as in the follow-ups.
 `HDTicket.assign_customer_owner()`:
 
 - **On insert** (`after_insert`), after the customer is resolved (`set_customer` runs in
-  `before_validate`, from the contact). Every channel inserts an HD Ticket, so all of them are
-  covered: email, the customer portal, the agent's New ticket, the API, the hub-client pull
+  `before_validate`, from the contact). A new ticket that still has no customer, isn't an
+  alert and wasn't raised by an agent may then get one from the sender's email domain
+  (`set_customer_from_domain`, see [ticket-intake.md](ticket-intake.md#customer-detection)).
+  Owner assignment itself covers every channel, since every channel inserts an HD Ticket:
+  email, the customer portal, the agent's New ticket, the API, the hub-client pull
   from customer sites (`ticket_puller`) and the Chatwoot bridge (including its stand-in
   default customer, if that customer has an owner).
 - **Customer set later** (`on_update`, `assign_owner_of_customer_set_later`): a ticket that
@@ -90,6 +93,11 @@ isn't in that team. The owner knows the customer; the team stays on the ticket. 
 also returns during the insert (`flags.in_insert`), where it used to return only because
 the in-memory `_assign` was still empty. `assign_customer_owner` keeps that copy in step with
 the database, so without the guard it would have taken the owner off on insert.
+
+**Routing after triage** ([ticket-intake.md](ticket-intake.md#routing)) sets the team later,
+as the automation user. It saves with `flags.keep_assignment`, so
+`remove_assignment_if_not_in_team` leaves the owner's ToDo alone, and the team's round
+robin skips the ticket because it already has an open assignment: the owner keeps it.
 
 ### What is recorded
 

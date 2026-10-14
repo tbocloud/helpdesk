@@ -210,8 +210,16 @@ doc_events = {
     # manager's change to these shows at once, tickets and tasks within the 10
     "HD Customer": {
         "after_insert": "helpdesk.customer_health.clear_health_cache",
-        "after_rename": "helpdesk.customer_health.clear_health_cache",
-        "on_trash": "helpdesk.customer_health.clear_health_cache",
+        "after_rename": [
+            "helpdesk.customer_health.clear_health_cache",
+            "helpdesk.helpdesk.doctype.hd_customer.hd_customer.clear_domain_cache",
+        ],
+        "on_trash": [
+            "helpdesk.customer_health.clear_health_cache",
+            "helpdesk.helpdesk.doctype.hd_customer.hd_customer.clear_domain_cache",
+        ],
+        # new tickets find their customer by domain (docs/ticket-intake.md)
+        "on_update": "helpdesk.helpdesk.doctype.hd_customer.hd_customer.clear_domain_cache",
     },
     "HD Support Contract": {
         "on_update": "helpdesk.customer_health.clear_health_cache",
@@ -292,4 +300,5 @@ default_log_clearing_doctypes = {
     "HDS AI Usage Log": 90,
     "HDS Site Login Log": 180,
     "HDS Remote Audit Log": 365,
+    "HD Intake Log": 30,
 }

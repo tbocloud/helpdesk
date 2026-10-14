@@ -11,6 +11,7 @@
   "customer_name",
   "customer_type",
   "domain",
+  "email_domains",
   "erpnext_customer",
   "country",
   "column_break_fead",
@@ -51,6 +52,12 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Domain"
+  },
+  {
+   "description": "More domains this customer's people email from, one per line. With Domain, they recognise the customer of a new ticket.",
+   "fieldname": "email_domains",
+   "fieldtype": "Small Text",
+   "label": "Other Email Domains"
   },
   {
    "fieldname": "references_tab",
@@ -141,7 +148,7 @@
  "image_field": "image",
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-10-14 10:00:00.000000",
+ "modified": "2026-10-14 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Helpdesk",
  "name": "HD Customer",

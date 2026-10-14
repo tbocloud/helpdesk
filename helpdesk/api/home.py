@@ -36,6 +36,7 @@ from helpdesk.api.work import (
     get_overview,
     get_project_portfolio,
 )
+from helpdesk.consts import ALERT_TICKET_TYPE
 from helpdesk.customer_health import (
     AT_RISK,
     WATCH,
@@ -61,6 +62,8 @@ CUSTOMER_LIMIT = 6
 PEOPLE_LIMIT = 10
 OPEN_TICKET_CATEGORIES = ("in", ["Open", "Paused"])
 OPEN_CHAT_STATUSES = ("in", ["Open", "Pending"])
+# monitoring alerts aren't customer tickets: no SLA, not counted (docs/ticket-intake.md)
+NOT_AN_ALERT = {"ticket_type": ("!=", ALERT_TICKET_TYPE)}
 RATING_DAYS = 30
 DAY_LIMIT = 6
 GROUP_LIMIT = 5
@@ -514,7 +517,7 @@ def _company(portfolio: dict) -> dict:
 def _open_tickets() -> list:
     return frappe.get_list(
         "HD Ticket",
-        filters={"status_category": OPEN_TICKET_CATEGORIES},
+        filters={"status_category": OPEN_TICKET_CATEGORIES, **NOT_AN_ALERT},
         fields=OPEN_TICKET_FIELDS,
         limit_page_length=0,
     )
@@ -528,7 +531,7 @@ def _ticket_summary(open_tickets: list) -> dict:
         "new_today": len(
             frappe.get_list(
                 "HD Ticket",
-                filters={"creation": (">=", getdate(nowdate()))},
+                filters={"creation": (">=", getdate(nowdate())), **NOT_AN_ALERT},
                 pluck="name",
                 limit_page_length=0,
             )

@@ -1,0 +1,47 @@
+{
+	"actions": [],
+	"creation": "2026-10-14 12:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"category",
+		"team",
+		"ticket_type"
+	],
+	"fields": [
+		{
+			"fieldname": "category",
+			"fieldtype": "Data",
+			"in_list_view": 1,
+			"label": "Triage Category",
+			"reqd": 1
+		},
+		{
+			"fieldname": "team",
+			"fieldtype": "Link",
+			"in_list_view": 1,
+			"label": "Team",
+			"options": "HD Team"
+		},
+		{
+			"fieldname": "ticket_type",
+			"fieldtype": "Link",
+			"in_list_view": 1,
+			"label": "Ticket Type",
+			"options": "HD Ticket Type"
+		}
+	],
+	"index_web_pages_for_search": 0,
+	"links": [],
+	"modified": "2026-10-14 12:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD Intake Route",
+	"owner": "Administrator",
+	"permissions": [],
+	"sort_field": "creation",
+	"sort_order": "DESC",
+	"states": [],
+	"istable": 1,
+	"editable_grid": 1
+}
