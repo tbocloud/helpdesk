@@ -161,7 +161,7 @@ class TestClientSyncBackoff(FrappeTestCase):
             ticket_puller.push_ticket_statuses()
         self.assertNotIn(self.conn, [c.args[0] for c in client.call_args_list])
 
-    def test_a_five_minute_job_that_cant_connect_counts_a_failure_not_an_error_log(
+    def test_a_five_minute_job_that_cant_connect_logs_nothing(
         self,
     ):
         make_ticket(subject="Stock report empty").db_set(
@@ -175,7 +175,7 @@ class TestClientSyncBackoff(FrappeTestCase):
         ):
             ticket_puller.push_ticket_statuses()
 
-        self.assertEqual(self.state().consecutive_failures, 1)
+        self.assertEqual(self.state().consecutive_failures, 0)
         self.assertFalse(
             frappe.db.exists(
                 "Error Log", {"method": f"Status push failed for {self.conn}"}

@@ -149,18 +149,23 @@ class HDSSupportConnection(Document):
         """In the helpdesk for System Managers, and on the team's chat channel."""
         from helpdesk.work_reminders import notify_users
 
-        notify_users(
-            get_users_with_role(ALERT_ROLE),
-            self.doctype,
-            self.name,
-            text,
-            escalate=True,
-            link=f"/customers/{self.customer_name}"
-            if self.customer_name
-            else "/customers",
-            # every outage and recovery is news, even with the same words
-            once=False,
+        link = (
+            f"/customers/{self.customer_name}" if self.customer_name else "/customers"
         )
+        try:
+            notify_users(
+                get_users_with_role(ALERT_ROLE),
+                self.doctype,
+                self.name,
+                text,
+                escalate=True,
+                link=link,
+                # every outage and recovery is news, even with the same words
+                once=False,
+            )
+        except Exception:
+            # a failed notice must not stop the scheduled job for the other sites
+            frappe.log_error(title=f"Connection notice not sent for {self.name}")
 
     def site_label(self) -> str:
         return self.customer_name or self.site_url or self.name

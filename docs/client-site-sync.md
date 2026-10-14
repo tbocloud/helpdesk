@@ -34,8 +34,9 @@ The jobs follow the backoff like this:
 - **The per-minute pull and the daily health check** call only the connections that are due
   (`ticket_puller.due_connections`), so they are the probe that finds a recovery.
 - **The 5-minute jobs** skip Unreachable connections (`ticket_puller.unreachable_connections`).
-  When they can't open an MCP session (`ticket_puller._connect`), it counts as a failure
-  instead of an Error Log.
+  When they can't open an MCP session (`ticket_puller._connect`), they move on without an
+  Error Log and without counting a failure. The per-minute pull keeps the count, so a
+  5-minute run in the same minute can't make a site Unreachable early.
 - **A site's own "ticket raised" ping** (`support_hub.ticket_raised`) pulls straight away,
   even when the connection is Unreachable. The ping shows the site is up.
 - **Registering again, or setting the status to Connected by hand,** clears the backoff
@@ -52,6 +53,9 @@ When a connection first becomes Unreachable, the hub sends:
   number of failures, the next call and the last error;
 - **one notification**: `notify_users(..., escalate=True)` to the System Managers, which
   posts to the team's Teams or Slack channel when it is set up.
+
+If a notice can't be sent, the hub writes an Error Log and carries on, so the job still
+syncs the other sites.
 
 When the site answers again, the hub sends one "reachable again" notification. It says how
 long the outage lasted. There is no Error Log for a recovery, because it isn't an error.

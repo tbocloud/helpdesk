@@ -347,14 +347,13 @@ def pull_connection(connection: str) -> int:
 
 
 def _connect(connection: str) -> MCPClient | None:
-    """An MCP session with the site, or None when it can't be reached; that counts
-    towards the connection's backoff instead of an Error Log per run."""
+    """An MCP session with the site, or None when it can't be reached. No Error Log
+    per run and no extra failure count: the per-minute pull probes the site and keeps
+    its backoff (counting here too would reach Unreachable early)."""
     try:
         return MCPClient(connection)
-    except Exception as e:
-        if frappe.db.exists("HDS Support Connection", connection):
-            frappe.get_doc("HDS Support Connection", connection).record_failure(str(e))
-        else:
+    except Exception:
+        if not frappe.db.exists("HDS Support Connection", connection):
             frappe.log_error(title=f"Ticket sync failed for {connection}")
         return None
 

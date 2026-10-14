@@ -556,12 +556,12 @@ def handle_assigned_to_filter(filters, doctype):
     """Turn an "Assigned to <user>" filter (`_assign` like %user%) into an exact match.
 
     A LIKE reads `_` and `%` in a user ID as wildcards, so the records are found through
-    their ToDos instead and merged into the filters as a name filter, in place. A ticket
+    their ToDos instead and merged into the filters as a name filter, in place. A record
     counts while its ToDo is open; a task also once it's done, as `_assign` keeps its
     assignees when its ToDos close (Task.close_assignments).
     """
     for user in _pop_assigned_to_users(filters):
-        finished = doctype != "HD Ticket"
+        finished = doctype == "Task"
         _merge_name_filter(
             filters, assigned_to_filter(doctype, user, finished=finished)[1]
         )
