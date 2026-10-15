@@ -221,17 +221,31 @@ class TestRefreshFromPress(FrappeTestCase):
         card.reload()
         rows = {row.app: row for row in card.apps}
         self.assertEqual(found["drift"], ["demo_app"])
+        # the bench is shared: its other apps are listed, never added to this site
+        self.assertEqual(found["bench_only"], ["erpnext"])
+        self.assertNotIn("erpnext", rows)
         # the commit the site itself reported stays; Press's differs, so it is drift
         self.assertEqual(
             (rows["demo_app"].deployed_commit, rows["demo_app"].drift_status),
             ("c" * 40, "Drift"),
         )
+        self.assertEqual(card.group_sites, "other.example.com")
+        self.assertTrue(card.last_synced)
+
+    def test_an_empty_card_is_filled_from_press(self):
+        card = make_site_registry(
+            self.customer, press_site="site1.example.com", press_release_group="bench-1"
+        )
+
+        refresh_site_card_from_press(card.name)
+
+        card.reload()
+        rows = {row.app: row for row in card.apps}
+        self.assertEqual(set(rows), {"demo_app", "erpnext"})
         self.assertEqual(
             (rows["erpnext"].deployed_commit, rows["erpnext"].drift_status),
             ("e" * 40, "In sync"),
         )
-        self.assertEqual(card.group_sites, "other.example.com")
-        self.assertTrue(card.last_synced)
 
     def test_a_card_without_a_bench_says_so(self):
         card = make_site_registry(self.customer)

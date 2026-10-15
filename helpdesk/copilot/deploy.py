@@ -520,7 +520,12 @@ def _wait(request, reason: str):
 
 
 def _follow(request):
-    """Follows Press's site updates until every site is updated, or one fails."""
+    """Follows Press's site updates until every site is updated, or one fails.
+
+    A failed build ends it at once: Press then never updates a site. Agent Jobs
+    are not read, since some fail by design on TBO's Press ("Add User to Proxy"
+    on every new bench) without the deploy failing.
+    """
     started = get_datetime(request.started_at)
     if (now_datetime() - started).total_seconds() > PRESS_HOURS * 3600:
         return fail(
@@ -559,12 +564,40 @@ def _follow(request):
                 ", ".join(sorted({row.status for row in failed})),
             ),
         )
-    if all(row.status in SITE_DONE for row in request.sites):
+    done = all(row.status in SITE_DONE for row in request.sites)
+    if not done and (build := _failed_build(request, started)):
+        url = (copilot_settings.get_settings().get("press_url") or "").rstrip("/")
+        return fail(
+            request,
+            _("Press's build {0} failed, so no site was changed: {1}").format(
+                build, f"{url}/app/deploy-candidate-build/{build}"
+            ),
+        )
+    if done:
         request.db_set({"status": "Checking"})
         run = runs.transition(
             request.run, "Verifying", runs.SYSTEM, note="Press updated the sites"
         )
         runs.add_event(run, "deploy_updated", {"request": request.name}, runs.SYSTEM)
+
+
+def _failed_build(request, started) -> str | None:
+    """The bench's newest build since the deploy started, when Press says it failed."""
+    try:
+        builds = press.get_list(
+            "Deploy Candidate Build",
+            filters={
+                "group": request.release_group,
+                "creation": [">=", str(started - timedelta(minutes=5))],
+            },
+            fields=["name", "status"],
+            limit=5,
+        )
+    except PressError:
+        return None  # Press could not be asked this time; the next run tries again
+    if builds and builds[0].get("status") == "Failure":
+        return builds[0].get("name")
+    return None
 
 
 def _backup_of(site_update: str) -> str | None:

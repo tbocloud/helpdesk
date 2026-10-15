@@ -296,6 +296,19 @@ class TestTheCheckAfter(DeployCase):
         self.cron()
         self.assertEqual(self.current_run().state, "Escalated")
 
+    def test_a_failed_build_escalates_at_once_with_presss_build(self):
+        self.request(self.senior, "now")
+        self.cron()
+        self.press.fail_build()
+        self.cron()
+
+        run = self.current_run()
+        request = frappe.get_doc(deploy.DEPLOY, run.deploy_request)
+        self.assertEqual((request.status, run.state), ("Failed", "Escalated"))
+        self.assertIn(
+            "https://press.example.com/app/deploy-candidate-build/DCB-1", request.error
+        )
+
     def test_a_failed_site_update_escalates_with_presss_reason(self):
         self.request(self.senior, "now")
         self.cron()

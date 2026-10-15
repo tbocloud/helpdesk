@@ -92,7 +92,10 @@ def refresh_from_press(registry) -> dict:
     """The bench's apps and their commits as Press knows them, and the other sites on the bench.
 
     The commit the site itself reports (Refresh from the site) stays the
-    deployed commit; an app whose Press commit differs is marked Drift.
+    deployed commit; an app whose Press commit differs is marked Drift. A card
+    the site already filled keeps exactly the site's apps: a shared bench holds
+    every site's apps, so the others are only listed (`bench_only`). An empty
+    card is filled from Press.
     """
     from helpdesk.copilot import press
 
@@ -103,11 +106,15 @@ def refresh_from_press(registry) -> dict:
     except press.PressError as e:
         frappe.throw(_("Press: {0}").format(e.message))
     rows = {row.app: row for row in registry.apps}
-    drift = []
+    filled = bool(rows)
+    drift, bench_only = [], []
     for app in info.get("apps") or []:
         name = app.get("app") or app.get("name")
         commit = app.get("hash") or ""
         if not name:
+            continue
+        if name not in rows and filled:
+            bench_only.append(name)
             continue
         row = rows.get(name) or registry.append("apps", {"app": name})
         if not row.deployed_commit:
@@ -130,7 +137,12 @@ def refresh_from_press(registry) -> dict:
     registry.group_sites = "\n".join(others)
     registry.last_synced = now_datetime()
     registry.save(ignore_permissions=True)
-    return {"apps": len(info.get("apps") or []), "drift": drift, "other_sites": others}
+    return {
+        "apps": len(info.get("apps") or []),
+        "drift": drift,
+        "other_sites": others,
+        "bench_only": bench_only,
+    }
 
 
 def apps_for(registry) -> list[dict]:

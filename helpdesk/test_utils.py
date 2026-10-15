@@ -3877,6 +3877,7 @@ class FakePress:
         self.deploys: list = []
         self.fetched: list = []
         self.site_updates: list = []
+        self.builds: list = []
         self.on_fetch = None
 
     def install(self, test_case):
@@ -3885,7 +3886,14 @@ class FakePress:
         test_case.addCleanup(patcher.stop)
         return self
 
+    def fail_build(self):
+        """The bench's newest build fails: Press then updates no site."""
+        self.builds[0]["status"] = "Failure"
+        self.site_updates.clear()
+
     def finish(self, status: str = "Success"):
+        for build in self.builds:
+            build["status"] = "Success"
         for update in self.site_updates:
             update["status"] = status
         if status == "Success":
@@ -3911,6 +3919,15 @@ class FakePress:
             return None
         if name == "deploy_and_update":
             self.deploys.append(copy.deepcopy(args))
+            self.builds.insert(
+                0,
+                {
+                    "name": f"DCB-{len(self.deploys)}",
+                    "group": self.group,
+                    "status": "Running",
+                    "creation": str(now_datetime()),
+                },
+            )
             for site in args["sites"]:
                 self.site_updates.insert(
                     0,
@@ -3933,6 +3950,12 @@ class FakePress:
             wanted = set(args["filters"]["site"][1])
             return [
                 dict(update) for update in self.site_updates if update["site"] in wanted
+            ]
+        if name == "get_list" and args.get("doctype") == "Deploy Candidate Build":
+            return [
+                dict(build)
+                for build in self.builds
+                if build["group"] == args["filters"]["group"]
             ]
         raise PressError(404, f"no fake route for {method}")
 
