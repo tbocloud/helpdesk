@@ -800,7 +800,10 @@ function showCopilotFixReview(info, doc, call, toast, $dialog) {
     field +
     '" placeholder="What is wrong, or anything the developer should know"></textarea></div></div>';
 
+  // One decision at a time: a second click while the first is sent is ignored.
+  var deciding = false;
   function decide(approve, _ref) {
+    if (deciding) return;
     var dateEl = document.getElementById("copilot-fix-date");
     var noteEl = document.getElementById("copilot-fix-note");
     var note = noteEl ? noteEl.value : "";
@@ -808,6 +811,7 @@ function showCopilotFixReview(info, doc, call, toast, $dialog) {
       toast.error("Please say why the fix is rejected.");
       return;
     }
+    deciding = true;
     call("helpdesk.api.copilot.decide_fix", {
       ticket: doc.name,
       approve: approve ? 1 : 0,
@@ -833,6 +837,7 @@ function showCopilotFixReview(info, doc, call, toast, $dialog) {
         _ref.close();
       })
       .catch(function (error) {
+        deciding = false;
         toast.error(copilotError(error, "Failed to record the decision"));
         console.error("Copilot fix decision error:", error);
       });
@@ -1042,13 +1047,17 @@ function showCopilotCorrectionReview(info, doc, call, toast, $dialog) {
     field +
     '"></textarea></div></div>';
 
+  // One decision at a time: a second click while the first is sent is ignored.
+  var deciding = false;
   function decide(approve, _ref) {
+    if (deciding) return;
     var noteEl = document.getElementById("copilot-correction-note");
     var note = noteEl ? noteEl.value : "";
     if (!approve && !note.trim()) {
       toast.error("Please say why the correction is rejected.");
       return;
     }
+    deciding = true;
     call("helpdesk.api.copilot.decide_fix", {
       ticket: doc.name,
       approve: approve ? 1 : 0,
@@ -1070,6 +1079,7 @@ function showCopilotCorrectionReview(info, doc, call, toast, $dialog) {
         _ref.close();
       })
       .catch(function (error) {
+        deciding = false;
         toast.error(copilotError(error, "Failed to record the decision"));
       });
   }

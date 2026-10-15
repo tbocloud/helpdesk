@@ -7,7 +7,7 @@ import json
 
 import frappe
 from frappe import _
-from frappe.utils import get_fullname, now_datetime, sbool
+from frappe.utils import format_datetime, get_fullname, now_datetime, sbool
 
 from helpdesk.api.customization import is_ticket_customer
 from helpdesk.copilot import customer, router, runs
@@ -311,6 +311,22 @@ def decide_fix(
     run = _run_of(ticket)
     approval = approvals.current(run)
     if not approval or approval.status != "Pending":
+        # a second click, or a second person: say who decided first
+        last = frappe.db.get_value(
+            "HDS Copilot Approval",
+            {"run": run.name, "decided_by": ["is", "set"]},
+            ["status", "decided_by", "decided_at"],
+            order_by="decided_at desc",
+            as_dict=True,
+        )
+        if last:
+            frappe.throw(
+                _("This was already {0} by {1} at {2}.").format(
+                    _("rejected") if last.status == "Rejected" else _("approved"),
+                    last.decided_by,
+                    format_datetime(last.decided_at),
+                )
+            )
         frappe.throw(_("No fix is waiting for approval on this ticket."))
     decision = approvals.decide(
         approval.name, frappe.session.user, bool(sbool(approve)), note, deploy_date

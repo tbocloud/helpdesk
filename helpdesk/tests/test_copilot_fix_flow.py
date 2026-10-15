@@ -429,6 +429,13 @@ class TestDecision(FixCase):
             approvals.decide(self.approval().name, self.senior, False, "too late")
         self.assertIn("already approved", str(caught.exception))
 
+    def test_a_second_click_says_who_decided_first(self):
+        self.github.set_checks(SHA, {"tests": None})
+        self.decide(self.approver)
+        with self.assertRaises(frappe.ValidationError) as caught:
+            self.decide(self.senior)
+        self.assertIn("already approved by " + self.approver, str(caught.exception))
+
     def test_the_developer_cannot_approve_their_own_fix(self):
         with self.assertRaises(frappe.PermissionError):
             self.decide(self.developer)
