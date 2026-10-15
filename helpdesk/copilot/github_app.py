@@ -11,12 +11,14 @@ push key is made for each request, only for the run's own repository, and
 never kept.
 """
 
+import re
 import time
 from datetime import datetime, timezone
 
 import frappe
 import jwt
 import requests
+from cryptography.hazmat.primitives import serialization
 from frappe import _
 
 from helpdesk.copilot.github import GITHUB_API, TIMEOUT, GitHubError
@@ -25,17 +27,45 @@ from helpdesk.copilot.github import GITHUB_API, TIMEOUT, GitHubError
 PUSH_PERMISSIONS = {"contents": "write", "pull_requests": "write"}
 CACHE_PREFIX = "copilot_github_app:"
 RENEW_BEFORE = 300  # seconds before expiry a kept key is replaced
+PEM_BLOCK = re.compile(r"-----BEGIN ([A-Z ]+)-----(.*?)-----END \1-----", re.S)
 
 
 def _private_key() -> str | None:
     from frappe.utils.password import get_decrypted_password
 
-    return get_decrypted_password(
-        "HDS Copilot Settings",
-        "HDS Copilot Settings",
-        "github_app_private_key",
-        raise_exception=False,
+    return as_pem(
+        get_decrypted_password(
+            "HDS Copilot Settings",
+            "HDS Copilot Settings",
+            "github_app_private_key",
+            raise_exception=False,
+        )
     )
+
+
+def as_pem(text: str | None) -> str:
+    """The private key in PEM form, however it was pasted.
+
+    The settings field holds one line, so a pasted .pem file arrives with its line
+    breaks turned into spaces or gone, and sometimes without its BEGIN and END lines.
+    The base64 body is the key; this puts it back together. GitHub's App keys are
+    PKCS#1 ("RSA PRIVATE KEY"); a PKCS#8 body ("PRIVATE KEY") is tried next.
+    """
+    text = (text or "").strip()
+    if not text:
+        return ""
+    found = PEM_BLOCK.search(text)
+    kinds = [found.group(1)] if found else ["RSA PRIVATE KEY", "PRIVATE KEY"]
+    body = "".join((found.group(2) if found else text).split())
+    lines = "\n".join(body[i : i + 64] for i in range(0, len(body), 64))
+    candidates = [f"-----BEGIN {k}-----\n{lines}\n-----END {k}-----\n" for k in kinds]
+    for pem in candidates:
+        try:
+            serialization.load_pem_private_key(pem.encode(), password=None)
+            return pem
+        except (ValueError, TypeError):
+            continue
+    return candidates[0]  # not a key: signing says so plainly (app_jwt)
 
 
 def _app_id() -> str:

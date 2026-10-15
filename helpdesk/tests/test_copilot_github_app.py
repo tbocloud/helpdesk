@@ -32,6 +32,7 @@ class AppCase(FrappeTestCase):
             serialization.PrivateFormat.TraditionalOpenSSL,
             serialization.NoEncryption(),
         ).decode()
+        self.pem = pem
         make_copilot_settings(github_app_id="12345", github_app_private_key=pem)
         frappe.cache().delete_keys(github_app.CACHE_PREFIX)
         self.addCleanup(frappe.cache().delete_keys, github_app.CACHE_PREFIX)
@@ -85,6 +86,36 @@ class TestTheApp(AppCase):
             with self.assertRaises(github.GitHubError) as caught:
                 github_app.token_for_repo("someone/else")
         self.assertIn("not installed on someone", caught.exception.message)
+
+
+class TestThePastedKey(AppCase):
+    """The settings field holds one line, so a pasted .pem file loses its line breaks."""
+
+    def use(self, text):
+        settings = frappe.get_single("HDS Copilot Settings")
+        settings.github_app_private_key = text
+        settings.save(ignore_permissions=True)
+
+    def test_a_key_pasted_on_one_line_still_signs(self):
+        lines = self.pem.strip().splitlines()
+        body = lines[1:-1]
+        for pasted in (
+            self.pem.replace("\n", " "),  # the whole file, breaks become spaces
+            " ".join(body),  # the body only, without BEGIN and END
+            "".join(body),  # the body only, breaks gone
+            self.pem.replace("\n", "\r\n"),  # Windows line ends
+        ):
+            self.use(pasted)
+            claims = jwt.decode(
+                github_app.app_jwt(), self.public_key, algorithms=["RS256"]
+            )
+            self.assertEqual(claims["iss"], "12345")
+
+    def test_something_that_is_not_a_key_is_refused_plainly(self):
+        self.use("SHA256:not-a-key")
+        with self.assertRaises(github.GitHubError) as caught:
+            github_app.app_jwt()
+        self.assertIn("private key", str(caught.exception))
 
 
 class TestTheClientUsesTheApp(AppCase):

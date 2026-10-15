@@ -209,7 +209,7 @@
 			"fieldtype": "Column Break"
 		},
 		{
-			"description": "The App's private key (the .pem file's text).",
+			"description": "The App's private key: paste the whole .pem file's text. The box keeps one line, so its line breaks are lost; that is fine.",
 			"fieldname": "github_app_private_key",
 			"fieldtype": "Password",
 			"label": "GitHub App private key"
@@ -311,7 +311,7 @@
 	],
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-10-13 02:10:00.000000",
+	"modified": "2026-10-15 10:51:21.578643",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Copilot Settings",
