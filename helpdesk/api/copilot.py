@@ -212,6 +212,7 @@ def _fix_card(run) -> dict | None:
         and press.configured()
         and deploy.may_deploy(user),
         "can_deploy_now": deploy.may_deploy_now(user),
+        "press_backups": not copilot_settings.get_settings().press_skip_backups,
         "can_undo": fixes.can_undo(run) and deploy.may_deploy(user),
         "reverts": run.get("reverts"),
         "revert_run": (fixes.revert_run_of(run) or frappe._dict()).get("name"),

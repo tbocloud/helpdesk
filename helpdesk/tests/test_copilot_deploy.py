@@ -198,6 +198,15 @@ class TestWhenAndWhere(DeployCase):
         )
         self.assertFalse(fix["can_deploy"] or fix["can_mark_deployed"])
 
+    def test_skip_presss_backup_on_a_test_bench(self):
+        self.settings(press_skip_backups=1)
+        frappe.set_user(self.senior)
+        self.assertFalse(api.get_run(self.ticket.name)["fix"]["press_backups"])
+        self.request(self.senior, "now")
+        self.cron()
+        self.assertTrue(self.press.deploys[0]["sites"][0]["skip_backups"])
+        self.assertFalse(self.events("deploy_started")[-1]["backups"])
+
 
 class TestSharedBench(DeployCase):
     sites = ("site1.example.com", "other-customer.example.com")
@@ -247,6 +256,38 @@ class TestNoAutomaticDeployOnASharedBench(DeployCase):
         self.assertIn(
             "share this bench", self.events("auto_deploy_skipped")[-1]["reason"]
         )
+
+
+class TestTheHubOnTheBench(DeployCase):
+    """TBO Support's own site shares the customer's bench, as on TBO's demo bench."""
+
+    auto = "low"
+
+    @property
+    def sites(self):
+        return ("site1.example.com", frappe.local.site)
+
+    def test_it_is_no_other_customer_and_never_moves(self):
+        request = frappe.get_doc(deploy.DEPLOY, self.current_run().deploy_request)
+        self.assertEqual(
+            (request.requested_by, request.other_sites),
+            (self.approver, frappe.local.site),
+        )
+        self.cron(riyadh(21, 5))
+        self.assertEqual(
+            [site["name"] for site in self.press.deploys[0]["sites"]],
+            ["site1.example.com"],
+        )
+
+    def test_a_card_naming_it_is_refused(self):
+        run = self.current_run()
+        deploy.cancel_deploy(run, self.approver)
+        frappe.db.set_value(
+            "HDS Site Registry", run.registry, "press_site", frappe.local.site
+        )
+        with self.assertRaises(frappe.ValidationError) as caught:
+            self.request(self.senior, "now")
+        self.assertIn("TBO Support itself", str(caught.exception))
 
 
 class TestTheCheckAfter(DeployCase):

@@ -8,7 +8,8 @@ Now (senior approvers and Agent Managers only). A cron every five minutes
 moves each deploy request along: it waits for Press (one Copilot deploy at a
 time, none while Press is deploying the bench, the merged commit registered
 on the bench), asks Press to update only the customer's sites (Press takes
-its own backups first and restores a site whose update fails), follows Press
+its own backups first unless Skip Press's backup is on, for test benches, and
+restores a site whose update fails), follows Press
 until the sites are updated, then hands over to the check after
 (helpdesk.copilot.verify). A failure escalates the run with Press's reason.
 """
@@ -153,7 +154,24 @@ def target(run) -> tuple[str, list[str]]:
         },
         pluck="press_site",
     )
-    return card.press_release_group, sorted(set(sites) | {card.press_site})
+    sites = sorted(set(sites) | {card.press_site})
+    if hub_site() in sites:
+        frappe.throw(
+            _(
+                "{0} is TBO Support itself, which Copilot never deploys; correct the customer's site card."
+            ).format(hub_site())
+        )
+    return card.press_release_group, sites
+
+
+def hub_site() -> str:
+    """This TBO Support site's name, which is also its Press site's name.
+
+    It may share a bench with customers (TBO's demo bench does): a deploy
+    leaves it on its current code, since Press moves only the sites it is
+    given and keeps every other app at its last deployed commit.
+    """
+    return frappe.local.site
 
 
 def _app_of(run, approval) -> dict:
@@ -180,7 +198,8 @@ def _app_of(run, approval) -> dict:
 def request_deploy(run, when: str, user: str, auto: bool = False):
     """Deploy the merged fix Tonight (the next window) or Now (seniors and Agent Managers).
 
-    `auto`: asked by Auto-deploy categories on the approver's behalf, never for a shared bench.
+    `auto`: asked by Auto-deploy categories on the approver's behalf, never for a bench
+    other customers' sites share (TBO Support's own site on it does not count).
     """
     from helpdesk.copilot import customer
 
@@ -222,11 +241,12 @@ def request_deploy(run, when: str, user: str, auto: bool = False):
             )
         )
     others = [site for site in on_bench if site not in sites]
-    if others and (auto or user not in approvals.seniors()):
+    customers = [site for site in others if site != hub_site()]
+    if customers and (auto or user not in approvals.seniors()):
         frappe.throw(
             _(
                 "Other sites share this bench ({0}); only a senior approver may deploy it."
-            ).format(", ".join(others[:5])),
+            ).format(", ".join(customers[:5])),
             frappe.PermissionError,
         )
     at = now_datetime() if now else next_opening()
@@ -282,7 +302,7 @@ def auto_request(run, approval):
     """Schedules a merged fix for the next window by itself when its root cause or risk is
     listed in Auto-deploy categories (empty in the pilot).
 
-    Never a sensitive or high-risk fix, an undo, or a bench other sites share; whatever
+    Never a sensitive or high-risk fix, an undo, or a bench other customers share; whatever
     stops it is noted on the run and leaves Deploy to a person.
     """
     wanted = auto_categories()
@@ -436,8 +456,9 @@ def _start(request):
                 ),
             )
         wanted = {site.site for site in request.sites}
+        skip_backups = bool(copilot_settings.get_settings().press_skip_backups)
         sites = [
-            {**site, "skip_failing_patches": False, "skip_backups": False}
+            {**site, "skip_failing_patches": False, "skip_backups": skip_backups}
             for site in info.get("sites") or []
             if site.get("name") in wanted
         ]
@@ -478,6 +499,7 @@ def _start(request):
             "request": request.name,
             "press": reference,
             "sites": [s["name"] for s in sites],
+            "backups": not skip_backups,
         },
         runs.SYSTEM,
     )

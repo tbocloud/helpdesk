@@ -588,6 +588,9 @@ function copilotFixSummary(fix) {
           .join(", "),
       ]);
     }
+    if (d.other_sites && d.other_sites.length) {
+      rows.push(["Not moved", d.other_sites.join(", ")]);
+    }
     for (var k = 0; k < (d.check || []).length; k++) {
       var c = d.check[k];
       rows.push([
@@ -1230,7 +1233,11 @@ function showCopilotDeploy(fix, doc, call, toast, $dialog) {
   $dialog({
     title: "Deploy the fix - Ticket #" + doc.name,
     html:
-      '<div style="padding:8px;font-size:13px"><p>TBO Support updates only this customer\'s sites through Press (Press takes a backup first), then checks that the site runs the merged fix without new errors, and asks the customer to confirm.</p>' +
+      '<div style="padding:8px;font-size:13px"><p>TBO Support updates only this customer\'s sites through Press (' +
+      (fix.press_backups
+        ? "Press takes a backup first"
+        : "<b>without a backup</b>: Skip Press's backup is on in the Copilot settings") +
+      "), then checks that the site runs the merged fix without new errors, and asks the customer to confirm. Other sites on the bench stay on their current code.</p>" +
       "<p><b>Tonight</b> waits for the deploy window. <b>Now</b> is for urgent fixes and only for senior approvers and Agent Managers. One deploy runs at a time.</p></div>",
     actions: actions,
   });

@@ -44,6 +44,7 @@
 		"column_break_deploy",
 		"deploy_start_wait_minutes",
 		"deploy_check_minutes",
+		"press_skip_backups",
 		"auto_deploy_categories",
 		"templates_section",
 		"message_templates"
@@ -291,6 +292,13 @@
 			"non_negative": 1
 		},
 		{
+			"default": "0",
+			"description": "Test benches only. Press then updates the sites without taking a backup first, so a failed update cannot be restored from one. Leave it off for customers' live sites.",
+			"fieldname": "press_skip_backups",
+			"fieldtype": "Check",
+			"label": "Skip Press's backup"
+		},
+		{
 			"description": "Root-cause categories or risk levels whose approved fixes deploy in the window without anyone pressing Deploy, one per line. Empty in the pilot.",
 			"fieldname": "auto_deploy_categories",
 			"fieldtype": "Small Text",
@@ -311,7 +319,7 @@
 	],
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-10-15 10:51:21.578643",
+	"modified": "2026-10-15 12:32:51.061468",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Copilot Settings",
