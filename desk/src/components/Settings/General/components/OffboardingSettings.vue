@@ -197,6 +197,8 @@ const run = createResource({ url: "helpdesk.api.offboarding.run_offboarding" });
 const log = createListResource({
   doctype: "HD Offboarding Log",
   fields: ["name", "user", "full_name", "reason", "disabled_on"],
+  // removals from TBO Chat are logged here too, but this list is who was disabled
+  filters: { action: "Disabled in TBO Support" },
   orderBy: "disabled_on desc",
   pageLength: 10,
   auto: authStore.isAdmin,

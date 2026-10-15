@@ -83,9 +83,7 @@ def draft_caption(
     except Exception:  # noqa: BLE001 - provider errors vary; show one clear message
         frappe.log_error(title="Draft with AI failed", message=frappe.get_traceback())
         frappe.throw(
-            _(
-                "AI drafting is unavailable right now. Check the AI provider in HDS Hub Settings."
-            )
+            _("AI drafting is unavailable right now. Check Settings → AI providers.")
         )
 
     response = result.get("response") or {}

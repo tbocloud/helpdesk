@@ -314,6 +314,9 @@ disables their Microsoft account, and that must end their access to the hub too.
    (user, reason, when) and, once per run, tells the Agent Managers in one notification
    (helpdesk panel plus email or chat). Nothing is unassigned, so tickets and tasks keep
    their history.
+4. **TBO Chat follows.** A User who is disabled (by this job or by hand) or an HD Agent who
+   is deactivated is removed from the Chatwoot account, and an HD Offboarding Log row with
+   action **Removed from TBO Chat** records it. See [chatwoot-sso.md](chatwoot-sso.md).
 
 ### Safety rules
 
@@ -480,7 +483,10 @@ The app words each type the way the web's activity list does.
 `status_category` (Open = waiting on us, Paused = waiting on the customer or a task),
 `sla_due`, `sla_kind` (first_response until the first reply, then resolution), `sla_breached`,
 `sla_due_soon` (within 4 hours), `assigned_to` (user id), `assignees` [{user, full_name}],
-`team`, `opened_at`, `awaiting_reply`, `escalation_level`.
+`team`, `opened_at`, `awaiting_reply`, `escalation_level`. The detail (`get_ticket` and the
+ticket actions) also has `customer_owner` (`{user, full_name}`, or null when the ticket has no
+customer or its customer no ticket owner): who the customer's new tickets go to (see
+[ticket-owners.md](ticket-owners.md)); the list rows don't carry it.
 
 Conversation message: `{id, kind: customer|agent|note, author, author_email, at, body (plain
 text), body_html, attachments: [{name, file_name, file_url}]}`, oldest first.
@@ -580,6 +586,51 @@ due}], waiting_on ("Client approval", …, or null), is_missed, at_risk}`. Rules
 
 `Escalation`: `id` (`Task:TASK-…`), `kind` (task, ticket), `doctype`, `ref`, `title`, `owners`,
 `level`, `level_label`, `days`, `severity`, `reason`, `route`, `app_route`.
+
+### Stand-up
+
+The async daily stand-up ([standup.md](standup.md)), as on `/helpdesk/standup`. The app opens
+it from the "Your stand-up is ready" notification (`reference_doctype` HD Standup).
+
+| Method | Params | Returns | Who / notes |
+| --- | --- | --- | --- |
+| `get_my_standup` | `date?` (YYYY-MM-DD, default today) | `MyStandup` | Any agent, their own. Today without a stored stand-up: a fresh draft from their work, `standup.name` null, not saved until `save_standup`. A future date is refused. Fixture `get_my_standup.json` |
+| `save_standup` POST | `values` (JSON: `yesterday`, `today`, `blockers` as rows, `notes` {yesterday, today}, `needs_help`; a section left out stays) | `MyStandup` | Today only, while the stand-up is on. Linked rows can only be kept or removed; a row without `reference_name` is text (≤300 chars). Status unchanged. Fixture `save_standup.json` |
+| `submit_standup` POST | `values?` as above | `MyStandup` with status Submitted | Same; may be sent again to update. Fixture `save_standup.json` |
+| `get_team_standup` | `team?` (a department; `__none__` for none), `date?` | `TeamStandup` | Heads, leads, coordinators and managers of the department (per the settings) get `can_lead: true` with `plan_vs_done` and `on_leave`; a member gets their own department read-only; any other department is 403. `content_today` for departments with content work (null otherwise, and for viewers outside the content team). Fixtures `get_team_standup.json` (ERP), `get_team_standup_digital.json` (content) |
+
+`MyStandup`: `enabled`, `date`, `previous_day` (the previous working day, "yesterday"),
+`is_working_day`, `editable`, `post_at` ("10:30"), `posted`, `teams` (departments the user
+leads), `department`, `standup` (`Standup` or null).
+
+`Standup`: `name`, `user`, `full_name`, `date`, `department`, `status` (Draft, Submitted,
+Auto-posted), `submitted_on`, `needs_help`, `hours` (null when hidden), `yesterday`, `today`,
+`blockers` (`[StandupItem]`), `notes` {yesterday, today}; in a team view for leads also
+`plan_vs_done` {planned, done, unplanned} or null.
+
+`StandupItem`: `id` (row id, null before saving), `kind` (task, ticket, post, plan, note),
+`title`, `detail`, `reference_doctype`, `reference_name`, `project`, `auto`, `route` (web),
+`app_route`, `helper`, `helper_name`, `help_task`, `content` (`StandupContent` or null).
+
+`StandupContent`, on content calendar lines (the content team's role parts and posts,
+[standup.md](standup.md#content-calendar)): `post` (HD Content Post name), `part` (writer,
+designer, video_editor, marketer; null on a post's own line), `part_label` ("Designer"),
+`client`, `go_live` ("YYYY-MM-DD HH:MM:SS"), `stage` (the post's status when the line was
+filled in). A part's line is a Task (`app_route` `/task/…`); a post's line has
+`reference_doctype` HD Content Post and no `app_route` (the app has no post screen yet: show
+`content` inline). Outside the content team, content lines are left out of a team view.
+
+`TeamStandup`: `team`, `teams`, `can_lead`, `date`, `previous_day`, `editable`, `post_at`,
+`posted`, `people` (`[Standup]`), `blockers` (`StandupItem` plus `standup`, `user`,
+`full_name`, `needs_help`), `needs_help` (names), `counts` {people, submitted, pending, auto,
+blockers}, `on_leave` ([{user, full_name, to_date, half_day}]), `content_today`
+(`[ContentTodayPost]` or null). The team's actions (nudge, assign help, create a task) are
+web-only for now: `helpdesk.api.standup`.
+
+`ContentTodayPost`: `post`, `title`, `client`, `go_live`, `channels` (list), `stage` (status),
+`state` (`missed`, `at_risk` = going live today without approval, `published`, `ready`),
+`people` ([{user, full_name}] on its team), `route` (web). Missed first, then at risk, then by
+time; posts going live that day plus the department's posts missed in the week before.
 
 ### Compete (Scoreboard for the app)
 
@@ -752,7 +803,7 @@ Decided per field; "app" means change `types.ts`, "hub" means a later hub change
 | `HoldReason` | the hub's list is `Laptop / system issue`, `Leave`, `Waiting on customer`, `Waiting on another task`, `Other` | app: use the hub's options (they drive reports) |
 | `TaskActivity` | `{id, at, who, kind, type, text, data}`; `text` only on comments and notes; kind `hold`/`escalation` don't exist (holds are status changes) | app: word items from `type` + `data` |
 | `askForHelp(name, to, note)` | `request_help` needs `task_name` (the helper task's title) | app: add a title field |
-| `Ticket` | `assigned_to` is a user id, not a full name (the mocks compare with `full_name`); adds `assignees`, `status_category`, `sla_kind`, `sla_breached`, `sla_due_soon`; `conversation` only in `get_ticket` | app |
+| `Ticket` | `assigned_to` is a user id, not a full name (the mocks compare with `full_name`); adds `assignees`, `status_category`, `sla_kind`, `sla_breached`, `sla_due_soon`; `conversation` and `customer_owner` only in the detail | app (additive) |
 | `TicketStatus` | statuses come from the hub (`statuses` in `get_ticket`), not a fixed union | app |
 | `TicketMessage` | adds `author_email`, `body_html`; attachments are `{name, file_name, file_url}`, no `size` | app |
 | `TicketView` | the hub adds `all-open` | app (additive) |

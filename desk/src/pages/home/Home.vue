@@ -85,6 +85,20 @@
 
         <FollowUpStrip v-if="data" :summary="data.follow_ups" />
 
+        <StandupCard v-if="data?.standup" :standup="data.standup" />
+
+        <AIProviderBanner
+          v-if="data?.systems?.ai.providers"
+          :status="data.systems.ai.providers"
+        >
+          <!-- Settings open from the desktop layout only -->
+          <Button
+            v-if="!isMobileView"
+            :label="__('Open AI providers')"
+            @click="openAIProviders"
+          />
+        </AIProviderBanner>
+
         <TaskyState
           v-if="home.error && !data"
           :icon="LucideCircleAlert"
@@ -137,10 +151,16 @@
 </template>
 
 <script setup lang="ts">
+import AIProviderBanner from "@/components/AIProviderBanner.vue";
 import FollowUpStrip from "@/components/FollowUpStrip.vue";
+import {
+  setActiveSettingsTab,
+  showSettingsModal,
+} from "@/components/Settings/settingsModal";
 import { INK } from "@/components/tone";
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import TaskyState from "@/components/TaskyState.vue";
+import { useScreenSize } from "@/composables/screen";
 import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
 import { Button, createResource, dayjs } from "frappe-ui";
@@ -156,6 +176,7 @@ import ActionPlan from "./components/ActionPlan.vue";
 import HomeSide from "./components/HomeSide.vue";
 import NeedsAttention from "./components/NeedsAttention.vue";
 import PulseStrip from "./components/PulseStrip.vue";
+import StandupCard from "./components/StandupCard.vue";
 import SystemsCard from "./components/SystemsCard.vue";
 import YourDay from "./components/YourDay.vue";
 import YourProjects from "./components/YourProjects.vue";
@@ -173,6 +194,13 @@ const parts = computed(() => (data.value ? statusParts(data.value.day) : []));
 const hasSide = computed(
   () => !!data.value?.company || !!data.value?.day.projects.count
 );
+
+const { isMobileView } = useScreenSize();
+
+function openAIProviders() {
+  setActiveSettingsTab("AI providers");
+  showSettingsModal.value = true;
+}
 
 const todayLabel = computed(() => dayjs().format("dddd, D MMMM YYYY"));
 

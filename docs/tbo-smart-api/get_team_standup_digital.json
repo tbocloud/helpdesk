@@ -1,0 +1,178 @@
+{
+  "v": 1,
+  "data": {
+    "team": "Digital",
+    "teams": ["Digital"],
+    "can_lead": true,
+    "date": "2026-10-14",
+    "previous_day": "2026-10-13",
+    "editable": true,
+    "post_at": "10:30",
+    "posted": false,
+    "people": [
+      {
+        "name": "SU-2026-10-14-jasir@tbo.example",
+        "user": "jasir@tbo.example",
+        "full_name": "Jasir Ali",
+        "date": "2026-10-14",
+        "department": "Digital",
+        "status": "Submitted",
+        "submitted_on": "2026-10-14 09:20:05",
+        "needs_help": false,
+        "hours": null,
+        "yesterday": [
+          {
+            "id": "d1a2b3c4e1",
+            "kind": "task",
+            "title": "Designer · Global Handwashing Day (Avera IoT)",
+            "detail": "Done",
+            "reference_doctype": "Task",
+            "reference_name": "TASK-2026-00611",
+            "project": "PROJ-0031",
+            "auto": true,
+            "route": "/projects/PROJ-0031",
+            "helper": null,
+            "helper_name": null,
+            "help_task": null,
+            "content": {
+              "post": "HD-POST-00142",
+              "part": "designer",
+              "part_label": "Designer",
+              "client": "Avera IoT",
+              "go_live": "2026-10-15 10:00:00",
+              "stage": "Internal Review"
+            },
+            "app_route": "/task/TASK-2026-00611"
+          }
+        ],
+        "today": [
+          {
+            "id": "d1a2b3c4e2",
+            "kind": "post",
+            "title": "World Food Day (Kerala Agro Foods)",
+            "detail": "Goes live tomorrow, 18:30 · Instagram, LinkedIn · Scheduled",
+            "reference_doctype": "HD Content Post",
+            "reference_name": "HD-POST-00150",
+            "project": null,
+            "auto": true,
+            "route": "/content?post=HD-POST-00150",
+            "helper": null,
+            "helper_name": null,
+            "help_task": null,
+            "content": {
+              "post": "HD-POST-00150",
+              "part": null,
+              "part_label": null,
+              "client": "Kerala Agro Foods",
+              "go_live": "2026-10-15 18:30:00",
+              "stage": "Scheduled"
+            },
+            "app_route": null
+          }
+        ],
+        "blockers": [
+          {
+            "id": "d1a2b3c4e3",
+            "kind": "task",
+            "title": "Designer · Diwali offer reel (Avera IoT)",
+            "detail": "Waiting on Writer (Ajmal)",
+            "reference_doctype": "Task",
+            "reference_name": "TASK-2026-00630",
+            "project": "PROJ-0031",
+            "auto": true,
+            "route": "/projects/PROJ-0031",
+            "helper": null,
+            "helper_name": null,
+            "help_task": null,
+            "content": {
+              "post": "HD-POST-00147",
+              "part": "designer",
+              "part_label": "Designer",
+              "client": "Avera IoT",
+              "go_live": "2026-10-20 18:00:00",
+              "stage": "Drafting"
+            },
+            "app_route": "/task/TASK-2026-00630"
+          }
+        ],
+        "notes": { "yesterday": "", "today": "" },
+        "plan_vs_done": { "planned": 1, "done": 1, "unplanned": 0 }
+      }
+    ],
+    "blockers": [
+      {
+        "standup": "SU-2026-10-14-jasir@tbo.example",
+        "user": "jasir@tbo.example",
+        "full_name": "Jasir Ali",
+        "needs_help": false,
+        "id": "d1a2b3c4e3",
+        "kind": "task",
+        "title": "Designer · Diwali offer reel (Avera IoT)",
+        "detail": "Waiting on Writer (Ajmal)",
+        "reference_doctype": "Task",
+        "reference_name": "TASK-2026-00630",
+        "project": "PROJ-0031",
+        "auto": true,
+        "route": "/projects/PROJ-0031",
+        "helper": null,
+        "helper_name": null,
+        "help_task": null,
+        "content": {
+          "post": "HD-POST-00147",
+          "part": "designer",
+          "part_label": "Designer",
+          "client": "Avera IoT",
+          "go_live": "2026-10-20 18:00:00",
+          "stage": "Drafting"
+        },
+        "app_route": "/task/TASK-2026-00630"
+      }
+    ],
+    "needs_help": [],
+    "counts": {
+      "people": 1,
+      "submitted": 1,
+      "pending": 0,
+      "auto": 0,
+      "blockers": 1
+    },
+    "on_leave": [],
+    "content_today": [
+      {
+        "post": "HD-POST-00139",
+        "title": "Teachers' Day",
+        "client": "Avera IoT",
+        "go_live": "2026-10-13 10:00:00",
+        "channels": ["Instagram"],
+        "stage": "Design",
+        "state": "missed",
+        "people": [{ "user": "jasir@tbo.example", "full_name": "Jasir Ali" }],
+        "route": "/content?post=HD-POST-00139"
+      },
+      {
+        "post": "HD-POST-00148",
+        "title": "Flash sale",
+        "client": "Kerala Agro Foods",
+        "go_live": "2026-10-14 17:00:00",
+        "channels": ["Instagram", "Facebook"],
+        "stage": "Client Review",
+        "state": "at_risk",
+        "people": [
+          { "user": "ajmal@tbo.example", "full_name": "Ajmal Rahman" }
+        ],
+        "route": "/content?post=HD-POST-00148"
+      },
+      {
+        "post": "HD-POST-00149",
+        "title": "Customer story",
+        "client": "Avera IoT",
+        "go_live": "2026-10-14 12:00:00",
+        "channels": ["LinkedIn"],
+        "stage": "Scheduled",
+        "state": "ready",
+        "people": [{ "user": "jasir@tbo.example", "full_name": "Jasir Ali" }],
+        "route": "/content?post=HD-POST-00149"
+      }
+    ]
+  }
+}

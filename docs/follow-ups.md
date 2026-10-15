@@ -39,6 +39,12 @@ refreshes it, so page loads don't evaluate everything themselves; the cache is d
 task's status or due date changes (`Task.refresh_follow_ups`) and when the settings are
 saved.
 
+The **async daily stand-up** ([standup.md](standup.md)) runs in the same 15-minute cron,
+uses this module's `WorkCalendar` (its `previous_working_day` is the stand-up's
+"yesterday"), skips people on leave the same way, and tells people through `notify_users`
+(bell plus Teams direct message, like any Reminder). Its summaries go to each department's
+Teams channel, else the escalation channel.
+
 ## Working days and hours
 
 `WorkCalendar` in `follow_ups.py`, from what the hub already has; nothing new to set up:

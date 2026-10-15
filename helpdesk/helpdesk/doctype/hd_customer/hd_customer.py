@@ -1,6 +1,8 @@
 # Copyright (c) 2022, Frappe Technologies and contributors
 # For license information, please see license.txt
 
+import re
+
 import frappe
 from frappe import _
 from frappe.core.api.user_invitation import invite_by_email
@@ -17,9 +19,14 @@ from helpdesk.integrations.erpnext.utils import (
     sync_related_fields,
     validate_rename_conflict,
 )
+from helpdesk.tasky.permissions import can_manage_team, is_project_manager
 from helpdesk.utils import agent_only, get_customers, is_agent
+from helpdesk.work_calendar import on_leave
 
 CUSTOMER_ROLES = ("HD Customer", "HD Customer Manager")
+TICKET_OWNER_FIELDS = ("ticket_owner", "backup_ticket_owner")
+DOMAIN_CACHE_KEY = "helpdesk:customer_domains"
+DOMAIN_CACHE_SECONDS = 600
 
 
 class HDCustomer(Document):
@@ -70,6 +77,63 @@ class HDCustomer(Document):
 
     def validate(self):
         self.validate_contacts()
+        self.validate_ticket_owners()
+
+    def validate_ticket_owners(self):
+        """Only the people who may set ticket owners change them, and both are active
+        agents; the backup needs an owner and is someone else (docs/ticket-owners.md)."""
+        previous = self.get_doc_before_save()
+        changed = [
+            field
+            for field in TICKET_OWNER_FIELDS
+            # an empty Link can be None or "": both mean no owner
+            if ((previous.get(field) if previous else None) or None)
+            != (self.get(field) or None)
+        ]
+        if not changed:
+            return
+        if not can_set_ticket_owner():
+            frappe.throw(
+                _("Only managers and department heads can set ticket owners."),
+                frappe.PermissionError,
+            )
+        if self.backup_ticket_owner and not self.ticket_owner:
+            frappe.throw(_("Set a ticket owner before a backup."))
+        if self.backup_ticket_owner and self.backup_ticket_owner == self.ticket_owner:
+            frappe.throw(_("The backup must be someone other than the ticket owner."))
+        chosen = [self.get(field) for field in changed if self.get(field)]
+        inactive = set(chosen) - active_agents(chosen)
+        if inactive:
+            frappe.throw(
+                _("{0} isn't an active agent, so they can't own tickets.").format(
+                    ", ".join(sorted(inactive))
+                )
+            )
+
+    def ticket_owner_today(self) -> dict | None:
+        """Who takes this customer's new tickets today: the owner, else the backup while
+        the owner is on approved leave (a half day still counts as working) or inactive.
+        None when neither can, and the assignment rules decide as before.
+
+        Returns {"user", "backup", "away": the owner when the backup takes it, "until":
+        the last day of the owner's leave, or None when the owner is inactive}.
+        """
+        if not self.ticket_owner:
+            return None
+        people = [p for p in (self.ticket_owner, self.backup_ticket_owner) if p]
+        working = active_agents(people)
+        away = on_leave(users=people)
+        if self.ticket_owner in working and self.ticket_owner not in away:
+            return {"user": self.ticket_owner, "backup": False}
+        backup = self.backup_ticket_owner
+        if not backup or backup not in working or backup in away:
+            return None
+        return {
+            "user": backup,
+            "backup": True,
+            "away": self.ticket_owner,
+            "until": away.get(self.ticket_owner),
+        }
 
     def validate_contacts(self):
         if not self.contacts:
@@ -485,3 +549,132 @@ def get_customer_membership(customer: str, user: str) -> dict | None:
         if member.get("name") == customer:
             return member
     return None
+
+
+def can_set_ticket_owner(user: str | None = None) -> bool:
+    """Who sets customers' ticket owners: System and Agent Managers, Project Managers
+    and department heads. Everyone else sees the owners read-only."""
+    user = user or frappe.session.user
+    return is_project_manager(user) or can_manage_team(user)
+
+
+def active_agents(users: list[str]) -> set[str]:
+    """The `users` who can take tickets: an active HD Agent with an enabled account."""
+    users = [u for u in users if u]
+    if not users:
+        return set()
+    agent = frappe.qb.DocType("HD Agent")
+    account = frappe.qb.DocType("User")
+    rows = (
+        frappe.qb.from_(agent)
+        .join(account)
+        .on(account.name == agent.user)
+        .select(agent.name)
+        .where(agent.name.isin(users) & (agent.is_active == 1) & (account.enabled == 1))
+        .run(pluck=True)
+    )
+    return set(rows)
+
+
+def add_customer_contact(customer: str, email: str) -> bool:
+    """Make `email` a contact of `customer`; True if a new Contact was created.
+
+    The member row is inserted directly, not through HD Customer.save(): saving grants
+    the HD Customer role to any existing User with this email, and these emails are
+    often staff. Ticket intake and the content portal only need the contact link.
+    """
+    contact = frappe.db.get_value("Contact", {"email_id": email}, "name")
+    created = not contact
+    if created:
+        contact = (
+            frappe.get_doc(
+                {
+                    "doctype": "Contact",
+                    "first_name": email.split("@")[0],
+                    "email_id": email,
+                    "email_ids": [{"email_id": email, "is_primary": 1}],
+                }
+            )
+            .insert(ignore_permissions=True)
+            .name
+        )
+
+    if frappe.db.exists(
+        "HD Customer Member",
+        {"parent": customer, "parenttype": "HD Customer", "contact_name": contact},
+    ):
+        return created
+    frappe.get_doc(
+        {
+            "doctype": "HD Customer Member",
+            "parent": customer,
+            "parenttype": "HD Customer",
+            "parentfield": "contacts",
+            "contact_name": contact,
+            "is_manager": 0,
+            "idx": frappe.db.count("HD Customer Member", {"parent": customer}) + 1,
+        }
+    ).db_insert()
+    return created
+
+
+def normalize_domain(value: str | None) -> str:
+    """ "https://www.Example.com/about" → "example.com"; "" when there is none."""
+    text = (value or "").strip().lower()
+    text = text.split("://", 1)[-1].split("/", 1)[0].split("?", 1)[0]
+    text = text.rsplit("@", 1)[-1].split(":", 1)[0].strip(".")
+    return text.removeprefix("www.") if "." in text else ""
+
+
+def customer_domains(domain: str | None, email_domains: str | None) -> set[str]:
+    """A customer's mail domains: Domain plus its Other Email Domains."""
+    values = [domain, *re.split(r"[\s,;]+", email_domains or "")]
+    return {d for d in (normalize_domain(v) for v in values) if d}
+
+
+def public_email_domains() -> set[str]:
+    """Domains anyone can have an address at (Settings → Ticket intake)."""
+    text = frappe.db.get_single_value("HD Intake Settings", "public_email_domains")
+    return {d for d in (normalize_domain(v) for v in (text or "").split()) if d}
+
+
+def customer_for_email(email: str | None) -> str | None:
+    """The one customer whose domains match the sender's (a subdomain counts), or None
+    for a public mail domain, no match or more than one."""
+    domain = normalize_domain((email or "").rpartition("@")[2])
+    if not domain or domain in public_email_domains():
+        return None
+    by_domain = domain_customers()
+    labels = domain.split(".")
+    # the domain itself and each parent: mail.acme.com, acme.com, com
+    matches = set().union(
+        *(by_domain.get(".".join(labels[i:]), ()) for i in range(len(labels)))
+    )
+    return matches.pop() if len(matches) == 1 else None
+
+
+def domain_customers() -> dict[str, list[str]]:
+    """{domain: the customers that have it}, cached until a customer changes
+    (`clear_domain_cache`) or for DOMAIN_CACHE_SECONDS, so a new ticket doesn't read
+    every customer."""
+    cached = frappe.cache.get_value(DOMAIN_CACHE_KEY, expires=True)
+    if cached is not None:
+        return cached
+    by_domain: dict[str, list[str]] = {}
+    for c in frappe.get_all(
+        "HD Customer",
+        or_filters={"domain": ("is", "set"), "email_domains": ("is", "set")},
+        fields=["name", "domain", "email_domains"],
+        limit_page_length=0,
+    ):
+        for domain in customer_domains(c.domain, c.email_domains):
+            by_domain.setdefault(domain, []).append(c.name)
+    frappe.cache.set_value(
+        DOMAIN_CACHE_KEY, by_domain, expires_in_sec=DOMAIN_CACHE_SECONDS
+    )
+    return by_domain
+
+
+def clear_domain_cache(doc=None, method=None):
+    """HD Customer doc event, and after the CRM fill writes domains directly."""
+    frappe.cache.delete_value(DOMAIN_CACHE_KEY)

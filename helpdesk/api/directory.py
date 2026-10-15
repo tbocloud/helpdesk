@@ -27,7 +27,16 @@ HEALTH_FILTERS = {
     HEALTHY: {HEALTHY},
     "attention": {AT_RISK, WATCH},
 }
-CUSTOMER_FIELDS = ["name", "customer_name", "domain", "image", "creation"]
+CUSTOMER_FIELDS = [
+    "name",
+    "customer_name",
+    "domain",
+    "image",
+    "creation",
+    "ticket_owner",
+]
+# the Customers list's owner filter: customers nobody owns yet, so managers fill the gaps
+OWNER_FILTERS = {"none": {"ticket_owner": ("is", "not set")}}
 CONTACT_SORTS = {"name": "full_name asc", "newest": "creation desc"}
 OPEN_INVITATION = ("in", ["Pending", "Expired"])
 
@@ -35,11 +44,17 @@ OPEN_INVITATION = ("in", ["Pending", "Expired"])
 @frappe.whitelist(methods=["GET"])
 @agent_only
 def get_customer_directory(
-    search: str = "", sort: str = "name", start: int = 0, health: str = ""
+    search: str = "",
+    sort: str = "name",
+    start: int = 0,
+    health: str = "",
+    owner: str = "",
 ) -> dict:
-    """A page of customers with their health, open tickets, active projects and ERP connection.
+    """A page of customers with their ticket owner, health, open tickets, active
+    projects and ERP connection.
 
-    `health` narrows to one status, or to `attention` (at risk or watch).
+    `health` narrows to one status, or to `attention` (at risk or watch); `owner`
+    to `none`, the customers without a ticket owner.
     """
     or_filters = search_filters(search, ["customer_name", "domain"])
     order_by = sort_order(sort, CUSTOMER_SORTS)
@@ -47,10 +62,13 @@ def get_customer_directory(
         frappe.throw(
             _("Filter health by one of: {0}").format(", ".join(HEALTH_FILTERS))
         )
+    if owner and owner not in OWNER_FILTERS:
+        frappe.throw(_("Filter owner by one of: {0}").format(", ".join(OWNER_FILTERS)))
+    filters = OWNER_FILTERS.get(owner)
     healths = all_health()
     if sort == "health" or health:
         customers, has_more, total = by_health(
-            healths, or_filters, order_by, sort == "health", health, start
+            healths, filters, or_filters, order_by, sort == "health", health, start
         )
     else:
         customers, has_more = page(
@@ -59,13 +77,16 @@ def get_customer_directory(
             or_filters=or_filters,
             order_by=order_by,
             start=start,
+            filters=filters,
         )
-        total = count("HD Customer", or_filters)
+        total = count("HD Customer", or_filters, filters)
     names = [c.name for c in customers]
     tickets = open_ticket_counts("customer", names)
     projects = active_project_counts(names)
     connections = connection_status(names)
+    owners = agent_names({c.ticket_owner for c in customers} - {None})
     for c in customers:
+        c["ticket_owner_name"] = owners.get(c.ticket_owner)
         c["health"] = brief(healths.get(c.name))
         c["open_tickets"] = tickets.get(c.name, 0)
         c["active_projects"] = projects.get(c.name, 0)
@@ -73,8 +94,21 @@ def get_customer_directory(
     return {"rows": customers, "has_more": has_more, "total": total}
 
 
+def agent_names(agents: set[str]) -> dict[str, str]:
+    """{agent: their name} for the ticket owners on a page."""
+    if not agents:
+        return {}
+    rows = frappe.get_all(
+        "HD Agent",
+        filters={"name": ("in", list(agents))},
+        fields=["name", "agent_name"],
+    )
+    return {r.name: r.agent_name or r.name for r in rows}
+
+
 def by_health(
     healths: dict,
+    filters: dict | None,
     or_filters: list | None,
     order_by: str,
     worst_first: bool,
@@ -89,6 +123,7 @@ def by_health(
     rows = frappe.get_list(
         "HD Customer",
         fields=CUSTOMER_FIELDS,
+        filters=filters,
         or_filters=or_filters,
         order_by=order_by,
         limit_page_length=0,
@@ -161,11 +196,13 @@ def page(
     or_filters: list | None,
     order_by: str,
     start: int,
+    filters: dict | None = None,
 ) -> tuple[list[dict], bool]:
     """One page of rows, and whether there are more; asks for one extra row to know."""
     rows = frappe.get_list(
         doctype,
         fields=fields,
+        filters=filters,
         or_filters=or_filters,
         order_by=order_by,
         limit_start=max(int(start or 0), 0),
@@ -174,9 +211,12 @@ def page(
     return rows[:PAGE_LENGTH], len(rows) > PAGE_LENGTH
 
 
-def count(doctype: str, or_filters: list | None) -> int:
+def count(doctype: str, or_filters: list | None, filters: dict | None = None) -> int:
     rows = frappe.get_list(
-        doctype, fields=["count(name) as total"], or_filters=or_filters
+        doctype,
+        fields=["count(name) as total"],
+        filters=filters,
+        or_filters=or_filters,
     )
     return rows[0].total if rows else 0
 

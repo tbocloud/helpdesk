@@ -174,6 +174,13 @@
               )
             "
           />
+          <!-- the backlog a customer-site outage leaves behind; never cleared on its own -->
+          <SettingsAction
+            v-if="auth.isAdmin"
+            method="helpdesk.api.chat_settings.mark_old_sync_errors_seen"
+            :label="__('Mark old sync errors as seen')"
+            :icon="LucideCheckCheck"
+          />
         </SettingsSection>
 
         <SettingsSection
@@ -290,10 +297,12 @@
 
 <script setup lang="ts">
 import SettingsLayoutBase from "@/components/layouts/SettingsLayoutBase.vue";
+import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
 import { dateFormat, dateTooltipFormat, timeAgo } from "@/utils";
 import { createResource, FormControl, Switch, toast } from "frappe-ui";
 import { computed, reactive, ref } from "vue";
+import LucideCheckCheck from "~icons/lucide/check-check";
 import LucideChevronRight from "~icons/lucide/chevron-right";
 import LucideTriangleAlert from "~icons/lucide/triangle-alert";
 import SettingRow from "../SettingRow.vue";
@@ -302,11 +311,13 @@ import SecretField, {
   type SecretEdit,
   type SecretStatus,
 } from "../SecretField.vue";
+import { secretValue } from "../secretEdit";
 import SettingsAction from "../SettingsAction.vue";
 
 const TEAMS = "Microsoft Teams";
 const SLACK = "Slack";
 const SEND_TEST = "helpdesk.api.chat_settings.send_test";
+const auth = useAuthStore();
 
 // the shape chat_notifications.teams_message posts, plus recipient for direct messages
 const PAYLOAD_SAMPLE = JSON.stringify(
@@ -389,12 +400,8 @@ const secrets = computed(
 );
 const lastProblem = computed(() => data.value?.last_problem);
 
-/** What a secret's edit sends: a new value, "" to remove it, or nothing. */
 function secretParam(key: Secret): string | undefined {
-  const edit = edits[key];
-  if (edit?.mode === "remove") return "";
-  if (edit?.mode === "replace" && edit.value.trim()) return edit.value.trim();
-  return undefined;
+  return secretValue(edits[key]);
 }
 
 const isDirty = computed(

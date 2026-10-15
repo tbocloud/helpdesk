@@ -4,7 +4,8 @@ A support mailbox also receives social-network notifications, newsletters and
 bounces. They are recognised by the sender: automated addresses (noreply@,
 notifications@, mailer-daemon@...) and the addresses or domains listed in
 HD Settings. Replies on existing tickets are never filtered, since only new
-tickets go through this check.
+tickets go through this check. The intake rules (helpdesk/intake.py) run before
+these built-in checks and match senders the same way (`sender_matches`).
 """
 
 import re
@@ -30,17 +31,25 @@ def is_unwanted_sender(sender: str | None) -> bool:
     address = (sender or "").strip().lower()
     if "@" not in address:
         return False
-    local, domain = address.rsplit("@", 1)
     settings = frappe.get_cached_doc("HD Settings")
-    if settings.ignore_automated_emails and AUTOMATED_SENDER.match(local):
+    if settings.ignore_automated_emails and AUTOMATED_SENDER.match(
+        address.rsplit("@", 1)[0]
+    ):
         return True
-    return any(
-        _matches(entry, address, domain)
-        for entry in _blocked_entries(settings.ignored_email_senders)
-    )
+    return sender_matches(settings.ignored_email_senders, address)
 
 
-def _blocked_entries(raw: str | None) -> list[str]:
+def sender_matches(entries: str | None, sender: str | None) -> bool:
+    """Whether `sender` is one of `entries`: addresses, or domains that also match
+    their subdomains, separated by commas, semicolons, spaces or new lines."""
+    address = (sender or "").strip().lower()
+    if "@" not in address:
+        return False
+    domain = address.rsplit("@", 1)[1]
+    return any(_matches(entry, address, domain) for entry in _entries(entries))
+
+
+def _entries(raw: str | None) -> list[str]:
     entries = re.split(r"[\s,;]+", (raw or "").lower())
     return [e.lstrip("@").strip() for e in entries if e.strip()]
 

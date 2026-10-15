@@ -355,6 +355,8 @@ export interface HDCustomer extends DocType {
   customer_type?: 'Company' | 'Individual' | 'Partnership';
   /** Domain: Data */
   domain?: string;
+  /** Other Email Domains: Small Text */
+  email_domains?: string;
   /** ERPNext Customer: Data */
   erpnext_customer?: string;
   /** Contacts: Table (HD Customer Member) */
@@ -367,6 +369,10 @@ export interface HDCustomer extends DocType {
   primary_contact?: string;
   /** Country: Link (Country) */
   country?: string;
+  /** Ticket Owner: Link (HD Agent) */
+  ticket_owner?: string;
+  /** Backup Ticket Owner: Link (HD Agent) */
+  backup_ticket_owner?: string;
 }
 
 // Last updated: 2024-03-23 16:03:23.469424

@@ -176,6 +176,44 @@ def make_customer_ticket(customer: str, subject: str, **values) -> str:
     return str(name)
 
 
+def make_owned_customer(name: str, owner: str | None = None, backup: str | None = None):
+    """Creates (or updates) an HD Customer whose new tickets go to `owner`, and to
+    `backup` while the owner is away. Saved as the session user (Administrator in
+    tests, who may set ticket owners)."""
+    if frappe.db.exists("HD Customer", name):
+        doc = frappe.get_doc("HD Customer", name)
+    else:
+        doc = frappe.get_doc({"doctype": "HD Customer", "customer_name": name})
+    doc.ticket_owner = owner
+    doc.backup_ticket_owner = backup
+    doc.save(ignore_permissions=True)
+    return doc
+
+
+def get_open_assignees(ticket) -> list[str]:
+    """The users a ticket is assigned to now (its open ToDos), sorted."""
+    return sorted(
+        frappe.get_all(
+            "ToDo",
+            filters={
+                "reference_type": "HD Ticket",
+                "reference_name": str(ticket),
+                "status": "Open",
+            },
+            pluck="allocated_to",
+        )
+    )
+
+
+def get_ticket_owner_activity(ticket) -> list[str]:
+    """The ticket's activity lines that record a ticket owner (or backup) assignment."""
+    return frappe.get_all(
+        "HD Ticket Activity",
+        filters={"ticket": str(ticket), "action": ("like", "%ticket owner of%")},
+        pluck="action",
+    )
+
+
 def create_agent(
     email: str, first_name: str | None = None, last_name: str | None = None
 ):
@@ -927,6 +965,45 @@ def make_support_connection(
             **kwargs,
         }
     ).insert(ignore_permissions=True)
+
+
+def run_client_pull(connection: str, error: str | None = None) -> int:
+    """Runs one ticket pull of `connection` with the customer site mocked: the call fails
+    with `error`, or the site answers with no pending tickets. Returns tickets made."""
+    from helpdesk import ticket_puller
+
+    client = (
+        patch.object(ticket_puller, "MCPClient", side_effect=RuntimeError(error))
+        if error
+        else patch.object(ticket_puller, "MCPClient")
+    )
+    with client, patch.object(ticket_puller, "_pending_tickets", return_value=[]):
+        return ticket_puller.pull_connection(connection)
+
+
+def get_outage_logs(connection: str) -> list[str]:
+    """Titles of the Error Logs written about `connection` being unreachable."""
+    return frappe.get_all(
+        "Error Log",
+        filters={
+            "reference_doctype": "HDS Support Connection",
+            "reference_name": connection,
+        },
+        pluck="method",
+    )
+
+
+def get_task_todos(task: str) -> list[tuple[str, str]]:
+    """The task's ToDos as (allocated_to, status) pairs, oldest first."""
+    return [
+        (t.allocated_to, t.status)
+        for t in frappe.get_all(
+            "ToDo",
+            filters={"reference_type": "Task", "reference_name": task},
+            fields=["allocated_to", "status"],
+            order_by="creation asc",
+        )
+    ]
 
 
 def make_ticket_communication(
@@ -2222,6 +2299,113 @@ def make_puller_mcp(site_url: str = "https://erp.example.com"):
     return mcp
 
 
+INTAKE_INBOX = "intake-inbox@example.com"
+
+
+def set_intake_settings(rules: list[dict] | None = None, **values):
+    """Overwrite HD Intake Settings for a test: `rules` (dicts of HD Intake Rule fields,
+    enabled unless they say otherwise) replace the rule list when given; other values
+    (apply_triage, default_team, routes, public_email_domains...) are set as they are.
+    Callers roll back afterwards."""
+    doc = frappe.get_single("HD Intake Settings")
+    if rules is not None:
+        doc.set("rules", [{"enabled": 1, **rule} for rule in rules])
+    doc.update(values)
+    doc.save(ignore_permissions=True)
+    frappe.clear_document_cache("HD Intake Settings", "HD Intake Settings")
+
+
+def make_mail_ticket(subject: str, sender: str, **values):
+    """Creates an HD Ticket the way an incoming email opens one: through the intake
+    inbox (an incoming Email Account), so the intake rules and the mail filter apply."""
+    inbox = make_email_account(
+        INTAKE_INBOX, enable_outgoing=0, enable_incoming=1, append_to="HD Ticket"
+    )
+    return make_ticket(
+        subject=subject, raised_by=sender, email_account=inbox.name, **values
+    )
+
+
+def make_intake_mail(subject: str, sender: str, body: str = "Alert details") -> bytes:
+    """A raw incoming email, as the mailbox hands it to Frappe's InboundMail."""
+    return (
+        f"From: {sender}\r\nTo: {INTAKE_INBOX}\r\nSubject: {subject}\r\n"
+        f"Message-ID: <{frappe.generate_hash(length=12)}@mail.example>\r\n"
+        f"Content-Type: text/plain; charset=utf-8\r\n\r\n{body}\r\n"
+    ).encode()
+
+
+def get_intake_logs(sender: str) -> list[dict]:
+    """HD Intake Log rows for `sender`, oldest first: action, rule and ticket."""
+    return frappe.get_all(
+        "HD Intake Log",
+        filters={"sender": sender},
+        fields=["action", "rule", "ticket"],
+        order_by="creation asc",
+    )
+
+
+def get_ticket_comments(ticket) -> list[str]:
+    """The contents of a ticket's HD Ticket Comments, oldest first."""
+    return frappe.get_all(
+        "HD Ticket Comment",
+        filters={"reference_ticket": str(ticket)},
+        pluck="content",
+        order_by="creation asc",
+    )
+
+
+def make_domain_customer(name: str, domain: str = "", email_domains: str = ""):
+    """Creates (or updates) an HD Customer with a Domain and Other Email Domains."""
+    doc = (
+        frappe.get_doc("HD Customer", name)
+        if frappe.db.exists("HD Customer", name)
+        else frappe.get_doc({"doctype": "HD Customer", "customer_name": name})
+    )
+    doc.domain = domain
+    doc.email_domains = email_domains
+    doc.save(ignore_permissions=True)
+    return doc
+
+
+def make_ticket_type(name: str):
+    """Creates an HD Ticket Type if the site doesn't have it yet."""
+    if not frappe.db.exists("HD Ticket Type", name):
+        frappe.get_doc({"doctype": "HD Ticket Type", "name": name}).insert(
+            ignore_permissions=True
+        )
+    return name
+
+
+def set_ticket_status(ticket, status: str):
+    """Saves `status` on the ticket through the document, so its save hooks run."""
+    doc = frappe.get_doc("HD Ticket", str(ticket))
+    doc.status = status
+    doc.save(ignore_permissions=True)
+    return doc
+
+
+def get_feedback_mails(sendmail_mock) -> list:
+    """The feedback-request mails among the calls a patched frappe.sendmail received."""
+    return [
+        c
+        for c in sendmail_mock.call_args_list
+        if c.kwargs.get("email_headers", {}).get("X-Auto-Generated")
+        == "hd-email-feedback"
+    ]
+
+
+def log_activity_as(user: str, ticket, action: str):
+    """Records a ticket activity line (e.g. "set priority to Low") as made by `user`."""
+    from helpdesk.helpdesk.doctype.hd_ticket_activity.hd_ticket_activity import (
+        log_ticket_activity,
+    )
+
+    activity = log_ticket_activity(str(ticket), action)
+    activity.db_set("owner", user, update_modified=False)
+    return activity
+
+
 def set_content_settings(**values):
     """Overwrite HD Content Settings fields for a test (callers roll back afterwards)."""
     frappe.db.set_single_value("HD Content Settings", values)
@@ -2638,12 +2822,19 @@ class FakeChatwootAPI:
     """Stands in for `requests.request` in helpdesk.chatwoot_bridge: records every call and answers like Chatwoot.
 
     GET .../messages returns `messages`; every POST returns a new message id.
-    `fail=True` answers everything with HTTP 500.
+    `fail=True` answers everything with HTTP 500. `answers` maps "METHOD url-suffix"
+    (e.g. "GET /agents") to the JSON to answer with, or to None for HTTP 500.
     """
 
-    def __init__(self, messages: list[dict] | None = None, fail: bool = False):
+    def __init__(
+        self,
+        messages: list[dict] | None = None,
+        fail: bool = False,
+        answers: dict | None = None,
+    ):
         self.messages = messages or []
         self.fail = fail
+        self.answers = answers or {}
         self.calls = []
 
     def __call__(self, method, url, json=None, headers=None, timeout=None, **kwargs):
@@ -2658,12 +2849,23 @@ class FakeChatwootAPI:
             }
         )
         response = MagicMock()
-        if self.fail:
+        # the last matching key wins, so a later override beats a default
+        answer = next(
+            (
+                (value,)
+                for key, value in reversed(list(self.answers.items()))
+                if key.split(" ", 1)[0] == method and url.endswith(key.split(" ", 1)[1])
+            ),
+            None,
+        )
+        if self.fail or (answer and answer[0] is None):
             response.status_code = 500
             response.text = "Internal Server Error"
             return response
         response.status_code = 200
-        if method == "GET":
+        if answer:
+            response.json.return_value = answer[0]
+        elif method == "GET":
             response.json.return_value = {"payload": self.messages}
         else:
             response.json.return_value = {"id": 900000 + len(self.calls)}
@@ -2685,6 +2887,90 @@ class FakeChatwootAPI:
     def statuses(self) -> list[str]:
         """The statuses the bridge toggled conversations to, in order."""
         return [c["body"].get("status") for c in self.calls_to("/toggle_status")]
+
+
+CHATWOOT_TEST_PLATFORM_TOKEN = "test-chatwoot-platform-token"
+CHATWOOT_TEST_SIGN_IN = f"{CHATWOOT_TEST_URL}/app/login?email=x&sso_auth_token=one-time"
+
+
+def enable_chatwoot_sso(**values):
+    """Turns on sign-in through TBO Support (HD Chatwoot Settings) with the bridge's test
+    settings and a test Platform App token, plus any overrides."""
+    return enable_chatwoot_bridge(
+        **{
+            "sso_enabled": 1,
+            "platform_api_token": CHATWOOT_TEST_PLATFORM_TOKEN,
+            "sso_create_users": 1,
+            "sso_default_role": "agent",
+            "sso_managers_as_admins": 1,
+            **values,
+        }
+    )
+
+
+def fake_chatwoot_platform(
+    test_case,
+    agents: list[dict] | None = None,
+    chat_user_id: int = 501,
+    answers: dict | None = None,
+):
+    """Patches Chatwoot for TBO Chat sign-in and returns the FakeChatwootAPI.
+
+    The account has `agents` ({id, email, role}); creating a user answers with
+    `chat_user_id`, and its one-time link is CHATWOOT_TEST_SIGN_IN. `answers`
+    overrides any route, e.g. {"GET /login": None} for an HTTP 500.
+    """
+    api = FakeChatwootAPI(
+        answers={
+            "GET /agents": agents or [],
+            "POST /platform/api/v1/users": {"id": chat_user_id},
+            f"GET /users/{chat_user_id}/login": {"url": CHATWOOT_TEST_SIGN_IN},
+            **(answers or {}),
+        }
+    )
+    request = patch("helpdesk.chatwoot_bridge.requests.request", api)
+    request.start()
+    test_case.addCleanup(request.stop)
+    return api
+
+
+def open_tbo_chat(user: str, referer: str | None = None, **query) -> dict:
+    """Calls helpdesk.api.chatwoot_sso.login as `user` (or "Guest") in a GET request
+    carrying `referer` and the `query` arguments, and returns what it answered:
+    frappe.local.response, a redirect or a page."""
+    from werkzeug.test import EnvironBuilder
+    from werkzeug.wrappers import Request
+
+    from helpdesk import chatwoot_sso
+    from helpdesk.api.chatwoot_sso import login
+
+    builder = EnvironBuilder(
+        path=chatwoot_sso.LOGIN_PATH,
+        base_url="http://localhost",
+        headers={"Referer": referer} if referer else None,
+        query_string=query or None,
+    )
+    previous = (getattr(frappe.local, "request", None), frappe.local.form_dict)
+    frappe.local.request = Request(builder.get_environ())
+    frappe.local.response = frappe._dict({"docs": []})
+    frappe.set_user(user)
+    # after set_user, which empties form_dict
+    frappe.local.form_dict = frappe._dict(query)
+    try:
+        login()
+    finally:
+        frappe.set_user("Administrator")
+        frappe.local.request, frappe.local.form_dict = previous
+    return dict(frappe.local.response)
+
+
+def reset_chat_sign_in_limit(user: str):
+    """Forgets `user`'s recent TBO Chat sign-ins, so the per-user limit and the
+    signed-out check start afresh."""
+    from helpdesk import chatwoot_sso
+
+    frappe.cache.delete(frappe.cache.make_key(f"chatwoot-sso:{user}"))
+    frappe.cache.delete_value(chatwoot_sso.opened_key(user))
 
 
 def make_chat_conversation(conversation_id: int, **values):
@@ -2728,6 +3014,126 @@ def ai_chat_answer(reply: str, action: str = "answer", **fields) -> dict:
 def ai_description_answer(description: str) -> dict:
     """What call_haiku returns for a task description draft."""
     return {"response": {"description": description}, "usage": {}, "cost": 0}
+
+
+# test-only keys: never real ones
+OPENAI_TEST_KEY = "sk-proj-not-a-real-key"
+ANTHROPIC_TEST_KEY = "sk-not-a-real-kimi-key"
+
+
+def make_ai_provider(slot: str = "OpenAI", **values):
+    """An ai_engine.AIProvider for one settings section (OpenAI or
+    Anthropic-compatible) with test keys, without touching HDS Hub Settings."""
+    from helpdesk.ai_engine import AIProvider
+
+    defaults = {
+        "OpenAI": {
+            "kind": "OpenAI",
+            "base_url": "https://api.openai.com/v1",
+            "model": "gpt-test-model",
+            "api_key": OPENAI_TEST_KEY,
+        },
+        "Anthropic-compatible": {
+            "kind": "Anthropic Compatible",
+            "base_url": "https://api.moonshot.ai/anthropic",
+            "model": "kimi-k2.6",
+            "api_key": ANTHROPIC_TEST_KEY,
+        },
+    }[slot]
+    return AIProvider(slot=slot, **{**defaults, **values})
+
+
+def set_ai_providers(**values):
+    """Sets the AI part of HDS Hub Settings: OpenAI primary with failover, both
+    sections set up with test keys, plus any overrides (None clears a field).
+    Forgets every pause and failure so each test starts clean."""
+    from helpdesk.ai_engine import reset_provider_state
+
+    doc = frappe.get_doc("HDS Hub Settings")
+    doc.update(
+        {
+            "primary_ai_provider": "OpenAI",
+            "ai_failover": 1,
+            "openai_base_url": "https://api.openai.com/v1",
+            "openai_model": "gpt-test-model",
+            "openai_api_key": OPENAI_TEST_KEY,
+            "ai_provider": "Anthropic Compatible",
+            "ai_base_url": "https://api.moonshot.ai/anthropic",
+            "default_triage_model": "kimi-k2.6",
+            "anthropic_api_key": ANTHROPIC_TEST_KEY,
+            **values,
+        }
+    )
+    doc.save(ignore_permissions=True)
+    reset_provider_state()
+    clear_ai_alerts()
+    return doc
+
+
+def clear_ai_alerts():
+    """Forgets which providers were alerted about and the outage mark."""
+    from helpdesk.ai_engine import ALERT_KEY, OUTAGE_KEY, SLOTS
+
+    frappe.cache.delete_value([OUTAGE_KEY, *(ALERT_KEY.format(slot) for slot in SLOTS)])
+
+
+def openai_http_response(status: int = 200, body: dict | None = None, text=""):
+    """A requests.Response stand-in for the OpenAI API: `body` as its JSON, or
+    an answer with `text` and token counts when no body is given."""
+    from unittest.mock import MagicMock
+
+    if body is None:
+        body = {
+            "choices": [{"message": {"content": text}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 78, "completion_tokens": 40},
+        }
+    return MagicMock(
+        ok=status < 400,
+        status_code=status,
+        reason="Error" if status >= 400 else "OK",
+        json=MagicMock(return_value=body),
+    )
+
+
+def anthropic_status_error(status: int, body: dict | None = None):
+    """The Anthropic SDK's APIStatusError for an HTTP `status` with an error
+    `body`, built without an HTTP response (the SDK's HTTP client varies by version)."""
+    import anthropic
+
+    error = anthropic.APIStatusError.__new__(anthropic.APIStatusError)
+    Exception.__init__(error, f"Error code: {status}")
+    error.status_code = status
+    error.body = body
+    error.message = f"Error code: {status}"
+    return error
+
+
+def patch_anthropic_sdk(test_case, *answers):
+    """Patches the Anthropic SDK client in helpdesk.ai_engine for `test_case`;
+    each Messages call returns (or raises) the next of `answers`. Returns the
+    patched client class."""
+    from helpdesk import ai_engine
+
+    sdk = patch.object(ai_engine.anthropic, "Anthropic")
+    client_cls = sdk.start()
+    test_case.addCleanup(sdk.stop)
+    client_cls.return_value.messages.create.side_effect = list(answers)
+    return client_cls
+
+
+def anthropic_answer(text: str, stop_reason: str = "end_turn"):
+    """A Messages API response with one text block and token counts."""
+    from unittest.mock import MagicMock
+
+    response = MagicMock(stop_reason=stop_reason)
+    response.content = [MagicMock(type="text", text=text)]
+    response.usage = MagicMock(
+        input_tokens=10,
+        output_tokens=5,
+        cache_read_input_tokens=0,
+        cache_creation_input_tokens=0,
+    )
+    return response
 
 
 def make_email_account(email_id: str, **kwargs):
@@ -2828,6 +3234,8 @@ class FakeCRM:
         self.role_calls: list[tuple[tuple, str]] = []
         self.orgs = [{"name": o, "organization_name": o} for o in organizations or []]
         self.erp = list(erp_customers or [])
+        # (ERPNext Customer name, its Account Manager), for filling empty ticket owners
+        self.account_managers: list[tuple[str, str]] = []
         # ERPNext on the CRM site, for invoicing: one company and its records
         self.company_rows = [{"name": FAKE_COMPANY, "default_currency": "INR"}]
         self.item_rows = [{"name": FAKE_ITEM, "item_name": "Support hours"}]
@@ -2897,6 +3305,12 @@ class FakeCRM:
 
     def customers(self):
         return [{"name": c, "customer_name": c} for c in self.erp]
+
+    def customer_account_managers(self):
+        return [
+            {"name": c, "customer_name": c, "account_manager": manager}
+            for c, manager in self.account_managers
+        ]
 
     def companies(self):
         return list(self.company_rows)
@@ -3021,6 +3435,107 @@ def make_hd_leave(
             "half_day": half_day,
         }
     ).insert(ignore_permissions=True)
+
+
+def set_standup_settings(**values):
+    """Saves HD Standup Settings (the async stand-up) with `values`, on by default."""
+    doc = frappe.get_doc("HD Standup Settings")
+    doc.update({"enabled": 1, **values})
+    doc.save(ignore_permissions=True)
+    frappe.clear_document_cache("HD Standup Settings", "HD Standup Settings")
+    return doc
+
+
+def standup_calendar(today, holidays=()):
+    """A follow-ups WorkCalendar at `today` on a Monday-to-Saturday week with Sundays
+    and `holidays` off and no SLA hours: what the stand-up counts working days with."""
+    from helpdesk import follow_ups
+
+    holidays = {getdate(day) for day in holidays}
+    with patch.object(
+        follow_ups,
+        "working_day_checker",
+        return_value=lambda day: day.weekday() != 6 and day not in holidays,
+    ):
+        calendar = follow_ups.WorkCalendar(getdate(today))
+    calendar.sla = None
+    return calendar
+
+
+def make_standup(user: str, day, department: str | None = None, **values):
+    """Creates `user`'s HD Standup for `day` directly, a Draft unless `values` says
+    otherwise; `values` may hold the yesterday, today and blockers rows (dicts with
+    kind and title, and reference_doctype, reference_name and project for linked work)."""
+    return frappe.get_doc(
+        {
+            "doctype": "HD Standup",
+            "user": user,
+            "date": getdate(day),
+            "department": department,
+            "status": "Draft",
+            **values,
+        }
+    ).insert(ignore_permissions=True)
+
+
+def get_standup_notices(user: str, standup: str) -> list[str]:
+    """The messages of the HD Notifications `user` got about a stand-up, oldest first."""
+    return frappe.get_all(
+        "HD Notification",
+        filters={
+            "user_to": user,
+            "reference_doctype": "HD Standup",
+            "reference_name": standup,
+        },
+        order_by="creation asc",
+        pluck="message",
+    )
+
+
+def make_content_post_at(
+    title: str, customer: str, publish_on, team: dict | None = None, **values
+) -> str:
+    """Creates a Drafting HD Content Post going live at `publish_on` with `team` (e.g.
+    {"writer": user, "designer": user}), so its role tasks are made and given out, then
+    sets `values` (a later status such as Client Review or Changes Requested,
+    client_review_since, head_feedback …) straight in the database, past the post's
+    approval guards. Returns the post's name."""
+    post = make_content_post(
+        title,
+        customer,
+        status="Drafting",
+        publish_on=str(publish_on),
+        **(team or {}),
+    ).name
+    if values:
+        frappe.db.set_value("HD Content Post", post, values, update_modified=False)
+    return post
+
+
+def log_post_move(post: str, user: str, day, old: str, new: str) -> str:
+    """Records in the post's history (a Version) that `user` changed its status from
+    `old` to `new` on `day` at 11:00, as the stand-up's "moved yesterday" reads it."""
+    version = frappe.get_doc(
+        {
+            "doctype": "Version",
+            "ref_doctype": "HD Content Post",
+            "docname": post,
+            "data": json.dumps({"changed": [["status", old, new]]}),
+        }
+    ).insert(ignore_permissions=True)
+    frappe.db.set_value(
+        "Version",
+        version.name,
+        {"owner": user, "creation": f"{getdate(day)} 11:00:00"},
+        update_modified=False,
+    )
+    return version.name
+
+
+def complete_task_on(task: str, day) -> None:
+    """Marks a Task Completed on `day` straight in the database, as if its assignee
+    finished it that day (its ToDos stay as they are)."""
+    frappe.db.set_value("Task", task, {"status": "Completed", "completed_on": day})
 
 
 def enable_invoicing(**values):

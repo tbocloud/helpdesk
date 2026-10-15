@@ -5,10 +5,13 @@ from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_to_date, now_datetime
 
 from helpdesk import error_alerts
+from helpdesk.api import chat_settings
 from helpdesk.test_utils import (
     TEST_TEAMS_CHANNEL_URL,
     enable_chat_notifications,
+    hold_commits,
     make_error_log,
+    make_tasky_user,
 )
 
 CHANNEL = TEST_TEAMS_CHANNEL_URL
@@ -78,7 +81,7 @@ class TestErrorAlerts(FrappeTestCase):
 
     def test_long_lists_are_cut_short(self):
         for i in range(error_alerts.MAX_TITLES + 2):
-            make_error_log(f"Failure {i}")
+            make_error_log(f"Failure {chr(ord('A') + i)}")
         text = self.run_digest().call_args.args[0]
         self.assertIn("…and 2 more kind(s).", text)
 
@@ -90,3 +93,53 @@ class TestErrorAlerts(FrappeTestCase):
         frappe.db.set_single_value("HD Chat Settings", "post_error_alerts", 1)
         frappe.db.set_single_value("HD Chat Settings", "enabled", 0)
         self.assertFalse(self.run_digest().called)
+
+    def test_titles_that_differ_only_by_a_number_are_one_line(self):
+        for ticket in (101, 102, 103):
+            make_error_log(f"Status push failed for {ticket}")
+        make_error_log("Triage failed")
+
+        text = self.run_digest().call_args.args[0]
+        self.assertIn("3 × Status push failed for", text)
+        self.assertIn("(and 2 similar)", text)
+        self.assertIn("1 × Triage failed", text)
+        self.assertNotIn("1 × Status push", text)
+
+
+class TestMarkOldSyncErrorsSeen(FrappeTestCase):
+    def setUp(self):
+        hold_commits(self)
+        self.addCleanup(frappe.set_user, "Administrator")
+        frappe.db.delete("Error Log")
+        two_days_ago = add_to_date(now_datetime(), days=-2)
+        self.old_sync = make_error_log(
+            "Ticket pull failed for TBO-CONN-2026-00002", at=two_days_ago
+        ).name
+        self.old_outage = make_error_log(
+            "Customer site unreachable: Metta", at=two_days_ago
+        ).name
+        self.new_sync = make_error_log(
+            "Ticket pull failed for TBO-CONN-2026-00001"
+        ).name
+        self.old_other = make_error_log("Triage failed", at=two_days_ago).name
+
+    def seen(self, name) -> int:
+        return frappe.db.get_value("Error Log", name, "seen")
+
+    def test_a_system_manager_marks_only_old_sync_errors(self):
+        result = chat_settings.mark_old_sync_errors_seen()
+
+        self.assertEqual(result["ok"], True)
+        self.assertIn("2", result["message"])
+        self.assertEqual((self.seen(self.old_sync), self.seen(self.old_outage)), (1, 1))
+        self.assertEqual((self.seen(self.new_sync), self.seen(self.old_other)), (0, 0))
+
+    def test_others_cant(self):
+        user = make_tasky_user(
+            "manager.errors@error-alerts.example", "Divya Rao", roles=("Agent Manager",)
+        )
+        frappe.set_user(user)
+        with self.assertRaises(frappe.PermissionError):
+            chat_settings.mark_old_sync_errors_seen()
+        frappe.set_user("Administrator")
+        self.assertEqual(self.seen(self.old_sync), 0)

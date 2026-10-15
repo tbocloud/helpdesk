@@ -9,6 +9,8 @@ An agent's own actions stay theirs: a reply drafted by the AI and sent by an
 agent is the agent's reply, tagged AI-drafted (see HDTicket.reply_via_agent).
 """
 
+from contextlib import contextmanager
+
 import frappe
 from frappe import _
 
@@ -35,6 +37,18 @@ def acting_user() -> str:
     if user == "Administrator" and getattr(frappe.local, "request", None) is not None:
         return user
     return automation_user() if user in SYSTEM_USERS else user
+
+
+@contextmanager
+def as_automation_user():
+    """Run the block as the automation user, so what it saves (and the activity lines
+    it logs) is the hub's work, not that of whoever's session or job is running."""
+    user, hub = frappe.session.user, automation_user()
+    frappe.set_user(hub)  # the hub's own work, credited to TBO AI - nosemgrep
+    try:
+        yield
+    finally:
+        frappe.set_user(user)  # back to whoever ran it - nosemgrep
 
 
 def credit(comment, user: str | None = None):

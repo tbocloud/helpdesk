@@ -1,0 +1,135 @@
+{
+	"actions": [],
+	"creation": "2026-10-14 09:00:00.000000",
+	"description": "One line of a stand-up: a task, ticket or content post filled in from the person's work, a step of their Home plan, or their own text. A content line also carries its post, part, client, go-live time and stage.",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"kind",
+		"title",
+		"detail",
+		"reference_doctype",
+		"reference_name",
+		"project",
+		"auto",
+		"helper",
+		"help_task",
+		"content_section",
+		"content_post",
+		"content_role",
+		"customer",
+		"go_live",
+		"stage"
+	],
+	"fields": [
+		{
+			"fieldname": "kind",
+			"fieldtype": "Select",
+			"in_list_view": 1,
+			"label": "Kind",
+			"options": "task\nticket\npost\nplan\nnote",
+			"reqd": 1
+		},
+		{
+			"fieldname": "title",
+			"fieldtype": "Small Text",
+			"in_list_view": 1,
+			"label": "Title",
+			"reqd": 1
+		},
+		{
+			"description": "Completed, Resolved, On hold: Waiting on customer, Due tomorrow …",
+			"fieldname": "detail",
+			"fieldtype": "Small Text",
+			"in_list_view": 1,
+			"label": "Detail"
+		},
+		{
+			"fieldname": "reference_doctype",
+			"fieldtype": "Link",
+			"label": "Reference Type",
+			"options": "DocType"
+		},
+		{
+			"fieldname": "reference_name",
+			"fieldtype": "Dynamic Link",
+			"label": "Reference",
+			"options": "reference_doctype"
+		},
+		{
+			"description": "The task's project, so the department walls apply when others read it",
+			"fieldname": "project",
+			"fieldtype": "Link",
+			"label": "Project",
+			"options": "Project"
+		},
+		{
+			"default": "0",
+			"description": "Filled in from the person's work, not typed",
+			"fieldname": "auto",
+			"fieldtype": "Check",
+			"label": "Auto"
+		},
+		{
+			"description": "Asked to help with this blocker from the team view",
+			"fieldname": "helper",
+			"fieldtype": "Link",
+			"label": "Helper",
+			"options": "User"
+		},
+		{
+			"description": "The task created from this blocker",
+			"fieldname": "help_task",
+			"fieldtype": "Link",
+			"label": "Help Task",
+			"options": "Task"
+		},
+		{
+			"fieldname": "content_section",
+			"fieldtype": "Section Break",
+			"label": "Content calendar"
+		},
+		{
+			"description": "The content post this line is about: a role part's post, or the post itself",
+			"fieldname": "content_post",
+			"fieldtype": "Link",
+			"label": "Content Post",
+			"options": "HD Content Post"
+		},
+		{
+			"description": "The part on the post: writer, designer, video_editor or marketer",
+			"fieldname": "content_role",
+			"fieldtype": "Data",
+			"label": "Content Part"
+		},
+		{
+			"fieldname": "customer",
+			"fieldtype": "Link",
+			"label": "Client",
+			"options": "HD Customer"
+		},
+		{
+			"description": "When the post goes live",
+			"fieldname": "go_live",
+			"fieldtype": "Datetime",
+			"label": "Go Live"
+		},
+		{
+			"description": "The post's stage (its status) when the line was filled in",
+			"fieldname": "stage",
+			"fieldtype": "Data",
+			"label": "Stage"
+		}
+	],
+	"istable": 1,
+	"links": [],
+	"modified": "2026-10-14 12:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD Standup Item",
+	"owner": "Administrator",
+	"permissions": [],
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": []
+}

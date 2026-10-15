@@ -37,7 +37,10 @@ import ContentSettings from "./Content/ContentSettings.vue";
 import TaskSettings from "./Tasks/TaskSettings.vue";
 import LucideListChecks from "~icons/lucide/list-checks";
 import FollowUpSettings from "./FollowUps/FollowUpSettings.vue";
+import StandupSettings from "./Standup/StandupSettings.vue";
 import LucideBellRing from "~icons/lucide/bell-ring";
+import IntakeSettings from "./Intake/IntakeSettings.vue";
+import LucideInbox from "~icons/lucide/inbox";
 import FileStorageSettings from "./FileStorage/FileStorageSettings.vue";
 import CRMSettings from "./CRM/CRMSettings.vue";
 import LucideHandshake from "~icons/lucide/handshake";
@@ -48,8 +51,12 @@ import Departments from "./Departments/Departments.vue";
 import SignoffTemplates from "./Signoff/SignoffTemplates.vue";
 import LucideClipboardCheck from "~icons/lucide/clipboard-check";
 import ChatSettings from "./Chat/ChatSettings.vue";
+import TboChatSettings from "./Chat/TboChatSettings.vue";
+import LucideMessageCircle from "~icons/lucide/message-circle";
 import LucideMessagesSquare from "~icons/lucide/messages-square";
 import GitHubSettings from "./GitHub/GitHubSettings.vue";
+import AIProviderSettings from "./AI/AIProviderSettings.vue";
+import LucideBot from "~icons/lucide/bot";
 import LucideGitPullRequest from "~icons/lucide/git-pull-request";
 
 export const showSettingsModal = ref(false);
@@ -196,6 +203,20 @@ export const tabs = computed(() => {
           // HD Follow Up Settings: System Managers and Agent Managers
           condition: () => auth.isAdmin || auth.isManager,
         },
+        {
+          label: __("Stand-up"),
+          icon: markRaw(LucideMessagesSquare),
+          component: markRaw(StandupSettings),
+          // HD Standup Settings through helpdesk.api.standup, which checks the roles
+          condition: () => auth.isAdmin || auth.isManager,
+        },
+        {
+          label: __("Ticket intake"),
+          icon: markRaw(LucideInbox),
+          component: markRaw(IntakeSettings),
+          // HD Intake Settings through helpdesk.api.intake, which checks the roles
+          condition: () => auth.isAdmin || auth.isManager,
+        },
       ],
     },
     {
@@ -214,10 +235,24 @@ export const tabs = computed(() => {
           condition: () => auth.isAdmin || auth.isManager,
         },
         {
+          label: __("TBO Chat"),
+          icon: markRaw(LucideMessageCircle),
+          component: markRaw(TboChatSettings),
+          // HD Chatwoot Settings is writable by System Managers only
+          condition: () => auth.isAdmin,
+        },
+        {
           label: __("GitHub"),
           icon: markRaw(LucideGitPullRequest),
           component: markRaw(GitHubSettings),
           // HD GitHub Settings through helpdesk.api.github_settings, which checks the roles
+          condition: () => auth.isAdmin || auth.isManager,
+        },
+        {
+          label: __("AI providers"),
+          icon: markRaw(LucideBot),
+          component: markRaw(AIProviderSettings),
+          // HDS Hub Settings through helpdesk.api.ai_settings, which checks the roles
           condition: () => auth.isAdmin || auth.isManager,
         },
         {
@@ -280,8 +315,12 @@ type TabName =
   | "Content"
   | "Tasks"
   | "Follow-ups"
+  | "Stand-up"
+  | "Ticket intake"
   | "Chat & Teams"
+  | "TBO Chat"
   | "GitHub"
+  | "AI providers"
   | "Sign-off templates"
   | "File storage"
   | "CRM";

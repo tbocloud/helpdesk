@@ -265,7 +265,7 @@ class TestPull(HubApiSyncCase):
                 "creation": "2026-10-09 09:00:00",
             }
         ]
-        created = ticket_puller._pull_connection(self.conn, self.customer)
+        created = ticket_puller._pull_connection(self.conn)
         self.assertEqual(created, 1)
         written = self.calls_to("update_ticket", "SUP-2026-00051")
         self.assertEqual(len(written), 1)

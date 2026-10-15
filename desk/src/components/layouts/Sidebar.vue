@@ -75,6 +75,7 @@ import { confirmLoginToFrappeCloud } from "@/composables/fc";
 import { useApps } from "@/composables/useApps";
 import { useScreenSize } from "@/composables/screen";
 import { useThemeToggle } from "@/composables/useThemeToggle";
+import { useTboChat } from "@/composables/useTboChat";
 import { showNewContactModal } from "@/pages/contact/dialogState";
 import {
   showAssignmentModal,
@@ -130,6 +131,7 @@ const { appsMenuOption } = useApps();
 // Agents switch theme from the button beside Notifications; the customer
 // portal has no Notifications row, so it keeps the menu entry.
 const { menuItem: themeMenuItem } = useThemeToggle();
+const { menuItems: chatMenuItems } = useTboChat();
 
 const isFCSite = ref(window.is_fc_site);
 
@@ -158,6 +160,7 @@ const agentPortalDropdown = computed(() => [
       window.open(path.href);
     },
   },
+  ...chatMenuItems.value,
   {
     icon: "lucide-life-buoy",
     label: __("Support"),

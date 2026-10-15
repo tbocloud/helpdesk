@@ -48,6 +48,7 @@ from frappe.utils import (
 from helpdesk.api.ticket import _sla_calendar
 from helpdesk.api.work import ON_HOLD, PENDING_REVIEW, WAITING_ON_TASK, is_task_overdue
 from helpdesk.automation import automation_user
+from helpdesk.consts import ALERT_TICKET_TYPE
 from helpdesk.recurrence import working_day_checker
 from helpdesk.tasky.permissions import (
     COORDINATOR_PROJECT_ROLE,
@@ -115,6 +116,7 @@ TICKET_FIELDS = [
     "last_customer_response",
     "last_agent_response",
     "custom_customer_followed_up_on",
+    "ticket_type",
 ]
 
 
@@ -226,6 +228,16 @@ class WorkCalendar:
         while not self.is_working_day(day):
             day = add_days(day, 1)
         return day
+
+    def previous_working_day(self):
+        """The last working day before today: Friday's work on a Monday, the day
+        before a holiday after it (the stand-up's "yesterday")."""
+        day = add_days(self.today, -1)
+        for _step in range(LOOKBACK_DAYS):
+            if self.is_working_day(day):
+                return day
+            day = add_days(day, -1)
+        return add_days(self.today, -1)
 
     def in_working_hours(self, moment) -> bool:
         moment = get_datetime(moment)
@@ -720,11 +732,16 @@ class TicketRules:
     def __init__(self, ctx: Context):
         self.ctx = ctx
         self.s = ctx.settings
-        self.tickets = frappe.qb.get_query(
-            "HD Ticket",
-            fields=TICKET_FIELDS,
-            filters={"status_category": ("in", ["Open", "Paused"])},
-        ).run(as_dict=True)
+        # monitoring alerts have no SLA and no customer waiting (docs/ticket-intake.md)
+        self.tickets = [
+            t
+            for t in frappe.qb.get_query(
+                "HD Ticket",
+                fields=TICKET_FIELDS,
+                filters={"status_category": ("in", ["Open", "Paused"])},
+            ).run(as_dict=True)
+            if t.ticket_type != ALERT_TICKET_TYPE
+        ]
         self.calendars = {}
         self.teams = self.load_teams({t.agent_group for t in self.tickets})
         self.support_heads = ctx.heads(self.s.ticket_department or None)

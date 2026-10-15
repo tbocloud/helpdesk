@@ -50,6 +50,8 @@ scheduler_events = {
         # digests at their times (docs/follow-ups.md)
         "*/15 * * * *": [
             "helpdesk.follow_ups.run",
+            # the async stand-up: drafts, the reminder and the summaries (docs/standup.md)
+            "helpdesk.standup.run",
             "helpdesk.helpdesk.doctype.hd_meeting.hd_meeting.sync_with_outlook",
             # Copilot fix approvals: remind the approver, then hand to a senior
             "helpdesk.copilot.approvals.remind_and_escalate",
@@ -153,9 +155,12 @@ user_invitation = {
 }
 
 doc_events = {
-    # a disabled user keeps no OAuth tokens (helpdesk/offboarding.py)
+    # a disabled user keeps no OAuth tokens (helpdesk/offboarding.py) and leaves TBO Chat
     "User": {
-        "on_update": "helpdesk.offboarding.revoke_tokens_of_disabled_user",
+        "on_update": [
+            "helpdesk.offboarding.revoke_tokens_of_disabled_user",
+            "helpdesk.chatwoot_sso.on_user_update",
+        ],
     },
     "Project": {
         # content tasks made before the customer had a content project join it
@@ -170,10 +175,15 @@ doc_events = {
     "File": {
         "after_insert": "helpdesk.storage.s3.after_insert",
     },
-    # a new or re-activated agent gets their TBO CRM user (helpdesk/integrations/crm)
+    # a new or re-activated agent gets their TBO CRM user (helpdesk/integrations/crm);
+    # a deactivated one leaves TBO Chat (helpdesk/chatwoot_sso.py)
     "HD Agent": {
         "after_insert": "helpdesk.integrations.crm.users.on_agent_change",
-        "on_update": "helpdesk.integrations.crm.users.on_agent_change",
+        "on_trash": "helpdesk.chatwoot_sso.on_agent_trash",
+        "on_update": [
+            "helpdesk.integrations.crm.users.on_agent_change",
+            "helpdesk.chatwoot_sso.on_agent_update",
+        ],
     },
     "Assignment Rule": {
         "on_trash": "helpdesk.extends.assignment_rule.on_assignment_rule_trash",
@@ -223,8 +233,16 @@ doc_events = {
     # manager's change to these shows at once, tickets and tasks within the 10
     "HD Customer": {
         "after_insert": "helpdesk.customer_health.clear_health_cache",
-        "after_rename": "helpdesk.customer_health.clear_health_cache",
-        "on_trash": "helpdesk.customer_health.clear_health_cache",
+        "after_rename": [
+            "helpdesk.customer_health.clear_health_cache",
+            "helpdesk.helpdesk.doctype.hd_customer.hd_customer.clear_domain_cache",
+        ],
+        "on_trash": [
+            "helpdesk.customer_health.clear_health_cache",
+            "helpdesk.helpdesk.doctype.hd_customer.hd_customer.clear_domain_cache",
+        ],
+        # new tickets find their customer by domain (docs/ticket-intake.md)
+        "on_update": "helpdesk.helpdesk.doctype.hd_customer.hd_customer.clear_domain_cache",
     },
     "HD Support Contract": {
         "on_update": "helpdesk.customer_health.clear_health_cache",
@@ -307,4 +325,5 @@ default_log_clearing_doctypes = {
     "HDS Remote Audit Log": 365,
     "HDS Copilot Event": 90,
     "HDS Copilot Call Log": 90,
+    "HD Intake Log": 30,
 }

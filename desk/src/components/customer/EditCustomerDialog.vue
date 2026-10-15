@@ -127,6 +127,7 @@ async function save() {
           name: newName,
           fieldname: {
             domain: state.domain,
+            email_domains: state.emailDomains,
             country: state.country,
             image: state.image,
             customer_type: state.customerType,
@@ -142,6 +143,7 @@ async function save() {
       await customer.setValue.submit({
         name: state.name,
         domain: state.domain,
+        email_domains: state.emailDomains,
         country: state.country,
         image: state.image,
         customer_type: state.customerType,
@@ -168,6 +170,7 @@ function revertChanges() {
   if (!isDirty.value) return;
   state.name = customer.doc.customer_name || "";
   state.domain = customer.doc.domain || "";
+  state.emailDomains = customer.doc.email_domains || "";
   state.country = customer.doc.country || "";
   state.image = customer.doc.image || "";
   state.customerType = customer.doc.customer_type || "Company";

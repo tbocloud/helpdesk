@@ -72,8 +72,16 @@ export const useAuthStore = defineStore("auth", () => {
   const canSeeCustomerReport: ComputedRef<boolean> = computed(
     () => !!(user__.value.is_manager || user__.value.is_project_manager)
   );
+  // managers, Project Managers and department heads set customers' ticket owners
+  const canSetTicketOwner: ComputedRef<boolean> = computed(
+    () => !!user__.value.can_set_ticket_owner
+  );
   const telephonyInstalled: ComputedRef<boolean> = computed(
     () => !!user__.value.telephony_installed
+  );
+  // an active agent while TBO Chat sign-in through TBO Support is on
+  const canOpenChat: ComputedRef<boolean> = computed(
+    () => !!user__.value.can_open_chat
   );
 
   const userId: ComputedRef<string> = computed(() => user__.value.user_id);
@@ -139,6 +147,7 @@ export const useAuthStore = defineStore("auth", () => {
     isProjectManager,
     canSeeOverview,
     canSeeCustomerReport,
+    canSetTicketOwner,
     isContentTeam,
     isDmHead,
     canEditContent,
@@ -147,6 +156,7 @@ export const useAuthStore = defineStore("auth", () => {
     isDmEmployee,
     canWorkTickets,
     telephonyInstalled,
+    canOpenChat,
     isLoggedIn,
     login,
     reloadUser,

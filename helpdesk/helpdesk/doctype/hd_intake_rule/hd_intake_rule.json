@@ -1,0 +1,70 @@
+{
+	"actions": [],
+	"creation": "2026-10-14 12:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"enabled",
+		"label",
+		"sender_pattern",
+		"subject_pattern",
+		"action"
+	],
+	"fields": [
+		{
+			"default": "1",
+			"fieldname": "enabled",
+			"fieldtype": "Check",
+			"in_list_view": 1,
+			"label": "Enabled",
+			"columns": 1
+		},
+		{
+			"fieldname": "label",
+			"fieldtype": "Data",
+			"in_list_view": 1,
+			"label": "Label",
+			"reqd": 1,
+			"columns": 2
+		},
+		{
+			"description": "Addresses or domains, separated by commas or new lines. A domain also matches its subdomains.",
+			"fieldname": "sender_pattern",
+			"fieldtype": "Small Text",
+			"in_list_view": 1,
+			"label": "Sender",
+			"columns": 3
+		},
+		{
+			"description": "A regular expression, not case-sensitive.",
+			"fieldname": "subject_pattern",
+			"fieldtype": "Data",
+			"in_list_view": 1,
+			"label": "Subject",
+			"columns": 2
+		},
+		{
+			"default": "Ignore",
+			"fieldname": "action",
+			"fieldtype": "Select",
+			"in_list_view": 1,
+			"label": "Action",
+			"options": "Ignore\nAlert\nMerge into open alert",
+			"reqd": 1,
+			"columns": 2
+		}
+	],
+	"index_web_pages_for_search": 0,
+	"links": [],
+	"modified": "2026-10-14 12:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD Intake Rule",
+	"owner": "Administrator",
+	"permissions": [],
+	"sort_field": "creation",
+	"sort_order": "DESC",
+	"states": [],
+	"istable": 1,
+	"editable_grid": 1
+}

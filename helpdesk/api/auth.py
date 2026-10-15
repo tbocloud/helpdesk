@@ -1,5 +1,6 @@
 import frappe
 
+from helpdesk import chatwoot_sso
 from helpdesk.api.work import can_see_overview
 from helpdesk.content_team import (
     can_edit_content,
@@ -10,6 +11,7 @@ from helpdesk.content_team import (
     is_dm_head,
     is_erp_only,
 )
+from helpdesk.helpdesk.doctype.hd_customer.hd_customer import can_set_ticket_owner
 from helpdesk.tasky.permissions import is_project_manager as tasky_is_project_manager
 from helpdesk.utils import agent_only, get_agent_name, get_agents_team
 from helpdesk.utils import is_agent as _is_agent
@@ -77,6 +79,7 @@ def get_user():
         "user_id": user_id,
         "is_manager": is_manager,
         "is_project_manager": is_project_manager,
+        "can_set_ticket_owner": can_set_ticket_owner(current_user),
         "can_see_overview": can_see_overview(current_user)
         and not is_content_only(current_user),
         "is_content_team": is_content_only(current_user),
@@ -102,6 +105,11 @@ def get_user():
         "availability": availability.get("availability"),
         "availability_changed_on": availability.get("availability_changed_on"),
         "persona_captured": persona_captured,
+        # Open TBO Chat in the profile menu (helpdesk.api.chatwoot_sso.login)
+        "can_open_chat": bool(
+            frappe.db.get_single_value("HD Chatwoot Settings", "sso_enabled")
+        )
+        and chatwoot_sso.is_active_agent(current_user),
     }
 
 

@@ -2,7 +2,7 @@ import type { Tone } from "@/components/tone";
 import { __ } from "@/translation";
 import { DocumentResource, Error } from "@/types";
 import { HDCustomer } from "@/types/doctypes";
-import { getErrorMessage } from "@/utils";
+import { dateFormat, getErrorMessage, getTimeFormat } from "@/utils";
 import { call, createDocumentResource } from "frappe-ui";
 import {
   computed,
@@ -21,19 +21,21 @@ import LucideMapPin from "~icons/lucide/map-pin";
 import LucideUnplug from "~icons/lucide/unplug";
 import LucideUser from "~icons/lucide/user";
 import LucideUsers from "~icons/lucide/users";
+import LucideWifiOff from "~icons/lucide/wifi-off";
 import { OrganizationsIcon } from "../components/icons";
 
 const customerCache: Record<string, DocumentResource<HDCustomer>> = {};
 
 /** A customer's ERP site connection (HDS Support Connection), as the directory sends it. */
 export interface Connection {
-  status: "Pending" | "Connected" | "Disconnected" | "Error";
+  status: "Pending" | "Connected" | "Disconnected" | "Error" | "Unreachable";
   site_url: string | null;
 }
 
 const CONNECTION_TONE: Record<Connection["status"], Tone> = {
   Connected: "success",
   Error: "danger",
+  Unreachable: "danger",
   Disconnected: "warning",
   Pending: "neutral",
 };
@@ -41,9 +43,32 @@ const CONNECTION_TONE: Record<Connection["status"], Tone> = {
 const CONNECTION_ICON: Record<Connection["status"], Component> = {
   Connected: LucideCircleCheck,
   Error: LucideCircleX,
+  Unreachable: LucideWifiOff,
   Disconnected: LucideUnplug,
   Pending: LucideCircleDashed,
 };
+
+/**
+ * What is wrong with a connection, in words: its last error and, for a site in an
+ * outage, when the hub calls it next (docs/client-site-sync.md). Null when it's fine.
+ */
+export function connectionProblem(connection: {
+  connection_status: string | null;
+  last_error: string | null;
+  next_attempt_at?: string | null;
+}): string | null {
+  const status = connection.connection_status;
+  if (status !== "Error" && status !== "Unreachable") return null;
+  const parts = [connection.last_error || __("The site doesn't answer")];
+  if (status === "Unreachable" && connection.next_attempt_at)
+    parts.push(
+      __(
+        "next try at {0}",
+        dateFormat(connection.next_attempt_at, getTimeFormat())
+      )
+    );
+  return parts.join(" · ");
+}
 
 /** TaskyBadge props for a connection: the status in words, a tone and an icon. */
 export function connectionBadge(connection: Connection) {
@@ -86,6 +111,7 @@ export function useCustomer(name: string) {
         state.name = data.customer_name || "";
         state.customerType = data.customer_type || "Company";
         state.domain = data.domain || "";
+        state.emailDomains = data.email_domains || "";
         state.image = data.image || "";
         state.country = data.country || "";
       }
@@ -96,6 +122,7 @@ export function useCustomer(name: string) {
   const isCustomerInfoChanged = computed(() => {
     return (
       state.domain !== (doc.doc?.domain || "") ||
+      state.emailDomains !== (doc.doc?.email_domains || "") ||
       state.image !== (doc.doc?.image || "") ||
       state.country !== (doc.doc?.country || "") ||
       state.customerType !== (doc.doc?.customer_type || "Company")
@@ -139,6 +166,7 @@ export function useCustomerState(name?: string | null) {
     name: name ? name : "",
     customerType: "Company",
     domain: "",
+    emailDomains: "",
     image: "",
     country: "",
   });
@@ -172,7 +200,13 @@ export function useNewCustomerForm() {
   return { state, primaryContact, reset };
 }
 
-type StateKey = "name" | "customerType" | "domain" | "image" | "country";
+type StateKey =
+  | "name"
+  | "customerType"
+  | "domain"
+  | "emailDomains"
+  | "image"
+  | "country";
 
 type PrimaryContactKey = "firstName" | "lastName" | "email" | "mobileNo";
 
@@ -238,5 +272,14 @@ export const customerFields: FieldConfig[] = [
     label: __("Domain"),
     placeholder: "frappe.io",
     prefix: h(LucideGlobe, { class: "size-4" }),
+  },
+  {
+    key: "emailDomains",
+    type: "textarea",
+    label: __("Other email domains"),
+    placeholder: "frappe.cloud",
+    description: __(
+      "One per line, if their people also email from other domains. New tickets from these domains get this customer."
+    ),
   },
 ];

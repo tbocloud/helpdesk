@@ -61,13 +61,18 @@ settings header) and the scrolling content area.
 - **`ChipListInput.vue`**: picked records as removable chips plus a Link picker to add more
   (File storage's document types, Content's alert recipients).
 - **`SecretField.vue`**: a saved secret shown masked with Replace and, when `removable`,
-  Remove (Undo until saved); the value never comes back from the server. Chat & Teams and
-  GitHub.
+  Remove (Undo until saved); the value never comes back from the server. Chat & Teams,
+  GitHub, AI providers and TBO Chat. `secretEdit.ts` (`secretValue`) turns an edit into
+  what Save sends: a new value, `""` to remove it, or nothing.
 - **`SettingsAction.vue`**: a button that runs a POST action on the saved settings (`method`,
   `params`, `icon`) and shows its `{ok, message, details?}` result in success or danger with
   an icon, and `details` as a label/value list. Disabled with "Save your changes first"
   while the page is `unsaved`. Send a test (Chat & Teams), Test token and Request a merge
-  bot run now (GitHub).
+  bot run now (GitHub), Test connection (AI providers).
+- **`SettingsPreviewAction.vue`**: a one-off change with a dry run. **Preview** lists what
+  would change (rows from a slot), and only then **Apply N changes** appears; the result
+  replaces the list. Both wait while the page is unsaved. Ticket intake's Apply rules to
+  open tickets and Fill customer domains from the CRM.
 - Plain fields use frappe-ui `FormControl` with `label` (above the field) and `description`.
 - The large upstream editors (SLA policy, holiday schedule, assignment rule) keep their own
   layout, with section headings and dividers matched to `SettingsSection`.
@@ -109,8 +114,12 @@ Telephony providers and pending invites.
 | Sign-off templates | List (inactive greyed, question count) and an editor sub-page with Active, Back and Save in the header. See [project-signoff.md](project-signoff.md). |
 | Content, Tasks, File storage, CRM | TBO pages; sections of `SettingRow`s, Save in the header, load errors with Try again. See [content-calendar.md](content-calendar.md), [ai-task-descriptions.md](ai-task-descriptions.md), [project-files.md](project-files.md), [tbo-crm-integration.md](tbo-crm-integration.md). Tasks also has the Support hours section (email the customer when their hours run low; [support-contracts.md](support-contracts.md)). CRM also has the Invoicing section, whose pickers are read live from the CRM site and checked on save ([timesheet-invoicing.md](timesheet-invoicing.md)). |
 | Follow-ups | System Managers and Agent Managers. Enabled in the header; Delivery (digest times, Send me a test digest), Escalation ladder, Task rules and Ticket rules (a switch and threshold per rule), Customer follow-up, Working hours (read from the default SLA) and a Preview of each person's digest. See [follow-ups.md](follow-ups.md). |
+| Stand-up | System Managers and Agent Managers. Enabled in the header; Times (drafts open, reminder, summary posts) and Show hours logged; Departments and channels (each department with its masked Teams channel workflow URL); Team view (heads, leads and coordinators, project managers). See [standup.md](standup.md#settings--stand-up). |
+| Ticket intake | System Managers and Agent Managers. Mail rules (ordered, each with On, move and remove), the built-in filter (HD Settings), Post monitor alerts, Apply rules to open tickets (Preview, then Apply), Recently kept out, Routing (Apply AI triage, default team, team per triage category, warnings for teams that would leave tickets unassigned), Customer detection (public mail domains, Fill customer domains from the CRM) and Customer feedback. See [ticket-intake.md](ticket-intake.md). |
 | Chat & Teams | System Managers and Agent Managers. Every HD Chat Settings field; secrets masked, with Send me a test and Send a test to the channel. See [Chat & Teams](#chat--teams) below. |
+| TBO Chat | System Managers. Sign-in to TBO Chat through TBO Support: Enabled in the header; Connection (Chatwoot URL, account ID, masked Bridge User Access Token), Sign-in (masked Platform App Token, adding missing agents, their role) and the address Chatwoot's sign-in page is sent to. See [chatwoot-sso.md](chatwoot-sso.md). |
 | GitHub | System Managers and Agent Managers. Every HD GitHub Settings field: the webhook (Payload URL with Copy, events, secret), the task sync, the org merge bot with Test token and Request a merge bot run now, the last webhook delivery and setup help. Secrets masked as on Chat & Teams. See [github-sync.md](github-sync.md#the-settings-page). |
+| AI providers | System Managers and Agent Managers. Banner while the primary fails; primary provider and fallback switch; OpenAI and Anthropic-compatible sections with model, base URL, masked API key and Test connection. See [ai-providers.md](ai-providers.md#settings--ai-providers). |
 | Telephony | Default medium, then Twilio and Exotel as list rows that open their sub-pages. |
 | ERPNext | Enable switch, in-sync / sync-needed status (success or warning soft panel, with icon). |
 
@@ -127,6 +136,11 @@ System Managers only). No new storage: it is the same Single the desk form edits
 - **Microsoft Teams** (Teams only): Direct Message Workflow URL and Escalation Channel
   Workflow URL. **Slack** (Slack only): Bot Token and Escalation Channel ID.
 - **Error alerts**: post hub errors to the escalation channel, and the titles to ignore.
+  The digest groups titles that differ only by a number into one line with a count
+  (`error_alerts.group_similar`). System Managers also get **Mark old sync errors as seen**
+  (`chat_settings.mark_old_sync_errors_seen`): the customer-site sync errors
+  (`error_alerts.SYNC_ERROR_TITLES`) older than a day are marked seen in the Error Log. It
+  only runs when clicked, never on a schedule ([client-site-sync.md](client-site-sync.md)).
 - **Last delivery problem**: shown only when the Error Log has a chat delivery failure
   (`error_alerts.CHAT_ERROR_TITLES`); its title and time, never the traceback, which can
   hold the URL.

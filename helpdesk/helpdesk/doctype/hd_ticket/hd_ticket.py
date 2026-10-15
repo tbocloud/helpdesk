@@ -13,12 +13,27 @@ from frappe.desk.form.assign_to import get as get_assignees
 from frappe.model.document import Document
 from frappe.permissions import add_permission, update_permission_property
 from frappe.query_builder import DocType, Order
-from frappe.utils import add_to_date, cint, getdate, now_datetime
+from frappe.utils import (
+    add_to_date,
+    cint,
+    format_datetime,
+    formatdate,
+    get_fullname,
+    getdate,
+    now_datetime,
+    validate_email_address,
+)
 from pypika.functions import Count
 from pypika.queries import Query
 from pypika.terms import Criterion
 
+from helpdesk.automation import automation_user
+from helpdesk.consts import ALERT_TICKET_TYPE
 from helpdesk.content_team import sees_no_tickets
+from helpdesk.helpdesk.doctype.hd_customer.hd_customer import (
+    add_customer_contact,
+    customer_for_email,
+)
 from helpdesk.helpdesk.doctype.hd_settings.helpers import (
     get_default_email_content,
     is_email_content_empty,
@@ -31,6 +46,7 @@ from helpdesk.helpdesk.utils.email import (
     default_ticket_outgoing_email_account,
 )
 from helpdesk.utils import (
+    add_assignment,
     capture_event,
     get_agents_team,
     get_customers,
@@ -39,6 +55,7 @@ from helpdesk.utils import (
     is_agent,
     is_chat_placeholder_email,
     publish_event,
+    remove_assignment,
     strip_chat_placeholders,
 )
 from helpdesk.work_reminders import _agent_managers, _assignees, notify_users
@@ -76,7 +93,7 @@ class HDTicket(Document):
         return self.name
 
     def before_insert(self):
-        self.reject_unwanted_email()
+        self.apply_intake_rules()
         self.generate_key()
 
     def before_validate(self):
@@ -93,6 +110,7 @@ class HDTicket(Document):
         self.validate_portal_contact()
         self.set_contact()
         self.set_customer()
+        self.set_customer_from_domain()
 
     def validate(self):
         self.validate_feedback()
@@ -124,29 +142,7 @@ class HDTicket(Document):
         )
 
     def handle_email_feedback(self):
-        if (
-            self.is_new()
-            or self.via_customer_portal
-            or self.feedback_rating
-            or not self.has_value_changed("status")
-            or not self.key
-            or self.has_chat_only_contact()
-        ):
-            return
-
-        [is_email_feedback_enabled, email_feedback_status] = frappe.get_cached_value(
-            "HD Settings",
-            "HD Settings",
-            ["enable_email_ticket_feedback", "send_email_feedback_on_status"],
-        )
-
-        send_feedback_email = int(is_email_feedback_enabled) and (
-            email_feedback_status == self.status
-            or email_feedback_status == ""
-            and self.status == "Closed"
-        )
-
-        if not send_feedback_email:
+        if not self.should_request_feedback():
             return
 
         last_communication = self.get_last_communication()
@@ -175,6 +171,62 @@ class HDTicket(Document):
             frappe.msgprint(_("Feedback email has been sent to the customer"))
         except Exception as e:
             frappe.throw(_("Could not send feedback email,due to: {0}").format(e))
+        self.feedback_requested_on = now_datetime()
+
+    def should_request_feedback(self) -> bool:
+        """Once per ticket, to a customer's real address: on the feedback status of HD
+        Settings, or, with Ask for Feedback on Close (Settings → Ticket intake), when the
+        ticket is closed without ever reaching that status (docs/ticket-intake.md)."""
+        if (
+            self.is_new()
+            or self.via_customer_portal
+            or self.feedback_rating
+            or self.feedback_requested_on
+            or self.flags.skip_feedback
+            or not self.has_value_changed("status")
+            or not self.key
+            or self.has_chat_only_contact()
+            or not self.is_customer_sender()
+        ):
+            return False
+
+        [is_email_feedback_enabled, email_feedback_status] = frappe.get_cached_value(
+            "HD Settings",
+            "HD Settings",
+            ["enable_email_ticket_feedback", "send_email_feedback_on_status"],
+        )
+        if not cint(is_email_feedback_enabled):
+            return False
+        feedback_status = email_feedback_status or "Closed"
+        if self.status == feedback_status:
+            return True
+        return (
+            self.status == "Closed"
+            and bool(
+                frappe.db.get_single_value("HD Intake Settings", "feedback_on_close")
+            )
+            and not self.reached_status(feedback_status)
+        )
+
+    def is_customer_sender(self) -> bool:
+        """A person outside the team: not an alert, an agent or an automated sender."""
+        from helpdesk.email_filter import is_unwanted_sender
+
+        email = parseaddr(self.raised_by or "")[1]
+        return (
+            not self.is_alert()
+            and bool(validate_email_address(email))
+            and not is_agent(email)
+            and not is_unwanted_sender(email)
+        )
+
+    def reached_status(self, status: str) -> bool:
+        return bool(
+            frappe.db.exists(
+                "HD Ticket Activity",
+                {"ticket": str(self.name), "action": f"set status to {status}"},
+            )
+        )
 
     def after_insert(self):
 
@@ -194,8 +246,13 @@ class HDTicket(Document):
             and not frappe.flags.initial_sync
             and send_ack_email
             and not self.has_chat_only_contact()
+            and not self.is_alert()
         ):
             self.send_acknowledgement_email()
+
+        self.link_sender_to_customer()
+        self.assign_customer_owner()
+        self.announce_alert()
 
     def capture_ticket_created_telemetry_events(self):
         if self.subject == "Welcome to Helpdesk":
@@ -229,6 +286,7 @@ class HDTicket(Document):
                         self.notify_agent(agent.name, "Reaction")
 
         self.remove_assignment_if_not_in_team()
+        self.assign_owner_of_customer_set_later()
         self.alert_low_rating()
         self.publish_update()
         self.capture_update_telemetry_events()
@@ -377,6 +435,29 @@ class HDTicket(Document):
                     frappe.ValidationError,
                 )
 
+    def set_customer_from_domain(self):
+        """A new ticket without a customer gets the one whose email domain is the
+        sender's, never for public mail domains or an agent's own ticket
+        (docs/ticket-intake.md)."""
+        if not self.is_new() or self.customer or self.is_alert():
+            return
+        email = parseaddr(self.raised_by or "")[1]
+        if is_agent(email) or not frappe.db.get_single_value(
+            "HD Intake Settings", "match_customer_by_domain"
+        ):
+            return
+        self.customer = customer_for_email(email)
+        self.flags.customer_from_domain = bool(self.customer)
+
+    def link_sender_to_customer(self):
+        """The sender of a ticket matched to a customer by domain becomes one of its
+        contacts, so their next ticket finds the customer through the contact."""
+        if not self.flags.customer_from_domain:
+            return
+        email = parseaddr(self.raised_by or "")[1]
+        if email and not is_chat_placeholder_email(email):
+            add_customer_contact(self.customer, email.lower())
+
     def set_priority(self):
         if self.priority:
             return
@@ -484,7 +565,10 @@ class HDTicket(Document):
         Removes the assignment if the agent is not in the team.
         Should be called inside on_update
         """
-        if self.is_new():
+        # a new ticket has no team change; its customer's ticket owner may be outside
+        # the team (docs/ticket-owners.md)
+        # nor does routing after triage, which never takes an assignment away
+        if self.is_new() or self.flags.in_insert or self.flags.keep_assignment:
             return
         if not self.agent_group or (hasattr(self, "_assign") and not self._assign):
             return
@@ -540,6 +624,115 @@ class HDTicket(Document):
 
         if frappe.session.user != agent:
             self.notify_agent(agent, "Assignment")
+
+    def assign_customer_owner(self):
+        """Give a new ticket to its customer's ticket owner, or the backup while the
+        owner is away (docs/ticket-owners.md).
+
+        Runs in after_insert, before Frappe's Assignment Rules (an on_update doc event),
+        which skip a ticket that already has an open assignment, so the owner wins over
+        the team round robin without a second ToDo. A rule's assignment that got in first
+        is withdrawn; a person's is kept.
+        """
+        if not self.customer:
+            return
+        customer = frappe.get_doc("HD Customer", self.customer)
+        pick = customer.ticket_owner_today()
+        if not pick:
+            return
+        open_todos = self.open_assignments()
+        if any(not todo.assignment_rule for todo in open_todos):
+            return
+        # every rule ToDo goes, even one for the owner, so the assignment is the owner's
+        for todo in open_todos:
+            remove_assignment(
+                "HD Ticket", self.name, todo.allocated_to, ignore_permissions=True
+            )
+        add_assignment(
+            {
+                "assign_to": [pick["user"]],
+                "doctype": "HD Ticket",
+                "name": self.name,
+                "assigned_by": automation_user(),
+            },
+            ignore_permissions=True,
+        )
+        # the ToDo wrote _assign to the database; keep this copy in step with it, so a
+        # later save of this document in the same request doesn't write the old value back
+        self.update({"_assign": frappe.db.get_value("HD Ticket", self.name, "_assign")})
+        self.log_owner_assignment(pick, customer.name)
+        self.notify_ticket_owner(pick)
+
+    def assign_owner_of_customer_set_later(self):
+        """A ticket that came in without a customer and is still unassigned gets the
+        owner once, when its customer is first set; later changes never reassign."""
+        if self.flags.in_insert:
+            return
+        previous = self.get_doc_before_save()
+        if not previous or previous.customer or not self.customer:
+            return
+        if self.open_assignments():
+            return
+        self.assign_customer_owner()
+
+    def open_assignments(self) -> list:
+        return frappe.get_all(
+            "ToDo",
+            filters={
+                "reference_type": "HD Ticket",
+                "reference_name": str(self.name),
+                "status": "Open",
+            },
+            fields=["allocated_to", "assignment_rule"],
+        )
+
+    def log_owner_assignment(self, pick: dict, customer: str):
+        """The activity line, credited to the automation user, not whoever's session
+        created the ticket (a portal customer, an email, a job)."""
+        name = get_fullname(pick["user"])
+        if not pick["backup"]:
+            action = _("assigned {0}, ticket owner of {1}").format(name, customer)
+        elif pick["until"]:
+            action = _(
+                "assigned {0}, backup ticket owner of {1} ({2} is on leave until {3})"
+            ).format(
+                name,
+                customer,
+                get_fullname(pick["away"]),
+                formatdate(pick["until"], "EEE d MMM"),
+            )
+        else:
+            action = _(
+                "assigned {0}, backup ticket owner of {1} ({2} is inactive)"
+            ).format(name, customer, get_fullname(pick["away"]))
+        activity = log_ticket_activity(self.name, action)
+        activity.db_set("owner", automation_user(), update_modified=False)
+
+    def notify_ticket_owner(self, pick: dict):
+        """The owner's notice: the helpdesk panel plus a Teams DM (or email) through
+        notify_users. A plain assignment sends no chat message, so this is the only one.
+        """
+        lines = [
+            _("New ticket #{0} from {1} assigned to you: {2}").format(
+                self.name, self.customer, self.subject
+            )
+        ]
+        details = [_("Priority: {0}").format(self.priority)] if self.priority else []
+        if self.response_by:
+            details.append(
+                _("First response due {0}").format(
+                    format_datetime(self.response_by, "d MMM, HH:mm")
+                )
+            )
+        if details:
+            lines.append(" · ".join(details))
+        if pick["backup"]:
+            lines.append(
+                _("You're the backup owner while {0} is away.").format(
+                    get_fullname(pick["away"])
+                )
+            )
+        notify_users([pick["user"]], "HD Ticket", self.name, "\n".join(lines))
 
     def get_assigned_agents(self):
         assignees = get_assignees({"doctype": "HD Ticket", "name": self.name})
@@ -649,13 +842,32 @@ class HDTicket(Document):
         if email_account := default_outgoing_email_account():
             return email_account
 
-    def reject_unwanted_email(self):
-        """Notifications and newsletters in the support mailbox don't become tickets."""
-        from helpdesk.email_filter import UnwantedTicketEmail, is_unwanted_sender
+    def apply_intake_rules(self):
+        """Notifications and newsletters in the support mailbox don't become tickets, and
+        a monitoring alert becomes a ticket of type Alert (helpdesk/intake.py)."""
+        from helpdesk.email_filter import UnwantedTicketEmail
+        from helpdesk.intake import IGNORE, decide, parse_alert
 
         # only tickets opened by an incoming email carry the account it came through
-        if self.email_account and is_unwanted_sender(self.raised_by):
+        if not self.email_account:
+            return
+        decision = decide(self.raised_by, self.subject)
+        if not decision:
+            return
+        if decision.action == IGNORE:
             raise UnwantedTicketEmail
+        self.ticket_type = ALERT_TICKET_TYPE
+        self.alert_key = parse_alert(self.subject).key
+
+    def is_alert(self) -> bool:
+        return self.ticket_type == ALERT_TICKET_TYPE
+
+    def announce_alert(self):
+        if not self.is_alert():
+            return
+        from helpdesk.intake import announce
+
+        announce(self.name, _("Alert opened: {0}").format(self.subject))
 
     def reply_to_address(self, sender_email=None) -> str | None:
         """Where the customer's reply should go: a mailbox we read.
@@ -971,15 +1183,30 @@ class HDTicket(Document):
 
     def set_sla(self):
         """
-        Find an SLA to apply to this ticket.
+        Find an SLA to apply to this ticket. A monitoring alert has none.
         """
+        if self.is_alert():
+            self.clear_sla()
+            return
         if sla := get_sla(self):
             self.sla = sla.name
+
+    def clear_sla(self):
+        self.update(
+            {
+                "sla": None,
+                "agreement_status": "",
+                "response_by": None,
+                "resolution_by": None,
+            }
+        )
 
     def apply_sla(self):
         """
         Apply SLA if set.
         """
+        if not self.sla:
+            return
         if sla := frappe.get_last_doc("HD Service Level Agreement", {"name": self.sla}):
             sla.apply(self)
 
@@ -988,6 +1215,8 @@ class HDTicket(Document):
 
     def is_currently_outside_working_hours(self):
         """Return True if current time is outside this SLA's working hours."""
+        if not self.sla:
+            return False
 
         sla = self.get_sla()
         current_date = getdate()

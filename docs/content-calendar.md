@@ -22,12 +22,28 @@ plans, staffs and ships social posts (`HD Content Post`) for customers.
 ## Filters and navigation
 
 The filter bar (customer, channel, status, person, **My posts**, Clear) applies to every view.
+The person filter (and My posts) also matches the "More people" table (`HD Content Post Member`),
+which joins it to the query, so the post lists sort on `` `tabHD Content Post`.`publish_on` `` /
+`` `creation` ``: a bare `creation` is ambiguous with the joined table and failed with an Internal
+Server Error (owner's report, 2026-10-14).
 Cancelled posts are hidden unless the status filter asks for them; the Board and Sheet views
 load them and show them behind their own chip. In the Tasks view the person filter keeps the
 tasks assigned to that person, and **My posts** reads **My tasks**.
 
 Board, Sheet and Tasks have a **Day / Week / Month** period switch, Today, previous/next (← / →,
 T for today) and a date picker. The Calendar view has its own navigation.
+
+- **Today always works** (owner's feedback, 2026-10-14: "the Today button is not working
+  sometimes"). The button is filled in the brand teal while the day, week or month on screen holds
+  today (`showingToday`, `aria-pressed`), like the selected Day / Week / Month option, and
+  gray otherwise (owner's choice, 2026-10-14). It works in both states. It moves to today's day, week or month and, when that period is already on
+  screen, scrolls to today's posts (`day-<date>`) or the today marker (`goToday`). It used to
+  be disabled whenever today was inside the period on screen, so in Week or Month view it did
+  nothing.
+- **Today stays current:** the date pages read it from `useToday()`
+  (`desk/src/composables/today.ts`, checked every minute), so a page left open overnight or
+  over a weekend moves on to the new day; it used to keep the day the page was opened, and
+  Today then jumped to that old day and the strip ringed the wrong one.
 
 ## Views
 
@@ -108,8 +124,10 @@ Grouped by day (day number, weekday, number of entries that day), sorted by time
 screens the day's date column stays pinned at the top of the list while its cards scroll past.
 
 - **Header:** a building tile, then the client in a larger semibold font (always shown, even
-  with the customer filter set); below it the copy (the post's `title`, opens the post) · post
-  type. On the right: the platforms (brand mark + name, from `ChannelIcon.vue`, coloured with
+  with the customer filter set); below it the copy, labelled **Copy:** like the Sub copy box (owner's request,
+  2026-10-14: people didn't know what it was; the post's `title`, opens the post) and the
+  post type as a tinted tag (brand-soft, its `PostTypeIcon` and name, 28px tall; owner's request,
+  2026-10-14: "catchy and attractive"). On the right: the platforms (brand mark + name, from `ChannelIcon.vue`, coloured with
   the `--channel-*` tokens), the time, the status pill (`StatusPill.vue` at `size="md"`), and a
   round button that opens the post, the same as clicking the copy: a pencil ("Edit …") for
   people who can edit content (`auth.canEditContent`), a paperclip ("Open … to add files") for
@@ -122,6 +140,10 @@ screens the day's date column stays pinned at the top of the list while its card
   person shows with a role-coloured initial tile, their name and task status (and "late" when
   the task is past due); an empty role shows a dashed **+ Assign** box in the card's tone,
   which opens the assign dialog. People who can't edit content see **Not assigned** instead.
+  On a **published** post the role boxes are read-only (`readonly`): they still show who did
+  each part and their task status, but there is no + Assign, change, task step or open-task
+  button, and an empty role just says **Not assigned**. The progress line is hidden: the work
+  is done, so there is nothing left to assign or chase (owner's decision, 2026-10-14).
   - **Open the task in place** (owner's feedback, 2026-10-12: "to know what that task is we
     have to go back into the project"): pressing the people in a filled box opens the role's
     linked Task (`task` from `get_team_task_status`, already in the payload, so no API change)
@@ -333,6 +355,26 @@ tasks in the period, and the whole page is only for the content team.
 - **Refused outside the content team** rather than an empty answer, as the calendar's other
   calls (`get_content_performance`) do; the page itself is never shown to them.
 
+## In the daily stand-up
+
+The async stand-up ([standup.md](standup.md#content-calendar)) carries the content work of
+the content team (`helpdesk/standup_content.py`), read as each person so these walls apply:
+
+- **Their stand-up:** the role parts they finished yesterday ("Designer · Global Handwashing
+  Day (Avera IoT)", Done) and the posts they published or moved on; today their open parts
+  (else the next one due) and the posts they're on going live today and tomorrow, with time,
+  channels and status (the Digital Marketing Head and DM Coordinators also every post going
+  live today); blockers for missed posts, posts going live within 24 hours without approval,
+  Changes Requested, Client Review longer than `client_reminder_days`, and parts waiting on
+  someone else's part (`post_progress`, "Waiting on Writer (Ajmal)"). A role task shows once,
+  as its part.
+- **The department's summary and team view:** a **Content today** block after the blockers:
+  the posts going live that day and the ones missed in the week before, missed and
+  not-approved first, with names.
+- **Settings → Stand-up → Content calendar:** "Include content calendar" per department, on
+  by default for Digital and every department with Content Calendar projects or post tasks.
+- Post lines open the post here (`/content?post=…`); part lines open the task.
+
 ## Adding and editing a post
 
 **Add entry** (`AddEntryDialog.vue`) creates posts through
@@ -346,7 +388,7 @@ same labels and fields:
 | Special day (optional) | `special_day` | Free text, e.g. "Diwali". Highlights the post on the calendar (see below). |
 | Platforms | `platforms`, `channel` | Chips; one post can go out on several. The first is `channel`. |
 | Post type | `format` | Chips, one per post. |
-| Sub Copy | `caption` | The post's text; Draft with AI fills it. |
+| Sub Copy | `caption` | The post's text; Draft with AI fills it. In the post dialog the caption box sits right under the Sub Copy label, and the **Brief for AI** box (what to tell the AI, never saved) comes after it with its own label: it used to sit first, looked like the Sub Copy, and text typed there was lost on save (owner's report, 2026-10-14). |
 | Description | `brief` | For the creative team; never shown to the client. |
 | Writer / Designer / Video editor / Digital marketer | role fields + `extra_team` | Several people per role. |
 | Est. hours (next to each role) | `writer_hours`, `designer_hours`, `video_editor_hours`, `marketer_hours` | Optional; see below. |

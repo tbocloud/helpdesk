@@ -144,6 +144,37 @@
           >
             {{ lastResult }}
           </p>
+          <!-- one-time: owners from ERPNext's Account Manager (docs/ticket-owners.md) -->
+          <div class="flex flex-col gap-2 border-t border-outline-gray-1 pt-4">
+            <p class="text-p-sm text-ink-gray-6">
+              {{
+                __(
+                  "Customers without a ticket owner can take the Account Manager of the same customer in ERPNext on the CRM site, when that person is an active agent here. Owners already set are left alone."
+                )
+              }}
+            </p>
+            <div>
+              <Button
+                :label="__('Fill ticket owners from CRM account managers')"
+                :loading="fillOwners.loading"
+                :disabled="isDirty"
+                :tooltip="isDirty ? __('Save your changes first') : ''"
+                @click="fillOwners.submit()"
+              >
+                <template #prefix>
+                  <LucideUserCheck class="size-4" aria-hidden="true" />
+                </template>
+              </Button>
+            </div>
+            <p
+              v-if="fillOwners.data?.message"
+              class="text-p-sm"
+              :class="fillOwners.data.ok ? 'text-ink-gray-6' : 'text-danger'"
+              role="status"
+            >
+              {{ fillOwners.data.message }}
+            </p>
+          </div>
         </SettingsSection>
 
         <SettingsSection
@@ -432,6 +463,7 @@ import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideInfo from "~icons/lucide/info";
 import LucidePlugZap from "~icons/lucide/plug-zap";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
+import LucideUserCheck from "~icons/lucide/user-check";
 import SettingsSection from "../SettingsSection.vue";
 
 interface CRMForm {
@@ -706,6 +738,17 @@ const sync = createResource({
   },
   onError(e: { messages?: string[] }) {
     toast.error(e.messages?.[0] || __("Couldn't sync users"));
+  },
+});
+
+const fillOwners = createResource({
+  url: "helpdesk.api.crm.fill_ticket_owners_now",
+  method: "POST",
+  onSuccess(data: { ok: boolean; message: string }) {
+    if (data.ok) toast.success(data.message);
+  },
+  onError(e: unknown) {
+    toast.error(errorText(e, __("Couldn't fill the ticket owners")));
   },
 });
 

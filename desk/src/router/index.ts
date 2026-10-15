@@ -236,6 +236,12 @@ const portalRoutes = [
     name: "InProgress",
     component: () => import("@/pages/work/InProgress.vue"),
   },
+  // everyone: their own stand-up; the server decides who gets the team view
+  {
+    path: "/standup",
+    name: "Standup",
+    component: () => import("@/pages/standup/Standup.vue"),
+  },
   {
     path: "/overview",
     name: "WorkOverview",
@@ -427,10 +433,7 @@ router.beforeEach(async (to, _, next) => {
   ) {
     // DM Employees work on projects and content, not support
     next({ name: "Home" });
-  } else if (
-    !authStore.inContentTeam &&
-    CONTENT_ROUTES.has(String(to.name))
-  ) {
+  } else if (!authStore.inContentTeam && CONTENT_ROUTES.has(String(to.name))) {
     // the content calendar is only for its team
     next({ name: "Home" });
   } else if (

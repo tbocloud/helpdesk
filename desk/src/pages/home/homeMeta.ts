@@ -1,3 +1,4 @@
+import type { ProviderStatus } from "@/components/aiProviders";
 import type { FollowUpSummary } from "@/components/followUps";
 import type { Tone } from "@/components/tone";
 import type { HealthBrief } from "@/composables/customerHealth";
@@ -170,6 +171,8 @@ export interface Systems {
     site_url: string | null;
     connection_status: string | null;
     last_error: string | null;
+    /** an Unreachable site's next call (its backoff) */
+    next_attempt_at: string | null;
   }[];
   mailboxes: {
     name: string;
@@ -179,7 +182,11 @@ export interface Systems {
   }[];
   teams: { enabled: boolean; platform: string | null };
   chat: { enabled: boolean; open: number };
-  ai: { calls_today: number; triage_failed: number };
+  ai: {
+    providers: ProviderStatus;
+    calls_today: number;
+    triage_failed: number;
+  };
 }
 
 /** helpdesk.api.home._calendar: holidays and leave synced from the CRM site */
@@ -194,6 +201,8 @@ export interface HomeCalendar {
 export interface HomeData {
   day: YourDay;
   follow_ups: FollowUpSummary;
+  /** today's stand-up while it is still a draft (helpdesk.standup.home_card) */
+  standup: { name: string; date: string; post_at: string } | null;
   calendar: HomeCalendar;
   company: Company | null;
   systems: Systems | null;

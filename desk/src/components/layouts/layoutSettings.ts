@@ -18,6 +18,7 @@ import LucideCalendarClock from "~icons/lucide/calendar-clock";
 import LucideHourglass from "~icons/lucide/hourglass";
 import LucideTrophy from "~icons/lucide/trophy";
 import LucideActivity from "~icons/lucide/activity";
+import LucideMessagesSquare from "~icons/lucide/messages-square";
 import { __ } from "@/translation";
 
 export const agentPortalSidebarOptions = [
@@ -41,6 +42,14 @@ export const agentPortalSidebarOptions = [
     label: __("In progress"),
     icon: LucideActivity,
     to: "InProgress",
+    tone: "blue",
+    section: "Workspace",
+  },
+  // everyone: the async daily stand-up (docs/standup.md)
+  {
+    label: __("Stand-up"),
+    icon: LucideMessagesSquare,
+    to: "Standup",
     tone: "blue",
     section: "Workspace",
   },

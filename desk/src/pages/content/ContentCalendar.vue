@@ -242,15 +242,15 @@
             <div class="flex items-center gap-2">
               <button
                 type="button"
-                class="inline-flex h-8 items-center rounded-[10px] bg-surface-gray-2 px-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-3"
+                class="inline-flex h-8 items-center rounded-[10px] px-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight focus-visible:ring-offset-1"
                 :class="
-                  includesToday
-                    ? 'cursor-default text-ink-gray-5'
-                    : 'text-ink-gray-8 hover:bg-surface-gray-3'
+                  showingToday
+                    ? 'bg-brand text-brand-on shadow-sm hover:bg-brand-hover'
+                    : 'bg-surface-gray-2 text-ink-gray-8 hover:bg-surface-gray-3'
                 "
-                :disabled="includesToday"
+                :aria-pressed="showingToday"
                 :title="__('Go to today (T)')"
-                @click="anchor = today"
+                @click="goToday"
               >
                 {{ __("Today") }}
               </button>
@@ -582,7 +582,7 @@ import {
 } from "frappe-ui";
 import { useListUpdate } from "@/composables/realtime";
 import { useEventListener, useStorage } from "@vueuse/core";
-import { computed, markRaw, reactive, ref, watch } from "vue";
+import { computed, markRaw, nextTick, reactive, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import LucideBuilding2 from "~icons/lucide/building-2";
 import LucideCalendarDays from "~icons/lucide/calendar-days";
@@ -617,6 +617,7 @@ import {
   type TeamRole,
 } from "./constants";
 import { useContentOptions } from "./contentOptions";
+import { useToday } from "@/composables/today";
 import AddEntryDialog from "./components/AddEntryDialog.vue";
 import ContentBoard from "./components/ContentBoard.vue";
 import ContentSheet from "./components/ContentSheet.vue";
@@ -679,15 +680,15 @@ const PERIODS: { key: Period; label: string }[] = [
   { key: "month", label: __("Month") },
 ];
 const period = useStorage<Period>("helpdesk-content-period", "month");
-const today = dayjs().format("YYYY-MM-DD");
+const today = useToday();
 // any date inside the period on screen; the period is worked out from it
-const anchor = ref(today);
+const anchor = ref(today.value);
 
 const rangeStart = computed(() =>
-  dayjs(anchor.value || today).startOf(period.value)
+  dayjs(anchor.value || today.value).startOf(period.value)
 );
 const rangeEnd = computed(() =>
-  dayjs(anchor.value || today).endOf(period.value)
+  dayjs(anchor.value || today.value).endOf(period.value)
 );
 // Day view loads its whole week so the day strip can show counts
 const fetchStart = computed(() =>
@@ -714,7 +715,7 @@ const visiblePosts = computed(() =>
 );
 
 const weekDays = computed(() => {
-  const start = dayjs(anchor.value || today).startOf("week");
+  const start = dayjs(anchor.value || today.value).startOf("week");
   const posts: ContentPost[] = monthPosts.data ?? [];
   return Array.from({ length: 7 }, (_, i) => {
     const day = start.add(i, "day");
@@ -724,7 +725,7 @@ const weekDays = computed(() => {
     );
     const missed = onDay.some((p) => isMissed(p));
     const special = onDay.find((p) => p.special_day)?.special_day;
-    const isToday = date === today;
+    const isToday = date === today.value;
     return {
       date,
       weekday: day.format("ddd"),
@@ -771,15 +772,10 @@ useEventListener(window, "keydown", (e: KeyboardEvent) => {
     return;
   if (e.key === "ArrowLeft") shiftPeriod(-1);
   else if (e.key === "ArrowRight") shiftPeriod(1);
-  else if (e.key === "t" || e.key === "T") anchor.value = today;
+  else if (e.key === "t" || e.key === "T") goToday();
   else return;
   e.preventDefault();
 });
-const includesToday = computed(
-  () =>
-    !dayjs(today).isBefore(rangeStart.value, "day") &&
-    !dayjs(today).isAfter(rangeEnd.value, "day")
-);
 const periodNoun = computed(
   () => ({ day: __("day"), week: __("week"), month: __("month") }[period.value])
 );
@@ -800,8 +796,31 @@ const periodText = computed(() =>
     : __("in {0}", periodLabel.value)
 );
 
+// teal while the day, week or month on screen holds today; the button still works then
+const showingToday = computed(
+  () =>
+    !dayjs(today.value).isBefore(rangeStart.value, "day") &&
+    !dayjs(today.value).isAfter(rangeEnd.value, "day")
+);
+
+// Today always works: it moves to today's period and, when that period is already on
+// screen (a week or month), brings today's posts (or the "today" marker) into view
+async function goToday() {
+  anchor.value = today.value;
+  await nextTick();
+  (
+    document.getElementById(`day-${today.value}`) ??
+    document.getElementById("day-today")
+  )?.scrollIntoView({
+    block: "start",
+    behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      ? "auto"
+      : "smooth",
+  });
+}
+
 function shiftPeriod(by: number) {
-  anchor.value = dayjs(anchor.value || today)
+  anchor.value = dayjs(anchor.value || today.value)
     .add(by, period.value)
     .format("YYYY-MM-DD");
 }
@@ -869,7 +888,7 @@ const posts = createResource({
       publish_on: ["between", [range.value!.start, range.value!.end]],
     },
     ...personQuery(),
-    order_by: "publish_on asc",
+    order_by: "`tabHD Content Post`.`publish_on` asc",
     limit_page_length: 1000,
   }),
 });
@@ -911,7 +930,7 @@ const monthPosts = createResource({
         ],
       },
       ...personQuery(),
-      order_by: "publish_on asc",
+      order_by: "`tabHD Content Post`.`publish_on` asc",
       limit_page_length: 1000,
     };
   },
@@ -988,7 +1007,8 @@ const undated = createResource({
       publish_on: ["is", "not set"],
     },
     ...personQuery(),
-    order_by: "creation desc",
+    // named in full: My posts joins the member table, which has its own creation column
+    order_by: "`tabHD Content Post`.`creation` desc",
     limit_page_length: 100,
   }),
 });

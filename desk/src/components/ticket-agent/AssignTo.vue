@@ -174,6 +174,7 @@ import { useOnLeave } from "@/composables/onLeave";
 import { useShortcut } from "@/composables/shortcuts";
 import { useAgentStatusStore } from "@/stores/agentStatus.ts";
 import { useUserStore } from "@/stores/user";
+import { logTicketActivity } from "@/composables/ticketAssignment";
 import { capture } from "@/telemetry";
 import { __ } from "@/translation";
 import {
@@ -191,7 +192,6 @@ import {
   Popover,
   TextInput,
   Tooltip,
-  call,
   createListResource,
   createResource,
   dayjsLocal,
@@ -507,14 +507,8 @@ watch(searchText, () => {
   highlightedIndex.value = 0;
 });
 
-async function logActivity(action: string) {
-  await call("frappe.client.insert", {
-    doc: {
-      doctype: "HD Ticket Activity",
-      ticket: ticket.value?.name,
-      action,
-    },
-  });
+function logActivity(action: string) {
+  return logTicketActivity(ticket.value?.name, action);
 }
 
 async function assignSelf() {

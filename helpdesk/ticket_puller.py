@@ -11,14 +11,19 @@ the only place a credential belongs.
 
 import hashlib
 import json
+from email.utils import parseaddr
 
 import frappe
 import requests
 from frappe import _
-from frappe.utils import add_to_date, now_datetime
+from frappe.utils import add_to_date, now_datetime, validate_email_address
 
 from helpdesk import client_api
-from helpdesk.automation import automation_user
+from helpdesk.automation import as_automation_user, automation_user
+from helpdesk.helpdesk.doctype.hd_customer.hd_customer import add_customer_contact
+from helpdesk.helpdesk.doctype.hds_support_connection.hds_support_connection import (
+    UNREACHABLE,
+)
 from helpdesk.mcp_client import MCPClient
 from helpdesk.session_replay import is_diagnostics_file, is_replay_file
 
@@ -51,6 +56,7 @@ def _pending_tickets(mcp: MCPClient) -> list[dict]:
                 "subject",
                 "description",
                 "raised_by",
+                "owner",
                 "screen_recording",
                 "creation",
             ],
@@ -109,25 +115,51 @@ def _already_imported(connection_name: str, client_ticket: str) -> bool:
 def _create_hd_ticket(connection_name: str, customer: str, ticket: dict) -> str:
     """Create the Helpdesk ticket for a pulled customer request.
 
+    HD Ticket only accepts a customer the contact belongs to unless an agent raises it,
+    and the pull right after a site's ping ran as Guest with no contact: every such
+    import failed with "customer … not linked to the contact None". So the sender
+    becomes a contact of the connection's customer first, and the ticket is inserted
+    as the automation user (docs/ticket-intake.md).
+
     AI triage fires automatically from the HD Ticket after_insert hook
     (see hooks.py doc_events) — do not enqueue it again here.
     """
-    hd = frappe.get_doc(
-        {
-            "doctype": "HD Ticket",
-            "subject": ticket.get("subject") or "Support request",
-            "description": ticket.get("description") or "",
-            "customer": customer,
-            "raised_by": ticket.get("raised_by"),
-            "via_customer_portal": 1,
-            # on the document from the start, so the after_insert hooks (triage,
-            # Copilot's first stage to the customer) see where it came from
-            "custom_qcs_connection": connection_name,
-            "custom_client_ticket": ticket.get("name"),
-        }
-    ).insert(ignore_permissions=True)
+    raised_by = _sender(ticket, customer)
+    if customer and raised_by:
+        add_customer_contact(customer, raised_by)
+    # the hub imports it, so the import is the automation user's, whoever's session
+    # (a scheduler run, a Guest ping) is running
+    with as_automation_user():
+        hd = frappe.get_doc(
+            {
+                "doctype": "HD Ticket",
+                "subject": ticket.get("subject") or "Support request",
+                "description": ticket.get("description") or "",
+                "customer": customer,
+                "raised_by": raised_by,
+                "via_customer_portal": 1,
+                # on the document from the start, so the after_insert hooks (triage,
+                # Copilot's first stage to the customer) see where it came from
+                "custom_qcs_connection": connection_name,
+                "custom_client_ticket": ticket.get("name"),
+            }
+        ).insert(ignore_permissions=True)
 
     return hd.name
+
+
+def _sender(ticket: dict, customer: str | None) -> str | None:
+    """The customer's address for a pulled ticket: its Raised By, else the user who
+    created it on their site, else the customer's own email. A user ID such as
+    Administrator is no address, and the hub would otherwise fill in its own session
+    user (Administrator, or Guest after a ping)."""
+    for value in (ticket.get("raised_by"), ticket.get("owner")):
+        email = validate_email_address(parseaddr(value or "")[1].strip().lower())
+        if email:
+            return email
+    if customer:
+        return frappe.db.get_value("HD Customer", customer, "email_id") or None
+    return None
 
 
 def _attach_recording(
@@ -287,26 +319,49 @@ def client_status_for(status: str) -> str | None:
 
 
 # "Error" is retried every run so a brief outage on the customer site (e.g. during
-# its own update) doesn't stop tickets for the rest of the day
-PULLABLE_STATUSES = ("Connected", "Error")
+# its own update) doesn't stop tickets for the rest of the day; "Unreachable" once its
+# backoff is over (HDSSupportConnection.record_failure, docs/client-site-sync.md)
+PULLABLE_STATUSES = ("Connected", "Error", UNREACHABLE)
+
+
+def due_connections(statuses) -> list[str]:
+    """The connections in `statuses` whose backoff, if any, is over."""
+    conn = frappe.qb.DocType("HDS Support Connection")
+    return (
+        frappe.qb.from_(conn)
+        .select(conn.name)
+        .where(
+            conn.connection_status.isin(list(statuses))
+            & (conn.next_attempt_at.isnull() | (conn.next_attempt_at <= now_datetime()))
+        )
+        .orderby(conn.name)
+        .run(pluck=True)
+    )
+
+
+def unreachable_connections() -> set[str]:
+    """Connections in an outage: the per-minute pull probes them, the other jobs skip them."""
+    return set(
+        frappe.get_all(
+            "HDS Support Connection",
+            filters={"connection_status": UNREACHABLE},
+            pluck="name",
+        )
+    )
 
 
 def pull_client_tickets() -> int:
     """Scheduled: turn Pending client tickets into HD Tickets."""
-    connections = frappe.get_all(
-        "HDS Support Connection",
-        filters={"connection_status": ("in", PULLABLE_STATUSES)},
-        fields=["name", "customer_name"],
-    )
-    return sum(pull_connection(conn.name, conn.customer_name) for conn in connections)
+    return sum(pull_connection(name) for name in due_connections(PULLABLE_STATUSES))
 
 
 # A pull can take a minute on a slow site; a lock older than this is stale
 PULL_LOCK_SECONDS = 300
 
 
-def pull_connection(connection: str, customer_name: str | None = None) -> int:
-    """Import one customer site's Pending tickets; also used right after the site pings us.
+def pull_connection(connection: str) -> int:
+    """Import one customer site's Pending tickets. Also run right after the site pings
+    us, which shows it is up, so that pull doesn't wait for a backoff.
 
     Only one pull per site runs at a time: the site's ping and the scheduled
     pull can start in the same minute, and without the lock both passed the
@@ -316,10 +371,6 @@ def pull_connection(connection: str, customer_name: str | None = None) -> int:
         # queued by the customer site's ping, which is a guest request; the
         # import must run as the hub's own user or every permission check fails
         frappe.set_user(automation_user())
-    if customer_name is None:
-        customer_name = frappe.db.get_value(
-            "HDS Support Connection", connection, "customer_name"
-        )
     lock_key = f"hds_pull_lock:{connection}"
     # site-prefixed like delete_value() below, so the release matches (as in triage.py)
     if not frappe.cache.set(
@@ -327,24 +378,22 @@ def pull_connection(connection: str, customer_name: str | None = None) -> int:
     ):
         return 0
     try:
-        return _pull_connection(connection, customer_name)
+        return _pull_connection(connection)
     finally:
         frappe.cache.delete_value(lock_key)
 
 
-def _pull_connection(connection: str, customer_name: str | None) -> int:
+def _pull_connection(connection: str) -> int:
     conn = frappe.get_doc("HDS Support Connection", connection)
     try:
         mcp = MCPClient(connection)
         tickets = _pending_tickets(mcp)
     except Exception as e:
-        frappe.log_error(
-            title=f"Ticket pull failed for {connection}",
-            message=frappe.get_traceback(),
-        )
-        _set_connection_health(connection, error=str(e)[:500])
+        # one Error Log per outage, not one per failed minute
+        conn.record_failure(str(e))
         return 0
-    _set_connection_health(connection)
+    conn.record_success()
+    customer_name = conn.customer_name
 
     created = 0
     for ticket in tickets:
@@ -395,25 +444,16 @@ def _pull_connection(connection: str, customer_name: str | None) -> int:
     return created
 
 
-def _set_connection_health(connection: str, error: str | None = None):
-    status = "Error" if error else "Connected"
-    current = frappe.db.get_value(
-        "HDS Support Connection",
-        connection,
-        ["connection_status", "last_error"],
-        as_dict=True,
-    )
-    if current and (current.connection_status, current.last_error or "") == (
-        status,
-        error or "",
-    ):
-        return
-    frappe.db.set_value(
-        "HDS Support Connection",
-        connection,
-        {"connection_status": status, "last_error": error or ""},
-        update_modified=False,
-    )
+def _connect(connection: str) -> MCPClient | None:
+    """An MCP session with the site, or None when it can't be reached. No Error Log
+    per run and no extra failure count: the per-minute pull probes the site and keeps
+    its backoff (counting here too would reach Unreachable early)."""
+    try:
+        return MCPClient(connection)
+    except Exception:
+        if not frappe.db.exists("HDS Support Connection", connection):
+            frappe.log_error(title=f"Ticket sync failed for {connection}")
+        return None
 
 
 def _status_payload(row, raw: bool = False) -> dict:
@@ -477,18 +517,16 @@ def push_ticket_statuses() -> int:
         by_connection.setdefault(row.custom_qcs_connection, []).append(row)
 
     pushed = 0
+    skip = unreachable_connections()
     for connection_name, tickets in by_connection.items():
+        if connection_name in skip:
+            continue
         conn = frappe.get_doc("HDS Support Connection", connection_name)
         use_hub_api = client_api.supports(conn, client_api.HUB_API)
         mcp = None
         if not use_hub_api:
-            try:
-                mcp = MCPClient(connection_name)
-            except Exception:
-                frappe.log_error(
-                    title=f"Status push failed for {connection_name}",
-                    message=frappe.get_traceback(),
-                )
+            mcp = _connect(connection_name)
+            if not mcp:
                 continue
 
         for row in tickets:
@@ -557,19 +595,16 @@ def sync_conversations() -> int:
         by_conn.setdefault(r.custom_qcs_connection, []).append(r)
 
     synced = 0
+    skip = unreachable_connections()
     for conn_name, tickets in by_conn.items():
+        if conn_name in skip:
+            continue
         conn = frappe.get_doc("HDS Support Connection", conn_name)
         use_hub_api = client_api.supports(conn, client_api.HUB_API)
         # comments the hub itself wrote on the customer site aren't pulled back
         support_user = conn.support_user or "support@quarkcs.com"
-        try:
-            mcp = MCPClient(conn_name)
-        except Exception:
-            # a site that is down would otherwise log this on every run
-            _log_once(
-                f"Conversation sync failed for {conn_name}",
-                f"hds_conversation_sync_failed:{conn_name}",
-            )
+        mcp = _connect(conn_name)
+        if not mcp:
             continue
 
         for row in tickets:

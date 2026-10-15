@@ -48,6 +48,16 @@ or an ERPNext **Customer** (not disabled) when that site runs ERPNext too; both 
   (website as domain).
 - Existing records on either side are never changed or deleted. Contacts are not synced yet.
 
+**Fill ticket owners from CRM account managers** (Settings → CRM → Customers, one-time,
+on click): customers without a ticket owner take the `account_manager` of the ERPNext
+Customer of the same name, when that person is an active agent here. CRM Organizations have
+no account owner, so only ERPNext Customers count. See [ticket-owners.md](ticket-owners.md).
+
+**Fill customer domains from the CRM** (Settings → Ticket intake → Customer detection,
+one-time, Preview then Fill): customers without a Domain take the domain of their CRM
+Organization's or ERPNext Customer's website, so new tickets find their customer by the
+sender's domain. See [ticket-intake.md](ticket-intake.md#customer-detection).
+
 Code: `helpdesk/integrations/crm/customers.py`.
 
 ## Invoicing (implemented)
@@ -118,7 +128,9 @@ On by default (*Sync approved leave*).
   removed.
 - **Used by**: the follow-ups (nobody on leave is nudged or escalated to; see
   [follow-ups.md](follow-ups.md#leave)), capacity (a day of leave has no available hours, a
-  half day half), the Calendar, Home, the Team page and the assignee pickers. The leave type
+  half day half), the Calendar, Home, the Team page, the assignee pickers and the
+  customers' ticket owners (the backup takes new tickets while the owner is on leave; see
+  [ticket-owners.md](ticket-owners.md)). The leave type
   stays in HD Leave; the pages show only dates.
 - **Who sees it**: every agent sees who is on leave today and until when
   (`helpdesk.api.calendar.get_on_leave`, for the pickers and team views), on purpose: whoever
