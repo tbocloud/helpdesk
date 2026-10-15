@@ -44,6 +44,23 @@ class TestPressClient(FrappeTestCase):
         self.assertEqual(headers["X-Press-Team"], "team-1")
         self.assertEqual(sent.call_args.kwargs["json"], {"name": "bench-1"})
 
+    def test_the_key_goes_only_to_an_https_address_and_never_follows_a_redirect(self):
+        moved = reply(302, {})
+        moved.headers = {"Location": "http://elsewhere.example.com/"}
+        with patch("requests.post", return_value=moved) as sent:
+            with self.assertRaises(PressError) as caught:
+                press.deploy_information("bench-1")
+        self.assertEqual(caught.exception.status, 302)
+        self.assertIn("redirect", caught.exception.message)
+        self.assertFalse(sent.call_args.kwargs["allow_redirects"])
+
+        make_copilot_settings(press_url="http://press.example.com")
+        with patch("requests.post") as sent:
+            with self.assertRaises(PressError) as caught:
+                press.deploy_information("bench-1")
+        self.assertIn("https://", caught.exception.message)
+        sent.assert_not_called()
+
     def test_a_refusal_carries_presss_own_message(self):
         body = {
             "exc_type": "ValidationError",

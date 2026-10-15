@@ -72,12 +72,20 @@ def call(method: str, **args):
     secret = _secret()
     if not (url and key and secret):
         raise PressError(0, _("Press is not set up in HDS Copilot Settings."))
+    if not url.lower().startswith("https://"):
+        # the key travels in a header, so never in clear text
+        raise PressError(0, _("The Press URL must start with https://."))
     headers = {"Authorization": f"token {key}:{secret}", "Accept": "application/json"}
     if team := (settings.get("press_team") or "").strip():
         headers["X-Press-Team"] = team
     try:
         response = requests.post(
-            f"{url}/api/method/{method}", json=args, headers=headers, timeout=TIMEOUT
+            f"{url}/api/method/{method}",
+            json=args,
+            headers=headers,
+            timeout=TIMEOUT,
+            # a redirect would carry the key to another address
+            allow_redirects=False,
         )
     except requests.RequestException as e:
         raise PressError(
@@ -87,6 +95,13 @@ def call(method: str, **args):
         body = response.json()
     except ValueError:
         body = {}
+    if 300 <= response.status_code < 400:
+        raise PressError(
+            response.status_code,
+            _(
+                "Press answered with a redirect, which Copilot does not follow: {0}"
+            ).format(str(response.headers.get("Location") or "")[:200]),
+        )
     if response.status_code >= 400:
         raise PressError(response.status_code, press_message(body, response.text[:300]))
     return body.get("message") if isinstance(body, dict) else None
