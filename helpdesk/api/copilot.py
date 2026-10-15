@@ -212,6 +212,8 @@ def _fix_card(run) -> dict | None:
         and press.configured()
         and deploy.may_deploy(user),
         "can_deploy_now": deploy.may_deploy_now(user),
+        # the exact sites Deploy updates, shown before it is pressed
+        "deploy_sites": deploy.card_sites(run)[1] if run.state == "Merged" else [],
         "press_backups": not copilot_settings.get_settings().press_skip_backups,
         "can_undo": fixes.can_undo(run) and deploy.may_deploy(user),
         "reverts": run.get("reverts"),

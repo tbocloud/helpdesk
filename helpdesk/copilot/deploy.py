@@ -128,6 +128,24 @@ def open_request(run):
 
 def target(run) -> tuple[str, list[str]]:
     """The bench and the customer's own sites on it, from their site cards."""
+    group, sites = card_sites(run)
+    if not group:
+        frappe.throw(
+            _(
+                "The customer's site card needs its Press site and release group (bench) to deploy through Press. For a site outside Press, deploy by hand and press Mark deployed."
+            )
+        )
+    if hub_site() in sites:
+        frappe.throw(
+            _(
+                "{0} is TBO Support itself, which Copilot never deploys; correct the customer's site card."
+            ).format(hub_site())
+        )
+    return group, sites
+
+
+def card_sites(run) -> tuple[str | None, list[str]]:
+    """What Deploy would update, without a message: the bench and the sites, or (None, [])."""
     card = (
         frappe.db.get_value(
             "HDS Site Registry",
@@ -139,11 +157,7 @@ def target(run) -> tuple[str, list[str]]:
         else None
     )
     if not (card and card.press_site and card.press_release_group):
-        frappe.throw(
-            _(
-                "The customer's site card needs its Press site and release group (bench) to deploy through Press. For a site outside Press, deploy by hand and press Mark deployed."
-            )
-        )
+        return None, []
     sites = frappe.get_all(
         "HDS Site Registry",
         filters={
@@ -154,14 +168,24 @@ def target(run) -> tuple[str, list[str]]:
         },
         pluck="press_site",
     )
-    sites = sorted(set(sites) | {card.press_site})
-    if hub_site() in sites:
+    return card.press_release_group, sorted(set(sites) | {card.press_site})
+
+
+def keep_sites(request):
+    """The sites are the ones the person saw and approved by pressing Deploy: they never change after."""
+    if request.is_new():
+        return
+    approved = frappe.get_all(
+        "HDS Deploy Site",
+        filters={"parent": request.name, "parenttype": DEPLOY},
+        pluck="site",
+    )
+    if sorted(approved) != sorted(row.site for row in request.sites):
         frappe.throw(
             _(
-                "{0} is TBO Support itself, which Copilot never deploys; correct the customer's site card."
-            ).format(hub_site())
+                "A deploy's sites are fixed when Deploy is pressed; cancel it and press Deploy again."
+            )
         )
-    return card.press_release_group, sites
 
 
 def hub_site() -> str:

@@ -191,12 +191,19 @@ class TestWhenAndWhere(DeployCase):
         frappe.set_user(self.senior)
         fix = api.get_run(self.ticket.name)["fix"]
         self.assertTrue(fix["can_deploy"] and fix["can_deploy_now"])
+        self.assertEqual(fix["deploy_sites"], ["site1.example.com"])
         with self.at(riyadh(14)):
             fix = api.request_deploy(self.ticket.name, "tonight")["fix"]
         self.assertEqual(
             (fix["deploy"]["status"], fix["deploy"]["can_cancel"]), ("Scheduled", True)
         )
         self.assertFalse(fix["can_deploy"] or fix["can_mark_deployed"])
+
+    def test_the_sites_approved_by_pressing_deploy_never_change(self):
+        request = self.request(self.approver)
+        request.append("sites", {"site": "other-customer.example.com"})
+        with self.assertRaises(frappe.ValidationError):
+            request.save(ignore_permissions=True)
 
     def test_skip_presss_backup_on_a_test_bench(self):
         self.settings(press_skip_backups=1)

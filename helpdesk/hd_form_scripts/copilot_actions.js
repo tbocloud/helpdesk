@@ -1238,6 +1238,12 @@ function showCopilotDeploy(fix, doc, call, toast, $dialog) {
         ? "Press takes a backup first"
         : "<b>without a backup</b>: Skip Press's backup is on in the Copilot settings") +
       "), then checks that the site runs the merged fix without new errors, and asks the customer to confirm. Other sites on the bench stay on their current code.</p>" +
+      "<p><b>Sites it updates:</b> " +
+      copilotEscape(
+        (fix.deploy_sites || []).join(", ") ||
+          "none: the site card needs its Press site and bench"
+      ) +
+      "</p>" +
       "<p><b>Tonight</b> waits for the deploy window. <b>Now</b> is for urgent fixes and only for senior approvers and Agent Managers. One deploy runs at a time.</p></div>",
     actions: actions,
   });

@@ -3,8 +3,11 @@
 
 from frappe.model.document import Document
 
+from helpdesk.copilot import deploy
+
 
 class HDSDeployRequest(Document):
     """One Copilot deploy of a merged fix through Press: when, which sites, Press's progress and the check after; changed only by helpdesk.copilot.deploy."""
 
-    pass
+    def validate(self):
+        deploy.keep_sites(self)
