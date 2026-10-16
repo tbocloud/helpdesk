@@ -122,9 +122,12 @@ class TestLeads(FrappeTestCase):
     def assert_error(self, error, expected_class, text):
         self.crm.lead_error = error
         self.as_bde()
+        frappe.local.message_log = []
         with self.assertRaises(expected_class) as caught:
             leads_api.get_lead("CRM-LEAD-0001")
         self.assertIn(text, str(caught.exception))
+        # the page shows the message, not "Internal Server Error"
+        self.assertIn(text, str(frappe.local.message_log))
 
     def test_crm_errors_become_messages_people_can_act_on(self):
         cases = [
@@ -155,6 +158,13 @@ class TestLeads(FrappeTestCase):
                 ),
                 LeadsUnavailableError,
                 "latest TBO Smart",
+            ),
+            (
+                CRMError(
+                    "x", 403, "Only the hub's integration user may act for someone else."
+                ),
+                LeadsUnavailableError,
+                "needs the Hub Integration role",
             ),
             (
                 CRMError("x", 403, "Not permitted"),
