@@ -221,17 +221,22 @@ class TestCRMCustomers(TestCRMUserSync):
             frappe.db.get_single_value("HD CRM Settings", "last_sync_result"),
         )
 
-    def test_a_failed_customer_read_without_frappe_crm_fails_the_sync(self):
-        """ERPNext Customers are then the only list; an empty one would claim every
-        customer is missing there."""
+    def test_a_failed_customer_read_fails_the_sync(self):
+        """An empty list instead would create CRM Organizations for existing ERPNext
+        Customers, or claim every customer is missing there."""
         from helpdesk.integrations.crm.client import CRMError
         from helpdesk.integrations.crm.customers import sync_customers
+        from helpdesk.test_utils import create_customer
 
-        self.crm.has_crm_organizations = False
+        create_customer("Only Here Freight")
         self.crm.customers_error = CRMError("timed out")
-        with patch(FROM_SETTINGS, return_value=self.crm):
-            with self.assertRaises(CRMError):
-                sync_customers()
+        for has_organizations in (True, False):
+            with self.subTest(has_organizations=has_organizations):
+                self.crm.has_crm_organizations = has_organizations
+                with patch(FROM_SETTINGS, return_value=self.crm):
+                    with self.assertRaises(CRMError):
+                        sync_customers()
+                self.assertEqual(self.crm.orgs, [])
 
     def test_system_manager_alone_still_gets_a_sales_role(self):
         self.crm.users[SYNCED]["roles"] = [{"role": "System Manager"}]

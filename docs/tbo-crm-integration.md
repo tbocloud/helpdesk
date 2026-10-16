@@ -57,8 +57,10 @@ name ignoring case and extra spaces. On the CRM site a customer is an ERPNext **
   duplicates to the system of record.
 - Without Frappe CRM, nothing is created on the CRM site: HD Customers missing there are
   counted in Last Sync Result ("N only in helpdesk; add them as Customers on the CRM site")
-  for someone to add in ERPNext. If the ERPNext Customers can't be read then (403, timeout),
-  the sync fails with that error instead of calling every customer missing.
+  for someone to add in ERPNext.
+- If the ERPNext Customers can't be read (403, timeout), the sync fails with that error,
+  with or without Frappe CRM, instead of creating duplicates or calling every customer
+  missing. A site without ERPNext answers 404, which counts as no Customers.
 - A CRM Organization or ERPNext Customer missing in helpdesk becomes an HD Customer
   (website as domain).
 - Existing records on either side are never changed or deleted. Contacts are not synced yet.

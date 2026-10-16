@@ -34,13 +34,13 @@ def sync_customers() -> dict:
         "failed": [],
     }
     # ERPNext Customers, plus CRM Organizations while Frappe CRM is on the site; both
-    # come into helpdesk
+    # come into helpdesk. A failed Customer read (403, timeout) fails the sync: an
+    # empty list would create duplicates there or call every customer missing. A
+    # site without ERPNext answers 404, which is just no Customers.
     has_organizations = client.has_doctype("CRM Organization")
     organizations = (
-        client.organizations() + client.erp_customers()
-        if has_organizations
-        else client.erp_customers(strict=True)
-    )
+        client.organizations() if has_organizations else []
+    ) + client.erp_customers(strict=True)
     in_crm = {key(o.get("organization_name") or o.get("name")) for o in organizations}
     customers = frappe.get_all("HD Customer", fields=["name", "domain"])
     in_helpdesk = {key(c.name) for c in customers}
