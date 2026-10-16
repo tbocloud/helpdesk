@@ -160,48 +160,36 @@
             <ol v-else role="list" class="flex flex-col">
               <li
                 v-for="(entry, i) in data.timeline"
-                :key="entry.name || i"
+                :key="entry.ref || i"
                 class="flex gap-3 border-b border-outline-gray-1 px-4 py-3 last:border-b-0"
               >
                 <component
-                  :is="entry.to_stage ? LucideArrowRight : LucideMessageSquare"
+                  :is="TIMELINE_ICONS[entry.kind] || LucideMessageSquare"
                   class="mt-0.5 size-4 shrink-0 text-ink-gray-5"
                   aria-hidden="true"
                 />
                 <div class="flex min-w-0 flex-1 flex-col gap-1">
                   <p
-                    v-if="entry.to_stage"
-                    class="text-base-medium text-ink-gray-9"
+                    v-if="entry.text"
+                    class="whitespace-pre-line break-words"
+                    :class="
+                      entry.kind === 'note'
+                        ? 'text-p-sm text-ink-gray-8'
+                        : 'text-base-medium text-ink-gray-9'
+                    "
                   >
-                    {{
-                      entry.from_stage
-                        ? __(
-                            "{0} → {1}",
-                            stageLabel(options, entry.from_stage),
-                            stageLabel(options, entry.to_stage)
-                          )
-                        : __(
-                            "Moved to {0}",
-                            stageLabel(options, entry.to_stage)
-                          )
-                    }}
-                  </p>
-                  <p
-                    v-if="entry.note || entry.content"
-                    class="whitespace-pre-line break-words text-p-sm text-ink-gray-8"
-                  >
-                    {{ entry.note || entry.content }}
+                    <span class="sr-only"
+                      >{{ TIMELINE_LABELS[entry.kind] }}: </span
+                    >{{ entry.text }}
                   </p>
                   <p class="text-xs text-ink-gray-5">
-                    {{ entry.owner_name || entry.owner }}
-                    <template v-if="entry.creation">
-                      <span aria-hidden="true"> · </span>
+                    {{ entry.who_name || entry.who }}
+                    <template v-if="entry.at">
+                      <span v-if="entry.who" aria-hidden="true"> · </span>
                       <time
-                        :datetime="entry.creation"
-                        :title="
-                          dayjs(entry.creation).format('D MMM YYYY, h:mm a')
-                        "
-                        >{{ dayjs(entry.creation).fromNow() }}</time
+                        :datetime="entry.at"
+                        :title="dayjs(entry.at).format('D MMM YYYY, h:mm a')"
+                        >{{ dayjs(entry.at).fromNow() }}</time
                       >
                     </template>
                   </p>
@@ -295,11 +283,15 @@ import {
   FormControl,
   toast,
 } from "frappe-ui";
-import { computed, ref, useId, watch } from "vue";
+import { computed, ref, useId, watch, type Component } from "vue";
 import LucideArrowRight from "~icons/lucide/arrow-right";
+import LucideCalendar from "~icons/lucide/calendar";
 import LucideChevronRight from "~icons/lucide/chevron-right";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
+import LucideFileText from "~icons/lucide/file-text";
+import LucideHistory from "~icons/lucide/history";
 import LucideMessageSquare from "~icons/lucide/message-square";
+import LucidePhone from "~icons/lucide/phone";
 import LucidePencil from "~icons/lucide/pencil";
 import LeadFormDialog from "./LeadFormDialog.vue";
 import LeadQuotations from "./LeadQuotations.vue";
@@ -311,9 +303,27 @@ import {
   type LeadDetail,
   type LeadOptions,
   type LeadStage,
+  type LeadTimelineEntry,
 } from "./leads";
 
 const props = defineProps<{ leadId: string }>();
+
+const TIMELINE_ICONS: Record<LeadTimelineEntry["kind"], Component> = {
+  note: LucideMessageSquare,
+  call: LucidePhone,
+  activity: LucideHistory,
+  meeting: LucideCalendar,
+  stage: LucideArrowRight,
+  quotation: LucideFileText,
+};
+const TIMELINE_LABELS: Record<LeadTimelineEntry["kind"], string> = {
+  note: __("Note"),
+  call: __("Call"),
+  activity: __("Activity"),
+  meeting: __("Meeting"),
+  stage: __("Stage"),
+  quotation: __("Quotation"),
+};
 
 const showEdit = ref(false);
 const stageFormId = `lead-stage-${useId()}`;

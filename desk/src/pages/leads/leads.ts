@@ -72,24 +72,25 @@ export const LEAD_FORM_FIELDS: (keyof LeadForm)[] = [
   "next_follow_up",
 ];
 
-/** One entry of a lead's timeline: a note, a stage move, a call or an edit. */
+/** One entry of a lead's timeline, newest first (TBO Smart's hub-leads-api.md). */
 export interface LeadTimelineEntry {
-  name?: string;
-  type?: string;
-  note?: string;
-  content?: string;
-  from_stage?: string;
-  to_stage?: string;
-  owner?: string;
-  owner_name?: string;
-  creation?: string;
+  kind: "note" | "call" | "activity" | "meeting" | "stage" | "quotation";
+  /** when it happened (a date only for a quotation) */
+  at?: string | null;
+  who?: string | null;
+  who_name?: string | null;
+  /** plain text; a stage move reads "Contacted → Proposal Sent" */
+  text?: string;
+  /** the record behind it: Comment, Event, meeting, stage change or Quotation */
+  ref?: string;
 }
 
 export interface LeadQuotation {
   name: string;
   transaction_date?: string;
   valid_till?: string;
-  status?: string;
+  /** Draft, Awaiting approval, Sent, Accepted, … (TBO Smart's quotation status) */
+  tbo_quote_status?: string;
   grand_total?: number;
   currency?: string;
 }
