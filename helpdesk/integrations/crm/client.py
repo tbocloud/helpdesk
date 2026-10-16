@@ -178,11 +178,15 @@ class CRMClient:
         )
         return (data or {}).get("data") or []
 
-    def erp_customers(self) -> list[dict]:
-        """ERPNext Customers on the CRM site, shaped like organizations; none without ERPNext."""
+    def erp_customers(self, strict: bool = False) -> list[dict]:
+        """ERPNext Customers on the CRM site, shaped like organizations; none without
+        ERPNext. With `strict`, a failed read raises instead: when they are the only
+        customers there, an empty list would wrongly say every customer is missing."""
         try:
             customers = self.customers()
         except CRMError:
+            if strict:
+                raise
             # no ERPNext on the CRM site (or no access to it): nothing to add
             return []
         return [

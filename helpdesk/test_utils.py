@@ -3235,6 +3235,8 @@ class FakeCRM:
         self.role_calls: list[tuple[str, str]] = []
         # False: Frappe CRM is gone from the CRM site, so there's no CRM Organization
         self.has_crm_organizations = True
+        # an Exception reading ERPNext Customers raises, as the CRM site would
+        self.customers_error: Exception | None = None
         self.orgs = [{"name": o, "organization_name": o} for o in organizations or []]
         self.erp = list(erp_customers or [])
         # (ERPNext Customer name, its Account Manager), for filling empty ticket owners
@@ -3302,7 +3304,11 @@ class FakeCRM:
     def organizations(self):
         return list(self.orgs)
 
-    def erp_customers(self):
+    def erp_customers(self, strict=False):
+        if self.customers_error:
+            if strict:
+                raise self.customers_error
+            return []
         return [{"name": c, "organization_name": c} for c in self.erp]
 
     def create_organization(self, name, website=None):

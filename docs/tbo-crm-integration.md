@@ -29,8 +29,8 @@ Only what's missing is created; existing accounts keep their roles and details.
   enabled desk user, except Administrator and the TBO AI automation user.
   - not on the CRM site → create the User (welcome email if that setting is on);
   - disabled on the CRM site → enable it;
-  - no CRM role (Sales User, Sales Manager or System Manager) → give the ERPNext sales role
-    from settings (Sales User or Sales Manager) on their User, as one Has Role row through
+  - no sales role (Sales User or Sales Manager; System Manager alone isn't enough, since
+    Leads act as the person there) → give the ERPNext sales role from settings (Sales User or Sales Manager) on their User, as one Has Role row through
     `frappe.client.insert` (`CRMClient.add_role`), so their other roles stay.
 - **CRM → helpdesk** (*Add CRM users missing in helpdesk, as agents*): enabled desk users
   with Sales User or Sales Manager on the CRM site (read from User and its roles,
@@ -57,7 +57,8 @@ name ignoring case and extra spaces. On the CRM site a customer is an ERPNext **
   duplicates to the system of record.
 - Without Frappe CRM, nothing is created on the CRM site: HD Customers missing there are
   counted in Last Sync Result ("N only in helpdesk; add them as Customers on the CRM site")
-  for someone to add in ERPNext.
+  for someone to add in ERPNext. If the ERPNext Customers can't be read then (403, timeout),
+  the sync fails with that error instead of calling every customer missing.
 - A CRM Organization or ERPNext Customer missing in helpdesk becomes an HD Customer
   (website as domain).
 - Existing records on either side are never changed or deleted. Contacts are not synced yet.

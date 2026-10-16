@@ -405,6 +405,11 @@ const rangeText = computed(() => {
   return __("{0}–{1} of {2}", String(first), String(last), String(total));
 });
 
+// an old link, or leads removed on the ERP site: go to the last page there is
+watch(data, (d) => {
+  if (d && page.value > pageCount.value) page.value = pageCount.value;
+});
+
 // a new view, search or filter starts again at page 1
 watch([view, debouncedSearch, () => ({ ...filters })], () => {
   page.value = 1;

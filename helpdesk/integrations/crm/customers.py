@@ -37,8 +37,10 @@ def sync_customers() -> dict:
     # come into helpdesk
     has_organizations = client.has_doctype("CRM Organization")
     organizations = (
-        client.organizations() if has_organizations else []
-    ) + client.erp_customers()
+        client.organizations() + client.erp_customers()
+        if has_organizations
+        else client.erp_customers(strict=True)
+    )
     in_crm = {key(o.get("organization_name") or o.get("name")) for o in organizations}
     customers = frappe.get_all("HD Customer", fields=["name", "domain"])
     in_helpdesk = {key(c.name) for c in customers}

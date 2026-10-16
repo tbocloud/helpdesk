@@ -19,10 +19,8 @@ from frappe import _
 from frappe.utils import now_datetime
 
 from helpdesk.automation import automation_user
-from helpdesk.integrations.crm.client import CRMClient, CRMError
+from helpdesk.integrations.crm.client import SALES_ROLES, CRMClient, CRMError
 
-# a user with any of these already has CRM access
-CRM_ROLES = {"Sales User", "Sales Manager", "System Manager"}
 SYNC_JOB = "helpdesk.integrations.crm.users.sync_users_job"
 SKIP = {"Administrator", "Guest"}
 
@@ -94,7 +92,8 @@ def push_users(client, settings, result: dict):
                 client.enable_user(email)
                 result["enabled"].append(email)
             roles = {row.get("role") for row in crm_user.get("roles") or []}
-            if roles & CRM_ROLES:
+            # a sales role, not System Manager alone: Leads act as this user there
+            if roles & set(SALES_ROLES):
                 result["in_sync"] += 1
             else:
                 needs_role.append(email)

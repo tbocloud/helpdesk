@@ -474,7 +474,23 @@
                     )
               }}
             </p>
-            <ul role="list" class="flex flex-col gap-1.5">
+            <div
+              v-if="teams.error"
+              role="alert"
+              class="flex flex-wrap items-center gap-2 rounded-md bg-danger-soft px-3 py-2 text-p-sm text-danger"
+            >
+              <LucideCircleAlert class="size-4 shrink-0" aria-hidden="true" />
+              <span class="min-w-0 flex-1">
+                {{
+                  errorText(
+                    teams.error,
+                    __("Couldn't load the teams. Check your connection.")
+                  )
+                }}
+              </span>
+              <Button :label="__('Try again')" @click="teams.reload()" />
+            </div>
+            <ul v-else role="list" class="flex flex-col gap-1.5">
               <li v-for="team in teamNames" :key="team">
                 <label
                   class="flex min-h-[28px] cursor-pointer items-center gap-2"
@@ -487,7 +503,7 @@
                 </label>
               </li>
               <li
-                v-if="!teams.loading && !teamNames.length"
+                v-if="teams.data && !teamNames.length"
                 class="text-p-sm text-ink-gray-5"
               >
                 {{
