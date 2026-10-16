@@ -77,8 +77,8 @@ browser.
 | 403, 404 or 417 saying the method isn't there or isn't whitelisted | Leads need the latest TBO Smart on the ERP site (host). |
 | Any other 403 | You don't have a sales account on the ERP site yet. Ask an admin to give (email) the Sales User role on (host). |
 | Any other 404 | That lead isn't on the ERP site any more, or you can't see it. |
-| Other 4xx with a message | The ERP site's own message (e.g. a missing field, a stage it refuses). |
-| 5xx | The ERP site ran into a problem (status). Try again; if it keeps happening, tell an admin. |
+| Other 4xx with a message | The ERP site's own message (e.g. a missing field, a stage it refuses); never its exception text. |
+| 5xx, or a 4xx with only an exception | The ERP site ran into a problem (status). Try again; if it keeps happening, tell an admin. |
 
 Setup and reach problems are `LeadsUnavailableError`, the rest `LeadsError` (both
 ValidationError, so the page shows the message with *Try again*).

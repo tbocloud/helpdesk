@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
@@ -167,9 +167,14 @@ class TestLeads(FrappeTestCase):
                 "isn't on the ERP site",
             ),
             (
-                CRMError("x", 417, "Give the lead a name."),
+                CRMError("x", 417, "Give the lead a name.", "Give the lead a name."),
                 LeadsError,
                 "Give the lead a name.",
+            ),
+            (
+                CRMError("x", 417, "Traceback (most recent call last): ...", ""),
+                LeadsUnavailableError,
+                "ran into a problem (417)",
             ),
             (CRMError("x", 502, ""), LeadsUnavailableError, "ran into a problem (502)"),
         ]
@@ -183,3 +188,30 @@ class TestLeads(FrappeTestCase):
             with self.assertRaises(LeadsUnavailableError) as caught:
                 leads_api.get_options()
         self.assertIn("Settings → CRM", str(caught.exception))
+
+
+class TestCRMCallErrors(FrappeTestCase):
+    """CRMClient.call keeps the ERP site's message apart from its exception text."""
+
+    def call_answering(self, status: int, body):
+        from helpdesk.integrations.crm.client import CRMClient
+
+        client = CRMClient("https://erp.example", "key", "secret")
+        response = Mock(ok=False, status_code=status, content=b"x", text=str(body))
+        response.json.return_value = body
+        with patch.object(client, "send", return_value=response):
+            with self.assertRaises(CRMError) as caught:
+                client.call("tbo_smart.api.hub_leads.get_lead", name="CRM-LEAD-0001")
+        return caught.exception
+
+    def test_the_exception_text_is_never_the_user_message(self):
+        error = self.call_answering(
+            417, {"exception": "frappe.exceptions.ValidationError: boom"}
+        )
+        self.assertIn("ValidationError", error.detail)
+        self.assertEqual(error.user_message, "")
+
+    def test_a_body_that_isnt_an_object_still_raises_crm_error(self):
+        error = self.call_answering(500, ["unexpected"])
+        self.assertEqual(error.status, 500)
+        self.assertEqual(error.user_message, "")

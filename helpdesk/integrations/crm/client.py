@@ -13,13 +13,22 @@ TIMEOUT = 20
 class CRMError(Exception):
     """The CRM site is unreachable, refused the key, or rejected a request.
 
-    `status` is the HTTP status (None when the site couldn't be reached) and `detail`
-    the site's own error message, so callers can tell the cases apart."""
+    `status` is the HTTP status (None when the site couldn't be reached), `detail`
+    the site's error (its message, else the exception), so callers can tell the cases
+    apart, and `user_message` only the message the site meant for people, never a
+    traceback."""
 
-    def __init__(self, message: str, status: int | None = None, detail: str = ""):
+    def __init__(
+        self,
+        message: str,
+        status: int | None = None,
+        detail: str = "",
+        user_message: str = "",
+    ):
         super().__init__(message)
         self.status = status
         self.detail = detail
+        self.user_message = user_message
 
 
 class CRMPermissionError(CRMError):
@@ -102,6 +111,7 @@ class CRMClient:
                 ),
                 response.status_code,
                 detail,
+                error_text(response, messages_only=True),
             )
         return (response.json() if response.content else {}).get("message")
 
@@ -383,11 +393,15 @@ class CRMClient:
         )
 
 
-def error_text(response) -> str:
+def error_text(response, messages_only: bool = False) -> str:
+    """The CRM site's error: its message, else (unless `messages_only`) the exception
+    or the start of the body."""
     try:
         body = response.json()
     except ValueError:
-        return response.text[:200]
+        return "" if messages_only else response.text[:200]
+    if not isinstance(body, dict):
+        return "" if messages_only else str(body)[:200]
     messages = body.get("_server_messages")
     if messages:
         try:
@@ -395,4 +409,7 @@ def error_text(response) -> str:
             return frappe.utils.strip_html(first.get("message", ""))[:200]
         except (ValueError, TypeError, IndexError, AttributeError):
             pass
+    if messages_only:
+        message = body.get("message")
+        return message[:200] if isinstance(message, str) else ""
     return str(body.get("exception") or body.get("message") or "")[:200]

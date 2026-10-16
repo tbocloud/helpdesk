@@ -127,9 +127,10 @@ def friendly_error(error: CRMError, site_url: str) -> LeadsError:
         return LeadsError(
             _("That lead isn't on the ERP site any more, or you can't see it.")
         )
-    if error.status < 500 and detail:
-        # the ERP site's own reason, e.g. a missing field or a stage it doesn't allow
-        return LeadsError(detail)
+    if error.status < 500 and error.user_message:
+        # the ERP site's own reason, e.g. a missing field or a stage it doesn't allow;
+        # never its exception text
+        return LeadsError(error.user_message)
     return LeadsUnavailableError(
         _(
             "The ERP site ran into a problem ({0}). Try again; if it keeps happening, tell an admin."
