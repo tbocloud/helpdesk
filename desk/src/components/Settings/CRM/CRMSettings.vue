@@ -89,7 +89,11 @@
           <Switch
             v-model="form.add_crm_users"
             :label="__('Add CRM users missing in helpdesk, as agents')"
-            :description="__('Existing helpdesk users are left as they are.')"
+            :description="
+              __(
+                'Enabled users with Sales User or Sales Manager on the CRM site. Existing helpdesk users are left as they are.'
+              )
+            "
           />
           <Switch
             v-model="form.disable_left_users"
@@ -120,7 +124,7 @@
             :label="__('Sync customers both ways')"
             :description="
               __(
-                'An HD Customer missing in the CRM becomes a CRM Organization, and the other way round. Matched by name; nothing existing is changed.'
+                'CRM Organizations and ERPNext Customers missing in helpdesk become HD Customers. While Frappe CRM is on the CRM site, an HD Customer missing there becomes a CRM Organization; without it, nothing is created there. Matched by name; nothing existing is changed.'
               )
             "
           />
@@ -437,6 +441,62 @@
             </span>
           </div>
         </SettingsSection>
+
+        <SettingsSection
+          :title="__('Leads')"
+          :description="
+            __(
+              'Sales leads live in ERPNext on the CRM site. The Leads page reads and writes them there as the person signed in, who needs Sales User or Sales Manager on that site.'
+            )
+          "
+        >
+          <Switch
+            v-model="form.enable_leads"
+            :label="__('Show the Leads page')"
+            :description="
+              __(
+                'Needs the CRM connection above and the latest TBO Smart on the CRM site.'
+              )
+            "
+          />
+          <fieldset v-if="form.enable_leads" class="flex flex-col gap-2">
+            <legend class="text-base text-ink-gray-8">
+              {{ __("For these teams") }}
+            </legend>
+            <p class="text-p-xs text-ink-gray-6">
+              {{
+                form.leads_teams.length
+                  ? __(
+                      "Only agents in the ticked teams see Leads. System Managers and Agent Managers always do."
+                    )
+                  : __(
+                      "None ticked: every agent sees Leads. Tick your sales teams to keep it to them."
+                    )
+              }}
+            </p>
+            <ul role="list" class="flex flex-col gap-1.5">
+              <li v-for="team in teamNames" :key="team">
+                <label
+                  class="flex min-h-[28px] cursor-pointer items-center gap-2"
+                >
+                  <Checkbox
+                    :model-value="form.leads_teams.includes(team)"
+                    @update:model-value="pickTeam(team, $event)"
+                  />
+                  <span class="text-base text-ink-gray-8">{{ team }}</span>
+                </label>
+              </li>
+              <li
+                v-if="!teams.loading && !teamNames.length"
+                class="text-p-sm text-ink-gray-5"
+              >
+                {{
+                  __("There are no teams yet; add them in Settings → Teams.")
+                }}
+              </li>
+            </ul>
+          </fieldset>
+        </SettingsSection>
       </div>
     </template>
   </SettingsLayoutBase>
@@ -488,6 +548,9 @@ interface CRMForm {
   /** Holiday List names on the CRM site; none: the company's default list */
   holiday_lists: string[];
   sync_leave: boolean;
+  enable_leads: boolean;
+  /** HD Team names that see Leads; none: every agent */
+  leads_teams: string[];
 }
 
 /** helpdesk.api.crm.get_holiday_options */
@@ -526,6 +589,14 @@ const holidayStatus = ref<{
   result?: string;
   error?: string;
 }>({});
+
+/** a Small Text of names, one per line */
+function lines(value?: string) {
+  return (value || "")
+    .split("\n")
+    .map((name) => name.trim())
+    .filter(Boolean);
+}
 
 // a new single has no saved value yet; these switches start on
 function onByDefault(value: unknown) {
@@ -569,11 +640,10 @@ const settings = createResource({
       invoice_hourly_rate: doc.invoice_hourly_rate || "",
       invoice_currency: doc.invoice_currency || "",
       sync_holidays: onByDefault(doc.sync_holidays),
-      holiday_lists: (doc.holiday_lists || "")
-        .split("\n")
-        .map((name: string) => name.trim())
-        .filter(Boolean),
+      holiday_lists: lines(doc.holiday_lists),
       sync_leave: onByDefault(doc.sync_leave),
+      enable_leads: Boolean(doc.enable_leads),
+      leads_teams: lines(doc.leads_teams),
     };
     initial.value = JSON.stringify(form.value);
     connected.value = Boolean(doc.site_url && doc.api_key && doc.api_secret);
@@ -710,6 +780,8 @@ const save = createResource({
       sync_holidays: f.sync_holidays ? 1 : 0,
       holiday_lists: f.holiday_lists.join("\n"),
       sync_leave: f.sync_leave ? 1 : 0,
+      enable_leads: f.enable_leads ? 1 : 0,
+      leads_teams: f.leads_teams.join("\n"),
     };
     if (!f.api_secret) delete fieldname.api_secret;
     return { doctype: DOCTYPE, name: DOCTYPE, fieldname };
@@ -751,6 +823,31 @@ const fillOwners = createResource({
     toast.error(errorText(e, __("Couldn't fill the ticket owners")));
   },
 });
+
+// --- leads ---
+
+const teams = createListResource({
+  doctype: "HD Team",
+  filters: { disabled: 0 },
+  fields: ["name"],
+  orderBy: "name asc",
+  pageLength: 500,
+  auto: true,
+});
+/** the enabled teams, plus ticked ones that were disabled or renamed since */
+const teamNames = computed(() => {
+  const names = (teams.data ?? []).map((t: { name: string }) => t.name);
+  const gone = (form.value?.leads_teams ?? []).filter(
+    (n) => !names.includes(n)
+  );
+  return [...names, ...gone];
+});
+
+function pickTeam(name: string, picked: boolean) {
+  if (!form.value) return;
+  const others = form.value.leads_teams.filter((n) => n !== name);
+  form.value.leads_teams = picked ? [...others, name] : others;
+}
 
 // --- holidays and leave, read from the CRM site ---
 

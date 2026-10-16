@@ -69,6 +69,10 @@ export const useAuthStore = defineStore("auth", () => {
   const canWorkTickets: ComputedRef<boolean> = computed(
     () => !!user__.value.can_work_tickets
   );
+  // the Leads page, live from the CRM site (docs/leads.md)
+  const canUseLeads: ComputedRef<boolean> = computed(
+    () => !!user__.value.can_use_leads
+  );
   const canSeeCustomerReport: ComputedRef<boolean> = computed(
     () => !!(user__.value.is_manager || user__.value.is_project_manager)
   );
@@ -155,6 +159,7 @@ export const useAuthStore = defineStore("auth", () => {
     isErpOnly,
     isDmEmployee,
     canWorkTickets,
+    canUseLeads,
     telephonyInstalled,
     canOpenChat,
     isLoggedIn,

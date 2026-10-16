@@ -5,7 +5,13 @@ from frappe.tests.utils import FrappeTestCase
 
 from helpdesk.api import crm as crm_api
 from helpdesk.integrations.crm import users as crm_users
-from helpdesk.test_utils import FakeCRM, create_agent, hold_commits
+from helpdesk.integrations.crm.client import CRMClient
+from helpdesk.test_utils import (
+    FakeCRM,
+    create_agent,
+    get_doc_refusing_agents,
+    hold_commits,
+)
 
 NEW = "new.agent@crm-sync.example"
 DISABLED = "returning.agent@crm-sync.example"
@@ -53,12 +59,11 @@ class TestCRMUserSync(FrappeTestCase):
         self.assertTrue(self.crm.users[NEW]["welcome_email"])
         self.assertIn(DISABLED, result["enabled"])
         self.assertEqual(self.crm.users[DISABLED]["enabled"], 1)
-        # one call for everyone who needed a role, with the role from settings
-        ((emails, role),) = self.crm.role_calls
-        self.assertIn(NEW, emails)
-        self.assertIn(DISABLED, emails)
-        self.assertNotIn(SYNCED, emails)
-        self.assertEqual(role, "Sales User")
+        # the ERPNext sales role from settings, on the User, for everyone without one
+        given = dict(self.crm.role_calls)
+        self.assertEqual(given.get(NEW), "Sales User")
+        self.assertEqual(given.get(DISABLED), "Sales User")
+        self.assertNotIn(SYNCED, given)
         # an agent who left isn't created
         self.assertNotIn(INACTIVE, self.crm.users)
         self.assertIn(
@@ -169,31 +174,6 @@ class TestCRMCustomers(TestCRMUserSync):
         self.assertEqual(again["created_in_crm"], [])
         self.assertEqual(again["created_in_helpdesk"], [])
 
-    def test_a_failed_agent_leaves_no_half_made_user(self):
-        self.crm.users[SALES_ONLY] = {
-            "name": SALES_ONLY,
-            "enabled": 1,
-            "roles": [{"role": "Sales User"}],
-        }
-        with patch(
-            "helpdesk.integrations.crm.users.frappe.get_doc",
-            side_effect=_fail_on_agent(frappe.get_doc),
-        ):
-            result = self.sync()
-        self.assertTrue(any(SALES_ONLY in f for f in result["failed"]))
-        self.assertFalse(frappe.db.exists("User", SALES_ONLY))
-
-
-def _fail_on_agent(get_doc):
-    """get_doc that refuses to build an HD Agent, like a validation error would."""
-
-    def wrapped(*args, **kwargs):
-        if args and isinstance(args[0], dict) and args[0].get("doctype") == "HD Agent":
-            raise frappe.ValidationError("agent refused")
-        return get_doc(*args, **kwargs)
-
-    return wrapped
-
     def test_the_customers_line_appears_once(self):
         from helpdesk.integrations.crm.customers import sync_customers
 
@@ -216,4 +196,88 @@ def _fail_on_agent(get_doc):
         # it isn't pushed back as a duplicate CRM Organization
         self.assertNotIn(
             "ERP Only Traders", [o["organization_name"] for o in self.crm.orgs]
+        )
+
+    def test_without_frappe_crm_only_erpnext_customers_are_read(self):
+        """After Frappe CRM is removed from the ERP site: Customers still come in,
+        nothing is created there, and helpdesk-only customers are reported."""
+        from helpdesk.integrations.crm.customers import sync_customers
+        from helpdesk.test_utils import create_customer
+
+        create_customer("Hub Only Logistics")
+        self.crm.has_crm_organizations = False
+        self.crm.orgs = [{"name": "Stale Org", "organization_name": "Stale Org"}]
+        self.crm.erp = ["ERP Side Traders"]
+        with patch(FROM_SETTINGS, return_value=self.crm):
+            result = sync_customers()
+
+        self.assertIn("ERP Side Traders", result["created_in_helpdesk"])
+        self.assertNotIn("Stale Org", result["created_in_helpdesk"])
+        self.assertEqual(result["created_in_crm"], [])
+        self.assertIn("Hub Only Logistics", result["only_in_helpdesk"])
+        self.assertEqual(len(self.crm.orgs), 1)
+        self.assertIn(
+            "only in helpdesk",
+            frappe.db.get_single_value("HD CRM Settings", "last_sync_result"),
+        )
+
+    def test_a_failed_agent_leaves_no_half_made_user(self):
+        self.crm.users[SALES_ONLY] = {
+            "name": SALES_ONLY,
+            "enabled": 1,
+            "roles": [{"role": "Sales User"}],
+        }
+        with patch(
+            "helpdesk.integrations.crm.users.frappe.get_doc",
+            side_effect=get_doc_refusing_agents(frappe.get_doc),
+        ):
+            result = self.sync()
+        self.assertTrue(any(SALES_ONLY in f for f in result["failed"]))
+        self.assertFalse(frappe.db.exists("User", SALES_ONLY))
+
+
+class TestCRMClientRoles(FrappeTestCase):
+    """The real client's calls for sales users and roles, without Frappe CRM's API."""
+
+    def setUp(self):
+        self.client = CRMClient("https://erp.example", "key", "secret")
+
+    def test_sales_users_are_read_from_user_roles(self):
+        rows = [
+            {"name": "bde@erp.example", "full_name": "Bina BDE"},
+            {"name": "bde@erp.example", "full_name": "Bina BDE"},
+            {"name": "Administrator", "full_name": "Administrator"},
+            {"name": "lead@erp.example", "first_name": "Lal", "last_name": "Lead"},
+        ]
+        with patch.object(self.client, "get_list", return_value=rows) as get_list:
+            users = self.client.crm_users()
+
+        doctype, _fields, filters = get_list.call_args.args
+        self.assertEqual(doctype, "User")
+        self.assertIn(
+            ["Has Role", "role", "in", ["Sales User", "Sales Manager"]], filters
+        )
+        self.assertEqual(
+            users,
+            [
+                {"email": "bde@erp.example", "full_name": "Bina BDE"},
+                {"email": "lead@erp.example", "full_name": "Lal Lead"},
+            ],
+        )
+
+    def test_a_role_is_added_as_one_has_role_row(self):
+        with patch.object(self.client, "request", return_value={}) as request:
+            self.client.add_role("bde@erp.example", "Sales User")
+
+        method, path = request.call_args.args
+        self.assertEqual((method, path), ("POST", "/api/method/frappe.client.insert"))
+        self.assertEqual(
+            request.call_args.kwargs["json"]["doc"],
+            {
+                "doctype": "Has Role",
+                "parenttype": "User",
+                "parent": "bde@erp.example",
+                "parentfield": "roles",
+                "role": "Sales User",
+            },
         )

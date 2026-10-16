@@ -3231,7 +3231,10 @@ class FakeCRM:
     ):
         self.users = {u["name"]: {"roles": [], "enabled": 1, **u} for u in users or []}
         self.failing = set(failing)
-        self.role_calls: list[tuple[tuple, str]] = []
+        # (email, role) for each sales role given on the CRM site
+        self.role_calls: list[tuple[str, str]] = []
+        # False: Frappe CRM is gone from the CRM site, so there's no CRM Organization
+        self.has_crm_organizations = True
         self.orgs = [{"name": o, "organization_name": o} for o in organizations or []]
         self.erp = list(erp_customers or [])
         # (ERPNext Customer name, its Account Manager), for filling empty ticket owners
@@ -3254,6 +3257,12 @@ class FakeCRM:
         # an Exception the holiday or leave reads raise, as the CRM site would
         self.holidays_error: Exception | None = None
         self.leave_error: Exception | None = None
+        # TBO Smart's hub leads API: what each method answers, the calls made as
+        # (method, post, params), and an Exception every call raises
+        self.base = "https://erp.example"
+        self.lead_answers: dict[str, object] = {}
+        self.lead_calls: list[tuple[str, bool, dict]] = []
+        self.lead_error: Exception | None = None
 
     def logged_user(self):
         return "api@crm.example"
@@ -3285,7 +3294,9 @@ class FakeCRM:
         return [
             {"email": u["name"], "full_name": u.get("full_name") or ""}
             for u in self.users.values()
-            if u.get("enabled") and u.get("roles")
+            if u.get("enabled")
+            and {r.get("role") for r in u.get("roles") or []}
+            & {"Sales User", "Sales Manager"}
         ]
 
     def organizations(self):
@@ -3298,10 +3309,19 @@ class FakeCRM:
         self.orgs.append({"name": name, "organization_name": name, "website": website})
         return self.orgs[-1]
 
-    def add_to_crm(self, emails, role):
-        self.role_calls.append((tuple(emails), role))
-        for email in emails:
-            self.users[email]["roles"].append({"role": role})
+    def add_role(self, email, role):
+        self.role_calls.append((email, role))
+        self.users[email]["roles"].append({"role": role})
+
+    def has_doctype(self, doctype):
+        return doctype != "CRM Organization" or self.has_crm_organizations
+
+    def call(self, method, post=False, **params):
+        name = method.rsplit(".", 1)[-1]
+        self.lead_calls.append((name, post, params))
+        if self.lead_error:
+            raise self.lead_error
+        return self.lead_answers.get(name)
 
     def customers(self):
         return [{"name": c, "customer_name": c} for c in self.erp]
@@ -3419,6 +3439,27 @@ def erp_leave_application(
         "half_day": 0,
         **values,
     }
+
+
+def get_doc_refusing_agents(get_doc):
+    """Wraps frappe.get_doc so building an HD Agent fails like a validation error would
+    (for patching the CRM user sync); every other document is built as usual."""
+
+    def wrapped(*args, **kwargs):
+        if args and isinstance(args[0], dict) and args[0].get("doctype") == "HD Agent":
+            raise frappe.ValidationError("agent refused")
+        return get_doc(*args, **kwargs)
+
+    return wrapped
+
+
+def enable_leads(teams: tuple[str, ...] = ()):
+    """Turns on the CRM connection and the Leads page, for `teams` (every agent when
+    none). The connection itself is faked with FakeCRM in the tests."""
+    frappe.db.set_single_value(
+        "HD CRM Settings",
+        {"enabled": 1, "enable_leads": 1, "leads_teams": "\n".join(teams)},
+    )
 
 
 def make_hd_leave(

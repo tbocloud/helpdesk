@@ -41,6 +41,10 @@
 		"leave_synced_count",
 		"holiday_sync_result",
 		"holiday_sync_error",
+		"leads_section",
+		"enable_leads",
+		"column_break_6",
+		"leads_teams",
 		"status_section",
 		"last_sync_on",
 		"last_sync_result"
@@ -271,11 +275,34 @@
 			"fieldtype": "Small Text",
 			"label": "Holiday Sync Problems",
 			"read_only": 1
+		},
+		{
+			"fieldname": "leads_section",
+			"fieldtype": "Section Break",
+			"label": "Leads",
+			"description": "Sales leads live in ERPNext on the CRM site; the Leads page reads and writes them there as the signed-in person. See docs/leads.md."
+		},
+		{
+			"fieldname": "enable_leads",
+			"fieldtype": "Check",
+			"label": "Enable Leads",
+			"default": "0",
+			"description": "Shows the Leads page to the teams below. Needs TBO Smart's hub leads API on the CRM site."
+		},
+		{
+			"fieldname": "column_break_6",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "leads_teams",
+			"fieldtype": "Small Text",
+			"label": "Leads For Teams",
+			"description": "HD Team names, one per line. Empty: every agent. System Managers and Agent Managers always see Leads."
 		}
 	],
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-10-10 12:00:00.000000",
+	"modified": "2026-10-16 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD CRM Settings",
