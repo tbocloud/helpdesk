@@ -89,15 +89,23 @@ def call(method: str, post: bool = False, **params):
     try:
         client = CRMClient.from_settings()
     except CRMError:
-        raise LeadsUnavailableError(
-            _("Leads aren't connected yet. Ask an admin to set up Settings → CRM.")
-        ) from None
+        fail(
+            LeadsUnavailableError(
+                _("Leads aren't connected yet. Ask an admin to set up Settings → CRM.")
+            )
+        )
     try:
         return client.call(
             f"{API}.{method}", post=post, acting_user=frappe.session.user, **params
         )
     except CRMError as e:
-        raise friendly_error(e, client.base) from None
+        fail(friendly_error(e, client.base))
+
+
+def fail(error: LeadsError):
+    # through frappe.throw, so the message reaches the page; a bare raise shows people only
+    # "Internal Server Error"
+    frappe.throw(str(error), exc=type(error))
 
 
 def friendly_error(error: CRMError, site_url: str) -> LeadsError:
@@ -116,6 +124,12 @@ def friendly_error(error: CRMError, site_url: str) -> LeadsError:
     if error.status in (403, 404, 417) and not_deployed(detail):
         return LeadsUnavailableError(
             _("Leads need the latest TBO Smart on the ERP site ({0}).").format(site)
+        )
+    if error.status == 403 and "integration user" in detail.casefold():
+        return LeadsUnavailableError(
+            _(
+                "The hub's API user on {0} needs the Hub Integration role. Ask an admin to add it to the user in Settings → CRM."
+            ).format(site)
         )
     if error.status == 403:
         return LeadsError(
