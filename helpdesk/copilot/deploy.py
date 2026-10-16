@@ -454,7 +454,8 @@ def _start(request):
                     request.release_group, app.app
                 ),
             )
-        if (row.get("hash") or "").startswith(app.to_commit or "-"):
+        current, following = press.app_commits(row)
+        if current.startswith(app.to_commit or "-"):
             # the site already runs it (deployed by hand): straight to the check
             request.db_set(
                 {
@@ -468,16 +469,14 @@ def _start(request):
                 run, "Verifying", runs.SYSTEM, note="the bench already runs the commit"
             )
             return
-        if not (row.get("next_hash") or "").startswith(app.to_commit or "-"):
+        if not following.startswith(app.to_commit or "-"):
             press.fetch_latest_app_update(request.release_group, app.app)
             _release_lock(request.name)
             return _wait(
                 request,
                 _(
                     "Press does not offer the merged commit {0} yet (it offers {1})"
-                ).format(
-                    (app.to_commit or "")[:12], (row.get("next_hash") or "none")[:12]
-                ),
+                ).format((app.to_commit or "")[:12], (following or "none")[:12]),
             )
         wanted = {site.site for site in request.sites}
         skip_backups = bool(copilot_settings.get_settings().press_skip_backups)
@@ -498,7 +497,7 @@ def _start(request):
                     "app": app.app,
                     "source": row.get("source"),
                     "release": row.get("next_release"),
-                    "hash": row.get("next_hash"),
+                    "hash": following,
                 }
             ],
             sites,

@@ -61,6 +61,24 @@ class TestPressClient(FrappeTestCase):
         self.assertIn("https://", caught.exception.message)
         sent.assert_not_called()
 
+    def test_an_apps_commits_as_presss_deploy_information_shows_them(self):
+        # release_group.get_app_updates: the running commit, and a newer one only as a release
+        row = {
+            "app": "demo_app",
+            "current_hash": "a" * 40,
+            "next_release": "REL-2",
+            "releases": [
+                {"name": "REL-3", "hash": "c" * 40},
+                {"name": "REL-2", "hash": "b" * 40},
+            ],
+            "update_available": True,
+        }
+        self.assertEqual(press.app_commits(row), ("a" * 40, "b" * 40))
+        self.assertEqual(
+            press.app_commits({"current_hash": "a" * 40, "releases": []}),
+            ("a" * 40, ""),
+        )
+
     def test_a_refusal_carries_presss_own_message(self):
         body = {
             "exc_type": "ValidationError",

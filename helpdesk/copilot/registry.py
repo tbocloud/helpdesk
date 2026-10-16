@@ -110,7 +110,7 @@ def refresh_from_press(registry) -> dict:
     drift, bench_only = [], []
     for app in info.get("apps") or []:
         name = app.get("app") or app.get("name")
-        commit = app.get("hash") or ""
+        commit = press.app_commits(app)[0]
         if not name:
             continue
         if name not in rows and filled:

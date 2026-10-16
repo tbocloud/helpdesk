@@ -4395,6 +4395,27 @@ class FakePress:
         self.builds: list = []
         self.on_fetch = None
 
+    @staticmethod
+    def _as_press(app: dict) -> dict:
+        """An app as TBO's Press shows it in deploy_information (release_group.get_app_updates):
+        the running commit as `current_hash`, a newer one only as a release."""
+        current, following = app.get("hash"), app.get("next_hash") or app.get("hash")
+        update = bool(following) and following != current
+        return {
+            "app": app["app"],
+            "name": app["app"],
+            "source": app.get("source"),
+            "current_hash": current,
+            "current_release": app.get("release"),
+            "next_release": app.get("next_release") if update else app.get("release"),
+            "releases": [
+                {"name": app.get("next_release"), "hash": following, "is_yanked": False}
+            ]
+            if update
+            else [],
+            "update_available": update,
+        }
+
     def install(self, test_case):
         patcher = patch("helpdesk.copilot.press.call", side_effect=self.call)
         patcher.start()
@@ -4422,7 +4443,7 @@ class FakePress:
         name = method.rsplit(".", 1)[-1]
         if name == "deploy_information":
             return {
-                "apps": copy.deepcopy(self.apps),
+                "apps": [self._as_press(app) for app in self.apps],
                 "sites": copy.deepcopy(self.sites),
                 "deploy_in_progress": self.deploy_in_progress,
                 "has_running_release_pipeline": False,

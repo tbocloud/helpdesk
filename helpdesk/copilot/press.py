@@ -112,6 +112,19 @@ def deploy_information(group: str) -> dict:
     return call("press.api.bench.deploy_information", name=group) or {}
 
 
+def app_commits(row: dict) -> tuple[str, str]:
+    """The commit a bench app runs and the one a deploy would bring, from one app of
+    `deploy_information`: Press shows them as `current_hash` and the hash of the release
+    named `next_release` among `releases` (newest first). Empty when Press has none."""
+    current = row.get("current_hash") or row.get("hash") or ""
+    following = row.get("next_hash") or ""
+    if not following:
+        releases = [r for r in row.get("releases") or [] if isinstance(r, dict)]
+        named = [r for r in releases if r.get("name") == row.get("next_release")]
+        following = ((named or releases or [{}])[0]).get("hash") or ""
+    return current, following
+
+
 def fetch_latest_app_update(group: str, app: str):
     """Asks Press to register the newest commit of the app's branch on the bench."""
     call("press.api.bench.fetch_latest_app_update", name=group, app=app)
