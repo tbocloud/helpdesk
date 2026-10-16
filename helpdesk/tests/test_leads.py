@@ -161,7 +161,9 @@ class TestLeads(FrappeTestCase):
             ),
             (
                 CRMError(
-                    "x", 403, "Only the hub's integration user may act for someone else."
+                    "x",
+                    403,
+                    "Only the hub's integration user may act for someone else.",
                 ),
                 LeadsUnavailableError,
                 "needs the Hub Integration role",
