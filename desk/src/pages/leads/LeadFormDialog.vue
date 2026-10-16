@@ -115,7 +115,7 @@
           type="submit"
           :form="formId"
           :label="lead ? __('Save changes') : __('Create lead')"
-          :loading="save.loading"
+          :loading="saving"
           :disabled="!!leadOptions.error && !options"
         />
       </div>
@@ -127,14 +127,7 @@
 import TaskyState from "@/components/TaskyState.vue";
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
-import {
-  Button,
-  Combobox,
-  createResource,
-  Dialog,
-  FormControl,
-  toast,
-} from "frappe-ui";
+import { Button, Combobox, call, Dialog, FormControl, toast } from "frappe-ui";
 import { computed, reactive, ref, useId, watch } from "vue";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import {
@@ -210,26 +203,10 @@ function validate() {
   return "";
 }
 
-const save = createResource({
-  url: props.lead
-    ? "helpdesk.api.leads.update_lead"
-    : "helpdesk.api.leads.create_lead",
-  method: "POST",
-  onSuccess(result: { name?: string }) {
-    toast.success(props.lead ? __("Lead saved") : __("Lead created"));
-    emit("saved", result?.name || props.lead?.name || "");
-    emit("update:open", false);
-  },
-  onError(e: unknown) {
-    errorMessage.value = errorText(
-      e,
-      __("Couldn't save the lead. Check your connection and try again.")
-    );
-  },
-});
+const saving = ref(false);
 
 function submit() {
-  if (save.loading) return;
+  if (saving.value) return;
   errorMessage.value = validate();
   if (errorMessage.value) return;
   const data = payload();
@@ -237,6 +214,24 @@ function submit() {
     emit("update:open", false);
     return;
   }
-  save.submit(props.lead ? { name: props.lead.name, data } : { data });
+  // create or update is decided now, from the lead the dialog has at this moment
+  const lead = props.lead;
+  saving.value = true;
+  call(
+    lead ? "helpdesk.api.leads.update_lead" : "helpdesk.api.leads.create_lead",
+    lead ? { name: lead.name, data } : { data }
+  )
+    .then((result: { name?: string } | null) => {
+      toast.success(lead ? __("Lead saved") : __("Lead created"));
+      emit("saved", result?.name || lead?.name || "");
+      emit("update:open", false);
+    })
+    .catch((e: unknown) => {
+      errorMessage.value = errorText(
+        e,
+        __("Couldn't save the lead. Check your connection and try again.")
+      );
+    })
+    .finally(() => (saving.value = false));
 }
 </script>
