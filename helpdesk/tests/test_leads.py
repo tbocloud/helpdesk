@@ -197,8 +197,13 @@ class TestCRMCallErrors(FrappeTestCase):
         from helpdesk.integrations.crm.client import CRMClient
 
         client = CRMClient("https://erp.example", "key", "secret")
-        response = Mock(ok=False, status_code=status, content=b"x", text=str(body))
-        response.json.return_value = body
+        response = Mock(
+            ok=status < 400, status_code=status, content=b"x", text=str(body)
+        )
+        if isinstance(body, Exception):
+            response.json.side_effect = body
+        else:
+            response.json.return_value = body
         with patch.object(client, "send", return_value=response):
             with self.assertRaises(CRMError) as caught:
                 client.call("tbo_smart.api.hub_leads.get_lead", name="CRM-LEAD-0001")
@@ -210,6 +215,12 @@ class TestCRMCallErrors(FrappeTestCase):
         )
         self.assertIn("ValidationError", error.detail)
         self.assertEqual(error.user_message, "")
+
+    def test_a_success_that_isnt_json_raises_crm_error(self):
+        for body in (ValueError("not JSON"), ["unexpected"]):
+            with self.subTest(body=body):
+                error = self.call_answering(200, body)
+                self.assertEqual(error.status, 200)
 
     def test_a_body_that_isnt_an_object_still_raises_crm_error(self):
         error = self.call_answering(500, ["unexpected"])

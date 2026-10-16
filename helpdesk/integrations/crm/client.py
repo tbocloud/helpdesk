@@ -113,7 +113,19 @@ class CRMClient:
                 detail,
                 error_text(response, messages_only=True),
             )
-        return (response.json() if response.content else {}).get("message")
+        try:
+            body = response.json() if response.content else {}
+        except ValueError:
+            body = None
+        if not isinstance(body, dict):
+            # e.g. a proxy's HTML page in front of the site
+            raise CRMError(
+                _("The CRM site didn't answer as expected ({0}).").format(
+                    response.status_code
+                ),
+                response.status_code,
+            )
+        return body.get("message")
 
     def logged_user(self) -> str:
         """Who the key belongs to on the CRM site; proves the connection works."""
