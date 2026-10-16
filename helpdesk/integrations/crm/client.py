@@ -11,11 +11,32 @@ TIMEOUT = 20
 
 
 class CRMError(Exception):
-    """The CRM site is unreachable, refused the key, or rejected a request."""
+    """The CRM site is unreachable, refused the key, or rejected a request.
+
+    `status` is the HTTP status (None when the site couldn't be reached), `detail`
+    the site's error (its message, else the exception), so callers can tell the cases
+    apart, and `user_message` only the message the site meant for people, never a
+    traceback."""
+
+    def __init__(
+        self,
+        message: str,
+        status: int | None = None,
+        detail: str = "",
+        user_message: str = "",
+    ):
+        super().__init__(message)
+        self.status = status
+        self.detail = detail
+        self.user_message = user_message
 
 
 class CRMPermissionError(CRMError):
     """The CRM site's API user may not read or change this (HTTP 403)."""
+
+
+# the ERPNext roles that give a user sales (CRM) access on the CRM site
+SALES_ROLES = ("Sales User", "Sales Manager")
 
 
 class CRMClient:
@@ -39,13 +60,17 @@ class CRMClient:
             raise CRMError(_("Add the CRM site URL, API key and API secret first."))
         return cls(settings.site_url, settings.api_key, secret)
 
-    def request(self, method: str, path: str, **kwargs):
+    def send(self, method: str, path: str, **kwargs):
         try:
-            response = self.session.request(
+            return self.session.request(
                 method, f"{self.base}{path}", timeout=TIMEOUT, **kwargs
             )
         except requests.RequestException as e:
             raise CRMError(_("Couldn't reach the CRM site: {0}").format(str(e))) from e
+
+    def request(self, method: str, path: str, **kwargs):
+        """The JSON answer, or None when the record doesn't exist (404)."""
+        response = self.send(method, path, **kwargs)
         if response.status_code == 404:
             return None
         if response.status_code in (401, 403):
@@ -53,15 +78,54 @@ class CRMClient:
             raise error(
                 _("The CRM site refused the API key ({0}).").format(
                     response.status_code
-                )
+                ),
+                response.status_code,
+                error_text(response),
             )
         if not response.ok:
+            detail = error_text(response)
             raise CRMError(
                 _("The CRM site answered {0}: {1}").format(
-                    response.status_code, error_text(response)
-                )
+                    response.status_code, detail
+                ),
+                response.status_code,
+                detail,
             )
         return response.json() if response.content else {}
+
+    def call(self, method: str, post: bool = False, **params):
+        """A whitelisted method on the CRM site; returns its `message`. Unlike
+        `request`, a 404 raises too: for a method it means the record wasn't found
+        or the method isn't there."""
+        path = f"/api/method/{method}"
+        response = (
+            self.send("POST", path, json=params)
+            if post
+            else self.send("GET", path, params=params)
+        )
+        if not response.ok:
+            detail = error_text(response)
+            raise CRMError(
+                _("The CRM site answered {0}: {1}").format(
+                    response.status_code, detail
+                ),
+                response.status_code,
+                detail,
+                error_text(response, messages_only=True),
+            )
+        try:
+            body = response.json() if response.content else {}
+        except ValueError:
+            body = None
+        if not isinstance(body, dict):
+            # e.g. a proxy's HTML page in front of the site
+            raise CRMError(
+                _("The CRM site didn't answer as expected ({0}).").format(
+                    response.status_code
+                ),
+                response.status_code,
+            )
+        return body.get("message")
 
     def logged_user(self) -> str:
         """Who the key belongs to on the CRM site; proves the connection works."""
@@ -95,19 +159,35 @@ class CRMClient:
         self.request("PUT", f"/api/resource/User/{quote(email)}", json={"enabled": 0})
 
     def crm_users(self) -> list[dict]:
-        """Enabled users with a CRM role (Frappe CRM's own list, so it matches its rules)."""
-        data = self.request("GET", "/api/method/crm.api.session.get_users") or {}
-        message = data.get("message") or [[], []]
-        users = message[1] if isinstance(message, list) and len(message) > 1 else []
-        return [
-            {
-                "email": u.get("email") or u.get("name"),
-                "full_name": u.get("full_name")
-                or " ".join(n for n in (u.get("first_name"), u.get("last_name")) if n),
-            }
-            for u in users
-            if u.get("name") != "Administrator" and u.get("enabled", 1)
-        ]
+        """Enabled desk users with an ERPNext sales role (Sales User or Sales Manager)
+        on the CRM site. Read from User itself, so it works with or without Frappe CRM
+        installed there."""
+        rows = self.get_list(
+            "User",
+            ["name", "full_name", "first_name", "last_name"],
+            [
+                ["Has Role", "role", "in", list(SALES_ROLES)],
+                ["enabled", "=", 1],
+                ["user_type", "=", "System User"],
+            ],
+        )
+        # a user with both roles comes back twice
+        users = {}
+        for u in rows:
+            if u.get("name") and u["name"] != "Administrator":
+                users[u["name"]] = {
+                    "email": u["name"],
+                    "full_name": u.get("full_name")
+                    or " ".join(
+                        n for n in (u.get("first_name"), u.get("last_name")) if n
+                    ),
+                }
+        return list(users.values())
+
+    def has_doctype(self, doctype: str) -> bool:
+        """Whether the CRM site has `doctype`, e.g. CRM Organization only while Frappe
+        CRM is installed there."""
+        return self.get_doc("DocType", doctype) is not None
 
     def organizations(self) -> list[dict]:
         data = self.request(
@@ -120,11 +200,15 @@ class CRMClient:
         )
         return (data or {}).get("data") or []
 
-    def erp_customers(self) -> list[dict]:
-        """ERPNext Customers on the CRM site, shaped like organizations; none without ERPNext."""
+    def erp_customers(self, strict: bool = False) -> list[dict]:
+        """ERPNext Customers on the CRM site, shaped like organizations; none without
+        ERPNext. With `strict`, a failed read raises instead: when they are the only
+        customers there, an empty list would wrongly say every customer is missing."""
         try:
             customers = self.customers()
         except CRMError:
+            if strict:
+                raise
             # no ERPNext on the CRM site (or no access to it): nothing to add
             return []
         return [
@@ -161,13 +245,31 @@ class CRMClient:
         )
         return (data or {}).get("data") or {}
 
-    def add_to_crm(self, emails: list[str], role: str):
-        """Give existing users a CRM role (Frappe CRM's own API, so its rules apply)."""
-        self.request(
+    def add_role(self, email: str, role: str):
+        """Give an existing user an ERPNext sales role on the CRM site. Added as one
+        Has Role row through frappe.client.insert, which appends it to the User and
+        saves it, so the user's other roles stay. A Role Profile on the User puts its
+        own roles back on save, so the saved User is checked for the role."""
+        data = self.request(
             "POST",
-            "/api/method/crm.api.user.add_existing_users",
-            data={"users": json.dumps(emails), "role": role},
+            "/api/method/frappe.client.insert",
+            json={
+                "doc": {
+                    "doctype": "Has Role",
+                    "parenttype": "User",
+                    "parent": email,
+                    "parentfield": "roles",
+                    "role": role,
+                }
+            },
         )
+        user = (data or {}).get("message") or {}
+        if role not in {row.get("role") for row in user.get("roles") or []}:
+            raise CRMError(
+                _(
+                    "The CRM site didn't keep the {0} role; the user's Role Profile may leave it out."
+                ).format(role)
+            )
 
     # --- ERPNext on the CRM site, for invoicing (docs/timesheet-invoicing.md) ---
 
@@ -311,11 +413,15 @@ class CRMClient:
         )
 
 
-def error_text(response) -> str:
+def error_text(response, messages_only: bool = False) -> str:
+    """The CRM site's error: its message, else (unless `messages_only`) the exception
+    or the start of the body."""
     try:
         body = response.json()
     except ValueError:
-        return response.text[:200]
+        return "" if messages_only else response.text[:200]
+    if not isinstance(body, dict):
+        return "" if messages_only else str(body)[:200]
     messages = body.get("_server_messages")
     if messages:
         try:
@@ -323,4 +429,7 @@ def error_text(response) -> str:
             return frappe.utils.strip_html(first.get("message", ""))[:200]
         except (ValueError, TypeError, IndexError, AttributeError):
             pass
+    if messages_only:
+        message = body.get("message")
+        return message[:200] if isinstance(message, str) else ""
     return str(body.get("exception") or body.get("message") or "")[:200]

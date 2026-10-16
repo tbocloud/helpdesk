@@ -1,10 +1,13 @@
 """Keep helpdesk agents and TBO CRM users in step, both ways, adding only what's missing.
 
 - Helpdesk → CRM: every active agent gets a CRM user (welcome email optional), a disabled
-  one is enabled again, and anyone without a CRM role gets the role from HD CRM Settings
-  through Frappe CRM's own API.
-- CRM → helpdesk: a CRM user (Sales User or Sales Manager) without a helpdesk account gets
-  one, as an agent. Existing helpdesk users are left as they are.
+  one is enabled again, and anyone without a CRM role gets the ERPNext sales role from HD
+  CRM Settings (Sales User or Sales Manager) on their User there.
+- CRM → helpdesk: an enabled user with Sales User or Sales Manager on the CRM site without
+  a helpdesk account gets one, as an agent. Existing helpdesk users are left as they are.
+
+Both read and write roles on User itself, not through Frappe CRM, so they work on an
+ERPNext site whether or not Frappe CRM is installed there (docs/tbo-crm-integration.md).
 - Leaving: users this connection created on the CRM site are disabled there when they're
   disabled or deactivated in helpdesk. People created directly in the CRM are never touched.
 """
@@ -16,10 +19,8 @@ from frappe import _
 from frappe.utils import now_datetime
 
 from helpdesk.automation import automation_user
-from helpdesk.integrations.crm.client import CRMClient, CRMError
+from helpdesk.integrations.crm.client import SALES_ROLES, CRMClient, CRMError
 
-# a user with any of these already has CRM access
-CRM_ROLES = {"Sales User", "Sales Manager", "System Manager"}
 SYNC_JOB = "helpdesk.integrations.crm.users.sync_users_job"
 SKIP = {"Administrator", "Guest"}
 
@@ -91,18 +92,22 @@ def push_users(client, settings, result: dict):
                 client.enable_user(email)
                 result["enabled"].append(email)
             roles = {row.get("role") for row in crm_user.get("roles") or []}
-            if roles & CRM_ROLES:
+            # a sales role, not System Manager alone: Leads act as this user there
+            if roles & set(SALES_ROLES):
                 result["in_sync"] += 1
             else:
                 needs_role.append(email)
         except CRMError as e:
             result["failed"].append(f"{email}: {str(e)}")
-    if needs_role:
+    role = settings.crm_role or "Sales User"
+    for email in needs_role:
         try:
-            client.add_to_crm(needs_role, settings.crm_role or "Sales User")
-            result["role_added"] = needs_role
+            client.add_role(email, role)
+            result["role_added"].append(email)
         except CRMError as e:
-            result["failed"].append(_("Couldn't give CRM roles: {0}").format(str(e)))
+            result["failed"].append(
+                _("{0}: couldn't give the {1} role: {2}").format(email, role, str(e))
+            )
 
 
 def pull_users(client, settings, result: dict):

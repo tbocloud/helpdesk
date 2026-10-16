@@ -13,6 +13,7 @@ import { createRouter, createWebHistory } from "vue-router";
 const { isMobileView } = useScreenSize();
 
 export const LOGIN_PAGE = "/login";
+const LEADS_ROUTES = new Set(["Leads", "Lead"]);
 
 // type the meta fields
 declare module "vue-router" {
@@ -149,6 +150,18 @@ const portalRoutes = [
     path: "/content/plans",
     name: "ContentPlans",
     component: () => import("@/pages/content/ContentPlans.vue"),
+  },
+  // sales leads, live from the CRM site (docs/leads.md)
+  {
+    path: "/leads",
+    name: "Leads",
+    component: () => import("@/pages/leads/Leads.vue"),
+  },
+  {
+    path: "/leads/:leadId",
+    name: "Lead",
+    component: () => import("@/pages/leads/Lead.vue"),
+    props: true,
   },
   {
     path: "/projects",
@@ -440,6 +453,8 @@ router.beforeEach(async (to, _, next) => {
     authStore.isErpOnly &&
     ERP_EMPLOYEE_HIDDEN_ROUTES.has(String(to.name))
   ) {
+    next({ name: "Home" });
+  } else if (LEADS_ROUTES.has(String(to.name)) && !authStore.canUseLeads) {
     next({ name: "Home" });
   } else if (to.name === "TicketAgent" && !authStore.isAgent) {
     const ticketId = to.params.ticketId;

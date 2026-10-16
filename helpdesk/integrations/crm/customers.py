@@ -1,11 +1,14 @@
 """Customers both ways between helpdesk (HD Customer) and the TBO CRM.
 
-On the CRM side a customer is a CRM Organization, or an ERPNext Customer when the CRM
-site runs ERPNext too; both are read. New ones from helpdesk become CRM Organizations
-(an ERPNext Customer needs a group and territory the hub can't choose).
+On the CRM side a customer is an ERPNext Customer, or a CRM Organization while Frappe
+CRM is installed there; both are read. New ones from helpdesk become CRM Organizations
+(an ERPNext Customer needs a group and territory the hub can't choose). Once Frappe CRM
+is gone from the site, nothing is created there: the ERPNext Customer is the system of
+record, so helpdesk-only customers are only counted for someone to add there.
 
 Only what's missing is created: an HD Customer the CRM doesn't have becomes a CRM
-Organization, and a CRM Organization helpdesk doesn't have becomes an HD Customer.
+Organization, and a CRM Organization or Customer helpdesk doesn't have becomes an HD
+Customer.
 Names are matched ignoring case and surrounding spaces; existing records are never
 changed or deleted.
 """
@@ -24,16 +27,29 @@ def key(name: str | None) -> str:
 
 def sync_customers() -> dict:
     client = CRMClient.from_settings()
-    result = {"created_in_crm": [], "created_in_helpdesk": [], "failed": []}
-    # the CRM keeps customers as CRM Organizations, and as ERPNext Customers when the
-    # CRM site also runs ERPNext; both come into helpdesk
-    organizations = client.organizations() + client.erp_customers()
+    result = {
+        "created_in_crm": [],
+        "created_in_helpdesk": [],
+        "only_in_helpdesk": [],
+        "failed": [],
+    }
+    # ERPNext Customers, plus CRM Organizations while Frappe CRM is on the site; both
+    # come into helpdesk. A failed Customer read (403, timeout) fails the sync: an
+    # empty list would create duplicates there or call every customer missing. A
+    # site without ERPNext answers 404, which is just no Customers.
+    has_organizations = client.has_doctype("CRM Organization")
+    organizations = (
+        client.organizations() if has_organizations else []
+    ) + client.erp_customers(strict=True)
     in_crm = {key(o.get("organization_name") or o.get("name")) for o in organizations}
     customers = frappe.get_all("HD Customer", fields=["name", "domain"])
     in_helpdesk = {key(c.name) for c in customers}
 
     for customer in customers:
         if key(customer.name) in in_crm:
+            continue
+        if not has_organizations:
+            result["only_in_helpdesk"].append(customer.name)
             continue
         try:
             client.create_organization(customer.name, customer.domain)
@@ -71,6 +87,13 @@ def record(result: dict):
             len(result["created_in_crm"]), len(result["created_in_helpdesk"])
         )
     )
+    if result["only_in_helpdesk"]:
+        text += " " + _(
+            "{0} only in helpdesk; add them as Customers on the CRM site: {1}"
+        ).format(
+            len(result["only_in_helpdesk"]),
+            ", ".join(result["only_in_helpdesk"][:10]),
+        )
     if result["failed"]:
         text += " " + _("Failed: {0}").format("; ".join(result["failed"])[:600])
     previous = frappe.db.get_single_value("HD CRM Settings", "last_sync_result") or ""

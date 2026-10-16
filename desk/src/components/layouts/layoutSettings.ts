@@ -19,6 +19,7 @@ import LucideHourglass from "~icons/lucide/hourglass";
 import LucideTrophy from "~icons/lucide/trophy";
 import LucideActivity from "~icons/lucide/activity";
 import LucideMessagesSquare from "~icons/lucide/messages-square";
+import LucideHandshake from "~icons/lucide/handshake";
 import { __ } from "@/translation";
 
 export const agentPortalSidebarOptions = [
@@ -101,6 +102,15 @@ export const agentPortalSidebarOptions = [
     section: "Workspace",
     countKey: "tickets",
     ticketWorkersOnly: true,
+  },
+  // sales leads, live from the CRM site, when Leads is on for them (docs/leads.md)
+  {
+    label: __("Leads"),
+    icon: LucideHandshake,
+    to: "Leads",
+    tone: "teal",
+    section: "Workspace",
+    leadsOnly: true,
   },
   {
     label: __("Projects"),
