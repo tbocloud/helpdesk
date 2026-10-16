@@ -288,7 +288,10 @@ class TestCRMClientRoles(FrappeTestCase):
         )
 
     def test_a_role_is_added_as_one_has_role_row(self):
-        with patch.object(self.client, "request", return_value={}) as request:
+        saved = {
+            "message": {"name": "bde@erp.example", "roles": [{"role": "Sales User"}]}
+        }
+        with patch.object(self.client, "request", return_value=saved) as request:
             self.client.add_role("bde@erp.example", "Sales User")
 
         method, path = request.call_args.args
@@ -303,3 +306,13 @@ class TestCRMClientRoles(FrappeTestCase):
                 "role": "Sales User",
             },
         )
+
+    def test_a_role_a_role_profile_drops_is_a_failure(self):
+        from helpdesk.integrations.crm.client import CRMError
+
+        saved = {
+            "message": {"name": "bde@erp.example", "roles": [{"role": "Employee"}]}
+        }
+        with patch.object(self.client, "request", return_value=saved):
+            with self.assertRaises(CRMError):
+                self.client.add_role("bde@erp.example", "Sales User")

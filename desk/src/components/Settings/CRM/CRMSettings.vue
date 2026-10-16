@@ -490,6 +490,18 @@
               </span>
               <Button :label="__('Try again')" @click="teams.reload()" />
             </div>
+            <div
+              v-else-if="teams.loading && !teams.data"
+              class="flex flex-col gap-2"
+              aria-busy="true"
+              :aria-label="__('Loading')"
+            >
+              <div
+                v-for="i in 3"
+                :key="i"
+                class="h-5 w-48 max-w-full animate-pulse rounded bg-surface-gray-2"
+              />
+            </div>
             <ul v-else role="list" class="flex flex-col gap-1.5">
               <li v-for="team in teamNames" :key="team">
                 <label

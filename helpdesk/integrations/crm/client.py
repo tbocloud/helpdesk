@@ -236,8 +236,9 @@ class CRMClient:
     def add_role(self, email: str, role: str):
         """Give an existing user an ERPNext sales role on the CRM site. Added as one
         Has Role row through frappe.client.insert, which appends it to the User and
-        saves it, so the user's other roles stay."""
-        self.request(
+        saves it, so the user's other roles stay. A Role Profile on the User puts its
+        own roles back on save, so the saved User is checked for the role."""
+        data = self.request(
             "POST",
             "/api/method/frappe.client.insert",
             json={
@@ -250,6 +251,13 @@ class CRMClient:
                 }
             },
         )
+        user = (data or {}).get("message") or {}
+        if role not in {row.get("role") for row in user.get("roles") or []}:
+            raise CRMError(
+                _(
+                    "The CRM site didn't keep the {0} role; the user's Role Profile may leave it out."
+                ).format(role)
+            )
 
     # --- ERPNext on the CRM site, for invoicing (docs/timesheet-invoicing.md) ---
 

@@ -31,7 +31,9 @@ Only what's missing is created; existing accounts keep their roles and details.
   - disabled on the CRM site → enable it;
   - no sales role (Sales User or Sales Manager; System Manager alone isn't enough, since
     Leads act as the person there) → give the ERPNext sales role from settings (Sales User or Sales Manager) on their User, as one Has Role row through
-    `frappe.client.insert` (`CRMClient.add_role`), so their other roles stay.
+    `frappe.client.insert` (`CRMClient.add_role`), so their other roles stay. A Role
+    Profile on that User that leaves the role out puts its own roles back; that is reported
+    as a failure for that person, not as done.
 - **CRM → helpdesk** (*Add CRM users missing in helpdesk, as agents*): enabled desk users
   with Sales User or Sales Manager on the CRM site (read from User and its roles,
   `CRMClient.crm_users`) without a helpdesk account get a User and an active HD Agent
