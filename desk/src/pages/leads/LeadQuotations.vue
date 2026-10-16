@@ -29,7 +29,7 @@
             {{ dayjs(q.transaction_date).format("D MMM YYYY") }}
           </span>
         </div>
-        <TaskyBadge v-if="q.status" :label="q.status" />
+        <TaskyBadge v-if="q.tbo_quote_status" :label="q.tbo_quote_status" />
         <span
           v-if="q.grand_total !== undefined && q.grand_total !== null"
           class="font-mono text-sm tabular-nums text-ink-gray-9"

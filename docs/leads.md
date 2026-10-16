@@ -52,9 +52,12 @@ user exists there with a sales role, applies what they may see, and records writ
   An update sends only the fields that changed; an empty string clears a field.
 - `allowed_stages` may be stage names or stage objects; the hub offers only those (minus the
   current stage).
-- Timeline entries are read as `{name, type, note or content, from_stage, to_stage, owner,
-  owner_name, creation}`; a `to_stage` makes it a stage move.
-- Quotations are read as `{name, transaction_date, status, grand_total, currency}`.
+- Timeline entries are TBO Smart's `{kind, at, who, who_name, text, ref}` (kind: note, call,
+  activity, meeting, stage, quotation), newest first; each kind has its own icon and a screen
+  reader label, and `text` is shown as sent (a stage move reads "Contacted → Proposal Sent").
+- Quotations are read as `{name, transaction_date, tbo_quote_status, grand_total, currency}`.
+- `next_follow_up` on create or update schedules a Sales follow-up for the lead owner on the
+  ERP site (tbo_smart#25); clearing it adds nothing and doesn't close the open one.
 - Stage colours from the ERP site are not used, to keep the hub's one-accent rule: a stage
   whose `type` is `Won` is green, `Lost` red, every other stage gray, always with its label.
 
