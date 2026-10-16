@@ -1,0 +1,112 @@
+{
+ "actions": [],
+ "creation": "2026-10-16 12:00:00.000000",
+ "description": "One stretch of a task's timer, from Start to Pause (or to leaving In progress, a hold or completion), on one day: a stretch past midnight is split. The Complete task dialog fills in hours per day from these, so each day's work lands on its own date in the timesheet.",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "task",
+  "user",
+  "column_break_1",
+  "start",
+  "end",
+  "hours",
+  "section_break_1",
+  "logged",
+  "timesheet"
+ ],
+ "fields": [
+  {
+   "fieldname": "task",
+   "fieldtype": "Link",
+   "label": "Task",
+   "options": "Task",
+   "reqd": 1,
+   "in_list_view": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "label": "User",
+   "options": "User",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "start",
+   "fieldtype": "Datetime",
+   "label": "Start",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "end",
+   "fieldtype": "Datetime",
+   "label": "End",
+   "reqd": 1
+  },
+  {
+   "fieldname": "hours",
+   "fieldtype": "Float",
+   "label": "Hours",
+   "precision": "2",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "section_break_1",
+   "fieldtype": "Section Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "logged",
+   "fieldtype": "Check",
+   "label": "Logged",
+   "description": "In a timesheet: the task was completed with these hours, so the next completion doesn't count them again."
+  },
+  {
+   "fieldname": "timesheet",
+   "fieldtype": "Link",
+   "label": "Timesheet",
+   "options": "Timesheet"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-16 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Helpdesk",
+ "name": "HD Task Time Session",
+ "naming_rule": "Random",
+ "autoname": "hash",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Agent Manager"
+  }
+ ],
+ "sort_field": "start",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0
+}

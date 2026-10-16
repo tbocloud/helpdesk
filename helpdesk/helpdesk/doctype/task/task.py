@@ -8,6 +8,7 @@ from frappe.query_builder.functions import Coalesce
 from frappe.utils import add_days, formatdate, get_datetime, getdate, now, nowdate
 
 from helpdesk.automation import acting_user
+from helpdesk.tasky.time_sessions import record_session
 
 WAITING_ON_TASK = "Waiting on Task"
 ON_HOLD = "On Hold"
@@ -500,6 +501,7 @@ class Task(Document):
         self.hold_by = frappe.session.user
         self.hold_previous_status = before.status if before else "Open"
         if self.get("custom_timer_start"):
+            record_session(self.name, self.custom_timer_start)
             hours = (
                 get_datetime(now()) - get_datetime(self.custom_timer_start)
             ).total_seconds() / 3600
