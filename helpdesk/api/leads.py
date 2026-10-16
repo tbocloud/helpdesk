@@ -4,6 +4,7 @@ site decides what each person may see and do, and the API key never leaves the h
 
 import frappe
 from frappe import _
+from frappe.utils import cint
 
 from helpdesk.integrations.crm.leads import call, require_leads
 
@@ -25,8 +26,8 @@ def list_leads(
     owner: str | None = None,
     segment: str | None = None,
     view: str = "all",
-    start: int = 0,
-    page_length: int = 20,
+    start: int | str = 0,
+    page_length: int | str = 20,
 ) -> dict:
     require_leads()
     if view not in VIEWS:
@@ -38,8 +39,9 @@ def list_leads(
         owner=owner or None,
         segment=segment or None,
         view=view,
-        start=max(int(start or 0), 0),
-        page_length=min(max(int(page_length or 20), 1), MAX_PAGE),
+        # cint: a malformed number is 0, never a server error
+        start=max(cint(start), 0),
+        page_length=min(max(cint(page_length) or 20, 1), MAX_PAGE),
     )
     return result or {"rows": [], "total": 0}
 

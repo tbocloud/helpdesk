@@ -65,6 +65,12 @@ class TestLeads(FrappeTestCase):
         self.assertEqual((params["start"], params["page_length"]), (0, 100))
         self.assertTrue(get_user()["can_use_leads"])
 
+    def test_malformed_paging_falls_back_to_the_first_page(self):
+        self.as_bde()
+        leads_api.list_leads(start="abc", page_length="")
+        ((_method, _post, params),) = self.crm.lead_calls
+        self.assertEqual((params["start"], params["page_length"]), (0, 20))
+
     def test_an_unknown_view_is_refused(self):
         self.as_bde()
         with self.assertRaises(frappe.ValidationError):

@@ -284,7 +284,7 @@ import TaskyBadge from "@/components/TaskyBadge.vue";
 import TaskyState from "@/components/TaskyState.vue";
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
-import { refDebounced } from "@vueuse/core";
+import { watchDebounced } from "@vueuse/core";
 import {
   Button,
   createResource,
@@ -330,20 +330,29 @@ function queryValue(key: string) {
   return typeof value === "string" ? value : "";
 }
 
+function queryView(): LeadView {
+  const value = queryValue("view");
+  return LEAD_VIEWS.some((v) => v.value === value)
+    ? (value as LeadView)
+    : "all";
+}
+
+function queryPage() {
+  return Math.max(Math.floor(Number(queryValue("page"))) || 1, 1);
+}
+
 // the view, search, filters and page live in the URL, so a view can be shared
-const view = ref<LeadView>(
-  LEAD_VIEWS.some((v) => v.value === route.query.view)
-    ? (route.query.view as LeadView)
-    : "all"
-);
+const view = ref<LeadView>(queryView());
 const search = ref(queryValue("q"));
-const debouncedSearch = refDebounced(search, 300);
+// what the list is searched for: the box, once typing pauses
+const appliedSearch = ref(search.value);
+watchDebounced(search, (q) => (appliedSearch.value = q), { debounce: 300 });
 const filters = reactive({
   stage: queryValue("stage"),
   owner: queryValue("owner"),
   segment: queryValue("segment"),
 });
-const page = ref(Math.max(Number(queryValue("page")) || 1, 1));
+const page = ref(queryPage());
 
 const hasFilters = computed(
   () =>
@@ -381,7 +390,7 @@ const ownerOptions = computed(() => [
 const leads = createResource({
   url: "helpdesk.api.leads.list_leads",
   makeParams: () => ({
-    search: debouncedSearch.value.trim() || null,
+    search: appliedSearch.value.trim() || null,
     stage: filters.stage || null,
     owner: filters.owner || null,
     segment: filters.segment || null,
@@ -410,12 +419,49 @@ watch(data, (d) => {
   if (d && page.value > pageCount.value) page.value = pageCount.value;
 });
 
+// the URL changed from outside (the sidebar, back and forward): take its state,
+// page included, without the reset to page 1 below
+let fromRoute = false;
+watch(
+  () => route.query,
+  () => {
+    if (route.name !== "Leads") return;
+    const wanted = {
+      view: queryView(),
+      q: queryValue("q"),
+      stage: queryValue("stage"),
+      owner: queryValue("owner"),
+      segment: queryValue("segment"),
+      page: queryPage(),
+    };
+    if (
+      view.value === wanted.view &&
+      appliedSearch.value.trim() === wanted.q.trim() &&
+      filters.stage === wanted.stage &&
+      filters.owner === wanted.owner &&
+      filters.segment === wanted.segment &&
+      page.value === wanted.page
+    )
+      return;
+    fromRoute = true;
+    view.value = wanted.view;
+    search.value = appliedSearch.value = wanted.q;
+    Object.assign(filters, {
+      stage: wanted.stage,
+      owner: wanted.owner,
+      segment: wanted.segment,
+    });
+    page.value = wanted.page;
+  }
+);
+
 // a new view, search or filter starts again at page 1
-watch([view, debouncedSearch, () => ({ ...filters })], () => {
-  page.value = 1;
+watch([view, appliedSearch, () => ({ ...filters })], () => {
+  if (!fromRoute) page.value = 1;
 });
 
-watch([view, debouncedSearch, () => ({ ...filters }), page], ([v, q, f, p]) => {
+watch([view, appliedSearch, () => ({ ...filters }), page], ([v, q, f, p]) => {
+  fromRoute = false;
   router.replace({
     query: {
       ...route.query,
