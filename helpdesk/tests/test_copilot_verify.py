@@ -38,8 +38,13 @@ class TestWhatTheCheckReads(FrappeTestCase):
                     {"ref": "Version/12"},
                     {"ref": "sales invoice/lower-case"},
                     "a note, not a reference",
-                    {"ref": "Item/ITEM-1"},
-                    {"ref": "Customer/C-1"},
+                    {
+                        "type": "customization",
+                        "ref": "Quotation Item/tier_discount_percent",
+                    },
+                    {"type": "code", "ref": "Sales Invoice/not-a-record"},
+                    {"type": "data", "ref": "Item/ITEM-1"},
+                    {"type": "setting", "ref": "Customer/C-1"},
                     {"ref": "Supplier/S-1"},
                 ]
             )

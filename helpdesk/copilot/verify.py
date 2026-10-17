@@ -55,14 +55,22 @@ def signature(entry: dict) -> str:
     return f"{entry.get('app') or '?'} | {entry.get('method') or '?'} | {lines[-1][:200] if lines else ''}"
 
 
+# Evidence that names a record; a customization ("Quotation Item/tier_discount_percent")
+# names a field, and code, commits and the ticket name no record either
+RECORD_EVIDENCE = {"data", "setting", ""}
+
+
 def named_documents(run) -> list[tuple[str, str]]:
     """Documents the diagnosis names ("Sales Invoice/ACC-SINV-…"), to open again after the deploy."""
     found = []
     for item in frappe.parse_json(run.evidence or "[]") or []:
-        ref = str((item or {}).get("ref") or "") if isinstance(item, dict) else ""
+        if not isinstance(item, dict):
+            continue
+        ref = str(item.get("ref") or "")
         doctype, _sep, name = ref.partition("/")
         if (
-            name
+            str(item.get("type") or "").lower() in RECORD_EVIDENCE
+            and name
             and doctype[:1].isupper()
             and doctype not in ("Error Log", "Version")
             and not any(mark in ref for mark in (".py", ".js", ".json", ":"))
