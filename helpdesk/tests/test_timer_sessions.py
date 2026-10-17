@@ -101,7 +101,9 @@ class TestTimerSessions(FrappeTestCase):
         self.as_dev(lambda: tasky.stop_timer(self.task))
 
         rows = self.sessions()
-        self.assertEqual([getdate(r.started_at) for r in rows], [self.yesterday, self.today])
+        self.assertEqual(
+            [getdate(r.started_at) for r in rows], [self.yesterday, self.today]
+        )
         self.assertEqual(rows[0].hours, 2.0)
         self.assertEqual({r.user for r in rows}, {DEV[0]})
 

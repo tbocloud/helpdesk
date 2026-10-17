@@ -658,7 +658,7 @@ logged it all as one time log ending now, so yesterday's work landed on today.
 - **One timer per task:** the timer lives on the task (`custom_timer_start`,
   `custom_timer_elapsed`), not on a person, as it did before sessions were kept. So completing
   logs the task's tracked time, whoever started or paused it, to the completer's timesheets; a
-  session's `user` only records who stopped that stretch. Splitting a shared task's hours between
+  session's `user` only records who stopped that stretch (for a GitHub move, which runs as Administrator, the task's only assignee, else the automation user). Splitting a shared task's hours between
   its assignees would need a timer per person, which this doesn't add.
 - Hours land on their own day everywhere timesheets are read: Timesheets, the Scoreboard, the
   customer report and support hours.
