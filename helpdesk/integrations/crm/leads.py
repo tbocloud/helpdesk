@@ -99,7 +99,7 @@ def call(method: str, post: bool = False, **params):
             f"{API}.{method}", post=post, acting_user=frappe.session.user, **params
         )
     except CRMError as e:
-        fail(friendly_error(e, client.base))
+        fail(friendly_error(e, client))
 
 
 def fail(error: LeadsError):
@@ -108,7 +108,8 @@ def fail(error: LeadsError):
     frappe.throw(str(error), exc=type(error))
 
 
-def friendly_error(error: CRMError, site_url: str) -> LeadsError:
+def friendly_error(error: CRMError, client) -> LeadsError:
+    site_url = client.base
     site = urlparse(site_url).netloc or site_url
     detail = error.detail or ""
     if error.status is None:
@@ -128,8 +129,8 @@ def friendly_error(error: CRMError, site_url: str) -> LeadsError:
     if error.status == 403 and "integration user" in detail.casefold():
         return LeadsUnavailableError(
             _(
-                "The hub's API user on {0} isn't the site's integration user: it needs the role in TBO Smart Settings → Hub integration role there (blank: Hub Integration). Ask an admin to check that field and add the role it names to the API user on {0}."
-            ).format(site)
+                "The hub's API user{0} on {1} isn't the site's integration user: it needs the role in TBO Smart Settings → Hub integration role there (blank: Hub Integration). Ask an admin to add the role that field names to that user."
+            ).format(api_user(client), site)
         )
     if error.status == 403:
         return LeadsError(
@@ -155,3 +156,13 @@ def friendly_error(error: CRMError, site_url: str) -> LeadsError:
 def not_deployed(detail: str) -> bool:
     text = detail.casefold()
     return any(hint.casefold() in text for hint in NOT_DEPLOYED_HINTS)
+
+
+def api_user(client) -> str:
+    """The user the hub's API key belongs to, as " (email)": which user an admin has to
+    give the integration role to. Empty when the site can't say."""
+    try:
+        email = client.logged_user()
+    except CRMError:
+        return ""
+    return f" ({email})" if email else ""
