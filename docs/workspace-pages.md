@@ -617,6 +617,17 @@ touches another's: there is no one-running-task rule. Before this, Pause only ch
 board's local state, so the server timer kept running and the next load (moving or editing
 another task, or coming back to the board) showed the paused task running again.
 
+### Dropping a card on In review or Completed
+
+Done work always goes through the Complete dialog, so the hours and notes reach the timesheet
+(`move_task` refuses Completed and Pending Review). Dropping a card on **Completed** opens it as
+**Complete task** (`complete_task`); on a project with review before done the controller still
+routes it to Pending Review, unless a lead or coordinator completes it. Dropping on **In review**
+opens it as **Send for review** (`complete_task(..., for_review=1)`): the task stays in
+Pending Review on any project, not only those with review before done, and the lead or managers
+get the "Ready for review" notice (`flags.review_requested`). A lead dropping a reviewed card on
+Completed approves it (`approve_task`).
+
 ### Telling the assigner a task is done
 
 When a task becomes **Completed**, whoever assigned it (the same person the "Assigned by" label

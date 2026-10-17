@@ -209,12 +209,16 @@ def add_assigners(tasks: list[dict]) -> list[dict]:
 
 @frappe.whitelist()
 def complete_task(
-    task: str, hours_worked: float | str | None = None, notes: str | None = None
+    task: str,
+    hours_worked: float | str | None = None,
+    notes: str | None = None,
+    for_review: bool | str | None = False,
 ) -> dict:
     """Complete a task and log the time spent on it to the user's timesheet.
 
     Hours and a note are required. The timesheet is part of the completion: if
-    it can't be saved, the task stays as it was.
+    it can't be saved, the task stays as it was. `for_review` sends it to the
+    lead for review on any project, not only those that ask for a review.
     """
     doc = frappe.get_doc("Task", str(task))
     doc.check_permission("write")
@@ -225,7 +229,7 @@ def complete_task(
 
     frappe.db.savepoint("complete_task")
     try:
-        _mark_completed(doc, hours)
+        _mark_completed(doc, hours, frappe.utils.sbool(for_review))
         timesheet = _log_completion_time(doc, hours, notes)
     except Exception:
         # undo the status change too, so the task never completes without its time
@@ -263,14 +267,19 @@ def _completion_notes(value: str | None) -> str:
     return notes
 
 
-def _mark_completed(doc, hours: float):
-    """Set Completed (the controller may route it to review) and stop the timer.
+def _mark_completed(doc, hours: float, for_review: bool = False):
+    """Set Completed (the controller may route it to review), or Pending Review
+    when asked, and stop the timer.
 
     Pausing the timer already added its time to actual hours, and the hours
     logged now cover that time, so it is swapped out rather than counted twice.
     """
     counted = frappe.utils.flt(doc.custom_timer_elapsed)
-    doc.status = "Completed"
+    if for_review:
+        doc.status = PENDING_REVIEW_STATUS
+        doc.flags.review_requested = True
+    else:
+        doc.status = "Completed"
     doc.custom_actual_hours = (
         max(frappe.utils.flt(doc.custom_actual_hours) - counted, 0) + hours
     )

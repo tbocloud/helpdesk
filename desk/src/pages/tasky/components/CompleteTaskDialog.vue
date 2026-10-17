@@ -1,7 +1,7 @@
 <template>
   <Dialog
     :open="!!task"
-    :title="__('Complete task')"
+    :title="forReview ? __('Send for review') : __('Complete task')"
     :message="task?.subject"
     size="md"
     @update:open="onOpenChange"
@@ -65,7 +65,7 @@
           variant="solid"
           type="submit"
           :form="formId"
-          :label="__('Complete task')"
+          :label="forReview ? __('Send for review') : __('Complete task')"
           :loading="completeTask.loading"
           :disabled="!isValid"
         >
@@ -122,6 +122,8 @@ const props = defineProps<{
    * time is worked out from the task's timer fields.
    */
   trackedHours?: number | null;
+  /** Send it to the lead for review even on a project that doesn't ask for one. */
+  forReview?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -253,6 +255,7 @@ function submit() {
     task: props.task.name,
     hours_worked: hoursValue.value,
     notes: notes.value.trim(),
+    for_review: props.forReview,
   });
 }
 </script>

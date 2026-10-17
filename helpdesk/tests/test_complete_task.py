@@ -133,6 +133,29 @@ class TestCompleteTask(FrappeTestCase):
         self.assertEqual(frappe.db.get_value("Task", self.task, "status"), "Completed")
         self.assertEqual(len(get_task_timesheets(self.task)), 1)
 
+    def test_sent_for_review_waits_for_the_lead_on_any_project(self):
+        # dropped on In review on a project that doesn't ask for reviews
+        result = self.complete(for_review=True)
+
+        self.assertEqual(result["status"], "Pending Review")
+        self.assertEqual(
+            frappe.db.get_value("Task", self.task, "status"), "Pending Review"
+        )
+        self.assertEqual(get_task_timesheets(self.task), [result["timesheet"]])
+        self.assertTrue(
+            frappe.db.exists(
+                "HD Notification",
+                {"user_to": LEAD[0], "reference_name": self.task},
+            )
+        )
+
+        run_as_user(LEAD[0], lambda: tasky.approve_task(task=self.task))
+        self.assertEqual(frappe.db.get_value("Task", self.task, "status"), "Completed")
+
+    def test_completing_without_review_still_completes(self):
+        result = self.complete(for_review="0")
+        self.assertEqual(result["status"], "Completed")
+
     def test_one_click_approve_offers_the_rating_only_to_a_rater(self):
         frappe.db.set_value("Task", self.task, "status", "Pending Review")
         result = run_as_user(LEAD[0], lambda: tasky.approve_task(task=self.task))
