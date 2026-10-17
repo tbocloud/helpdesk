@@ -42,6 +42,7 @@ from frappe.utils import (
 
 from helpdesk import merge_bot
 from helpdesk.automation import acting_user, credit
+from helpdesk.tasky.time_sessions import record_session
 from helpdesk.work_reminders import notify_users
 
 SETTINGS = "HD GitHub Settings"
@@ -245,6 +246,8 @@ class PullRequestLink:
         self.is_new = is_new
         self.before_state = None if is_new else row.state
         self._task = None
+        # (start, end) of a timer stop_timer folded in, until move_task saves it
+        self._stopped = None
 
     @property
     def task(self):
@@ -288,6 +291,11 @@ class PullRequestLink:
             task.status = status
             task.update(values)
             task.save(ignore_permissions=True)
+            # the timer's stretch is saved only once the move went through: a refused move
+            # reloads the task with its timer still running, which would count it twice
+            if self._stopped:
+                record_session(task.name, *self._stopped, user=self.timer_owner())
+                self._stopped = None
             return True
         except frappe.ValidationError as e:
             frappe.db.rollback(save_point="github_task_move")
@@ -300,15 +308,22 @@ class PullRequestLink:
             )
             return False
 
+    def timer_owner(self) -> str:
+        """Whose stretch it was: the webhook runs as Administrator, so the session goes on the
+        task's person (its only assignee), else on the automation user."""
+        assignees = self.task.assignees()
+        return assignees[0] if len(assignees) == 1 else acting_user()
+
     def stop_timer(self):
         """A running timer is folded into the actual hours before the task leaves Working."""
         task = self.task
         start = task.get("custom_timer_start")
         if not start:
             return
-        hours = round(
-            (now_datetime() - get_datetime(start)).total_seconds() / 3600, 2
-        )
+        end = now_datetime()
+        # saved by move_task once the move goes through
+        self._stopped = (start, end)
+        hours = round((end - get_datetime(start)).total_seconds() / 3600, 2)
         task.custom_actual_hours = (task.get("custom_actual_hours") or 0) + hours
         task.custom_timer_elapsed = (task.get("custom_timer_elapsed") or 0) + hours
         task.custom_timer_start = None

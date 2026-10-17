@@ -24,6 +24,12 @@ from helpdesk.tasky.permissions import (
     is_tasky_admin,
     sees_all_tasks,
 )
+from helpdesk.tasky.time_sessions import (
+    completion_days,
+    first_start_on,
+    mark_logged,
+    record_session,
+)
 from helpdesk.utils import (
     add_assignment,
     assigned_to_filter,
@@ -42,6 +48,8 @@ TASK_HOLD_FIELDS = ["hold_reason", "hold_note", "hold_since", "hold_by"]
 RECENT_PROJECTS = 8
 # the most one completion may log; longer work belongs on a manual timesheet
 MAX_HOURS_PER_COMPLETION = 24
+# a day logged without a timer stretch to say when it began starts here
+DEFAULT_DAY_START = "09:00:00"
 # a template task goes to a project member with this role (round robin), else to anyone
 CATEGORY_TO_ROLE = {
     "Functional": "Functional Consultant",
@@ -213,32 +221,44 @@ def complete_task(
     hours_worked: float | str | None = None,
     notes: str | None = None,
     for_review: bool | str | None = False,
+    days: str | list | None = None,
 ) -> dict:
     """Complete a task and log the time spent on it to the user's timesheet.
 
-    Hours and a note are required. The timesheet is part of the completion: if
-    it can't be saved, the task stays as it was. `for_review` sends it to the
-    lead for review on any project, not only those that ask for a review.
+    Hours and a note are required. `days` ([{date, hours}]) puts each day's hours on
+    its own date; without it, `hours_worked` goes on today. The timesheet is part of
+    the completion: if it can't be saved, the task stays as it was. `for_review` sends
+    it to the lead for review on any project, not only those that ask for a review.
     """
     doc = frappe.get_doc("Task", str(task))
     doc.check_permission("write")
     if doc.status == "Completed":
         frappe.throw(_("This task is already completed."))
-    hours = _completion_hours(hours_worked)
+    if days:
+        worked = _completion_days(doc, days)
+    else:
+        worked = [(frappe.utils.getdate(), _completion_hours(hours_worked))]
+    hours = round(sum(h for _day, h in worked), 2)
     notes = _completion_notes(notes)
 
     frappe.db.savepoint("complete_task")
     try:
         _mark_completed(doc, hours, frappe.utils.sbool(for_review))
-        timesheet = _log_completion_time(doc, hours, notes)
+        timesheets = _log_completion_time(doc, worked, notes)
     except Exception:
         # undo the status change too, so the task never completes without its time
         frappe.db.rollback(save_point="complete_task")
         raise
     return {
         **_format_task(_task_dict(doc)),
-        "timesheet": timesheet.name,
-        "timesheet_status": timesheet.status,
+        # one per day worked; the first (and the status: Draft if any couldn't be
+        # submitted) also as before, for the mobile app
+        "timesheets": [ts.name for ts in timesheets],
+        "timesheet": timesheets[0].name,
+        "timesheet_status": (
+            "Draft" if any(ts.status == "Draft" for ts in timesheets) else "Submitted"
+        ),
+        "draft_timesheets": [ts.name for ts in timesheets if ts.status == "Draft"],
         "hours_logged": hours,
     }
 
@@ -260,6 +280,65 @@ def _completion_hours(value: float | str | None) -> float:
     return round(hours, 2)
 
 
+@frappe.whitelist()
+def get_completion_days(task: str) -> dict:
+    """The hours to offer when completing the task: {today, days: [{date, hours, from_time,
+    long}]}, one per day its timer ran (helpdesk.tasky.time_sessions.completion_days)."""
+    doc = frappe.get_doc("Task", str(task))
+    doc.check_permission("read")
+    return completion_days(doc)
+
+
+def _completion_days(task_doc, value: str | list) -> list[tuple]:
+    """[(date, hours)] from the dialog's rows, earliest first: each day once, not in the
+    future, not before the task was created, at most a day's worth of hours."""
+    rows = frappe.parse_json(value) if isinstance(value, str) else value
+    if not isinstance(rows, list) or not all(isinstance(r, dict) for r in rows):
+        frappe.throw(_("Send the hours as a list of days, each with a date and hours."))
+    created = frappe.utils.getdate(task_doc.creation)
+    today = frappe.utils.getdate()
+    worked: dict = {}
+    for row in rows or []:
+        hours = frappe.utils.flt(row.get("hours"))
+        if not hours > 0:
+            continue
+        raw = str(row.get("date") or "").strip()
+        try:
+            # getdate("") would quietly mean today
+            day = frappe.utils.getdate(raw) if raw else None
+        except Exception:
+            day = None
+        if not day:
+            frappe.throw(_("Pick the date for each day's hours."))
+        label = frappe.utils.formatdate(day)
+        if day > today:
+            frappe.throw(
+                _("{0} hasn't come yet; log hours only for days you worked.").format(
+                    label
+                )
+            )
+        if day < created:
+            frappe.throw(
+                _("{0} is before this task was created ({1}).").format(
+                    label, frappe.utils.formatdate(created)
+                )
+            )
+        if day in worked:
+            frappe.throw(
+                _("{0} is listed twice. Put that day's hours in one row.").format(label)
+            )
+        if hours > MAX_HOURS_PER_COMPLETION:
+            frappe.throw(
+                _("{0}: a day has at most {1} hours.").format(
+                    label, MAX_HOURS_PER_COMPLETION
+                )
+            )
+        worked[day] = round(hours, 2)
+    if not worked:
+        frappe.throw(_("Enter the hours you worked on this task."))
+    return sorted(worked.items())
+
+
 def _completion_notes(value: str | None) -> str:
     notes = str(value or "").strip()
     if not notes:
@@ -275,6 +354,8 @@ def _mark_completed(doc, hours: float, for_review: bool = False):
     logged now cover that time, so it is swapped out rather than counted twice.
     """
     counted = frappe.utils.flt(doc.custom_timer_elapsed)
+    if doc.custom_timer_start:
+        record_session(doc.name, doc.custom_timer_start)
     if for_review:
         doc.status = PENDING_REVIEW_STATUS
         doc.flags.review_requested = True
@@ -288,14 +369,43 @@ def _mark_completed(doc, hours: float, for_review: bool = False):
     doc.save()
 
 
-def _log_completion_time(task_doc, hours: float, notes: str):
-    """Insert and submit the user's timesheet for the completed task.
+def _log_completion_time(task_doc, worked: list[tuple], notes: str) -> list:
+    """Insert and submit the user's timesheets for the completed task: one timesheet per day
+    worked ([(date, hours)]), so each shows only that day's hours.
 
-    An insert failure propagates. A submit failure leaves the timesheet as a
-    Draft (logged, and reported through its status) rather than losing the time.
+    A day starts when its timer first ran; today without a timer ends now (as before), and
+    another day without one starts at 09:00. An insert failure propagates. A submit
+    failure leaves that timesheet as a Draft (logged, and reported through its status)
+    rather than losing the time.
     """
+    timesheets = [
+        _log_day(task_doc, day, hours, notes, frappe.utils.getdate())
+        for day, hours in worked
+    ]
+    # a timer day taken out in the dialog is settled too, so it isn't offered again
+    mark_logged(task_doc.name, None)
+    return timesheets
+
+
+def _day_start(task: str, day, hours: float, today):
+    """When the day's time log starts: its timer's first start (09:00 for a day without a
+    timer; today without one ends now), moved earlier where needed so the log ends by now
+    (today) or midnight (another day), and never before the day began."""
+    now = frappe.utils.now_datetime()
+    day_begins = frappe.utils.get_datetime(f"{day} 00:00:00")
+    ends_by = now if day == today else frappe.utils.add_days(day_begins, 1)
+    start = first_start_on(task, day) or (
+        frappe.utils.add_to_date(now, hours=-hours)
+        if day == today
+        else frappe.utils.get_datetime(f"{day} {DEFAULT_DAY_START}")
+    )
+    latest = frappe.utils.add_to_date(ends_by, hours=-hours)
+    return max(min(start, latest), day_begins)
+
+
+def _log_day(task_doc, day, hours: float, notes: str, today):
     user = frappe.session.user
-    from_time = frappe.utils.add_to_date(frappe.utils.now_datetime(), hours=-hours)
+    from_time = _day_start(task_doc.name, day, hours, today)
     ts = frappe.get_doc(
         {
             "doctype": "Timesheet",
@@ -317,6 +427,7 @@ def _log_completion_time(task_doc, hours: float, notes: str):
     # that check is the permission decision, whatever their Timesheet role says.
     ts.flags.ignore_permissions = True
     ts.insert()
+    mark_logged(task_doc.name, ts.name, day)
 
     frappe.db.savepoint("complete_task_timesheet_submit")
     try:
@@ -2164,6 +2275,7 @@ def stop_timer(task: str):
     elapsed = _timer_hours(timer_start)
     actual = frappe.db.get_value("Task", task_id, "custom_actual_hours") or 0
     paused = frappe.db.get_value("Task", task_id, "custom_timer_elapsed") or 0
+    record_session(task_id, timer_start)
     frappe.db.set_value("Task", task_id, "custom_timer_start", None)
     frappe.db.set_value(
         "Task", task_id, "custom_actual_hours", actual + round(elapsed, 2)
@@ -2195,6 +2307,13 @@ def move_task(task: str, new_status: str):
     # Leaving Working: accumulate elapsed from running timer
     if old_status == "Working" and timer_start:
         elapsed_this_move = _timer_hours(timer_start)
+        # only Open and Pending Review bank the stretch for completion (below); cancelling
+        # drops it from what completion offers, as before, but it's kept for the record
+        record_session(
+            task_id,
+            timer_start,
+            settled=new_status not in ("Open", "Pending Review"),
+        )
         frappe.db.set_value("Task", task_id, "custom_timer_start", None)
         frappe.db.set_value(
             "Task", task_id, "custom_actual_hours", actual + round(elapsed_this_move, 2)

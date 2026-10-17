@@ -424,7 +424,7 @@ coordinator for its tasks); the app shows them only behind `manage_team` and an 
 | `get_task` | `task` | `Task` + `description` (HTML), `activity`, `pull_requests`, `quality` (below) | Anyone who may read the task (#94 visibility: members only their own, leads/coordinators/managers the project's). Fixture `get_task.json` |
 | `start_task` POST | `task` | `Task` detail | Starts an Open task (status Working, timer running) or resumes a paused timer. Write permission. Fixture `task_action.json` |
 | `pause_task` POST | `task` | `Task` detail | Banks the time; stays Working |
-| `complete_task` POST | `task`, `hours_worked` (>0, ≤24), `notes` (required), `for_review?` | `Task` detail | Logs a timesheet; a review project moves it to Pending Review, and `for_review` does so on any project |
+| `complete_task` POST | `task`, `hours_worked` (>0, ≤24), `notes` (required), `for_review?` | `Task` detail | Logs a timesheet; a review project moves it to Pending Review, and `for_review` does so on any project. (The web app can also send `days`, hours per day; see workspace-pages.md "Hours by day".) |
 | `hold_task` POST | `task`, `reason`, `note?` | `Task` detail | `reason` is one of the hub's: `Laptop / system issue`, `Leave`, `Waiting on customer`, `Waiting on another task`, `Other` |
 | `resume_task` POST | `task`, `extend_due_date` (default true) | `Task` detail | The days on hold are added to the due date |
 | `hand_over_task` POST | `task`, `teammate`, `reason` (required) | `{task, handed_to}` | The assignee (or the project's lead/coordinator). The task may leave the user's view, so no detail comes back. Fixture `hand_over_task.json` |
