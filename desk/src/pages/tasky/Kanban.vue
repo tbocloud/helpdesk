@@ -491,6 +491,7 @@
     <CompleteTaskDialog
       v-model:task="completingTask"
       :tracked-hours="completingTrackedHours"
+      :for-review="completingForReview"
       @completed="onCompleted"
     />
   </div>
@@ -759,6 +760,8 @@ function phasesOf(project?: string) {
 }
 
 const completingTask = ref<Task | null>(null);
+// dropped on In review, so it waits there for the lead whatever the project's setting
+const completingForReview = ref(false);
 // what the card's timer shows, so the dialog offers the same hours
 const completingTrackedHours = computed(() => {
   const timer = completingTask.value && timers.value[completingTask.value.name];
@@ -944,17 +947,21 @@ function changeStatus(task: Task, newStatus: string) {
   }
 
   // completing records the time worked, so it happens once the dialog is submitted
-  // (that also sends it to review when the project wants one); a lead dropping a
+  // (Completed also goes to review when the project wants one); a lead dropping a
   // reviewed task on Completed signs it off instead
   if (newStatus === "Pending Review") {
     dropTarget.value = null;
+    completingForReview.value = true;
     completingTask.value = task;
     return;
   }
   if (newStatus === "Completed") {
     dropTarget.value = null;
     if (isPendingReview(task) && canCoordinate.value) approve(task);
-    else completingTask.value = task;
+    else {
+      completingForReview.value = false;
+      completingTask.value = task;
+    }
     return;
   }
 
