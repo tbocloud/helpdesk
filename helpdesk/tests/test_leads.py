@@ -201,6 +201,27 @@ class TestLeads(FrappeTestCase):
                 leads_api.get_options()
         self.assertIn("Settings → CRM", str(caught.exception))
 
+    def assert_integration_role_error(self):
+        self.crm.lead_error = CRMError(
+            "x", 403, "Only the hub's integration user may act for someone else."
+        )
+        self.as_bde()
+        frappe.local.message_log = []
+        with self.assertRaises(LeadsUnavailableError) as caught:
+            leads_api.get_lead("CRM-LEAD-0001")
+        return str(caught.exception)
+
+    def test_the_integration_role_error_names_the_api_user_to_fix(self):
+        message = self.assert_integration_role_error()
+        self.assertIn("api@crm.example", message)
+
+    def test_the_integration_role_error_without_the_api_users_name(self):
+        self.as_bde()
+        with patch.object(self.crm, "logged_user", side_effect=CRMError("no")):
+            message = self.assert_integration_role_error()
+        self.assertNotIn("(None)", message)
+        self.assertIn("Hub integration role", message)
+
 
 class TestCRMCallErrors(FrappeTestCase):
     """CRMClient.call keeps the ERP site's message apart from its exception text."""
