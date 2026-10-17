@@ -77,6 +77,7 @@ browser.
 | No connection saved | Leads aren't connected yet. Ask an admin to set up Settings → CRM. |
 | ERP site unreachable or timed out | Couldn't reach the ERP site (host). Try again in a minute. |
 | 401 | The ERP site refused the hub's API key. Ask an admin to check Settings → CRM. |
+| 403 saying only the hub's integration user may act for someone else | The hub's API user on (host) needs the Hub Integration role (TBO Smart Settings → Hub integration role). Ask an admin to add it to the user in Settings → CRM. |
 | 403, 404 or 417 saying the method isn't there or isn't whitelisted | Leads need the latest TBO Smart on the ERP site (host). |
 | Any other 403 | You don't have a sales account on the ERP site yet. Ask an admin to give (email) the Sales User role on (host). |
 | Any other 404 | That lead isn't on the ERP site any more, or you can't see it. |
