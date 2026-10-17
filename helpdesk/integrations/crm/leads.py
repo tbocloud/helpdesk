@@ -128,7 +128,7 @@ def friendly_error(error: CRMError, site_url: str) -> LeadsError:
     if error.status == 403 and "integration user" in detail.casefold():
         return LeadsUnavailableError(
             _(
-                "The hub's API user on {0} needs the Hub Integration role (TBO Smart Settings → Hub integration role). Ask an admin to add it to the user in Settings → CRM."
+                "The hub's API user on {0} isn't the site's integration user: it needs the role in TBO Smart Settings → Hub integration role there (blank: Hub Integration). Ask an admin to check that field and add the role it names to the API user on {0}."
             ).format(site)
         )
     if error.status == 403:
