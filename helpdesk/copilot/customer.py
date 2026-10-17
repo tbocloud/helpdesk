@@ -351,7 +351,7 @@ def on_communication_insert(doc, method=None):
         return
     try:
         if doc.sent_or_received == "Sent":
-            on_agent_reply(run)
+            on_agent_reply(run, doc.content or "")
         elif doc.sent_or_received == "Received":
             on_customer_message(run)
     except Exception:
@@ -361,19 +361,55 @@ def on_communication_insert(doc, method=None):
         )
 
 
-def on_agent_reply(run):
+def on_agent_reply(run, sent: str = ""):
     if run.state != "Explaining":
         return
     waiting = run.root_cause_category == "unclear"
-    run = runs.transition(run, "Answered", runs.SYSTEM, note="the agent sent the reply")
+    edited = explanation_edited(run, sent)
+    run = runs.transition(
+        run,
+        "Answered",
+        runs.SYSTEM,
+        note="the agent sent the reply",
+        **({"explanation_edited": edited} if edited is not None else {}),
+    )
     if waiting:
         send_stage(run, "Waiting for you")
+    elif run.root_cause_category == "customization_request":
+        send_stage(
+            run, "With our team"
+        )  # a person estimates the work; the estimate flow follows
     else:
         send_stage(
             run,
             "Resolved",
             {"resolution": RESOLUTION_TEXT.get(run.root_cause_category, "")},
         )
+
+
+def explanation_edited(run, sent: str) -> float | None:
+    """How much the agent changed Copilot's explanation, 0 (as drafted) to 100 (rewritten); None when unknown."""
+    import html
+    import re
+    from difflib import SequenceMatcher
+
+    from helpdesk.copilot import router
+
+    if not sent:
+        return None
+    investigation = frappe.parse_json(run.investigation or "{}") or {}
+    draft = router.explanation_text(investigation, run.root_cause_category or "")
+
+    def plain(text: str) -> str:
+        # tags become spaces, so paragraphs stay apart words
+        return " ".join(
+            html.unescape(re.sub(r"<[^>]+>", " ", text or "")).split()
+        ).lower()
+
+    if not plain(draft):
+        return None
+    ratio = SequenceMatcher(None, plain(draft), plain(sent), autojunk=False).ratio()
+    return round((1 - ratio) * 100, 1)
 
 
 def on_customer_message(run):

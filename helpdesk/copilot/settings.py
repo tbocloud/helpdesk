@@ -42,6 +42,31 @@ def is_shadow() -> bool:
     return bool(get_settings().shadow_mode)
 
 
+# a customer's Copilot level (HD Customer), each one allowing what the ones before it do
+DIAGNOSE, EXPLAIN, FIX, CORRECT = LEVELS = (
+    "Diagnose only",
+    "Explain",
+    "Fix",
+    "Correct",
+)
+
+
+def level_of(customer: str | None) -> str:
+    """How far Copilot may go for the customer: their level, else the default; shadow mode
+    holds everyone at Diagnose only, and so does a ticket with no customer."""
+    if is_shadow() or not customer:
+        return DIAGNOSE
+    level = frappe.db.get_value("HD Customer", customer, "custom_copilot_level")
+    if level not in LEVELS:
+        level = get_settings().get("default_copilot_level")
+    return level if level in LEVELS else DIAGNOSE
+
+
+def allows(customer: str | None, level: str) -> bool:
+    """Whether the customer's level reaches `level`."""
+    return LEVELS.index(level_of(customer)) >= LEVELS.index(level)
+
+
 def template_for(stage: str) -> str:
     """The message text for a stage: the configured row, else the built-in text."""
     if stage not in STAGES:

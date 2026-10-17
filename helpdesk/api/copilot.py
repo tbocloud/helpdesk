@@ -92,7 +92,13 @@ def get_run(ticket: str | int) -> dict:
         # the customer asked TBO to correct their own entries, after Copilot's explanation
         "can_prepare_correction": run.root_cause_category == "customer_mistake"
         and run.get("kind") != "revert"
-        and runs.active_run(run.ticket) is None,
+        and runs.active_run(run.ticket) is None
+        and copilot_settings.allows(run.customer, copilot_settings.CORRECT),
+        # a feature request: the agent starts the estimate flow from Copilot's proposal
+        "can_start_estimate": run.root_cause_category == "customization_request"
+        and frappe.db.get_value("HD Ticket", run.ticket, "custom_estimate_status")
+        in (None, ""),
+        "level": copilot_settings.level_of(run.customer),
         "shadow": bool(run.shadow),
         "base_app": run.base_app,
         "base_commit": run.base_commit,
@@ -225,6 +231,7 @@ def _fix_card(run) -> dict | None:
             "max_attempts": attempts,
         },
         "can_request_fix": run.state == "Preparing Fix"
+        and copilot_settings.allows(run.customer, copilot_settings.FIX)
         and run.fix_status not in ("Queued", "Working")
         and not fixes.open_pull_request(run)
         and (run.fix_attempts or 0) < attempts,
@@ -416,6 +423,40 @@ def prepare_correction(ticket: str | int) -> dict:
     frappe.has_permission("HD Ticket", "write", str(ticket), throw=True)
     changes.prepare_correction(str(ticket), frappe.session.user)
     return get_run(ticket)
+
+
+@frappe.whitelist(methods=["POST"])
+@agent_only
+def start_estimate(ticket: str | int) -> dict:
+    """Copilot found a feature request: the ticket becomes a Customization with Copilot's
+    estimate (when it gave hours), for the agent to check and send from the estimate card."""
+    from helpdesk.api.customization import get_estimate, record_triage_estimate
+
+    frappe.has_permission("HD Ticket", "write", str(ticket), throw=True)
+    run = _run_of(ticket)
+    if run.root_cause_category != "customization_request":
+        frappe.throw(_("Copilot did not find a customization request on this ticket."))
+    proposal = frappe.parse_json(run.proposal or "{}") or {}
+    hours = next(
+        (
+            proposal.get(key)
+            for key in ("estimate_hours", "hours")
+            if str(proposal.get(key) or "").replace(".", "", 1).isdigit()
+        ),
+        0,
+    )
+    record_triage_estimate(
+        str(ticket),
+        {
+            "request_type": "customization",
+            "estimate_hours": hours,
+            "estimate_note": _("From Copilot run {0}: {1}").format(
+                run.name, run.summary or ""
+            ),
+        },
+    )
+    runs.add_event(run, "estimate_started", {"hours": hours}, runs.AGENT)
+    return get_estimate(ticket)
 
 
 @frappe.whitelist(methods=["GET"])

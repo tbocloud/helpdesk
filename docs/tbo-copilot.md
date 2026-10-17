@@ -70,7 +70,7 @@ A run started while **Shadow mode** is on is a shadow run (`shadow`) for its who
 
 **Leases.** A claim gives the worker a token for **Lease minutes**; `heartbeat` extends it, and every later call must carry it. The cron `*/5` (`expire_stale_leases`) sends a run whose lease ran out back to the queue, or fails it after **Max lease losses**. A cancelled run keeps its token so the worker's next heartbeat is answered with `cancel`.
 
-**Router** (`helpdesk/copilot/router.py`). `submit_result` with `kind: investigation` is validated (`root_cause_category` among the eight, `confidence` 0–1, bounded strings and lists) and routed by the table above; a confidence below **Min confidence** is treated as `unclear`, with the reported category kept in the run's investigation JSON.
+**Router** (`helpdesk/copilot/router.py`). `submit_result` with `kind: investigation` is validated (`root_cause_category` among the nine, `confidence` 0–1, bounded strings and lists) and routed by the table above; a confidence below **Min confidence** is treated as `unclear`, with the reported category kept in the run's investigation JSON.
 
 ## Worker API (`helpdesk/api/copilot_worker.py`)
 
@@ -96,6 +96,7 @@ The context holds the ticket, its triage fields, the customer, the registered si
 | question, not_allowed_request, customer_mistake | Explaining → Answered when the agent sends | Working on it → **Resolved** ("please confirm, or reopen") | the worker's `customer_message` lands in the agent's suggested-reply card; nothing goes out by itself |
 | unclear (or confidence below the setting) | Explaining → Answered when the agent sends | Working on it → **Waiting for you** | the questions land in the card; the customer's reply (email, portal or their site) starts a **follow-up run** |
 | wrong_setting, bug, data_damaged_by_bug | Preparing Fix | **Working on it** | continues in the next phases (sandbox, pull request, approval) |
+| customization_request | Explaining → Answered when the agent sends | Working on it → **With our team** | the explanation says it is a change, not a fault, and offers an estimate; **Start estimate** in the Copilot dialog makes the ticket a Customization with Copilot's hours (`helpdesk.api.copilot.start_estimate`), and the agent sends the estimate from the estimate card |
 | core_issue | Handed Over | **With our team** | a Task for the customer's **Assigned developer** in the customer's open Project (else the hand-over project); without a project the Agent Managers are told |
 
 Every diagnosis is an internal note on the ticket (category, confidence, summary, evidence, proposal), credited to the hub's automation user.
@@ -204,6 +205,29 @@ API (agents): `helpdesk.api.copilot.decide_fix` (also for corrections), `change_
 3. **Wrong values applied:** **Undo the change** prepares the reverse; a senior approves it.
 4. **Submitted documents set aside:** a person corrects them the ERP way. Copilot does not touch them.
 5. **No approval key:** the customer's System Manager connects the site again with a connection code from TBO Support.
+
+## Pilot (Phase 4: `settings.level_of`, `pilot.py`, report Copilot Pilot)
+
+**Copilot level per customer** (HD Customer **Copilot Level**; blank uses **Default Copilot level** in HDS Copilot Settings). Each level allows what the ones before it do:
+
+| Level | Copilot may |
+|---|---|
+| Diagnose only | investigate; every run is a shadow run (the team sees the diagnosis, the customer nothing) |
+| Explain | the customer sees the stages and the explanations agents send; bugs get the fix task and the one approval as before |
+| Fix | Copilot also writes fixes (**Let Copilot fix it**, or **Copilot writes fixes**); below Fix both are refused |
+| Correct | a senior may also approve setting and data corrections; below Correct a correction is checked and shown on the card (event `change_set_held`) but never sent for approval, approved or applied, even if the level is lowered after the approval was asked |
+
+**Shadow mode** holds everyone at Diagnose only, and so does a ticket with no customer. The patch `copilot_pilot_defaults` sets the default level to Correct on a site where Copilot already ran live (shadow mode off), so nothing changes there, and to Diagnose only otherwise. The Copilot dialog shows the customer's level.
+
+**The instant stop.** With **Copilot enabled** off, no run starts, `claim_job` hands out no work, and a worker mid-run is answered `cancel` at its next heartbeat (within 30 seconds): an investigation is Cancelled, a fix job is marked Failed (event `fix_stopped`), and the team takes the ticket as before Copilot.
+
+**Monthly AI budget** (HDS Copilot Settings → Pilot). The month's spend is the AI usage log rows with a Copilot run (the worker's stages; the hub's own AI features are not counted). At 80% the Agent Managers are told once a month; at 100% `claim_job` hands out no work until the next month or a larger budget (0: no budget). **Dollar cap per diagnosis** goes to the worker in the run context (`limits.max_usd`); a fix has **Dollar cap per fix** in `fix.max_usd`.
+
+**Worker watch** (every 10 minutes, `pilot.watch_workers`): runs queued, or fixes asked for, more than 15 minutes ago with no worker claiming them → the Agent Managers are told, once an hour while it lasts (not while the budget holds the work).
+
+**Copilot Pilot** (Script Report, System and Agent Managers; filters dates and customer): per week and customer, tickets, diagnoses, ratings (Right, Partly, Wrong; rated right % counts Partly half), root causes, explanations sent and the median **edit** (how much agents changed Copilot's explanation before sending it: 0 as drafted, 100 rewritten; kept on the run as `explanation_edited`), fixes asked, opened, approved, merged, deployed and undone, corrections applied, records skipped and corrections undone, refused approvals, escalations and hand-overs, median approval wait and time to resolve, AI cost (hub and worker) per ticket, and the runs rated Wrong.
+
+**Weekly pilot email** (hourly check, sent once on Monday from 08:00 Riyadh time): last week's rows, the cost, links to the runs rated Wrong and to the report, to the **Weekly pilot email to** addresses and the Agent Managers.
 
 ## MCP server (`helpdesk/api/copilot_mcp.py`, `helpdesk/copilot/mcp/`)
 

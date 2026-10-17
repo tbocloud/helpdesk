@@ -144,8 +144,9 @@ def start_run(
     """Queues a run for a ticket; when one is already active, that one is returned instead.
 
     `base_app` and `base_commit` make the worker read that app at that commit
-    instead of the deployed code (evaluation runs). A run started in shadow
-    mode stays a shadow run, whatever the setting says later.
+    instead of the deployed code (evaluation runs). A run for a customer below the
+    Explain level (or in shadow mode) is a shadow run, and stays one whatever the
+    settings say later.
     """
     from helpdesk.content_sync import get_client_connection
 
@@ -167,7 +168,9 @@ def start_run(
             "registry": registry.name if registry else None,
             "kind": kind,
             "state": "Queued",
-            "shadow": int(copilot_settings.is_shadow()),
+            "shadow": int(
+                not copilot_settings.allows(info.customer, copilot_settings.EXPLAIN)
+            ),
             "base_app": base_app,
             "base_commit": base_commit,
             "queued_at": now_datetime(),
@@ -415,9 +418,25 @@ def heartbeat(run: str, token: str) -> dict:
     ):
         return {"ok": True, "action": "cancel"}
     doc = check_lease(doc, token)
+    if not copilot_settings.is_enabled():
+        return switched_off(doc)
     expires = add_to_date(now_datetime(), minutes=lease_minutes())
     doc.db_set("lease_expires", expires, update_modified=False)
     return {"ok": True, "action": "continue", "lease_expires": str(expires)}
+
+
+def switched_off(doc) -> dict:
+    """Copilot was switched off mid-run: the worker stops at once and a person takes the ticket."""
+    note = "Copilot was switched off in HDS Copilot Settings"
+    if fixing(doc):
+        doc.db_set(
+            {"fix_status": "Failed", "lease_token_hash": None, "lease_expires": None},
+            update_modified=False,
+        )
+        add_event(doc, "fix_stopped", {"reason": note}, SYSTEM)
+    elif doc.state in CANCELLABLE:
+        _move(doc, "Cancelled", SYSTEM, note=note)
+    return {"ok": True, "action": "cancel"}
 
 
 def expire_stale_leases():
@@ -573,6 +592,10 @@ def run_context(run) -> dict:
         if run.root_cause_category
         else None,
         "fix": fixes.fix_context(run) if fixing(run) else None,
+        # the pilot's per-run dollar cap for an investigation (a fix has its own in `fix`)
+        "limits": {
+            "max_usd": copilot_settings.get_settings().get("max_diagnosis_usd") or 0
+        },
         # read this app at this commit instead of the deployed code (evaluation runs)
         "base_app": run.base_app,
         "base_commit": run.base_commit,

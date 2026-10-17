@@ -322,6 +322,15 @@ def _decide_change_set(approval, run, user: str, approve: bool, note: str, via: 
         "decided_via": via,
         "note": note,
     }
+    if approve and not copilot_settings.allows(run.customer, copilot_settings.CORRECT):
+        frappe.throw(
+            _(
+                "Corrections are approved only for customers at the Correct level ({0} is at {1})."
+            ).format(
+                run.customer or _("no customer"),
+                copilot_settings.level_of(run.customer),
+            )
+        )
     if not approve:
         if not note:
             frappe.throw(_("Please say why the correction is rejected."))

@@ -70,6 +70,8 @@ scheduler_events = {
             "helpdesk.error_alerts.post_error_digest",
             # Copilot fixes read their pull requests, so a missed webhook never strands an approval
             "helpdesk.copilot.fixes.refresh_open",
+            # Copilot runs waiting with no worker claiming them: the Agent Managers hear hourly
+            "helpdesk.copilot.pilot.watch_workers",
         ],
         # every 10 minutes, off the error digest's minutes: ask GitHub to run the org
         # merge bot, whose own schedule doesn't fire (off by default; docs/github-sync.md)
@@ -117,6 +119,8 @@ scheduler_events = {
         "helpdesk.triage.fail_stuck_triages",
         "helpdesk.integrations.crm.users.sync_users_job",
         "helpdesk.helpdesk.doctype.hd_content_post.hd_content_post.send_missed_post_alerts",
+        # Monday from 08:00 Riyadh time, once: the Copilot pilot's weekly email
+        "helpdesk.copilot.pilot.send_weekly_email",
     ],
     "hourly_long": [
         "helpdesk.helpdesk.doctype.hd_ticket.hd_ticket.update_sla_status_in_ticket"

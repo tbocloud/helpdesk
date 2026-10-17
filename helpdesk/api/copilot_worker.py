@@ -53,6 +53,17 @@ def claim_job(
         frappe.throw(_("worker_id is required"))
     if int(free_slots) < 1:
         return {}
+    from helpdesk.copilot import pilot
+    from helpdesk.copilot import settings as copilot_settings
+
+    if not copilot_settings.is_enabled():
+        return (
+            {}
+        )  # switched off: no work goes out, and a worker mid-run is stopped at its heartbeat
+    if not pilot.budget_allows_work():
+        return (
+            {}
+        )  # the month's AI budget is used up: work waits (the managers were told)
     run, token = runs.claim(worker_id, capabilities or "", (run or "").strip() or None)
     if not run:
         return {}

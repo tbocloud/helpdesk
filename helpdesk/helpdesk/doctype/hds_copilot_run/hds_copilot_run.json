@@ -25,6 +25,7 @@
 		"confidence",
 		"summary",
 		"customer_message",
+		"explanation_edited",
 		"column_break_result",
 		"handed_over_to",
 		"task",
@@ -186,7 +187,7 @@
 			"fieldtype": "Select",
 			"in_list_view": 1,
 			"label": "Root Cause",
-			"options": "\nquestion\nnot_allowed_request\ncustomer_mistake\nwrong_setting\nbug\ndata_damaged_by_bug\ncore_issue\nunclear",
+			"options": "\nquestion\nnot_allowed_request\ncustomer_mistake\nwrong_setting\nbug\ndata_damaged_by_bug\ncore_issue\ncustomization_request\nunclear",
 			"read_only": 1
 		},
 		{
@@ -415,7 +416,7 @@
 			"fieldname": "reviewed_root_cause",
 			"fieldtype": "Select",
 			"label": "Reviewed Root Cause",
-			"options": "\nquestion\nnot_allowed_request\ncustomer_mistake\nwrong_setting\nbug\ndata_damaged_by_bug\ncore_issue\nunclear",
+			"options": "\nquestion\nnot_allowed_request\ncustomer_mistake\nwrong_setting\nbug\ndata_damaged_by_bug\ncore_issue\ncustomization_request\nunclear",
 			"read_only": 1
 		},
 		{
@@ -473,10 +474,17 @@
 			"fieldtype": "Datetime",
 			"label": "Finished At",
 			"read_only": 1
+		},
+		{
+			"fieldname": "explanation_edited",
+			"fieldtype": "Percent",
+			"label": "Explanation edited",
+			"read_only": 1,
+			"description": "How much the agent changed Copilot's explanation before sending it: 0 sent as drafted, 100 rewritten."
 		}
 	],
 	"links": [],
-	"modified": "2026-10-13 14:00:00.000000",
+	"modified": "2026-10-17 23:57:37.497010",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Copilot Run",

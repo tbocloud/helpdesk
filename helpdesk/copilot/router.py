@@ -20,6 +20,7 @@ CATEGORIES = (
     "bug",
     "data_damaged_by_bug",
     "core_issue",
+    "customization_request",
     "unclear",
 )
 STATE_FOR_CATEGORY = {
@@ -27,6 +28,8 @@ STATE_FOR_CATEGORY = {
     "not_allowed_request": "Explaining",
     "customer_mistake": "Explaining",
     "unclear": "Explaining",
+    # a feature request: the explanation offers an estimate; an agent starts the estimate flow
+    "customization_request": "Explaining",
     "wrong_setting": "Preparing Fix",
     "bug": "Preparing Fix",
     "data_damaged_by_bug": "Preparing Fix",
@@ -192,7 +195,9 @@ def _fix_task(run):
     frappe.db.savepoint("copilot_fix_task")
     try:
         fixes.create_fix_task(run)
-        if copilot_settings.get_settings().get("copilot_writes_fixes"):
+        if copilot_settings.get_settings().get(
+            "copilot_writes_fixes"
+        ) and copilot_settings.allows(run.customer, copilot_settings.FIX):
             fixes.request_copilot_fix(run)
     except fixes.NoProject:
         # a setup gap, not a failure: the agents see it on the ticket and can create the task later
@@ -222,6 +227,11 @@ def explanation_text(investigation: dict, category: str) -> str:
     """What the agent is offered to send: the worker's message, or its questions as a list."""
     text = (investigation.get("customer_message") or "").strip()
     questions = [q for q in investigation.get("questions") or [] if q.strip()]
+    if category == "customization_request":
+        offer = _(
+            "This is a change to how your system works rather than a fault, so we will send you an estimate of the work and a delivery date for your approval."
+        )
+        return f"{text}\n\n{offer}" if text else offer
     if category == "unclear" and questions:
         asked = "\n".join(f"- {q.strip()}" for q in questions)
         text = (

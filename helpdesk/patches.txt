@@ -77,6 +77,7 @@ helpdesk.patches.v16_0_2.set_ai_provider_defaults
 helpdesk.patches.v16_0_2.seed_signoff_templates
 helpdesk.patches.v16_0_2.copilot_mcp_defaults
 helpdesk.patches.v16_0_2.copilot_shadow_mode_on
+helpdesk.patches.v16_0_2.copilot_pilot_defaults
 helpdesk.patches.v16_0_2.seed_content_options
 helpdesk.patches.v16_0_2.content_campaign_as_text
 helpdesk.patches.v16_0_2.seed_follow_up_settings

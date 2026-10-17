@@ -436,6 +436,25 @@ class TestShadow(ChangeCase):
         self.assertFalse(run.task)
 
 
+class TestBelowTheCorrectLevel(ChangeCase):
+    def test_a_correction_is_shown_but_never_sent_for_approval(self):
+        frappe.db.set_value("HD Customer", self.customer, "custom_copilot_level", "Fix")
+        run = self.diagnosed()
+        self.assertEqual((self.change_set().status, run.approval), ("Checked", None))
+        self.assertEqual(self.events("change_set_held")[0]["level"], "Fix")
+
+    def test_a_level_lowered_after_the_approval_was_asked_stops_it(self):
+        self.diagnosed()
+        frappe.db.set_value(
+            "HD Customer", self.customer, "custom_copilot_level", "Explain"
+        )
+        with self.assertRaises(frappe.ValidationError):
+            self.decide(self.senior)
+        self.assertEqual(
+            self.site.value(SETTINGS, SETTINGS, "selling_price_list"), "Wholesale"
+        )
+
+
 class TestTheSiteReadsOurSignature(FrappeTestCase):
     @unittest.skipUnless(
         importlib.util.find_spec("helpdesk_client"),

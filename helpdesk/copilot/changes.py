@@ -21,6 +21,7 @@ from frappe import _
 from frappe.utils import cstr, now_datetime
 
 from helpdesk.copilot import approval_key, runs
+from helpdesk.copilot import settings as copilot_settings
 
 CHANGE_SET = "HDS Copilot Change Set"
 MAX_RECORDS = 1000
@@ -367,6 +368,23 @@ def check_and_ask(change_set: str):
     )
     if run.shadow:
         return  # shown to the team on the card; a shadow run never changes a customer's data
+    if not copilot_settings.allows(run.customer, copilot_settings.CORRECT):
+        # shown to the team on the card, never approved below the Correct level
+        runs.add_event(
+            run,
+            "change_set_held",
+            {"change_set": doc.name, "level": copilot_settings.level_of(run.customer)},
+            runs.SYSTEM,
+        )
+        customer.comment(
+            run.ticket,
+            frappe.utils.escape_html(
+                _(
+                    "Copilot prepared a correction ({0}); it is shown only, because the customer is at the {1} level (corrections need Correct)."
+                ).format(doc.name, copilot_settings.level_of(run.customer))
+            ),
+        )
+        return
     if not doc.ready_count:
         customer.comment(
             run.ticket,
@@ -404,6 +422,7 @@ def waiting_for_code(run):
         run.shadow
         or run.get("kind") == "revert"
         or run.root_cause_category != "data_damaged_by_bug"
+        or not copilot_settings.allows(run.customer, copilot_settings.CORRECT)
     ):
         return None
     if not run.get("change_set"):
@@ -442,6 +461,23 @@ def apply(change_set: str, user: str):
     doc = frappe.get_doc(CHANGE_SET, change_set)
     run = frappe.get_doc("HDS Copilot Run", doc.run)
     if doc.status not in ("Approved", "Applying"):
+        return doc
+    if not copilot_settings.allows(run.customer, copilot_settings.CORRECT):
+        # the customer's level was lowered after the approval: nothing is written
+        doc.db_set(
+            {
+                "status": "Stopped",
+                "error": _(
+                    "Not applied: the customer is no longer at the Correct level."
+                ),
+            }
+        )
+        runs.add_event(
+            run,
+            "change_set_held",
+            {"change_set": doc.name, "level": copilot_settings.level_of(run.customer)},
+            runs.SYSTEM,
+        )
         return doc
     approval = frappe.get_doc("HDS Copilot Approval", doc.approval)
     doc.db_set("status", "Applying")
@@ -821,6 +857,15 @@ def prepare_correction(ticket: str, user: str):
     if not latest or latest.root_cause_category != "customer_mistake":
         frappe.throw(
             _("Copilot prepares a correction for a customer's own mistake only.")
+        )
+    if not copilot_settings.allows(latest.customer, copilot_settings.CORRECT):
+        frappe.throw(
+            _(
+                "Copilot prepares corrections only for customers at the Correct level ({0} is at {1})."
+            ).format(
+                latest.customer or _("no customer"),
+                copilot_settings.level_of(latest.customer),
+            )
         )
     if runs.active_run(ticket):
         frappe.throw(

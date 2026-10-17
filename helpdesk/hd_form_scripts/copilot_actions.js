@@ -83,6 +83,7 @@ function showCopilotRunDialog(info, doc, call, toast, $dialog) {
       "Customer sees",
       info.shadow ? "Nothing (shadow mode)" : info.stage || "-",
     ],
+    ["Copilot level", info.level || "-"],
     [
       "Root cause",
       info.root_cause
@@ -343,6 +344,24 @@ function showCopilotRunDialog(info, doc, call, toast, $dialog) {
           _ref.close();
         } catch (error) {
           toast.error("Failed to cancel the run");
+        }
+      },
+    });
+  }
+  if (info.can_start_estimate) {
+    actions.push({
+      label: "Start estimate",
+      onClick: async function (_ref) {
+        try {
+          await call("helpdesk.api.copilot.start_estimate", {
+            ticket: doc.name,
+          });
+          toast.success(
+            "The ticket is a Customization now: check the estimate and send it to the customer."
+          );
+          _ref.close();
+        } catch (error) {
+          toast.error(copilotError(error, "Failed to start the estimate"));
         }
       },
     });

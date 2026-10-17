@@ -490,6 +490,14 @@ def get_custom_fields():
                 "insert_after": "custom_copilot_enabled",
                 "description": "Gets the task when Copilot hands a ticket over to a person",
             },
+            {
+                "fieldname": "custom_copilot_level",
+                "fieldtype": "Select",
+                "options": "\nDiagnose only\nExplain\nFix\nCorrect",
+                "label": "Copilot Level",
+                "insert_after": "custom_assigned_developer",
+                "description": "How far Copilot may go on this customer's tickets: Diagnose only (the team sees the diagnosis), Explain (the customer sees stages and the explanations agents send), Fix (Copilot also writes fixes), Correct (a senior may also approve setting and data corrections). Blank: the default in HDS Copilot Settings",
+            },
         ],
         "HD Ticket": [
             {

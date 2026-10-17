@@ -3852,9 +3852,11 @@ def get_recurring_tasks_created(recurring_task: str) -> list[dict]:
 def make_copilot_settings(templates: dict[str, str] | None = None, **values):
     """Saves HDS Copilot Settings with `values`; `templates` maps a stage to its message text.
 
-    Shadow mode is off unless asked for, so a test sees what a live customer would.
+    Shadow mode is off and customers default to the Correct level unless asked for, so a
+    test sees what a live customer would.
     """
     values.setdefault("shadow_mode", 0)
+    values.setdefault("default_copilot_level", "Correct")
     settings = frappe.get_single("HDS Copilot Settings")
     settings.update(values)
     for stage, message in (templates or {}).items():
@@ -3956,6 +3958,11 @@ FAKE_INVESTIGATIONS = {
             "type": "handover",
             "text": "A person decides between a report workaround and an upstream fix",
         },
+    },
+    "customization_request": {
+        "summary": "A new column for the salesperson's region on the Sales Register: nothing is broken, it is a change.",
+        "customer_message": "The Sales Register shows what it was built to show; adding the salesperson's region is a new column in the report.",
+        "proposal": {"type": "customization", "estimate_hours": 4},
     },
     "unclear": {
         "summary": "Not enough to go on: no page, time or record is named.",

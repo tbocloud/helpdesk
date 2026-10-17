@@ -257,6 +257,15 @@ def request_copilot_fix(run, user: str | None = None):
         )
     if run.fix_status in ("Queued", "Working"):
         return run
+    if not copilot_settings.allows(run.customer, copilot_settings.FIX):
+        frappe.throw(
+            _(
+                "Copilot writes fixes only for customers at the Fix level or above ({0} is at {1})."
+            ).format(
+                run.customer or _("no customer"),
+                copilot_settings.level_of(run.customer),
+            )
+        )
     if open_pull_request(run):
         frappe.throw(
             _("A pull request is already open for this fix; review that one instead.")

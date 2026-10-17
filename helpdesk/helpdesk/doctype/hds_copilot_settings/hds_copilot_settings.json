@@ -46,6 +46,14 @@
 		"deploy_check_minutes",
 		"press_skip_backups",
 		"auto_deploy_categories",
+		"pilot_section",
+		"default_copilot_level",
+		"monthly_ai_budget_usd",
+		"max_diagnosis_usd",
+		"column_break_pilot",
+		"pilot_report_to",
+		"pilot_report_enabled",
+		"pilot_report_sent_for",
 		"templates_section",
 		"message_templates"
 	],
@@ -315,11 +323,65 @@
 			"fieldtype": "Table",
 			"label": "Stage Messages",
 			"options": "HDS Copilot Message Template"
+		},
+		{
+			"fieldname": "pilot_section",
+			"fieldtype": "Section Break",
+			"label": "Pilot",
+			"collapsible": 1,
+			"description": "Phase 4: how far Copilot may go per customer, the monthly AI budget, and the weekly pilot email (docs/tbo-copilot.md, Pilot)."
+		},
+		{
+			"fieldname": "default_copilot_level",
+			"fieldtype": "Select",
+			"label": "Default Copilot level",
+			"options": "Diagnose only\nExplain\nFix\nCorrect",
+			"default": "Diagnose only",
+			"description": "For customers whose Copilot level is blank. Diagnose only: the team sees the diagnosis, the customer nothing. Explain: the customer sees the stages and the explanations agents send. Fix: Copilot also writes fixes. Correct: a senior may also approve setting and data corrections. Shadow mode holds everyone at Diagnose only."
+		},
+		{
+			"fieldname": "monthly_ai_budget_usd",
+			"fieldtype": "Float",
+			"label": "Monthly AI budget (USD)",
+			"default": "100",
+			"non_negative": 1,
+			"description": "What Copilot's runs may cost in a calendar month. At 80% the Agent Managers are told; at 100% no new work goes to a worker until the next month or a larger budget. 0: no budget."
+		},
+		{
+			"fieldname": "max_diagnosis_usd",
+			"fieldtype": "Float",
+			"label": "Dollar cap per diagnosis",
+			"default": "1",
+			"non_negative": 1,
+			"description": "The worker stops an investigation that would cost more than this, in US dollars (0: the worker's own limit)."
+		},
+		{
+			"fieldname": "column_break_pilot",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "pilot_report_to",
+			"fieldtype": "Small Text",
+			"label": "Weekly pilot email to",
+			"description": "Email addresses, one per line or comma separated, besides the Agent Managers. Sent on Monday at 08:00 Riyadh time with last week's numbers."
+		},
+		{
+			"fieldname": "pilot_report_enabled",
+			"fieldtype": "Check",
+			"label": "Send the weekly pilot email",
+			"default": "1"
+		},
+		{
+			"fieldname": "pilot_report_sent_for",
+			"fieldtype": "Data",
+			"label": "Pilot email sent for week",
+			"read_only": 1,
+			"hidden": 1
 		}
 	],
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-10-15 12:32:51.061468",
+	"modified": "2026-10-17 23:57:18.058545",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Copilot Settings",
