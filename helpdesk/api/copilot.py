@@ -12,6 +12,7 @@ from frappe.utils import format_datetime, get_fullname, now_datetime, sbool
 from helpdesk.api.customization import is_ticket_customer
 from helpdesk.copilot import customer, router, runs
 from helpdesk.copilot import settings as copilot_settings
+from helpdesk.copilot import suspicious
 from helpdesk.utils import agent_only, is_agent
 
 VERDICTS = ("Right", "Partly", "Wrong")
@@ -99,6 +100,8 @@ def get_run(ticket: str | int) -> dict:
         and frappe.db.get_value("HD Ticket", run.ticket, "custom_estimate_status")
         in (None, ""),
         "level": copilot_settings.level_of(run.customer),
+        # text that tried to instruct the AI, found by the hub (ticket) or the worker (what it read)
+        "suspicious": suspicious.seen(run.name),
         "shadow": bool(run.shadow),
         "base_app": run.base_app,
         "base_commit": run.base_commit,

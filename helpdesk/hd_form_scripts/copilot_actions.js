@@ -125,6 +125,21 @@ function showCopilotRunDialog(info, doc, call, toast, $dialog) {
       "</td></tr>";
   }
   html += "</table>";
+  if (info.suspicious && info.suspicious.length) {
+    html +=
+      '<div style="margin-top:8px;padding:6px 8px;border-radius:6px;background:#fef3c7;color:#92400e">' +
+      "<b>Text that tries to instruct the AI</b>" +
+      "<div>Copilot is told to ignore it. Read it before you send anything to the customer.</div><ul>";
+    for (var s = 0; s < info.suspicious.length; s++) {
+      html +=
+        "<li>" +
+        copilotEscape(info.suspicious[s].source) +
+        ": " +
+        copilotEscape(info.suspicious[s].text) +
+        "</li>";
+    }
+    html += "</ul></div>";
+  }
   if (info.summary) {
     html +=
       '<div style="margin-top:8px"><b>Diagnosis</b><div>' +

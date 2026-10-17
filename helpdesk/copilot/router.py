@@ -161,6 +161,7 @@ def route(run, result: dict):
         investigated_at=now_datetime(),
     )
     runs.update_ticket(doc, root_cause=effective)
+    _flag_suspicious(doc)
     customer.note_diagnosis(doc, investigation)
     if doc.state == "Explaining":
         customer.draft_explanation(doc, explanation_text(investigation, effective))
@@ -186,6 +187,18 @@ def route(run, result: dict):
             _fix_task(doc)
     customer.send_stage(doc, STAGE_FOR_CATEGORY[effective])
     return doc
+
+
+def _flag_suspicious(run):
+    """Text in the ticket that tries to instruct the AI, recorded for the card; never stops the routing."""
+    from helpdesk.copilot import suspicious
+
+    try:
+        suspicious.check_ticket(run)
+    except Exception:
+        frappe.log_error(
+            title=f"Copilot could not check ticket {run.ticket} for planted instructions"
+        )
 
 
 def _fix_task(run):
