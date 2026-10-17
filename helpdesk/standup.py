@@ -922,7 +922,9 @@ def write_headline(label: str, docs: list, day) -> list[str]:
         return []
     facts = headline_facts(label, docs, day)
     try:
-        result = call_haiku(HEADLINE_PROMPT, json.dumps(facts, indent=1, default=str))
+        result = call_haiku(
+            HEADLINE_PROMPT, json.dumps(facts, indent=1, default=str), job="summary"
+        )
     except Exception:  # noqa: BLE001 - provider errors vary; the summary still posts
         frappe.log_error(title="Stand-up headline failed")
         return []

@@ -291,7 +291,9 @@ def run_triage(
         from frappe.utils import nowdate
 
         user_message = f"Today's date: {nowdate()}\n\n{user_message}"
-        result = call_haiku(TRIAGE_SYSTEM_PROMPT, user_message, ticket_name=ticket_id)
+        result = call_haiku(
+            TRIAGE_SYSTEM_PROMPT, user_message, ticket_name=ticket_id, job="triage"
+        )
         triage = result["response"]
         if (
             not isinstance(triage, dict)

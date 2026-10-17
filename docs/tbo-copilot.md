@@ -83,7 +83,9 @@ POST only, for users with the role **Copilot Worker** (created on migrate, no de
 | `post_events(run, lease_token, events)` | stores `[{seq, type, payload}]`; a repeated `seq` is ignored; payloads over 16 KB are cut and marked |
 | `submit_result(run, lease_token, result)` | `{kind: investigation, root_cause_category, confidence, summary, evidence[], proposal{}, customer_message, questions[], cost{tokens_in, tokens_out, usd, model}}` or `{kind: failure, reason}`; the run keeps the tokens and the model |
 
-The context holds the ticket, its triage fields, the customer, the registered site and its apps, the last 20 messages, the file list and earlier runs, whether the run is a shadow run, and the base app and commit when set; never credentials. Events are kept 90 days.
+The context holds the ticket, its triage fields, the customer, the registered site and its apps, the last 20 messages, the file list and earlier runs, whether the run is a shadow run, the base app and commit when set, and `models`: for `investigate`, `fix` and `review`, each AI provider section in the hub's order with that job's model (Models per job, else the section's model) and its price per million tokens. Never credentials: the worker holds its own provider addresses and keys and uses only the sections it has a key for ([AI providers](ai-providers.md#models-per-job)). Events are kept 90 days.
+
+**The worker's AI cost.** The `cost` in `submit_investigation` and `submit_change` may carry `stages`: one entry per job and model (a stage that moved to its fallback model has two). Each becomes an HDS AI Usage Log row with the run, its ticket, the job and `fallback`, once per run, job, attempt and model, so a ticket's hub and worker AI cost show in one report.
 
 **Trying it without a worker:** `bench --site <site> execute helpdesk.test_utils.run_fake_worker --kwargs "{'category': 'bug'}"` claims the oldest queued run and reports that root cause with demo text (`abandon: True` claims and stops, to watch the lease expire; `ticket: '0042'` starts a run for that ticket first).
 

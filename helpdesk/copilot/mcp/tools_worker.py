@@ -79,8 +79,19 @@ def submit_investigation(
             "change_set": change_set,
         },
     )
+    _log_usage(doc.name, cost, "investigate", 1)
     # the lease ends with the investigation: this token stops working now
     return {"run": doc.name, "state": doc.state, "root_cause": doc.root_cause_category}
+
+
+def _log_usage(run: str, cost: dict | None, job: str, attempt: int):
+    """The worker's spend as usage rows (one per stage); a logging failure never refuses the report."""
+    from helpdesk.ai_engine import log_worker_usage
+
+    try:
+        log_worker_usage(run, cost, job, attempt)
+    except Exception:
+        frappe.log_error(title=f"Copilot usage not logged for {run}")
 
 
 def submit_change(
@@ -116,6 +127,7 @@ def submit_change(
             "cost": cost or {},
         },
     )
+    _log_usage(doc.name, cost, "fix", doc.get("fix_attempts") or 1)
     # the lease ends with the change: this token stops working now
     return {"run": doc.name, "state": doc.state, "fix": doc.fix_status}
 

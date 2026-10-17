@@ -547,7 +547,9 @@ def write_bullets(facts: dict) -> tuple[list[str], str | None]:
     Any bullet with a number that isn't in the facts is dropped (home_plan.clean_steps,
     the Scoreboard's guard)."""
     try:
-        result = call_haiku(SUMMARY_PROMPT, json.dumps(facts, indent=1, default=str))
+        result = call_haiku(
+            SUMMARY_PROMPT, json.dumps(facts, indent=1, default=str), job="summary"
+        )
     except Exception:  # noqa: BLE001 - provider errors vary; the insights still work
         frappe.log_error(title="Team insights summary failed")
         return [], _("The AI couldn't be reached.")

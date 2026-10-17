@@ -369,7 +369,7 @@ def project_progress(tasks, projects) -> list[dict]:
 def write_summary(customer: str, stats: dict) -> tuple[str, bool]:
     """Summary HTML and whether the AI wrote it; falls back to a plain summary of the stats."""
     try:
-        result = call_haiku(SYSTEM_PROMPT, build_prompt(customer, stats))
+        result = call_haiku(SYSTEM_PROMPT, build_prompt(customer, stats), job="summary")
     except Exception:  # noqa: BLE001 - provider errors vary; the plain summary still goes out
         frappe.log_error(
             title="Weekly summary with AI failed", message=frappe.get_traceback()

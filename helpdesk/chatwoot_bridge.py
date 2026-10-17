@@ -608,7 +608,9 @@ class ChatConversation:
         try:
             articles = self.find_articles(messages)
             result = call_haiku(
-                CHAT_SYSTEM_PROMPT, self.build_prompt(messages, articles)
+                CHAT_SYSTEM_PROMPT,
+                self.build_prompt(messages, articles),
+                job="triage",
             )
             decision = parse_decision(result.get("response"), articles)
             if not decision:
@@ -745,7 +747,9 @@ class ChatConversation:
         if is_ai_configured() and messages:
             try:
                 result = call_haiku(
-                    SUMMARY_SYSTEM_PROMPT, "\n\n".join(transcript_lines(messages))
+                    SUMMARY_SYSTEM_PROMPT,
+                    "\n\n".join(transcript_lines(messages)),
+                    job="summary",
                 )
                 response = result.get("response")
                 if isinstance(response, dict) and not response.get("parse_error"):

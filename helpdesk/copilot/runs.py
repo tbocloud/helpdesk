@@ -549,10 +549,13 @@ def run_context(run) -> dict:
         if run.customer
         else None
     )
+    from helpdesk.ai_engine import worker_models
     from helpdesk.copilot import changes, fixes
 
     return {
         "run": run.name,
+        # each worker job's model per provider section, in order, with its price: no keys
+        "models": worker_models(),
         "kind": "fix" if fixing(run) else run.kind,
         "shadow": bool(run.shadow),
         # an agent asked Copilot to prepare the correction of the customer's own mistake

@@ -6,7 +6,7 @@ prompt caching and token tracking (docs/ai-providers.md)."""
 
 import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from time import monotonic
 
 import anthropic
@@ -267,10 +267,17 @@ class AIProvider:
     base_url: str | None
     model: str
     api_key: str = field(repr=False)
+    # a job's own model (HDS AI Job): paused and reported apart from the section's model
+    override: bool = False
 
     @property
     def label(self) -> str:
         return f"{self.slot} ({self.model})"
+
+    @property
+    def key(self) -> str:
+        """What a pause, a failing status or an alert is kept under."""
+        return f"{self.slot}|{self.model}" if self.override else self.slot
 
     @property
     def speaks_openai(self) -> bool:
@@ -366,11 +373,79 @@ def provider_order(settings=None) -> list[str]:
     return [primary, *(slot for slot in SLOTS if slot != primary)]
 
 
-def get_providers() -> list[AIProvider]:
-    """The providers call_haiku tries, in order; sections without a key are left out."""
+# The AI jobs (docs/ai-providers.md, Models per job): TBO Support's own, then the Copilot worker's
+JOBS = ("triage", "draft", "summary", "task", "chat", "investigate", "fix", "review")
+WORKER_JOBS = ("investigate", "fix", "review")
+
+
+def job_models(job: str | None, settings=None) -> dict[str, str]:
+    """A job's own model per section, from its row in Models per job; empty without one."""
+    if not job:
+        return {}
+    settings = settings or get_hub_settings()
+    for row in settings.get("ai_jobs") or []:
+        if row.job == job:
+            models = {
+                OPENAI_SLOT: row.openai_model,
+                ANTHROPIC_SLOT: row.anthropic_model,
+            }
+            return {
+                slot: model.strip()
+                for slot, model in models.items()
+                if (model or "").strip()
+            }
+    return {}
+
+
+def get_providers(job: str | None = None) -> list[AIProvider]:
+    """The providers call_haiku tries, in order; sections without a key are left out.
+    A job's row changes only the model of each section, never the order or the fallback."""
     settings = get_hub_settings()
     providers = configured_providers(settings)
-    return [providers[slot] for slot in provider_order(settings) if providers[slot]]
+    models = job_models(job, settings)
+    return [
+        replace(providers[slot], model=models[slot], override=True)
+        if models.get(slot) and models[slot] != providers[slot].model
+        else providers[slot]
+        for slot in provider_order(settings)
+        if providers[slot]
+    ]
+
+
+def check_job_rows(settings):
+    """HDS Hub Settings: one row per job."""
+    seen = set()
+    for row in settings.get("ai_jobs") or []:
+        if row.job in seen:
+            frappe.throw(
+                _("Models per job: {0} has more than one row.").format(row.job)
+            )
+        seen.add(row.job)
+
+
+def worker_models() -> dict[str, list[dict]]:
+    """For the Copilot worker's run context: each worker job's sections in order, with the
+    model and its price per million tokens. Never a key: the worker holds its own."""
+    settings = get_hub_settings()
+    providers = configured_providers(settings)
+    order = [slot for slot in provider_order(settings) if providers[slot]]
+    out = {}
+    for job in WORKER_JOBS:
+        models = job_models(job, settings)
+        out[job] = []
+        for slot in order:
+            model = models.get(slot) or providers[slot].model
+            cost = get_model_cost(model)
+            out[job].append(
+                {
+                    "section": slot,
+                    "model": model,
+                    "price_in": cost["input"],
+                    "price_out": cost["output"],
+                    "price_cached": cost["cache_read"],
+                }
+            )
+    return out
 
 
 def wants_json(system_prompt: str) -> bool:
@@ -536,6 +611,8 @@ def complete(
     ticket_name: str | None = None,
     budgets: tuple[int, ...] | None = None,
     deadline: float | None = None,
+    job: str | None = None,
+    fallback: bool = False,
 ):
     """One answer from one provider, each attempt logged; AIProviderError if it fails.
 
@@ -554,7 +631,12 @@ def complete(
             provider, system_prompt, user_message, max_tokens, timeout
         )
         log_usage(
-            provider.model, usage, ticket_name=ticket_name, provider=provider.slot
+            provider.model,
+            usage,
+            ticket_name=ticket_name,
+            provider=provider.slot,
+            job=job,
+            fallback=fallback,
         )
         if text.strip() or not ran_out:
             break
@@ -565,7 +647,7 @@ def complete(
 
 
 def circuit_open(provider: AIProvider) -> bool:
-    return bool(frappe.cache.get_value(CIRCUIT_KEY.format(provider.slot), expires=True))
+    return bool(frappe.cache.get_value(CIRCUIT_KEY.format(provider.key), expires=True))
 
 
 def provider_down(slot: str) -> dict | None:
@@ -584,15 +666,15 @@ def record_failure(error: AIProviderError, fallback: AIProvider | None):
         return
     if error.kind in CIRCUIT_KINDS:
         frappe.cache.set_value(
-            CIRCUIT_KEY.format(provider.slot),
+            CIRCUIT_KEY.format(provider.key),
             error.kind,
             expires_in_sec=CIRCUIT_SECONDS,
         )
     if error.kind in TRANSIENT_KINDS:
         return
-    since = (provider_down(provider.slot) or {}).get("since") or str(now_datetime())
+    since = (provider_down(provider.key) or {}).get("since") or str(now_datetime())
     frappe.cache.set_value(
-        DOWN_KEY.format(provider.slot),
+        DOWN_KEY.format(provider.key),
         {
             "kind": error.kind,
             "reason": error.summary,
@@ -609,7 +691,7 @@ def alert_once(error: AIProviderError, fallback: AIProvider | None, since: str):
     that rolls back after the failure doesn't take the alert with it."""
     provider = error.provider
     first = frappe.cache.set(  # site-prefixed via make_key; set_value can't do NX - nosemgrep
-        frappe.cache.make_key(ALERT_KEY.format(provider.slot)),
+        frappe.cache.make_key(ALERT_KEY.format(provider.key)),
         1,
         nx=True,
         ex=ALERT_SECONDS,
@@ -654,7 +736,7 @@ def send_provider_alert(subject: str):
 def record_success(provider: AIProvider):
     """The provider works: unpause it, and re-run triages that failed while none did."""
     frappe.cache.delete_value(
-        [CIRCUIT_KEY.format(provider.slot), DOWN_KEY.format(provider.slot)]
+        [CIRCUIT_KEY.format(provider.key), DOWN_KEY.format(provider.key)]
     )
     if frappe.cache.get_value(OUTAGE_KEY, expires=True):
         frappe.cache.delete_value(OUTAGE_KEY)
@@ -768,6 +850,9 @@ def log_usage(
     session_name: str | None = None,
     ticket_name: str | None = None,
     provider: str | None = None,
+    job: str | None = None,
+    copilot_run: str | None = None,
+    fallback: bool = False,
 ):
     """Log API usage to HDS AI Usage Log. Without `provider` it is an
     investigation's call: those always run on an Anthropic-compatible provider."""
@@ -779,6 +864,9 @@ def log_usage(
                 "ticket": ticket_name,
                 "model": model,
                 "provider": provider or ANTHROPIC_SLOT,
+                "job": job,
+                "copilot_run": copilot_run,
+                "fallback": int(bool(fallback)),
                 "input_tokens": usage.input_tokens,
                 "output_tokens": usage.output_tokens,
                 "cache_read_tokens": getattr(usage, "cache_read_input_tokens", 0),
@@ -788,6 +876,44 @@ def log_usage(
         ).insert(ignore_permissions=True)
     except Exception:
         frappe.log_error("Failed to log AI usage")
+
+
+def log_worker_usage(run: str, cost: dict | None, job: str, attempt: int = 1):
+    """The Copilot worker's spend for a run, one row per stage: `cost` is one stage's
+    totals ({tokens_in, tokens_cached, tokens_out, usd, model}) or {"stages": [...]}, each
+    with its own `job`. A report sent again adds nothing (one row per run, job, attempt and
+    model: a stage that moved to the fallback has a row for each)."""
+    stages = (cost or {}).get("stages") if isinstance(cost, dict) else None
+    for stage in stages if isinstance(stages, list) else [cost or {}]:
+        if not isinstance(stage, dict) or not (
+            stage.get("tokens_in") or stage.get("usd")
+        ):
+            continue
+        stage_job = stage.get("job") if stage.get("job") in WORKER_JOBS else job
+        key = f"{run}:{stage_job}:{attempt}" + (
+            ":fallback" if stage.get("fallback") else ""
+        )
+        if frappe.db.exists("HDS AI Usage Log", {"stage_key": key}):
+            continue
+        tokens_in, cached = int(stage.get("tokens_in") or 0), int(
+            stage.get("tokens_cached") or 0
+        )
+        frappe.get_doc(
+            {
+                "doctype": "HDS AI Usage Log",
+                "ticket": frappe.db.get_value("HDS Copilot Run", run, "ticket"),
+                "copilot_run": run,
+                "job": stage_job,
+                "stage_key": key,
+                "provider": stage.get("section") or "Copilot worker",
+                "model": str(stage.get("model") or "")[:140],
+                "fallback": int(bool(stage.get("fallback"))),
+                "input_tokens": tokens_in - cached,
+                "cache_read_tokens": cached,
+                "output_tokens": int(stage.get("tokens_out") or 0),
+                "estimated_cost_usd": float(stage.get("usd") or 0),
+            }
+        ).insert(ignore_permissions=True)
 
 
 TRIAGE_TOKEN_BUDGETS = (4096, 8192)
@@ -826,7 +952,7 @@ def invents_numbers(text: str, known: set[str]) -> bool:
     return bool(set(NUMBER.findall(text)) - known)
 
 
-def call_haiku(system_prompt, user_message, ticket_name=None):
+def call_haiku(system_prompt, user_message, ticket_name=None, job=None):
     """The cheap, always-on AI call behind triage, drafts and summaries.
 
     Tries the primary provider, then the fallback (docs/ai-providers.md), and
@@ -836,11 +962,12 @@ def call_haiku(system_prompt, user_message, ticket_name=None):
             system_prompt: The instructions; mentioning JSON turns on OpenAI's JSON mode
             user_message: The content to work on
             ticket_name: Optional ticket name for usage logging
+            job: The AI job (JOBS): its row in Models per job picks each section's model
 
     Returns:
             dict with keys: response (parsed JSON), usage (token counts), cost (USD)
     """
-    providers = get_providers()
+    providers = get_providers(job)
     if not providers:
         frappe.throw(_("AI isn't set up. Add an API key in Settings → AI providers."))
     ready = [provider for provider in providers if not circuit_open(provider)]
@@ -853,7 +980,13 @@ def call_haiku(system_prompt, user_message, ticket_name=None):
     for index, provider in enumerate(ready):
         try:
             text, usage = complete(
-                provider, system_prompt, user_message, ticket_name, deadline=deadline
+                provider,
+                system_prompt,
+                user_message,
+                ticket_name,
+                deadline=deadline,
+                job=job,
+                fallback=provider is not providers[0],
             )
         except AIProviderError as e:
             error = e

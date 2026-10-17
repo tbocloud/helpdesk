@@ -257,7 +257,7 @@ def sibling_tasks(
 
 def draft_description(context: dict) -> str:
     """The AI's description for a task context; empty when it gave nothing usable."""
-    result = call_haiku(SYSTEM_PROMPT, frappe.as_json(context))
+    result = call_haiku(SYSTEM_PROMPT, frappe.as_json(context), job="task")
     response = result.get("response") if isinstance(result, dict) else None
     if not isinstance(response, dict):
         return ""

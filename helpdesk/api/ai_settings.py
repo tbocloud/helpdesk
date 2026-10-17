@@ -21,6 +21,7 @@ PLAIN_FIELDS = (
     "openai_model",
 )
 SECRET_FIELDS = ("openai_api_key", "anthropic_api_key")
+JOB_FIELDS = ("openai_model", "anthropic_model")
 # enough of a key to tell which kind is saved, nothing of the key itself
 KEY_PREFIXES = ("sk-proj-", "sk-ant-", "sk-")
 # the Messages API kinds of the Anthropic-compatible section; "OpenAI Compatible",
@@ -51,10 +52,28 @@ def settings_payload(doc) -> dict:
             "masked": mask(value) if value else "",
         }
     return {
-        "settings": {f: doc.get(f) for f in PLAIN_FIELDS},
+        "settings": {
+            **{f: doc.get(f) for f in PLAIN_FIELDS},
+            "ai_jobs": [
+                {"job": row.job, **{f: row.get(f) or "" for f in JOB_FIELDS}}
+                for row in doc.get("ai_jobs") or []
+            ],
+        },
         "secrets": secrets,
         "status": ai_engine.provider_status(),
     }
+
+
+def job_rows(rows: list) -> list[dict]:
+    """Models per job as the page sends them: known jobs with at least one model, trimmed."""
+    out = []
+    for row in rows:
+        if not isinstance(row, dict) or row.get("job") not in ai_engine.JOBS:
+            continue
+        models = {f: str(row.get(f) or "").strip() for f in JOB_FIELDS}
+        if any(models.values()):
+            out.append({"job": row["job"], **models})
+    return out
 
 
 @frappe.whitelist()
@@ -67,6 +86,7 @@ def get_settings() -> dict:
 def save_settings(values: dict | str) -> dict:
     """Plain fields as sent. A key only when it is sent: a value replaces it, an
     empty string removes it; HDSHubSettings.validate checks the base URLs.
+    `ai_jobs`, when sent, replaces Models per job; a job with no model is left out.
 
     Saving forgets the providers' pauses and failures, so a fixed key or model is
     tried at once."""
@@ -77,11 +97,14 @@ def save_settings(values: dict | str) -> dict:
     for fieldname in SECRET_FIELDS:
         if values.get(fieldname) is not None:
             doc.set(fieldname, str(values[fieldname]).strip())
+    if isinstance(values.get("ai_jobs"), list):
+        doc.set("ai_jobs", job_rows(values["ai_jobs"]))
     if doc.ai_provider in (ANTHROPIC, ANTHROPIC_COMPATIBLE, None, ""):
         # a base URL is what makes the Messages API endpoint Anthropic-compatible
         doc.ai_provider = ANTHROPIC_COMPATIBLE if doc.ai_base_url else ANTHROPIC
     doc.save(ignore_permissions=True)
-    ai_engine.ensure_model_pricing(doc.openai_model, ai_engine.OPENAI_SLOT)
+    for model in {doc.openai_model, *(row.openai_model for row in doc.ai_jobs)}:
+        ai_engine.ensure_model_pricing(model, ai_engine.OPENAI_SLOT)
     ai_engine.reset_provider_state()
     return settings_payload(frappe.get_doc(SETTINGS))
 

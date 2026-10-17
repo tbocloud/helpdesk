@@ -79,7 +79,7 @@ def draft_caption(
         )
 
     try:
-        result = call_haiku(SYSTEM_PROMPT, "\n".join(lines))
+        result = call_haiku(SYSTEM_PROMPT, "\n".join(lines), job="draft")
     except Exception:  # noqa: BLE001 - provider errors vary; show one clear message
         frappe.log_error(title="Draft with AI failed", message=frappe.get_traceback())
         frappe.throw(

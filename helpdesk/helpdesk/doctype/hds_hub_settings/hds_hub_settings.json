@@ -22,6 +22,8 @@
 		"openai_api_key",
 		"column_break_openai",
 		"openai_model",
+		"jobs_section",
+		"ai_jobs",
 		"limits_section",
 		"max_tool_calls_per_session",
 		"max_session_time_seconds",
@@ -153,6 +155,19 @@
 			"label": "OpenAI Model"
 		},
 		{
+			"collapsible": 1,
+			"description": "Optional: a job's own model in each section. Without a row, a job uses the section's model; the order and the fallback stay as above. A change applies to the next call.",
+			"fieldname": "jobs_section",
+			"fieldtype": "Section Break",
+			"label": "Models per job"
+		},
+		{
+			"fieldname": "ai_jobs",
+			"fieldtype": "Table",
+			"label": "AI jobs",
+			"options": "HDS AI Job"
+		},
+		{
 			"fieldname": "limits_section",
 			"fieldtype": "Section Break",
 			"label": "Investigation Limits"
@@ -263,7 +278,7 @@
 	],
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-10-14 12:00:00.000000",
+	"modified": "2026-10-17 17:25:51.799475",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Hub Settings",

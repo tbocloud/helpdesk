@@ -806,7 +806,9 @@ def write_analysis(facts: dict) -> dict:
     if not is_ai_configured():
         return {"status": "unavailable", "reason": _("AI isn't set up on this hub.")}
     try:
-        result = call_haiku(SYSTEM_PROMPT, json.dumps(facts, indent=1, default=str))
+        result = call_haiku(
+            SYSTEM_PROMPT, json.dumps(facts, indent=1, default=str), job="summary"
+        )
     except Exception:  # noqa: BLE001 - provider errors vary; the dashboard still works
         frappe.log_error(
             title="Team dashboard analysis failed", message=frappe.get_traceback()

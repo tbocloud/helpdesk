@@ -11,7 +11,10 @@ KEYED_URL_FIELDS = ("ai_base_url", "openai_base_url")
 
 class HDSHubSettings(Document):
     def validate(self):
+        from helpdesk.ai_engine import check_job_rows
+
         self.validate_ai_base_urls()
+        check_job_rows(self)
 
     def validate_ai_base_urls(self):
         """An AI key only goes over https. Messages start with the field's label,

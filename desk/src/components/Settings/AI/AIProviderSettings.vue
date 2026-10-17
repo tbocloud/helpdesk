@@ -117,6 +117,46 @@
               />
             </SecretField>
           </SettingsSection>
+
+          <SettingsSection
+            :title="__('Models per job')"
+            :description="
+              __(
+                'Blank uses the section\'s model. A model here changes only that job, from its next call; the order and the fallback stay as above.'
+              )
+            "
+          >
+            <div class="flex flex-col divide-y divide-outline-gray-1">
+              <div
+                v-for="job in JOBS"
+                :key="job.job"
+                class="grid gap-3 py-3 first:pt-0 last:pb-0 sm:grid-cols-3 sm:items-end"
+              >
+                <div class="flex min-w-0 flex-col gap-1 sm:self-center">
+                  <span class="text-base-medium text-ink-gray-8">
+                    {{ job.label }}
+                  </span>
+                  <p class="text-p-sm text-ink-gray-6">{{ job.description }}</p>
+                </div>
+                <FormControl
+                  v-model="form.ai_jobs[job.job].openai_model"
+                  :label="__('OpenAI')"
+                  :placeholder="form.openai_model || __('Section model')"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+                <FormControl
+                  v-model="form.ai_jobs[job.job].anthropic_model"
+                  :label="__('Anthropic-compatible')"
+                  :placeholder="
+                    form.default_triage_model || __('Section model')
+                  "
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+              </div>
+            </div>
+          </SettingsSection>
         </div>
       </div>
     </template>
@@ -153,7 +193,7 @@ import SettingsSection from "../SettingsSection.vue";
 
 const SLOTS: ProviderSlot[] = ["OpenAI", "Anthropic-compatible"];
 const SECRETS = ["openai_api_key", "anthropic_api_key"] as const;
-type Secret = typeof SECRETS[number];
+type Secret = (typeof SECRETS)[number];
 type BaseUrlField = "openai_base_url" | "ai_base_url";
 
 // HDSHubSettings.validate starts its messages with these labels
@@ -212,6 +252,57 @@ const SECTIONS: Section[] = [
   },
 ];
 
+interface JobModels {
+  openai_model: string;
+  anthropic_model: string;
+}
+
+// helpdesk.ai_engine.JOBS, in that order
+const JOBS = [
+  {
+    job: "triage",
+    label: __("Triage"),
+    description: __("The first look at a new ticket."),
+  },
+  {
+    job: "draft",
+    label: __("Drafts"),
+    description: __("Reply suggestions, knowledge base drafts and content."),
+  },
+  {
+    job: "summary",
+    label: __("Summaries"),
+    description: __(
+      "Home plan, team dashboards, work summaries and repeat issues."
+    ),
+  },
+  {
+    job: "task",
+    label: __("Tasks"),
+    description: __("Task descriptions and estimates."),
+  },
+  {
+    job: "chat",
+    label: __("Chat"),
+    description: __("The chatbot in Teams and the helpdesk, when it comes."),
+  },
+  {
+    job: "investigate",
+    label: __("Copilot: investigate"),
+    description: __("Finding a ticket's root cause."),
+  },
+  {
+    job: "fix",
+    label: __("Copilot: fix"),
+    description: __("Writing and testing the fix."),
+  },
+  {
+    job: "review",
+    label: __("Copilot: review"),
+    description: __("Reviewing the fix before a person approves it."),
+  },
+];
+
 interface SettingsData {
   settings: Record<string, any>;
   secrets: Record<Secret, SecretStatus>;
@@ -226,9 +317,25 @@ const fieldErrors = reactive({} as Partial<Record<BaseUrlField, string>>);
 const saves = ref(0);
 
 function load(data: SettingsData) {
+  const rows = (data.settings.ai_jobs ?? []) as Array<
+    JobModels & { job: string }
+  >;
   form.value = {
     ...data.settings,
     ai_failover: Boolean(data.settings.ai_failover),
+    // every job has a row on the page; the hub keeps only those with a model
+    ai_jobs: Object.fromEntries(
+      JOBS.map(({ job }) => {
+        const row = rows.find((item) => item.job === job);
+        return [
+          job,
+          {
+            openai_model: row?.openai_model ?? "",
+            anthropic_model: row?.anthropic_model ?? "",
+          },
+        ];
+      })
+    ) as Record<string, JobModels>,
   };
   initial.value = JSON.stringify(form.value);
   for (const key of SECRETS) edits[key] = { mode: "keep", value: "" };
@@ -301,6 +408,9 @@ const save = createResource({
     const values: Record<string, any> = {
       ...form.value,
       ai_failover: form.value?.ai_failover ? 1 : 0,
+      ai_jobs: Object.entries(
+        (form.value?.ai_jobs ?? {}) as Record<string, JobModels>
+      ).map(([job, models]) => ({ job, ...models })),
     };
     for (const key of SECRETS) {
       const value = secretParam(key);

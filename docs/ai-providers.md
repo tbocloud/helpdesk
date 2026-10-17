@@ -101,9 +101,35 @@ mistyped OpenAI model fails over to the other provider and tells the managers.
   fallback, "… No other provider is set up, so AI features are paused until it's fixed in
   Settings → AI providers." The time keeps each incident's text unique, since chat posts
   are sent once per text. It links to Home.
-- Callers are unchanged: they still call `call_haiku(system_prompt, user_message,
-  ticket_name=None)` and get `{response, usage, cost}`. Triage catches `AIProviderError`
+- Callers call `call_haiku(system_prompt, user_message, ticket_name=None, job=None)` and get
+  `{response, usage, cost}`; each names its job (below). Triage catches `AIProviderError`
   (it used to catch the SDK's `anthropic.APIError`) and marks the ticket Failed.
+
+## Models per job
+
+A job can use its own model in each section; the order, the failover, the pauses and the
+alerts stay as above. **HDS Hub Settings → Models per job** (child table `HDS AI Job`: job,
+OpenAI model, Anthropic-compatible model; one row per job, both models optional) and the
+same list on Settings → AI providers. A blank model, or no row, is the section's own model,
+so with an empty table every job runs as before. A change applies from the job's next call.
+
+| Job | Who calls it |
+|---|---|
+| `triage` | `triage.py`, `api/ticket_ai.py`, the Chatwoot chat answer |
+| `draft` | `ai_suggestion.py`, `kb_drafts.py`, `content_topics.py`, `api/content.py` |
+| `summary` | `work_summary.py`, `team_dashboard.py`, `team_insights.py`, `home_plan.py`, `repeat_issues.py`, `standup.py`, the Chatwoot transcript summary |
+| `task` | `task_descriptions.py`, `task_estimates.py` |
+| `chat` | none yet: the chatbot of a later phase |
+| `investigate`, `fix`, `review` | the TBO Copilot worker (below) |
+
+- `get_providers(job)` gives each section with the job's model. A provider with its own
+  model has `override` set, and its pause, failure and alert keys are `<section>|<model>`
+  (`AIProvider.key`), so a mistyped job model pauses only that job, not its section.
+- `HDSHubSettings.validate` refuses a second row for the same job (`check_job_rows`).
+- **The worker's jobs:** `run_context.models` (`ai_engine.worker_models()`) lists, for
+  `investigate`, `fix` and `review`, each set-up section in the hub's order with the job's
+  model and its HDS Model Pricing prices per million tokens. It never holds a key: the worker
+  keeps its own addresses and keys and uses only the sections it has a key for.
 
 ## Recovery
 
@@ -153,7 +179,13 @@ providers**. The Systems card's AI triage row names the provider that answers no
 ## Usage log and pricing
 
 - **HDS AI Usage Log** has `provider` (the section; investigation calls log
-  Anthropic-compatible) next to `model`, for every attempt.
+  Anthropic-compatible) next to `model`, for every attempt, plus `job`, `fallback` (the
+  answer came from a section other than the first) and `copilot_run`.
+- **The worker's spend:** `submit_investigation` and `submit_change` carry the run's `cost`
+  with a `stages` list (one entry per job and model: tokens, cached tokens, dollars, section,
+  fallback). `log_worker_usage` turns each entry into a usage row with the run and its
+  ticket, keyed by `stage_key` (`<run>:<job>:<attempt>`, plus `:fallback`), so a report sent
+  again adds nothing. A ticket's hub and worker AI cost are then in the same log.
 - **HDS Model Pricing** `provider` options: Anthropic, Anthropic-compatible, OpenAI.
   `ensure_model_pricing` adds a row priced 0 with a TODO note for a newly configured OpenAI
   model (on save and in the patch), so cost reports list it at $0 until a System Manager
@@ -177,6 +209,8 @@ the Anthropic-compatible provider keeps answering as before.
 4. Primary provider OpenAI and Fall back on are the defaults. Top up Kimi (or remove its
    key) when convenient; until then it is the paused fallback.
 5. Enter OpenAI's price for the model in HDS Model Pricing.
+6. Optional: a job that needs another model gets a row under **Models per job**; its
+   OpenAI model gets a pricing row priced 0 to fill in, as in step 5.
 
 ## Known limits
 
