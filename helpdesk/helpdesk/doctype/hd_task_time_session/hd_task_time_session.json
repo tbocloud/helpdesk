@@ -8,8 +8,8 @@
   "task",
   "user",
   "column_break_1",
-  "start",
-  "end",
+  "started_at",
+  "ended_at",
   "hours",
   "section_break_1",
   "logged",
@@ -37,16 +37,16 @@
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "start",
+   "fieldname": "started_at",
    "fieldtype": "Datetime",
-   "label": "Start",
+   "label": "Started At",
    "reqd": 1,
    "in_list_view": 1
   },
   {
-   "fieldname": "end",
+   "fieldname": "ended_at",
    "fieldtype": "Datetime",
-   "label": "End",
+   "label": "Ended At",
    "reqd": 1
   },
   {
@@ -76,7 +76,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-10-16 12:00:00.000000",
+ "modified": "2026-10-17 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Helpdesk",
  "name": "HD Task Time Session",
@@ -105,7 +105,7 @@
    "role": "Agent Manager"
   }
  ],
- "sort_field": "start",
+ "sort_field": "started_at",
  "sort_order": "DESC",
  "states": [],
  "track_changes": 0

@@ -176,9 +176,7 @@ def process_delivery(delivery: str):
     if doc.status != "Queued":
         return
     previous_user = frappe.session.user
-    frappe.set_user(
-        "Administrator"
-    )  # the job inherits Guest from the webhook; task rules and history need a real user - nosemgrep
+    frappe.set_user("Administrator")  # the job inherits Guest from the webhook; task rules and history need a real user - nosemgrep
     frappe.db.savepoint("github_delivery")
     try:
         handled = handle_event(doc.event, frappe.parse_json(doc.payload or "{}"), doc)
@@ -192,9 +190,7 @@ def process_delivery(delivery: str):
             reference_name=doc.name,
         )
     finally:
-        frappe.set_user(
-            previous_user
-        )  # back to whoever enqueued it (Guest, or the test user) - nosemgrep
+        frappe.set_user(previous_user)  # back to whoever enqueued it (Guest, or the test user) - nosemgrep
     doc.db_set({"status": status, "error": error})
 
 
@@ -298,7 +294,7 @@ class PullRequestLink:
             # the timer's stretch is saved only once the move went through: a refused move
             # reloads the task with its timer still running, which would count it twice
             if self._stopped:
-                record_session(task.name, *self._stopped)
+                record_session(task.name, *self._stopped, user=self.timer_owner())
                 self._stopped = None
             return True
         except frappe.ValidationError as e:
@@ -311,6 +307,12 @@ class PullRequestLink:
                 )
             )
             return False
+
+    def timer_owner(self) -> str:
+        """Whose stretch it was: the webhook runs as Administrator, so the session goes on the
+        task's person (its only assignee), else on the automation user."""
+        assignees = self.task.assignees()
+        return assignees[0] if len(assignees) == 1 else acting_user()
 
     def stop_timer(self):
         """A running timer is folded into the actual hours before the task leaves Working."""
@@ -352,7 +354,9 @@ class PullRequestSync:
         self.repo = repo
         self.pr = pr
         self.number = int(pr.get("number") or 0)
-        self.login = (sender or {}).get("login") or (pr.get("user") or {}).get("login")
+        self.login = (sender or {}).get("login") or (pr.get("user") or {}).get(
+            "login"
+        )
         self.settings = frappe.get_single(SETTINGS)
 
     @property
@@ -373,7 +377,9 @@ class PullRequestSync:
         """Task name -> "Closes" or "Refs"; only tasks that exist."""
         text = f"{self.pr.get('title') or ''}\n{self.pr.get('body') or ''}"
         branch = (self.pr.get("head") or {}).get("ref") or ""
-        refs = {m.upper(): "Refs" for m in TASK_REF.findall(f"{text}\n{branch}")}
+        refs = {
+            m.upper(): "Refs" for m in TASK_REF.findall(f"{text}\n{branch}")
+        }
         for m in CLOSING_REF.findall(text):
             refs[m.upper()] = "Closes"
         if not refs:
@@ -524,8 +530,10 @@ class PullRequestSync:
         # the Task controller already told the lead unless the task came off a hold
         if moved and target == PENDING_REVIEW and not task.flags.review_requested:
             link.notify_leads(
-                _("{0} merged, ready for review: {1}").format(link.label, task.subject)
-            )
+                    _("{0} merged, ready for review: {1}").format(
+                        link.label, task.subject
+                    )
+                )
 
     def tell_ticket(self, link: PullRequestLink):
         """The agent on the linked ticket can tell the customer the fix is in."""

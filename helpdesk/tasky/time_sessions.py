@@ -36,8 +36,8 @@ def record_session(
                 "doctype": SESSION,
                 "task": task,
                 "user": user,
-                "start": piece_start,
-                "end": piece_end,
+                "started_at": piece_start,
+                "ended_at": piece_end,
                 "hours": round((piece_end - piece_start).total_seconds() / 3600, 2),
                 "logged": 1 if settled else 0,
             }
@@ -61,10 +61,10 @@ def unlogged_sessions(task: str) -> list:
     session = frappe.qb.DocType(SESSION)
     return (
         frappe.qb.from_(session)
-        .select(session.name, session.start, session.end, session.hours)
+        .select(session.name, session.started_at, session.ended_at, session.hours)
         .where(session.task == task)
         .where(session.logged == 0)
-        .orderby(session.start)
+        .orderby(session.started_at)
         .run(as_dict=True)
     )
 
@@ -87,7 +87,7 @@ def completion_days(task_doc) -> dict:
 
     sessions = unlogged_sessions(task_doc.name)
     for row in sessions:
-        add(str(getdate(row.start)), flt(row.hours), get_datetime(row.start))
+        add(str(getdate(row.started_at)), flt(row.hours), get_datetime(row.started_at))
     if task_doc.get("custom_timer_start"):
         for piece_start, piece_end in split_by_day(
             get_datetime(task_doc.custom_timer_start), now_datetime()
@@ -123,9 +123,9 @@ def first_start_on(task: str, day) -> datetime | None:
     """When the task's timer first started on `day`, among its unlogged sessions."""
     day = getdate(day)
     starts = [
-        get_datetime(r.start)
+        get_datetime(r.started_at)
         for r in unlogged_sessions(task)
-        if getdate(r.start) == day
+        if getdate(r.started_at) == day
     ]
     return min(starts) if starts else None
 
@@ -142,5 +142,5 @@ def mark_logged(task: str, timesheet: str | None, day=None) -> None:
         .where(session.logged == 0)
     )
     if day:
-        query = query.where(Date(session.start) == frappe.utils.getdate(day))
+        query = query.where(Date(session.started_at) == frappe.utils.getdate(day))
     query.run()

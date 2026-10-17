@@ -624,10 +624,12 @@ today"). Before, banked time was only a total in `custom_timer_elapsed`, and com
 logged it all as one time log ending now, so yesterday's work landed on today.
 
 - **Sessions:** every stretch the timer runs is saved as an **HD Task Time Session** (task, user,
-  start, end, hours, `logged`, `timesheet`), split at midnight so each row is one day
+  `started_at`, `ended_at`, hours, `logged`, `timesheet`; not `start`/`end`, which newer Frappe's
+  list-query check rejects as SQL keywords), split at midnight so each row is one day
   (`helpdesk/tasky/time_sessions.py`, `record_session`). It's written wherever the timer stops:
   Pause (`stop_timer`), leaving In progress (`move_task`), going on hold (`Task.start_hold`), a
-  GitHub event moving the task (`github_sync`, only once the move is saved: a refused move keeps
+  GitHub event moving the task (`github_sync`, on the task's only assignee rather than the
+  webhook's Administrator, else the automation user; only once the move is saved: a refused move keeps
   the timer running, and saving the stretch then would count it twice), and completion
   (`_mark_completed`). Moving In progress to Cancelled saves the stretch already `logged`
   (`settled`): it's kept for the record but not offered at completion, as cancelling never
@@ -653,6 +655,11 @@ logged it all as one time log ending now, so yesterday's work landed on today.
   (`_day_start`). Each day's sessions are then marked `logged` with that day's timesheet,
   and any left (a timer day taken out in the dialog) are marked `logged` too, so completing a
   reopened task starts afresh. `hours_worked` alone (the mobile app) still logs on today.
+- **One timer per task:** the timer lives on the task (`custom_timer_start`,
+  `custom_timer_elapsed`), not on a person, as it did before sessions were kept. So completing
+  logs the task's tracked time, whoever started or paused it, to the completer's timesheets; a
+  session's `user` only records who stopped that stretch. Splitting a shared task's hours between
+  its assignees would need a timer per person, which this doesn't add.
 - Hours land on their own day everywhere timesheets are read: Timesheets, the Scoreboard, the
   customer report and support hours.
 

@@ -57,8 +57,8 @@ class TestTimerSessions(FrappeTestCase):
         return frappe.get_all(
             SESSION,
             filters=filters,
-            fields=["start", "end", "hours", "user", "logged", "timesheet"],
-            order_by="start asc",
+            fields=["started_at", "ended_at", "hours", "user", "logged", "timesheet"],
+            order_by="started_at asc",
         )
 
     def run_timer_today(self, hours: float) -> float:
@@ -101,7 +101,7 @@ class TestTimerSessions(FrappeTestCase):
         self.as_dev(lambda: tasky.stop_timer(self.task))
 
         rows = self.sessions()
-        self.assertEqual([getdate(r.start) for r in rows], [self.yesterday, self.today])
+        self.assertEqual([getdate(r.started_at) for r in rows], [self.yesterday, self.today])
         self.assertEqual(rows[0].hours, 2.0)
         self.assertEqual({r.user for r in rows}, {DEV[0]})
 
