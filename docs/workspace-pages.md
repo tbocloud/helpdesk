@@ -617,6 +617,63 @@ touches another's: there is no one-running-task rule. Before this, Pause only ch
 board's local state, so the server timer kept running and the next load (moving or editing
 another task, or coming back to the board) showed the paused task running again.
 
+### Dropping a card on In review or Completed
+
+Done work always goes through the Complete dialog, so the hours and notes reach the timesheet
+(`move_task` refuses Completed and Pending Review). Dropping a card on **Completed** opens it as
+**Complete task** (`complete_task`); on a project with review before done the controller still
+routes it to Pending Review, unless a lead or coordinator completes it. Dropping on **In review**
+opens it as **Send for review** (`complete_task(..., for_review=1)`): the task stays in
+Pending Review on any project, not only those with review before done, and the lead or managers
+get the "Ready for review" notice (`flags.review_requested`). A lead dropping a reviewed card on
+Completed approves it (`approve_task`).
+
+### Hours by day
+
+The timer remembers the day it ran (owner's request, 2026-10-16: "yesterday's hours went on
+today"). Before, banked time was only a total in `custom_timer_elapsed`, and completing the task
+logged it all as one time log ending now, so yesterday's work landed on today.
+
+- **Sessions:** every stretch the timer runs is saved as an **HD Task Time Session** (task, user,
+  `started_at`, `ended_at`, hours, `logged`, `timesheet`; not `start`/`end`, which newer Frappe's
+  list-query check rejects as SQL keywords), split at midnight so each row is one day
+  (`helpdesk/tasky/time_sessions.py`, `record_session`). It's written wherever the timer stops:
+  Pause (`stop_timer`), leaving In progress (`move_task`), going on hold (`Task.start_hold`), a
+  GitHub event moving the task (`github_sync`, on the task's only assignee rather than the
+  webhook's Administrator, else the automation user; only once the move is saved: a refused move keeps
+  the timer running, and saving the stretch then would count it twice), and completion
+  (`_mark_completed`). Moving In progress to Cancelled saves the stretch already `logged`
+  (`settled`): it's kept for the record but not offered at completion, as cancelling never
+  banked it.
+- **Complete task dialog:** `get_completion_days(task)` returns `{today, days}`: the site's today
+  (the dialog checks dates against it, not the browser's clock or time zone) and one entry per
+  day, `[{date, hours, from_time, long}]`, from the task's unlogged sessions plus the stretch
+  still running. Time banked before sessions were kept (no sessions behind it) goes on today.
+  The dialog shows a row per day (date and hours, each rounded to the nearest quarter hour, so a
+  few minutes on a day are left out unless that leaves no time at all; "From the timer: …"),
+  with **+ Add another day** and remove. Only the latest request's answer fills the rows, so a
+  slow reply for a task closed a moment ago never fills another's. A day over 10 hours
+  (`LONG_DAY_HOURS`) is flagged: "The timer ran over 10 hours this day. Was it left running?"
+- **Saving:** `complete_task(task, notes, days=[{date, hours}])` checks each day (a date, not in
+  the future, not before the task was created, listed once, more than 0 and at most 24 hours)
+  (a malformed `days` gets a message, not an error) and logs **one timesheet per day**, each with that day's single time log, so a person reading
+  their timesheets sees each day's hours on their own (owner's decision, 2026-10-16: one
+  timesheet holding several days read as one larger number). The response lists them in
+  `timesheets`; `timesheet` is the first, `timesheet_status` is Draft if any couldn't be
+  submitted, and `draft_timesheets` names those. A day's log starts when its timer first ran; today without a timer ends now, as before;
+  another day without one starts at 09:00 (`DEFAULT_DAY_START`). The start moves earlier where
+  needed so the log ends by now (today) or by midnight (another day), never before the day began
+  (`_day_start`). Each day's sessions are then marked `logged` with that day's timesheet,
+  and any left (a timer day taken out in the dialog) are marked `logged` too, so completing a
+  reopened task starts afresh. `hours_worked` alone (the mobile app) still logs on today.
+- **One timer per task:** the timer lives on the task (`custom_timer_start`,
+  `custom_timer_elapsed`), not on a person, as it did before sessions were kept. So completing
+  logs the task's tracked time, whoever started or paused it, to the completer's timesheets; a
+  session's `user` only records who stopped that stretch (for a GitHub move, which runs as Administrator, the task's only assignee, else the automation user). Splitting a shared task's hours between
+  its assignees would need a timer per person, which this doesn't add.
+- Hours land on their own day everywhere timesheets are read: Timesheets, the Scoreboard, the
+  customer report and support hours.
+
 ### Telling the assigner a task is done
 
 When a task becomes **Completed**, whoever assigned it (the same person the "Assigned by" label

@@ -31,6 +31,9 @@ export const DM_EMPLOYEE_HIDDEN_ROUTES = new Set([
 export const ERP_EMPLOYEE_HIDDEN_ROUTES = new Set(["WorkCalendar"]);
 
 export const CONTENT_TEAM_ROUTES = new Set([
+  // shown only when Leads is on for them (authStore.canUseLeads)
+  "Leads",
+  "Lead",
   "ContentCalendar",
   "ContentReport",
   "Performance",

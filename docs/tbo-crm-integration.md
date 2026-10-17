@@ -1,14 +1,17 @@
 # TBO CRM integration
 
 Status: users and customers both ways are implemented (missing records only), billable
-time becomes draft Sales Invoices in the CRM site's ERPNext, and the CRM site's holidays and
-approved leave are read into the hub.
+time becomes draft Sales Invoices in the CRM site's ERPNext, the CRM site's holidays and
+approved leave are read into the hub, and sales leads are worked in the hub, live on the CRM
+site ([leads.md](leads.md)).
 This document is the source of truth for the feature and changes with it.
 
 ## What it connects
 
 - **TBO Support**: this hub (Frappe Helpdesk fork, tbocloud/helpdesk).
-- **TBO CRM**: a Frappe CRM site (fork tbocloud/crm), e.g. https://tboindia.tbocloud.in.
+- **TBO CRM**: the ERPNext site https://tboindia.tbocloud.in (india.teambackoffice.com).
+  Frappe CRM is being removed from it (owner, 2026-10-16) and ERPNext's Lead becomes the
+  system of record; everything below works with or without Frappe CRM installed there.
 
 The hub calls the CRM's REST API. The connection lives in **Settings → CRM**
 (HD CRM Settings): site URL, API key and API secret of a System Manager user on the
@@ -26,11 +29,18 @@ Only what's missing is created; existing accounts keep their roles and details.
   enabled desk user, except Administrator and the TBO AI automation user.
   - not on the CRM site → create the User (welcome email if that setting is on);
   - disabled on the CRM site → enable it;
-  - no CRM role (Sales User, Sales Manager or System Manager) → give the role from settings
-    through Frappe CRM's own `crm.api.user.add_existing_users`.
-- **CRM → helpdesk** (*Add CRM users missing in helpdesk, as agents*): users Frappe CRM lists
-  as CRM users (`crm.api.session.get_users`) without a helpdesk account get a User and an
-  active HD Agent (HD Agent adds the Agent role). Existing helpdesk users are not changed.
+  - no sales role (Sales User or Sales Manager; System Manager alone isn't enough, since
+    Leads act as the person there) → give the ERPNext sales role from settings (Sales User or Sales Manager) on their User, as one Has Role row through
+    `frappe.client.insert` (`CRMClient.add_role`), so their other roles stay. A Role
+    Profile on that User that leaves the role out puts its own roles back; that is reported
+    as a failure for that person, not as done.
+- **CRM → helpdesk** (*Add CRM users missing in helpdesk, as agents*): enabled desk users
+  with Sales User or Sales Manager on the CRM site (read from User and its roles,
+  `CRMClient.crm_users`) without a helpdesk account get a User and an active HD Agent
+  (HD Agent adds the Agent role). Existing helpdesk users are not changed.
+- Why roles on User directly: Frappe CRM's `crm.api.user.add_existing_users` and
+  `crm.api.session.get_users` go away with Frappe CRM. ERPNext's Lead permissions use the same
+  two roles, so this works before and after the cutover.
 - **Leaving** (*Disable CRM users who leave helpdesk*): users this connection created on the
   CRM site (remembered in HD CRM Settings, hidden field `created_in_crm`) are disabled there
   once they're disabled or deactivated in helpdesk. People created directly in the CRM are
@@ -39,11 +49,20 @@ Only what's missing is created; existing accounts keep their roles and details.
 ## Customers, both ways (implemented)
 
 *Sync customers both ways*: helpdesk **HD Customer** ↔ the CRM's customers, matched by
-name ignoring case and extra spaces. On the CRM site a customer is a **CRM Organization**,
-or an ERPNext **Customer** (not disabled) when that site runs ERPNext too; both are read.
+name ignoring case and extra spaces. On the CRM site a customer is an ERPNext **Customer**
+(not disabled), or a **CRM Organization** while Frappe CRM is installed there
+(`CRMClient.has_doctype("CRM Organization")`); both are read.
 
-- An HD Customer missing in the CRM becomes a CRM Organization (with its domain as website);
-  it isn't created as an ERPNext Customer, which needs a group and territory.
+- While Frappe CRM is there, an HD Customer missing in the CRM becomes a CRM Organization
+  (with its domain as website). It isn't created as an ERPNext Customer, which needs a group
+  and territory, and an hourly job creating accounting masters from name matches could add
+  duplicates to the system of record.
+- Without Frappe CRM, nothing is created on the CRM site: HD Customers missing there are
+  counted in Last Sync Result ("N only in helpdesk; add them as Customers on the CRM site")
+  for someone to add in ERPNext.
+- If the ERPNext Customers can't be read (403, timeout), the sync fails with that error,
+  with or without Frappe CRM, instead of creating duplicates or calling every customer
+  missing. A site without ERPNext answers 404, which counts as no Customers.
 - A CRM Organization or ERPNext Customer missing in helpdesk becomes an HD Customer
   (website as domain).
 - Existing records on either side are never changed or deleted. Contacts are not synced yet.
@@ -162,6 +181,12 @@ On by default (*Sync approved leave*).
 Tests: `helpdesk/tests/test_crm_holidays.py` (with `test_utils.FakeCRM`) and the leave cases in
 `helpdesk/tests/test_follow_ups.py`.
 
+## Leads (implemented)
+
+Sales leads are created and worked in the hub and live only in ERPNext on the CRM site,
+read and written as the signed-in person through TBO Smart's hub leads API. Settings → CRM →
+**Leads** turns it on (off by default) and picks the teams. Details: [leads.md](leads.md).
+
 ## When it runs
 
 Every hour (users, then customers), soon after an agent is added, re-activated or
@@ -175,14 +200,16 @@ Tests: `helpdesk/tests/test_crm_user_sync.py` and `helpdesk/tests/test_timesheet
 ## Possible next steps
 
 - Contacts of a customer, both ways.
-- A CRM Deal marked Won creating the customer's project in helpdesk.
+- A lead marked Won creating the customer's project in helpdesk.
 - A webhook from the CRM site for new organizations, instead of waiting for the hourly run.
 
 ## Security
 
 - Keys are entered only in Settings → CRM, never sent in chat or email; rotate any key
   that was.
-- The CRM API user needs System Manager (to create users) on the CRM site. For holidays
+- The CRM API user needs System Manager (to create users and give roles) on the CRM site.
+  For Leads, TBO Smart acts as `acting_user`, so each person's own roles there decide what
+  they see and change. For holidays
   and leave it needs read access to **Holiday List**, **Company**, **Leave Application** and
   **Employee** (System Manager has it; with a narrower role, add read in Role Permissions).
 - The hub only creates, enables and (for users it created) disables records. The one

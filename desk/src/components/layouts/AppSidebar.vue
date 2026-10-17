@@ -462,6 +462,7 @@ const navItems = computed(() => {
       (item) =>
         !authStore.isDmEmployee || !DM_EMPLOYEE_HIDDEN_ROUTES.has(item.to)
     )
+    .filter((item) => !item.leadsOnly || authStore.canUseLeads)
     .filter((item) => !item.projectManagerOnly || authStore.isProjectManager)
     .filter((item) => !item.overviewOnly || authStore.canSeeOverview)
     .filter(
