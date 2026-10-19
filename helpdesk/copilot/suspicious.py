@@ -27,6 +27,32 @@ PATTERNS = [
 ]
 EVENT = "suspicious_instruction"
 
+# shapes of secrets: a flagged line goes into the run's events, and a secret never does
+SECRET_SHAPES = [
+    re.compile(p)
+    for p in (
+        r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)",
+        r"\b(?:sk|pk|rk)-[A-Za-z0-9_-]{16,}",
+        r"\bgh[pousr]_[A-Za-z0-9]{20,}",
+        r"\bgithub_pat_[A-Za-z0-9_]{20,}",
+        r"\bAKIA[0-9A-Z]{16}\b",
+        r"\bxox[baprs]-[A-Za-z0-9-]{10,}",
+        r"[A-Za-z0-9+/_=-]{32,}",  # any long opaque string: a token, a key, a signature
+    )
+]
+SECRET_ASSIGNMENT = re.compile(
+    r"\b(password|passwd|secret|token|api[_-]?key|apikey|client[_-]?secret)\b(\s*[:=]\s*)([\"']?)[^\s\"']{4,}\3",
+    re.IGNORECASE,
+)
+
+
+def redact_secrets(line: str) -> str:
+    """The line with anything shaped like a secret replaced, so it can go into an event."""
+    text = SECRET_ASSIGNMENT.sub(r"\1\2[secret removed]", line)
+    for shape in SECRET_SHAPES:
+        text = shape.sub("[secret removed]", text)
+    return text
+
 
 def suspicious_lines(text: str, limit: int = 3) -> list[str]:
     """The lines of `text` (HTML or plain) that look like an instruction to the AI, cut to 200 characters."""
@@ -75,7 +101,9 @@ def check_ticket(run):
         [ticket.get("subject") or "", ticket.get("description") or "", *messages]
     )
     for line in suspicious_lines(text, 5):
-        runs.add_event(run, EVENT, {"source": "ticket", "text": line}, runs.SYSTEM)
+        runs.add_event(
+            run, EVENT, {"source": "ticket", "text": redact_secrets(line)}, runs.SYSTEM
+        )
 
 
 def seen(run_name: str) -> list[dict]:
