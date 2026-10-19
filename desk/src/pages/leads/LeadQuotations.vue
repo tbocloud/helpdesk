@@ -1,5 +1,5 @@
 <template>
-  <!-- read only for now; proposals will be made from here (docs/leads.md) -->
+  <!-- read only; a proposal prices the lead through these (docs/proposals.md) -->
   <section
     class="rounded-xl border border-outline-gray-2 bg-surface-base"
     :aria-label="__('Quotations')"

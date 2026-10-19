@@ -56,6 +56,8 @@ import LucideMessageCircle from "~icons/lucide/message-circle";
 import LucideMessagesSquare from "~icons/lucide/messages-square";
 import GitHubSettings from "./GitHub/GitHubSettings.vue";
 import AIProviderSettings from "./AI/AIProviderSettings.vue";
+import SalesSettings from "./Sales/SalesSettings.vue";
+import LucideReceipt from "~icons/lucide/receipt";
 import LucideBot from "~icons/lucide/bot";
 import LucideGitPullRequest from "~icons/lucide/git-pull-request";
 
@@ -211,6 +213,13 @@ export const tabs = computed(() => {
           condition: () => auth.isAdmin || auth.isManager,
         },
         {
+          label: __("Rates and proposals"),
+          icon: markRaw(LucideReceipt),
+          component: markRaw(SalesSettings),
+          // read live from the ERP site, which decides who may change them
+          condition: () => auth.canUseLeads,
+        },
+        {
           label: __("Ticket intake"),
           icon: markRaw(LucideInbox),
           component: markRaw(IntakeSettings),
@@ -317,6 +326,7 @@ type TabName =
   | "Follow-ups"
   | "Stand-up"
   | "Ticket intake"
+  | "Rates and proposals"
   | "Chat & Teams"
   | "TBO Chat"
   | "GitHub"

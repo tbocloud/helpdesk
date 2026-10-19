@@ -3264,6 +3264,8 @@ class FakeCRM:
         self.base = "https://erp.example"
         self.lead_answers: dict[str, object] = {}
         self.lead_calls: list[tuple[str, bool, dict]] = []
+        # the full method path of each call, e.g. tbo_smart.api.hub_proposals.get_proposal
+        self.lead_paths: list[str] = []
         self.lead_error: Exception | None = None
 
     def logged_user(self):
@@ -3325,6 +3327,7 @@ class FakeCRM:
     def call(self, method, post=False, **params):
         name = method.rsplit(".", 1)[-1]
         self.lead_calls.append((name, post, params))
+        self.lead_paths.append(method)
         if self.lead_error:
             raise self.lead_error
         return self.lead_answers.get(name)

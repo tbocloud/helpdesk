@@ -13,7 +13,7 @@ import { createRouter, createWebHistory } from "vue-router";
 const { isMobileView } = useScreenSize();
 
 export const LOGIN_PAGE = "/login";
-const LEADS_ROUTES = new Set(["Leads", "Lead"]);
+const LEADS_ROUTES = new Set(["Leads", "Lead", "LeadProposal"]);
 
 // type the meta fields
 declare module "vue-router" {
@@ -161,6 +161,12 @@ const portalRoutes = [
     path: "/leads/:leadId",
     name: "Lead",
     component: () => import("@/pages/leads/Lead.vue"),
+    props: true,
+  },
+  {
+    path: "/leads/:leadId/proposals/:proposalId",
+    name: "LeadProposal",
+    component: () => import("@/pages/leads/Proposal.vue"),
     props: true,
   },
   {
