@@ -59,11 +59,20 @@ export type SectionType =
   | "Success Criteria"
   | "Constraints"
   | "Open Questions"
+  | "Introduction"
+  | "User Roles"
+  | "Module Specification"
+  | "Non-functional Requirements"
   | "Image"
   | "Custom";
 
 /** The client documents, one made from the accepted one before it (docs/proposals.md §Documents). */
-export type DocumentTypeName = "Proposal" | "Quotation" | "Work Order" | "BRD";
+export type DocumentTypeName =
+  | "Proposal"
+  | "Quotation"
+  | "Work Order"
+  | "BRD"
+  | "SRS";
 
 /** A switched-on type of client document, as the ERP site describes it. */
 export interface DocumentType {
@@ -602,6 +611,10 @@ export const SECTION_LABELS: Record<SectionType, string> = {
   "Success Criteria": __("Success Criteria"),
   Constraints: __("Constraints"),
   "Open Questions": __("Open Questions"),
+  Introduction: __("Introduction"),
+  "User Roles": __("User Roles & Permissions"),
+  "Module Specification": __("Module Specification"),
+  "Non-functional Requirements": __("Non-functional Requirements"),
   Image: __("Image"),
   Custom: __("Custom"),
 };

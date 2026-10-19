@@ -513,6 +513,39 @@ const moduleTexts = [
     rows: 2,
     help: __("“Title: Step → Step → Step”, one a line."),
   },
+  // what the module adds to an SRS (TBO Smart's docs/client-documents.md §6)
+  {
+    key: "srs_requirements",
+    label: __("SRS: functional requirements"),
+    rows: 4,
+    help: __(
+      "“Requirement | How the client accepts it”, one a line. Each becomes a numbered FR and a UAT test."
+    ),
+  },
+  {
+    key: "srs_roles",
+    label: __("SRS: user roles"),
+    rows: 2,
+    help: __("“Role | What they may do”, one a line."),
+  },
+  {
+    key: "srs_screens",
+    label: __("SRS: screens and fields"),
+    rows: 2,
+    help: __("“Screen: field, field”, one a line."),
+  },
+  {
+    key: "srs_validations",
+    label: __("SRS: validations"),
+    rows: 2,
+    help: __("One rule a line."),
+  },
+  {
+    key: "srs_notifications",
+    label: __("SRS: notifications"),
+    rows: 2,
+    help: __("Who is told what, and when; one a line."),
+  },
 ];
 
 function lines(value?: string | null) {

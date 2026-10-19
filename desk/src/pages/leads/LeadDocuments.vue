@@ -35,7 +35,7 @@
     <!-- a grid, so the whole chain fits on one line on a wide screen and wraps on a narrow one -->
     <ol
       role="list"
-      class="grid grid-cols-2 gap-2 p-3 sm:grid-cols-3 lg:grid-cols-[repeat(auto-fit,minmax(9rem,1fr))]"
+      class="grid grid-cols-1 gap-2 p-3 sm:grid-cols-3 lg:grid-cols-[repeat(auto-fit,minmax(9rem,1fr))]"
     >
       <li
         v-for="(step, i) in chain.steps"
