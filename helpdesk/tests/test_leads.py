@@ -113,6 +113,28 @@ class TestLeads(FrappeTestCase):
         with self.assertRaises(frappe.ValidationError):
             leads_api.list_leads(metric="won", period="decade")
 
+    def test_ai_suggestions_are_the_signed_in_persons_to_act_on(self):
+        self.crm.lead_answers["get_lead_ai"] = {"enabled": True, "insight": None}
+        self.as_bde()
+        self.assertTrue(leads_api.get_lead_ai("CRM-LEAD-0001")["enabled"])
+        leads_api.apply_ai_stage("CRM-LEAD-0001")
+        leads_api.draft_lead_message("CRM-LEAD-0001", "email", language="xx")
+        leads_api.log_message_sent(
+            "CRM-LEAD-0001", "whatsapp", "  Sent the demo link  "
+        )
+        calls = {method: (post, params) for method, post, params in self.crm.lead_calls}
+        self.assertEqual(calls["get_lead_ai"][0], False)
+        for method in ("apply_ai_stage", "draft_lead_message", "log_message_sent"):
+            post, params = calls[method]
+            self.assertTrue(post)
+            self.assertEqual(params["acting_user"], BDE)
+        self.assertEqual(calls["draft_lead_message"][1]["language"], "en")
+        self.assertEqual(calls["log_message_sent"][1]["text"], "Sent the demo link")
+        with self.assertRaises(frappe.ValidationError):
+            leads_api.draft_lead_message("CRM-LEAD-0001", "sms")
+        with self.assertRaises(frappe.ValidationError):
+            leads_api.log_message_sent("CRM-LEAD-0001", "email", "  ")
+
     def test_writes_are_posted_with_the_acting_user(self):
         self.as_bde()
         leads_api.create_lead({"lead_name": "Asha Traders"})

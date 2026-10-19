@@ -110,6 +110,7 @@
                 </div>
               </dl>
             </section>
+            <LeadAISuggests :lead-id="leadId" @changed="detail.reload()" />
             <LeadQuotations :quotations="data.quotations || []" />
           </div>
 
@@ -285,6 +286,7 @@ import {
 } from "frappe-ui";
 import { computed, ref, useId, watch, type Component } from "vue";
 import LucideArrowRight from "~icons/lucide/arrow-right";
+import LucideBot from "~icons/lucide/bot";
 import LucideCalendar from "~icons/lucide/calendar";
 import LucideChevronRight from "~icons/lucide/chevron-right";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
@@ -293,6 +295,7 @@ import LucideHistory from "~icons/lucide/history";
 import LucideMessageSquare from "~icons/lucide/message-square";
 import LucidePhone from "~icons/lucide/phone";
 import LucidePencil from "~icons/lucide/pencil";
+import LeadAISuggests from "./LeadAISuggests.vue";
 import LeadFormDialog from "./LeadFormDialog.vue";
 import LeadQuotations from "./LeadQuotations.vue";
 import {
@@ -315,6 +318,7 @@ const TIMELINE_ICONS: Record<LeadTimelineEntry["kind"], Component> = {
   meeting: LucideCalendar,
   stage: LucideArrowRight,
   quotation: LucideFileText,
+  ai: LucideBot,
 };
 const TIMELINE_LABELS: Record<LeadTimelineEntry["kind"], string> = {
   note: __("Note"),
@@ -323,6 +327,7 @@ const TIMELINE_LABELS: Record<LeadTimelineEntry["kind"], string> = {
   meeting: __("Meeting"),
   stage: __("Stage"),
   quotation: __("Quotation"),
+  ai: __("TBO AI"),
 };
 
 const showEdit = ref(false);

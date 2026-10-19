@@ -40,6 +40,10 @@ user exists there with a sales role, applies what they may see, and records writ
 | `get_options` | GET | | `{stages: [{name, label, type, color}], sources, segments, owners: [{email, full_name}], territories, industries}` |
 | `list_leads` | GET | `search, stage, owner, segment, source, temperature, metric, period, from_date, to_date, view, start, page_length` | `{rows: [{name, lead_name, company_name, email_id, mobile_no, tbo_stage, segment, lead_owner, owner_name, score, next_follow_up, modified}], total}` |
 | `get_overview` | GET | `period, from_date, to_date, owner` | the Overview's figures (TBO Smart's `hub-leads-api.md` §2.4) |
+| `get_lead_ai` | GET | `name` | what the AI proposes, the lead's health and likely duplicates (TBO Smart's `hub-leads-api.md` §2.6) |
+| `refresh_lead_ai`, `apply_ai_stage`, `dismiss_ai_stage` | POST | `name` | as above, or the lead (apply) |
+| `draft_lead_message` | POST | `name, channel (whatsapp / email), language` | `{channel, subject, text, to?, url?}`; nothing is sent |
+| `log_message_sent` | POST | `name, channel, text` | the timeline entry |
 | `get_sales_activity` | GET | `from_date, to_date`, **no** `acting_user` | each salesperson's activity, for the Scoreboard ([team-dashboard.md](team-dashboard.md#sales)) |
 | `get_lead` | GET | `name` | `{lead: {...}, timeline: [...], quotations: [...], allowed_stages: [...]}` |
 | `create_lead` | POST | `data` | the lead (at least `name`) |
@@ -48,7 +52,7 @@ user exists there with a sales role, applies what they may see, and records writ
 | `add_note` | POST | `name, note` | the note |
 
 - `metric` (`new`, `contacted`, `meetings`, `quotations`, `won`, `lost`, `stale`, `overdue`,
-  `hot`) keeps the leads one Overview number counts; `period` (`week`, `month`, `quarter`,
+  `hot`, `open`, and the AI's `high_intent`, `unhappy`, `stage_suggested`) keeps the leads one Overview number counts; `period` (`week`, `month`, `quarter`,
   `custom` with `from_date` and `to_date`) goes with it and is sent only with a metric.
 - `view` is `all`, `mine`, `call_today` or `follow_up`. The hub sends `page_length` 20
   (at most 100) and `start` from 0.
@@ -58,8 +62,9 @@ user exists there with a sales role, applies what they may see, and records writ
 - `allowed_stages` may be stage names or stage objects; the hub offers only those (minus the
   current stage).
 - Timeline entries are TBO Smart's `{kind, at, who, who_name, text, ref}` (kind: note, call,
-  activity, meeting, stage, quotation), newest first; each kind has its own icon and a screen
-  reader label, and `text` is shown as sent (a stage move reads "Contacted → Proposal Sent").
+  activity, meeting, stage, quotation, and ai: what TBO AI did, with a bot icon), newest
+  first; each kind has its own icon and a screen reader label, and `text` is shown as sent (a
+  stage move reads "Contacted → Proposal Sent").
 - Quotations are read as `{name, transaction_date, tbo_quote_status, grand_total, currency}`.
 - `next_follow_up` on create or update schedules a Sales follow-up for the lead owner on the
   ERP site (tbo_smart#25); clearing it adds nothing and doesn't close the open one.
@@ -69,7 +74,9 @@ user exists there with a sales role, applies what they may see, and records writ
 ## Hub endpoints
 
 `helpdesk/api/leads.py`, thin typed proxies (writes are POST only): `get_options`,
-`list_leads`, `get_overview`, `get_lead`, `create_lead`, `update_lead`, `set_stage`, `add_note`. They check
+`list_leads`, `get_overview`, `get_lead`, `get_lead_ai`, `refresh_lead_ai`, `apply_ai_stage`,
+`dismiss_ai_stage`, `draft_lead_message`, `log_message_sent`, `create_lead`, `update_lead`,
+`set_stage`, `add_note`. They check
 `can_use_leads`, validate the view and page size, trim notes, and pass `acting_user`. The
 client is `CRMClient.call` in `helpdesk/integrations/crm/client.py`; the call and error
 mapping live in `helpdesk/integrations/crm/leads.py`. The API key and secret never reach the
@@ -117,6 +124,11 @@ ValidationError, so the page shows the message with *Try again*).
     unfinished custom period, an empty line in each panel with nothing to show.
   - Colour: one brand accent (the selected period); green only for Won, red only for
     overdue, amber for gone quiet, each with its icon and label. No other colour.
+  - **Your plan for today** (with **AI runs leads** on the ERP site, TBO Smart Settings): the
+    person's follow-ups due, Call today and hot leads, each with the AI's next step and its
+    day; a manager who picks an owner sees theirs. Its header counts the open leads the AI
+    read as high intent, unhappy, and with a stage move waiting for a person; each count
+    opens those leads.
 - **Leads** list (the other tabs, `desk/src/pages/leads/Leads.vue`): views All, Mine, Call
   today and Follow-up; search (debounced) and stage, owner and segment filters; 20 a page
   with Previous and Next. View, search, filters and page are in the URL. Rows show the
@@ -131,6 +143,23 @@ ValidationError, so the page shows the message with *Try again*).
   action; only `allowed_stages`, with an optional note), *Edit* (the same dialog, sending
   only changed fields), a note composer and the timeline, and the quotations read-only
   (`LeadQuotations.vue`).
+- **AI suggests** on the lead page (`LeadAISuggests.vue`, its own component under Details):
+  - the AI's summary, sentiment and intent (badges with icons; an unhappy customer amber),
+    the phrases that show it, and the **next step** with its channel and day (already the
+    follow-up when nothing else was planned);
+  - a **stage to move to** with its reason: *Move to …* (a person's click; the ERP site
+    records them) or *Dismiss*. The AI never suggests Won or Lost;
+  - a **message to send**: the stored draft, or *Draft a message* (WhatsApp or Email). The
+    person edits it, *Open in WhatsApp* / *Open in mail* opens their own app with the text,
+    they press Send there, then *I sent it* logs it on the lead. **Nothing is sent from the
+    hub or the ERP site;**
+  - *Read the lead again* (once a minute), and when the lead changed since the last read the
+    header says so;
+  - **Lead health** (Healthy / Watch / At risk with the reasons) and **Maybe the same
+    customer** (other leads with the same phone, email or company), which work with AI runs
+    leads off too (the block is then titled *Lead health*).
+  - States: loading lines, an error with Try again, "hasn't read this one yet" with *Read it
+    now*, and a note when no AI provider is set up.
 - The pickers' options (`get_options`) are fetched once per session (`leadOptions` in
   `desk/src/pages/leads/leads.ts`).
 - Sidebar: *Leads* in Workspace (teal group), shown when `can_use_leads`.
@@ -146,4 +175,5 @@ ValidationError, so the page shows the message with *Try again*).
 `helpdesk/tests/test_leads.py` with `test_utils.FakeCRM` (`lead_answers`, `lead_calls`,
 `lead_error`) and `test_utils.enable_leads`: off by default, `acting_user` on every call,
 writes posted, view and page size checked, teams and inactive agents gated, and each error
-mapped; the Overview's period checks and the metric with its period passed to the list.
+mapped; the Overview's period checks and the metric with its period passed to the list; the
+AI calls are the signed-in person's (POST for every change) and the channels checked.

@@ -188,6 +188,80 @@
         />
       </section>
 
+      <!-- AI runs leads: the day's plan, picked from Call today, follow-ups and hot leads -->
+      <section v-if="ai?.enabled" class="panel" :aria-labelledby="ids.plan">
+        <header class="panel-head">
+          <div class="flex min-w-0 flex-col">
+            <h2 :id="ids.plan" class="text-base-medium text-ink-gray-9">
+              {{
+                owner && data.scope !== "own"
+                  ? __("Their plan for today")
+                  : __("Your plan for today")
+              }}
+            </h2>
+            <span class="text-xs text-ink-gray-6">{{
+              __(
+                "Follow-ups due, Call today and hot leads, each with the AI's next step"
+              )
+            }}</span>
+          </div>
+          <nav
+            class="flex flex-wrap gap-x-3 gap-y-1 text-sm"
+            :aria-label="__('What the AI sees')"
+          >
+            <router-link
+              v-for="count in AI_COUNTS"
+              :key="count.metric"
+              :to="list(count.metric, false)"
+              class="num-link font-sans"
+              >{{ count.label(ai[count.metric] ?? 0) }}</router-link
+            >
+          </nav>
+        </header>
+        <p v-if="!ai.ai_ready" class="px-4 pt-3 text-p-sm text-ink-gray-6">
+          {{
+            __(
+              "The AI isn't set up on the ERP site, so there are no new next steps. Ask an admin to add a provider in TBO Smart Settings."
+            )
+          }}
+        </p>
+        <p
+          v-if="!ai.plan?.rows.length"
+          class="px-4 py-4 text-p-sm text-ink-gray-6"
+        >
+          {{ __("Nothing due today: no follow-ups and no hot leads waiting.") }}
+        </p>
+        <ol v-else role="list" class="flex flex-col py-1">
+          <li v-for="row in ai.plan.rows" :key="row.name">
+            <router-link
+              :to="{ name: 'Lead', params: { leadId: row.name } }"
+              class="row-link flex flex-col gap-0.5 px-4 py-2.5 sm:flex-row sm:items-center sm:gap-4"
+            >
+              <span class="flex min-w-0 flex-col sm:w-64 sm:shrink-0">
+                <span class="truncate text-sm text-ink-gray-9">{{
+                  row.lead_name || row.name
+                }}</span>
+                <span class="truncate text-xs text-ink-gray-6">{{
+                  [row.why, row.tbo_stage].filter(Boolean).join(" · ")
+                }}</span>
+              </span>
+              <span
+                class="min-w-0 flex-1 text-sm"
+                :class="row.next_action ? 'text-ink-gray-8' : 'text-ink-gray-5'"
+              >
+                {{ row.next_action || __("No next step from the AI yet") }}
+                <span
+                  v-if="row.next_action && row.next_due"
+                  class="text-xs tabular-nums text-ink-gray-6"
+                >
+                  · {{ dayjs(row.next_due).format("D MMM") }}</span
+                >
+              </span>
+            </router-link>
+          </li>
+        </ol>
+      </section>
+
       <div class="grid gap-5 lg:grid-cols-[3fr_2fr]">
         <!-- the pipeline now, stage by stage -->
         <section class="panel" :aria-labelledby="ids.pipeline">
@@ -568,6 +642,17 @@ const OWNER_COLUMNS: {
   { key: "won", label: __("Won"), metric: "won" },
   { key: "open", label: __("Open"), metric: "open" },
 ];
+const AI_COUNTS: {
+  metric: "high_intent" | "unhappy" | "stage_suggested";
+  label: (n: number) => string;
+}[] = [
+  { metric: "high_intent", label: (n) => __("{0} high intent", String(n)) },
+  { metric: "unhappy", label: (n) => __("{0} unhappy", String(n)) },
+  {
+    metric: "stage_suggested",
+    label: (n) => __("{0} stage moves to check", String(n)),
+  },
+];
 const BREAKDOWNS = [
   {
     key: "by_segment" as const,
@@ -592,6 +677,7 @@ const ids = {
   lost: useId(),
   hot: useId(),
   owners: useId(),
+  plan: useId(),
 };
 
 function queryValue(key: string) {
@@ -649,6 +735,7 @@ defineExpose({ reload: () => overview.reload() });
 
 const data = computed(() => overview.data as LeadOverview | undefined);
 const t = computed(() => data.value!.totals);
+const ai = computed(() => data.value?.ai);
 
 const ownerOptions = computed(() => [
   {
