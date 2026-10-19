@@ -121,6 +121,15 @@ export const leadOptions = createResource({
   cache: "hd-lead-options",
 });
 
+// the cached copy shows at once, but it is fetched again once per page load: a setting
+// changed on the ERP site (e.g. Proposals switched on) must show without clearing the browser
+let leadOptionsFetched = false;
+export function loadLeadOptions() {
+  if (leadOptionsFetched || leadOptions.loading) return;
+  leadOptionsFetched = true;
+  leadOptions.fetch();
+}
+
 export function stageLabel(options: LeadOptions | undefined, stage?: string) {
   if (!stage) return "";
   return options?.stages.find((s) => s.name === stage)?.label || stage;

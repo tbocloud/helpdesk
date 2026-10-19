@@ -340,6 +340,7 @@ import LeadsOverview from "./LeadsOverview.vue";
 import {
   choices,
   LEAD_VIEWS,
+  loadLeadOptions,
   leadOptions,
   METRIC_LABELS,
   ownerName,
@@ -465,7 +466,7 @@ function showAll() {
   view.value = "all";
 }
 
-if (!leadOptions.data && !leadOptions.loading) leadOptions.fetch();
+loadLeadOptions();
 const options = computed(() => leadOptions.data as LeadOptions | undefined);
 
 const stageOptions = computed(() => [

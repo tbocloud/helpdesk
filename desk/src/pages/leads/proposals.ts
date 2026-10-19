@@ -207,6 +207,15 @@ export const proposalOptions = createResource({
   cache: "hd-proposal-options",
 });
 
+// the cached copy shows at once, but it is fetched again once per page load: a setting
+// changed on the ERP site (e.g. Proposals switched on) must show without clearing the browser
+let proposalOptionsFetched = false;
+export function loadProposalOptions() {
+  if (proposalOptionsFetched || proposalOptions.loading) return;
+  proposalOptionsFetched = true;
+  proposalOptions.fetch();
+}
+
 /** Plain text as paragraphs and bullet lists, as the client's page lays it out. */
 export function textParts(
   body?: string | null
@@ -214,7 +223,12 @@ export function textParts(
   return (body || "")
     .trim()
     .split(/\n\s*\n/)
-    .map((chunk) => chunk.split("\n").map((l) => l.trim()).filter(Boolean))
+    .map((chunk) =>
+      chunk
+        .split("\n")
+        .map((l) => l.trim())
+        .filter(Boolean)
+    )
     .filter((lines) => lines.length)
     .map((lines) =>
       lines.every((l) => l.startsWith("- ") || l.startsWith("• "))
