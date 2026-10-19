@@ -16,7 +16,11 @@
       </div>
       <div class="flex flex-col gap-2">
         <span class="text-xs text-ink-gray-5">{{
-          isCover ? __("Cover image (optional)") : __("Image")
+          isCover
+            ? __("Cover image (optional)")
+            : block.section_type === "Image"
+            ? __("Image")
+            : __("Image (optional)")
         }}</span>
         <div v-if="editable" class="flex flex-wrap gap-2">
           <Button
@@ -26,6 +30,15 @@
           >
             <template #prefix>
               <LucideUpload class="size-4" aria-hidden="true" />
+            </template>
+          </Button>
+          <Button
+            v-if="libraryImages.length"
+            :label="__('From the library')"
+            @click="showLibrary = true"
+          >
+            <template #prefix>
+              <LucideImages class="size-4" aria-hidden="true" />
             </template>
           </Button>
           <Button
@@ -50,6 +63,36 @@
       </div>
     </div>
     <p v-if="error" role="alert" class="text-p-sm text-danger">{{ error }}</p>
+    <Dialog
+      v-model:open="showLibrary"
+      :title="__('Choose an image')"
+      size="2xl"
+    >
+      <ul class="grid grid-cols-2 gap-3 sm:grid-cols-3" role="list">
+        <li v-for="img in libraryImages" :key="img.name">
+          <button
+            type="button"
+            class="flex w-full flex-col gap-1 rounded-lg border border-outline-gray-2 p-2 text-left hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight disabled:opacity-60"
+            :disabled="fromLibrary.loading"
+            @click="fromLibrary.submit({ name: proposal, image: img.name })"
+          >
+            <img
+              :src="img.url || ''"
+              :alt="img.alt_text"
+              class="h-24 w-full rounded object-cover"
+            />
+            <span class="truncate text-sm text-ink-gray-8">{{
+              img.title
+            }}</span>
+            <span
+              v-if="img.sections.includes(block.section_type)"
+              class="text-xs text-ink-gray-5"
+              >{{ __("Suits this section") }}</span
+            >
+          </button>
+        </li>
+      </ul>
+    </Dialog>
     <template v-if="block.image">
       <FormControl
         :model-value="block.image_alt || ''"
@@ -94,11 +137,22 @@
 <script setup lang="ts">
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
-import { Button, createResource, FormControl, TabButtons } from "frappe-ui";
+import {
+  Button,
+  createResource,
+  Dialog,
+  FormControl,
+  TabButtons,
+} from "frappe-ui";
 import { computed, ref, useId } from "vue";
+import LucideImages from "~icons/lucide/images";
 import LucideImage from "~icons/lucide/image";
 import LucideUpload from "~icons/lucide/upload";
-import type { ProposalSection } from "./proposals";
+import {
+  proposalOptions,
+  type ProposalOptions,
+  type ProposalSection,
+} from "./proposals";
 
 const props = defineProps<{
   proposal: string;
@@ -121,6 +175,33 @@ const sizeOptions = [
   { label: __("Full"), value: "Full" },
   { label: __("Half"), value: "Half" },
 ];
+
+const showLibrary = ref(false);
+/** The library's images, those tagged for this section first. */
+const libraryImages = computed(() => {
+  const all =
+    (proposalOptions.data as ProposalOptions | undefined)?.images ?? [];
+  const suits = (img: typeof all[number]) =>
+    img.sections.includes(props.block.section_type) ? 0 : 1;
+  return [...all].sort((a, b) => suits(a) - suits(b));
+});
+
+const fromLibrary = createResource({
+  url: "helpdesk.api.proposals.use_library_image",
+  method: "POST",
+  onSuccess(d: { file: string; url: string; alt?: string }) {
+    emit("update", {
+      image: d.file,
+      image_url: d.url,
+      image_alt: props.block.image_alt || d.alt || "",
+    });
+    showLibrary.value = false;
+  },
+  onError(e: unknown) {
+    error.value = errorText(e, __("Couldn't use that image. Try another."));
+    showLibrary.value = false;
+  },
+});
 
 const upload = createResource({
   url: "helpdesk.api.proposals.upload_proposal_image",

@@ -55,7 +55,13 @@ def get_proposal_options() -> dict:
 
 @frappe.whitelist(methods=["POST"])
 def create_proposal(
-    lead: str, template: str | None = None, ai_draft: int | str = 0
+    lead: str,
+    template: str | None = None,
+    ai_draft: int | str = 0,
+    scoping: dict | str | None = None,
+    requirements: str | None = None,
+    client_profile: dict | str | None = None,
+    chat: list | str | None = None,
 ) -> dict:
     require_leads()
     result = (
@@ -65,6 +71,10 @@ def create_proposal(
             lead=lead,
             template=template or None,
             ai_draft=1 if cint(ai_draft) else 0,
+            scoping=as_json_value(scoping) if scoping else None,
+            requirements=(requirements or "").strip() or None,
+            client_profile=as_json_value(client_profile) if client_profile else None,
+            chat=as_json_value(chat, list) if chat else None,
         )
         or {}
     )
@@ -83,6 +93,163 @@ def get_proposal(name: str) -> dict:
 def save_proposal(name: str, data: dict | str) -> dict:
     require_leads()
     return proposal("save_proposal", post=True, name=name, data=as_json_value(data))
+
+
+@frappe.whitelist()
+def get_client_profile(lead: str) -> dict:
+    """What the lead says about the client, and the website summary read earlier."""
+    require_leads()
+    return proposals("get_client_profile", lead=lead) or {}
+
+
+@frappe.whitelist(methods=["POST"])
+def read_client_website(
+    lead: str, url: str | None = None, refresh: int | str = 0
+) -> dict:
+    """The client's website read and summarised on the ERP site (guarded there), kept on
+    the lead."""
+    require_leads()
+    return (
+        proposals(
+            "read_client_website",
+            post=True,
+            lead=lead,
+            url=(url or "").strip() or None,
+            refresh=1 if cint(refresh) else 0,
+        )
+        or {}
+    )
+
+
+@frappe.whitelist()
+def get_requirements_from_lead(lead: str) -> dict:
+    """The lead's notes and minutes as one text, to start the requirements box (no AI)."""
+    require_leads()
+    return proposals("get_requirements_from_lead", lead=lead) or {}
+
+
+@frappe.whitelist(methods=["POST"])
+def extract_requirements(lead: str, text: str) -> dict:
+    """The requirements box read into the scoping form by one small AI call; nothing saved."""
+    require_leads()
+    text = (text or "").strip()
+    if not text:
+        frappe.throw(_("Write or paste the client's requirements first."))
+    return proposals("extract_requirements", post=True, lead=lead, text=text) or {}
+
+
+@frappe.whitelist(methods=["POST"])
+def regenerate_section(name: str, index: int | str, force: int | str = 0) -> dict:
+    require_leads()
+    result = (
+        proposals(
+            "regenerate_section",
+            post=True,
+            name=name,
+            index=cint(index),
+            force=1 if cint(force) else 0,
+        )
+        or {}
+    )
+    if result.get("proposal"):
+        clean_letter_head(result["proposal"])
+    return result
+
+
+@frappe.whitelist(methods=["POST"])
+def regenerate_proposal(name: str, force: int | str = 0) -> dict:
+    require_leads()
+    result = (
+        proposals(
+            "regenerate_proposal", post=True, name=name, force=1 if cint(force) else 0
+        )
+        or {}
+    )
+    if result.get("proposal"):
+        clean_letter_head(result["proposal"])
+    return result
+
+
+@frappe.whitelist(methods=["POST"])
+def chat_edit(name: str, message: str) -> dict:
+    """The assistant: a change in words, read on the ERP site into structured changes."""
+    require_leads()
+    message = (message or "").strip()
+    if not message:
+        frappe.throw(_("Say what to change."))
+    result = proposals("chat_edit", post=True, name=name, message=message[:1000]) or {}
+    if result.get("proposal"):
+        clean_letter_head(result["proposal"])
+    return result
+
+
+@frappe.whitelist(methods=["POST"])
+def price_from_modules(name: str) -> dict:
+    require_leads()
+    return proposal("price_from_modules", post=True, name=name)
+
+
+@frappe.whitelist(methods=["POST"])
+def share_proposal(name: str) -> dict:
+    """The client's link without an email (a draft goes out as Send does)."""
+    require_leads()
+    result = proposals("share_proposal", post=True, name=name) or {}
+    if result.get("proposal"):
+        clean_letter_head(result["proposal"])
+    return result
+
+
+@frappe.whitelist(methods=["POST"])
+def use_library_image(name: str, image: str) -> dict:
+    require_leads()
+    return proposals("use_library_image", post=True, name=name, image=image) or {}
+
+
+# ---------- the libraries (editors change them; checked on the ERP site) ----------
+
+
+@frappe.whitelist()
+def get_proposal_library() -> dict:
+    require_leads()
+    return proposals("get_proposal_library") or {}
+
+
+@frappe.whitelist(methods=["POST"])
+def save_library_record(kind: str, data: dict | str) -> dict:
+    require_leads()
+    return (
+        proposals("save_library_record", post=True, kind=kind, data=as_json_value(data))
+        or {}
+    )
+
+
+@frappe.whitelist(methods=["POST"])
+def delete_library_record(kind: str, name: str) -> dict:
+    require_leads()
+    return proposals("delete_library_record", post=True, kind=kind, name=name) or {}
+
+
+@frappe.whitelist(methods=["POST"])
+def draft_library_module(module: str) -> dict:
+    """The AI's draft of a catalogue module's text, for an editor to review (library upkeep)."""
+    require_leads()
+    return proposals("draft_library_module", post=True, module=module) or {}
+
+
+@frappe.whitelist(methods=["POST"])
+def upload_library_image(filename: str, content: str, data: dict | str) -> dict:
+    require_leads()
+    check_image_size(content)
+    return (
+        proposals(
+            "upload_library_image",
+            post=True,
+            filename=(filename or "image")[:140],
+            content=content,
+            data=as_json_value(data),
+        )
+        or {}
+    )
 
 
 @frappe.whitelist()
@@ -135,14 +302,7 @@ def upload_proposal_image(name: str, filename: str, content: str) -> dict:
     """A private image on a draft, sent on to the ERP site (`content` base64). Returns
     {file, url}; the builder puts `file` in a block and saves."""
     require_leads()
-    try:
-        size = len(base64.b64decode(content or "", validate=True))
-    except ValueError:  # binascii.Error is a ValueError
-        frappe.throw(_("Send the image as base64."))
-    if not size:
-        frappe.throw(_("Choose an image to upload."))
-    if size > MAX_IMAGE_BYTES:
-        frappe.throw(_("The image is larger than 5 MB. Make it smaller and try again."))
+    check_image_size(content)
     return (
         proposals(
             "upload_proposal_image",
@@ -153,6 +313,18 @@ def upload_proposal_image(name: str, filename: str, content: str) -> dict:
         )
         or {}
     )
+
+
+def check_image_size(content: str) -> None:
+    """Refused here (before anything is sent on) when it isn't base64 or is over 5 MB."""
+    try:
+        size = len(base64.b64decode(content or "", validate=True))
+    except ValueError:  # binascii.Error is a ValueError
+        frappe.throw(_("Send the image as base64."))
+    if not size:
+        frappe.throw(_("Choose an image to upload."))
+    if size > MAX_IMAGE_BYTES:
+        frappe.throw(_("The image is larger than 5 MB. Make it smaller and try again."))
 
 
 @frappe.whitelist(methods=["POST"])
