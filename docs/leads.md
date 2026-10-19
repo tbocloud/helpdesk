@@ -1,7 +1,9 @@
 # Leads
 
 Status: Phase 1 implemented (list, new lead, lead page with stage, notes, edit and read-only
-quotations), and the **Overview** (2026-10-19). This document is the source of truth for the feature and changes with it.
+quotations), the **Overview** (2026-10-19), and proposals with the segment rate card in
+[proposals.md](proposals.md). This document is the source of truth for the feature and changes
+with it.
 
 ## Why it works this way
 
@@ -45,7 +47,7 @@ user exists there with a sales role, applies what they may see, and records writ
 | `draft_lead_message` | POST | `name, channel (whatsapp / email), language` | `{channel, subject, text, to?, url?}`; nothing is sent |
 | `log_message_sent` | POST | `name, channel, text` | the timeline entry |
 | `get_sales_activity` | GET | `from_date, to_date`, **no** `acting_user` | each salesperson's activity, for the Scoreboard ([team-dashboard.md](team-dashboard.md#sales)) |
-| `get_lead` | GET | `name` | `{lead: {...}, timeline: [...], quotations: [...], allowed_stages: [...]}` |
+| `get_lead` | GET | `name` | `{lead: {...}, timeline: [...], quotations: [...], proposals: [...], allowed_stages: [...]}` |
 | `create_lead` | POST | `data` | the lead (at least `name`) |
 | `update_lead` | POST | `name, data` | the lead |
 | `set_stage` | POST | `name, stage, note` | the lead |
@@ -62,10 +64,15 @@ user exists there with a sales role, applies what they may see, and records writ
 - `allowed_stages` may be stage names or stage objects; the hub offers only those (minus the
   current stage).
 - Timeline entries are TBO Smart's `{kind, at, who, who_name, text, ref}` (kind: note, call,
-  activity, meeting, stage, quotation, and ai: what TBO AI did, with a bot icon), newest
-  first; each kind has its own icon and a screen reader label, and `text` is shown as sent (a
-  stage move reads "Contacted → Proposal Sent").
+  activity, meeting, stage, quotation, proposal, and ai: what TBO AI did, with a bot icon),
+  newest first; each kind has its own icon and a screen reader label, and `text` is shown as
+  sent (a stage move reads "Contacted → Proposal Sent").
 - Quotations are read as `{name, transaction_date, tbo_quote_status, grand_total, currency}`.
+- Proposals are read as `{name, title, status, revision_no, view_count, …}` (empty while
+  Proposals is off on the ERP site; [proposals.md](proposals.md)).
+- A lead's `segment` sets its discount band, so once it has one only the people who edit
+  quotation presets and prices on the ERP site move it to another; the Edit dialog shows the
+  ERP site's reason otherwise.
 - `next_follow_up` on create or update schedules a Sales follow-up for the lead owner on the
   ERP site (tbo_smart#25); clearing it adds nothing and doesn't close the open one.
 - Stage colours from the ERP site are not used, to keep the hub's one-accent rule: a stage
@@ -164,11 +171,10 @@ ValidationError, so the page shows the message with *Try again*).
   `desk/src/pages/leads/leads.ts`).
 - Sidebar: *Leads* in Workspace (teal group), shown when `can_use_leads`.
 
-## Next phases
+## Proposals
 
-- Phase 3/4: proposals and quotations made from the lead page. `LeadQuotations.vue` is the
-  place: it gets the actions, and `get_lead`'s `quotations` the extra fields. No placeholder
-  UI is shown until then.
+The Lead page's **Proposals** section, the proposal builder and Settings → Rates and proposals
+are specified in [proposals.md](proposals.md).
 
 ## Tests
 

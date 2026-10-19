@@ -83,9 +83,10 @@ def require_leads():
         )
 
 
-def call(method: str, post: bool = False, **params):
-    """`tbo_smart.api.hub_leads.<method>` on the CRM site as the signed-in person; any
-    failure becomes a LeadsError the person can act on."""
+def call(method: str, post: bool = False, api: str = API, **params):
+    """`<api>.<method>` on the CRM site (TBO Smart's hub leads API by default, or its hub
+    proposals API) as the signed-in person; any failure becomes a LeadsError the person
+    can act on."""
     try:
         client = CRMClient.from_settings()
     except CRMError:
@@ -96,7 +97,7 @@ def call(method: str, post: bool = False, **params):
         )
     try:
         return client.call(
-            f"{API}.{method}", post=post, acting_user=frappe.session.user, **params
+            f"{api}.{method}", post=post, acting_user=frappe.session.user, **params
         )
     except CRMError as e:
         fail(friendly_error(e, client))

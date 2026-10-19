@@ -3,6 +3,7 @@
 import type { Tone } from "@/components/tone";
 import { __ } from "@/translation";
 import { createResource } from "frappe-ui";
+import type { ProposalRow } from "./proposals";
 
 export interface LeadStage {
   name: string;
@@ -75,14 +76,22 @@ export const LEAD_FORM_FIELDS: (keyof LeadForm)[] = [
 /** One entry of a lead's timeline, newest first (TBO Smart's hub-leads-api.md). */
 export interface LeadTimelineEntry {
   /** ai: what TBO AI did on the lead (read it, planned a follow-up, …) */
-  kind: "note" | "call" | "activity" | "meeting" | "stage" | "quotation" | "ai";
+  kind:
+    | "note"
+    | "call"
+    | "activity"
+    | "meeting"
+    | "stage"
+    | "quotation"
+    | "ai"
+    | "proposal";
   /** when it happened (a date only for a quotation) */
   at?: string | null;
   who?: string | null;
   who_name?: string | null;
   /** plain text; a stage move reads "Contacted → Proposal Sent" */
   text?: string;
-  /** the record behind it: Comment, Event, meeting, stage change or Quotation */
+  /** the record behind it: Comment, Event, meeting, stage change, Quotation or proposal */
   ref?: string;
 }
 
@@ -100,6 +109,8 @@ export interface LeadDetail {
   lead: LeadRow & Partial<LeadForm> & Record<string, unknown>;
   timeline: LeadTimelineEntry[];
   quotations: LeadQuotation[];
+  /** the lead's proposals (empty while proposals are off on the ERP site) */
+  proposals?: ProposalRow[];
   /** stage names, or stages, this lead may move to */
   allowed_stages: (string | LeadStage)[];
 }

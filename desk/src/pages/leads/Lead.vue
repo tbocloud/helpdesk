@@ -112,6 +112,11 @@
             </section>
             <LeadAISuggests :lead-id="leadId" @changed="detail.reload()" />
             <LeadQuotations :quotations="data.quotations || []" />
+            <LeadProposals
+              :lead-id="leadId"
+              :proposals="data.proposals || []"
+              :can-write="!!lead?.can_write"
+            />
           </div>
 
           <section
@@ -296,7 +301,9 @@ import LucideMessageSquare from "~icons/lucide/message-square";
 import LucidePhone from "~icons/lucide/phone";
 import LucidePencil from "~icons/lucide/pencil";
 import LeadAISuggests from "./LeadAISuggests.vue";
+import LucideScrollText from "~icons/lucide/scroll-text";
 import LeadFormDialog from "./LeadFormDialog.vue";
+import LeadProposals from "./LeadProposals.vue";
 import LeadQuotations from "./LeadQuotations.vue";
 import {
   leadOptions,
@@ -319,6 +326,7 @@ const TIMELINE_ICONS: Record<LeadTimelineEntry["kind"], Component> = {
   stage: LucideArrowRight,
   quotation: LucideFileText,
   ai: LucideBot,
+  proposal: LucideScrollText,
 };
 const TIMELINE_LABELS: Record<LeadTimelineEntry["kind"], string> = {
   note: __("Note"),
@@ -328,6 +336,7 @@ const TIMELINE_LABELS: Record<LeadTimelineEntry["kind"], string> = {
   stage: __("Stage"),
   quotation: __("Quotation"),
   ai: __("TBO AI"),
+  proposal: __("Proposal"),
 };
 
 const showEdit = ref(false);
