@@ -17,6 +17,7 @@ from helpdesk.test_utils import (
     make_done_task,
     make_project,
     make_tasky_user,
+    run_as_user,
     sales_person,
     score_stats,
 )
@@ -126,6 +127,24 @@ class TestSalesOnTheScoreboard(FrappeTestCase):
         # Joel's two meetings without minutes cost him more than his calls earn
         self.assertLess(people[JOEL]["score"], 0)
         self.assertIn("sales", data["rules"])
+
+    def test_the_app_gets_the_sales_figures(self):
+        with patch("helpdesk.api.team_dashboard.nowdate", return_value=str(TODAY)):
+            td.clear_cache()
+            board = run_as_user(
+                NIYA,
+                lambda: frappe.call(
+                    "helpdesk.api.mobile.get_scoreboard", period="week"
+                ),
+            )
+        data = board["data"]
+        crm = next(r for r in data["departments"] if r["department"] == "CRM")
+        self.assertEqual((crm["parent"], crm["sales"]["won"]), ("Sales", 1))
+        self.assertEqual(data["me"]["sales"]["contacted"], 10)
+        web = next(
+            r for r in data["departments"] if r["department"] == "Web Development"
+        )
+        self.assertIsNone(web["sales"])
 
     def test_closed_periods_store_the_crm_champion(self):
         with patch("helpdesk.ai_suggestion.is_ai_configured", return_value=False):
