@@ -271,12 +271,16 @@
             type="number"
             min="1"
             class="sm:max-w-[12rem]"
+            placeholder="180"
             :label="__('Keep recordings (days)')"
           />
           <FormControl
             v-model="form.telephony_recording_notice"
             type="textarea"
             :rows="2"
+            :placeholder="
+              __('This call may be recorded for quality and training purposes.')
+            "
             :label="__('Recording notice')"
             :description="
               __(
@@ -302,6 +306,7 @@
               v-model.number="form.call_summary_min_seconds"
               type="number"
               min="0"
+              placeholder="30"
               :label="__('Shortest call (seconds)')"
             />
             <FormControl
@@ -433,6 +438,9 @@ function load(d: SettingsData) {
   const values: Record<string, any> = { ...d.settings };
   for (const key of SWITCHES) values[key] = Boolean(values[key]);
   values.telephony_fallback_owner = values.telephony_fallback_owner || "";
+  // 0 or blank: the ERP site's defaults, shown as placeholders
+  for (const key of ["telephony_recording_days", "call_summary_min_seconds"])
+    values[key] = values[key] || "";
   form.value = {
     ...values,
     agents: d.agents.map((a) => ({
