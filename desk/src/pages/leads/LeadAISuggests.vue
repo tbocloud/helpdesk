@@ -368,6 +368,7 @@ const actionError = ref("");
 const draft = ref<LeadDraft | null>(null);
 const opened = ref(false);
 const wanted = ref<"whatsapp" | "email">("whatsapp");
+const storedTaken = ref(false);
 
 const suggestions = createResource({
   url: "helpdesk.api.leads.get_lead_ai",
@@ -377,7 +378,12 @@ const suggestions = createResource({
 watch(
   () => props.leadId,
   () => {
+    // the old lead's suggestions must never show (or be acted on) under the new one
     draft.value = null;
+    opened.value = false;
+    actionError.value = "";
+    storedTaken.value = false;
+    suggestions.reset();
     suggestions.reload();
   }
 );
@@ -385,16 +391,19 @@ watch(
 const ai = computed(() => suggestions.data as LeadAI | undefined);
 const insight = computed(() => ai.value?.insight ?? null);
 
-// the stored draft is offered until the person discards it or writes another
+// the stored draft is offered once per AI read: after Discard or "I sent it" it
+// never comes back with a reload, so nobody sends it twice
 watch(
   () => insight.value?.message,
   (message) => {
-    if (message && !draft.value)
+    if (message && !draft.value && !storedTaken.value) {
+      storedTaken.value = true;
       draft.value = {
         channel: message.channel,
         subject: message.subject || "",
         text: message.text,
       };
+    }
   },
   { immediate: true }
 );
@@ -412,6 +421,7 @@ const refresh = createResource({
   url: "helpdesk.api.leads.refresh_lead_ai",
   onSuccess: (data: LeadAI) => {
     draft.value = null;
+    storedTaken.value = false;
     took(data);
   },
   onError,
