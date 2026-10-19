@@ -1,3 +1,4 @@
+import base64
 from unittest.mock import patch
 
 import frappe
@@ -111,3 +112,47 @@ class TestProposals(FrappeTestCase):
         with self.assertRaises(LeadsError) as caught:
             proposals_api.send_proposal("PROP-2026-00001")
         self.assertIn("above your limit", str(caught.exception))
+
+    def test_an_image_upload_is_checked_then_sent_on(self):
+        self.crm.lead_answers["upload_proposal_image"] = {"file": "abc", "url": "u"}
+        content = base64.b64encode(b"\x89PNG small").decode()
+        self.assertEqual(
+            proposals_api.upload_proposal_image("PROP-2026-00001", "a.png", content),
+            {"file": "abc", "url": "u"},
+        )
+        ((name, post, params),) = self.crm.lead_calls
+        self.assertEqual((name, post), ("upload_proposal_image", True))
+        self.assertEqual((params["content"], params["acting_user"]), (content, BDE))
+        too_big = base64.b64encode(b"0" * (proposals_api.MAX_IMAGE_BYTES + 1)).decode()
+        for bad in (too_big, "%%%", ""):
+            with self.assertRaises(frappe.ValidationError):
+                proposals_api.upload_proposal_image("PROP-2026-00001", "a.png", bad)
+        self.assertEqual(len(self.crm.lead_calls), 1)
+        frappe.set_user(SUPPORT)
+        with self.assertRaises(frappe.PermissionError):
+            proposals_api.upload_proposal_image("PROP-2026-00001", "a.png", content)
+
+    def test_the_default_letter_head_is_set_on_the_erp_site(self):
+        proposals_api.set_default_letter_head("")
+        ((name, post, params),) = self.crm.lead_calls
+        self.assertEqual(
+            (name, post, params["letter_head"]), ("set_default_letter_head", True, None)
+        )
+
+    def test_the_letter_heads_html_is_sanitised_for_the_preview(self):
+        self.crm.lead_answers["get_proposal"] = {
+            "name": "PROP-2026-00001",
+            "letter_head_preview": {
+                "name": "TBO",
+                "header": {"html": '<p onclick="x()">TBO<script>alert(1)</script></p>'},
+                "footer": {
+                    "image": "https://erp.example/files/f.png",
+                    "align": "center",
+                },
+            },
+        }
+        head = proposals_api.get_proposal("PROP-2026-00001")["letter_head_preview"]
+        self.assertIn("TBO", head["header"]["html"])
+        self.assertNotIn("<script", head["header"]["html"])
+        self.assertNotIn("onclick", head["header"]["html"])
+        self.assertEqual(head["footer"]["align"], "center")

@@ -61,10 +61,21 @@
         </div>
         <div class="flex flex-col gap-3 p-4">
           <slot v-if="block.section_type === 'Pricing'" name="pricing" />
+          <ProposalImageField
+            v-if="proposal && IMAGE_BLOCKS.includes(block.section_type)"
+            :proposal="proposal"
+            :block="block"
+            :editable="editable"
+            @update="update(i, $event)"
+          />
           <FormControl
             v-if="block.section_type !== 'Cover'"
             :model-value="block.heading || ''"
-            :label="__('Heading')"
+            :label="
+              block.section_type === 'Image'
+                ? __('Heading (optional)')
+                : __('Heading')
+            "
             :placeholder="SECTION_LABELS[block.section_type]"
             maxlength="140"
             :disabled="!editable"
@@ -85,6 +96,7 @@
             @update:model-value="update(i, { guidance: $event })"
           />
           <FormControl
+            v-if="block.section_type !== 'Image'"
             :model-value="block.body || ''"
             type="textarea"
             :rows="block.section_type === 'Pricing' ? 2 : 5"
@@ -134,7 +146,9 @@ import LucideArrowDown from "~icons/lucide/arrow-down";
 import LucideArrowUp from "~icons/lucide/arrow-up";
 import LucidePlus from "~icons/lucide/plus";
 import LucideTrash2 from "~icons/lucide/trash-2";
+import ProposalImageField from "./ProposalImageField.vue";
 import {
+  IMAGE_BLOCKS,
   SECTION_LABELS,
   type ProposalSection,
   type SectionType,
@@ -149,6 +163,8 @@ const props = defineProps<{
   sectionTypes: SectionType[];
   /** a template's blocks: each also has its guidance */
   withGuidance?: boolean;
+  /** the proposal the blocks belong to; with it, Cover and Image blocks take an image */
+  proposal?: string;
 }>();
 const emit = defineEmits<{
   (e: "update:sections", value: TemplateSection[]): void;
@@ -213,7 +229,12 @@ function add() {
   keys.value.push(counter++);
   emit("update:sections", [
     ...props.sections,
-    { section_type: newType.value, heading: "", body: "" },
+    {
+      section_type: newType.value,
+      heading: "",
+      body: "",
+      ...(props.proposal ? { image: null, image_size: "Full" as const } : {}),
+    },
   ]);
 }
 </script>

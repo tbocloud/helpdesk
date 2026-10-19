@@ -174,10 +174,34 @@
                   />
                 </div>
               </div>
+              <FormControl
+                v-if="letterHeadOptions.length > 1"
+                v-model="form.letter_head"
+                type="select"
+                :label="__('Letter head')"
+                :options="letterHeadOptions"
+                :disabled="!editable"
+              />
+              <p
+                v-else-if="options?.enabled && options?.can_edit_templates"
+                role="status"
+                class="flex items-start gap-2 rounded-lg bg-warning-soft px-3 py-2 text-p-sm text-warning"
+              >
+                <LucideTriangleAlert
+                  class="mt-0.5 size-4 shrink-0"
+                  aria-hidden="true"
+                />
+                {{
+                  __(
+                    "The ERP site has no Letter Head yet, so proposals show only the company's logo. Add one there (Letter Head) and mark it default."
+                  )
+                }}
+              </p>
             </section>
 
             <ProposalBlocks
               v-model:sections="form.sections"
+              :proposal="proposalId"
               :editable="editable"
               :guidance="guidance"
               :section-types="options?.section_types || []"
@@ -246,6 +270,7 @@
                 :valid-till="form.valid_till"
                 :sections="form.sections"
                 :quotation="proposal.quotation"
+                :letter-head="letterHeadPreview"
               />
             </div>
           </div>
@@ -369,6 +394,8 @@ const proposal = ref<Proposal>();
 const form = reactive({
   title: "",
   theme: "TBO Teal",
+  /** "": the default letter head */
+  letter_head: "",
   valid_till: "" as string | null,
   sections: [] as ProposalSection[],
 });
@@ -382,6 +409,7 @@ function setProposal(p: Proposal) {
   proposal.value = p;
   form.title = p.title;
   form.theme = p.theme || "TBO Teal";
+  form.letter_head = p.letter_head || "";
   form.valid_till = p.valid_till || "";
   form.sections = p.sections.map((s) => ({ ...s }));
   saved.value = snapshot();
@@ -424,6 +452,28 @@ const guidance = computed(() => {
   );
 });
 
+// --- letter head ---
+
+const letterHeadOptions = computed(() => {
+  const heads = options.value?.letter_heads ?? [];
+  if (!heads.length) return [];
+  const fallback = options.value?.default_letter_head;
+  return [
+    {
+      label: fallback ? __("Default ({0})", fallback) : __("Default"),
+      value: "",
+    },
+    ...heads.map((h) => ({ label: h.name, value: h.name })),
+  ];
+});
+
+/** The letter head as saved; a pick not saved yet shows once saved. */
+const letterHeadPreview = computed(() =>
+  form.letter_head === (proposal.value?.letter_head || "")
+    ? proposal.value?.letter_head_preview
+    : null
+);
+
 // --- save ---
 
 const saveResource = createResource({
@@ -447,6 +497,7 @@ function save() {
     data: {
       title: form.title,
       theme: form.theme,
+      letter_head: form.letter_head || null,
       valid_till: form.valid_till || null,
       sections: form.sections,
     },

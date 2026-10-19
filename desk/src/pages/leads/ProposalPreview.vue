@@ -4,6 +4,11 @@
     class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
     :aria-label="__('Preview')"
   >
+    <LetterHeadPart
+      v-if="letterHead?.header"
+      :part="letterHead.header"
+      class="border-b border-outline-gray-2"
+    />
     <div
       class="border-b-4 px-6 py-6"
       :class="graphite ? 'border-outline-gray-5' : 'border-brand'"
@@ -30,11 +35,31 @@
       class="border-b border-outline-gray-1 px-6 py-5 last:border-b-0"
     >
       <h3
-        v-if="block.section_type !== 'Cover'"
+        v-if="
+          block.section_type !== 'Cover' &&
+          (block.section_type !== 'Image' || block.heading)
+        "
         class="mb-2 text-lg font-semibold text-ink-gray-9"
       >
         {{ block.heading || SECTION_LABELS[block.section_type] }}
       </h3>
+      <figure
+        v-if="block.image_url && IMAGE_BLOCKS.includes(block.section_type)"
+        class="mb-3"
+        :class="block.image_size === 'Half' ? 'sm:max-w-[50%]' : ''"
+      >
+        <img
+          :src="block.image_url"
+          :alt="block.image_alt || ''"
+          class="block h-auto w-full rounded-lg border border-outline-gray-2"
+        />
+        <figcaption
+          v-if="block.image_caption && block.section_type === 'Image'"
+          class="mt-2 text-p-sm text-ink-gray-6"
+        >
+          {{ block.image_caption }}
+        </figcaption>
+      </figure>
       <template v-for="(part, j) in textParts(block.body)" :key="j">
         <ul
           v-if="part.kind === 'list'"
@@ -121,6 +146,11 @@
         {{ __("Price the proposal and its lines show here.") }}
       </p>
     </section>
+    <LetterHeadPart
+      v-if="letterHead?.footer"
+      :part="letterHead.footer"
+      class="border-t border-outline-gray-2"
+    />
   </article>
 </template>
 
@@ -129,9 +159,12 @@ import { money } from "@/components/invoicing/invoices";
 import { __ } from "@/translation";
 import { dayjs } from "frappe-ui";
 import { computed } from "vue";
+import LetterHeadPart from "./LetterHeadPart.vue";
 import {
+  IMAGE_BLOCKS,
   SECTION_LABELS,
   textParts,
+  type LetterHeadPreview,
   type ProposalQuotation,
   type ProposalSection,
 } from "./proposals";
@@ -143,6 +176,7 @@ const props = defineProps<{
   validTill?: string | null;
   sections: ProposalSection[];
   quotation: ProposalQuotation | null;
+  letterHead?: LetterHeadPreview | null;
 }>();
 
 const graphite = computed(() => props.theme === "Graphite");
@@ -150,7 +184,10 @@ const graphite = computed(() => props.theme === "Graphite");
 /** As on the client's page: an empty block shows nothing, pricing always. */
 const visible = computed(() =>
   props.sections.filter(
-    (s) => (s.body || "").trim() || s.section_type === "Pricing"
+    (s) =>
+      (s.section_type !== "Image" && (s.body || "").trim()) ||
+      (s.image_url && IMAGE_BLOCKS.includes(s.section_type)) ||
+      s.section_type === "Pricing"
   )
 );
 </script>

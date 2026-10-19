@@ -12,7 +12,7 @@
     :title="__('Rates and proposals')"
     :description="
       __(
-        'Each lead segment\'s price list and discount band, and the templates new proposals start from. They live on the ERP site.'
+        'Each lead segment\'s price list and discount band, the templates new proposals start from and their letter head. They live on the ERP site.'
       )
     "
     :dirty="dirty"
@@ -131,6 +131,41 @@
         </SettingsSection>
 
         <SettingsSection
+          v-if="options?.enabled"
+          :title="__('Proposal letter head')"
+          :description="
+            __(
+              'The header and footer on every proposal\'s page and PDF, unless a proposal picks another. They are the ERP site\'s Letter Heads.'
+            )
+          "
+        >
+          <p
+            v-if="!options.letter_heads?.length"
+            role="status"
+            class="flex items-start gap-2 rounded-lg bg-warning-soft px-3 py-2 text-p-sm text-warning"
+          >
+            <LucideTriangleAlert
+              class="mt-0.5 size-4 shrink-0"
+              aria-hidden="true"
+            />
+            {{
+              __(
+                "The ERP site has no Letter Head yet, so proposals show only the company's logo. Add one there (Letter Head) and mark it default."
+              )
+            }}
+          </p>
+          <FormControl
+            v-else
+            v-model="letterHead"
+            type="select"
+            class="sm:max-w-sm"
+            :label="__('Default letter head')"
+            :options="letterHeadOptions"
+            :disabled="!canEditTemplates"
+          />
+        </SettingsSection>
+
+        <SettingsSection
           :title="__('Proposal templates')"
           :description="
             __(
@@ -201,9 +236,10 @@ import {
   TabButtons,
   toast,
 } from "frappe-ui";
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import LucidePlus from "~icons/lucide/plus";
 import LucideScrollText from "~icons/lucide/scroll-text";
+import LucideTriangleAlert from "~icons/lucide/triangle-alert";
 import SettingsList from "../SettingsList.vue";
 import SettingsListItem from "../SettingsListItem.vue";
 import SettingsSection from "../SettingsSection.vue";
@@ -258,6 +294,31 @@ const options = computed(
 );
 const canEditTemplates = computed(() => !!options.value?.can_edit_templates);
 
+/** TBO Smart Settings → Proposal letter head; "": the Letter Head marked default */
+const letterHead = ref("");
+const savedLetterHead = computed(
+  () => options.value?.proposal_letter_head || ""
+);
+watch(savedLetterHead, (v) => (letterHead.value = v), { immediate: true });
+const letterHeadOptions = computed(() => {
+  const marked = options.value?.letter_heads?.find((h) => h.is_default);
+  return [
+    {
+      label: marked
+        ? __("The one marked default ({0})", marked.name)
+        : __("The one marked default"),
+      value: "",
+    },
+    ...(options.value?.letter_heads ?? []).map((h) => ({
+      label: h.name,
+      value: h.name,
+    })),
+  ];
+});
+const letterHeadDirty = computed(
+  () => canEditTemplates.value && letterHead.value !== savedLetterHead.value
+);
+
 const priceListOptions = computed(() => [
   { label: __("Selling price list"), value: "" },
   ...(cardData.value?.price_lists ?? []).map((p) => ({ label: p, value: p })),
@@ -286,12 +347,13 @@ function setRate(item: string, value: string | number) {
   };
 }
 
-const dirty = computed(
+const ratesDirty = computed(
   () =>
     canEdit.value &&
     (JSON.stringify(rows.value) !== savedRows.value ||
       Object.keys(rateEdits.value).length > 0)
 );
+const dirty = computed(() => ratesDirty.value || letterHeadDirty.value);
 
 async function save() {
   if (saving.value || !dirty.value) return;
@@ -314,10 +376,17 @@ async function save() {
         segment: segment || null,
       });
     }
-    toast.success(__("Rates saved"));
+    if (letterHeadDirty.value) {
+      proposalOptions.setData(
+        await call("helpdesk.api.proposals.set_default_letter_head", {
+          letter_head: letterHead.value || null,
+        })
+      );
+    }
+    toast.success(__("Saved"));
     card.reload();
   } catch (e) {
-    toast.error(errorText(e, __("Couldn't save the rates.")));
+    toast.error(errorText(e, __("Couldn't save. Try again.")));
   } finally {
     saving.value = false;
   }
