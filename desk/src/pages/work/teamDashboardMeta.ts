@@ -100,6 +100,8 @@ export interface SalesFigures {
   won: number;
   won_value: number;
   new: number;
+  /** answered MyOperator calls (0 without telephony on the ERP site) */
+  calls: number;
   mom_pending: number;
   follow_ups_overdue: number;
   /** won of new, %; null without new leads */
@@ -115,9 +117,10 @@ export interface SalesStatus {
   department: string;
 }
 
-/** "12 contacted · 2 meetings · 1 proposal · 1 won" */
+/** "12 contacted · 30 calls · 2 meetings · 1 proposal · 1 won" */
 export function salesText(s: SalesFigures) {
   const parts = [__("{0} contacted", String(s.contacted))];
+  if (s.calls) parts.push(__("{0} calls", String(s.calls)));
   if (s.moms_submitted)
     parts.push(__("{0} meetings", String(s.moms_submitted)));
   if (s.quotations_sent)

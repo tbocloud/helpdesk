@@ -2,7 +2,8 @@
 // them there as the signed-in person (docs/leads.md).
 import type { Tone } from "@/components/tone";
 import { __ } from "@/translation";
-import { createResource } from "frappe-ui";
+import { errorText } from "@/utils";
+import { createResource, toast } from "frappe-ui";
 import type { ProposalRow } from "./proposals";
 
 export interface LeadStage {
@@ -20,6 +21,8 @@ export interface LeadOptions {
   owners: { email: string; full_name?: string }[];
   territories: string[];
   industries: string[];
+  /** MyOperator click-to-call is set up for the signed-in person on the ERP site */
+  can_call?: boolean;
 }
 
 export interface LeadRow {
@@ -93,6 +96,30 @@ export interface LeadTimelineEntry {
   text?: string;
   /** the record behind it: Comment, Event, meeting, stage change, Quotation or proposal */
   ref?: string;
+  /** a call through MyOperator (TBO Smart's docs/telephony-myoperator.md §4.1) */
+  call?: string;
+  /** talk time in seconds */
+  duration?: number;
+  direction?: "incoming" | "outgoing" | null;
+  status?: "answered" | "missed" | "voicemail" | null;
+  /** the call's name when it has a recording (played through call_recording) */
+  recording?: string | null;
+  summary?: CallSummary | null;
+}
+
+/** What TBO AI made of a recorded call. */
+export interface CallSummary {
+  text: string;
+  language?: string;
+  interest?: string | null;
+  sentiment?: "Positive" | "Neutral" | "Negative";
+  intent?: "High" | "Medium" | "Low" | "None";
+  objections?: string[];
+  next_step?: {
+    what: string;
+    channel?: string;
+    due: string;
+  } | null;
 }
 
 export interface LeadQuotation {
@@ -128,6 +155,28 @@ export function loadLeadOptions() {
   if (leadOptionsFetched || leadOptions.loading) return;
   leadOptionsFetched = true;
   leadOptions.fetch();
+}
+
+/** Asks MyOperator to ring the signed-in person's phone, then the lead. */
+export function useClickToCall() {
+  return createResource({
+    url: "helpdesk.api.leads.click_to_call",
+    method: "POST",
+    onSuccess(data: { message?: string }) {
+      toast.success(data?.message || __("MyOperator is calling your phone…"));
+    },
+    onError(e: unknown) {
+      toast.error(
+        errorText(e, __("Couldn't place the call. Try again in a minute."))
+      );
+    },
+  });
+}
+
+/** 125 → "2:05" */
+export function callLength(seconds?: number | null) {
+  const total = Math.max(0, Math.round(seconds || 0));
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
 }
 
 export function stageLabel(options: LeadOptions | undefined, stage?: string) {

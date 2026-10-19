@@ -39,7 +39,7 @@ user exists there with a sales role, applies what they may see, and records writ
 
 | Method | HTTP | Arguments | Returns |
 | --- | --- | --- | --- |
-| `get_options` | GET | | `{stages: [{name, label, type, color}], sources, segments, owners: [{email, full_name}], territories, industries}` |
+| `get_options` | GET | | `{stages: [{name, label, type, color}], sources, segments, owners: [{email, full_name}], territories, industries, can_call}` |
 | `list_leads` | GET | `search, stage, owner, segment, source, temperature, metric, period, from_date, to_date, view, start, page_length` | `{rows: [{name, lead_name, company_name, email_id, mobile_no, tbo_stage, segment, lead_owner, owner_name, score, next_follow_up, modified}], total}` |
 | `get_overview` | GET | `period, from_date, to_date, owner` | the Overview's figures (TBO Smart's `hub-leads-api.md` §2.4) |
 | `get_lead_ai` | GET | `name` | what the AI proposes, the lead's health and likely duplicates (TBO Smart's `hub-leads-api.md` §2.6) |
@@ -78,12 +78,35 @@ user exists there with a sales role, applies what they may see, and records writ
 - Stage colours from the ERP site are not used, to keep the hub's one-accent rule: a stage
   whose `type` is `Won` is green, `Lost` red, every other stage gray, always with its label.
 
+## Calls through MyOperator
+
+Telecallers' calls go through MyOperator, set up on the ERP site (TBO Smart's
+`docs/telephony-myoperator.md`, which also lists the owner's setup steps in MyOperator).
+The ERP site's `tbo_smart.api.telephony` takes the same `acting_user`:
+
+| Method | HTTP | Arguments | Returns |
+| --- | --- | --- | --- |
+| `click_to_call` | POST | `lead, number` (one of the lead's own numbers; blank: its mobile) | `{ok, message, number, reference_id}`: MyOperator rings the person's phone, then the lead |
+| `call_recording` | GET | `call` | the recording (audio), only to someone who may read the lead |
+| `get_settings`, `save_settings`, `test_connection`, `regenerate_webhook_secret` | GET / POST | `values` (save) | the MyOperator settings (System Managers on the ERP site); secrets never come back, a new webhook secret once |
+
+- `get_options` and the lead's `can_call` say whether the signed-in person may use **Call**
+  (telephony on and they are mapped to a MyOperator user or mobile on the ERP site).
+- A call timeline entry that came through MyOperator adds `call, duration` (talk seconds),
+  `direction` (incoming / outgoing), `status` (answered / missed / voicemail), `recording`
+  (the call's name, or null) and `summary` (TBO AI's `{text, interest, intent, objections,
+  next_step, language}`, or null). The transcript never leaves the ERP site.
+- Hub: `helpdesk.api.leads.click_to_call` (POST) and `call_recording` (GET, streams the ERP
+  site's file through `CRMClient.download`, served inline as audio), and
+  `helpdesk/api/myoperator.py` for the settings (hub admins and managers who use leads; the
+  ERP site checks its own System Manager role).
+
 ## Hub endpoints
 
 `helpdesk/api/leads.py`, thin typed proxies (writes are POST only): `get_options`,
 `list_leads`, `get_overview`, `get_lead`, `get_lead_ai`, `refresh_lead_ai`, `apply_ai_stage`,
 `dismiss_ai_stage`, `draft_lead_message`, `log_message_sent`, `create_lead`, `update_lead`,
-`set_stage`, `add_note`. They check
+`set_stage`, `add_note`, `click_to_call`, `call_recording`. They check
 `can_use_leads`, validate the view and page size, trim notes, and pass `acting_user`. The
 client is `CRMClient.call` in `helpdesk/integrations/crm/client.py`; the call and error
 mapping live in `helpdesk/integrations/crm/leads.py`. The API key and secret never reach the
@@ -167,6 +190,23 @@ ValidationError, so the page shows the message with *Try again*).
     leads off too (the block is then titled *Lead health*).
   - States: loading lines, an error with Try again, "hasn't read this one yet" with *Read it
     now*, and a note when no AI provider is set up.
+- **Call** (MyOperator, when `can_call`): a button in the lead's header and a phone button on
+  each list row with a mobile (outside the row's link). It toasts "MyOperator is calling your
+  phone…", or the ERP site's reason (not set up, no number, MyOperator refused).
+- **Calls on the timeline**: a MyOperator call shows "Incoming call" / "Outgoing call" with its
+  talk time (mono), or "Missed call" / "Unanswered call" in red with the phone-missed icon; the
+  direction is its icon. A recording plays in an audio player (`preload="none"`), streamed by
+  `call_recording`. The AI summary is a collapsed `<details>` (its first line, "TBO AI"),
+  opening to what was discussed, interest, intent, concerns, the next step and its day, and
+  the language (`LeadCallEntry.vue`).
+- **Settings → Telephony → MyOperator** (`MyOperatorSettings.vue`; the Telephony page opens
+  on it when the telephony app isn't installed): the switch, company ID, IVR and caller ID,
+  the three keys (`SecretField`: saved ones are never shown), *Test connection* (lists
+  MyOperator's users, used to pick each person's MyOperator user), the **webhook URL with a
+  copy button, the header and the events** to paste into MyOperator, *Make a new secret*
+  (asks first; the new secret shows once, with Copy), the people mapping, unknown callers,
+  recordings (days kept, the recording notice for the IVR greeting under the DPDP Act) and
+  the AI call summary.
 - The pickers' options (`get_options`) are fetched once per session (`leadOptions` in
   `desk/src/pages/leads/leads.ts`).
 - Sidebar: *Leads* in Workspace (teal group), shown when `can_use_leads`.
@@ -183,3 +223,6 @@ are specified in [proposals.md](proposals.md).
 writes posted, view and page size checked, teams and inactive agents gated, and each error
 mapped; the Overview's period checks and the metric with its period passed to the list; the
 AI calls are the signed-in person's (POST for every change) and the channels checked.
+`helpdesk/tests/test_lead_calls.py`: Call posted as the signed-in person to TBO Smart's
+telephony API, the recording streamed (audio only) and a refusal refused, the MyOperator
+settings for admins only and proxied.

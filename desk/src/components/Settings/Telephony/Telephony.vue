@@ -139,6 +139,19 @@ const providers = [
     ),
     step: "exotel-settings",
   },
+  // lead calls, set up on the ERP site (TBO Smart's docs/telephony-myoperator.md)
+  ...(auth.canUseLeads && (auth.isAdmin || auth.isManager)
+    ? [
+        {
+          name: "myoperator",
+          label: __("MyOperator"),
+          description: __(
+            "Calls with leads: Call on a lead, recordings and AI call summaries"
+          ),
+          step: "myoperator-settings",
+        },
+      ]
+    : []),
 ];
 
 async function save() {

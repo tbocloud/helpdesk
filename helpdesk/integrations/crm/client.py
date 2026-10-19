@@ -127,6 +127,23 @@ class CRMClient:
             )
         return body.get("message")
 
+    def download(self, method: str, **params) -> tuple[bytes, str]:
+        """A whitelisted method on the CRM site that answers with a file (e.g. a call's
+        recording): (its bytes, its content type). Fails like `call`."""
+        response = self.send("GET", f"/api/method/{method}", params=params)
+        if not response.ok:
+            detail = error_text(response)
+            raise CRMError(
+                _("The CRM site answered {0}: {1}").format(
+                    response.status_code, detail
+                ),
+                response.status_code,
+                detail,
+                error_text(response, messages_only=True),
+            )
+        content_type = response.headers.get("Content-Type") or ""
+        return response.content, content_type.split(";")[0].strip()
+
     def logged_user(self) -> str:
         """Who the key belongs to on the CRM site; proves the connection works."""
         data = self.request("GET", "/api/method/frappe.auth.get_logged_user") or {}

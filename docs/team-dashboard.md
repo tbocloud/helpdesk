@@ -190,7 +190,10 @@ site, where leads live ([leads.md](leads.md)).
   and wins count (`sales.delivered`). So a few calls alone never make a champion.
 - **Conversion** (won of new leads, %) is shown, not scored: it would reward taking few
   leads.
-- **On the page**: department rows with sales show "Sales: 12 contacted · 2 meetings ·
+- **Calls** (answered MyOperator calls the person took, `calls`) are shown, not scored: a
+  call that moves a lead already counts through Contacted, and counting calls or talk time
+  would reward dialling over outcomes. Talk time is not shown either.
+- **On the page**: department rows with sales show "Sales: 12 contacted · 30 calls · 2 meetings ·
   1 proposals · 1 won"; a person with sales shows the same next to their department; the
   breakdown names each part ("Leads contacted: 10, follow-ups on time 2 of 3", "Leads won:
   1, worth ₹3,00,000"); **How weight works** lists the sales points (`rules.sales`).

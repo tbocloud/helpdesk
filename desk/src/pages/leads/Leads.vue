@@ -187,11 +187,11 @@
               <li
                 v-for="row in data.rows"
                 :key="row.name"
-                class="border-b border-outline-gray-1 last:border-b-0"
+                class="flex items-center border-b border-outline-gray-1 last:border-b-0"
               >
                 <router-link
                   :to="{ name: 'Lead', params: { leadId: row.name } }"
-                  class="flex flex-col gap-2 px-4 py-3 transition-colors hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-outline-gray-4 md:flex-row md:items-center md:gap-4"
+                  class="flex min-w-0 flex-1 flex-col gap-2 px-4 py-3 transition-colors hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-outline-gray-4 md:flex-row md:items-center md:gap-4"
                 >
                   <div class="flex min-w-0 flex-1 flex-col gap-0.5">
                     <div class="flex min-w-0 flex-wrap items-center gap-2">
@@ -264,6 +264,21 @@
                     </span>
                   </div>
                 </router-link>
+                <Button
+                  v-if="options?.can_call && row.mobile_no"
+                  class="mr-3 shrink-0"
+                  variant="ghost"
+                  :aria-label="__('Call {0}', row.lead_name || row.name)"
+                  :tooltip="__('MyOperator rings your phone, then the lead')"
+                  :loading="
+                    clickToCall.loading && clickToCall.params?.name === row.name
+                  "
+                  @click="clickToCall.submit({ name: row.name })"
+                >
+                  <template #icon>
+                    <LucidePhone class="size-4" aria-hidden="true" />
+                  </template>
+                </Button>
               </li>
             </ul>
 
@@ -328,6 +343,7 @@ import LucideCalendarX from "~icons/lucide/calendar-x";
 import LucideChevronLeft from "~icons/lucide/chevron-left";
 import LucideChevronRight from "~icons/lucide/chevron-right";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
+import LucidePhone from "~icons/lucide/phone";
 import LucidePlus from "~icons/lucide/plus";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideSearch from "~icons/lucide/search";
@@ -341,6 +357,7 @@ import {
   choices,
   LEAD_VIEWS,
   loadLeadOptions,
+  useClickToCall,
   leadOptions,
   METRIC_LABELS,
   ownerName,
@@ -468,6 +485,7 @@ function showAll() {
 
 loadLeadOptions();
 const options = computed(() => leadOptions.data as LeadOptions | undefined);
+const clickToCall = useClickToCall();
 
 const stageOptions = computed(() => [
   { label: __("Any stage"), value: "" },

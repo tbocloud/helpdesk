@@ -6,11 +6,14 @@ import frappe
 from frappe import _
 from frappe.utils import cint
 
-from helpdesk.integrations.crm.leads import call, require_leads
+from helpdesk.integrations.crm.leads import call, download, require_leads
 
 VIEWS = ("all", "mine", "call_today", "follow_up")
 PERIODS = ("week", "month", "quarter", "custom")
 MESSAGE_CHANNELS = ("whatsapp", "email")
+TELEPHONY = "tbo_smart.api.telephony"
+# what the recording player may be handed back
+AUDIO_TYPES = ("audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/ogg")
 MAX_PAGE = 100
 
 
@@ -195,6 +198,43 @@ def log_message_sent(name: str, channel: str, text: str) -> dict:
     return (
         call("log_message_sent", post=True, name=name, channel=channel, text=text) or {}
     )
+
+
+# --- calls through MyOperator (TBO Smart's docs/telephony-myoperator.md) ----------
+
+
+@frappe.whitelist(methods=["POST"])
+def click_to_call(name: str, number: str | None = None) -> dict:
+    """MyOperator rings the signed-in person's phone, then the lead (`number`: one of
+    the lead's own numbers; default its mobile)."""
+    require_leads()
+    return (
+        call(
+            "click_to_call",
+            post=True,
+            api=TELEPHONY,
+            lead=name,
+            number=(number or "").strip() or None,
+        )
+        or {}
+    )
+
+
+@frappe.whitelist()
+def call_recording(call: str) -> None:
+    """A call's recording, streamed from the ERP site, which plays it only to people
+    who may read the lead."""
+    require_leads()
+    content, content_type = download(
+        "call_recording", api=TELEPHONY, call=(call or "").strip()
+    )
+    frappe.local.response.filename = f"call-{call}.mp3"
+    frappe.local.response.filecontent = content
+    frappe.local.response.content_type = (
+        content_type if content_type in AUDIO_TYPES else "audio/mpeg"
+    )
+    frappe.local.response.display_content_as = "inline"
+    frappe.local.response.type = "download"
 
 
 def parse_data(data: dict | str) -> dict:

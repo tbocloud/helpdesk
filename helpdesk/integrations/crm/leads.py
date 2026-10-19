@@ -103,6 +103,25 @@ def call(method: str, post: bool = False, api: str = API, **params):
         fail(friendly_error(e, client))
 
 
+def download(method: str, api: str = API, **params) -> tuple[bytes, str]:
+    """A file from `<api>.<method>` on the CRM site as the signed-in person: (bytes,
+    content type); failures as `call`'s."""
+    try:
+        client = CRMClient.from_settings()
+    except CRMError:
+        fail(
+            LeadsUnavailableError(
+                _("Leads aren't connected yet. Ask an admin to set up Settings → CRM.")
+            )
+        )
+    try:
+        return client.download(
+            f"{api}.{method}", acting_user=frappe.session.user, **params
+        )
+    except CRMError as e:
+        fail(friendly_error(e, client))
+
+
 def fail(error: LeadsError):
     # through frappe.throw, so the message reaches the page; a bare raise shows people only
     # "Internal Server Error"
