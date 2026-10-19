@@ -194,6 +194,9 @@ site, where leads live ([leads.md](leads.md)).
   1 proposals · 1 won"; a person with sales shows the same next to their department; the
   breakdown names each part ("Leads contacted: 10, follow-ups on time 2 of 3", "Leads won:
   1, worth ₹3,00,000"); **How weight works** lists the sales points (`rules.sales`).
+- **In TBO Smart**: the app's Scoreboard (`helpdesk.api.mobile.get_scoreboard`) gets the same
+  `sales` on its department rows, `me` and `leaders`, and shows "Sales: …" under the CRM and
+  Sales rows; its How weight works lists the same points.
 
 ## Weight and quality
 

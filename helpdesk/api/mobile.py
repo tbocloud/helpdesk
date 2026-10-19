@@ -1749,6 +1749,8 @@ def get_scoreboard(
                     "overdue": d["overdue"],
                     "hours": d["hours"],
                     "champion": (d["champion"] or {}).get("name"),
+                    # work on leads (the CRM department under Sales); None without any
+                    "sales": d.get("sales"),
                 }
                 for d in board["departments"]
             ],
@@ -1770,6 +1772,7 @@ def _score_line(p: dict) -> dict:
         "on_time_pct": p["on_time_pct"],
         "hours": p["hours"],
         "overdue": p["overdue"],
+        "sales": p.get("sales"),
     }
 
 
