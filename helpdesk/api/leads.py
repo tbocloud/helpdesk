@@ -10,6 +10,7 @@ from helpdesk.integrations.crm.leads import call, require_leads
 
 VIEWS = ("all", "mine", "call_today", "follow_up")
 PERIODS = ("week", "month", "quarter", "custom")
+MESSAGE_CHANNELS = ("whatsapp", "email")
 MAX_PAGE = 100
 
 
@@ -130,6 +131,70 @@ def add_note(name: str, note: str) -> dict:
     if not note:
         frappe.throw(_("Write the note first."))
     return call("add_note", post=True, name=name, note=note) or {}
+
+
+# --- AI runs leads: the AI proposes, a person decides and sends -----------------
+
+
+@frappe.whitelist()
+def get_lead_ai(name: str) -> dict:
+    """The lead's "AI suggests": summary, sentiment, intent, next best action, a
+    stage to suggest and a draft, its health and likely duplicates."""
+    require_leads()
+    return call("get_lead_ai", name=name) or {}
+
+
+@frappe.whitelist(methods=["POST"])
+def refresh_lead_ai(name: str) -> dict:
+    require_leads()
+    return call("refresh_lead_ai", post=True, name=name) or {}
+
+
+@frappe.whitelist(methods=["POST"])
+def apply_ai_stage(name: str) -> dict:
+    """Moves the lead to the stage the AI suggested, as the signed-in person."""
+    require_leads()
+    return call("apply_ai_stage", post=True, name=name) or {}
+
+
+@frappe.whitelist(methods=["POST"])
+def dismiss_ai_stage(name: str) -> dict:
+    require_leads()
+    return call("dismiss_ai_stage", post=True, name=name) or {}
+
+
+@frappe.whitelist(methods=["POST"])
+def draft_lead_message(name: str, channel: str, language: str = "en") -> dict:
+    """A WhatsApp or email text to edit and send from the person's own app; the
+    ERP site sends nothing."""
+    require_leads()
+    if channel not in MESSAGE_CHANNELS:
+        frappe.throw(_("Pick WhatsApp or email."))
+    return (
+        call(
+            "draft_lead_message",
+            post=True,
+            name=name,
+            channel=channel,
+            language=language if language in ("en", "ml") else "en",
+        )
+        or {}
+    )
+
+
+@frappe.whitelist(methods=["POST"])
+def log_message_sent(name: str, channel: str, text: str) -> dict:
+    """The person sent the message from their own WhatsApp or mail: put it on the
+    lead's timeline as theirs."""
+    require_leads()
+    if channel not in MESSAGE_CHANNELS:
+        frappe.throw(_("Pick WhatsApp or email."))
+    text = (text or "").strip()
+    if not text:
+        frappe.throw(_("Write the message first."))
+    return (
+        call("log_message_sent", post=True, name=name, channel=channel, text=text) or {}
+    )
 
 
 def parse_data(data: dict | str) -> dict:

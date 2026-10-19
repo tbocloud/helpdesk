@@ -74,7 +74,8 @@ export const LEAD_FORM_FIELDS: (keyof LeadForm)[] = [
 
 /** One entry of a lead's timeline, newest first (TBO Smart's hub-leads-api.md). */
 export interface LeadTimelineEntry {
-  kind: "note" | "call" | "activity" | "meeting" | "stage" | "quotation";
+  /** ai: what TBO AI did on the lead (read it, planned a follow-up, …) */
+  kind: "note" | "call" | "activity" | "meeting" | "stage" | "quotation" | "ai";
   /** when it happened (a date only for a quotation) */
   at?: string | null;
   who?: string | null;
@@ -148,7 +149,11 @@ export type LeadMetric =
   | "stale"
   | "overdue"
   | "hot"
-  | "open";
+  | "open"
+  // what AI runs leads read in the open leads
+  | "high_intent"
+  | "unhappy"
+  | "stage_suggested";
 
 export const METRIC_LABELS: Record<LeadMetric, string> = {
   new: __("New leads"),
@@ -161,6 +166,9 @@ export const METRIC_LABELS: Record<LeadMetric, string> = {
   overdue: __("Overdue follow-ups"),
   hot: __("Hot leads"),
   open: __("Open leads"),
+  high_intent: __("High intent (AI)"),
+  unhappy: __("Unhappy customers (AI)"),
+  stage_suggested: __("Stage moves to check (AI)"),
 };
 
 interface OverviewBreakdown {
@@ -233,4 +241,87 @@ export interface LeadOverview {
   }[];
   by_segment: OverviewBreakdown[];
   by_source: OverviewBreakdown[];
+  /** with AI runs leads on the ERP site */
+  ai?: OverviewAI;
+}
+
+/** TBO Smart's get_lead_ai (hub-leads-api.md §2.6): what the AI proposes for a lead. */
+export interface LeadAI {
+  enabled: boolean;
+  ai_ready: boolean;
+  open: boolean;
+  /** when the AI last read the lead */
+  at?: string | null;
+  /** the lead changed since that read */
+  stale?: boolean;
+  score: { score: number; temperature?: string; reason?: string } | null;
+  insight: {
+    summary?: string | null;
+    sentiment: "Positive" | "Neutral" | "Negative";
+    intent: "High" | "Medium" | "Low" | "None";
+    signals: string[];
+    next_action: {
+      what: string;
+      why?: string | null;
+      channel: "call" | "whatsapp" | "email" | "meeting";
+      due: string;
+    } | null;
+    suggested_stage?: string | null;
+    stage_reason?: string | null;
+    message: {
+      channel: "whatsapp" | "email";
+      subject?: string | null;
+      text: string;
+    } | null;
+  } | null;
+  health: {
+    status: "healthy" | "watch" | "at_risk";
+    signals: { key: string; state: "watch" | "at_risk"; text: string }[];
+  } | null;
+  duplicates: {
+    name: string;
+    lead_name?: string;
+    company_name?: string;
+    tbo_stage?: string;
+    owner_name?: string | null;
+    match: ("phone" | "email" | "company")[];
+  }[];
+  /** where a draft is sent from: the lead's WhatsApp number (wa.me digits) and email */
+  contact: { whatsapp: string | null; email: string | null };
+}
+
+/** The Overview's AI part: the day's plan and what the AI sees in the scope. */
+export interface OverviewAI {
+  enabled: boolean;
+  ai_ready?: boolean;
+  plan?: {
+    user: string;
+    rows: {
+      name: string;
+      lead_name?: string;
+      company_name?: string;
+      tbo_stage?: string;
+      score?: number;
+      temperature?: string;
+      why?: string;
+      next_action?: string | null;
+      next_due?: string | null;
+      intent?: string | null;
+    }[];
+  };
+  high_intent?: number;
+  unhappy?: number;
+  stage_suggested?: number;
+  read?: number;
+}
+
+/** A message the AI drafted, for the person to edit and send themselves. */
+export interface LeadDraft {
+  channel: "whatsapp" | "email";
+  subject?: string | null;
+  text: string;
+  /** the lead's email, for an email draft */
+  to?: string;
+  /** wa.me link with the text, for a WhatsApp draft */
+  url?: string | null;
 }
