@@ -35,18 +35,13 @@
           :label="__(proposal.status)"
           :tone="proposalTone(proposal.status)"
         />
-        <Button
-          :label="__('Preview link')"
-          :link="proposal.preview_url"
-          :title="
-            __('Opens the client\'s page in a new tab; no view is counted')
-          "
-        >
-          <!-- a phone shows the icon only; the label stays its accessible name -->
-          <template #[previewSlot]>
-            <LucideExternalLink class="size-4" aria-hidden="true" />
-          </template>
-        </Button>
+        <Dropdown :options="shareOptions">
+          <Button :label="__('Share')">
+            <template #prefix>
+              <LucideShare2 class="size-4" aria-hidden="true" />
+            </template>
+          </Button>
+        </Dropdown>
         <Button
           v-if="isDraft && proposal.can_write"
           :label="dirty ? __('Save changes') : __('Saved')"
@@ -163,14 +158,16 @@
                   :disabled="!editable"
                 />
                 <div class="flex flex-col gap-1.5">
-                  <span :id="themeLabelId" class="text-xs text-ink-gray-5">{{
-                    __("Theme")
+                  <span :id="priceLabelId" class="text-xs text-ink-gray-5">{{
+                    __("Price shown")
                   }}</span>
                   <TabButtons
-                    :model-value="form.theme"
-                    :aria-labelledby="themeLabelId"
-                    :options="themeOptions"
-                    @update:model-value="editable && (form.theme = $event)"
+                    :model-value="form.pricing_mode"
+                    :aria-labelledby="priceLabelId"
+                    :options="pricingModeOptions"
+                    @update:model-value="
+                      editable && (form.pricing_mode = $event)
+                    "
                   />
                 </div>
               </div>
@@ -197,7 +194,147 @@
                   )
                 }}
               </p>
+              <p class="text-p-sm tabular-nums text-ink-gray-6">
+                {{ __("About {0} pages", String(pages)) }}
+                <template v-if="proposal.page_guide">
+                  · {{ __("guide: {0}", proposal.page_guide) }}</template
+                >
+              </p>
+              <p
+                v-if="proposal.ai"
+                class="text-p-sm tabular-nums text-ink-gray-6"
+              >
+                {{
+                  __(
+                    "AI on this proposal: {0} runs, {1} tokens, about ${2}",
+                    String(proposal.ai.runs),
+                    (
+                      proposal.ai.input_tokens + proposal.ai.output_tokens
+                    ).toLocaleString(),
+                    proposal.ai.cost_usd.toFixed(3)
+                  )
+                }}
+                <template v-if="proposal.ai.estimate_tokens">
+                  ·
+                  {{
+                    __(
+                      "a full regenerate is about {0} tokens",
+                      proposal.ai.estimate_tokens.toLocaleString()
+                    )
+                  }}</template
+                >
+              </p>
             </section>
+
+            <ProposalAssistant
+              :proposal="proposalId"
+              :chat="proposal.chat || []"
+              :ai="!!options?.ai"
+              :editable="editable"
+              :dirty="dirty"
+              @changed="setProposal"
+            />
+
+            <details
+              class="rounded-xl border border-outline-gray-2 bg-surface-base"
+            >
+              <summary
+                class="flex min-h-[44px] cursor-pointer items-center px-4 text-base-medium text-ink-gray-9"
+              >
+                {{ __("Client, requirements and scoping") }}
+              </summary>
+              <div
+                class="flex flex-col gap-5 border-t border-outline-gray-1 p-4"
+              >
+                <ClientProfileForm
+                  v-model="form.client_profile"
+                  :lead="leadId"
+                  :can-read="!!options?.ai"
+                  :disabled="!editable"
+                />
+                <FormControl
+                  v-model="form.requirements"
+                  type="textarea"
+                  :rows="4"
+                  :label="__('Customer requirements')"
+                  maxlength="8000"
+                  :disabled="!editable"
+                />
+                <ProposalScopingForm
+                  v-model="form.scoping"
+                  :questions="template?.questions"
+                  :catalogue="options?.catalogue || []"
+                  :solution-type="proposal.solution_type"
+                  :hosting="options?.hosting || []"
+                  :disabled="!editable"
+                />
+                <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <FormControl
+                    :model-value="form.scoping.timeline_template || ''"
+                    type="select"
+                    :label="__('Timeline')"
+                    :options="timelineOptions"
+                    :disabled="!editable"
+                    @update:model-value="
+                      form.scoping.timeline_template = $event
+                    "
+                  />
+                  <FormControl
+                    :model-value="form.scoping.payment_terms || ''"
+                    type="select"
+                    :label="__('Payment terms')"
+                    :options="paymentOptions"
+                    :disabled="!editable"
+                    @update:model-value="form.scoping.payment_terms = $event"
+                  />
+                  <FormControl
+                    :model-value="form.scoping.amc_plan || ''"
+                    type="select"
+                    :label="__('AMC plan to recommend')"
+                    :options="amcOptions"
+                    :disabled="!editable"
+                    @update:model-value="form.scoping.amc_plan = $event || null"
+                  />
+                </div>
+                <div v-if="editable" class="flex flex-wrap items-center gap-3">
+                  <Button
+                    :label="__('Regenerate proposal')"
+                    :disabled="dirty"
+                    :tooltip="dirty ? __('Save your changes first') : ''"
+                    :loading="regenerateAll.loading"
+                    @click="regenerateProposal(false)"
+                  >
+                    <template #prefix>
+                      <LucideRefreshCw class="size-4" aria-hidden="true" />
+                    </template>
+                  </Button>
+                  <span class="text-p-sm text-ink-gray-6">{{
+                    __(
+                      "Rebuilds every section from the scoping and the libraries (and the narrative with AI). Sections you edited are kept."
+                    )
+                  }}</span>
+                </div>
+              </div>
+            </details>
+
+            <ProposalModules
+              v-model:modules="form.modules"
+              :catalogue="options?.catalogue || []"
+              :solution-type="proposal.solution_type"
+              :editable="editable"
+            >
+              <template #actions>
+                <Button
+                  v-if="editable"
+                  class="ml-auto"
+                  :label="__('Price from modules')"
+                  :disabled="dirty || !form.modules.length"
+                  :tooltip="dirty ? __('Save your changes first') : ''"
+                  :loading="priceModules.loading"
+                  @click="priceModules.submit({ name: proposalId })"
+                />
+              </template>
+            </ProposalModules>
 
             <ProposalBlocks
               v-model:sections="form.sections"
@@ -205,6 +342,8 @@
               :editable="editable"
               :guidance="guidance"
               :section-types="options?.section_types || []"
+              :busy="regenerating"
+              @regenerate="regenerateSection($event, false)"
             >
               <template #pricing>
                 <ProposalPricingSummary
@@ -266,10 +405,12 @@
               <ProposalPreview
                 :title="form.title"
                 :client="proposal.client"
-                :theme="form.theme"
+                :solution-type="proposal.solution_type"
                 :valid-till="form.valid_till"
                 :sections="form.sections"
                 :quotation="proposal.quotation"
+                :pricing-mode="form.pricing_mode"
+                :modules="form.modules"
                 :letter-head="letterHeadPreview"
               />
             </div>
@@ -333,6 +474,21 @@
         </div>
       </template>
     </Dialog>
+
+    <!-- one confirm for the actions that can't be undone or write over edits -->
+    <Dialog v-model:open="confirm.open" :title="confirm.title" size="md">
+      <p class="text-p-base text-ink-gray-7">{{ confirm.message }}</p>
+      <template #actions="{ close }">
+        <div class="flex justify-end gap-2">
+          <Button :label="__('Cancel')" @click="close" />
+          <Button
+            variant="solid"
+            :label="confirm.action"
+            @click="runConfirmed"
+          />
+        </div>
+      </template>
+    </Dialog>
   </div>
 </template>
 
@@ -347,6 +503,7 @@ import {
   Button,
   createResource,
   Dialog,
+  Dropdown,
   FormControl,
   TabButtons,
   toast,
@@ -355,48 +512,60 @@ import { computed, reactive, ref, useId, watch } from "vue";
 import { useRouter } from "vue-router";
 import LucideChevronRight from "~icons/lucide/chevron-right";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
-import LucideExternalLink from "~icons/lucide/external-link";
+import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideSend from "~icons/lucide/send";
+import LucideShare2 from "~icons/lucide/share-2";
 import LucideTriangleAlert from "~icons/lucide/triangle-alert";
+import ClientProfileForm from "./ClientProfileForm.vue";
+import ProposalAssistant from "./ProposalAssistant.vue";
 import ProposalBlocks from "./ProposalBlocks.vue";
+import ProposalModules from "./ProposalModules.vue";
 import ProposalPreview from "./ProposalPreview.vue";
 import ProposalPricingDialog from "./ProposalPricingDialog.vue";
 import ProposalPricingSummary from "./ProposalPricingSummary.vue";
+import ProposalScopingForm from "./ProposalScopingForm.vue";
 import ProposalTracking from "./ProposalTracking.vue";
 import {
+  emptyProfile,
+  emptyScoping,
+  estimatePages,
   loadProposalOptions,
   proposalOptions,
   proposalTone,
+  type ClientProfile,
   type Proposal,
+  type ProposalModule,
   type ProposalOptions,
   type ProposalSection,
+  type Scoping,
 } from "./proposals";
 
 const props = defineProps<{ leadId: string; proposalId: string }>();
 const router = useRouter();
 const { isMobileView } = useScreenSize();
-const previewSlot = computed(() => (isMobileView.value ? "icon" : "prefix"));
-const themeLabelId = `proposal-theme-${useId()}`;
+const priceLabelId = `proposal-price-${useId()}`;
 const sendFormId = `proposal-send-${useId()}`;
 
 loadProposalOptions();
 const options = computed(
   () => proposalOptions.data as ProposalOptions | undefined
 );
-const themeOptions = computed(() =>
-  (options.value?.themes ?? ["TBO Teal", "Graphite"]).map((t) => ({
-    label: __(t),
-    value: t,
-  }))
-);
+const pricingModeOptions = [
+  { label: __("Itemised"), value: "Itemised" },
+  { label: __("Consolidated"), value: "Consolidated" },
+];
 
 const proposal = ref<Proposal>();
 const form = reactive({
   title: "",
-  theme: "TBO Teal",
   /** "": the default letter head */
   letter_head: "",
+  pricing_mode: "Itemised" as Proposal["pricing_mode"],
   valid_till: "" as string | null,
+  requirements: "",
+  client_profile: emptyProfile() as ClientProfile,
+  scoping: emptyScoping() as Scoping,
+  modules: [] as ProposalModule[],
   sections: [] as ProposalSection[],
 });
 const saved = ref("");
@@ -408,9 +577,13 @@ function snapshot() {
 function setProposal(p: Proposal) {
   proposal.value = p;
   form.title = p.title;
-  form.theme = p.theme || "TBO Teal";
   form.letter_head = p.letter_head || "";
+  form.pricing_mode = p.pricing_mode || "Itemised";
   form.valid_till = p.valid_till || "";
+  form.requirements = p.requirements || "";
+  form.client_profile = { ...emptyProfile(), ...(p.client_profile || {}) };
+  form.scoping = { ...emptyScoping(), ...(p.scoping || {}) };
+  form.modules = (p.modules || []).map((m) => ({ ...m }));
   form.sections = p.sections.map((s) => ({ ...s }));
   saved.value = snapshot();
 }
@@ -441,16 +614,34 @@ const sendTooltip = computed(() => {
   if (dirty.value) return __("Save your changes first");
   return proposal.value?.send_blockers[0] || "";
 });
+const pages = computed(() => estimatePages(form.sections));
 
-/** Each block type's guidance from the proposal's template, as the placeholder. */
-const guidance = computed(() => {
-  const template = options.value?.templates?.find(
-    (t) => t.name === proposal.value?.template
-  );
-  return Object.fromEntries(
-    (template?.sections ?? []).map((s) => [s.section_type, s.guidance || ""])
-  );
-});
+const template = computed(() =>
+  options.value?.templates?.find((t) => t.name === proposal.value?.template)
+);
+/** Each section type's guidance from the proposal's template, as the placeholder. */
+const guidance = computed(() =>
+  Object.fromEntries(
+    (template.value?.sections ?? []).map((s) => [
+      s.section_type,
+      s.guidance || "",
+    ])
+  )
+);
+
+const timelineOptions = computed(() =>
+  (options.value?.timelines ?? []).map((t) => ({
+    label: t.title,
+    value: t.title,
+  }))
+);
+const paymentOptions = computed(() =>
+  (options.value?.payment_terms ?? []).map((t) => ({ label: t, value: t }))
+);
+const amcOptions = computed(() => [
+  { label: __("None"), value: "" },
+  ...(options.value?.amc_plans ?? []).map((p) => ({ label: p, value: p })),
+]);
 
 // --- letter head ---
 
@@ -474,6 +665,115 @@ const letterHeadPreview = computed(() =>
     : null
 );
 
+// --- sharing: copy link, PDF, print ---
+
+/** The ERP site's guest PDF for this proposal (a draft's through its preview). */
+const pdfUrl = computed(() => {
+  if (!proposal.value) return "";
+  const url = new URL(proposal.value.preview_url);
+  const token = url.pathname.split("/").pop();
+  return `${
+    url.origin
+  }/api/method/tbo_smart.api.proposal_page.download_pdf?token=${token}${
+    isDraft.value ? "&preview=1" : ""
+  }`;
+});
+
+const shareOptions = computed(() => [
+  {
+    label: __("Copy link"),
+    icon: "link",
+    onClick: copyLink,
+  },
+  {
+    label: __("Download PDF"),
+    icon: "download",
+    onClick: () => window.open(pdfUrl.value, "_blank", "noopener"),
+  },
+  {
+    label: __("Print"),
+    icon: "printer",
+    onClick: () =>
+      window.open(
+        `${proposal.value?.preview_url}&print=1`,
+        "_blank",
+        "noopener"
+      ),
+  },
+  {
+    label: __("Preview link"),
+    icon: "external-link",
+    onClick: () =>
+      window.open(proposal.value?.preview_url, "_blank", "noopener"),
+  },
+]);
+
+async function writeClipboard(url: string) {
+  try {
+    await navigator.clipboard.writeText(url);
+    toast.success(__("Link copied"));
+  } catch {
+    toast.info(url);
+  }
+}
+
+/** A sent proposal's link is copied at once; a draft is shared (it goes out) after a confirm. */
+function copyLink() {
+  const p = proposal.value;
+  if (!p) return;
+  if (p.public_url) {
+    writeClipboard(p.public_url);
+    return;
+  }
+  if (dirty.value) {
+    toast.warning(__("Save your changes first"));
+    return;
+  }
+  if (p.share_blockers.length) {
+    toast.warning(p.share_blockers[0]);
+    return;
+  }
+  ask(
+    __("Share this draft?"),
+    __(
+      "The proposal goes to the client as if sent, without an email: its quotation goes out, the lead moves to Proposal Sent, and the content is fixed. Changes after that need a revision."
+    ),
+    __("Share and copy link"),
+    () => shareResource.submit({ name: props.proposalId })
+  );
+}
+
+const shareResource = createResource({
+  url: "helpdesk.api.proposals.share_proposal",
+  method: "POST",
+  onSuccess(d: { proposal: Proposal; url: string }) {
+    setProposal(d.proposal);
+    writeClipboard(d.url);
+  },
+  onError(e: unknown) {
+    toast.error(errorText(e, __("Couldn't share it.")));
+  },
+});
+
+// --- confirm ---
+
+const confirm = reactive({
+  open: false,
+  title: "",
+  message: "",
+  action: "",
+  run: null as null | (() => void),
+});
+
+function ask(title: string, message: string, action: string, run: () => void) {
+  Object.assign(confirm, { open: true, title, message, action, run });
+}
+
+function runConfirmed() {
+  confirm.open = false;
+  confirm.run?.();
+}
+
 // --- save ---
 
 const saveResource = createResource({
@@ -496,9 +796,13 @@ function save() {
     name: props.proposalId,
     data: {
       title: form.title,
-      theme: form.theme,
       letter_head: form.letter_head || null,
+      pricing_mode: form.pricing_mode,
       valid_till: form.valid_till || null,
+      requirements: form.requirements,
+      client_profile: form.client_profile,
+      scoping: form.scoping,
+      modules: form.modules,
       sections: form.sections,
     },
   });
@@ -514,6 +818,87 @@ function takePricing(p: Proposal) {
 function onPriced(p: Proposal) {
   takePricing(p);
   toast.success(__("Pricing saved"));
+}
+
+const priceModules = createResource({
+  url: "helpdesk.api.proposals.price_from_modules",
+  method: "POST",
+  onSuccess(p: Proposal) {
+    takePricing(p);
+    toast.success(__("Priced from the modules"));
+  },
+  onError(e: unknown) {
+    toast.error(errorText(e, __("Couldn't price it from the modules.")));
+  },
+});
+
+// --- regenerate ---
+
+const regenerating = ref<number | null>(null);
+
+function showWarnings(warnings?: string[]) {
+  for (const warning of warnings ?? []) toast.warning(warning);
+}
+
+const regenerateOne = createResource({
+  url: "helpdesk.api.proposals.regenerate_section",
+  method: "POST",
+  onSuccess(d: {
+    proposal: Proposal;
+    warnings: string[];
+    confirm: string | null;
+  }) {
+    const index = regenerating.value;
+    regenerating.value = null;
+    if (d.confirm && index !== null) {
+      ask(__("Write over your edits?"), d.confirm, __("Write over"), () =>
+        regenerateSection(index, true)
+      );
+      return;
+    }
+    setProposal(d.proposal);
+    showWarnings(d.warnings);
+  },
+  onError(e: unknown) {
+    regenerating.value = null;
+    toast.error(errorText(e, __("Couldn't regenerate it.")));
+  },
+});
+
+function regenerateSection(index: number, force: boolean) {
+  if (dirty.value) {
+    toast.warning(__("Save your changes first"));
+    return;
+  }
+  regenerating.value = index;
+  regenerateOne.submit({ name: props.proposalId, index, force: force ? 1 : 0 });
+}
+
+const regenerateAll = createResource({
+  url: "helpdesk.api.proposals.regenerate_proposal",
+  method: "POST",
+  onSuccess(d: { proposal: Proposal; warnings: string[]; kept: string[] }) {
+    setProposal(d.proposal);
+    showWarnings(d.warnings);
+    if (d.kept?.length)
+      ask(
+        __("Some sections were kept"),
+        __(
+          "You edited these, so they weren't rebuilt: {0}.",
+          d.kept.join(", ")
+        ),
+        __("Rebuild them too"),
+        () => regenerateProposal(true)
+      );
+    else toast.success(__("Proposal regenerated"));
+  },
+  onError(e: unknown) {
+    toast.error(errorText(e, __("Couldn't regenerate the proposal.")));
+  },
+});
+
+function regenerateProposal(force: boolean) {
+  regenerateAll.submit({ name: props.proposalId, force: force ? 1 : 0 });
 }
 
 // --- revision ---

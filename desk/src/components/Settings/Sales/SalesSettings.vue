@@ -4,6 +4,8 @@
     :template="editing === 'new' ? null : editing"
     :packages="options?.packages || []"
     :section-types="options?.section_types || []"
+    :catalogue="(options?.catalogue || []).map((m) => m.module_name)"
+    :default-headings="options?.default_headings || {}"
     @back="editing = null"
     @saved="onTemplateSaved"
   />
@@ -212,6 +214,8 @@
             </template>
           </SettingsList>
         </SettingsSection>
+
+        <ProposalLibrarySettings v-if="options?.enabled" :ai="!!options.ai" />
       </div>
     </template>
   </SettingsLayoutBase>
@@ -243,6 +247,7 @@ import LucideTriangleAlert from "~icons/lucide/triangle-alert";
 import SettingsList from "../SettingsList.vue";
 import SettingsListItem from "../SettingsListItem.vue";
 import SettingsSection from "../SettingsSection.vue";
+import ProposalLibrarySettings from "./ProposalLibrarySettings.vue";
 import ProposalTemplateEditor from "./ProposalTemplateEditor.vue";
 
 interface CardRow {
@@ -398,8 +403,11 @@ async function save() {
 const editing = ref<ProposalTemplate | "new" | null>(null);
 
 function templateSubtitle(t: ProposalTemplate) {
-  const blocks = __("{0} blocks", String(t.sections.length));
-  return t.solution_type ? `${t.solution_type} · ${blocks}` : blocks;
+  const modules = __(
+    "{0} default modules",
+    String(t.default_modules?.length ?? 0)
+  );
+  return [t.page_guide, modules].filter(Boolean).join(" · ");
 }
 
 function onTemplateSaved(data: ProposalOptions) {

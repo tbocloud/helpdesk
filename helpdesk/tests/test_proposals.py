@@ -156,3 +156,78 @@ class TestProposals(FrappeTestCase):
         self.assertNotIn("<script", head["header"]["html"])
         self.assertNotIn("onclick", head["header"]["html"])
         self.assertEqual(head["footer"]["align"], "center")
+
+    def test_the_new_proposal_flow_goes_to_the_erp_site(self):
+        proposals_api.get_client_profile("CRM-LEAD-1")
+        proposals_api.read_client_website("CRM-LEAD-1", " client.example ", "1")
+        proposals_api.get_requirements_from_lead("CRM-LEAD-1")
+        proposals_api.extract_requirements("CRM-LEAD-1", " HR and Accounts ")
+        proposals_api.create_proposal(
+            "CRM-LEAD-1",
+            "ERPNext Implementation",
+            1,
+            {"modules": ["Accounts"]},
+            " Need HR ",
+            {"industry": "Spice export", "pain_points": "Payroll"},
+        )
+        calls = {name: (post, params) for name, post, params in self.crm.lead_calls}
+        self.assertEqual(calls["read_client_website"][1]["url"], "client.example")
+        self.assertEqual(calls["read_client_website"][1]["refresh"], 1)
+        self.assertEqual(calls["extract_requirements"][1]["text"], "HR and Accounts")
+        create = calls["create_proposal"][1]
+        self.assertEqual(create["scoping"], {"modules": ["Accounts"]})
+        self.assertEqual(create["requirements"], "Need HR")
+        self.assertEqual(create["client_profile"]["industry"], "Spice export")
+        self.assertFalse(calls["get_client_profile"][0])
+        self.assertTrue(
+            all(calls[n][0] for n in ("read_client_website", "extract_requirements"))
+        )
+        with self.assertRaises(frappe.ValidationError):
+            proposals_api.extract_requirements("CRM-LEAD-1", "  ")
+
+    def test_regenerate_share_and_libraries_go_to_the_erp_site(self):
+        proposals_api.regenerate_section("PROP-2026-00001", "3", "1")
+        proposals_api.regenerate_proposal("PROP-2026-00001")
+        proposals_api.price_from_modules("PROP-2026-00001")
+        proposals_api.share_proposal("PROP-2026-00001")
+        proposals_api.use_library_image("PROP-2026-00001", "IMG-1")
+        proposals_api.get_proposal_library()
+        proposals_api.save_library_record("item", '{"library": "Risk", "title": "x"}')
+        proposals_api.delete_library_record("item", "LIB-1")
+        proposals_api.draft_library_module("Accounts")
+        proposals_api.chat_edit("PROP-2026-00001", "  add Payroll  ")
+        calls = {name: (post, params) for name, post, params in self.crm.lead_calls}
+        self.assertEqual(
+            (
+                calls["regenerate_section"][1]["index"],
+                calls["regenerate_section"][1]["force"],
+            ),
+            (3, 1),
+        )
+        self.assertEqual(calls["regenerate_proposal"][1]["force"], 0)
+        self.assertEqual(
+            calls["save_library_record"][1]["data"], {"library": "Risk", "title": "x"}
+        )
+        self.assertFalse(calls["get_proposal_library"][0])
+        self.assertEqual(calls["chat_edit"][1]["message"], "add Payroll")
+        with self.assertRaises(frappe.ValidationError):
+            proposals_api.chat_edit("PROP-2026-00001", " ")
+        self.assertTrue(
+            all(
+                calls[n][0]
+                for n in (
+                    "regenerate_section",
+                    "regenerate_proposal",
+                    "price_from_modules",
+                    "share_proposal",
+                    "use_library_image",
+                    "save_library_record",
+                    "delete_library_record",
+                    "draft_library_module",
+                    "chat_edit",
+                )
+            )
+        )
+        too_big = base64.b64encode(b"0" * (proposals_api.MAX_IMAGE_BYTES + 1)).decode()
+        with self.assertRaises(frappe.ValidationError):
+            proposals_api.upload_library_image("a.png", too_big, {"title": "x"})

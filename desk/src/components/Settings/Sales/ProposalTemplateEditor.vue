@@ -43,6 +43,69 @@
             :label="__('Description')"
             :description="__('Shown when someone picks a template.')"
           />
+          <FormControl
+            v-model="form.page_guide"
+            type="select"
+            :label="__('Length guide')"
+            :options="pageGuides"
+            :description="
+              __('Shown in the builder beside the proposal\'s page count.')
+            "
+          />
+        </SettingsSection>
+        <SettingsSection
+          :title="__('Scoping questions')"
+          :description="
+            __('What the scoping form asks for this kind of proposal.')
+          "
+        >
+          <div class="flex flex-wrap gap-2">
+            <label
+              v-for="q in QUESTIONS"
+              :key="q"
+              class="flex min-h-[36px] cursor-pointer items-center gap-2 rounded-md border px-3"
+              :class="
+                form.questions.includes(q)
+                  ? 'border-brand bg-brand-soft text-brand-ink'
+                  : 'border-outline-gray-2 text-ink-gray-7'
+              "
+            >
+              <input
+                v-model="form.questions"
+                type="checkbox"
+                :value="q"
+                class="size-4 rounded border-outline-gray-4 focus-visible:ring-2 focus-visible:ring-highlight"
+              />
+              <span class="text-sm">{{ QUESTION_LABELS[q] }}</span>
+            </label>
+          </div>
+        </SettingsSection>
+        <SettingsSection
+          :title="__('Default modules')"
+          :description="
+            __('Ticked on a new proposal; presales adds or removes them.')
+          "
+        >
+          <div class="flex flex-wrap gap-2">
+            <label
+              v-for="m in catalogue"
+              :key="m"
+              class="flex min-h-[36px] cursor-pointer items-center gap-2 rounded-md border px-3"
+              :class="
+                form.default_modules.includes(m)
+                  ? 'border-brand bg-brand-soft text-brand-ink'
+                  : 'border-outline-gray-2 text-ink-gray-7'
+              "
+            >
+              <input
+                v-model="form.default_modules"
+                type="checkbox"
+                :value="m"
+                class="size-4 rounded border-outline-gray-4 focus-visible:ring-2 focus-visible:ring-highlight"
+              />
+              <span class="text-sm">{{ m }}</span>
+            </label>
+          </div>
         </SettingsSection>
         <SettingsSection
           :title="__('Default packages')"
@@ -76,7 +139,14 @@
             </label>
           </div>
         </SettingsSection>
-        <SettingsSection :title="__('Blocks')">
+        <SettingsSection
+          :title="__('Sections')"
+          :description="
+            __(
+              'Every new proposal starts with all of them on; the guidance is the AI\'s brief and the placeholder.'
+            )
+          "
+        >
           <ProposalBlocks
             v-model:sections="form.sections"
             editable
@@ -106,11 +176,13 @@
 import ConfirmDialog from "@/components/ConfirmDialog.vue";
 import SettingsLayoutBase from "@/components/layouts/SettingsLayoutBase.vue";
 import ProposalBlocks from "@/pages/leads/ProposalBlocks.vue";
-import type {
-  ProposalOptions,
-  ProposalTemplate,
-  SectionType,
-  TemplateSection,
+import {
+  QUESTION_LABELS,
+  QUESTIONS,
+  type ProposalOptions,
+  type ProposalTemplate,
+  type SectionType,
+  type TemplateSection,
 } from "@/pages/leads/proposals";
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
@@ -122,7 +194,18 @@ const props = defineProps<{
   template: ProposalTemplate | null;
   packages: string[];
   sectionTypes: SectionType[];
+  /** the catalogue's module names */
+  catalogue: string[];
+  /** the master sections with their default headings, for a new template */
+  defaultHeadings: Record<string, string>;
 }>();
+
+const pageGuides = [
+  "Small project (5–8 pages)",
+  "ERP (10–15 pages)",
+  "ERP + mobile (15–25 pages)",
+  "Enterprise (20–35 pages)",
+].map((g) => ({ label: __(g), value: g }));
 const emit = defineEmits<{ back: []; saved: [options: ProposalOptions] }>();
 
 const t = props.template;
@@ -132,8 +215,16 @@ const form = reactive({
   description: t?.description || "",
   enabled: t ? !!t.enabled : true,
   packages: [...(t?.packages ?? [])],
+  page_guide: t?.page_guide || "ERP (10–15 pages)",
+  questions: [...(t?.questions?.length ? t.questions : QUESTIONS)] as string[],
+  default_modules: [...(t?.default_modules ?? [])],
   sections: (
-    t?.sections ?? [{ section_type: "Cover" }, { section_type: "Pricing" }]
+    t?.sections ??
+    Object.entries(props.defaultHeadings).map(([section_type, heading]) => ({
+      section_type,
+      heading,
+      enabled: 1,
+    }))
   ).map((s) => ({ ...s })) as TemplateSection[],
 });
 const snapshot = () => JSON.stringify(form);
@@ -150,7 +241,7 @@ function back() {
 
 async function save() {
   if (!form.template_name.trim() || !form.sections.length) {
-    error.value = __("Give the template a name and at least one block.");
+    error.value = __("Give the template a name and at least one section.");
     return;
   }
   error.value = "";
