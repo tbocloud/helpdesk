@@ -135,15 +135,32 @@
         :disabled="disabled"
         @update:model-value="set('integrations', $event)"
       />
-      <FormControl
-        v-if="asks('users')"
-        :model-value="model.users || ''"
-        type="number"
-        min="0"
-        :label="__('Number of users')"
-        :disabled="disabled"
-        @update:model-value="set('users', Number($event) || 0)"
-      />
+      <!-- users and companies: a number, or Unlimited -->
+      <template v-if="asks('users')">
+        <div v-for="c in counts" :key="c.key" class="flex items-end gap-3">
+          <FormControl
+            class="flex-1"
+            :model-value="
+              model[c.key] === 'Unlimited' ? '' : model[c.key] || ''
+            "
+            type="number"
+            min="0"
+            :label="c.label"
+            :placeholder="model[c.key] === 'Unlimited' ? __('Unlimited') : ''"
+            :disabled="disabled || model[c.key] === 'Unlimited'"
+            @update:model-value="set(c.key, Number($event) || 0)"
+          />
+          <FormControl
+            class="pb-2"
+            :model-value="model[c.key] === 'Unlimited'"
+            type="checkbox"
+            :label="__('Unlimited')"
+            :aria-label="__('Unlimited {0}', c.label.toLowerCase())"
+            :disabled="disabled"
+            @update:model-value="set(c.key, $event ? 'Unlimited' : 0)"
+          />
+        </div>
+      </template>
       <FormControl
         v-if="asks('timeline_weeks')"
         :model-value="model.timeline_weeks || ''"
@@ -228,6 +245,11 @@ const moduleChoices = computed(() => {
     if (!names.includes(m)) names.push(m);
   return names;
 });
+
+const counts = [
+  { key: "users" as const, label: __("Number of users") },
+  { key: "companies" as const, label: __("Number of companies") },
+];
 
 const hostingOptions = computed(() => [
   { label: __("Not decided"), value: "" },
