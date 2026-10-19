@@ -86,7 +86,7 @@ The ERP site's `tbo_smart.api.telephony` takes the same `acting_user`:
 
 | Method | HTTP | Arguments | Returns |
 | --- | --- | --- | --- |
-| `click_to_call` | POST | `lead, number` (one of the lead's own numbers; blank: its mobile) | `{ok, message, number, reference_id}`: MyOperator rings the person's phone, then the lead |
+| `click_to_call` | POST | `lead, number` (one of the lead's own numbers; blank: the first of its mobile, phone and WhatsApp) | `{ok, message, number, reference_id}`: MyOperator rings the person's phone, then the lead |
 | `call_recording` | GET | `call` | the recording (audio), only to someone who may read the lead |
 | `get_settings`, `save_settings`, `test_connection`, `regenerate_webhook_secret` | GET / POST | `values` (save) | the MyOperator settings (System Managers on the ERP site); secrets never come back, a new webhook secret once |
 

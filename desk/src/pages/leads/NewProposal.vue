@@ -24,12 +24,23 @@
           :label="__('Back to the assistant')"
           @click="chatOpen = true"
         />
+        <!-- Generate stays a normal button; while something required is empty this says what,
+             and the button (or the hint) takes presales to the first missing field -->
+        <button
+          v-if="missing.length && options?.enabled"
+          type="button"
+          class="hidden max-w-xs truncate rounded text-p-sm text-ink-gray-7 underline decoration-outline-gray-4 underline-offset-2 hover:text-ink-gray-9 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight sm:inline"
+          @click="focusMissing"
+        >
+          {{
+            __("To generate, fill: {0}", missing.map((m) => m.label).join(", "))
+          }}
+        </button>
         <Button
           variant="solid"
           :label="__('Generate proposal')"
           :loading="create.loading"
-          :disabled="!ready"
-          :tooltip="profileFilled ? '' : __('Fill the client profile first')"
+          :disabled="!options?.enabled"
           @click="generate"
         >
           <!-- a phone shows the icon only; the label stays its accessible name -->
@@ -63,7 +74,7 @@
               class="h-full"
               :lead="leadId"
               :options="options"
-              :can-generate="ready"
+              :missing="missing.map((m) => m.label)"
               :generating="create.loading"
               @skip="chatOpen = false"
               @generate="generate"
@@ -274,11 +285,34 @@ const templateOptions = computed(() => [
   { label: __("Blank (every section, no template)"), value: "" },
 ]);
 
-const profileFilled = computed(() =>
-  (options.value?.profile_required ?? ["industry", "pain_points"]).every(
-    (field) => (state.profile[field as keyof ClientProfile] || "").trim()
-  )
+const PROFILE_LABELS: Record<string, string> = {
+  industry: __("Industry"),
+  pain_points: __("Pain points"),
+};
+/** The client profile fields still empty that a proposal needs, in the form's order. */
+const missing = computed(() =>
+  (options.value?.profile_required ?? ["industry", "pain_points"])
+    .filter(
+      (field) => !(state.profile[field as keyof ClientProfile] || "").trim()
+    )
+    .map((field) => ({ field, label: PROFILE_LABELS[field] || field }))
 );
+const profileFilled = computed(() => !missing.value.length);
+
+/** To the first missing field in the summary, ready to type. */
+function focusMissing() {
+  const first = missing.value[0];
+  if (!first) return;
+  // the attribute lands on the field's wrapper or on the input itself
+  const marked = document.querySelector<HTMLElement>(
+    `[data-profile-field="${first.field}"]`
+  );
+  const box = marked?.matches("input, textarea")
+    ? marked
+    : marked?.querySelector<HTMLElement>("input, textarea");
+  box?.scrollIntoView({ behavior: "smooth", block: "center" });
+  box?.focus({ preventScroll: true });
+}
 const ready = computed(
   () => !!options.value?.enabled && profileFilled.value && !create.loading
 );
@@ -366,6 +400,14 @@ const create = createResource({
 });
 
 function generate() {
+  if (!profileFilled.value) {
+    error.value = __(
+      "To generate, fill: {0}",
+      missing.value.map((m) => m.label).join(", ")
+    );
+    focusMissing();
+    return;
+  }
   if (!ready.value) return;
   error.value = "";
   const s = state;

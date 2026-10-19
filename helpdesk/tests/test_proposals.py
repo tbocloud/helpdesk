@@ -258,3 +258,16 @@ class TestProposals(FrappeTestCase):
             calls["get_document_chain"],
             (False, {"lead": "CRM-LEAD-1", "acting_user": BDE}),
         )
+
+    def test_text_that_isnt_a_website_is_refused_here(self):
+        for typed in ("build propsol", "not a site", "http://", "client"):
+            with self.assertRaises(frappe.ValidationError) as caught:
+                proposals_api.read_client_website("CRM-LEAD-1", typed)
+            self.assertIn("doesn't look like a website", str(caught.exception))
+        self.assertEqual(self.crm.lead_calls, [])
+        for typed in ("vasthubuilders.com", "https://www.client.co.in/about"):
+            proposals_api.read_client_website("CRM-LEAD-1", typed)
+        self.assertEqual(
+            [params["url"] for _n, _p, params in self.crm.lead_calls],
+            ["vasthubuilders.com", "https://www.client.co.in/about"],
+        )

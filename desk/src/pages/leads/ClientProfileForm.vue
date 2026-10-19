@@ -40,6 +40,7 @@
     />
     <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
       <FormControl
+        data-profile-field="industry"
         :model-value="modelValue.industry"
         :label="__('Industry')"
         required
@@ -80,6 +81,7 @@
       @update:model-value="set('key_processes', $event)"
     />
     <FormControl
+      data-profile-field="pain_points"
       :model-value="modelValue.pain_points"
       type="textarea"
       :rows="3"

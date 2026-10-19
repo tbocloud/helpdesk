@@ -5,6 +5,7 @@ as the signed-in person, the same way as helpdesk.api.leads. The CRM site decide
 see, change and send what; the API key never leaves the hub."""
 
 import base64
+import re
 
 import frappe
 from frappe import _
@@ -18,6 +19,10 @@ PROPOSALS = "tbo_smart.api.hub_proposals"
 
 # the ERP site checks it too; refusing here spares sending a big file there
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
+# a website as people type it: vasthubuilders.com, https://www.client.co.in/about
+WEBSITE = re.compile(
+    r"^(https?://)?([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}(/\S*)?$", re.I
+)
 
 
 def proposals(method: str, post: bool = False, **params):
@@ -140,12 +145,19 @@ def read_client_website(
     """The client's website read and summarised on the ERP site (guarded there), kept on
     the lead."""
     require_leads()
+    url = (url or "").strip()
+    if url and not WEBSITE.match(url):
+        frappe.throw(
+            _(
+                "That doesn't look like a website. Type it like vasthubuilders.com, or go on without one."
+            )
+        )
     return (
         proposals(
             "read_client_website",
             post=True,
             lead=lead,
-            url=(url or "").strip() or None,
+            url=url or None,
             refresh=1 if cint(refresh) else 0,
         )
         or {}

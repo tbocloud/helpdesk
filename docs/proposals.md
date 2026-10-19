@@ -93,8 +93,12 @@ to change it, or **Skip to the form** (and **Back to the assistant**) at any poi
 The chat is **scripted**: its questions cost no tokens, and quick-reply chips are used wherever
 the choices are fixed. In order:
 
-1. The client's **website**: with the AI on, the ERP site reads it into the profile (or "No
-   website"). Then the industry, if still missing.
+1. The client's **website**: anything that isn't a website (e.g. "build propsol") gets "That
+   doesn't look like a website. Type it like vasthubuilders.com, or tap “No website”" and the
+   question stays (checked in the browser and again in the proxy, before anything reaches the
+   ERP site). With the AI on, the ERP site reads it into the profile; when it can't, its reason is
+   shown in words. **No website** skips the read. Then what the client does and the industry, if
+   still missing.
 2. **What the client needs** (typed, pasted or "Use the lead's notes"): kept as the requirements
    and, with the AI on, read into the form by the one extraction call (template, modules,
    customisations, users, hosting, AMC…); the assistant says what it filled.
@@ -102,13 +106,26 @@ the choices are fixed. In order:
 4. **Customisations** (one short line each, split one a line, 1 day each until set; or "None").
 5. **Mobile app / data migration / integrations / source code** (chips), then which systems to
    connect when integrations is picked.
-6. **Users** (chips 10 / 25 / 50 / 100, or a number) and **hosting** (chips).
+6. **Users** (chips 10 / 25 / 50 / 100 / Unlimited, or a number), **companies** (chips 1 / 2 / 3 /
+   Unlimited, or a number) and **hosting** (chips). In the form each is a number with an
+   **Unlimited** box.
 7. **Timeline** (45 / 60 / 90 / 120 days, the suggested one marked), **payment terms**, **AMC**
    (a plan, or No AMC).
 8. **Anything else** (added to the requirements).
+9. Before offering Generate, the chat asks for whatever required profile field is still empty
+   (industry, pain points).
 
-**Generate proposal** (in the chat's end and the header; off until the profile's industry and
-pain points are filled) creates the proposal with the transcript and opens the builder. With the
+**Voice input** (`VoiceButton.vue`, in the chat and the builder's assistant): a mic beside the
+input uses the browser's own speech recognition (Web Speech API), English (en-IN) by default or
+Malayalam (ml-IN) with the EN / ML toggle. What is heard (interim text too) goes into the box to
+edit before sending; no audio reaches our servers or the AI provider, and it costs no tokens. The
+button is `aria-pressed` while listening, shows "Listening…", and Esc stops it; in a browser
+without speech recognition (Safari, Firefox) it stays disabled with a tooltip saying why.
+
+**Generate proposal** (in the chat's end and the header) creates the proposal with the transcript
+and opens the builder. It keeps its normal look; while the profile's industry or pain points are
+empty, "To generate, fill: Industry, Pain points" shows beside it (and at the chat's end), and
+clicking either takes presales to the first missing field. With the
 AI off the chat still works: chips and typed values go into the fields as they are, and "Write
 … with AI" is hidden. The chat is calm: plain bubbles in the hub's neutrals, the brand only on the
 picked chips and the primary button; `role="log"` with `aria-live`, every chip a button

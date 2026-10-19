@@ -207,7 +207,9 @@ export interface Scoping {
   web_app: boolean;
   integrations: string;
   data_migration: boolean;
-  users: number;
+  /** a number (0: not said) or "Unlimited" */
+  users: number | "Unlimited";
+  companies: number | "Unlimited";
   hosting: string | null;
   amc: boolean;
   timeline_weeks: number;
@@ -256,6 +258,7 @@ export function emptyScoping(): Scoping {
     integrations: "",
     data_migration: false,
     users: 0,
+    companies: 0,
     hosting: null,
     amc: false,
     timeline_weeks: 0,
