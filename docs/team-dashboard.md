@@ -147,7 +147,7 @@ Salespeople work leads, not tasks, so they are scored on their **CRM activity** 
 site, where leads live ([leads.md](leads.md)).
 
 - **Where it comes from**: TBO Smart's `hub_leads.get_sales_activity(from_date, to_date)`
-  (`hub-leads-api.md` §2.3), called by `helpdesk/sales_scoreboard.py` as the hub's own API
+  (`hub-leads-api.md` §2.5), called by `helpdesk/sales_scoreboard.py` as the hub's own API
   user, **without `acting_user`**: the Scoreboard is open to everyone and closes its periods
   at night with nobody signed in. It answers counts per person only, never a lead.
   Everything counts for the lead's owner; follow-ups for whom they're allocated to.

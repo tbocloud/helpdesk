@@ -171,7 +171,7 @@ interface OverviewBreakdown {
   won: number;
 }
 
-/** TBO Smart's hub_leads.get_overview (hub-leads-api.md §2.2). */
+/** TBO Smart's hub_leads.get_overview (hub-leads-api.md §2.4). */
 export interface LeadOverview {
   period: OverviewPeriod;
   from_date: string;
