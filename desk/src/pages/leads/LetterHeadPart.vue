@@ -9,9 +9,10 @@
     />
     <!-- sanitised on the ERP site and again by the hub (helpdesk.api.proposals) -->
     <!-- eslint-disable-next-line vue/no-v-html -->
+    <!-- a letter head's HTML often has fixed widths: kept within the preview -->
     <div
       v-else-if="part.html"
-      class="text-p-sm text-ink-gray-8"
+      class="max-w-full text-p-sm text-ink-gray-8 [&_*]:max-w-full [&_img]:h-auto [&_table]:w-full"
       v-html="part.html"
     />
   </div>

@@ -271,3 +271,25 @@ class TestProposals(FrappeTestCase):
             [params["url"] for _n, _p, params in self.crm.lead_calls],
             ["vasthubuilders.com", "https://www.client.co.in/about"],
         )
+
+    def test_mark_ready_and_the_chat_answer_go_to_the_erp_site(self):
+        proposals_api.finalise_proposal("PROP-2026-00001", "1")
+        proposals_api.finalise_proposal("PROP-2026-00001", 0)
+        proposals_api.read_chat_answer(
+            "CRM-LEAD-1", "What's the client's website?", "  payroll venam  "
+        )
+        calls = [(name, post, params) for name, post, params in self.crm.lead_calls]
+        ready = [
+            params["ready"]
+            for name, _post, params in calls
+            if name == "finalise_proposal"
+        ]
+        self.assertEqual(ready, [1, 0])
+        read = next(
+            params for name, _post, params in calls if name == "read_chat_answer"
+        )
+        self.assertEqual(read["text"], "payroll venam")
+        self.assertEqual(read["question"], "What's the client's website?")
+        self.assertTrue(all(post for _name, post, _params in calls))
+        with self.assertRaises(frappe.ValidationError):
+            proposals_api.read_chat_answer("CRM-LEAD-1", "Q", " ")

@@ -182,6 +182,26 @@ def extract_requirements(lead: str, text: str) -> dict:
 
 
 @frappe.whitelist(methods=["POST"])
+def read_chat_answer(lead: str, question: str, text: str) -> dict:
+    """A start-chat answer that doesn't fit its question (an intent, Malayalam or mixed) read
+    on the ERP site by one small AI call into English and the fields it gives; nothing saved."""
+    require_leads()
+    text = (text or "").strip()
+    if not text:
+        frappe.throw(_("Type or say the answer first."))
+    return (
+        proposals(
+            "read_chat_answer",
+            post=True,
+            lead=lead,
+            question=(question or "")[:300],
+            text=text[:3000],
+        )
+        or {}
+    )
+
+
+@frappe.whitelist(methods=["POST"])
 def regenerate_section(name: str, index: int | str, force: int | str = 0) -> dict:
     require_leads()
     result = (
@@ -230,6 +250,15 @@ def chat_edit(name: str, message: str) -> dict:
 def price_from_modules(name: str) -> dict:
     require_leads()
     return proposal("price_from_modules", post=True, name=name)
+
+
+@frappe.whitelist(methods=["POST"])
+def finalise_proposal(name: str, ready: int | str = 1) -> dict:
+    """Mark the draft ready to send (its content and numbers fixed), or reopen it."""
+    require_leads()
+    return proposal(
+        "finalise_proposal", post=True, name=name, ready=1 if cint(ready) else 0
+    )
 
 
 @frappe.whitelist(methods=["POST"])

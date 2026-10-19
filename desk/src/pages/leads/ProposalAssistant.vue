@@ -45,7 +45,11 @@
           )
         }}
       </p>
-      <form v-else class="flex items-end gap-2" @submit.prevent="sendMessage">
+      <form
+        v-else
+        class="flex flex-wrap items-end gap-2"
+        @submit.prevent="sendMessage"
+      >
         <VoiceButton v-model="message" :disabled="!editable || edit.loading" />
         <FormControl
           v-model="message"

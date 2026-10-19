@@ -76,6 +76,7 @@
               :options="options"
               :missing="missing.map((m) => m.label)"
               :generating="create.loading"
+              :ready="profileLoaded"
               @skip="chatOpen = false"
               @generate="generate"
             />
@@ -364,6 +365,8 @@ watch(
   { immediate: true }
 );
 
+/** The chat starts once the lead's profile is in, so it skips what is already known. */
+const profileLoaded = ref(false);
 createResource({
   url: "helpdesk.api.proposals.get_client_profile",
   makeParams: () => ({ lead: props.leadId }),
@@ -374,6 +377,10 @@ createResource({
       ...(d.profile || {}),
       ...nonEmpty(state.profile),
     };
+    profileLoaded.value = true;
+  },
+  onError() {
+    profileLoaded.value = true;
   },
 });
 

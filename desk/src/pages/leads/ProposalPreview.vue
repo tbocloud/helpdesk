@@ -1,8 +1,9 @@
 <template>
   <!-- what the client reads at the proposal's link, drawn live from the editor; the page and
        the PDF on the ERP site are the real thing (Share → Preview link / Download PDF) -->
+  <!-- long words (links, emails, codes) wrap rather than push the column wider -->
   <article
-    class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
+    class="min-w-0 overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base [overflow-wrap:anywhere]"
     :aria-label="__('Preview')"
   >
     <LetterHeadPart

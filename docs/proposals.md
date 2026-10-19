@@ -47,6 +47,8 @@ sending `acting_user`; each maps 1:1 to `tbo_smart.api.hub_proposals.<same name>
 | `get_proposal_options`, `get_proposal(name)`, `create_proposal(lead, template, ai_draft, scoping, requirements, client_profile, chat)`, `save_proposal(name, data)` | |
 | `get_client_profile(lead)`, `read_client_website(lead, url, refresh)` | The website is read on the ERP site (guarded there) and kept on the lead |
 | `get_requirements_from_lead(lead)`, `extract_requirements(lead, text)` | A blank text is refused here |
+| `read_chat_answer(lead, question, text)` | An off-script chat answer; a blank text is refused here, the question capped at 300 and the text at 3,000 characters |
+| `finalise_proposal(name, ready)` | 1: Mark ready, 0: Reopen |
 | `regenerate_section(name, index, force)`, `regenerate_proposal(name, force)`, `chat_edit(name, message)` | `chat_edit` refuses a blank message and caps it at 1,000 characters |
 | `price_from_modules(name)`, `get_pricing_form(name)`, `save_pricing(name, values)`, `request_approval(name, reason)` | A reason is required here too |
 | `share_proposal(name)`, `send_proposal(name, recipients, message, attach_pdf)`, `create_revision(name)` | |
@@ -91,36 +93,67 @@ edit one state: every chat answer lands in the summary at once, and presales can
 to change it, or **Skip to the form** (and **Back to the assistant**) at any point.
 
 The chat is **scripted**: its questions cost no tokens, and quick-reply chips are used wherever
-the choices are fixed. In order:
+the choices are fixed. It starts once the lead's profile is in, **greets with a recap** of what is
+already known (website, what they do, industry, pain points, modules) and **skips every question
+whose answer is known**; on a lead with a website and an industry the first question is the pain
+points. In order:
 
-1. The client's **website**: anything that isn't a website (e.g. "build propsol") gets "That
-   doesn't look like a website. Type it like vasthubuilders.com, or tap “No website”" and the
-   question stays (checked in the browser and again in the proxy, before anything reaches the
-   ERP site). With the AI on, the ERP site reads it into the profile; when it can't, its reason is
-   shown in words. **No website** skips the read. Then what the client does and the industry, if
-   still missing.
-2. **What the client needs** (typed, pasted or "Use the lead's notes"): kept as the requirements
+1. The client's **website** (skipped when known). Only something typed like an address gets the
+   URL check: "vasthubuiders" with a dot but no valid ending gets "That doesn't look like a
+   website…" and stays **in the box** to fix (checked in the browser and again in the proxy).
+   Anything else said here ("they need payroll and accounts") is an off-script answer (below) and
+   the chat moves on. With the AI on, the ERP site reads a website into the profile; when it
+   can't, its reason is shown in words. **No website** skips the read. Then what the client does
+   and the industry, if still missing.
+2. **Pain points**, asked outright with multi-select chips (Manual payroll, No real-time stock,
+   GST filing is slow, Data in Excel; stored in English) plus a box for their own words or voice;
+   **Send** takes the picks and the text together, one a line in the profile.
+3. **What the client needs** (skipped when the requirements are filled) (typed, pasted or "Use the lead's notes"): kept as the requirements
    and, with the AI on, read into the form by the one extraction call (template, modules,
    customisations, users, hosting, AMC…); the assistant says what it filled.
-3. **Modules** (chips, the template's or the extraction's picked; **Done**).
-4. **Customisations** (one short line each, split one a line, 1 day each until set; or "None").
-5. **Mobile app / data migration / integrations / source code** (chips), then which systems to
+4. **Modules** (chips, the template's or the extraction's picked; **Done**).
+5. **Customisations** (one short line each, split one a line, 1 day each until set; or "None").
+6. **Mobile app / data migration / integrations / source code** (chips), then which systems to
    connect when integrations is picked.
-6. **Users** (chips 10 / 25 / 50 / 100 / Unlimited, or a number), **companies** (chips 1 / 2 / 3 /
+7. **Users** (chips 10 / 25 / 50 / 100 / Unlimited, or a number), **companies** (chips 1 / 2 / 3 /
    Unlimited, or a number) and **hosting** (chips). In the form each is a number with an
    **Unlimited** box.
-7. **Timeline** (45 / 60 / 90 / 120 days, the suggested one marked), **payment terms**, **AMC**
+8. **Timeline** (45 / 60 / 90 / 120 days, the suggested one marked), **payment terms**, **AMC**
    (a plan, or No AMC).
-8. **Anything else** (added to the requirements).
-9. Before offering Generate, the chat asks for whatever required profile field is still empty
-   (industry, pain points).
+9. **Anything else** (added to the requirements).
+10. Before offering Generate, the chat asks for whatever required profile field is still empty
+    (industry, pain points).
+
+**Off-script answers.** An answer that doesn't fit its question (an intent at the website step,
+words where a number was asked) and **any answer in Malayalam script** go, with the AI on, to
+`read_chat_answer`: one small structured call on the ERP site returns the English, the language,
+and only the profile and scoping fields the text gives (the template, modules, customisations,
+users, pain points…). The chat applies them over what it has (modules and customisations added,
+profile fields filled only where empty), says what it took ("Got it. Modules: …"), and moves on.
+Values are kept in English; the transcript keeps what was said and adds "Translated from
+Malayalam: …" (or "…from Malayalam and English…") after it. With the AI off, or when the call
+fails, the text stays in the box with a short note. An answer that fits costs nothing.
 
 **Voice input** (`VoiceButton.vue`, in the chat and the builder's assistant): a mic beside the
-input uses the browser's own speech recognition (Web Speech API), English (en-IN) by default or
-Malayalam (ml-IN) with the EN / ML toggle. What is heard (interim text too) goes into the box to
-edit before sending; no audio reaches our servers or the AI provider, and it costs no tokens. The
-button is `aria-pressed` while listening, shows "Listening…", and Esc stops it; in a browser
-without speech recognition (Safari, Firefox) it stays disabled with a tooltip saying why.
+input uses the browser's speech recognition (Web Speech API, `SpeechRecognition` or
+`webkitSpeechRecognition`), English (en-IN) by default or Malayalam (ml-IN) with the EN / ML
+toggle (locked while listening). The language, interim results and continuous mode are set
+before `start()`; what is heard (interim text too) goes into the box through `v-model` to edit
+before sending, and stays there if the answer is then refused. Its tooltip says what happens to
+the audio, accurately: **"Uses your browser's speech service (Google in Chrome); nothing is sent
+to TBO's servers or the AI."** It costs no tokens. The button is `aria-pressed` while listening,
+shows "Listening…", and Esc stops it; in a browser without speech recognition (Safari, Firefox)
+it stays disabled with a tooltip saying why.
+
+Every way it can end without text says why, under the input (`role="alert"`):
+`not-allowed` / `service-not-allowed` (the microphone is blocked for the site: allow it from the
+lock icon), `audio-capture` (no microphone), `no-speech` (nothing heard), `network` (the
+browser's speech service can't be reached), `language-not-supported` (switch to EN), any other
+code in words with the code, a `start()` that throws, and an end with nothing heard ("Didn't catch
+anything"). Stopping it yourself, or `aborted`, says nothing. A MediaRecorder recording sent for
+server-side transcription (OpenAI) was considered as a fallback and left out: it would send audio
+to an AI provider and cost per minute, against the privacy line above; the messages say to type
+instead.
 
 **Generate proposal** (in the chat's end and the header) creates the proposal with the transcript
 and opens the builder. It keeps its normal look; while the profile's industry or pain points are
@@ -138,11 +171,20 @@ lead's first proposal with a website (the summary is kept on the lead); none wit
 
 - **Header:** breadcrumb, status, **Share** (Copy link, Download PDF, Print, Preview link),
   **Save changes** ("Saved" and off until something changes) or **Create revision** once sent,
-  and **Send** (the one primary action; **Send again** once sent). Send is off with unsaved edits
-  and while the ERP site gives reasons, the first as its tooltip.
-- **Copy link:** a sent proposal's link at once. A draft asks **"Share this draft?"** first: it
-  goes out as Send does but without an email (blocked the same way, e.g. pricing waiting for
-  approval), then its link is copied. A draft's link shows the client nothing.
+  and one primary action: on a draft **Mark ready** (off with unsaved edits and while the ERP
+  site gives share blockers, the first as its tooltip); once marked, **Reopen** and **Send**
+  (**Send again** once sent). Send is off while the ERP site gives reasons.
+- **Mark ready** fixes the draft's content and numbers (the form turns read-only, with "Ready to
+  send. The content and the numbers are fixed; Reopen to change them."); **Reopen** makes it
+  editable again. The ERP site refuses any change while it is marked.
+- **Saving** sends the modules and scoping with the sections; the ERP site rebuilds the data
+  sections not edited by hand, follows a suggested timeline and reprices the quotation, so a
+  module's price, days or fit shows in Modules & Features, the timeline, the Investment and the
+  payment amounts on save. What stops the repricing comes back as warning toasts.
+- **Copy link:** a sent proposal's link at once. A draft must be marked ready first, then asks
+  **"Share this draft?"**: it goes out as Send does but without an email (blocked the same way,
+  e.g. pricing waiting for approval), then its link is copied. A draft's link shows the client
+  nothing.
 - **Download PDF** (the ERP site's A4 PDF, a draft's through its preview) and **Print** (the
   client's page with the print dialog).
 - **Can't send yet:** every reason in the ERP site's words. **With the client**
@@ -174,7 +216,9 @@ lead's first proposal with a website (the summary is kept on the lead); none wit
   cover, the contents with the parts, numbered sections and subsections, tables, workflow
   chains, the module cards, the timeline bar, payment amounts, the price itemised or
   consolidated, the signature boxes and the letter head; the ERP site's page and PDF are the
-  real thing).
+  real thing). It fits its column with no horizontal overflow at 1280, 1440 and 1920 px and at
+  phone width: long words (links, emails) wrap, and a letter head's HTML with fixed widths is
+  kept within it.
 - States: skeleton while loading, an error with Try again and Back to the lead.
 
 ### The documents after the proposal in the builder
@@ -222,4 +266,5 @@ lead notes, extraction, create with scoping, requirements, profile and chat; a b
 refused); regenerate, chat edits, pricing from modules, share, library images and the library
 methods posted with their arguments; a library image over 5 MB refused here; the documents after
 the proposal (`create_document` posted with its source and type, an unknown type refused here,
-`get_document_chain` read).
+`get_document_chain` read); Mark ready / Reopen and the off-script chat answer posted with their
+arguments, a blank answer refused here.
