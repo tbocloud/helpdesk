@@ -164,7 +164,7 @@
                   :label="__('Project start date')"
                   :description="
                     __(
-                      'The timeline\'s dates follow from it. Regenerate the timeline after changing it.'
+                      'The timeline and the purpose take their dates from it when you save.'
                     )
                   "
                   :disabled="!editable"

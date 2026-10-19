@@ -187,7 +187,8 @@ Termination added to the block labels); the preview's cover shows the type ("Quo
 "Project Agreement"), no part titles, and no contents for a quotation, with the type's default
 headings. A quotation is priced here (the pricing dialog, *Price from modules*, *Request
 approval*); an agreement shows the accepted quotation's price read only and has a **Project start
-date** (Send says to set it; regenerating the timeline dates it). The status reads "Signed" for
+date** (Send says to set it; saving a new one dates the timeline and the purpose on the ERP site,
+unless they were edited by hand). The status reads "Signed" for
 an accepted agreement.
 
 ### Settings → Rates and proposals (`components/Settings/Sales/`)
