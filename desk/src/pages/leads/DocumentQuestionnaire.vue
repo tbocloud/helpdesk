@@ -21,8 +21,10 @@
           :label="
             __('Update from {0} new answers', String(questionnaire.new_answers))
           "
-          :disabled="dirty"
-          :tooltip="dirty ? __('Save your changes first') : ''"
+          :disabled="dirty || questionsDirty"
+          :tooltip="
+            dirty || questionsDirty ? __('Save your changes first') : ''
+          "
           :loading="apply.loading"
           @click="apply.submit({ name: proposal })"
         >
@@ -47,7 +49,7 @@
     >
       {{
         __(
-          "Closed: the BRD was answered or revised. The answers stay as the client gave them."
+          "Closed: the BRD was approved, declined or revised. The answers stay as the client gave them."
         )
       }}
     </p>
@@ -247,16 +249,21 @@ const sendFormId = `questionnaire-send-${useId()}`;
 
 const rows = ref<DocumentQuestion[]>([]);
 const saved = ref("");
+const questionsDirty = computed(
+  () => JSON.stringify(rows.value) !== saved.value
+);
+// the builder hands a new copy after any save: unsaved question edits are kept until
+// this panel's own save replaces them
+let takeNext = false;
 watch(
   () => props.questionnaire,
   (q) => {
+    if (questionsDirty.value && !takeNext) return;
+    takeNext = false;
     rows.value = q.questions.map((row) => ({ ...row }));
     saved.value = JSON.stringify(rows.value);
   },
   { immediate: true }
-);
-const questionsDirty = computed(
-  () => JSON.stringify(rows.value) !== saved.value
 );
 const answered = computed(
   () => rows.value.filter((row) => (row.answer || "").trim()).length
@@ -290,6 +297,7 @@ const save = createResource({
   url: "helpdesk.api.proposals.save_questions",
   method: "POST",
   onSuccess(p: Proposal) {
+    takeNext = true;
     done(p);
     toast.success(__("Questions saved"));
   },
