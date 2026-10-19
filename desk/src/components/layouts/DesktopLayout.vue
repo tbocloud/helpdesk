@@ -11,11 +11,14 @@
       <slot />
     </main>
     <Notifications />
+    <CopilotChatPanel v-if="!isCustomerPortal" />
     <CommandPalette />
   </div>
 </template>
 <script setup>
 import { Notifications, CommandPalette } from "@/components";
+import CopilotChatPanel from "@/components/copilot/CopilotChatPanel.vue";
+import { isCustomerPortal } from "@/utils";
 import AppHeader from "./AppHeader.vue";
 import Sidebar from "./Sidebar.vue";
 </script>

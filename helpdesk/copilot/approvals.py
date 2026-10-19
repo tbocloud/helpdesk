@@ -409,7 +409,23 @@ def decide(
     deploy_date=None,
     via: str = "Hub",
 ):
-    """The first decision wins. Approving checks that the pull request still has the approved commit."""
+    """The first decision wins. Approving checks that the pull request still has the approved commit.
+    Every copy of the approval's card (Teams, the panel) then shows the decision."""
+    from helpdesk.copilot import assistant
+
+    outcome = _decide(approval_name, user, approve, note, deploy_date, via)
+    assistant.refresh_cards(approval_name)
+    return outcome
+
+
+def _decide(
+    approval_name: str,
+    user: str,
+    approve: bool,
+    note: str = "",
+    deploy_date=None,
+    via: str = "Hub",
+):
     from helpdesk.copilot import fixes
 
     frappe.db.get_value(APPROVAL, approval_name, "status", for_update=True)
@@ -532,14 +548,29 @@ def decide(
 def announce(
     approval, subject: str, also: list[str] | None = None, escalate: bool = False
 ):
-    """The approver (or, with none, the Agent Managers) hears it by chat or email;
-    a sensitive fix or a long wait also goes to the team's channel."""
-    from helpdesk.work_reminders import notify_users
+    """The approver (or, with none, the Agent Managers) gets the fix's card with its buttons in
+    the Copilot chat: in Teams when the bot can reach them (then the panel's notice only), else in
+    the TBO Support panel plus the usual chat message or email. A sensitive fix or a long wait
+    also goes to the team's channel."""
+    from helpdesk.copilot import assistant
+    from helpdesk.work_reminders import helpdesk_path, new_notification, notify_users
 
     people = [approval.assigned_to] if approval.assigned_to else _managers()
     people = list(dict.fromkeys(people + (also or [])))
+    by_bot = []
+    for person in people:
+        if assistant.send_fix_card(person, approval) == "Teams":
+            by_bot.append(person)
+            new_notification(
+                person,
+                "HD Ticket",
+                approval.ticket,
+                subject,
+                helpdesk_path("HD Ticket", approval.ticket),
+                deliver=False,
+            )
     notify_users(
-        people,
+        [p for p in people if p not in by_bot],
         "HD Ticket",
         approval.ticket,
         subject,
@@ -589,10 +620,17 @@ def remind_and_escalate():
                 also=_managers(),
                 escalate=True,
             )
-        elif waited >= remind and (
-            not approval.reminded_at
-            or (now - get_datetime(approval.reminded_at)).total_seconds() / 3600
-            >= remind
+        elif (
+            waited >= remind
+            and not (
+                approval.get("snoozed_until")
+                and get_datetime(approval.snoozed_until) > now
+            )
+            and (
+                not approval.reminded_at
+                or (now - get_datetime(approval.reminded_at)).total_seconds() / 3600
+                >= remind
+            )
         ):
             approval.db_set("reminded_at", now, update_modified=False)
             announce(

@@ -174,9 +174,30 @@ def send_direct(email: str, text: str, url: str | None = None) -> bool:
             return False
         slack_post(user_id, text, url)
         return True
+    if send_by_copilot_bot(email, text, url):
+        return True
     if not settings.get_password("teams_direct_webhook", raise_exception=False):
         return False
     teams_post("teams_direct_webhook", {"recipient": email, **teams_message(text, url)})
+    return True
+
+
+def send_by_copilot_bot(email: str, text: str, url: str | None) -> bool:
+    """With the TBO Copilot bot set up and able to reach the person, it carries the message
+    instead of the Workflows webhook (helpdesk.copilot.teams)."""
+    from helpdesk.copilot import assistant, teams
+
+    user = frappe.db.get_value("User", {"email": email, "enabled": 1})
+    if not user or not teams.reachable(user):
+        return False
+    reply = assistant.card(
+        "", [text], links=[(_("Open"), helpdesk_url(url))] if url else []
+    )
+    try:
+        teams.send_card(user, reply)
+    except Exception:
+        frappe.log_error(title="TBO Copilot bot could not carry a chat message")
+        return False
     return True
 
 

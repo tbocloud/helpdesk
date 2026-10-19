@@ -230,6 +230,7 @@ import { useDevice } from "@/composables";
 import { useThemeToggle } from "@/composables/useThemeToggle";
 import { currentView, useView } from "@/composables/useView";
 import { useAuthStore } from "@/stores/auth";
+import { useCopilotChatStore } from "@/stores/copilotChat";
 import { useNotificationStore } from "@/stores/notification";
 import { useSidebarStore } from "@/stores/sidebar";
 import { useTelephonyStore } from "@/stores/telephony";
@@ -251,6 +252,7 @@ import { computed, onBeforeUnmount, reactive, ref, watch } from "vue";
 import type { RouteLocationRaw } from "vue-router";
 import { useRoute, useRouter } from "vue-router";
 import LucideBell from "~icons/lucide/bell";
+import LucideBot from "~icons/lucide/bot";
 import LucidePin from "~icons/lucide/pin";
 import LucidePinOff from "~icons/lucide/pin-off";
 import LucideSearch from "~icons/lucide/search";
@@ -524,6 +526,17 @@ const notificationItem = computed(() =>
       }
 );
 
+// the staff assistant's panel (Phase 6): the same chat as the TBO Copilot bot in Teams
+const copilotChat = useCopilotChatStore();
+const copilotItem = computed(() => ({
+  label: __("TBO Copilot"),
+  icon: LucideBot,
+  onClick: () => copilotChat.toggle(),
+  tone: "purple",
+  key: "copilot",
+  id: "copilot-btn",
+}));
+
 const themeRailItem = computed(() => ({
   label: themeToggle.label.value,
   icon: themeToggle.icon.value,
@@ -542,6 +555,7 @@ const sections = computed(() => {
     props.mobile || showSearchCard.value
       ? [notificationItem.value]
       : [searchItem.value, notificationItem.value];
+  if (!props.mobile) top.push(copilotItem.value);
   // Expanded, the theme button sits in the Notifications row; the collapsed
   // rail hides row suffixes, so it gets its own rail item there.
   if (isCollapsed.value) top.push(themeRailItem.value);

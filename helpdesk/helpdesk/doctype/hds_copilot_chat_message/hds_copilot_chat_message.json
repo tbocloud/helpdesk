@@ -1,0 +1,162 @@
+{
+	"actions": [],
+	"autoname": "hash",
+	"creation": "2026-10-18 10:00:00.000000",
+	"description": "One message in a Copilot chat: what the person wrote, or Copilot's reply or card, with the action a card proposes.",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"in_create": 1,
+	"field_order": [
+		"chat",
+		"user",
+		"direction",
+		"text",
+		"intent",
+		"card",
+		"action",
+		"action_status",
+		"result",
+		"ticket",
+		"run",
+		"approval",
+		"files",
+		"teams_activity",
+		"cost_usd"
+	],
+	"fields": [
+		{
+			"fieldname": "chat",
+			"fieldtype": "Link",
+			"options": "HDS Copilot Chat",
+			"label": "Chat",
+			"reqd": 1,
+			"in_standard_filter": 1,
+			"read_only": 1
+		},
+		{
+			"fieldname": "user",
+			"fieldtype": "Link",
+			"options": "User",
+			"label": "User",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"read_only": 1
+		},
+		{
+			"fieldname": "direction",
+			"fieldtype": "Select",
+			"options": "In\nOut",
+			"label": "Direction",
+			"in_list_view": 1,
+			"read_only": 1
+		},
+		{
+			"fieldname": "text",
+			"fieldtype": "Small Text",
+			"label": "Text",
+			"read_only": 1
+		},
+		{
+			"fieldname": "intent",
+			"fieldtype": "Data",
+			"label": "Intent",
+			"in_list_view": 1,
+			"read_only": 1
+		},
+		{
+			"fieldname": "card",
+			"fieldtype": "Code",
+			"options": "JSON",
+			"label": "Card",
+			"read_only": 1
+		},
+		{
+			"fieldname": "action",
+			"fieldtype": "Code",
+			"options": "JSON",
+			"label": "Proposed action",
+			"read_only": 1,
+			"description": "What a Yes on this card does; nothing happens until the person confirms."
+		},
+		{
+			"fieldname": "action_status",
+			"fieldtype": "Select",
+			"options": "\nProposed\nDone\nCancelled\nFailed\nExpired",
+			"label": "Action status",
+			"in_list_view": 1,
+			"read_only": 1
+		},
+		{
+			"fieldname": "result",
+			"fieldtype": "Small Text",
+			"label": "Result",
+			"read_only": 1
+		},
+		{
+			"fieldname": "ticket",
+			"fieldtype": "Link",
+			"options": "HD Ticket",
+			"label": "Ticket",
+			"read_only": 1
+		},
+		{
+			"fieldname": "run",
+			"fieldtype": "Link",
+			"options": "HDS Copilot Run",
+			"label": "Copilot run",
+			"read_only": 1
+		},
+		{
+			"fieldname": "approval",
+			"fieldtype": "Link",
+			"options": "HDS Copilot Approval",
+			"label": "Approval",
+			"read_only": 1
+		},
+		{
+			"fieldname": "files",
+			"fieldtype": "Code",
+			"options": "JSON",
+			"label": "Files",
+			"read_only": 1
+		},
+		{
+			"fieldname": "teams_activity",
+			"fieldtype": "Data",
+			"label": "Teams message ID",
+			"read_only": 1
+		},
+		{
+			"fieldname": "cost_usd",
+			"fieldtype": "Currency",
+			"label": "AI cost (USD)",
+			"read_only": 1
+		}
+	],
+	"links": [],
+	"modified": "2026-10-18 10:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HDS Copilot Chat Message",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"delete": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "System Manager",
+			"share": 1
+		},
+		{
+			"export": 1,
+			"read": 1,
+			"report": 1,
+			"role": "Agent Manager"
+		}
+	],
+	"sort_field": "creation",
+	"sort_order": "DESC",
+	"states": []
+}

@@ -244,6 +244,7 @@ class HDTicket(Document):
         if (
             not self.via_customer_portal
             and not frappe.flags.initial_sync
+            and not self.flags.skip_acknowledgement  # raised from a Copilot chat: a person writes first
             and send_ack_email
             and not self.has_chat_only_contact()
             and not self.is_alert()

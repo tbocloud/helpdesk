@@ -85,6 +85,56 @@ def repo_token(run: str, lease_token: str, repository: str) -> dict:
     return fixes.push_key(doc, repository)
 
 
+# what a worker may download from a ticket: pictures and videos of the problem (Phase 6, W9)
+TICKET_FILE_TYPES = {
+    "png": "image/png",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "gif": "image/gif",
+    "webp": "image/webp",
+    "mp4": "video/mp4",
+    "webm": "video/webm",
+    "mov": "video/quicktime",
+    "mkv": "video/x-matroska",
+}
+TICKET_FILE_MAX_BYTES = 50 * 1024 * 1024
+
+
+@frappe.whitelist(methods=["POST"])
+def ticket_file(run: str, lease_token: str, file_url: str):
+    """One picture or video attached to the run's ticket, as bytes, while the lease holds."""
+    from werkzeug.wrappers import Response
+
+    worker_only()
+    doc = runs.check_lease(run, lease_token)
+    name = frappe.db.get_value(
+        "File",
+        {
+            "file_url": file_url,
+            "attached_to_doctype": "HD Ticket",
+            "attached_to_name": doc.ticket,
+        },
+        "name",
+    )
+    if not name:
+        frappe.throw(
+            _("That file is not on this run's ticket."), frappe.PermissionError
+        )
+    file = frappe.get_doc("File", name)
+    kind = TICKET_FILE_TYPES.get((file.file_name or "").rsplit(".", 1)[-1].lower())
+    if not kind:
+        frappe.throw(_("Only pictures and videos are given to the worker."))
+    if (file.file_size or 0) > TICKET_FILE_MAX_BYTES:
+        frappe.throw(_("The file is larger than 50 MB."))
+    content = file.get_content()
+    if isinstance(content, str):
+        content = content.encode()
+    runs.add_event(
+        doc, "file_read", {"file": file.file_name, "bytes": len(content)}, runs.WORKER
+    )
+    return Response(content, status=200, content_type=kind)
+
+
 @frappe.whitelist(methods=["POST"])
 def heartbeat(run: str, lease_token: str, stage: str = "") -> dict:
     """Keeps the lease; the answer says `continue` or `cancel`."""

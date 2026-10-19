@@ -1,0 +1,101 @@
+{
+	"actions": [],
+	"autoname": "hash",
+	"creation": "2026-10-18 10:27:17.587949",
+	"description": "A person who talks to the TBO Copilot bot in Teams, matched to an agent by their Microsoft email.",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"user",
+		"email",
+		"disabled",
+		"aad_object_id",
+		"teams_id",
+		"service_url",
+		"conversation_id",
+		"last_seen"
+	],
+	"fields": [
+		{
+			"fieldname": "user",
+			"fieldtype": "Link",
+			"options": "User",
+			"label": "Agent",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"description": "Matched by the Microsoft email; blank when no enabled user has it."
+		},
+		{
+			"fieldname": "email",
+			"fieldtype": "Data",
+			"label": "Microsoft email",
+			"in_list_view": 1,
+			"read_only": 1
+		},
+		{
+			"fieldname": "disabled",
+			"fieldtype": "Check",
+			"label": "Disabled",
+			"description": "The bot neither answers nor messages this person."
+		},
+		{
+			"fieldname": "aad_object_id",
+			"fieldtype": "Data",
+			"label": "Microsoft user ID",
+			"unique": 1,
+			"read_only": 1
+		},
+		{
+			"fieldname": "teams_id",
+			"fieldtype": "Data",
+			"label": "Teams ID",
+			"read_only": 1
+		},
+		{
+			"fieldname": "service_url",
+			"fieldtype": "Data",
+			"label": "Service URL",
+			"read_only": 1
+		},
+		{
+			"fieldname": "conversation_id",
+			"fieldtype": "Data",
+			"label": "Personal chat",
+			"read_only": 1,
+			"description": "Kept when the app is installed for the person or they write to the bot; reminders go there."
+		},
+		{
+			"fieldname": "last_seen",
+			"fieldtype": "Datetime",
+			"label": "Last seen",
+			"read_only": 1
+		}
+	],
+	"links": [],
+	"modified": "2026-10-18 10:27:17.587949",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HDS Teams User",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"create": 0,
+			"delete": 1,
+			"export": 1,
+			"read": 1,
+			"report": 1,
+			"role": "System Manager",
+			"write": 1
+		},
+		{
+			"read": 1,
+			"report": 1,
+			"role": "Agent Manager",
+			"write": 1
+		}
+	],
+	"sort_field": "creation",
+	"sort_order": "DESC",
+	"states": [],
+	"title_field": "email"
+}

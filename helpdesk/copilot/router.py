@@ -186,6 +186,11 @@ def route(run, result: dict):
         ):
             _fix_task(doc)
     customer.send_stage(doc, STAGE_FOR_CATEGORY[effective])
+    from helpdesk.copilot import assistant
+
+    assistant.tell_watchers(
+        doc
+    )  # people who started this work from a Copilot chat hear it there
     return doc
 
 

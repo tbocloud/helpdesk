@@ -82,6 +82,9 @@ TRANSITIONS = {
     ("Verifying", "Applying"): {SYSTEM},
     ("Merged", "Applying"): {AGENT},
 }
+# a run reaching one of these is news for the people on its fix (the staff assistant)
+NEWS_STATES = ("Merged", "Resolved", "Closed", "Escalated", "Failed")
+
 CANCELLABLE = (
     "Queued",
     "Investigating",
@@ -229,6 +232,17 @@ def _move(doc, to: str, actor: str, note: str = "", **fields):
     doc.save(ignore_permissions=True)
     add_event(doc, "state_change", {"from": previous, "to": to, "note": note}, actor)
     update_ticket(doc)
+    if to in NEWS_STATES and not doc.shadow:
+        # the people on the fix hear it in Teams or the Copilot panel (helpdesk.copilot.assistant)
+        frappe.enqueue(
+            "helpdesk.copilot.assistant.tell_news",
+            queue="short",
+            run=doc.name,
+            state=to,
+            note=note,
+            enqueue_after_commit=True,
+            now=frappe.flags.in_test,
+        )
     if STAGE_FOR_STATE.get(to):
         send_stage(doc, STAGE_FOR_STATE[to])
     publish_run(doc)

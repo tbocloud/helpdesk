@@ -231,6 +231,37 @@ API (agents): `helpdesk.api.copilot.decide_fix` (also for corrections), `change_
 
 **Weekly pilot email** (hourly check, sent once on Monday from 08:00 Riyadh time): last week's rows, the cost, links to the runs rated Wrong and to the report, to the **Weekly pilot email to** addresses and the Agent Managers.
 
+## Staff assistant (Phase 6: `assistant.py`, `teams.py`, `api/copilot_teams.py`, `api/copilot_chat.py`)
+
+One engine for the **TBO Copilot bot in Teams** (personal chat) and the **TBO Copilot panel** in the agent app (sidebar → TBO Copilot). Chats and messages: **HDS Copilot Chat** and **HDS Copilot Chat Message** (kept 90 days, `assistant.prune` daily).
+
+**How it works.** The model only reads what the person wants: `call_haiku(job="chat")` returns one intent as JSON (`question`, `approve`, `reject`, `change_request`, `new_work`, `waiting`, `snooze`, `help`, `unclear`) with the ticket, task, reason, customer or summary it names. The code then:
+
+| Intent | What happens |
+|---|---|
+| question | Answered from the run's own record only (diagnosis, evidence, proposal, the fix card, events), with links; "The run does not say" otherwise. Refused for a ticket the person cannot read |
+| approve | The fix's card: problem, change, files, checks, site, risk, with **Approve**, **Reject** (the reason box), **Remind me later** |
+| reject | A confirmation card; Yes rejects with the reason |
+| change_request | A confirmation card; Yes notes the words on the ticket (an HD Ticket Comment, which the worker reads), rejects a pending fix with them (so `fix.guidance` carries them to the next fix job) and asks Copilot for a new fix when the customer's level allows; on a finished run, a follow-up run |
+| new_work | The customer from the site cards (buttons when several match); a confirmation card; Yes raises the ticket for the customer's contact (no acknowledgement email: a person replies first), attaches the files and starts Copilot. The diagnosis comes back in the same chat |
+| waiting, snooze, help | What waits for the person; snooze an approval's reminders (hours, or until 09:00 Riyadh); what it can do |
+
+Every action runs **as the person** (their permissions), only after **Yes** (a proposal older than 24 hours expires), and is logged in HDS Copilot Call Log with kind `Teams` or `Web`. Approve and Reject call the same `approvals.decide` as the ticket page (`decided_via` Teams or Web). Messages with text that tries to instruct the AI get the warning card first. 30 messages a minute per person.
+
+**In Teams** (`helpdesk.api.copilot_teams.messages`, guest by design): the Bot Framework token is checked first (signature from the published keys, issuer, audience = our bot's app ID, the service URL), then the tenant. People are **HDS Teams User** rows (Microsoft user ID, email, the agent with that email, their personal chat); unknown people are told to ask their manager. Messages are answered in the background; card buttons are Adaptive Card Universal Actions (`Action.Execute`) answered with the updated card. Pictures and files sent to the bot are saved privately on the chat and go to the ticket on new work. Settings: HDS Copilot Settings → **Teams bot** (enabled, app ID, client secret, tenant; blank tenant = HD Settings').
+
+**The fix's card, news and the digest.** When an approval opens (and at every reminder), `approvals.announce` sends the fix's card to the approver: by the bot when it can reach them (then only the panel notice, no second message), else into their panel chat plus the usual chat message or email. **Remind me later** sets `snoozed_until` on the approval: reminders wait, escalation does not. After any decision every copy of the card shows who decided (`refresh_cards`). A run reaching Merged, Resolved, Closed, Escalated or Failed is news for the approver, the ticket's assignees and whoever started it from a chat (`tell_news`). At 09:00 Riyadh time each person with a pending approval or a fix task gets one digest (`send_digest`). With the bot set up, helpdesk reminders (HD Notification) reach people through the bot instead of the Workflows webhook.
+
+**The worker sees the pictures** (W9): `copilot_worker.ticket_file(run, lease_token, file_url)` gives the worker a picture or video of the run's ticket (png, jpg, gif, webp, mp4, webm, mov, mkv; up to 50 MB) while the lease holds (event `file_read`); the worker turns videos into frames. `fix.guidance` carries the reasons earlier fixes of the run were rejected.
+
+**Setting up the bot (TBO's Microsoft 365 admin, once per hub):**
+1. Azure portal → create an **Azure Bot**: handle `tbo-copilot`, pricing tier F0, type **Single Tenant**, a new Microsoft App ID.
+2. The bot's Configuration → **Messaging endpoint**: `https://<the hub>/api/method/helpdesk.api.copilot_teams.messages`.
+3. Channels → **Microsoft Teams** → enable.
+4. The bot's app registration (Microsoft Entra) → Certificates & secrets → a new client secret. In TBO Support → HDS Copilot Settings → Teams bot: the App ID, the secret, the tenant ID (if HD Settings has none); enable.
+5. As a System Manager, download the Teams app: `/api/method/helpdesk.api.copilot_teams.app_package`. Teams admin center → Teams apps → Manage apps → **Upload new app**; then Setup policies → Installed apps → add **TBO Copilot** for the support staff (so reminders can reach everyone).
+6. In Teams, write `help` to TBO Copilot.
+
 ## MCP server (`helpdesk/api/copilot_mcp.py`, `helpdesk/copilot/mcp/`)
 
 TBO staff use tickets, tasks and the knowledge base from the TBO Copilot desktop app, or any MCP client, **as themselves, with their own permissions** (TASK-2026-00013).

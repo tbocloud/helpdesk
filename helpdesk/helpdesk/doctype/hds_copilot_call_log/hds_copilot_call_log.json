@@ -33,7 +33,7 @@
 			"fieldtype": "Select",
 			"in_standard_filter": 1,
 			"label": "Kind",
-			"options": "MCP person\nMCP worker",
+			"options": "MCP person\nMCP worker\nTeams\nWeb",
 			"read_only": 1
 		},
 		{
@@ -106,7 +106,7 @@
 	],
 	"in_create": 1,
 	"links": [],
-	"modified": "2026-10-09 14:00:00.000000",
+	"modified": "2026-10-18 10:25:31.765929",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Copilot Call Log",

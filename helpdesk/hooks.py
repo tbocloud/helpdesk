@@ -108,6 +108,8 @@ scheduler_events = {
         "helpdesk.helpdesk.doctype.hd_ticket.hd_ticket.close_tickets_after_n_days",
         "helpdesk.tasks.health_check_connections",
         "helpdesk.tasks.retry_pending_triages",
+        # Copilot chats (Teams and the panel) are kept 90 days
+        "helpdesk.copilot.assistant.prune",
         "helpdesk.helpdesk.doctype.hd_content_post.hd_content_post.send_due_reminders",
         "helpdesk.work_calendar.sync_saturdays_off",
         "helpdesk.helpdesk.doctype.hd_github_delivery.hd_github_delivery.clear_old_deliveries",
@@ -121,6 +123,8 @@ scheduler_events = {
         "helpdesk.helpdesk.doctype.hd_content_post.hd_content_post.send_missed_post_alerts",
         # Monday from 08:00 Riyadh time, once: the Copilot pilot's weekly email
         "helpdesk.copilot.pilot.send_weekly_email",
+        # 09:00 Riyadh time, once a day: what waits for each person, in Teams or the Copilot panel
+        "helpdesk.copilot.assistant.send_digest",
     ],
     "hourly_long": [
         "helpdesk.helpdesk.doctype.hd_ticket.hd_ticket.update_sla_status_in_ticket"

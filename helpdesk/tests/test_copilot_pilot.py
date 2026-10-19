@@ -397,3 +397,79 @@ class TestPlantedInstructions(PilotCase):
             "<p>The API key field on the settings page is empty after saving.</p>",
         ):
             self.assertEqual(suspicious_lines(text), [], text)
+
+
+class TestTheWorkerGetsTheTicketsPictures(PilotCase):
+    def test_a_picture_on_the_runs_ticket_while_the_lease_holds(self):
+        from helpdesk.api import copilot_worker
+
+        ticket = self.ticket("Screenshot")
+        frappe.get_doc(
+            {
+                "doctype": "File",
+                "file_name": "error.png",
+                "content": b"\x89PNG picture",
+                "is_private": 1,
+                "attached_to_doctype": "HD Ticket",
+                "attached_to_name": ticket,
+            }
+        ).insert(ignore_permissions=True)
+        frappe.get_doc(
+            {
+                "doctype": "File",
+                "file_name": "notes.txt",
+                "content": b"text",
+                "is_private": 1,
+                "attached_to_doctype": "HD Ticket",
+                "attached_to_name": ticket,
+            }
+        ).insert(ignore_permissions=True)
+        other = frappe.get_doc(
+            {
+                "doctype": "File",
+                "file_name": "other.png",
+                "content": b"\x89PNG other",
+                "is_private": 1,
+                "attached_to_doctype": "HD Ticket",
+                "attached_to_name": self.ticket("Other"),
+            }
+        ).insert(ignore_permissions=True)
+        make_copilot_run(ticket, queued_at=add_to_date(now_datetime(), minutes=-1))
+        worker = FakeWorker("w1")
+        job = worker.claim()
+        urls = {f["file_name"]: f["file_url"] for f in job["context"]["files"]}
+        response = copilot_worker.ticket_file(
+            job["run"], job["lease_token"], urls["error.png"]
+        )
+        self.assertEqual(
+            (response.status_code, response.content_type, response.get_data()),
+            (200, "image/png", b"\x89PNG picture"),
+        )
+        with self.assertRaises(frappe.ValidationError):
+            copilot_worker.ticket_file(
+                job["run"], job["lease_token"], urls["notes.txt"]
+            )
+        with self.assertRaises(frappe.PermissionError):
+            copilot_worker.ticket_file(job["run"], job["lease_token"], other.file_url)
+        with self.assertRaises(frappe.PermissionError):
+            copilot_worker.ticket_file(job["run"], "wrong-lease", urls["error.png"])
+
+    def test_a_fix_job_carries_the_reasons_earlier_fixes_were_rejected(self):
+        from helpdesk.copilot import fixes
+
+        run = make_copilot_run(self.ticket(), "Preparing Fix", task=None)
+        for note in ("use the price list rate", "keep the old field"):
+            frappe.get_doc(
+                {
+                    "doctype": "HDS Copilot Approval",
+                    "run": run.name,
+                    "ticket": run.ticket,
+                    "status": "Rejected",
+                    "note": note,
+                    "decided_at": now_datetime(),
+                }
+            ).insert(ignore_permissions=True)
+        self.assertEqual(
+            sorted(fixes.fix_context(run)["guidance"]),
+            ["keep the old field", "use the price list rate"],
+        )

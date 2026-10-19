@@ -28,6 +28,7 @@
 		"assigned_to",
 		"assigned_at",
 		"reminded_at",
+		"snoozed_until",
 		"escalated_at",
 		"column_break_decision",
 		"decided_by",
@@ -267,10 +268,17 @@
 			"fieldtype": "Small Text",
 			"label": "Merge Error",
 			"read_only": 1
+		},
+		{
+			"fieldname": "snoozed_until",
+			"fieldtype": "Datetime",
+			"label": "Reminders snoozed until",
+			"read_only": 1,
+			"description": "Set from the Copilot chat (Remind me later); the escalation to a senior is not held."
 		}
 	],
 	"links": [],
-	"modified": "2026-10-13 12:00:00.000000",
+	"modified": "2026-10-18 10:25:31.765929",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Copilot Approval",

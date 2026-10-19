@@ -54,6 +54,12 @@
 		"pilot_report_to",
 		"pilot_report_enabled",
 		"pilot_report_sent_for",
+		"teams_section",
+		"teams_bot_enabled",
+		"teams_bot_app_id",
+		"column_break_teams",
+		"teams_bot_secret",
+		"teams_tenant_id",
 		"templates_section",
 		"message_templates"
 	],
@@ -377,11 +383,45 @@
 			"label": "Pilot email sent for week",
 			"read_only": 1,
 			"hidden": 1
+		},
+		{
+			"fieldname": "teams_section",
+			"fieldtype": "Section Break",
+			"label": "Teams bot",
+			"collapsible": 1,
+			"description": "Phase 6: the TBO Copilot bot in Teams (an Azure Bot registered by TBO's Microsoft 365 admin). Its messaging endpoint is /api/method/helpdesk.api.copilot_teams.messages on this site."
+		},
+		{
+			"fieldname": "teams_bot_enabled",
+			"fieldtype": "Check",
+			"label": "Teams bot enabled",
+			"description": "Off: Teams messages go through the Workflows webhooks of HD Chat Settings, as before."
+		},
+		{
+			"fieldname": "teams_bot_app_id",
+			"fieldtype": "Data",
+			"label": "Bot app ID",
+			"description": "The Microsoft App ID of the Azure Bot (single tenant)."
+		},
+		{
+			"fieldname": "column_break_teams",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "teams_bot_secret",
+			"fieldtype": "Password",
+			"label": "Bot client secret"
+		},
+		{
+			"fieldname": "teams_tenant_id",
+			"fieldtype": "Data",
+			"label": "Tenant ID",
+			"description": "Blank: the Microsoft tenant ID in HD Settings."
 		}
 	],
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-10-17 23:57:18.058545",
+	"modified": "2026-10-18 10:27:17.587949",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Copilot Settings",

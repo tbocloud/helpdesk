@@ -233,6 +233,14 @@ def fix_context(run) -> dict:
         "max_usd": settings.get("max_fix_usd") or 0,
         "commit_email": commit_email(),
         "repositories": site_repositories(run),
+        # what people asked for when they rejected earlier fixes of this run (newest first)
+        "guidance": frappe.get_all(
+            "HDS Copilot Approval",
+            filters={"run": run.name, "status": "Rejected", "note": ["is", "set"]},
+            pluck="note",
+            order_by="decided_at desc",
+            limit=3,
+        ),
     }
 
 
