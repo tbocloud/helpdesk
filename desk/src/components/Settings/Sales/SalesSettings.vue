@@ -186,6 +186,7 @@
 import SettingsLayoutBase from "@/components/layouts/SettingsLayoutBase.vue";
 import TaskyBadge from "@/components/TaskyBadge.vue";
 import {
+  loadProposalOptions,
   proposalOptions,
   type ProposalOptions,
   type ProposalTemplate,
@@ -251,7 +252,7 @@ const card = createResource({
 const cardData = computed(() => card.data as RateCard | undefined);
 const canEdit = computed(() => !!cardData.value?.can_edit);
 
-if (!proposalOptions.data && !proposalOptions.loading) proposalOptions.fetch();
+loadProposalOptions();
 const options = computed(
   () => proposalOptions.data as ProposalOptions | undefined
 );

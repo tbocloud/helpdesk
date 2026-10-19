@@ -136,6 +136,7 @@ import { computed, ref, useId } from "vue";
 import { useRouter } from "vue-router";
 import LucidePlus from "~icons/lucide/plus";
 import {
+  loadProposalOptions,
   proposalOptions,
   proposalTone,
   type Proposal,
@@ -152,7 +153,7 @@ const props = defineProps<{
 const router = useRouter();
 const formId = `new-proposal-${useId()}`;
 
-if (!proposalOptions.data && !proposalOptions.loading) proposalOptions.fetch();
+loadProposalOptions();
 const options = computed(
   () => proposalOptions.data as ProposalOptions | undefined
 );

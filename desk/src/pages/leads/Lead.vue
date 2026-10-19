@@ -306,6 +306,7 @@ import LeadFormDialog from "./LeadFormDialog.vue";
 import LeadProposals from "./LeadProposals.vue";
 import LeadQuotations from "./LeadQuotations.vue";
 import {
+  loadLeadOptions,
   leadOptions,
   ownerName,
   stageLabel,
@@ -342,7 +343,7 @@ const TIMELINE_LABELS: Record<LeadTimelineEntry["kind"], string> = {
 const showEdit = ref(false);
 const stageFormId = `lead-stage-${useId()}`;
 
-if (!leadOptions.data && !leadOptions.loading) leadOptions.fetch();
+loadLeadOptions();
 const options = computed(() => leadOptions.data as LeadOptions | undefined);
 
 const detail = createResource({

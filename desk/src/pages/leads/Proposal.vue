@@ -339,6 +339,7 @@ import ProposalPricingDialog from "./ProposalPricingDialog.vue";
 import ProposalPricingSummary from "./ProposalPricingSummary.vue";
 import ProposalTracking from "./ProposalTracking.vue";
 import {
+  loadProposalOptions,
   proposalOptions,
   proposalTone,
   type Proposal,
@@ -353,7 +354,7 @@ const previewSlot = computed(() => (isMobileView.value ? "icon" : "prefix"));
 const themeLabelId = `proposal-theme-${useId()}`;
 const sendFormId = `proposal-send-${useId()}`;
 
-if (!proposalOptions.data && !proposalOptions.loading) proposalOptions.fetch();
+loadProposalOptions();
 const options = computed(
   () => proposalOptions.data as ProposalOptions | undefined
 );
