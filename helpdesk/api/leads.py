@@ -9,6 +9,7 @@ from frappe.utils import cint
 from helpdesk.integrations.crm.leads import call, require_leads
 
 VIEWS = ("all", "mine", "call_today", "follow_up")
+PERIODS = ("week", "month", "quarter", "custom")
 MAX_PAGE = 100
 
 
@@ -28,22 +29,64 @@ def list_leads(
     view: str = "all",
     start: int | str = 0,
     page_length: int | str = 20,
+    source: str | None = None,
+    temperature: str | None = None,
+    metric: str | None = None,
+    period: str | None = None,
+    from_date: str | None = None,
+    to_date: str | None = None,
 ) -> dict:
+    """A page of leads. `metric` with its period keeps the leads one number of the
+    Overview counts (the ERP site picks them)."""
     require_leads()
     if view not in VIEWS:
         frappe.throw(_("Pick All, Mine, Call today or Follow-up."))
+    if period and period not in PERIODS:
+        frappe.throw(_("Pick a week, a month, a quarter or your own dates."))
     result = call(
         "list_leads",
         search=(search or "").strip() or None,
         stage=stage or None,
         owner=owner or None,
         segment=segment or None,
+        source=source or None,
+        temperature=temperature or None,
+        metric=metric or None,
+        period=(period or None) if metric else None,
+        from_date=(from_date or None) if metric else None,
+        to_date=(to_date or None) if metric else None,
         view=view,
         # cint: a malformed number is 0, never a server error
         start=max(cint(start), 0),
         page_length=min(max(cint(page_length) or 20, 1), MAX_PAGE),
     )
     return result or {"rows": [], "total": 0}
+
+
+@frappe.whitelist()
+def get_overview(
+    period: str = "month",
+    from_date: str | None = None,
+    to_date: str | None = None,
+    owner: str | None = None,
+) -> dict:
+    """The Overview: the pipeline, the funnel and the period's figures for the
+    leads the signed-in person may see (theirs, their team's or everyone's)."""
+    require_leads()
+    if period not in PERIODS:
+        frappe.throw(_("Pick a week, a month, a quarter or your own dates."))
+    if period == "custom" and not (from_date and to_date):
+        frappe.throw(_("Pick both dates for your own period."))
+    return (
+        call(
+            "get_overview",
+            period=period,
+            from_date=from_date if period == "custom" else None,
+            to_date=to_date if period == "custom" else None,
+            owner=owner or None,
+        )
+        or {}
+    )
 
 
 @frappe.whitelist()

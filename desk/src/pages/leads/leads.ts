@@ -134,3 +134,103 @@ export function choices(values: string[] | undefined, none?: string) {
   const list = (values ?? []).map((v) => ({ label: v, value: v }));
   return none !== undefined ? [{ label: none, value: "" }, ...list] : list;
 }
+
+export type OverviewPeriod = "week" | "month" | "quarter" | "custom";
+
+/** The numbers on the Overview that open their own list (TBO Smart's metrics). */
+export type LeadMetric =
+  | "new"
+  | "contacted"
+  | "meetings"
+  | "quotations"
+  | "won"
+  | "lost"
+  | "stale"
+  | "overdue"
+  | "hot"
+  | "open";
+
+export const METRIC_LABELS: Record<LeadMetric, string> = {
+  new: __("New leads"),
+  contacted: __("Contacted"),
+  meetings: __("Meetings held"),
+  quotations: __("Proposals sent"),
+  won: __("Won"),
+  lost: __("Lost"),
+  stale: __("Gone quiet"),
+  overdue: __("Overdue follow-ups"),
+  hot: __("Hot leads"),
+  open: __("Open leads"),
+};
+
+interface OverviewBreakdown {
+  /** null: leads with no segment or source */
+  value: string | null;
+  new: number;
+  open: number;
+  won: number;
+}
+
+/** TBO Smart's hub_leads.get_overview (hub-leads-api.md §2.4). */
+export interface LeadOverview {
+  period: OverviewPeriod;
+  from_date: string;
+  to_date: string;
+  scope: "own" | "team" | "all";
+  people: { user: string; full_name: string }[];
+  stale_days: number;
+  currency?: string;
+  totals: {
+    new: number;
+    contacted: number;
+    meetings: number;
+    mom_pending: number;
+    quotations_sent: number;
+    won: number;
+    won_value: number;
+    lost: number;
+    stale: number;
+    overdue: number;
+    hot: number;
+    open: number;
+    open_value: number;
+    win_rate: number;
+    conversion_rate: number;
+  };
+  pipeline: {
+    stage: string;
+    type: string;
+    color?: string;
+    count: number;
+    value: number;
+  }[];
+  funnel: {
+    step: "created" | "contacted" | "meeting" | "proposal" | "won";
+    count: number;
+    rate: number;
+  }[];
+  lost_reasons: { reason: string; count: number }[];
+  hot: {
+    count: number;
+    rows: {
+      name: string;
+      lead_name?: string;
+      organization?: string;
+      status?: string;
+      lead_score?: number;
+      lead_owner?: string;
+    }[];
+  };
+  by_owner: {
+    user: string;
+    full_name: string;
+    new: number;
+    contacted: number;
+    open: number;
+    meetings_held: number;
+    quotations_sent: number;
+    won: number;
+  }[];
+  by_segment: OverviewBreakdown[];
+  by_source: OverviewBreakdown[];
+}

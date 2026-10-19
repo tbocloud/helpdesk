@@ -22,6 +22,7 @@ from frappe import _
 from frappe.query_builder.functions import Count, Sum
 from frappe.utils import add_days, flt, get_last_day, getdate, now_datetime, nowdate
 
+from helpdesk import sales_scoreboard as sales
 from helpdesk.ai_engine import call_haiku, fact_numbers, invents_numbers
 from helpdesk.api.content_performance import members, scored_posts
 from helpdesk.api.ticket_ai import truncate
@@ -182,19 +183,25 @@ def collect(start, end, with_overdue: bool = True, today=None) -> dict:
         f"{CACHE_PREFIX}:{CACHE_VERSION}:{start}:{end}:{int(with_overdue)}:"
         f"{'' if closed else today}"
     )
-    cached = frappe.cache.get_value(key, expires=True)
-    if cached is not None:
-        return cached
-    data = {
-        "tasks": completed_tasks(start, end),
-        "overdue": overdue_tasks(today) if with_overdue else [],
-        "hours": logged_hours(start, end),
-        "posts": delivered_posts(start, end),
+    data = frappe.cache.get_value(key, expires=True)
+    if data is None:
+        data = {
+            "tasks": completed_tasks(start, end),
+            "overdue": overdue_tasks(today) if with_overdue else [],
+            "hours": logged_hours(start, end),
+            "posts": delivered_posts(start, end),
+        }
+        frappe.cache.set_value(
+            key, data, expires_in_sec=CLOSED_CACHE_SECONDS if closed else CACHE_SECONDS
+        )
+    # salespeople's CRM activity, read from the CRM site and cached on its own, so
+    # a site that can't be reached never holds up the rest of the Scoreboard
+    activity = sales.activity(start, end, with_overdue)
+    return {
+        **data,
+        "sales": activity["rows"],
+        "sales_status": {k: v for k, v in activity.items() if k != "rows"},
     }
-    frappe.cache.set_value(
-        key, data, expires_in_sec=CLOSED_CACHE_SECONDS if closed else CACHE_SECONDS
-    )
-    return data
 
 
 def clear_cache():
@@ -434,6 +441,7 @@ def blank() -> dict:
         "posts_on_time": 0,
         "posts_late": 0,
         "posts_missed": 0,
+        **sales.blank(),
     }
 
 
@@ -508,6 +516,7 @@ def score_rules(period: str) -> dict:
         },
         "quality": QUALITY,
         "score": WEIGHTS,
+        "sales": sales.WEIGHTS,
         "champion_minimum": PERIODS[period][1],
         "min_delivered": MIN_DELIVERED,
     }
@@ -560,6 +569,10 @@ def tally(data: dict, group) -> dict:
         )
         for user in post["users"]:
             out[g][user][field] += 1
+    for row in data.get("sales") or []:
+        g = group(row)
+        if g is not None and row["user"] not in SKIP:
+            sales.add(out[g][row["user"]], row)
     return out
 
 
@@ -568,8 +581,14 @@ def pct(part, whole) -> int | None:
 
 
 def delivered(stats: dict) -> int:
-    """How many tasks were completed and posts published."""
-    return stats["tasks"] + stats["posts_on_time"] + stats["posts_late"]
+    """How many tasks were completed and posts published, and how much sales work
+    was done (leads contacted, meetings with minutes, proposals, wins)."""
+    return (
+        stats["tasks"]
+        + stats["posts_on_time"]
+        + stats["posts_late"]
+        + sales.delivered(stats)
+    )
 
 
 def eligible(stats: dict, period: str, total: float) -> bool:
@@ -577,7 +596,12 @@ def eligible(stats: dict, period: str, total: float) -> bool:
     published) of at least the period's minimum, from at least MIN_DELIVERED
     tasks and posts, and a positive score. Weighted, so a pile of tiny tasks of
     one's own doesn't qualify sooner than a few real ones."""
-    weighted = stats["weight"] + stats["posts_on_time"] + stats["posts_late"]
+    weighted = (
+        stats["weight"]
+        + stats["posts_on_time"]
+        + stats["posts_late"]
+        + sales.weighted(stats)
+    )
     return (
         weighted >= PERIODS[period][1]
         and delivered(stats) >= MIN_DELIVERED
@@ -607,6 +631,7 @@ def score(stats: dict, period: str) -> dict:
         "missed_posts": stats["posts_missed"] * w["post_missed"],
         "overdue": stats["overdue"] * w["overdue"],
         "slips": stats["slips"] * w["slip"],
+        **sales.parts(stats),
     }
     earned = sum(v for v in parts.values() if v > 0)
     parts["hours"] = min(stats["hours"] * w["hour"], earned * w["hours_cap_share"])
@@ -631,6 +656,8 @@ def score(stats: dict, period: str) -> dict:
 
 def part_detail(key: str, s: dict) -> str:
     """What one part of the score stands for, in words."""
+    if key.startswith("sales_"):
+        return sales.detail(key, s)
     if key == "tasks":
         text = _("Tasks done: {0}, weighted work {1}").format(
             s["tasks"], round(s["weight"], 1)
@@ -718,7 +745,17 @@ def totals(data: dict, keep) -> dict:
         "overdue": sum(1 for t in data["overdue"] if keep(t)),
         "posts": sum(p["timing"] != "Missed" for p in posts),
         "posts_missed": sum(p["timing"] == "Missed" for p in posts),
+        "sales": sales_totals(data, keep),
     }
+
+
+def sales_totals(data: dict, keep) -> dict | None:
+    """The scope's sales activity added up; None without any."""
+    stats = sales.blank()
+    for row in data.get("sales") or []:
+        if keep(row):
+            sales.add(stats, row)
+    return sales.figures(stats)
 
 
 def trend(data: dict, keep, start, end, period: str) -> dict | None:
@@ -792,6 +829,7 @@ def analysis_facts(title: str, period_label: str, ranked: list, team: dict) -> d
                 "came_back": r["stats"]["came_back"],
                 "rated_excellent": r["stats"]["excellent"],
                 "rated_needs_rework": r["stats"]["rework"],
+                "sales": sales.figures(r["stats"]),
             }
             for r in shown
         ],

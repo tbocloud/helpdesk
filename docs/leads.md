@@ -1,7 +1,7 @@
 # Leads
 
 Status: Phase 1 implemented (list, new lead, lead page with stage, notes, edit and read-only
-quotations). This document is the source of truth for the feature and changes with it.
+quotations), and the **Overview** (2026-10-19). This document is the source of truth for the feature and changes with it.
 
 ## Why it works this way
 
@@ -38,13 +38,18 @@ user exists there with a sales role, applies what they may see, and records writ
 | Method | HTTP | Arguments | Returns |
 | --- | --- | --- | --- |
 | `get_options` | GET | | `{stages: [{name, label, type, color}], sources, segments, owners: [{email, full_name}], territories, industries}` |
-| `list_leads` | GET | `search, stage, owner, segment, view, start, page_length` | `{rows: [{name, lead_name, company_name, email_id, mobile_no, tbo_stage, segment, lead_owner, owner_name, score, next_follow_up, modified}], total}` |
+| `list_leads` | GET | `search, stage, owner, segment, source, temperature, metric, period, from_date, to_date, view, start, page_length` | `{rows: [{name, lead_name, company_name, email_id, mobile_no, tbo_stage, segment, lead_owner, owner_name, score, next_follow_up, modified}], total}` |
+| `get_overview` | GET | `period, from_date, to_date, owner` | the Overview's figures (TBO Smart's `hub-leads-api.md` §2.4) |
+| `get_sales_activity` | GET | `from_date, to_date`, **no** `acting_user` | each salesperson's activity, for the Scoreboard ([team-dashboard.md](team-dashboard.md#sales)) |
 | `get_lead` | GET | `name` | `{lead: {...}, timeline: [...], quotations: [...], allowed_stages: [...]}` |
 | `create_lead` | POST | `data` | the lead (at least `name`) |
 | `update_lead` | POST | `name, data` | the lead |
 | `set_stage` | POST | `name, stage, note` | the lead |
 | `add_note` | POST | `name, note` | the note |
 
+- `metric` (`new`, `contacted`, `meetings`, `quotations`, `won`, `lost`, `stale`, `overdue`,
+  `hot`) keeps the leads one Overview number counts; `period` (`week`, `month`, `quarter`,
+  `custom` with `from_date` and `to_date`) goes with it and is sent only with a metric.
 - `view` is `all`, `mine`, `call_today` or `follow_up`. The hub sends `page_length` 20
   (at most 100) and `start` from 0.
 - `data` (create and update) uses these keys: `lead_name, company_name, email_id, mobile_no,
@@ -64,7 +69,7 @@ user exists there with a sales role, applies what they may see, and records writ
 ## Hub endpoints
 
 `helpdesk/api/leads.py`, thin typed proxies (writes are POST only): `get_options`,
-`list_leads`, `get_lead`, `create_lead`, `update_lead`, `set_stage`, `add_note`. They check
+`list_leads`, `get_overview`, `get_lead`, `create_lead`, `update_lead`, `set_stage`, `add_note`. They check
 `can_use_leads`, validate the view and page size, trim notes, and pass `acting_user`. The
 client is `CRMClient.call` in `helpdesk/integrations/crm/client.py`; the call and error
 mapping live in `helpdesk/integrations/crm/leads.py`. The API key and secret never reach the
@@ -89,7 +94,30 @@ ValidationError, so the page shows the message with *Try again*).
 
 ## The pages
 
-- **Leads** (`/helpdesk/leads`, `desk/src/pages/leads/Leads.vue`): views All, Mine, Call
+- **Overview** (the first tab, where `/helpdesk/leads` opens; `LeadsOverview.vue`): one calm
+  page for the person's leads (their own, their team's or everyone's, as the ERP site's sales
+  rules give them). Its job: see where the pipeline stands and what needs a person now.
+  - **Period** (This week, This month, This quarter, Custom with from and to dates) and, for
+    a team lead or a manager, **Owner** ("My team" / "Everyone" or one person). Both are in
+    the URL (`period`, `from`, `to`, `owner`).
+  - **This period**: New leads, Contacted, Meetings held, Proposals sent, Won (with its
+    value), Lost. **Needs attention** now: Overdue follow-ups (red), Gone quiet (no touch for
+    the ERP site's stale days, amber), Hot leads.
+  - **Pipeline now**: every open stage with its leads and their latest quotations' value, as
+    neutral bars (Won and Lost only when they have leads). **Funnel**: of the period's new
+    leads, how many got to Contacted, Meeting, Proposal and Won, with the win rate. **Why
+    leads were lost** (top five). **Hot leads** (the six best, each opens the lead). **By
+    owner** (new, contacted, meetings, proposals, won, open), **By segment** and **By
+    source** (new, open, won).
+  - **Every number opens its leads**: a tile, a stage, an owner's or a segment's number
+    goes to the list with `metric` and the period (or a stage, owner, segment or source
+    filter); the list shows what it was opened with ("Won, this month") and *Clear filters*
+    drops it.
+  - States: skeleton while loading, error with Try again, "Pick both dates" for an
+    unfinished custom period, an empty line in each panel with nothing to show.
+  - Colour: one brand accent (the selected period); green only for Won, red only for
+    overdue, amber for gone quiet, each with its icon and label. No other colour.
+- **Leads** list (the other tabs, `desk/src/pages/leads/Leads.vue`): views All, Mine, Call
   today and Follow-up; search (debounced) and stage, owner and segment filters; 20 a page
   with Previous and Next. View, search, filters and page are in the URL. Rows show the
   name, stage, company, segment, mobile or email, the next follow-up (red with an icon once
@@ -118,4 +146,4 @@ ValidationError, so the page shows the message with *Try again*).
 `helpdesk/tests/test_leads.py` with `test_utils.FakeCRM` (`lead_answers`, `lead_calls`,
 `lead_error`) and `test_utils.enable_leads`: off by default, `acting_user` on every call,
 writes posted, view and page size checked, teams and inactive agents gated, and each error
-mapped.
+mapped; the Overview's period checks and the metric with its period passed to the list.

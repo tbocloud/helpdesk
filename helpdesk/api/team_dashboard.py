@@ -16,6 +16,7 @@ from frappe.query_builder import Case
 from frappe.query_builder.functions import Count, Sum
 from frappe.utils import add_days, getdate, nowdate
 
+from helpdesk import sales_scoreboard as sales
 from helpdesk import team_dashboard as td
 from helpdesk.tasky.permissions import is_tasky_admin
 from helpdesk.utils import agent_only
@@ -103,6 +104,7 @@ def get_team_dashboard(
         "analysis": current_analysis(period, start, scope, closed),
         "months": months and months["rows"],
         "rules": td.score_rules(period),
+        "sales": {**data["sales_status"], "department": sales.SALES_DEPARTMENT},
     }
 
 
@@ -273,6 +275,7 @@ def people_rows(
                 "posts_on_time": s["posts_on_time"],
                 "posts_late": s["posts_late"],
                 "posts_missed": s["posts_missed"],
+                "sales": sales.figures(s),
                 "months": months["people"].get(r["user"]) if months else None,
             }
         )
@@ -280,10 +283,10 @@ def people_rows(
 
 
 def main_department(user: str, by_department: dict, members: dict) -> str | None:
-    """Where the person did the most tasks in the period, else a department they're
-    a member of."""
+    """Where the person delivered the most in the period (tasks, posts, sales
+    work), else a department they're a member of."""
     done = {
-        d: people[user]["tasks"]
+        d: td.delivered(people[user])
         for d, people in by_department.items()
         if user in people
     }

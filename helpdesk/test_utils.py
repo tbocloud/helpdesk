@@ -3468,6 +3468,28 @@ def enable_leads(teams: tuple[str, ...] = ()):
     )
 
 
+def sales_person(user: str, **counts) -> dict:
+    """One salesperson's row as TBO Smart's get_sales_activity answers it: every
+    count 0 unless given (contacted, moms_submitted, quotations_sent, won, …)."""
+    row = {
+        field: 0
+        for field in (
+            "contacted",
+            "meetings_held",
+            "moms_submitted",
+            "mom_pending",
+            "quotations_sent",
+            "follow_ups_done",
+            "follow_ups_on_time",
+            "follow_ups_overdue",
+            "new",
+            "won",
+            "won_value",
+        )
+    }
+    return {"user": user, "full_name": user, **row, **counts}
+
+
 def make_hd_leave(
     user: str, from_date, to_date, half_day: int = 0, leave_application=None
 ):
