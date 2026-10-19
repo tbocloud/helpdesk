@@ -3332,6 +3332,16 @@ class FakeCRM:
             raise self.lead_error
         return self.lead_answers.get(name)
 
+    def download(self, method, **params):
+        """A file method (a call's recording): `lead_answers[name]` is its
+        (bytes, content type); recorded as a GET call."""
+        name = method.rsplit(".", 1)[-1]
+        self.lead_calls.append((name, False, params))
+        self.lead_paths.append(method)
+        if self.lead_error:
+            raise self.lead_error
+        return self.lead_answers.get(name) or (b"", "")
+
     def customers(self):
         return [{"name": c, "customer_name": c} for c in self.erp]
 
@@ -3488,6 +3498,7 @@ def sales_person(user: str, **counts) -> dict:
             "new",
             "won",
             "won_value",
+            "calls",
         )
     }
     return {"user": user, "full_name": user, **row, **counts}

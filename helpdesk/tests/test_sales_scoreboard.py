@@ -81,6 +81,7 @@ class TestSalesOnTheScoreboard(FrappeTestCase):
                     won=1,
                     won_value=300000,
                     new=4,
+                    calls=7,
                 ),
                 sales_person(JOEL, contacted=3, mom_pending=2),
             ],
@@ -123,6 +124,8 @@ class TestSalesOnTheScoreboard(FrappeTestCase):
         people = {p["user"]: p for p in data["people"]}
         self.assertEqual(people[NIYA]["department"], "CRM")
         self.assertEqual(people[NIYA]["sales"]["contacted"], 10)
+        # MyOperator calls show, and earn no points of their own
+        self.assertEqual(people[NIYA]["sales"]["calls"], 7)
         self.assertIsNone(people[DEV]["sales"])
         # Joel's two meetings without minutes cost him more than his calls earn
         self.assertLess(people[JOEL]["score"], 0)

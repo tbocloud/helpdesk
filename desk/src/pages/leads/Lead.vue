@@ -21,10 +21,24 @@
         </nav>
       </template>
       <template v-if="lead" #right-header>
+        <!-- Call and Edit are icons on a phone, so Move stage keeps its room; `label` names them -->
+        <Button
+          v-if="canCall"
+          :label="__('Call')"
+          :loading="clickToCall.loading"
+          :tooltip="__('MyOperator rings your phone, then the lead')"
+          @click="clickToCall.submit({ name: leadId })"
+        >
+          <template #prefix>
+            <LucidePhone class="size-4" aria-hidden="true" />
+          </template>
+          <span class="hidden sm:inline">{{ __("Call") }}</span>
+        </Button>
         <Button :label="__('Edit')" @click="showEdit = true">
           <template #prefix>
             <LucidePencil class="size-4" aria-hidden="true" />
           </template>
+          <span class="hidden sm:inline">{{ __("Edit") }}</span>
         </Button>
         <Button
           variant="solid"
@@ -170,13 +184,19 @@
                 class="flex gap-3 border-b border-outline-gray-1 px-4 py-3 last:border-b-0"
               >
                 <component
-                  :is="TIMELINE_ICONS[entry.kind] || LucideMessageSquare"
-                  class="mt-0.5 size-4 shrink-0 text-ink-gray-5"
+                  :is="timelineIcon(entry)"
+                  class="mt-0.5 size-4 shrink-0"
+                  :class="
+                    entry.call && entry.status === 'missed'
+                      ? 'text-danger'
+                      : 'text-ink-gray-5'
+                  "
                   aria-hidden="true"
                 />
                 <div class="flex min-w-0 flex-1 flex-col gap-1">
+                  <LeadCallEntry v-if="entry.call" :entry="entry" />
                   <p
-                    v-if="entry.text"
+                    v-else-if="entry.text"
                     class="whitespace-pre-line break-words"
                     :class="
                       entry.kind === 'note'
@@ -299,8 +319,12 @@ import LucideFileText from "~icons/lucide/file-text";
 import LucideHistory from "~icons/lucide/history";
 import LucideMessageSquare from "~icons/lucide/message-square";
 import LucidePhone from "~icons/lucide/phone";
+import LucidePhoneIncoming from "~icons/lucide/phone-incoming";
+import LucidePhoneMissed from "~icons/lucide/phone-missed";
+import LucidePhoneOutgoing from "~icons/lucide/phone-outgoing";
 import LucidePencil from "~icons/lucide/pencil";
 import LeadAISuggests from "./LeadAISuggests.vue";
+import LeadCallEntry from "./LeadCallEntry.vue";
 import LucideScrollText from "~icons/lucide/scroll-text";
 import LeadFormDialog from "./LeadFormDialog.vue";
 import LeadProposals from "./LeadProposals.vue";
@@ -311,6 +335,7 @@ import {
   ownerName,
   stageLabel,
   stageTone,
+  useClickToCall,
   type LeadDetail,
   type LeadOptions,
   type LeadStage,
@@ -340,6 +365,16 @@ const TIMELINE_LABELS: Record<LeadTimelineEntry["kind"], string> = {
   proposal: __("Proposal"),
 };
 
+/** A call through MyOperator shows which way it went, or that it was missed. */
+function timelineIcon(entry: LeadTimelineEntry): Component {
+  if (entry.call) {
+    if (entry.status === "missed") return LucidePhoneMissed;
+    if (entry.direction === "incoming") return LucidePhoneIncoming;
+    if (entry.direction === "outgoing") return LucidePhoneOutgoing;
+  }
+  return TIMELINE_ICONS[entry.kind] || LucideMessageSquare;
+}
+
 const showEdit = ref(false);
 const stageFormId = `lead-stage-${useId()}`;
 
@@ -358,6 +393,13 @@ watch(
 
 const data = computed(() => detail.data as LeadDetail | undefined);
 const lead = computed(() => data.value?.lead);
+
+const clickToCall = useClickToCall();
+const canCall = computed(
+  () =>
+    !!lead.value?.can_call &&
+    !!(lead.value.mobile_no || lead.value.phone || lead.value.whatsapp_no)
+);
 
 const detailFields = computed(() => {
   const l = lead.value;

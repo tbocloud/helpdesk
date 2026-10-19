@@ -235,6 +235,10 @@ export const tabs = computed(() => {
           label: __("Telephony"),
           icon: markRaw(PhoneIcon),
           component: markRaw(TelephonyPage),
+          // Twilio and Exotel with the telephony app; MyOperator for admins who use leads
+          condition: () =>
+            auth.telephonyInstalled ||
+            (auth.canUseLeads && (auth.isAdmin || auth.isManager)),
         },
         {
           label: __("Chat & Teams"),

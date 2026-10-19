@@ -35,6 +35,8 @@ FIELDS = {
     "won": "sales_won",
     "won_value": "sales_won_value",
     "new": "sales_new",
+    # answered MyOperator calls the person took (a count; it earns no points)
+    "calls": "sales_calls",
     # today's state: only for the period in progress
     "mom_pending": "sales_mom_pending",
     "follow_ups_overdue": "sales_follow_ups_overdue",
