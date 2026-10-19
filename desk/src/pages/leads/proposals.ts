@@ -47,11 +47,23 @@ export type SectionType =
   | "Intellectual Property"
   | "Confidentiality"
   | "Termination"
+  | "Business Objectives"
+  | "Stakeholders"
+  | "Current Process"
+  | "Pain Points"
+  | "Desired Process"
+  | "Business Rules"
+  | "Reports Needed"
+  | "Integrations"
+  | "Data Migration"
+  | "Success Criteria"
+  | "Constraints"
+  | "Open Questions"
   | "Image"
   | "Custom";
 
 /** The client documents, one made from the accepted one before it (docs/proposals.md §Documents). */
-export type DocumentTypeName = "Proposal" | "Quotation" | "Work Order";
+export type DocumentTypeName = "Proposal" | "Quotation" | "Work Order" | "BRD";
 
 /** A switched-on type of client document, as the ERP site describes it. */
 export interface DocumentType {
@@ -68,6 +80,32 @@ export interface DocumentType {
   priced: boolean;
   /** the client signs it with their designation */
   signature: boolean;
+  /** the client answers questions on their own page (the BRD) */
+  questionnaire: boolean;
+}
+
+/** A question for the client on a BRD's questionnaire page. */
+export interface DocumentQuestion {
+  name?: string;
+  section_type: SectionType | null;
+  question: string;
+  answer?: string | null;
+  answered_on?: string | null;
+  /** the BRD was rebuilt with this answer */
+  applied?: number;
+  asked_by?: "Library" | "AI" | "Presales";
+}
+
+/** A BRD's questionnaire: its questions and the client link's state. */
+export interface Questionnaire {
+  questions: DocumentQuestion[];
+  /** null until it is shared */
+  url: string | null;
+  open: boolean;
+  sent_on?: string | null;
+  answered_on?: string | null;
+  /** answers not in the BRD yet */
+  new_answers: number;
 }
 
 /** One step of the lead's chain of documents. */
@@ -416,6 +454,8 @@ export interface Proposal {
   document_type: DocumentTypeName;
   /** "Proposal", "Quotation", "Project Agreement" */
   document_label: string;
+  /** what its cover calls it ("Business Requirements Document") */
+  kicker: string;
   accepted_label: string;
   /** the accepted document it was made from */
   source_document?: string | null;
@@ -425,6 +465,8 @@ export interface Proposal {
   signature: boolean;
   /** the agreement's project start: the timeline's dates follow from it */
   start_date?: string | null;
+  /** the BRD's questions for the client */
+  questionnaire: Questionnaire | null;
   title: string;
   lead: string;
   lead_name?: string;
@@ -548,6 +590,18 @@ export const SECTION_LABELS: Record<SectionType, string> = {
   "Intellectual Property": __("Intellectual Property & Source Code"),
   Confidentiality: __("Confidentiality"),
   Termination: __("Termination"),
+  "Business Objectives": __("Business Objectives"),
+  Stakeholders: __("Stakeholders"),
+  "Current Process": __("Current Process (As-Is)"),
+  "Pain Points": __("Pain Points"),
+  "Desired Process": __("Desired Process (To-Be)"),
+  "Business Rules": __("Business Rules"),
+  "Reports Needed": __("Reports Needed"),
+  Integrations: __("Integrations"),
+  "Data Migration": __("Data Migration"),
+  "Success Criteria": __("Success Criteria"),
+  Constraints: __("Constraints"),
+  "Open Questions": __("Open Questions"),
   Image: __("Image"),
   Custom: __("Custom"),
 };

@@ -36,7 +36,11 @@
       </div>
       <div class="flex flex-col gap-0.5">
         <dt class="text-xs text-ink-gray-5">
-          {{ proposal.status === "Declined" ? __("Declined") : __("Accepted") }}
+          {{
+            proposal.status === "Declined"
+              ? __("Declined")
+              : proposal.accepted_label || __("Accepted")
+          }}
         </dt>
         <dd v-if="t.decided_on" class="text-sm tabular-nums text-ink-gray-8">
           {{ when(t.decided_on) }}
@@ -44,6 +48,9 @@
         <dd v-else class="text-sm text-ink-gray-6">{{ __("Not yet") }}</dd>
         <dd v-if="t.decided_by_name" class="text-xs text-ink-gray-6">
           {{ t.decided_by_name }}
+          <template v-if="t.decided_by_designation">
+            ({{ t.decided_by_designation }})</template
+          >
           <span v-if="t.decided_by_email" class="font-mono">
             · {{ t.decided_by_email }}</span
           >
