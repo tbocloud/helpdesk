@@ -90,6 +90,11 @@
           class="flex items-end gap-2"
           @submit.prevent="answerText"
         >
+          <VoiceButton
+            v-if="current.input !== 'number'"
+            v-model="draft"
+            :disabled="busy"
+          />
           <FormControl
             v-model="draft"
             class="flex-1"
@@ -119,13 +124,16 @@
       </template>
       <div v-else class="flex flex-wrap items-center gap-3">
         <p class="text-p-sm text-ink-gray-7">
-          {{ __("That's everything. Check the summary, then generate.") }}
+          {{
+            missing.length
+              ? __("To generate, fill: {0}", missing.join(", "))
+              : __("That's everything. Check the summary, then generate.")
+          }}
         </p>
         <Button
           class="ml-auto"
           variant="solid"
           :label="__('Generate proposal')"
-          :disabled="!canGenerate"
           :loading="generating"
           @click="emit('generate')"
         />
@@ -141,6 +149,7 @@ import { Button, call, FormControl } from "frappe-ui";
 import { computed, nextTick, onMounted, ref, useId } from "vue";
 import LucideArrowUp from "~icons/lucide/arrow-up";
 import LucideCheck from "~icons/lucide/check";
+import VoiceButton from "./VoiceButton.vue";
 import {
   emptyScoping,
   suggestTimeline,
@@ -166,8 +175,9 @@ export interface ChatLine {
 const props = defineProps<{
   lead: string;
   options: ProposalOptions;
-  canGenerate: boolean;
   generating?: boolean;
+  /** the required fields still empty, by label */
+  missing: string[];
   state: ChatState;
   log: ChatLine[];
 }>();
@@ -191,7 +201,8 @@ interface Step {
   /** skip the step when it has nothing to ask */
   when?: () => boolean;
   onChip?: (value: string) => Promise<void> | void;
-  onText?: (text: string) => Promise<void> | void;
+  /** false: the answer didn't fit; stay on this question */
+  onText?: (text: string) => Promise<void | false> | void | false;
   onDone?: (values: string[]) => void;
 }
 
@@ -237,7 +248,17 @@ const STEPS: Step[] = [
     chips: () => [{ label: __("No website"), value: "none" }],
     onChip: () => {},
     onText: async (typed) => {
-      const url = /^https?:\/\//i.test(typed) ? typed : `https://${typed}`;
+      if (!WEBSITE.test(typed.trim())) {
+        say(
+          __(
+            "That doesn't look like a website. Type it like vasthubuilders.com, or tap “No website”."
+          )
+        );
+        return false;
+      }
+      const url = /^https?:\/\//i.test(typed)
+        ? typed.trim()
+        : `https://${typed.trim()}`;
       setProfile({ website: url });
       if (!ai.value) return;
       const read = await work(__("Reading the website…"), () =>
@@ -262,6 +283,13 @@ const STEPS: Step[] = [
           .join("\n") || __("The site had little to go on.")
       );
     },
+  },
+  {
+    key: "about",
+    ask: () => __("What does the client do, in a line?"),
+    input: "text",
+    when: () => !props.state.profile.about.trim(),
+    onText: (text) => setProfile({ about: text }),
   },
   {
     key: "industry",
@@ -357,9 +385,25 @@ const STEPS: Step[] = [
     key: "users",
     ask: () => __("About how many users?"),
     input: "number",
-    chips: () => ["10", "25", "50", "100"].map((n) => ({ label: n, value: n })),
-    onChip: (n) => setScoping({ users: Number(n) }),
+    chips: () => [
+      ...["10", "25", "50", "100"].map((n) => ({ label: n, value: n })),
+      { label: __("Unlimited"), value: "Unlimited" },
+    ],
+    onChip: (n) =>
+      setScoping({ users: n === "Unlimited" ? "Unlimited" : Number(n) }),
     onText: (text) => setScoping({ users: parseInt(text, 10) || 0 }),
+  },
+  {
+    key: "companies",
+    ask: () => __("How many companies will it run?"),
+    input: "number",
+    chips: () => [
+      ...["1", "2", "3"].map((n) => ({ label: n, value: n })),
+      { label: __("Unlimited"), value: "Unlimited" },
+    ],
+    onChip: (n) =>
+      setScoping({ companies: n === "Unlimited" ? "Unlimited" : Number(n) }),
+    onText: (text) => setScoping({ companies: parseInt(text, 10) || 0 }),
   },
   {
     key: "hosting",
@@ -415,7 +459,27 @@ const STEPS: Step[] = [
         .join("\n\n");
     },
   },
+  // before Generate: what the profile still needs
+  {
+    key: "need_industry",
+    ask: () =>
+      __("One more thing before I can generate it: what industry are they in?"),
+    input: "text",
+    when: () => !props.state.profile.industry.trim(),
+    onText: (text) => setProfile({ industry: text }),
+  },
+  {
+    key: "need_pain",
+    ask: () =>
+      __("And what hurts today? Their main problems, in a line or two."),
+    input: "textarea",
+    when: () => !props.state.profile.pain_points.trim(),
+    onText: (text) => setProfile({ pain_points: text }),
+  },
 ];
+// a website as people type it: vasthubuilders.com, https://www.client.co.in/about
+const WEBSITE =
+  /^(https?:\/\/)?([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}(\/\S*)?$/i;
 
 const suggested = computed(() =>
   suggestTimeline(
@@ -513,7 +577,7 @@ async function answerText() {
   if (!s || !text || busy.value) return;
   say(text, "presales");
   draft.value = "";
-  await s.onText?.(text);
+  if ((await s.onText?.(text)) === false) return;
   next();
 }
 

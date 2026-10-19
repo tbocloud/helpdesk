@@ -46,6 +46,7 @@
         }}
       </p>
       <form v-else class="flex items-end gap-2" @submit.prevent="sendMessage">
+        <VoiceButton v-model="message" :disabled="!editable || edit.loading" />
         <FormControl
           v-model="message"
           class="flex-1"
@@ -79,6 +80,7 @@ import { Button, createResource, FormControl, toast } from "frappe-ui";
 import { nextTick, ref } from "vue";
 import LucideArrowUp from "~icons/lucide/arrow-up";
 import type { Proposal } from "./proposals";
+import VoiceButton from "./VoiceButton.vue";
 
 const props = defineProps<{
   proposal: string;
