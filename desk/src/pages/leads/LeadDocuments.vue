@@ -32,14 +32,15 @@
         {{ __("Every document is accepted") }}
       </p>
     </div>
+    <!-- a grid, so the whole chain fits on one line on a wide screen and wraps on a narrow one -->
     <ol
       role="list"
-      class="flex flex-col gap-2 p-3 sm:flex-row sm:flex-wrap sm:items-stretch"
+      class="grid grid-cols-2 gap-2 p-3 sm:grid-cols-3 lg:grid-cols-[repeat(auto-fit,minmax(9rem,1fr))]"
     >
       <li
         v-for="(step, i) in chain.steps"
         :key="step.document_type"
-        class="flex min-w-0 items-center gap-2 sm:flex-1"
+        class="flex min-w-0"
       >
         <component
           :is="step.name ? 'router-link' : 'div'"
@@ -52,7 +53,7 @@
               : undefined
           "
           :aria-current="isNext(step) ? 'step' : undefined"
-          class="flex min-h-[44px] min-w-0 flex-1 items-center gap-2 rounded-lg border px-3 py-2"
+          class="flex min-h-[44px] min-w-0 flex-1 flex-col gap-1.5 rounded-lg border px-3 py-2"
           :class="[
             isNext(step)
               ? 'border-brand bg-brand-soft'
@@ -62,37 +63,36 @@
               : '',
           ]"
         >
-          <LucideCircleCheck
-            v-if="step.done"
-            class="size-4 shrink-0 text-success"
-            :aria-label="__('Done')"
-          />
-          <span
-            v-else
-            class="flex size-4 shrink-0 items-center justify-center font-mono text-xs tabular-nums text-ink-gray-5"
-            aria-hidden="true"
-            >{{ i + 1 }}</span
-          >
-          <span class="flex min-w-0 flex-1 flex-col">
-            <span class="truncate text-sm font-medium text-ink-gray-8">{{
-              step.label
-            }}</span>
+          <span class="flex min-w-0 items-center gap-1.5">
+            <LucideCircleCheck
+              v-if="step.done"
+              class="size-4 shrink-0 text-success"
+              :aria-label="__('Done')"
+            />
+            <span
+              v-else
+              class="flex size-4 shrink-0 items-center justify-center font-mono text-xs tabular-nums text-ink-gray-5"
+              aria-hidden="true"
+              >{{ i + 1 }}</span
+            >
+            <span
+              class="truncate text-sm font-medium text-ink-gray-8"
+              :title="step.label"
+              >{{ step.label }}</span
+            >
+          </span>
+          <span class="flex min-w-0 flex-wrap items-center gap-1.5">
+            <TaskyBadge
+              :label="step.status_label || __('Not started')"
+              :tone="step.status ? proposalTone(step.status) : 'neutral'"
+            />
             <span
               v-if="step.quotation_status && !step.done"
               class="truncate text-xs text-ink-gray-6"
               >{{ __("Price: {0}", __(step.quotation_status)) }}</span
             >
           </span>
-          <TaskyBadge
-            :label="step.status_label || __('Not started')"
-            :tone="step.status ? proposalTone(step.status) : 'neutral'"
-          />
         </component>
-        <LucideChevronRight
-          v-if="i < chain.steps.length - 1"
-          class="hidden size-4 shrink-0 text-ink-gray-4 sm:block"
-          aria-hidden="true"
-        />
       </li>
     </ol>
   </section>
@@ -106,7 +106,6 @@ import { Button, createResource, toast } from "frappe-ui";
 import { computed, useId } from "vue";
 import { useRouter } from "vue-router";
 import LucideArrowRight from "~icons/lucide/arrow-right";
-import LucideChevronRight from "~icons/lucide/chevron-right";
 import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucidePlus from "~icons/lucide/plus";
 import {

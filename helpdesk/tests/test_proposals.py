@@ -271,3 +271,27 @@ class TestProposals(FrappeTestCase):
             [params["url"] for _n, _p, params in self.crm.lead_calls],
             ["vasthubuilders.com", "https://www.client.co.in/about"],
         )
+
+    def test_the_brd_questionnaire_goes_to_the_erp_site(self):
+        proposals_api.save_questions(
+            "BRD-2026-00001", '[{"section_type": "Integrations", "question": "Bank?"}]'
+        )
+        proposals_api.share_questionnaire("BRD-2026-00001")
+        proposals_api.send_questionnaire("BRD-2026-00001", " ", " Hello ")
+        proposals_api.apply_answers("BRD-2026-00001")
+        with self.assertRaises(frappe.ValidationError):
+            proposals_api.save_questions("BRD-2026-00001", '{"question": "Bank?"}')
+        calls = {name: (post, params) for name, post, params in self.crm.lead_calls}
+        self.assertTrue(all(post for post, _params in calls.values()))
+        self.assertEqual(
+            calls["save_questions"][1]["questions"],
+            [{"section_type": "Integrations", "question": "Bank?"}],
+        )
+        self.assertEqual(
+            (
+                calls["send_questionnaire"][1]["recipients"],
+                calls["send_questionnaire"][1]["message"],
+            ),
+            (None, "Hello"),
+        )
+        self.assertEqual(calls["apply_answers"][1]["name"], "BRD-2026-00001")

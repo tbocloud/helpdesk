@@ -213,12 +213,12 @@
                 >
               </p>
               <p
-                v-if="proposal.ai && isProposal"
+                v-if="proposal.ai && (isProposal || kind?.ai_sections.length)"
                 class="text-p-sm tabular-nums text-ink-gray-6"
               >
                 {{
                   __(
-                    "AI on this proposal: {0} runs, {1} tokens, about ${2}",
+                    "AI on this document: {0} runs, {1} tokens, about ${2}",
                     String(proposal.ai.runs),
                     (
                       proposal.ai.input_tokens + proposal.ai.output_tokens
@@ -237,6 +237,18 @@
                 >
               </p>
             </section>
+
+            <DocumentQuestionnaire
+              v-if="proposal.questionnaire"
+              :proposal="proposalId"
+              :questionnaire="proposal.questionnaire"
+              :section-types="kind?.section_types || []"
+              :can-write="proposal.can_write"
+              :editable="editable"
+              :dirty="dirty"
+              :lead-email="proposal.lead_email"
+              @changed="takePricing"
+            />
 
             <ProposalAssistant
               v-if="isProposal"
@@ -423,7 +435,7 @@
                 :title="form.title"
                 :client="proposal.client"
                 :solution-type="proposal.solution_type"
-                :kicker="isProposal ? null : proposal.document_label"
+                :kicker="isProposal ? null : proposal.kicker"
                 :contents="proposal.document_type !== 'Quotation'"
                 :parts="isProposal"
                 :headings="kind?.default_headings"
@@ -538,6 +550,7 @@ import LucideSend from "~icons/lucide/send";
 import LucideShare2 from "~icons/lucide/share-2";
 import LucideTriangleAlert from "~icons/lucide/triangle-alert";
 import ClientProfileForm from "./ClientProfileForm.vue";
+import DocumentQuestionnaire from "./DocumentQuestionnaire.vue";
 import ProposalAssistant from "./ProposalAssistant.vue";
 import ProposalBlocks from "./ProposalBlocks.vue";
 import ProposalModules from "./ProposalModules.vue";
