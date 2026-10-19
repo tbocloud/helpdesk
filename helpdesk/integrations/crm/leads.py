@@ -126,6 +126,13 @@ def friendly_error(error: CRMError, client) -> LeadsError:
         return LeadsUnavailableError(
             _("Leads need the latest TBO Smart on the ERP site ({0}).").format(site)
         )
+    if error.status == 403 and "an integration user, not a person" in detail.casefold():
+        # the person signed in here holds the ERP site's integration role themselves
+        return LeadsError(
+            _(
+                "Your user {0} on {1} has the Hub Integration role, which is only for the hub's API user. Ask an admin to remove it from your user there (keep Sales User or Sales Manager)."
+            ).format(frappe.session.user, site)
+        )
     if error.status == 403 and "integration user" in detail.casefold():
         return LeadsUnavailableError(
             _(

@@ -169,6 +169,15 @@ class TestLeads(FrappeTestCase):
                 "Hub integration role",
             ),
             (
+                CRMError(
+                    "x",
+                    403,
+                    "bde@example.com is an integration user, not a person.",
+                ),
+                LeadsError,
+                "only for the hub's API user",
+            ),
+            (
                 CRMError("x", 403, "Not permitted"),
                 LeadsError,
                 "don't have a sales account",
