@@ -226,6 +226,19 @@
             :disabled="!canEdit"
           />
           <FormControl
+            v-if="record.library === 'Agreement Clause'"
+            v-model="record.group"
+            type="select"
+            :label="__('Agreement section')"
+            :options="
+              (data?.clause_groups || []).map((g) => ({
+                label: __(g),
+                value: g,
+              }))
+            "
+            :disabled="!canEdit"
+          />
+          <FormControl
             v-if="record.library === 'Timeline'"
             v-model.number="record.weeks"
             type="number"
@@ -398,6 +411,8 @@ interface Library {
   conditions: string[];
   fits: string[];
   scope_groups: string[];
+  /** an Agreement Clause's section in the project agreement */
+  clause_groups?: string[];
 }
 
 defineProps<{ ai?: boolean }>();
@@ -449,6 +464,9 @@ const HELP: Record<string, string> = {
   "Out of Scope": __("What is not included; modules add their own."),
   Risk: __("A risk, and how we handle it in the text."),
   Terms: __("A term: its heading, then its text."),
+  "Agreement Clause": __(
+    "A clause of the project agreement: its heading, its text and the section it shows in."
+  ),
 };
 const kindHelp = computed(() => HELP[kind.value] || "");
 

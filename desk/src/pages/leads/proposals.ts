@@ -13,7 +13,10 @@ export type ProposalStatus =
   | "Declined"
   | "Expired";
 
-/** The Universal IT Proposal's sections (TBO Smart's MASTER_SECTIONS), plus Image and Custom. */
+/**
+ * The Universal IT Proposal's sections (TBO Smart's MASTER_SECTIONS), the project agreement's
+ * own (Parties … Termination), plus Image and Custom.
+ */
 export type SectionType =
   | "Cover"
   | "Executive Summary"
@@ -38,8 +41,62 @@ export type SectionType =
   | "Risks & Mitigation"
   | "Terms & Conditions"
   | "Acceptance"
+  | "Parties"
+  | "Purpose"
+  | "Change Requests"
+  | "Intellectual Property"
+  | "Confidentiality"
+  | "Termination"
   | "Image"
   | "Custom";
+
+/** The client documents, one made from the accepted one before it (docs/proposals.md §Documents). */
+export type DocumentTypeName = "Proposal" | "Quotation" | "Work Order";
+
+/** A switched-on type of client document, as the ERP site describes it. */
+export interface DocumentType {
+  name: DocumentTypeName;
+  /** "Project Agreement" for the work order */
+  label: string;
+  /** what Accepted reads as: "Signed" for the agreement */
+  accepted_label: string;
+  follows: DocumentTypeName | null;
+  section_types: SectionType[];
+  default_headings: Record<string, string>;
+  ai_sections: SectionType[];
+  /** its quotation is its price, edited and sent with it */
+  priced: boolean;
+  /** the client signs it with their designation */
+  signature: boolean;
+}
+
+/** One step of the lead's chain of documents. */
+export interface DocumentStep {
+  document_type: DocumentTypeName;
+  label: string;
+  name: string | null;
+  title: string | null;
+  status: ProposalStatus | null;
+  status_label: string | null;
+  done: boolean;
+  view_count: number;
+  /** where its ERPNext Quotation is (a priced document's) */
+  quotation_status: string | null;
+}
+
+/** The lead's documents in order and the one next action (get_lead's `documents`). */
+export interface DocumentChain {
+  steps: DocumentStep[];
+  next: null | {
+    action: "create_proposal" | "create" | "open";
+    document_type: DocumentTypeName;
+    label: string;
+    /** create: the accepted document to make it from */
+    source?: string;
+    /** open: the document in progress */
+    name?: string;
+  };
+}
 
 /** Every section may carry an image but these two: the price and the signatures. */
 export const NO_IMAGE: SectionType[] = ["Investment", "Acceptance"];
@@ -293,11 +350,14 @@ export interface ProposalOptions {
   default_letter_head?: string | null;
   /** TBO Smart Settings → Proposal letter head; null: the one marked default */
   proposal_letter_head?: string | null;
+  /** the switched-on client document types, in the chain's order */
+  document_types?: DocumentType[];
 }
 
 /** A row of the lead's proposals (get_lead's `proposals`). */
 export interface ProposalRow {
   name: string;
+  document_type?: DocumentTypeName;
   title: string;
   status: ProposalStatus;
   revision_no: number;
@@ -353,6 +413,18 @@ export interface SegmentPricing {
 
 export interface Proposal {
   name: string;
+  document_type: DocumentTypeName;
+  /** "Proposal", "Quotation", "Project Agreement" */
+  document_label: string;
+  accepted_label: string;
+  /** the accepted document it was made from */
+  source_document?: string | null;
+  /** priced here (a proposal or a quotation); else it shows the accepted price */
+  can_price: boolean;
+  /** the client signs with a designation (the agreement) */
+  signature: boolean;
+  /** the agreement's project start: the timeline's dates follow from it */
+  start_date?: string | null;
   title: string;
   lead: string;
   lead_name?: string;
@@ -397,6 +469,7 @@ export interface Proposal {
     decided_on?: string | null;
     decided_by_name?: string | null;
     decided_by_email?: string | null;
+    decided_by_designation?: string | null;
     decline_reason?: string | null;
   };
   can_write: boolean;
@@ -469,6 +542,12 @@ export const SECTION_LABELS: Record<SectionType, string> = {
   "Risks & Mitigation": __("Risks & Mitigation"),
   "Terms & Conditions": __("Terms & Conditions"),
   Acceptance: __("Acceptance & Approval"),
+  Parties: __("Parties"),
+  Purpose: __("Purpose of this Agreement"),
+  "Change Requests": __("Change Request Process"),
+  "Intellectual Property": __("Intellectual Property & Source Code"),
+  Confidentiality: __("Confidentiality"),
+  Termination: __("Termination"),
   Image: __("Image"),
   Custom: __("Custom"),
 };
@@ -479,6 +558,14 @@ export function proposalTone(status?: ProposalStatus): Tone {
   if (status === "Declined" || status === "Expired") return "danger";
   if (status === "Viewed") return "info";
   return "neutral";
+}
+
+/** A document's type from the options (null until they load or while it is switched off). */
+export function documentType(
+  options: ProposalOptions | undefined,
+  name: DocumentTypeName | undefined
+): DocumentType | null {
+  return options?.document_types?.find((t) => t.name === name) ?? null;
 }
 
 /** Fetched once per session: whether proposals are on, templates, catalogue, block types. */

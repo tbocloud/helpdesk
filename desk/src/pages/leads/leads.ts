@@ -4,7 +4,7 @@ import type { Tone } from "@/components/tone";
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
 import { createResource, toast } from "frappe-ui";
-import type { ProposalRow } from "./proposals";
+import type { DocumentChain, ProposalRow } from "./proposals";
 
 export interface LeadStage {
   name: string;
@@ -138,6 +138,8 @@ export interface LeadDetail {
   quotations: LeadQuotation[];
   /** the lead's proposals (empty while proposals are off on the ERP site) */
   proposals?: ProposalRow[];
+  /** the chain of client documents and the next action (null while proposals are off) */
+  documents?: DocumentChain | null;
   /** stage names, or stages, this lead may move to */
   allowed_stages: (string | LeadStage)[];
 }

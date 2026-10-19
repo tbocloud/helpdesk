@@ -17,8 +17,15 @@ A proposal is **assembled, not written**: a master structure of 23 sections, a p
 library and section libraries on the ERP site fill every factual section at no AI cost; one small
 AI call writes the narrative. Presales should not have to type content.
 
-The ERP side's spec is TBO Smart's `docs/proposals.md` (v2.0); its contract is
-`docs/hub-proposals-api.md` (v2.0).
+The ERP side's spec is TBO Smart's `docs/proposals.md` (v2.1) and, for the documents after an
+accepted proposal, `docs/client-documents.md` (v1.0); its contract is `docs/hub-proposals-api.md`
+(v2.1).
+
+**The documents after the proposal** (the owner's chain of 2026-10-19): **Proposal → Quotation →
+Project Agreement / Work Order** (the BRD, SRS, implementation plan, project and UAT sign-off
+follow). Each is a TBO Proposal of its own type on the ERP site, made from the accepted one before
+it and pre-filled from it, so the same builder, preview, Share, Send, revisions and client page
+serve them all. Each type has its own switch in TBO Smart Settings, off by default.
 
 ## Who sees it
 
@@ -43,6 +50,7 @@ sending `acting_user`; each maps 1:1 to `tbo_smart.api.hub_proposals.<same name>
 | `regenerate_section(name, index, force)`, `regenerate_proposal(name, force)`, `chat_edit(name, message)` | `chat_edit` refuses a blank message and caps it at 1,000 characters |
 | `price_from_modules(name)`, `get_pricing_form(name)`, `save_pricing(name, values)`, `request_approval(name, reason)` | A reason is required here too |
 | `share_proposal(name)`, `send_proposal(name, recipients, message, attach_pdf)`, `create_revision(name)` | |
+| `create_document(source, document_type)`, `get_document_chain(lead)` | The next document (`Quotation`, `Work Order`; anything else refused here) from the accepted `source`; the lead's chain. `get_lead` carries the chain too (`documents`) |
 | `upload_proposal_image(name, filename, content)`, `use_library_image(name, image)` | Images over 5 MB or not base64 are refused here before anything is sent |
 | `save_template(data)`, `set_default_letter_head(letter_head)` | |
 | `get_proposal_library()`, `save_library_record(kind, data)`, `delete_library_record(kind, name)`, `upload_library_image(filename, content, data)`, `draft_library_module(module)` | Editors only (checked on the ERP site) |
@@ -56,11 +64,23 @@ so the API key never reaches the browser.
 
 ## The screens
 
+### Lead page: Documents (`LeadDocuments.vue`)
+
+Across the top of the lead, while at least the Quotation is switched on: each switched-on type in
+order (Proposal → Quotation → Project Agreement), each with its status in words (Draft, Sent,
+Viewed, Accepted / Signed, Declined, Expired, or Not started), a check when accepted, a step
+number otherwise, and for a priced one in progress its quotation's state ("Price: Pending
+Approval"). A step with a document opens it. The **one primary button** is the next action from
+the ERP site: *New proposal*, *Create quotation* / *Create project agreement* (made on the ERP site
+from the accepted one, then opened; its warnings shown) or *Continue the …* for the one in
+progress; "Every document is accepted" when the chain is done. The step it points at is
+brand-outlined. One column on a phone; 44px targets.
+
 ### Lead page: Proposals (`LeadProposals.vue`)
 
-Each proposal with its version, views and status (Accepted green, Declined and Expired red, Viewed
-blue, the rest gray, always with the word). **New proposal** (people who may write the lead)
-opens the start page.
+Each proposal (the proposals only; the later documents are in the strip) with its version, views
+and status (Accepted green, Declined and Expired red, Viewed blue, the rest gray, always with the
+word). **New proposal** (people who may write the lead) opens the start page.
 
 ### Start: the guided chat (`/helpdesk/leads/<lead>/proposals/new`, `NewProposal.vue`)
 
@@ -157,6 +177,20 @@ lead's first proposal with a website (the summary is kept on the lead); none wit
   real thing).
 - States: skeleton while loading, an error with Try again and Back to the lead.
 
+### The documents after the proposal in the builder
+
+The same page (`Proposal.vue`) for every type, reading the type from the options
+(`document_types`): a quotation or an agreement has no assistant, no client and scoping form and
+no module editor (they keep what they copied); its sections are its type's (`section_types`, the
+agreement's Parties, Purpose, Change Requests, Intellectual Property, Confidentiality and
+Termination added to the block labels); the preview's cover shows the type ("Quotation",
+"Project Agreement"), no part titles, and no contents for a quotation, with the type's default
+headings. A quotation is priced here (the pricing dialog, *Price from modules*, *Request
+approval*); an agreement shows the accepted quotation's price read only and has a **Project start
+date** (Send says to set it; saving a new one dates the timeline and the purpose on the ERP site,
+unless they were edited by hand). The status reads "Signed" for
+an accepted agreement.
+
 ### Settings → Rates and proposals (`components/Settings/Sales/`)
 
 For everyone who sees Leads; read only for people who may not change it on the ERP site.
@@ -172,7 +206,8 @@ For everyone who sees Leads; read only for people who may not change it on the E
   with AI** (fills the text once for review; nothing is saved until Save). A library item: its
   library (company overview, solution components, scope, workflows, architecture, deliverables,
   phases, timeline templates, roles, investment notes, payment terms templates, warranty, AMC
-  plans, assumptions, out of scope, risks, terms), title, text, subsection, days, yearly price,
+  plans, assumptions, out of scope, risks, terms, agreement clauses), title, text, subsection (an
+  agreement clause: its section), days, yearly price,
   condition, order, solution types, enabled. An image: upload (PNG, JPEG, WebP up to 5 MB),
   title, alt text, the sections and modules it suits.
 
@@ -185,4 +220,6 @@ reason reaching the page; an image upload checked here and then posted on; the d
 head; the letter head's HTML sanitised for the preview; the start flow (profile, website read,
 lead notes, extraction, create with scoping, requirements, profile and chat; a blank text
 refused); regenerate, chat edits, pricing from modules, share, library images and the library
-methods posted with their arguments; a library image over 5 MB refused here.
+methods posted with their arguments; a library image over 5 MB refused here; the documents after
+the proposal (`create_document` posted with its source and type, an unknown type refused here,
+`get_document_chain` read).

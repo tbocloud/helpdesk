@@ -232,6 +232,33 @@ class TestProposals(FrappeTestCase):
         with self.assertRaises(frappe.ValidationError):
             proposals_api.upload_library_image("a.png", too_big, {"title": "x"})
 
+    def test_documents_after_the_proposal_go_to_the_erp_site(self):
+        self.crm.lead_answers["create_document"] = {
+            "proposal": {"name": "QUOT-2026-00001"},
+            "warnings": [],
+        }
+        result = proposals_api.create_document("PROP-2026-00001", "Quotation")
+        self.assertEqual(result["proposal"]["name"], "QUOT-2026-00001")
+        proposals_api.get_document_chain("CRM-LEAD-1")
+        with self.assertRaises(frappe.ValidationError):
+            proposals_api.create_document("PROP-2026-00001", "Invoice")
+        calls = {name: (post, params) for name, post, params in self.crm.lead_calls}
+        self.assertEqual(
+            calls["create_document"],
+            (
+                True,
+                {
+                    "source": "PROP-2026-00001",
+                    "document_type": "Quotation",
+                    "acting_user": BDE,
+                },
+            ),
+        )
+        self.assertEqual(
+            calls["get_document_chain"],
+            (False, {"lead": "CRM-LEAD-1", "acting_user": BDE}),
+        )
+
     def test_text_that_isnt_a_website_is_refused_here(self):
         for typed in ("build propsol", "not a site", "http://", "client"):
             with self.assertRaises(frappe.ValidationError) as caught:

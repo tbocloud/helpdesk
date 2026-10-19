@@ -32,7 +32,7 @@
       <template v-if="proposal" #right-header>
         <TaskyBadge
           class="hidden sm:inline-flex"
-          :label="__(proposal.status)"
+          :label="statusLabel"
           :tone="proposalTone(proposal.status)"
         />
         <Dropdown :options="shareOptions">
@@ -76,7 +76,7 @@
           v-if="detail.error && !proposal"
           error
           :icon="LucideCircleAlert"
-          :title="__('Couldn\'t load the proposal')"
+          :title="__('Couldn\'t load the document')"
           :message="
             errorText(detail.error, __('Check your connection and try again.'))
           "
@@ -134,7 +134,7 @@
                   ? __(
                       "This version went to the client and can't change. Create a revision to edit it; the client keeps this one until you send the new one."
                     )
-                  : __("A newer version of this proposal exists.")
+                  : __("A newer version of this document exists.")
               }}
             </p>
 
@@ -157,7 +157,19 @@
                   :label="__('Valid till')"
                   :disabled="!editable"
                 />
-                <div class="flex flex-col gap-1.5">
+                <FormControl
+                  v-if="proposal.signature"
+                  v-model="form.start_date"
+                  type="date"
+                  :label="__('Project start date')"
+                  :description="
+                    __(
+                      'The timeline and the purpose take their dates from it when you save.'
+                    )
+                  "
+                  :disabled="!editable"
+                />
+                <div v-if="proposal.can_price" class="flex flex-col gap-1.5">
                   <span :id="priceLabelId" class="text-xs text-ink-gray-5">{{
                     __("Price shown")
                   }}</span>
@@ -196,12 +208,12 @@
               </p>
               <p class="text-p-sm tabular-nums text-ink-gray-6">
                 {{ __("About {0} pages", String(pages)) }}
-                <template v-if="proposal.page_guide">
+                <template v-if="isProposal && proposal.page_guide">
                   · {{ __("guide: {0}", proposal.page_guide) }}</template
                 >
               </p>
               <p
-                v-if="proposal.ai"
+                v-if="proposal.ai && isProposal"
                 class="text-p-sm tabular-nums text-ink-gray-6"
               >
                 {{
@@ -227,6 +239,7 @@
             </section>
 
             <ProposalAssistant
+              v-if="isProposal"
               :proposal="proposalId"
               :chat="proposal.chat || []"
               :ai="!!options?.ai"
@@ -236,6 +249,7 @@
             />
 
             <details
+              v-if="isProposal"
               class="rounded-xl border border-outline-gray-2 bg-surface-base"
             >
               <summary
@@ -318,6 +332,7 @@
             </details>
 
             <ProposalModules
+              v-if="isProposal"
               v-model:modules="form.modules"
               :catalogue="options?.catalogue || []"
               :solution-type="proposal.solution_type"
@@ -341,14 +356,16 @@
               :proposal="proposalId"
               :editable="editable"
               :guidance="guidance"
-              :section-types="options?.section_types || []"
+              :section-types="
+                kind?.section_types || options?.section_types || []
+              "
               :busy="regenerating"
               @regenerate="regenerateSection($event, false)"
             >
               <template #pricing>
                 <ProposalPricingSummary
                   :proposal="proposal"
-                  :editable="editable"
+                  :editable="editable && proposal.can_price"
                   @price="showPricing = true"
                   @changed="takePricing"
                 />
@@ -406,6 +423,10 @@
                 :title="form.title"
                 :client="proposal.client"
                 :solution-type="proposal.solution_type"
+                :kicker="isProposal ? null : proposal.document_label"
+                :contents="proposal.document_type !== 'Quotation'"
+                :parts="isProposal"
+                :headings="kind?.default_headings"
                 :valid-till="form.valid_till"
                 :sections="form.sections"
                 :quotation="proposal.quotation"
@@ -426,7 +447,7 @@
       @saved="onPriced"
     />
 
-    <Dialog v-model:open="showSend" :title="__('Send the proposal')" size="lg">
+    <Dialog v-model:open="showSend" :title="__('Send to the client')" size="lg">
       <form
         :id="sendFormId"
         class="flex flex-col gap-4"
@@ -467,7 +488,7 @@
             variant="solid"
             type="submit"
             :form="sendFormId"
-            :label="__('Send proposal')"
+            :label="__('Send')"
             :loading="sendResource.loading"
             :disabled="!sendForm.recipients.trim()"
           />
@@ -526,6 +547,7 @@ import ProposalPricingSummary from "./ProposalPricingSummary.vue";
 import ProposalScopingForm from "./ProposalScopingForm.vue";
 import ProposalTracking from "./ProposalTracking.vue";
 import {
+  documentType,
   emptyProfile,
   emptyScoping,
   estimatePages,
@@ -562,6 +584,7 @@ const form = reactive({
   letter_head: "",
   pricing_mode: "Itemised" as Proposal["pricing_mode"],
   valid_till: "" as string | null,
+  start_date: "" as string | null,
   requirements: "",
   client_profile: emptyProfile() as ClientProfile,
   scoping: emptyScoping() as Scoping,
@@ -580,6 +603,7 @@ function setProposal(p: Proposal) {
   form.letter_head = p.letter_head || "";
   form.pricing_mode = p.pricing_mode || "Itemised";
   form.valid_till = p.valid_till || "";
+  form.start_date = p.start_date || "";
   form.requirements = p.requirements || "";
   form.client_profile = { ...emptyProfile(), ...(p.client_profile || {}) };
   form.scoping = { ...emptyScoping(), ...(p.scoping || {}) };
@@ -603,6 +627,18 @@ watch(
 );
 
 const isDraft = computed(() => proposal.value?.status === "Draft");
+const kind = computed(() =>
+  documentType(options.value, proposal.value?.document_type)
+);
+/** The proposal has the assistant, the scoping and the modules; the documents after it don't. */
+const isProposal = computed(
+  () => (proposal.value?.document_type || "Proposal") === "Proposal"
+);
+const statusLabel = computed(() =>
+  proposal.value?.status === "Accepted"
+    ? proposal.value.accepted_label || __("Accepted")
+    : __(proposal.value?.status || "")
+);
 const editable = computed(() => !!(isDraft.value && proposal.value?.can_write));
 const dirty = computed(() => editable.value && snapshot() !== saved.value);
 const canSendStatus = computed(
@@ -735,9 +771,13 @@ function copyLink() {
   }
   ask(
     __("Share this draft?"),
-    __(
-      "The proposal goes to the client as if sent, without an email: its quotation goes out, the lead moves to Proposal Sent, and the content is fixed. Changes after that need a revision."
-    ),
+    p.can_price
+      ? __(
+          "It goes to the client as if sent, without an email: its quotation goes out, the lead moves on, and the content is fixed. Changes after that need a revision."
+        )
+      : __(
+          "It goes to the client as if sent, without an email, and the content is fixed. Changes after that need a revision."
+        ),
     __("Share and copy link"),
     () => shareResource.submit({ name: props.proposalId })
   );
@@ -781,7 +821,7 @@ const saveResource = createResource({
   method: "POST",
   onSuccess(p: Proposal) {
     setProposal(p);
-    toast.success(__("Proposal saved"));
+    toast.success(__("Saved"));
   },
   onError(e: unknown) {
     toast.error(
@@ -799,11 +839,19 @@ function save() {
       letter_head: form.letter_head || null,
       pricing_mode: form.pricing_mode,
       valid_till: form.valid_till || null,
-      requirements: form.requirements,
-      client_profile: form.client_profile,
-      scoping: form.scoping,
-      modules: form.modules,
       sections: form.sections,
+      ...(proposal.value?.signature
+        ? { start_date: form.start_date || null }
+        : {}),
+      // a document after the proposal keeps what it copied from it
+      ...(isProposal.value
+        ? {
+            requirements: form.requirements,
+            client_profile: form.client_profile,
+            scoping: form.scoping,
+            modules: form.modules,
+          }
+        : {}),
     },
   });
 }
@@ -890,10 +938,10 @@ const regenerateAll = createResource({
         __("Rebuild them too"),
         () => regenerateProposal(true)
       );
-    else toast.success(__("Proposal regenerated"));
+    else toast.success(__("Regenerated"));
   },
   onError(e: unknown) {
-    toast.error(errorText(e, __("Couldn't regenerate the proposal.")));
+    toast.error(errorText(e, __("Couldn't regenerate it.")));
   },
 });
 
