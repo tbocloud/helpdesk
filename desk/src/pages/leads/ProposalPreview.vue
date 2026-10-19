@@ -12,7 +12,7 @@
     />
     <div class="border-b border-outline-gray-2 px-6 py-8">
       <p class="text-xs font-semibold uppercase tracking-wider text-brand-ink">
-        {{ solutionType || __("Proposal") }}
+        {{ kicker || solutionType || __("Proposal") }}
       </p>
       <h2 class="mt-2 text-2xl font-semibold text-ink-gray-9">
         {{ title || __("Untitled proposal") }}
@@ -26,7 +26,7 @@
     </div>
 
     <nav
-      v-if="blocks.some((b) => b.number)"
+      v-if="contents !== false && blocks.some((b) => b.number)"
       class="border-b border-outline-gray-2 px-6 py-4"
       :aria-label="__('Contents')"
     >
@@ -372,6 +372,14 @@ const props = defineProps<{
   title: string;
   client: string;
   solutionType?: string | null;
+  /** the cover's line above the title for a document after the proposal ("Quotation") */
+  kicker?: string | null;
+  /** false: no contents (the quotation) */
+  contents?: boolean;
+  /** false: no part titles (only the proposal has parts) */
+  parts?: boolean;
+  /** the document type's default headings */
+  headings?: Record<string, string>;
   validTill?: string | null;
   sections: ProposalSection[];
   quotation: ProposalQuotation | null;
@@ -421,7 +429,8 @@ const blocks = computed(() => {
       section.section_type
     );
     if (!parts.length && !section.image_url && !always) return;
-    const newPart = partOf(section.section_type) ?? part;
+    const newPart =
+      props.parts === false ? undefined : partOf(section.section_type) ?? part;
     const partTitle = newPart && newPart !== part ? newPart : null;
     part = newPart;
     const titled = section.section_type !== "Image" || !!section.heading;
@@ -458,7 +467,8 @@ const blocks = computed(() => {
         .filter(([, d]) => d > 0);
       const total = rows.reduce((sum, [, d]) => sum + d, 0);
       if (total) {
-        table.hidden = true;
+        // a dated timeline (the agreement's) keeps its table under the bars
+        table.hidden = table.header.length <= 2;
         let start = 0;
         bars = rows.map(([phase, d]) => {
           const bar = {
@@ -490,7 +500,10 @@ const blocks = computed(() => {
       section,
       number: n,
       part: partTitle,
-      heading: section.heading || SECTION_LABELS[section.section_type],
+      heading:
+        section.heading ||
+        props.headings?.[section.section_type] ||
+        SECTION_LABELS[section.section_type],
       parts,
       cards,
       bars,

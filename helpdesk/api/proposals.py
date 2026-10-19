@@ -1,4 +1,5 @@
-"""Proposals and the segment rate card on the Leads page (docs/proposals.md). Thin proxies
+"""Proposals, the client documents after them, and the segment rate card on the Leads
+page (docs/proposals.md). Thin proxies
 to TBO Smart's hub proposals API (and the rate card in its hub leads API) on the CRM site,
 as the signed-in person, the same way as helpdesk.api.leads. The CRM site decides who may
 see, change and send what; the API key never leaves the hub."""
@@ -81,6 +82,36 @@ def create_proposal(
     if result.get("proposal"):
         clean_letter_head(result["proposal"])
     return result
+
+
+# the documents made from an accepted one (TBO Smart's docs/client-documents.md)
+DOCUMENT_TYPES = ("Quotation", "Work Order")
+
+
+@frappe.whitelist(methods=["POST"])
+def create_document(source: str, document_type: str) -> dict:
+    """The next client document, made on the ERP site from the accepted `source`
+    (a quotation from a proposal, a project agreement from a quotation)."""
+    require_leads()
+    if document_type not in DOCUMENT_TYPES:
+        frappe.throw(_("Pick a quotation or a project agreement."))
+    result = (
+        proposals(
+            "create_document", post=True, source=source, document_type=document_type
+        )
+        or {}
+    )
+    if result.get("proposal"):
+        clean_letter_head(result["proposal"])
+    return result
+
+
+@frappe.whitelist()
+def get_document_chain(lead: str) -> dict:
+    """The lead's documents in order (Proposal → Quotation → Project Agreement), each
+    with its status, and the one next action."""
+    require_leads()
+    return proposals("get_document_chain", lead=lead) or {"steps": [], "next": None}
 
 
 @frappe.whitelist()

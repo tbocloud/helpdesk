@@ -84,6 +84,12 @@
         </div>
 
         <div v-else class="grid grid-cols-1 gap-4 lg:grid-cols-[20rem_1fr]">
+          <LeadDocuments
+            class="lg:col-span-2"
+            :lead-id="leadId"
+            :chain="data.documents"
+            :can-write="!!lead?.can_write"
+          />
           <div class="flex min-w-0 flex-col gap-4">
             <section
               class="rounded-xl border border-outline-gray-2 bg-surface-base"
@@ -128,7 +134,11 @@
             <LeadQuotations :quotations="data.quotations || []" />
             <LeadProposals
               :lead-id="leadId"
-              :proposals="data.proposals || []"
+              :proposals="
+                (data.proposals || []).filter(
+                  (p) => (p.document_type || 'Proposal') === 'Proposal'
+                )
+              "
               :can-write="!!lead?.can_write"
             />
           </div>
@@ -327,6 +337,7 @@ import LeadAISuggests from "./LeadAISuggests.vue";
 import LeadCallEntry from "./LeadCallEntry.vue";
 import LucideScrollText from "~icons/lucide/scroll-text";
 import LeadFormDialog from "./LeadFormDialog.vue";
+import LeadDocuments from "./LeadDocuments.vue";
 import LeadProposals from "./LeadProposals.vue";
 import LeadQuotations from "./LeadQuotations.vue";
 import {
