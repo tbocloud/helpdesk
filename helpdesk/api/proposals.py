@@ -90,7 +90,7 @@ def create_proposal(
 
 
 # the documents made from an accepted one (TBO Smart's docs/client-documents.md)
-DOCUMENT_TYPES = ("Quotation", "Work Order")
+DOCUMENT_TYPES = ("Quotation", "Work Order", "BRD")
 
 
 @frappe.whitelist(methods=["POST"])
@@ -99,13 +99,66 @@ def create_document(source: str, document_type: str) -> dict:
     (a quotation from a proposal, a project agreement from a quotation)."""
     require_leads()
     if document_type not in DOCUMENT_TYPES:
-        frappe.throw(_("Pick a quotation or a project agreement."))
+        frappe.throw(_("Pick a quotation, a project agreement or a BRD."))
     result = (
         proposals(
             "create_document", post=True, source=source, document_type=document_type
         )
         or {}
     )
+    if result.get("proposal"):
+        clean_letter_head(result["proposal"])
+    return result
+
+
+# --- a BRD's questionnaire for the client --------------------------------------
+
+
+@frappe.whitelist(methods=["POST"])
+def save_questions(name: str, questions: list | str) -> dict:
+    """A draft BRD's questions for the client; the answered ones stay on the ERP site."""
+    require_leads()
+    return proposal(
+        "save_questions", post=True, name=name, questions=as_json_value(questions, list)
+    )
+
+
+@frappe.whitelist(methods=["POST"])
+def share_questionnaire(name: str) -> dict:
+    """The client's questionnaire link (only the questions, never the draft)."""
+    require_leads()
+    result = proposals("share_questionnaire", post=True, name=name) or {}
+    if result.get("proposal"):
+        clean_letter_head(result["proposal"])
+    return result
+
+
+@frappe.whitelist(methods=["POST"])
+def send_questionnaire(
+    name: str, recipients: str | None = None, message: str | None = None
+) -> dict:
+    """Email the client the questionnaire link from the ERP site."""
+    require_leads()
+    result = (
+        proposals(
+            "send_questionnaire",
+            post=True,
+            name=name,
+            recipients=(recipients or "").strip() or None,
+            message=(message or "").strip() or None,
+        )
+        or {}
+    )
+    if result.get("proposal"):
+        clean_letter_head(result["proposal"])
+    return result
+
+
+@frappe.whitelist(methods=["POST"])
+def apply_answers(name: str) -> dict:
+    """The client's new answers into the BRD (only the sections they touch)."""
+    require_leads()
+    result = proposals("apply_answers", post=True, name=name) or {}
     if result.get("proposal"):
         clean_letter_head(result["proposal"])
     return result

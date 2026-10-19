@@ -18,11 +18,11 @@ library and section libraries on the ERP site fill every factual section at no A
 AI call writes the narrative. Presales should not have to type content.
 
 The ERP side's spec is TBO Smart's `docs/proposals.md` (v2.1) and, for the documents after an
-accepted proposal, `docs/client-documents.md` (v1.0); its contract is `docs/hub-proposals-api.md`
-(v2.1).
+accepted proposal, `docs/client-documents.md` (v1.1); its contract is `docs/hub-proposals-api.md`
+(v2.2).
 
 **The documents after the proposal** (the owner's chain of 2026-10-19): **Proposal → Quotation →
-Project Agreement / Work Order** (the BRD, SRS, implementation plan, project and UAT sign-off
+Project Agreement / Work Order → BRD** (the SRS, implementation plan, project and UAT sign-off
 follow). Each is a TBO Proposal of its own type on the ERP site, made from the accepted one before
 it and pre-filled from it, so the same builder, preview, Share, Send, revisions and client page
 serve them all. Each type has its own switch in TBO Smart Settings, off by default.
@@ -52,7 +52,8 @@ sending `acting_user`; each maps 1:1 to `tbo_smart.api.hub_proposals.<same name>
 | `regenerate_section(name, index, force)`, `regenerate_proposal(name, force)`, `chat_edit(name, message)` | `chat_edit` refuses a blank message and caps it at 1,000 characters |
 | `price_from_modules(name)`, `get_pricing_form(name)`, `save_pricing(name, values)`, `request_approval(name, reason)` | A reason is required here too |
 | `share_proposal(name)`, `send_proposal(name, recipients, message, attach_pdf)`, `create_revision(name)` | |
-| `create_document(source, document_type)`, `get_document_chain(lead)` | The next document (`Quotation`, `Work Order`; anything else refused here) from the accepted `source`; the lead's chain. `get_lead` carries the chain too (`documents`) |
+| `save_questions(name, questions)`, `share_questionnaire(name)`, `send_questionnaire(name, recipients, message)`, `apply_answers(name)` | A BRD's client questionnaire (the questions as a list; blank recipients and message trimmed) |
+| `create_document(source, document_type)`, `get_document_chain(lead)` | The next document (`Quotation`, `Work Order`, `BRD`; anything else refused here) from the accepted `source`; the lead's chain. `get_lead` carries the chain too (`documents`) |
 | `upload_proposal_image(name, filename, content)`, `use_library_image(name, image)` | Images over 5 MB or not base64 are refused here before anything is sent |
 | `save_template(data)`, `set_default_letter_head(letter_head)` | |
 | `get_proposal_library()`, `save_library_record(kind, data)`, `delete_library_record(kind, name)`, `upload_library_image(filename, content, data)`, `draft_library_module(module)` | Editors only (checked on the ERP site) |
@@ -235,6 +236,17 @@ date** (Send says to set it; saving a new one dates the timeline and the purpose
 unless they were edited by hand). The status reads "Signed" for
 an accepted agreement.
 
+### The BRD's client questionnaire (`DocumentQuestionnaire.vue`)
+
+On a BRD, above its sections: the questions for the client by section, how many are answered,
+each answer with "New" (info) or "In the BRD" (success), and questions the AI asked marked so. On a
+draft, presales rewords, removes or adds questions (a section and a question) and saves them;
+answered questions can't be changed. **Share with the client** copies the questionnaire's own link
+(it shows only the questions, never the draft) or sends it by email from the ERP site. When the
+client has sent new answers, the primary **Update from n new answers** rebuilds only the sections
+they belong to (the ERP site rewrites the narrative ones in one small AI call) and says which.
+Closed once the BRD is approved, declined or revised.
+
 ### Settings → Rates and proposals (`components/Settings/Sales/`)
 
 For everyone who sees Leads; read only for people who may not change it on the ERP site.
@@ -267,4 +279,5 @@ refused); regenerate, chat edits, pricing from modules, share, library images an
 methods posted with their arguments; a library image over 5 MB refused here; the documents after
 the proposal (`create_document` posted with its source and type, an unknown type refused here,
 `get_document_chain` read); Mark ready / Reopen and the off-script chat answer posted with their
-arguments, a blank answer refused here.
+arguments, a blank answer refused here; the BRD's questionnaire methods posted (questions as a
+list, a non-list refused here, blank recipients dropped).
