@@ -21,10 +21,10 @@
         </nav>
       </template>
       <template v-if="lead" #right-header>
-        <!-- Call and Edit are icons on a phone, so Move stage keeps its room -->
+        <!-- Call and Edit are icons on a phone, so Move stage keeps its room; `label` names them -->
         <Button
           v-if="canCall"
-          :aria-label="__('Call')"
+          :label="__('Call')"
           :loading="clickToCall.loading"
           :tooltip="__('MyOperator rings your phone, then the lead')"
           @click="clickToCall.submit({ name: leadId })"
@@ -34,7 +34,7 @@
           </template>
           <span class="hidden sm:inline">{{ __("Call") }}</span>
         </Button>
-        <Button :aria-label="__('Edit')" @click="showEdit = true">
+        <Button :label="__('Edit')" @click="showEdit = true">
           <template #prefix>
             <LucidePencil class="size-4" aria-hidden="true" />
           </template>

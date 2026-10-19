@@ -190,8 +190,9 @@ ValidationError, so the page shows the message with *Try again*).
     leads off too (the block is then titled *Lead health*).
   - States: loading lines, an error with Try again, "hasn't read this one yet" with *Read it
     now*, and a note when no AI provider is set up.
-- **Call** (MyOperator, when `can_call`): a button in the lead's header and a phone button on
-  each list row with a mobile (outside the row's link). It toasts "MyOperator is calling your
+- **Call** (MyOperator, when `can_call`): a button in the lead's header (on a phone, Call and
+  Edit show as icons, named by their `label`) and a phone button on each list row with a mobile
+  (outside the row's link; all of them wait while one call is being placed). It toasts "MyOperator is calling your
   phone…", or the ERP site's reason (not set up, no number, MyOperator refused).
 - **Calls on the timeline**: a MyOperator call shows "Incoming call" / "Outgoing call" with its
   talk time (mono), or "Missed call" / "Unanswered call" in red with the phone-missed icon; the

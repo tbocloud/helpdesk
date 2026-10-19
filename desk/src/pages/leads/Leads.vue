@@ -268,7 +268,7 @@
                   v-if="options?.can_call && row.mobile_no"
                   class="mr-3 shrink-0"
                   variant="ghost"
-                  :aria-label="__('Call {0}', row.lead_name || row.name)"
+                  :label="__('Call {0}', row.lead_name || row.name)"
                   :tooltip="__('MyOperator rings your phone, then the lead')"
                   :loading="
                     clickToCall.loading && clickToCall.params?.name === row.name

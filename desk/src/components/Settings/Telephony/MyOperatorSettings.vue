@@ -96,7 +96,7 @@
               }}</span>
               <Button
                 variant="ghost"
-                :aria-label="__('Copy the webhook URL')"
+                :label="__('Copy the webhook URL')"
                 @click="copyToClipboard(data.webhook.url)"
               >
                 <template #icon>
@@ -223,7 +223,7 @@
               />
               <Button
                 variant="ghost"
-                :aria-label="__('Remove {0}', agent.user || __('this person'))"
+                :label="__('Remove {0}', agent.user || __('this person'))"
                 @click="form.agents.splice(i, 1)"
               >
                 <template #icon>
