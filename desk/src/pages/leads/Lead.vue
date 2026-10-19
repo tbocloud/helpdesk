@@ -187,7 +187,7 @@
                   :is="timelineIcon(entry)"
                   class="mt-0.5 size-4 shrink-0"
                   :class="
-                    entry.call && entry.status !== 'answered'
+                    entry.call && entry.status === 'missed'
                       ? 'text-danger'
                       : 'text-ink-gray-5'
                   "
@@ -368,10 +368,9 @@ const TIMELINE_LABELS: Record<LeadTimelineEntry["kind"], string> = {
 /** A call through MyOperator shows which way it went, or that it was missed. */
 function timelineIcon(entry: LeadTimelineEntry): Component {
   if (entry.call) {
-    if (entry.status !== "answered") return LucidePhoneMissed;
-    return entry.direction === "incoming"
-      ? LucidePhoneIncoming
-      : LucidePhoneOutgoing;
+    if (entry.status === "missed") return LucidePhoneMissed;
+    if (entry.direction === "incoming") return LucidePhoneIncoming;
+    if (entry.direction === "outgoing") return LucidePhoneOutgoing;
   }
   return TIMELINE_ICONS[entry.kind] || LucideMessageSquare;
 }

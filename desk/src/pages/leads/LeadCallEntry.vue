@@ -31,7 +31,7 @@
       class="group rounded-lg border border-outline-gray-2 bg-surface-gray-1"
     >
       <summary
-        class="flex min-h-[36px] cursor-pointer list-none items-center gap-2 rounded-lg px-3 text-sm text-ink-gray-8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight [&::-webkit-details-marker]:hidden"
+        class="flex min-h-[44px] cursor-pointer list-none items-center gap-2 rounded-lg px-3 text-sm text-ink-gray-8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight [&::-webkit-details-marker]:hidden"
       >
         <LucideChevronRight
           class="size-4 shrink-0 text-ink-gray-5 transition-transform group-open:rotate-90"
@@ -113,12 +113,14 @@ const INTENT_LABELS: Record<string, string> = {
   None: __("None yet"),
 };
 
-const missed = computed(() => props.entry.status !== "answered");
+// only an explicit missed status is a missed call; an unknown one stays neutral
+const missed = computed(() => props.entry.status === "missed");
 
 const title = computed(() => {
   const incoming = props.entry.direction === "incoming";
   if (props.entry.status === "voicemail") return __("Voicemail");
   if (missed.value) return incoming ? __("Missed call") : __("Unanswered call");
+  if (!props.entry.direction) return __("Call");
   return incoming ? __("Incoming call") : __("Outgoing call");
 });
 

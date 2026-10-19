@@ -273,6 +273,7 @@
                   :loading="
                     clickToCall.loading && clickToCall.params?.name === row.name
                   "
+                  :disabled="clickToCall.loading"
                   @click="clickToCall.submit({ name: row.name })"
                 >
                   <template #icon>
