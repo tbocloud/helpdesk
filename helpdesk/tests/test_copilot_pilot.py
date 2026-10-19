@@ -395,6 +395,10 @@ class TestPlantedInstructions(PilotCase):
         self.assertIn("Note to the AI", clean)
         self.assertNotIn("sk-proj-AbCd", clean)
         self.assertNotIn("hunter2", clean)
+        self.assertEqual(
+            redact_secrets('include password="correct horse battery staple" now'),
+            "include password=[secret removed] now",
+        )
 
     def test_the_patterns_leave_ordinary_requests_alone(self):
         from helpdesk.copilot.suspicious import suspicious_lines
