@@ -41,6 +41,8 @@ and sending `acting_user`:
 | `request_approval(name, reason)` | `hub_proposals.request_approval` (reason required here too) |
 | `send_proposal(name, recipients, message, attach_pdf)` | `hub_proposals.send_proposal` |
 | `create_revision(name)` | `hub_proposals.create_revision` |
+| `upload_proposal_image(name, filename, content)` | `hub_proposals.upload_proposal_image` (`content` base64; refused here above 5 MB or when it isn't base64, before anything is sent) |
+| `set_default_letter_head(letter_head)` | `hub_proposals.set_default_letter_head` (editors only, checked there) |
 | `save_template(data)` | `hub_proposals.save_template` |
 | `get_rate_card`, `save_rate_card(rows)`, `set_segment_rate(item_code, rate, segment)` | `hub_leads.*` of the same names |
 
@@ -48,6 +50,14 @@ and sending `acting_user`:
 proposals proxies share the leads call and its error mapping ([leads.md](leads.md) "Errors
 people see"): the ERP site's own reason (a refused send, a segment move, a discount above the
 band) reaches the page.
+
+Every proxy that answers with a proposal runs its `letter_head_preview` HTML through Frappe's
+`sanitize_html` once more (the ERP site already did), because the preview renders it.
+
+**Images** stay private on the ERP site (Files attached to the proposal). The builder and the
+preview load them straight from the ERP site's token-gated link (`image_url`,
+`proposal_page.image`), so the hub stores and proxies no image bytes except on upload, and the
+API key never reaches the browser.
 
 ## The screens
 
@@ -72,11 +82,20 @@ notes) show as toasts, and the builder opens. The timeline shows proposals as "<
   the limit or waiting for approval, no outgoing email account, validity passed, …).
 - **With the client** (`ProposalTracking.vue`, once sent): sent on and to, views, last opened,
   accepted or declined with who and their reason, and the client's link with **Copy link**.
-- **Details:** title, valid till and theme (TBO Teal or Graphite, `TabButtons`).
+- **Details:** title, valid till, theme (TBO Teal or Graphite, `TabButtons`) and **Letter
+  head**: "Default (<name>)" or any Letter Head on the ERP site (`letter_head`; blank: the
+  default). With no Letter Head on the ERP site at all, editors see a warning instead (the page
+  then shows only the company's logo).
 - **Blocks** (`ProposalBlocks.vue`): ordered cards with **Move up**, **Move down** and
   **Remove** (named buttons; the keyboard stays on the block that moved), a heading and the
   text, whose placeholder is the template's guidance for that block. **Add a block** picks the
   type. A blank line starts a paragraph and "- " a list item, as on the client's page.
+- **Images** (`ProposalImageField.vue`): an **Image** block (an optional heading, the image,
+  **Alt text** (required), an optional caption and **Width** Full / Half) and a cover image on
+  the **Cover** block. **Upload image** / **Replace** opens the file picker (PNG, JPEG or WebP
+  up to 5 MB, checked in the browser first and by the ERP site by content), **Remove** takes it
+  out; a thumbnail, the button's loading state and the error in words. Uploading only adds the
+  file; **Save changes** puts it in the proposal.
 - **Pricing block** (`ProposalPricingSummary.vue`): the lead's segment and its discount band,
   the quotation (name, status, lines, discount and total), and when it is above the limit a
   warning with **Request approval** (a reason, then the next level up decides on the ERP site
@@ -87,8 +106,9 @@ notes) show as toasts, and the builder opens. The timeline shows proposals as "<
   quotation on the ERP site (revising it first if it was already sent).
 - **Versions:** every version of the proposal, the current one marked.
 - **What the client sees** (`ProposalPreview.vue`): the page drawn live from the editor in the
-  chosen theme, empty blocks left out as on the real page. Side by side from `xl`, stacked
-  below.
+  chosen theme, with the saved letter head's header and footer (`LetterHeadPart.vue`; a newly
+  picked one shows once saved) and the images, empty blocks left out as on the real page. Side
+  by side from `xl`, stacked below.
 - **Send dialog:** To (the lead's email, or where it last went), an optional message (blank: a
   standard greeting) and **Attach the PDF too**; **Send proposal**. The ERP site emails it and
   records it on the lead.
@@ -106,6 +126,9 @@ them on the ERP site.
 - **Service rates:** the rate of each service on the selling list or on a segment's own list
   (`TabButtons` for the list); a segment without a list of its own has nothing to edit there.
 - **Save changes** saves the card and every changed rate.
+- **Proposal letter head:** the default letter head (TBO Smart Settings → Proposal letter head
+  on the ERP site): "The one marked default (<name>)" or any Letter Head; saved with **Save
+  changes**, editors only. With no Letter Head on the ERP site, a warning says to add one.
 - **Proposal templates:** the templates (disabled ones greyed) and **New template**; a template
   opens `ProposalTemplateEditor.vue`: Enabled, name, solution type, description, default
   packages and the blocks (the same block editor, with each block's guidance and default text).
@@ -116,4 +139,5 @@ them on the ERP site.
 `lead_paths`, `lead_error`): only people who use Leads; reads GET and writes POST to the
 proposals API as the signed-in person, with the arguments trimmed and typed; the rate card on
 the leads API; a reason required for an approval request; the ERP site's reason reaching the
-page.
+page; an image upload checked here (size, base64, Leads users only) and then posted on; the
+default letter head set on the ERP site; the letter head's HTML sanitised for the preview.

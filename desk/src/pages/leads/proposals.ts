@@ -22,12 +22,36 @@ export type SectionType =
   | "Timeline"
   | "Pricing"
   | "Terms"
+  | "Image"
   | "Custom";
+
+/** Blocks that may carry an image: an Image block's picture, a Cover's cover image. */
+export const IMAGE_BLOCKS: SectionType[] = ["Cover", "Image"];
 
 export interface ProposalSection {
   section_type: SectionType;
   heading?: string | null;
   body?: string | null;
+  /** a private File of the proposal on the ERP site */
+  image?: string | null;
+  /** the token-gated link the preview loads it from */
+  image_url?: string | null;
+  image_alt?: string | null;
+  image_caption?: string | null;
+  image_size?: "Full" | "Half";
+}
+
+/** A letter head part: an image, or HTML sanitised on the ERP site and the hub. */
+export interface LetterHeadPart {
+  image?: string;
+  align?: "left" | "center" | "right";
+  html?: string;
+}
+
+export interface LetterHeadPreview {
+  name: string;
+  header: LetterHeadPart | null;
+  footer: LetterHeadPart | null;
 }
 
 export interface TemplateSection extends ProposalSection {
@@ -52,6 +76,11 @@ export interface ProposalOptions {
   packages?: string[];
   section_types?: SectionType[];
   themes?: string[];
+  letter_heads?: { name: string; is_default: number }[];
+  /** what a proposal without its own pick uses; null: the site has none */
+  default_letter_head?: string | null;
+  /** TBO Smart Settings → Proposal letter head; null: the one marked default */
+  proposal_letter_head?: string | null;
 }
 
 /** A row of the lead's proposals (get_lead's `proposals`). */
@@ -121,6 +150,9 @@ export interface Proposal {
   template?: string | null;
   status: ProposalStatus;
   theme: string;
+  /** the proposal's own letter head; null: the default */
+  letter_head?: string | null;
+  letter_head_preview?: LetterHeadPreview | null;
   valid_till?: string | null;
   sections: ProposalSection[];
   quotation: ProposalQuotation | null;
@@ -190,6 +222,7 @@ export const SECTION_LABELS: Record<SectionType, string> = {
   Timeline: __("Timeline"),
   Pricing: __("Pricing"),
   Terms: __("Terms"),
+  Image: __("Image"),
   Custom: __("Custom"),
 };
 
