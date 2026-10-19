@@ -116,7 +116,7 @@ def fetch(start, end) -> dict:
             f"{API}.get_sales_activity", from_date=str(start), to_date=str(end)
         )
     except CRMError as e:
-        return unavailable(str(friendly_error(e, client.base)))
+        return unavailable(str(friendly_error(e, client)))
     result = result if isinstance(result, dict) else {}
     return {
         "status": OK,

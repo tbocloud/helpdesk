@@ -417,7 +417,7 @@ const extraChips = computed(() => {
           )}`
         : PERIOD_LABELS[extra.period || "month"];
     chips.push(
-      ["stale", "overdue", "hot"].includes(extra.metric)
+      ["stale", "overdue", "hot", "open"].includes(extra.metric)
         ? label
         : `${label}, ${when}`
     );

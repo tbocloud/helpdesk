@@ -79,6 +79,26 @@
     </div>
 
     <template v-else>
+      <!-- a failed update keeps the last numbers, and says so -->
+      <div
+        v-if="overview.error"
+        role="alert"
+        class="flex flex-wrap items-center gap-3 rounded-xl border border-outline-gray-2 bg-surface-base px-4 py-3"
+      >
+        <LucideCircleAlert
+          class="size-4 shrink-0 text-danger"
+          aria-hidden="true"
+        />
+        <p class="min-w-0 flex-1 text-p-sm text-ink-gray-8">
+          {{
+            __(
+              "Couldn't update the overview: {0} These numbers may be out of date.",
+              errorText(overview.error, __("Check your connection."))
+            )
+          }}
+        </p>
+        <Button :label="__('Try again')" @click="overview.reload()" />
+      </div>
       <p class="text-p-sm text-ink-gray-6">
         {{ periodText }}
         <span v-if="overview.loading" class="sr-only" aria-live="polite">{{
@@ -456,7 +476,7 @@
                   >{{ row.new }}</router-link
                 >
                 <router-link
-                  :to="fieldLink(block.field, row.value)"
+                  :to="fieldLink(block.field, row.value, 'open')"
                   class="num-link w-10 text-right"
                   :aria-label="__('{0} open', String(row.open))"
                   >{{ row.open }}</router-link
@@ -539,14 +559,14 @@ const OWNER_COLUMNS: {
     | "won"
     | "open";
   label: string;
-  metric?: LeadMetric;
+  metric: LeadMetric;
 }[] = [
   { key: "new", label: __("New"), metric: "new" },
   { key: "contacted", label: __("Contacted"), metric: "contacted" },
   { key: "meetings_held", label: __("Meetings"), metric: "meetings" },
   { key: "quotations_sent", label: __("Proposals"), metric: "quotations" },
   { key: "won", label: __("Won"), metric: "won" },
-  { key: "open", label: __("Open") },
+  { key: "open", label: __("Open"), metric: "open" },
 ];
 const BREAKDOWNS = [
   {
@@ -706,12 +726,15 @@ function stageLink(stage: string): RouteLocationRaw {
   };
 }
 
-function ownerLink(user: string, metric?: LeadMetric): RouteLocationRaw {
+function ownerLink(user: string, metric: LeadMetric): RouteLocationRaw {
   return {
     name: "Leads",
-    query: metric
-      ? { view: "all", owner: user, metric, ...periodQuery() }
-      : { view: "all", owner: user },
+    query: {
+      view: "all",
+      owner: user,
+      metric,
+      ...(metric === "open" ? {} : periodQuery()),
+    },
   };
 }
 
@@ -726,7 +749,9 @@ function fieldLink(
       view: "all",
       [field]: value,
       owner: owner.value || undefined,
-      ...(metric ? { metric, ...periodQuery() } : {}),
+      ...(metric
+        ? { metric, ...(metric === "open" ? {} : periodQuery()) }
+        : {}),
     },
   };
 }

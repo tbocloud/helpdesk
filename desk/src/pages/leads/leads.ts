@@ -147,7 +147,8 @@ export type LeadMetric =
   | "lost"
   | "stale"
   | "overdue"
-  | "hot";
+  | "hot"
+  | "open";
 
 export const METRIC_LABELS: Record<LeadMetric, string> = {
   new: __("New leads"),
@@ -159,6 +160,7 @@ export const METRIC_LABELS: Record<LeadMetric, string> = {
   stale: __("Gone quiet"),
   overdue: __("Overdue follow-ups"),
   hot: __("Hot leads"),
+  open: __("Open leads"),
 };
 
 interface OverviewBreakdown {
