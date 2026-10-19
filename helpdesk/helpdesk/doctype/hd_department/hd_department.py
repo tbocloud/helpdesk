@@ -10,10 +10,29 @@ from frappe.model.document import Document
 from frappe.query_builder.functions import Max
 
 # TBO's departments, in the order the owner wants them listed
-DEFAULT_DEPARTMENTS = ("ERP", "Digital", "Creative", "GrowthX", "Internal / R&D")
-# the owner's two main groups: ERP with GrowthX and Internal / R&D, Digital with
-# Creative (the Scoreboard ranks each group as well as each department)
-DEFAULT_GROUPS = {"GrowthX": "ERP", "Internal / R&D": "ERP", "Creative": "Digital"}
+DEFAULT_DEPARTMENTS = (
+    "ERP",
+    "Digital",
+    "Creative",
+    "GrowthX",
+    "Internal / R&D",
+    "Web Development",
+    "Sales",
+    "CRM",
+)
+# added on 2026-10-16 (the owner: Web Development is part of Digital, CRM part of
+# Sales); the patch that seeds them on existing sites adds only these
+SALES_AND_WEB_DEPARTMENTS = ("Web Development", "Sales", "CRM")
+# the owner's main groups: ERP with GrowthX and Internal / R&D, Digital with
+# Creative and Web Development, Sales with CRM (the Scoreboard ranks each group as
+# well as each department)
+DEFAULT_GROUPS = {
+    "GrowthX": "ERP",
+    "Internal / R&D": "ERP",
+    "Creative": "Digital",
+    "Web Development": "Digital",
+    "CRM": "Sales",
+}
 
 
 class HDDepartment(Document):
@@ -60,13 +79,16 @@ class HDDepartment(Document):
         self.sort_order = (highest[0][0] or 0) + 1
 
 
-def ensure_default_departments() -> list[str]:
-    """Add the default departments a site doesn't have yet; returns the ones added.
+def ensure_default_departments(
+    names: tuple[str, ...] = DEFAULT_DEPARTMENTS
+) -> list[str]:
+    """Add the default departments (`names`) a site doesn't have yet, then the
+    default groups; returns the ones added.
 
     Existing departments (including renamed or deactivated ones) are left alone.
     """
     added = []
-    for name in DEFAULT_DEPARTMENTS:
+    for name in names:
         if frappe.db.exists("HD Department", name):
             continue
         frappe.get_doc({"doctype": "HD Department", "department_name": name}).insert(

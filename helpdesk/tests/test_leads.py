@@ -77,6 +77,42 @@ class TestLeads(FrappeTestCase):
             leads_api.list_leads(view="everything")
         self.assertEqual(self.crm.lead_calls, [])
 
+    def test_the_overview_is_read_as_the_signed_in_person(self):
+        self.crm.lead_answers["get_overview"] = {"totals": {"new": 3}}
+        self.as_bde()
+        result = leads_api.get_overview(period="week", owner="", from_date="x")
+        self.assertEqual(result["totals"]["new"], 3)
+        ((method, post, params),) = self.crm.lead_calls
+        self.assertEqual(
+            (method, post, params["acting_user"]), ("get_overview", False, BDE)
+        )
+        # dates go only with a custom period
+        self.assertEqual(
+            (params["period"], params["from_date"], params["owner"]),
+            ("week", None, None),
+        )
+        with self.assertRaises(frappe.ValidationError):
+            leads_api.get_overview(period="decade")
+        with self.assertRaises(frappe.ValidationError):
+            leads_api.get_overview(period="custom", from_date="2026-10-01")
+
+    def test_a_number_on_the_overview_opens_its_leads(self):
+        self.as_bde()
+        leads_api.list_leads(metric="won", period="quarter", source="Website")
+        leads_api.list_leads(period="quarter", temperature="Hot")
+        (_m, _p, first), (_m2, _p2, second) = self.crm.lead_calls
+        self.assertEqual(
+            (first["metric"], first["period"], first["source"]),
+            ("won", "quarter", "Website"),
+        )
+        # without a metric the period means nothing and isn't sent
+        self.assertEqual(
+            (second["metric"], second["period"], second["temperature"]),
+            (None, None, "Hot"),
+        )
+        with self.assertRaises(frappe.ValidationError):
+            leads_api.list_leads(metric="won", period="decade")
+
     def test_writes_are_posted_with_the_acting_user(self):
         self.as_bde()
         leads_api.create_lead({"lead_name": "Asha Traders"})

@@ -1,7 +1,7 @@
 # Departments and creative roles
 
-TBO is organised in five departments: **ERP**, **Digital**, **Creative**, **GrowthX** and
-**Internal / R&D**. Every project can belong to one, and the Projects page groups projects by
+TBO is organised in eight departments: **ERP**, **Digital**, **Creative**, **GrowthX**,
+**Internal / R&D**, **Web Development**, **Sales** and **CRM**. Every project can belong to one, and the Projects page groups projects by
 department. Project members can also hold creative and digital roles, and template tasks in
 the matching categories go to them.
 
@@ -142,8 +142,8 @@ through the same permissions, so they show up for the ERP team too.
 - **Project.custom_department**: Link → HD Department, defined in
   `helpdesk/setup/install.py` `get_custom_fields()` and applied on install and on every
   migrate. It is a standard filter.
-- **Seeding**: `ensure_default_departments()` (in `hd_department.py`) inserts any of the five
-  defaults that are missing and leaves existing, renamed or deactivated ones alone. It runs from
+- **Seeding**: `ensure_default_departments(names=DEFAULT_DEPARTMENTS)` (in `hd_department.py`)
+  inserts any of the defaults that are missing and leaves existing, renamed or deactivated ones alone. It runs from
   `after_install` and from the patch `helpdesk.patches.v16_0_2.seed_departments` for existing
   sites. Patches run once, so a default deleted later stays deleted.
 
@@ -205,8 +205,9 @@ also gives rough durations for designs and videos.
 
 ## Department groups
 
-TBO has two main departments: **ERP** (with **GrowthX** and **Internal / R&D** under it) and
-**Digital** (with **Creative**). A department can be **part of** a main department
+TBO has three main departments: **ERP** (with **GrowthX** and **Internal / R&D** under it),
+**Digital** (with **Creative** and **Web Development**) and **Sales** (with **CRM**; the
+owner, 2026-10-16). A department can be **part of** a main department
 (`HD Department.parent_department`); a main department and its sub-departments form a
 **group**, named after the main department.
 
@@ -225,14 +226,25 @@ TBO has two main departments: **ERP** (with **GrowthX** and **Internal / R&D** u
   department. Projects keep exactly one department, and the Projects page, the Overview
   filter and every other list still go by department.
 - **The walls are unchanged**: `HIDDEN_DEPARTMENTS` still names single departments (ERP,
-  Digital), so putting Creative in the Digital group doesn't hide Creative from ERP
-  Employees, and GrowthX stays visible to DM Employees.
+  Digital), so putting Creative or Web Development in the Digital group doesn't hide them
+  from ERP Employees, and GrowthX stays visible to DM Employees.
+- **No wall for Sales (decided 2026-10-19):** Sales and CRM are visible to everyone, like
+  Creative and GrowthX. Leads themselves never live in the hub (they are read live from the
+  ERP site, whose sales rules decide who sees which lead, [leads.md](leads.md)), so a wall
+  here would hide nothing; Sales projects and tasks, if any, are ordinary work.
 - **Setting the owner's groups**: `DEFAULT_GROUPS` in `hd_department.py`; `set_default_groups()`
-  puts GrowthX and Internal / R&D under ERP and Creative under Digital, only where a
+  puts GrowthX and Internal / R&D under ERP, Creative and Web Development under Digital and
+  CRM under Sales, only where a
   department has no group yet and both exist (a group someone set stays, and a renamed
   department is left alone). New sites get it on install (`ensure_default_departments`);
   existing sites from the patch `helpdesk.patches.v16_0_2.set_department_groups`, which runs
-  once on deploy.
+  once on deploy. Web Development, Sales and CRM came later: the patch
+  `helpdesk.patches.v16_0_2.seed_sales_departments` adds only those three when missing
+  (`ensure_default_departments(SALES_AND_WEB_DEPARTMENTS)`, so an older default someone
+  deleted stays deleted) and then fills the groups the same careful way.
+- **Where Sales counts**: salespeople's CRM activity is scored in **CRM**
+  ([team-dashboard.md](team-dashboard.md#sales)); Sales' own projects, if any, count in Sales
+  like any department.
 
 ## Department heads
 

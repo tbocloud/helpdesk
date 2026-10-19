@@ -68,6 +68,25 @@
                 >
                   {{ groupLine(row) }}
                 </span>
+                <!-- salespeople's CRM activity, read from the ERP site -->
+                <span
+                  v-if="row.sales"
+                  class="truncate text-xs tabular-nums text-ink-gray-6"
+                >
+                  {{ __("Sales: {0}", salesText(row.sales)) }}
+                </span>
+                <span
+                  v-else-if="salesMissing(row)"
+                  class="inline-flex items-start gap-1 text-xs text-ink-gray-6"
+                >
+                  <LucideCloudOff
+                    class="mt-0.5 size-3.5 shrink-0"
+                    aria-hidden="true"
+                  />
+                  <span class="min-w-0">{{
+                    __("Sales numbers missing: {0}", sales?.message || "")
+                  }}</span>
+                </span>
               </span>
               <LucideChevronRight
                 v-if="row.department"
@@ -171,19 +190,37 @@ import { __ } from "@/translation";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
 import LucideBuilding2 from "~icons/lucide/building-2";
 import LucideChevronRight from "~icons/lucide/chevron-right";
+import LucideCloudOff from "~icons/lucide/cloud-off";
 import LucideUser from "~icons/lucide/user";
 import {
   departmentLabel,
   hoursText,
+  salesText,
   weightText,
   type DepartmentRow,
+  type SalesStatus,
 } from "../teamDashboardMeta";
 
 const props = defineProps<{
   departments: DepartmentRow[];
   /** Each group's departments, the main one first. */
   groups: { group: string; departments: string[] }[];
+  /** whether the ERP site's sales numbers are in */
+  sales?: SalesStatus;
 }>();
+
+/** The sales department's row (and its group's) when the ERP site couldn't answer. */
+function salesMissing(row: DepartmentRow) {
+  const sales = props.sales;
+  if (!sales || sales.status !== "unavailable" || !row.department) return false;
+  if (row.department === sales.department) return true;
+  return (
+    row.kind === "group" &&
+    !!props.groups
+      .find((g) => g.group === row.department)
+      ?.departments.includes(sales.department)
+  );
+}
 const emit = defineEmits<{
   open: [department: string];
   openGroup: [group: string];

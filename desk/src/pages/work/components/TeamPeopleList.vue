@@ -79,6 +79,9 @@
                 </span>
                 <span class="block truncate text-xs text-ink-gray-5">
                   {{ departmentLabel(person.department) }}
+                  <template v-if="person.sales">
+                    · {{ salesText(person.sales) }}</template
+                  >
                 </span>
               </span>
               <span
@@ -256,6 +259,7 @@ import LucideUsers from "~icons/lucide/users";
 import {
   departmentLabel,
   hoursText,
+  salesText,
   weightText,
   type PersonMonth,
   type PersonRow,
