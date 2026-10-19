@@ -40,10 +40,10 @@ SECRET_SHAPES = [
         r"[A-Za-z0-9+/_=-]{32,}",  # any long opaque string: a token, a key, a signature
     )
 ]
-# the whole value: a quoted one with its spaces ("correct horse battery staple"), or a bare word
+# the whole value: a quoted one with its spaces ("correct horse battery staple"), or any bare word
 SECRET_ASSIGNMENT = re.compile(
     r"\b(password|passwd|secret|token|api[_-]?key|apikey|client[_-]?secret)\b(\s*[:=]\s*)"
-    r"(?:\"[^\"\n]*\"|'[^'\n]*'|[^\s\"']{4,})",
+    r"(?:\"[^\"\n]*\"|'[^'\n]*'|[^\s\"']+)",
     re.IGNORECASE,
 )
 

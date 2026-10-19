@@ -399,6 +399,9 @@ class TestPlantedInstructions(PilotCase):
             redact_secrets('include password="correct horse battery staple" now'),
             "include password=[secret removed] now",
         )
+        self.assertEqual(
+            redact_secrets("copy password=abc"), "copy password=[secret removed]"
+        )
 
     def test_the_patterns_leave_ordinary_requests_alone(self):
         from helpdesk.copilot.suspicious import suspicious_lines
