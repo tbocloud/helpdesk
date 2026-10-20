@@ -294,7 +294,11 @@
                   − {{ money(quotation.discount_amount, quotation.currency) }}
                 </td>
               </tr>
-              <template v-if="quotation.total_taxes_and_charges">
+              <template
+                v-if="
+                  quotation.taxes?.length || quotation.total_taxes_and_charges
+                "
+              >
                 <tr>
                   <td class="pt-1">{{ __("Net total") }}</td>
                   <td class="pt-1 text-right font-mono tabular-nums">

@@ -67,7 +67,9 @@
         </div>
       </dl>
       <p
-        v-if="!q.total_taxes_and_charges"
+        v-if="
+          !q.taxes_and_charges && !q.taxes?.length && !q.total_taxes_and_charges
+        "
         class="flex items-start gap-1.5 text-p-sm text-ink-gray-6"
       >
         <LucideInfo class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
