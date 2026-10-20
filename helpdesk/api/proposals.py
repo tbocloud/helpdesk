@@ -90,7 +90,7 @@ def create_proposal(
 
 
 # the documents made from an accepted one (TBO Smart's docs/client-documents.md)
-DOCUMENT_TYPES = ("Quotation", "Work Order", "BRD")
+DOCUMENT_TYPES = ("Quotation", "Work Order", "BRD", "SRS")
 
 
 @frappe.whitelist(methods=["POST"])
@@ -99,7 +99,7 @@ def create_document(source: str, document_type: str) -> dict:
     (a quotation from a proposal, a project agreement from a quotation)."""
     require_leads()
     if document_type not in DOCUMENT_TYPES:
-        frappe.throw(_("Pick a quotation, a project agreement or a BRD."))
+        frappe.throw(_("Pick a quotation, a project agreement, a BRD or an SRS."))
     result = (
         proposals(
             "create_document", post=True, source=source, document_type=document_type

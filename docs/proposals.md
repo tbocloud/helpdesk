@@ -18,11 +18,11 @@ library and section libraries on the ERP site fill every factual section at no A
 AI call writes the narrative. Presales should not have to type content.
 
 The ERP side's spec is TBO Smart's `docs/proposals.md` (v2.1) and, for the documents after an
-accepted proposal, `docs/client-documents.md` (v1.1); its contract is `docs/hub-proposals-api.md`
+accepted proposal, `docs/client-documents.md` (v1.2); its contract is `docs/hub-proposals-api.md`
 (v2.2).
 
 **The documents after the proposal** (the owner's chain of 2026-10-19): **Proposal → Quotation →
-Project Agreement / Work Order → BRD** (the SRS, implementation plan, project and UAT sign-off
+Project Agreement / Work Order → BRD → SRS** (the implementation plan, project and UAT sign-off
 follow). Each is a TBO Proposal of its own type on the ERP site, made from the accepted one before
 it and pre-filled from it, so the same builder, preview, Share, Send, revisions and client page
 serve them all. Each type has its own switch in TBO Smart Settings, off by default.
@@ -53,7 +53,7 @@ sending `acting_user`; each maps 1:1 to `tbo_smart.api.hub_proposals.<same name>
 | `price_from_modules(name)`, `get_pricing_form(name)`, `save_pricing(name, values)`, `request_approval(name, reason)` | A reason is required here too |
 | `share_proposal(name)`, `send_proposal(name, recipients, message, attach_pdf)`, `create_revision(name)` | |
 | `save_questions(name, questions)`, `share_questionnaire(name)`, `send_questionnaire(name, recipients, message)`, `apply_answers(name)` | A BRD's client questionnaire (the questions as a list; blank recipients and message trimmed) |
-| `create_document(source, document_type)`, `get_document_chain(lead)` | The next document (`Quotation`, `Work Order`, `BRD`; anything else refused here) from the accepted `source`; the lead's chain. `get_lead` carries the chain too (`documents`) |
+| `create_document(source, document_type)`, `get_document_chain(lead)` | The next document (`Quotation`, `Work Order`, `BRD`, `SRS`; anything else refused here) from the accepted `source`; the lead's chain. `get_lead` carries the chain too (`documents`) |
 | `upload_proposal_image(name, filename, content)`, `use_library_image(name, image)` | Images over 5 MB or not base64 are refused here before anything is sent |
 | `save_template(data)`, `set_default_letter_head(letter_head)` | |
 | `get_proposal_library()`, `save_library_record(kind, data)`, `delete_library_record(kind, name)`, `upload_library_image(filename, content, data)`, `draft_library_module(module)` | Editors only (checked on the ERP site) |
@@ -70,12 +70,12 @@ so the API key never reaches the browser.
 ### Lead page: Documents (`LeadDocuments.vue`)
 
 Across the top of the lead, while at least the Quotation is switched on: each switched-on type in
-order (Proposal → Quotation → Project Agreement), each with its status in words (Draft, Sent,
-Viewed, Accepted / Signed, Declined, Expired, or Not started), a check when accepted, a step
+order (Proposal → Quotation → Project Agreement → BRD → SRS), each with its status in words
+(Draft, Sent, Viewed, Accepted / Signed / Approved, Declined, Expired, or Not started), a check when accepted, a step
 number otherwise, and for a priced one in progress its quotation's state ("Price: Pending
 Approval"). A step with a document opens it. The **one primary button** is the next action from
-the ERP site: *New proposal*, *Create quotation* / *Create project agreement* (made on the ERP site
-from the accepted one, then opened; its warnings shown) or *Continue the …* for the one in
+the ERP site: *New proposal*, *Create quotation* / *Create project agreement* / *Create BRD* /
+*Create SRS* (made on the ERP site from the accepted one, then opened; its warnings shown) or *Continue the …* for the one in
 progress; "Every document is accepted" when the chain is done. The step it points at is
 brand-outlined. One column on a phone; 44px targets.
 
@@ -246,6 +246,14 @@ answered questions can't be changed. **Share with the client** copies the questi
 client has sent new answers, the primary **Update from n new answers** rebuilds only the sections
 they belong to (the ERP site rewrites the narrative ones in one small AI call) and says which.
 Closed once the BRD is approved, declined or revised.
+
+### The SRS in the builder
+
+An SRS has a **Module Specification** section a module, headed by the module's name (and one for
+the customisations), with its numbered requirements (FR-ACC-01 …) and acceptance criteria as a
+table; regenerating one is one small AI call for that module on the ERP site, *Reset to library*
+none. The module library editor has each module's SRS text (requirements "requirement | how the
+client accepts it", roles, screens and fields, validations, notifications).
 
 ### Settings → Rates and proposals (`components/Settings/Sales/`)
 
