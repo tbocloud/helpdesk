@@ -37,7 +37,10 @@ class Project(Document):
         the ERP site about the plan as that maker."""
         before = None if self.is_new() else self.get_doc_before_save()
         for field in PLAN_LINK:
-            if self.get(field) != (before.get(field) if before else None):
+            # an unset link reads as None or "" depending on where the doc came from
+            if (self.get(field) or None) != (
+                (before.get(field) if before else None) or None
+            ):
                 frappe.throw(
                     _("The project's plan link is set only by Create project."),
                     frappe.PermissionError,
