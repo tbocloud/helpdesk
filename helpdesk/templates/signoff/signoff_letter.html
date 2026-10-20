@@ -27,7 +27,10 @@
   </tr>
   {% endif %} {% if trainer_name %}
   <tr>
-    <th>{{ _("Trainer") }}</th>
+    <th>
+      {% if doc.signoff_type == "UAT" %}{{ _("Tested with") }}{% else %}{{
+      _("Trainer") }}{% endif %}
+    </th>
     <td>{{ trainer_name|e }}</td>
   </tr>
   {% endif %}
