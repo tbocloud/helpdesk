@@ -309,21 +309,85 @@ def page_data(token: str) -> dict:
     doc = find_signoff(token)
     state = link_state(doc)
     if state != "open":
-        return {"state": state}
+        return {"state": state, "words": words(None)}
     if not get_session(doc):
         return {
             "state": "code",
             "module_title": doc.module_title,
             "project_name": doc.project_name or doc.project,
             "email": mask_email(doc.signatory_email),
+            "words": words(doc),
         }
-    return {"state": "open", "signoff": customer_view(doc)}
+    return {"state": "open", "signoff": customer_view(doc), "words": words(doc)}
+
+
+def words(doc) -> dict:
+    """What the page calls things: a training sign-off's Done / Not clear / Escalate, or a UAT's
+    Pass / Fail / Blocker (docs/project-signoff.md, UAT)."""
+    if doc and doc.is_uat():
+        return {
+            "title": _("User acceptance sign-off"),
+            "done": _("Pass"),
+            "unclear": _("Fail"),
+            "escalate": _("Blocker"),
+            "trainer": _("Tested with"),
+            "date": _("Tested on"),
+            "signed_heading": _("User acceptance signed off"),
+            "sign_heading": _("Sign off the acceptance tests"),
+            "confirm": _(
+                "I confirm that we tested the system as listed above and accept it."
+            ),
+            "sign_button": _("Sign off UAT"),
+            "followup_label": _(
+                "What went wrong? Our team fixes it and asks you to test again."
+            ),
+            "escalate_label": _(
+                "What blocks you? It goes to our project managers at once."
+            ),
+            "send_button": _("Report the issue"),
+            "with_team": _("Open issue: with our team"),
+            "escalated_status": _("Blocker: our team will contact you"),
+            "followed_up": _("Our team fixed this."),
+            "followed_up_note": _("Our team fixed this: {0}"),
+            "again": _("Please test it again."),
+            "locked_one": _("Sign-off opens once every test has passed. 1 test left."),
+            "locked_many": _(
+                "Sign-off opens once every test has passed. {0} tests left."
+            ),
+        }
+    return {
+        "title": _("Training sign-off"),
+        "done": _("Done"),
+        "unclear": _("Not clear"),
+        "escalate": _("Escalate"),
+        "trainer": _("Trainer"),
+        "date": _("Training date"),
+        "signed_heading": _("Training signed off"),
+        "sign_heading": _("Sign off the training"),
+        "confirm": _(
+            "I confirm that the training listed above has been completed to our satisfaction."
+        ),
+        "sign_button": _("Sign off training"),
+        "followup_label": _("What needs explaining? Your trainer will follow up."),
+        "escalate_label": _(
+            "What should we escalate? It goes to your trainer and our project managers."
+        ),
+        "send_button": _("Send to your trainer"),
+        "with_team": _("With your trainer"),
+        "escalated_status": _("Escalated: our team will contact you"),
+        "followed_up": _("Your trainer has followed up on this."),
+        "followed_up_note": _("Your trainer followed up: {0}"),
+        "again": _("Please answer it again."),
+        "locked_one": _("Sign-off opens once every item is Done. 1 item left."),
+        "locked_many": _("Sign-off opens once every item is Done. {0} items left."),
+    }
 
 
 def customer_view(doc) -> dict:
     """Only what the customer needs: no tasks, internal notes, other sign-offs or audit details."""
     return {
         "module_title": doc.module_title,
+        "signoff_type": doc.signoff_type,
         "project_name": doc.project_name or doc.project,
         "customer_name": doc.customer_name(),
         "trainer_name": get_fullname(doc.trainer) if doc.trainer else None,

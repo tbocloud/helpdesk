@@ -15,12 +15,15 @@ def get_context(context):
     context.favicon = config.favicon
     context.brand_name = config.brand_name or "TBO"
     token = frappe.form_dict.get("token") or ""
+    data = page_data(token)
+    # a training sign-off's page, or a UAT's (signoff_portal.words)
+    context.page_title = data["words"]["title"]
     context.page_data = to_script_json(
         {
             # a signed-in desk user opening the page still needs CSRF on POSTs
             "csrf_token": get_csrf_token() if frappe.session.user != "Guest" else "",
             "token": token,
-            **page_data(token),
+            **data,
         }
     )
     return context

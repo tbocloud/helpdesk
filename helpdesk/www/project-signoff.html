@@ -1,5 +1,5 @@
 {% extends "helpdesk/templates/portal_base.html" %} {% block title %}{{
-_("Training sign-off") }} · {{ brand_name }}{% endblock %} {% block head %}
+page_title }} · {{ brand_name }}{% endblock %} {% block head %}
 <!-- the link's token is in the URL; never send it on to another site -->
 <meta name="referrer" content="no-referrer" />
 {% endblock %} {% block style %}
@@ -369,10 +369,12 @@ _("Training sign-off") }} · {{ brand_name }}{% endblock %} {% block head %}
       badge: '<path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z"/><path d="m9 12 2 2 4-4"/>',
     });
 
+    // the words for this kind of sign-off (training or UAT), from signoff_portal.words
+    const W = DATA.words;
     const T = {
-      done: {{ _("Done")|tojson }},
-      unclear: {{ _("Not clear")|tojson }},
-      escalate: {{ _("Escalate")|tojson }},
+      done: W.done,
+      unclear: W.unclear,
+      escalate: W.escalate,
       saved: {{ _("Saved")|tojson }},
     };
     // the server's response values, and how each one looks
@@ -394,7 +396,7 @@ _("Training sign-off") }} · {{ brand_name }}{% endblock %} {% block head %}
     }
 
     function brandBar(extra) {
-      return `<div class="brandbar"><b>${esc(BRAND)}</b><span class="grow">{{ _("Training sign-off") }}</span>${extra || ""}</div>`;
+      return `<div class="brandbar"><b>${esc(BRAND)}</b><span class="grow">${esc(W.title)}</span>${extra || ""}</div>`;
     }
 
     // ------------------------------------------------------------ states --
@@ -504,8 +506,8 @@ _("Training sign-off") }} · {{ brand_name }}{% endblock %} {% block head %}
         <p class="eyebrow">${esc(view.project_name)} · ${esc(view.customer_name)}</p>
         <h1 class="page-title">${esc(view.module_title)}</h1>
         <dl class="facts">
-          ${view.trainer_name ? `<div><dt>{{ _("Trainer") }}</dt><dd>${esc(view.trainer_name)}</dd></div>` : ""}
-          ${view.training_date ? `<div><dt>{{ _("Training date") }}</dt><dd class="num">${esc(view.training_date)}</dd></div>` : ""}
+          ${view.trainer_name ? `<div><dt>${esc(W.trainer)}</dt><dd>${esc(view.trainer_name)}</dd></div>` : ""}
+          ${view.training_date ? `<div><dt>${esc(W.date)}</dt><dd class="num">${esc(view.training_date)}</dd></div>` : ""}
           <div><dt>{{ _("Signatory") }}</dt><dd>${esc(view.signatory_name)}</dd></div>
         </dl>
       </header>`;
@@ -513,7 +515,7 @@ _("Training sign-off") }} · {{ brand_name }}{% endblock %} {% block head %}
       if (signed) {
         html += `<section class="card done-card" aria-labelledby="h-signed">
           <div class="head">${icon("badge")}<div>
-            <h2 id="h-signed">{{ _("Training signed off") }}</h2>
+            <h2 id="h-signed">${esc(W.signed_heading)}</h2>
             <p class="muted">${esc({{ _("Signed by {0}, {1} on {2}. Thank you.")|tojson }}.replace("{0}", signed.name).replace("{1}", signed.designation).replace("{2}", signed.on))}</p>
           </div></div>
           ${signed.has_pdf ? `<a class="btn" href="/api/method/helpdesk.api.signoff_portal.download_pdf?token=${encodeURIComponent(DATA.token)}">${icon("download")} {{ _("Download the signed record") }}</a>` : ""}
@@ -574,24 +576,24 @@ _("Training sign-off") }} · {{ brand_name }}{% endblock %} {% block head %}
       if (item.clarified && item.response === "Pending") {
         below += `<p class="note">${icon("info")} ${
           item.clarification_note
-            ? esc({{ _("Your trainer followed up: {0}")|tojson }}.replace("{0}", item.clarification_note))
-            : {{ _("Your trainer has followed up on this.")|tojson }}
-        } {{ _("Please answer it again.") }}</p>`;
+            ? esc(W.followed_up_note.replace("{0}", item.clarification_note))
+            : esc(W.followed_up)
+        } ${esc(W.again)}</p>`;
       }
       if (draft) {
         const escalate = draft.response === "Escalated";
         below += `<form class="followup" data-followup="${id}">
-          <label for="fu-${id}">${escalate ? {{ _("What should we escalate? It goes to your trainer and our project managers.")|tojson }} : {{ _("What needs explaining? Your trainer will follow up.")|tojson }}}</label>
+          <label for="fu-${id}">${esc(escalate ? W.escalate_label : W.followup_label)}</label>
           <textarea class="input" id="fu-${id}" required maxlength="1000">${esc(draft.comment || "")}</textarea>
           <div class="row">
-            <button type="submit" class="btn primary">${escalate ? {{ _("Escalate")|tojson }} : {{ _("Send to your trainer")|tojson }}}</button>
+            <button type="submit" class="btn primary">${esc(escalate ? W.escalate : W.send_button)}</button>
             <button type="button" class="btn ghost" data-cancel="${id}">{{ _("Cancel") }}</button>
           </div>
         </form>`;
       } else if (followUp) {
         below += `<p class="said"><b>{{ _("You said:") }}</b> ${esc(item.customer_comment)}</p>
           <p class="item-status"><span class="pill ${item.response === "Escalated" ? "danger" : "warning"}">${icon(item.response === "Escalated" ? "alert" : "help")} ${
-            item.response === "Escalated" ? {{ _("Escalated: our team will contact you")|tojson }} : {{ _("With your trainer")|tojson }}
+            esc(item.response === "Escalated" ? W.escalated_status : W.with_team)
           }</span></p>`;
       } else if (item.response === "Done") {
         if (commenting.has(item.name) && !signed) {
@@ -623,22 +625,19 @@ _("Training sign-off") }} · {{ brand_name }}{% endblock %} {% block head %}
       if (c.done !== c.total) {
         const left = c.total - c.done;
         return `<div class="card locked">${icon("lock")}<p style="margin:0">${esc(
-          (left === 1
-            ? {{ _("Sign-off opens once every item is Done. 1 item left.")|tojson }}
-            : {{ _("Sign-off opens once every item is Done. {0} items left.")|tojson }}
-          ).replace("{0}", left)
+          (left === 1 ? W.locked_one : W.locked_many).replace("{0}", left)
         )}</p></div>`;
       }
       return `<form class="card sign" id="f-sign" novalidate aria-labelledby="h-sign">
-        <h2 id="h-sign">{{ _("Sign off the training") }}</h2>
+        <h2 id="h-sign">${esc(W.sign_heading)}</h2>
         <p class="muted">{{ _("Your name, designation and the time of signing are recorded with this sign-off, and a PDF copy is emailed to you.") }}</p>
         <div class="grid2">
           <div><label for="in-name">{{ _("Full name") }}</label><input class="input" id="in-name" autocomplete="name" maxlength="140" required value="${esc(view.signatory_name || "")}"></div>
           <div><label for="in-designation">{{ _("Designation") }}</label><input class="input" id="in-designation" autocomplete="organization-title" maxlength="140" required></div>
         </div>
-        <label class="check"><input type="checkbox" id="in-confirm" required> <span>{{ _("I confirm that the training listed above has been completed to our satisfaction.") }}</span></label>
+        <label class="check"><input type="checkbox" id="in-confirm" required> <span>${esc(W.confirm)}</span></label>
         <p class="msg err" id="m-sign" role="alert"></p>
-        <button class="btn primary" type="submit">{{ _("Sign off training") }}</button>
+        <button class="btn primary" type="submit">${esc(W.sign_button)}</button>
       </form>`;
     }
 
@@ -778,11 +777,11 @@ _("Training sign-off") }} · {{ brand_name }}{% endblock %} {% block head %}
             view = await call("sign", { token: DATA.token, full_name: name, designation, confirm: 1 });
             render();
             window.scrollTo({ top: 0 });
-            say({{ _("Training signed off")|tojson }});
+            say(W.signed_heading);
           } catch (err) {
             msg.textContent = err.message;
             submit.disabled = false;
-            submit.textContent = {{ _("Sign off training")|tojson }};
+            submit.textContent = W.sign_button;
           }
         });
       }

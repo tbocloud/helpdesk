@@ -8,6 +8,9 @@ once they have explained, the item goes back to the customer. When every item is
 customer signs, a PDF is saved on the project, and when every module of the project is signed
 a project completion letter is generated.
 
+A **UAT sign-off** is the same feature for the client's acceptance tests at delivery (see
+[UAT](#uat)): its items are the test cases of the project's SRS, answered Pass / Fail / Blocker.
+
 ## Decisions
 
 - **One sign-off per module / training, several per project.** Trainings happen on different
@@ -89,6 +92,33 @@ Item responses: **Pending**, **Done**, **Not clear**, **Escalated**.
    are written to the history; signature fields are cleared; the signed PDF stays on the
    project; the project's completion letter field is cleared. Signing again generates a new
    PDF (and a new completion letter once all are signed).
+
+## UAT
+
+For a project the hub made from an implementation plan on the ERP site (`custom_crm_plan`, see
+[proposals.md](proposals.md) "The project from the plan"), the Sign-off tab offers **New UAT
+sign-off** (`create_uat_signoff(project, signatory_contact, trainer)`, the same people as New
+sign-off). Extended, not duplicated: one doctype (**HD Project Signoff**, `signoff_type` Training
+or UAT, `crm_plan`), one portal, one flow.
+
+- **The tests**: the ERP site's `get_uat_cases` for the plan: **a test case for each functional
+  requirement of the approved SRS** (section = its module, question = "FR-ACC-01: <the
+  requirement>", help text = its steps and "Expected: <its acceptance criterion>"). A draft,
+  edited and sent like any sign-off. The calls to the ERP site are made on behalf of the
+  project's creator (the person who made it from the plan; the ERP site checks their rights:
+  `leads.call(..., acting_user=…)`), whoever acts here.
+- **Answers**: the same three, read as **Pass** (Done), **Fail** (Not clear) and **Blocker**
+  (Escalated). A Fail or Blocker needs a few words ("Say what went wrong, so we can fix it") and
+  becomes **an open issue**: a task "Fix: <test>" for the tester (Urgent and the managers told for
+  a Blocker, as an escalation). *Mark fixed* returns it to the client to test again. The list and
+  the page say "open issues" and "passed".
+- **Signing**: every test passed, then the same signature (name, designation, the tick "I confirm
+  that we tested the system as listed above and accept it"); the PDF "User acceptance sign-off" on
+  the project. A UAT is **not** in the training completion letter's roll-up.
+- **The ERP site is told**: signing (and reopening) queues `record_uat_on_erp` after the commit
+  (`record_uat` on the plan: Signed with the signer, which **starts the warranty** the day after
+  and completes the lead's chain), so a slow ERP site never holds up the client.
+- The portal's words come from `signoff_portal.words(doc)` (training or UAT), in `page_data`.
 
 ## Security
 
@@ -203,12 +233,13 @@ warehouses, Stock movements, Receipts and deliveries, Stock reports) and **HR & 
 
 `helpdesk/api/project_signoff.py` (desk):
 
-- `get_project_signoffs(project)` → `{signoffs, signed, total, completion_letter, can_create}`;
-  each sign-off has `total`, `done`, `follow_up`.
+- `get_project_signoffs(project)` → `{signoffs, signed, total, completion_letter, can_create,
+  can_create_uat}` (`signed` and `total` count the training sign-offs); each sign-off has
+  `signoff_type`, `total`, `done`, `follow_up`.
 - `get_signoff_form(project)` → `{customer, templates, team, contacts}`.
 - `get_signoff(signoff)` → the sign-off with items, history (newest first), counts,
   `link_open`, `can_manage`, `can_edit`.
-- POST: `create_signoff`, `update_signoff`, `send_signoff_link`, `revoke_signoff_link`,
+- POST: `create_signoff`, `create_uat_signoff(project, signatory_contact, trainer)`, `update_signoff`, `send_signoff_link`, `revoke_signoff_link`,
   `mark_item_clarified(signoff, item, note)`, `reopen_signoff(signoff, reason)`,
   `delete_signoff` (drafts only), `save_signoff_template`.
 - `get_signoff_templates()`, `get_signoff_template(template)`.
@@ -230,6 +261,9 @@ task and notifies, Escalate is urgent and reaches managers, escalating an open t
 it urgent and due tomorrow, Mark clarified returns the item
 and emails a new link, completing the task clarifies, signing needs all Done and the
 signatory, signing saves the PDF on the project and locks, reopen needs a reason and is
-logged, the completion letter once every sign-off is signed, and permissions (members view,
+logged, the completion letter once every sign-off is signed, a UAT from the plan's SRS (a test a
+requirement, read for the project's creator, Pass / Fail words, a Fail a "Fix:" task, a blank
+Fail refused), signing a UAT queued to the ERP site with the signer and not in the completion
+letter, no UAT without a plan, and permissions (members view,
 only managers, the lead or the trainer act, outsiders refused; only project managers edit
 templates).

@@ -1,7 +1,10 @@
 {% extends "helpdesk/templates/signoff/letter_base.html" %} {% block doc_type
-%}{{ _("Training sign-off") }}<br />{{ doc.name|e }}{% endblock %} {% block body
-%}
-<h1>{{ _("{0} training: sign-off").format(doc.module_title)|e }}</h1>
+%}{{ kind_title|e }}<br />{{ doc.name|e }}{% endblock %} {% block body %}
+<h1>
+  {% if doc.signoff_type == "UAT" %}{{ _("{0}:
+  sign-off").format(doc.module_title)|e }}{% else %}{{ _("{0} training:
+  sign-off").format(doc.module_title)|e }}{% endif %}
+</h1>
 <p class="lede">{{ lede|e }}</p>
 
 <table class="facts">
@@ -44,7 +47,7 @@
         </div>
         {% endif %}
       </td>
-      <td class="answer">{{ _(row.response)|e }}</td>
+      <td class="answer">{{ answers.get(row.response, _(row.response))|e }}</td>
     </tr>
     {% endfor %}
   </tbody>
