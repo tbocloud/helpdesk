@@ -260,7 +260,11 @@ let submitted = "";
 watch(
   () => props.questionnaire,
   (q) => {
-    if (questionsDirty.value && !takeNext) return;
+    if (questionsDirty.value && !takeNext) {
+      // keep the local edits, but compare them with what the server now has
+      saved.value = JSON.stringify(q.questions.map((row) => ({ ...row })));
+      return;
+    }
     takeNext = false;
     rows.value = q.questions.map((row) => ({ ...row }));
     saved.value = JSON.stringify(rows.value);
