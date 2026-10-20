@@ -87,8 +87,8 @@
         </div>
         <form
           v-if="current.input"
-          class="flex items-end gap-2"
-          @submit.prevent="answerText"
+          class="flex flex-wrap items-end gap-2"
+          @submit.prevent="current.multi ? finishMulti() : answerText()"
         >
           <VoiceButton
             v-if="current.input !== 'number'"
@@ -111,14 +111,16 @@
             type="submit"
             variant="solid"
             :label="__('Send')"
-            :disabled="busy || !draft.trim()"
+            :disabled="
+              busy || (!draft.trim() && !(current.multi && picked.length))
+            "
           >
             <template #icon>
               <LucideArrowUp class="size-4" aria-hidden="true" />
             </template>
           </Button>
         </form>
-        <div v-if="current.multi" class="flex justify-end">
+        <div v-if="current.multi && !current.input" class="flex justify-end">
           <Button :label="__('Done')" :disabled="busy" @click="finishMulti" />
         </div>
       </template>
@@ -146,7 +148,7 @@
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
 import { Button, call, FormControl } from "frappe-ui";
-import { computed, nextTick, onMounted, ref, useId } from "vue";
+import { computed, nextTick, ref, useId, watch } from "vue";
 import LucideArrowUp from "~icons/lucide/arrow-up";
 import LucideCheck from "~icons/lucide/check";
 import VoiceButton from "./VoiceButton.vue";
@@ -180,6 +182,8 @@ const props = defineProps<{
   missing: string[];
   state: ChatState;
   log: ChatLine[];
+  /** the lead's profile is in: the chat starts then, skipping what is known */
+  ready?: boolean;
 }>();
 const emit = defineEmits<{ (e: "skip"): void; (e: "generate"): void }>();
 
@@ -201,9 +205,13 @@ interface Step {
   /** skip the step when it has nothing to ask */
   when?: () => boolean;
   onChip?: (value: string) => Promise<void> | void;
-  /** false: the answer didn't fit; stay on this question */
-  onText?: (text: string) => Promise<void | false> | void | false;
-  onDone?: (values: string[]) => void;
+  /** false: the answer didn't fit (it is read by the AI, else asked again); "retry": stay on
+   * this question with the text kept in the box */
+  onText?: (
+    text: string
+  ) => Promise<void | false | "retry"> | void | false | "retry";
+  /** a multi step's picks and what was typed with them */
+  onDone?: (values: string[], typed: string) => void;
 }
 
 const ai = computed(() => !!props.options.ai);
@@ -246,15 +254,18 @@ const STEPS: Step[] = [
     input: "text",
     placeholder: "client.example",
     chips: () => [{ label: __("No website"), value: "none" }],
+    when: () => !props.state.profile.website.trim(),
     onChip: () => {},
     onText: async (typed) => {
       if (!WEBSITE.test(typed.trim())) {
+        // something else said here (an intent, needs) goes to the AI; a mistyped address is asked again
+        if (!URLISH.test(typed.trim())) return false;
         say(
           __(
             "That doesn't look like a website. Type it like vasthubuilders.com, or tap “No website”."
           )
         );
-        return false;
+        return "retry";
       }
       const url = /^https?:\/\//i.test(typed)
         ? typed.trim()
@@ -299,12 +310,26 @@ const STEPS: Step[] = [
     onText: (text) => setProfile({ industry: text }),
   },
   {
+    key: "pain",
+    ask: () =>
+      __(
+        "What hurts today? Pick any that fit, add your own, or say it with the mic."
+      ),
+    multi: true,
+    input: "textarea",
+    placeholder: __("Their problems, in their words"),
+    chips: () => PAINS.map((p) => ({ label: __(p), value: p })),
+    when: () => !props.state.profile.pain_points.trim(),
+    onDone: (values, typed) => addPains([...values, typed]),
+  },
+  {
     key: "needs",
     ask: () =>
       __(
         "What does the client need, and what hurts today? Type or paste it, or use the lead's notes."
       ),
     input: "textarea",
+    when: () => !props.state.requirements.trim(),
     chips: () => [{ label: __("Use the lead's notes"), value: "notes" }],
     onChip: async () => {
       const got = await work(__("Reading the lead's notes…"), () =>
@@ -391,7 +416,10 @@ const STEPS: Step[] = [
     ],
     onChip: (n) =>
       setScoping({ users: n === "Unlimited" ? "Unlimited" : Number(n) }),
-    onText: (text) => setScoping({ users: parseInt(text, 10) || 0 }),
+    onText: (text) => {
+      if (!/^\s*\d+\s*$/.test(text)) return false;
+      setScoping({ users: parseInt(text, 10) });
+    },
   },
   {
     key: "companies",
@@ -403,7 +431,10 @@ const STEPS: Step[] = [
     ],
     onChip: (n) =>
       setScoping({ companies: n === "Unlimited" ? "Unlimited" : Number(n) }),
-    onText: (text) => setScoping({ companies: parseInt(text, 10) || 0 }),
+    onText: (text) => {
+      if (!/^\s*\d+\s*$/.test(text)) return false;
+      setScoping({ companies: parseInt(text, 10) });
+    },
   },
   {
     key: "hosting",
@@ -474,9 +505,20 @@ const STEPS: Step[] = [
       __("And what hurts today? Their main problems, in a line or two."),
     input: "textarea",
     when: () => !props.state.profile.pain_points.trim(),
-    onText: (text) => setProfile({ pain_points: text }),
+    onText: (text) => addPains([text]),
   },
 ];
+// the usual problems, offered as chips (kept in English)
+const PAINS = [
+  "Manual payroll",
+  "No real-time stock",
+  "GST filing is slow",
+  "Data in Excel",
+];
+// what a person typing an address types: no spaces, and a dot or http(s):// or www.
+const URLISH = /^(https?:\/\/|www\.)\S*$|^\S+\.\S+$/i;
+// Malayalam script: such an answer is read by the AI so the form is kept in English
+const MALAYALAM = /[\u0D00-\u0D7F]/;
 // a website as people type it: vasthubuilders.com, https://www.client.co.in/about
 const WEBSITE =
   /^(https?:\/\/)?([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}(\/\S*)?$/i;
@@ -524,6 +566,108 @@ async function takeNeeds(text: string, typed: boolean) {
       .filter(Boolean)
       .join("\n") || __("Noted. Nothing to fill from it yet.")
   );
+}
+
+function addPains(items: string[]) {
+  const have = props.state.profile.pain_points
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+  for (const item of items.map((i) => i.trim()).filter(Boolean))
+    if (!have.includes(item)) have.push(item);
+  setProfile({ pain_points: have.join("\n").slice(0, 1000) });
+}
+
+interface ChatRead {
+  language: "English" | "Malayalam" | "Mixed";
+  english: string;
+  profile: Partial<ClientProfile>;
+  template: string | null;
+  scoping: Partial<Scoping>;
+}
+
+/**
+ * An answer that doesn't fit its question (an intent at the website step, needs in place of a
+ * number, Malayalam) read by the one small parse call: whatever it gives is applied, in English,
+ * and the chat moves on. False when there is no AI or the call failed.
+ */
+async function understand(text: string, s: Step): Promise<boolean> {
+  if (!ai.value) return false;
+  const read = (await work(__("Reading that…"), () =>
+    call("helpdesk.api.proposals.read_chat_answer", {
+      lead: props.lead,
+      question: s.ask(),
+      text,
+    })
+  )) as ChatRead | null;
+  if (!read) return false;
+  if (read.language !== "English" && read.english)
+    say(
+      read.language === "Malayalam"
+        ? __("Translated from Malayalam: {0}", read.english)
+        : __("Translated from Malayalam and English: {0}", read.english)
+    );
+  const { pain_points, ...profile } = read.profile || {};
+  for (const [k, v] of Object.entries(profile))
+    if (
+      v &&
+      k in props.state.profile &&
+      !(props.state.profile as any)[k]?.trim()
+    )
+      setProfile({ [k]: v });
+  if (pain_points) addPains(pain_points.split("\n"));
+  if (read.template && !props.state.template)
+    props.state.template = read.template;
+  const { customisations, modules, ...scoping } = read.scoping || {};
+  setScoping(scoping);
+  if (modules?.length)
+    setScoping({ modules: [...new Set([...sc().modules, ...modules])] });
+  if (customisations?.length)
+    setScoping({
+      customisation: true,
+      customisations: [...sc().customisations, ...customisations],
+    });
+  // the step's own field, from the English, when the read didn't fill it
+  if (s.key === "about" && !props.state.profile.about.trim())
+    setProfile({ about: read.english });
+  if (s.key === "industry" && !props.state.profile.industry.trim())
+    setProfile({ industry: read.english });
+  if (["pain", "need_pain"].includes(s.key) && !pain_points)
+    addPains([read.english]);
+  if (["needs", "else"].includes(s.key))
+    props.state.requirements = [props.state.requirements, read.english]
+      .filter(Boolean)
+      .join("\n\n");
+  const got = [
+    modules?.length && __("Modules: {0}", modules.join(", ")),
+    customisations?.length &&
+      __("Customisations: {0}", customisations.map((c) => c.item).join("; ")),
+    pain_points && __("Pain points: {0}", pain_points.replace(/\n/g, "; ")),
+    profile.industry && __("Industry: {0}", profile.industry),
+    read.template && __("Template: {0}", read.template),
+  ].filter(Boolean);
+  say(got.length ? __("Got it.\n{0}", got.join("\n")) : __("Noted."));
+  return true;
+}
+
+/** What is already known about the client, said before the first question. */
+function recap() {
+  const p = props.state.profile;
+  const known = [
+    p.website && __("Website: {0}", p.website),
+    p.about && __("They: {0}", p.about),
+    p.industry && __("Industry: {0}", p.industry),
+    p.pain_points && __("Pain points: {0}", p.pain_points.replace(/\n/g, "; ")),
+    sc().modules.length && __("Modules: {0}", sc().modules.join(", ")),
+  ].filter(Boolean);
+  if (known.length)
+    say(
+      __(
+        "Here's what I already have for {0}:\n{1}\nI'll only ask what's missing.",
+        p.name || __("this client"),
+        known.join("\n")
+      )
+    );
 }
 
 function ask() {
@@ -577,18 +721,41 @@ async function answerText() {
   if (!s || !text || busy.value) return;
   say(text, "presales");
   draft.value = "";
-  if ((await s.onText?.(text)) === false) return;
+  // Malayalam is read first, so the form keeps English
+  if (MALAYALAM.test(text) && (await understand(text, s))) return next();
+  const fit = await s.onText?.(text);
+  if (fit === "retry") {
+    // what was said or typed stays in the box to fix
+    draft.value = text;
+    return;
+  }
+  if (fit === false) {
+    if (await understand(text, s)) return next();
+    draft.value = text;
+    if (!ai.value)
+      say(
+        __("I couldn't use that here. Change it, or fill the summary instead.")
+      );
+    return;
+  }
   next();
 }
 
-function finishMulti() {
+async function finishMulti() {
   const s = current.value;
-  if (!s) return;
+  if (!s || busy.value) return;
   const labels = chips.value
     .filter((c) => picked.value.includes(c.value))
     .map((c) => c.label);
-  say(labels.join(", ") || __("None"), "presales");
-  s.onDone?.(picked.value);
+  let typed = draft.value.trim();
+  say(
+    [labels.join(", "), typed].filter(Boolean).join("\n") || __("None"),
+    "presales"
+  );
+  draft.value = "";
+  if (typed && MALAYALAM.test(typed) && (await understand(typed, s)))
+    typed = "";
+  s.onDone?.(picked.value, typed);
   next();
 }
 
@@ -597,7 +764,13 @@ function submitOnEnter(event: KeyboardEvent) {
   answerText();
 }
 
-onMounted(() => {
-  if (!props.log.length) ask();
-});
+watch(
+  () => props.ready,
+  (ready) => {
+    if (ready === false || props.log.length) return;
+    recap();
+    ask();
+  },
+  { immediate: true }
+);
 </script>

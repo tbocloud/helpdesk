@@ -43,11 +43,18 @@
           </Button>
         </Dropdown>
         <Button
-          v-if="isDraft && proposal.can_write"
+          v-if="editable"
           :label="dirty ? __('Save changes') : __('Saved')"
           :disabled="!dirty"
           :loading="saveResource.loading"
           @click="save"
+        />
+        <Button
+          v-else-if="isDraft && proposal.can_write"
+          :label="__('Reopen')"
+          :tooltip="__('Change it again; mark it ready before sending')"
+          :loading="readyResource.loading"
+          @click="markReady(false)"
         />
         <Button
           v-else-if="proposal.can_write && proposal.is_latest"
@@ -55,8 +62,22 @@
           :loading="revisionResource.loading"
           @click="revisionResource.submit({ name: proposalId })"
         />
+        <!-- a draft is marked ready (its numbers fixed) before it can go out -->
         <Button
-          v-if="proposal.can_write && canSendStatus"
+          v-if="editable && canSendStatus"
+          variant="solid"
+          :label="__('Mark ready')"
+          :disabled="!!proposal.share_blockers.length || dirty"
+          :tooltip="readyTooltip"
+          :loading="readyResource.loading"
+          @click="markReady(true)"
+        >
+          <template #prefix>
+            <LucideCircleCheck class="size-4" aria-hidden="true" />
+          </template>
+        </Button>
+        <Button
+          v-else-if="proposal.can_write && canSendStatus"
           variant="solid"
           :label="proposal.status === 'Draft' ? __('Send') : __('Send again')"
           :disabled="!!proposal.send_blockers.length || dirty"
@@ -125,6 +146,21 @@
                 }}</span>
               </div>
             </div>
+            <p
+              v-if="isDraft && proposal.ready_on"
+              role="status"
+              class="flex items-start gap-2 rounded-lg bg-success-soft px-3 py-2 text-p-sm text-success"
+            >
+              <LucideCircleCheck
+                class="mt-0.5 size-4 shrink-0"
+                aria-hidden="true"
+              />
+              {{
+                __(
+                  "Ready to send. The content and the numbers are fixed; Reopen to change them."
+                )
+              }}
+            </p>
             <p
               v-if="!isDraft"
               class="rounded-lg border border-outline-gray-2 bg-surface-gray-1 px-3 py-2 text-p-sm text-ink-gray-7"
@@ -545,6 +581,7 @@ import { computed, reactive, ref, useId, watch } from "vue";
 import { useRouter } from "vue-router";
 import LucideChevronRight from "~icons/lucide/chevron-right";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
+import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideSend from "~icons/lucide/send";
 import LucideShare2 from "~icons/lucide/share-2";
@@ -652,7 +689,10 @@ const statusLabel = computed(() =>
     ? proposal.value.accepted_label || __("Accepted")
     : __(proposal.value?.status || "")
 );
-const editable = computed(() => !!(isDraft.value && proposal.value?.can_write));
+const editable = computed(
+  () =>
+    !!(isDraft.value && proposal.value?.can_write && !proposal.value.ready_on)
+);
 const dirty = computed(() => editable.value && snapshot() !== saved.value);
 const canSendStatus = computed(
   () =>
@@ -662,6 +702,13 @@ const canSendStatus = computed(
 const sendTooltip = computed(() => {
   if (dirty.value) return __("Save your changes first");
   return proposal.value?.send_blockers[0] || "";
+});
+const readyTooltip = computed(() => {
+  if (dirty.value) return __("Save your changes first");
+  return (
+    proposal.value?.share_blockers[0] ||
+    __("Fix the content and numbers, then share or send it")
+  );
 });
 const pages = computed(() => estimatePages(form.sections));
 
@@ -782,6 +829,10 @@ function copyLink() {
     toast.warning(p.share_blockers[0]);
     return;
   }
+  if (!p.ready_on) {
+    toast.warning(__("Mark it ready first, then share it"));
+    return;
+  }
   ask(
     __("Share this draft?"),
     p.can_price
@@ -835,6 +886,7 @@ const saveResource = createResource({
   onSuccess(p: Proposal) {
     setProposal(p);
     toast.success(__("Saved"));
+    showWarnings(p.warnings);
   },
   onError(e: unknown) {
     toast.error(
@@ -892,6 +944,25 @@ const priceModules = createResource({
     toast.error(errorText(e, __("Couldn't price it from the modules.")));
   },
 });
+
+// --- mark ready / reopen ---
+
+const readyResource = createResource({
+  url: "helpdesk.api.proposals.finalise_proposal",
+  method: "POST",
+  onSuccess(p: Proposal) {
+    setProposal(p);
+    toast.success(p.ready_on ? __("Marked ready") : __("Reopened"));
+  },
+  onError(e: unknown) {
+    toast.error(errorText(e, __("Couldn't change it. Try again.")));
+  },
+});
+
+function markReady(ready: boolean) {
+  if (readyResource.loading || (ready && dirty.value)) return;
+  readyResource.submit({ name: props.proposalId, ready: ready ? 1 : 0 });
+}
 
 // --- regenerate ---
 

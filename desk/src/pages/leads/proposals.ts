@@ -332,10 +332,12 @@ export function suggestTimeline(
       (sum, name) =>
         sum + (catalogue.find((c) => c.module_name === name)?.effort_days || 0),
       0
-    ) + scoping.customisations.reduce((sum, c) => sum + (Number(c.days) || 0), 0);
+    ) +
+    scoping.customisations.reduce((sum, c) => sum + (Number(c.days) || 0), 0);
   const needed = Math.max(effort * 1.6, (scoping.timeline_weeks || 0) * 7);
   const sorted = [...timelines].sort((a, b) => a.days - b.days);
-  return (sorted.find((t) => t.days >= needed) || sorted[sorted.length - 1]).title;
+  return (sorted.find((t) => t.days >= needed) || sorted[sorted.length - 1])
+    .title;
 }
 
 /** A module in the catalogue, written once and assembled into every proposal. */
@@ -487,6 +489,10 @@ export interface Proposal {
   page_guide?: string | null;
   prepared_by?: string | null;
   status: ProposalStatus;
+  /** marked ready to send: the content and numbers are fixed until reopened */
+  ready_on?: string | null;
+  /** a save's: why the quotation couldn't be priced again */
+  warnings?: string[];
   pricing_mode: "Itemised" | "Consolidated";
   scoping: Scoping;
   requirements?: string | null;
