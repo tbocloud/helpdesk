@@ -8,11 +8,15 @@ from frappe.utils import getdate
 
 from helpdesk.tasky.permissions import hidden_departments
 
+# set by Create project on the lead's documents strip (docs/proposals.md)
+PLAN_LINK = ("custom_crm_lead", "custom_crm_plan", "custom_crm_acting_user")
+
 
 class Project(Document):
     def validate(self):
         self.validate_dates()
         self.validate_department()
+        self.protect_plan_link()
 
     def on_trash(self):
         self.delete_file_folders()
@@ -26,6 +30,18 @@ class Project(Document):
         # the files themselves go with the project's attachments
         for folder in reversed(FolderTree(self.name).order()):
             frappe.delete_doc("HD Project Folder", folder, ignore_permissions=True)
+
+    def protect_plan_link(self):
+        """The lead, plan and plan maker are written only by Create project
+        (helpdesk.api.proposals.create_project_from_plan), never by a save: the hub asks
+        the ERP site about the plan as that maker."""
+        before = None if self.is_new() else self.get_doc_before_save()
+        for field in PLAN_LINK:
+            if self.get(field) != (before.get(field) if before else None):
+                frappe.throw(
+                    _("The project's plan link is set only by Create project."),
+                    frappe.PermissionError,
+                )
 
     def validate_dates(self):
         if (

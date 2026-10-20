@@ -1,4 +1,4 @@
-"""Training sign-offs on a project (Project -> Sign-off tab) and their templates.
+"""Training and UAT sign-offs on a project (Project -> Sign-off tab) and their templates.
 
 Everyone who can read the project sees its sign-offs. Admins, the project's
 managers and lead, and a sign-off's trainer create, send, clarify and reopen.
@@ -16,6 +16,7 @@ from helpdesk.helpdesk.doctype.hd_project_signoff.hd_project_signoff import (
     EDITABLE_STATUSES,
     NEEDS_FOLLOW_UP,
     SIGNED,
+    UAT,
 )
 from helpdesk.tasky.permissions import (
     can_manage_project,
@@ -50,6 +51,7 @@ def get_project_signoffs(project: str) -> dict:
         fields=[
             "name",
             "module_title",
+            "signoff_type",
             "template",
             "status",
             "training_date",
@@ -67,18 +69,24 @@ def get_project_signoffs(project: str) -> dict:
     for s in signoffs:
         s.update(counts.get(s.name, {"total": 0, "done": 0, "follow_up": 0}))
         s.trainer_name = get_fullname(s.trainer) if s.trainer else None
-    letter = frappe.db.get_value("Project", project, "custom_signoff_letter")
-    signed = sum(1 for s in signoffs if s.status == SIGNED)
+    letter, plan = frappe.db.get_value(
+        "Project", project, ["custom_signoff_letter", "custom_crm_plan"]
+    )
+    # the completion letter is the training's: a UAT isn't in its roll-up
+    training = [s for s in signoffs if s.signoff_type != UAT]
+    signed = sum(1 for s in training if s.status == SIGNED)
     return {
         "signoffs": signoffs,
         "signed": signed,
-        "total": len(signoffs),
+        "total": len(training),
         "completion_letter": (
             _file_info(letter)
-            if letter and signoffs and signed == len(signoffs)
+            if letter and training and signed == len(training)
             else None
         ),
         "can_create": can_manage_project(project),
+        # made from an implementation plan on the ERP site: its SRS gives the UAT's tests
+        "can_create_uat": bool(plan) and can_manage_project(project),
     }
 
 
@@ -107,6 +115,9 @@ def get_signoff(signoff: str) -> dict:
         "project_name": doc.project_name,
         "customer": doc.customer,
         "module_title": doc.module_title,
+        "signoff_type": doc.signoff_type,
+        # a UAT's state on the ERP site; differs from `status` until recorded
+        "crm_recorded": doc.crm_recorded,
         "template": doc.template,
         "status": doc.status,
         "training_date": doc.training_date,
@@ -193,6 +204,146 @@ def create_signoff(
         }
     ).insert(ignore_permissions=True)
     return {"name": doc.name}
+
+
+@frappe.whitelist(methods=["POST"])
+def create_uat_signoff(project: str, signatory_contact: str, trainer: str) -> dict:
+    """A UAT sign-off for a project made from an implementation plan: a test case for
+    each functional requirement of the plan's approved SRS on the ERP site (its module the
+    section, its steps and expected result the help text). A draft, edited and sent like
+    any sign-off."""
+    project = _check_project(project)
+    if not can_manage_project(project):
+        frappe.throw(
+            _("Only the project's manager or lead can add sign-offs."),
+            frappe.PermissionError,
+        )
+    plan = frappe.db.get_value("Project", project, "custom_crm_plan")
+    if not plan:
+        frappe.throw(_("This project wasn't made from an implementation plan."))
+    if not cstr(trainer).strip():
+        frappe.throw(_("Pick who tests with the client."))
+    found = _erp_call(project, "get_uat_cases", name=plan) or {}
+    cases = found.get("cases") or []
+    if not cases:
+        frappe.throw(_("The plan's SRS has no requirements to test."))
+    doc = frappe.get_doc(
+        {
+            "doctype": SIGNOFF,
+            "project": project,
+            "signoff_type": UAT,
+            "crm_plan": plan,
+            "module_title": _("User acceptance testing ({0})").format(
+                found.get("srs") or plan
+            )[:140],
+            "trainer": cstr(trainer).strip(),
+            "signatory_contact": signatory_contact,
+            "status": "Draft",
+            "items": [
+                {
+                    "section": cstr(case.get("module"))[:140],
+                    "question": cstr(case.get("title"))[:1000],
+                    "help_text": "\n".join(
+                        part
+                        for part in (
+                            cstr(case.get("steps")),
+                            _("Expected: {0}").format(cstr(case.get("expected"))),
+                        )
+                        if part
+                    )[:1000],
+                }
+                for case in cases
+            ],
+        }
+    ).insert(ignore_permissions=True)
+    return {"name": doc.name}
+
+
+ERP_ATTEMPTS = 3
+
+
+def record_uat_on_erp(signoff: str, status: str, signed_by: str | None = None) -> bool:
+    """A UAT sign-off's state (as it was when queued) to its plan on the ERP site, which
+    starts the warranty when Signed. The ERP site out of reach is tried again (three times,
+    a few seconds apart); a failure that stays is written on the sign-off's history, and
+    *Record on the ERP site* sends it again. Returns whether it was recorded."""
+    import time
+
+    from helpdesk.integrations.crm.leads import LeadsError, LeadsUnavailableError
+
+    doc = frappe.get_doc(SIGNOFF, signoff)
+    for attempt in range(1, ERP_ATTEMPTS + 1):
+        try:
+            _erp_call(
+                doc.project,
+                "record_uat",
+                post=True,
+                name=doc.crm_plan,
+                status=status,
+                signed_by=signed_by,
+            )
+            break
+        except LeadsUnavailableError as e:
+            if attempt == ERP_ATTEMPTS:
+                return _not_recorded(doc, status, e)
+            frappe.clear_messages()
+            time.sleep(2 * attempt)
+        except LeadsError as e:
+            return _not_recorded(doc, status, e)
+    doc.reload()
+    doc.crm_recorded = status
+    doc.flags.signoff_action = True
+    doc.log_event(_("Recorded on the ERP site"), detail=_(status))
+    doc.save(ignore_permissions=True)
+    return True
+
+
+def _not_recorded(doc, status: str, error) -> bool:
+    frappe.clear_messages()
+    doc.reload()
+    doc.flags.signoff_action = True
+    doc.log_event(
+        _("Not recorded on the ERP site"),
+        detail=_("{0}: {1}").format(_(status), str(error)),
+    )
+    doc.save(ignore_permissions=True)
+    return False
+
+
+@frappe.whitelist(methods=["POST"])
+def record_uat_again(signoff: str) -> dict:
+    """Send a UAT's current state to the ERP site again (after it couldn't be recorded)."""
+    doc = _get_signoff(signoff, manage=True)
+    if not doc.is_uat() or not doc.crm_plan:
+        frappe.throw(_("Only a UAT made from a plan is recorded on the ERP site."))
+    ok = record_uat_on_erp(
+        doc.name, doc.status, doc.signer_name if doc.status == SIGNED else None
+    )
+    if not ok:
+        frappe.throw(
+            _(
+                "The ERP site couldn't record it. The reason is in the history; try again later."
+            )
+        )
+    return get_signoff(doc.name)
+
+
+def _erp_call(project: str, method: str, post: bool = False, **params):
+    """TBO Smart's hub proposals API on behalf of the person who made the project from the
+    plan (`custom_crm_acting_user`: the ERP site already let them read that plan), whoever
+    acts here: a project manager reading the tests, or the customer signing. The ERP site
+    still checks that person's rights."""
+    from helpdesk.api.proposals import PROPOSALS
+    from helpdesk.integrations.crm.leads import call
+
+    maker = frappe.db.get_value("Project", project, "custom_crm_acting_user")
+    if not maker:
+        frappe.throw(
+            _(
+                "This project doesn't say who made it from the plan, so the ERP site can't be asked. Press Create project on the lead's documents strip once more: it links the same project and records you."
+            )
+        )
+    return call(method, post=post, api=PROPOSALS, acting_user=maker, **params)
 
 
 @frappe.whitelist(methods=["POST"])

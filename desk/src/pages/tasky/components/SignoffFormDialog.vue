@@ -1,7 +1,13 @@
 <template>
   <Dialog
     :open="open"
-    :title="editing ? __('Edit sign-off') : __('New sign-off')"
+    :title="
+      editing
+        ? __('Edit sign-off')
+        : isUat
+        ? __('New UAT sign-off')
+        : __('New sign-off')
+    "
     :size="editing ? '4xl' : 'xl'"
     @update:open="(value: boolean) => emit('update:open', value)"
   >
@@ -49,9 +55,16 @@
       novalidate
       @submit.prevent="submit"
     >
+      <p v-if="isUat" class="text-p-sm text-ink-gray-6">
+        {{
+          __(
+            "A test case for each requirement of the approved SRS on the ERP site: its steps and the expected result. Edit them before sending. The client marks each Pass or Fail; a Fail becomes an issue for the team."
+          )
+        }}
+      </p>
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <FormControl
-          v-if="!editing"
+          v-if="!editing && !isUat"
           v-model="form.template"
           type="select"
           :label="__('Template')"
@@ -64,6 +77,7 @@
           @update:model-value="onTemplate"
         />
         <TextInput
+          v-if="!isUat"
           v-model="form.module_title"
           :label="__('Module')"
           :placeholder="__('e.g. Accounts')"
@@ -71,13 +85,14 @@
           required
         />
         <TextInput
+          v-if="!isUat"
           v-model="form.training_date"
           type="date"
           :label="__('Training date')"
         />
         <!-- Combobox layers inside the dialog, so Escape and clicking outside still close it -->
         <Combobox
-          :label="__('Trainer')"
+          :label="isUat ? __('Tests with the client') : __('Trainer')"
           :options="trainerOptions"
           :placeholder="__('Pick from the project team')"
           :model-value="form.trainer || null"
@@ -145,7 +160,13 @@
           variant="solid"
           type="submit"
           :form="formId"
-          :label="editing ? __('Save changes') : __('Create sign-off')"
+          :label="
+            editing
+              ? __('Save changes')
+              : isUat
+              ? __('Create UAT sign-off')
+              : __('Create sign-off')
+          "
           :loading="saving"
         />
       </div>
@@ -177,6 +198,7 @@ import type { SignoffQuestion } from "../signoffMeta";
 export interface SignoffDraft {
   name: string;
   module_title: string;
+  signoff_type?: "Training" | "UAT";
   training_date?: string | null;
   trainer?: string | null;
   signatory_contact?: string | null;
@@ -187,6 +209,8 @@ const props = defineProps<{
   open: boolean;
   projectId: string;
   signoff?: SignoffDraft | null;
+  /** a UAT: its tests come from the SRS of the plan the project was made from */
+  uat?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -196,6 +220,10 @@ const emit = defineEmits<{
 
 const formId = `signoff-form-${useId()}`;
 const editing = computed(() => !!props.signoff);
+// a new UAT, or editing one
+const isUat = computed(
+  () => props.uat || props.signoff?.signoff_type === "UAT"
+);
 const errorMessage = ref("");
 
 const form = reactive({
@@ -269,7 +297,7 @@ function onTemplate(name: string) {
 
 const canSubmit = computed(
   () =>
-    !!form.module_title.trim() &&
+    (isUat.value || !!form.module_title.trim()) &&
     !!form.trainer &&
     !!form.signatory_contact &&
     (!editing.value || form.items.every((i) => i.question.trim()))
@@ -283,6 +311,8 @@ async function submit() {
       ? __(
           "Fill in the module, trainer and signatory, and give every question some text."
         )
+      : isUat.value
+      ? __("Pick who tests with the client and who signs.")
       : __("Fill in the module, trainer and signatory.");
     return;
   }
@@ -300,6 +330,12 @@ async function submit() {
           signoff: props.signoff!.name,
           items: form.items,
           ...common,
+        })
+      : props.uat
+      ? await call("helpdesk.api.project_signoff.create_uat_signoff", {
+          project: props.projectId,
+          trainer: form.trainer,
+          signatory_contact: form.signatory_contact,
         })
       : await call("helpdesk.api.project_signoff.create_signoff", {
           project: props.projectId,

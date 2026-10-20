@@ -1,13 +1,17 @@
 # Copyright (c) 2026, Frappe Technologies and contributors
 # For license information, please see license.txt
 
-"""A customer's sign-off that training on one module of a project is complete.
+"""A customer's sign-off that training on one module of a project is complete, or (a UAT
+sign-off) that they tested the system against its SRS and accept it.
 
 The customer opens a tokenised link, proves they are the named signatory with an
 emailed code, answers every question Done / Not clear / Escalate, and signs once
 everything is Done. Not clear and Escalate become clarification tasks for the
 trainer. Signing saves a PDF on the project; when every sign-off of a project is
-signed, a project completion letter is generated. See docs/project-signoff.md.
+signed, a project completion letter is generated. A UAT's items are the SRS's test cases
+on the ERP site, answered Pass / Fail / Blocker; a Fail is an open issue (a task to fix it), and
+signing is recorded on the ERP site's plan, which starts the warranty. See
+docs/project-signoff.md.
 """
 
 import base64
@@ -55,6 +59,8 @@ TASK_DONE = ("Completed", "Cancelled")
 MAX_TEXT = 1000
 MAX_NAME = 140
 PORTAL_PATH = "/project-signoff"
+TRAINING = "Training"
+UAT = "UAT"
 
 
 class HDProjectSignoff(Document):
@@ -318,9 +324,19 @@ class HDProjectSignoff(Document):
         )
         self.save(ignore_permissions=True)
         self.email_customer(
-            _("Please confirm your {0} training").format(self.module_title),
-            _(
-                "{0} has finished your {1} training for {2}. Please go through the checklist and tell us, item by item, whether everything is clear."
+            (
+                _("Please test and accept {0}")
+                if self.is_uat()
+                else _("Please confirm your {0} training")
+            ).format(self.module_title),
+            (
+                _(
+                    "{0} has prepared {1} for {2}. Please run each test and tell us, one by one, whether it passes."
+                )
+                if self.is_uat()
+                else _(
+                    "{0} has finished your {1} training for {2}. Please go through the checklist and tell us, item by item, whether everything is clear."
+                )
             ).format(
                 escape_html(
                     get_fullname(self.trainer) if self.trainer else _("Your trainer")
@@ -373,11 +389,17 @@ class HDProjectSignoff(Document):
         """The customer's answer to one question; True if a clarification is now needed."""
         self.ensure_open_for_customer()
         if response not in CUSTOMER_RESPONSES:
-            frappe.throw(_("Choose Done, Not clear or Escalate."))
+            frappe.throw(
+                _("Choose Pass, Fail or Blocker.")
+                if self.is_uat()
+                else _("Choose Done, Not clear or Escalate.")
+            )
         comment = (comment or "").strip()[:MAX_TEXT]
         if response in NEEDS_FOLLOW_UP and not comment:
             frappe.throw(
-                _("Tell your trainer what needs explaining, so they can help.")
+                _("Say what went wrong, so we can fix it.")
+                if self.is_uat()
+                else _("Tell your trainer what needs explaining, so they can help.")
             )
         row = self.get_item(item)
         if (row.response, row.customer_comment or "") == (response, comment):
@@ -455,7 +477,9 @@ class HDProjectSignoff(Document):
         task = frappe.get_doc(
             {
                 "doctype": "Task",
-                "subject": _("Clarify: {0}").format(row.question)[:140],
+                "subject": (
+                    _("Fix: {0}") if self.is_uat() else _("Clarify: {0}")
+                ).format(row.question)[:140],
                 "project": self.project,
                 "status": "Open",
                 "priority": "Urgent" if escalate else "High",
@@ -547,8 +571,14 @@ class HDProjectSignoff(Document):
                 else _("{0} items are ready for you to review again.").format(pending)
             )
             + " "
-            + _(
-                "Your trainer has followed up on what wasn't clear. This link replaces the one we sent before."
+            + (
+                _(
+                    "Our team fixed what failed: please test it again. This link replaces the one we sent before."
+                )
+                if self.is_uat()
+                else _(
+                    "Your trainer has followed up on what wasn't clear. This link replaces the one we sent before."
+                )
             ),
             token,
         )
@@ -570,7 +600,11 @@ class HDProjectSignoff(Document):
                 frappe.PermissionError,
             )
         if not self.all_done():
-            frappe.throw(_("Mark every item Done before signing."))
+            frappe.throw(
+                _("Every test must pass before signing.")
+                if self.is_uat()
+                else _("Mark every item Done before signing.")
+            )
         full_name = (full_name or "").strip()[:MAX_NAME]
         designation = (designation or "").strip()[:MAX_NAME]
         if not full_name or not designation:
@@ -623,6 +657,7 @@ class HDProjectSignoff(Document):
         self.save(ignore_permissions=True)
         self.email_signed_pdf(pdf.file_name, content)
         self.complete_project_if_all_signed()
+        self.tell_erp_site()
 
     def reopen(self, reason: str):
         if self.status != SIGNED:
@@ -656,8 +691,28 @@ class HDProjectSignoff(Document):
             self.set(field, None)
         self.status = REOPENED
         self.flags.signoff_action = True
-        # the project is no longer fully signed off
-        frappe.db.set_value("Project", self.project, "custom_signoff_letter", None)
+        if not self.is_uat():
+            # the project's training is no longer fully signed off (a UAT isn't in the letter)
+            frappe.db.set_value("Project", self.project, "custom_signoff_letter", None)
+        self.tell_erp_site()
+
+    # --- UAT ---
+
+    def is_uat(self) -> bool:
+        return self.signoff_type == UAT
+
+    def tell_erp_site(self):
+        """A UAT's state (Signed, Reopened) goes to its plan on the ERP site, after the
+        commit, so a slow or failing ERP site never holds up the customer."""
+        if self.is_uat() and self.crm_plan:
+            # the state as of now: a reopen before the job runs mustn't replace the signature
+            frappe.enqueue(
+                "helpdesk.api.project_signoff.record_uat_on_erp",
+                signoff=self.name,
+                status=self.status,
+                signed_by=self.signer_name if self.status == SIGNED else None,
+                enqueue_after_commit=True,
+            )
 
     # --- documents ---
 
@@ -733,13 +788,33 @@ class HDProjectSignoff(Document):
             else "",
             "signed_on": format_datetime(self.signed_on),
             # long sentences live here: an HTML formatter would wrap them inside _()
-            "lede": _(
-                "{0} confirms that the training listed below has been completed."
+            "lede": (
+                _(
+                    "{0} confirms that it tested the system as listed below and accepts it."
+                )
+                if self.is_uat()
+                else _(
+                    "{0} confirms that the training listed below has been completed."
+                )
             ).format(customer_name),
             "confirmation": _(
+                "I confirm that we tested the system as listed above and accept it."
+            )
+            if self.is_uat()
+            else _(
                 "I confirm that the training listed above has been completed to our satisfaction."
             ),
+            "kind_title": _("User acceptance sign-off")
+            if self.is_uat()
+            else _("Training sign-off"),
+            "answers": self.answer_labels(),
         }
+
+    def answer_labels(self) -> dict:
+        """How an answer reads: a UAT's Done is Pass, Not clear Fail, Escalated Blocker."""
+        if self.is_uat():
+            return {DONE: _("Pass"), NOT_CLEAR: _("Fail"), ESCALATED: _("Blocker")}
+        return {response: _(response) for response in CUSTOMER_RESPONSES}
 
     def customer_name(self) -> str:
         return (
@@ -751,7 +826,11 @@ class HDProjectSignoff(Document):
         file_name, content = self.render_document(
             "helpdesk/templates/signoff/signoff_letter.html",
             self.pdf_context(),
-            _("Training sign-off - {0} - {1}").format(self.module_title, self.name),
+            (
+                _("UAT sign-off - {0} - {1}")
+                if self.is_uat()
+                else _("Training sign-off - {0} - {1}")
+            ).format(self.module_title, self.name),
         )
         return self.save_project_file(file_name, content), content
 
@@ -759,10 +838,18 @@ class HDProjectSignoff(Document):
         recipients = {self.signatory_email, self.trainer, self.project_lead()}
         frappe.sendmail(
             recipients=sorted(r for r in recipients if r),
-            subject=_("{0} training signed off").format(self.module_title),
+            subject=(
+                _("{0} signed off") if self.is_uat() else _("{0} training signed off")
+            ).format(self.module_title),
             message="<p>"
-            + _(
-                "{0} ({1}) signed off the {2} training for {3} on {4}. The signed record is attached."
+            + (
+                _(
+                    "{0} ({1}) accepted {2} for {3} on {4}. The signed record is attached."
+                )
+                if self.is_uat()
+                else _(
+                    "{0} ({1}) signed off the {2} training for {3} on {4}. The signed record is attached."
+                )
             ).format(
                 escape_html(self.signer_name),
                 escape_html(self.signer_designation),
@@ -779,9 +866,10 @@ class HDProjectSignoff(Document):
     # --- project roll-up ---
 
     def project_signoffs(self) -> list[dict]:
+        """The project's training sign-offs (the completion letter's; a UAT isn't one)."""
         return frappe.get_all(
             "HD Project Signoff",
-            filters={"project": self.project},
+            filters={"project": self.project, "signoff_type": ("!=", UAT)},
             fields=[
                 "name",
                 "module_title",
@@ -799,7 +887,9 @@ class HDProjectSignoff(Document):
         )
 
     def complete_project_if_all_signed(self):
-        """Every sign-off of the project signed: the completion letter goes on the project and out by email."""
+        """Every training sign-off of the project signed: the completion letter goes on the project and out by email."""
+        if self.is_uat():
+            return
         signoffs = self.project_signoffs()
         if not signoffs or any(s.status != SIGNED for s in signoffs):
             return
