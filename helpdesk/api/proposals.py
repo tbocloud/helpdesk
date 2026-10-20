@@ -90,7 +90,7 @@ def create_proposal(
 
 
 # the documents made from an accepted one (TBO Smart's docs/client-documents.md)
-DOCUMENT_TYPES = ("Quotation", "Work Order", "BRD", "SRS")
+DOCUMENT_TYPES = ("Quotation", "Work Order", "BRD", "SRS", "Implementation Plan")
 
 
 @frappe.whitelist(methods=["POST"])
@@ -99,7 +99,11 @@ def create_document(source: str, document_type: str) -> dict:
     (a quotation from a proposal, a project agreement from a quotation)."""
     require_leads()
     if document_type not in DOCUMENT_TYPES:
-        frappe.throw(_("Pick a quotation, a project agreement, a BRD or an SRS."))
+        frappe.throw(
+            _(
+                "Pick a quotation, a project agreement, a BRD, an SRS or an implementation plan."
+            )
+        )
     result = (
         proposals(
             "create_document", post=True, source=source, document_type=document_type
@@ -162,6 +166,90 @@ def apply_answers(name: str) -> dict:
     if result.get("proposal"):
         clean_letter_head(result["proposal"])
     return result
+
+
+# --- the project made from an approved implementation plan -------------------------
+
+# the project type a solution maps to (Project.project_type)
+PROJECT_TYPES = (
+    ("mobile", "Mobile App"),
+    ("erpnext", "ERP Implementation"),
+    ("website", "Website"),
+)
+
+
+@frappe.whitelist(methods=["POST"])
+def create_project_from_plan(plan: str) -> dict:
+    """The hub project from an approved plan on the ERP site, once: the project with the
+    plan's dates and the client, a task for each phase's deliverable and a milestone at
+    each phase's end (the phase on every task). The plan is told its project, and the
+    lead's chain moves on. A second call finds the project already made."""
+    from helpdesk.tasky.api import create_project
+
+    require_leads()
+    data = proposals("get_project_plan", name=plan) or {}
+    project = data.get("hub_project") or frappe.db.get_value(
+        "Project", {"custom_crm_plan": data.get("plan") or plan}, "name"
+    )
+    if not project or not frappe.db.exists("Project", project):
+        project = create_project(
+            project_name=unique_project_name(data["project_name"]),
+            expected_start_date=data.get("start"),
+            expected_end_date=data.get("end"),
+            customer=frappe.db.exists("HD Customer", data.get("client") or "") or None,
+            project_type=project_type_for(data.get("solution_type")),
+        )["name"]
+        frappe.db.set_value(
+            "Project",
+            project,
+            {"custom_crm_lead": data.get("lead"), "custom_crm_plan": data.get("plan")},
+        )
+        add_plan_tasks(project, data.get("phases") or [])
+    chain = proposals(
+        "link_project",
+        post=True,
+        name=plan,
+        project=project,
+        url=frappe.utils.get_url(f"/helpdesk/projects/{project}"),
+    )
+    return {"project": project, "chain": chain}
+
+
+def unique_project_name(name: str) -> str:
+    """The plan's project name, numbered when another project has it."""
+    candidate, number = name[:140], 2
+    while frappe.db.exists("Project", {"project_name": candidate}):
+        candidate = f"{name[:130]} ({number})"
+        number += 1
+    return candidate
+
+
+def project_type_for(solution: str | None) -> str | None:
+    text = (solution or "").casefold()
+    return next((kind for word, kind in PROJECT_TYPES if word in text), None)
+
+
+def add_plan_tasks(project: str, phases: list) -> int:
+    """The plan's tasks on the project, each in its phase with the phase's dates; each
+    phase's milestone a milestone task. Returns how many."""
+    made = 0
+    for phase in phases:
+        for task in phase.get("tasks") or []:
+            frappe.get_doc(
+                {
+                    "doctype": "Task",
+                    "subject": str(task.get("subject") or "")[:140],
+                    "project": project,
+                    "custom_phase": phase.get("phase") or "",
+                    "is_milestone": 1 if task.get("milestone") else 0,
+                    "priority": "Medium",
+                    "status": "Open",
+                    "exp_start_date": task.get("start") or None,
+                    "exp_end_date": task.get("end") or None,
+                }
+            ).insert()
+            made += 1
+    return made
 
 
 @frappe.whitelist()

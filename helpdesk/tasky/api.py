@@ -1980,6 +1980,8 @@ def get_project_detail(project: str):
         "project_type": doc.project_type,
         "department": doc.custom_department,
         "file_count": file_counts([doc.name]).get(doc.name, 0),
+        # the sales lead it was made from (an implementation plan's project)
+        "crm_lead": doc.get("custom_crm_lead"),
     }
 
 

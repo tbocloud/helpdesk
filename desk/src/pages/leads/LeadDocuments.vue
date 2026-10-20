@@ -17,7 +17,7 @@
         class="ml-auto"
         variant="solid"
         :label="chain.next.label"
-        :loading="create.loading"
+        :loading="busy"
         @click="runNext"
       >
         <template #prefix>
@@ -44,14 +44,7 @@
       >
         <component
           :is="step.name ? 'router-link' : 'div'"
-          :to="
-            step.name
-              ? {
-                  name: 'LeadProposal',
-                  params: { leadId, proposalId: step.name },
-                }
-              : undefined
-          "
+          :to="step.name ? stepRoute(step) : undefined"
           :aria-current="isNext(step) ? 'step' : undefined"
           class="flex min-h-[44px] min-w-0 flex-1 flex-col gap-1.5 rounded-lg border px-3 py-2"
           :class="[
@@ -124,8 +117,22 @@ const router = useRouter();
 const titleId = `lead-documents-${useId()}`;
 
 const nextIcon = computed(() =>
-  props.chain?.next?.action === "open" ? LucideArrowRight : LucidePlus
+  ["open", "uat"].includes(props.chain?.next?.action || "")
+    ? LucideArrowRight
+    : LucidePlus
 );
+
+/** A document opens in the builder; the project on its page, the UAT on its sign-off tab. */
+function stepRoute(step: DocumentStep) {
+  if (step.document_type === "Project")
+    return { name: "TaskyProject", params: { projectId: step.name } };
+  if (step.document_type === "UAT")
+    return { name: "TaskySignoffs", params: { projectId: step.name } };
+  return {
+    name: "LeadProposal",
+    params: { leadId: props.leadId, proposalId: step.name },
+  };
+}
 
 function isNext(step: DocumentStep) {
   return props.chain?.next?.document_type === step.document_type;
@@ -151,13 +158,31 @@ const create = createResource({
   },
 });
 
+const createProject = createResource({
+  url: "helpdesk.api.proposals.create_project_from_plan",
+  method: "POST",
+  onSuccess(d: { project: string }) {
+    toast.success(__("Project {0} created from the plan", d.project));
+    router.push({ name: "TaskyProject", params: { projectId: d.project } });
+  },
+  onError(e: unknown) {
+    toast.error(errorText(e, __("Couldn't create the project. Try again.")));
+  },
+});
+
+const busy = computed(() => create.loading || createProject.loading);
+
 function runNext() {
   const next = props.chain?.next;
-  if (!next || create.loading) return;
+  if (!next || busy.value) return;
   if (next.action === "create_proposal")
     router.push({ name: "LeadNewProposal", params: { leadId: props.leadId } });
   else if (next.action === "open" && next.name) open(next.name);
   else if (next.action === "create")
     create.submit({ source: next.source, document_type: next.document_type });
+  else if (next.action === "create_project")
+    createProject.submit({ plan: next.source });
+  else if (next.action === "uat" && next.name)
+    router.push({ name: "TaskySignoffs", params: { projectId: next.name } });
 }
 </script>

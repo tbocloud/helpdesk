@@ -317,3 +317,64 @@ class TestProposals(FrappeTestCase):
             (None, "Hello"),
         )
         self.assertEqual(calls["apply_answers"][1]["name"], "BRD-2026-00001")
+
+    def test_the_plans_project_is_made_here_once(self):
+        self.crm.lead_answers["get_project_plan"] = {
+            "plan": "PIP-2026-00001",
+            "lead": "CRM-LEAD-1",
+            "client": "Malabar Spices",
+            "project_name": "Malabar Spices - ERPNext Implementation",
+            "solution_type": "ERPNext Implementation",
+            "start": "2026-11-02",
+            "end": "2027-01-30",
+            "hub_project": None,
+            "phases": [
+                {
+                    "phase": "Analysis",
+                    "start": "2026-11-02",
+                    "end": "2026-11-11",
+                    "tasks": [
+                        {
+                            "subject": "Accounts: study of the chart of accounts",
+                            "start": "2026-11-02",
+                            "end": "2026-11-11",
+                            "milestone": 0,
+                        },
+                        {
+                            "subject": "Analysis complete",
+                            "start": "2026-11-11",
+                            "end": "2026-11-11",
+                            "milestone": 1,
+                        },
+                    ],
+                }
+            ],
+        }
+        self.crm.lead_answers["link_project"] = {"steps": [], "next": None}
+        frappe.set_user("Administrator")
+        result = proposals_api.create_project_from_plan("PIP-2026-00001")
+        project = frappe.get_doc("Project", result["project"])
+        self.assertEqual(
+            (
+                project.project_type,
+                str(project.expected_start_date),
+                project.custom_crm_plan,
+            ),
+            ("ERP Implementation", "2026-11-02", "PIP-2026-00001"),
+        )
+        tasks = frappe.get_all(
+            "Task",
+            filters={"project": project.name},
+            fields=["subject", "custom_phase", "is_milestone"],
+            order_by="creation asc",
+        )
+        self.assertEqual(
+            [(t.custom_phase, t.is_milestone) for t in tasks],
+            [("Analysis", 0), ("Analysis", 1)],
+        )
+        calls = {name: params for name, _post, params in self.crm.lead_calls}
+        self.assertEqual(calls["link_project"]["project"], project.name)
+        # again: the same project, no second set of tasks
+        again = proposals_api.create_project_from_plan("PIP-2026-00001")
+        self.assertEqual(again["project"], project.name)
+        self.assertEqual(frappe.db.count("Task", {"project": project.name}), 2)

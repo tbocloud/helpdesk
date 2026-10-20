@@ -194,13 +194,13 @@
                   :disabled="!editable"
                 />
                 <FormControl
-                  v-if="proposal.signature"
+                  v-if="proposal.dated"
                   v-model="form.start_date"
                   type="date"
                   :label="__('Project start date')"
                   :description="
                     __(
-                      'The timeline and the purpose take their dates from it when you save.'
+                      'The dated sections take their dates from it when you save.'
                     )
                   "
                   :disabled="!editable"
@@ -905,9 +905,7 @@ function save() {
       pricing_mode: form.pricing_mode,
       valid_till: form.valid_till || null,
       sections: form.sections,
-      ...(proposal.value?.signature
-        ? { start_date: form.start_date || null }
-        : {}),
+      ...(proposal.value?.dated ? { start_date: form.start_date || null } : {}),
       // a document after the proposal keeps what it copied from it
       ...(isProposal.value
         ? {

@@ -701,6 +701,25 @@ def get_custom_fields():
                 "read_only": 1,
                 "no_copy": 1,
             },
+            {
+                # the sales lead and the implementation plan on the ERP site it was made
+                # from (TBO Smart's docs/client-documents.md §7)
+                "fieldname": "custom_crm_lead",
+                "fieldtype": "Data",
+                "label": "Sales Lead",
+                "insert_after": "custom_signoff_letter",
+                "read_only": 1,
+                "no_copy": 1,
+            },
+            {
+                "fieldname": "custom_crm_plan",
+                "fieldtype": "Data",
+                "label": "Implementation Plan",
+                "insert_after": "custom_crm_lead",
+                "read_only": 1,
+                "no_copy": 1,
+                "search_index": 1,
+            },
         ],
         "Timesheet Detail": [
             {
