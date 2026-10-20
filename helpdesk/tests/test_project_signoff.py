@@ -554,7 +554,17 @@ class TestProjectSignoff(FrappeTestCase):
         self.assertEqual(
             enqueue.call_args.args[0], "helpdesk.api.project_signoff.record_uat_on_erp"
         )
-        api.record_uat_on_erp(name)
+        # the state as of signing travels with the job
+        self.assertEqual(
+            (enqueue.call_args.kwargs["status"], enqueue.call_args.kwargs["signed_by"]),
+            ("Signed", "Fathima Rahman"),
+        )
+        api.record_uat_on_erp(
+            name, **{k: enqueue.call_args.kwargs[k] for k in ("status", "signed_by")}
+        )
+        self.assertEqual(
+            frappe.db.get_value("HD Project Signoff", name, "crm_recorded"), "Signed"
+        )
         (_name, post, params) = crm.lead_calls[-1]
         self.assertTrue(post)
         self.assertEqual(
@@ -581,6 +591,36 @@ class TestProjectSignoff(FrappeTestCase):
             frappe.db.get_value("Project", self.project, "custom_signoff_letter"),
             "letter.pdf",
         )
+
+    def test_an_erp_site_out_of_reach_is_retried_then_recorded_by_hand(self):
+        from helpdesk.integrations.crm.client import CRMError
+
+        crm = self.uat_project()
+        name = run_as_user(
+            PM[0],
+            lambda: api.create_uat_signoff(self.project, self.contact, TRAINER[0]),
+        )["name"]
+        crm.lead_error = CRMError("unreachable")
+        with patch("time.sleep") as sleep:
+            self.assertFalse(api.record_uat_on_erp(name, "Signed", "Fathima Rahman"))
+        self.assertEqual(sleep.call_count, 2)
+        doc = frappe.get_doc("HD Project Signoff", name)
+        self.assertEqual(doc.log[-1].event, "Not recorded on the ERP site")
+        self.assertFalse(doc.crm_recorded)
+        # once it is back, Record on the ERP site sends the current state
+        crm.lead_error = None
+        frappe.db.set_value("HD Project Signoff", name, "status", "Signed")
+        run_as_user(PM[0], lambda: api.record_uat_again(name))
+        self.assertEqual(
+            frappe.db.get_value("HD Project Signoff", name, "crm_recorded"), "Signed"
+        )
+
+    def test_the_plan_link_is_not_changed_by_a_save(self):
+        self.uat_project()
+        project = frappe.get_doc("Project", self.project)
+        project.custom_crm_acting_user = OUTSIDER[0]
+        with self.assertRaises(frappe.PermissionError):
+            project.save(ignore_permissions=True)
 
     def test_the_erp_site_is_asked_only_as_the_plans_maker(self):
         self.uat_project()

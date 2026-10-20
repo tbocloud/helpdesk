@@ -1,10 +1,8 @@
 {% extends "helpdesk/templates/signoff/letter_base.html" %} {% block doc_type
-%}{{ kind_title|e }}<br />{{ doc.name|e }}{% endblock %} {% block body %}
-<h1>
-  {% if doc.signoff_type == "UAT" %}{{ _("{0}:
-  sign-off").format(doc.module_title)|e }}{% else %}{{ _("{0} training:
-  sign-off").format(doc.module_title)|e }}{% endif %}
-</h1>
+%}{{ kind_title|e }}<br />{{ doc.name|e }}{% endblock %} {% block body %} {%-
+set heading = _("{0}: sign-off") if doc.signoff_type == "UAT" else _("{0}
+training: sign-off") %}
+<h1>{{ heading.format(doc.module_title)|e }}</h1>
 <p class="lede">{{ lede|e }}</p>
 
 <table class="facts">

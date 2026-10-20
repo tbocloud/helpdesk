@@ -116,6 +116,8 @@ def get_signoff(signoff: str) -> dict:
         "customer": doc.customer,
         "module_title": doc.module_title,
         "signoff_type": doc.signoff_type,
+        # a UAT's state on the ERP site; differs from `status` until recorded
+        "crm_recorded": doc.crm_recorded,
         "template": doc.template,
         "status": doc.status,
         "training_date": doc.training_date,
@@ -257,18 +259,73 @@ def create_uat_signoff(project: str, signatory_contact: str, trainer: str) -> di
     return {"name": doc.name}
 
 
-def record_uat_on_erp(signoff: str) -> None:
-    """Background: a UAT sign-off's state to its plan on the ERP site (Signed starts the
-    warranty there). Run as the project's creator, who made it from the plan."""
+ERP_ATTEMPTS = 3
+
+
+def record_uat_on_erp(signoff: str, status: str, signed_by: str | None = None) -> bool:
+    """A UAT sign-off's state (as it was when queued) to its plan on the ERP site, which
+    starts the warranty when Signed. The ERP site out of reach is tried again (three times,
+    a few seconds apart); a failure that stays is written on the sign-off's history, and
+    *Record on the ERP site* sends it again. Returns whether it was recorded."""
+    import time
+
+    from helpdesk.integrations.crm.leads import LeadsError, LeadsUnavailableError
+
     doc = frappe.get_doc(SIGNOFF, signoff)
-    _erp_call(
-        doc.project,
-        "record_uat",
-        post=True,
-        name=doc.crm_plan,
-        status=doc.status,
-        signed_by=doc.signer_name if doc.status == SIGNED else None,
+    for attempt in range(1, ERP_ATTEMPTS + 1):
+        try:
+            _erp_call(
+                doc.project,
+                "record_uat",
+                post=True,
+                name=doc.crm_plan,
+                status=status,
+                signed_by=signed_by,
+            )
+            break
+        except LeadsUnavailableError as e:
+            if attempt == ERP_ATTEMPTS:
+                return _not_recorded(doc, status, e)
+            frappe.clear_messages()
+            time.sleep(2 * attempt)
+        except LeadsError as e:
+            return _not_recorded(doc, status, e)
+    doc.reload()
+    doc.crm_recorded = status
+    doc.flags.signoff_action = True
+    doc.log_event(_("Recorded on the ERP site"), detail=_(status))
+    doc.save(ignore_permissions=True)
+    return True
+
+
+def _not_recorded(doc, status: str, error) -> bool:
+    frappe.clear_messages()
+    doc.reload()
+    doc.flags.signoff_action = True
+    doc.log_event(
+        _("Not recorded on the ERP site"),
+        detail=_("{0}: {1}").format(_(status), str(error)),
     )
+    doc.save(ignore_permissions=True)
+    return False
+
+
+@frappe.whitelist(methods=["POST"])
+def record_uat_again(signoff: str) -> dict:
+    """Send a UAT's current state to the ERP site again (after it couldn't be recorded)."""
+    doc = _get_signoff(signoff, manage=True)
+    if not doc.is_uat() or not doc.crm_plan:
+        frappe.throw(_("Only a UAT made from a plan is recorded on the ERP site."))
+    ok = record_uat_on_erp(
+        doc.name, doc.status, doc.signer_name if doc.status == SIGNED else None
+    )
+    if not ok:
+        frappe.throw(
+            _(
+                "The ERP site couldn't record it. The reason is in the history; try again later."
+            )
+        )
+    return get_signoff(doc.name)
 
 
 def _erp_call(project: str, method: str, post: bool = False, **params):

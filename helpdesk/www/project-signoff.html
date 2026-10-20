@@ -576,7 +576,7 @@ page_title }} · {{ brand_name }}{% endblock %} {% block head %}
       if (item.clarified && item.response === "Pending") {
         below += `<p class="note">${icon("info")} ${
           item.clarification_note
-            ? esc(W.followed_up_note.replace("{0}", item.clarification_note))
+            ? esc(W.followed_up_note.replace("{0}", () => item.clarification_note))
             : esc(W.followed_up)
         } ${esc(W.again)}</p>`;
       }

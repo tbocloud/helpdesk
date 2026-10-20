@@ -705,9 +705,12 @@ class HDProjectSignoff(Document):
         """A UAT's state (Signed, Reopened) goes to its plan on the ERP site, after the
         commit, so a slow or failing ERP site never holds up the customer."""
         if self.is_uat() and self.crm_plan:
+            # the state as of now: a reopen before the job runs mustn't replace the signature
             frappe.enqueue(
                 "helpdesk.api.project_signoff.record_uat_on_erp",
                 signoff=self.name,
+                status=self.status,
+                signed_by=self.signer_name if self.status == SIGNED else None,
                 enqueue_after_commit=True,
             )
 

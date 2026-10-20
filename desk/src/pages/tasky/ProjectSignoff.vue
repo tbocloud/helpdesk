@@ -135,6 +135,24 @@
                   ><LucideSend class="size-4" aria-hidden="true"
                 /></template>
               </Button>
+              <!-- a UAT's state the ERP site couldn't take yet (the history says why) -->
+              <Button
+                v-if="notRecorded"
+                :label="__('Record on the ERP site')"
+                :loading="busy === 'record'"
+                @click="
+                  run(
+                    'record',
+                    'record_uat_again',
+                    {},
+                    __('Recorded on the ERP site')
+                  )
+                "
+              >
+                <template #prefix
+                  ><LucideRefreshCw class="size-4" aria-hidden="true"
+                /></template>
+              </Button>
               <a
                 v-if="s.signed_pdf"
                 :href="s.signed_pdf.file_url"
@@ -635,6 +653,8 @@ interface SignoffDetail {
   module_title: string;
   /** Training, or UAT (Pass / Fail / Blocker against the SRS's tests) */
   signoff_type: "Training" | "UAT";
+  /** a UAT's last state on the ERP site */
+  crm_recorded?: string | null;
   template?: string | null;
   status: string;
   training_date?: string | null;
@@ -689,6 +709,13 @@ watch(
 
 const s = computed(() => detail.data as SignoffDetail | undefined);
 const uat = computed(() => s.value?.signoff_type === "UAT");
+// signed or reopened here, but the ERP site's plan doesn't have it yet
+const notRecorded = computed(
+  () =>
+    uat.value &&
+    ["Signed", "Reopened"].includes(s.value?.status ?? "") &&
+    s.value?.crm_recorded !== s.value?.status
+);
 const status = computed(() => signoffStatusMeta(s.value?.status ?? "Draft"));
 const groups = computed(() =>
   groupBySection(s.value?.items ?? [], __("General"))
