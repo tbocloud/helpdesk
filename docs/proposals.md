@@ -70,12 +70,12 @@ so the API key never reaches the browser.
 ### Lead page: Documents (`LeadDocuments.vue`)
 
 Across the top of the lead, while at least the Quotation is switched on: each switched-on type in
-order (Proposal → Quotation → Project Agreement), each with its status in words (Draft, Sent,
-Viewed, Accepted / Signed, Declined, Expired, or Not started), a check when accepted, a step
+order (Proposal → Quotation → Project Agreement → BRD → SRS), each with its status in words
+(Draft, Sent, Viewed, Accepted / Signed / Approved, Declined, Expired, or Not started), a check when accepted, a step
 number otherwise, and for a priced one in progress its quotation's state ("Price: Pending
 Approval"). A step with a document opens it. The **one primary button** is the next action from
-the ERP site: *New proposal*, *Create quotation* / *Create project agreement* (made on the ERP site
-from the accepted one, then opened; its warnings shown) or *Continue the …* for the one in
+the ERP site: *New proposal*, *Create quotation* / *Create project agreement* / *Create BRD* /
+*Create SRS* (made on the ERP site from the accepted one, then opened; its warnings shown) or *Continue the …* for the one in
 progress; "Every document is accepted" when the chain is done. The step it points at is
 brand-outlined. One column on a phone; 44px targets.
 

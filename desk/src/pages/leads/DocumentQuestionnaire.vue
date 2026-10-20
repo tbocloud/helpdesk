@@ -255,6 +255,8 @@ const questionsDirty = computed(
 // the builder hands a new copy after any save: unsaved question edits are kept until
 // this panel's own save replaces them
 let takeNext = false;
+// the rows as sent with the pending save: edits made while it runs are not replaced
+let submitted = "";
 watch(
   () => props.questionnaire,
   (q) => {
@@ -297,7 +299,7 @@ const save = createResource({
   url: "helpdesk.api.proposals.save_questions",
   method: "POST",
   onSuccess(p: Proposal) {
-    takeNext = true;
+    takeNext = JSON.stringify(rows.value) === submitted;
     done(p);
     toast.success(__("Questions saved"));
   },
@@ -308,6 +310,7 @@ const save = createResource({
 
 function saveQuestions() {
   if (save.loading) return;
+  submitted = JSON.stringify(rows.value);
   save.submit({
     name: props.proposal,
     questions: rows.value
