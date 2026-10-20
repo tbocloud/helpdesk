@@ -96,7 +96,8 @@ DOCUMENT_TYPES = ("Quotation", "Work Order", "BRD", "SRS", "Implementation Plan"
 @frappe.whitelist(methods=["POST"])
 def create_document(source: str, document_type: str) -> dict:
     """The next client document, made on the ERP site from the accepted `source`
-    (a quotation from a proposal, a project agreement from a quotation)."""
+    (a project agreement from a proposal, or from a quotation while the proposal
+    isn't the quotation; a BRD from a signed agreement …)."""
     require_leads()
     if document_type not in DOCUMENT_TYPES:
         frappe.throw(

@@ -17,15 +17,29 @@ A proposal is **assembled, not written**: a master structure of 23 sections, a p
 library and section libraries on the ERP site fill every factual section at no AI cost; one small
 AI call writes the narrative. Presales should not have to type content.
 
-The ERP side's spec is TBO Smart's `docs/proposals.md` (v2.1) and, for the documents after an
-accepted proposal, `docs/client-documents.md` (v1.4); its contract is `docs/hub-proposals-api.md`
-(v2.4).
+The ERP side's spec is TBO Smart's `docs/proposals.md` (v2.6) and, for the documents after an
+accepted proposal, `docs/client-documents.md` (v1.5); its contract is `docs/hub-proposals-api.md`
+(v2.8).
 
-**The documents after the proposal** (the owner's chain of 2026-10-19): **Proposal → Quotation →
-Project Agreement / Work Order → BRD → SRS → Implementation Plan → Project → UAT sign-off**
-(the UAT is the project's sign-off, [project-signoff.md](project-signoff.md) UAT). Each is a TBO Proposal of its own type on the ERP site, made from the accepted one before
-it and pre-filled from it, so the same builder, preview, Share, Send, revisions and client page
-serve them all. Each type has its own switch in TBO Smart Settings, off by default.
+**The documents after the proposal** (the owner's chain of 2026-10-19): **Proposal → Project
+Agreement / Work Order → BRD → SRS → Implementation Plan → Project → UAT sign-off** (the UAT is
+the project's sign-off, [project-signoff.md](project-signoff.md) UAT). Each is a TBO Proposal of
+its own type on the ERP site, made from the accepted one before it and pre-filled from it, so the
+same builder, preview, Share, Send, revisions and client page serve them all. Each type has its
+own switch in TBO Smart Settings, off by default.
+
+**The proposal is the quotation** (the owner's decision of 2026-10-20; TBO Smart Settings, on by
+default, TBO Smart's `docs/client-documents.md` §1.1): one document carries the solution and the
+final value. The proposal's own ERPNext Quotation is the single price record (with the company's
+default GST, the terms and the proposal's validity), accepting the proposal accepts it, and there
+is no Quotation step: the agreement is made from the accepted proposal. Switched off on the ERP
+site, the chain is as before: Proposal → **Quotation** → Project Agreement → …. The hub follows
+whatever chain the ERP site sends; nothing here decides it.
+
+**The ERPNext Quotation is internal** (accounts, the Sales Order, approvals): the client only ever
+sees the proposal, its number (`PROP-…`) and version. Staff see the Quotation's number as a small
+reference with a desk link (the builder's pricing block, the lead's Quotations, each with
+"for PROP-…").
 
 ## Who sees it
 
@@ -70,13 +84,15 @@ so the API key never reaches the browser.
 
 ### Lead page: Documents (`LeadDocuments.vue`)
 
-Across the top of the lead, while at least the Quotation is switched on: each switched-on type in
-order (Proposal → Quotation → Project Agreement → BRD → SRS → Implementation Plan → Project →
-UAT sign-off), each with its status in words (Draft, Sent, Viewed, Accepted / Signed / Approved,
+Across the top of the lead, while at least one document after the proposal is switched on: each
+switched-on type in the ERP site's order (Proposal → Project Agreement → BRD → SRS →
+Implementation Plan → Project → UAT sign-off while the proposal is the quotation; with the
+Quotation after the Proposal otherwise), each with its status in words (Draft, Sent, Viewed, Accepted / Signed / Approved,
 Declined, Expired, Created, or Not started), a check when accepted, a step number otherwise, and
 for a priced one in progress its quotation's state ("Price: Pending Approval"). A step with a
 document opens it. The **one primary button** is the next action from the ERP site: *New
-proposal*, *Create quotation* / *Create project agreement* / *Create BRD* / *Create SRS* /
+proposal*, *Create project agreement* (from the accepted proposal) / *Create quotation* (only while
+the proposal isn't the quotation) / *Create BRD* / *Create SRS* /
 *Create implementation plan* (made on the ERP site from the accepted one, then opened; its
 warnings shown), *Create project* (below), *UAT sign-off* (the project's Sign-off tab) or
 *Continue the …* for the one in progress; the Project step opens the project and the UAT step its
@@ -216,11 +232,15 @@ lead's first proposal with a website (the summary is kept on the lead); none wit
   the text (paragraphs, "- " lists, "## " subheadings, "a | b" tables, "A → B" workflows) and an
   image (`ProposalImageField.vue`: upload, **From the library** (tagged images for the section
   first), replace, remove, alt text, caption, width) on every section but the Investment and
-  the Acceptance. The Investment shows the pricing summary.
+  the Acceptance. The Investment shows the pricing summary (`ProposalPricingSummary.vue`): the
+  Quotation's number as a small staff-only reference linking to its desk form, its status, lines
+  and discount, then the **net total, each tax line ("GST 18%") and the grand total**, the same
+  figures as the client's Investment section; "No GST on this price…" when it has no taxes.
 - **Versions**, the **Send dialog** and **What the client sees** (`ProposalPreview.vue`: the
   cover, the contents with the parts, numbered sections and subsections, tables, workflow
-  chains, the module cards, the timeline bar, payment amounts, the price itemised or
-  consolidated, the signature boxes and the letter head; the ERP site's page and PDF are the
+  chains, the module cards, the timeline bar, payment amounts (of the grand total), the price
+  itemised or consolidated with the net total, each tax line and the grand total, the signature
+  boxes and the letter head; the ERP site's page and PDF are the
   real thing). It fits its column with no horizontal overflow at 1280, 1440 and 1920 px and at
   phone width: long words (links, emails) wrap, and a letter head's HTML with fixed widths is
   kept within it.
@@ -235,7 +255,8 @@ agreement's Parties, Purpose, Change Requests, Intellectual Property, Confidenti
 Termination added to the block labels); the preview's cover shows the type ("Quotation",
 "Project Agreement"), no part titles, and no contents for a quotation, with the type's default
 headings. A quotation is priced here (the pricing dialog, *Price from modules*, *Request
-approval*); an agreement shows the accepted quotation's price read only and has a **Project start
+approval*); an agreement shows the accepted quotation's (or, while the proposal is the
+quotation, the accepted proposal's) price read only and has a **Project start
 date** (Send says to set it; saving a new one dates the timeline and the purpose on the ERP site,
 unless they were edited by hand). The status reads "Signed" for
 an accepted agreement.

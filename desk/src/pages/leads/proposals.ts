@@ -456,6 +456,10 @@ export interface ProposalQuotation {
   taxes_and_charges?: string | null;
   valid_till?: string | null;
   needs_approval: ApprovalNeed[];
+  /** staff only: the ERPNext Quotation's desk form (the client never sees its number) */
+  desk_url?: string | null;
+  /** each tax line as the client's page shows it ("GST 18%") */
+  taxes?: { label: string; amount: number }[];
 }
 
 export interface SegmentPricing {

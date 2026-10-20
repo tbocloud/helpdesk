@@ -130,6 +130,10 @@ export interface LeadQuotation {
   tbo_quote_status?: string;
   grand_total?: number;
   currency?: string;
+  /** the client document it prices (PROP-…, QUOT-…): the client's reference */
+  tbo_proposal?: string | null;
+  /** staff only: its desk form on the ERP site */
+  url?: string | null;
 }
 
 export interface LeadDetail {

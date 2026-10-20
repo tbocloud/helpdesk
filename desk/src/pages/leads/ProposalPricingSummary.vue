@@ -11,21 +11,73 @@
           : __("no discount band")
       }}
     </p>
-    <div v-if="q" class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-      <span class="font-mono text-ink-gray-7">{{ q.name }}</span>
-      <TaskyBadge v-if="q.quote_status" :label="__(q.quote_status)" />
-      <span class="text-ink-gray-6">{{
-        __("{0} lines", String(q.items.length))
-      }}</span>
-      <span v-if="discount" class="font-mono tabular-nums text-ink-gray-6">{{
-        __("{0}% off", String(discount))
-      }}</span>
-      <span
-        class="ml-auto font-mono text-base-medium tabular-nums text-ink-gray-9"
+    <template v-if="q">
+      <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+        <!-- staff only: the ERPNext Quotation behind the price; the client sees the proposal -->
+        <a
+          v-if="q.desk_url"
+          :href="q.desk_url"
+          target="_blank"
+          rel="noopener"
+          class="inline-flex items-center gap-1 rounded font-mono text-xs text-ink-gray-6 hover:text-ink-gray-8 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+          :title="
+            __('Internal ERPNext quotation; the client never sees this number')
+          "
+          :aria-label="__('Open quotation {0} on the ERP site', q.name)"
+        >
+          {{ q.name }}
+          <LucideExternalLink class="size-3" aria-hidden="true" />
+        </a>
+        <span v-else class="font-mono text-xs text-ink-gray-6">{{
+          q.name
+        }}</span>
+        <TaskyBadge v-if="q.quote_status" :label="__(q.quote_status)" />
+        <span class="text-ink-gray-6">{{
+          __("{0} lines", String(q.items.length))
+        }}</span>
+        <span v-if="discount" class="font-mono tabular-nums text-ink-gray-6">{{
+          __("{0}% off", String(discount))
+        }}</span>
+      </div>
+      <!-- the same totals as the client's Investment section -->
+      <dl class="flex flex-col gap-1 text-sm">
+        <div class="flex items-baseline justify-between gap-3">
+          <dt class="text-ink-gray-6">{{ __("Net total") }}</dt>
+          <dd class="font-mono tabular-nums text-ink-gray-8">
+            {{ money(q.net_total, q.currency) }}
+          </dd>
+        </div>
+        <div
+          v-for="(tax, k) in taxLines"
+          :key="k"
+          class="flex items-baseline justify-between gap-3"
+        >
+          <dt class="min-w-0 truncate text-ink-gray-6">{{ tax.label }}</dt>
+          <dd class="font-mono tabular-nums text-ink-gray-8">
+            {{ money(tax.amount, q.currency) }}
+          </dd>
+        </div>
+        <div
+          class="flex items-baseline justify-between gap-3 border-t border-outline-gray-2 pt-1"
+        >
+          <dt class="text-ink-gray-8">{{ __("Grand total") }}</dt>
+          <dd class="font-mono text-base-medium tabular-nums text-ink-gray-9">
+            {{ money(q.grand_total, q.currency) }}
+          </dd>
+        </div>
+      </dl>
+      <p
+        v-if="!q.total_taxes_and_charges"
+        class="flex items-start gap-1.5 text-p-sm text-ink-gray-6"
       >
-        {{ money(q.grand_total, q.currency) }}
-      </span>
-    </div>
+        <LucideInfo class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+        {{
+          __(
+            "No GST on this price. Pick a tax template in Change pricing, or set the company's default one on the ERP site."
+          )
+        }}
+      </p>
+    </template>
     <p v-else class="text-p-sm text-ink-gray-6">
       {{
         __(
@@ -130,6 +182,8 @@ import { __ } from "@/translation";
 import { errorText } from "@/utils";
 import { Button, createResource, Dialog, FormControl, toast } from "frappe-ui";
 import { computed, ref, useId } from "vue";
+import LucideExternalLink from "~icons/lucide/external-link";
+import LucideInfo from "~icons/lucide/info";
 import LucideReceipt from "~icons/lucide/receipt";
 import LucideTriangleAlert from "~icons/lucide/triangle-alert";
 import type { Proposal } from "./proposals";
@@ -154,6 +208,15 @@ const discount = computed(() => {
   return list
     ? Math.round(((list - quotation.net_total) / list) * 10000) / 100
     : 0;
+});
+
+/** The tax lines as the client's page shows them; one "Taxes" line from an older ERP site. */
+const taxLines = computed(() => {
+  const quotation = q.value;
+  if (!quotation) return [];
+  return quotation.taxes?.length
+    ? quotation.taxes
+    : [{ label: __("Taxes"), amount: quotation.total_taxes_and_charges || 0 }];
 });
 
 function limitText(limit: number | null) {
