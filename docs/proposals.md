@@ -18,12 +18,12 @@ library and section libraries on the ERP site fill every factual section at no A
 AI call writes the narrative. Presales should not have to type content.
 
 The ERP side's spec is TBO Smart's `docs/proposals.md` (v2.1) and, for the documents after an
-accepted proposal, `docs/client-documents.md` (v1.3); its contract is `docs/hub-proposals-api.md`
-(v2.3).
+accepted proposal, `docs/client-documents.md` (v1.4); its contract is `docs/hub-proposals-api.md`
+(v2.4).
 
 **The documents after the proposal** (the owner's chain of 2026-10-19): **Proposal → Quotation →
-Project Agreement / Work Order → BRD → SRS → Implementation Plan → Project** (the UAT sign-off
-follows). Each is a TBO Proposal of its own type on the ERP site, made from the accepted one before
+Project Agreement / Work Order → BRD → SRS → Implementation Plan → Project → UAT sign-off**
+(the UAT is the project's sign-off, [project-signoff.md](project-signoff.md) UAT). Each is a TBO Proposal of its own type on the ERP site, made from the accepted one before
 it and pre-filled from it, so the same builder, preview, Share, Send, revisions and client page
 serve them all. Each type has its own switch in TBO Smart Settings, off by default.
 
@@ -266,7 +266,8 @@ go-live, the client when an HD Customer has its name, the project type from the 
 (ERPNext → ERP Implementation, mobile → Mobile App, website → Website); then a task for each
 phase's deliverable and a milestone task at each phase's end, each in its phase
 (`custom_phase`) with the phase's dates. The project keeps the lead and the plan
-(`custom_crm_lead`, `custom_crm_plan`), and the plan is told its project (`link_project`), so the
+(`custom_crm_lead`, `custom_crm_plan`, and who made it, `custom_crm_acting_user`, whom the hub
+asks the ERP site as later), and the plan is told its project (`link_project`), so the
 chain moves on. Pressing it again finds the same project (by the plan) and adds nothing. After
 that the project is where the work is planned; changing the plan doesn't change it.
 

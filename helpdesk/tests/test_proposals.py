@@ -359,8 +359,9 @@ class TestProposals(FrappeTestCase):
                 project.project_type,
                 str(project.expected_start_date),
                 project.custom_crm_plan,
+                project.custom_crm_acting_user,
             ),
-            ("ERP Implementation", "2026-11-02", "PIP-2026-00001"),
+            ("ERP Implementation", "2026-11-02", "PIP-2026-00001", "Administrator"),
         )
         tasks = frappe.get_all(
             "Task",
@@ -374,7 +375,12 @@ class TestProposals(FrappeTestCase):
         )
         calls = {name: params for name, _post, params in self.crm.lead_calls}
         self.assertEqual(calls["link_project"]["project"], project.name)
-        # again: the same project, no second set of tasks
+        # again: the same project, no second set of tasks; a missing maker is filled in
+        frappe.db.set_value("Project", project.name, "custom_crm_acting_user", None)
         again = proposals_api.create_project_from_plan("PIP-2026-00001")
         self.assertEqual(again["project"], project.name)
         self.assertEqual(frappe.db.count("Task", {"project": project.name}), 2)
+        self.assertEqual(
+            frappe.db.get_value("Project", project.name, "custom_crm_acting_user"),
+            "Administrator",
+        )

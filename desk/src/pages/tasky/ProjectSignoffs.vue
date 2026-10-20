@@ -28,13 +28,23 @@
         <template v-else>
           <div class="mb-4 flex flex-wrap items-center gap-2">
             <h2 class="text-lg-semibold text-ink-gray-9">
-              {{ __("Training sign-off") }}
+              {{ __("Sign-offs") }}
             </h2>
-            <div class="ml-auto">
+            <div class="ml-auto flex flex-wrap gap-2">
               <Button
-                v-if="data?.can_create && data.total"
+                v-if="data?.can_create_uat"
+                :variant="hasUat ? 'subtle' : 'solid'"
+                :label="__('New UAT sign-off')"
+                @click="newSignoff(true)"
+              >
+                <template #prefix>
+                  <LucideListChecks class="size-4" aria-hidden="true" />
+                </template>
+              </Button>
+              <Button
+                v-if="data?.can_create && data.signoffs.length"
                 :label="__('New sign-off')"
-                @click="showNew = true"
+                @click="newSignoff(false)"
               >
                 <template #prefix>
                   <LucidePlus class="size-4" aria-hidden="true" />
@@ -141,7 +151,7 @@
           </div>
 
           <TaskyState
-            v-else-if="!data.total"
+            v-else-if="!data.signoffs.length"
             :icon="LucideClipboardCheck"
             :title="__('No sign-offs yet')"
             :message="
@@ -156,9 +166,9 @@
           >
             <Button
               v-if="data.can_create"
-              variant="solid"
+              :variant="data.can_create_uat ? 'subtle' : 'solid'"
               :label="__('New sign-off')"
-              @click="showNew = true"
+              @click="newSignoff(false)"
             >
               <template #prefix>
                 <LucidePlus class="size-4" aria-hidden="true" />
@@ -190,6 +200,11 @@
                       s.module_title
                     }}</span>
                     <TaskyBadge
+                      v-if="s.signoff_type === 'UAT'"
+                      :label="__('UAT')"
+                      :icon="LucideListChecks"
+                    />
+                    <TaskyBadge
                       :label="__(signoffStatusMeta(s.status).label)"
                       :tone="signoffStatusMeta(s.status).tone"
                       :icon="signoffStatusMeta(s.status).icon"
@@ -220,7 +235,11 @@
                   >
                     <LucideCircleHelp class="size-3.5" aria-hidden="true" />
                     {{
-                      s.follow_up === 1
+                      s.signoff_type === "UAT"
+                        ? s.follow_up === 1
+                          ? __("1 open issue")
+                          : __("{0} open issues", String(s.follow_up))
+                        : s.follow_up === 1
                         ? __("1 to clarify")
                         : __("{0} to clarify", String(s.follow_up))
                     }}
@@ -246,7 +265,15 @@
                     <span
                       class="font-mono text-xs tabular-nums text-ink-gray-7"
                     >
-                      {{ __("{0}/{1} done", String(s.done), String(s.total)) }}
+                      {{
+                        s.signoff_type === "UAT"
+                          ? __(
+                              "{0}/{1} passed",
+                              String(s.done),
+                              String(s.total)
+                            )
+                          : __("{0}/{1} done", String(s.done), String(s.total))
+                      }}
                     </span>
                   </span>
                 </div>
@@ -261,6 +288,7 @@
       v-if="data?.can_create"
       v-model:open="showNew"
       :project-id="projectId"
+      :uat="newUat"
       @saved="openSignoff"
     />
   </div>
@@ -282,6 +310,7 @@ import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideCircleHelp from "~icons/lucide/circle-help";
 import LucideClipboardCheck from "~icons/lucide/clipboard-check";
 import LucideDownload from "~icons/lucide/download";
+import LucideListChecks from "~icons/lucide/list-checks";
 import LucidePlus from "~icons/lucide/plus";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideSend from "~icons/lucide/send";
@@ -293,6 +322,8 @@ import { loadErrorMessage } from "./taskMeta";
 interface SignoffRow {
   name: string;
   module_title: string;
+  /** Training, or UAT (the client's acceptance tests from the SRS) */
+  signoff_type: "Training" | "UAT";
   status: string;
   training_date?: string | null;
   trainer_name?: string | null;
@@ -308,11 +339,19 @@ interface SignoffList {
   total: number;
   completion_letter: { file_name: string; file_url: string } | null;
   can_create: boolean;
+  /** the project was made from an implementation plan: a UAT can be made from its SRS */
+  can_create_uat: boolean;
 }
 
 const props = defineProps<{ projectId: string }>();
 const router = useRouter();
 const showNew = ref(false);
+const newUat = ref(false);
+
+function newSignoff(uat: boolean) {
+  newUat.value = uat;
+  showNew.value = true;
+}
 
 const signoffs = createResource({
   url: "helpdesk.api.project_signoff.get_project_signoffs",
@@ -327,6 +366,9 @@ watch(
 );
 
 const data = computed(() => signoffs.data as SignoffList | undefined);
+const hasUat = computed(
+  () => !!data.value?.signoffs.some((s) => s.signoff_type === "UAT")
+);
 const allSigned = computed(
   () => !!data.value?.total && data.value.signed === data.value.total
 );

@@ -83,10 +83,16 @@ def require_leads():
         )
 
 
-def call(method: str, post: bool = False, api: str = API, **params):
+def call(
+    method: str,
+    post: bool = False,
+    api: str = API,
+    acting_user: str | None = None,
+    **params,
+):
     """`<api>.<method>` on the CRM site (TBO Smart's hub leads API by default, or its hub
-    proposals API) as the signed-in person; any failure becomes a LeadsError the person
-    can act on."""
+    proposals API) as the signed-in person (or `acting_user`, for a call the hub makes on
+    someone's behalf); any failure becomes a LeadsError the person can act on."""
     try:
         client = CRMClient.from_settings()
     except CRMError:
@@ -97,10 +103,13 @@ def call(method: str, post: bool = False, api: str = API, **params):
         )
     try:
         return client.call(
-            f"{api}.{method}", post=post, acting_user=frappe.session.user, **params
+            f"{api}.{method}",
+            post=post,
+            acting_user=acting_user or frappe.session.user,
+            **params,
         )
     except CRMError as e:
-        fail(friendly_error(e, client))
+        fail(friendly_error(e, client, acting_user))
 
 
 def download(method: str, api: str = API, **params) -> tuple[bytes, str]:
@@ -128,7 +137,12 @@ def fail(error: LeadsError):
     frappe.throw(str(error), exc=type(error))
 
 
-def friendly_error(error: CRMError, client) -> LeadsError:
+def friendly_error(
+    error: CRMError, client, acting_user: str | None = None
+) -> LeadsError:
+    """A message the person can act on; it names the user the ERP site checked (`acting_user`
+    for a call made on someone's behalf)."""
+    user = acting_user or frappe.session.user
     site_url = client.base
     site = urlparse(site_url).netloc or site_url
     detail = error.detail or ""
@@ -151,7 +165,7 @@ def friendly_error(error: CRMError, client) -> LeadsError:
         return LeadsError(
             _(
                 "Your user {0} on {1} has the Hub Integration role, which is only for the hub's API user. Ask an admin to remove it from your user there (keep Sales User or Sales Manager)."
-            ).format(frappe.session.user, site)
+            ).format(user, site)
         )
     if error.status == 403 and "integration user" in detail.casefold():
         return LeadsUnavailableError(
@@ -163,7 +177,7 @@ def friendly_error(error: CRMError, client) -> LeadsError:
         return LeadsError(
             _(
                 "You don't have a sales account on the ERP site yet. Ask an admin to give {0} the Sales User role on {1}."
-            ).format(frappe.session.user, site)
+            ).format(user, site)
         )
     if error.status == 404:
         return LeadsError(
