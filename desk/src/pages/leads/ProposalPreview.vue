@@ -294,16 +294,27 @@
                   − {{ money(quotation.discount_amount, quotation.currency) }}
                 </td>
               </tr>
-              <tr v-if="quotation.total_taxes_and_charges">
-                <td class="pt-1">{{ __("Taxes") }}</td>
-                <td class="pt-1 text-right font-mono tabular-nums">
-                  {{
-                    money(quotation.total_taxes_and_charges, quotation.currency)
-                  }}
-                </td>
-              </tr>
+              <template
+                v-if="
+                  quotation.taxes?.length || quotation.total_taxes_and_charges
+                "
+              >
+                <tr>
+                  <td class="pt-1">{{ __("Net total") }}</td>
+                  <td class="pt-1 text-right font-mono tabular-nums">
+                    {{ money(quotation.net_total, quotation.currency) }}
+                  </td>
+                </tr>
+                <!-- each tax line as the client's page shows it ("GST 18%") -->
+                <tr v-for="(tax, k) in taxLines" :key="`tax-${k}`">
+                  <td class="pt-1">{{ tax.label }}</td>
+                  <td class="pt-1 text-right font-mono tabular-nums">
+                    {{ money(tax.amount, quotation.currency) }}
+                  </td>
+                </tr>
+              </template>
               <tr class="text-base font-semibold text-ink-gray-9">
-                <td class="pt-2">{{ __("Total") }}</td>
+                <td class="pt-2">{{ __("Grand total") }}</td>
                 <td class="pt-2 text-right font-mono tabular-nums">
                   {{ money(quotation.grand_total, quotation.currency) }}
                 </td>
@@ -388,6 +399,15 @@ const props = defineProps<{
   modules: ProposalModule[];
   letterHead?: LetterHeadPreview | null;
 }>();
+
+/** The tax lines; an older ERP site sends only the total, shown as one "Taxes" line. */
+const taxLines = computed(() => {
+  const q = props.quotation;
+  if (!q) return [];
+  return q.taxes?.length
+    ? q.taxes
+    : [{ label: __("Taxes"), amount: q.total_taxes_and_charges }];
+});
 
 const signatureFields = [
   __("Authorised person"),
