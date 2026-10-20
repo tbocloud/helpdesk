@@ -273,13 +273,20 @@ def record_uat_on_erp(signoff: str) -> None:
 
 def _erp_call(project: str, method: str, post: bool = False, **params):
     """TBO Smart's hub proposals API on behalf of the person who made the project from the
-    plan (a sales person the ERP site knows), whoever acts here: a project manager reading
-    the tests, or the customer signing. The ERP site still checks that person's rights."""
+    plan (`custom_crm_acting_user`: the ERP site already let them read that plan), whoever
+    acts here: a project manager reading the tests, or the customer signing. The ERP site
+    still checks that person's rights."""
     from helpdesk.api.proposals import PROPOSALS
     from helpdesk.integrations.crm.leads import call
 
-    owner = frappe.db.get_value("Project", project, "owner")
-    return call(method, post=post, api=PROPOSALS, acting_user=owner, **params)
+    maker = frappe.db.get_value("Project", project, "custom_crm_acting_user")
+    if not maker:
+        frappe.throw(
+            _(
+                "This project doesn't say who made it from the plan, so the ERP site can't be asked. Make the project from the plan again."
+            )
+        )
+    return call(method, post=post, api=PROPOSALS, acting_user=maker, **params)
 
 
 @frappe.whitelist(methods=["POST"])

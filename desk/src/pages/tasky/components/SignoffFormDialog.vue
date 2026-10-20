@@ -4,7 +4,7 @@
     :title="
       editing
         ? __('Edit sign-off')
-        : uat
+        : isUat
         ? __('New UAT sign-off')
         : __('New sign-off')
     "
@@ -55,7 +55,7 @@
       novalidate
       @submit.prevent="submit"
     >
-      <p v-if="uat" class="text-p-sm text-ink-gray-6">
+      <p v-if="isUat" class="text-p-sm text-ink-gray-6">
         {{
           __(
             "A test case for each requirement of the approved SRS on the ERP site: its steps and the expected result. Edit them before sending. The client marks each Pass or Fail; a Fail becomes an issue for the team."
@@ -64,7 +64,7 @@
       </p>
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <FormControl
-          v-if="!editing && !uat"
+          v-if="!editing && !isUat"
           v-model="form.template"
           type="select"
           :label="__('Template')"
@@ -77,7 +77,7 @@
           @update:model-value="onTemplate"
         />
         <TextInput
-          v-if="!uat"
+          v-if="!isUat"
           v-model="form.module_title"
           :label="__('Module')"
           :placeholder="__('e.g. Accounts')"
@@ -85,14 +85,14 @@
           required
         />
         <TextInput
-          v-if="!uat"
+          v-if="!isUat"
           v-model="form.training_date"
           type="date"
           :label="__('Training date')"
         />
         <!-- Combobox layers inside the dialog, so Escape and clicking outside still close it -->
         <Combobox
-          :label="uat ? __('Tests with the client') : __('Trainer')"
+          :label="isUat ? __('Tests with the client') : __('Trainer')"
           :options="trainerOptions"
           :placeholder="__('Pick from the project team')"
           :model-value="form.trainer || null"
@@ -163,7 +163,7 @@
           :label="
             editing
               ? __('Save changes')
-              : uat
+              : isUat
               ? __('Create UAT sign-off')
               : __('Create sign-off')
           "
@@ -198,6 +198,7 @@ import type { SignoffQuestion } from "../signoffMeta";
 export interface SignoffDraft {
   name: string;
   module_title: string;
+  signoff_type?: "Training" | "UAT";
   training_date?: string | null;
   trainer?: string | null;
   signatory_contact?: string | null;
@@ -219,6 +220,10 @@ const emit = defineEmits<{
 
 const formId = `signoff-form-${useId()}`;
 const editing = computed(() => !!props.signoff);
+// a new UAT, or editing one
+const isUat = computed(
+  () => props.uat || props.signoff?.signoff_type === "UAT"
+);
 const errorMessage = ref("");
 
 const form = reactive({
@@ -292,7 +297,7 @@ function onTemplate(name: string) {
 
 const canSubmit = computed(
   () =>
-    (props.uat || !!form.module_title.trim()) &&
+    (isUat.value || !!form.module_title.trim()) &&
     !!form.trainer &&
     !!form.signatory_contact &&
     (!editing.value || form.items.every((i) => i.question.trim()))
@@ -306,7 +311,7 @@ async function submit() {
       ? __(
           "Fill in the module, trainer and signatory, and give every question some text."
         )
-      : props.uat
+      : isUat.value
       ? __("Pick who tests with the client and who signs.")
       : __("Fill in the module, trainer and signatory.");
     return;

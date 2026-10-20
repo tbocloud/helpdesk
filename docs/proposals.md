@@ -266,7 +266,8 @@ go-live, the client when an HD Customer has its name, the project type from the 
 (ERPNext → ERP Implementation, mobile → Mobile App, website → Website); then a task for each
 phase's deliverable and a milestone task at each phase's end, each in its phase
 (`custom_phase`) with the phase's dates. The project keeps the lead and the plan
-(`custom_crm_lead`, `custom_crm_plan`), and the plan is told its project (`link_project`), so the
+(`custom_crm_lead`, `custom_crm_plan`, and who made it, `custom_crm_acting_user`, whom the hub
+asks the ERP site as later), and the plan is told its project (`link_project`), so the
 chain moves on. Pressing it again finds the same project (by the plan) and adds nothing. After
 that the project is where the work is planned; changing the plan doesn't change it.
 

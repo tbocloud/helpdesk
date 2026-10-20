@@ -104,9 +104,11 @@ or UAT, `crm_plan`), one portal, one flow.
 - **The tests**: the ERP site's `get_uat_cases` for the plan: **a test case for each functional
   requirement of the approved SRS** (section = its module, question = "FR-ACC-01: <the
   requirement>", help text = its steps and "Expected: <its acceptance criterion>"). A draft,
-  edited and sent like any sign-off. The calls to the ERP site are made on behalf of the
-  project's creator (the person who made it from the plan; the ERP site checks their rights:
-  `leads.call(..., acting_user=…)`), whoever acts here.
+  edited and sent like any sign-off. The calls to the ERP site are made on behalf of the person
+  who made the project from the plan (`custom_crm_acting_user`, kept when *Create project* ran:
+  the ERP site had let them read that plan), never the project's owner; the ERP site still checks
+  their rights (`leads.call(..., acting_user=…)`), and its errors name that person. Without it
+  the hub refuses to ask.
 - **Answers**: the same three, read as **Pass** (Done), **Fail** (Not clear) and **Blocker**
   (Escalated). A Fail or Blocker needs a few words ("Say what went wrong, so we can fix it") and
   becomes **an open issue**: a task "Fix: <test>" for the tester (Urgent and the managers told for
@@ -114,7 +116,9 @@ or UAT, `crm_plan`), one portal, one flow.
   the page say "open issues" and "passed".
 - **Signing**: every test passed, then the same signature (name, designation, the tick "I confirm
   that we tested the system as listed above and accept it"); the PDF "User acceptance sign-off" on
-  the project. A UAT is **not** in the training completion letter's roll-up.
+  the project. A UAT is **not** in the training completion letter's roll-up, and reopening one
+  keeps the letter. The emails (the link, a fixed item to test again, the signed record) use the
+  UAT's words.
 - **The ERP site is told**: signing (and reopening) queues `record_uat_on_erp` after the commit
   (`record_uat` on the plan: Signed with the signer, which **starts the warranty** the day after
   and completes the lead's chain), so a slow ERP site never holds up the client.

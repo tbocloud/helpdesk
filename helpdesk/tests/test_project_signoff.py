@@ -472,7 +472,9 @@ class TestProjectSignoff(FrappeTestCase):
     def uat_project(self):
         """The project as made from an implementation plan, with the ERP site faked."""
         frappe.db.set_value(
-            "Project", self.project, "custom_crm_plan", "PIP-2026-00001"
+            "Project",
+            self.project,
+            {"custom_crm_plan": "PIP-2026-00001", "custom_crm_acting_user": PM[0]},
         )
         crm = FakeCRM()
         crm.lead_answers["get_uat_cases"] = {
@@ -564,10 +566,30 @@ class TestProjectSignoff(FrappeTestCase):
             ),
             ("PIP-2026-00001", "Signed", "Fathima Rahman", PM[0]),
         )
-        # the training completion letter isn't the UAT's
+        # the training completion letter isn't the UAT's: reopening the UAT keeps it
         self.assertFalse(
             frappe.db.get_value("Project", self.project, "custom_signoff_letter")
         )
+        frappe.db.set_value(
+            "Project", self.project, "custom_signoff_letter", "letter.pdf"
+        )
+        doc = frappe.get_doc("HD Project Signoff", name)
+        with patch("frappe.enqueue"):
+            doc.reopen("A test failed after all")
+            doc.save(ignore_permissions=True)
+        self.assertEqual(
+            frappe.db.get_value("Project", self.project, "custom_signoff_letter"),
+            "letter.pdf",
+        )
+
+    def test_the_erp_site_is_asked_only_as_the_plans_maker(self):
+        self.uat_project()
+        frappe.db.set_value("Project", self.project, "custom_crm_acting_user", None)
+        with self.assertRaises(frappe.ValidationError):
+            run_as_user(
+                PM[0],
+                lambda: api.create_uat_signoff(self.project, self.contact, TRAINER[0]),
+            )
 
     def test_a_project_without_a_plan_has_no_uat(self):
         listed = run_as_user(PM[0], lambda: api.get_project_signoffs(self.project))

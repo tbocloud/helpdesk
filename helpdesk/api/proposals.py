@@ -202,7 +202,12 @@ def create_project_from_plan(plan: str) -> dict:
         frappe.db.set_value(
             "Project",
             project,
-            {"custom_crm_lead": data.get("lead"), "custom_crm_plan": data.get("plan")},
+            {
+                "custom_crm_lead": data.get("lead"),
+                "custom_crm_plan": data.get("plan"),
+                # the ERP site let this person read the plan: the hub asks it as them later
+                "custom_crm_acting_user": frappe.session.user,
+            },
         )
         add_plan_tasks(project, data.get("phases") or [])
     chain = proposals(

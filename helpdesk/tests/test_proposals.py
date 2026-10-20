@@ -359,8 +359,9 @@ class TestProposals(FrappeTestCase):
                 project.project_type,
                 str(project.expected_start_date),
                 project.custom_crm_plan,
+                project.custom_crm_acting_user,
             ),
-            ("ERP Implementation", "2026-11-02", "PIP-2026-00001"),
+            ("ERP Implementation", "2026-11-02", "PIP-2026-00001", "Administrator"),
         )
         tasks = frappe.get_all(
             "Task",

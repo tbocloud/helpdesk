@@ -324,9 +324,19 @@ class HDProjectSignoff(Document):
         )
         self.save(ignore_permissions=True)
         self.email_customer(
-            _("Please confirm your {0} training").format(self.module_title),
-            _(
-                "{0} has finished your {1} training for {2}. Please go through the checklist and tell us, item by item, whether everything is clear."
+            (
+                _("Please test and accept {0}")
+                if self.is_uat()
+                else _("Please confirm your {0} training")
+            ).format(self.module_title),
+            (
+                _(
+                    "{0} has prepared {1} for {2}. Please run each test and tell us, one by one, whether it passes."
+                )
+                if self.is_uat()
+                else _(
+                    "{0} has finished your {1} training for {2}. Please go through the checklist and tell us, item by item, whether everything is clear."
+                )
             ).format(
                 escape_html(
                     get_fullname(self.trainer) if self.trainer else _("Your trainer")
@@ -561,8 +571,14 @@ class HDProjectSignoff(Document):
                 else _("{0} items are ready for you to review again.").format(pending)
             )
             + " "
-            + _(
-                "Your trainer has followed up on what wasn't clear. This link replaces the one we sent before."
+            + (
+                _(
+                    "Our team fixed what failed: please test it again. This link replaces the one we sent before."
+                )
+                if self.is_uat()
+                else _(
+                    "Your trainer has followed up on what wasn't clear. This link replaces the one we sent before."
+                )
             ),
             token,
         )
@@ -675,8 +691,9 @@ class HDProjectSignoff(Document):
             self.set(field, None)
         self.status = REOPENED
         self.flags.signoff_action = True
-        # the project is no longer fully signed off
-        frappe.db.set_value("Project", self.project, "custom_signoff_letter", None)
+        if not self.is_uat():
+            # the project's training is no longer fully signed off (a UAT isn't in the letter)
+            frappe.db.set_value("Project", self.project, "custom_signoff_letter", None)
         self.tell_erp_site()
 
     # --- UAT ---
@@ -822,8 +839,14 @@ class HDProjectSignoff(Document):
                 _("{0} signed off") if self.is_uat() else _("{0} training signed off")
             ).format(self.module_title),
             message="<p>"
-            + _(
-                "{0} ({1}) signed off the {2} training for {3} on {4}. The signed record is attached."
+            + (
+                _(
+                    "{0} ({1}) accepted {2} for {3} on {4}. The signed record is attached."
+                )
+                if self.is_uat()
+                else _(
+                    "{0} ({1}) signed off the {2} training for {3} on {4}. The signed record is attached."
+                )
             ).format(
                 escape_html(self.signer_name),
                 escape_html(self.signer_designation),

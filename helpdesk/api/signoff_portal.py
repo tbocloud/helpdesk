@@ -309,7 +309,7 @@ def page_data(token: str) -> dict:
     doc = find_signoff(token)
     state = link_state(doc)
     if state != "open":
-        return {"state": state, "words": words(None)}
+        return {"state": state, "words": words(doc)}
     if not get_session(doc):
         return {
             "state": "code",

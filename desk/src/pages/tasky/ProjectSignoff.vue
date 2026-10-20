@@ -456,7 +456,7 @@
     <!-- mark clarified -->
     <Dialog
       :open="!!clarifying"
-      :title="__('Mark clarified')"
+      :title="uat ? __('Mark fixed') : __('Mark clarified')"
       size="lg"
       @update:open="(v: boolean) => !v && (clarifying = null)"
     >
@@ -483,7 +483,7 @@
           <Button :label="__('Cancel')" @click="clarifying = null" />
           <Button
             variant="solid"
-            :label="__('Mark clarified')"
+            :label="uat ? __('Mark fixed') : __('Mark clarified')"
             :loading="busy === 'clarify'"
             @click="clarify"
           />
@@ -838,7 +838,9 @@ function clarify() {
     "clarify",
     "mark_item_clarified",
     { item: clarifying.value.name, note: clarifyNote.value },
-    __("Marked clarified; the customer has been emailed")
+    uat.value
+      ? __("Marked fixed; the customer has been asked to test it again")
+      : __("Marked clarified; the customer has been emailed")
   );
 }
 
