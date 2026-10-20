@@ -63,6 +63,10 @@ export type SectionType =
   | "User Roles"
   | "Module Specification"
   | "Non-functional Requirements"
+  | "Plan Overview"
+  | "Phase Deliverables"
+  | "RACI Matrix"
+  | "Client Responsibilities"
   | "Image"
   | "Custom";
 
@@ -72,7 +76,8 @@ export type DocumentTypeName =
   | "Quotation"
   | "Work Order"
   | "BRD"
-  | "SRS";
+  | "SRS"
+  | "Implementation Plan";
 
 /** A switched-on type of client document, as the ERP site describes it. */
 export interface DocumentType {
@@ -117,9 +122,9 @@ export interface Questionnaire {
   new_answers: number;
 }
 
-/** One step of the lead's chain of documents. */
+/** One step of the lead's chain of documents (after the plan: its project and the UAT). */
 export interface DocumentStep {
-  document_type: DocumentTypeName;
+  document_type: DocumentTypeName | "Project" | "UAT";
   label: string;
   name: string | null;
   title: string | null;
@@ -135,12 +140,12 @@ export interface DocumentStep {
 export interface DocumentChain {
   steps: DocumentStep[];
   next: null | {
-    action: "create_proposal" | "create" | "open";
-    document_type: DocumentTypeName;
+    action: "create_proposal" | "create" | "open" | "create_project" | "uat";
+    document_type: DocumentStep["document_type"];
     label: string;
     /** create: the accepted document to make it from */
     source?: string;
-    /** open: the document in progress */
+    /** open: the document in progress; uat: the project */
     name?: string;
   };
 }
@@ -474,7 +479,9 @@ export interface Proposal {
   can_price: boolean;
   /** the client signs with a designation (the agreement) */
   signature: boolean;
-  /** the agreement's project start: the timeline's dates follow from it */
+  /** its dates follow from the start date (the agreement, the plan) */
+  dated: boolean;
+  /** the agreement's or the plan's start: the dates follow from it */
   start_date?: string | null;
   /** the BRD's questions for the client */
   questionnaire: Questionnaire | null;
@@ -621,6 +628,10 @@ export const SECTION_LABELS: Record<SectionType, string> = {
   "User Roles": __("User Roles & Permissions"),
   "Module Specification": __("Module Specification"),
   "Non-functional Requirements": __("Non-functional Requirements"),
+  "Plan Overview": __("Plan Overview"),
+  "Phase Deliverables": __("Deliverables by Phase"),
+  "RACI Matrix": __("RACI Matrix"),
+  "Client Responsibilities": __("Client Responsibilities"),
   Image: __("Image"),
   Custom: __("Custom"),
 };

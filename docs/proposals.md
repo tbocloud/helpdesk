@@ -18,12 +18,12 @@ library and section libraries on the ERP site fill every factual section at no A
 AI call writes the narrative. Presales should not have to type content.
 
 The ERP side's spec is TBO Smart's `docs/proposals.md` (v2.1) and, for the documents after an
-accepted proposal, `docs/client-documents.md` (v1.2); its contract is `docs/hub-proposals-api.md`
-(v2.2).
+accepted proposal, `docs/client-documents.md` (v1.3); its contract is `docs/hub-proposals-api.md`
+(v2.3).
 
 **The documents after the proposal** (the owner's chain of 2026-10-19): **Proposal → Quotation →
-Project Agreement / Work Order → BRD → SRS** (the implementation plan, project and UAT sign-off
-follow). Each is a TBO Proposal of its own type on the ERP site, made from the accepted one before
+Project Agreement / Work Order → BRD → SRS → Implementation Plan → Project** (the UAT sign-off
+follows). Each is a TBO Proposal of its own type on the ERP site, made from the accepted one before
 it and pre-filled from it, so the same builder, preview, Share, Send, revisions and client page
 serve them all. Each type has its own switch in TBO Smart Settings, off by default.
 
@@ -53,7 +53,8 @@ sending `acting_user`; each maps 1:1 to `tbo_smart.api.hub_proposals.<same name>
 | `price_from_modules(name)`, `get_pricing_form(name)`, `save_pricing(name, values)`, `request_approval(name, reason)` | A reason is required here too |
 | `share_proposal(name)`, `send_proposal(name, recipients, message, attach_pdf)`, `create_revision(name)` | |
 | `save_questions(name, questions)`, `share_questionnaire(name)`, `send_questionnaire(name, recipients, message)`, `apply_answers(name)` | A BRD's client questionnaire (the questions as a list; blank recipients and message trimmed) |
-| `create_document(source, document_type)`, `get_document_chain(lead)` | The next document (`Quotation`, `Work Order`, `BRD`, `SRS`; anything else refused here) from the accepted `source`; the lead's chain. `get_lead` carries the chain too (`documents`) |
+| `create_project_from_plan(plan)` | The hub project from an approved plan, once (see below) |
+| `create_document(source, document_type)`, `get_document_chain(lead)` | The next document (`Quotation`, `Work Order`, `BRD`, `SRS`, `Implementation Plan`; anything else refused here) from the accepted `source`; the lead's chain. `get_lead` carries the chain too (`documents`) |
 | `upload_proposal_image(name, filename, content)`, `use_library_image(name, image)` | Images over 5 MB or not base64 are refused here before anything is sent |
 | `save_template(data)`, `set_default_letter_head(letter_head)` | |
 | `get_proposal_library()`, `save_library_record(kind, data)`, `delete_library_record(kind, name)`, `upload_library_image(filename, content, data)`, `draft_library_module(module)` | Editors only (checked on the ERP site) |
@@ -70,13 +71,16 @@ so the API key never reaches the browser.
 ### Lead page: Documents (`LeadDocuments.vue`)
 
 Across the top of the lead, while at least the Quotation is switched on: each switched-on type in
-order (Proposal → Quotation → Project Agreement → BRD → SRS), each with its status in words
-(Draft, Sent, Viewed, Accepted / Signed / Approved, Declined, Expired, or Not started), a check when accepted, a step
-number otherwise, and for a priced one in progress its quotation's state ("Price: Pending
-Approval"). A step with a document opens it. The **one primary button** is the next action from
-the ERP site: *New proposal*, *Create quotation* / *Create project agreement* / *Create BRD* /
-*Create SRS* (made on the ERP site from the accepted one, then opened; its warnings shown) or *Continue the …* for the one in
-progress; "Every document is accepted" when the chain is done. The step it points at is
+order (Proposal → Quotation → Project Agreement → BRD → SRS → Implementation Plan → Project →
+UAT sign-off), each with its status in words (Draft, Sent, Viewed, Accepted / Signed / Approved,
+Declined, Expired, Created, or Not started), a check when accepted, a step number otherwise, and
+for a priced one in progress its quotation's state ("Price: Pending Approval"). A step with a
+document opens it. The **one primary button** is the next action from the ERP site: *New
+proposal*, *Create quotation* / *Create project agreement* / *Create BRD* / *Create SRS* /
+*Create implementation plan* (made on the ERP site from the accepted one, then opened; its
+warnings shown), *Create project* (below), *UAT sign-off* (the project's Sign-off tab) or
+*Continue the …* for the one in progress; the Project step opens the project and the UAT step its
+sign-offs; "Every document is accepted" when the chain is done. The step it points at is
 brand-outlined. One column on a phone; 44px targets.
 
 ### Lead page: Proposals (`LeadProposals.vue`)
@@ -246,6 +250,25 @@ answered questions can't be changed. **Share with the client** copies the questi
 client has sent new answers, the primary **Update from n new answers** rebuilds only the sections
 they belong to (the ERP site rewrites the narrative ones in one small AI call) and says which.
 Closed once the BRD is approved, declined or revised.
+
+### The project page
+
+A project made from a plan (`custom_crm_lead`) shows the same Documents strip above its overview,
+read only (no next action: the lead is where the documents are worked), for people who use Leads;
+anyone else doesn't see it (`get_project_detail` returns `crm_lead`).
+
+### The project from the plan (`create_project_from_plan`)
+
+With the plan approved, *Create project* reads the plan from the ERP site and makes the hub's own
+project once, through the existing project creation (`tasky.api.create_project`, so the creator is
+its manager): named "<client> - <solution>" (numbered when the name is taken), the plan's start and
+go-live, the client when an HD Customer has its name, the project type from the solution
+(ERPNext → ERP Implementation, mobile → Mobile App, website → Website); then a task for each
+phase's deliverable and a milestone task at each phase's end, each in its phase
+(`custom_phase`) with the phase's dates. The project keeps the lead and the plan
+(`custom_crm_lead`, `custom_crm_plan`), and the plan is told its project (`link_project`), so the
+chain moves on. Pressing it again finds the same project (by the plan) and adds nothing. After
+that the project is where the work is planned; changing the plan doesn't change it.
 
 ### The SRS in the builder
 
