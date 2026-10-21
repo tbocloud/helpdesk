@@ -19,6 +19,7 @@ from frappe.utils import (
     nowdate,
 )
 
+from helpdesk.content_team import is_sales_employee
 from helpdesk.github_sync import OPEN_STATES as PR_OPEN_STATES
 from helpdesk.github_sync import get_pull_requests
 from helpdesk.tasky.api import (
@@ -1333,8 +1334,11 @@ def _free_people() -> list[dict]:
 
 
 def can_see_overview(user: str | None = None) -> bool:
-    """PMs, admins and anyone leading a project get the cross-project overview."""
+    """PMs, admins and anyone leading a project get the cross-project overview; never
+    a Sales Employee."""
     user = user or frappe.session.user
+    if is_sales_employee(user):
+        return False
     return is_project_manager(user) or bool(
         frappe.db.exists("Project", {"project_lead": user})
     )

@@ -24,7 +24,14 @@ The hub never gets ERPNext installed.
   CRM connection must be enabled too.
 - **For these teams** (`leads_teams`, HD Team names one per line, ticked in Settings): only
   active agents in an enabled ticked team see Leads. None ticked: every active agent.
-  System Managers and Agent Managers (and Administrator) always do.
+  System Managers and Agent Managers (and Administrator) always do, and so does every active
+  **Sales Employee**, whatever their team.
+- **Salespeople see only the sales screens:** an agent with the Sales Employee role
+  (Settings → Agents → Department wall → Sales team) gets Leads, the Scoreboard,
+  notifications and Help, and no tasks, projects, tickets or content; Home opens Leads →
+  Overview for them, and their documents chain stops at the client documents (the Project
+  and UAT steps don't open). The full rules are in
+  [departments.md](departments.md#sales-wall-sales-employee).
 - The check is `helpdesk.integrations.crm.leads.can_use_leads`; `helpdesk.api.auth.get_user`
   sends it as `can_use_leads`, which shows the sidebar item and lets the router open
   `/helpdesk/leads`. Every endpoint checks it again on the server.
@@ -224,6 +231,8 @@ are specified in [proposals.md](proposals.md).
 writes posted, view and page size checked, teams and inactive agents gated, and each error
 mapped; the Overview's period checks and the metric with its period passed to the list; the
 AI calls are the signed-in person's (POST for every change) and the channels checked.
+`helpdesk/tests/test_sales_wall.py`: a Sales Employee outside the Leads teams lists, opens,
+creates, moves and notes a lead as themselves.
 `helpdesk/tests/test_lead_calls.py`: Call posted as the signed-in person to TBO Smart's
 telephony API, the recording streamed (audio only) and a refusal refused, the MyOperator
 settings for admins only and proxied.

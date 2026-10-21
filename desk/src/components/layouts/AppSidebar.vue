@@ -177,7 +177,7 @@
 
         <div class="mt-auto flex flex-col gap-2 pt-2">
           <FollowUpStrip
-            v-if="!isCustomerPortal"
+            v-if="!isCustomerPortal && !authStore.isSalesEmployee"
             :summary="navCounts.data?.follow_ups"
             compact
             :rail="isCollapsed"
@@ -208,7 +208,11 @@
       </div>
     </Sidebar>
   </div>
-  <CP v-if="!mobile" v-model="showCommandPalette" />
+  <!-- the palette finds tickets and articles, none of which a salesperson opens -->
+  <CP
+    v-if="!mobile && !authStore.isSalesEmployee"
+    v-model="showCommandPalette"
+  />
   <ViewModal
     v-if="viewDialogConfig.show"
     v-model="viewDialogConfig"
@@ -222,6 +226,7 @@ import {
   ERP_EMPLOYEE_HIDDEN_ROUTES,
   CONTENT_TEAM_ROUTES,
   DM_EMPLOYEE_HIDDEN_ROUTES,
+  SALES_EMPLOYEE_ROUTES,
 } from "@/pages/content/contentTeam";
 import CP from "@/components/command-palette/CP.vue";
 import FollowUpStrip from "@/components/FollowUpStrip.vue";
@@ -462,6 +467,12 @@ const navItems = computed(() => {
       (item) =>
         !authStore.isDmEmployee || !DM_EMPLOYEE_HIDDEN_ROUTES.has(item.to)
     )
+    .filter(
+      (item) =>
+        !authStore.isSalesEmployee ||
+        isCustomerPortal.value ||
+        SALES_EMPLOYEE_ROUTES.has(item.to)
+    )
     .filter((item) => !item.leadsOnly || authStore.canUseLeads)
     .filter((item) => !item.projectManagerOnly || authStore.isProjectManager)
     .filter((item) => !item.overviewOnly || authStore.canSeeOverview)
@@ -487,7 +498,11 @@ const navItems = computed(() => {
 });
 
 const showSearchCard = computed(
-  () => !props.mobile && !isCustomerPortal.value && !isCollapsed.value
+  () =>
+    !props.mobile &&
+    !isCustomerPortal.value &&
+    !isCollapsed.value &&
+    !authStore.isSalesEmployee
 );
 
 const searchItem = computed(() => ({
@@ -539,7 +554,7 @@ const sections = computed(() => {
   // Expanded desktop shows search as its own card above the nav; collapsed it
   // falls back to a rail item so it keeps its tooltip.
   const top =
-    props.mobile || showSearchCard.value
+    props.mobile || showSearchCard.value || authStore.isSalesEmployee
       ? [notificationItem.value]
       : [searchItem.value, notificationItem.value];
   // Expanded, the theme button sits in the Notifications row; the collapsed
@@ -551,7 +566,8 @@ const sections = computed(() => {
     if (items.length)
       result.push({ label: __(label), items, collapsible: false });
   }
-  if (pinnedViews.value?.length) {
+  // saved views are ticket views, which a salesperson doesn't open
+  if (pinnedViews.value?.length && !authStore.isSalesEmployee) {
     result.push({
       label: __("Private Views"),
       items: parseViews(pinnedViews.value),

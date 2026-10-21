@@ -8,6 +8,7 @@ import {
   ERP_EMPLOYEE_HIDDEN_ROUTES,
   CONTENT_TEAM_ROUTES,
   DM_EMPLOYEE_HIDDEN_ROUTES,
+  SALES_EMPLOYEE_ROUTES,
 } from "@/pages/content/contentTeam";
 import { createRouter, createWebHistory } from "vue-router";
 const { isMobileView } = useScreenSize();
@@ -445,6 +446,14 @@ router.beforeEach(async (to, _, next) => {
       (redirectURL ? `?redirect-to=/helpdesk${redirectURL}` : "/helpdesk");
   } else if (!to.meta.public && !authStore.hasDeskAccess) {
     next({ name: "TicketsCustomer" });
+  } else if (!to.meta.public && authStore.isSalesEmployee) {
+    // salespeople see the sales screens only; the Scoreboard when Leads is off
+    const name = String(to.name);
+    const allowed =
+      SALES_EMPLOYEE_ROUTES.has(name) &&
+      (!LEADS_ROUTES.has(name) || authStore.canUseLeads);
+    if (allowed) next();
+    else next({ name: authStore.canUseLeads ? "Leads" : "TeamDashboard" });
   } else if (
     !to.meta.public &&
     authStore.isContentTeam &&
