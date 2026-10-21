@@ -30,6 +30,19 @@ export const DM_EMPLOYEE_HIDDEN_ROUTES = new Set([
 // Also hidden from ERP Employees, who are never in the content team
 export const ERP_EMPLOYEE_HIDDEN_ROUTES = new Set(["WorkCalendar"]);
 
+// All a Sales Employee opens (authStore.isSalesEmployee): an allow list, so a page
+// added later stays out of their way until someone decides it's a sales page. Every
+// other route goes to Leads, Home included: Home is their tasks and tickets.
+export const SALES_EMPLOYEE_ROUTES = new Set([
+  "Leads",
+  "Lead",
+  "LeadProposal",
+  "LeadNewProposal",
+  "TeamDashboard",
+  "Notifications",
+  "Invalid Page",
+]);
+
 export const CONTENT_TEAM_ROUTES = new Set([
   // shown only when Leads is on for them (authStore.canUseLeads)
   "Leads",

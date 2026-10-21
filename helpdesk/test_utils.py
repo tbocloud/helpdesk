@@ -709,6 +709,15 @@ def make_content_user(email: str, full_name: str, role: str):
     return make_tasky_user(email, full_name, roles=(role,))
 
 
+def make_sales_employee(email: str, full_name: str, *roles: str):
+    """Creates an agent with the Sales Employee role (sees Leads and the Scoreboard, no
+    tasks, projects, tickets or content), plus any other `roles`."""
+    from helpdesk.content_team import SALES_EMPLOYEE_ROLE, ensure_role
+
+    ensure_role()
+    return make_tasky_user(email, full_name, roles=(SALES_EMPLOYEE_ROLE, *roles))
+
+
 def attach_file(doctype: str, name: str, file_name: str = "draft.png"):
     """Attaches a small private file to a document as the current user, the way the
     upload button does (it needs write permission on the document)."""

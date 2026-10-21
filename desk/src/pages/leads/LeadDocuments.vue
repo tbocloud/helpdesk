@@ -13,7 +13,7 @@
         {{ __("Documents") }}
       </h2>
       <Button
-        v-if="canWrite && chain.next"
+        v-if="canWrite && chain.next && !deliveryStep(chain.next.action)"
         class="ml-auto"
         variant="solid"
         :label="chain.next.label"
@@ -31,6 +31,12 @@
         <LucideCircleCheck class="size-4" aria-hidden="true" />
         {{ __("Every document is accepted") }}
       </p>
+      <p
+        v-else-if="deliveryStep(chain.next.action)"
+        class="ml-auto text-sm text-ink-gray-6"
+      >
+        {{ __("The project team takes it from here") }}
+      </p>
     </div>
     <!-- a grid, so the whole chain fits on one line on a wide screen and wraps on a narrow one -->
     <ol
@@ -43,15 +49,15 @@
         class="flex min-w-0"
       >
         <component
-          :is="step.name ? 'router-link' : 'div'"
-          :to="step.name ? stepRoute(step) : undefined"
+          :is="opens(step) ? 'router-link' : 'div'"
+          :to="opens(step) ? stepRoute(step) : undefined"
           :aria-current="isNext(step) ? 'step' : undefined"
           class="flex min-h-[44px] min-w-0 flex-1 flex-col gap-1.5 rounded-lg border px-3 py-2"
           :class="[
             isNext(step)
               ? 'border-brand bg-brand-soft'
               : 'border-outline-gray-2',
-            step.name
+            opens(step)
               ? 'hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight'
               : '',
           ]"
@@ -93,6 +99,7 @@
 
 <script setup lang="ts">
 import TaskyBadge from "@/components/TaskyBadge.vue";
+import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
 import { Button, createResource, toast } from "frappe-ui";
@@ -114,7 +121,24 @@ const props = defineProps<{
   canWrite: boolean;
 }>();
 const router = useRouter();
+const authStore = useAuthStore();
 const titleId = `lead-documents-${useId()}`;
+
+// a Sales Employee's chain stops at the client documents: the project and its UAT
+// belong to the project team, whose pages they don't open (docs/departments.md)
+const DELIVERY_TYPES = new Set(["Project", "UAT"]);
+const DELIVERY_ACTIONS = new Set(["create_project", "uat"]);
+
+function deliveryStep(action?: string) {
+  return authStore.isSalesEmployee && DELIVERY_ACTIONS.has(action || "");
+}
+
+function opens(step: DocumentStep) {
+  return (
+    !!step.name &&
+    !(authStore.isSalesEmployee && DELIVERY_TYPES.has(step.document_type))
+  );
+}
 
 const nextIcon = computed(() =>
   ["open", "uat"].includes(props.chain?.next?.action || "")

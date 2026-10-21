@@ -10,6 +10,7 @@ import json
 import frappe
 
 from helpdesk.automation import automation_user
+from helpdesk.content_team import SALES_HIDDEN_DOCTYPES, is_sales_employee
 
 MANAGER_PROJECT_ROLE = "Project Manager"
 SKIP = {"Administrator", "Guest"}
@@ -105,7 +106,10 @@ def new_notification(
     deliver: bool = True,
 ):
     """One HD Notification. `deliver=False` keeps it in the panel only: no chat
-    message or email (follow-ups reach chat in the digest instead)."""
+    message or email (follow-ups reach chat in the digest instead). A Sales Employee
+    left on a project's or a post's team hears nothing about work they can't open."""
+    if doctype in SALES_HIDDEN_DOCTYPES and is_sales_employee(user):
+        return None
     doc = frappe.get_doc(
         {
             "doctype": "HD Notification",

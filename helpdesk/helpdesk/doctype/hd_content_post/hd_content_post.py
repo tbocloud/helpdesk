@@ -24,6 +24,7 @@ from helpdesk.content_team import (
     in_content_team,
     is_dm_head,
     is_erp_only,
+    is_sales_employee,
 )
 from helpdesk.utils import add_assignment, remove_assignment
 from helpdesk.work_reminders import notify_users
@@ -125,9 +126,9 @@ class HDContentPost(Document):
         return {u for f in self.part_fields(content_role) for u in self.people(f)}
 
     def task_people(self, users: list[str]) -> list[str]:
-        """Who gets a task among `users`: ERP Employees never see the content calendar,
-        so one left on a post's team gets no task rather than failing the save."""
-        return [u for u in users if not is_erp_only(u)]
+        """Who gets a task among `users`: ERP and Sales Employees never see the content
+        calendar, so one left on a post's team gets no task rather than failing the save."""
+        return [u for u in users if not (is_erp_only(u) or is_sales_employee(u))]
 
     def replace_on_part(self, content_role: str, leaving: list[str], newcomer: str):
         """Put `newcomer` in place of `leaving` on the roles behind one task (a hand-over

@@ -43,6 +43,10 @@ Everyone else sees the owners read-only.
 2. Otherwise the backup, when they are an active agent and not on leave.
 3. Otherwise nobody: the ticket goes to the assignment rules as before.
 
+A Sales Employee counts as not working here (they can't be given tickets,
+[departments.md](departments.md#sales-wall-sales-employee)), and the assignment rules pass
+them over too.
+
 Leave is the approved leave synced from tboindia into **HD Leave**
 (`work_calendar.on_leave`, the same reader the follow-ups use). A **half day still counts as
 working**, as in the follow-ups.

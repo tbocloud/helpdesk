@@ -14,6 +14,7 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.utils import getdate
 
+from helpdesk.content_team import is_sales_employee
 from helpdesk.tasky.permissions import (
     MANAGER_PROJECT_ROLE,
     get_led_projects,
@@ -54,6 +55,8 @@ def permission_query(user: str | None = None) -> str | None:
     user = user or frappe.session.user
     if is_tasky_admin(user):
         return None
+    if is_sales_employee(user):
+        return "1 = 0"
     u = frappe.db.escape(user)
     role = frappe.db.escape(MANAGER_PROJECT_ROLE)
     projects = (
@@ -72,4 +75,6 @@ def has_permission(
     user = user or frappe.session.user
     if is_tasky_admin(user):
         return None
+    if is_sales_employee(user):
+        return False
     return None if doc.customer in managed_customers(user) else False

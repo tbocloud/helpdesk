@@ -40,7 +40,7 @@ from helpdesk import home_plan
 from helpdesk import team_dashboard as td
 from helpdesk.ai_engine import call_haiku
 from helpdesk.api.work import ON_HOLD, PENDING_REVIEW, WAITING_ON_TASK
-from helpdesk.content_team import in_content_team
+from helpdesk.content_team import in_content_team, is_sales_employee
 from helpdesk.follow_ups import WorkCalendar, open_work_owners
 from helpdesk.tasky.permissions import (
     PROJECT_MANAGER_ROLE,
@@ -549,10 +549,13 @@ def record(settings, field: str, day) -> None:
 
 def candidates(settings, day) -> tuple[list[str], dict]:
     """Active agents not on leave `day`, in the stand-up's departments, with each
-    one's department."""
+    one's department. Sales Employees take no part: their work is leads, which the
+    stand-up doesn't read."""
     agents = frappe.get_all("HD Agent", filters={"is_active": 1}, pluck="user")
     away = on_leave(day)
-    users = [u for u in enabled_users(agents) if u not in away]
+    users = [
+        u for u in enabled_users(agents) if u not in away and not is_sales_employee(u)
+    ]
     departments = home_departments(users)
     users = [u for u in users if takes_part(settings, departments.get(u))]
     return users, departments

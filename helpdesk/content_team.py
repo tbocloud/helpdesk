@@ -17,6 +17,25 @@ DM_COORDINATOR_ROLE = "DM Coordinator"
 DM_EMPLOYEE_ROLE = "DM Employee"
 # an ERP team member: never sees the Digital department's projects or the content calendar
 ERP_EMPLOYEE_ROLE = "ERP Employee"
+# a salesperson: sees the sales screens (Leads, the Scoreboard) and no tasks, projects,
+# tickets or content (docs/departments.md)
+SALES_EMPLOYEE_ROLE = "Sales Employee"
+# what a Sales Employee is never told about: the hub's work, support and content records
+SALES_HIDDEN_DOCTYPES = (
+    "Project",
+    "Task",
+    "Timesheet",
+    "HD Ticket",
+    "HD Article",
+    "HD Content Post",
+    "HD Content Package",
+    "HD Content Campaign",
+    "HD Work Summary",
+    "HD Support Contract",
+    "HD Project File",
+    "HD Project Signoff",
+    "HD Standup",
+)
 CONTENT_EDITOR_ROLES = (
     "System Manager",
     DM_COORDINATOR_ROLE,
@@ -59,10 +78,23 @@ def is_dm_employee(user: str | None = None) -> bool:
     return DM_EMPLOYEE_ROLE in frappe.get_roles(user)
 
 
+def is_sales_employee(user: str | None = None) -> bool:
+    """A Sales Employee: the hub shows them the sales screens only. Their task, project,
+    ticket and content lists are empty and those records are refused when opened, and
+    nobody can give them a task or a ticket. System Managers and Agent Managers keep
+    everything, as with the department walls."""
+    from helpdesk.tasky.permissions import is_tasky_admin
+
+    user = user or frappe.session.user
+    if is_tasky_admin(user):
+        return False
+    return SALES_EMPLOYEE_ROLE in frappe.get_roles(user)
+
+
 def sees_no_tickets(user: str | None = None) -> bool:
-    """Writers and designers (Content Team) and DM Employees work on projects and
-    content, not tickets; the tickets they raised stay theirs."""
-    return is_content_only(user) or is_dm_employee(user)
+    """Writers and designers (Content Team), DM Employees and Sales Employees don't work
+    tickets; the tickets they raised stay theirs."""
+    return is_content_only(user) or is_dm_employee(user) or is_sales_employee(user)
 
 
 def can_work_tickets(user: str | None = None) -> bool:
@@ -91,7 +123,7 @@ def in_content_team(user: str | None = None) -> bool:
     """Part of the content calendar, so it's shown to them: whoever edits content (the
     admins, Project Managers and DM Coordinators) and holders of a content calendar role.
     Everyone else, ERP Employees included, sees only the content tasks that are their
-    own (see docs/content-calendar.md)."""
+    own (see docs/content-calendar.md). Sales Employees see none at all."""
     user = user or frappe.session.user
     if user == "Administrator":
         return True
@@ -111,7 +143,12 @@ def content_team_members(users: list[str]) -> list[str]:
             (has_role.parenttype == "User")
             & has_role.parent.isin(users)
             & has_role.role.isin(
-                [*CONTENT_EDITOR_ROLES, *CONTENT_CALENDAR_ROLES, ERP_EMPLOYEE_ROLE]
+                [
+                    *CONTENT_EDITOR_ROLES,
+                    *CONTENT_CALENDAR_ROLES,
+                    ERP_EMPLOYEE_ROLE,
+                    SALES_EMPLOYEE_ROLE,
+                ]
             )
         )
         .run()
@@ -121,6 +158,9 @@ def content_team_members(users: list[str]) -> list[str]:
 
 
 def _in_content_team(roles: set[str]) -> bool:
+    # the Sales Employee wall keeps them out unless they are an admin, as `is_sales_employee`
+    if SALES_EMPLOYEE_ROLE in roles and not roles & {"System Manager", "Agent Manager"}:
+        return False
     if roles & set(CONTENT_EDITOR_ROLES):
         return True
     # the ERP Employee wall keeps them out whatever else they hold, as `is_erp_only`
@@ -175,12 +215,13 @@ def _users_with_role(role: str) -> list[str]:
 
 def ensure_role():
     """Created on migrate, so they can be given to people from the user's Roles."""
-    for role in (
-        CONTENT_TEAM_ROLE,
-        DM_HEAD_ROLE,
-        DM_COORDINATOR_ROLE,
-        DM_EMPLOYEE_ROLE,
-        ERP_EMPLOYEE_ROLE,
+    for role, home_page in (
+        (CONTENT_TEAM_ROLE, "/helpdesk/content"),
+        (DM_HEAD_ROLE, "/helpdesk/content"),
+        (DM_COORDINATOR_ROLE, "/helpdesk/content"),
+        (DM_EMPLOYEE_ROLE, "/helpdesk/content"),
+        (ERP_EMPLOYEE_ROLE, "/helpdesk/content"),
+        (SALES_EMPLOYEE_ROLE, "/helpdesk/leads"),
     ):
         if frappe.db.exists("Role", role):
             continue
@@ -189,6 +230,6 @@ def ensure_role():
                 "doctype": "Role",
                 "role_name": role,
                 "desk_access": 1,
-                "home_page": "/helpdesk/content",
+                "home_page": home_page,
             }
         ).insert(ignore_permissions=True)

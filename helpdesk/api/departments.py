@@ -5,7 +5,7 @@ import frappe
 from frappe import _
 from frappe.query_builder.functions import Count
 
-from helpdesk.content_team import content_team_members
+from helpdesk.content_team import SALES_EMPLOYEE_ROLE, content_team_members
 from helpdesk.tasky.permissions import (
     DEPARTMENT_HEAD_TABLE,
     DEPARTMENT_HEADS,
@@ -15,6 +15,8 @@ from helpdesk.tasky.permissions import (
 )
 
 DEPARTMENT = "HD Department"
+# the roles Settings → Agents gives as a wall: the two department walls and Sales
+WALL_ROLES = (*HIDDEN_DEPARTMENTS, SALES_EMPLOYEE_ROLE)
 
 
 @frappe.whitelist()
@@ -260,7 +262,7 @@ def _check_name_free(name: str):
 
 @frappe.whitelist()
 def get_department_walls(users: list[str] | str) -> dict[str, list[str]]:
-    """Each agent's wall roles (DM Employee, ERP Employee), for Settings → Agents."""
+    """Each agent's wall roles (DM, ERP or Sales Employee), for Settings → Agents."""
     _check_can_set_walls()
     users = frappe.parse_json(users) if isinstance(users, str) else users or []
     if not users:
@@ -273,7 +275,7 @@ def get_department_walls(users: list[str] | str) -> dict[str, list[str]]:
         .where(
             (has_role.parenttype == "User")
             & has_role.parent.isin(users)
-            & has_role.role.isin(list(HIDDEN_DEPARTMENTS))
+            & has_role.role.isin(list(WALL_ROLES))
         )
         .orderby(has_role.role)
         .run()
@@ -293,20 +295,21 @@ def get_content_team(users: list[str] | str) -> list[str]:
 
 @frappe.whitelist(methods=["POST"])
 def set_department_wall(user: str, role: str | None = None) -> list[str]:
-    """Give an agent one wall role, or none (empty role); their other roles stay."""
+    """Give an agent one wall role (DM, ERP or Sales Employee), or none (empty role);
+    their other roles stay."""
     from helpdesk.content_team import ensure_role
 
     _check_can_set_walls()
     role = role or None
-    if role and role not in HIDDEN_DEPARTMENTS:
-        frappe.throw(_("Pick DM Employee, ERP Employee or no wall."))
+    if role and role not in WALL_ROLES:
+        frappe.throw(_("Pick DM Employee, ERP Employee, Sales Employee or no wall."))
     if not frappe.db.exists("HD Agent", user):
         frappe.throw(_("{0} is not an agent.").format(user), frappe.DoesNotExistError)
     ensure_role()
     doc = frappe.get_doc("User", user)
     doc.set(
         "roles",
-        [r for r in doc.roles if r.role not in HIDDEN_DEPARTMENTS or r.role == role],
+        [r for r in doc.roles if r.role not in WALL_ROLES or r.role == role],
     )
     if role and role not in {r.role for r in doc.roles}:
         doc.append("roles", {"role": role})
