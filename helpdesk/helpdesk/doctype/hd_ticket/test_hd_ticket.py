@@ -127,7 +127,7 @@ class TestHDTicket(FrappeTestCase):
             "HD Notification",
             filters={
                 "reference_ticket": ticket.name,
-                "notification_type": "Reaction",
+                "notification_type": "Ticket Update",
                 "user_to": ["in", [agent, agent2]],
                 "user_from": "Administrator",
             },

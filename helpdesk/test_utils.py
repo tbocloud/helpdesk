@@ -214,6 +214,22 @@ def get_ticket_owner_activity(ticket) -> list[str]:
     )
 
 
+def get_ticket_notices(ticket, notification_type: str) -> list[tuple[str, str]]:
+    """The (user_to, message) pairs of a ticket's HD Notifications of one type
+    (e.g. New Ticket, Ticket Update), sorted."""
+    return sorted(
+        (n.user_to, n.message)
+        for n in frappe.get_all(
+            "HD Notification",
+            filters={
+                "reference_ticket": str(ticket),
+                "notification_type": notification_type,
+            },
+            fields=["user_to", "message"],
+        )
+    )
+
+
 def create_agent(
     email: str, first_name: str | None = None, last_name: str | None = None
 ):
