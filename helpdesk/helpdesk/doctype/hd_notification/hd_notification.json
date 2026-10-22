@@ -43,7 +43,7 @@
 			"fieldtype": "Select",
 			"in_list_view": 1,
 			"label": "Type",
-			"options": "Assignment\nMention\nReaction\nReminder\nTask Completed",
+			"options": "Assignment\nMention\nReaction\nReminder\nTask Completed\nNew Ticket\nTicket Update",
 			"reqd": 1
 		},
 		{
@@ -114,7 +114,7 @@
 	],
 	"index_web_pages_for_search": 1,
 	"links": [],
-	"modified": "2026-10-10 09:00:00.000000",
+	"modified": "2026-10-22 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Notification",

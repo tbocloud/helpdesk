@@ -95,7 +95,7 @@ All thresholds are in HD Follow Up Settings (**Settings → Follow-ups**). Defau
 | **Blocking an overdue task** (`blocked`) | Another open task depends on this one, and this one is overdue | This task's assignees ("… is waiting on your overdue task") | Waiting on you |
 | **SLA** (`sla`) | First reply and resolution: 50% and 80% of the SLA's working time used, then the breach | The ticket ladder below | Due now; SLA breached |
 | **Unassigned ticket** (`unassigned`) | Open, nobody assigned, for 30 working minutes since it came in | The ticket's team and the Agent Managers | Overdue |
-| **Customer replied, no answer** (`customer_replied`) | The customer's last message is newer than the last agent reply, for 4 working hours (first reply already given) | Assignee; at twice the hours also the team lead | Waiting on you; Overdue at L1 |
+| **Customer replied, no answer** (`customer_replied`) | The customer's last message is newer than the last agent reply, for 4 working hours (first reply already given). Each reply also gives an immediate panel notice to the assignees and the ticket owner ([ticket-owners.md](ticket-owners.md#status-changes-and-customer-replies)) | Assignee; at twice the hours also the team lead | Waiting on you; Overdue at L1 |
 | **Waiting on the customer** (`awaiting_customer`) | Paused (e.g. Replied, not Waiting on Task) for 3 working days since the last agent reply | The follow-up email, or the assignee when emails are off | Waiting on you |
 
 A ticket without an assignee goes to its team (HD Team members), else the Agent Managers.

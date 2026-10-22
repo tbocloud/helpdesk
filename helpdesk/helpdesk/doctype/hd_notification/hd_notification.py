@@ -59,13 +59,18 @@ class HDNotification(Document):
 
     def announce(self):
         """Tell the recipient's open helpdesk tabs, so the bell updates without a reload
-        (and chimes for a completed task)."""
+        (and chimes for a completed task). `sound` marks a new ticket for the person
+        who takes it, which chimes when they turned on the new-ticket sound; the
+        backup's quiet copy (not delivered) doesn't."""
         frappe.publish_realtime(
             "helpdesk:new-notification",
             {
                 "name": self.name,
                 "notification_type": self.notification_type,
                 "message": self.message,
+                "link": self.link,
+                "sound": self.notification_type == "New Ticket"
+                and not self.flags.skip_delivery,
             },
             user=self.user_to,
             after_commit=True,
@@ -82,7 +87,7 @@ class HDNotification(Document):
         """Chat instead of email when HD Chat Settings is on (sent after commit, in the background)."""
         from helpdesk.chat_notifications import is_enabled
 
-        if self.notification_type not in ("Mention", "Reminder"):
+        if self.notification_type not in ("Mention", "Reminder", "New Ticket"):
             return
         # a follow-up reaches chat in the person's digest, not one message per item
         if self.flags.skip_delivery:
@@ -134,12 +139,13 @@ class HDNotification(Document):
         )
 
     def send_reminder_email(self):
-        """Deadline reminders also go by email, unless the person turned email notifications off."""
+        """Deadline reminders and a new ticket for its owner also go by email, unless
+        the person turned email notifications off."""
         from frappe.desk.doctype.notification_settings.notification_settings import (
             is_email_notifications_enabled,
         )
 
-        if self.notification_type != "Reminder":
+        if self.notification_type not in ("Reminder", "New Ticket"):
             return
         if not is_email_notifications_enabled(self.user_to):
             return
@@ -156,7 +162,12 @@ class HDNotification(Document):
                     ),
                     "doc_link": helpdesk_url(self.chat_path()),
                 },
-                header=[_("Reminder"), "orange"],
+                header=[
+                    _("New ticket")
+                    if self.notification_type == "New Ticket"
+                    else _("Reminder"),
+                    "orange",
+                ],
             )
         except frappe.OutgoingEmailError:
             # no outgoing email account yet; the in-app reminder is still there

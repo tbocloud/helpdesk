@@ -377,6 +377,17 @@ def get_custom_fields():
                 "set_only_once": 1,
             },
         ],
+        "User": [
+            {
+                # a chime with a new ticket's notice, set by the person in
+                # Settings → Preferences (docs/ticket-owners.md#notification)
+                "fieldname": "hd_new_ticket_sound",
+                "fieldtype": "Check",
+                "label": "Sound for New Tickets",
+                "default": "0",
+                "insert_after": "mute_sounds",
+            },
+        ],
         "Communication": [
             {
                 # an agent sent this reply from an AI draft (it is still their reply);

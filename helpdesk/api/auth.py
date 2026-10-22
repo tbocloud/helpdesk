@@ -31,6 +31,7 @@ def get_user():
         "username",
         "time_zone",
         "language",
+        "hd_new_ticket_sound",
     ]
     user = frappe.get_value(
         doctype="User",
@@ -107,6 +108,8 @@ def get_user():
         "username": username,
         "time_zone": user.time_zone,
         "language": language,
+        # chime with a new ticket's notice (Settings → Preferences, default off)
+        "new_ticket_sound": bool(user.hd_new_ticket_sound),
         "user_teams": user_team_names,
         "availability": availability.get("availability"),
         "availability_changed_on": availability.get("availability_changed_on"),

@@ -115,6 +115,10 @@ export const useAuthStore = defineStore("auth", () => {
   const personaCaptured: ComputedRef<boolean> = computed(
     () => !!user__.value.persona_captured
   );
+  // chime with a new ticket's notice (Settings → Preferences, default off)
+  const newTicketSound: ComputedRef<boolean> = computed(
+    () => !!user__.value.new_ticket_sound
+  );
 
   function sessionUser() {
     const cookies = new URLSearchParams(document.cookie.split("; ").join("&"));
@@ -181,6 +185,7 @@ export const useAuthStore = defineStore("auth", () => {
     language,
     userTeams,
     personaCaptured,
+    newTicketSound,
     user,
     logout,
   };

@@ -695,7 +695,9 @@ count updates without a reload. For Task Completed the notification store
 made with the Web Audio API, no sound file) and shows the message as a toast. Browsers only play
 sound after the person has used the page; if audio is blocked the chime is skipped and the bell
 and toast still show. The panel shows the completer's avatar and the message
-(`isTextOnly()` in `Notifications.vue` and `MobileNotifications.vue`).
+(`isTextOnly()` in `stores/notification.ts`, used by `Notifications.vue` and
+`MobileNotifications.vue`). New-ticket notices have their own sound preference, see
+[ticket-owners.md](ticket-owners.md#notification).
 
 ### When a task is overdue
 

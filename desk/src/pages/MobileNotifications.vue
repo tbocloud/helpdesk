@@ -35,14 +35,7 @@
         }
       "
     >
-      <span
-        v-if="n.notification_type === 'Reminder'"
-        class="grid size-8 shrink-0 place-items-center rounded-full bg-warning-soft text-warning"
-        aria-hidden="true"
-      >
-        <LucideAlarmClock class="size-4" />
-      </span>
-      <UserAvatar v-else :name="n.user_from" />
+      <NotificationIcon :notification="n" />
       <div>
         <div
           v-if="isTextOnly(n)"
@@ -90,12 +83,11 @@
 import { RouterLink } from "vue-router";
 import { Breadcrumbs, dayjs, Tooltip } from "frappe-ui";
 import LayoutHeader from "@/components/LayoutHeader.vue";
-import { useNotificationStore } from "@/stores/notification";
+import { isTextOnly, useNotificationStore } from "@/stores/notification";
 import { ref } from "vue";
 import { onClickOutside } from "@vueuse/core";
 import { Notification } from "@/types";
-import { UserAvatar } from "@/components";
-import LucideAlarmClock from "~icons/lucide/alarm-clock";
+import NotificationIcon from "@/components/notifications/NotificationIcon.vue";
 import LucideBell from "~icons/lucide/bell";
 import { __ } from "@/translation";
 const notificationStore = useNotificationStore();
@@ -123,16 +115,19 @@ function linkProps(n: Notification) {
     : { to: getRoute(n) };
 }
 
-// a reminder or a completed task carries its whole message; the rest are built here
-function isTextOnly(n: Notification) {
-  return ["Reminder", "Task Completed"].includes(n.notification_type);
-}
-
 function getRoute(n: Notification) {
   switch (n.notification_type) {
     case "Reminder":
     case "Task Completed":
       return n.link || { name: "MyWork" };
+    case "New Ticket":
+    case "Ticket Update":
+      return (
+        n.link || {
+          name: "TicketAgent",
+          params: { ticketId: n.reference_ticket },
+        }
+      );
     case "Mention":
       return {
         name: "TicketAgent",

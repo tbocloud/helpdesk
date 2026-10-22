@@ -515,7 +515,8 @@ the top), `folder_id`, `kind` (extension), `size` (bytes), `modified`, `uploaded
 | `mark_notifications_read` POST | `names` (list) or `"all"` | `{unread}` | Only the user's own notifications change |
 
 `AppNotification`: `name`, `site: "hub"`, `type` (Assignment, Mention, Reminder, Reaction,
-Task Completed), `title`, `body`, `at`, `read`, `doctype`, `reference`, `route` (the web
+Task Completed, New Ticket, Ticket Update; see [ticket-owners.md](ticket-owners.md#notification)),
+`title`, `body`, `at`, `read`, `doctype`, `reference`, `route` (the web
 path), `app_route` (`/task/…`, `/ticket/…`, `/project/…`, or null), `from`.
 
 ### Devices and push
@@ -532,9 +533,10 @@ through the two endpoints.
 
 **Push** (`helpdesk/mobile_push.py`), when HD Settings → **Mobile push** is on (default
 off):
-- Every new HD Notification of type Assignment, Mention, Reminder or Task Completed is
-  queued (after commit) to the recipient's Expo tokens. Notices kept for the follow-up
-  digest (`skip_delivery`) aren't pushed, like chat and email. Reactions aren't pushed.
+- Every new HD Notification of type Assignment, Mention, Reminder, Task Completed or New
+  Ticket is queued (after commit) to the recipient's Expo tokens. Notices kept for the follow-up
+  digest (`skip_delivery`) aren't pushed, like chat and email, and neither is the
+  backup's quiet copy of a new ticket. Reactions and Ticket Updates aren't pushed.
 - Sent to `https://exp.host/--/api/v2/push/send` in batches of 100. A
   `DeviceNotRegistered` answer deletes that token.
 - Payload (`push_payload.json`): `title`/`body` as in the notification list, `sound`,
