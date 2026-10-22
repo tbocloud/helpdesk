@@ -2640,7 +2640,7 @@ def make_github_payload(event: str, action: str = "", **overrides) -> dict:
     """A minimal GitHub webhook payload shaped like the real one for `event`.
 
     Overrides: repo, number, title, body, branch, draft, merged, closed, login,
-    comments, review_state, review_body, reviewer, conclusion, sha, workflow,
+    comments, labels (names), review_state, review_body, reviewer, conclusion, sha, workflow,
     pull_requests (workflow_run / check_suite: PR numbers the run belongs to).
     """
     repo = overrides.get("repo", GITHUB_TEST_REPO)
@@ -2682,6 +2682,7 @@ def make_github_payload(event: str, action: str = "", **overrides) -> dict:
         "closed_at": "2026-09-30T10:00:00Z" if closed else None,
         "merged_by": {"login": "lead-octocat"} if merged else None,
         "comments": overrides.get("comments", 0),
+        "labels": [{"name": label} for label in overrides.get("labels", ())],
         "user": {"login": login},
         "head": {"ref": branch, "sha": sha},
         "base": {"ref": "main"},

@@ -30,7 +30,7 @@ module (`new_notification`).
    (validate) also resets it as soon as a task is Completed, Cancelled or put On Hold.
    Switching follow-ups off clears every stored level on the next run (`clear_levels`), so
    no badge outlives the engine.
-4. **Notices** (`post_notices`): one notification per person and item per day, see Dedupe.
+4. **Notices** (`post_notices`): one notification per person and item, see Dedupe.
 5. **Customer follow-up emails** (`send_customer_follow_ups`), when switched on.
 6. **Digests** (`send_due_digests`) at the digest times.
 
@@ -155,12 +155,16 @@ Each level **adds** people; nobody drops off.
 
 ## Dedupe
 
-The key is **(person, item, rule, stage or level, date)**:
+The key is **(person, item, rule, stage or level)**:
 
 - Stored on the notification as `HD Notification.dedupe_key`
-  `follow-up:<date>:<rule>:<stage>`, one notification per (person, item) per date.
-- A run with the same key changes nothing; a different key the same day rewrites it (and pings
-  again only if the new stage is an immediate one); a new day starts a new notification.
+  `follow-up:<date>:<rule>:<stage>`, one notification per (person, item); the date is the
+  day it was last posted or rewritten.
+- A run with the same rule and stage, on any day, changes nothing but the text (a read notice
+  stays read, so the same overdue task doesn't come back unread every morning). A different
+  rule or stage rewrites it as unread, and pings again only if the new stage is an immediate
+  one. The ladder climbing (L1 → L2 → L3) is a new stage, so it does come back. The digest
+  still lists everything open each time.
 - The digest's own once-per-time guard is `digest_sent_through`; the channel's is
   `HD Chat Escalation` (once per message text).
 
@@ -179,7 +183,7 @@ The assignee may **acknowledge** a reminder from the TBO Smart app
   however it is saved (`HDFollowUpSnooze.validate`): the person is the item's assignee,
   there is a reason (≤500 characters), and the date is tomorrow to 7 days ahead. Each snooze
   also leaves a note on the item ("Anu Menon
-  acknowledged the reminder until 14 Oct: …") so whoever runs the work sees why. Today's
+  acknowledged the reminder until 14 Oct: …") so whoever runs the work sees why. The
   follow-up notice about it is marked read.
 - Each run takes the person off that item's L0/L1 follow-ups until the date
   (`drop_snoozed`, right after the run's result is cached): no notice and no digest line for

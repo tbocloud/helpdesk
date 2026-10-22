@@ -10,10 +10,10 @@ Every 15 minutes `run()`:
   HD Follow Up Settings;
 - records how far up the ladder each overdue task and breached ticket has gone
   (Task.escalation_level, HD Ticket.custom_escalation_level);
-- keeps one notification per person and item per day in the notification panel,
-  rewritten as the item moves to another rule or level (`post_notices`);
+- keeps one notification per person and item in the notification panel, unread
+  again only when the item moves to another rule or level (`post_notices`);
 - pings at once (chat, or email) only for L2+ escalations, SLA breaches and late key
-  tasks and milestones: once per person, item, rule, level and day;
+  tasks and milestones: once per person, item, rule and level;
 - at each digest time sends every person one message with all of it, grouped by
   severity, the first of the day with their plan for today (helpdesk.home_plan);
 - emails customers who haven't replied, when that is switched on.
@@ -1103,8 +1103,9 @@ def save_levels(follow_ups: list[FollowUp], ctx: Context) -> None:
 
 
 def post_notices(follow_ups: list[FollowUp], today) -> None:
-    """One notification per person and item per day: the most pressing follow-up for
-    them. A later run rewrites it (unread again) when the rule or level changes; a ping
+    """One notification per person and item: the most pressing follow-up for them. A
+    later run rewrites it (unread again) only when the rule or level changes; the same
+    follow-up on a new day just refreshes its text, so a read reminder stays read. A ping
     goes to chat or email only for L2+, breaches and late key work, once per stage."""
     from helpdesk.chat_notifications import post_escalation
 
@@ -1114,19 +1115,24 @@ def post_notices(follow_ups: list[FollowUp], today) -> None:
     reachable = set(enabled_users({user for user, _dt, _name in chosen}))
     prefix = f"{NOTICE_PREFIX}:{today}:"
     notice = frappe.qb.DocType("HD Notification")
-    existing = {
-        (n.user_to, n.reference_doctype, n.reference_name): n
-        for n in frappe.qb.from_(notice)
+    existing = {}
+    # oldest first, so each (person, item) ends on its latest notice
+    for n in (
+        frappe.qb.from_(notice)
         .select(
             notice.name,
             notice.user_to,
             notice.reference_doctype,
             notice.reference_name,
             notice.dedupe_key,
+            notice.message,
         )
-        .where(notice.dedupe_key.like(f"{prefix}%"))
+        .where(notice.dedupe_key.like(f"{NOTICE_PREFIX}:%"))
+        .where(notice.reference_name.isin(sorted({name for _u, _dt, name in chosen})))
+        .orderby(notice.creation)
         .run(as_dict=True)
-    }
+    ):
+        existing[(n.user_to, n.reference_doctype, n.reference_name)] = n
     escalated = {}
     for (user, doctype, name), f in chosen.items():
         if user not in reachable:
@@ -1137,7 +1143,16 @@ def post_notices(follow_ups: list[FollowUp], today) -> None:
             new_notification(
                 user, doctype, name, f.text, f.link, dedupe_key=key, deliver=f.immediate
             )
-        elif old.dedupe_key != key:
+        elif notice_stage(old.dedupe_key) == f.key:
+            if old.message != f.text:
+                frappe.db.set_value(
+                    "HD Notification",
+                    old.name,
+                    {"message": f.text, "link": f.link},
+                    update_modified=False,
+                )
+            continue
+        else:
             doc = frappe.get_doc("HD Notification", old.name)
             doc.update(
                 {"message": f.text, "link": f.link, "dedupe_key": key, "read": 0}
@@ -1146,8 +1161,6 @@ def post_notices(follow_ups: list[FollowUp], today) -> None:
             doc.announce()
             if f.immediate:
                 doc.deliver()
-        else:
-            continue
         if f.immediate:
             escalated[(doctype, name, f.key)] = f
     for f in escalated.values():
@@ -1158,6 +1171,11 @@ def post_notices(follow_ups: list[FollowUp], today) -> None:
             else level_labels().get(f.level) or severity_labels()[f.severity]
         )
         post_escalation(f"{label} ({f.rule_label()}): {f.title}", f.link)
+
+
+def notice_stage(dedupe_key: str) -> str:
+    """The rule and stage a follow-up notice was posted for: `follow-up:<date>:<rule>:<stage>`."""
+    return dedupe_key.split(":", 2)[2] if dedupe_key.count(":") >= 2 else ""
 
 
 def send_customer_follow_ups(ctx: Context) -> None:
@@ -1279,7 +1297,7 @@ def snooze(user: str, doctype: str, name: str, until, reason: str) -> dict:
             )
         ),
     )
-    clear_todays_notice(user, doctype, str(doc.name), getdate(now_datetime()))
+    clear_notice(user, doctype, str(doc.name))
     return {"until": str(saved.until), "reason": saved.reason, "level": level}
 
 
@@ -1310,8 +1328,8 @@ def record_snooze(user: str, doctype: str, name: str, values: dict):
     return doc
 
 
-def clear_todays_notice(user: str, doctype: str, name: str, today) -> None:
-    """Today's follow-up notice about the item is dealt with: mark it read."""
+def clear_notice(user: str, doctype: str, name: str) -> None:
+    """The follow-up notice about the item is dealt with: mark it read."""
     notice = frappe.qb.DocType("HD Notification")
     (
         frappe.qb.update(notice)
@@ -1320,7 +1338,7 @@ def clear_todays_notice(user: str, doctype: str, name: str, today) -> None:
             (notice.user_to == user)
             & (notice.reference_doctype == doctype)
             & (notice.reference_name == name)
-            & notice.dedupe_key.like(f"{NOTICE_PREFIX}:{today}:%")
+            & notice.dedupe_key.like(f"{NOTICE_PREFIX}:%")
         )
         .run()
     )

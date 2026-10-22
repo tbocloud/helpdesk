@@ -321,6 +321,33 @@ class TestPullRequestFlow(GitHubSyncCase):
         self.assertTrue(links)
         self.assertTrue(all(link.startswith("https://github.com/") for link in links))
 
+    def test_unlinked_pr_reaches_system_managers_not_team_leads(self):
+        make_tasky_user(*LEAD, roles=("Agent Manager",))
+        make_tasky_user(*OUTSIDER, roles=("System Manager",))
+        with patch.object(github_sync.requests, "request"):
+            self.send("pull_request", "opened", number=45, body="")
+
+        told = frappe.get_all(
+            "HD Notification",
+            filters={"message": ("like", "PR #45 in % names no task%")},
+            pluck="user_to",
+        )
+        self.assertIn(OUTSIDER[0], told)
+        self.assertNotIn(LEAD[0], told)
+
+    def test_a_no_task_pr_is_left_alone(self):
+        enable_github_sync(github_token="ghp_test_token")
+        with patch.object(github_sync.requests, "request") as request:
+            self.send("pull_request", "opened", number=44, body="", labels=["no-task"])
+
+        request.assert_not_called()
+        self.assertFalse(
+            frappe.get_all(
+                "HD Notification",
+                filters={"message": ("like", "PR #44 in % names no task%")},
+            )
+        )
+
     def test_processing_an_event_twice_adds_nothing(self):
         for delivery in ("gh-twice-1", "gh-twice-2"):
             send_github_webhook(

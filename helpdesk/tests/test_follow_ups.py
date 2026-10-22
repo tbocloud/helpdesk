@@ -432,7 +432,7 @@ class TestLeave(FollowUpCase):
 
 
 class TestDelivery(FollowUpCase):
-    def test_one_notice_per_person_and_item_a_day_updated_not_duplicated(self):
+    def test_one_notice_per_person_and_item_updated_not_duplicated(self):
         task = self.task("Import customers", FRIDAY)
         follow_ups.process(follow_up_context())
         follow_ups.process(follow_up_context())
@@ -448,9 +448,13 @@ class TestDelivery(FollowUpCase):
         self.assertEqual(notice.dedupe_key, "follow-up:2026-10-12:overdue:L2")
         self.assertFalse(notice.read)
 
-        # a new day is a new notice
+        # a new day at the same level keeps the one notice, and a read one stays read
+        frappe.db.set_value("HD Notification", notice.name, "read", 1)
+        frappe.db.set_value("Task", task, "exp_end_date", THURSDAY)
         follow_ups.process(follow_up_context(datetime(2026, 10, 13, 11, 0)))
-        self.assertEqual(len(get_follow_up_notices(DEV[0], task)), 2)
+        [notice] = get_follow_up_notices(DEV[0], task)
+        self.assertEqual(notice.dedupe_key, "follow-up:2026-10-12:overdue:L2")
+        self.assertTrue(notice.read)
 
     def test_pings_go_out_only_for_l2_breaches_and_key_work(self):
         follow_ups.process(follow_up_context())
