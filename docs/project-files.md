@@ -8,6 +8,9 @@ the label is a pointer, not a restriction. Files and folders can be marked **Sup
 (an older version of a master prompt or spec, kept for reference) or **Active**, and each has
 a **comment thread**.
 
+Screenshots and screen recordings about one task are attached to the task instead: see
+[task-attachments.md](task-attachments.md).
+
 ## Where it is in the app
 
 - **Project page → Files tab** (`/helpdesk/projects/<project>/files`, route `TaskyFiles`,

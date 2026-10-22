@@ -188,6 +188,9 @@ watch(
   { immediate: true }
 );
 
+// the task dialog reloads it when something there (an attachment) adds a line
+defineExpose({ reload: () => activity.reload() });
+
 const items = computed<ActivityItem[]>(
   () => (activity.data as ActivityData | null)?.items ?? []
 );

@@ -129,6 +129,7 @@
             >{{ __("See the schedule") }}</router-link
           >
         </p>
+        <TaskAttachments :task="detail.name" @changed="attachmentsChanged" />
         <TaskPullRequests :pull-requests="detail.pull_requests" />
         <MeetingsCard
           reference-doctype="Task"
@@ -137,6 +138,7 @@
         />
         <!-- every step in this dialog closes it first, so reopening loads fresh activity -->
         <TaskActivity
+          ref="activity"
           :task="detail.name"
           class="border-t border-outline-gray-1 pt-4"
         />
@@ -218,6 +220,7 @@ import SendBackTaskDialog from "./SendBackTaskDialog.vue";
 import SlipBadge from "./SlipBadge.vue";
 import EscalationBadge from "@/components/EscalationBadge.vue";
 import TaskActivity from "./TaskActivity.vue";
+import TaskAttachments from "./TaskAttachments.vue";
 import TaskPlanDialog from "./TaskPlanDialog.vue";
 import TaskPullRequests from "./TaskPullRequests.vue";
 import TaskQuality, { type TaskQualityInfo } from "./TaskQuality.vue";
@@ -291,6 +294,7 @@ const emit = defineEmits<{
 }>();
 
 const router = useRouter();
+const activity = ref<InstanceType<typeof TaskActivity> | null>(null);
 
 const taskDetail = createResource({
   url: "helpdesk.tasky.api.get_task_detail",
@@ -579,6 +583,12 @@ function handOff(target: Ref<TaskDetail | null>) {
 
 function changed() {
   emit("changed");
+}
+
+// a new line in the activity, and a new count on the board card
+function attachmentsChanged() {
+  activity.value?.reload();
+  changed();
 }
 
 function openBoard() {
