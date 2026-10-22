@@ -8,7 +8,7 @@
         <Button
           variant="ghost"
           :aria-label="__('Refresh')"
-          :loading="timesheets.loading && !!timesheets.data"
+          :loading="(timesheets.loading && !!timesheets.data) || days.loading"
           @click="reload"
         >
           <template #icon>
@@ -38,10 +38,10 @@
           {{
             scope === "team"
               ? __(
-                  "Hours your team logged on the projects you lead or manage. Pick dates to see a period."
+                  "Hours your team logged on the projects you lead or manage, as a record of the work. Pick dates to see a period."
                 )
               : __(
-                  "Hours you logged against projects and tasks. Pick dates to see a period."
+                  "Hours you logged against projects and tasks, as a record of your work. Pick dates to see a period."
                 )
           }}
         </p>
@@ -87,6 +87,14 @@
                   type="select"
                   :label="__('Agent')"
                   :options="agentOptions"
+                />
+              </div>
+              <div class="w-full sm:w-56">
+                <FormControl
+                  v-model="filters.project"
+                  type="select"
+                  :label="__('Project')"
+                  :options="projectFilterOptions"
                 />
               </div>
               <div class="w-[calc(50%-0.375rem)] sm:w-40">
@@ -214,8 +222,169 @@
             </SectionCard>
           </div>
 
-          <!-- The timesheets -->
+          <!-- The timesheets, as a list or day by day -->
+          <div
+            class="mt-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-2"
+          >
+            <TabButtons
+              v-model="view"
+              size="md"
+              :aria-label="__('Show the timesheets')"
+              :options="VIEWS.map((o) => ({ label: o.label, value: o.key }))"
+            />
+            <p v-if="view === 'day'" class="text-p-sm text-ink-gray-6">
+              {{
+                __("Each day's hours by task or project, with the work notes.")
+              }}
+            </p>
+          </div>
+
+          <div
+            v-if="view === 'day'"
+            class="mt-3 flex flex-col gap-4"
+            :aria-busy="dayLoading"
+          >
+            <TaskyState
+              v-if="rangeError"
+              class="rounded-xl border border-outline-gray-2 bg-surface-base"
+              :icon="LucideCalendarRange"
+              :title="__('Pick a shorter period')"
+              :message="rangeError"
+            />
+            <SectionCard
+              v-else-if="dayLoading"
+              :title="__('Loading the days')"
+              class="overflow-hidden"
+            >
+              <div class="flex flex-col gap-3 p-4" :aria-label="__('Loading')">
+                <div
+                  v-for="i in 4"
+                  :key="i"
+                  class="h-4 animate-pulse rounded bg-surface-gray-2"
+                />
+              </div>
+            </SectionCard>
+            <TaskyState
+              v-else-if="days.error"
+              class="rounded-xl border border-outline-gray-2 bg-surface-base"
+              error
+              :icon="LucideCircleAlert"
+              :title="__('Couldn\'t load the days')"
+              :message="
+                errorText(
+                  days.error,
+                  __('Check your connection and try again.')
+                )
+              "
+            >
+              <Button :label="__('Retry')" @click="days.reload()" />
+            </TaskyState>
+            <TaskyState
+              v-else-if="dayData?.too_many"
+              class="rounded-xl border border-outline-gray-2 bg-surface-base"
+              :icon="LucideCalendarRange"
+              :title="__('Too many time logs to show day by day')"
+              :message="
+                __(
+                  'Pick fewer days or one person, or download the CSV for all of them.'
+                )
+              "
+            >
+              <Button :label="__('Download CSV')" @click="downloadCsv">
+                <template #prefix>
+                  <LucideDownload class="size-4" aria-hidden="true" />
+                </template>
+              </Button>
+            </TaskyState>
+            <TaskyState
+              v-else-if="!dayPeople.length"
+              class="rounded-xl border border-outline-gray-2 bg-surface-base"
+              :icon="LucideSearchX"
+              :title="__('No time logged in these dates')"
+              :message="
+                hasFilters
+                  ? __('Try other dates, or clear the filters.')
+                  : __('Pick other dates, or log time for this week.')
+              "
+            >
+              <Button
+                v-if="hasFilters"
+                :label="__('Clear filters')"
+                @click="clearFilters"
+              />
+              <Button
+                v-else
+                variant="solid"
+                :label="__('Log time')"
+                @click="openForm"
+              >
+                <template #prefix>
+                  <LucidePlus class="size-4" aria-hidden="true" />
+                </template>
+              </Button>
+            </TaskyState>
+
+            <SectionCard
+              v-for="person in dayPeople"
+              v-else
+              :key="person.user"
+              :title="person.full_name"
+              :description="personLine(person)"
+              class="overflow-hidden"
+            >
+              <section
+                v-for="day in person.days"
+                :key="day.date"
+                :aria-label="dayLabel(person, day)"
+                class="border-b border-outline-gray-2 last:border-b-0"
+              >
+                <h3
+                  class="flex items-baseline justify-between gap-4 bg-surface-gray-1 px-4 py-2 text-sm-medium text-ink-gray-8"
+                >
+                  <span class="tabular-nums">{{ formatDay(day.date) }}</span>
+                  <span class="font-mono tabular-nums">
+                    <span class="sr-only">{{ __("Total") }}</span>
+                    {{ formatHours(day.hours) }}
+                  </span>
+                </h3>
+                <ul role="list">
+                  <li
+                    v-for="entry in day.entries"
+                    :key="`${entry.project}-${entry.task}`"
+                    class="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 border-t border-outline-gray-1 px-4 py-2.5"
+                  >
+                    <div class="min-w-0">
+                      <div class="break-words text-sm text-ink-gray-9">
+                        {{ entryTitle(entry) }}
+                      </div>
+                      <div
+                        v-if="entry.task && entry.project"
+                        class="mt-0.5 truncate text-xs text-ink-gray-5"
+                        :title="entry.project_name || entry.project"
+                      >
+                        {{ entry.project_name || entry.project }}
+                      </div>
+                      <p
+                        v-for="(note, i) in entry.notes"
+                        :key="i"
+                        class="mt-1 whitespace-pre-line break-words text-p-sm text-ink-gray-7"
+                      >
+                        {{ note }}
+                      </p>
+                    </div>
+                    <span
+                      class="text-right font-mono text-sm tabular-nums text-ink-gray-8"
+                    >
+                      {{ formatHours(entry.hours) }}
+                    </span>
+                  </li>
+                </ul>
+              </section>
+            </SectionCard>
+          </div>
+
           <SectionCard
+            v-else
             :title="__('Timesheets')"
             :count="listLoading ? undefined : sheets.length"
             :description="
@@ -226,7 +395,7 @@
                   )
                 : undefined
             "
-            class="mt-6 overflow-hidden"
+            class="mt-3 overflow-hidden"
           >
             <div
               v-if="sheets.length"
@@ -456,6 +625,7 @@ import {
 } from "frappe-ui";
 import { computed, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import LucideCalendarRange from "~icons/lucide/calendar-range";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideCircleDashed from "~icons/lucide/circle-dashed";
@@ -490,7 +660,39 @@ interface Summary {
   }[];
 }
 
+interface DayEntry {
+  project: string | null;
+  project_name: string | null;
+  task: string | null;
+  task_subject: string | null;
+  hours: number;
+  notes: string[];
+}
+
+interface Day {
+  date: string;
+  hours: number;
+  entries: DayEntry[];
+}
+
+interface PersonDays {
+  user: string;
+  full_name: string;
+  hours: number;
+  days: Day[];
+}
+
+interface TimesheetDays {
+  from_date: string;
+  to_date: string;
+  too_many: boolean;
+  hours: number | null;
+  people: PersonDays[];
+}
+
 const LIST_LIMIT = 500;
+// the most days the By day view shows at once; get_timesheet_days refuses more
+const MAX_DAYS = 62;
 const BREAKDOWN_ROWS = 6;
 
 const route = useRoute();
@@ -511,21 +713,66 @@ const scope = ref<"mine" | "team">(
   canSeeTeam.value && queryValue("scope") === "team" ? "team" : "mine"
 );
 
-// whose and when live in the URL, so a period can be shared
+const VIEWS = [
+  { key: "list", label: __("List") },
+  { key: "day", label: __("By day") },
+] as const;
+const view = ref<"list" | "day">(queryValue("view") === "day" ? "day" : "list");
+
+// whose, which project and when live in the URL, so a period can be shared
 const filters = reactive({
   agent: queryValue("agent"),
+  project: queryValue("project"),
   from_date: queryValue("from"),
   to_date: queryValue("to"),
 });
 
-const hasFilters = computed(
-  () =>
-    !!(
-      (scope.value === "team" && filters.agent) ||
-      filters.from_date ||
-      filters.to_date
-    )
-);
+const DATE = "YYYY-MM-DD";
+function thisWeek() {
+  const today = dayjs();
+  const monday = today.subtract((today.day() + 6) % 7, "day");
+  return { from: monday.format(DATE), to: monday.add(6, "day").format(DATE) };
+}
+
+// By day always shows a period: this week unless dates are picked; true if it set one
+function ensureDayRange() {
+  if (view.value !== "day" || (filters.from_date && filters.to_date))
+    return false;
+  if (filters.from_date) {
+    filters.to_date = dayjs(filters.from_date).add(6, "day").format(DATE);
+  } else if (filters.to_date) {
+    filters.from_date = dayjs(filters.to_date).subtract(6, "day").format(DATE);
+  } else {
+    const week = thisWeek();
+    filters.from_date = week.from;
+    filters.to_date = week.to;
+  }
+  return true;
+}
+ensureDayRange();
+
+const hasFilters = computed(() => {
+  const week = thisWeek();
+  // in By day, this week is the default, not a filter
+  const datesPicked =
+    view.value === "day"
+      ? filters.from_date !== week.from || filters.to_date !== week.to
+      : !!(filters.from_date || filters.to_date);
+  return !!(
+    (scope.value === "team" && filters.agent) ||
+    filters.project ||
+    datesPicked
+  );
+});
+
+const rangeError = computed(() => {
+  if (view.value !== "day" || !filters.from_date || !filters.to_date) return "";
+  const days = dayjs(filters.to_date).diff(dayjs(filters.from_date), "day") + 1;
+  if (days < 1) return __("The From date must be on or before the To date.");
+  if (days > MAX_DAYS)
+    return __("Pick up to {0} days at a time.", String(MAX_DAYS));
+  return "";
+});
 
 const GRID = computed(() =>
   scope.value === "team"
@@ -538,6 +785,7 @@ function filterParams() {
   return {
     team: team ? 1 : 0,
     ...(team && filters.agent ? { agent: filters.agent } : {}),
+    ...(filters.project ? { project: filters.project } : {}),
     ...(filters.from_date ? { from_date: filters.from_date } : {}),
     ...(filters.to_date ? { to_date: filters.to_date } : {}),
   };
@@ -558,23 +806,65 @@ const summary = createResource({
   onError() {},
 });
 
+const days = createResource({
+  url: "helpdesk.tasky.api.get_timesheet_days",
+  makeParams: () => filterParams(),
+  auto: view.value === "day" && !rangeError.value,
+  onError() {},
+});
+
 function reload() {
   timesheets.reload();
   summary.reload();
+  if (view.value === "day" && !rangeError.value) days.reload();
 }
 
-watch([scope, filters], () => {
+watch([scope, filters, view], () => {
+  // filling in this week's dates runs this again with them
+  if (ensureDayRange()) return;
   router.replace({
     query: {
       ...route.query,
       scope: scope.value === "team" ? "team" : undefined,
+      view: view.value === "day" ? "day" : undefined,
       agent: (scope.value === "team" && filters.agent) || undefined,
+      project: filters.project || undefined,
       from: filters.from_date || undefined,
       to: filters.to_date || undefined,
     },
   });
   reload();
 });
+
+const dayData = computed(() => days.data as TimesheetDays | undefined);
+const dayPeople = computed(() => dayData.value?.people ?? []);
+const dayLoading = computed(() => days.loading && !days.data);
+
+function formatDay(date: string) {
+  return dayjs(date).format("ddd D MMM");
+}
+
+function personLine(person: PersonDays) {
+  return person.days.length === 1
+    ? __("{0} on 1 day", formatHours(person.hours))
+    : __(
+        "{0} over {1} days",
+        formatHours(person.hours),
+        String(person.days.length)
+      );
+}
+
+function dayLabel(person: PersonDays, day: Day) {
+  return scope.value === "team"
+    ? `${person.full_name}, ${formatDay(day.date)}`
+    : formatDay(day.date);
+}
+
+function entryTitle(entry: DayEntry) {
+  if (entry.task) return entry.task_subject || entry.task;
+  if (entry.project) return entry.project_name || entry.project;
+  return __("No project");
+}
 
 const sheets = computed<TimesheetRow[]>(() => timesheets.data ?? []);
 const listLoading = computed(() => timesheets.loading && !timesheets.data);
@@ -670,7 +960,12 @@ const agentOptions = computed(() => [
 ]);
 
 function clearFilters() {
-  Object.assign(filters, { agent: "", from_date: "", to_date: "" });
+  Object.assign(filters, {
+    agent: "",
+    project: "",
+    from_date: "",
+    to_date: "",
+  });
 }
 
 function downloadCsv() {
@@ -710,12 +1005,19 @@ const taskResource = createResource({
 
 const taskList = computed(() => taskResource.data ?? []);
 
-const projectOptions = computed(() => [
-  { label: __("None"), value: "" },
-  ...(projectList.data ?? []).map((p: any) => ({
+const projectChoices = computed(() =>
+  (projectList.data ?? []).map((p: any) => ({
     label: p.project_name || p.name,
     value: p.name,
-  })),
+  }))
+);
+const projectFilterOptions = computed(() => [
+  { label: __("All projects"), value: "" },
+  ...projectChoices.value,
+]);
+const projectOptions = computed(() => [
+  { label: __("None"), value: "" },
+  ...projectChoices.value,
 ]);
 
 const taskOptions = computed(() => [

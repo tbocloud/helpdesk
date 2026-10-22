@@ -2397,16 +2397,18 @@ def get_my_timesheets(
     agent: str | None = None,
     from_date: str | None = None,
     to_date: str | None = None,
+    project: str | None = None,
 ):
     """My timesheets with project info; `team` shows everyone's that a lead or manager may see.
 
-    `agent` narrows the team view to one person; `from_date` / `to_date` to when it was logged.
+    `agent` narrows the team view to one person; `from_date` / `to_date` to when it was
+    logged; `project` to the timesheets with time on that project.
     """
     # get_list applies the timesheet permission rules: a lead sees the
     # timesheets on their projects, admins see all
     timesheets = frappe.get_list(
         "Timesheet",
-        filters=_timesheet_filters(team, agent, from_date, to_date),
+        filters=_timesheet_filters(team, agent, from_date, to_date, project),
         fields=[
             "name",
             "title",
@@ -2462,18 +2464,19 @@ def export_timesheets_csv(
     agent: str | None = None,
     from_date: str | None = None,
     to_date: str | None = None,
+    project: str | None = None,
 ):
     """Download the timesheets on screen as CSV, one row per time log."""
     import csv
     import io
 
     sheets = _visible_timesheets(
-        team, agent, from_date, to_date, ["name", "title", "status", "owner"]
+        team, agent, from_date, to_date, ["name", "title", "status", "owner"], project
     )
     logs = (
         frappe.get_all(
             "Timesheet Detail",
-            filters=_time_log_filters(sheets, from_date, to_date),
+            filters=_time_log_filters(sheets, from_date, to_date, project),
             fields=[
                 "parent",
                 "from_time",
@@ -2518,7 +2521,7 @@ def export_timesheets_csv(
             projects.get(log.project, log.project or ""),
             tasks.get(log.task, log.task or ""),
             log.hours,
-            frappe.utils.strip_html(log.description or ""),
+            _plain_note(log.description),
             _("Yes") if log.custom_billable else _("No"),
         ]
         writer.writerow([csv_safe(cell) for cell in cells])
@@ -2534,17 +2537,20 @@ def get_timesheet_summary(
     agent: str | None = None,
     from_date: str | None = None,
     to_date: str | None = None,
+    project: str | None = None,
 ) -> dict:
     """Hours in the time logs on screen: in total, by person and by project.
 
     Counts each time log in the chosen dates, not each timesheet's total, so a
     timesheet spanning several projects or days splits correctly.
     """
-    sheets = _visible_timesheets(team, agent, from_date, to_date, ["name", "owner"])
+    sheets = _visible_timesheets(
+        team, agent, from_date, to_date, ["name", "owner"], project
+    )
     rows = (
         frappe.get_all(
             "Timesheet Detail",
-            filters=_time_log_filters(sheets, from_date, to_date),
+            filters=_time_log_filters(sheets, from_date, to_date, project),
             fields=["parent", "project", "sum(hours) as hours"],
             group_by="parent, project",
         )
@@ -2577,13 +2583,111 @@ def get_timesheet_summary(
     }
 
 
-def _visible_timesheets(team, agent, from_date, to_date, fields: list) -> dict:
+# the By day view reads every log in the period; keep the period and the page small
+TIMESHEET_DAYS_MAX_RANGE = 62
+TIMESHEET_DAYS_MAX_LOGS = 2000
+
+
+@frappe.whitelist()
+def get_timesheet_days(
+    from_date: str,
+    to_date: str,
+    team: bool = False,
+    agent: str | None = None,
+    project: str | None = None,
+) -> dict:
+    """The time logs in the chosen dates, person by person and day by day, with the
+    project, task, hours and work notes of each: a log of the work, not a scorecard.
+
+    People come in name order and days in date order; only days with time logged appear.
+    The same permission rules as the list apply (`_timesheet_filters`, then
+    `timesheet_query` through get_list). More than `TIMESHEET_DAYS_MAX_LOGS` logs
+    returns `too_many` instead of a partial picture.
+    """
+    start, end = frappe.utils.getdate(from_date), frappe.utils.getdate(to_date)
+    if end < start:
+        frappe.throw(_("The From date must be on or before the To date."))
+    if frappe.utils.date_diff(end, start) >= TIMESHEET_DAYS_MAX_RANGE:
+        frappe.throw(
+            _("Pick up to {0} days at a time.").format(TIMESHEET_DAYS_MAX_RANGE)
+        )
+    period = {"from_date": str(start), "to_date": str(end)}
+    sheets = _visible_timesheets(
+        team, agent, from_date, to_date, ["name", "owner"], project
+    )
+    logs = (
+        frappe.get_all(
+            "Timesheet Detail",
+            filters=_time_log_filters(sheets, from_date, to_date, project),
+            fields=["parent", "from_time", "hours", "project", "task", "description"],
+            order_by="from_time asc",
+            limit_page_length=TIMESHEET_DAYS_MAX_LOGS + 1,
+        )
+        if sheets
+        else []
+    )
+    if len(logs) > TIMESHEET_DAYS_MAX_LOGS:
+        return {**period, "too_many": True, "hours": None, "people": []}
+
+    days_by_person = {}
+    for log in logs:
+        owner = sheets[log.parent].owner
+        day = str(frappe.utils.getdate(log.from_time))
+        entries = days_by_person.setdefault(owner, {}).setdefault(day, {})
+        entry = entries.setdefault(
+            (log.project or "", log.task or ""),
+            {"project": log.project, "task": log.task, "hours": 0, "notes": []},
+        )
+        entry["hours"] += frappe.utils.flt(log.hours)
+        note = _plain_note(log.description)
+        if note and note not in entry["notes"]:
+            entry["notes"].append(note)
+
+    projects = _names_of("Project", "project_name", {log.project for log in logs})
+    tasks = _names_of("Task", "subject", {log.task for log in logs})
+    names = user_full_names(set(days_by_person))
+    people = []
+    for user, days in days_by_person.items():
+        person_days = []
+        for day in sorted(days):
+            entries = list(days[day].values())
+            for entry in entries:
+                entry["hours"] = round(entry["hours"], 2)
+                entry["project_name"] = projects.get(entry["project"])
+                entry["task_subject"] = tasks.get(entry["task"])
+            person_days.append(
+                {
+                    "date": day,
+                    "hours": round(sum(e["hours"] for e in entries), 2),
+                    "entries": entries,
+                }
+            )
+        people.append(
+            {
+                "user": user,
+                "full_name": names.get(user, user),
+                "hours": round(sum(d["hours"] for d in person_days), 2),
+                "days": person_days,
+            }
+        )
+    people.sort(key=lambda p: p["full_name"].lower())
+    return {
+        **period,
+        "too_many": False,
+        "hours": round(sum(p["hours"] for p in people), 2),
+        "people": people,
+    }
+
+
+def _visible_timesheets(
+    team, agent, from_date, to_date, fields: list, project=None
+) -> dict:
     """Every timesheet the viewer may see under the filters, by name."""
     return {
         ts.name: ts
         for ts in frappe.get_list(
             "Timesheet",
-            filters=_timesheet_filters(team, agent, from_date, to_date),
+            filters=_timesheet_filters(team, agent, from_date, to_date, project),
             fields=fields,
             limit_page_length=0,
             distinct=True,
@@ -2591,16 +2695,25 @@ def _visible_timesheets(team, agent, from_date, to_date, fields: list) -> dict:
     }
 
 
-def _time_log_filters(sheets: dict, from_date=None, to_date=None) -> dict:
-    """Only the time logs in the chosen dates, from timesheets the viewer may see."""
-    filters = {"parent": ["in", list(sheets)], "parenttype": "Timesheet"}
+def _time_log_filters(sheets: dict, from_date=None, to_date=None, project=None) -> dict:
+    """Only the time logs in the chosen dates (and project), from timesheets the viewer
+    may see. A cancelled timesheet's logs are cancelled too and never count."""
+    filters = {
+        "parent": ["in", list(sheets)],
+        "parenttype": "Timesheet",
+        "docstatus": ["!=", 2],
+    }
     log_range = _log_date_range(from_date, to_date)
     if log_range:
         filters["from_time"] = log_range
+    if project:
+        filters["project"] = project
     return filters
 
 
-def _timesheet_filters(team=False, agent=None, from_date=None, to_date=None) -> list:
+def _timesheet_filters(
+    team=False, agent=None, from_date=None, to_date=None, project=None
+) -> list:
     """Filters for the timesheets list; only leads and managers see the team's."""
     from helpdesk.api.work import can_see_overview
 
@@ -2619,7 +2732,16 @@ def _timesheet_filters(team=False, agent=None, from_date=None, to_date=None) -> 
     if log_range:
         # the day the work was done, not when the timesheet was saved
         filters.append(["Timesheet Detail", "from_time", *log_range])
+    if project:
+        filters.append(["Timesheet Detail", "project", "=", project])
     return filters
+
+
+def _plain_note(text: str | None) -> str:
+    """A time log's work note as plain text: its html tags dropped, entities decoded."""
+    import html
+
+    return html.unescape(frappe.utils.strip_html(text or "")).strip()
 
 
 def _log_date_range(from_date=None, to_date=None) -> list | None:

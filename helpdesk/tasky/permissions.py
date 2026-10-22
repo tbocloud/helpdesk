@@ -639,7 +639,9 @@ def timesheet_has_permission(
         return None
     if is_sales_employee(user):
         return False
-    managed = set(get_managed_projects(user))
+    # the same projects as timesheet_query: managed or led, so a lead can open
+    # the timesheets the list shows them
+    managed = set(get_managed_projects(user)) | set(get_led_projects(user))
     if ptype == "read" and any(
         log.project in managed for log in doc.get("time_logs", [])
     ):
