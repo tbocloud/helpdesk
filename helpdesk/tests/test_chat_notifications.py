@@ -49,8 +49,13 @@ class ChatCase(FrappeTestCase):
 
     def due_soon_task(self):
         task = make_task(self.project, "Configure GST", add_days(nowdate(), 1))
-        make_assignment("Task", task.name, DEV[0])
+        self.assign(task.name)
         return task.name
+
+    def assign(self, task: str):
+        # the assignment's own chat message (tasky.new_assignments) isn't what these tests look at
+        with patch("helpdesk.chat_notifications.send_direct", return_value=True):
+            make_assignment("Task", task, DEV[0])
 
 
 class TestTeams(ChatCase):
@@ -73,7 +78,7 @@ class TestTeams(ChatCase):
         card = body["attachments"][0]["content"]
         self.assertIn("Configure GST", card["body"][0]["text"])
         self.assertTrue(
-            card["actions"][0]["url"].endswith(f"/helpdesk/projects/{self.project}")
+            card["actions"][0]["url"].endswith(f"/helpdesk/my-work?task={task}")
         )
         self.assertFalse(sendmail.called)
 
@@ -82,7 +87,7 @@ class TestTeams(ChatCase):
             "Microsoft Teams", teams_channel_webhook=TEAMS_CHANNEL
         )
         task = make_task(self.project, "Go-live checklist", add_days(nowdate(), -5))
-        make_assignment("Task", task.name, DEV[0])
+        self.assign(task.name)
         with patch(
             "helpdesk.chat_notifications.requests.post", return_value=ok_response()
         ) as post:

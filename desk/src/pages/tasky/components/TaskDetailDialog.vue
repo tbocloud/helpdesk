@@ -171,6 +171,7 @@
 <script setup lang="ts">
 import MeetingsCard from "@/components/meetings/MeetingsCard.vue";
 import TaskyBadge from "@/components/TaskyBadge.vue";
+import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
 import { errorText, sanitizeRichText } from "@/utils";
 import { Dialog, createResource, dayjs, toast } from "frappe-ui";
@@ -294,6 +295,14 @@ const emit = defineEmits<{
 }>();
 
 const router = useRouter();
+const authStore = useAuthStore();
+
+// best effort: if it fails, the task just stays marked New until the next open
+let markedSeen = "";
+const markSeen = createResource({
+  url: "helpdesk.tasky.new_assignments.mark_task_seen",
+  onError() {},
+});
 const activity = ref<InstanceType<typeof TaskActivity> | null>(null);
 
 const taskDetail = createResource({
@@ -306,6 +315,12 @@ const taskDetail = createResource({
     }
   },
   onSuccess(d: TaskDetail) {
+    // the assignee opened it: it stops showing as New in their lists
+    // once per opening: the details reload after every step taken in the dialog
+    if (d.assignees?.includes(authStore.userId) && markedSeen !== d.name) {
+      markedSeen = d.name;
+      markSeen.submit({ task: d.name });
+    }
     if (!props.action || d.name !== props.task?.name) return;
     const target = {
       plan: planningTask,
@@ -349,6 +364,7 @@ watch(
   () => props.task?.name,
   (name) => {
     pendingRating.value = "";
+    if (!name) markedSeen = "";
     if (name) taskDetail.submit({ task: name });
   },
   { immediate: true }

@@ -28,6 +28,7 @@ from helpdesk.tasky.api import (
     hold_by_name,
     hold_by_names,
 )
+from helpdesk.tasky.new_assignments import assignment_states
 from helpdesk.tasky.permissions import (
     can_add_tasks,
     can_coordinate_project,
@@ -330,6 +331,8 @@ def get_my_work(user: str | None = None) -> dict:
         limit_page_length=LIST_LIMIT,
     )
     items = _items(tasks, tickets, with_plan=True)
+    if user == viewer:
+        _mark_new_tasks(items, user)
     done = _done_items(user)
     return {
         "items": items,
@@ -342,6 +345,16 @@ def get_my_work(user: str | None = None) -> dict:
             "done": len(done),
         },
     }
+
+
+def _mark_new_tasks(items: list[dict], user: str):
+    """`assignment_state` on tasks the person hasn't opened since they were given them:
+    "new", or "reassigned" when they had it before; None once opened. Only on their
+    own list: opening a task marks it seen for whoever opens it."""
+    states = assignment_states(user, [i["name"] for i in items if i["kind"] == "task"])
+    for item in items:
+        if item["kind"] == "task":
+            item["assignment_state"] = states.get(item["name"])
 
 
 def _done_items(user: str) -> list[dict]:

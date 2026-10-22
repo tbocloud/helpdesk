@@ -162,6 +162,8 @@ doc_events = {
     "ToDo": {
         # nobody is given a task in a department their team keeps out of
         "validate": "helpdesk.tasky.permissions.check_assignment_department",
+        # the person given a task hears about it (docs/workspace-pages.md, "New tasks")
+        "after_insert": "helpdesk.tasky.new_assignments.notify_assignee",
         # In progress and Overview reload when a task changes hands
         "on_update": "helpdesk.tasky.api.notify_task_assignment",
     },
@@ -288,6 +290,8 @@ ignore_links_on_delete = [
     # a meeting stays in Outlook after its ticket is deleted
     "HD Meeting",
     "HD Ticket Comment",
+    # who opened a deleted task when no longer matters
+    "HD Task Seen",
     # AI cost records are an audit trail; they keep the old ticket number
     "HDS AI Usage Log",
     # deleting a project deletes its files, and each File takes its HD Project File along

@@ -272,7 +272,12 @@
                     :key="itemKey(item)"
                     class="border-b border-outline-gray-1 last:border-b-0"
                   >
-                    <WorkItemRow :item="item">
+                    <!-- a task opens its details here, which also clears its New mark -->
+                    <WorkItemRow
+                      :item="item"
+                      :opens="item.kind === 'task'"
+                      @open="openTask(item, null)"
+                    >
                       <template v-if="item.kind === 'task'" #actions>
                         <WorkItemActions
                           :item="item"
@@ -450,8 +455,15 @@ watch(activeTab, (tab) => {
   });
 });
 
-const items = computed<WorkItem[]>(
-  () => (work.data as MyWork | undefined)?.items ?? []
+// tasks opened since the list loaded; the server stops marking them on the next load
+const opened = ref(new Set<string>());
+
+const items = computed<WorkItem[]>(() =>
+  ((work.data as MyWork | undefined)?.items ?? []).map((item) =>
+    item.assignment_state && opened.value.has(item.name)
+      ? { ...item, assignment_state: null }
+      : item
+  )
 );
 
 function matches(item: WorkItem, tab: Tab) {
@@ -573,7 +585,22 @@ watch(detailTask, (task) => {
   if (task) return;
   detailAction.value = null;
   busy.value = null;
+  if (route.query.task)
+    router.replace({ query: { ...route.query, task: undefined } });
 });
+
+// a notification links here with ?task=<name> to open that task's details
+watch(
+  () => route.query.task,
+  (name) => {
+    if (typeof name !== "string" || !name || detailTask.value?.name === name)
+      return;
+    detailAction.value = null;
+    opened.value.add(name);
+    detailTask.value = { name };
+  },
+  { immediate: true }
+);
 
 const start = createResource({
   url: "helpdesk.tasky.api.update_task_status",
@@ -595,6 +622,8 @@ const { approve } = useApproveTask(() => {
 
 function openTask(item: WorkItem, action: TaskAction | null) {
   detailAction.value = action;
+  // only the assignee's own open marks it seen (TaskDetailDialog)
+  if (!viewUser.value) opened.value.add(item.name);
   detailTask.value = {
     name: item.name,
     subject: item.title,

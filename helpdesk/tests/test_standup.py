@@ -425,6 +425,8 @@ class TestReminder(StandupCase):
 class TestSummary(StandupCase):
     def setUp(self):
         super().setUp()
+        # assigned before chat is on, so its assignment message isn't sent
+        held = self.task("Customer GST file", status="On Hold")
         enable_chat_notifications(teams_channel_webhook=TEST_TEAMS_CHANNEL_URL)
         self.addCleanup(
             frappe.clear_document_cache, "HD Chat Settings", "HD Chat Settings"
@@ -434,7 +436,6 @@ class TestSummary(StandupCase):
                 {"department": DEPARTMENT, "channel_webhook": DEPARTMENT_CHANNEL_URL}
             ]
         )
-        held = self.task("Customer GST file", status="On Hold")
         make_standup(
             DEV[0],
             self.today,

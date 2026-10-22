@@ -454,6 +454,7 @@ class HDProjectSignoff(Document):
 
     def create_clarification_task(self, row, escalate: bool):
         from helpdesk.tasky.api import _assign_user
+        from helpdesk.tasky.new_assignments import told_by_caller
 
         link = get_url(f"/helpdesk{self.helpdesk_path()}")
         description = "".join(
@@ -488,7 +489,11 @@ class HDProjectSignoff(Document):
                 "description": description,
             }
         ).insert(ignore_permissions=True)
-        _assign_user(task, self.trainer or self.project_lead(), ignore_permissions=True)
+        # notify_follow_up tells them about the item
+        with told_by_caller():
+            _assign_user(
+                task, self.trainer or self.project_lead(), ignore_permissions=True
+            )
         return task
 
     def notify_follow_up(self, row, escalate: bool):

@@ -1,6 +1,7 @@
 """Tasky API — checklist-driven project management on ERPNext Project/Task."""
 
 import json
+from collections import Counter
 
 import frappe
 from frappe import _
@@ -11,6 +12,11 @@ from helpdesk.api.content_board import user_full_names
 from helpdesk.api.project_files import file_counts
 from helpdesk.api.task_attachments import attachment_counts
 from helpdesk.github_sync import get_pull_requests
+from helpdesk.tasky.new_assignments import (
+    assignment_states,
+    notify_given_tasks,
+    told_by_caller,
+)
 from helpdesk.tasky.permissions import (
     MANAGER_PROJECT_ROLE,
     can_add_tasks,
@@ -578,6 +584,7 @@ def generate_checklist(project: str, template: str):
             return user
         return None
 
+    given = Counter()
     for ttask in template_doc.tasks:
         task_start, task_end = _compute_due_date(
             project_start,
@@ -606,8 +613,14 @@ def generate_checklist(project: str, template: str):
             }
         )
         task_doc.insert()
-        _assign_user(task_doc, pick_user(ttask.category))
+        user = pick_user(ttask.category)
+        # one notice per person for the whole checklist, sent below
+        with told_by_caller():
+            _assign_user(task_doc, user)
+        if user:
+            given[user] += 1
 
+    notify_given_tasks(given, project)
     return {"tasks_created": len(template_doc.tasks)}
 
 
@@ -807,9 +820,15 @@ def get_my_tasks(
             as_list=True,
         )
     )
+    # the New / Reassigned mark until the person opens the task (tasky.new_assignments)
+    states = assignment_states(frappe.session.user, [t.name for t in tasks])
     return add_assigners(
         [
-            {**t, "project_name": project_names.get(t.get("project"))}
+            {
+                **t,
+                "project_name": project_names.get(t.get("project")),
+                "assignment_state": states.get(t["name"]),
+            }
             for t in _format_tasks(tasks)
         ]
     )
@@ -943,7 +962,8 @@ def request_help(
     )
     # developers can't create tasks; _get_own_task checked this one is theirs
     helper.insert(ignore_permissions=True)
-    _assign_user(helper, teammate, ignore_permissions=True)
+    with told_by_caller():  # "needs your help" below says it
+        _assign_user(helper, teammate, ignore_permissions=True)
     _estimate_if_undated(helper)
 
     doc.depends_on_task = helper.name
@@ -1016,13 +1036,14 @@ def hand_over_task(task: str, teammate: str, reason: str) -> dict:
     leaving = [giver] if giver in previous else previous
     assigner = get_assigners({doc.name: leaving[0]}).get(doc.name) if leaving else None
     post = _content_post_for_hand_over(doc, leaving)
-    _reassign(
-        doc,
-        leaving,
-        teammate,
-        ignore_permissions=True,
-        assigned_by=assigner or giver,
-    )
+    with told_by_caller():  # "handed you a task" below says it
+        _reassign(
+            doc,
+            leaving,
+            teammate,
+            ignore_permissions=True,
+            assigned_by=assigner or giver,
+        )
     if post:
         _hand_over_content_part(post, doc.content_role, leaving, teammate)
     doc.add_comment(

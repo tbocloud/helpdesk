@@ -137,6 +137,14 @@ function getRoute(n: Notification) {
         hash: "#" + n.reference_comment,
       };
     case "Assignment":
+      // a task assignment links to the task itself
+      if (!n.reference_ticket) return n.link || { name: "MyWork" };
+      return {
+        name: "TicketAgent",
+        params: {
+          ticketId: n.reference_ticket,
+        },
+      };
     case "Reaction":
       return {
         name: "TicketAgent",

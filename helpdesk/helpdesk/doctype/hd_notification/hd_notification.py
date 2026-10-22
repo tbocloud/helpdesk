@@ -95,6 +95,10 @@ class HDNotification(Document):
         if not is_enabled():
             self.send_email()
             return
+        self.queue_chat()
+
+    def queue_chat(self):
+        """Send it as a chat message, after commit, in the background."""
         frappe.enqueue(
             "helpdesk.chat_notifications.deliver_notification",
             notification=self.name,

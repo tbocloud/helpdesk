@@ -971,7 +971,7 @@ class TestTaskHold(WorkControlCase):
 
 
 class TestReminderDelivery(WorkControlCase):
-    def test_reminder_opens_the_project_and_is_emailed(self):
+    def test_reminder_opens_the_task_and_is_emailed(self):
         task = self.make_task("Share UAT build", add_days(nowdate(), 1))
         with patch("frappe.sendmail") as sendmail:
             send_task_reminder(task)
@@ -979,7 +979,7 @@ class TestReminderDelivery(WorkControlCase):
         note = frappe.get_last_doc(
             "HD Notification", filters={"user_to": DEV[0], "reference_name": task}
         )
-        self.assertEqual(note.link, f"/projects/{self.project}")
+        self.assertEqual(note.link, f"/my-work?task={task}")
         self.assertEqual(sendmail.call_args.kwargs["recipients"], DEV[0])
         self.assertTrue(
             sendmail.call_args.kwargs["args"]["doc_link"].endswith(note.link)

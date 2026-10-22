@@ -319,6 +319,12 @@ export function assignedByName(task: {
   return task.assigned_by_name || by;
 }
 
+/**
+ * A task given to the viewer since they last opened it: "new", or "reassigned" when
+ * they had it before (helpdesk.tasky.new_assignments). Cleared once they open it.
+ */
+export type AssignmentState = "new" | "reassigned";
+
 export interface TaskTimer {
   running: boolean;
   paused: boolean;

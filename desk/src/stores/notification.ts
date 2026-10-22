@@ -30,7 +30,11 @@ const TEXT_ONLY_TYPES = [
 ];
 
 export function isTextOnly(n: Notification) {
-  return TEXT_ONLY_TYPES.includes(n.notification_type);
+  // a task assignment (no ticket) also carries its whole message and link
+  return (
+    TEXT_ONLY_TYPES.includes(n.notification_type) ||
+    (n.notification_type === "Assignment" && !n.reference_ticket)
+  );
 }
 
 export const useNotificationStore = defineStore("notification", () => {

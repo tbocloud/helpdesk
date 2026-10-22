@@ -477,7 +477,12 @@ team member's work, for leads and managers of their projects (the Team page link
   over; the project's manager, lead or coordinator may edit, plan, approve and send back, and also hold, resume and hand it over. "Move to
   project…" shows when the task says `can_move` (see [Moving a task](#moving-a-task-to-another-project)).
 - **Rows** say "Assigned by Arun" next to the project when someone other than the assignee gave
-  the task out.
+  the task out, and **New** or **Reassigned** while the task hasn't been opened since it was
+  given (see [New tasks](#new-tasks)). A task row's title opens the task details in place
+  (`WorkItemRow` `opens`); a ticket row's title opens the ticket.
+- **`?task=<name>`** opens that task's details on My Work, for anyone who may read the task;
+  closing the dialog drops it from the URL. Notifications about a task link here
+  (`helpdesk_path("Task", name)` in `helpdesk/work_reminders.py`).
 
 ## Board (`/my-board`)
 
@@ -503,6 +508,46 @@ assignee's latest ToDo that wasn't cancelled (`assign_to` records `assigned_by`)
 created the task. The UI (`assignedByName()` in `taskMeta.ts`) shows it as muted "Assigned by
 …" text on board cards and My Work rows, as a row in the task details and in Edit task, and
 hides it when the assignee took the task themselves.
+
+### New tasks
+
+Spec for the request "a newly assigned task must stand out from the ones people already had".
+Code: `helpdesk/tasky/new_assignments.py`.
+
+- **The notice.** Every assignment is a ToDo, so `notify_assignee` runs on ToDo
+  `after_insert` (hooks.py) and catches every way a task is given out: New task, Edit task,
+  checklists, recurring tasks, tasks from tickets and sign-offs, the desk. It sends one HD
+  Notification of type **Assignment** (the bell, open tabs through `helpdesk:new-notification`,
+  and phones when Mobile push is on), from the assigner, linking to `/my-work?task=<name>`, and,
+  when HD Chat Settings is on, one Teams or Slack direct message
+  (`HDNotification.queue_chat`). It sends no email: Frappe's own assignment notice already
+  emails the person as their Notification Settings allow, and its link now opens the task in
+  `/helpdesk` too (`extends/notification_log.py`). Assignment (not Reminder) keeps the bell's
+  wording right and leaves the reminder email and its dedupe out of it.
+- **Wording.** "Meera Iyer assigned you a new task: …"; "… reassigned a task to you: …" when it
+  was taken off someone else; "… assigned you … again" when the person had it before.
+- **No notice** when someone assigns themselves, for the automation user, Administrator and
+  Guest, for a disabled account, and for callers that tell the person in their own words
+  (they run inside `told_by_caller()`): handing over ("handed you a task"), asking for help
+  ("needs your help"), content posts ("New content task", or the plan's summary), stand-up help
+  ("asked you to help") and a sign-off's clarification task (the sign-off notice). A checklist
+  made from a template sends one notice per person ("… assigned you 3 new tasks in …"). The
+  notice's wording describes the event ("reassigned" = taken off someone else), while the row's
+  mark describes the reader ("Reassigned" = they had it before), so a task moved to someone new
+  reads "reassigned a task to you" in the bell and "New" on the row. The mark uses the brand
+  accent on purpose: it is the viewer's current to-do signal, with its text always shown.
+- **Seen.** `HD Task Seen` (user, task, seen_on; unique per user and task) records when a person
+  last opened a task. `TaskDetailDialog` calls `mark_task_seen(task)` (POST; needs read
+  permission) when it loads a task the viewer is assigned to. Frappe's `_seen` isn't used: it
+  resets on every save. Tasks people already had when this shipped were marked seen by the
+  patch `mark_assigned_tasks_seen`, so nobody starts with a page of New marks.
+- **The mark.** `assignment_states(user, tasks)` (two queries for any list) gives each task the
+  person has an open ToDo on, created after they last opened it, a state: `reassigned` when they
+  had an earlier ToDo on it, else `new`. `get_my_work` (the viewer's own list only, not a team
+  member's) and `get_my_tasks` return it as `assignment_state` (null once opened).
+  `NewTaskBadge.vue` shows it as a brand-soft "New" or "Reassigned" badge with text, after the
+  title on My Work and My Tasks rows; opening the task clears it at once and the server
+  remembers.
 
 ### On hold: why, and who
 
@@ -553,7 +598,8 @@ card's menu, the checklist row's menu and the task details (`HandOverTaskDialog`
   hander's place (`HDContentPost.replace_on_part`, saved without re-syncing its tasks), so
   the post's next save doesn't give the task back.
 - **Record and notices:** comments "Reassigned from … to … by …" and "Handed over by …:
-  reason"; the teammate is notified ("… handed you a task"), and the project lead (or its
+  reason"; the teammate is notified ("… handed you a task", with no separate assignment
+  notice, see [New tasks](#new-tasks)), and the project lead (or its
   managers when it has no lead) and the original assigner hear who took it and why, each
   only while they may still read the task.
 
@@ -680,7 +726,7 @@ logged it all as one time log ending now, so yesterday's work landed on today.
 When a task becomes **Completed**, whoever assigned it (the same person the "Assigned by" label
 shows, from `get_assigners()`) gets a **Task Completed** notification: "Fathima Rizwana completed
 Bank reconciliation", credited to the assignees who did the work (when a lead's review approval
-completes it) or else to whoever completed it, linking to the task's project (My Work when it has none).
+completes it) or else to whoever completed it, linking to the task's details on My Work (`/my-work?task=`).
 `Task.tell_assigner_it_is_done()` sends it through `notify_users(…, notification_type="Task
 Completed", user_from=…, once=False)`, so completing a reopened task notifies again. It isn't sent
 when the assigner completed (or, on review projects, approved) it themselves, when the assignee

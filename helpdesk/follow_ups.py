@@ -62,6 +62,7 @@ from helpdesk.work_reminders import (
     _agent_managers,
     _assignees,
     enabled_users,
+    helpdesk_path,
     new_notification,
 )
 
@@ -462,7 +463,7 @@ class TaskRules:
             text=f"{text} · {away}" if away else text,
             recipients=recipients,
             owners=owners,
-            link=f"/projects/{task.project}" if task.project else "/my-work",
+            link=helpdesk_path("Task", task.name),
             **kwargs,
         )
 
