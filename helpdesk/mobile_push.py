@@ -18,7 +18,7 @@ EXPO_BATCH_SIZE = 100
 EXPO_TIMEOUT_SECONDS = 15
 DEVICE = "HD Mobile Device"
 # reactions are too small to buzz a phone; the rest is what the bell shows
-PUSH_TYPES = ("Assignment", "Mention", "Reminder", "Task Completed")
+PUSH_TYPES = ("Assignment", "Mention", "Reminder", "Task Completed", "New Ticket")
 
 
 def is_enabled() -> bool:

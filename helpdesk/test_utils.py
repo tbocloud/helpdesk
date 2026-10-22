@@ -214,6 +214,22 @@ def get_ticket_owner_activity(ticket) -> list[str]:
     )
 
 
+def get_ticket_notices(ticket, notification_type: str) -> list[tuple[str, str]]:
+    """The (user_to, message) pairs of a ticket's HD Notifications of one type
+    (e.g. New Ticket, Ticket Update), sorted."""
+    return sorted(
+        (n.user_to, n.message)
+        for n in frappe.get_all(
+            "HD Notification",
+            filters={
+                "reference_ticket": str(ticket),
+                "notification_type": notification_type,
+            },
+            fields=["user_to", "message"],
+        )
+    )
+
+
 def create_agent(
     email: str, first_name: str | None = None, last_name: str | None = None
 ):
@@ -1285,10 +1301,12 @@ def make_member_day(project: str, member: str, lead: str, teammate: str) -> dict
     return tasks
 
 
-def log_hours(user: str, project: str, hours: float, day) -> str:
-    """Creates a draft Timesheet of `hours` on `project` on `day`, logged by `user`
-    (its owner); returns its name."""
-    sheet = make_timesheet(project, hours, f"{day} 10:00:00").name
+def log_hours(
+    user: str, project: str, hours: float, day, at: str = "10:00:00", **log
+) -> str:
+    """Creates a draft Timesheet of `hours` on `project` on `day` at `at`, logged by
+    `user` (its owner); returns its name. `log` passes `task` or `notes` on."""
+    sheet = make_timesheet(project, hours, f"{day} {at}", **log).name
     frappe.db.set_value("Timesheet", sheet, "owner", user, update_modified=False)
     return sheet
 
@@ -3235,10 +3253,12 @@ def make_timesheet(
     from_time,
     task: str | None = None,
     billable: int = 1,
+    notes: str | None = None,
 ):
     """Creates a draft Timesheet with one time log of `hours` on `project` (and `task`).
 
-    `billable=0` logs internal time that doesn't use up a customer's support hours.
+    `billable=0` logs internal time that doesn't use up a customer's support hours;
+    `notes` is the log's work note.
     """
     return frappe.get_doc(
         {
@@ -3250,6 +3270,7 @@ def make_timesheet(
                     "hours": hours,
                     "from_time": from_time,
                     "custom_billable": billable,
+                    "description": notes,
                 }
             ],
         }

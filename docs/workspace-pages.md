@@ -742,7 +742,9 @@ count updates without a reload. For Task Completed the notification store
 made with the Web Audio API, no sound file) and shows the message as a toast. Browsers only play
 sound after the person has used the page; if audio is blocked the chime is skipped and the bell
 and toast still show. The panel shows the completer's avatar and the message
-(`isTextOnly()` in `Notifications.vue` and `MobileNotifications.vue`).
+(`isTextOnly()` in `stores/notification.ts`, used by `Notifications.vue` and
+`MobileNotifications.vue`). New-ticket notices have their own sound preference, see
+[ticket-owners.md](ticket-owners.md#notification).
 
 ### When a task is overdue
 
@@ -845,12 +847,18 @@ the logic is `TaskActivity` in `helpdesk/task_activity.py`.
 ## Timesheets (`/timesheets`)
 
 `desk/src/pages/tasky/Timesheets.vue`; APIs `helpdesk.tasky.api.get_my_timesheets` (the list,
-the 500 most recently updated), `get_timesheet_summary` (the totals) and
-`export_timesheets_csv` (Download CSV, one row per time log).
+the 500 most recently updated), `get_timesheet_summary` (the totals),
+`get_timesheet_days` (the By day view) and `export_timesheets_csv` (Download CSV, one row per
+time log).
 
 - **Scope**: Mine, or Team for leads and managers (the timesheets on projects they lead or
-  manage). Filters: agent (Team), From and To (the day the work was done).
-- **URL**: `scope=team`, `agent`, `from`, `to`.
+  manage). Filters: agent (Team), project, From and To (the day the work was done). Every
+  filter applies alike to the tiles, the breakdowns, the list, By day and the CSV
+  (`_timesheet_filters` for the timesheets, `_time_log_filters` for their time logs).
+- **Cancelled timesheets** never count: `_time_log_filters` skips cancelled time logs, so
+  the hours, By day and the CSV leave them out. The list still shows the timesheet with its
+  Cancelled status.
+- **URL**: `scope=team`, `view=day`, `agent`, `project`, `from`, `to`.
 - **Summary tiles**: Hours logged in the period, Timesheets (500+ when the list is capped) and
   Drafts.
 - **By person** (Team) and **By project**: `get_timesheet_summary(team, agent, from_date,
@@ -858,7 +866,36 @@ the 500 most recently updated), `get_timesheet_summary` (the totals) and
   viewer may see; it doesn't use each timesheet's total, so a timesheet across several
   projects or days splits correctly. Six rows each, then "N more · Xh". The bars are neutral
   and show each row's share of the period.
-- **Download CSV** has a Billable column.
+- **Download CSV** has a Billable column. Notes are plain text (`_plain_note`: tags dropped,
+  entities decoded).
+- **List | By day** (segmented control above the list). **By day** is the employee's daily
+  log of the work, for them and their manager: one card per person (name order; Mine shows
+  just you) with their hours and the number of days, then each day with time logged
+  (oldest first) with its total, and under it one row per task, or per project for time
+  logged without a task: the task (with its project under it), the hours and the work notes
+  as plain text. Days without time are left out. Hours are facts only: no targets, no
+  "under 8h" or idle warnings, no rankings or comparisons between people.
+  - `get_timesheet_days(from_date, to_date, team, agent, project)` uses the same permission
+    path as the list (`_timesheet_filters`, then `timesheet_query` through `get_list`), so a
+    developer sees their own, a lead or manager the timesheets on their projects, a Sales
+    Employee only their own (Team refused). It reads the time logs in one query and the
+    project, task and people names in one query each.
+  - Bounded: at most 62 days (`TIMESHEET_DAYS_MAX_RANGE`; the page says "Pick up to 62 days
+    at a time." and doesn't ask); more than 2000 time logs (`TIMESHEET_DAYS_MAX_LOGS`)
+    returns `too_many`, shown as "Too many time logs to show day by day" with Download CSV,
+    rather than a partial picture.
+  - The period defaults to this week (Monday to Sunday) when no dates are picked; one date
+    alone gets the week from or up to it. In By day this week isn't counted as a filter.
+  - States: loading skeleton, error with Retry, too many, and empty ("No time logged in
+    these dates": Clear filters when filtered, otherwise Log time).
+  - No print view: Download CSV is the export.
+- **Leads opening a timesheet**: `timesheet_has_permission` lets a lead read a timesheet with
+  time on a project they lead, matching `timesheet_query` (before, the list showed it and
+  opening it was refused).
+- **Tests**: `helpdesk/tests/test_timesheet_days.py` (grouping and sums, own vs team, the
+  project filter across days, summary, list and CSV, Sales Employee, cancelled, date bounds,
+  plain notes, a lead opening a timesheet); the list, summary and CSV in
+  `helpdesk/tests/test_work_control.py` (`TestTeamTimesheets`).
 - **List**: a titled card; Timesheet, Person (Team), Status, Hours (right-aligned, tabular)
   and Updated columns from `md`; below that a two-line row with person, status and date in
   the second line. Empty states tell "no time logged in these dates" (Clear filters) from
