@@ -47,6 +47,10 @@
           <span v-else class="truncate text-base text-ink-gray-9">
             {{ item.title }}
           </span>
+          <NewTaskBadge
+            v-if="item.kind === 'task' && item.assignment_state"
+            :state="item.assignment_state"
+          />
           <template v-if="item.is_key">
             <LucideStar
               class="size-3.5 shrink-0 fill-current text-warning"
@@ -244,6 +248,7 @@ import LucideTicket from "~icons/lucide/ticket";
 import LucideTriangleAlert from "~icons/lucide/triangle-alert";
 import HoldNote from "@/pages/tasky/components/HoldNote.vue";
 import MilestoneMark from "@/pages/tasky/components/MilestoneMark.vue";
+import NewTaskBadge from "@/pages/tasky/components/NewTaskBadge.vue";
 import PullRequestChip from "@/pages/tasky/components/PullRequestChip.vue";
 import SlipBadge from "@/pages/tasky/components/SlipBadge.vue";
 import EscalationBadge from "@/components/EscalationBadge.vue";

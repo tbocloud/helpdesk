@@ -1435,6 +1435,7 @@ def assign_help(viewer: str, standup: str, row: str, helper: str) -> dict:
 def join_task(task: str, helper: str) -> None:
     """Add `helper` to the task's assignees unless they already are (the ToDo hooks
     still refuse someone across a department wall)."""
+    from helpdesk.tasky.new_assignments import told_by_caller
     from helpdesk.utils import add_assignment
 
     assigned = frappe.db.exists(
@@ -1447,10 +1448,12 @@ def join_task(task: str, helper: str) -> None:
         },
     )
     if not assigned:
-        add_assignment(
-            {"doctype": "Task", "name": task, "assign_to": [helper]},
-            ignore_permissions=True,
-        )
+        # the stand-up's "asked you to help" notice tells them
+        with told_by_caller():
+            add_assignment(
+                {"doctype": "Task", "name": task, "assign_to": [helper]},
+                ignore_permissions=True,
+            )
 
 
 def create_task_from_blocker(

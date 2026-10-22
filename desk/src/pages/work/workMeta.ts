@@ -1,4 +1,5 @@
 import type { TaskPullRequest } from "@/pages/tasky/pullRequestMeta";
+import type { AssignmentState } from "@/pages/tasky/taskMeta";
 import { __ } from "@/translation";
 import { dayjs } from "frappe-ui";
 
@@ -41,6 +42,8 @@ export interface WorkItem {
   /** Tasks: who gave it to its assignee. */
   assigned_by?: string | null;
   assigned_by_name?: string | null;
+  /** My Work, the viewer's own tasks: given to them since they last opened it. */
+  assignment_state?: AssignmentState | null;
 }
 
 export function isAtRisk(item: WorkItem) {

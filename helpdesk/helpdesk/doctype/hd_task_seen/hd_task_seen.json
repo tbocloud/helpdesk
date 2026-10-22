@@ -1,0 +1,66 @@
+{
+	"actions": [],
+	"autoname": "hash",
+	"creation": "2026-10-22 12:00:00.000000",
+	"description": "When a person last opened a task. A task assigned to them after that shows as New (or Reassigned) in My Work and My Tasks; written by helpdesk.tasky.new_assignments.",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"user",
+		"task",
+		"seen_on"
+	],
+	"fields": [
+		{
+			"fieldname": "user",
+			"fieldtype": "Link",
+			"in_list_view": 1,
+			"label": "User",
+			"options": "User",
+			"reqd": 1
+		},
+		{
+			"fieldname": "task",
+			"fieldtype": "Link",
+			"in_list_view": 1,
+			"label": "Task",
+			"options": "Task",
+			"reqd": 1,
+			"search_index": 1
+		},
+		{
+			"fieldname": "seen_on",
+			"fieldtype": "Datetime",
+			"in_list_view": 1,
+			"label": "Seen On",
+			"reqd": 1
+		}
+	],
+	"in_create": 1,
+	"index_web_pages_for_search": 0,
+	"links": [],
+	"modified": "2026-10-22 12:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD Task Seen",
+	"naming_rule": "Random",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "System Manager",
+			"share": 1,
+			"write": 1
+		}
+	],
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": [],
+	"track_changes": 0
+}

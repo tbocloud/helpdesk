@@ -26,6 +26,7 @@ from helpdesk.content_team import (
     is_erp_only,
     is_sales_employee,
 )
+from helpdesk.tasky.new_assignments import told_by_caller
 from helpdesk.utils import add_assignment, remove_assignment
 from helpdesk.work_reminders import notify_users
 
@@ -381,6 +382,13 @@ class HDContentPost(Document):
             self.give_task(task, user)
 
     def give_task(self, task, user: str):
+        # the post tells its people in its own words, below or in the plan's summary
+        with told_by_caller():
+            self.assign_task(task, user)
+        if not self.flags.quiet_tasks:
+            self.tell_new_task(task, user)
+
+    def assign_task(self, task, user: str):
         if self.flags.quiet_tasks:
             # a monthly plan hands out many tasks at once and its package sends one
             # summary, so the ToDo is created without Frappe's notice per task
@@ -401,6 +409,8 @@ class HDContentPost(Document):
             {"doctype": "Task", "name": task.name, "assign_to": [user]},
             ignore_permissions=True,
         )
+
+    def tell_new_task(self, task, user: str):
         notify_users(
             [user],
             "Task",

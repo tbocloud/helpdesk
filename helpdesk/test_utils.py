@@ -1455,6 +1455,13 @@ def hand_over_task_as(
     )
 
 
+def reassign_task_as(user: str, task: str, assignee: str):
+    """`user` gives `task` to `assignee` through the whitelisted update_task (Edit task)."""
+    return call_as_user(
+        user, "helpdesk.tasky.api.update_task", task=task, assigned_to=assignee
+    )
+
+
 def get_content_task(post: str, role: str) -> str | None:
     """The Task a content post made for one role ("Writer", "Designer", …)."""
     return frappe.db.get_value(
@@ -1560,6 +1567,30 @@ def get_reminder_messages(user: str, reference_name) -> list[str]:
         },
         pluck="message",
     )
+
+
+def get_assignment_notices(user: str, reference_name) -> list[str]:
+    """Messages of the Assignment HD Notifications sent to `user` about a document, oldest first."""
+    return frappe.get_all(
+        "HD Notification",
+        filters={
+            "user_to": user,
+            "notification_type": "Assignment",
+            "reference_name": str(reference_name),
+        },
+        order_by="creation asc",
+        pluck="message",
+    )
+
+
+def get_assignment_state(user: str, task: str, source: str = "my_work") -> str | None:
+    """The New / Reassigned mark `user` sees on `task` in My Work (`source` "my_work")
+    or My Tasks ("my_tasks"); None when the task is unmarked or not in the list."""
+    if source == "my_work":
+        rows = call_as_user(user, "helpdesk.api.work.get_my_work")["items"]
+    else:
+        rows = call_as_user(user, "helpdesk.tasky.api.get_my_tasks")
+    return next((r.get("assignment_state") for r in rows if r["name"] == task), None)
 
 
 def send_task_reminder(task: str, escalate: bool = False) -> str:

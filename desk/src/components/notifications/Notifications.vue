@@ -151,16 +151,18 @@ function linkProps(n: Notification) {
     : { to: getRoute(n) };
 }
 
-// a reminder or a completed task carries its whole message; the rest are built here
+// a reminder, a completed task or a task assignment (no ticket) carries its whole
+// message and link; the rest are built here
 function isTextOnly(n: Notification) {
-  return ["Reminder", "Task Completed"].includes(n.notification_type);
+  return (
+    ["Reminder", "Task Completed"].includes(n.notification_type) ||
+    (n.notification_type === "Assignment" && !n.reference_ticket)
+  );
 }
 
 function getRoute(n: Notification) {
+  if (isTextOnly(n)) return n.link || { name: "MyWork" };
   switch (n.notification_type) {
-    case "Reminder":
-    case "Task Completed":
-      return n.link || { name: "MyWork" };
     case "Mention":
       return {
         name: "TicketAgent",

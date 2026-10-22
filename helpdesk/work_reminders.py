@@ -6,6 +6,7 @@ reminders and escalations for tasks and tickets live in helpdesk.follow_ups
 """
 
 import json
+from urllib.parse import urlencode
 
 import frappe
 
@@ -137,10 +138,10 @@ def helpdesk_path(doctype: str, name: str) -> str:
         return f"/tickets/{name}"
     if doctype == "HD Article":
         return f"/kb/articles/{name}"
-    project = (
-        frappe.db.get_value(doctype, name, "project") if doctype == "Task" else None
-    )
-    return f"/projects/{project}" if project else "/my-work"
+    if doctype == "Task":
+        # My Work opens the task's details (?task=), for anyone who may read it
+        return f"/my-work?{urlencode({'task': name})}"
+    return "/my-work"
 
 
 def get_project_managers(project: str) -> list[str]:
