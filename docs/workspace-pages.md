@@ -471,7 +471,8 @@ team member's work, for leads and managers of their projects (the Team page link
   phase, assigned to, assigned by, due, estimate, timer (from `taskTimer` and
   `formatElapsed`: a running timer ticks every second while the dialog shows it, a paused one
   stays still; the ticker stops when the dialog closes or the timer stops), description,
-  pull requests and meetings. Its
+  images and videos ([task-attachments.md](task-attachments.md)), pull requests and
+  meetings. Its
   actions follow `mine`: the assignee may edit, complete, hold or resume, ask for help and hand
   over; the project's manager, lead or coordinator may edit, plan, approve and send back, and also hold, resume and hand it over. "Move to
   project…" shows when the task says `can_move` (see [Moving a task](#moving-a-task-to-another-project)).

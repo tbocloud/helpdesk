@@ -784,6 +784,23 @@ def make_project_file(
     return run_as_user(user, add) if user else add()
 
 
+def make_task_attachment(
+    task: str,
+    file_name: str = "screenshot.png",
+    content: bytes = b"\x89PNG\r\n\x1a\n" + b"\0" * 64,
+    user: str | None = None,
+) -> str:
+    """Attaches an image or video to a task through the task attachments API, as
+    `user` (default: the session user), and returns the File's name. The default
+    content starts with PNG's magic number, which is all the type check reads."""
+    from helpdesk.api.task_attachments import add_task_attachment
+
+    def add():
+        return add_task_attachment(task, file_name, content)["name"]
+
+    return run_as_user(user, add) if user else add()
+
+
 def make_project_folder(
     project: str,
     folder_name: str = "Prompts",

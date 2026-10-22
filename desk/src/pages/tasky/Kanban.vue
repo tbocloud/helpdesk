@@ -373,6 +373,15 @@
                     v-if="task.pull_request"
                     :pr="task.pull_request"
                   />
+                  <span
+                    v-if="task.attachment_count"
+                    class="flex shrink-0 items-center gap-1 text-xs tabular-nums text-ink-gray-5"
+                    :title="__('Images and videos')"
+                  >
+                    <LucideImage class="size-3.5" aria-hidden="true" />
+                    <span class="sr-only">{{ __("Images and videos") }}:</span>
+                    {{ task.attachment_count }}
+                  </span>
                   <div class="ml-auto flex shrink-0 items-center gap-1.5">
                     <component
                       :is="priorityIcon(task.priority)"
@@ -513,6 +522,7 @@ import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideCirclePause from "~icons/lucide/circle-pause";
 import LucideFolderInput from "~icons/lucide/folder-input";
 import LucideGripVertical from "~icons/lucide/grip-vertical";
+import LucideImage from "~icons/lucide/image";
 import LucideInfo from "~icons/lucide/info";
 import LucideMoreHorizontal from "~icons/lucide/more-horizontal";
 import LucidePause from "~icons/lucide/pause";
@@ -622,6 +632,7 @@ interface Task {
   depends_on_subject?: string | null;
   blocked?: boolean;
   pull_request?: TaskPullRequest | null;
+  attachment_count?: number;
 }
 
 const kanban = createResource({
