@@ -9,6 +9,7 @@ from frappe.query_builder import Order
 from helpdesk import task_activity
 from helpdesk.api.content_board import user_full_names
 from helpdesk.api.project_files import file_counts
+from helpdesk.api.task_attachments import attachment_counts
 from helpdesk.github_sync import get_pull_requests
 from helpdesk.tasky.permissions import (
     MANAGER_PROJECT_ROLE,
@@ -1801,6 +1802,7 @@ def get_kanban_tasks(project: str | None = None):
 
     # one query for the whole board; a card shows its most recently active open PR
     open_prs = get_pull_requests([t.name for t in tasks], open_only=True)
+    media = attachment_counts([t.name for t in tasks])
 
     columns = {
         "Open": [],
@@ -1829,7 +1831,13 @@ def get_kanban_tasks(project: str | None = None):
         if status not in columns:
             status = "Open"
         prs = open_prs.get(t["name"])
-        columns[status].append({**t, "pull_request": prs[0] if prs else None})
+        columns[status].append(
+            {
+                **t,
+                "pull_request": prs[0] if prs else None,
+                "attachment_count": media.get(t["name"], 0),
+            }
+        )
 
     return {"columns": columns}
 
