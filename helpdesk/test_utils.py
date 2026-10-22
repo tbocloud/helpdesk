@@ -1,4 +1,5 @@
 import gzip
+import io
 import json
 from datetime import datetime
 from unittest.mock import patch
@@ -782,6 +783,15 @@ def make_project_file(
         return add_project_file(project, file_name, content, for_users, folder)["name"]
 
     return run_as_user(user, add) if user else add()
+
+
+def make_image_bytes(fmt: str, colour: str = "teal") -> bytes:
+    """A real 4×4 image in `fmt` (PNG, JPEG, WEBP, GIF), for upload tests."""
+    from PIL import Image
+
+    out = io.BytesIO()
+    Image.new("RGB", (4, 4), colour).save(out, format=fmt)
+    return out.getvalue()
 
 
 def make_task_attachment(
