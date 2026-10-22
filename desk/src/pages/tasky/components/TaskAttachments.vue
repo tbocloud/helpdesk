@@ -332,6 +332,10 @@ function problem(file: File): string | null {
 // one at a time, so a refused file is reported by name and the rest still upload
 async function upload(files: File[]) {
   if (!data.value?.can_upload || !files.length) return;
+  // the files belong to the task they were dropped on, even if another one opens meanwhile
+  const endpoint = `/api/method/helpdesk.api.task_attachments.upload_task_attachment?${new URLSearchParams(
+    { task: props.task }
+  )}`;
   const items = files.map((file) => {
     const item: QueuedUpload = { id: nextId++, name: file.name, progress: 0 };
     const reason = problem(file);
@@ -351,9 +355,7 @@ async function upload(files: File[]) {
     });
     try {
       await handler.upload(file, {
-        upload_endpoint: `/api/method/helpdesk.api.task_attachments.upload_task_attachment?${new URLSearchParams(
-          { task: props.task }
-        )}`,
+        upload_endpoint: endpoint,
         private: true,
       });
       dismiss(row.id);
