@@ -7,7 +7,6 @@ from unittest.mock import patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
-from PIL import Image
 
 from helpdesk.api import task_attachments as api
 from helpdesk.tasky.api import get_kanban_tasks
@@ -16,6 +15,7 @@ from helpdesk.test_utils import (
     hold_commits,
     make_assigned_task,
     make_assignment,
+    make_image_bytes,
     make_project,
     make_task_attachment,
     make_tasky_user,
@@ -34,12 +34,6 @@ MP4 = b"\x00\x00\x00\x18ftypmp42" + b"\x00" * 64
 MOV = b"\x00\x00\x00\x14ftypqt  " + b"\x01" * 64
 WEBM = b"\x1a\x45\xdf\xa3" + b"\x00" * 64
 EXE = b"MZ\x90\x00" + b"\x00" * 64
-
-
-def image_bytes(fmt: str, colour: str = "teal") -> bytes:
-    out = io.BytesIO()
-    Image.new("RGB", (4, 4), colour).save(out, format=fmt)
-    return out.getvalue()
 
 
 class TestTaskAttachments(FrappeTestCase):
@@ -70,7 +64,7 @@ class TestTaskAttachments(FrappeTestCase):
 
     def test_assignee_attaches_an_image_and_a_video_privately(self):
         image = make_task_attachment(
-            self.task, "safari-checkout.png", image_bytes("PNG"), user=DEV_A[0]
+            self.task, "safari-checkout.png", make_image_bytes("PNG"), user=DEV_A[0]
         )
         video = make_task_attachment(
             self.task, "click-recording.mp4", MP4, user=DEV_A[0]
@@ -119,13 +113,13 @@ class TestTaskAttachments(FrappeTestCase):
 
     def test_every_allowed_format_is_taken(self):
         for file_name, content in (
-            ("a.jpg", image_bytes("JPEG", "red")),
-            ("b.jpeg", image_bytes("JPEG", "blue")),
-            ("c.webp", image_bytes("WEBP")),
-            ("d.gif", image_bytes("GIF")),
+            ("a.jpg", make_image_bytes("JPEG", "red")),
+            ("b.jpeg", make_image_bytes("JPEG", "blue")),
+            ("c.webp", make_image_bytes("WEBP")),
+            ("d.gif", make_image_bytes("GIF")),
             ("e.mov", MOV),
             ("f.webm", WEBM),
-            ("G.PNG", image_bytes("PNG", "white")),
+            ("G.PNG", make_image_bytes("PNG", "white")),
         ):
             make_task_attachment(self.task, file_name, content, user=DEV_A[0])
         self.assertEqual(len(self.list_as(DEV_A)["attachments"]), 7)
@@ -134,10 +128,10 @@ class TestTaskAttachments(FrappeTestCase):
         for file_name, content in (
             ("brief.pdf", b"%PDF-1.4\n" + b"\x00" * 64),
             ("setup.png", EXE),
-            ("photo.png", image_bytes("JPEG")),
+            ("photo.png", make_image_bytes("JPEG")),
             ("clip.webm", MP4),
-            ("clip.mp4", image_bytes("PNG")),
-            ("no-extension", image_bytes("PNG")),
+            ("clip.mp4", make_image_bytes("PNG")),
+            ("no-extension", make_image_bytes("PNG")),
         ):
             with self.assertRaises(frappe.ValidationError, msg=file_name):
                 make_task_attachment(self.task, file_name, content, user=DEV_A[0])
@@ -148,7 +142,7 @@ class TestTaskAttachments(FrappeTestCase):
         )
 
     def test_size_limits_per_kind_and_the_site_limit(self):
-        png = image_bytes("PNG")
+        png = make_image_bytes("PNG")
         with patch.object(api, "MAX_IMAGE_BYTES", len(png) - 1):
             with self.assertRaises(frappe.ValidationError):
                 make_task_attachment(self.task, "big.png", png, user=DEV_A[0])
@@ -168,7 +162,7 @@ class TestTaskAttachments(FrappeTestCase):
             self.list_as(OUTSIDER)
         with self.assertRaises(frappe.PermissionError):
             make_task_attachment(
-                self.task, "x.png", image_bytes("PNG", "red"), user=OUTSIDER[0]
+                self.task, "x.png", make_image_bytes("PNG", "red"), user=OUTSIDER[0]
             )
         # what /private/files/... and the S3 download route check before serving it
         self.assertFalse(
@@ -186,10 +180,10 @@ class TestTaskAttachments(FrappeTestCase):
 
     def test_uploader_and_manager_delete_but_other_assignees_cannot(self):
         mine = make_task_attachment(
-            self.task, "a.png", image_bytes("PNG", "red"), user=DEV_A[0]
+            self.task, "a.png", make_image_bytes("PNG", "red"), user=DEV_A[0]
         )
         other = make_task_attachment(
-            self.task, "b.png", image_bytes("PNG", "blue"), user=DEV_A[0]
+            self.task, "b.png", make_image_bytes("PNG", "blue"), user=DEV_A[0]
         )
 
         with self.assertRaises(frappe.PermissionError):
