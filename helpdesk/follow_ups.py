@@ -46,7 +46,13 @@ from frappe.utils import (
 )
 
 from helpdesk.api.ticket import _sla_calendar
-from helpdesk.api.work import ON_HOLD, PENDING_REVIEW, WAITING_ON_TASK, is_task_overdue
+from helpdesk.api.work import (
+    ON_HOLD,
+    PENDING_REVIEW,
+    WAITING_ON_TASK,
+    is_task_overdue,
+    status_changed_on,
+)
 from helpdesk.automation import automation_user
 from helpdesk.consts import ALERT_TICKET_TYPE
 from helpdesk.recurrence import working_day_checker
@@ -621,18 +627,7 @@ class TaskRules:
         names = [t.name for t in self.tasks if t.status == PENDING_REVIEW]
         if not names:
             return {}
-        version = frappe.qb.DocType("Version")
-        found = dict(
-            frappe.qb.from_(version)
-            .select(version.docname, Max(version.creation))
-            .where(
-                (version.ref_doctype == "Task")
-                & version.docname.isin(names)
-                & version.data.like(f'%"{PENDING_REVIEW}"%')
-            )
-            .groupby(version.docname)
-            .run()
-        )
+        found = status_changed_on(dict.fromkeys(names, PENDING_REVIEW))
         # without a history row (set straight in the database), the last change
         return {name: found.get(name) or self.by_name[name].modified for name in names}
 

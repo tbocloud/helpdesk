@@ -52,8 +52,11 @@ DONE_DAYS = 30
 PRS_PER_ITEM = 3
 LIST_LIMIT = 300
 WAITING_ON_TASK = "Waiting on Task"
+WORKING = "Working"
 ON_HOLD = "On Hold"
 PENDING_REVIEW = "Pending Review"
+# started and not finished: being worked on, waiting for review, or paused
+IN_PROGRESS_STATUSES = (WORKING, PENDING_REVIEW, ON_HOLD)
 # the Overview's donut counts each item once, under the first of these it falls in
 URGENCY_ORDER = ("overdue", "at_risk", "due_soon", "key")
 TOP_PROJECTS = 7
@@ -67,6 +70,9 @@ TASK_FIELDS = [
     "status",
     "priority",
     "exp_end_date",
+    # with creation, when a started task's status age falls back without history
+    "exp_start_date",
+    "creation",
     "is_key",
     "hd_ticket",
     *TASK_HOLD_FIELDS,
@@ -128,6 +134,65 @@ def _open_dependencies(tasks) -> dict:
             as_list=True,
         )
     )
+
+
+def status_changed_on(statuses: dict[str, str]) -> dict:
+    """{task: when it last moved into a status}: {task: status} in, from the tasks'
+    Version history in one query. Tasks with no such history row are left out."""
+    if not statuses:
+        return {}
+    version = frappe.qb.DocType("Version")
+    rows = (
+        frappe.qb.from_(version)
+        .select(version.docname, version.creation, version.data)
+        .where(
+            (version.ref_doctype == "Task")
+            & version.docname.isin(list(statuses))
+            & version.data.like('%"status"%')
+        )
+        .orderby(version.creation)
+        .run(as_dict=True)
+    )
+    found = {}
+    for row in rows:
+        try:
+            changed = json.loads(row.data or "{}").get("changed") or []
+        except (TypeError, ValueError):
+            continue
+        # oldest first, so the latest move into the status wins
+        if any(
+            len(change) == 3
+            and change[0] == "status"
+            and change[2] == statuses[row.docname]
+            for change in changed
+        ):
+            found[row.docname] = row.creation
+    return found
+
+
+def status_since(tasks) -> dict[str, str]:
+    """{task: when it entered its current status} for started tasks (Working, Pending
+    Review, On Hold): the hold's start, else the latest history row moving it into
+    the status, else its expected start, else its creation."""
+    started = [t for t in tasks if t.status in IN_PROGRESS_STATUSES]
+    history = status_changed_on(
+        {
+            t.name: t.status
+            for t in started
+            if not (t.status == ON_HOLD and t.get("hold_since"))
+        }
+    )
+    since = {}
+    for t in started:
+        when = (
+            (t.status == ON_HOLD and t.get("hold_since"))
+            or history.get(t.name)
+            or t.get("exp_start_date")
+            or t.get("creation")
+        )
+        if when:
+            since[t.name] = str(get_datetime(when))
+    return since
 
 
 def is_task_overdue(task, deadline, today) -> bool:
@@ -266,13 +331,21 @@ def _attach_pull_requests(items: list[dict]) -> None:
         item["pull_requests"] = task_prs[:PRS_PER_ITEM]
 
 
-def _items(tasks, tickets, with_plan: bool = False) -> list[dict]:
+def _items(
+    tasks, tickets, with_plan: bool = False, with_assigners: bool = True
+) -> list[dict]:
     """Work items, overdue first. `with_plan` also says on every task whether the
-    viewer may plan it (My Work's Plan step), which costs a lookup per project."""
+    viewer may plan it (My Work's Plan step), which costs a lookup per project.
+    `with_assigners` adds who gave each task out (not needed when one person did)."""
     names = _project_names(tasks)
     waiting = _open_dependencies(tasks)
     holders = hold_by_names(tasks)
-    task_items = add_assigners([_task_item(t, names, waiting, holders) for t in tasks])
+    since = status_since(tasks)
+    task_items = [_task_item(t, names, waiting, holders) for t in tasks]
+    for item in task_items:
+        item["status_since"] = since.get(item["name"])
+    if with_assigners:
+        add_assigners(task_items)
     _attach_pull_requests(task_items)
     # who may plan a task or sign off one waiting for review: the project's manager,
     # lead or coordinator
@@ -302,16 +375,7 @@ def _sort_key(item: dict):
 def get_my_work(user: str | None = None) -> dict:
     """Open tasks and tickets of the current user (or, for leads and managers, a team member), overdue first."""
     viewer = frappe.session.user
-    user = (user or "").strip() or viewer
-    if user != viewer:
-        allowed = can_see_overview(viewer) and (
-            is_tasky_admin(viewer) or user in _team_members(viewer, None)
-        )
-        if not allowed:
-            frappe.throw(
-                _("You can only see the work of people on your projects."),
-                frappe.PermissionError,
-            )
+    user = _work_owner(user)
     tasks = frappe.get_list(
         "Task",
         filters={
@@ -345,6 +409,75 @@ def get_my_work(user: str | None = None) -> dict:
             "done": len(done),
         },
     }
+
+
+def _work_owner(user: str | None) -> str:
+    """Whose work My Work shows: the viewer's own, or a team member's for leads and
+    managers (anyone's for admins); anyone else asking for another person is refused."""
+    viewer = frappe.session.user
+    user = (user or "").strip() or viewer
+    if user == viewer:
+        return user
+    allowed = can_see_overview(viewer) and (
+        is_tasky_admin(viewer) or user in _team_members(viewer, None)
+    )
+    if not allowed:
+        frappe.throw(
+            _("You can only see the work of people on your projects."),
+            frappe.PermissionError,
+        )
+    return user
+
+
+def given_out_query(assigner: str):
+    """Tasks `assigner` gave to someone else that are still assigned to them (their
+    open ToDo names `assigner`): a query of (name, allocated_to), oldest assignment
+    first, for the caller to narrow by the task's fields."""
+    todo = frappe.qb.DocType("ToDo")
+    task = frappe.qb.DocType("Task")
+    return (
+        frappe.qb.from_(todo)
+        .join(task)
+        .on(task.name == todo.reference_name)
+        .select(task.name, todo.allocated_to)
+        .where(
+            (todo.reference_type == "Task")
+            & (todo.status == "Open")
+            & (todo.assigned_by == assigner)
+            & (todo.allocated_to != assigner)
+        )
+        .orderby(todo.creation)
+    )
+
+
+@frappe.whitelist()
+@agent_only
+def get_assigned_by(user: str | None = None) -> dict:
+    """Open tasks the current user (or, for leads and managers, a team member, as on
+    My Work) gave to someone else, overdue first. `given_to` on each names the people
+    they gave it to; the task lists still decide which tasks the viewer may read."""
+    user = _work_owner(user)
+    task = frappe.qb.DocType("Task")
+    given_to = {}
+    for name, person in (
+        given_out_query(user).where(task.status.notin(OPEN_TASK_FILTER[1])).run()
+    ):
+        given_to.setdefault(name, []).append(person)
+    tasks = (
+        frappe.get_list(
+            "Task",
+            filters={"name": ("in", list(given_to))},
+            fields=TASK_FIELDS,
+            limit_page_length=LIST_LIMIT,
+        )
+        if given_to
+        else []
+    )
+    # every row was given out by `user`, so the rows name who has it instead
+    items = _items(tasks, [], with_plan=True, with_assigners=False)
+    for item in items:
+        item["given_to"] = list(dict.fromkeys(given_to[item["name"]]))
+    return {"user": user, "items": items}
 
 
 def _mark_new_tasks(items: list[dict], user: str):
