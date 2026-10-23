@@ -14,14 +14,17 @@ from frappe.utils import add_to_date, get_datetime, now_datetime, sbool
 
 from helpdesk.api.content_board import role_tasks, task_for_role, user_full_names
 from helpdesk.api.work import (
+    IN_PROGRESS_STATUSES,
     ON_HOLD,
     PENDING_REVIEW,
     TASK_FIELDS,
+    WORKING,
     _assignees,
     _open_dependencies,
     _task_item,
     can_see_overview,
     scoped_task_filters,
+    status_since,
 )
 from helpdesk.content_team import in_content_team
 from helpdesk.helpdesk.doctype.hd_content_post.hd_content_post import (
@@ -42,9 +45,6 @@ from helpdesk.tasky.permissions import (
 )
 from helpdesk.utils import agent_only
 
-WORKING = "Working"
-# started and not finished: being worked on, waiting for review, or paused
-IN_PROGRESS_STATUSES = (WORKING, PENDING_REVIEW, ON_HOLD)
 # a post between its first draft and going out; Idea hasn't started, Scheduled is done
 PRODUCTION_STATUSES = (
     "Drafting",
@@ -149,6 +149,7 @@ def _tasks(department, customer, person) -> tuple[list[dict], bool]:
     waiting = _open_dependencies(rows)
     holders = hold_by_names(rows)
     people = user_full_names({u for t in rows for u in _assignees(t._assign)})
+    since = status_since(rows)
     items = []
     for task in rows:
         item = _task_item(task, names, waiting, holders)
@@ -158,6 +159,7 @@ def _tasks(department, customer, person) -> tuple[list[dict], bool]:
                 "customer": project.customer,
                 "department": project.custom_department,
                 "assignee_names": {u: people.get(u, u) for u in item["assignees"]},
+                "status_since": since.get(task.name),
                 "estimated_hours": task.custom_estimated_hours or 0,
                 # the board timer (docs/workspace-pages.md "The board timer")
                 "custom_timer_start": (

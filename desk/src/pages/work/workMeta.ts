@@ -1,5 +1,8 @@
 import type { TaskPullRequest } from "@/pages/tasky/pullRequestMeta";
-import type { AssignmentState } from "@/pages/tasky/taskMeta";
+import {
+  taskStatusMeta,
+  type AssignmentState,
+} from "@/pages/tasky/taskMeta";
 import { __ } from "@/translation";
 import { dayjs } from "frappe-ui";
 
@@ -24,6 +27,9 @@ export interface WorkItem {
   hold_by_name?: string | null;
   /** Days since the hold began; null unless the task is On Hold. */
   hold_days?: number | null;
+  /** Started tasks (Working, Pending Review, On Hold): when the task entered its
+   * current status. */
+  status_since?: string | null;
   is_milestone?: boolean;
   /** Times the task's due date was moved later. */
   slip_count?: number;
@@ -42,6 +48,8 @@ export interface WorkItem {
   /** Tasks: who gave it to its assignee. */
   assigned_by?: string | null;
   assigned_by_name?: string | null;
+  /** My Work's Assigned by me: the people the assigner gave the task to. */
+  given_to?: string[];
   /** My Work, the viewer's own tasks: given to them since they last opened it. */
   assignment_state?: AssignmentState | null;
 }
@@ -107,6 +115,36 @@ function ticketDeadline(item: WorkItem): DeadlineInfo {
 export function deadlineInfo(item: WorkItem): DeadlineInfo {
   if (!item.deadline) return { label: __("No deadline"), overdue: false };
   return item.kind === "ticket" ? ticketDeadline(item) : taskDeadline(item);
+}
+
+export interface StatusAge {
+  /** "9d", for the row. */
+  short: string;
+  /** "In progress for 9 days", for screen readers. */
+  label: string;
+  /** "In progress since Wed 14 Oct", for the tooltip. */
+  title: string;
+}
+
+/** How long a started task has been in its status, in calendar days. */
+export function statusAge(item: WorkItem): StatusAge | null {
+  if (item.kind !== "task" || !item.status_since) return null;
+  const since = dayjs(item.status_since);
+  const days = Math.max(
+    dayjs().startOf("day").diff(since.startOf("day"), "day"),
+    0
+  );
+  const status = __(taskStatusMeta(item.status).label);
+  return {
+    short: `${days}d`,
+    label:
+      days === 0
+        ? __("{0} since today", status)
+        : days === 1
+        ? __("{0} for 1 day", status)
+        : __("{0} for {1} days", status, String(days)),
+    title: __("{0} since {1}", status, since.format("ddd D MMM")),
+  };
 }
 
 export function itemRoute(item: WorkItem) {

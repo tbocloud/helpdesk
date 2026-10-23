@@ -21,9 +21,9 @@
         </div>
         <Button
           variant="ghost"
-          :loading="work.loading"
+          :loading="work.loading || given.loading"
           :aria-label="__('Refresh')"
-          @click="work.reload()"
+          @click="reload"
         >
           <template #icon>
             <LucideRefreshCw class="size-4" aria-hidden="true" />
@@ -115,7 +115,11 @@
                   :class="checked ? '' : 'text-ink-gray-5'"
                 >
                   <span
-                    v-if="isLoading"
+                    v-if="
+                      button.modelValue === 'assigned'
+                        ? givenLoading
+                        : isLoading
+                    "
                     class="inline-block h-3 w-3 animate-pulse rounded bg-surface-gray-2 align-middle"
                   />
                   <template v-else>{{ countFor(button.modelValue) }}</template>
@@ -124,10 +128,14 @@
             </TabButtons>
           </div>
 
-          <div :id="listId" class="mt-4" :aria-busy="work.loading">
+          <div
+            :id="listId"
+            class="mt-4"
+            :aria-busy="activeTab === 'assigned' ? given.loading : work.loading"
+          >
             <!-- Loading -->
             <div
-              v-if="isLoading"
+              v-if="activeTab === 'assigned' ? givenLoading : isLoading"
               class="overflow-hidden rounded-lg border border-outline-gray-2 bg-surface-base"
               :aria-label="__('Loading')"
             >
@@ -150,6 +158,132 @@
                 />
               </div>
             </div>
+
+            <!-- Tasks the person gave to someone else, by who has them -->
+            <template v-else-if="activeTab === 'assigned'">
+              <div
+                v-if="given.error && !given.data"
+                class="rounded-lg border border-outline-gray-2 bg-surface-base"
+              >
+                <TaskyState
+                  :icon="LucideCircleAlert"
+                  :title="__('Couldn\'t load the tasks given out')"
+                  :message="
+                    errorText(
+                      given.error,
+                      __('Check your connection and try again.')
+                    )
+                  "
+                  error
+                >
+                  <Button :label="__('Retry')" @click="given.reload()" />
+                </TaskyState>
+              </div>
+              <div
+                v-else-if="!givenItems.length"
+                class="rounded-lg border border-outline-gray-2 bg-surface-base"
+              >
+                <TaskyState
+                  :icon="LucideInbox"
+                  :title="
+                    viewUser
+                      ? __('{0} hasn\'t assigned any open tasks.', viewName)
+                      : __('You haven\'t assigned any open tasks.')
+                  "
+                  :message="
+                    __(
+                      'Open tasks given to someone else show up here, grouped by who has them.'
+                    )
+                  "
+                />
+              </div>
+              <template v-else>
+                <div
+                  class="mb-4 grid grid-cols-1 items-end gap-3 sm:grid-cols-[repeat(2,minmax(0,16rem))_auto]"
+                  role="group"
+                  :aria-label="__('Filter the tasks given out')"
+                >
+                  <Select
+                    :model-value="givenFilters.to || undefined"
+                    :options="givenPeople"
+                    :label="__('Person')"
+                    :placeholder="__('Everyone')"
+                    @update:model-value="
+                      (v: unknown) => (givenFilters.to = (v as string) || '')
+                    "
+                  />
+                  <Select
+                    :model-value="givenFilters.project || undefined"
+                    :options="givenProjects"
+                    :label="__('Project')"
+                    :placeholder="__('All projects')"
+                    @update:model-value="
+                      (v: unknown) =>
+                        (givenFilters.project = (v as string) || '')
+                    "
+                  />
+                  <Button
+                    v-if="givenFilters.to || givenFilters.project"
+                    variant="ghost"
+                    class="justify-self-start"
+                    :label="__('Clear filters')"
+                    @click="clearGivenFilters"
+                  >
+                    <template #prefix>
+                      <LucideX class="size-4" aria-hidden="true" />
+                    </template>
+                  </Button>
+                </div>
+                <div
+                  v-if="!givenGroups.length"
+                  class="rounded-lg border border-outline-gray-2 bg-surface-base"
+                >
+                  <TaskyState
+                    :icon="LucideCircleCheck"
+                    :title="__('Nothing matches these filters')"
+                    :message="__('Pick another person or project.')"
+                  >
+                    <Button
+                      :label="__('Clear filters')"
+                      @click="clearGivenFilters"
+                    />
+                  </TaskyState>
+                </div>
+                <div v-else class="flex flex-col gap-4">
+                  <SectionCard
+                    v-for="group in givenGroups"
+                    :key="group.user"
+                    :title="group.name"
+                    :count="group.items.length"
+                    class="overflow-hidden"
+                  >
+                    <ul role="list">
+                      <li
+                        v-for="item in group.items"
+                        :key="itemKey(item)"
+                        class="border-b border-outline-gray-1 last:border-b-0"
+                      >
+                        <WorkItemRow
+                          :item="item"
+                          show-assignees
+                          opens
+                          @open="openTask(item, null, false)"
+                        >
+                          <template #actions>
+                            <WorkItemActions
+                              :item="item"
+                              :mine="false"
+                              :busy="busy === item.name"
+                              @step="(step, i) => onStep(step, i, false)"
+                            />
+                          </template>
+                        </WorkItemRow>
+                      </li>
+                    </ul>
+                  </SectionCard>
+                </div>
+              </template>
+            </template>
 
             <!-- Completed work -->
             <SectionCard
@@ -299,8 +433,8 @@
     <TaskDetailDialog
       v-model:task="detailTask"
       :action="detailAction"
-      :mine="!viewUser"
-      @changed="work.reload()"
+      :mine="detailMine"
+      @changed="reload"
     />
   </div>
 </template>
@@ -324,10 +458,11 @@ import {
   Button,
   createResource,
   dayjs,
+  Select,
   TabButtons,
   toast,
 } from "frappe-ui";
-import { computed, ref, useId, watch, type Component } from "vue";
+import { computed, reactive, ref, useId, watch, type Component } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
 import LucideArrowLeft from "~icons/lucide/arrow-left";
@@ -339,6 +474,8 @@ import LucidePause from "~icons/lucide/pause";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideStar from "~icons/lucide/star";
 import LucideTriangleAlert from "~icons/lucide/triangle-alert";
+import LucideUsers from "~icons/lucide/users";
+import LucideX from "~icons/lucide/x";
 import WorkItemActions, {
   type WorkStep,
 } from "./components/WorkItemActions.vue";
@@ -352,7 +489,15 @@ import {
   type WorkItem,
 } from "./workMeta";
 
-type Tab = "all" | "overdue" | "at_risk" | "key" | "task" | "ticket" | "done";
+type Tab =
+  | "all"
+  | "overdue"
+  | "at_risk"
+  | "key"
+  | "task"
+  | "ticket"
+  | "assigned"
+  | "done";
 
 interface DoneItem {
   kind: "task" | "ticket";
@@ -388,6 +533,20 @@ const work = createResource({
 
 const isLoading = computed(() => work.loading && !work.data);
 
+// open tasks this person gave to someone else (Assigned by me)
+const given = createResource({
+  url: "helpdesk.api.work.get_assigned_by",
+  makeParams: () => ({ user: viewUser.value || undefined }),
+  auto: true,
+});
+
+const givenLoading = computed(() => given.loading && !given.data);
+
+function reload() {
+  work.reload();
+  given.reload();
+}
+
 const people = createResource({
   url: "helpdesk.tasky.api.get_users",
   auto: authStore.canSeeOverview,
@@ -420,8 +579,17 @@ const pageTitle = computed(() =>
 );
 
 watch(viewUser, (user) => {
-  router.replace({ query: { ...route.query, user: user || undefined } });
-  work.reload();
+  // another person gave out other tasks, so their filters start empty
+  Object.assign(givenFilters, { to: "", project: "" });
+  router.replace({
+    query: {
+      ...route.query,
+      user: user || undefined,
+      to: undefined,
+      project: undefined,
+    },
+  });
+  reload();
 });
 
 const tabs = computed<{ key: Tab; label: string; icon?: Component }[]>(() => [
@@ -431,6 +599,11 @@ const tabs = computed<{ key: Tab; label: string; icon?: Component }[]>(() => [
   { key: "key", label: __("Key"), icon: LucideStar },
   { key: "task", label: __("Tasks") },
   { key: "ticket", label: __("Tickets") },
+  {
+    key: "assigned",
+    label: viewUser.value ? __("Assigned by them") : __("Assigned by me"),
+    icon: LucideUsers,
+  },
   { key: "done", label: __("Completed"), icon: LucideCircleCheck },
 ]);
 
@@ -441,6 +614,7 @@ const TAB_KEYS: Tab[] = [
   "key",
   "task",
   "ticket",
+  "assigned",
   "done",
 ];
 
@@ -480,6 +654,7 @@ const doneItems = computed<DoneItem[]>(
 
 function countFor(tab: Tab) {
   if (tab === "done") return doneItems.value.length;
+  if (tab === "assigned") return givenItems.value.length;
   return items.value.filter((i) => matches(i, tab)).length;
 }
 
@@ -490,6 +665,75 @@ function doneRoute(item: DoneItem) {
     return { name: "TaskyProject", params: { projectId: item.project } };
   return null;
 }
+
+function queryValue(key: string) {
+  const value = route.query[key];
+  return typeof value === "string" ? value : "";
+}
+
+const givenItems = computed<WorkItem[]>(
+  () => (given.data as { items: WorkItem[] } | undefined)?.items ?? []
+);
+
+// Person and Project live in the URL with the tab, so a view can be shared
+const givenFilters = reactive({
+  to: queryValue("to"),
+  project: queryValue("project"),
+});
+
+watch(
+  () => ({ ...givenFilters }),
+  (f) =>
+    router.replace({
+      query: {
+        ...route.query,
+        to: f.to || undefined,
+        project: f.project || undefined,
+      },
+    })
+);
+
+function clearGivenFilters() {
+  Object.assign(givenFilters, { to: "", project: "" });
+}
+
+function personName(user: string) {
+  return userStore.getUser(user)?.full_name || user;
+}
+
+const givenPeople = computed(() =>
+  [...new Set(givenItems.value.flatMap((i) => i.given_to ?? []))]
+    .map((user) => ({ label: personName(user), value: user }))
+    .sort((a, b) => a.label.localeCompare(b.label))
+);
+
+const givenProjects = computed(() => {
+  const projects = new Map<string, string>();
+  for (const item of givenItems.value)
+    if (item.project)
+      projects.set(item.project, item.project_name || item.project);
+  return [...projects]
+    .map(([value, label]) => ({ label, value }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+});
+
+/** One group per person the tasks were given to, the busiest first. */
+const givenGroups = computed(() => {
+  const byPerson = new Map<string, WorkItem[]>();
+  for (const item of givenItems.value) {
+    if (givenFilters.project && item.project !== givenFilters.project) continue;
+    for (const user of item.given_to ?? []) {
+      if (givenFilters.to && user !== givenFilters.to) continue;
+      if (!byPerson.has(user)) byPerson.set(user, []);
+      byPerson.get(user)!.push(item);
+    }
+  }
+  return [...byPerson]
+    .map(([user, items]) => ({ user, name: personName(user), items }))
+    .sort(
+      (a, b) => b.items.length - a.items.length || a.name.localeCompare(b.name)
+    );
+});
 
 // the server already orders overdue → key → deadline
 const visibleItems = computed(() =>
@@ -558,7 +802,7 @@ const emptyState = computed(() => {
           ),
     };
   }
-  const messages: Record<Exclude<Tab, "all" | "done">, string> = {
+  const messages: Record<Exclude<Tab, "all" | "done" | "assigned">, string> = {
     overdue: __("Nothing is overdue. Nice work."),
     at_risk: __("Nothing looks likely to slip right now."),
     key: __("None of this work is marked as key."),
@@ -568,7 +812,8 @@ const emptyState = computed(() => {
   return {
     icon: LucideCircleCheck,
     title: __("Nothing here"),
-    message: messages[activeTab.value as Exclude<Tab, "all" | "done">],
+    message:
+      messages[activeTab.value as Exclude<Tab, "all" | "done" | "assigned">],
   };
 });
 
@@ -579,6 +824,8 @@ const busy = ref<string | null>(null);
 
 const detailTask = ref<TaskRef | null>(null);
 const detailAction = ref<TaskAction | null>(null);
+// the open task is the viewer's own (not someone else's work, nor one they gave out)
+const detailMine = ref(true);
 
 // the dialog closes itself once a step has loaded, so the spinner can stop
 watch(detailTask, (task) => {
@@ -596,6 +843,7 @@ watch(
     if (typeof name !== "string" || !name || detailTask.value?.name === name)
       return;
     detailAction.value = null;
+    detailMine.value = !viewUser.value;
     opened.value.add(name);
     detailTask.value = { name };
   },
@@ -607,7 +855,7 @@ const start = createResource({
   onSuccess() {
     toast.success(__("Started"));
     busy.value = null;
-    work.reload();
+    reload();
   },
   onError(e: unknown) {
     toast.error(errorText(e, __("Couldn't start the task.")));
@@ -617,13 +865,18 @@ const start = createResource({
 
 const { approve } = useApproveTask(() => {
   busy.value = null;
-  work.reload();
+  reload();
 });
 
-function openTask(item: WorkItem, action: TaskAction | null) {
+function openTask(
+  item: WorkItem,
+  action: TaskAction | null,
+  assigned = !viewUser.value
+) {
   detailAction.value = action;
+  detailMine.value = assigned;
   // only the assignee's own open marks it seen (TaskDetailDialog)
-  if (!viewUser.value) opened.value.add(item.name);
+  if (assigned) opened.value.add(item.name);
   detailTask.value = {
     name: item.name,
     subject: item.title,
@@ -632,8 +885,8 @@ function openTask(item: WorkItem, action: TaskAction | null) {
   };
 }
 
-function onStep(step: WorkStep, item: WorkItem) {
-  if (step === "details") return openTask(item, null);
+function onStep(step: WorkStep, item: WorkItem, assigned = !viewUser.value) {
+  if (step === "details") return openTask(item, null, assigned);
   busy.value = item.name;
   if (step === "start")
     return start.submit({ task: item.name, status: "Working" });
@@ -643,6 +896,6 @@ function onStep(step: WorkStep, item: WorkItem) {
     return;
   }
   // these dialogs need the whole task (timer, hold, dependency), so load it first
-  openTask(item, step);
+  openTask(item, step, assigned);
 }
 </script>

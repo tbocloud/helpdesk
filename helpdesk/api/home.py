@@ -35,6 +35,7 @@ from helpdesk.api.work import (
     get_my_work,
     get_overview,
     get_project_portfolio,
+    given_out_query,
 )
 from helpdesk.consts import ALERT_TICKET_TYPE
 from helpdesk.customer_health import (
@@ -285,30 +286,21 @@ def _add_timers(tasks: list[dict]) -> None:
 def _given_out(user: str, skip: set[str]) -> list[dict]:
     """Tasks the user gave someone else that are overdue or waiting for review,
     overdue first. `skip` holds tasks already in the user's approvals."""
-    todo = frappe.qb.DocType("ToDo")
     task = frappe.qb.DocType("Task")
-    names = (
-        frappe.qb.from_(todo)
-        .join(task)
-        .on(task.name == todo.reference_name)
-        .select(task.name)
-        .distinct()
+    rows = (
+        given_out_query(user)
         .where(
-            (todo.reference_type == "Task")
-            & (todo.status == "Open")
-            & (todo.assigned_by == user)
-            & (todo.allocated_to != user)
             # due today is overdue only past its estimate; is_task_overdue decides below
-            & (
+            (
                 (task.status == PENDING_REVIEW)
                 | (task.exp_end_date <= getdate(nowdate()))
             )
             & task.status.notin(["Completed", "Cancelled", "Template", ON_HOLD])
         )
         .limit(GIVEN_OUT_LIMIT)
-        .run(pluck=True)
+        .run()
     )
-    names = [n for n in names if n not in skip]
+    names = [n for n in dict.fromkeys(name for name, _to in rows) if n not in skip]
     if not names:
         return []
     # through get_list, so the department walls still apply

@@ -3991,6 +3991,20 @@ def make_started_task(
     return task
 
 
+def record_status_change(task: str, old: str, new: str, at) -> None:
+    """Writes a Version row saying `task` moved from `old` to `new` at `at`, as the
+    task form's history would, so a task's status age can be read from it."""
+    version = frappe.get_doc(
+        {
+            "doctype": "Version",
+            "ref_doctype": "Task",
+            "docname": task,
+            "data": frappe.as_json({"changed": [["status", old, new]]}),
+        }
+    ).insert(ignore_permissions=True)
+    frappe.db.set_value("Version", version.name, "creation", at, update_modified=False)
+
+
 def get_in_progress_as(user: str, **filters) -> dict:
     """The In progress page's answer (helpdesk.api.in_progress.get_in_progress) for `user`."""
     return call_as_user(user, "helpdesk.api.in_progress.get_in_progress", **filters)

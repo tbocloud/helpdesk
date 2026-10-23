@@ -219,8 +219,8 @@ Team too); Home's Your day "In progress" part links here.
 - **Task rows** (`WorkItemRow` with `opens`): subject, key star, escalation badge, project and
   ID, assignee (avatar and name; on phones the name moves into the second line), status or the
   hold reason with `HoldNote`, the due label (red when overdue, the hub's `is_task_overdue`),
-  and the timer from the server's fields (`taskTimer`): "Tracking 2h 01m" or "Paused 1h 24m",
-  refreshed every 30 seconds. Clicking opens `TaskDetailDialog` in place (`mine` when the
+  the [status age](#status-age) ("In progress 9d"), and the timer from the server's fields
+  (`taskTimer`): "Tracking 2h 01m" or "Paused 1h 24m", refreshed every 30 seconds. Clicking opens `TaskDetailDialog` in place (`mine` when the
   viewer is an assignee), so every step the viewer may take is there.
 - **Post rows** (`components/InProgressPostRow.vue`): title, "Not approved yet" when it goes
   live within 2 days unapproved (`REMINDER_WINDOW_HOURS`, the board's rule), customer, platform
@@ -452,7 +452,8 @@ team member's work, for leads and managers of their projects (the Team page link
   in-review tasks leave the date groups because they wait on someone. Within a group the
   server's order stays: overdue, then key, then deadline.
 - **Tabs** filter before grouping and stay in the URL as `tab`: All, Overdue, At risk, Key,
-  Tasks, Tickets, Completed (the last 30 days, with hours).
+  Tasks, Tickets, [Assigned by me](#assigned-by-me) (`tab=assigned`), Completed (the last 30
+  days, with hours).
 - **Steps on a task** (`components/WorkItemActions.vue`, in `WorkItemRow`'s `actions` slot):
   one button for the next step (Approve when the viewer may sign it off; else Start an Open
   task; Complete a working one; Resume a held one) and a menu with Details, Complete (when
@@ -483,6 +484,62 @@ team member's work, for leads and managers of their projects (the Team page link
 - **`?task=<name>`** opens that task's details on My Work, for anyone who may read the task;
   closing the dialog drops it from the URL. Notifications about a task link here
   (`helpdesk_path("Task", name)` in `helpdesk/work_reminders.py`).
+- **Who may see another person's work** (`_work_owner` in `helpdesk/api/work.py`, shared by
+  `get_my_work` and `get_assigned_by`): admins anyone's; people who see the overview (project
+  managers and leads) the people on the projects they manage or lead; everyone else only their
+  own. Anything else is a `PermissionError` from the server, not only a hidden control.
+
+### Status age
+
+How long a started task has sat in its current status, so a task "In progress" for weeks
+stands out. `status_since` on every task item of `get_my_work`, `get_overview`,
+`get_assigned_by` and `get_in_progress` (Working, Pending Review and On Hold tasks; `null`
+otherwise), from `status_since()` in `helpdesk/api/work.py`:
+
+1. On Hold: the task's `hold_since`.
+2. Else the task's Version history: the latest change that moved `status` into its current
+   value (`status_changed_on()`, one query for the whole list; the JSON is read in Python so a
+   move *out of* the status never counts). Task has `track_changes`, so every save through the
+   app writes one.
+3. Else (no history row, e.g. set straight in the database) its `exp_start_date`, else its
+   `creation`.
+
+The Follow-ups "waiting for review" rule reads the same history through `status_changed_on()`
+(keeping its own fallback, the task's last change).
+
+`WorkItemRow` (`statusAge()` in `workMeta.ts`) shows it once, for every page that uses the row
+(My Work, the Overview, In progress): a small neutral mono "9d" after the status badge, in
+calendar days, with the tooltip "In progress since Wed 14 Oct" and the screen-reader text "In
+progress for 9 days". Held tasks don't repeat it there: their due column already says how long
+the hold has lasted.
+
+### Assigned by me
+
+The My Work tab for the person who hands work out: "which tasks did I give to whom, in which
+projects, and where do they stand?". API `helpdesk.api.work.get_assigned_by(user)`:
+
+- **What's in it**: open tasks (not Completed, Cancelled or Template) with an open ToDo whose
+  `assigned_by` is the person and whose `allocated_to` is someone else (`given_out_query()`,
+  shared with Home's "Given out" part). The task list goes through `frappe.get_list`, so the
+  viewer only gets tasks they may read, and is capped at `LIST_LIMIT`. Each item is the usual
+  work item (status, status age, due, risks, pull requests, `can_plan`, `can_approve`) plus
+  `given_to`, the people the person gave it to; it skips `assigned_by`, which is the person on
+  every row.
+- **Whose**: the viewer's own by default. On someone else's My Work (`?user=`) the tab is
+  "Assigned by them" and lists what that person gave out, under the same rule as the rest of
+  the page ([who may see another person's work](#my-work-my-work)); managers and leads use the
+  header's "Show work for…" picker for it, so there is no second person picker.
+- **Layout**: one card per person the tasks went to, busiest first, with a count; a task given
+  to two people sits in both. Rows are `WorkItemRow` with the assignee column (avatar and
+  name) instead of "Assigned by", with Approve and Plan where the viewer may (`mine` false),
+  opening the task details in place.
+- **Filters**: Person and Project (frappe-ui `Select`, built from the results), with Clear
+  filters; kept in the URL as `to` and `project` next to `tab`, and reset when the page
+  switches to another person.
+- **States**: a skeleton while loading; "Couldn't load the tasks given out" with Retry; "You
+  haven't assigned any open tasks."; "Nothing matches these filters" with Clear filters. The
+  tab's count is the number of tasks, before the filters.
+- Tests: `helpdesk/tests/test_task_aging.py` (with the status age).
 
 ## Board (`/my-board`)
 
