@@ -213,7 +213,7 @@
                 'Go to {0}: {1}, {2}, {3}',
                 dayjs(p.publish_on).format('ddd D MMM, h:mm A'),
                 p.customer,
-                p.title,
+                copyOf(p),
                 __(p.status)
               )
             "
@@ -236,7 +236,7 @@
               <span class="font-semibold text-ink-gray-9">{{
                 p.customer
               }}</span>
-              <span class="text-ink-gray-7"> · {{ p.title }}</span>
+              <span class="text-ink-gray-7"> · {{ copyOf(p) }}</span>
             </span>
           </button>
         </li>
@@ -443,12 +443,13 @@
                     <button
                       :id="`entry-${post.name}`"
                       type="button"
-                      :aria-label="__('Copy: {0}', post.title)"
+                      :aria-label="__('Copy: {0}', copyOf(post))"
                       class="min-w-0 max-w-full truncate rounded text-left text-base font-medium text-ink-gray-8 hover:text-ink-gray-9 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
-                      :title="post.title"
+                      :class="!post.title && 'italic text-ink-gray-6'"
+                      :title="copyOf(post)"
                       @click="emit('open', post.name)"
                     >
-                      {{ post.title }}
+                      {{ post.title || __("No copy yet") }}
                     </button>
                     <!-- the post type stands out: a tinted tag with the same icon as the
                          dialogs' post type chips (owner's request, 2026-10-14) -->
@@ -516,8 +517,8 @@
                     class="grid size-7 place-items-center rounded-full border border-outline-gray-2 bg-surface-base text-ink-gray-7 transition-colors hover:bg-surface-gray-2 hover:text-ink-gray-9 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
                     :aria-label="
                       auth.canEditContent
-                        ? __('Edit {0}', post.title)
-                        : __('Open {0} to add files', post.title)
+                        ? __('Edit {0}', copyOf(post))
+                        : __('Open {0} to add files', copyOf(post))
                     "
                     @click="emit('open', post.name)"
                   >
@@ -583,7 +584,7 @@
                 :people="peopleOf(post, role.field)"
                 :can-edit="auth.canEditContent"
                 :readonly="post.status === 'Published'"
-                :context="`${post.customer} · ${post.title}`"
+                :context="`${post.customer} · ${copyOf(post)}`"
                 :step="boxStep(roleTask(post, role.field))"
                 :busy="
                   !!stepBusy && stepBusy === roleTaskName(post, role.field)
@@ -786,6 +787,7 @@ import {
   type RolePerson,
   TEAM_ROLES,
   type TeamRole,
+  copyOf,
 } from "../constants";
 import {
   boxStep,
@@ -1054,9 +1056,9 @@ const tiles = computed<Tile[]>(() => {
       label: __("Next post"),
       value: next ? dayjs(next.publish_on).format("ddd D MMM") : "—",
       sub: next
-        ? `${dayjs(next.publish_on).format("h:mm A")} · ${
-            next.title
-          } · ${platformsOf(next).join(", ")}`
+        ? `${dayjs(next.publish_on).format("h:mm A")} · ${copyOf(
+            next
+          )} · ${platformsOf(next).join(", ")}`
         : __("Nothing scheduled"),
       iconClass: "bg-brand-soft text-brand",
       icon: markRaw(LucideSend),

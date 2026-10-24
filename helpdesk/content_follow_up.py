@@ -58,6 +58,7 @@ def waiting_posts() -> list:
         fields=[
             "name",
             "title",
+            "format",
             "customer",
             "publish_on",
             "marketer",
@@ -83,7 +84,7 @@ def remind_client(customer: str, posts: list):
         return
 
     items = "".join(
-        f"<li>{escape_html(p.title)} · {format_datetime(p.publish_on, 'd MMM, h:mm a')}</li>"
+        f"<li>{escape_html(p.title or p.format or p.name)} · {format_datetime(p.publish_on, 'd MMM, h:mm a')}</li>"
         for p in posts
     )
     if portal_enabled():
@@ -128,7 +129,7 @@ def alert_team(post, days: int):
         _(
             "{0} ({1}) has waited {2} days for the client's approval and publishes {3}."
         ).format(
-            post.title,
+            post.title or post.format or post.name,
             post.customer,
             days,
             format_datetime(post.publish_on, "d MMM, h:mm a"),

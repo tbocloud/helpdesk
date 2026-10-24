@@ -19,7 +19,7 @@
             class="max-w-full truncate text-left text-base text-ink-gray-9 after:absolute after:inset-0 after:rounded after:content-[''] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-highlight"
             @click="emit('open')"
           >
-            {{ post.title }}
+            {{ copyOf(post) }}
           </button>
           <TaskyBadge
             v-if="post.at_risk"
@@ -98,6 +98,7 @@
 </template>
 
 <script setup lang="ts">
+import { copyOf } from "@/pages/content/constants";
 import TaskyBadge from "@/components/TaskyBadge.vue";
 import ChannelIcon from "@/pages/content/components/ChannelIcon.vue";
 import StatusPill from "@/pages/content/components/StatusPill.vue";

@@ -1,6 +1,8 @@
 # Copyright (c) 2026, Frappe Technologies and contributors
 # For license information, please see license.txt
 
+import re
+
 import frappe
 from frappe import _
 from frappe.model.document import Document
@@ -16,6 +18,7 @@ from frappe.utils import (
     get_url,
     getdate,
     now_datetime,
+    strip_html,
 )
 
 from helpdesk.content_team import (
@@ -198,30 +201,13 @@ class HDContentPost(Document):
 
     def wanted_tasks(self) -> dict:
         """{role: {"users": [...], "due": date, "hours": float}} for the tasks this post should have."""
-        publish = getdate(self.publish_on) if self.publish_on else None
-        settings = frappe.get_cached_doc("HD Content Settings")
-
-        today = getdate()
-
-        def due(days_before):
-            if not publish:
-                return None
-            # a part whose lead time has already passed is due today, not on a past date,
-            # and never after the publish date (a missed post keeps it)
-            return min(max(add_days(publish, -(days_before or 0)), today), publish)
-
-        days = {
-            "writer": settings.writer_days_before,
-            "designer": settings.designer_days_before,
-            "video_editor": settings.video_editor_days_before,
-            "marketer": 0,
-        }
+        due = self.role_due
         if self.task_mode == PER_PERSON:
             # one task per role; several people on a role share it
             return {
                 label: {
                     "users": self.task_people(self.people(field)),
-                    "due": due(days[field]),
+                    "due": due(field),
                     "hours": self.role_hours(field),
                     "cleared": self.hours_cleared([field]),
                 }
@@ -234,13 +220,28 @@ class HDContentPost(Document):
                 return {
                     SHARED_ROLE: {
                         "users": users,
-                        "due": due(days["designer"]),
+                        "due": due("designer"),
                         # the shared task covers every role's part
                         "hours": sum(self.role_hours(f) for f in TASK_ROLES),
                         "cleared": self.hours_cleared(list(TASK_ROLES)),
                     }
                 }
         return {}
+
+    def role_due(self, role: str):
+        """When a role's task is due: the role's days before publishing (Content
+        Settings). A lead time that has already passed is due today, not on a past date,
+        and never after the publish date (a missed post keeps it)."""
+        if not self.publish_on:
+            return None
+        settings = frappe.get_cached_doc("HD Content Settings")
+        days_before = {
+            "writer": settings.writer_days_before,
+            "designer": settings.designer_days_before,
+            "video_editor": settings.video_editor_days_before,
+        }.get(role)
+        publish = getdate(self.publish_on)
+        return min(max(add_days(publish, -(days_before or 0)), getdate()), publish)
 
     def hours_cleared(self, roles: list[str]) -> bool:
         """These roles had hours before this save and have none now."""
@@ -255,7 +256,7 @@ class HDContentPost(Document):
 
     def task_subject(self, role: str) -> str:
         what = _("Content") if role == SHARED_ROLE else _(role)
-        text = f"{what}: {self.title} ({self.platforms_label})"
+        text = f"{what}: {self.label} ({self.platforms_label})"
         if self.customer:
             text += f" · {self.customer}"
         return text[:140]
@@ -314,7 +315,7 @@ class HDContentPost(Document):
                 "status": "Open",
                 "priority": "Medium",
                 "exp_end_date": plan["due"],
-                "description": escape_html(self.brief or ""),
+                "description": self.task_description(self),
                 "content_post": self.name,
                 "content_role": role,
                 # left empty, the task's hours are estimated by AI instead
@@ -347,6 +348,9 @@ class HDContentPost(Document):
         if task.subject != subject:
             task.subject = subject
             changed = True
+        if self.refreshes_description(task):
+            task.description = self.task_description(self)
+            changed = True
         # no hours on the post keeps whatever the task has (e.g. an AI estimate),
         # unless the post's hours were just cleared
         if plan["hours"] and flt(task.get("custom_estimated_hours")) != plan["hours"]:
@@ -356,6 +360,42 @@ class HDContentPost(Document):
             task.custom_estimated_hours = 0
             changed = True
         return changed
+
+    @staticmethod
+    def task_description(post) -> str:
+        """The post's copy, sub copy and description, for the people doing it."""
+        parts = []
+        if post.title:
+            parts.append(
+                f"<p><strong>{_('Copy')}:</strong> {escape_html(post.title)}</p>"
+            )
+        if strip_html(post.caption or "").strip():
+            parts.append(f"<p><strong>{_('Sub copy')}</strong></p>{post.caption}")
+        if (post.brief or "").strip():
+            brief = escape_html(post.brief.strip()).replace("\n", "<br>")
+            parts.append(f"<p><strong>{_('Description')}</strong></p><p>{brief}</p>")
+        return "".join(parts)
+
+    def refreshes_description(self, task) -> bool:
+        """A new copy reaches the task, unless someone has written its description by hand.
+        The markup is compared, not just the text, so an added link or bold is a hand edit."""
+        current = self.same_markup(task.description)
+        if current == self.same_markup(self.task_description(self)):
+            return False
+        before = self.get_doc_before_save()
+        if not before:
+            return not current
+        return current in (
+            "",
+            self.same_markup(self.task_description(before)),
+            # tasks made before the post's text was copied in carried only the brief
+            self.same_markup(escape_html(before.brief or "")),
+        )
+
+    @staticmethod
+    def same_markup(html: str | None) -> str:
+        """HTML with the whitespace between tags dropped, for comparing descriptions."""
+        return re.sub(r">\s+<", "><", (html or "").strip())
 
     def redates(self, task) -> bool:
         """Whether this save gives an existing task a new due date. The date is set when the
@@ -504,7 +544,7 @@ class HDContentPost(Document):
             "HD Content Post",
             self.name,
             message.format(
-                self.title, self.customer or self.platforms_label, _(self.status)
+                self.label, self.customer or self.platforms_label, _(self.status)
             ),
             link=self.board_path(),
         )
@@ -579,7 +619,7 @@ class HDContentPost(Document):
         frappe.throw(
             _(
                 "{0} went to the client, so the client and then the Digital Marketing Head approve it before it can be {1}. Send it to Client Review."
-            ).format(self.title, _(self.status))
+            ).format(self.label, _(self.status))
         )
 
     def record_head_decision(self):
@@ -625,7 +665,7 @@ class HDContentPost(Document):
     def ensure_in_head_review(self):
         if self.status != HEAD_REVIEW:
             frappe.throw(
-                _("{0} isn't waiting for the Digital Marketing Head").format(self.title)
+                _("{0} isn't waiting for the Digital Marketing Head").format(self.label)
             )
         if not is_dm_head():
             frappe.throw(
@@ -657,6 +697,11 @@ class HDContentPost(Document):
         return list(dict.fromkeys(p for p in raw if p)) or (
             [self.channel] if self.channel else []
         )
+
+    @property
+    def label(self) -> str:
+        """The copy, or the post type and then the ID when there's no copy yet."""
+        return self.title or self.format or self.name
 
     @property
     def platforms_label(self) -> str:
@@ -767,7 +812,7 @@ class HDContentPost(Document):
     def ensure_awaiting_client(self):
         if self.status != "Client Review":
             frappe.throw(
-                _("{0} is no longer waiting for your review").format(self.title)
+                _("{0} is no longer waiting for your review").format(self.label)
             )
 
 
@@ -861,6 +906,7 @@ def send_due_reminders():
         fields=[
             "name",
             "title",
+            "format",
             "status",
             "publish_on",
             "owner",
@@ -880,7 +926,7 @@ def send_due_reminders():
             "HD Content Post",
             post.name,
             _("{0} publishes {1} and is still in {2}").format(
-                post.title,
+                post.title or post.format or post.name,
                 format_datetime(post.publish_on, "d MMM, h:mm a"),
                 _(post.status),
             ),
@@ -901,6 +947,7 @@ def send_missed_post_alerts():
         .select(
             Post.name,
             Post.title,
+            Post.format,
             Post.customer,
             Post.channel,
             Post.platforms,
@@ -939,7 +986,10 @@ def send_missed_post_alerts():
             post.name,
             _(
                 "Missed: {0} was due {1} and isn't published. Publish or postpone it."
-            ).format(post.title, format_datetime(post.publish_on, "d MMM, h:mm a")),
+            ).format(
+                post.title or post.format or post.name,
+                format_datetime(post.publish_on, "d MMM, h:mm a"),
+            ),
             link=f"/content?post={post.name}",
         )
         sent += 1
@@ -955,7 +1005,7 @@ def _send_missed_post_alert(settings, post, recipients: set[str]):
     subject, message = settings.render(
         "missed_post",
         {
-            "title": post.title,
+            "title": post.title or post.format or post.name,
             "customer": post.customer,
             "channel": post.platforms or post.channel,
             "due_datetime": format_datetime(post.publish_on),
