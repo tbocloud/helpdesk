@@ -47,20 +47,28 @@ def leads_teams() -> list[str]:
 def can_use_leads(user: str | None = None) -> bool:
     """Leads are on, and `user` is a System Manager or Agent Manager, or an active agent
     who is a Sales Employee or in one of the Leads teams (any active agent when no team
-    is picked)."""
-    from helpdesk.content_team import SALES_EMPLOYEE_ROLE
+    is picked). The Digital team (content and DM roles) never sees them, Agent Managers
+    included, unless they're also a System Manager or a Sales Employee."""
+    from helpdesk.content_team import CONTENT_CALENDAR_ROLES, SALES_EMPLOYEE_ROLE
     from helpdesk.utils import is_agent
 
     user = user or frappe.session.user
     if user == "Guest" or not leads_on():
         return False
-    if user == "Administrator" or MANAGER_ROLES & set(frappe.get_roles(user)):
+    if user == "Administrator":
+        return True
+    roles = set(frappe.get_roles(user))
+    if "System Manager" in roles:
+        return True
+    if roles & set(CONTENT_CALENDAR_ROLES) and SALES_EMPLOYEE_ROLE not in roles:
+        return False
+    if MANAGER_ROLES & roles:
         return True
     if not is_agent(user) or not frappe.db.get_value("HD Agent", user, "is_active"):
         return False
     teams = leads_teams()
     # a salesperson's screens are the sales ones, whatever team they are in
-    if not teams or SALES_EMPLOYEE_ROLE in frappe.get_roles(user):
+    if not teams or SALES_EMPLOYEE_ROLE in roles:
         return True
     team, member = frappe.qb.DocType("HD Team"), frappe.qb.DocType("HD Team Member")
     return bool(
