@@ -26,6 +26,9 @@ The hub never gets ERPNext installed.
   active agents in an enabled ticked team see Leads. None ticked: every active agent.
   System Managers and Agent Managers (and Administrator) always do, and so does every active
   **Sales Employee**, whatever their team.
+- **Never the Digital team:** anyone with a content or DM role (Content Team, Digital
+  Marketing Head, DM Coordinator, DM Employee) doesn't see Leads, Agent Managers included,
+  unless they're also a System Manager or a Sales Employee.
 - **Salespeople see only the sales screens:** an agent with the Sales Employee role
   (Settings → Agents → Department wall → Sales team) gets Leads, the Scoreboard,
   notifications and Help, and no tasks, projects, tickets or content; Home opens Leads →
