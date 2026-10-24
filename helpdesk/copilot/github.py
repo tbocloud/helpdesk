@@ -305,3 +305,23 @@ def remove_label(repo: str, number: int, label: str):
 
 def comment(repo: str, number: int, text: str):
     request("POST", f"/repos/{repo}/issues/{int(number)}/comments", body={"body": text})
+
+
+# --- releases (Phase 7): what a branch gained since the deployed commit ---------------
+
+
+def branch_head(repo: str, branch: str) -> str:
+    """The commit at the tip of `branch`."""
+    found = request("GET", f"/repos/{repo}/branches/{quote(branch, safe='')}") or {}
+    return (found.get("commit") or {}).get("sha") or ""
+
+
+def compare(repo: str, base: str, head: str) -> dict:
+    """`{status, commits}` from `base` to `head`, oldest commit first (GitHub lists at most 250)."""
+    found = request("GET", f"/repos/{repo}/compare/{base}...{head}") or {}
+    return {"status": found.get("status") or "", "commits": found.get("commits") or []}
+
+
+def commit_pulls(repo: str, sha: str) -> list[dict]:
+    """The pull requests a commit belongs to (open or merged)."""
+    return request("GET", f"/repos/{repo}/commits/{sha}/pulls") or []

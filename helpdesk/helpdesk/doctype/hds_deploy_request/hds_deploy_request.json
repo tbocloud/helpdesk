@@ -7,6 +7,31 @@
 	"field_order": [
 		"run",
 		"ticket",
+		"release_section",
+		"source",
+		"repository",
+		"branch",
+		"task",
+		"column_break_release",
+		"authors",
+		"changes",
+		"ci_section",
+		"ci_status",
+		"ci_detail",
+		"column_break_ci",
+		"ci_override_by",
+		"ci_override_reason",
+		"decision_section",
+		"needs_senior",
+		"assigned_to",
+		"reminded_at",
+		"approval_hash",
+		"column_break_decision",
+		"decided_by",
+		"decided_at",
+		"decided_via",
+		"decision_note",
+		"train",
 		"approval",
 		"column_break_request",
 		"status",
@@ -37,8 +62,9 @@
 			"label": "Copilot run",
 			"options": "HDS Copilot Run",
 			"read_only": 1,
-			"reqd": 1,
-			"search_index": 1
+			"reqd": 0,
+			"search_index": 1,
+			"description": "Empty for a release of other people's merges (Phase 7)"
 		},
 		{
 			"fieldname": "ticket",
@@ -48,6 +74,161 @@
 			"options": "HD Ticket",
 			"read_only": 1,
 			"search_index": 1
+		},
+		{
+			"fieldname": "release_section",
+			"fieldtype": "Section Break",
+			"label": "Release"
+		},
+		{
+			"default": "Copilot run",
+			"fieldname": "source",
+			"fieldtype": "Select",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"label": "Source",
+			"options": "Copilot run\nPull request\nPush",
+			"read_only": 1
+		},
+		{
+			"fieldname": "repository",
+			"fieldtype": "Data",
+			"label": "Repository",
+			"read_only": 1,
+			"search_index": 1
+		},
+		{
+			"fieldname": "branch",
+			"fieldtype": "Data",
+			"label": "Branch",
+			"read_only": 1
+		},
+		{
+			"fieldname": "task",
+			"fieldtype": "Link",
+			"label": "Task",
+			"options": "Task",
+			"read_only": 1
+		},
+		{
+			"fieldname": "column_break_release",
+			"fieldtype": "Column Break"
+		},
+		{
+			"description": "Who wrote the commits (GitHub logins, or the commit email for a push); they never approve their own release",
+			"fieldname": "authors",
+			"fieldtype": "Small Text",
+			"label": "Authors",
+			"read_only": 1
+		},
+		{
+			"fieldname": "changes",
+			"fieldtype": "Code",
+			"label": "Commits",
+			"options": "JSON",
+			"read_only": 1
+		},
+		{
+			"fieldname": "ci_section",
+			"fieldtype": "Section Break",
+			"label": "CI"
+		},
+		{
+			"fieldname": "ci_status",
+			"fieldtype": "Select",
+			"label": "CI",
+			"options": "\nPending\nPassed\nFailed\nOverridden",
+			"read_only": 1
+		},
+		{
+			"fieldname": "ci_detail",
+			"fieldtype": "Small Text",
+			"label": "CI detail",
+			"read_only": 1
+		},
+		{
+			"fieldname": "column_break_ci",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "ci_override_by",
+			"fieldtype": "Link",
+			"label": "CI overridden by",
+			"options": "User",
+			"read_only": 1
+		},
+		{
+			"fieldname": "ci_override_reason",
+			"fieldtype": "Small Text",
+			"label": "Override reason",
+			"read_only": 1
+		},
+		{
+			"fieldname": "decision_section",
+			"fieldtype": "Section Break",
+			"label": "Approval"
+		},
+		{
+			"description": "A push without a pull request, a sensitive change, or a bench other customers share",
+			"fieldname": "needs_senior",
+			"fieldtype": "Check",
+			"label": "Needs a senior",
+			"read_only": 1
+		},
+		{
+			"fieldname": "assigned_to",
+			"fieldtype": "Link",
+			"label": "Assigned to",
+			"options": "User",
+			"read_only": 1
+		},
+		{
+			"fieldname": "reminded_at",
+			"fieldtype": "Datetime",
+			"label": "Reminded at",
+			"read_only": 1
+		},
+		{
+			"fieldname": "approval_hash",
+			"fieldtype": "Data",
+			"label": "Approval hash",
+			"read_only": 1
+		},
+		{
+			"fieldname": "column_break_decision",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "decided_by",
+			"fieldtype": "Link",
+			"label": "Decided by",
+			"options": "User",
+			"read_only": 1
+		},
+		{
+			"fieldname": "decided_at",
+			"fieldtype": "Datetime",
+			"label": "Decided at",
+			"read_only": 1
+		},
+		{
+			"fieldname": "decided_via",
+			"fieldtype": "Data",
+			"label": "Decided via",
+			"read_only": 1
+		},
+		{
+			"fieldname": "decision_note",
+			"fieldtype": "Small Text",
+			"label": "Decision note",
+			"read_only": 1
+		},
+		{
+			"description": "The release that leads one Press deploy for several approved releases of the same bench",
+			"fieldname": "train",
+			"fieldtype": "Data",
+			"label": "Train",
+			"read_only": 1
 		},
 		{
 			"fieldname": "approval",
@@ -67,7 +248,7 @@
 			"in_list_view": 1,
 			"in_standard_filter": 1,
 			"label": "Status",
-			"options": "Scheduled\nWaiting for Press\nDeploying\nChecking\nSucceeded\nFailed\nCancelled",
+			"options": "Waiting for CI\nWaiting for approval\nScheduled\nWaiting for Press\nDeploying\nChecking\nSucceeded\nFailed\nRejected\nCancelled",
 			"read_only": 1,
 			"search_index": 1
 		},
@@ -183,7 +364,7 @@
 		}
 	],
 	"links": [],
-	"modified": "2026-10-13 02:00:00.000000",
+	"modified": "2026-10-24 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Deploy Request",

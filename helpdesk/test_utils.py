@@ -4329,6 +4329,34 @@ class FakeGitHub:
         self.reverted: list = []
         # a fine-grained personal token may not read check runs: GitHub says 403
         self.check_runs_refused = False
+        # releases (Phase 7): each branch's tip, each repository's commits in order, a commit's pull requests
+        self.branches: dict = {}
+        self.history: dict = {}
+        self.commit_pulls_of: dict = {}
+
+    def commit(
+        self,
+        repo: str,
+        sha: str,
+        branch: str = "main",
+        message: str = "Change",
+        author: str = "dev-login",
+        pull: int | None = None,
+    ):
+        """A commit on `branch`, which becomes its tip; `pull`: the merged pull request it came with."""
+        self.history.setdefault(repo, []).append(
+            {
+                "sha": sha,
+                "commit": {
+                    "message": message,
+                    "author": {"email": f"{author}@example.com"},
+                },
+                "author": {"login": author},
+            }
+        )
+        self.branches[(repo, branch)] = sha
+        if pull:
+            self.commit_pulls_of.setdefault((repo, sha), []).append(pull)
 
     def install(self, test_case):
         patcher = patch("helpdesk.copilot.github.request", side_effect=self.request)
@@ -4434,6 +4462,27 @@ class FakeGitHub:
             )
         if rest[0] == "actions":
             return {"workflow_runs": self.workflow_runs((params or {})["head_sha"])}
+        if rest[0] == "branches":
+            sha = self.branches.get((repo, rest[1]))
+            if not sha:
+                raise GitHubError(404, "Branch not found")
+            return {"name": rest[1], "commit": {"sha": sha}}
+        if rest[0] == "compare":
+            base, head = rest[1].split("...")
+            shas = [c["sha"] for c in self.history.get(repo, [])]
+            if base not in shas or head not in shas:
+                raise GitHubError(404, "No common ancestor")
+            start, end = shas.index(base), shas.index(head)
+            commits = self.history[repo][start + 1 : end + 1]
+            status = (
+                "identical" if start == end else "ahead" if end > start else "behind"
+            )
+            return {"status": status, "commits": copy.deepcopy(commits)}
+        if rest[0] == "commits" and rest[2] == "pulls":
+            return [
+                copy.deepcopy(self.pulls[(repo, number)])
+                for number in self.commit_pulls_of.get((repo, rest[1]), [])
+            ]
         if rest[0] == "commits":
             sha = rest[1]
             if rest[2] == "check-runs":

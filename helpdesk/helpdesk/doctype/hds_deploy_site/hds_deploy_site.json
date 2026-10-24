@@ -6,6 +6,8 @@
 	"engine": "InnoDB",
 	"field_order": [
 		"site",
+		"customer",
+		"registry",
 		"status",
 		"site_update",
 		"backup"
@@ -17,6 +19,19 @@
 			"in_list_view": 1,
 			"label": "Site",
 			"reqd": 1
+		},
+		{
+			"fieldname": "customer",
+			"fieldtype": "Link",
+			"in_list_view": 1,
+			"label": "Customer",
+			"options": "HD Customer"
+		},
+		{
+			"fieldname": "registry",
+			"fieldtype": "Link",
+			"label": "Site card",
+			"options": "HDS Site Registry"
 		},
 		{
 			"fieldname": "status",
@@ -41,7 +56,7 @@
 	],
 	"istable": 1,
 	"links": [],
-	"modified": "2026-10-13 02:00:00.000000",
+	"modified": "2026-10-24 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Deploy Site",

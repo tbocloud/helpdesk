@@ -72,6 +72,8 @@ scheduler_events = {
             "helpdesk.copilot.fixes.refresh_open",
             # Copilot runs waiting with no worker claiming them: the Agent Managers hear hourly
             "helpdesk.copilot.pilot.watch_workers",
+            # every merge into a branch a customer site runs becomes a release (off by default)
+            "helpdesk.copilot.releases.watch",
         ],
         # every 10 minutes, off the error digest's minutes: ask GitHub to run the org
         # merge bot, whose own schedule doesn't fire (off by default; docs/github-sync.md)

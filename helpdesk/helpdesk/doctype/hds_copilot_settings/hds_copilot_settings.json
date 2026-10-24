@@ -61,7 +61,10 @@
 		"teams_bot_secret",
 		"teams_tenant_id",
 		"templates_section",
-		"message_templates"
+		"message_templates",
+		"releases_section",
+		"releases_enabled",
+		"release_repositories"
 	],
 	"fields": [
 		{
@@ -417,11 +420,31 @@
 			"fieldtype": "Data",
 			"label": "Tenant ID",
 			"description": "Blank: the Microsoft tenant ID in HD Settings."
+		},
+		{
+			"collapsible": 1,
+			"description": "Phase 7: every merge into a branch a customer site runs goes out through TBO Support: CI, one approval, the Press deploy in the window, the check after (docs/tbo-copilot.md, Releases).",
+			"fieldname": "releases_section",
+			"fieldtype": "Section Break",
+			"label": "Releases"
+		},
+		{
+			"default": "0",
+			"fieldname": "releases_enabled",
+			"fieldtype": "Check",
+			"label": "Release every merge"
+		},
+		{
+			"depends_on": "releases_enabled",
+			"description": "One owner/repo per line. Only these repositories' branches become releases; add a repository once its CI is green.",
+			"fieldname": "release_repositories",
+			"fieldtype": "Small Text",
+			"label": "Repositories in the pipeline"
 		}
 	],
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-10-18 10:27:17.587949",
+	"modified": "2026-10-24 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Copilot Settings",
