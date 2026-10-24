@@ -800,6 +800,27 @@ class TestSandboxCheck(StagingCase):
         self.assertEqual(release.status, "Waiting for approval")
         self.assertTrue(release.needs_senior)
 
+    def test_a_check_that_could_not_run_goes_to_the_seniors_not_the_authors(self):
+        release = self.waiting()
+        job = releases.claim_check("w1")
+        before = len(self.told(self.approver))
+
+        result = releases.check_result(
+            release.name,
+            job["lease_token"],
+            [{"check": "the sandbox check", "result": "not_run", "detail": "runner unreachable"}],
+        )
+
+        release.reload()
+        self.assertEqual(result["staging_status"], "Not run")
+        self.assertEqual((release.status, release.staging_status), ("Staging", "Not run"))
+        self.assertIn("runner unreachable", self.told(self.senior)[-1])
+        self.assertEqual(len(self.told(self.approver)), before)
+        releases.override_ci(release, self.senior, "the runner is down; CI was green")
+        self.assertEqual(
+            frappe.db.get_value(deploy.DEPLOY, release.name, "status"), "Waiting for approval"
+        )
+
     def test_a_lease_that_is_not_the_workers_is_refused(self):
         release = self.waiting()
         releases.claim_check("w1")

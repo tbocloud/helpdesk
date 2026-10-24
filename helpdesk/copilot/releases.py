@@ -1339,11 +1339,31 @@ def check_result(name: str, lease_token: str, evidence: list, tested_on: str = "
         rows.append(
             {"check": _("tested on"), "result": "not_run", "detail": tested_on[:200]}
         )
-    passed = any(r["result"] == "pass" for r in rows) and not any(
-        r["result"] == "fail" for r in rows
-    )
-    staging_done(release, passed, rows)
-    return {"staging_status": "Passed" if passed else "Failed"}
+    passes = any(r["result"] == "pass" for r in rows)
+    fails = any(r["result"] == "fail" for r in rows)
+    if not passes and not fails:
+        # the check could not be done (the runner or GitHub unreachable): not the code's fault
+        release.db_set(
+            {
+                "staging_status": "Not run",
+                "staging_detail": json.dumps(rows, indent=1, default=str),
+                "check_lease_hash": None,
+            }
+        )
+        tell(
+            release,
+            approvals.seniors(),
+            _(
+                "The sandbox check of the release of {0} {1} could not run ({2}); a senior can let it through with a reason."
+            ).format(
+                release.repository,
+                release.branch,
+                "; ".join(r["detail"] for r in rows if r["detail"])[:200],
+            ),
+        )
+        return {"staging_status": "Not run"}
+    staging_done(release, passes and not fails, rows)
+    return {"staging_status": "Passed" if passes and not fails else "Failed"}
 
 
 def expire_checks():
