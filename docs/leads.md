@@ -1,7 +1,8 @@
 # Leads
 
 Status: Phase 1 implemented (list, new lead, lead page with stage, notes, edit and read-only
-quotations), the **Overview** (2026-10-19), and proposals with the segment rate card in
+quotations), the **Overview** (2026-10-19), the **daily new-lead target**, **where each lead
+stands on its row** and **Proposals & money** on the Overview (2026-10-24), and proposals with the segment rate card in
 [proposals.md](proposals.md). This document is the source of truth for the feature and changes
 with it.
 
@@ -47,8 +48,10 @@ user exists there with a sales role, applies what they may see, and records writ
 | Method | HTTP | Arguments | Returns |
 | --- | --- | --- | --- |
 | `get_options` | GET | | `{stages: [{name, label, type, color}], sources, segments, owners: [{email, full_name}], territories, industries, can_call}` |
-| `list_leads` | GET | `search, stage, owner, segment, source, temperature, metric, period, from_date, to_date, view, start, page_length` | `{rows: [{name, lead_name, company_name, email_id, mobile_no, tbo_stage, segment, lead_owner, owner_name, score, next_follow_up, modified}], total}` |
+| `list_leads` | GET | `search, stage, owner, segment, source, temperature, metric, period, from_date, to_date, view, start, page_length` | `{rows: [{name, lead_name, company_name, email_id, mobile_no, tbo_stage, segment, lead_owner, owner_name, score, next_follow_up, modified, latest_quotation, latest_proposal}], total}` |
 | `get_overview` | GET | `period, from_date, to_date, owner` | the Overview's figures (TBO Smart's `hub-leads-api.md` §2.4) |
+| `get_lead_intake` | GET | `from_date, to_date` (the hub sends yesterday and today) | new leads taken each day by owner, imports left out, and the scope's salespeople (§2.4.1) |
+| `get_proposal_money` | GET | `period, from_date, to_date, owner` | proposals sent, won, advances and every payment split still to collect (§2.8) |
 | `get_lead_ai` | GET | `name` | what the AI proposes, the lead's health and likely duplicates (TBO Smart's `hub-leads-api.md` §2.6) |
 | `refresh_lead_ai`, `apply_ai_stage`, `dismiss_ai_stage` | POST | `name` | as above, or the lead (apply) |
 | `draft_lead_message` | POST | `name, channel (whatsapp / email), language` | `{channel, subject, text, to?, url?}`; nothing is sent |
@@ -60,9 +63,15 @@ user exists there with a sales role, applies what they may see, and records writ
 | `set_stage` | POST | `name, stage, note` | the lead |
 | `add_note` | POST | `name, note` | the note |
 
-- `metric` (`new`, `contacted`, `meetings`, `quotations`, `won`, `lost`, `stale`, `overdue`,
-  `hot`, `open`, and the AI's `high_intent`, `unhappy`, `stage_suggested`) keeps the leads one Overview number counts; `period` (`week`, `month`, `quarter`,
-  `custom` with `from_date` and `to_date`) goes with it and is sent only with a metric.
+- `metric` (`new`, `intake`, `contacted`, `meetings`, `quotations`, `won`, `lost`, `stale`,
+  `overdue`, `hot`, `open`, and the AI's `high_intent`, `unhappy`, `stage_suggested`) keeps
+  the leads one Overview number counts; `period` (`week`, `month`, `quarter`, `custom` with
+  `from_date` and `to_date`) goes with it and is sent only with a metric. The hub's own
+  `today` and `yesterday` periods go to the ERP site as a one-day `custom` range, so an older
+  TBO Smart answers them too (`erp_period` in `helpdesk/api/leads.py`).
+- `latest_quotation` (`{name, tbo_quote_status, grand_total, currency, tbo_sent_on}`) and
+  `latest_proposal` (`{name, document_type, status, view_count, sent_on}`) say where a lead
+  stands with the client; an older TBO Smart leaves them out and the row shows only the stage.
 - `view` is `all`, `mine`, `call_today` or `follow_up`. The hub sends `page_length` 20
   (at most 100) and `start` from 0.
 - `data` (create and update) uses these keys: `lead_name, company_name, email_id, mobile_no,
@@ -111,7 +120,7 @@ The ERP site's `tbo_smart.api.telephony` takes the same `acting_user`:
 ## Hub endpoints
 
 `helpdesk/api/leads.py`, thin typed proxies (writes are POST only): `get_options`,
-`list_leads`, `get_overview`, `get_lead`, `get_lead_ai`, `refresh_lead_ai`, `apply_ai_stage`,
+`list_leads`, `get_overview`, `get_lead_intake`, `get_proposal_money`, `get_lead`, `get_lead_ai`, `refresh_lead_ai`, `apply_ai_stage`,
 `dismiss_ai_stage`, `draft_lead_message`, `log_message_sent`, `create_lead`, `update_lead`,
 `set_stage`, `add_note`, `click_to_call`, `call_recording`. They check
 `can_use_leads`, validate the view and page size, trim notes, and pass `acting_user`. The
@@ -134,14 +143,22 @@ browser.
 | 5xx, or a 4xx with only an exception | The ERP site ran into a problem (status). Try again; if it keeps happening, tell an admin. |
 
 Setup and reach problems are `LeadsUnavailableError`, the rest `LeadsError` (both
-ValidationError, so the page shows the message with *Try again*).
+ValidationError, so the page shows the message with *Try again*). A method the ERP site's
+TBO Smart doesn't have yet is `LeadsNotDeployedError` (a `LeadsUnavailableError`).
+
+**Newer parts on an older ERP site:** `get_lead_intake` and `get_proposal_money` go through
+`call_if_deployed`, which answers `None` for `LeadsNotDeployedError` and drops the queued
+message, so the endpoints return `{available: false}` and the page leaves the strip, the
+Created filter and Proposals & money out without a toast. The list row's status chip simply
+doesn't show without its fields. The hub can be deployed before TBO Smart.
 
 ## The pages
 
 - **Overview** (the first tab, where `/helpdesk/leads` opens; `LeadsOverview.vue`): one calm
   page for the person's leads (their own, their team's or everyone's, as the ERP site's sales
   rules give them). Its job: see where the pipeline stands and what needs a person now.
-  - **Period** (This week, This month, This quarter, Custom with from and to dates) and, for
+  - **Period** (Today, Yesterday, This week, This month, This quarter, Custom with from and
+    to dates) and, for
     a team lead or a manager, **Owner** ("My team" / "Everyone" or one person). Both are in
     the URL (`period`, `from`, `to`, `owner`).
   - **This period**: New leads, Contacted, Meetings held, Proposals sent, Won (with its
@@ -161,16 +178,50 @@ ValidationError, so the page shows the message with *Try again*).
     unfinished custom period, an empty line in each panel with nothing to show.
   - Colour: one brand accent (the selected period); green only for Won, red only for
     overdue, amber for gone quiet, each with its icon and label. No other colour.
+  - **Proposals & money** (`LeadsMoney.vue`, under Pipeline and Funnel, read by its own
+    `get_proposal_money` with the same period and owner): four tiles, *Proposals sent* (their
+    value, how many; opens the Proposals sent list), *Won* (value, leads), *Advances received*
+    in the period, and *Still to collect* (with what is overdue); a note when proposals went
+    out without a price. **Expected by month**: overdue (red, with its icon), this month and
+    the next five, later, and *On milestone* (splits without a date), as neutral bars with
+    the amounts. **Payment splits**: each split still being collected, by due date (a button
+    flips soonest / latest first): client (and owner, for a team view), the split's label and
+    %, its sales order or quotation, due date or *On milestone*, status and amount (what is
+    left, "of" the split when part came in). Status: *Received* (green, check), *Overdue*
+    (red, calendar-x), *Due* within a week (blue, calendar-clock), *Upcoming* (gray). Eight
+    rows, then *Show all*. Each row opens the lead. How the ERP site finds the splits and
+    what came in is in TBO Smart's `hub-leads-api.md` §2.8: a sales order's schedule (paid
+    in due order from its advances and invoices), else the latest sent or accepted
+    quotation's, else the proposal's Payment Terms milestones as % of the total with no
+    date. A failed read shows an inline error with *Try again*, never a toast.
+  - Money is formatted by `money()` (`components/invoicing/invoices.ts`): rupees group the
+    Indian way (₹1,55,000) whatever the browser's language, without paise in summaries.
   - **Your plan for today** (with **AI runs leads** on the ERP site, TBO Smart Settings): the
     person's follow-ups due, Call today and hot leads, each with the AI's next step and its
     day; a manager who picks an owner sees theirs. Its header counts the open leads the AI
     read as high intent, unhappy, and with a stage move waiting for a person; each count
     opens those leads.
+- **New leads taken** (`LeadIntakeStrip.vue`, under the tabs on every tab): the owner wants
+  each salesperson to take a number of new leads a day (Settings → CRM → Leads → *Daily
+  new-lead target per salesperson*, `daily_lead_target`, 0 = no target). Two halves, Today
+  and Yesterday: the total new leads (mono) and a chip per salesperson in the person's view,
+  "Shahana 7 / 10" (just the count without a target), most first; someone who took none
+  shows 0. Reaching the target is a green check and green count with "target met" for
+  screen readers; short of it stays neutral (no red: it isn't a failure to shame). Leads
+  copied in from the old CRM don't count. The total and every chip open the list of exactly
+  those leads (`metric=intake`, `period=today|yesterday`, `owner`). Skeleton while loading;
+  left out quietly when the ERP site is older or the read fails.
 - **Leads** list (the other tabs, `desk/src/pages/leads/Leads.vue`): views All, Mine, Call
-  today and Follow-up; search (debounced) and stage, owner and segment filters; 20 a page
-  with Previous and Next. View, search, filters and page are in the URL. Rows show the
-  name, stage, company, segment, mobile or email, the next follow-up (red with an icon once
-  it's past), the owner and the score; on a phone they wrap into two-line cards. States:
+  today and Follow-up; search (debounced) and stage, owner, segment and **Created** filters
+  (Any time, Today, Yesterday, This week, This month, Custom with from and to dates; it is
+  the `intake` metric with its period, so it replaces a number the Overview opened the list
+  with; shown once the ERP site counts it); 20 a page with Previous and Next. View, search,
+  filters and page are in the URL. Rows show the name, stage, **where the lead stands with
+  the client** (one chip: the proposal's status, else the quotation's, with its value and how
+  long ago it went, e.g. "Proposal sent · ₹1,55,000 · 3 days ago", "Viewed 2× · …";
+  Accepted green, Declined, Rejected and Expired red, everything else gray, always as words),
+  company, segment, mobile or email, the next follow-up (red with an icon once it's past),
+  the owner and the score; on a phone they wrap into two-line cards. States:
   loading skeleton, error with Try again, "No leads match" when filtered to nothing, "No
   leads yet" on first use.
 - **New lead** (`LeadFormDialog.vue`, the one primary action on the list): contact name
@@ -229,7 +280,10 @@ are specified in [proposals.md](proposals.md).
 `helpdesk/tests/test_leads.py` with `test_utils.FakeCRM` (`lead_answers`, `lead_calls`,
 `lead_error`) and `test_utils.enable_leads`: off by default, `acting_user` on every call,
 writes posted, view and page size checked, teams and inactive agents gated, and each error
-mapped; the Overview's period checks and the metric with its period passed to the list; the
+mapped; the Overview's period checks and the metric with its period passed to the list; today and
+yesterday sent as one-day custom ranges; the intake with the daily target (a negative one is
+none); the money read for the period and owner; an older ERP site hides both quietly (no
+message queued) while other errors still show; the
 AI calls are the signed-in person's (POST for every change) and the channels checked.
 `helpdesk/tests/test_sales_wall.py`: a Sales Employee outside the Leads teams lists, opens,
 creates, moves and notes a lead as themselves.

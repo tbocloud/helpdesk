@@ -2,6 +2,7 @@ from unittest.mock import Mock, patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
+from frappe.utils import add_days, getdate, nowdate
 
 from helpdesk.api import leads as leads_api
 from helpdesk.api.auth import get_user
@@ -112,6 +113,77 @@ class TestLeads(FrappeTestCase):
         )
         with self.assertRaises(frappe.ValidationError):
             leads_api.list_leads(metric="won", period="decade")
+
+    def test_today_and_yesterday_are_one_day_ranges_on_the_erp_site(self):
+        today = getdate(nowdate())
+        self.crm.lead_answers["get_overview"] = {"totals": {}}
+        self.as_bde()
+        leads_api.get_overview(period="today")
+        leads_api.list_leads(metric="intake", period="yesterday", owner=BDE)
+        (_m, _p, overview), (_m2, _p2, listed) = self.crm.lead_calls
+        self.assertEqual(
+            (overview["period"], overview["from_date"], overview["to_date"]),
+            ("custom", str(today), str(today)),
+        )
+        yesterday = str(add_days(today, -1))
+        self.assertEqual(
+            (
+                listed["metric"],
+                listed["period"],
+                listed["from_date"],
+                listed["to_date"],
+            ),
+            ("intake", "custom", yesterday, yesterday),
+        )
+        self.assertEqual(listed["owner"], BDE)
+
+    def test_the_intake_comes_with_the_daily_target(self):
+        frappe.db.set_single_value("HD CRM Settings", "daily_lead_target", 10)
+        self.crm.lead_answers["get_lead_intake"] = {"days": [], "people": []}
+        self.as_bde()
+        result = leads_api.get_lead_intake()
+        self.assertEqual((result["available"], result["target"]), (True, 10))
+        ((method, _post, params),) = self.crm.lead_calls
+        today = getdate(nowdate())
+        self.assertEqual(
+            (method, params["from_date"], params["to_date"], params["acting_user"]),
+            ("get_lead_intake", str(add_days(today, -1)), str(today), BDE),
+        )
+        # a negative target is no target
+        frappe.db.set_single_value("HD CRM Settings", "daily_lead_target", -3)
+        self.assertEqual(leads_api.get_lead_intake()["target"], 0)
+
+    def test_the_money_is_read_for_the_period_and_owner(self):
+        self.crm.lead_answers["get_proposal_money"] = {"totals": {"to_collect": 5}}
+        self.as_bde()
+        result = leads_api.get_proposal_money(period="month", owner=BDE)
+        self.assertEqual(
+            (result["available"], result["totals"]["to_collect"]), (True, 5)
+        )
+        ((method, _post, params),) = self.crm.lead_calls
+        self.assertEqual(
+            (method, params["period"], params["from_date"], params["owner"]),
+            ("get_proposal_money", "month", None, BDE),
+        )
+        with self.assertRaises(frappe.ValidationError):
+            leads_api.get_proposal_money(period="custom", to_date="2026-10-01")
+
+    def test_an_older_erp_site_hides_the_new_parts_quietly(self):
+        older = CRMError(
+            "x", 417, "Failed to get method for command tbo_smart.api.hub_leads.x"
+        )
+        self.crm.lead_answers["get_lead_intake"] = older
+        self.crm.lead_answers["get_proposal_money"] = older
+        self.as_bde()
+        frappe.clear_messages()
+        self.assertEqual(leads_api.get_lead_intake(), {"available": False})
+        self.assertEqual(leads_api.get_proposal_money(), {"available": False})
+        # nothing for a toast: the parts just stay out
+        self.assertEqual(frappe.message_log, [])
+        # anything else is still an error the page shows
+        self.crm.lead_answers["get_lead_intake"] = CRMError("x", 502, "")
+        with self.assertRaises(LeadsUnavailableError):
+            leads_api.get_lead_intake()
 
     def test_ai_suggestions_are_the_signed_in_persons_to_act_on(self):
         self.crm.lead_answers["get_lead_ai"] = {"enabled": True, "insight": None}

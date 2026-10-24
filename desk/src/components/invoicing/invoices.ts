@@ -70,12 +70,18 @@ export interface CustomerInvoice {
   hours_covered: number;
 }
 
-export function money(amount: number, currency: string): string {
+/**
+ * An amount in its currency. Rupees group the Indian way (₹1,55,000) whatever the
+ * browser's language; `whole` drops the paise/cents for summary figures.
+ */
+export function money(amount: number, currency: string, whole = false): string {
   try {
-    return new Intl.NumberFormat(undefined, {
+    return new Intl.NumberFormat(currency === "INR" ? "en-IN" : undefined, {
       style: "currency",
       currency,
-      maximumFractionDigits: 2,
+      ...(whole
+        ? { minimumFractionDigits: 0, maximumFractionDigits: 0 }
+        : { maximumFractionDigits: 2 }),
     }).format(amount || 0);
   } catch {
     // an unknown currency code
