@@ -14,6 +14,7 @@ until the sites are updated, then hands over to the check after
 (helpdesk.copilot.verify). A failure escalates the run with Press's reason.
 """
 
+import json
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -436,49 +437,104 @@ def _press_app(info: dict, app: str) -> dict | None:
     )
 
 
-def _start(request):
-    run = frappe.get_doc("HDS Copilot Run", request.run)
+def _run_of(request):
+    """The Copilot run a deploy request belongs to; None for a release of other people's merges."""
+    return frappe.get_doc("HDS Copilot Run", request.run) if request.run else None
+
+
+def _note(request, kind: str, payload: dict):
+    """An event on the run, or a comment on a release (which has no run)."""
+    if request.run:
+        runs.add_event(request.run, kind, payload, runs.SYSTEM)
+    else:
+        request.add_comment(
+            "Info", f"{kind}: {json.dumps(payload, default=str)}"[:1000]
+        )
+
+
+def _riders(request) -> list:
+    """The nightly train: other approved requests due on the same bench go out in the
+    same Press deploy, one build instead of several. A request for an app already on
+    the train waits for the next one."""
+    if not request.release_group:
+        return []
+    apps = {row.app for row in request.apps}
+    riders = []
+    for name in frappe.get_all(
+        DEPLOY,
+        filters={
+            "name": ["!=", request.name],
+            "release_group": request.release_group,
+            "status": ["in", WAITING],
+            "scheduled_for": ["<=", now_datetime()],
+        },
+        order_by="scheduled_for asc",
+        pluck="name",
+    ):
+        rider = frappe.get_doc(DEPLOY, name)
+        if {row.app for row in rider.apps} & apps:
+            continue
+        riders.append(rider)
+        apps |= {row.app for row in rider.apps}
+    return riders
+
+
+def _offer(info: dict, request) -> str:
+    """Whether Press can deploy the request's commit: "current" (the bench runs it), "offered", or why not."""
     app = request.apps[0]
+    row = _press_app(info, app.app)
+    if not row:
+        return _("Press's bench {0} has no app {1}").format(
+            request.release_group, app.app
+        )
+    current, following = press.app_commits(row)
+    if current.startswith(app.to_commit or "-"):
+        return "current"
+    if following.startswith(app.to_commit or "-"):
+        return "offered"
+    return _("Press does not offer the merged commit {0} yet (it offers {1})").format(
+        (app.to_commit or "")[:12], (following or "none")[:12]
+    )
+
+
+def _already_running(request, run):
+    """The bench already runs it (deployed by hand): straight to the check."""
+    request.db_set(
+        {"status": "Checking", "started_at": now_datetime(), "waiting_since": None}
+    )
+    if run:
+        runs.transition(run, "Deploying", runs.SYSTEM, note="already on Press")
+        runs.transition(
+            run, "Verifying", runs.SYSTEM, note="the bench already runs the commit"
+        )
+
+
+def _start(request):
+    run = _run_of(request)
     if not _take_lock(request.name):
         return _wait(request, _("another Copilot deploy is running"))
     try:
         info = press.deploy_information(request.release_group)
-        row = _press_app(info, app.app)
         if info.get("deploy_in_progress") or info.get("has_running_release_pipeline"):
             _release_lock(request.name)
             return _wait(request, _("Press is already deploying this bench"))
-        if not row:
-            return fail(
-                request,
-                _("Press's bench {0} has no app {1}").format(
-                    request.release_group, app.app
-                ),
-            )
-        current, following = press.app_commits(row)
-        if current.startswith(app.to_commit or "-"):
-            # the site already runs it (deployed by hand): straight to the check
-            request.db_set(
-                {
-                    "status": "Checking",
-                    "started_at": now_datetime(),
-                    "waiting_since": None,
-                }
-            )
-            runs.transition(run, "Deploying", runs.SYSTEM, note="already on Press")
-            runs.transition(
-                run, "Verifying", runs.SYSTEM, note="the bench already runs the commit"
-            )
-            return
-        if not following.startswith(app.to_commit or "-"):
-            press.fetch_latest_app_update(request.release_group, app.app)
+        offer = _offer(info, request)
+        if offer == "current":
+            return _already_running(request, run)
+        if offer != "offered":
+            if not _press_app(info, request.apps[0].app):
+                return fail(request, offer)
+            press.fetch_latest_app_update(request.release_group, request.apps[0].app)
             _release_lock(request.name)
-            return _wait(
-                request,
-                _(
-                    "Press does not offer the merged commit {0} yet (it offers {1})"
-                ).format((app.to_commit or "")[:12], (following or "none")[:12]),
-            )
-        wanted = {site.site for site in request.sites}
+            return _wait(request, offer)
+        train = [request]
+        for rider in _riders(request):
+            rider_offer = _offer(info, rider)
+            if rider_offer == "current":
+                _already_running(rider, _run_of(rider))
+            elif rider_offer == "offered":
+                train.append(rider)
+        wanted = {site.site for member in train for site in member.sites}
         skip_backups = bool(copilot_settings.get_settings().press_skip_backups)
         sites = [
             {**site, "skip_failing_patches": False, "skip_backups": skip_backups}
@@ -490,42 +546,48 @@ def _start(request):
                 request,
                 _("Press no longer lists every site of this deploy on the bench"),
             )
-        reference = press.deploy_and_update(
-            request.release_group,
-            [
+        apps = []
+        for member in train:
+            row = _press_app(info, member.apps[0].app)
+            apps.append(
                 {
-                    "app": app.app,
+                    "app": member.apps[0].app,
                     "source": row.get("source"),
                     "release": row.get("next_release"),
-                    "hash": following,
+                    "hash": press.app_commits(row)[1],
                 }
-            ],
-            sites,
-        )
+            )
+        reference = press.deploy_and_update(request.release_group, apps, sites)
     except PressError as e:
         _release_lock(request.name)
         return _wait(request, _("Press: {0}").format(e.message))
-    request.db_set(
-        {
-            "status": "Deploying",
-            "started_at": now_datetime(),
-            "press_reference": str(reference or "")[:140],
-            "waiting_since": None,
-            "error": None,
-        }
-    )
-    runs.transition(run, "Deploying", runs.SYSTEM, note=f"Press {reference}")
-    runs.add_event(
-        run,
-        "deploy_started",
-        {
-            "request": request.name,
-            "press": reference,
-            "sites": [s["name"] for s in sites],
-            "backups": not skip_backups,
-        },
-        runs.SYSTEM,
-    )
+    for member in train:
+        member.db_set(
+            {
+                "status": "Deploying",
+                "started_at": now_datetime(),
+                "press_reference": str(reference or "")[:140],
+                "waiting_since": None,
+                "error": None,
+                "train": request.name if len(train) > 1 else None,
+            }
+        )
+        member_run = run if member is request else _run_of(member)
+        if member_run:
+            runs.transition(
+                member_run, "Deploying", runs.SYSTEM, note=f"Press {reference}"
+            )
+        _note(
+            member,
+            "deploy_started",
+            {
+                "request": member.name,
+                "press": reference,
+                "sites": sorted(row.site for row in member.sites),
+                "train": [m.name for m in train] if len(train) > 1 else None,
+                "backups": not skip_backups,
+            },
+        )
 
 
 def _wait(request, reason: str):
@@ -544,15 +606,14 @@ def _wait(request, reason: str):
                 "error": str(reason)[:1000],
             }
         )
-        runs.add_event(
-            request.run,
+        _note(
+            request,
             "deploy_rescheduled",
             {
                 "request": request.name,
                 "reason": reason,
                 "to": str(request.scheduled_for),
             },
-            runs.SYSTEM,
         )
         return
     request.db_set(
@@ -620,10 +681,13 @@ def _follow(request):
         )
     if done:
         request.db_set({"status": "Checking"})
-        run = runs.transition(
-            request.run, "Verifying", runs.SYSTEM, note="Press updated the sites"
-        )
-        runs.add_event(run, "deploy_updated", {"request": request.name}, runs.SYSTEM)
+        if request.run:
+            run = runs.transition(
+                request.run, "Verifying", runs.SYSTEM, note="Press updated the sites"
+            )
+            runs.add_event(
+                run, "deploy_updated", {"request": request.name}, runs.SYSTEM
+            )
 
 
 def _failed_build(request, started) -> str | None:
@@ -685,6 +749,11 @@ def fail(request, reason: str):
     from helpdesk.copilot import customer
 
     reason = str(reason)[:1000]
+    if not request.run:
+        from helpdesk.copilot import releases
+
+        _release_lock(request.name)
+        return releases.failed(request, reason, _press_links(request))
     request.db_set({"status": "Failed", "error": reason, "finished_at": now_datetime()})
     _release_lock(request.name)
     run = frappe.get_doc("HDS Copilot Run", request.run)
@@ -730,10 +799,13 @@ def fail(request, reason: str):
 
 def succeed(request, results: list[dict]):
     """The check passed: the run is Resolved and the customer is asked to confirm."""
-    import json
-
     from helpdesk.copilot import customer
 
+    if not request.run:
+        from helpdesk.copilot import releases
+
+        _release_lock(request.name)
+        return releases.succeeded(request, results)
     request.db_set(
         {
             "status": "Succeeded",

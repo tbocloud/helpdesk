@@ -23,7 +23,10 @@
 		"ci_override_reason",
 		"decision_section",
 		"needs_senior",
+		"risk_level",
+		"risk_reasons",
 		"assigned_to",
+		"assigned_at",
 		"reminded_at",
 		"approval_hash",
 		"column_break_decision",
@@ -176,10 +179,29 @@
 			"read_only": 1
 		},
 		{
+			"fieldname": "risk_level",
+			"fieldtype": "Select",
+			"label": "Risk",
+			"options": "\nlow\nmedium\nhigh\nunknown",
+			"read_only": 1
+		},
+		{
+			"fieldname": "risk_reasons",
+			"fieldtype": "Small Text",
+			"label": "Risk reasons",
+			"read_only": 1
+		},
+		{
 			"fieldname": "assigned_to",
 			"fieldtype": "Link",
 			"label": "Assigned to",
 			"options": "User",
+			"read_only": 1
+		},
+		{
+			"fieldname": "assigned_at",
+			"fieldtype": "Datetime",
+			"label": "Assigned at",
 			"read_only": 1
 		},
 		{
@@ -364,7 +386,7 @@
 		}
 	],
 	"links": [],
-	"modified": "2026-10-24 12:00:00.000000",
+	"modified": "2026-10-24 14:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Deploy Request",

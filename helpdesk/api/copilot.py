@@ -633,3 +633,103 @@ def decide_resolution(
         actor=runs.AGENT if agent else runs.CUSTOMER,
     )
     return {**result, "ticket": doc.name}
+
+
+# --- releases (Phase 7): every merge goes out through CI, one approval and the nightly train ---
+
+
+def _release(name: str):
+    from helpdesk.copilot import deploy
+
+    doc = frappe.get_doc(deploy.DEPLOY, name)
+    doc.check_permission("read")
+    if doc.run:
+        frappe.throw(_("A Copilot fix is decided and deployed from its ticket."))
+    return doc
+
+
+@frappe.whitelist()
+@agent_only
+def get_release(release: str) -> dict:
+    """What the release card shows, and what the person may do with it."""
+    from helpdesk.copilot import approvals, deploy, releases
+
+    doc = _release(release)
+    user = frappe.session.user
+    return {
+        "name": doc.name,
+        "status": doc.status,
+        "hash": doc.approval_hash,
+        "may_decide": doc.status == "Waiting for approval"
+        and not releases.may_decide(doc, user),
+        "why_not": releases.may_decide(doc, user)
+        if doc.status == "Waiting for approval"
+        else None,
+        "may_deploy_now": deploy.may_deploy_now(user),
+        "may_override_ci": doc.status == "Waiting for CI"
+        and user in approvals.seniors(),
+        "may_cancel": doc.status
+        in ("Waiting for CI", "Waiting for approval") + deploy.WAITING
+        and deploy.may_deploy(user),
+    }
+
+
+@frappe.whitelist(methods=["POST"])
+@agent_only
+def decide_release(
+    release: str,
+    approve: bool | int | str,
+    note: str = "",
+    when: str = "tonight",
+    expected_hash: str | None = None,
+) -> dict:
+    from helpdesk.copilot import releases
+
+    _release(release)
+    return releases.decide(
+        release,
+        frappe.session.user,
+        bool(sbool(approve)),
+        note,
+        when=when,
+        expected_hash=expected_hash,
+    )
+
+
+@frappe.whitelist(methods=["POST"])
+@agent_only
+def override_release_ci(release: str, reason: str) -> dict:
+    """A senior lets a release with red or missing CI go to its approval, with a reason."""
+    from helpdesk.copilot import releases
+
+    doc = _release(release)
+    releases.override_ci(doc, frappe.session.user, reason)
+    return {"status": frappe.db.get_value(doc.doctype, doc.name, "status")}
+
+
+@frappe.whitelist(methods=["POST"])
+@agent_only
+def cancel_release(release: str, reason: str = "") -> dict:
+    """A release that has not started deploying is stopped; its commits go out with the next one."""
+    from helpdesk.copilot import deploy, releases
+
+    doc = _release(release)
+    user = frappe.session.user
+    if doc.status not in ("Waiting for CI", "Waiting for approval") + deploy.WAITING:
+        frappe.throw(
+            _("Only a release that has not started deploying can be cancelled.")
+        )
+    if not deploy.may_deploy(user):
+        frappe.throw(
+            _("Only the Copilot approvers and the Agent Managers may cancel releases."),
+            frappe.PermissionError,
+        )
+    doc.db_set({"status": "Cancelled", "finished_at": now_datetime()})
+    doc.add_comment(
+        "Info",
+        _("Cancelled by {0}{1}").format(
+            get_fullname(user), f": {reason}" if reason else ""
+        ),
+    )
+    releases.refresh_cards(doc.name)
+    return {"status": "Cancelled"}

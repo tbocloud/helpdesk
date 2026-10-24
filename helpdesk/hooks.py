@@ -59,6 +59,8 @@ scheduler_events = {
         "*/5 * * * *": [
             # Copilot deploys through Press: start, follow, check (helpdesk.copilot.deploy)
             "helpdesk.copilot.deploy.run_due",
+            # releases of every merge: the CI gate and approval reminders (off by default)
+            "helpdesk.copilot.releases.run_due",
             "helpdesk.tasks.push_ticket_statuses",
             "helpdesk.tasks.sync_conversations",
             "helpdesk.content_sync.sync_content_approvals",

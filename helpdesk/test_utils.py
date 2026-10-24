@@ -4477,7 +4477,21 @@ class FakeGitHub:
             status = (
                 "identical" if start == end else "ahead" if end > start else "behind"
             )
-            return {"status": status, "commits": copy.deepcopy(commits)}
+            # the files of the pull requests the commits came with; a push changes push.py
+            files = []
+            for commit in commits:
+                numbers = self.commit_pulls_of.get((repo, commit["sha"]))
+                for number in numbers or []:
+                    files += self.files.get((repo, number), [])
+                if not numbers:
+                    files.append(
+                        {"filename": "demo_app/push.py", "additions": 1, "deletions": 0}
+                    )
+            return {
+                "status": status,
+                "commits": copy.deepcopy(commits),
+                "files": copy.deepcopy(files),
+            }
         if rest[0] == "commits" and rest[2] == "pulls":
             return [
                 copy.deepcopy(self.pulls[(repo, number)])

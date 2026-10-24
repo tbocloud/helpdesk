@@ -317,9 +317,14 @@ def branch_head(repo: str, branch: str) -> str:
 
 
 def compare(repo: str, base: str, head: str) -> dict:
-    """`{status, commits}` from `base` to `head`, oldest commit first (GitHub lists at most 250)."""
+    """`{status, commits, files}` from `base` to `head`, oldest commit first (GitHub lists at
+    most 250 commits and 300 files)."""
     found = request("GET", f"/repos/{repo}/compare/{base}...{head}") or {}
-    return {"status": found.get("status") or "", "commits": found.get("commits") or []}
+    return {
+        "status": found.get("status") or "",
+        "commits": found.get("commits") or [],
+        "files": found.get("files") or [],
+    }
 
 
 def commit_pulls(repo: str, sha: str) -> list[dict]:

@@ -28,8 +28,8 @@ class SiteUnreachable(Exception):
     pass
 
 
-def _call(client, run, tool: str, args: dict):
-    result = client.call_tool(tool, args, session_id=f"deploy-{run.name}")
+def _call(client, session: str, tool: str, args: dict):
+    result = client.call_tool(tool, args, session_id=session)
     text = ((result.get("content") or [{}])[0] or {}).get("text") or ""
     if result.get("isError"):
         raise SiteUnreachable(text[:300])
@@ -80,8 +80,7 @@ def named_documents(run) -> list[tuple[str, str]]:
 
 
 def check(run, request) -> list[dict]:
-    from helpdesk.mcp_client import MCPClient
-
+    """The check after a Copilot fix's deploy, through the ticket's connection."""
     if not run.connection:
         return [
             {
@@ -90,10 +89,45 @@ def check(run, request) -> list[dict]:
                 "detail": _("the ticket has no connection to the customer's site"),
             }
         ]
-    client = MCPClient(run.connection)
+    return site_rows(
+        run.connection, f"deploy-{run.name}", request, named_documents(run)
+    )
+
+
+def check_release(request) -> list[dict]:
+    """The check after a release: every site through its own site card's connection."""
+    rows = []
+    for site in request.sites:
+        connection = (
+            frappe.db.get_value("HDS Site Registry", site.registry, "connection")
+            if site.registry
+            else None
+        )
+        if not connection:
+            rows.append(
+                {
+                    "check": _("the check after the deploy of {0}").format(site.site),
+                    "result": "not_run",
+                    "detail": _("its site card has no connection to the site"),
+                }
+            )
+            continue
+        found = site_rows(connection, f"deploy-{request.name}", request, [])
+        if len(request.sites) > 1:
+            for row in found:
+                row["check"] = f"{site.site}: {row['check']}"
+        rows += found
+    return rows
+
+
+def site_rows(connection: str, session: str, request, documents) -> list[dict]:
+    """One site after a deploy: it runs the merged commit, no new errors, the scheduler running, the named documents open."""
+    from helpdesk.mcp_client import MCPClient
+
+    client = MCPClient(connection)
     app = request.apps[0]
     started = get_datetime(request.started_at)
-    identity = _call(client, run, "get_code_identity", {"apps": [app.app]})
+    identity = _call(client, session, "get_code_identity", {"apps": [app.app]})
     entry = (
         next(
             (
@@ -116,10 +150,10 @@ def check(run, request) -> list[dict]:
             f"{app.app} at {commit[:12] or '?'}",
         )
     ]
-    status = _call(client, run, "get_deploy_status", {"since": str(started)}) or {}
+    status = _call(client, session, "get_deploy_status", {"since": str(started)}) or {}
     before = _call(
         client,
-        run,
+        session,
         "get_error_log",
         {"since": str(started - timedelta(days=7)), "until": str(started), "limit": 50},
     )
@@ -143,9 +177,9 @@ def check(run, request) -> list[dict]:
             and not status.get("maintenance_mode"),
         )
     )
-    for doctype, name in named_documents(run):
+    for doctype, name in documents:
         try:
-            _call(client, run, "get_doc", {"doctype": doctype, "name": name})
+            _call(client, session, "get_doc", {"doctype": doctype, "name": name})
             rows.append(_row(_("{0} {1} opens").format(doctype, name), True))
         except SiteUnreachable as e:
             rows.append(_row(_("{0} {1} opens").format(doctype, name), False, str(e)))
@@ -156,10 +190,13 @@ def step(request):
     """Checks the site once; a site that cannot answer is asked again until the time is up."""
     from helpdesk.copilot import deploy
 
-    run = frappe.get_doc("HDS Copilot Run", request.run)
     limit = copilot_settings.get_settings().get("deploy_check_minutes") or 30
     try:
-        rows = check(run, request)
+        rows = (
+            check(frappe.get_doc("HDS Copilot Run", request.run), request)
+            if request.run
+            else check_release(request)
+        )
     except Exception as e:  # the connector or the site could not answer
         if (
             now_datetime() - get_datetime(request.modified)

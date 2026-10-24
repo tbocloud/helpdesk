@@ -977,6 +977,10 @@ def press(
 
 
 def _press(user: str, channel: str, chat, verb: str, data: dict, inputs: dict) -> dict:
+    if verb in ("release_approve", "release_now", "release_reject"):
+        from helpdesk.copilot import releases
+
+        return releases.press_button(user, channel, verb, data, inputs)
     if verb in ("approve", "reject", "snooze", "show_fix"):
         approval = frappe.get_doc("HDS Copilot Approval", data.get("approval"))
         if verb == "show_fix":

@@ -4,11 +4,14 @@
 """Releases (Phase 7): every merge into a branch a customer site runs goes out the same way."""
 
 import json
+from datetime import timedelta
+from unittest.mock import patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from helpdesk.copilot import deploy, releases
+from helpdesk.api import copilot as api
+from helpdesk.copilot import assistant, deploy, releases
 from helpdesk.test_utils import (
     FakeGitHub,
     FakePress,
@@ -19,13 +22,20 @@ from helpdesk.test_utils import (
     make_copilot_settings,
     make_customer_project,
     make_site_registry,
+    make_support_connection,
     make_task,
     make_ticket,
+    site_tool_replies,
 )
 
 REPO = "tbocloud/demo-app"
 RUNNING = "o" * 40  # what the bench runs before any release
 A, B, C = "a" * 40, "b" * 40, "c" * 40
+
+
+def head(sha: str) -> str:
+    """The last commit of the pull request that `sha` merged."""
+    return "h" + sha[1:]
 
 
 class ReleaseCase(FrappeTestCase):
@@ -76,10 +86,24 @@ class ReleaseCase(FrappeTestCase):
             "deployed_commit": RUNNING,
         }
 
-    def merged(self, number: int, sha: str, author: str = "dev-one", body: str = ""):
-        """A pull request merged into main, landing as commit `sha`."""
+    def merged(
+        self,
+        number: int,
+        sha: str,
+        author: str = "dev-one",
+        body: str = "",
+        files=None,
+    ):
+        """A pull request merged into main, landing as commit `sha`; its CI ran (green) on its head, head(sha)."""
         self.github.add_pull(
-            REPO, number, sha, body=body, author=author, merged=True, state="closed"
+            REPO,
+            number,
+            head(sha),
+            files=files,
+            body=body,
+            author=author,
+            merged=True,
+            state="closed",
         )
         self.github.commit(
             REPO, sha, message=f"Merge #{number}", author=author, pull=number
@@ -307,3 +331,382 @@ class TestReleaseWatch(ReleaseCase):
 
         self.assertEqual(frappe.db.count("Error Log", logged) - before, 1)
         self.assertEqual(self.releases_of(), [])
+
+
+class GateCase(ReleaseCase):
+    def setUp(self):
+        super().setUp()
+        self.notified = []
+        patcher = patch(
+            "helpdesk.work_reminders.notify_users",
+            side_effect=lambda *a, **k: self.notified.append((a, k)),
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        project = make_customer_project(self.customer, "Release Co support")
+        self.task = make_task(project, "Margin report").name
+        # the approver wrote it: they are on its task
+        frappe.db.set_value("Task", self.task, "_assign", json.dumps([self.approver]))
+
+    def told(self, user: str) -> list[str]:
+        return [a[3] for a, _k in self.notified if user in a[0]]
+
+    def waiting(self, sha: str = A, number: int = 5, files=None, checks=None):
+        """A merged pull request, the release it makes, and its CI gate; `checks`: its CI instead of green."""
+        self.merged(number, sha, body=f"Closes {self.task}", files=files)
+        if checks:
+            self.github.set_checks(head(sha), checks)
+        releases.watch()
+        releases.run_due()
+        return self.only_release()
+
+
+class TestCiGate(GateCase):
+    def test_green_ci_asks_one_approver_who_wrote_none_of_it(self):
+        release = self.waiting()
+
+        self.assertEqual(release.status, "Waiting for approval")
+        self.assertEqual(release.ci_status, "Passed")
+        self.assertIn("1 checks green on 1 commits", release.ci_detail)
+        self.assertEqual(release.assigned_to, self.senior)
+        self.assertEqual(release.approval_hash, releases.approval_hash(release))
+        self.assertTrue(self.told(self.senior))
+        card = frappe.get_all(
+            assistant.MESSAGE,
+            filters={"release": release.name, "user": self.senior},
+            pluck="card",
+        )
+        self.assertIn("release_approve", card[0])
+
+    def test_red_ci_waits_and_tells_the_people_who_wrote_it_once(self):
+        release = self.waiting(checks={"tests": "failure"})
+
+        self.assertEqual(
+            (release.status, release.ci_status), ("Waiting for CI", "Failed")
+        )
+        self.assertIn("tests", release.ci_detail)
+        self.assertEqual(len(self.told(self.approver)), 1)
+        releases.run_due()
+        self.assertEqual(len(self.told(self.approver)), 1)
+
+    def test_ci_still_running_waits(self):
+        release = self.waiting(checks={"tests": None})
+
+        self.assertEqual(
+            (release.status, release.ci_status), ("Waiting for CI", "Pending")
+        )
+        self.assertIn("still running", release.ci_detail)
+
+    def test_a_push_without_ci_fails_and_only_a_senior_lets_it_through(self):
+        self.github.commit(REPO, A, message="hotfix", author="pusher")
+        releases.watch()
+        releases.run_due()
+        release = self.only_release()
+        self.assertEqual(release.ci_status, "Failed")
+        self.assertIn("no CI ran on", release.ci_detail)
+
+        with self.assertRaises(frappe.PermissionError):
+            releases.override_ci(release, self.approver, "urgent")
+        with self.assertRaises(frappe.ValidationError):
+            releases.override_ci(release, self.senior, " ")
+        releases.override_ci(release, self.senior, "the customer is down")
+
+        release.reload()
+        self.assertEqual(release.status, "Waiting for approval")
+        self.assertEqual(release.ci_status, "Overridden")
+        self.assertEqual(release.ci_override_reason, "the customer is down")
+        self.assertTrue(release.needs_senior)
+        self.assertEqual(release.assigned_to, self.senior)
+
+    def test_a_sensitive_change_needs_a_senior(self):
+        release = self.waiting(
+            files=[
+                {
+                    "filename": "demo_app/hooks.py",
+                    "additions": 2,
+                    "deletions": 0,
+                    "patch": "+doc_events = {}",
+                }
+            ]
+        )
+
+        self.assertEqual(release.risk_level, "high")
+        self.assertTrue(release.needs_senior)
+        self.assertIn("hooks.py", release.risk_reasons)
+
+
+class TestDecision(GateCase):
+    def test_the_approver_schedules_it_for_the_next_window(self):
+        release = self.waiting()
+
+        result = releases.decide(
+            release.name, self.senior, True, expected_hash=release.approval_hash
+        )
+
+        release.reload()
+        self.assertEqual((release.status, release.when), ("Scheduled", "Tonight"))
+        self.assertEqual(result["status"], "Scheduled")
+        self.assertEqual(
+            (release.decided_by, release.requested_by), (self.senior, self.senior)
+        )
+        self.assertTrue(
+            abs((release.scheduled_for - deploy.next_opening()).total_seconds()) < 120
+        )
+        card = json.loads(
+            frappe.get_all(
+                assistant.MESSAGE, filters={"release": release.name}, pluck="card"
+            )[0]
+        )
+        self.assertFalse(card["actions"])  # the card shows the decision
+
+    def test_the_people_who_wrote_it_and_non_seniors_where_needed_may_not_decide(self):
+        release = self.waiting()
+        with self.assertRaisesRegex(frappe.PermissionError, "You wrote part"):
+            releases.decide(release.name, self.approver, True)
+
+        frappe.db.set_value(deploy.DEPLOY, release.name, "needs_senior", 1)
+        frappe.db.set_value("Task", self.task, "_assign", "[]")
+        with self.assertRaisesRegex(frappe.PermissionError, "senior"):
+            releases.decide(release.name, self.approver, True)
+
+    def test_a_rejection_needs_a_reason_and_reaches_the_people_who_wrote_it(self):
+        release = self.waiting()
+        with self.assertRaises(frappe.ValidationError):
+            releases.decide(release.name, self.senior, False, "")
+
+        releases.decide(release.name, self.senior, False, "breaks the POS invoices")
+
+        release.reload()
+        self.assertEqual(release.status, "Rejected")
+        self.assertIn("breaks the POS invoices", self.told(self.approver)[-1])
+
+    def test_deploy_now_is_for_seniors_and_managers(self):
+        frappe.db.set_value("Task", self.task, "_assign", json.dumps([self.senior]))
+        release = self.waiting()
+        self.assertEqual(release.assigned_to, self.approver)
+        with self.assertRaises(frappe.PermissionError):
+            releases.decide(release.name, self.approver, True, when="now")
+
+        releases.decide(release.name, self.approver, True)
+        self.assertEqual(
+            frappe.db.get_value(deploy.DEPLOY, release.name, "when"), "Tonight"
+        )
+
+    def test_a_card_seen_before_the_release_changed_is_refused(self):
+        release = self.waiting()
+        with self.assertRaisesRegex(frappe.ValidationError, "changed"):
+            releases.decide(release.name, self.senior, True, expected_hash="old")
+
+    def test_the_first_decision_wins(self):
+        release = self.waiting()
+        releases.decide(release.name, self.senior, True)
+        with self.assertRaisesRegex(frappe.ValidationError, "already decided"):
+            releases.decide(release.name, self.senior, False, "no")
+
+    def test_new_commits_after_the_card_ask_for_ci_and_approval_again(self):
+        release = self.waiting()
+        self.merged(6, B)
+        releases.watch()
+
+        release.reload()
+        self.assertEqual(release.status, "Waiting for CI")
+        with self.assertRaisesRegex(frappe.ValidationError, "not waiting"):
+            releases.decide(release.name, self.senior, True)
+
+    def test_the_buttons_in_teams_or_the_panel_decide_it_as_the_person(self):
+        release = self.waiting()
+
+        result = assistant.press(
+            self.senior,
+            "Web",
+            "release_approve",
+            {"release": release.name, "hash": release.approval_hash},
+            {},
+        )
+
+        self.assertEqual(
+            frappe.db.get_value(deploy.DEPLOY, release.name, "status"), "Scheduled"
+        )
+        self.assertIn("scheduled", result["card"]["title"].lower())
+        logged = frappe.get_all(
+            "HDS Copilot Call Log",
+            filters={"tool": "decide_release", "user": self.senior},
+            fields=["status", "kind"],
+        )
+        self.assertEqual([(r.status, r.kind) for r in logged], [("OK", "Web")])
+
+    def test_reject_from_a_card_needs_the_reason_box(self):
+        release = self.waiting()
+
+        result = assistant.press(
+            self.senior, "Web", "release_reject", {"release": release.name}, {}
+        )
+
+        self.assertIn("reason", result["replies"][0]["lines"][0])
+        self.assertEqual(
+            frappe.db.get_value(deploy.DEPLOY, release.name, "status"),
+            "Waiting for approval",
+        )
+
+    def test_the_desk_endpoints_follow_the_same_rules(self):
+        release = self.waiting()
+        frappe.set_user(self.senior)
+
+        seen = api.get_release(release.name)
+        self.assertTrue(seen["may_decide"])
+        api.decide_release(release.name, 1, expected_hash=seen["hash"])
+
+        self.assertEqual(
+            frappe.db.get_value(deploy.DEPLOY, release.name, "status"), "Scheduled"
+        )
+        api.cancel_release(release.name, "the customer asked to wait")
+        self.assertEqual(
+            frappe.db.get_value(deploy.DEPLOY, release.name, "status"), "Cancelled"
+        )
+
+
+class TestReleaseDeploy(GateCase):
+    def setUp(self):
+        super().setUp()
+        frappe.cache().delete(deploy._lock_key())
+        self.addCleanup(lambda: frappe.cache().delete(deploy._lock_key()))
+        self.press.apps[0]["next_hash"] = A
+
+    def approved(self):
+        release = self.waiting()
+        releases.decide(release.name, self.senior, True)
+        frappe.db.set_value(
+            deploy.DEPLOY,
+            release.name,
+            "scheduled_for",
+            frappe.utils.now_datetime() - timedelta(minutes=1),
+        )
+        return frappe.get_doc(deploy.DEPLOY, release.name)
+
+    def checked_site(self, commit=A, errors=None):
+        connection = make_support_connection(self.customer).name
+        self.card.db_set("connection", connection)
+        replies = {
+            "get_code_identity": [{"app": "demo_app", "commit": commit}],
+            "get_deploy_status": {
+                "scheduler_enabled": True,
+                "maintenance_mode": False,
+                "errors": {"top": [{"signature": s, "count": 1} for s in errors or []]},
+            },
+            "get_error_log": [],
+        }
+        client = patch("helpdesk.mcp_client.MCPClient")
+        mocked = client.start()
+        self.addCleanup(client.stop)
+        mocked.return_value.call_tool.side_effect = site_tool_replies(replies)
+
+    def test_an_approved_release_deploys_and_is_checked(self):
+        release = self.approved()
+        self.checked_site()
+
+        deploy.run_due()
+        release.reload()
+        self.assertEqual(release.status, "Deploying")
+        sent = self.press.deploys[0]
+        self.assertEqual([s["name"] for s in sent["sites"]], ["site1.example.com"])
+        self.assertEqual(sent["apps"][0]["hash"], A)
+
+        self.press.finish("Success")
+        deploy.run_due()
+        deploy.run_due()
+
+        release.reload()
+        self.assertEqual(release.status, "Succeeded")
+        self.assertIn("live and checked", self.told(self.approver)[-1])
+        self.assertTrue(deploy._take_lock("TBO-DEP-NEXT"))  # released
+
+    def test_a_new_error_after_the_deploy_fails_the_release_and_tells_people(self):
+        release = self.approved()
+        self.checked_site(
+            errors=["demo_app | demo_app.margin.validate | ZeroDivisionError"]
+        )
+
+        deploy.run_due()
+        self.press.finish("Success")
+        deploy.run_due()
+        deploy.run_due()
+
+        release.reload()
+        self.assertEqual(release.status, "Failed")
+        self.assertIn("ZeroDivisionError", release.error)
+        escalated = [k for _a, k in self.notified if k.get("escalate")]
+        self.assertTrue(escalated)
+
+    def test_two_releases_on_one_bench_go_in_one_press_deploy(self):
+        first = self.approved()
+        self.press.apps.append(
+            {
+                "app": "other_app",
+                "source": "SRC-2",
+                "release": "REL-3",
+                "hash": "p" * 40,
+                "next_release": "REL-4",
+                "next_hash": C,
+            }
+        )
+        second = frappe.get_doc(
+            {
+                "doctype": deploy.DEPLOY,
+                "status": "Scheduled",
+                "source": "Pull request",
+                "repository": "tbocloud/other-app",
+                "branch": "main",
+                "release_group": "bench-1",
+                "scheduled_for": frappe.utils.now_datetime() - timedelta(minutes=1),
+                "sites": [{"site": "site1.example.com", "customer": self.customer}],
+                "apps": [{"app": "other_app", "from_commit": "p" * 40, "to_commit": C}],
+            }
+        ).insert(ignore_permissions=True)
+
+        deploy.run_due()
+
+        self.assertEqual(len(self.press.deploys), 1)
+        self.assertEqual(
+            sorted(a["app"] for a in self.press.deploys[0]["apps"]),
+            ["demo_app", "other_app"],
+        )
+        first.reload()
+        second.reload()
+        self.assertEqual((first.status, second.status), ("Deploying", "Deploying"))
+        self.assertEqual(first.train, second.train)
+
+    def test_copilot_fixes_inside_the_release_are_resolved_with_it(self):
+        ticket = make_ticket(subject="Copilot fixed this", customer=self.customer).name
+        run = make_copilot_run(ticket, state="Merged")
+        frappe.get_doc(
+            {
+                "doctype": "HDS Copilot Approval",
+                "run": run.name,
+                "ticket": ticket,
+                "kind": "Code Change",
+                "status": "Merged",
+                "repo": REPO,
+                "number": 7,
+            }
+        ).insert(ignore_permissions=True)
+        self.github.add_pull(REPO, 7, head(B), merged=True, state="closed")
+        self.github.commit(REPO, B, pull=7)
+        self.merged(8, A)
+        self.press.apps[0]["next_hash"] = A
+        releases.watch()
+        releases.run_due()
+        release = self.only_release()
+        releases.decide(release.name, self.senior, True, when="now")
+        self.checked_site()
+
+        deploy.run_due()
+        self.press.finish("Success")
+        deploy.run_due()
+        deploy.run_due()
+
+        self.assertEqual(
+            frappe.db.get_value(deploy.DEPLOY, release.name, "status"), "Succeeded"
+        )
+        self.assertEqual(
+            frappe.db.get_value("HDS Copilot Run", run.name, "state"), "Resolved"
+        )
