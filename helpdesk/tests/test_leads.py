@@ -49,6 +49,27 @@ class TestLeads(FrappeTestCase):
         self.assertFalse(get_user()["can_use_leads"])
         self.assertEqual(self.crm.lead_calls, [])
 
+    def test_the_digital_team_never_sees_leads(self):
+        from helpdesk.content_team import (
+            DM_EMPLOYEE_ROLE,
+            SALES_EMPLOYEE_ROLE,
+            ensure_role,
+        )
+        from helpdesk.integrations.crm.leads import can_use_leads
+
+        ensure_role()
+        user = frappe.get_doc("User", SUPPORT)
+        user.add_roles("Agent Manager", DM_EMPLOYEE_ROLE)
+        self.assertFalse(can_use_leads(SUPPORT))
+
+        # a salesperson who also does digital work keeps Leads
+        user.add_roles(SALES_EMPLOYEE_ROLE)
+        self.assertTrue(can_use_leads(SUPPORT))
+        user.remove_roles(SALES_EMPLOYEE_ROLE)
+
+        user.add_roles("System Manager")
+        self.assertTrue(can_use_leads(SUPPORT))
+
     def test_reads_go_to_the_crm_site_as_the_signed_in_person(self):
         self.as_bde()
         result = leads_api.list_leads(
