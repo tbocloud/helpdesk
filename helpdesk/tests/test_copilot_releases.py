@@ -11,6 +11,7 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from helpdesk.api import copilot as api
+from helpdesk.api import copilot_worker
 from helpdesk.copilot import assistant, deploy, releases
 from helpdesk.test_utils import (
     FakeGitHub,
@@ -65,6 +66,7 @@ class ReleaseCase(FrappeTestCase):
             **{
                 "enabled": 1,
                 "releases_enabled": 1,
+                "release_staging": 0,
                 "release_repositories": f"https://github.com/{REPO}\n",
                 "press_url": "https://press.example.com",
                 "press_api_key": "k",
@@ -114,7 +116,7 @@ class ReleaseCase(FrappeTestCase):
             frappe.get_doc(deploy.DEPLOY, name)
             for name in frappe.get_all(
                 deploy.DEPLOY,
-                filters={"repository": repo},
+                filters={"repository": repo, "staging_for": ["is", "not set"]},
                 order_by="creation asc",
                 pluck="name",
             )
@@ -710,3 +712,272 @@ class TestReleaseDeploy(GateCase):
         self.assertEqual(
             frappe.db.get_value("HDS Copilot Run", run.name, "state"), "Resolved"
         )
+
+
+class StagingCase(TestReleaseDeploy):
+    """Releases with staging on: the sandbox check by a worker, or the customer's UAT site."""
+
+    def setUp(self):
+        super().setUp()
+        self.settings(release_staging=1, release_check_hours=6)
+        # queued runs of other tests would be handed out before a check
+        frappe.db.set_value(
+            "HDS Copilot Run", {"state": "Queued"}, "state", "Cancelled"
+        )
+
+    # the deploy tests are inherited for their helpers only
+    test_an_approved_release_deploys_and_is_checked = None
+    test_a_new_error_after_the_deploy_fails_the_release_and_tells_people = None
+    test_two_releases_on_one_bench_go_in_one_press_deploy = None
+    test_copilot_fixes_inside_the_release_are_resolved_with_it = None
+
+
+class TestSandboxCheck(StagingCase):
+    def test_without_a_uat_site_a_worker_checks_it_on_the_sandbox(self):
+        release = self.waiting()
+        self.assertEqual(
+            (release.status, release.staging, release.staging_status),
+            ("Staging", "Sandbox", "Queued"),
+        )
+        self.assertEqual(
+            copilot_worker.claim_job("w1"), {}
+        )  # a worker that can't check
+
+        job = copilot_worker.claim_job("w1", capabilities="investigate, release_check")
+
+        self.assertEqual((job["kind"], job["release"]), ("release_check", release.name))
+        context = job["context"]
+        self.assertEqual((context["app"], context["commit"]), ("demo_app", A))
+        self.assertEqual(context["apps"][0]["commit"], A)
+        self.assertEqual(
+            frappe.db.get_value(deploy.DEPLOY, release.name, "staging_status"),
+            "Running",
+        )
+        self.assertEqual(
+            copilot_worker.claim_job("w2", capabilities="release_check"), {}
+        )
+
+        result = copilot_worker.release_check_result(
+            release.name,
+            job["lease_token"],
+            json.dumps(
+                [
+                    {"check": "migrate", "result": "pass"},
+                    {"check": "demo_app tests", "result": "pass", "detail": "9 passed"},
+                    {"check": "no new errors", "result": "pass"},
+                ]
+            ),
+            "a fresh ERPNext site with the customer's apps",
+        )
+
+        release.reload()
+        self.assertEqual(result["staging_status"], "Passed")
+        self.assertEqual(
+            (release.status, release.staging_status), ("Waiting for approval", "Passed")
+        )
+        self.assertIn("9 passed", release.staging_detail)
+        self.assertEqual(release.assigned_to, self.senior)
+
+    def test_a_failed_check_waits_for_a_fix_or_a_senior(self):
+        release = self.waiting()
+        job = releases.claim_check("w1")
+        releases.check_result(
+            release.name,
+            job["lease_token"],
+            [{"check": "migrate", "result": "fail", "detail": "patch failed"}],
+        )
+
+        release.reload()
+        self.assertEqual(
+            (release.status, release.staging_status), ("Staging", "Failed")
+        )
+        self.assertIn("patch failed", self.told(self.approver)[-1])
+
+        with self.assertRaises(frappe.PermissionError):
+            releases.override_ci(release, self.approver, "fine")
+        releases.override_ci(release, self.senior, "the patch only runs once")
+        release.reload()
+        self.assertEqual(release.status, "Waiting for approval")
+        self.assertTrue(release.needs_senior)
+
+    def test_a_lease_that_is_not_the_workers_is_refused(self):
+        release = self.waiting()
+        releases.claim_check("w1")
+        with self.assertRaises(frappe.PermissionError):
+            releases.check_result(release.name, "not-the-token", [])
+
+    def test_a_quiet_worker_loses_the_check_and_one_nobody_takes_is_not_run(self):
+        release = self.waiting()
+        releases.claim_check("w1")
+        frappe.db.set_value(
+            deploy.DEPLOY,
+            release.name,
+            "check_lease_expires",
+            frappe.utils.now_datetime() - timedelta(minutes=1),
+        )
+        releases.run_due()
+        self.assertEqual(
+            frappe.db.get_value(deploy.DEPLOY, release.name, "staging_status"), "Queued"
+        )
+
+        frappe.db.set_value(
+            deploy.DEPLOY,
+            release.name,
+            "modified",
+            frappe.utils.now_datetime() - timedelta(hours=7),
+            update_modified=False,
+        )
+        releases.run_due()
+
+        release.reload()
+        self.assertEqual(release.staging_status, "Not run")
+        self.assertIn("No worker checked", self.told(self.senior)[-1])
+
+    def test_new_commits_during_the_check_start_it_over(self):
+        release = self.waiting()
+        job = releases.claim_check("w1")
+        self.merged(6, B)
+        releases.watch()
+
+        release.reload()
+        self.assertEqual(
+            (release.status, release.staging_status), ("Waiting for CI", None)
+        )
+        with self.assertRaises(frappe.PermissionError):
+            releases.check_result(release.name, job["lease_token"], [])
+
+    def test_staging_off_goes_straight_to_the_approval(self):
+        self.settings(release_staging=0)
+        release = self.waiting()
+
+        self.assertEqual(
+            (release.status, release.staging_status),
+            ("Waiting for approval", "Not run"),
+        )
+
+
+class TestUatStaging(StagingCase):
+    def setUp(self):
+        super().setUp()
+        self.uat_card = make_site_registry(
+            self.customer,
+            environment="UAT",
+            press_site="uat.example.com",
+            press_release_group="bench-uat",
+            apps=[self.app_row()],
+        )
+        self.press.sites.append(
+            {"name": "uat.example.com", "server": "f1", "bench": "bench-uat-old"}
+        )
+
+    def uat_request(self, release):
+        return frappe.get_doc(deploy.DEPLOY, release.staging_request)
+
+    def test_the_customers_uat_site_takes_it_first(self):
+        release = self.waiting()
+        self.assertEqual(
+            (release.status, release.staging, release.staging_status),
+            ("Staging", "UAT site", "Queued"),
+        )
+        uat = self.uat_request(release)
+        self.assertEqual(
+            (uat.status, uat.staging_for, uat.release_group),
+            ("Scheduled", release.name, "bench-uat"),
+        )
+        self.assertEqual([s.site for s in uat.sites], ["uat.example.com"])
+
+        self.checked_site()
+        self.uat_card.db_set("connection", self.card.connection)
+        uat.db_set("scheduled_for", frappe.utils.now_datetime() - timedelta(minutes=1))
+        deploy.run_due()
+        self.press.finish("Success")
+        deploy.run_due()
+        deploy.run_due()
+
+        release.reload()
+        self.assertEqual(self.uat_request(release).status, "Succeeded")
+        self.assertEqual(
+            (release.status, release.staging_status), ("Waiting for approval", "Passed")
+        )
+
+    def test_a_failed_uat_deploy_fails_staging(self):
+        release = self.waiting()
+        uat = self.uat_request(release)
+        uat.db_set("scheduled_for", frappe.utils.now_datetime() - timedelta(minutes=1))
+        deploy.run_due()
+        self.press.finish("Failure")
+        deploy.run_due()
+
+        release.reload()
+        self.assertEqual(self.uat_request(release).status, "Failed")
+        self.assertEqual(
+            (release.status, release.staging_status), ("Staging", "Failed")
+        )
+
+    def test_new_commits_cancel_a_uat_deploy_not_yet_started(self):
+        release = self.waiting()
+        uat = self.uat_request(release)
+        self.merged(6, B)
+        releases.watch()
+
+        uat.reload()
+        release.reload()
+        self.assertEqual(uat.status, "Cancelled")
+        self.assertEqual(release.status, "Waiting for CI")
+
+
+class TestUndoAndRecord(TestReleaseDeploy):
+    test_an_approved_release_deploys_and_is_checked = None
+    test_a_new_error_after_the_deploy_fails_the_release_and_tells_people = None
+    test_two_releases_on_one_bench_go_in_one_press_deploy = None
+    test_copilot_fixes_inside_the_release_are_resolved_with_it = None
+
+    def test_a_failed_check_after_reverts_each_pull_request_newest_first(self):
+        self.merged(4, C)
+        self.merged(5, A)
+        releases.watch()
+        releases.run_due()
+        release = self.only_release()
+        releases.decide(release.name, self.senior, True, when="now")
+        self.checked_site(errors=["demo_app | demo_app.margin.validate | KeyError"])
+
+        deploy.run_due()
+        self.press.finish("Success")
+        deploy.run_due()
+        deploy.run_due()
+
+        self.assertEqual(
+            frappe.db.get_value(deploy.DEPLOY, release.name, "status"), "Failed"
+        )
+        self.assertEqual(self.github.reverted, [(REPO, 5), (REPO, 4)])
+        escalated = [a[3] for a, k in self.notified if k.get("escalate")]
+        self.assertIn("Reverted in", escalated[-1])
+
+    def test_a_press_failure_is_not_reverted(self):
+        release = self.approved()
+        deploy.run_due()
+        self.press.finish("Failure")
+        deploy.run_due()
+
+        self.assertEqual(
+            frappe.db.get_value(deploy.DEPLOY, release.name, "status"), "Failed"
+        )
+        self.assertEqual(self.github.reverted, [])
+
+    def test_the_weekly_email_has_a_releases_section(self):
+        from frappe.utils import add_days, getdate
+
+        release = self.approved()
+        frappe.db.set_value(
+            deploy.DEPLOY,
+            release.name,
+            {"status": "Succeeded", "finished_at": frappe.utils.now_datetime()},
+        )
+        today = getdate()
+
+        numbers = releases.week_numbers(add_days(today, -1), today)
+
+        self.assertEqual((numbers["made"], numbers["succeeded"]), (1, 1))
+        self.assertIsNotNone(numbers["median_wait_hours"])
+        self.assertEqual(numbers["bypasses"], 0)
+        self.assertIn("Releases", releases.week_html(add_days(today, -1), today))

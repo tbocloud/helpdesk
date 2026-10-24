@@ -64,7 +64,9 @@
 		"message_templates",
 		"releases_section",
 		"releases_enabled",
-		"release_repositories"
+		"release_repositories",
+		"release_staging",
+		"release_check_hours"
 	],
 	"fields": [
 		{
@@ -440,11 +442,27 @@
 			"fieldname": "release_repositories",
 			"fieldtype": "Small Text",
 			"label": "Repositories in the pipeline"
+		},
+		{
+			"default": "1",
+			"depends_on": "releases_enabled",
+			"description": "The customer's UAT site when a card runs the branch there, else the sandbox check by a worker. Off: releases go straight to their approval.",
+			"fieldname": "release_staging",
+			"fieldtype": "Check",
+			"label": "Stage before the approval"
+		},
+		{
+			"default": "6",
+			"depends_on": "releases_enabled",
+			"description": "After this, the check is marked not run and a senior decides whether the release goes on.",
+			"fieldname": "release_check_hours",
+			"fieldtype": "Int",
+			"label": "Hours a sandbox check may wait for a worker"
 		}
 	],
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-10-24 12:00:00.000000",
+	"modified": "2026-10-24 16:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Copilot Settings",

@@ -21,6 +21,17 @@
 		"column_break_ci",
 		"ci_override_by",
 		"ci_override_reason",
+		"staging_section",
+		"staging",
+		"staging_status",
+		"staging_request",
+		"staging_for",
+		"column_break_staging",
+		"staging_detail",
+		"check_worker",
+		"check_started_at",
+		"check_lease_expires",
+		"check_lease_hash",
 		"decision_section",
 		"needs_senior",
 		"risk_level",
@@ -167,6 +178,78 @@
 			"read_only": 1
 		},
 		{
+			"fieldname": "staging_section",
+			"fieldtype": "Section Break",
+			"label": "Staging"
+		},
+		{
+			"description": "Before the approval: the customer's UAT site when a card runs the branch there, else a fresh site with the customer's apps on the sandbox server",
+			"fieldname": "staging",
+			"fieldtype": "Select",
+			"label": "Staging",
+			"options": "\nUAT site\nSandbox",
+			"read_only": 1
+		},
+		{
+			"fieldname": "staging_status",
+			"fieldtype": "Select",
+			"label": "Staging result",
+			"options": "\nQueued\nRunning\nPassed\nFailed\nNot run",
+			"read_only": 1
+		},
+		{
+			"fieldname": "staging_request",
+			"fieldtype": "Link",
+			"label": "UAT deploy",
+			"options": "HDS Deploy Request",
+			"read_only": 1
+		},
+		{
+			"description": "On a UAT deploy: the release it stages",
+			"fieldname": "staging_for",
+			"fieldtype": "Link",
+			"label": "Staging for",
+			"options": "HDS Deploy Request",
+			"read_only": 1
+		},
+		{
+			"fieldname": "column_break_staging",
+			"fieldtype": "Column Break",
+			"label": ""
+		},
+		{
+			"fieldname": "staging_detail",
+			"fieldtype": "Code",
+			"label": "Staging checks",
+			"options": "JSON",
+			"read_only": 1
+		},
+		{
+			"fieldname": "check_worker",
+			"fieldtype": "Data",
+			"label": "Checked by worker",
+			"read_only": 1
+		},
+		{
+			"fieldname": "check_started_at",
+			"fieldtype": "Datetime",
+			"label": "Check started",
+			"read_only": 1
+		},
+		{
+			"fieldname": "check_lease_expires",
+			"fieldtype": "Datetime",
+			"label": "Check lease expires",
+			"read_only": 1
+		},
+		{
+			"fieldname": "check_lease_hash",
+			"fieldtype": "Data",
+			"hidden": 1,
+			"label": "Check lease",
+			"read_only": 1
+		},
+		{
 			"fieldname": "decision_section",
 			"fieldtype": "Section Break",
 			"label": "Approval"
@@ -270,7 +353,7 @@
 			"in_list_view": 1,
 			"in_standard_filter": 1,
 			"label": "Status",
-			"options": "Waiting for CI\nWaiting for approval\nScheduled\nWaiting for Press\nDeploying\nChecking\nSucceeded\nFailed\nRejected\nCancelled",
+			"options": "Waiting for CI\nStaging\nWaiting for approval\nScheduled\nWaiting for Press\nDeploying\nChecking\nSucceeded\nFailed\nRejected\nCancelled",
 			"read_only": 1,
 			"search_index": 1
 		},
@@ -386,7 +469,7 @@
 		}
 	],
 	"links": [],
-	"modified": "2026-10-24 14:00:00.000000",
+	"modified": "2026-10-24 16:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Deploy Request",

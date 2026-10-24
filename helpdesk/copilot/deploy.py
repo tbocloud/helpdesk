@@ -752,8 +752,12 @@ def fail(request, reason: str):
     if not request.run:
         from helpdesk.copilot import releases
 
+        # the site ran the new code and the check after failed: the release is reverted
+        after_check = request.status == "Checking"
         _release_lock(request.name)
-        return releases.failed(request, reason, _press_links(request))
+        return releases.failed(
+            request, reason, _press_links(request), after_check=after_check
+        )
     request.db_set({"status": "Failed", "error": reason, "finished_at": now_datetime()})
     _release_lock(request.name)
     run = frappe.get_doc("HDS Copilot Run", request.run)

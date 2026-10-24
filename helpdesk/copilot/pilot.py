@@ -362,6 +362,8 @@ def send_weekly_email(now=None, force: bool = False):
     recipients = pilot_recipients()
     if not recipients:
         return None
+    from helpdesk.copilot import releases
+
     rows = pilot_rows(week_start, week_end)
     frappe.sendmail(
         recipients=recipients,
@@ -370,7 +372,8 @@ def send_weekly_email(now=None, force: bool = False):
         ),
         template="new_notification",
         args={
-            "body_content": weekly_email_html(rows, week_start, week_end),
+            "body_content": weekly_email_html(rows, week_start, week_end)
+            + releases.week_html(week_start, week_end),
             "doc_link": get_url(
                 f"/app/query-report/Copilot Pilot?from_date={week_start}&to_date={week_end}"
             ),

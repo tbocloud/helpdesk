@@ -197,6 +197,15 @@ def push_token(repo: str) -> dict:
     return _mint(installation(repo), [repo.split("/", 1)[1]], PUSH_PERMISSIONS)
 
 
+def read_token(repo: str) -> str:
+    """A worker's key to clone `repo` for a release's sandbox check: read only, one hour, never kept."""
+    return _mint(
+        installation(repo),
+        [repo.split("/", 1)[1]],
+        {"contents": "read", "metadata": "read"},
+    )["token"]
+
+
 def bot_login() -> str:
     """The login GitHub shows for the App's pull requests and commits (`<slug>[bot]`), kept a day."""
     key = f"{CACHE_PREFIX}bot_login"

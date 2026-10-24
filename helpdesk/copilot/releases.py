@@ -35,7 +35,7 @@ from helpdesk.copilot.press import PressError
 
 DEPLOY = deploy.DEPLOY
 # a release still takes in later commits until it is approved
-GROWING = ("Waiting for CI", "Waiting for approval")
+GROWING = ("Waiting for CI", "Staging", "Waiting for approval")
 MAX_COMMITS = 100
 SEEN_KEY = "copilot_release_seen"
 TROUBLE_HOURS = 6
@@ -328,6 +328,7 @@ def grow(doc, head: str, changes: list[dict]):
     sites = [{"customer": row.customer, "site": row.site} for row in doc.sites]
     others = [s for s in (doc.other_sites or "").splitlines() if s]
     doc.apps[0].to_commit = head
+    cancel_staging(doc)
     doc.update(
         {
             "status": "Waiting for CI",
@@ -336,6 +337,11 @@ def grow(doc, head: str, changes: list[dict]):
             "ci_override_by": None,
             "ci_override_reason": None,
             "approval_hash": None,
+            "staging": None,
+            "staging_status": None,
+            "staging_detail": None,
+            "staging_request": None,
+            "check_lease_hash": None,
             **_fields(changes, others, sites),
         }
     )
@@ -404,6 +410,7 @@ def run_due():
             frappe.log_error(
                 title=_("Copilot release {0} could not move on").format(name)
             )
+    expire_checks()
     remind()
 
 
@@ -472,23 +479,32 @@ def gate(release):
             )
         return
     release.db_set({"ci_status": "Passed", "ci_detail": result["detail"]})
-    ask_approval(release)
+    start_staging(release)
 
 
 def override_ci(release, user: str, reason: str):
-    """A senior lets a release with red or missing CI go to its approval; the reason is kept."""
-    if release.status != "Waiting for CI":
-        frappe.throw(_("Only a release waiting for CI can be let through."))
+    """A senior lets a release through red or missing CI, or a staging check that failed or
+    never ran, to its approval; the reason is kept and the approval needs a senior."""
+    staging = release.status == "Staging" and release.staging_status in (
+        "Failed",
+        "Not run",
+    )
+    if release.status != "Waiting for CI" and not staging:
+        frappe.throw(
+            _(
+                "Only a release waiting for CI, or whose staging check failed or never ran, can be let through."
+            )
+        )
     if user not in approvals.seniors():
         frappe.throw(
-            _("Only a senior approver may let a release through without green CI."),
+            _("Only a senior approver may let a release through without its checks."),
             frappe.PermissionError,
         )
     if not (reason or "").strip():
-        frappe.throw(_("Say why the release may go without green CI."))
+        frappe.throw(_("Say why the release may go on without its checks."))
     release.db_set(
         {
-            "ci_status": "Overridden",
+            "ci_status": release.ci_status if staging else "Overridden",
             "ci_override_by": user,
             "ci_override_reason": reason.strip()[:1000],
             "needs_senior": 1,
@@ -496,9 +512,11 @@ def override_ci(release, user: str, reason: str):
     )
     release.add_comment(
         "Info",
-        _("{0} let it through without green CI: {1}").format(
-            frappe.utils.get_fullname(user), reason.strip()
-        ),
+        (
+            _("{0} let it through without its staging check: {1}")
+            if staging
+            else _("{0} let it through without green CI: {1}")
+        ).format(frappe.utils.get_fullname(user), reason.strip()),
     )
     ask_approval(release)
 
@@ -873,6 +891,16 @@ def succeeded(release, results: list[dict]):
     """Deployed and checked: the people are told, and Copilot's fixes inside it are resolved."""
     from helpdesk.copilot import customer, runs
 
+    if release.staging_for:  # the UAT deploy of a release: it passed its staging
+        release.db_set(
+            {
+                "status": "Succeeded",
+                "finished_at": now_datetime(),
+                "check_results": json.dumps(results, indent=1),
+            }
+        )
+        return staging_done(frappe.get_doc(DEPLOY, release.staging_for), True, results)
+
     release.db_set(
         {
             "status": "Succeeded",
@@ -920,10 +948,23 @@ def succeeded(release, results: list[dict]):
     )
 
 
-def failed(release, reason: str, links: str = ""):
-    """The deploy or the check after failed: the people are told, with Press's links."""
+def failed(release, reason: str, links: str = "", after_check: bool = False):
+    """The deploy or the check after failed: the people are told, with Press's links. When
+    the site ran the new code and the check after failed, each pull request is reverted."""
     reason = str(reason)[:1000]
     release.db_set({"status": "Failed", "error": reason, "finished_at": now_datetime()})
+    if release.staging_for:  # the UAT deploy of a release: it failed its staging
+        return staging_done(
+            frappe.get_doc(DEPLOY, release.staging_for),
+            False,
+            [
+                {
+                    "check": _("the deploy to the UAT site"),
+                    "result": "fail",
+                    "detail": reason,
+                }
+            ],
+        )
     release.add_comment(
         "Info",
         frappe.utils.escape_html(_("The deploy failed: {0}").format(reason))
@@ -942,6 +983,7 @@ def failed(release, reason: str, links: str = ""):
         )
     from helpdesk.work_reminders import notify_users
 
+    reverts = undo(release) if after_check else []
     people = list(authors(release)) + [release.decided_by] + approvals.managers()
     notify_users(
         [p for p in dict.fromkeys(people) if p],
@@ -949,6 +991,11 @@ def failed(release, reason: str, links: str = ""):
         release.name,
         _("The release of {0} {1} failed: {2}").format(
             release.repository, release.branch, reason[:160]
+        )
+        + (
+            " " + _("Reverted in {0}.").format(", ".join(r["url"] for r in reverts))
+            if reverts
+            else ""
         ),
         escalate=True,
         once=False,
@@ -1017,3 +1064,502 @@ def press_button(user: str, channel: str, verb: str, data: dict, inputs: dict) -
         release.ticket,
     )
     return {"replies": [], "card": decided_card(frappe.get_doc(DEPLOY, release.name))}
+
+
+# --- staging (H25): the customer's UAT site, else the sandbox check by a worker -------------
+
+CHECK_LEASE_MINUTES = 60
+
+
+def uat_sites(release) -> tuple[str | None, list[dict]]:
+    """The UAT bench and sites of the release's customers whose cards run the same branch."""
+    from helpdesk.copilot.fixes import _repo_name
+
+    customers = {row.customer for row in release.sites if row.customer}
+    if not customers:
+        return None, []
+    found = {}
+    for card in frappe.get_all(
+        "HDS Site Registry",
+        filters={
+            "environment": "UAT",
+            "customer_name": ["in", list(customers)],
+            "press_site": ["is", "set"],
+            "press_release_group": ["is", "set"],
+        },
+        fields=["name", "customer_name", "press_site", "press_release_group"],
+        order_by="name asc",
+    ):
+        for row in frappe.get_all(
+            "HDS Site App",
+            filters={"parent": card.name, "parenttype": "HDS Site Registry"},
+            fields=["repository", "branch"],
+        ):
+            if (
+                _repo_name(row.repository) == release.repository
+                and row.branch == release.branch
+            ):
+                found.setdefault(card.press_release_group, []).append(
+                    {
+                        "site": card.press_site,
+                        "customer": card.customer_name,
+                        "registry": card.name,
+                    }
+                )
+    if not found:
+        return None, []
+    group = sorted(found)[0]
+    return group, found[group]
+
+
+def start_staging(release):
+    """After green CI and before the approval: the UAT site in the next window, else the sandbox check."""
+    if not copilot_settings.get_settings().get("release_staging"):
+        release.db_set(
+            {
+                "staging_status": "Not run",
+                "staging_detail": json.dumps(
+                    [
+                        {
+                            "check": _("staging"),
+                            "result": "not_run",
+                            "detail": _("switched off in HDS Copilot Settings"),
+                        }
+                    ]
+                ),
+            }
+        )
+        return ask_approval(release)
+    group, sites = uat_sites(release)
+    if group:
+        at = deploy.next_opening()
+        uat = frappe.get_doc(
+            {
+                "doctype": DEPLOY,
+                "status": "Scheduled",
+                "when": "Tonight",
+                "scheduled_for": at,
+                "requested_at": now_datetime(),
+                "source": release.source,
+                "repository": release.repository,
+                "branch": release.branch,
+                "release_group": group,
+                "staging_for": release.name,
+                "ticket": release.ticket,
+                "task": release.task,
+                "authors": release.authors,
+                "changes": release.changes,
+                "ci_status": release.ci_status,
+                "sites": sites,
+                "apps": [
+                    {
+                        "app": release.apps[0].app,
+                        "repository": release.repository,
+                        "to_commit": release.apps[0].to_commit,
+                    }
+                ],
+            }
+        ).insert(ignore_permissions=True)
+        release.db_set(
+            {
+                "status": "Staging",
+                "staging": "UAT site",
+                "staging_status": "Queued",
+                "staging_request": uat.name,
+            }
+        )
+        release.add_comment(
+            "Info",
+            _("Staging on the UAT site {0} {1}.").format(
+                ", ".join(s["site"] for s in sites), deploy.local_time(at)
+            ),
+        )
+        return
+    release.db_set(
+        {"status": "Staging", "staging": "Sandbox", "staging_status": "Queued"}
+    )
+
+
+def cancel_staging(release):
+    """New commits: a UAT deploy not yet started is cancelled, a sandbox check's lease dropped."""
+    if (
+        release.staging_request
+        and frappe.db.get_value(DEPLOY, release.staging_request, "status")
+        in deploy.WAITING
+    ):
+        frappe.db.set_value(
+            DEPLOY,
+            release.staging_request,
+            {"status": "Cancelled", "finished_at": now_datetime()},
+        )
+
+
+def staging_done(release, passed: bool, rows: list[dict]):
+    """The staging result: passed goes to the approval; failed waits for new commits or a senior."""
+    if release.status != "Staging":
+        return  # new commits arrived meanwhile: this result is for older code
+    release.db_set(
+        {
+            "staging_status": "Passed" if passed else "Failed",
+            "staging_detail": json.dumps(rows, indent=1, default=str),
+            "check_lease_hash": None,
+        }
+    )
+    if passed:
+        return ask_approval(release)
+    failing = "; ".join(
+        f"{r.get('check')}: {r.get('detail') or ''}"[:200]
+        for r in rows
+        if r.get("result") == "fail"
+    )
+    tell(
+        release,
+        authors(release),
+        _(
+            "The release of {0} {1} failed its staging check: {2}. Push a fix, or a senior can let it through with a reason."
+        ).format(release.repository, release.branch, failing[:300]),
+    )
+
+
+def _lease(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def claim_check(worker_id: str) -> dict:
+    """The oldest release waiting for its sandbox check, leased to the worker; {} when none."""
+    for name in frappe.get_all(
+        DEPLOY,
+        filters={"status": "Staging", "staging": "Sandbox", "staging_status": "Queued"},
+        order_by="modified asc",
+        limit=5,
+        pluck="name",
+    ):
+        if (
+            frappe.db.get_value(DEPLOY, name, "staging_status", for_update=True)
+            != "Queued"
+        ):
+            continue  # another worker got it first
+        token = frappe.generate_hash(length=32)
+        release = frappe.get_doc(DEPLOY, name)
+        release.db_set(
+            {
+                "staging_status": "Running",
+                "check_worker": worker_id[:140],
+                "check_started_at": now_datetime(),
+                "check_lease_expires": add_to_date(
+                    now_datetime(), minutes=CHECK_LEASE_MINUTES
+                ),
+                "check_lease_hash": _lease(token),
+            }
+        )
+        return {
+            "kind": "release_check",
+            "release": name,
+            "lease_token": token,
+            "lease_expires": str(release.check_lease_expires),
+            "context": check_context(release),
+        }
+    return {}
+
+
+def check_context(release) -> dict:
+    """What the worker builds: the site card's apps at the commits they run, this app at the release's commit."""
+    from helpdesk.copilot import github_app
+    from helpdesk.copilot.fixes import _repo_name
+
+    app = release.apps[0]
+    card = release.sites[0].registry if release.sites else None
+    apps = []
+    for row in frappe.get_all(
+        "HDS Site App",
+        filters={"parent": card, "parenttype": "HDS Site Registry"},
+        fields=["app", "repository", "branch", "deployed_commit"],
+        order_by="idx asc",
+    ):
+        mine = row.app == app.app
+        apps.append(
+            {
+                "app": row.app,
+                "repository": _repo_name(row.repository) if row.repository else None,
+                "branch": row.branch,
+                "commit": app.to_commit if mine else row.deployed_commit,
+            }
+        )
+    if not any(a["app"] == app.app for a in apps):
+        apps.append(
+            {
+                "app": app.app,
+                "repository": release.repository,
+                "branch": release.branch,
+                "commit": app.to_commit,
+            }
+        )
+    token = None
+    if github_app.configured():
+        try:
+            token = github_app.read_token(release.repository)
+        except Exception:
+            token = None  # a public repository is cloned without a key
+    return {
+        "release": release.name,
+        "repository": release.repository,
+        "branch": release.branch,
+        "app": app.app,
+        "commit": app.to_commit,
+        "customer": release.sites[0].customer if release.sites else None,
+        "site": release.sites[0].site if release.sites else None,
+        "apps": apps,
+        "repo_token": token,
+    }
+
+
+def check_result(name: str, lease_token: str, evidence: list, tested_on: str = ""):
+    """The worker's sandbox check: migrate, the app's tests, no new errors."""
+    release = frappe.get_doc(DEPLOY, name, for_update=True)
+    if (
+        release.staging_status != "Running"
+        or not release.check_lease_hash
+        or release.check_lease_hash != _lease(lease_token or "")
+    ):
+        frappe.throw(
+            _("This check's lease is no longer valid."), frappe.PermissionError
+        )
+    rows = [
+        {
+            "check": str(item.get("check") or "")[:200],
+            "result": item.get("result")
+            if item.get("result") in ("pass", "fail", "not_run")
+            else "fail",
+            "detail": str(item.get("detail") or "")[:500],
+        }
+        for item in evidence or []
+        if isinstance(item, dict)
+    ]
+    if tested_on:
+        rows.append(
+            {"check": _("tested on"), "result": "not_run", "detail": tested_on[:200]}
+        )
+    passed = any(r["result"] == "pass" for r in rows) and not any(
+        r["result"] == "fail" for r in rows
+    )
+    staging_done(release, passed, rows)
+    return {"staging_status": "Passed" if passed else "Failed"}
+
+
+def expire_checks():
+    """A check whose worker went quiet is queued again; one no worker took in time is marked not run."""
+    now = now_datetime()
+    for name in frappe.get_all(
+        DEPLOY,
+        filters={
+            "status": "Staging",
+            "staging_status": "Running",
+            "check_lease_expires": ["<", now],
+        },
+        pluck="name",
+    ):
+        frappe.db.set_value(
+            DEPLOY, name, {"staging_status": "Queued", "check_lease_hash": None}
+        )
+    hours = copilot_settings.get_settings().get("release_check_hours") or 6
+    for release in frappe.get_all(
+        DEPLOY,
+        filters={
+            "status": "Staging",
+            "staging": "Sandbox",
+            "staging_status": "Queued",
+            "modified": ["<", add_to_date(now, hours=-hours)],
+        },
+        pluck="name",
+    ):
+        doc = frappe.get_doc(DEPLOY, release)
+        doc.db_set(
+            {
+                "staging_status": "Not run",
+                "staging_detail": json.dumps(
+                    [
+                        {
+                            "check": _("the sandbox check"),
+                            "result": "not_run",
+                            "detail": _("no worker took it within {0} hours").format(
+                                hours
+                            ),
+                        }
+                    ]
+                ),
+            }
+        )
+        tell(
+            doc,
+            approvals.seniors(),
+            _(
+                "No worker checked the release of {0} {1} within {2} hours; a senior can let it through with a reason."
+            ).format(doc.repository, doc.branch, hours),
+        )
+
+
+# --- undo (H25): the check after failed, so each pull request is reverted -----------------
+
+
+def undo(release) -> list[dict]:
+    """GitHub's own revert of each pull request in the release, newest first; `[{number, url}]`.
+
+    The reverts are ordinary pull requests: reviewed, merged, and released like any other.
+    A push has no pull request to revert; the people are told instead.
+    """
+    numbers = []
+    for change in reversed(frappe.parse_json(release.changes or "[]") or []):
+        number = (change.get("pull") or {}).get("number")
+        if number and number not in numbers:
+            numbers.append(number)
+    opened = []
+    for number in numbers:
+        try:
+            opened.append(
+                github.revert_pull(
+                    release.repository,
+                    number,
+                    f"Revert #{number}: release {release.name} failed its check",
+                    _(
+                        "TBO Support deployed release {0} and the check after it failed: {1}\n\nThis reverts #{2}."
+                    ).format(release.name, (release.error or "")[:500], number),
+                )
+            )
+        except GitHubError as e:
+            release.add_comment(
+                "Info",
+                frappe.utils.escape_html(
+                    _("Could not revert #{0}: {1}").format(number, e.message)
+                ),
+            )
+    if opened:
+        release.add_comment(
+            "Info",
+            _("Reverted: {0}").format(
+                ", ".join(
+                    f'<a href="{frappe.utils.escape_html(r["url"])}">#{r["number"]}</a>'
+                    for r in opened
+                )
+            ),
+        )
+    return opened
+
+
+# --- the weekly record (H25): Monday's pilot email gets a releases section ----------------
+
+
+def week_numbers(week_start, week_end) -> dict:
+    """The week's releases (not Copilot fixes, not UAT deploys): how many, how they ended, the waits, the bypasses."""
+    from frappe.utils import add_days
+
+    start = get_datetime(str(week_start))
+    end = get_datetime(str(add_days(week_end, 1)))
+    base = {"run": ["is", "not set"], "staging_for": ["is", "not set"]}
+    made = frappe.get_all(
+        DEPLOY,
+        filters={**base, "creation": ["between", [start, end]]},
+        fields=["name", "source", "ci_override_by"],
+    )
+    ended = frappe.get_all(
+        DEPLOY,
+        filters={**base, "finished_at": ["between", [start, end]]},
+        fields=["name", "status", "release_group", "press_reference"],
+    )
+    waits = sorted(
+        (get_datetime(r.decided_at) - get_datetime(r.assigned_at)).total_seconds()
+        / 3600
+        for r in frappe.get_all(
+            DEPLOY,
+            filters={
+                **base,
+                "decided_at": ["between", [start, end]],
+                "assigned_at": ["is", "set"],
+            },
+            fields=["decided_at", "assigned_at"],
+        )
+    )
+    reverted = frappe.db.count(
+        "Comment",
+        {
+            "reference_doctype": DEPLOY,
+            "content": ["like", "Reverted:%"],
+            "creation": ["between", [start, end]],
+        },
+    )
+    return {
+        "made": len(made),
+        "pushes": sum(1 for r in made if r.source == "Push"),
+        "overrides": sum(1 for r in made if r.ci_override_by),
+        "succeeded": sum(1 for r in ended if r.status == "Succeeded"),
+        "failed": sum(1 for r in ended if r.status == "Failed"),
+        "rejected": sum(1 for r in ended if r.status == "Rejected"),
+        "reverted": reverted,
+        "median_wait_hours": round(waits[len(waits) // 2], 1) if waits else None,
+        "bypasses": bypasses(start, end),
+    }
+
+
+def bypasses(start, end) -> int | None:
+    """Press builds on the pipeline's benches that no deploy from TBO Support asked for; None when Press can't say."""
+    if not (enabled() and press.configured()):
+        return None
+    groups = {key[2] for key in targets()}
+    ours = frappe.get_all(
+        DEPLOY,
+        filters={
+            "release_group": ["in", list(groups) or [""]],
+            "started_at": ["between", [start, end]],
+        },
+        fields=["release_group", "train", "name"],
+    )
+    asked = len({r.train or r.name for r in ours})
+    try:
+        builds = sum(
+            len(
+                press.get_list(
+                    "Deploy Candidate Build",
+                    filters={"group": group, "creation": [">=", str(start)]},
+                    fields=["name", "creation"],
+                    limit=200,
+                )
+                or []
+            )
+            for group in groups
+        )
+    except PressError:
+        return None
+    return max(builds - asked, 0)
+
+
+def week_html(week_start, week_end) -> str:
+    """The releases section of the weekly pilot email; empty when releases are off."""
+    if not enabled():
+        return ""
+    numbers = week_numbers(week_start, week_end)
+    escape = frappe.utils.escape_html
+    lines = [
+        _("{0} releases made ({1} from pushes, {2} let through by a senior)").format(
+            numbers["made"], numbers["pushes"], numbers["overrides"]
+        ),
+        _("{0} live and checked, {1} failed ({2} reverted), {3} rejected").format(
+            numbers["succeeded"],
+            numbers["failed"],
+            numbers["reverted"],
+            numbers["rejected"],
+        ),
+        _("Median wait for an approval: {0} hours").format(
+            numbers["median_wait_hours"]
+            if numbers["median_wait_hours"] is not None
+            else "-"
+        ),
+    ]
+    if numbers["bypasses"] is not None:
+        lines.append(
+            _(
+                "Deploys on these benches that went around TBO Support (Press dashboard): {0}"
+            ).format(numbers["bypasses"])
+        )
+    return "<h4>{0}</h4><ul>{1}</ul>".format(
+        escape(_("Releases")),
+        "".join(f"<li>{escape(line)}</li>" for line in lines),
+    )

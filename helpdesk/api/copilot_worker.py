@@ -9,6 +9,7 @@ can report on it.
 """
 
 import json
+import re
 
 import frappe
 from frappe import _
@@ -66,6 +67,10 @@ def claim_job(
         )  # the month's AI budget is used up: work waits (the managers were told)
     run, token = runs.claim(worker_id, capabilities or "", (run or "").strip() or None)
     if not run:
+        if "release_check" in re.split(r"[\s,]+", (capabilities or "").lower()):
+            from helpdesk.copilot import releases
+
+            return releases.claim_check(worker_id)  # a release's sandbox check, or {}
         return {}
     return {
         "run": run.name,
@@ -73,6 +78,19 @@ def claim_job(
         "lease_expires": str(run.lease_expires),
         "context": runs.run_context(run),
     }
+
+
+@frappe.whitelist(methods=["POST"])
+def release_check_result(
+    release: str, lease_token: str, evidence: list | str, tested_on: str = ""
+) -> dict:
+    """A release's sandbox check (Phase 7, W11): `[{check, result: pass|fail|not_run, detail}]`."""
+    from helpdesk.copilot import releases
+
+    worker_only()
+    return releases.check_result(
+        release, lease_token, _parse(evidence, "evidence"), tested_on or ""
+    )
 
 
 @frappe.whitelist(methods=["POST"])
