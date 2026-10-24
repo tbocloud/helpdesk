@@ -383,7 +383,7 @@ same labels and fields:
 
 | Label | Field | Notes |
 | --- | --- | --- |
-| Copy | `title` | Required. |
+| Copy | `title` | Optional (owner's request, 2026-10-24). Without it the post is named by its post type, then its ID: `label` on the controller, `copyOf()` in `pages/content/constants.ts`, also in task names, reminders and the client approval. |
 | Campaign (optional) | `campaign` | Free text (Data), e.g. "Diwali 2026". |
 | Special day (optional) | `special_day` | Free text, e.g. "Diwali". Highlights the post on the calendar (see below). |
 | Platforms | `platforms`, `channel` | Chips; one post can go out on several. The first is `channel`. |
@@ -402,6 +402,14 @@ names campaigns as they go. The patch `content_campaign_as_text` replaced the st
 with the campaign names. With the link gone, a post's tasks always go to the customer's open
 project (see below), the customer is never filled in from a campaign, and Draft with AI
 passes the campaign text as "Campaign: …". The `HD Content Campaign` doctype itself is unchanged.
+
+### What the task says
+
+A content task's description carries the post's **Copy**, **Sub copy** and **Description**
+(`HDContentPost.task_description`), so whoever does the work has the text without opening the
+post (owner's request, 2026-10-24). Each part is left out when empty. When the post's copy, sub
+copy or description changes, its open tasks get the new text (`refreshes_description`), unless
+someone has written the task's description by hand; then it stays.
 
 ### When the tasks are due
 
@@ -428,6 +436,16 @@ designer's. In `wanted_tasks` (`due()`):
 When a task counts as overdue (past its date, or due today and past its estimated hours) is
 described in [workspace-pages.md](workspace-pages.md#when-a-task-is-overdue), and who hears
 about it in [follow-ups.md](follow-ups.md).
+
+### Setting a task's due date when assigning
+
+The Assign dialog (`EntryActionDialog.vue`) has a **Due date** beside the people and hours
+(owner's request, 2026-10-24). It starts at the role's task date, or, before the role has a
+task, the date it would get (`get_role_due`; `HDContentPost.role_due`, from the days before in
+Content Settings; the shared task follows the designer's). Saving passes `due` to `assign`,
+which sets it on the role's open task (`set_role_due`): never after the post goes live, and a
+new date can't be in the past; an unchanged date is left alone, so a late task still saves.
+Postponing the post to a later day moves the task's date again, as before.
 
 ### Which project the tasks go to
 

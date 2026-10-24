@@ -60,10 +60,10 @@
             <button
               type="button"
               class="block max-w-full truncate text-left text-ink-gray-9 hover:underline"
-              :title="post.title"
+              :title="copyOf(post)"
               @click.stop="emit('open', post.name)"
             >
-              {{ post.title }}
+              {{ copyOf(post) }}
             </button>
             <SpecialDayBadge
               v-if="post.special_day"
@@ -116,6 +116,7 @@ import {
   type RolePerson,
   TEAM_ROLES,
   type TeamRole,
+  copyOf,
 } from "../constants";
 import { firstFromToday, revealIfLow } from "../dayFocus";
 import SpecialDayBadge from "./SpecialDayBadge.vue";

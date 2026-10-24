@@ -4,7 +4,7 @@
       <div class="flex flex-col gap-0.5">
         <h3 class="text-xl-semibold text-ink-gray-9">{{ copy.title }}</h3>
         <p v-if="post" class="truncate text-p-sm text-ink-gray-5">
-          {{ post.title }} · {{ platformsOf(post).join(", ") }}
+          {{ copyOf(post) }} · {{ platformsOf(post).join(", ") }}
         </p>
       </div>
     </template>
@@ -86,10 +86,23 @@
           <p v-else-if="!error" class="text-p-sm text-ink-gray-5">
             {{ __("Loading who is on this role…") }}
           </p>
+          <FormControl
+            v-if="teamLoaded && people.length"
+            v-model="due"
+            type="date"
+            :label="__('Due date')"
+            :max="publishDay"
+            :description="
+              __(
+                'When the task is due. Set from the posting date; change it here.'
+              )
+            "
+            required
+          />
           <p class="text-p-sm text-ink-gray-5">
             {{
               __(
-                "Everyone on this gets the post's task for it, with these hours. Remove everyone to unassign."
+                "Everyone on this gets the post's task for it, with these hours and due date. Remove everyone to unassign."
               )
             }}
           </p>
@@ -134,6 +147,7 @@ import {
   platformsOf,
   TEAM_ROLES,
   type TeamRole,
+  copyOf,
 } from "../constants";
 
 const props = defineProps<{
@@ -150,6 +164,12 @@ const time = ref("10:00");
 const reason = ref("");
 const people = ref<string[]>([]);
 const hours = ref<number | string | null>(null);
+const due = ref("");
+const publishDay = computed(() =>
+  props.post?.publish_on
+    ? dayjs(props.post.publish_on).format("YYYY-MM-DD")
+    : undefined
+);
 const error = ref("");
 const saving = ref(false);
 // saving before everyone on the role has loaded would take the others off it
@@ -220,17 +240,24 @@ watch(open, (isOpen) => {
   hours.value = (props.role && props.post[`${props.role}_hours`]) || null;
   const request = ++teamRequest;
   teamLoaded.value = true;
+  due.value = "";
   if (props.action === "assign" && props.role) {
     const role = props.role;
     const name = props.post.name;
     teamLoaded.value = false;
     // the post list only carries the main person; everyone else comes from here
-    call("helpdesk.api.content_board.get_team_task_status", { posts: [name] })
-      .then((team) => {
+    Promise.all([
+      call("helpdesk.api.content_board.get_team_task_status", {
+        posts: [name],
+      }),
+      call("helpdesk.api.content_board.get_role_due", { post: name, role }),
+    ])
+      .then(([team, roleDue]) => {
         if (request !== teamRequest) return;
         const onRole = team?.[name]?.[role];
         if (onRole?.length)
           people.value = onRole.map((p: { user: string }) => p.user);
+        due.value = roleDue || "";
         teamLoaded.value = true;
       })
       .catch((e: any) => {
@@ -296,6 +323,7 @@ async function submit() {
         users: people.value,
         // the box starts with the post's hours, so empty means none
         hours: Number(hours.value) || 0,
+        due: due.value || undefined,
       });
       toast.success(
         people.value.length ? __("Team updated") : __("Unassigned")

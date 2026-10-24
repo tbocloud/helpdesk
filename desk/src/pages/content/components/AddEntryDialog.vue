@@ -138,7 +138,6 @@
           v-model="form.title"
           :label="__('Copy')"
           :placeholder="__('e.g. Diwali offer carousel')"
-          required
         />
 
         <div class="flex flex-col gap-1.5">
@@ -370,7 +369,6 @@ async function save(addNext: boolean) {
   if (!form.customer) return (error.value = __("Select a customer"));
   if (!form.date) return (error.value = __("Pick the posting date"));
   if (!form.time) return (error.value = __("Pick the posting time"));
-  if (!form.title.trim()) return (error.value = __("Write the copy"));
   if (!form.channels.length)
     return (error.value = __("Pick at least one platform"));
 

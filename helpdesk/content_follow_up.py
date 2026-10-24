@@ -58,6 +58,7 @@ def waiting_posts() -> list:
         fields=[
             "name",
             "title",
+            "format",
             "customer",
             "publish_on",
             "marketer",
@@ -128,7 +129,7 @@ def alert_team(post, days: int):
         _(
             "{0} ({1}) has waited {2} days for the client's approval and publishes {3}."
         ).format(
-            post.title,
+            post.title or post.format or post.name,
             post.customer,
             days,
             format_datetime(post.publish_on, "d MMM, h:mm a"),

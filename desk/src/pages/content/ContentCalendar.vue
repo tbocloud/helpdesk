@@ -473,7 +473,7 @@
                 :title="__('Open it and set a posting date')"
                 @click="openPost(p.name)"
               >
-                {{ p.title }}
+                {{ copyOf(p) }}
                 <span class="text-xs text-ink-gray-5">· {{ p.customer }}</span>
               </button>
             </li>
@@ -615,6 +615,7 @@ import {
   STATUSES,
   TEAM_ROLES,
   type TeamRole,
+  copyOf,
 } from "./constants";
 import { useContentOptions } from "./contentOptions";
 import { useToday } from "@/composables/today";
@@ -964,7 +965,7 @@ const events = computed(() =>
       // ★ marks a special-day post on the month and week grid
       title: `${p.special_day ? `★ ${p.special_day} · ` : ""}${platformsOf(
         p
-      ).join(", ")} · ${p.title}`,
+      ).join(", ")} · ${copyOf(p)}`,
       participant: `${p.status} · ${p.customer}`,
       fromDate: start.format("YYYY-MM-DD"),
       toDate: start.format("YYYY-MM-DD"),
