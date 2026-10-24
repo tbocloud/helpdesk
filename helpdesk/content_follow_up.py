@@ -84,7 +84,7 @@ def remind_client(customer: str, posts: list):
         return
 
     items = "".join(
-        f"<li>{escape_html(p.title)} · {format_datetime(p.publish_on, 'd MMM, h:mm a')}</li>"
+        f"<li>{escape_html(p.title or p.format or p.name)} · {format_datetime(p.publish_on, 'd MMM, h:mm a')}</li>"
         for p in posts
     )
     if portal_enabled():

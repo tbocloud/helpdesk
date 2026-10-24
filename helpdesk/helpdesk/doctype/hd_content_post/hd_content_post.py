@@ -1,6 +1,8 @@
 # Copyright (c) 2026, Frappe Technologies and contributors
 # For license information, please see license.txt
 
+import re
+
 import frappe
 from frappe import _
 from frappe.model.document import Document
@@ -375,17 +377,25 @@ class HDContentPost(Document):
         return "".join(parts)
 
     def refreshes_description(self, task) -> bool:
-        """A new copy reaches the task, unless someone has written its description by hand."""
-        new = self.task_description(self)
-        if strip_html(task.description or "") == strip_html(new):
+        """A new copy reaches the task, unless someone has written its description by hand.
+        The markup is compared, not just the text, so an added link or bold is a hand edit."""
+        current = self.same_markup(task.description)
+        if current == self.same_markup(self.task_description(self)):
             return False
         before = self.get_doc_before_save()
-        written_by_post = self.task_description(before) if before else ""
-        return strip_html(task.description or "").strip() in (
+        if not before:
+            return not current
+        return current in (
             "",
-            strip_html(written_by_post).strip(),
-            strip_html(escape_html((before.brief if before else "") or "")).strip(),
+            self.same_markup(self.task_description(before)),
+            # tasks made before the post's text was copied in carried only the brief
+            self.same_markup(escape_html(before.brief or "")),
         )
+
+    @staticmethod
+    def same_markup(html: str | None) -> str:
+        """HTML with the whitespace between tags dropped, for comparing descriptions."""
+        return re.sub(r">\s+<", "><", (html or "").strip())
 
     def redates(self, task) -> bool:
         """Whether this save gives an existing task a new due date. The date is set when the

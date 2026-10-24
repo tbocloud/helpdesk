@@ -871,6 +871,7 @@ function baseFilters() {
 const FIELDS = [
   "name",
   "title",
+  "format",
   "status",
   "channel",
   "platforms",
@@ -897,7 +898,6 @@ const posts = createResource({
 // Board and Sheet show cancelled posts too, behind their own filter
 const BOARD_FIELDS = [
   ...FIELDS,
-  "format",
   "caption",
   "brief",
   "writer",
@@ -997,7 +997,7 @@ const undated = createResource({
   url: "frappe.client.get_list",
   makeParams: () => ({
     doctype: "HD Content Post",
-    fields: ["name", "title", "customer"],
+    fields: ["name", "title", "format", "customer"],
     filters: {
       ...baseFilters(),
       // a cancelled post needs no date, so it never needs fixing

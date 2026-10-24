@@ -158,6 +158,16 @@ class TestTasksFromPosts(ContentTaskCase):
         text = frappe.utils.strip_html(frappe.db.get_value("Task", task, "description"))
         self.assertIn("Time-saving", text)
 
+        # a link added by hand, with the same words, counts as written by hand
+        linked = frappe.db.get_value("Task", task, "description").replace(
+            "Time-saving", '<a href="https://example.com/brand">Time-saving</a>'
+        )
+        frappe.db.set_value("Task", task, "description", linked)
+        post.reload()
+        post.caption = "<p>Wash in ten minutes.</p>"
+        post.save()
+        self.assertEqual(frappe.db.get_value("Task", task, "description"), linked)
+
         # a description written by hand stays
         frappe.db.set_value("Task", task, "description", "<p>Use the blue logo</p>")
         post.reload()
@@ -394,6 +404,26 @@ class TestEstimatedHours(ContentTaskCase):
         for bad in (add_days(day, 1), add_days(getdate(), -1)):
             with self.assertRaises(frappe.ValidationError, msg=str(bad)):
                 content_board.assign(post.name, "writer", [WRITER[0]], due=str(bad))
+
+    def test_a_finished_task_keeps_its_due_date(self):
+        from helpdesk.api import content_board
+
+        post = self.post()
+        day = getdate(self.publish)
+        task = self.tasks(post)["Writer"].name
+        frappe.db.set_value("Task", task, "status", "Completed")
+
+        # the dialog offers the usual date, and saving leaves the finished task alone
+        self.assertEqual(
+            content_board.get_role_due(post.name, "writer"), str(add_days(day, -3))
+        )
+        content_board.assign(
+            post.name, "writer", [WRITER[0]], due=str(add_days(day, -5))
+        )
+        self.assertEqual(
+            getdate(frappe.db.get_value("Task", task, "exp_end_date")),
+            add_days(day, -3),
+        )
 
     def test_a_role_without_a_task_offers_its_usual_due_date(self):
         from helpdesk.api import content_board

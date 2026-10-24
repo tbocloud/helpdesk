@@ -1056,9 +1056,9 @@ const tiles = computed<Tile[]>(() => {
       label: __("Next post"),
       value: next ? dayjs(next.publish_on).format("ddd D MMM") : "—",
       sub: next
-        ? `${dayjs(next.publish_on).format("h:mm A")} · ${
-            next.title
-          } · ${platformsOf(next).join(", ")}`
+        ? `${dayjs(next.publish_on).format("h:mm A")} · ${copyOf(
+            next
+          )} · ${platformsOf(next).join(", ")}`
         : __("Nothing scheduled"),
       iconClass: "bg-brand-soft text-brand",
       icon: markRaw(LucideSend),

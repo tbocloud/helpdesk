@@ -152,7 +152,7 @@ def assign(
 def set_role_due(doc, role: str, due):
     """Give the role's open task this due date: today or later, and not after the post
     goes live. An unchanged date is left alone, so a late task can still be saved."""
-    found = task_for_role(role_tasks([doc.name]), doc, role)
+    found = open_role_task(doc, role)
     if not found:
         return
     task = frappe.get_doc("Task", found["task"])
@@ -166,6 +166,12 @@ def set_role_due(doc, role: str, due):
     task.save(ignore_permissions=True)
 
 
+def open_role_task(doc, role: str) -> dict | None:
+    """The role's task while it's still open; a finished or cancelled one has no date to set."""
+    found = task_for_role(role_tasks([doc.name]), doc, role)
+    return found if found and found["status"] not in DONE_TASK_STATUSES else None
+
+
 @frappe.whitelist()
 def get_role_due(post: str, role: str) -> str | None:
     """When the role's task is due: its open task's date, else the date it would get."""
@@ -173,7 +179,7 @@ def get_role_due(post: str, role: str) -> str | None:
         frappe.throw(_("Unknown role {0}").format(role))
     doc = frappe.get_doc("HD Content Post", post)
     doc.check_permission("read")
-    found = task_for_role(role_tasks([doc.name]), doc, role)
+    found = open_role_task(doc, role)
     # the shared task is due when the designer's part is
     due = (found or {}).get("due") or doc.role_due(
         "designer" if doc.task_mode == ONE_TASK else role
