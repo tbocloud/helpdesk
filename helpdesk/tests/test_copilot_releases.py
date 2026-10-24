@@ -325,13 +325,14 @@ class TestReleaseWatch(ReleaseCase):
         frappe.cache().delete(marker)
         self.addCleanup(frappe.cache().delete, marker)
         del self.github.branches[(REPO, "main")]
-        logged = {"method": ["like", "Copilot could not read%"]}
-        before = frappe.db.count("Error Log", logged)
 
-        releases.watch()
-        releases.watch()
+        # an Error Log outlives the test's rollback, so the call is caught instead
+        with patch("helpdesk.copilot.releases.frappe.log_error") as logged:
+            releases.watch()
+            releases.watch()
 
-        self.assertEqual(frappe.db.count("Error Log", logged) - before, 1)
+        self.assertEqual(logged.call_count, 1)
+        self.assertIn("could not read", logged.call_args.kwargs["title"])
         self.assertEqual(self.releases_of(), [])
 
 
@@ -808,17 +809,26 @@ class TestSandboxCheck(StagingCase):
         result = releases.check_result(
             release.name,
             job["lease_token"],
-            [{"check": "the sandbox check", "result": "not_run", "detail": "runner unreachable"}],
+            [
+                {
+                    "check": "the sandbox check",
+                    "result": "not_run",
+                    "detail": "runner unreachable",
+                }
+            ],
         )
 
         release.reload()
         self.assertEqual(result["staging_status"], "Not run")
-        self.assertEqual((release.status, release.staging_status), ("Staging", "Not run"))
+        self.assertEqual(
+            (release.status, release.staging_status), ("Staging", "Not run")
+        )
         self.assertIn("runner unreachable", self.told(self.senior)[-1])
         self.assertEqual(len(self.told(self.approver)), before)
         releases.override_ci(release, self.senior, "the runner is down; CI was green")
         self.assertEqual(
-            frappe.db.get_value(deploy.DEPLOY, release.name, "status"), "Waiting for approval"
+            frappe.db.get_value(deploy.DEPLOY, release.name, "status"),
+            "Waiting for approval",
         )
 
     def test_a_lease_that_is_not_the_workers_is_refused(self):
