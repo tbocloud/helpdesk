@@ -528,7 +528,7 @@ export interface MoneySplit {
   outstanding: number;
   /** null: when a milestone is reached */
   due_date: string | null;
-  source: "schedule" | "proposal" | "whole";
+  source: "schedule" | "quotation" | "proposal" | "whole";
   status: SplitStatus;
 }
 
