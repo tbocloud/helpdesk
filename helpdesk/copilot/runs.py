@@ -642,6 +642,8 @@ def run_context(run) -> dict:
             "environment": registry.environment,
             "site_url": registry.site_url,
             "apps": apps_for(registry),
+            # when the commits were last read from the site (the claim reads them again when it can)
+            "apps_read_at": str(registry.last_synced or ""),
         }
         if registry
         else None,

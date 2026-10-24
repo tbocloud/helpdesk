@@ -66,6 +66,11 @@ def claim_job(
             {}
         )  # the month's AI budget is used up: work waits (the managers were told)
     run, token = runs.claim(worker_id, capabilities or "", (run or "").strip() or None)
+    if run:
+        from helpdesk.copilot import registry
+
+        # the code the site runs now, not what its card last saw (a deploy from Press's dashboard)
+        registry.refresh_for_run(run)
     if not run:
         if "release_check" in re.split(r"[\s,]+", (capabilities or "").lower()):
             from helpdesk.copilot import releases

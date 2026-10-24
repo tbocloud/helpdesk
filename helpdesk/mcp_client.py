@@ -62,6 +62,9 @@ class MCPClient:
         """
         conn = frappe.get_doc("HDS Support Connection", connection_name)
         self.connection_name = connection_name
+        # how long one call waits, and how many times it is tried again; a caller in a hurry lowers them
+        self.timeout = MCP_TIMEOUT
+        self.retries = MCP_RETRY_COUNT
         self.endpoint = conn.mcp_endpoint
         self.customer_name = conn.customer_name
         self.site_url = conn.site_url
@@ -227,13 +230,13 @@ class MCPClient:
             headers["Mcp-Session-Id"] = self.session_id
 
         last_error = None
-        for attempt in range(MCP_RETRY_COUNT + 1):
+        for attempt in range(self.retries + 1):
             try:
                 response = requests.post(
                     self.endpoint,
                     json=payload,
                     headers=headers,
-                    timeout=MCP_TIMEOUT,
+                    timeout=self.timeout,
                 )
 
                 if not expect_response:
@@ -247,7 +250,7 @@ class MCPClient:
 
             except requests.Timeout:
                 last_error = f"MCP request timed out after {MCP_TIMEOUT}s"
-                if attempt < MCP_RETRY_COUNT:
+                if attempt < self.retries:
                     continue
             except requests.ConnectionError as e:
                 last_error = f"Cannot connect to {self.site_url}: {e}"

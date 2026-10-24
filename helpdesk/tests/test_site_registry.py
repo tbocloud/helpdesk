@@ -251,3 +251,111 @@ class TestRefreshFromPress(FrappeTestCase):
         card = make_site_registry(self.customer)
         with self.assertRaises(frappe.ValidationError):
             refresh_site_card_from_press(card.name)
+
+
+class TestRefreshForRun(FrappeTestCase):
+    """Before a worker reads the code, the card's commits come from the site again."""
+
+    OLD, NEW = "o" * 40, "n" * 40
+
+    def setUp(self):
+        from helpdesk.test_utils import make_copilot_run, make_copilot_settings
+
+        hold_commits(self)
+        make_copilot_settings(enabled=1)
+        customer = create_customer("Registry Run Co").name
+        self.registry = make_site_registry(
+            customer,
+            connection=make_support_connection(customer).name,
+            apps=[
+                {
+                    "app": "alpha_app",
+                    "repository": "https://github.com/acme/alpha_app",
+                    "branch": "main",
+                    "deployed_commit": self.OLD,
+                }
+            ],
+        )
+        # the card was last read days ago; the site has been deployed since
+        self.registry.db_set(
+            "last_synced", frappe.utils.add_days(frappe.utils.now(), -7)
+        )
+        frappe.db.set_value(
+            "HDS Copilot Run", {"state": "Queued"}, "state", "Cancelled"
+        )
+        ticket = make_ticket(subject="Submit does nothing", customer=customer).name
+        self.run = make_copilot_run(ticket, registry=self.registry.name)
+        client = patch("helpdesk.mcp_client.MCPClient")
+        self.client = client.start()
+        self.addCleanup(client.stop)
+        self.client.return_value.call_tool.return_value = {
+            "content": [
+                {
+                    "type": "text",
+                    "text": json.dumps(
+                        [{"app": "alpha_app", "branch": "main", "commit": self.NEW}]
+                    ),
+                }
+            ]
+        }
+
+    def card_commit(self) -> str:
+        return (
+            frappe.get_doc("HDS Site Registry", self.registry.name)
+            .apps[0]
+            .deployed_commit
+        )
+
+    def events(self, kind: str) -> list[dict]:
+        return [
+            json.loads(payload)
+            for payload in frappe.get_all(
+                "HDS Copilot Event",
+                filters={"run": self.run.name, "event_type": kind},
+                pluck="payload",
+            )
+        ]
+
+    def test_the_card_takes_the_commit_the_site_runs_now(self):
+        from helpdesk.copilot.registry import refresh_for_run
+
+        found = refresh_for_run(self.run)
+
+        self.assertEqual(self.card_commit(), self.NEW)
+        self.assertEqual(
+            found["changed"], [{"app": "alpha_app", "from": self.OLD, "to": self.NEW}]
+        )
+        self.assertEqual(self.events("site_refreshed")[0]["changed"][0]["to"], self.NEW)
+        # a quick read: one try, a few seconds
+        self.assertEqual(
+            (self.client.return_value.timeout, self.client.return_value.retries), (8, 0)
+        )
+
+    def test_a_site_that_does_not_answer_leaves_the_card_and_the_run_says_so(self):
+        from helpdesk.copilot.registry import refresh_for_run
+
+        self.client.return_value.call_tool.side_effect = TimeoutError("read timed out")
+
+        found = refresh_for_run(self.run)
+
+        self.assertEqual(found, {"refreshed": False})
+        self.assertEqual(self.card_commit(), self.OLD)
+        self.assertIn("read timed out", self.events("site_not_refreshed")[0]["reason"])
+
+    def test_a_card_read_a_moment_ago_is_not_read_again(self):
+        from helpdesk.copilot.registry import refresh_for_run
+
+        self.registry.db_set("last_synced", frappe.utils.now())
+
+        self.assertIsNone(refresh_for_run(self.run))
+        self.client.return_value.call_tool.assert_not_called()
+
+    def test_the_worker_gets_the_live_commits_with_its_claim(self):
+        from helpdesk.api import copilot_worker
+
+        job = copilot_worker.claim_job("w1")
+
+        self.assertEqual(job["run"], self.run.name)
+        apps = job["context"]["site"]["apps"]
+        self.assertEqual(apps[0]["deployed_commit"], self.NEW)
+        self.assertTrue(job["context"]["site"]["apps_read_at"])

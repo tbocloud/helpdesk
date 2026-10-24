@@ -8,7 +8,7 @@ import re
 
 import frappe
 from frappe import _
-from frappe.utils import now_datetime
+from frappe.utils import add_to_date, get_datetime, now_datetime
 
 # A remote that can be cloned from elsewhere. Press builds each app from a copy in its
 # build context, so a Press site reports a local path (file:///home/frappe/context/apps/...).
@@ -33,7 +33,7 @@ def registry_for_ticket(ticket: str):
     return frappe.get_doc("HDS Site Registry", name) if name else None
 
 
-def refresh_from_site(registry) -> dict:
+def refresh_from_site(registry, timeout: int | None = None) -> dict:
     """Every app the site runs, with its repository, branch and commit, read through its connection.
 
     A sandbox copy needs all of them (Frappe, ERPNext, HRMS and the custom
@@ -46,7 +46,10 @@ def refresh_from_site(registry) -> dict:
 
     if not registry.connection:
         frappe.throw(_("This site card has no connection to read the site through."))
-    result = MCPClient(registry.connection).call_tool(
+    client = MCPClient(registry.connection)
+    if timeout:
+        client.timeout, client.retries = timeout, 0
+    result = client.call_tool(
         "get_code_identity", {}, session_id=f"registry-{registry.name}"
     )
     text = ((result.get("content") or [{}])[0] or {}).get("text") or ""
@@ -86,6 +89,61 @@ def refresh_from_site(registry) -> dict:
         "apps": len(rows),
         "drift": [row["app"] for row in rows if row["drift_status"] == "Drift"],
     }
+
+
+# before a worker reads the code: a quick read of the site, at most this often per site
+RUN_REFRESH_SECONDS = 8
+RUN_REFRESH_FRESH_MINUTES = 2
+
+
+def refresh_for_run(run) -> dict | None:
+    """Before a worker reads the code, the card's commits as the site reports them now.
+
+    A deploy made outside Copilot (from the Press dashboard, say) leaves the card
+    behind, and the worker would read older code than the site runs. One quick
+    read through the connection; when the site does not answer in time, the card
+    stays as it is and the run says so. None when there is nothing to read.
+    """
+    from helpdesk.copilot import runs
+
+    if not run.registry:
+        return None
+    registry = frappe.get_doc("HDS Site Registry", run.registry)
+    if not registry.connection:
+        return None
+    if registry.last_synced and get_datetime(registry.last_synced) > add_to_date(
+        now_datetime(), minutes=-RUN_REFRESH_FRESH_MINUTES
+    ):
+        return None  # read a moment ago, for another run
+    before = {row.app: row.deployed_commit or "" for row in registry.apps}
+    try:
+        refresh_from_site(registry, timeout=RUN_REFRESH_SECONDS)
+    except Exception as e:
+        frappe.clear_last_message()
+        runs.add_event(
+            run,
+            "site_not_refreshed",
+            {
+                "registry": registry.name,
+                "reason": str(e)[:300],
+                "card_from": str(registry.last_synced or ""),
+            },
+            runs.SYSTEM,
+        )
+        return {"refreshed": False}
+    changed = [
+        {"app": row.app, "from": before.get(row.app) or None, "to": row.deployed_commit}
+        for row in registry.apps
+        if before.get(row.app, "") != (row.deployed_commit or "")
+    ]
+    if changed:
+        runs.add_event(
+            run,
+            "site_refreshed",
+            {"registry": registry.name, "changed": changed},
+            runs.SYSTEM,
+        )
+    return {"refreshed": True, "changed": changed}
 
 
 def refresh_from_press(registry) -> dict:
