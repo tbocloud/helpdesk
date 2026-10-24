@@ -200,6 +200,10 @@
                         >
                           {{ task.subject }}
                         </span>
+                        <NewTaskBadge
+                          v-if="task.assignment_state"
+                          :state="task.assignment_state"
+                        />
                         <MilestoneMark v-if="task.is_milestone" />
                         <SlipBadge
                           v-if="task.slip_count && !isClosed(task)"
@@ -332,6 +336,7 @@ import LucideSearch from "~icons/lucide/search";
 import LucideSearchX from "~icons/lucide/search-x";
 import HoldNote from "./components/HoldNote.vue";
 import MilestoneMark from "./components/MilestoneMark.vue";
+import NewTaskBadge from "./components/NewTaskBadge.vue";
 import SlipBadge from "./components/SlipBadge.vue";
 import EscalationBadge from "@/components/EscalationBadge.vue";
 import TaskDetailDialog from "./components/TaskDetailDialog.vue";
@@ -339,6 +344,7 @@ import TaskStatusBadge from "./components/TaskStatusBadge.vue";
 import WaitingOn from "./components/WaitingOn.vue";
 import {
   ON_HOLD,
+  type AssignmentState,
   holdDays,
   holdDurationLabel,
   isClosed,
@@ -367,6 +373,7 @@ interface Task {
   escalation_level?: number;
   depends_on_subject?: string | null;
   blocked?: boolean;
+  assignment_state?: AssignmentState | null;
 }
 
 type Filter =
@@ -556,6 +563,8 @@ const emptyState = computed(() => {
 const selectedTask = ref<Task | null>(null);
 
 function openTask(task: Task) {
+  // opening it marks it seen (TaskDetailDialog), so the mark goes at once
+  task.assignment_state = null;
   selectedTask.value = task;
 }
 </script>

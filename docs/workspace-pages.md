@@ -219,8 +219,8 @@ Team too); Home's Your day "In progress" part links here.
 - **Task rows** (`WorkItemRow` with `opens`): subject, key star, escalation badge, project and
   ID, assignee (avatar and name; on phones the name moves into the second line), status or the
   hold reason with `HoldNote`, the due label (red when overdue, the hub's `is_task_overdue`),
-  and the timer from the server's fields (`taskTimer`): "Tracking 2h 01m" or "Paused 1h 24m",
-  refreshed every 30 seconds. Clicking opens `TaskDetailDialog` in place (`mine` when the
+  the [status age](#status-age) ("In progress 9d"), and the timer from the server's fields
+  (`taskTimer`): "Tracking 2h 01m" or "Paused 1h 24m", refreshed every 30 seconds. Clicking opens `TaskDetailDialog` in place (`mine` when the
   viewer is an assignee), so every step the viewer may take is there.
 - **Post rows** (`components/InProgressPostRow.vue`): title, "Not approved yet" when it goes
   live within 2 days unapproved (`REMINDER_WINDOW_HOURS`, the board's rule), customer, platform
@@ -452,7 +452,8 @@ team member's work, for leads and managers of their projects (the Team page link
   in-review tasks leave the date groups because they wait on someone. Within a group the
   server's order stays: overdue, then key, then deadline.
 - **Tabs** filter before grouping and stay in the URL as `tab`: All, Overdue, At risk, Key,
-  Tasks, Tickets, Completed (the last 30 days, with hours).
+  Tasks, Tickets, [Assigned by me](#assigned-by-me) (`tab=assigned`), Completed (the last 30
+  days, with hours).
 - **Steps on a task** (`components/WorkItemActions.vue`, in `WorkItemRow`'s `actions` slot):
   one button for the next step (Approve when the viewer may sign it off; else Start an Open
   task; Complete a working one; Resume a held one) and a menu with Details, Complete (when
@@ -471,12 +472,74 @@ team member's work, for leads and managers of their projects (the Team page link
   phase, assigned to, assigned by, due, estimate, timer (from `taskTimer` and
   `formatElapsed`: a running timer ticks every second while the dialog shows it, a paused one
   stays still; the ticker stops when the dialog closes or the timer stops), description,
-  pull requests and meetings. Its
+  images and videos ([task-attachments.md](task-attachments.md)), pull requests and
+  meetings. Its
   actions follow `mine`: the assignee may edit, complete, hold or resume, ask for help and hand
   over; the project's manager, lead or coordinator may edit, plan, approve and send back, and also hold, resume and hand it over. "Move to
   project…" shows when the task says `can_move` (see [Moving a task](#moving-a-task-to-another-project)).
 - **Rows** say "Assigned by Arun" next to the project when someone other than the assignee gave
-  the task out.
+  the task out, and **New** or **Reassigned** while the task hasn't been opened since it was
+  given (see [New tasks](#new-tasks)). A task row's title opens the task details in place
+  (`WorkItemRow` `opens`); a ticket row's title opens the ticket.
+- **`?task=<name>`** opens that task's details on My Work, for anyone who may read the task;
+  closing the dialog drops it from the URL. Notifications about a task link here
+  (`helpdesk_path("Task", name)` in `helpdesk/work_reminders.py`).
+- **Who may see another person's work** (`_work_owner` in `helpdesk/api/work.py`, shared by
+  `get_my_work` and `get_assigned_by`): admins anyone's; people who see the overview (project
+  managers and leads) the people on the projects they manage or lead; everyone else only their
+  own. Anything else is a `PermissionError` from the server, not only a hidden control.
+
+### Status age
+
+How long a started task has sat in its current status, so a task "In progress" for weeks
+stands out. `status_since` on every task item of `get_my_work`, `get_overview`,
+`get_assigned_by` and `get_in_progress` (Working, Pending Review and On Hold tasks; `null`
+otherwise), from `status_since()` in `helpdesk/api/work.py`:
+
+1. On Hold: the task's `hold_since`.
+2. Else the task's Version history: the latest change that moved `status` into its current
+   value (`status_changed_on()`, one query for the whole list; the JSON is read in Python so a
+   move *out of* the status never counts). Task has `track_changes`, so every save through the
+   app writes one.
+3. Else (no history row, e.g. set straight in the database) its `exp_start_date`, else its
+   `creation`.
+
+The Follow-ups "waiting for review" rule reads the same history through `status_changed_on()`
+(keeping its own fallback, the task's last change).
+
+`WorkItemRow` (`statusAge()` in `workMeta.ts`) shows it once, for every page that uses the row
+(My Work, the Overview, In progress): a small neutral mono "9d" after the status badge, in
+calendar days, with the tooltip "In progress since Wed 14 Oct" and the screen-reader text "In
+progress for 9 days". Held tasks don't repeat it there: their due column already says how long
+the hold has lasted.
+
+### Assigned by me
+
+The My Work tab for the person who hands work out: "which tasks did I give to whom, in which
+projects, and where do they stand?". API `helpdesk.api.work.get_assigned_by(user)`:
+
+- **What's in it**: open tasks (not Completed, Cancelled or Template) with an open ToDo whose
+  `assigned_by` is the person and whose `allocated_to` is someone else (`given_out_query()`,
+  shared with Home's "Given out" part). The task list goes through `frappe.get_list`, so the
+  viewer only gets tasks they may read, and is capped at `LIST_LIMIT`. Each item is the usual
+  work item (status, status age, due, risks, pull requests, `can_plan`, `can_approve`) plus
+  `given_to`, the people the person gave it to; it skips `assigned_by`, which is the person on
+  every row.
+- **Whose**: the viewer's own by default. On someone else's My Work (`?user=`) the tab is
+  "Assigned by them" and lists what that person gave out, under the same rule as the rest of
+  the page ([who may see another person's work](#my-work-my-work)); managers and leads use the
+  header's "Show work for…" picker for it, so there is no second person picker.
+- **Layout**: one card per person the tasks went to, busiest first, with a count; a task given
+  to two people sits in both. Rows are `WorkItemRow` with the assignee column (avatar and
+  name) instead of "Assigned by", with Approve and Plan where the viewer may (`mine` false),
+  opening the task details in place.
+- **Filters**: Person and Project (frappe-ui `Select`, built from the results), with Clear
+  filters; kept in the URL as `to` and `project` next to `tab`, and reset when the page
+  switches to another person.
+- **States**: a skeleton while loading; "Couldn't load the tasks given out" with Retry; "You
+  haven't assigned any open tasks."; "Nothing matches these filters" with Clear filters. The
+  tab's count is the number of tasks, before the filters.
+- Tests: `helpdesk/tests/test_task_aging.py` (with the status age).
 
 ## Board (`/my-board`)
 
@@ -502,6 +565,46 @@ assignee's latest ToDo that wasn't cancelled (`assign_to` records `assigned_by`)
 created the task. The UI (`assignedByName()` in `taskMeta.ts`) shows it as muted "Assigned by
 …" text on board cards and My Work rows, as a row in the task details and in Edit task, and
 hides it when the assignee took the task themselves.
+
+### New tasks
+
+Spec for the request "a newly assigned task must stand out from the ones people already had".
+Code: `helpdesk/tasky/new_assignments.py`.
+
+- **The notice.** Every assignment is a ToDo, so `notify_assignee` runs on ToDo
+  `after_insert` (hooks.py) and catches every way a task is given out: New task, Edit task,
+  checklists, recurring tasks, tasks from tickets and sign-offs, the desk. It sends one HD
+  Notification of type **Assignment** (the bell, open tabs through `helpdesk:new-notification`,
+  and phones when Mobile push is on), from the assigner, linking to `/my-work?task=<name>`, and,
+  when HD Chat Settings is on, one Teams or Slack direct message
+  (`HDNotification.queue_chat`). It sends no email: Frappe's own assignment notice already
+  emails the person as their Notification Settings allow, and its link now opens the task in
+  `/helpdesk` too (`extends/notification_log.py`). Assignment (not Reminder) keeps the bell's
+  wording right and leaves the reminder email and its dedupe out of it.
+- **Wording.** "Meera Iyer assigned you a new task: …"; "… reassigned a task to you: …" when it
+  was taken off someone else; "… assigned you … again" when the person had it before.
+- **No notice** when someone assigns themselves, for the automation user, Administrator and
+  Guest, for a disabled account, and for callers that tell the person in their own words
+  (they run inside `told_by_caller()`): handing over ("handed you a task"), asking for help
+  ("needs your help"), content posts ("New content task", or the plan's summary), stand-up help
+  ("asked you to help") and a sign-off's clarification task (the sign-off notice). A checklist
+  made from a template sends one notice per person ("… assigned you 3 new tasks in …"). The
+  notice's wording describes the event ("reassigned" = taken off someone else), while the row's
+  mark describes the reader ("Reassigned" = they had it before), so a task moved to someone new
+  reads "reassigned a task to you" in the bell and "New" on the row. The mark uses the brand
+  accent on purpose: it is the viewer's current to-do signal, with its text always shown.
+- **Seen.** `HD Task Seen` (user, task, seen_on; unique per user and task) records when a person
+  last opened a task. `TaskDetailDialog` calls `mark_task_seen(task)` (POST; needs read
+  permission) when it loads a task the viewer is assigned to. Frappe's `_seen` isn't used: it
+  resets on every save. Tasks people already had when this shipped were marked seen by the
+  patch `mark_assigned_tasks_seen`, so nobody starts with a page of New marks.
+- **The mark.** `assignment_states(user, tasks)` (two queries for any list) gives each task the
+  person has an open ToDo on, created after they last opened it, a state: `reassigned` when they
+  had an earlier ToDo on it, else `new`. `get_my_work` (the viewer's own list only, not a team
+  member's) and `get_my_tasks` return it as `assignment_state` (null once opened).
+  `NewTaskBadge.vue` shows it as a brand-soft "New" or "Reassigned" badge with text, after the
+  title on My Work and My Tasks rows; opening the task clears it at once and the server
+  remembers.
 
 ### On hold: why, and who
 
@@ -552,7 +655,8 @@ card's menu, the checklist row's menu and the task details (`HandOverTaskDialog`
   hander's place (`HDContentPost.replace_on_part`, saved without re-syncing its tasks), so
   the post's next save doesn't give the task back.
 - **Record and notices:** comments "Reassigned from … to … by …" and "Handed over by …:
-  reason"; the teammate is notified ("… handed you a task"), and the project lead (or its
+  reason"; the teammate is notified ("… handed you a task", with no separate assignment
+  notice, see [New tasks](#new-tasks)), and the project lead (or its
   managers when it has no lead) and the original assigner hear who took it and why, each
   only while they may still read the task.
 
@@ -679,7 +783,7 @@ logged it all as one time log ending now, so yesterday's work landed on today.
 When a task becomes **Completed**, whoever assigned it (the same person the "Assigned by" label
 shows, from `get_assigners()`) gets a **Task Completed** notification: "Fathima Rizwana completed
 Bank reconciliation", credited to the assignees who did the work (when a lead's review approval
-completes it) or else to whoever completed it, linking to the task's project (My Work when it has none).
+completes it) or else to whoever completed it, linking to the task's details on My Work (`/my-work?task=`).
 `Task.tell_assigner_it_is_done()` sends it through `notify_users(…, notification_type="Task
 Completed", user_from=…, once=False)`, so completing a reopened task notifies again. It isn't sent
 when the assigner completed (or, on review projects, approved) it themselves, when the assignee
@@ -695,7 +799,9 @@ count updates without a reload. For Task Completed the notification store
 made with the Web Audio API, no sound file) and shows the message as a toast. Browsers only play
 sound after the person has used the page; if audio is blocked the chime is skipped and the bell
 and toast still show. The panel shows the completer's avatar and the message
-(`isTextOnly()` in `Notifications.vue` and `MobileNotifications.vue`).
+(`isTextOnly()` in `stores/notification.ts`, used by `Notifications.vue` and
+`MobileNotifications.vue`). New-ticket notices have their own sound preference, see
+[ticket-owners.md](ticket-owners.md#notification).
 
 ### When a task is overdue
 
@@ -798,12 +904,18 @@ the logic is `TaskActivity` in `helpdesk/task_activity.py`.
 ## Timesheets (`/timesheets`)
 
 `desk/src/pages/tasky/Timesheets.vue`; APIs `helpdesk.tasky.api.get_my_timesheets` (the list,
-the 500 most recently updated), `get_timesheet_summary` (the totals) and
-`export_timesheets_csv` (Download CSV, one row per time log).
+the 500 most recently updated), `get_timesheet_summary` (the totals),
+`get_timesheet_days` (the By day view) and `export_timesheets_csv` (Download CSV, one row per
+time log).
 
 - **Scope**: Mine, or Team for leads and managers (the timesheets on projects they lead or
-  manage). Filters: agent (Team), From and To (the day the work was done).
-- **URL**: `scope=team`, `agent`, `from`, `to`.
+  manage). Filters: agent (Team), project, From and To (the day the work was done). Every
+  filter applies alike to the tiles, the breakdowns, the list, By day and the CSV
+  (`_timesheet_filters` for the timesheets, `_time_log_filters` for their time logs).
+- **Cancelled timesheets** never count: `_time_log_filters` skips cancelled time logs, so
+  the hours, By day and the CSV leave them out. The list still shows the timesheet with its
+  Cancelled status.
+- **URL**: `scope=team`, `view=day`, `agent`, `project`, `from`, `to`.
 - **Summary tiles**: Hours logged in the period, Timesheets (500+ when the list is capped) and
   Drafts.
 - **By person** (Team) and **By project**: `get_timesheet_summary(team, agent, from_date,
@@ -811,7 +923,36 @@ the 500 most recently updated), `get_timesheet_summary` (the totals) and
   viewer may see; it doesn't use each timesheet's total, so a timesheet across several
   projects or days splits correctly. Six rows each, then "N more · Xh". The bars are neutral
   and show each row's share of the period.
-- **Download CSV** has a Billable column.
+- **Download CSV** has a Billable column. Notes are plain text (`_plain_note`: tags dropped,
+  entities decoded).
+- **List | By day** (segmented control above the list). **By day** is the employee's daily
+  log of the work, for them and their manager: one card per person (name order; Mine shows
+  just you) with their hours and the number of days, then each day with time logged
+  (oldest first) with its total, and under it one row per task, or per project for time
+  logged without a task: the task (with its project under it), the hours and the work notes
+  as plain text. Days without time are left out. Hours are facts only: no targets, no
+  "under 8h" or idle warnings, no rankings or comparisons between people.
+  - `get_timesheet_days(from_date, to_date, team, agent, project)` uses the same permission
+    path as the list (`_timesheet_filters`, then `timesheet_query` through `get_list`), so a
+    developer sees their own, a lead or manager the timesheets on their projects, a Sales
+    Employee only their own (Team refused). It reads the time logs in one query and the
+    project, task and people names in one query each.
+  - Bounded: at most 62 days (`TIMESHEET_DAYS_MAX_RANGE`; the page says "Pick up to 62 days
+    at a time." and doesn't ask); more than 2000 time logs (`TIMESHEET_DAYS_MAX_LOGS`)
+    returns `too_many`, shown as "Too many time logs to show day by day" with Download CSV,
+    rather than a partial picture.
+  - The period defaults to this week (Monday to Sunday) when no dates are picked; one date
+    alone gets the week from or up to it. In By day this week isn't counted as a filter.
+  - States: loading skeleton, error with Retry, too many, and empty ("No time logged in
+    these dates": Clear filters when filtered, otherwise Log time).
+  - No print view: Download CSV is the export.
+- **Leads opening a timesheet**: `timesheet_has_permission` lets a lead read a timesheet with
+  time on a project they lead, matching `timesheet_query` (before, the list showed it and
+  opening it was refused).
+- **Tests**: `helpdesk/tests/test_timesheet_days.py` (grouping and sums, own vs team, the
+  project filter across days, summary, list and CSV, Sales Employee, cancelled, date bounds,
+  plain notes, a lead opening a timesheet); the list, summary and CSV in
+  `helpdesk/tests/test_work_control.py` (`TestTeamTimesheets`).
 - **List**: a titled card; Timesheet, Person (Team), Status, Hours (right-aligned, tabular)
   and Updated columns from `md`; below that a two-line row with person, status and date in
   the second line. Empty states tell "no time logged in these dates" (Clear filters) from

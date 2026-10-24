@@ -48,8 +48,18 @@ export function signoffStatusMeta(status: string): StatusMeta {
   return SIGNOFF_STATUS[status] ?? SIGNOFF_STATUS.Draft;
 }
 
-export function responseMeta(response: string): StatusMeta {
-  return RESPONSE[response] ?? RESPONSE.Pending;
+// a UAT's answers read as test results (docs/project-signoff.md, UAT)
+const UAT_LABELS: Record<string, string> = {
+  Done: "Pass",
+  "Not clear": "Fail",
+  Escalated: "Blocker",
+};
+
+export function responseMeta(response: string, uat = false): StatusMeta {
+  const meta = RESPONSE[response] ?? RESPONSE.Pending;
+  return uat && UAT_LABELS[response]
+    ? { ...meta, label: UAT_LABELS[response] }
+    : meta;
 }
 
 export function needsFollowUp(response?: string): boolean {

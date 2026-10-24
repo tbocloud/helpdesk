@@ -11,6 +11,7 @@ from helpdesk.api import departments
 from helpdesk.helpdesk.doctype.hd_department.hd_department import (
     DEFAULT_DEPARTMENTS,
     DEFAULT_GROUPS,
+    SALES_AND_WEB_DEPARTMENTS,
     ensure_default_departments,
     set_default_groups,
 )
@@ -61,7 +62,10 @@ class TestDepartments(FrappeTestCase):
         # someone put Creative under ERP on purpose: that stays
         frappe.db.set_value("HD Department", "Creative", "parent_department", "ERP")
 
-        self.assertEqual(set(set_default_groups()), {"GrowthX", "Internal / R&D"})
+        self.assertEqual(
+            set(set_default_groups()),
+            {"GrowthX", "Internal / R&D", "Web Development", "CRM"},
+        )
         self.assertEqual(set_default_groups(), [])
         parents = dict(
             frappe.get_all(
@@ -73,7 +77,37 @@ class TestDepartments(FrappeTestCase):
         )
         self.assertEqual(
             parents,
-            {"GrowthX": "ERP", "Internal / R&D": "ERP", "Creative": "ERP"},
+            {
+                "GrowthX": "ERP",
+                "Internal / R&D": "ERP",
+                "Creative": "ERP",
+                "Web Development": "Digital",
+                "CRM": "Sales",
+            },
+        )
+
+    def test_sales_and_web_development_are_seeded_into_their_groups(self):
+        ensure_default_departments()
+        frappe.delete_doc("HD Department", "GrowthX", force=True)
+        frappe.delete_doc("HD Department", "CRM", force=True)
+        frappe.db.set_value(
+            "HD Department", "Web Development", "parent_department", None
+        )
+
+        # the patch adds only the new departments: a default deleted earlier stays deleted
+        self.assertEqual(ensure_default_departments(SALES_AND_WEB_DEPARTMENTS), ["CRM"])
+        self.assertFalse(frappe.db.exists("HD Department", "GrowthX"))
+        self.assertEqual(
+            frappe.db.get_value("HD Department", "CRM", "parent_department"), "Sales"
+        )
+        self.assertEqual(
+            frappe.db.get_value(
+                "HD Department", "Web Development", "parent_department"
+            ),
+            "Digital",
+        )
+        self.assertFalse(
+            frappe.db.get_value("HD Department", "Sales", "parent_department")
         )
 
     def test_groups_are_one_level_deep(self):

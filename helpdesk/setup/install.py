@@ -375,6 +375,17 @@ def get_custom_fields():
                 "set_only_once": 1,
             },
         ],
+        "User": [
+            {
+                # a chime with a new ticket's notice, set by the person in
+                # Settings → Preferences (docs/ticket-owners.md#notification)
+                "fieldname": "hd_new_ticket_sound",
+                "fieldtype": "Check",
+                "label": "Sound for New Tickets",
+                "default": "0",
+                "insert_after": "mute_sounds",
+            },
+        ],
         "Communication": [
             {
                 # an agent sent this reply from an AI draft (it is still their reply);
@@ -774,6 +785,35 @@ def get_custom_fields():
                 "options": "File",
                 "label": "Training Completion Letter",
                 "insert_after": "custom_department",
+                "read_only": 1,
+                "no_copy": 1,
+            },
+            {
+                # the sales lead and the implementation plan on the ERP site it was made
+                # from (TBO Smart's docs/client-documents.md §7)
+                "fieldname": "custom_crm_lead",
+                "fieldtype": "Data",
+                "label": "Sales Lead",
+                "insert_after": "custom_signoff_letter",
+                "read_only": 1,
+                "no_copy": 1,
+            },
+            {
+                "fieldname": "custom_crm_plan",
+                "fieldtype": "Data",
+                "label": "Implementation Plan",
+                "insert_after": "custom_crm_lead",
+                "read_only": 1,
+                "no_copy": 1,
+                "search_index": 1,
+            },
+            {
+                # who made it from the plan: the hub asks the ERP site about the plan as them
+                "fieldname": "custom_crm_acting_user",
+                "fieldtype": "Link",
+                "options": "User",
+                "label": "Made From Plan By",
+                "insert_after": "custom_crm_plan",
                 "read_only": 1,
                 "no_copy": 1,
             },

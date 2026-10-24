@@ -33,6 +33,7 @@ from helpdesk.content_team import (
     DM_HEAD_ROLE,
     in_content_team,
     is_erp_only,
+    is_sales_employee,
 )
 from helpdesk.utils import assigned_names_query
 
@@ -41,6 +42,8 @@ ADMIN_ROLES = ("System Manager", "Agent Manager")
 CONTENT_DEPARTMENT = "Digital"
 # each team keeps out of the other's department (by department name, see departments.md)
 HIDDEN_DEPARTMENTS = {"DM Employee": "ERP", "ERP Employee": CONTENT_DEPARTMENT}
+# what can't be assigned to a Sales Employee
+SALES_REFUSED_ASSIGNMENTS = ("Task", "HD Ticket")
 # role -> the department its holders head, besides the department's own Heads setting
 DEPARTMENT_HEADS = {DM_HEAD_ROLE: CONTENT_DEPARTMENT}
 # the user-list child table behind HD Department.heads
@@ -142,16 +145,16 @@ def check_can_take_content_task(user: str):
 
 
 def check_assignment_department(todo, method=None):
-    """Refuse giving a task to someone whose team keeps out of its project's department.
+    """Refuse giving a task to someone whose team keeps out of its project's department,
+    and a task or a ticket to a Sales Employee.
 
     Assigning shares the task with them, which would let them open it even though it's
     hidden from all their lists; so the assignment itself is refused.
     """
-    if (
-        todo.reference_type != "Task"
-        or not todo.allocated_to
-        or todo.status == "Cancelled"
-    ):
+    if not todo.allocated_to or todo.status == "Cancelled":
+        return
+    check_sales_assignment(todo)
+    if todo.reference_type != "Task":
         return
     project, content_post = frappe.db.get_value(
         "Task", todo.reference_name, ["project", "content_post"]
@@ -165,6 +168,24 @@ def check_assignment_department(todo, method=None):
                 frappe.db.get_value("Project", project, "custom_department"),
             )
         )
+
+
+def check_sales_assignment(todo):
+    """Sales Employees see no tasks or tickets, so they can't be given one. Only a new
+    assignment is refused: closing one they held before the wall still works."""
+    if todo.reference_type not in SALES_REFUSED_ASSIGNMENTS or todo.status != "Open":
+        return
+    reassigned = todo.has_value_changed("allocated_to") or todo.has_value_changed(
+        "status"
+    )
+    if not (todo.is_new() or reassigned) or not is_sales_employee(todo.allocated_to):
+        return
+    name = frappe.utils.get_fullname(todo.allocated_to)
+    if todo.reference_type == "Task":
+        frappe.throw(
+            _("{0} is on the Sales team and can't be given tasks.").format(name)
+        )
+    frappe.throw(_("{0} is on the Sales team and can't be given tickets.").format(name))
 
 
 def get_managed_projects(user: str) -> list[str]:
@@ -492,6 +513,8 @@ def project_query(user: str | None = None) -> str | None:
     user = user or frappe.session.user
     if is_tasky_admin(user):
         return None
+    if is_sales_employee(user):
+        return "1 = 0"
     u = frappe.db.escape(user)
     condition = (
         f"(`tabProject`.`owner` = {u} or `tabProject`.`project_lead` = {u} or `tabProject`.`name` in "
@@ -509,6 +532,8 @@ def task_query(user: str | None = None) -> str | None:
     user = user or frappe.session.user
     if is_tasky_admin(user):
         return None
+    if is_sales_employee(user):
+        return "1 = 0"
     # a task someone added for a teammate stays visible to them
     owner = frappe.db.escape(user)
     condition = (
@@ -540,6 +565,9 @@ def timesheet_query(user: str | None = None) -> str | None:
     if is_tasky_admin(user):
         return None
     u = frappe.db.escape(user)
+    if is_sales_employee(user):
+        # no projects, so nobody else's timesheets either
+        return f"`tabTimesheet`.`owner` = {u}"
     return (
         f"(`tabTimesheet`.`owner` = {u} or `tabTimesheet`.`name` in "
         f"(select `parent` from `tabTimesheet Detail` where `project` in ({_managed_projects_subquery(user)})))"
@@ -553,7 +581,11 @@ def project_has_permission(
     doc, ptype: str | None = None, user: str | None = None
 ) -> bool | None:
     user = user or frappe.session.user
-    if ptype == "create" or is_tasky_admin(user):
+    if is_tasky_admin(user):
+        return None
+    if is_sales_employee(user):
+        return False
+    if ptype == "create":
         return None
     if doc.get("custom_department") in hidden_departments(user):
         return False
@@ -574,7 +606,7 @@ def task_has_permission(
     user = user or frappe.session.user
     if is_tasky_admin(user):
         return None
-    if is_hidden_project(doc.project, user):
+    if is_sales_employee(user) or is_hidden_project(doc.project, user):
         return False
     # outside the content team, only their own content tasks; never for ERP Employees
     if (
@@ -605,7 +637,11 @@ def timesheet_has_permission(
     user = user or frappe.session.user
     if ptype == "create" or is_tasky_admin(user) or doc.owner == user:
         return None
-    managed = set(get_managed_projects(user))
+    if is_sales_employee(user):
+        return False
+    # the same projects as timesheet_query: managed or led, so a lead can open
+    # the timesheets the list shows them
+    managed = set(get_managed_projects(user)) | set(get_led_projects(user))
     if ptype == "read" and any(
         log.project in managed for log in doc.get("time_logs", [])
     ):

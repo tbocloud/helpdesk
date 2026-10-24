@@ -3,7 +3,7 @@
     :title="__('Agents')"
     :description="
       __(
-        'Everyone who works here: agent or manager, and their department wall (ERP or Digital team), set from each agent\'s menu. Only the content team sees the content calendar; put someone on the Digital team to add them.'
+        'Everyone who works here: agent or manager, and their wall (ERP, Digital or Sales team), set from each agent\'s menu. Only the content team sees the content calendar; put someone on the Digital team to add them. The Sales team sees only Leads and the Scoreboard.'
       )
     "
   >
@@ -261,6 +261,10 @@ const WALLS = [
   { role: "", label: __("No wall: every department") },
   { role: "ERP Employee", label: __("ERP team: no Digital or content") },
   { role: "DM Employee", label: __("Digital team: content calendar, no ERP") },
+  {
+    role: "Sales Employee",
+    label: __("Sales team: leads only, no tasks or tickets"),
+  },
 ];
 
 const walls = createResource({
@@ -322,9 +326,10 @@ function wallOptions(agent: string) {
 
 function wallLabel(agent: string) {
   const roles: string[] = walls.data?.[agent] ?? [];
-  if (roles.length > 1) return __("ERP and Digital walls");
+  if (roles.length > 1) return __("More than one wall");
   if (roles[0] === "ERP Employee") return __("ERP team");
   if (roles[0] === "DM Employee") return __("Digital team");
+  if (roles[0] === "Sales Employee") return __("Sales team");
   return "";
 }
 

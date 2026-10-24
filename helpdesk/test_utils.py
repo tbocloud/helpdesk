@@ -1,4 +1,5 @@
 import gzip
+import io
 import json
 from datetime import datetime
 from unittest.mock import patch
@@ -211,6 +212,22 @@ def get_ticket_owner_activity(ticket) -> list[str]:
         "HD Ticket Activity",
         filters={"ticket": str(ticket), "action": ("like", "%ticket owner of%")},
         pluck="action",
+    )
+
+
+def get_ticket_notices(ticket, notification_type: str) -> list[tuple[str, str]]:
+    """The (user_to, message) pairs of a ticket's HD Notifications of one type
+    (e.g. New Ticket, Ticket Update), sorted."""
+    return sorted(
+        (n.user_to, n.message)
+        for n in frappe.get_all(
+            "HD Notification",
+            filters={
+                "reference_ticket": str(ticket),
+                "notification_type": notification_type,
+            },
+            fields=["user_to", "message"],
+        )
     )
 
 
@@ -709,6 +726,15 @@ def make_content_user(email: str, full_name: str, role: str):
     return make_tasky_user(email, full_name, roles=(role,))
 
 
+def make_sales_employee(email: str, full_name: str, *roles: str):
+    """Creates an agent with the Sales Employee role (sees Leads and the Scoreboard, no
+    tasks, projects, tickets or content), plus any other `roles`."""
+    from helpdesk.content_team import SALES_EMPLOYEE_ROLE, ensure_role
+
+    ensure_role()
+    return make_tasky_user(email, full_name, roles=(SALES_EMPLOYEE_ROLE, *roles))
+
+
 def attach_file(doctype: str, name: str, file_name: str = "draft.png"):
     """Attaches a small private file to a document as the current user, the way the
     upload button does (it needs write permission on the document)."""
@@ -771,6 +797,32 @@ def make_project_file(
 
     def add():
         return add_project_file(project, file_name, content, for_users, folder)["name"]
+
+    return run_as_user(user, add) if user else add()
+
+
+def make_image_bytes(fmt: str, colour: str = "teal") -> bytes:
+    """A real 4×4 image in `fmt` (PNG, JPEG, WEBP, GIF), for upload tests."""
+    from PIL import Image
+
+    out = io.BytesIO()
+    Image.new("RGB", (4, 4), colour).save(out, format=fmt)
+    return out.getvalue()
+
+
+def make_task_attachment(
+    task: str,
+    file_name: str = "screenshot.png",
+    content: bytes = b"\x89PNG\r\n\x1a\n" + b"\0" * 64,
+    user: str | None = None,
+) -> str:
+    """Attaches an image or video to a task through the task attachments API, as
+    `user` (default: the session user), and returns the File's name. The default
+    content starts with PNG's magic number, which is all the type check reads."""
+    from helpdesk.api.task_attachments import add_task_attachment
+
+    def add():
+        return add_task_attachment(task, file_name, content)["name"]
 
     return run_as_user(user, add) if user else add()
 
@@ -1259,10 +1311,12 @@ def make_member_day(project: str, member: str, lead: str, teammate: str) -> dict
     return tasks
 
 
-def log_hours(user: str, project: str, hours: float, day) -> str:
-    """Creates a draft Timesheet of `hours` on `project` on `day`, logged by `user`
-    (its owner); returns its name."""
-    sheet = make_timesheet(project, hours, f"{day} 10:00:00").name
+def log_hours(
+    user: str, project: str, hours: float, day, at: str = "10:00:00", **log
+) -> str:
+    """Creates a draft Timesheet of `hours` on `project` on `day` at `at`, logged by
+    `user` (its owner); returns its name. `log` passes `task` or `notes` on."""
+    sheet = make_timesheet(project, hours, f"{day} {at}", **log).name
     frappe.db.set_value("Timesheet", sheet, "owner", user, update_modified=False)
     return sheet
 
@@ -1446,6 +1500,13 @@ def hand_over_task_as(
     )
 
 
+def reassign_task_as(user: str, task: str, assignee: str):
+    """`user` gives `task` to `assignee` through the whitelisted update_task (Edit task)."""
+    return call_as_user(
+        user, "helpdesk.tasky.api.update_task", task=task, assigned_to=assignee
+    )
+
+
 def get_content_task(post: str, role: str) -> str | None:
     """The Task a content post made for one role ("Writer", "Designer", …)."""
     return frappe.db.get_value(
@@ -1551,6 +1612,30 @@ def get_reminder_messages(user: str, reference_name) -> list[str]:
         },
         pluck="message",
     )
+
+
+def get_assignment_notices(user: str, reference_name) -> list[str]:
+    """Messages of the Assignment HD Notifications sent to `user` about a document, oldest first."""
+    return frappe.get_all(
+        "HD Notification",
+        filters={
+            "user_to": user,
+            "notification_type": "Assignment",
+            "reference_name": str(reference_name),
+        },
+        order_by="creation asc",
+        pluck="message",
+    )
+
+
+def get_assignment_state(user: str, task: str, source: str = "my_work") -> str | None:
+    """The New / Reassigned mark `user` sees on `task` in My Work (`source` "my_work")
+    or My Tasks ("my_tasks"); None when the task is unmarked or not in the list."""
+    if source == "my_work":
+        rows = call_as_user(user, "helpdesk.api.work.get_my_work")["items"]
+    else:
+        rows = call_as_user(user, "helpdesk.tasky.api.get_my_tasks")
+    return next((r.get("assignment_state") for r in rows if r["name"] == task), None)
 
 
 def send_task_reminder(task: str, escalate: bool = False) -> str:
@@ -2555,7 +2640,7 @@ def make_github_payload(event: str, action: str = "", **overrides) -> dict:
     """A minimal GitHub webhook payload shaped like the real one for `event`.
 
     Overrides: repo, number, title, body, branch, draft, merged, closed, login,
-    comments, review_state, review_body, reviewer, conclusion, sha, workflow,
+    comments, labels (names), review_state, review_body, reviewer, conclusion, sha, workflow,
     pull_requests (workflow_run / check_suite: PR numbers the run belongs to).
     """
     repo = overrides.get("repo", GITHUB_TEST_REPO)
@@ -2597,6 +2682,7 @@ def make_github_payload(event: str, action: str = "", **overrides) -> dict:
         "closed_at": "2026-09-30T10:00:00Z" if closed else None,
         "merged_by": {"login": "lead-octocat"} if merged else None,
         "comments": overrides.get("comments", 0),
+        "labels": [{"name": label} for label in overrides.get("labels", ())],
         "user": {"login": login},
         "head": {"ref": branch, "sha": sha},
         "base": {"ref": "main"},
@@ -3178,10 +3264,12 @@ def make_timesheet(
     from_time,
     task: str | None = None,
     billable: int = 1,
+    notes: str | None = None,
 ):
     """Creates a draft Timesheet with one time log of `hours` on `project` (and `task`).
 
-    `billable=0` logs internal time that doesn't use up a customer's support hours.
+    `billable=0` logs internal time that doesn't use up a customer's support hours;
+    `notes` is the log's work note.
     """
     return frappe.get_doc(
         {
@@ -3193,6 +3281,7 @@ def make_timesheet(
                     "hours": hours,
                     "from_time": from_time,
                     "custom_billable": billable,
+                    "description": notes,
                 }
             ],
         }
@@ -3264,6 +3353,8 @@ class FakeCRM:
         self.base = "https://erp.example"
         self.lead_answers: dict[str, object] = {}
         self.lead_calls: list[tuple[str, bool, dict]] = []
+        # the full method path of each call, e.g. tbo_smart.api.hub_proposals.get_proposal
+        self.lead_paths: list[str] = []
         self.lead_error: Exception | None = None
 
     def logged_user(self):
@@ -3325,9 +3416,20 @@ class FakeCRM:
     def call(self, method, post=False, **params):
         name = method.rsplit(".", 1)[-1]
         self.lead_calls.append((name, post, params))
+        self.lead_paths.append(method)
         if self.lead_error:
             raise self.lead_error
         return self.lead_answers.get(name)
+
+    def download(self, method, **params):
+        """A file method (a call's recording): `lead_answers[name]` is its
+        (bytes, content type); recorded as a GET call."""
+        name = method.rsplit(".", 1)[-1]
+        self.lead_calls.append((name, False, params))
+        self.lead_paths.append(method)
+        if self.lead_error:
+            raise self.lead_error
+        return self.lead_answers.get(name) or (b"", "")
 
     def customers(self):
         return [{"name": c, "customer_name": c} for c in self.erp]
@@ -3466,6 +3568,29 @@ def enable_leads(teams: tuple[str, ...] = ()):
         "HD CRM Settings",
         {"enabled": 1, "enable_leads": 1, "leads_teams": "\n".join(teams)},
     )
+
+
+def sales_person(user: str, **counts) -> dict:
+    """One salesperson's row as TBO Smart's get_sales_activity answers it: every
+    count 0 unless given (contacted, moms_submitted, quotations_sent, won, …)."""
+    row = {
+        field: 0
+        for field in (
+            "contacted",
+            "meetings_held",
+            "moms_submitted",
+            "mom_pending",
+            "quotations_sent",
+            "follow_ups_done",
+            "follow_ups_on_time",
+            "follow_ups_overdue",
+            "new",
+            "won",
+            "won_value",
+            "calls",
+        )
+    }
+    return {"user": user, "full_name": user, **row, **counts}
 
 
 def make_hd_leave(
@@ -4402,6 +4527,20 @@ def make_started_task(
     make_assignment("Task", task, assignee)
     frappe.db.set_value("Task", task, {"status": status, **values})
     return task
+
+
+def record_status_change(task: str, old: str, new: str, at) -> None:
+    """Writes a Version row saying `task` moved from `old` to `new` at `at`, as the
+    task form's history would, so a task's status age can be read from it."""
+    version = frappe.get_doc(
+        {
+            "doctype": "Version",
+            "ref_doctype": "Task",
+            "docname": task,
+            "data": frappe.as_json({"changed": [["status", old, new]]}),
+        }
+    ).insert(ignore_permissions=True)
+    frappe.db.set_value("Version", version.name, "creation", at, update_modified=False)
 
 
 def get_in_progress_as(user: str, **filters) -> dict:

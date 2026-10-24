@@ -60,6 +60,7 @@ helpdesk.patches.v16_0_2.enable_auto_investigate
 helpdesk.patches.v16_0_2.add_waiting_on_task_status
 helpdesk.patches.v16_0_2.set_connection_support_user
 helpdesk.patches.v16_0_2.close_finished_task_todos
+helpdesk.patches.v16_0_2.mark_assigned_tasks_seen
 helpdesk.patches.v16_0_2.rename_qcs_connections
 helpdesk.patches.v16_0_2.ignore_automated_emails
 helpdesk.patches.v16_0_2.ticket_intake_defaults
@@ -84,3 +85,4 @@ helpdesk.patches.v16_0_2.seed_follow_up_settings
 helpdesk.patches.v16_0_2.seed_standup_settings
 helpdesk.patches.v16_0_2.reset_seeded_afternoon_nudge
 helpdesk.patches.v16_0_2.set_offboarding_defaults
+helpdesk.patches.v16_0_2.seed_sales_departments

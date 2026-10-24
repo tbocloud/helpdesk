@@ -74,7 +74,9 @@
                   </dd>
                 </div>
                 <div v-if="s.trainer_name" class="flex gap-1.5">
-                  <dt class="text-ink-gray-5">{{ __("Trainer") }}</dt>
+                  <dt class="text-ink-gray-5">
+                    {{ uat ? __("Tests with") : __("Trainer") }}
+                  </dt>
                   <dd class="text-ink-gray-8">{{ s.trainer_name }}</dd>
                 </div>
                 <div v-if="s.training_date" class="flex gap-1.5">
@@ -133,6 +135,24 @@
                   ><LucideSend class="size-4" aria-hidden="true"
                 /></template>
               </Button>
+              <!-- a UAT's state the ERP site couldn't take yet (the history says why) -->
+              <Button
+                v-if="notRecorded"
+                :label="__('Record on the ERP site')"
+                :loading="busy === 'record'"
+                @click="
+                  run(
+                    'record',
+                    'record_uat_again',
+                    {},
+                    __('Recorded on the ERP site')
+                  )
+                "
+              >
+                <template #prefix
+                  ><LucideRefreshCw class="size-4" aria-hidden="true"
+                /></template>
+              </Button>
               <a
                 v-if="s.signed_pdf"
                 :href="s.signed_pdf.file_url"
@@ -170,7 +190,7 @@
           <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
             <StatTile
               compact
-              :label="__('Done')"
+              :label="__(responseMeta('Done', uat).label)"
               :value="
                 __('{0} of {1}', String(s.counts.done), String(s.counts.total))
               "
@@ -181,14 +201,14 @@
             />
             <StatTile
               compact
-              :label="__('Not clear')"
+              :label="__(responseMeta('Not clear', uat).label)"
               :value="s.counts.not_clear"
               :icon="LucideCircleHelp"
               :icon-tone="s.counts.not_clear ? 'warning' : 'neutral'"
             />
             <StatTile
               compact
-              :label="__('Escalated')"
+              :label="__(responseMeta('Escalated', uat).label)"
               :value="s.counts.escalated"
               :icon="LucideTriangleAlert"
               :icon-tone="s.counts.escalated ? 'danger' : 'neutral'"
@@ -339,9 +359,9 @@
                   class="flex shrink-0 flex-wrap items-center gap-2 pl-8 sm:pl-0"
                 >
                   <TaskyBadge
-                    :label="__(responseMeta(item.response).label)"
-                    :tone="responseMeta(item.response).tone"
-                    :icon="responseMeta(item.response).icon"
+                    :label="__(responseMeta(item.response, uat).label)"
+                    :tone="responseMeta(item.response, uat).tone"
+                    :icon="responseMeta(item.response, uat).icon"
                   />
                   <Button
                     v-if="item.clarification_task"
@@ -367,9 +387,11 @@
                   </Button>
                   <Button
                     v-if="s.can_manage && needsFollowUp(item.response)"
-                    :label="__('Mark clarified')"
+                    :label="uat ? __('Mark fixed') : __('Mark clarified')"
                     :aria-label="
-                      __('Mark question {0} clarified', String(item.n))
+                      uat
+                        ? __('Mark test {0} fixed', String(item.n))
+                        : __('Mark question {0} clarified', String(item.n))
                     "
                     @click="startClarify(item)"
                   />
@@ -452,7 +474,7 @@
     <!-- mark clarified -->
     <Dialog
       :open="!!clarifying"
-      :title="__('Mark clarified')"
+      :title="uat ? __('Mark fixed') : __('Mark clarified')"
       size="lg"
       @update:open="(v: boolean) => !v && (clarifying = null)"
     >
@@ -479,7 +501,7 @@
           <Button :label="__('Cancel')" @click="clarifying = null" />
           <Button
             variant="solid"
-            :label="__('Mark clarified')"
+            :label="uat ? __('Mark fixed') : __('Mark clarified')"
             :loading="busy === 'clarify'"
             @click="clarify"
           />
@@ -629,6 +651,10 @@ interface SignoffDetail {
   project: string;
   project_name: string;
   module_title: string;
+  /** Training, or UAT (Pass / Fail / Blocker against the SRS's tests) */
+  signoff_type: "Training" | "UAT";
+  /** a UAT's last state on the ERP site */
+  crm_recorded?: string | null;
   template?: string | null;
   status: string;
   training_date?: string | null;
@@ -682,6 +708,14 @@ watch(
 );
 
 const s = computed(() => detail.data as SignoffDetail | undefined);
+const uat = computed(() => s.value?.signoff_type === "UAT");
+// signed or reopened here, but the ERP site's plan doesn't have it yet
+const notRecorded = computed(
+  () =>
+    uat.value &&
+    ["Signed", "Reopened"].includes(s.value?.status ?? "") &&
+    s.value?.crm_recorded !== s.value?.status
+);
 const status = computed(() => signoffStatusMeta(s.value?.status ?? "Draft"));
 const groups = computed(() =>
   groupBySection(s.value?.items ?? [], __("General"))
@@ -831,7 +865,9 @@ function clarify() {
     "clarify",
     "mark_item_clarified",
     { item: clarifying.value.name, note: clarifyNote.value },
-    __("Marked clarified; the customer has been emailed")
+    uat.value
+      ? __("Marked fixed; the customer has been asked to test it again")
+      : __("Marked clarified; the customer has been emailed")
   );
 }
 

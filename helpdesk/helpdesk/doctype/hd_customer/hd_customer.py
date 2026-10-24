@@ -9,6 +9,7 @@ from frappe.core.api.user_invitation import invite_by_email
 from frappe.model.document import Document
 from frappe.utils import validate_email_address
 
+from helpdesk.content_team import is_sales_employee
 from helpdesk.integrations.erpnext.utils import (
     cascade_rename,
     in_cascade,
@@ -121,7 +122,8 @@ class HDCustomer(Document):
         if not self.ticket_owner:
             return None
         people = [p for p in (self.ticket_owner, self.backup_ticket_owner) if p]
-        working = active_agents(people)
+        # a Sales Employee can't be given tickets, so counts as not working here
+        working = [u for u in active_agents(people) if not is_sales_employee(u)]
         away = on_leave(users=people)
         if self.ticket_owner in working and self.ticket_owner not in away:
             return {"user": self.ticket_owner, "backup": False}

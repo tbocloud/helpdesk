@@ -8,12 +8,13 @@ import {
   ERP_EMPLOYEE_HIDDEN_ROUTES,
   CONTENT_TEAM_ROUTES,
   DM_EMPLOYEE_HIDDEN_ROUTES,
+  SALES_EMPLOYEE_ROUTES,
 } from "@/pages/content/contentTeam";
 import { createRouter, createWebHistory } from "vue-router";
 const { isMobileView } = useScreenSize();
 
 export const LOGIN_PAGE = "/login";
-const LEADS_ROUTES = new Set(["Leads", "Lead"]);
+const LEADS_ROUTES = new Set(["Leads", "Lead", "LeadProposal", "LeadNewProposal"]);
 
 // type the meta fields
 declare module "vue-router" {
@@ -161,6 +162,18 @@ const portalRoutes = [
     path: "/leads/:leadId",
     name: "Lead",
     component: () => import("@/pages/leads/Lead.vue"),
+    props: true,
+  },
+  {
+    path: "/leads/:leadId/proposals/new",
+    name: "LeadNewProposal",
+    component: () => import("@/pages/leads/NewProposal.vue"),
+    props: true,
+  },
+  {
+    path: "/leads/:leadId/proposals/:proposalId",
+    name: "LeadProposal",
+    component: () => import("@/pages/leads/Proposal.vue"),
     props: true,
   },
   {
@@ -433,6 +446,14 @@ router.beforeEach(async (to, _, next) => {
       (redirectURL ? `?redirect-to=/helpdesk${redirectURL}` : "/helpdesk");
   } else if (!to.meta.public && !authStore.hasDeskAccess) {
     next({ name: "TicketsCustomer" });
+  } else if (!to.meta.public && authStore.isSalesEmployee) {
+    // salespeople see the sales screens only; the Scoreboard when Leads is off
+    const name = String(to.name);
+    const allowed =
+      SALES_EMPLOYEE_ROUTES.has(name) &&
+      (!LEADS_ROUTES.has(name) || authStore.canUseLeads);
+    if (allowed) next();
+    else next({ name: authStore.canUseLeads ? "Leads" : "TeamDashboard" });
   } else if (
     !to.meta.public &&
     authStore.isContentTeam &&

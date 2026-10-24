@@ -16,6 +16,9 @@ by `process_delivery`:
   project wants that), and a linked ticket hears the fix is in.
 - closed without merging: the task goes On Hold for the lead to decide. Tasks
   are never cancelled automatically.
+- opened naming no task: a task in "Project for PRs without a task" if one is
+  set, else a comment on the PR asking for the number and one notice to the
+  System Managers. A PR with the `no-task` label is left alone.
 
 Every change is compared with the stored row first, so processing the same
 event twice adds no second comment or notification.
@@ -65,6 +68,9 @@ DONE = ("Completed", "Cancelled")
 ON_HOLD = "On Hold"
 PENDING_REVIEW = "Pending Review"
 ADMIN_ROLES = ("System Manager", "Agent Manager")
+# team leads (Agent Managers) don't run the repositories, so only these hear about PRs no task claims
+UNLINKED_PR_ROLES = ("System Manager",)
+NO_TASK_LABEL = "no-task"
 CI_RESULTS = {
     "success": "Passing",
     "failure": "Failing",
@@ -461,7 +467,7 @@ class PullRequestSync:
     def on_pull_request(self, action: str, delivery) -> bool:
         links = self.link_rows()
         if not links:
-            if action != "opened":
+            if action != "opened" or self.has_label(NO_TASK_LABEL):
                 return False
             links = self.handle_unlinked(delivery)
             if not links:
@@ -619,7 +625,7 @@ class PullRequestSync:
             return self.link_rows({self.create_unlinked_task(project): "Closes"})
         url = self.pr.get("html_url") or ""
         notify_users(
-            admin_users(),
+            admin_users(UNLINKED_PR_ROLES),
             DELIVERY,
             delivery.name,
             _("PR #{0} in {1} names no task: {2}").format(
@@ -714,6 +720,9 @@ class PullRequestSync:
             )
             return None
 
+    def has_label(self, name: str) -> bool:
+        return any((label or {}).get("name") == name for label in self.pr.get("labels") or [])
+
     def ask_for_task_number(self):
         self.github_request(
             "POST",
@@ -766,8 +775,8 @@ def plain_text(value: str | None, limit: int = NOTE_LIMIT) -> str:
     return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
 
 
-def admin_users() -> list[str]:
-    """Enabled System and Agent Managers, who hear about PRs no task claims."""
+def admin_users(roles: tuple[str, ...] = ADMIN_ROLES) -> list[str]:
+    """Enabled System Users with one of `roles` (by default System and Agent Managers)."""
     user = frappe.qb.DocType("User")
     has_role = frappe.qb.DocType("Has Role")
     return (
@@ -778,7 +787,7 @@ def admin_users() -> list[str]:
         .distinct()
         .where(
             (has_role.parenttype == "User")
-            & (has_role.role.isin(ADMIN_ROLES))
+            & (has_role.role.isin(roles))
             & (user.enabled == 1)
             & (user.user_type == "System User")
         )

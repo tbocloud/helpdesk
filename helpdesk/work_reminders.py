@@ -6,10 +6,12 @@ reminders and escalations for tasks and tickets live in helpdesk.follow_ups
 """
 
 import json
+from urllib.parse import urlencode
 
 import frappe
 
 from helpdesk.automation import automation_user
+from helpdesk.content_team import SALES_HIDDEN_DOCTYPES, is_sales_employee
 
 MANAGER_PROJECT_ROLE = "Project Manager"
 SKIP = {"Administrator", "Guest"}
@@ -105,7 +107,10 @@ def new_notification(
     deliver: bool = True,
 ):
     """One HD Notification. `deliver=False` keeps it in the panel only: no chat
-    message or email (follow-ups reach chat in the digest instead)."""
+    message or email (follow-ups reach chat in the digest instead). A Sales Employee
+    left on a project's or a post's team hears nothing about work they can't open."""
+    if doctype in SALES_HIDDEN_DOCTYPES and is_sales_employee(user):
+        return None
     doc = frappe.get_doc(
         {
             "doctype": "HD Notification",
@@ -133,10 +138,10 @@ def helpdesk_path(doctype: str, name: str) -> str:
         return f"/tickets/{name}"
     if doctype == "HD Article":
         return f"/kb/articles/{name}"
-    project = (
-        frappe.db.get_value(doctype, name, "project") if doctype == "Task" else None
-    )
-    return f"/projects/{project}" if project else "/my-work"
+    if doctype == "Task":
+        # My Work opens the task's details (?task=), for anyone who may read it
+        return f"/my-work?{urlencode({'task': name})}"
+    return "/my-work"
 
 
 def get_project_managers(project: str) -> list[str]:

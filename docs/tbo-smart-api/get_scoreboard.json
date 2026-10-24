@@ -24,6 +24,12 @@
           "Digital",
           "Creative"
         ]
+      },
+      {
+        "group": "Sales",
+        "departments": [
+          "CRM"
+        ]
       }
     ],
     "champion": {
@@ -83,7 +89,8 @@
           "points": -1.5,
           "detail": "Overdue now: 1"
         }
-      ]
+      ],
+      "sales": null
     },
     "leaders": [
       {
@@ -98,7 +105,8 @@
         "key_tasks": 3,
         "on_time_pct": 100,
         "hours": 40.0,
-        "overdue": 0
+        "overdue": 0,
+        "sales": null
       },
       {
         "user": "najath@teambackoffice.com",
@@ -112,7 +120,8 @@
         "key_tasks": 2,
         "on_time_pct": 89,
         "hours": 38.5,
-        "overdue": 1
+        "overdue": 1,
+        "sales": null
       }
     ],
     "departments": [
@@ -126,7 +135,8 @@
         "on_time_pct": 87,
         "overdue": 4,
         "hours": 380.0,
-        "champion": "Arun Menon"
+        "champion": "Arun Menon",
+        "sales": null
       },
       {
         "department": "ERP",
@@ -138,7 +148,8 @@
         "on_time_pct": 86,
         "overdue": 4,
         "hours": 302.5,
-        "champion": "Arun Menon"
+        "champion": "Arun Menon",
+        "sales": null
       },
       {
         "department": "GrowthX",
@@ -150,7 +161,8 @@
         "on_time_pct": 100,
         "overdue": 0,
         "hours": 52.5,
-        "champion": "Najath Thekkeyil"
+        "champion": "Najath Thekkeyil",
+        "sales": null
       },
       {
         "department": "Internal / R&D",
@@ -162,7 +174,8 @@
         "on_time_pct": 50,
         "overdue": 0,
         "hours": 25.0,
-        "champion": null
+        "champion": null,
+        "sales": null
       },
       {
         "department": "Digital",
@@ -174,7 +187,8 @@
         "on_time_pct": 90,
         "overdue": 1,
         "hours": 220.0,
-        "champion": "Sana Rafeeq"
+        "champion": "Sana Rafeeq",
+        "sales": null
       },
       {
         "department": "Digital",
@@ -186,7 +200,8 @@
         "on_time_pct": 89,
         "overdue": 1,
         "hours": 188.0,
-        "champion": "Sana Rafeeq"
+        "champion": "Sana Rafeeq",
+        "sales": null
       },
       {
         "department": "Creative",
@@ -198,7 +213,58 @@
         "on_time_pct": 100,
         "overdue": 0,
         "hours": 32.0,
-        "champion": null
+        "champion": null,
+        "sales": null
+      },
+      {
+        "department": "Sales",
+        "kind": "group",
+        "parent": null,
+        "people": 2,
+        "done": 0,
+        "weighted_work": 0.0,
+        "on_time_pct": null,
+        "overdue": 0,
+        "hours": 0.0,
+        "champion": "Niya Thomas",
+        "sales": {
+          "contacted": 12,
+          "moms_submitted": 2,
+          "quotations_sent": 1,
+          "follow_ups_done": 4,
+          "follow_ups_on_time": 3,
+          "won": 1,
+          "won_value": 300000.0,
+          "new": 9,
+          "mom_pending": 0,
+          "follow_ups_overdue": 1,
+          "conversion": 11
+        }
+      },
+      {
+        "department": "CRM",
+        "kind": "department",
+        "parent": "Sales",
+        "people": 2,
+        "done": 0,
+        "weighted_work": 0.0,
+        "on_time_pct": null,
+        "overdue": 0,
+        "hours": 0.0,
+        "champion": "Niya Thomas",
+        "sales": {
+          "contacted": 12,
+          "moms_submitted": 2,
+          "quotations_sent": 1,
+          "follow_ups_done": 4,
+          "follow_ups_on_time": 3,
+          "won": 1,
+          "won_value": 300000.0,
+          "new": 9,
+          "mom_pending": 0,
+          "follow_ups_overdue": 1,
+          "conversion": 11
+        }
       }
     ]
   }

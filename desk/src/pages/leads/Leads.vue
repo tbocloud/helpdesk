@@ -7,9 +7,11 @@
       <template #right-header>
         <Button
           variant="ghost"
-          :loading="leads.loading && !!data"
+          :loading="view !== 'overview' && leads.loading && !!data"
           :aria-label="__('Refresh')"
-          @click="leads.reload()"
+          @click="
+            view === 'overview' ? overviewPanel?.reload() : leads.reload()
+          "
         >
           <template #icon>
             <LucideRefreshCw class="size-4" aria-hidden="true" />
@@ -31,10 +33,19 @@
               :model-value="view"
               size="md"
               :aria-label="__('Which leads')"
-              :options="LEAD_VIEWS"
-              @update:model-value="view = $event as LeadView"
+              :options="TABS"
+              @update:model-value="view = $event as LeadTab"
             />
           </div>
+        </div>
+
+        <LeadsOverview
+          v-if="view === 'overview'"
+          ref="overviewPanel"
+          class="mt-4"
+        />
+
+        <div v-else class="mt-3 flex flex-col gap-3">
           <div
             class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(14rem,2fr)_repeat(3,minmax(10rem,1fr))]"
             role="group"
@@ -73,7 +84,17 @@
               :options="choices(options?.segments, __('Any segment'))"
             />
           </div>
-          <div v-if="hasFilters" class="flex justify-end">
+          <div
+            v-if="hasFilters"
+            class="flex flex-wrap items-center justify-end gap-2"
+          >
+            <!-- what the Overview opened this list with -->
+            <span
+              v-for="chip in extraChips"
+              :key="chip"
+              class="rounded-full bg-surface-gray-2 px-2.5 py-1 text-xs text-ink-gray-8"
+              >{{ chip }}</span
+            >
             <Button
               variant="ghost"
               :label="__('Clear filters')"
@@ -86,190 +107,214 @@
           </div>
         </div>
 
-        <TaskyState
-          v-if="leads.error && !data"
-          class="mt-6"
-          error
-          :icon="LucideCircleAlert"
-          :title="__('Couldn\'t load the leads')"
-          :message="
-            errorText(leads.error, __('Check your connection and try again.'))
-          "
-        >
-          <Button :label="__('Try again')" @click="leads.reload()" />
-        </TaskyState>
+        <template v-if="view !== 'overview'">
+          <TaskyState
+            v-if="leads.error && !data"
+            class="mt-6"
+            error
+            :icon="LucideCircleAlert"
+            :title="__('Couldn\'t load the leads')"
+            :message="
+              errorText(leads.error, __('Check your connection and try again.'))
+            "
+          >
+            <Button :label="__('Try again')" @click="leads.reload()" />
+          </TaskyState>
 
-        <!-- loading: the rows' shape is known -->
-        <div
-          v-else-if="!data"
-          class="mt-4 overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
-          aria-busy="true"
-          :aria-label="__('Loading')"
-        >
+          <!-- loading: the rows' shape is known -->
           <div
-            v-for="i in 6"
-            :key="i"
-            class="flex items-center gap-3 border-b border-outline-gray-1 px-4 py-4 last:border-b-0"
-          >
-            <div class="flex flex-1 flex-col gap-2">
-              <div
-                class="h-3.5 w-1/3 animate-pulse rounded bg-surface-gray-2"
-              />
-              <div class="h-3 w-1/2 animate-pulse rounded bg-surface-gray-2" />
-            </div>
-            <div class="h-5 w-20 animate-pulse rounded bg-surface-gray-2" />
-          </div>
-        </div>
-
-        <TaskyState
-          v-else-if="!data.total && (hasFilters || view !== 'all')"
-          class="mt-6"
-          :icon="LucideSearchX"
-          :title="__('No leads match')"
-          :message="
-            __(
-              'Nothing in this view with these filters. Try All, or clear the filters.'
-            )
-          "
-        >
-          <Button :label="__('Show all leads')" @click="showAll" />
-        </TaskyState>
-
-        <TaskyState
-          v-else-if="!data.total"
-          class="mt-6"
-          :icon="LucideUserPlus"
-          :title="__('No leads yet')"
-          :message="
-            __(
-              'Leads you can see on the ERP site show up here. Add the first one when someone shows interest.'
-            )
-          "
-        >
-          <Button
-            variant="solid"
-            :label="__('New lead')"
-            @click="showNew = true"
-          />
-        </TaskyState>
-
-        <template v-else>
-          <ul
+            v-else-if="!data"
             class="mt-4 overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
-            role="list"
-            :aria-label="__('Leads')"
-            :aria-busy="leads.loading"
+            aria-busy="true"
+            :aria-label="__('Loading')"
           >
-            <li
-              v-for="row in data.rows"
-              :key="row.name"
-              class="border-b border-outline-gray-1 last:border-b-0"
+            <div
+              v-for="i in 6"
+              :key="i"
+              class="flex items-center gap-3 border-b border-outline-gray-1 px-4 py-4 last:border-b-0"
             >
-              <router-link
-                :to="{ name: 'Lead', params: { leadId: row.name } }"
-                class="flex flex-col gap-2 px-4 py-3 transition-colors hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-outline-gray-4 md:flex-row md:items-center md:gap-4"
+              <div class="flex flex-1 flex-col gap-2">
+                <div
+                  class="h-3.5 w-1/3 animate-pulse rounded bg-surface-gray-2"
+                />
+                <div
+                  class="h-3 w-1/2 animate-pulse rounded bg-surface-gray-2"
+                />
+              </div>
+              <div class="h-5 w-20 animate-pulse rounded bg-surface-gray-2" />
+            </div>
+          </div>
+
+          <TaskyState
+            v-else-if="!data.total && (hasFilters || view !== 'all')"
+            class="mt-6"
+            :icon="LucideSearchX"
+            :title="__('No leads match')"
+            :message="
+              __(
+                'Nothing in this view with these filters. Try All, or clear the filters.'
+              )
+            "
+          >
+            <Button :label="__('Show all leads')" @click="showAll" />
+          </TaskyState>
+
+          <TaskyState
+            v-else-if="!data.total"
+            class="mt-6"
+            :icon="LucideUserPlus"
+            :title="__('No leads yet')"
+            :message="
+              __(
+                'Leads you can see on the ERP site show up here. Add the first one when someone shows interest.'
+              )
+            "
+          >
+            <Button
+              variant="solid"
+              :label="__('New lead')"
+              @click="showNew = true"
+            />
+          </TaskyState>
+
+          <template v-else>
+            <ul
+              class="mt-4 overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
+              role="list"
+              :aria-label="__('Leads')"
+              :aria-busy="leads.loading"
+            >
+              <li
+                v-for="row in data.rows"
+                :key="row.name"
+                class="flex items-center border-b border-outline-gray-1 last:border-b-0"
               >
-                <div class="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <div class="flex min-w-0 flex-wrap items-center gap-2">
-                    <span
-                      class="truncate text-base-medium text-ink-gray-9"
-                      :title="row.lead_name || row.name"
-                      >{{ row.lead_name || row.name }}</span
+                <router-link
+                  :to="{ name: 'Lead', params: { leadId: row.name } }"
+                  class="flex min-w-0 flex-1 flex-col gap-2 px-4 py-3 transition-colors hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-outline-gray-4 md:flex-row md:items-center md:gap-4"
+                >
+                  <div class="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <div class="flex min-w-0 flex-wrap items-center gap-2">
+                      <span
+                        class="truncate text-base-medium text-ink-gray-9"
+                        :title="row.lead_name || row.name"
+                        >{{ row.lead_name || row.name }}</span
+                      >
+                      <TaskyBadge
+                        v-if="row.tbo_stage"
+                        :label="stageLabel(options, row.tbo_stage)"
+                        :tone="stageTone(options, row.tbo_stage)"
+                      />
+                    </div>
+                    <div
+                      class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-ink-gray-6"
                     >
-                    <TaskyBadge
-                      v-if="row.tbo_stage"
-                      :label="stageLabel(options, row.tbo_stage)"
-                      :tone="stageTone(options, row.tbo_stage)"
-                    />
+                      <span v-if="row.company_name" class="truncate">{{
+                        row.company_name
+                      }}</span>
+                      <template v-if="row.segment">
+                        <span aria-hidden="true">·</span>
+                        <span>{{ row.segment }}</span>
+                      </template>
+                      <template v-if="row.mobile_no || row.email_id">
+                        <span aria-hidden="true">·</span>
+                        <span class="truncate font-mono">{{
+                          row.mobile_no || row.email_id
+                        }}</span>
+                      </template>
+                    </div>
                   </div>
                   <div
-                    class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-ink-gray-6"
+                    class="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-gray-7 md:w-80 md:justify-end"
                   >
-                    <span v-if="row.company_name" class="truncate">{{
-                      row.company_name
-                    }}</span>
-                    <template v-if="row.segment">
-                      <span aria-hidden="true">·</span>
-                      <span>{{ row.segment }}</span>
-                    </template>
-                    <template v-if="row.mobile_no || row.email_id">
-                      <span aria-hidden="true">·</span>
-                      <span class="truncate font-mono">{{
-                        row.mobile_no || row.email_id
+                    <span
+                      v-if="row.next_follow_up"
+                      class="inline-flex items-center gap-1 tabular-nums"
+                      :class="
+                        followUpLate(row) ? 'font-medium text-danger' : ''
+                      "
+                    >
+                      <component
+                        :is="
+                          followUpLate(row) ? LucideCalendarX : LucideCalendar
+                        "
+                        class="size-3.5"
+                        aria-hidden="true"
+                      />
+                      {{ followUpText(row) }}
+                    </span>
+                    <span class="inline-flex min-w-0 items-center gap-1">
+                      <LucideUser
+                        class="size-3.5 shrink-0 text-ink-gray-5"
+                        aria-hidden="true"
+                      />
+                      <span class="truncate">{{
+                        row.owner_name ||
+                        ownerName(options, row.lead_owner) ||
+                        __("No owner")
                       }}</span>
-                    </template>
+                    </span>
+                    <span
+                      v-if="row.score !== null && row.score !== undefined"
+                      class="font-mono tabular-nums text-ink-gray-8"
+                      :title="__('Lead score')"
+                    >
+                      <span class="sr-only">{{ __("Score") }}</span>
+                      {{ row.score }}
+                    </span>
                   </div>
-                </div>
-                <div
-                  class="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-gray-7 md:w-80 md:justify-end"
+                </router-link>
+                <Button
+                  v-if="options?.can_call && row.mobile_no"
+                  class="mr-3 shrink-0"
+                  variant="ghost"
+                  :label="__('Call {0}', row.lead_name || row.name)"
+                  :tooltip="__('MyOperator rings your phone, then the lead')"
+                  :loading="
+                    clickToCall.loading && clickToCall.params?.name === row.name
+                  "
+                  :disabled="clickToCall.loading"
+                  @click="clickToCall.submit({ name: row.name })"
                 >
-                  <span
-                    v-if="row.next_follow_up"
-                    class="inline-flex items-center gap-1 tabular-nums"
-                    :class="followUpLate(row) ? 'font-medium text-danger' : ''"
-                  >
-                    <component
-                      :is="followUpLate(row) ? LucideCalendarX : LucideCalendar"
-                      class="size-3.5"
-                      aria-hidden="true"
-                    />
-                    {{ followUpText(row) }}
-                  </span>
-                  <span class="inline-flex min-w-0 items-center gap-1">
-                    <LucideUser
-                      class="size-3.5 shrink-0 text-ink-gray-5"
-                      aria-hidden="true"
-                    />
-                    <span class="truncate">{{
-                      row.owner_name ||
-                      ownerName(options, row.lead_owner) ||
-                      __("No owner")
-                    }}</span>
-                  </span>
-                  <span
-                    v-if="row.score !== null && row.score !== undefined"
-                    class="font-mono tabular-nums text-ink-gray-8"
-                    :title="__('Lead score')"
-                  >
-                    <span class="sr-only">{{ __("Score") }}</span>
-                    {{ row.score }}
-                  </span>
-                </div>
-              </router-link>
-            </li>
-          </ul>
+                  <template #icon>
+                    <LucidePhone class="size-4" aria-hidden="true" />
+                  </template>
+                </Button>
+              </li>
+            </ul>
 
-          <nav
-            class="mt-3 flex flex-wrap items-center justify-between gap-2"
-            :aria-label="__('Pages')"
-          >
-            <span
-              class="font-mono text-p-sm tabular-nums text-ink-gray-6"
-              aria-live="polite"
+            <nav
+              class="mt-3 flex flex-wrap items-center justify-between gap-2"
+              :aria-label="__('Pages')"
             >
-              {{ rangeText }}
-            </span>
-            <div class="flex gap-2">
-              <Button
-                :label="__('Previous')"
-                :disabled="page === 1 || leads.loading"
-                @click="page--"
+              <span
+                class="font-mono text-p-sm tabular-nums text-ink-gray-6"
+                aria-live="polite"
               >
-                <template #prefix>
-                  <LucideChevronLeft class="size-4" aria-hidden="true" />
-                </template>
-              </Button>
-              <Button
-                :label="__('Next')"
-                :disabled="page >= pageCount || leads.loading"
-                @click="page++"
-              >
-                <template #suffix>
-                  <LucideChevronRight class="size-4" aria-hidden="true" />
-                </template>
-              </Button>
-            </div>
-          </nav>
+                {{ rangeText }}
+              </span>
+              <div class="flex gap-2">
+                <Button
+                  :label="__('Previous')"
+                  :disabled="page === 1 || leads.loading"
+                  @click="page--"
+                >
+                  <template #prefix>
+                    <LucideChevronLeft class="size-4" aria-hidden="true" />
+                  </template>
+                </Button>
+                <Button
+                  :label="__('Next')"
+                  :disabled="page >= pageCount || leads.loading"
+                  @click="page++"
+                >
+                  <template #suffix>
+                    <LucideChevronRight class="size-4" aria-hidden="true" />
+                  </template>
+                </Button>
+              </div>
+            </nav>
+          </template>
         </template>
       </div>
     </div>
@@ -299,6 +344,7 @@ import LucideCalendarX from "~icons/lucide/calendar-x";
 import LucideChevronLeft from "~icons/lucide/chevron-left";
 import LucideChevronRight from "~icons/lucide/chevron-right";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
+import LucidePhone from "~icons/lucide/phone";
 import LucidePlus from "~icons/lucide/plus";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideSearch from "~icons/lucide/search";
@@ -307,19 +353,36 @@ import LucideUser from "~icons/lucide/user";
 import LucideUserPlus from "~icons/lucide/user-plus";
 import LucideX from "~icons/lucide/x";
 import LeadFormDialog from "./LeadFormDialog.vue";
+import LeadsOverview from "./LeadsOverview.vue";
 import {
   choices,
   LEAD_VIEWS,
+  loadLeadOptions,
+  useClickToCall,
   leadOptions,
+  METRIC_LABELS,
   ownerName,
   stageLabel,
   stageTone,
   type LeadOptions,
   type LeadRow,
+  type LeadMetric,
   type LeadView,
 } from "./leads";
 
 const PAGE_LENGTH = 20;
+// the Overview comes first and is where the page opens (docs/leads.md)
+type LeadTab = LeadView | "overview";
+const TABS: { value: LeadTab; label: string }[] = [
+  { value: "overview", label: __("Overview") },
+  ...LEAD_VIEWS,
+];
+const PERIOD_LABELS: Record<string, string> = {
+  week: __("this week"),
+  month: __("this month"),
+  quarter: __("this quarter"),
+};
+const overviewPanel = ref<InstanceType<typeof LeadsOverview> | null>(null);
 
 const route = useRoute();
 const router = useRouter();
@@ -330,11 +393,9 @@ function queryValue(key: string) {
   return typeof value === "string" ? value : "";
 }
 
-function queryView(): LeadView {
+function queryView(): LeadTab {
   const value = queryValue("view");
-  return LEAD_VIEWS.some((v) => v.value === value)
-    ? (value as LeadView)
-    : "all";
+  return TABS.some((v) => v.value === value) ? (value as LeadTab) : "overview";
 }
 
 function queryPage() {
@@ -342,7 +403,7 @@ function queryPage() {
 }
 
 // the view, search, filters and page live in the URL, so a view can be shared
-const view = ref<LeadView>(queryView());
+const view = ref<LeadTab>(queryView());
 const search = ref(queryValue("q"));
 // what the list is searched for: the box, once typing pauses
 const appliedSearch = ref(search.value);
@@ -352,16 +413,70 @@ const filters = reactive({
   owner: queryValue("owner"),
   segment: queryValue("segment"),
 });
+// set by a number on the Overview: the leads it counts, and its period
+function queryExtra() {
+  return {
+    source: queryValue("source"),
+    temperature: queryValue("temperature"),
+    metric: queryValue("metric"),
+    period: queryValue("period"),
+    from: queryValue("from"),
+    to: queryValue("to"),
+  };
+}
+const extra = reactive(queryExtra());
+const extraChips = computed(() => {
+  const chips: string[] = [];
+  if (extra.metric) {
+    const label = METRIC_LABELS[extra.metric as LeadMetric] || extra.metric;
+    const when =
+      extra.period === "custom" && extra.from && extra.to
+        ? `${dayjs(extra.from).format("D MMM")} – ${dayjs(extra.to).format(
+            "D MMM"
+          )}`
+        : PERIOD_LABELS[extra.period || "month"];
+    chips.push(
+      [
+        "stale",
+        "overdue",
+        "hot",
+        "open",
+        "high_intent",
+        "unhappy",
+        "stage_suggested",
+      ].includes(extra.metric)
+        ? label
+        : `${label}, ${when}`
+    );
+  }
+  if (extra.source) chips.push(__("Source: {0}", extra.source));
+  if (extra.temperature) chips.push(extra.temperature);
+  return chips;
+});
 const page = ref(queryPage());
 
 const hasFilters = computed(
   () =>
-    !!(search.value.trim() || filters.stage || filters.owner || filters.segment)
+    !!(
+      search.value.trim() ||
+      filters.stage ||
+      filters.owner ||
+      filters.segment ||
+      extraChips.value.length
+    )
 );
 
 function clearFilters() {
   search.value = "";
   Object.assign(filters, { stage: "", owner: "", segment: "" });
+  Object.assign(extra, {
+    source: "",
+    temperature: "",
+    metric: "",
+    period: "",
+    from: "",
+    to: "",
+  });
 }
 
 function showAll() {
@@ -369,8 +484,9 @@ function showAll() {
   view.value = "all";
 }
 
-if (!leadOptions.data && !leadOptions.loading) leadOptions.fetch();
+loadLeadOptions();
 const options = computed(() => leadOptions.data as LeadOptions | undefined);
+const clickToCall = useClickToCall();
 
 const stageOptions = computed(() => [
   { label: __("Any stage"), value: "" },
@@ -394,11 +510,17 @@ const leads = createResource({
     stage: filters.stage || null,
     owner: filters.owner || null,
     segment: filters.segment || null,
-    view: view.value,
+    source: extra.source || null,
+    temperature: extra.temperature || null,
+    metric: extra.metric || null,
+    period: extra.metric ? extra.period || "month" : null,
+    from_date: extra.metric ? extra.from || null : null,
+    to_date: extra.metric ? extra.to || null : null,
+    view: view.value === "overview" ? "all" : view.value,
     start: (page.value - 1) * PAGE_LENGTH,
     page_length: PAGE_LENGTH,
   }),
-  auto: true,
+  auto: view.value !== "overview",
 });
 
 const data = computed(
@@ -433,8 +555,10 @@ watch(
       owner: queryValue("owner"),
       segment: queryValue("segment"),
       page: queryPage(),
+      extra: queryExtra(),
     };
     if (
+      JSON.stringify({ ...extra }) === JSON.stringify(wanted.extra) &&
       view.value === wanted.view &&
       appliedSearch.value.trim() === wanted.q.trim() &&
       filters.stage === wanted.stage &&
@@ -451,30 +575,44 @@ watch(
       owner: wanted.owner,
       segment: wanted.segment,
     });
+    Object.assign(extra, wanted.extra);
     page.value = wanted.page;
   }
 );
 
 // a new view, search or filter starts again at page 1
-watch([view, appliedSearch, () => ({ ...filters })], () => {
-  if (!fromRoute) page.value = 1;
-});
+watch(
+  [view, appliedSearch, () => ({ ...filters }), () => ({ ...extra })],
+  () => {
+    if (!fromRoute) page.value = 1;
+  }
+);
 
-watch([view, appliedSearch, () => ({ ...filters }), page], ([v, q, f, p]) => {
-  fromRoute = false;
-  router.replace({
-    query: {
-      ...route.query,
-      view: v === "all" ? undefined : v,
-      q: q.trim() || undefined,
-      stage: f.stage || undefined,
-      owner: f.owner || undefined,
-      segment: f.segment || undefined,
-      page: p > 1 ? String(p) : undefined,
-    },
-  });
-  leads.reload();
-});
+watch(
+  [view, appliedSearch, () => ({ ...filters }), () => ({ ...extra }), page],
+  ([v, q, f, x, p]) => {
+    fromRoute = false;
+    router.replace({
+      query: {
+        ...route.query,
+        view: v === "overview" ? undefined : v,
+        q: q.trim() || undefined,
+        stage: f.stage || undefined,
+        owner: f.owner || undefined,
+        segment: f.segment || undefined,
+        source: x.source || undefined,
+        temperature: x.temperature || undefined,
+        metric: x.metric || undefined,
+        // the Overview keeps its own period in the URL too
+        period: x.period || undefined,
+        from: x.from || undefined,
+        to: x.to || undefined,
+        page: p > 1 ? String(p) : undefined,
+      },
+    });
+    if (v !== "overview") leads.reload();
+  }
+);
 
 function followUpLate(row: LeadRow) {
   return (

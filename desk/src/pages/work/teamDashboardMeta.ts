@@ -90,6 +90,45 @@ export type PersonMonth = {
   weight: number;
 } | null;
 
+/** A person's or a scope's CRM activity from the ERP site (helpdesk.sales_scoreboard). */
+export interface SalesFigures {
+  contacted: number;
+  moms_submitted: number;
+  quotations_sent: number;
+  follow_ups_done: number;
+  follow_ups_on_time: number;
+  won: number;
+  won_value: number;
+  new: number;
+  /** answered MyOperator calls (0 without telephony on the ERP site) */
+  calls: number;
+  mom_pending: number;
+  follow_ups_overdue: number;
+  /** won of new, %; null without new leads */
+  conversion: number | null;
+}
+
+/** Whether the ERP site's sales numbers are in: off while Leads aren't set up. */
+export interface SalesStatus {
+  status: "ok" | "off" | "unavailable";
+  message: string | null;
+  currency: string | null;
+  /** where sales activity counts: CRM, under Sales */
+  department: string;
+}
+
+/** "12 contacted · 30 calls · 2 meetings · 1 proposal · 1 won" */
+export function salesText(s: SalesFigures) {
+  const parts = [__("{0} contacted", String(s.contacted))];
+  if (s.calls) parts.push(__("{0} calls", String(s.calls)));
+  if (s.moms_submitted)
+    parts.push(__("{0} meetings", String(s.moms_submitted)));
+  if (s.quotations_sent)
+    parts.push(__("{0} proposals", String(s.quotations_sent)));
+  if (s.won) parts.push(__("{0} won", String(s.won)));
+  return parts.join(" · ");
+}
+
 export interface Totals {
   tasks: number;
   /** The tasks' weights added up (helpdesk.team_dashboard.task_weight). */
@@ -100,6 +139,7 @@ export interface Totals {
   overdue: number;
   posts: number;
   posts_missed: number;
+  sales: SalesFigures | null;
   previous: {
     tasks: number;
     weight: number;
@@ -146,6 +186,7 @@ export interface PersonRow {
   posts_on_time: number;
   posts_late: number;
   posts_missed: number;
+  sales: SalesFigures | null;
   months: PersonMonth[] | null;
 }
 
@@ -228,6 +269,7 @@ export interface Dashboard {
   history: HistoryRow[];
   analysis: Analysis | null;
   rules: ScoreRules;
+  sales: SalesStatus;
 }
 
 /** The numbers behind weight, quality and the score (team_dashboard.score_rules). */
@@ -257,6 +299,18 @@ export interface ScoreRules {
     slip: number;
     hour: number;
     hours_cap_share: number;
+  };
+  /** points for sales activity (helpdesk.sales_scoreboard.WEIGHTS) */
+  sales: {
+    contacted: number;
+    follow_up_on_time: number;
+    meeting: number;
+    proposal: number;
+    won: number;
+    won_per_lakh: number;
+    won_value_cap: number;
+    mom_pending: number;
+    follow_up_overdue: number;
   };
   champion_minimum: number;
   min_delivered: number;

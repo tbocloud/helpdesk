@@ -515,7 +515,8 @@ the top), `folder_id`, `kind` (extension), `size` (bytes), `modified`, `uploaded
 | `mark_notifications_read` POST | `names` (list) or `"all"` | `{unread}` | Only the user's own notifications change |
 
 `AppNotification`: `name`, `site: "hub"`, `type` (Assignment, Mention, Reminder, Reaction,
-Task Completed), `title`, `body`, `at`, `read`, `doctype`, `reference`, `route` (the web
+Task Completed, New Ticket, Ticket Update; see [ticket-owners.md](ticket-owners.md#notification)),
+`title`, `body`, `at`, `read`, `doctype`, `reference`, `route` (the web
 path), `app_route` (`/task/…`, `/ticket/…`, `/project/…`, or null), `from`.
 
 ### Devices and push
@@ -532,9 +533,10 @@ through the two endpoints.
 
 **Push** (`helpdesk/mobile_push.py`), when HD Settings → **Mobile push** is on (default
 off):
-- Every new HD Notification of type Assignment, Mention, Reminder or Task Completed is
-  queued (after commit) to the recipient's Expo tokens. Notices kept for the follow-up
-  digest (`skip_delivery`) aren't pushed, like chat and email. Reactions aren't pushed.
+- Every new HD Notification of type Assignment, Mention, Reminder, Task Completed or New
+  Ticket is queued (after commit) to the recipient's Expo tokens. Notices kept for the follow-up
+  digest (`skip_delivery`) aren't pushed, like chat and email, and neither is the
+  backup's quiet copy of a new ticket. Reactions and Ticket Updates aren't pushed.
 - Sent to `https://exp.host/--/api/v2/push/send` in batches of 100. A
   `DeviceNotRegistered` answer deletes that token.
 - Payload (`push_payload.json`): `title`/`body` as in the notification list, `sound`,
@@ -559,7 +561,7 @@ off):
 | `get_approvals` | – | `[Approval]` (kind review) | Managers, leads and coordinators of projects; others get 403. Decide with `review_task`. Fixture `get_approvals.json` |
 | `get_projects_health` | – | `[ProjectHealth]` | Same as `get_team` (the portfolio). Fixture `get_projects_health.json` |
 | `get_sla_summary` | – | `{open, new_today, breached, first_reply_overdue, breaching_soon, unassigned, waiting_on_customer, oldest_unassigned}` | Same as `get_team`. Fixture `get_sla_summary.json` |
-| `get_scoreboard` | `period` (today, week, month, quarter, half, year), `department?` or `group?` (a main department with its sub-departments, e.g. `ERP`), `day?` (a past day: its period; a future day is refused) | `{period, period_label, range, department, group, groups, closed, champion, previous_champion, months, me, leaders (top 10), departments}` | Every agent (the Scoreboard is open to all). Weeks are clipped to their month and every month starts on the 1st ([team-dashboard.md](team-dashboard.md#periods)). A closed period's `champion` is the one stored when it closed (`stored: true`); `previous_champion` is the period before's stored champion (e.g. last month's), with `start`, `end` and `reasons`; `months` (year only) is the twelve months side by side (`month`, `future`, `tasks`, `weight`, `on_time_pct`, `quality`, `champion`). Lines carry `weighted_work` next to `tasks_done`; `groups` is `[{group, departments}]`; `departments` rows have `kind` (`group` or `department`), `parent` (a department's group) and `weighted_work`, a group row first with its departments under it. Fixture `get_scoreboard.json` |
+| `get_scoreboard` | `period` (today, week, month, quarter, half, year), `department?` or `group?` (a main department with its sub-departments, e.g. `ERP`), `day?` (a past day: its period; a future day is refused) | `{period, period_label, range, department, group, groups, closed, champion, previous_champion, months, me, leaders (top 10), departments}` | Every agent (the Scoreboard is open to all). Weeks are clipped to their month and every month starts on the 1st ([team-dashboard.md](team-dashboard.md#periods)). A closed period's `champion` is the one stored when it closed (`stored: true`); `previous_champion` is the period before's stored champion (e.g. last month's), with `start`, `end` and `reasons`; `months` (year only) is the twelve months side by side (`month`, `future`, `tasks`, `weight`, `on_time_pct`, `quality`, `champion`). Lines carry `weighted_work` next to `tasks_done`; `groups` is `[{group, departments}]`; `departments` rows have `kind` (`group` or `department`), `parent` (a department's group) and `weighted_work`, a group row first with its departments under it. Department rows, `me` and `leaders` carry `sales`: the work on leads from the ERP site (`contacted`, `moms_submitted`, `quotations_sent`, `follow_ups_done`, `follow_ups_on_time`, `won`, `won_value`, `new`, `mom_pending`, `follow_ups_overdue`, `conversion`; [team-dashboard.md](team-dashboard.md#sales)), `null` without any; the CRM department under the Sales group has it. Fixture `get_scoreboard.json` |
 
 `Task.quality` (from `get_task`): `{weight, weight_reasons, quality, quality_reasons, rating,
 rated_by, rated_by_name, rated_on, can_rate, self_made}`, e.g. `weight 3.25` with

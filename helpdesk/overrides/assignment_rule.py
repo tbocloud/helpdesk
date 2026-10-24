@@ -1,6 +1,8 @@
 import frappe
 from frappe.automation.doctype.assignment_rule.assignment_rule import AssignmentRule
 
+from helpdesk.content_team import is_sales_employee
+
 
 def get_agents_by_category(category: str) -> set[str]:
     """User ids of HD Agents whose current status falls under the given category."""
@@ -27,12 +29,9 @@ class HelpdeskAssignmentRule(AssignmentRule):
         always Active agents are preferred; fall back to Away if no Active is available;
         fall back to the full pool (including Unavailable) only if no one else
         is available, so the ticket is never left unassigned.
+        Sales Employees are never in the pool: they can't be given tickets or tasks
+        (docs/departments.md), and picking one would fail the document's save.
         """
-
-        away = get_agents_by_category("Away")
-        unavailable = get_agents_by_category("Unavailable")
-        if not away and not unavailable:
-            return super().get_user(doc)
 
         # "Based on Field" assigns through the document field, so the
         # availability filter does not apply.
@@ -44,10 +43,16 @@ class HelpdeskAssignmentRule(AssignmentRule):
             return super().get_user(doc)
 
         original_pool = getattr(self, user_pool_fieldname)
+        pool = [u for u in original_pool if not is_sales_employee(u.user)]
+        away = get_agents_by_category("Away")
+        unavailable = get_agents_by_category("Unavailable")
+        if len(pool) == len(original_pool) and not away and not unavailable:
+            return super().get_user(doc)
+
         active_only = [
-            u for u in original_pool if u.user not in away and u.user not in unavailable
+            u for u in pool if u.user not in away and u.user not in unavailable
         ]
-        not_unavailable = [u for u in original_pool if u.user not in unavailable]
+        not_unavailable = [u for u in pool if u.user not in unavailable]
 
         # Tier: Active → Away → full pool (Unavailable as last resort)
         if active_only:
@@ -55,7 +60,7 @@ class HelpdeskAssignmentRule(AssignmentRule):
         elif not_unavailable:
             preferred_pool = not_unavailable
         else:
-            preferred_pool = original_pool
+            preferred_pool = pool
 
         setattr(self, user_pool_fieldname, preferred_pool)
         try:

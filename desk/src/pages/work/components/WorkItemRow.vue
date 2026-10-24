@@ -47,6 +47,10 @@
           <span v-else class="truncate text-base text-ink-gray-9">
             {{ item.title }}
           </span>
+          <NewTaskBadge
+            v-if="item.kind === 'task' && item.assignment_state"
+            :state="item.assignment_state"
+          />
           <template v-if="item.is_key">
             <LucideStar
               class="size-3.5 shrink-0 fill-current text-warning"
@@ -104,7 +108,12 @@
             </span>
           </template>
           <span class="md:hidden" aria-hidden="true">·</span>
-          <span class="md:hidden" :class="onHold ? 'min-w-0 max-w-full' : ''">
+          <span
+            class="md:hidden"
+            :class="
+              onHold ? 'min-w-0 max-w-full' : 'inline-flex items-center gap-1.5'
+            "
+          >
             <TaskyBadge
               v-if="onHold"
               tone="warning"
@@ -124,6 +133,14 @@
               :icon="ticketIcon"
               :label="item.status"
             />
+            <span
+              v-if="age"
+              class="font-mono text-xs tabular-nums text-ink-gray-5"
+              :title="age.title"
+            >
+              <span aria-hidden="true">{{ age.short }}</span>
+              <span class="sr-only">{{ age.label }}</span>
+            </span>
           </span>
         </div>
         <HoldNote
@@ -171,7 +188,7 @@
       <span v-else class="text-sm text-ink-gray-5">{{ __("Unassigned") }}</span>
     </div>
 
-    <div class="hidden min-w-0 md:block">
+    <div class="hidden min-w-0 items-center gap-1.5 md:flex">
       <TaskyBadge
         v-if="onHold"
         tone="warning"
@@ -188,6 +205,14 @@
         :icon="ticketIcon"
         :label="item.status"
       />
+      <span
+        v-if="age"
+        class="font-mono text-xs tabular-nums text-ink-gray-5"
+        :title="age.title"
+      >
+        <span aria-hidden="true">{{ age.short }}</span>
+        <span class="sr-only">{{ age.label }}</span>
+      </span>
     </div>
 
     <!-- stacked on phones so the title keeps its width -->
@@ -244,6 +269,7 @@ import LucideTicket from "~icons/lucide/ticket";
 import LucideTriangleAlert from "~icons/lucide/triangle-alert";
 import HoldNote from "@/pages/tasky/components/HoldNote.vue";
 import MilestoneMark from "@/pages/tasky/components/MilestoneMark.vue";
+import NewTaskBadge from "@/pages/tasky/components/NewTaskBadge.vue";
 import PullRequestChip from "@/pages/tasky/components/PullRequestChip.vue";
 import SlipBadge from "@/pages/tasky/components/SlipBadge.vue";
 import EscalationBadge from "@/components/EscalationBadge.vue";
@@ -255,6 +281,7 @@ import {
   deadlineInfo,
   isHeldTask,
   itemRoute,
+  statusAge,
   type WorkItem,
 } from "../workMeta";
 
@@ -286,6 +313,8 @@ const risks = computed(() => props.item.risks ?? []);
 const deadline = computed(() => deadlineInfo(props.item));
 
 const onHold = computed(() => isHeldTask(props.item));
+// a held task's row already says how long it has been paused
+const age = computed(() => (onHold.value ? null : statusAge(props.item)));
 const holdChip = computed(() =>
   props.item.hold_reason
     ? __("On hold · {0}", __(props.item.hold_reason))

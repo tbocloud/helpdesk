@@ -28,7 +28,8 @@ a day off (the weekly off, Saturdays off and business holidays, through follow-u
   day still gets one), and anyone with no open task or ticket, nothing done on the
   previous working day and no content post to report today (a post going live, missed or
   waiting, see [Content calendar](#content-calendar): their part can be done while the post
-  still needs them).
+  still needs them). Sales Employees never get one: their work is leads, which the stand-up
+  doesn't read ([departments.md](departments.md#sales-wall-sales-employee)).
 - **Departments left out** of Settings → Stand-up (when any are listed) get no draft and
   no reminder, can't start or edit one from the page (`takes_part`; a stand-up made before
   they were left out stays readable, as history), and are never posted, not even to the

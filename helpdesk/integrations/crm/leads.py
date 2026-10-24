@@ -46,7 +46,9 @@ def leads_teams() -> list[str]:
 
 def can_use_leads(user: str | None = None) -> bool:
     """Leads are on, and `user` is a System Manager or Agent Manager, or an active agent
-    in one of the Leads teams (any active agent when no team is picked)."""
+    who is a Sales Employee or in one of the Leads teams (any active agent when no team
+    is picked)."""
+    from helpdesk.content_team import SALES_EMPLOYEE_ROLE
     from helpdesk.utils import is_agent
 
     user = user or frappe.session.user
@@ -57,7 +59,8 @@ def can_use_leads(user: str | None = None) -> bool:
     if not is_agent(user) or not frappe.db.get_value("HD Agent", user, "is_active"):
         return False
     teams = leads_teams()
-    if not teams:
+    # a salesperson's screens are the sales ones, whatever team they are in
+    if not teams or SALES_EMPLOYEE_ROLE in frappe.get_roles(user):
         return True
     team, member = frappe.qb.DocType("HD Team"), frappe.qb.DocType("HD Team Member")
     return bool(
@@ -83,9 +86,16 @@ def require_leads():
         )
 
 
-def call(method: str, post: bool = False, **params):
-    """`tbo_smart.api.hub_leads.<method>` on the CRM site as the signed-in person; any
-    failure becomes a LeadsError the person can act on."""
+def call(
+    method: str,
+    post: bool = False,
+    api: str = API,
+    acting_user: str | None = None,
+    **params,
+):
+    """`<api>.<method>` on the CRM site (TBO Smart's hub leads API by default, or its hub
+    proposals API) as the signed-in person (or `acting_user`, for a call the hub makes on
+    someone's behalf); any failure becomes a LeadsError the person can act on."""
     try:
         client = CRMClient.from_settings()
     except CRMError:
@@ -96,7 +106,29 @@ def call(method: str, post: bool = False, **params):
         )
     try:
         return client.call(
-            f"{API}.{method}", post=post, acting_user=frappe.session.user, **params
+            f"{api}.{method}",
+            post=post,
+            acting_user=acting_user or frappe.session.user,
+            **params,
+        )
+    except CRMError as e:
+        fail(friendly_error(e, client, acting_user))
+
+
+def download(method: str, api: str = API, **params) -> tuple[bytes, str]:
+    """A file from `<api>.<method>` on the CRM site as the signed-in person: (bytes,
+    content type); failures as `call`'s."""
+    try:
+        client = CRMClient.from_settings()
+    except CRMError:
+        fail(
+            LeadsUnavailableError(
+                _("Leads aren't connected yet. Ask an admin to set up Settings → CRM.")
+            )
+        )
+    try:
+        return client.download(
+            f"{api}.{method}", acting_user=frappe.session.user, **params
         )
     except CRMError as e:
         fail(friendly_error(e, client))
@@ -108,7 +140,12 @@ def fail(error: LeadsError):
     frappe.throw(str(error), exc=type(error))
 
 
-def friendly_error(error: CRMError, client) -> LeadsError:
+def friendly_error(
+    error: CRMError, client, acting_user: str | None = None
+) -> LeadsError:
+    """A message the person can act on; it names the user the ERP site checked (`acting_user`
+    for a call made on someone's behalf)."""
+    user = acting_user or frappe.session.user
     site_url = client.base
     site = urlparse(site_url).netloc or site_url
     detail = error.detail or ""
@@ -131,7 +168,7 @@ def friendly_error(error: CRMError, client) -> LeadsError:
         return LeadsError(
             _(
                 "Your user {0} on {1} has the Hub Integration role, which is only for the hub's API user. Ask an admin to remove it from your user there (keep Sales User or Sales Manager)."
-            ).format(frappe.session.user, site)
+            ).format(user, site)
         )
     if error.status == 403 and "integration user" in detail.casefold():
         return LeadsUnavailableError(
@@ -143,7 +180,7 @@ def friendly_error(error: CRMError, client) -> LeadsError:
         return LeadsError(
             _(
                 "You don't have a sales account on the ERP site yet. Ask an admin to give {0} the Sales User role on {1}."
-            ).format(frappe.session.user, site)
+            ).format(user, site)
         )
     if error.status == 404:
         return LeadsError(

@@ -102,6 +102,27 @@
             }}
           </p>
         </section>
+
+        <section v-if="rules.sales" aria-labelledby="rules-sales">
+          <h3 id="rules-sales" class="text-base-medium text-ink-gray-9">
+            {{ __("Sales: work on leads") }}
+          </h3>
+          <p class="mt-1">
+            {{
+              __(
+                "Salespeople are scored on their leads in the ERP site, counted in CRM under Sales. It joins any task score, so the same minimum applies: sales work counts by its points."
+              )
+            }}
+          </p>
+          <dl class="mt-2 flex flex-col gap-1">
+            <div v-for="row in salesRows" :key="row.label" :class="ROW">
+              <dt>{{ row.label }}</dt>
+              <dd class="shrink-0 font-mono tabular-nums text-ink-gray-9">
+                {{ row.value }}
+              </dd>
+            </div>
+          </dl>
+        </section>
       </div>
     </template>
   </Dialog>
@@ -159,6 +180,35 @@ const qualityRows = computed(() => {
         "Each time it came back after it was done (task or its ticket reopened)"
       ),
       value: num(q.came_back, true),
+    },
+  ];
+});
+
+const salesRows = computed(() => {
+  const s = props.rules.sales;
+  return [
+    { label: __("Each lead contacted"), value: num(s.contacted, true) },
+    {
+      label: __("Each follow-up done by its day"),
+      value: num(s.follow_up_on_time, true),
+    },
+    { label: __("Each meeting with its minutes"), value: num(s.meeting, true) },
+    { label: __("Each proposal sent"), value: num(s.proposal, true) },
+    {
+      label: __(
+        "Each lead won, plus {0} per lakh of its value (up to {1} a lead)",
+        num(s.won_per_lakh),
+        num(s.won_value_cap)
+      ),
+      value: num(s.won, true),
+    },
+    {
+      label: __("Each meeting still waiting for its minutes"),
+      value: num(s.mom_pending, true),
+    },
+    {
+      label: __("Each follow-up overdue now"),
+      value: num(s.follow_up_overdue, true),
     },
   ];
 });

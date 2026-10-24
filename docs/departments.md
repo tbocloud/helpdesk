@@ -1,7 +1,7 @@
 # Departments and creative roles
 
-TBO is organised in five departments: **ERP**, **Digital**, **Creative**, **GrowthX** and
-**Internal / R&D**. Every project can belong to one, and the Projects page groups projects by
+TBO is organised in eight departments: **ERP**, **Digital**, **Creative**, **GrowthX**,
+**Internal / R&D**, **Web Development**, **Sales** and **CRM**. Every project can belong to one, and the Projects page groups projects by
 department. Project members can also hold creative and digital roles, and template tasks in
 the matching categories go to them.
 
@@ -90,18 +90,87 @@ both teams see every department, so they can compete ([team-dashboard.md](team-d
   it, see only their own tasks (assigned to them, given out by them or created by them); the
   Digital Marketing Head and DM Coordinators see every task of content calendar and Digital
   projects. The full matrix is in [workspace-pages.md](workspace-pages.md#who-sees-which-tasks).
-- **Setting the walls: Settings → Agents.** Each agent row shows an "ERP team" or "Digital
-  team" badge, and System Managers and Agent Managers set it from the agent's menu
-  (Department wall: No wall, ERP team, Digital team). A "Content team" badge marks everyone who
+- **Setting the walls: Settings → Agents.** Each agent row shows an "ERP team", "Digital
+  team" or "Sales team" badge, and System Managers and Agent Managers set it from the agent's
+  menu (Department wall: No wall, ERP team, Digital team, Sales team; the Sales team is the
+  [Sales Employee wall](#sales-wall-sales-employee)). A "Content team" badge marks everyone who
   sees the content calendar (`get_content_team(users)`); the Digital team wall adds someone
   to it. Picking one gives the user that role and
-  takes the other away; their other roles stay. API in `helpdesk/api/departments.py`:
+  takes the others away; their other roles stay. API in `helpdesk/api/departments.py`:
   `get_department_walls(users)` and `set_department_wall(user, role)` (POST; `role` is
-  `ERP Employee`, `DM Employee` or empty). Someone with both roles shows "ERP and Digital
-  walls" until a choice is made.
+  `ERP Employee`, `DM Employee`, `Sales Employee` or empty; `WALL_ROLES`). Someone with more
+  than one of those roles shows "More than one wall" until a choice is made.
 - The walls go by department **name** ("ERP", "Digital"). Renaming either department in
   Settings → Departments turns its wall off until `HIDDEN_DEPARTMENTS` is updated. Projects with
   no department aren't walled, so set each project's department for the walls to apply.
+
+## Sales wall: Sales Employee
+
+The owner (2026-10-21): "Shahana is a salesperson. She wants to see the leads, proposals and
+related things only. She doesn't want to see the tasks, the content calendar, things like
+that." The **Sales Employee** role (created on install and migrate by
+`content_team.ensure_role()`, home page `/helpdesk/leads`) makes an agent a salesperson in
+the hub. `content_team.is_sales_employee(user)` is the one check; it is false for
+Administrator, System Managers and Agent Managers, who are never walled. In the boot it is
+`is_sales_employee` (`authStore.isSalesEmployee`).
+
+Unlike the ERP and Digital walls it doesn't hide one department: it hides the hub's work
+altogether, because a salesperson's work is leads, which live on the ERP site.
+
+| Sees | Doesn't see, and can't open |
+| --- | --- |
+| **Leads**: the Overview, the list, the lead page, proposals and the documents chain up to the client documents | Home (it is their tasks and tickets, so `/helpdesk/home` opens Leads → Overview) |
+| **Scoreboard** (the sales rows, [team-dashboard.md](team-dashboard.md#sales)) | Tickets and the support pages: Customers, Contacts, Templates, Knowledge base, Support hours, Customer report |
+| **Notifications**, their own profile and preferences (the user menu), **Help & docs** | Projects, My Work, Board, Calendar, Timesheets, In progress, the work Overview, Team, Summaries, Performance, Stand-up |
+| | The content calendar (Content, plans, the report) |
+
+- **Sidebar and routes** (`SALES_EMPLOYEE_ROUTES` in `pages/content/contentTeam.ts`): an
+  **allow list**, not a hide list like the other walls, so a page added later stays out of
+  a salesperson's way until someone decides it is a sales page. `AppSidebar.vue` shows only
+  those items, and the router (`desk/src/router/index.ts`) sends every other route to Leads
+  (to the Scoreboard while Leads is switched off). The search card, the command palette
+  (it finds tickets and articles), saved ticket views and the follow-up strip (it opens My
+  Work) are left out for them.
+- **Leads for every salesperson:** `can_use_leads` is true for a Sales Employee whatever the
+  "Leads for" teams say, while Leads is on and they are an active agent
+  ([leads.md](leads.md#who-sees-it)).
+- **Documents chain:** a salesperson works the client documents; the **Project** and **UAT**
+  steps show their status but don't open, and when the next step is the project's or the
+  UAT's the header says "The project team takes it from here" instead of the button
+  (`LeadDocuments.vue`). Creating the project is refused on the server anyway.
+- **Server** (so nothing reaches them another way):
+  - Projects and tasks: `project_query` and `task_query` return nothing (`1 = 0`), and
+    `project_has_permission` and `task_has_permission` refuse every one, creating included,
+    even on a project's team, with a task they created or one given to them before the wall.
+    HD Pull Request follows the task. Timesheets: only their own (`timesheet_query`).
+  - Tickets: `sees_no_tickets()` is true, so HD Ticket's `permission_query` and
+    `has_permission` give them only tickets they raised themselves, as for DM Employees;
+    `can_work_tickets` is false.
+  - Content: they are never in the content team (`_in_content_team`, as for ERP Employees),
+    so posts, campaigns and content tasks are refused; HD Content Campaign and HD Work
+    Summary refuse them too, even for a customer whose project they are on.
+  - `can_see_overview` (`helpdesk/api/work.py`) is false for them, which closes the Overview
+    and Team APIs even to a salesperson who also holds Project Manager.
+- **Left on a team, they hear nothing:** a content post gives them no task
+  (`HDContentPost.task_people`), and `work_reminders.new_notification`, the one place every
+  hub notice is made, skips a Sales Employee for the doctypes they can't open
+  (`SALES_HIDDEN_DOCTYPES` in `content_team.py`: Project, Task, Timesheet, HD Ticket, HD
+  Article, the content doctypes, HD Work Summary, HD Support Contract, project files and
+  sign-offs, HD Standup). Scoreboard notices (HD Team Champion) still reach them.
+- **No assignments:** the ToDo `validate` hook (`check_sales_assignment`, from
+  `check_assignment_department`) refuses giving a Sales Employee a task ("Shahana Sales is on
+  the Sales team and can't be given tasks.") or a ticket ("… can't be given tickets."), from
+  any screen, the Desk or templates. Only a new or reopened assignment is refused, so work
+  they held before the wall can still be closed. Assignment rules pass them over
+  (`HelpdeskAssignmentRule.get_user`), and a customer's ticket owner or backup who is a Sales
+  Employee counts as not working (`HDCustomer.ticket_owner_today`), so a new ticket never
+  fails to save over them.
+- **Stand-up:** not for them. It is filled from tasks, tickets and content posts, none of
+  which they have, so they get no draft and no reminder (`standup.candidates`), and the page
+  isn't in their sidebar.
+- **Giving someone the role:** Settings → Agents → the agent's menu → Department wall →
+  **Sales team: leads only, no tasks or tickets**. It replaces an ERP or Digital wall. The
+  role can also be added on the user's Roles in the Desk.
 
 ## Tickets list
 
@@ -124,7 +193,7 @@ for example, doesn't get it:
 | System Manager, Agent Manager | yes | what their agent permissions allow |
 | ERP Employee | yes | what any agent sees (teams, assignment) |
 | Other agents (no wall) | no | what any agent sees; a ticket opens from a link |
-| DM Employee, Content Team | no | only tickets they raised |
+| DM Employee, Sales Employee, Content Team | no | only tickets they raised |
 
 The list gate only hides pages; which tickets someone sees is always HD Ticket's
 `permission_query` and `has_permission`. Home and My Work list the tickets assigned to a person
@@ -142,8 +211,8 @@ through the same permissions, so they show up for the ERP team too.
 - **Project.custom_department**: Link → HD Department, defined in
   `helpdesk/setup/install.py` `get_custom_fields()` and applied on install and on every
   migrate. It is a standard filter.
-- **Seeding**: `ensure_default_departments()` (in `hd_department.py`) inserts any of the five
-  defaults that are missing and leaves existing, renamed or deactivated ones alone. It runs from
+- **Seeding**: `ensure_default_departments(names=DEFAULT_DEPARTMENTS)` (in `hd_department.py`)
+  inserts any of the defaults that are missing and leaves existing, renamed or deactivated ones alone. It runs from
   `after_install` and from the patch `helpdesk.patches.v16_0_2.seed_departments` for existing
   sites. Patches run once, so a default deleted later stays deleted.
 
@@ -205,8 +274,9 @@ also gives rough durations for designs and videos.
 
 ## Department groups
 
-TBO has two main departments: **ERP** (with **GrowthX** and **Internal / R&D** under it) and
-**Digital** (with **Creative**). A department can be **part of** a main department
+TBO has three main departments: **ERP** (with **GrowthX** and **Internal / R&D** under it),
+**Digital** (with **Creative** and **Web Development**) and **Sales** (with **CRM**; the
+owner, 2026-10-16). A department can be **part of** a main department
 (`HD Department.parent_department`); a main department and its sub-departments form a
 **group**, named after the main department.
 
@@ -225,14 +295,28 @@ TBO has two main departments: **ERP** (with **GrowthX** and **Internal / R&D** u
   department. Projects keep exactly one department, and the Projects page, the Overview
   filter and every other list still go by department.
 - **The walls are unchanged**: `HIDDEN_DEPARTMENTS` still names single departments (ERP,
-  Digital), so putting Creative in the Digital group doesn't hide Creative from ERP
-  Employees, and GrowthX stays visible to DM Employees.
+  Digital), so putting Creative or Web Development in the Digital group doesn't hide them
+  from ERP Employees, and GrowthX stays visible to DM Employees.
+- **No department wall for Sales (decided 2026-10-19):** Sales and CRM projects are visible
+  to everyone, like Creative and GrowthX. Leads themselves never live in the hub (they are
+  read live from the ERP site, whose sales rules decide who sees which lead,
+  [leads.md](leads.md)), so a department wall here would hide nothing; Sales projects and
+  tasks, if any, are ordinary work. Salespeople themselves get the
+  [Sales Employee wall](#sales-wall-sales-employee) (2026-10-21), which keeps them to the
+  sales screens.
 - **Setting the owner's groups**: `DEFAULT_GROUPS` in `hd_department.py`; `set_default_groups()`
-  puts GrowthX and Internal / R&D under ERP and Creative under Digital, only where a
+  puts GrowthX and Internal / R&D under ERP, Creative and Web Development under Digital and
+  CRM under Sales, only where a
   department has no group yet and both exist (a group someone set stays, and a renamed
   department is left alone). New sites get it on install (`ensure_default_departments`);
   existing sites from the patch `helpdesk.patches.v16_0_2.set_department_groups`, which runs
-  once on deploy.
+  once on deploy. Web Development, Sales and CRM came later: the patch
+  `helpdesk.patches.v16_0_2.seed_sales_departments` adds only those three when missing
+  (`ensure_default_departments(SALES_AND_WEB_DEPARTMENTS)`, so an older default someone
+  deleted stays deleted) and then fills the groups the same careful way.
+- **Where Sales counts**: salespeople's CRM activity is scored in **CRM**
+  ([team-dashboard.md](team-dashboard.md#sales)); Sales' own projects, if any, count in Sales
+  like any department.
 
 ## Department heads
 

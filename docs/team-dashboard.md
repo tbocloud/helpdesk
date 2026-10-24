@@ -102,6 +102,7 @@ day, so a late edit to an old task shows within the hour.
 | Overdue now | Open tasks (Open, Working, Overdue) past their due date today. On Hold and Pending Review are left out: they wait on someone else |
 | Hours | Time logs of draft and submitted Timesheets in the period, by the timesheet's owner (as `get_timesheet_summary` does) |
 | Posts | Content posts due in the period (`content_performance.scored_posts`): on time, late or missed, for everyone on the post. Upcoming posts aren't counted |
+| Sales | Each salesperson's CRM activity from the ERP site, in the CRM department ([Sales](#sales)) |
 
 A row's **department** is its project's `custom_department`; a post's is the department of
 its tasks' project. Rows without one fall under **No department**.
@@ -121,6 +122,7 @@ dashboard, the stored champions, the AI and the app's Compete screen all use it,
 | Overdue now | `−1` per task |
 | Slips | `−0.5` per due-date move |
 | Hours | `+0.05` per hour, **capped at a tenth of the points earned by delivering**, so hours alone score 0 and long hours never beat on-time delivery (the owner's rule: task control, not time tracking) |
+| Sales | CRM activity on leads ([Sales](#sales)) |
 
 - **Minimum activity** before anyone can be champion: **weighted work** (the tasks' weights
   plus posts published) of Today 2, week 3, month 5, quarter 8, half year 12, year 20, from
@@ -137,6 +139,67 @@ dashboard, the stored champions, the AI and the app's Compete screen all use it,
 - **How weight works**: a link under the page's intro opens `ScoreRulesDialog`, which
   explains weight, quality and the score with a worked example. Its numbers come from the
   server (`score_rules()`, the page's `rules`), so it can't drift from the formula.
+
+## Sales
+
+The owner (2026-10-16): "we need a Scoreboard for CRM … CRM is part of the Sales department".
+Salespeople work leads, not tasks, so they are scored on their **CRM activity** on the ERP
+site, where leads live ([leads.md](leads.md)).
+
+- **Where it comes from**: TBO Smart's `hub_leads.get_sales_activity(from_date, to_date)`
+  (`hub-leads-api.md` §2.5), called by `helpdesk/sales_scoreboard.py` as the hub's own API
+  user, **without `acting_user`**: the Scoreboard is open to everyone and closes its periods
+  at night with nobody signed in. It answers counts per person only, never a lead.
+  Everything counts for the lead's owner; follow-ups for whom they're allocated to.
+- **Where it counts**: the **CRM** department (`SALES_DEPARTMENT`), under **Sales**
+  ([departments.md](departments.md#department-groups)). Every activity row joins
+  `collect()`'s data as `sales` with department CRM, so `tally`, `score`, the ranking, the
+  Sales group and CRM champions, the closed periods' stored champions, the month view and
+  the app's Compete screen all take it in with no second formula.
+- **One score per person**: the sales points are parts of `score()`, next to the task parts.
+  Someone with project tasks and sales work keeps their task score and adds the sales parts.
+- **Only while Leads are on** (Settings → CRM → Leads); otherwise nothing is asked and
+  `sales.status` is `off`.
+- **When the ERP site can't answer**, `sales.status` is `unavailable` with the reason (the
+  Leads page's messages, e.g. "Couldn't reach the ERP site (…)"); the CRM row and the Sales
+  group row say "Sales numbers missing: …", and the rest of the Scoreboard works as always.
+  A failure is asked again after a minute, a success cached for five (`team_dashboard:sales:…`,
+  dropped by `clear_cache`). **Known limit**: if the site is unreachable when a period
+  closes (00:30), that period's champions are stored without the sales activity.
+- **Today's state** (minutes pending, follow-ups overdue) counts only for the period in
+  progress, as overdue tasks do.
+
+### Sales points (`sales_scoreboard.WEIGHTS`)
+
+| Part | Points |
+| --- | --- |
+| Each lead contacted (a note, call, email, stage change or follow-up done on it in the period) | `+0.25` |
+| Each follow-up done by its day | `+0.25` |
+| Each meeting with its minutes (MOM submitted) | `+1.5` |
+| Each proposal / quotation sent | `+1.5` |
+| Each lead won | `+4`, plus `+1` per lakh of its latest quotations' value, at most `+4` a won lead |
+| Each meeting waiting for its minutes now | `−0.5` |
+| Each follow-up overdue now | `−0.5` |
+
+- **Quality-aware, like tasks**: a meeting only counts with its minutes, and minutes left
+  pending and follow-ups let slip cost points, as overdue tasks and slips do. A won deal's
+  size counts, capped so one big deal can't outweigh steady work.
+- **Minimum before champion**: the same `PERIODS` minimum (week 3, month 5, …) of weighted
+  work, where sales work counts by its points above (`sales.weighted`), and at least
+  `MIN_DELIVERED` (2) things done, where leads contacted, meetings with minutes, proposals
+  and wins count (`sales.delivered`). So a few calls alone never make a champion.
+- **Conversion** (won of new leads, %) is shown, not scored: it would reward taking few
+  leads.
+- **Calls** (answered MyOperator calls the person took, `calls`) are shown, not scored: a
+  call that moves a lead already counts through Contacted, and counting calls or talk time
+  would reward dialling over outcomes. Talk time is not shown either.
+- **On the page**: department rows with sales show "Sales: 12 contacted · 30 calls · 2 meetings ·
+  1 proposals · 1 won"; a person with sales shows the same next to their department; the
+  breakdown names each part ("Leads contacted: 10, follow-ups on time 2 of 3", "Leads won:
+  1, worth ₹3,00,000"); **How weight works** lists the sales points (`rules.sales`).
+- **In TBO Smart**: the app's Scoreboard (`helpdesk.api.mobile.get_scoreboard`) gets the same
+  `sales` on its department rows, `me` and `leaders`, and shows "Sales: …" under the CRM and
+  Sales rows; its How weight works lists the same points.
 
 ## Weight and quality
 
@@ -448,7 +511,7 @@ a number that isn't in the facts**, so it can't invent figures.
 
 | Method | HTTP | What |
 | --- | --- | --- |
-| `get_team_dashboard(period="week", department=None, group=None, day=None)` | GET | `period` (dates, comparison, `closed`, `current`, `earliest` for the month picker), `previous_champion`, `months` (the year only), `access` (departments, `groups` [{group, departments}], can_refresh), `department`, `group`, `summary` (with `weight` and `previous`), `champion`, `departments` (rows with `kind`, `parent`, `weight`), `people` (with `weight`, `self_made`, `excellent`, `good`, `rework`, `sent_back`, `came_back`), `projects`, `trend`, `history`, `analysis`, `rules` (`score_rules()`) |
+| `get_team_dashboard(period="week", department=None, group=None, day=None)` | GET | `period` (dates, comparison, `closed`, `current`, `earliest` for the month picker), `previous_champion`, `months` (the year only), `access` (departments, `groups` [{group, departments}], can_refresh), `department`, `group`, `summary` (with `weight`, `sales` and `previous`), `champion`, `departments` (rows with `kind`, `parent`, `weight`, `sales`), `people` (with `weight`, `self_made`, `excellent`, `good`, `rework`, `sent_back`, `came_back`, `sales`), `projects`, `trend`, `history`, `analysis`, `rules` (`score_rules()`, with `sales`), `sales` (`{status: ok / off / unavailable, message, currency, department}`) |
 | `refresh_analysis(period="week", department=None, group=None)` | POST | A new analysis for the period in progress (System and Agent Managers) |
 
 `helpdesk/tasky/api.py`: `rate_task(task, rating=None)` (POST; a completed task's rating, or

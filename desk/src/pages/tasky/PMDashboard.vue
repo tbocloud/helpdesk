@@ -55,6 +55,14 @@
         </TaskyState>
 
         <template v-else>
+          <!-- the client documents it came from (read only here; acted on from the lead) -->
+          <LeadDocuments
+            v-if="projectDetail.data?.crm_lead && documentChain.data"
+            class="mb-4"
+            :lead-id="projectDetail.data.crm_lead"
+            :chain="documentChain.data"
+            :can-write="false"
+          />
           <!-- Overview -->
           <div
             class="rounded-xl border border-outline-gray-2 bg-surface-base p-4 shadow-sm md:p-5"
@@ -458,6 +466,7 @@ import LucideListTodo from "~icons/lucide/list-todo";
 import LucidePause from "~icons/lucide/pause";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideSparkles from "~icons/lucide/sparkles";
+import LeadDocuments from "@/pages/leads/LeadDocuments.vue";
 import ProjectNav from "./components/ProjectNav.vue";
 import SlipBadge from "./components/SlipBadge.vue";
 import TaskStatusBadge from "./components/TaskStatusBadge.vue";
@@ -486,6 +495,15 @@ const dashboard = createResource({
 const projectDetail = createResource({
   url: "helpdesk.tasky.api.get_project_detail",
   makeParams: () => ({ project: props.projectId }),
+  onError() {},
+  onSuccess(d: { crm_lead?: string | null }) {
+    if (d?.crm_lead) documentChain.fetch({ lead: d.crm_lead });
+  },
+});
+
+// the lead's chain, for people who use Leads; anyone else simply doesn't see it
+const documentChain = createResource({
+  url: "helpdesk.api.proposals.get_document_chain",
   onError() {},
 });
 

@@ -58,7 +58,15 @@ from helpdesk.utils import (
     remove_assignment,
     strip_chat_placeholders,
 )
-from helpdesk.work_reminders import _agent_managers, _assignees, notify_users
+from helpdesk.work_reminders import (
+    SKIP,
+    _agent_managers,
+    _assignees,
+    enabled_users,
+    helpdesk_path,
+    new_notification,
+    notify_users,
+)
 
 from ..hd_notification.utils import clear as clear_notifications
 from ..hd_service_level_agreement.utils import get_sla
@@ -273,19 +281,7 @@ class HDTicket(Document):
             capture_event("ticket_split")
 
     def on_update(self):
-        # flake8: noqa
-        if self.status_category == "Open":
-            if (
-                self.get_doc_before_save()
-                and self.get_doc_before_save().status_category != "Open"
-            ):
-                agents = self.get_assigned_agents()
-                if agents:
-                    for agent in agents:
-                        if agent.name == frappe.session.user:
-                            continue
-                        self.notify_agent(agent.name, "Reaction")
-
+        self.notify_ticket_update()
         self.remove_assignment_if_not_in_team()
         self.assign_owner_of_customer_set_later()
         self.alert_low_rating()
@@ -315,6 +311,91 @@ class HDTicket(Document):
             subject,
             escalate=True,
         )
+
+    def notify_ticket_update(self):
+        """Resolved, closed, reopened or a customer's reply: one panel notice to each
+        follower, never to whoever made the change (docs/ticket-owners.md). No chat
+        message or email: these come often, and the follow-ups chase what is late."""
+        message = self.ticket_update_message()
+        # used once: a later save of this document is a change of its own
+        reply = self.flags.pop("customer_reply", None)
+        self.flags.pop("skip_update_notice", None)
+        if not message:
+            return
+        for user in self.ticket_followers():
+            new_notification(
+                user,
+                "HD Ticket",
+                self.name,
+                message,
+                helpdesk_path("HD Ticket", self.name),
+                notification_type="Ticket Update",
+                user_from=frappe.session.user,
+                dedupe_key=reply,
+                deliver=False,
+            )
+
+    def ticket_update_message(self) -> str | None:
+        """What changed, in one line, or None when nothing worth a notice did. A reply
+        that reopens the ticket is told once, as the reply."""
+        if self.flags.skip_update_notice:
+            return None
+        if self.flags.customer_reply:
+            return _("{0} replied on #{1}: {2}").format(
+                self.customer or self.contact or self.raised_by,
+                self.name,
+                self.subject,
+            )
+        previous = self.get_doc_before_save()
+        if not previous or not self.has_value_changed("status"):
+            return None
+        actor = frappe.session.user
+        by = None if actor in SKIP else get_fullname(actor)
+        if self.status_category == "Open" and previous.status_category != "Open":
+            if by:
+                return _("{0} reopened #{1}: {2}").format(by, self.name, self.subject)
+            return _("#{0} was reopened: {1}").format(self.name, self.subject)
+        if self.status_category == "Resolved":
+            if by:
+                return _("{0} marked #{1} {2}: {3}").format(
+                    by, self.name, self.status, self.subject
+                )
+            return _("#{0} was marked {1}: {2}").format(
+                self.name, self.status, self.subject
+            )
+        return None
+
+    def ticket_followers(self) -> list[str]:
+        """The assignees and the customer's ticket owner, plus the backup while they
+        cover for the owner; not the person making the change. A Sales Employee among
+        them is skipped by new_notification."""
+        people = set(_assignees(self._assign))
+        if self.customer:
+            customer = frappe.get_doc("HD Customer", self.customer)
+            people.add(customer.ticket_owner)
+            pick = customer.ticket_owner_today()
+            if pick and pick["backup"]:
+                people.add(pick["user"])
+        people.discard(frappe.session.user)
+        return enabled_users(people)
+
+    def mark_customer_reply(self, c):
+        """Flag a customer's message for notify_ticket_update, keyed by the
+        Communication. The message that opened the ticket isn't a reply, and a
+        Communication saved again (an incoming email is saved twice) isn't a new one."""
+        key = f"ticket-reply:{c.name}"
+        earlier = frappe.db.exists(
+            "Communication",
+            {
+                "reference_doctype": "HD Ticket",
+                "reference_name": str(self.name),
+                "sent_or_received": "Received",
+                "name": ("!=", c.name),
+                "creation": ("<", c.creation),
+            },
+        )
+        if earlier and not frappe.db.exists("HD Notification", {"dedupe_key": key}):
+            self.flags.customer_reply = key
 
     def notify_agent(self, agent, notification_type="Assignment"):
         frappe.get_doc(
@@ -663,6 +744,7 @@ class HDTicket(Document):
         self.update({"_assign": frappe.db.get_value("HD Ticket", self.name, "_assign")})
         self.log_owner_assignment(pick, customer.name)
         self.notify_ticket_owner(pick)
+        self.notify_backup_owner(pick, customer.backup_ticket_owner)
 
     def assign_owner_of_customer_set_later(self):
         """A ticket that came in without a customer and is still unassigned gets the
@@ -712,7 +794,10 @@ class HDTicket(Document):
     def notify_ticket_owner(self, pick: dict):
         """The owner's notice: the helpdesk panel plus a Teams DM (or email) through
         notify_users. A plain assignment sends no chat message, so this is the only one.
+        None when they raised the ticket themselves.
         """
+        if pick["user"] in self.raisers():
+            return
         lines = [
             _("New ticket #{0} from {1} assigned to you: {2}").format(
                 self.name, self.customer, self.subject
@@ -733,7 +818,38 @@ class HDTicket(Document):
                     get_fullname(pick["away"])
                 )
             )
-        notify_users([pick["user"]], "HD Ticket", self.name, "\n".join(lines))
+        notify_users(
+            [pick["user"]],
+            "HD Ticket",
+            self.name,
+            "\n".join(lines),
+            notification_type="New Ticket",
+        )
+
+    def notify_backup_owner(self, pick: dict, backup: str | None):
+        """While the owner takes a new ticket, the backup sees it in the panel only (no
+        Teams message, to keep it quiet), so they know the customer's work when they
+        cover. When the backup takes it, the owner is on leave or inactive and hears
+        nothing."""
+        if pick["backup"] or not backup or backup in self.raisers():
+            return
+        if not enabled_users([backup]):
+            return
+        new_notification(
+            backup,
+            "HD Ticket",
+            self.name,
+            _("New ticket #{0} from {1} for {2} (you're the backup): {3}").format(
+                self.name, self.customer, get_fullname(pick["user"]), self.subject
+            ),
+            helpdesk_path("HD Ticket", self.name),
+            notification_type="New Ticket",
+            deliver=False,
+        )
+
+    def raisers(self) -> set:
+        """Who raised the ticket: nobody is told about a ticket they raised themselves."""
+        return {self.owner, self.raised_by}
 
     def get_assigned_agents(self):
         assignees = get_assignees({"doctype": "HD Ticket", "name": self.name})
@@ -1057,6 +1173,8 @@ class HDTicket(Document):
         # if self.status_category == "Paused" and not new_ticket:
         if not new_ticket:
             self.status = self.ticket_reopen_status
+            # the Communication below tells the followers, as the customer's reply
+            self.flags.skip_update_notice = True
             self.save(ignore_permissions=True)
 
         c = frappe.new_doc("Communication")
@@ -1315,6 +1433,7 @@ class HDTicket(Document):
         # be reopened.
         # handle re opening tickets for email
         if c.sent_or_received == "Received":
+            self.mark_customer_reply(c)
             # check if agent has replied
 
             if self.has_agent_replied:

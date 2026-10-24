@@ -291,6 +291,7 @@
                 v-else-if="view === 'departments'"
                 :departments="data.departments"
                 :groups="data.access.groups"
+                :sales="data.sales"
                 @open="openDepartment"
                 @open-group="openGroup"
               />

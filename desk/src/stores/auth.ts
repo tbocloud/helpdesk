@@ -65,6 +65,10 @@ export const useAuthStore = defineStore("auth", () => {
   const isDmEmployee: ComputedRef<boolean> = computed(
     () => !!user__.value.is_dm_employee
   );
+  // Sales Employees: the sales screens only (SALES_EMPLOYEE_ROUTES), docs/departments.md
+  const isSalesEmployee: ComputedRef<boolean> = computed(
+    () => !!user__.value.is_sales_employee
+  );
   // the Tickets list and New ticket: System / Agent Managers and the ERP team
   const canWorkTickets: ComputedRef<boolean> = computed(
     () => !!user__.value.can_work_tickets
@@ -110,6 +114,10 @@ export const useAuthStore = defineStore("auth", () => {
   );
   const personaCaptured: ComputedRef<boolean> = computed(
     () => !!user__.value.persona_captured
+  );
+  // chime with a new ticket's notice (Settings → Preferences, default off)
+  const newTicketSound: ComputedRef<boolean> = computed(
+    () => !!user__.value.new_ticket_sound
   );
 
   function sessionUser() {
@@ -158,6 +166,7 @@ export const useAuthStore = defineStore("auth", () => {
     inContentTeam,
     isErpOnly,
     isDmEmployee,
+    isSalesEmployee,
     canWorkTickets,
     canUseLeads,
     telephonyInstalled,
@@ -176,6 +185,7 @@ export const useAuthStore = defineStore("auth", () => {
     language,
     userTeams,
     personaCaptured,
+    newTicketSound,
     user,
     logout,
   };

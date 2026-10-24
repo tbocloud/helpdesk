@@ -133,6 +133,7 @@ import LucideCircleAlert from "~icons/lucide/circle-alert";
 import {
   choices,
   LEAD_FORM_FIELDS,
+  loadLeadOptions,
   leadOptions,
   type LeadForm,
   type LeadOptions,
@@ -172,7 +173,7 @@ watch(
       values[field] = String(props.lead?.[field] ?? "");
     }
     Object.assign(form, values);
-    if (!leadOptions.data && !leadOptions.loading) leadOptions.fetch();
+    loadLeadOptions();
   },
   { immediate: true }
 );

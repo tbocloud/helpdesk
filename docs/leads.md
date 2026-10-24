@@ -1,7 +1,9 @@
 # Leads
 
 Status: Phase 1 implemented (list, new lead, lead page with stage, notes, edit and read-only
-quotations). This document is the source of truth for the feature and changes with it.
+quotations), the **Overview** (2026-10-19), and proposals with the segment rate card in
+[proposals.md](proposals.md). This document is the source of truth for the feature and changes
+with it.
 
 ## Why it works this way
 
@@ -22,7 +24,14 @@ The hub never gets ERPNext installed.
   CRM connection must be enabled too.
 - **For these teams** (`leads_teams`, HD Team names one per line, ticked in Settings): only
   active agents in an enabled ticked team see Leads. None ticked: every active agent.
-  System Managers and Agent Managers (and Administrator) always do.
+  System Managers and Agent Managers (and Administrator) always do, and so does every active
+  **Sales Employee**, whatever their team.
+- **Salespeople see only the sales screens:** an agent with the Sales Employee role
+  (Settings → Agents → Department wall → Sales team) gets Leads, the Scoreboard,
+  notifications and Help, and no tasks, projects, tickets or content; Home opens Leads →
+  Overview for them, and their documents chain stops at the client documents (the Project
+  and UAT steps don't open). The full rules are in
+  [departments.md](departments.md#sales-wall-sales-employee).
 - The check is `helpdesk.integrations.crm.leads.can_use_leads`; `helpdesk.api.auth.get_user`
   sends it as `can_use_leads`, which shows the sidebar item and lets the router open
   `/helpdesk/leads`. Every endpoint checks it again on the server.
@@ -37,14 +46,23 @@ user exists there with a sales role, applies what they may see, and records writ
 
 | Method | HTTP | Arguments | Returns |
 | --- | --- | --- | --- |
-| `get_options` | GET | | `{stages: [{name, label, type, color}], sources, segments, owners: [{email, full_name}], territories, industries}` |
-| `list_leads` | GET | `search, stage, owner, segment, view, start, page_length` | `{rows: [{name, lead_name, company_name, email_id, mobile_no, tbo_stage, segment, lead_owner, owner_name, score, next_follow_up, modified}], total}` |
-| `get_lead` | GET | `name` | `{lead: {...}, timeline: [...], quotations: [...], allowed_stages: [...]}` |
+| `get_options` | GET | | `{stages: [{name, label, type, color}], sources, segments, owners: [{email, full_name}], territories, industries, can_call}` |
+| `list_leads` | GET | `search, stage, owner, segment, source, temperature, metric, period, from_date, to_date, view, start, page_length` | `{rows: [{name, lead_name, company_name, email_id, mobile_no, tbo_stage, segment, lead_owner, owner_name, score, next_follow_up, modified}], total}` |
+| `get_overview` | GET | `period, from_date, to_date, owner` | the Overview's figures (TBO Smart's `hub-leads-api.md` §2.4) |
+| `get_lead_ai` | GET | `name` | what the AI proposes, the lead's health and likely duplicates (TBO Smart's `hub-leads-api.md` §2.6) |
+| `refresh_lead_ai`, `apply_ai_stage`, `dismiss_ai_stage` | POST | `name` | as above, or the lead (apply) |
+| `draft_lead_message` | POST | `name, channel (whatsapp / email), language` | `{channel, subject, text, to?, url?}`; nothing is sent |
+| `log_message_sent` | POST | `name, channel, text` | the timeline entry |
+| `get_sales_activity` | GET | `from_date, to_date`, **no** `acting_user` | each salesperson's activity, for the Scoreboard ([team-dashboard.md](team-dashboard.md#sales)) |
+| `get_lead` | GET | `name` | `{lead: {...}, timeline: [...], quotations: [...], proposals: [...], allowed_stages: [...]}` |
 | `create_lead` | POST | `data` | the lead (at least `name`) |
 | `update_lead` | POST | `name, data` | the lead |
 | `set_stage` | POST | `name, stage, note` | the lead |
 | `add_note` | POST | `name, note` | the note |
 
+- `metric` (`new`, `contacted`, `meetings`, `quotations`, `won`, `lost`, `stale`, `overdue`,
+  `hot`, `open`, and the AI's `high_intent`, `unhappy`, `stage_suggested`) keeps the leads one Overview number counts; `period` (`week`, `month`, `quarter`,
+  `custom` with `from_date` and `to_date`) goes with it and is sent only with a metric.
 - `view` is `all`, `mine`, `call_today` or `follow_up`. The hub sends `page_length` 20
   (at most 100) and `start` from 0.
 - `data` (create and update) uses these keys: `lead_name, company_name, email_id, mobile_no,
@@ -53,18 +71,49 @@ user exists there with a sales role, applies what they may see, and records writ
 - `allowed_stages` may be stage names or stage objects; the hub offers only those (minus the
   current stage).
 - Timeline entries are TBO Smart's `{kind, at, who, who_name, text, ref}` (kind: note, call,
-  activity, meeting, stage, quotation), newest first; each kind has its own icon and a screen
-  reader label, and `text` is shown as sent (a stage move reads "Contacted → Proposal Sent").
+  activity, meeting, stage, quotation, proposal, and ai: what TBO AI did, with a bot icon),
+  newest first; each kind has its own icon and a screen reader label, and `text` is shown as
+  sent (a stage move reads "Contacted → Proposal Sent").
 - Quotations are read as `{name, transaction_date, tbo_quote_status, grand_total, currency}`.
+- Proposals are read as `{name, title, status, revision_no, view_count, …}` (empty while
+  Proposals is off on the ERP site; [proposals.md](proposals.md)).
+- A lead's `segment` sets its discount band, so once it has one only the people who edit
+  quotation presets and prices on the ERP site move it to another; the Edit dialog shows the
+  ERP site's reason otherwise.
 - `next_follow_up` on create or update schedules a Sales follow-up for the lead owner on the
   ERP site (tbo_smart#25); clearing it adds nothing and doesn't close the open one.
 - Stage colours from the ERP site are not used, to keep the hub's one-accent rule: a stage
   whose `type` is `Won` is green, `Lost` red, every other stage gray, always with its label.
 
+## Calls through MyOperator
+
+Telecallers' calls go through MyOperator, set up on the ERP site (TBO Smart's
+`docs/telephony-myoperator.md`, which also lists the owner's setup steps in MyOperator).
+The ERP site's `tbo_smart.api.telephony` takes the same `acting_user`:
+
+| Method | HTTP | Arguments | Returns |
+| --- | --- | --- | --- |
+| `click_to_call` | POST | `lead, number` (one of the lead's own numbers; blank: the first of its mobile, phone and WhatsApp) | `{ok, message, number, reference_id}`: MyOperator rings the person's phone, then the lead |
+| `call_recording` | GET | `call` | the recording (audio), only to someone who may read the lead |
+| `get_settings`, `save_settings`, `test_connection`, `regenerate_webhook_secret` | GET / POST | `values` (save) | the MyOperator settings (System Managers on the ERP site); secrets never come back, a new webhook secret once |
+
+- `get_options` and the lead's `can_call` say whether the signed-in person may use **Call**
+  (telephony on and they are mapped to a MyOperator user or mobile on the ERP site).
+- A call timeline entry that came through MyOperator adds `call, duration` (talk seconds),
+  `direction` (incoming / outgoing), `status` (answered / missed / voicemail), `recording`
+  (the call's name, or null) and `summary` (TBO AI's `{text, interest, intent, objections,
+  next_step, language}`, or null). The transcript never leaves the ERP site.
+- Hub: `helpdesk.api.leads.click_to_call` (POST) and `call_recording` (GET, streams the ERP
+  site's file through `CRMClient.download`, served inline as audio), and
+  `helpdesk/api/myoperator.py` for the settings (hub admins and managers who use leads; the
+  ERP site checks its own System Manager role).
+
 ## Hub endpoints
 
 `helpdesk/api/leads.py`, thin typed proxies (writes are POST only): `get_options`,
-`list_leads`, `get_lead`, `create_lead`, `update_lead`, `set_stage`, `add_note`. They check
+`list_leads`, `get_overview`, `get_lead`, `get_lead_ai`, `refresh_lead_ai`, `apply_ai_stage`,
+`dismiss_ai_stage`, `draft_lead_message`, `log_message_sent`, `create_lead`, `update_lead`,
+`set_stage`, `add_note`, `click_to_call`, `call_recording`. They check
 `can_use_leads`, validate the view and page size, trim notes, and pass `acting_user`. The
 client is `CRMClient.call` in `helpdesk/integrations/crm/client.py`; the call and error
 mapping live in `helpdesk/integrations/crm/leads.py`. The API key and secret never reach the
@@ -89,7 +138,35 @@ ValidationError, so the page shows the message with *Try again*).
 
 ## The pages
 
-- **Leads** (`/helpdesk/leads`, `desk/src/pages/leads/Leads.vue`): views All, Mine, Call
+- **Overview** (the first tab, where `/helpdesk/leads` opens; `LeadsOverview.vue`): one calm
+  page for the person's leads (their own, their team's or everyone's, as the ERP site's sales
+  rules give them). Its job: see where the pipeline stands and what needs a person now.
+  - **Period** (This week, This month, This quarter, Custom with from and to dates) and, for
+    a team lead or a manager, **Owner** ("My team" / "Everyone" or one person). Both are in
+    the URL (`period`, `from`, `to`, `owner`).
+  - **This period**: New leads, Contacted, Meetings held, Proposals sent, Won (with its
+    value), Lost. **Needs attention** now: Overdue follow-ups (red), Gone quiet (no touch for
+    the ERP site's stale days, amber), Hot leads.
+  - **Pipeline now**: every open stage with its leads and their latest quotations' value, as
+    neutral bars (Won and Lost only when they have leads). **Funnel**: of the period's new
+    leads, how many got to Contacted, Meeting, Proposal and Won, with the win rate. **Why
+    leads were lost** (top five). **Hot leads** (the six best, each opens the lead). **By
+    owner** (new, contacted, meetings, proposals, won, open), **By segment** and **By
+    source** (new, open, won).
+  - **Every number opens its leads**: a tile, a stage, an owner's or a segment's number
+    goes to the list with `metric` and the period (or a stage, owner, segment or source
+    filter); the list shows what it was opened with ("Won, this month") and *Clear filters*
+    drops it.
+  - States: skeleton while loading, error with Try again, "Pick both dates" for an
+    unfinished custom period, an empty line in each panel with nothing to show.
+  - Colour: one brand accent (the selected period); green only for Won, red only for
+    overdue, amber for gone quiet, each with its icon and label. No other colour.
+  - **Your plan for today** (with **AI runs leads** on the ERP site, TBO Smart Settings): the
+    person's follow-ups due, Call today and hot leads, each with the AI's next step and its
+    day; a manager who picks an owner sees theirs. Its header counts the open leads the AI
+    read as high intent, unhappy, and with a stage move waiting for a person; each count
+    opens those leads.
+- **Leads** list (the other tabs, `desk/src/pages/leads/Leads.vue`): views All, Mine, Call
   today and Follow-up; search (debounced) and stage, owner and segment filters; 20 a page
   with Previous and Next. View, search, filters and page are in the URL. Rows show the
   name, stage, company, segment, mobile or email, the next follow-up (red with an icon once
@@ -103,19 +180,59 @@ ValidationError, so the page shows the message with *Try again*).
   action; only `allowed_stages`, with an optional note), *Edit* (the same dialog, sending
   only changed fields), a note composer and the timeline, and the quotations read-only
   (`LeadQuotations.vue`).
+- **AI suggests** on the lead page (`LeadAISuggests.vue`, its own component under Details):
+  - the AI's summary, sentiment and intent (badges with icons; an unhappy customer amber),
+    the phrases that show it, and the **next step** with its channel and day (already the
+    follow-up when nothing else was planned);
+  - a **stage to move to** with its reason: *Move to …* (a person's click; the ERP site
+    records them) or *Dismiss*. The AI never suggests Won or Lost;
+  - a **message to send**: the stored draft, or *Draft a message* (WhatsApp or Email). The
+    person edits it, *Open in WhatsApp* / *Open in mail* opens their own app with the text,
+    they press Send there, then *I sent it* logs it on the lead. **Nothing is sent from the
+    hub or the ERP site;**
+  - *Read the lead again* (once a minute), and when the lead changed since the last read the
+    header says so;
+  - **Lead health** (Healthy / Watch / At risk with the reasons) and **Maybe the same
+    customer** (other leads with the same phone, email or company), which work with AI runs
+    leads off too (the block is then titled *Lead health*).
+  - States: loading lines, an error with Try again, "hasn't read this one yet" with *Read it
+    now*, and a note when no AI provider is set up.
+- **Call** (MyOperator, when `can_call`): a button in the lead's header (on a phone, Call and
+  Edit show as icons, named by their `label`) and a phone button on each list row with a mobile
+  (outside the row's link; all of them wait while one call is being placed). It toasts "MyOperator is calling your
+  phone…", or the ERP site's reason (not set up, no number, MyOperator refused).
+- **Calls on the timeline**: a MyOperator call shows "Incoming call" / "Outgoing call" with its
+  talk time (mono), or "Missed call" / "Unanswered call" in red with the phone-missed icon; the
+  direction is its icon. A recording plays in an audio player (`preload="none"`), streamed by
+  `call_recording`. The AI summary is a collapsed `<details>` (its first line, "TBO AI"),
+  opening to what was discussed, interest, intent, concerns, the next step and its day, and
+  the language (`LeadCallEntry.vue`).
+- **Settings → Telephony → MyOperator** (`MyOperatorSettings.vue`; the Telephony page opens
+  on it when the telephony app isn't installed): the switch, company ID, IVR and caller ID,
+  the three keys (`SecretField`: saved ones are never shown), *Test connection* (lists
+  MyOperator's users, used to pick each person's MyOperator user), the **webhook URL with a
+  copy button, the header and the events** to paste into MyOperator, *Make a new secret*
+  (asks first; the new secret shows once, with Copy), the people mapping, unknown callers,
+  recordings (days kept, the recording notice for the IVR greeting under the DPDP Act) and
+  the AI call summary.
 - The pickers' options (`get_options`) are fetched once per session (`leadOptions` in
   `desk/src/pages/leads/leads.ts`).
 - Sidebar: *Leads* in Workspace (teal group), shown when `can_use_leads`.
 
-## Next phases
+## Proposals
 
-- Phase 3/4: proposals and quotations made from the lead page. `LeadQuotations.vue` is the
-  place: it gets the actions, and `get_lead`'s `quotations` the extra fields. No placeholder
-  UI is shown until then.
+The Lead page's **Proposals** section, the proposal builder and Settings → Rates and proposals
+are specified in [proposals.md](proposals.md).
 
 ## Tests
 
 `helpdesk/tests/test_leads.py` with `test_utils.FakeCRM` (`lead_answers`, `lead_calls`,
 `lead_error`) and `test_utils.enable_leads`: off by default, `acting_user` on every call,
 writes posted, view and page size checked, teams and inactive agents gated, and each error
-mapped.
+mapped; the Overview's period checks and the metric with its period passed to the list; the
+AI calls are the signed-in person's (POST for every change) and the channels checked.
+`helpdesk/tests/test_sales_wall.py`: a Sales Employee outside the Leads teams lists, opens,
+creates, moves and notes a lead as themselves.
+`helpdesk/tests/test_lead_calls.py`: Call posted as the signed-in person to TBO Smart's
+telephony API, the recording streamed (audio only) and a refusal refused, the MyOperator
+settings for admins only and proxied.

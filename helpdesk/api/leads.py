@@ -6,9 +6,14 @@ import frappe
 from frappe import _
 from frappe.utils import cint
 
-from helpdesk.integrations.crm.leads import call, require_leads
+from helpdesk.integrations.crm.leads import call, download, require_leads
 
 VIEWS = ("all", "mine", "call_today", "follow_up")
+PERIODS = ("week", "month", "quarter", "custom")
+MESSAGE_CHANNELS = ("whatsapp", "email")
+TELEPHONY = "tbo_smart.api.telephony"
+# what the recording player may be handed back
+AUDIO_TYPES = ("audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/ogg")
 MAX_PAGE = 100
 
 
@@ -28,22 +33,64 @@ def list_leads(
     view: str = "all",
     start: int | str = 0,
     page_length: int | str = 20,
+    source: str | None = None,
+    temperature: str | None = None,
+    metric: str | None = None,
+    period: str | None = None,
+    from_date: str | None = None,
+    to_date: str | None = None,
 ) -> dict:
+    """A page of leads. `metric` with its period keeps the leads one number of the
+    Overview counts (the ERP site picks them)."""
     require_leads()
     if view not in VIEWS:
         frappe.throw(_("Pick All, Mine, Call today or Follow-up."))
+    if period and period not in PERIODS:
+        frappe.throw(_("Pick a week, a month, a quarter or your own dates."))
     result = call(
         "list_leads",
         search=(search or "").strip() or None,
         stage=stage or None,
         owner=owner or None,
         segment=segment or None,
+        source=source or None,
+        temperature=temperature or None,
+        metric=metric or None,
+        period=(period or None) if metric else None,
+        from_date=(from_date or None) if metric else None,
+        to_date=(to_date or None) if metric else None,
         view=view,
         # cint: a malformed number is 0, never a server error
         start=max(cint(start), 0),
         page_length=min(max(cint(page_length) or 20, 1), MAX_PAGE),
     )
     return result or {"rows": [], "total": 0}
+
+
+@frappe.whitelist()
+def get_overview(
+    period: str = "month",
+    from_date: str | None = None,
+    to_date: str | None = None,
+    owner: str | None = None,
+) -> dict:
+    """The Overview: the pipeline, the funnel and the period's figures for the
+    leads the signed-in person may see (theirs, their team's or everyone's)."""
+    require_leads()
+    if period not in PERIODS:
+        frappe.throw(_("Pick a week, a month, a quarter or your own dates."))
+    if period == "custom" and not (from_date and to_date):
+        frappe.throw(_("Pick both dates for your own period."))
+    return (
+        call(
+            "get_overview",
+            period=period,
+            from_date=from_date if period == "custom" else None,
+            to_date=to_date if period == "custom" else None,
+            owner=owner or None,
+        )
+        or {}
+    )
 
 
 @frappe.whitelist()
@@ -87,6 +134,107 @@ def add_note(name: str, note: str) -> dict:
     if not note:
         frappe.throw(_("Write the note first."))
     return call("add_note", post=True, name=name, note=note) or {}
+
+
+# --- AI runs leads: the AI proposes, a person decides and sends -----------------
+
+
+@frappe.whitelist()
+def get_lead_ai(name: str) -> dict:
+    """The lead's "AI suggests": summary, sentiment, intent, next best action, a
+    stage to suggest and a draft, its health and likely duplicates."""
+    require_leads()
+    return call("get_lead_ai", name=name) or {}
+
+
+@frappe.whitelist(methods=["POST"])
+def refresh_lead_ai(name: str) -> dict:
+    require_leads()
+    return call("refresh_lead_ai", post=True, name=name) or {}
+
+
+@frappe.whitelist(methods=["POST"])
+def apply_ai_stage(name: str) -> dict:
+    """Moves the lead to the stage the AI suggested, as the signed-in person."""
+    require_leads()
+    return call("apply_ai_stage", post=True, name=name) or {}
+
+
+@frappe.whitelist(methods=["POST"])
+def dismiss_ai_stage(name: str) -> dict:
+    require_leads()
+    return call("dismiss_ai_stage", post=True, name=name) or {}
+
+
+@frappe.whitelist(methods=["POST"])
+def draft_lead_message(name: str, channel: str, language: str = "en") -> dict:
+    """A WhatsApp or email text to edit and send from the person's own app; the
+    ERP site sends nothing."""
+    require_leads()
+    if channel not in MESSAGE_CHANNELS:
+        frappe.throw(_("Pick WhatsApp or email."))
+    return (
+        call(
+            "draft_lead_message",
+            post=True,
+            name=name,
+            channel=channel,
+            language=language if language in ("en", "ml") else "en",
+        )
+        or {}
+    )
+
+
+@frappe.whitelist(methods=["POST"])
+def log_message_sent(name: str, channel: str, text: str) -> dict:
+    """The person sent the message from their own WhatsApp or mail: put it on the
+    lead's timeline as theirs."""
+    require_leads()
+    if channel not in MESSAGE_CHANNELS:
+        frappe.throw(_("Pick WhatsApp or email."))
+    text = (text or "").strip()
+    if not text:
+        frappe.throw(_("Write the message first."))
+    return (
+        call("log_message_sent", post=True, name=name, channel=channel, text=text) or {}
+    )
+
+
+# --- calls through MyOperator (TBO Smart's docs/telephony-myoperator.md) ----------
+
+
+@frappe.whitelist(methods=["POST"])
+def click_to_call(name: str, number: str | None = None) -> dict:
+    """MyOperator rings the signed-in person's phone, then the lead (`number`: one of
+    the lead's own numbers; default its mobile)."""
+    require_leads()
+    return (
+        call(
+            "click_to_call",
+            post=True,
+            api=TELEPHONY,
+            lead=name,
+            number=(number or "").strip() or None,
+        )
+        or {}
+    )
+
+
+@frappe.whitelist()
+def call_recording(call: str) -> None:
+    """A call's recording, streamed from the ERP site, which plays it only to people
+    who may read the lead."""
+    require_leads()
+    content, content_type = download(
+        "call_recording", api=TELEPHONY, call=(call or "").strip()
+    )
+    frappe.local.response.filename = f"call-{call}.mp3"
+    frappe.local.response.filecontent = content
+    frappe.local.response.content_type = (
+        content_type if content_type in AUDIO_TYPES else "audio/mpeg"
+    )
+    frappe.local.response.display_content_as = "inline"
+    frappe.local.response.type = "download"
 
 
 def parse_data(data: dict | str) -> dict:

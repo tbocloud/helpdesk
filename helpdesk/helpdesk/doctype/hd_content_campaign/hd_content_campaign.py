@@ -6,6 +6,8 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.utils import getdate
 
+from helpdesk.content_team import is_sales_employee
+
 
 class HDContentCampaign(Document):
     def validate(self):
@@ -27,6 +29,8 @@ def permission_query(user: str | None = None) -> str | None:
     )
 
     user = user or frappe.session.user
+    if is_sales_employee(user):
+        return "1 = 0"
     if _is_content_lead(user):
         return None
     table = "`tabHD Content Campaign`"
@@ -45,6 +49,8 @@ def has_permission(
     )
 
     user = user or frappe.session.user
+    if is_sales_employee(user):
+        return False
     if ptype == "create" or _is_content_lead(user):
         return None
     if doc.owner == user or doc.customer in member_customers(user):
