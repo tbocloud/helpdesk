@@ -7,6 +7,8 @@ cd ~ || ex
 sudo apt update
 sudo apt remove mysql-server mysql-client
 sudo apt install libcups2-dev redis-server mariadb-client libmariadb-dev
+# the newer client requires SSL by default; the test service has none (bench runs the client too)
+printf "[client]\nskip-ssl\n" > ~/.my.cnf
 
 pip install frappe-bench
 git clone "https://github.com/frappe/frappe" --branch "version-15" --depth 1 
