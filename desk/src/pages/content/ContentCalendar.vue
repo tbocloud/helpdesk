@@ -473,7 +473,7 @@
                 :title="__('Open it and set a posting date')"
                 @click="openPost(p.name)"
               >
-                {{ p.title }}
+                {{ copyOf(p) }}
                 <span class="text-xs text-ink-gray-5">· {{ p.customer }}</span>
               </button>
             </li>
@@ -615,6 +615,7 @@ import {
   STATUSES,
   TEAM_ROLES,
   type TeamRole,
+  copyOf,
 } from "./constants";
 import { useContentOptions } from "./contentOptions";
 import { useToday } from "@/composables/today";
@@ -870,6 +871,7 @@ function baseFilters() {
 const FIELDS = [
   "name",
   "title",
+  "format",
   "status",
   "channel",
   "platforms",
@@ -896,7 +898,6 @@ const posts = createResource({
 // Board and Sheet show cancelled posts too, behind their own filter
 const BOARD_FIELDS = [
   ...FIELDS,
-  "format",
   "caption",
   "brief",
   "writer",
@@ -964,7 +965,7 @@ const events = computed(() =>
       // ★ marks a special-day post on the month and week grid
       title: `${p.special_day ? `★ ${p.special_day} · ` : ""}${platformsOf(
         p
-      ).join(", ")} · ${p.title}`,
+      ).join(", ")} · ${copyOf(p)}`,
       participant: `${p.status} · ${p.customer}`,
       fromDate: start.format("YYYY-MM-DD"),
       toDate: start.format("YYYY-MM-DD"),
@@ -996,7 +997,7 @@ const undated = createResource({
   url: "frappe.client.get_list",
   makeParams: () => ({
     doctype: "HD Content Post",
-    fields: ["name", "title", "customer"],
+    fields: ["name", "title", "format", "customer"],
     filters: {
       ...baseFilters(),
       // a cancelled post needs no date, so it never needs fixing

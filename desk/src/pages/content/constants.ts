@@ -1,3 +1,5 @@
+import { __ } from "@/translation";
+
 export const CHANNELS = [
   "Instagram",
   "Facebook",
@@ -156,6 +158,11 @@ export function textToHtml(text: string) {
     .split(/\n{2,}/)
     .map((para) => `<p>${escape(para).replace(/\n/g, "<br>")}</p>`)
     .join("");
+}
+
+// What a post is called: its copy, else its post type until the copy is written
+export function copyOf(post: { title?: string; format?: string }) {
+  return post.title || post.format || __("Untitled post");
 }
 
 // Every platform a post goes out on; older posts only have their channel

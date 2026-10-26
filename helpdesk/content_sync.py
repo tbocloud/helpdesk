@@ -182,7 +182,7 @@ def needs_push(post) -> bool:
 
 def approval_values(post) -> dict:
     return {
-        "title": post.title,
+        "title": post.title or post.format or post.name,
         "channel": post.channel,
         "format": post.format,
         "publish_on": str(post.publish_on) if post.publish_on else None,

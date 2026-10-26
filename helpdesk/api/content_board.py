@@ -4,7 +4,7 @@ import json
 
 import frappe
 from frappe import _
-from frappe.utils import date_diff, flt, strip_html
+from frappe.utils import date_diff, flt, getdate, strip_html
 
 from helpdesk.helpdesk.doctype.hd_content_occasion.hd_content_occasion import (
     occasions_between,
@@ -127,12 +127,13 @@ def assign(
     role: str,
     users: str | list | None = None,
     hours: float | str | None = None,
+    due: str | None = None,
 ) -> list[str]:
     """Put these people on one role of a post; the first is its main person.
 
     Their tasks follow the post's task mode: in one-task-per-person mode
     everyone on the role shares that role's task. `hours`, when given, is the
-    role's estimate, which goes on its task.
+    role's estimate, and `due` the date its task is due; both go on its task.
     """
     if role not in TEAM_FIELDS:
         frappe.throw(_("Unknown role {0}").format(role))
@@ -143,7 +144,47 @@ def assign(
     if hours is not None:
         doc.set(f"{role}_hours", flt(hours))
     doc.save()
+    if due and users:
+        set_role_due(doc, role, getdate(due))
     return doc.people(role)
+
+
+def set_role_due(doc, role: str, due):
+    """Give the role's open task this due date: today or later, and not after the post
+    goes live. An unchanged date is left alone, so a late task can still be saved."""
+    found = open_role_task(doc, role)
+    if not found:
+        return
+    task = frappe.get_doc("Task", found["task"])
+    if task.exp_end_date and getdate(task.exp_end_date) == due:
+        return
+    if due < getdate():
+        frappe.throw(_("Pick today or a later date for the task to be due."))
+    if doc.publish_on and due > getdate(doc.publish_on):
+        frappe.throw(_("The task can't be due after the post goes live."))
+    task.exp_end_date = due
+    task.save(ignore_permissions=True)
+
+
+def open_role_task(doc, role: str) -> dict | None:
+    """The role's task while it's still open; a finished or cancelled one has no date to set."""
+    found = task_for_role(role_tasks([doc.name]), doc, role)
+    return found if found and found["status"] not in DONE_TASK_STATUSES else None
+
+
+@frappe.whitelist()
+def get_role_due(post: str, role: str) -> str | None:
+    """When the role's task is due: its open task's date, else the date it would get."""
+    if role not in TEAM_FIELDS:
+        frappe.throw(_("Unknown role {0}").format(role))
+    doc = frappe.get_doc("HD Content Post", post)
+    doc.check_permission("read")
+    found = open_role_task(doc, role)
+    # the shared task is due when the designer's part is
+    due = (found or {}).get("due") or doc.role_due(
+        "designer" if doc.task_mode == ONE_TASK else role
+    )
+    return str(getdate(due)) if due else None
 
 
 @frappe.whitelist()
