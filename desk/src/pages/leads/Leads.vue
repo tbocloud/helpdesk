@@ -37,7 +37,7 @@
           </div>
           <!-- hidden quietly until the ERP site's TBO Smart counts it, and on a failed read -->
           <div
-            v-if="intake.loading && !intakeData"
+            v-if="!intakeData && intakeLoading"
             class="h-[118px] animate-pulse rounded-xl bg-surface-gray-2 md:h-[94px]"
             aria-hidden="true"
           />
@@ -48,6 +48,7 @@
           v-if="view === 'overview'"
           ref="overviewPanel"
           class="mt-4"
+          @intake="takeOverviewIntake"
         />
 
         <div v-else class="mt-3 flex flex-col gap-3">
@@ -612,19 +613,38 @@ const leads = createResource({
   auto: view.value !== "overview" && !waitingForDates.value,
 });
 
-// new leads taken today and yesterday; quiet on failure (the strip just stays out)
+// new leads taken today and yesterday; quiet on failure (the strip just stays out). The
+// Overview brings it with its own request, so only the list asks for it here.
 const intake = createResource({
   url: "helpdesk.api.leads.get_lead_intake",
-  auto: true,
+  auto: view.value !== "overview",
+  onSuccess(data: LeadIntake) {
+    intakeData.value = data;
+  },
   onError() {},
 });
-const intakeData = computed(() => intake.data as LeadIntake | undefined);
+const intakeData = ref<LeadIntake>();
+const overviewSettled = ref(false);
+const intakeLoading = computed(
+  () => intake.loading || (view.value === "overview" && !overviewSettled.value)
+);
 const intakeOn = computed(() => !!intakeData.value?.available);
 
+function takeOverviewIntake(value: LeadIntake | undefined) {
+  overviewSettled.value = true;
+  if (value) intakeData.value = value;
+}
+
+watch(view, (tab) => {
+  if (tab !== "overview" && !intakeData.value) intake.fetch();
+});
+
 function refresh() {
-  intake.reload();
   if (view.value === "overview") overviewPanel.value?.reload();
-  else if (!waitingForDates.value) leads.reload();
+  else {
+    intake.submit({ fresh: 1 });
+    if (!waitingForDates.value) leads.reload();
+  }
 }
 
 const data = computed(

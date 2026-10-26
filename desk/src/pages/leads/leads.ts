@@ -555,3 +555,12 @@ export interface ProposalMoney {
   splits?: MoneySplit[];
   splits_total?: number;
 }
+
+/** helpdesk.api.leads.get_overview_page: the Overview, its money and the intake in one
+ * request; a part that failed is null with its message in `errors`. */
+export interface OverviewPage {
+  overview: LeadOverview;
+  money: ProposalMoney | null;
+  intake: LeadIntake | null;
+  errors: { money?: string; intake?: string };
+}
