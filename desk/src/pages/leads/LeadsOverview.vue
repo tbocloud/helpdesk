@@ -395,14 +395,14 @@
 
       <!-- proposals and the money after them; hidden until the ERP site has it -->
       <LeadsMoney
-        v-if="money.data?.available || money.error"
-        :money="money.data"
-        :error="money.error"
-        :loading="money.loading"
+        v-if="proposalMoney.data?.available || proposalMoney.error"
+        :money="proposalMoney.data"
+        :error="proposalMoney.error"
+        :loading="proposalMoney.loading"
         :owner-picked="!!owner || data.scope === 'own'"
         :proposals-link="list('quotations')"
         :won-link="list('won')"
-        @retry="money.reload()"
+        @retry="proposalMoney.reload()"
       />
 
       <!-- the hottest leads, to call first -->
@@ -729,7 +729,7 @@ watch(
 );
 
 // the same period and owner, read on its own so an older ERP site leaves it out quietly
-const money = createResource({
+const proposalMoney = createResource({
   url: "helpdesk.api.leads.get_proposal_money",
   makeParams: () => ({
     period: period.value,
@@ -755,7 +755,7 @@ watch(
   () => {
     if (period.value !== "custom" || customReady.value) {
       overview.reload();
-      money.reload();
+      proposalMoney.reload();
     }
   },
   { immediate: true }
@@ -764,7 +764,7 @@ watch(
 defineExpose({
   reload: () => {
     overview.reload();
-    money.reload();
+    proposalMoney.reload();
   },
 });
 
