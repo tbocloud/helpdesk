@@ -9,9 +9,7 @@
           variant="ghost"
           :loading="view !== 'overview' && leads.loading && !!data"
           :aria-label="__('Refresh')"
-          @click="
-            view === 'overview' ? overviewPanel?.reload() : leads.reload()
-          "
+          @click="refresh"
         >
           <template #icon>
             <LucideRefreshCw class="size-4" aria-hidden="true" />
@@ -37,6 +35,13 @@
               @update:model-value="view = $event as LeadTab"
             />
           </div>
+          <!-- hidden quietly until the ERP site's TBO Smart counts it, and on a failed read -->
+          <div
+            v-if="intake.loading && !intakeData"
+            class="h-[118px] animate-pulse rounded-xl bg-surface-gray-2 md:h-[94px]"
+            aria-hidden="true"
+          />
+          <LeadIntakeStrip v-else-if="intakeOn" :intake="intakeData!" />
         </div>
 
         <LeadsOverview
@@ -47,7 +52,7 @@
 
         <div v-else class="mt-3 flex flex-col gap-3">
           <div
-            class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(14rem,2fr)_repeat(3,minmax(10rem,1fr))]"
+            class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(14rem,2fr)_repeat(4,minmax(9rem,1fr))]"
             role="group"
             :aria-label="__('Filter the leads')"
           >
@@ -83,6 +88,32 @@
               :label="__('Segment')"
               :options="choices(options?.segments, __('Any segment'))"
             />
+            <FormControl
+              v-if="intakeOn"
+              v-model="created"
+              type="select"
+              :label="__('Created')"
+              :options="CREATED"
+            />
+          </div>
+          <div
+            v-if="created === 'custom'"
+            class="flex flex-wrap items-end gap-3"
+            role="group"
+            :aria-label="__('Created between')"
+          >
+            <FormControl
+              v-model="extra.from"
+              type="date"
+              class="w-40"
+              :label="__('From')"
+            />
+            <FormControl
+              v-model="extra.to"
+              type="date"
+              class="w-40"
+              :label="__('To')"
+            />
           </div>
           <div
             v-if="hasFilters"
@@ -109,7 +140,16 @@
 
         <template v-if="view !== 'overview'">
           <TaskyState
-            v-if="leads.error && !data"
+            v-if="waitingForDates"
+            class="mt-6"
+            :icon="LucideCalendarRange"
+            :title="__('Pick both dates')"
+            :message="
+              __('Choose a from and a to date to see the leads created then.')
+            "
+          />
+          <TaskyState
+            v-else-if="leads.error && !data"
             class="mt-6"
             error
             :icon="LucideCircleAlert"
@@ -204,6 +244,14 @@
                         v-if="row.tbo_stage"
                         :label="stageLabel(options, row.tbo_stage)"
                         :tone="stageTone(options, row.tbo_stage)"
+                      />
+                      <!-- where it stands with the client: the proposal or quotation -->
+                      <TaskyBadge
+                        v-if="statuses.get(row.name)"
+                        :label="statuses.get(row.name)!.label"
+                        :tone="statuses.get(row.name)!.tone"
+                        :title="statuses.get(row.name)!.title"
+                        class="font-normal tabular-nums"
                       />
                     </div>
                     <div
@@ -340,6 +388,7 @@ import {
 import { computed, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import LucideCalendar from "~icons/lucide/calendar";
+import LucideCalendarRange from "~icons/lucide/calendar-range";
 import LucideCalendarX from "~icons/lucide/calendar-x";
 import LucideChevronLeft from "~icons/lucide/chevron-left";
 import LucideChevronRight from "~icons/lucide/chevron-right";
@@ -353,9 +402,11 @@ import LucideUser from "~icons/lucide/user";
 import LucideUserPlus from "~icons/lucide/user-plus";
 import LucideX from "~icons/lucide/x";
 import LeadFormDialog from "./LeadFormDialog.vue";
+import LeadIntakeStrip from "./LeadIntakeStrip.vue";
 import LeadsOverview from "./LeadsOverview.vue";
 import {
   choices,
+  clientStatus,
   LEAD_VIEWS,
   loadLeadOptions,
   useClickToCall,
@@ -364,6 +415,7 @@ import {
   ownerName,
   stageLabel,
   stageTone,
+  type LeadIntake,
   type LeadOptions,
   type LeadRow,
   type LeadMetric,
@@ -378,10 +430,21 @@ const TABS: { value: LeadTab; label: string }[] = [
   ...LEAD_VIEWS,
 ];
 const PERIOD_LABELS: Record<string, string> = {
+  today: __("today"),
+  yesterday: __("yesterday"),
   week: __("this week"),
   month: __("this month"),
   quarter: __("this quarter"),
 };
+// the Created filter: leads taken in a period (the ERP site's "intake" metric)
+const CREATED = [
+  { label: __("Any time"), value: "" },
+  { label: __("Today"), value: "today" },
+  { label: __("Yesterday"), value: "yesterday" },
+  { label: __("This week"), value: "week" },
+  { label: __("This month"), value: "month" },
+  { label: __("Custom"), value: "custom" },
+];
 const overviewPanel = ref<InstanceType<typeof LeadsOverview> | null>(null);
 
 const route = useRoute();
@@ -427,7 +490,7 @@ function queryExtra() {
 const extra = reactive(queryExtra());
 const extraChips = computed(() => {
   const chips: string[] = [];
-  if (extra.metric) {
+  if (extra.metric && extra.metric !== "intake") {
     const label = METRIC_LABELS[extra.metric as LeadMetric] || extra.metric;
     const when =
       extra.period === "custom" && extra.from && extra.to
@@ -462,8 +525,34 @@ const hasFilters = computed(
       filters.stage ||
       filters.owner ||
       filters.segment ||
+      extra.metric ||
       extraChips.value.length
     )
+);
+
+const created = computed({
+  get: () => (extra.metric === "intake" ? extra.period || "month" : ""),
+  set: (value: string) => {
+    if (!value) {
+      if (extra.metric === "intake")
+        Object.assign(extra, { metric: "", period: "", from: "", to: "" });
+      return;
+    }
+    const custom = value === "custom";
+    Object.assign(extra, {
+      metric: "intake",
+      period: value,
+      from: custom ? extra.from : "",
+      to: custom ? extra.to : "",
+    });
+  },
+});
+// a custom period waits for both dates before the list asks for it
+const waitingForDates = computed(
+  () =>
+    !!extra.metric &&
+    extra.period === "custom" &&
+    !(extra.from && extra.to && extra.from <= extra.to)
 );
 
 function clearFilters() {
@@ -520,11 +609,29 @@ const leads = createResource({
     start: (page.value - 1) * PAGE_LENGTH,
     page_length: PAGE_LENGTH,
   }),
-  auto: view.value !== "overview",
+  auto: view.value !== "overview" && !waitingForDates.value,
 });
+
+// new leads taken today and yesterday; quiet on failure (the strip just stays out)
+const intake = createResource({
+  url: "helpdesk.api.leads.get_lead_intake",
+  auto: true,
+  onError() {},
+});
+const intakeData = computed(() => intake.data as LeadIntake | undefined);
+const intakeOn = computed(() => !!intakeData.value?.available);
+
+function refresh() {
+  intake.reload();
+  if (view.value === "overview") overviewPanel.value?.reload();
+  else if (!waitingForDates.value) leads.reload();
+}
 
 const data = computed(
   () => leads.data as { rows: LeadRow[]; total: number } | undefined
+);
+const statuses = computed(
+  () => new Map((data.value?.rows ?? []).map((r) => [r.name, clientStatus(r)]))
 );
 const pageCount = computed(() =>
   Math.max(Math.ceil((data.value?.total ?? 0) / PAGE_LENGTH), 1)
@@ -610,7 +717,7 @@ watch(
         page: p > 1 ? String(p) : undefined,
       },
     });
-    if (v !== "overview") leads.reload();
+    if (v !== "overview" && !waitingForDates.value) leads.reload();
   }
 );
 
