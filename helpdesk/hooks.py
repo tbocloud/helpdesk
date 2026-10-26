@@ -333,7 +333,11 @@ setup_wizard_complete = "helpdesk.setup.setup_wizard.setup_complete"
 # ---------------
 
 before_tests = "helpdesk.test_utils.before_tests"
-auth_hooks = ["helpdesk.auth.authenticate"]
+auth_hooks = [
+    "helpdesk.auth.authenticate",
+    # Bot Framework's token for the Teams bot's endpoint, which Frappe would take for its own
+    "helpdesk.copilot.teams.authenticate",
+]
 
 default_log_clearing_doctypes = {
     "HDS AI Usage Log": 90,

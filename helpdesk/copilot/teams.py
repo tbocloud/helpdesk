@@ -113,6 +113,58 @@ def check_token(header: str | None, service_url: str | None) -> dict:
 
 
 REFUSED_KEY = "copilot_teams_refused:"
+ENDPOINT = "helpdesk.api.copilot_teams.messages"
+# the bot's own user: no roles, no password; requests Bot Framework signed run as it
+BOT_USER = "teams.bot@tbo-copilot.internal"
+
+
+def ensure_bot_user() -> str:
+    """The bot's own user, made on migrate (and when it is missing): a website user without roles."""
+    if not frappe.db.exists("User", BOT_USER):
+        frappe.get_doc(
+            {
+                "doctype": "User",
+                "email": BOT_USER,
+                "first_name": "TBO Copilot Teams bot",
+                "user_type": "Website User",
+                "send_welcome_email": 0,
+                "enabled": 1,
+            }
+        ).insert(ignore_permissions=True)
+    return BOT_USER
+
+
+def authenticate():
+    """auth_hooks: lets Bot Framework's own token through Frappe's sign-in, for the bot's endpoint only.
+
+    Frappe takes any "Authorization: Bearer …" for its own credentials (an OAuth token or an
+    API key) and refuses the request when no user results, before the endpoint runs, so no
+    message from Teams ever reached it. For a POST to the bot's endpoint with a token Bot
+    Framework signed for our bot and this service URL, the request goes on as the bot's own
+    user, which has no roles; the endpoint then checks the token again, the tenant, and acts
+    only as the person it finds in TBO Support. Anything else is left to Frappe, which
+    refuses it as before.
+    """
+    if frappe.session.user not in ("", "Guest"):
+        return
+    request = getattr(frappe.local, "request", None)
+    if (
+        not request
+        or request.method != "POST"
+        or request.path.rstrip("/") != f"/api/method/{ENDPOINT}"
+    ):
+        return
+    header = frappe.get_request_header("Authorization") or ""
+    if not header.startswith("Bearer ") or not enabled():
+        return
+    activity = request.get_json(silent=True) or {}
+    try:
+        check_token(header, activity.get("serviceUrl"))
+    except frappe.PermissionError as e:
+        frappe.clear_last_message()
+        note_refusal(str(e), activity, header)
+        return  # Frappe answers 401
+    frappe.set_user(ensure_bot_user())
 
 
 def note_refusal(reason: str, activity: dict, header: str | None = None):

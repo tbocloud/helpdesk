@@ -636,6 +636,81 @@ class TestTheEndpoint(TeamsCase):
             make_copilot_settings(enabled=1, teams_bot_enabled=0)
             self.assertEqual(copilot_teams.messages().status_code, 404)
 
+    def through_frappe_sign_in(self, header, path=None, activity=None):
+        """Frappe's own sign-in (frappe.auth.validate_auth) for a POST with this Authorization header."""
+        from frappe.auth import validate_auth
+        from frappe.utils import set_request
+
+        frappe.set_user("Guest")
+        self.addCleanup(frappe.set_user, "Administrator")
+        set_request(
+            method="POST",
+            path=path or f"/api/method/{teams.ENDPOINT}",
+            headers={"Authorization": header, "Content-Type": "application/json"},
+            data=json.dumps(activity or self.activity(type="conversationUpdate")),
+        )
+        validate_auth()
+        return frappe.session.user
+
+    def test_frappes_sign_in_lets_a_bot_framework_token_through_as_the_bot(self):
+        # Frappe takes any Bearer token for its own; before this, it refused every call from Teams
+        self.assertEqual(self.through_frappe_sign_in(self.token()), teams.BOT_USER)
+        self.assertFalse(set(frappe.get_roles(teams.BOT_USER)) - {"All", "Guest"})
+
+    def test_frappes_sign_in_still_refuses_a_bad_token_and_writes_down_why(self):
+        quiet = patch("helpdesk.copilot.teams.frappe.log_error")
+        logged = quiet.start()
+        self.addCleanup(quiet.stop)
+        marker = frappe.cache().make_key(teams.REFUSED_KEY + "bad Bot Framework token")
+        frappe.cache().delete(marker)
+        self.addCleanup(frappe.cache().delete, marker)
+
+        with self.assertRaises(frappe.AuthenticationError):
+            self.through_frappe_sign_in(self.token(aud="another-bot"))
+        self.assertEqual(logged.call_count, 1)
+
+    def test_a_bearer_token_on_any_other_path_is_left_to_frappe(self):
+        with self.assertRaises(frappe.AuthenticationError):
+            self.through_frappe_sign_in(
+                self.token(), path="/api/method/helpdesk.api.copilot.get_run"
+            )
+
+    def test_a_real_request_from_bot_framework_reaches_the_endpoint(self):
+        """Through the whole request, as Teams sends it: Frappe's sign-in, then the endpoint."""
+        from frappe.tests.test_api import make_request
+        from frappe.utils import get_test_client, get_url
+
+        # the request runs in its own thread and database connection, where this test's
+        # unsaved settings are not seen: what the endpoint needs is given here instead
+        for name, value in (
+            ("enabled", True),
+            ("app_id", "bot-app-id"),
+            ("tenant", "tenant-1"),
+        ):
+            patcher = patch.object(teams, name, return_value=value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        quiet = patch("helpdesk.copilot.teams.frappe.log_error")
+        quiet.start()
+        self.addCleanup(quiet.stop)
+        url = get_url() + f"/api/method/{teams.ENDPOINT}"
+        # an update about someone else joining: answered with 200 and nothing to do
+        activity = self.activity(
+            type="conversationUpdate", membersAdded=[{"id": "29:someone"}]
+        )
+
+        def post(header):
+            return make_request(
+                target=get_test_client().post,
+                args=(url,),
+                kwargs={"json": activity, "headers": {"Authorization": header}},
+            )
+
+        self.assertEqual(post(self.token()).status_code, 200)
+        refused = post(self.token(aud="another-bot"))
+        self.assertEqual(refused.status_code, 401)
+        self.assertIn("AuthenticationError", refused.get_data(as_text=True))
+
     def test_a_refused_call_from_teams_is_written_down_once_an_hour_with_the_ids(self):
         from unittest.mock import MagicMock
 
