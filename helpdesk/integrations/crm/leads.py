@@ -32,6 +32,10 @@ class LeadsUnavailableError(LeadsError):
     """The CRM site can't be used for leads right now (setup, reach or version)."""
 
 
+class LeadsNotDeployedError(LeadsUnavailableError):
+    """The CRM site's TBO Smart is older than the method asked for."""
+
+
 def leads_on() -> bool:
     return bool(
         frappe.db.get_single_value("HD CRM Settings", "enabled")
@@ -123,6 +127,17 @@ def call(
         fail(friendly_error(e, client, acting_user))
 
 
+def call_if_deployed(method: str, **params):
+    """`call`, or None when the CRM site's TBO Smart is older than `method`: for parts of
+    a page that show once the ERP site has them, and stay hidden quietly until then."""
+    try:
+        return call(method, **params)
+    except LeadsNotDeployedError:
+        # frappe.throw queued the message for a toast; nothing is wrong for the person
+        frappe.clear_last_message()
+        return None
+
+
 def download(method: str, api: str = API, **params) -> tuple[bytes, str]:
     """A file from `<api>.<method>` on the CRM site as the signed-in person: (bytes,
     content type); failures as `call`'s."""
@@ -168,7 +183,7 @@ def friendly_error(
             )
         )
     if error.status in (403, 404, 417) and not_deployed(detail):
-        return LeadsUnavailableError(
+        return LeadsNotDeployedError(
             _("Leads need the latest TBO Smart on the ERP site ({0}).").format(site)
         )
     if error.status == 403 and "an integration user, not a person" in detail.casefold():

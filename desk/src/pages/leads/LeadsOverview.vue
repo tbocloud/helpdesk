@@ -393,6 +393,18 @@
         </div>
       </div>
 
+      <!-- proposals and the money after them; hidden until the ERP site has it -->
+      <LeadsMoney
+        v-if="money.data?.available || money.error"
+        :money="money.data"
+        :error="money.error"
+        :loading="money.loading"
+        :owner-picked="!!owner || data.scope === 'own'"
+        :proposals-link="list('quotations')"
+        :won-link="list('won')"
+        @retry="money.reload()"
+      />
+
       <!-- the hottest leads, to call first -->
       <section
         v-if="data.hot.rows.length"
@@ -609,9 +621,12 @@ import LucidePhone from "~icons/lucide/phone";
 import LucideTrophy from "~icons/lucide/trophy";
 import LucideUserPlus from "~icons/lucide/user-plus";
 import LucideUsers from "~icons/lucide/users";
+import LeadsMoney from "./LeadsMoney.vue";
 import type { LeadMetric, LeadOverview, OverviewPeriod } from "./leads";
 
 const PERIODS: { value: OverviewPeriod; label: string }[] = [
+  { value: "today", label: __("Today") },
+  { value: "yesterday", label: __("Yesterday") },
   { value: "week", label: __("This week") },
   { value: "month", label: __("This month") },
   { value: "quarter", label: __("This quarter") },
@@ -713,6 +728,18 @@ watch(
   (c) => setQuery({ from: c.from || undefined, to: c.to || undefined })
 );
 
+// the same period and owner, read on its own so an older ERP site leaves it out quietly
+const money = createResource({
+  url: "helpdesk.api.leads.get_proposal_money",
+  makeParams: () => ({
+    period: period.value,
+    from_date: period.value === "custom" ? custom.from : null,
+    to_date: period.value === "custom" ? custom.to : null,
+    owner: owner.value || null,
+  }),
+  onError() {},
+});
+
 const overview = createResource({
   url: "helpdesk.api.leads.get_overview",
   makeParams: () => ({
@@ -726,12 +753,20 @@ const overview = createResource({
 watch(
   [period, owner, () => customReady.value && `${custom.from}:${custom.to}`],
   () => {
-    if (period.value !== "custom" || customReady.value) overview.reload();
+    if (period.value !== "custom" || customReady.value) {
+      overview.reload();
+      money.reload();
+    }
   },
   { immediate: true }
 );
 
-defineExpose({ reload: () => overview.reload() });
+defineExpose({
+  reload: () => {
+    overview.reload();
+    money.reload();
+  },
+});
 
 const data = computed(() => overview.data as LeadOverview | undefined);
 const t = computed(() => data.value!.totals);
@@ -752,7 +787,9 @@ const periodText = computed(() => {
   const d = data.value!;
   const from = dayjs(d.from_date);
   const to = dayjs(d.to_date);
-  const range = from.isSame(to, "year")
+  const range = from.isSame(to, "day")
+    ? to.format("D MMM YYYY")
+    : from.isSame(to, "year")
     ? `${from.format("D MMM")} – ${to.format("D MMM YYYY")}`
     : `${from.format("D MMM YYYY")} – ${to.format("D MMM YYYY")}`;
   const whose =
