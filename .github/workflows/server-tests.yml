@@ -30,7 +30,9 @@ concurrency:
 jobs:
   tests:
     name: Python Unit Tests
-    runs-on: ubuntu-latest
+    # ubuntu-latest moved to 26.04, whose MariaDB 11.8 client insists on TLS that the
+    # mariadb:10.6 service doesn't offer ("SSL is required, but the server does not support it")
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
 
     services:
