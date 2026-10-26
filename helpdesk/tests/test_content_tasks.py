@@ -400,10 +400,11 @@ class TestEstimatedHours(ContentTaskCase):
             content_board.get_role_due(post.name, "writer"), str(add_days(day, -5))
         )
 
-        # never after the post goes live, nor a new date in the past
-        for bad in (add_days(day, 1), add_days(getdate(), -1)):
-            with self.assertRaises(frappe.ValidationError, msg=str(bad)):
-                content_board.assign(post.name, "writer", [WRITER[0]], due=str(bad))
+        # any date can be picked, even after the post goes live or in the past
+        for other in (add_days(day, 2), add_days(getdate(), -1)):
+            content_board.assign(post.name, "writer", [WRITER[0]], due=str(other))
+            task = self.tasks(post)["Writer"]
+            self.assertEqual(getdate(task.exp_end_date), other)
 
     def test_a_finished_task_keeps_its_due_date(self):
         from helpdesk.api import content_board

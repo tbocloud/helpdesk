@@ -152,19 +152,15 @@ def assign(
 
 
 def set_role_due(doc, role: str, due):
-    """Give the role's open task this due date (the caller saves the returned task):
-    today or later, and not after the post goes live. An unchanged date is left alone,
-    so a late task can still be saved."""
+    """Give the role's open task this due date (the caller saves the returned task).
+    Any date may be picked, even after the post goes live or in the past; the dialog
+    points those out. An unchanged date is left alone."""
     found = open_role_task(doc, role)
     if not found:
         return
     task = frappe.get_doc("Task", found["task"])
     if task.exp_end_date and getdate(task.exp_end_date) == due:
         return
-    if due < getdate():
-        frappe.throw(_("Pick today or a later date for the task to be due."))
-    if doc.publish_on and due > getdate(doc.publish_on):
-        frappe.throw(_("The task can't be due after the post goes live."))
     task.exp_end_date = due
     return task
 
