@@ -217,12 +217,31 @@ def from_our_tenant(activity: dict) -> bool:
 # --- calling Bot Framework ------------------------------------------------------------------------
 
 
-def bot_token() -> str:
-    cached = frappe.cache.get_value(TOKEN_KEY)
+# the bot's key comes from its tenant (a Single Tenant bot) or from Bot Framework's own
+# tenant (a Multi Tenant bot); the one Bot Framework accepted is remembered
+AUTHORITY_KEY = "copilot-teams:token-authority"
+BOT_FRAMEWORK_TENANT = "botframework.com"
+
+
+def authorities() -> list[str]:
+    """Where to ask for the bot's key, the one that worked last first."""
+    both = list(dict.fromkeys([tenant() or BOT_FRAMEWORK_TENANT, BOT_FRAMEWORK_TENANT]))
+    # kept with an expiry, so read past the request's own copy
+    remembered = frappe.cache.get_value(AUTHORITY_KEY, expires=True)
+    if remembered in both:
+        both.remove(remembered)
+        both.insert(0, remembered)
+    return both
+
+
+def bot_token(authority: str | None = None) -> str:
+    authority = authority or authorities()[0]
+    key = f"{TOKEN_KEY}:{authority}"
+    cached = frappe.cache.get_value(key, expires=True)
     if cached:
         return cached
     response = requests.post(
-        TOKEN_URL.format(tenant=tenant()),
+        TOKEN_URL.format(tenant=authority),
         data={
             "grant_type": "client_credentials",
             "client_id": app_id(),
@@ -241,7 +260,7 @@ def bot_token() -> str:
             )
         )
     frappe.cache.set_value(
-        TOKEN_KEY,
+        key,
         data["access_token"],
         expires_in_sec=max(int(data.get("expires_in") or 3600) - 300, 60),
     )
@@ -249,16 +268,41 @@ def bot_token() -> str:
 
 
 def call(method: str, service_url: str, path: str, body: dict | None = None) -> dict:
-    response = requests.request(
-        method,
-        service_url.rstrip("/") + path,
-        json=body,
-        headers={"Authorization": f"Bearer {bot_token()}"},
-        timeout=TIMEOUT,
-    )
+    """One Bot Framework call with the bot's key: its tenant's first; when Bot Framework refuses
+    it (a bot registered as Multi Tenant), once more with Bot Framework's own."""
+    response, tried = None, []
+    for authority in authorities():
+        try:
+            token = bot_token(authority)
+        except TeamsError as e:
+            tried.append(f"{authority}: {e}")
+            continue
+        response = requests.request(
+            method,
+            service_url.rstrip("/") + path,
+            json=body,
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=TIMEOUT,
+        )
+        if response.status_code != 401:
+            frappe.cache.set_value(
+                AUTHORITY_KEY, authority, expires_in_sec=7 * 24 * 3600
+            )
+            break
+        tried.append(f"{authority}: refused")
+    if response is None:
+        raise TeamsError(" ; ".join(tried)[:500])
     if response.status_code >= 300:
+        hint = (
+            " (Bot Framework refused the bot's key from "
+            + ", ".join(t.split(":")[0] for t in tried)
+            + ": check the Azure Bot's Microsoft App Type and App Tenant ID against"
+            " the Tenant ID in Teams bot settings)"
+            if response.status_code == 401
+            else ""
+        )
         raise TeamsError(
-            f"Bot Framework {method} {path}: {response.status_code} {response.text[:300]}"
+            f"Bot Framework {method} {path}: {response.status_code} {response.text[:300]}{hint}"
         )
     return response.json() if response.content else {}
 

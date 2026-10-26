@@ -763,3 +763,104 @@ class TestTheEndpoint(TeamsCase):
         self.assertEqual(
             (second["their_tenant"], second["our_tenant"]), ("other", "tenant-1")
         )
+
+
+class FakeHttpReply:
+    def __init__(self, status: int, body: dict):
+        self.status_code = status
+        self._body = body
+        self.content = json.dumps(body).encode()
+        self.text = json.dumps(body)
+
+    def json(self):
+        return self._body
+
+
+class TestTheBotsKey(FrappeTestCase):
+    """The bot's key comes from its tenant (Single Tenant) or Bot Framework's own (Multi Tenant)."""
+
+    def setUp(self):
+        hold_commits(self)
+        make_copilot_settings(
+            enabled=1,
+            teams_bot_enabled=1,
+            teams_bot_app_id="bot-app-id",
+            teams_bot_secret="s3cret",
+            teams_tenant_id="tenant-1",
+        )
+        for key in (
+            teams.AUTHORITY_KEY,
+            f"{teams.TOKEN_KEY}:tenant-1",
+            f"{teams.TOKEN_KEY}:{teams.BOT_FRAMEWORK_TENANT}",
+        ):
+            frappe.cache.delete_value(key)
+            self.addCleanup(frappe.cache.delete_value, key)
+        self.signs_in = {"tenant-1", teams.BOT_FRAMEWORK_TENANT}
+        self.accepted = set()
+        self.asked, self.sent = [], []
+        for name, fake in (
+            ("post", self.token_reply),
+            ("request", self.connector_reply),
+        ):
+            patcher = patch(f"helpdesk.copilot.teams.requests.{name}", side_effect=fake)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def token_reply(self, url, data=None, timeout=None):
+        authority = url.split("/")[3]
+        self.asked.append(authority)
+        if authority in self.signs_in:
+            return FakeHttpReply(
+                200, {"access_token": f"key-{authority}", "expires_in": 3600}
+            )
+        return FakeHttpReply(
+            400, {"error_description": "AADSTS700016: no such app here"}
+        )
+
+    def connector_reply(self, method, url, json=None, headers=None, timeout=None):
+        key = headers["Authorization"].split(" ", 1)[1]
+        self.sent.append(key)
+        if key in self.accepted:
+            return FakeHttpReply(201, {"id": "act-1"})
+        return FakeHttpReply(
+            401, {"message": "Authorization has been denied for this request."}
+        )
+
+    def send(self):
+        return teams.call(
+            "POST", SERVICE, "/v3/conversations/a:1/activities", {"type": "message"}
+        )
+
+    def test_a_single_tenant_bot_uses_its_tenants_key(self):
+        self.accepted = {"key-tenant-1"}
+
+        self.assertEqual(self.send(), {"id": "act-1"})
+        self.assertEqual(self.sent, ["key-tenant-1"])
+        self.assertEqual(
+            frappe.cache.get_value(teams.AUTHORITY_KEY, expires=True), "tenant-1"
+        )
+
+    def test_a_multi_tenant_bot_gets_bot_frameworks_key_and_it_is_remembered(self):
+        self.accepted = {f"key-{teams.BOT_FRAMEWORK_TENANT}"}
+
+        self.assertEqual(self.send(), {"id": "act-1"})
+        self.assertEqual(
+            self.sent, ["key-tenant-1", f"key-{teams.BOT_FRAMEWORK_TENANT}"]
+        )
+        self.sent.clear()
+        self.send()
+        self.assertEqual(
+            self.sent, [f"key-{teams.BOT_FRAMEWORK_TENANT}"]
+        )  # asked first now
+
+    def test_both_refused_says_what_to_check_in_azure(self):
+        self.signs_in = {
+            "tenant-1"
+        }  # a single-tenant app: Bot Framework's tenant has no such app
+
+        with self.assertRaises(teams.TeamsError) as refused:
+            self.send()
+
+        self.assertIn("401", str(refused.exception))
+        self.assertIn("Microsoft App Type and App Tenant ID", str(refused.exception))
+        self.assertEqual(self.asked, ["tenant-1", teams.BOT_FRAMEWORK_TENANT])
