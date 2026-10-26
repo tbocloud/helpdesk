@@ -166,6 +166,28 @@ means nothing is noise. The mapping is fixed:
   icons, and tiles whose number isn't a status. Still no gradients, rainbow cards or
   decorative colour, and every tone keeps an icon or text next to it.
 
+### The owner's exception: the Daily report is colourful (2026-10-26)
+
+The owner asked for the Leads **Daily report** tab to be colourful, so its sections each
+carry a tone, **on that screen only**. The reason: the report is read top to bottom by
+sales managers, and a tone per section tells the parts apart at a glance. The mapping is
+fixed and uses the existing tokens, never a new colour:
+
+| Section | Tone |
+| --- | --- |
+| Daily call performance | `info` |
+| Positive leads | `success` |
+| New quotations | `warning` |
+| New leads generated | `brand` |
+| This week vs target | neutral frame; each ring is `success` at or above pace, `warning` behind it |
+
+- Each section is a card with a 4 px left border in its tone, a soft tinted heading strip
+  and a heading icon in the tone; the big figures stay `font-mono tabular-nums` in
+  neutral ink (the team table tints its columns the same way).
+- A target behind pace is `warning` with its words ("Behind by 4 meetings"), **never
+  `danger`**: it isn't a failure to shame. Every tone has its icon or words beside it.
+- No gradients, no tone outside the table above, and the rest of the app is unchanged.
+
 ## 9. Components
 
 Reusable, composable, predictable, accessible and responsive, without over-abstracting.

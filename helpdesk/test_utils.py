@@ -3576,6 +3576,49 @@ def enable_leads(teams: tuple[str, ...] = ()):
     frappe.cache.delete_keys("hd_leads:")
 
 
+def make_sales_manager(email: str, first_name: str = "Manager") -> str:
+    """An agent with the Sales Manager role (created when the hub doesn't have it yet),
+    who may use Leads and gets the 6 pm Daily Sales Report."""
+    create_agent(email, first_name, "Sales")
+    if not frappe.db.exists("Role", "Sales Manager"):
+        frappe.get_doc({"doctype": "Role", "role_name": "Sales Manager"}).insert(
+            ignore_permissions=True
+        )
+    frappe.get_doc("User", email).add_roles("Sales Manager")
+    return email
+
+
+def daily_report_person(user: str, full_name: str, **fields) -> dict:
+    """One salesperson's row as TBO Smart's get_daily_report answers it: every count 0
+    and every list empty unless given."""
+    return {
+        "user": user,
+        "full_name": full_name,
+        "calls_total": 0,
+        "calls_connected": 0,
+        "fresh_leads": 0,
+        "follow_up_leads": 0,
+        "positive_leads": [],
+        "new_quotations": {"count": 0, "value": 0, "items": []},
+        "meetings_held": 0,
+        "follow_ups_done": 0,
+        "follow_ups_overdue": 0,
+        "new_leads": [],
+        "week_to_date": {"leads": 0, "meetings": 0, "proposals": 0, "follow_ups": 0},
+        **fields,
+    }
+
+
+def daily_report(people: list[dict], date: str = "2026-10-26") -> dict:
+    """A get_daily_report answer for `people` (daily_report_person rows) on `date`."""
+    return {
+        "date": date,
+        "week_from": "2026-10-26",
+        "currency": "INR",
+        "people": people,
+    }
+
+
 def sales_person(user: str, **counts) -> dict:
     """One salesperson's row as TBO Smart's get_sales_activity answers it: every
     count 0 unless given (contacted, moms_submitted, quotations_sent, won, …)."""
