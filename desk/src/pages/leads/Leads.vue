@@ -7,7 +7,7 @@
       <template #right-header>
         <Button
           variant="ghost"
-          :loading="view !== 'overview' && leads.loading && !!data"
+          :loading="isList && leads.loading && !!data"
           :aria-label="__('Refresh')"
           @click="refresh"
         >
@@ -31,17 +31,20 @@
               :model-value="view"
               size="md"
               :aria-label="__('Which leads')"
-              :options="TABS"
+              :options="tabs"
               @update:model-value="view = $event as LeadTab"
             />
           </div>
-          <!-- hidden quietly until the ERP site's TBO Smart counts it, and on a failed read -->
-          <div
-            v-if="!intakeData && intakeLoading"
-            class="h-[118px] animate-pulse rounded-xl bg-surface-gray-2 md:h-[94px]"
-            aria-hidden="true"
-          />
-          <LeadIntakeStrip v-else-if="intakeOn" :intake="intakeData!" />
+          <!-- the Daily report has the day's new leads itself, and loads in one request -->
+          <template v-if="view !== 'daily'">
+            <!-- hidden quietly until the ERP site's TBO Smart counts it, and on a failed read -->
+            <div
+              v-if="!intakeData && intakeLoading"
+              class="h-[118px] animate-pulse rounded-xl bg-surface-gray-2 md:h-[94px]"
+              aria-hidden="true"
+            />
+            <LeadIntakeStrip v-else-if="intakeOn" :intake="intakeData!" />
+          </template>
         </div>
 
         <LeadsOverview
@@ -49,6 +52,13 @@
           ref="overviewPanel"
           class="mt-4"
           @intake="takeOverviewIntake"
+        />
+
+        <!-- the Daily Sales Performance Report; only when the ERP site has it -->
+        <LeadsDailyReport
+          v-else-if="view === 'daily'"
+          ref="dailyPanel"
+          class="mt-4"
         />
 
         <div v-else class="mt-3 flex flex-col gap-3">
@@ -404,6 +414,7 @@ import LucideUserPlus from "~icons/lucide/user-plus";
 import LucideX from "~icons/lucide/x";
 import LeadFormDialog from "./LeadFormDialog.vue";
 import LeadIntakeStrip from "./LeadIntakeStrip.vue";
+import LeadsDailyReport from "./LeadsDailyReport.vue";
 import LeadsOverview from "./LeadsOverview.vue";
 import {
   choices,
@@ -425,9 +436,11 @@ import {
 
 const PAGE_LENGTH = 20;
 // the Overview comes first and is where the page opens (docs/leads.md)
-type LeadTab = LeadView | "overview";
+// and the Daily report sits next to it, once the ERP site has it
+type LeadTab = LeadView | "overview" | "daily";
 const TABS: { value: LeadTab; label: string }[] = [
   { value: "overview", label: __("Overview") },
+  { value: "daily", label: __("Daily report") },
   ...LEAD_VIEWS,
 ];
 const PERIOD_LABELS: Record<string, string> = {
@@ -447,6 +460,7 @@ const CREATED = [
   { label: __("Custom"), value: "custom" },
 ];
 const overviewPanel = ref<InstanceType<typeof LeadsOverview> | null>(null);
+const dailyPanel = ref<InstanceType<typeof LeadsDailyReport> | null>(null);
 
 const route = useRoute();
 const router = useRouter();
@@ -468,6 +482,10 @@ function queryPage() {
 
 // the view, search, filters and page live in the URL, so a view can be shared
 const view = ref<LeadTab>(queryView());
+// a list of leads, not one of the two report tabs
+const isList = computed(
+  () => view.value !== "overview" && view.value !== "daily"
+);
 const search = ref(queryValue("q"));
 // what the list is searched for: the box, once typing pauses
 const appliedSearch = ref(search.value);
@@ -576,6 +594,15 @@ function showAll() {
 
 loadLeadOptions();
 const options = computed(() => leadOptions.data as LeadOptions | undefined);
+const hasDaily = computed(() => !!options.value?.has_daily_report);
+const tabs = computed(() =>
+  TABS.filter((tab) => tab.value !== "daily" || hasDaily.value)
+);
+// an old link to a report the ERP site doesn't have
+watch(options, (value) => {
+  if (value && !value.has_daily_report && view.value === "daily")
+    view.value = "overview";
+});
 const clickToCall = useClickToCall();
 
 const stageOptions = computed(() => [
@@ -606,18 +633,18 @@ const leads = createResource({
     period: extra.metric ? extra.period || "month" : null,
     from_date: extra.metric ? extra.from || null : null,
     to_date: extra.metric ? extra.to || null : null,
-    view: view.value === "overview" ? "all" : view.value,
+    view: isList.value ? view.value : "all",
     start: (page.value - 1) * PAGE_LENGTH,
     page_length: PAGE_LENGTH,
   }),
-  auto: view.value !== "overview" && !waitingForDates.value,
+  auto: isList.value && !waitingForDates.value,
 });
 
 // new leads taken today and yesterday; quiet on failure (the strip just stays out). The
 // Overview brings it with its own request, so only the list asks for it here.
 const intake = createResource({
   url: "helpdesk.api.leads.get_lead_intake",
-  auto: view.value !== "overview",
+  auto: isList.value,
   onSuccess(data: LeadIntake) {
     intakeData.value = data;
   },
@@ -636,11 +663,12 @@ function takeOverviewIntake(value: LeadIntake | undefined) {
 }
 
 watch(view, (tab) => {
-  if (tab !== "overview" && !intakeData.value) intake.fetch();
+  if (isList.value && !intakeData.value) intake.fetch();
 });
 
 function refresh() {
   if (view.value === "overview") overviewPanel.value?.reload();
+  else if (view.value === "daily") dailyPanel.value?.reload();
   else {
     intake.submit({ fresh: 1 });
     if (!waitingForDates.value) leads.reload();
@@ -737,7 +765,7 @@ watch(
         page: p > 1 ? String(p) : undefined,
       },
     });
-    if (v !== "overview" && !waitingForDates.value) leads.reload();
+    if (isList.value && !waitingForDates.value) leads.reload();
   }
 );
 

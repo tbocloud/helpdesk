@@ -10,6 +10,7 @@ from frappe.utils import add_days, cint, getdate, today
 
 from helpdesk.integrations.crm.leads import (
     LeadsError,
+    LeadsUnavailableError,
     call,
     call_if_deployed,
     download,
@@ -21,6 +22,7 @@ PERIODS = ("today", "yesterday", "week", "month", "quarter", "custom")
 # a day is a custom range of that one day on the ERP site, which an older TBO Smart reads too
 DAYS_AGO = {"today": 0, "yesterday": 1}
 MESSAGE_CHANNELS = ("whatsapp", "email")
+CALL_OUTCOMES = ("Connected", "No answer", "Busy", "Voicemail")
 TELEPHONY = "tbo_smart.api.telephony"
 # what the recording player may be handed back
 AUDIO_TYPES = ("audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/ogg")
@@ -55,11 +57,15 @@ def clear_cached_reads() -> None:
 
 @frappe.whitelist()
 def get_options(fresh: int | str = 0) -> dict:
-    """Stages, sources, segments, owners, territories and industries for the pickers."""
+    """Stages, sources, segments, owners, territories and industries for the pickers,
+    and whether the ERP site has the Daily report and can log a call made outside
+    MyOperator (`has_daily_report`, `can_log_call`: both came with the same TBO Smart)."""
     require_leads()
-    return cached_read(
+    options = cached_read(
         "options", {}, OPTIONS_TTL, fresh, lambda: call("get_options") or {}
     )
+    deployed = report_deployed()
+    return {**options, "can_log_call": deployed, "has_daily_report": deployed}
 
 
 @frappe.whitelist()
@@ -230,6 +236,80 @@ def get_overview_page(
             frappe.clear_last_message()
             page["errors"][part] = str(e)
     return page
+
+
+@frappe.whitelist()
+def get_daily_report(
+    date: str | None = None, owner: str | None = None, fresh: int | str = 0
+) -> dict:
+    """The Daily Sales Performance Report for one day (default today): one row per
+    salesperson the signed-in person may see, or just `owner`. The hub adds the targets,
+    each person's pace against them and the text to paste into WhatsApp. `available` is
+    false while the ERP site's TBO Smart is older than this, so the tab stays out."""
+    from helpdesk.daily_sales_report import prepare
+
+    require_leads()
+    day = getdate(date) if date else getdate(today())
+    result = cached_read(
+        "daily_report",
+        {"date": str(day), "owner": owner or None},
+        READ_TTL,
+        fresh,
+        lambda: call_if_deployed(
+            "get_daily_report", date=str(day), owner=owner or None
+        ),
+        keep=lambda answer: answer is not None,
+    )
+    if result is None:
+        return {"available": False}
+    return {**prepare(result), "available": True}
+
+
+def report_deployed() -> bool:
+    """Whether the ERP site has the daily report and `log_call`, which ship together. Asked
+    through the signed-in person's own report, remembered for ten minutes once it is
+    there; any failure is "not now", never an error on the lead page."""
+    require_leads()
+    day = str(getdate(today()))
+    try:
+        return bool(
+            cached_read(
+                "report_deployed",
+                {},
+                OPTIONS_TTL,
+                0,
+                lambda: call_if_deployed(
+                    "get_daily_report", date=day, owner=frappe.session.user
+                )
+                is not None,
+            )
+        )
+    except LeadsError:
+        frappe.clear_last_message()
+        return False
+
+
+@frappe.whitelist(methods=["POST"])
+def log_call(lead: str, outcome: str, note: str | None = None) -> dict:
+    """A call made outside MyOperator, logged on the lead as the signed-in person; it
+    counts in today's report, so their cached reads go."""
+    require_leads()
+    if outcome not in CALL_OUTCOMES:
+        frappe.throw(_("Pick Connected, No answer, Busy or Voicemail."))
+    logged = call_if_deployed(
+        "log_call",
+        post=True,
+        lead=lead,
+        outcome=outcome,
+        note=(note or "").strip() or None,
+    )
+    if logged is None:
+        frappe.throw(
+            _("The ERP site can't log calls yet. It needs the latest TBO Smart."),
+            LeadsUnavailableError,
+        )
+    clear_cached_reads()
+    return logged
 
 
 def check_period(

@@ -24,6 +24,8 @@ export interface LeadOptions {
   industries: string[];
   /** MyOperator click-to-call is set up for the signed-in person on the ERP site */
   can_call?: boolean;
+  /** the ERP site can log a call made outside MyOperator (TBO Smart's log_call) */
+  can_log_call?: boolean;
 }
 
 export interface LeadRow {
@@ -505,6 +507,101 @@ export interface LeadIntake {
   }[];
   /** the scope's salespeople, so someone who took none still shows */
   people?: { user: string; full_name: string }[];
+}
+
+export type DailyMetric = "leads" | "meetings" | "proposals" | "follow_ups";
+
+export interface DailyLeadRef {
+  name: string;
+  lead_name?: string | null;
+  company_name?: string | null;
+}
+
+/** One salesperson's day and week (helpdesk.api.leads.get_daily_report). */
+export interface DailyPerson {
+  user: string;
+  full_name: string;
+  calls_total: number;
+  calls_connected: number;
+  fresh_leads: number;
+  follow_up_leads: number;
+  positive_leads: DailyLeadRef[];
+  new_quotations: {
+    count: number;
+    value: number;
+    items: {
+      kind: "quotation" | "proposal";
+      name: string;
+      lead: string;
+      lead_name?: string | null;
+      value: number;
+    }[];
+  };
+  meetings_held: number;
+  follow_ups_done: number;
+  follow_ups_overdue: number;
+  new_leads: DailyLeadRef[];
+  week_to_date: Record<DailyMetric, number>;
+  /** each targeted metric's week so far against what the working days passed call for */
+  pace: Partial<
+    Record<
+      DailyMetric,
+      { actual: number; target: number; expected: number; behind: number }
+    >
+  >;
+  behind: { metric: DailyMetric; by: number }[];
+  on_track: boolean;
+  /** the plain text to paste into WhatsApp */
+  text: string;
+}
+
+export interface DailyReport {
+  /** false while the ERP site's TBO Smart is older than this */
+  available: boolean;
+  date?: string;
+  week_from?: string;
+  currency?: string;
+  people?: DailyPerson[];
+  /** per day for leads, per week for the rest; 0: none */
+  targets?: Record<DailyMetric, number>;
+  working_days?: { elapsed: number; total: number };
+  team_text?: string;
+}
+
+/** The name a lead goes by in the report. */
+export function leadTitle(lead: DailyLeadRef) {
+  return lead.lead_name || lead.company_name || lead.name;
+}
+
+/** Copies `text`: the clipboard, else a hidden field; false when neither worked. */
+export async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const field = document.createElement("textarea");
+    field.value = text;
+    field.setAttribute("readonly", "");
+    field.style.position = "fixed";
+    field.style.opacity = "0";
+    document.body.appendChild(field);
+    field.select();
+    try {
+      return document.execCommand("copy");
+    } catch {
+      return false;
+    } finally {
+      field.remove();
+    }
+  }
+}
+
+/** helpdesk.api.leads.log_call: a call made outside MyOperator, logged on the lead. */
+export function useLogCall() {
+  return createResource({
+    url: "helpdesk.api.leads.log_call",
+    method: "POST",
+  });
 }
 
 export type SplitStatus = "Received" | "Due" | "Overdue" | "Upcoming";

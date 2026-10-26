@@ -2,7 +2,7 @@
 
 Status: Phase 1 implemented (list, new lead, lead page with stage, notes, edit and read-only
 quotations), the **Overview** (2026-10-19), the **daily new-lead target**, **where each lead
-stands on its row** and **Proposals & money** on the Overview (2026-10-24), and proposals with the segment rate card in
+stands on its row** and **Proposals & money** on the Overview (2026-10-24) and the **Daily report** (2026-10-26), and proposals with the segment rate card in
 [proposals.md](proposals.md). This document is the source of truth for the feature and changes
 with it.
 
@@ -55,6 +55,8 @@ user exists there with a sales role, applies what they may see, and records writ
 | `get_overview` | GET | `period, from_date, to_date, owner` | the Overview's figures (TBO Smart's `hub-leads-api.md` §2.4) |
 | `get_lead_intake` | GET | `from_date, to_date` (the hub sends yesterday and today) | new leads taken each day by owner, imports left out, and the scope's salespeople (§2.4.1) |
 | `get_proposal_money` | GET | `period, from_date, to_date, owner` | proposals sent, won, advances and every payment split still to collect (§2.8) |
+| `get_daily_report` | GET | `date, owner` | each salesperson's day and week to date (§2.5.1) |
+| `log_call` | POST | `lead, outcome, note` | `{name, status, outcomes}` (§2.7) |
 | `get_lead_ai` | GET | `name` | what the AI proposes, the lead's health and likely duplicates (TBO Smart's `hub-leads-api.md` §2.6) |
 | `refresh_lead_ai`, `apply_ai_stage`, `dismiss_ai_stage` | POST | `name` | as above, or the lead (apply) |
 | `draft_lead_message` | POST | `name, channel (whatsapp / email), language` | `{channel, subject, text, to?, url?}`; nothing is sent |
@@ -125,7 +127,7 @@ The ERP site's `tbo_smart.api.telephony` takes the same `acting_user`:
 `helpdesk/api/leads.py`, thin typed proxies (writes are POST only): `get_options`,
 `list_leads`, `get_overview_page`, `get_overview`, `get_lead_intake`, `get_proposal_money`, `get_lead`, `get_lead_ai`, `refresh_lead_ai`, `apply_ai_stage`,
 `dismiss_ai_stage`, `draft_lead_message`, `log_message_sent`, `create_lead`, `update_lead`,
-`set_stage`, `add_note`, `click_to_call`, `call_recording`. They check
+`set_stage`, `add_note`, `click_to_call`, `call_recording`, `get_daily_report`, `log_call`. They check
 `can_use_leads`, validate the view and page size, trim notes, and pass `acting_user`. The
 client is `CRMClient.call` in `helpdesk/integrations/crm/client.py`; the call and error
 mapping live in `helpdesk/integrations/crm/leads.py`. The API key and secret never reach the
@@ -294,6 +296,82 @@ doesn't show without its fields. The hub can be deployed before TBO Smart.
   `desk/src/pages/leads/leads.ts`).
 - Sidebar: *Leads* in Workspace (teal group), shown when `can_use_leads`.
 
+## Daily report
+
+The Leads page's **Daily report** tab (next to Overview; `LeadsDailyReport.vue`,
+`DailyReportCard.vue`, `TargetRing.vue`) is the Sales Manager's Daily Sales Performance
+Report, read live from TBO Smart's `get_daily_report` (`tbo_smart.api.hub_leads`, tbo_smart#49).
+It shows **only when the ERP site has it**: `get_options` answers `has_daily_report` (and
+`can_log_call`) from one probe, kept ten minutes once it is there, and the tab is left out
+without a message until then. The ERP site counts the day; **the hub holds the targets and
+compares**. Every metric's exact definition (what a call, a fresh lead, a follow-up lead, a
+positive lead, a new quotation and a new lead are) is in TBO Smart's `docs/hub-leads-api.md`
+§2.5.1 and §2.7.
+
+- **Endpoint** `helpdesk.api.leads.get_daily_report(date, owner, fresh)`: one hub request,
+  one ERP call, kept per person for 60 s like the Overview's reads (`fresh=1` skips it). It
+  answers `{available, date, week_from, currency, people, targets, working_days, team_text}`;
+  each person also gets `pace`, `behind`, `on_track` and `text`. `available: false` for an
+  older ERP site (nothing queued for a toast, not remembered). A salesperson gets only
+  themselves, a Sales Manager everyone; an `owner` out of scope is the ERP site's refusal.
+- **Targets** (Settings → CRM → Leads, `HD CRM Settings`): `daily_lead_target` 10 qualified
+  new leads a day, `weekly_meeting_target` 10, `weekly_proposal_target` 5 and
+  `weekly_follow_up_target` 40 (0 = no target). The week's lead goal is the day's target
+  times the week's working days.
+- **Pace**: each weekly target is pro-rated by the working days gone, Monday to the day
+  (`working_day_checker` in `helpdesk/recurrence.py`: the weekly off, Saturdays off and the
+  hub's holidays are not working days; Monday to Saturday otherwise), of the week's working
+  days. A person is *On track* when each metric is at or above that share, else *Behind by
+  N meetings* (rounded up), one chip per metric behind. Quiet colour only: warning, never red.
+- **Team view** (a manager, nobody picked): one row per salesperson: calls (and how many
+  connected), fresh, follow-up, positive, quotations (count and value), new leads and the
+  pace chips; a row opens that person's card. A salesperson, or anyone who picks a person,
+  gets the **person card** in the owner's template order: header "Daily sales performance ·
+  date · name"; Daily call performance (Total calls made, Fresh leads, Follow-up leads,
+  Positive leads with names, New quotations with count, value and items, each opening the
+  lead); New leads generated (total and a numbered list, each opening the lead); This week vs
+  target (a ring per metric, with On track or Behind by N). The day (with previous and next
+  day) and the person are in the URL (`date`, `person`). States: skeleton, error with Try
+  again (a failed refresh keeps the last numbers), no salespeople in view.
+- **Copy for WhatsApp** (and **Copy team report**) copies the plain text the hub writes
+  (`helpdesk/daily_sales_report.py`, the same text the 6 pm message uses), with a
+  fallback field when the browser refuses the clipboard. One person:
+
+```
+📊 DAILY SALES PERFORMANCE REPORT
+📅 Date: 26 Oct 2026
+👤 Employee Name: Shahana V K
+
+📞 1. Daily Call Performance
+• Total Calls Made: 32
+• Fresh Leads: 8
+• Follow-up Leads: 14
+• Positive Leads: 3
+• New Quotations: 2
+
+🎯 2. New Leads Generated
+• Total New Leads: 7
+• Lead Names:
+1. Asha Traders
+2. ...
+```
+
+  An empty list is "—". The team text is one block per person, a line between them.
+- **6 pm summary**: `helpdesk.daily_sales_report.run`, cron `0 18 * * *` (site time),
+  behind *Send the Daily Sales Report at 6 pm* (`send_daily_sales_report`, on by default).
+  On working days only, each enabled user with the Sales Manager or System Manager role who
+  can use Leads gets **one message** with the team's day as they see it on the ERP site
+  (chat when set up, else email, as the follow-up digest: `deliver_digest`). A manager the
+  ERP site refuses is skipped, one failure doesn't stop the rest, and the whole run is
+  silent while the ERP site is older.
+- **Log call** (`LogCallDialog.vue`, `helpdesk.api.leads.log_call(lead, outcome, note)`,
+  POST): a *Log call* button on the lead page beside Call, for calls made outside
+  MyOperator: Connected, No answer, Busy or Voicemail and an optional note; the ERP site
+  records an outgoing call as the signed-in person, which counts in the report. Shown only
+  with `can_log_call`; the person's cached reads are cleared after it.
+- **Colour**: this tab is colourful on the owner's request, an exception recorded in
+  [ui-guidelines.md](ui-guidelines.md) §8.
+
 ## Proposals
 
 The Lead page's **Proposals** section, the proposal builder and Settings → Rates and proposals
@@ -313,6 +391,11 @@ The one-request Overview page (all parts, money or intake failing alone, cache h
 per-person cache, a write clearing it) is tested there too.
 `helpdesk/tests/test_sales_wall.py`: a Sales Employee outside the Leads teams lists, opens,
 creates, moves and notes a lead as themselves.
+`helpdesk/tests/test_daily_sales_report.py`: the report proxied as the person, targets and
+pace (pro-rated by working days, zero targets left out), the exact WhatsApp text, the cache
+(`fresh`, another day, a logged call clearing it), an older ERP site hiding it quietly,
+`log_call`, and the 6 pm job (one message per manager, not on a day off, not when the setting
+is off, silent on an older ERP site, a refused manager skipped).
 `helpdesk/tests/test_lead_calls.py`: Call posted as the signed-in person to TBO Smart's
 telephony API, the recording streamed (audio only) and a refusal refused, the MyOperator
 settings for admins only and proxied.

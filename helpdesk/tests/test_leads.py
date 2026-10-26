@@ -252,6 +252,8 @@ class TestLeads(FrappeTestCase):
         self.crm.lead_answers["get_options"] = {"stages": []}
         self.crm.lead_answers["get_proposal_money"] = {"totals": {}}
         self.crm.lead_answers["get_lead_intake"] = {"days": [], "people": []}
+        # the options also ask whether calls can be logged, which is kept too
+        self.crm.lead_answers["get_daily_report"] = {"people": []}
         self.as_bde()
         leads_api.get_overview_page()
         leads_api.get_options()
@@ -357,7 +359,8 @@ class TestLeads(FrappeTestCase):
         # managers always see Leads
         frappe.set_user("Administrator")
         leads_api.get_options()
-        self.assertEqual(len(self.crm.lead_calls), 2)
+        asked = [method for method, _post, _params in self.crm.lead_calls]
+        self.assertEqual(asked.count("get_options"), 2)
 
     def test_an_inactive_agent_doesnt_see_leads(self):
         frappe.db.set_value("HD Agent", BDE, "is_active", 0)
