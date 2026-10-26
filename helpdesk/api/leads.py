@@ -171,19 +171,19 @@ def read_lead_intake(fresh) -> dict:
         return {"available": False}
     # the target is the hub's own setting, so it is read live
     target = frappe.db.get_single_value("HD CRM Settings", "daily_lead_target")
-    # the ERP site lists everyone with a sales role; the strip shows the sales team, and
-    # anyone else only on a day they took leads (the day's rows are theirs, so they stay)
-    took = {
-        row.get("user")
-        for day in result.get("days") or []
-        for row in day.get("by_owner") or []
-        if cint(row.get("count"))
-    }
-    people, team_empty = only_sales_team(
-        result.get("people") or [], lambda p: p.get("user") in took
-    )
+    # the ERP site lists everyone with a sales role; the strip is the sales team only, and
+    # each day's total is the sum of the rows shown so the numbers match the chips
+    people, team_empty = only_sales_team(result.get("people") or [])
+    team = {p.get("user") for p in people}
+    days = []
+    for day in result.get("days") or []:
+        rows = [r for r in day.get("by_owner") or [] if r.get("user") in team]
+        days.append(
+            {**day, "by_owner": rows, "total": sum(cint(r.get("count")) for r in rows)}
+        )
     return {
         **result,
+        "days": days,
         "people": people,
         "team_empty": team_empty,
         "available": True,

@@ -129,25 +129,13 @@ def add_texts(report: dict) -> dict:
     return {**report, "people": people, "team_text": team_text(people, day)}
 
 
-def has_figures(person: dict) -> bool:
-    """Whether the person did anything that day."""
-    return bool(
-        cint(person.get("calls_total"))
-        or cint(person.get("fresh_leads"))
-        or cint(person.get("follow_up_leads"))
-        or person.get("positive_leads")
-        or (person.get("new_quotations") or {}).get("count")
-        or person.get("new_leads")
-    )
-
-
 def sales_team_only(report: dict, keep=()) -> tuple[dict, bool]:
-    """`report` with only the sales team's people, plus anyone in `keep` or with figures
-    that day, and whether the hub has a sales team at all (content_team.only_sales_team)."""
+    """`report` with only the sales team's people, plus anyone in `keep`, and whether the
+    hub has a sales team at all (content_team.only_sales_team)."""
     from helpdesk.content_team import only_sales_team
 
     people, team_empty = only_sales_team(
-        report.get("people") or [], has_figures, {k for k in keep if k}
+        report.get("people") or [], {k for k in keep if k}
     )
     return {**report, "people": people}, team_empty
 
