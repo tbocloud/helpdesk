@@ -11,6 +11,7 @@ People are HDS Teams User rows, matched to agents by their Microsoft email. The 
 """
 
 import json
+import re
 
 import frappe
 import jwt
@@ -503,6 +504,108 @@ def save_files(activity: dict, chat) -> list[str]:
 
 UNKNOWN = "I don't know you in TBO Support yet. Ask your manager to add you as an agent with this Microsoft email."
 
+# --- joining a Teams account to its agent, by a one-time link the person opens signed in -----------
+# Bot Framework may not say who wrote (its member lookup can be refused), and an admin pairing
+# accounts by hand can pair the wrong ones; the person links their own account instead.
+LINK_KEY = "copilot-teams:link:"
+LINK_MINUTES = 30
+LINK_CODE = re.compile(r"^[0-9a-f]{32}$")
+
+
+def unknown_card(activity: dict) -> dict:
+    """For someone the bot does not know yet: a one-time link that joins this Teams account to theirs."""
+    from helpdesk.copilot import assistant
+
+    aad = (activity.get("from") or {}).get("aadObjectId")
+    name = frappe.db.get_value(TEAMS_USER, {"aad_object_id": aad}) if aad else None
+    if not name or frappe.db.get_value(TEAMS_USER, name, "disabled"):
+        return assistant.text_card(UNKNOWN)
+    code = frappe.generate_hash(length=32)
+    frappe.cache.set_value(LINK_KEY + code, name, expires_in_sec=LINK_MINUTES * 60)
+    return assistant.card(
+        _("I don't know you in TBO Support yet"),
+        [
+            _(
+                "Open this link while you are signed in to TBO Support as yourself: it joins this Teams account to your agent account. It works once, for {0} minutes."
+            ).format(LINK_MINUTES),
+            _("Not an agent yet? Ask your manager to add you first."),
+        ],
+        links=[
+            (
+                _("Link my Teams account"),
+                frappe.utils.get_url(
+                    f"/api/method/helpdesk.api.copilot_teams.link?code={code}"
+                ),
+            )
+        ],
+    )
+
+
+def link_target(code: str | None):
+    """The Teams record a one-time link stands for; None when the code is unknown, used or expired."""
+    if not code or not LINK_CODE.match(code):
+        return None
+    name = frappe.cache.get_value(LINK_KEY + code, expires=True)
+    return (
+        frappe.get_doc(TEAMS_USER, name)
+        if name and frappe.db.exists(TEAMS_USER, name)
+        else None
+    )
+
+
+def why_not_link(record, user: str) -> str | None:
+    """Why `user` may not take this Teams account, or None when they may."""
+    from helpdesk.copilot import assistant
+
+    if not assistant.is_agent(user):
+        return _(
+            "Only TBO Support agents can link a Teams account. Ask your manager to add you as an agent first."
+        )
+    if record.disabled:
+        return _("This Teams account is switched off in TBO Support.")
+    if record.user and record.user != user:
+        return _(
+            "This Teams account is already linked to someone else in TBO Support. Ask a System Manager."
+        )
+    if frappe.db.exists(
+        TEAMS_USER, {"user": user, "name": ["!=", record.name], "disabled": 0}
+    ):
+        return _(
+            "Your TBO Support account is already linked to another Teams account. Ask a System Manager."
+        )
+    email = (frappe.db.get_value("User", user, "email") or "").lower()
+    if record.email and record.email.lower() != email:
+        return _("This Teams account's Microsoft email is not your TBO Support email.")
+    return None
+
+
+def link(code: str, user: str):
+    """Joins the Teams account behind a one-time link to `user`; the code is used up."""
+    from helpdesk.copilot import assistant
+
+    record = link_target(code)
+    if not record:
+        frappe.throw(
+            _(
+                "This link is no longer valid. Write to TBO Copilot in Teams for a new one."
+            )
+        )
+    if reason := why_not_link(record, user):
+        frappe.throw(reason, frappe.PermissionError)
+    frappe.cache.delete_value(LINK_KEY + code)
+    record.db_set("user", user)
+    record.add_comment(
+        "Info",
+        _("{0} linked this Teams account with a one-time link from the bot.").format(
+            frappe.utils.get_fullname(user)
+        ),
+    )
+    try:
+        assistant.send(user, assistant.help_card())
+    except Exception:
+        frappe.log_error(title=f"Copilot could not greet {user} in Teams")
+    return record
+
 
 def handle_activity(activity: dict) -> dict | None:
     """One activity from Teams; the body of the answer for a card's button, else None."""
@@ -529,7 +632,7 @@ def handle_activity(activity: dict) -> dict | None:
     if kind == "invoke" and activity.get("name") == "adaptiveCard/action":
         user = remember(activity)
         if not user:
-            return invoke_answer(assistant.text_card(UNKNOWN))
+            return invoke_answer(unknown_card(activity))
         action = (activity.get("value") or {}).get("action") or {}
         data = dict(action.get("data") or {})
         inputs = {"reason": data.pop("reason", "")}
@@ -559,7 +662,7 @@ def answer_message(activity: dict):
 
     user = remember(activity)
     if not user:
-        reply_in(activity, assistant.text_card(UNKNOWN))
+        reply_in(activity, unknown_card(activity))
         return
     chat = assistant.chat_for(user, "Teams")
     files = save_files(activity, chat)

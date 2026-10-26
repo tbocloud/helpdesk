@@ -467,7 +467,12 @@ class TestTheTeamsBot(TeamsCase):
                     **{"from": {"id": "29:x", "aadObjectId": "aad-x"}},
                 )
             )
-        self.assertIn("don't know you", self.calls[-1][2]["text"])
+        card = self.calls[-1][2]["attachments"][0]["content"]
+        self.assertIn("don't know you", json.dumps(card))
+        # and a one-time link to join their Teams account to their agent account
+        self.assertTrue(
+            any(a["type"] == "Action.OpenUrl" for a in card.get("actions") or [])
+        )
 
     def test_a_cards_approve_button_decides_and_the_card_changes(self):
         _run, approval = self.pending_fix()
@@ -897,3 +902,115 @@ class TestTheBotsKey(FrappeTestCase):
         self.assertIn("401", str(refused.exception))
         self.assertIn("Microsoft App Type and App Tenant ID", str(refused.exception))
         self.assertEqual(self.asked, ["tenant-1", teams.BOT_FRAMEWORK_TENANT])
+
+
+class TestTheTeamsLink(TeamsCase):
+    """Someone the bot does not know links their own Teams account, signed in as themselves."""
+
+    def setUp(self):
+        super().setUp()
+        self.addCleanup(frappe.set_user, "Administrator")
+        # Bot Framework does not say who wrote (its member lookup can be refused)
+        patcher = patch.object(teams, "member_email", return_value=None)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.greeted = []
+        patcher = patch(
+            "helpdesk.copilot.assistant.send",
+            side_effect=lambda user, reply, **links: self.greeted.append(user),
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def link_from_the_bot(self) -> str:
+        teams.handle_activity(self.activity(type="message", text="hi"))
+        body = self.calls[-1][2]
+        actions = body["attachments"][0]["content"]["actions"]
+        url = next(a["url"] for a in actions if a["type"] == "Action.OpenUrl")
+        self.assertIn("/api/method/helpdesk.api.copilot_teams.link?code=", url)
+        return url.rsplit("code=", 1)[1]
+
+    def record(self):
+        return frappe.get_doc(teams.TEAMS_USER, {"aad_object_id": "aad-dev"})
+
+    def confirm_as(self, user: str, code: str) -> str:
+        from helpdesk.api import copilot_teams
+
+        frappe.set_user(user)
+        copilot_teams.confirm_link(code)
+        frappe.set_user("Administrator")
+        return frappe.local.message_title
+
+    def test_someone_unknown_gets_a_one_time_link(self):
+        code = self.link_from_the_bot()
+
+        self.assertRegex(code, r"^[0-9a-f]{32}$")
+        self.assertEqual(teams.link_target(code).aad_object_id, "aad-dev")
+        self.assertFalse(self.record().user)
+
+    def test_signed_out_people_sign_in_first(self):
+        from helpdesk.api import copilot_teams
+
+        code = self.link_from_the_bot()
+        frappe.set_user("Guest")
+
+        copilot_teams.link(code)
+
+        self.assertEqual(frappe.local.response["type"], "redirect")
+        self.assertTrue(
+            frappe.local.response["location"].startswith("/login?redirect-to=")
+        )
+
+    def test_the_page_asks_before_anything_is_linked(self):
+        from helpdesk.api import copilot_teams
+
+        code = self.link_from_the_bot()
+        frappe.set_user(self.dev)
+
+        copilot_teams.link(code)
+
+        self.assertIn('name="csrf_token"', frappe.local.message)
+        self.assertIn("confirm_link", frappe.local.message)
+        frappe.set_user("Administrator")
+        self.assertFalse(self.record().user)
+
+    def test_the_agent_links_their_own_account_once_and_is_greeted(self):
+        code = self.link_from_the_bot()
+
+        self.assertEqual(self.confirm_as(self.dev, code), "Teams account linked")
+
+        self.assertEqual(self.record().user, self.dev)
+        self.assertEqual(self.greeted, [self.dev])
+        self.assertEqual(self.confirm_as(self.dev, code), "Cannot link")  # used up
+        self.assertIsNone(teams.link_target(code))
+
+    def test_the_wrong_pairings_are_refused(self):
+        from helpdesk.test_utils import create_agent as make_agent
+        from helpdesk.test_utils import create_user
+
+        code = self.link_from_the_bot()
+        outsider = create_user("not.an.agent@example.com").name
+        self.assertEqual(self.confirm_as(outsider, code), "Cannot link")
+
+        other = make_agent("other.agent@example.com").name
+        frappe.db.set_value(teams.TEAMS_USER, self.record().name, "user", other)
+        self.assertEqual(self.confirm_as(self.dev, code), "Cannot link")
+        frappe.db.set_value(teams.TEAMS_USER, self.record().name, "user", None)
+
+        frappe.db.set_value(
+            teams.TEAMS_USER, self.record().name, "email", "someone@else.com"
+        )
+        self.assertEqual(self.confirm_as(self.dev, code), "Cannot link")
+        frappe.db.set_value(teams.TEAMS_USER, self.record().name, "email", None)
+
+        frappe.get_doc(
+            {
+                "doctype": teams.TEAMS_USER,
+                "aad_object_id": "aad-dev-2",
+                "user": self.dev,
+            }
+        ).insert(ignore_permissions=True)
+        self.assertEqual(self.confirm_as(self.dev, code), "Cannot link")
+
+        self.assertEqual(self.confirm_as(self.dev, "0" * 32), "Cannot link")
+        self.assertFalse(self.record().user)
