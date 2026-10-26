@@ -2,7 +2,7 @@
 
 Status: Phase 1 implemented (list, new lead, lead page with stage, notes, edit and read-only
 quotations), the **Overview** (2026-10-19), the **daily new-lead target**, **where each lead
-stands on its row** **Proposals & money** on the Overview (2026-10-24) and the **Daily report** (2026-10-26), and proposals with the segment rate card in
+stands on its row** and **Proposals & money** on the Overview (2026-10-24) and the **Daily report** (2026-10-26), and proposals with the segment rate card in
 [proposals.md](proposals.md). This document is the source of truth for the feature and changes
 with it.
 
