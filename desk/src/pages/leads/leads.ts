@@ -505,8 +505,10 @@ export interface LeadIntake {
     total: number;
     by_owner: { user: string | null; full_name: string | null; count: number }[];
   }[];
-  /** the scope's salespeople, so someone who took none still shows */
+  /** the sales team, so someone who took none still shows */
   people?: { user: string; full_name: string }[];
+  /** no enabled user has the Sales Employee role yet */
+  team_empty?: boolean;
 }
 
 export type DailyMetric = "leads" | "meetings" | "proposals" | "follow_ups";
@@ -566,6 +568,8 @@ export interface DailyReport {
   targets?: Record<DailyMetric, number>;
   working_days?: { elapsed: number; total: number };
   team_text?: string;
+  /** no enabled user has the Sales Employee role yet */
+  team_empty?: boolean;
 }
 
 /** The name a lead goes by in the report. */

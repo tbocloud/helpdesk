@@ -3619,6 +3619,19 @@ def daily_report(people: list[dict], date: str = "2026-10-26") -> dict:
     }
 
 
+def lead_intake(people: list[dict], by_owner: list[dict]) -> dict:
+    """A get_lead_intake answer: today's `by_owner` rows ({user, full_name, count}) with
+    yesterday empty, and the scope's `people` ({user, full_name})."""
+    total = sum(row["count"] for row in by_owner)
+    return {
+        "days": [
+            {"date": "2026-10-26", "total": total, "by_owner": by_owner},
+            {"date": "2026-10-25", "total": 0, "by_owner": []},
+        ],
+        "people": people,
+    }
+
+
 def sales_person(user: str, **counts) -> dict:
     """One salesperson's row as TBO Smart's get_sales_activity answers it: every
     count 0 unless given (contacted, moms_submitted, quotations_sent, won, …)."""

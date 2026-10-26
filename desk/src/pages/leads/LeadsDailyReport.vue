@@ -118,7 +118,11 @@
         :icon="LucideUsers"
         :title="__('No salespeople in your view')"
         :message="
-          __('Nobody on the ERP site has leads you may see for this day.')
+          data?.team_empty && authStore.isManager
+            ? __(
+                'Pick your salespeople in Settings → Agents → Department wall → Sales team'
+              )
+            : __('Nobody on the ERP site has leads you may see for this day.')
         "
       />
 
@@ -251,6 +255,7 @@
 import { money } from "@/components/invoicing/invoices";
 import TaskyState from "@/components/TaskyState.vue";
 import { TONE_CLASSES } from "@/components/tone";
+import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
 import {
@@ -366,6 +371,7 @@ const report = createResource({
 });
 
 const data = computed(() => report.data as DailyReport | undefined);
+const authStore = useAuthStore();
 const people = computed(() => data.value?.people ?? []);
 const currency = computed(() => data.value?.currency || "INR");
 const hasTargets = computed(() =>

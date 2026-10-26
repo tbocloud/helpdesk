@@ -4,7 +4,7 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from helpdesk.api import leads as leads_api
-from helpdesk.daily_sales_report import person_text, team_text
+from helpdesk.daily_sales_report import person_text, send_report, team_text
 from helpdesk.integrations.crm.client import CRMError
 from helpdesk.test_utils import (
     FakeCRM,
@@ -13,6 +13,7 @@ from helpdesk.test_utils import (
     daily_report_person,
     enable_leads,
     hold_commits,
+    make_sales_employee,
     make_sales_manager,
 )
 
@@ -87,6 +88,53 @@ class TestDailySalesReport(FrappeTestCase):
             (params["date"], params["owner"], params["acting_user"]),
             (MONDAY, BDE, BDE),
         )
+
+    def team_report(self):
+        """Shahana is on the sales team, Quiet Q is not and did nothing, the manager did
+        some calls though he is not on the team."""
+        make_sales_employee("shahana@tbo.example", "Shahana V K")
+        self.crm.lead_answers["get_daily_report"] = daily_report(
+            [
+                shahana(),
+                daily_report_person("q@tbo.example", "Quiet Q"),
+                daily_report_person(MANAGER, "Maya", calls_total=4),
+            ]
+        )
+
+    def test_only_the_sales_team_and_outsiders_with_figures_are_listed(self):
+        self.team_report()
+        report = self.read(fresh=1)
+        self.assertEqual(
+            [p["user"] for p in report["people"]], ["shahana@tbo.example", MANAGER]
+        )
+        self.assertNotIn("Quiet Q", report["team_text"])
+        self.assertIn("Maya", report["team_text"])
+        self.assertFalse(report["team_empty"])
+
+    def test_a_person_picked_on_purpose_is_shown_even_with_nothing_to_report(self):
+        self.team_report()
+        self.crm.lead_answers["get_daily_report"]["people"] = [
+            daily_report_person("q@tbo.example", "Quiet Q")
+        ]
+        report = self.read(fresh=1, owner="q@tbo.example")
+        self.assertEqual([p["user"] for p in report["people"]], ["q@tbo.example"])
+
+    def test_with_no_sales_team_only_people_with_figures_are_listed(self):
+        self.team_report()
+        with patch("helpdesk.content_team._users_with_role", return_value=[]):
+            report = self.read(fresh=1)
+        self.assertEqual(
+            [p["user"] for p in report["people"]], ["shahana@tbo.example", MANAGER]
+        )
+        self.assertTrue(report["team_empty"])
+
+    def test_the_6_pm_text_lists_only_the_sales_team(self):
+        self.team_report()
+        self.crm.lead_answers["get_daily_report"]["people"].pop()  # no manager figures
+        with patch("helpdesk.follow_ups.deliver_digest") as deliver:
+            send_report(MANAGER, self.crm.lead_answers["get_daily_report"])
+        _user, _subject, sections = deliver.call_args.args
+        self.assertEqual([title for title, _ in sections], ["👤 Shahana V K"])
 
     def test_the_week_is_measured_against_the_targets_pro_rated_by_working_days(self):
         self.crm.lead_answers["get_daily_report"] = daily_report(
@@ -183,8 +231,11 @@ class TestDailySalesReport(FrappeTestCase):
         text = team_text([shahana(), quiet], MONDAY)
         self.assertEqual(text.count("📊 DAILY SALES PERFORMANCE REPORT"), 2)
         self.assertIn("──────────", text)
-        self.crm.lead_answers["get_daily_report"] = daily_report([shahana(), quiet])
-        self.assertEqual(self.read(fresh=1)["team_text"], text)
+        busy = daily_report_person("b@tbo.example", "Busy B", calls_total=1)
+        self.crm.lead_answers["get_daily_report"] = daily_report([shahana(), busy])
+        self.assertEqual(
+            self.read(fresh=1)["team_text"], team_text([shahana(), busy], MONDAY)
+        )
 
     def test_a_read_is_kept_for_the_person_until_fresh_or_a_call_is_logged(self):
         self.read()
