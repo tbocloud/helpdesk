@@ -618,6 +618,10 @@ class TestTheEndpoint(TeamsCase):
         request = MagicMock()
         request.get_json.return_value = self.activity(type="message", text="help")
         self.intents["help"] = {"intent": "help"}
+        # the refusal's Error Log would outlive the test's rollback
+        quiet = patch("helpdesk.copilot.teams.frappe.log_error")
+        quiet.start()
+        self.addCleanup(quiet.stop)
         with patch.object(frappe, "request", request, create=True):
             with patch("frappe.get_request_header", return_value="Bearer nonsense"):
                 self.assertEqual(copilot_teams.messages().status_code, 401)
