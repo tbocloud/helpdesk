@@ -2,8 +2,9 @@
 // them there as the signed-in person (docs/leads.md).
 import type { Tone } from "@/components/tone";
 import { __ } from "@/translation";
+import { money } from "@/components/invoicing/invoices";
 import { errorText } from "@/utils";
-import { createResource, toast } from "frappe-ui";
+import { createResource, dayjs, toast } from "frappe-ui";
 import type { DocumentChain, ProposalRow } from "./proposals";
 
 export interface LeadStage {
@@ -38,7 +39,88 @@ export interface LeadRow {
   score?: number | null;
   next_follow_up?: string | null;
   modified?: string;
+  /** the newest quotation's latest revision (absent from an older TBO Smart) */
+  latest_quotation?: {
+    name: string;
+    tbo_quote_status?: string | null;
+    grand_total?: number;
+    currency?: string;
+    tbo_sent_on?: string | null;
+  } | null;
+  /** the newest priced client document's latest revision, while Proposals is on */
+  latest_proposal?: {
+    name: string;
+    document_type?: string;
+    status?: string;
+    view_count?: number;
+    sent_on?: string | null;
+  } | null;
 }
+
+/** Where a lead stands with the client, as one chip on its row: the proposal's
+ * status (else the quotation's), its value and when it went out. Colour only for an
+ * outcome: accepted is success, declined, rejected and expired danger. */
+export function clientStatus(
+  row: LeadRow
+): { label: string; tone: Tone; title: string } | null {
+  const quote = row.latest_quotation;
+  const proposal = row.latest_proposal;
+  if (!quote && !proposal) return null;
+  const isQuote = !proposal;
+  const status = (proposal?.status || quote?.tbo_quote_status || "") as string;
+  const look = (isQuote ? QUOTE_STATUS : PROPOSAL_STATUS)[status] || {
+    label: status,
+    tone: "neutral" as Tone,
+  };
+  let label = look.label;
+  if (status === "Viewed" && (proposal?.view_count || 0) > 1)
+    label = __("Viewed {0}×", String(proposal!.view_count));
+  const parts = [label];
+  if (quote?.grand_total && quote.currency)
+    parts.push(money(quote.grand_total, quote.currency, true));
+  const sent = proposal?.sent_on || quote?.tbo_sent_on;
+  if (sent && look.open) parts.push(dayjs(sent).fromNow());
+  const doc = isQuote ? __("Quotation {0}", quote!.name) : proposal!.name;
+  return { label: parts.join(" · "), tone: look.tone, title: doc };
+}
+
+interface StatusLook {
+  label: string;
+  tone: Tone;
+  /** still with the client: say how long ago it went */
+  open?: boolean;
+}
+
+const PROPOSAL_STATUS: Record<string, StatusLook> = {
+  Draft: { label: __("Proposal draft"), tone: "neutral" },
+  Sent: { label: __("Proposal sent"), tone: "neutral", open: true },
+  Viewed: { label: __("Viewed"), tone: "neutral", open: true },
+  Accepted: { label: __("Accepted"), tone: "success" },
+  Declined: { label: __("Declined"), tone: "danger" },
+  Expired: { label: __("Expired"), tone: "danger" },
+};
+
+// TBO Smart's tbo_quote_status
+const QUOTE_STATUS: Record<string, StatusLook> = {
+  Draft: { label: __("Quote draft"), tone: "neutral" },
+  "Pending Approval": { label: __("Quote awaiting approval"), tone: "neutral" },
+  Approved: { label: __("Quote approved"), tone: "neutral" },
+  "Sent to Client": { label: __("Quote sent"), tone: "neutral", open: true },
+  "Viewed / Acknowledged": {
+    label: __("Quote viewed"),
+    tone: "neutral",
+    open: true,
+  },
+  "Under Negotiation": { label: __("Negotiating"), tone: "neutral", open: true },
+  "Revision Required": {
+    label: __("Revision asked"),
+    tone: "neutral",
+    open: true,
+  },
+  Accepted: { label: __("Accepted"), tone: "success" },
+  Rejected: { label: __("Rejected"), tone: "danger" },
+  Expired: { label: __("Expired"), tone: "danger" },
+};
 
 export type LeadView = "all" | "mine" | "call_today" | "follow_up";
 
@@ -211,11 +293,19 @@ export function choices(values: string[] | undefined, none?: string) {
   return none !== undefined ? [{ label: none, value: "" }, ...list] : list;
 }
 
-export type OverviewPeriod = "week" | "month" | "quarter" | "custom";
+export type OverviewPeriod =
+  | "today"
+  | "yesterday"
+  | "week"
+  | "month"
+  | "quarter"
+  | "custom";
 
 /** The numbers on the Overview that open their own list (TBO Smart's metrics). */
 export type LeadMetric =
   | "new"
+  // created in the period, imports left out: the "Created" filter and the intake strip
+  | "intake"
   | "contacted"
   | "meetings"
   | "quotations"
@@ -232,6 +322,7 @@ export type LeadMetric =
 
 export const METRIC_LABELS: Record<LeadMetric, string> = {
   new: __("New leads"),
+  intake: __("Leads taken"),
   contacted: __("Contacted"),
   meetings: __("Meetings held"),
   quotations: __("Proposals sent"),
@@ -399,4 +490,68 @@ export interface LeadDraft {
   to?: string;
   /** wa.me link with the text, for a WhatsApp draft */
   url?: string | null;
+}
+
+/** helpdesk.api.leads.get_lead_intake: today's and yesterday's new leads by salesperson. */
+export interface LeadIntake {
+  /** false while the ERP site's TBO Smart is older than this */
+  available: boolean;
+  /** new leads each salesperson should take a day; 0: none */
+  target?: number;
+  days?: {
+    date: string;
+    total: number;
+    by_owner: { user: string | null; full_name: string | null; count: number }[];
+  }[];
+  /** the scope's salespeople, so someone who took none still shows */
+  people?: { user: string; full_name: string }[];
+}
+
+export type SplitStatus = "Received" | "Due" | "Overdue" | "Upcoming";
+
+/** One payment split still being collected (TBO Smart's hub-leads-api.md §2.8). */
+export interface MoneySplit {
+  lead: string;
+  lead_name?: string;
+  company_name?: string;
+  lead_owner?: string;
+  owner_name?: string | null;
+  document_type: "Sales Order" | "Quotation";
+  document: string;
+  quote_status?: string;
+  idx: number;
+  /** payment term, description or milestone; null: the whole amount */
+  label: string | null;
+  percent: number;
+  amount: number;
+  received: number;
+  outstanding: number;
+  /** null: when a milestone is reached */
+  due_date: string | null;
+  source: "schedule" | "quotation" | "proposal" | "whole";
+  status: SplitStatus;
+}
+
+/** helpdesk.api.leads.get_proposal_money: the Overview's "Proposals & money". */
+export interface ProposalMoney {
+  available: boolean;
+  currency?: string;
+  totals?: {
+    proposals_sent: number;
+    proposals_value: number;
+    unpriced_sent: number;
+    won: number;
+    won_value: number;
+    advances: number;
+    to_collect: number;
+    overdue: number;
+  };
+  by_month?: {
+    overdue: number;
+    later: number;
+    undated: number;
+    months: { month: string; amount: number }[];
+  };
+  splits?: MoneySplit[];
+  splits_total?: number;
 }

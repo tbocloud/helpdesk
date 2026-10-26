@@ -43,6 +43,7 @@
 		"holiday_sync_error",
 		"leads_section",
 		"enable_leads",
+		"daily_lead_target",
 		"column_break_6",
 		"leads_teams",
 		"status_section",
@@ -290,6 +291,14 @@
 			"description": "Shows the Leads page to the teams below. Needs TBO Smart's hub leads API on the CRM site."
 		},
 		{
+			"fieldname": "daily_lead_target",
+			"fieldtype": "Int",
+			"label": "Daily New-Lead Target",
+			"default": "0",
+			"non_negative": 1,
+			"description": "New leads each salesperson should take a day; the Leads page shows each person's count against it. 0: no target."
+		},
+		{
 			"fieldname": "column_break_6",
 			"fieldtype": "Column Break"
 		},
@@ -302,7 +311,7 @@
 	],
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-10-16 12:00:00.000000",
+	"modified": "2026-10-24 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD CRM Settings",

@@ -459,6 +459,20 @@
               )
             "
           />
+          <FormControl
+            v-if="form.enable_leads"
+            v-model="form.daily_lead_target"
+            class="max-w-xs"
+            type="number"
+            min="0"
+            step="1"
+            :label="__('Daily new-lead target per salesperson')"
+            :description="
+              __(
+                'The Leads page shows how many new leads each salesperson took today and yesterday against it. 0: no target.'
+              )
+            "
+          />
           <fieldset v-if="form.enable_leads" class="flex flex-col gap-2">
             <legend class="text-base text-ink-gray-8">
               {{ __("For these teams") }}
@@ -577,6 +591,8 @@ interface CRMForm {
   holiday_lists: string[];
   sync_leave: boolean;
   enable_leads: boolean;
+  /** new leads each salesperson should take a day; 0: no target */
+  daily_lead_target: number | "";
   /** HD Team names that see Leads; none: every agent */
   leads_teams: string[];
 }
@@ -671,6 +687,7 @@ const settings = createResource({
       holiday_lists: lines(doc.holiday_lists),
       sync_leave: onByDefault(doc.sync_leave),
       enable_leads: Boolean(doc.enable_leads),
+      daily_lead_target: doc.daily_lead_target || 0,
       leads_teams: lines(doc.leads_teams),
     };
     initial.value = JSON.stringify(form.value);
@@ -809,6 +826,10 @@ const save = createResource({
       holiday_lists: f.holiday_lists.join("\n"),
       sync_leave: f.sync_leave ? 1 : 0,
       enable_leads: f.enable_leads ? 1 : 0,
+      daily_lead_target: Math.max(
+        Math.floor(Number(f.daily_lead_target)) || 0,
+        0
+      ),
       leads_teams: f.leads_teams.join("\n"),
     };
     if (!f.api_secret) delete fieldname.api_secret;

@@ -3348,8 +3348,9 @@ class FakeCRM:
         # an Exception the holiday or leave reads raise, as the CRM site would
         self.holidays_error: Exception | None = None
         self.leave_error: Exception | None = None
-        # TBO Smart's hub leads API: what each method answers, the calls made as
-        # (method, post, params), and an Exception every call raises
+        # TBO Smart's hub leads API: what each method answers (an Exception: that
+        # method raises it), the calls made as (method, post, params), and an
+        # Exception every call raises
         self.base = "https://erp.example"
         self.lead_answers: dict[str, object] = {}
         self.lead_calls: list[tuple[str, bool, dict]] = []
@@ -3419,7 +3420,10 @@ class FakeCRM:
         self.lead_paths.append(method)
         if self.lead_error:
             raise self.lead_error
-        return self.lead_answers.get(name)
+        answer = self.lead_answers.get(name)
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
 
     def download(self, method, **params):
         """A file method (a call's recording): `lead_answers[name]` is its

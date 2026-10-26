@@ -4,12 +4,19 @@ site decides what each person may see and do, and the API key never leaves the h
 
 import frappe
 from frappe import _
-from frappe.utils import cint
+from frappe.utils import add_days, cint, getdate, today
 
-from helpdesk.integrations.crm.leads import call, download, require_leads
+from helpdesk.integrations.crm.leads import (
+    call,
+    call_if_deployed,
+    download,
+    require_leads,
+)
 
 VIEWS = ("all", "mine", "call_today", "follow_up")
-PERIODS = ("week", "month", "quarter", "custom")
+PERIODS = ("today", "yesterday", "week", "month", "quarter", "custom")
+# a day is a custom range of that one day on the ERP site, which an older TBO Smart reads too
+DAYS_AGO = {"today": 0, "yesterday": 1}
 MESSAGE_CHANNELS = ("whatsapp", "email")
 TELEPHONY = "tbo_smart.api.telephony"
 # what the recording player may be handed back
@@ -45,8 +52,17 @@ def list_leads(
     require_leads()
     if view not in VIEWS:
         frappe.throw(_("Pick All, Mine, Call today or Follow-up."))
-    if period and period not in PERIODS:
-        frappe.throw(_("Pick a week, a month, a quarter or your own dates."))
+    if period:
+        check_period(period, from_date, to_date, dates_required=bool(metric))
+    when = {"period": None, "from_date": None, "to_date": None}
+    if metric:
+        when = {
+            "period": period or None,
+            "from_date": from_date or None,
+            "to_date": to_date or None,
+        }
+        if period in DAYS_AGO:
+            when = erp_period(period, from_date, to_date)
     result = call(
         "list_leads",
         search=(search or "").strip() or None,
@@ -56,9 +72,7 @@ def list_leads(
         source=source or None,
         temperature=temperature or None,
         metric=metric or None,
-        period=(period or None) if metric else None,
-        from_date=(from_date or None) if metric else None,
-        to_date=(to_date or None) if metric else None,
+        **when,
         view=view,
         # cint: a malformed number is 0, never a server error
         start=max(cint(start), 0),
@@ -77,20 +91,79 @@ def get_overview(
     """The Overview: the pipeline, the funnel and the period's figures for the
     leads the signed-in person may see (theirs, their team's or everyone's)."""
     require_leads()
-    if period not in PERIODS:
-        frappe.throw(_("Pick a week, a month, a quarter or your own dates."))
-    if period == "custom" and not (from_date and to_date):
-        frappe.throw(_("Pick both dates for your own period."))
+    check_period(period, from_date, to_date)
     return (
         call(
             "get_overview",
-            period=period,
-            from_date=from_date if period == "custom" else None,
-            to_date=to_date if period == "custom" else None,
+            **erp_period(period, from_date, to_date),
             owner=owner or None,
         )
         or {}
     )
+
+
+@frappe.whitelist()
+def get_lead_intake() -> dict:
+    """New leads each salesperson took today and yesterday (imports left out), with the
+    daily target from HD CRM Settings (0: none). `available` is false while the ERP
+    site's TBO Smart is older than this, so the page leaves the strip out."""
+    require_leads()
+    day = getdate(today())
+    result = call_if_deployed(
+        "get_lead_intake", from_date=str(add_days(day, -1)), to_date=str(day)
+    )
+    if result is None:
+        return {"available": False}
+    target = frappe.db.get_single_value("HD CRM Settings", "daily_lead_target")
+    return {**result, "available": True, "target": max(cint(target), 0)}
+
+
+@frappe.whitelist()
+def get_proposal_money(
+    period: str = "month",
+    from_date: str | None = None,
+    to_date: str | None = None,
+    owner: str | None = None,
+) -> dict:
+    """The Overview's "Proposals & money": proposals sent, won, advances received in the
+    period, and every payment split still to come in. `available` is false while the
+    ERP site's TBO Smart is older than this."""
+    require_leads()
+    check_period(period, from_date, to_date)
+    result = call_if_deployed(
+        "get_proposal_money",
+        **erp_period(period, from_date, to_date),
+        owner=owner or None,
+    )
+    return {**result, "available": True} if result is not None else {"available": False}
+
+
+def check_period(
+    period: str,
+    from_date: str | None,
+    to_date: str | None,
+    dates_required: bool = True,
+) -> None:
+    if period not in PERIODS:
+        frappe.throw(
+            _("Pick today, yesterday, a week, a month, a quarter or your own dates.")
+        )
+    if dates_required and period == "custom" and not (from_date and to_date):
+        frappe.throw(_("Pick both dates for your own period."))
+
+
+def erp_period(period: str, from_date: str | None, to_date: str | None) -> dict:
+    """The period as the ERP site takes it: today and yesterday as a one-day custom range;
+    dates only for a custom period."""
+    if period in DAYS_AGO:
+        day = str(add_days(getdate(today()), -DAYS_AGO[period]))
+        return {"period": "custom", "from_date": day, "to_date": day}
+    custom = period == "custom"
+    return {
+        "period": period,
+        "from_date": from_date if custom else None,
+        "to_date": to_date if custom else None,
+    }
 
 
 @frappe.whitelist()
