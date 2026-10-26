@@ -129,13 +129,48 @@ def add_texts(report: dict) -> dict:
     return {**report, "people": people, "team_text": team_text(people, day)}
 
 
-def prepare(report: dict) -> dict:
-    """A report as the page gets it: pace for each person, the targets, and the text."""
+def has_figures(person: dict) -> bool:
+    """Whether the person did anything that day."""
+    return bool(
+        cint(person.get("calls_total"))
+        or cint(person.get("fresh_leads"))
+        or cint(person.get("follow_up_leads"))
+        or person.get("positive_leads")
+        or (person.get("new_quotations") or {}).get("count")
+        or person.get("new_leads")
+    )
+
+
+def sales_team_only(report: dict, keep=()) -> tuple[dict, bool]:
+    """`report` with only the sales team's people, plus anyone in `keep` or with figures
+    that day, and whether the hub has a sales team at all (content_team.only_sales_team)."""
+    from helpdesk.content_team import only_sales_team
+
+    people, team_empty = only_sales_team(
+        report.get("people") or [], has_figures, {k for k in keep if k}
+    )
+    return {**report, "people": people}, team_empty
+
+
+def prepare(report: dict, owner: str | None = None) -> dict:
+    """A report as the page gets it: only the sales team (and `owner`, picked on purpose,
+    and the viewer when they aren't a manager), pace for each person, the targets, the
+    text, and `team_empty` when nobody is picked as a salesperson yet."""
+    own = (
+        () if set(frappe.get_roles()) & set(RECIPIENT_ROLES) else (frappe.session.user,)
+    )
+    report, team_empty = sales_team_only(report, (owner, *own))
     targets = read_targets()
     days = week_days(report.get("date") or today())
     people = [with_pace(p, targets, days) for p in report.get("people") or []]
     return add_texts(
-        {**report, "people": people, "targets": targets, "working_days": days}
+        {
+            **report,
+            "people": people,
+            "targets": targets,
+            "working_days": days,
+            "team_empty": team_empty,
+        }
     )
 
 
@@ -192,7 +227,7 @@ def send_report(user: str, report: dict):
     from helpdesk.follow_ups import deliver_digest
 
     day = report.get("date") or today()
-    people = report.get("people") or []
+    people = sales_team_only(report)[0]["people"]
     if not people:
         return None
     sections = [

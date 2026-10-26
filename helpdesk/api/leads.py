@@ -8,6 +8,7 @@ import frappe
 from frappe import _
 from frappe.utils import add_days, cint, getdate, today
 
+from helpdesk.content_team import only_sales_team
 from helpdesk.integrations.crm.leads import (
     LeadsError,
     LeadsUnavailableError,
@@ -170,7 +171,24 @@ def read_lead_intake(fresh) -> dict:
         return {"available": False}
     # the target is the hub's own setting, so it is read live
     target = frappe.db.get_single_value("HD CRM Settings", "daily_lead_target")
-    return {**result, "available": True, "target": max(cint(target), 0)}
+    # the ERP site lists everyone with a sales role; the strip shows the sales team, and
+    # anyone else only on a day they took leads (the day's rows are theirs, so they stay)
+    took = {
+        row.get("user")
+        for day in result.get("days") or []
+        for row in day.get("by_owner") or []
+        if cint(row.get("count"))
+    }
+    people, team_empty = only_sales_team(
+        result.get("people") or [], lambda p: p.get("user") in took
+    )
+    return {
+        **result,
+        "people": people,
+        "team_empty": team_empty,
+        "available": True,
+        "target": max(cint(target), 0),
+    }
 
 
 @frappe.whitelist()
@@ -262,7 +280,7 @@ def get_daily_report(
     )
     if result is None:
         return {"available": False}
-    return {**prepare(result), "available": True}
+    return {**prepare(result, owner=owner), "available": True}
 
 
 def report_deployed() -> bool:

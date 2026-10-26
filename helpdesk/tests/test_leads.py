@@ -13,11 +13,14 @@ from helpdesk.test_utils import (
     create_agent,
     enable_leads,
     hold_commits,
+    lead_intake,
+    make_sales_employee,
     make_team,
 )
 
 BDE = "bde.agent@leads.example"
 SUPPORT = "support.agent@leads.example"
+SALES = "sales.employee@leads.example"
 TEAM = "Leads Test Sales"
 FROM_SETTINGS = "helpdesk.integrations.crm.client.CRMClient.from_settings"
 
@@ -173,6 +176,36 @@ class TestLeads(FrappeTestCase):
         # a negative target is no target
         frappe.db.set_single_value("HD CRM Settings", "daily_lead_target", -3)
         self.assertEqual(leads_api.get_lead_intake()["target"], 0)
+
+    def intake_users(self, **answer):
+        self.crm.lead_answers["get_lead_intake"] = lead_intake(**answer)
+        self.as_bde()
+        result = leads_api.get_lead_intake(fresh=1)
+        return [p["user"] for p in result["people"]], result
+
+    def test_the_intake_lists_the_sales_team_and_outsiders_who_took_leads(self):
+        make_sales_employee(SALES, "Sia Sales")
+        everyone = [{"user": u, "full_name": u} for u in (SALES, BDE, SUPPORT)]
+        users, result = self.intake_users(
+            people=everyone,
+            by_owner=[{"user": SUPPORT, "full_name": "Sunil", "count": 3}],
+        )
+        # BDE took nothing and isn't on the team: gone; Sunil took 3: kept
+        self.assertEqual(users, [SALES, SUPPORT])
+        self.assertFalse(result["team_empty"])
+        # the header total is the ERP site's, whoever is listed
+        self.assertEqual(result["days"][0]["total"], 3)
+
+    def test_an_empty_sales_team_leaves_only_people_with_leads(self):
+        everyone = [{"user": u, "full_name": u} for u in (BDE, SUPPORT)]
+        with patch("helpdesk.content_team._users_with_role", return_value=[]):
+            users, result = self.intake_users(
+                people=everyone, by_owner=[{"user": BDE, "full_name": "B", "count": 2}]
+            )
+            self.assertEqual(users, [BDE])
+            self.assertTrue(result["team_empty"])
+            users, _ = self.intake_users(people=everyone, by_owner=[])
+        self.assertEqual(users, [])
 
     def test_the_money_is_read_for_the_period_and_owner(self):
         self.crm.lead_answers["get_proposal_money"] = {"totals": {"to_collect": 5}}
