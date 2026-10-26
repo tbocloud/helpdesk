@@ -359,9 +359,11 @@ positive lead, a new quotation and a new lead are) is in TBO Smart's `docs/hub-l
   An empty list is "—". The team text is one block per person, a line between them.
 - **6 pm summary**: `helpdesk.daily_sales_report.run`, cron `0 18 * * *` (site time),
   behind *Send the Daily Sales Report at 6 pm* (`send_daily_sales_report`, on by default).
-  On working days only, each enabled user with the Sales Manager or System Manager role who
-  can use Leads gets **one message** with the team's day as they see it on the ERP site
-  (chat when set up, else email, as the follow-up digest: `deliver_digest`). A manager the
+  On working days only, each enabled user who can use Leads and is listed in *Send the 6 pm
+  report to* (`daily_report_recipients`, one email per line: Sales Manager is an ERP role, so
+  a hub Agent Manager is named here) gets **one message** with the team's day as they see it on the ERP site
+  (chat when set up, else email, as the follow-up digest: `deliver_digest`). Blank list:
+  every enabled Sales Manager and System Manager who can use Leads. A manager the
   ERP site refuses is skipped, one failure doesn't stop the rest, and the whole run is
   silent while the ERP site is older.
 - **Log call** (`LogCallDialog.vue`, `helpdesk.api.leads.log_call(lead, outcome, note)`,

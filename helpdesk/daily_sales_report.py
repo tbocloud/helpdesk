@@ -140,21 +140,24 @@ def prepare(report: dict) -> dict:
 
 
 def recipients() -> list[str]:
-    """Enabled users with a manager role who can use Leads, sorted."""
-    users = set(
-        frappe.get_all(
-            "Has Role",
-            filters={"role": ("in", RECIPIENT_ROLES), "parenttype": "User"},
-            pluck="parent",
+    """Who gets the 6 pm message, sorted: the emails listed in HD CRM Settings, else every
+    Sales Manager and System Manager (the ERP's Sales Manager role may not be a hub role,
+    so a hub Agent Manager is named in the list). Only enabled users who can use Leads."""
+    listed = frappe.db.get_single_value(SETTINGS, "daily_report_recipients") or ""
+    users = {line.strip() for line in listed.splitlines() if line.strip()}
+    if not users:
+        users = set(
+            frappe.get_all(
+                "Has Role",
+                filters={"role": ("in", RECIPIENT_ROLES), "parenttype": "User"},
+                pluck="parent",
+            )
         )
-    )
     users.discard("Administrator")
-    enabled = set(
-        frappe.get_all(
-            "User", filters={"name": ("in", list(users)), "enabled": 1}, pluck="name"
-        )
-        if users
-        else []
+    if not users:
+        return []
+    enabled = frappe.get_all(
+        "User", filters={"name": ("in", list(users)), "enabled": 1}, pluck="name"
     )
     return sorted(u for u in enabled if can_use_leads(u))
 

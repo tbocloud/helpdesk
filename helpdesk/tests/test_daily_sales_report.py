@@ -14,6 +14,7 @@ from helpdesk.test_utils import (
     enable_leads,
     hold_commits,
     make_sales_manager,
+    make_team,
 )
 
 BDE = "daily.bde@report.example"
@@ -300,3 +301,25 @@ class TestDailySalesReport(FrappeTestCase):
         answers = iter([refused, daily_report([shahana()])])
         self.crm.call = lambda method, post=False, **params: next(answers)
         self.assertEqual(self.run_job().call_count, 1)
+
+    def test_a_list_of_recipients_replaces_the_manager_roles(self):
+        frappe.db.set_single_value(
+            "HD CRM Settings",
+            "daily_report_recipients",
+            f" {MANAGER} \n{BDE}\nnobody@report.example\n",
+        )
+        users = [c.args[0] for c in self.run_job().call_args_list]
+        # the listed, enabled users who can use Leads; the other manager is not on it
+        self.assertEqual(sorted(users), sorted([MANAGER, BDE]))
+
+    def test_a_listed_user_who_cannot_use_leads_is_skipped(self):
+        create_agent("support.only@report.example", "Sue", "Support")
+        make_team("Daily Sales Only", [MANAGER])
+        enable_leads(teams=("Daily Sales Only",))
+        frappe.db.set_single_value(
+            "HD CRM Settings",
+            "daily_report_recipients",
+            f"{MANAGER}\nsupport.only@report.example",
+        )
+        users = [c.args[0] for c in self.run_job().call_args_list]
+        self.assertEqual(users, [MANAGER])

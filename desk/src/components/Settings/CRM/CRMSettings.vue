@@ -517,6 +517,18 @@
               )
             "
           />
+          <FormControl
+            v-if="form.enable_leads && form.send_daily_sales_report"
+            v-model="form.daily_report_recipients"
+            type="textarea"
+            :rows="3"
+            :label="__('Send the 6 pm report to')"
+            :description="
+              __(
+                'One email per line. Blank: every Sales Manager and System Manager who uses Leads.'
+              )
+            "
+          />
           <fieldset v-if="form.enable_leads" class="flex flex-col gap-2">
             <legend class="text-base text-ink-gray-8">
               {{ __("For these teams") }}
@@ -642,6 +654,8 @@ interface CRMForm {
   weekly_proposal_target: number | "";
   weekly_follow_up_target: number | "";
   send_daily_sales_report: boolean;
+  /** one email per line; blank: Sales Managers and System Managers */
+  daily_report_recipients: string;
   /** HD Team names that see Leads; none: every agent */
   leads_teams: string[];
 }
@@ -746,6 +760,7 @@ const settings = createResource({
       weekly_proposal_target: doc.weekly_proposal_target ?? 5,
       weekly_follow_up_target: doc.weekly_follow_up_target ?? 40,
       send_daily_sales_report: onByDefault(doc.send_daily_sales_report),
+      daily_report_recipients: doc.daily_report_recipients || "",
       leads_teams: lines(doc.leads_teams),
     };
     initial.value = JSON.stringify(form.value);
@@ -889,6 +904,7 @@ const save = createResource({
       weekly_proposal_target: wholeNumber(f.weekly_proposal_target),
       weekly_follow_up_target: wholeNumber(f.weekly_follow_up_target),
       send_daily_sales_report: f.send_daily_sales_report ? 1 : 0,
+      daily_report_recipients: f.daily_report_recipients.trim(),
       leads_teams: f.leads_teams.join("\n"),
     };
     if (!f.api_secret) delete fieldname.api_secret;

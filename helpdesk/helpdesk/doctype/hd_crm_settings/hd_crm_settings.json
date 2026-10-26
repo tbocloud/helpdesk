@@ -48,6 +48,7 @@
 		"weekly_proposal_target",
 		"weekly_follow_up_target",
 		"send_daily_sales_report",
+		"daily_report_recipients",
 		"column_break_6",
 		"leads_teams",
 		"status_section",
@@ -334,6 +335,12 @@
 			"description": "On working days at 18:00, sends Sales Managers and System Managers who use Leads the day's team report."
 		},
 		{
+			"fieldname": "daily_report_recipients",
+			"fieldtype": "Small Text",
+			"label": "Send the 6 pm report to",
+			"description": "One email per line. Blank: every Sales Manager and System Manager who uses Leads."
+		},
+		{
 			"fieldname": "column_break_6",
 			"fieldtype": "Column Break"
 		},
@@ -346,7 +353,7 @@
 	],
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-10-26 12:00:00.000000",
+	"modified": "2026-10-26 13:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD CRM Settings",
