@@ -670,9 +670,7 @@ class TestTheEndpoint(TeamsCase):
         kept = patch.object(frappe.db, "commit")
         committed = kept.start()
         self.addCleanup(kept.stop)
-        marker = frappe.cache().make_key(teams.REFUSED_KEY + "bad Bot Framework token")
-        frappe.cache().delete(marker)
-        self.addCleanup(frappe.cache().delete, marker)
+        forget_refusals(self)
 
         with self.assertRaises(frappe.AuthenticationError):
             self.through_frappe_sign_in(self.token(aud="another-bot"))
@@ -754,15 +752,7 @@ class TestTheEndpoint(TeamsCase):
 
         from helpdesk.api import copilot_teams
 
-        for kind in (
-            "bad Bot Framework token",
-            "another tenant",
-            "no Bot Framework token",
-        ):
-            frappe.cache().delete(frappe.cache().make_key(teams.REFUSED_KEY + kind))
-            self.addCleanup(
-                frappe.cache().delete, frappe.cache().make_key(teams.REFUSED_KEY + kind)
-            )
+        forget_refusals(self)
         request = MagicMock()
         request.get_json.return_value = self.activity(
             type="message", text="help", recipient={"id": "28:another-bot"}
@@ -801,6 +791,44 @@ class TestTheEndpoint(TeamsCase):
         self.assertEqual(
             (second["their_tenant"], second["our_tenant"]), ("other", "tenant-1")
         )
+        self.assertEqual(first["from"]["aadObjectId"], "aad-dev")
+
+    def test_one_senders_refusal_does_not_hide_anothers(self):
+        """A test's refusal an hour ago once hid a real person's: the hour is per sender."""
+        forget_refusals(self)
+        refused = self.token(aud="another-bot")
+        with patch("helpdesk.copilot.teams.frappe.log_error") as logged:
+            for sender in ("aad-test", "aad-test", "aad-arun"):
+                teams.note_refusal(
+                    "bad Bot Framework token: Invalid audience",
+                    self.activity(**{"from": {"id": "29:x", "aadObjectId": sender}}),
+                    refused,
+                )
+
+        senders = [
+            json.loads(c.kwargs["message"])["from"]["aadObjectId"]
+            for c in logged.call_args_list
+        ]
+        self.assertEqual(senders, ["aad-test", "aad-arun"])
+
+    def test_refusals_from_unproven_senders_are_capped_an_hour(self):
+        forget_refusals(self)
+        refused = self.token(aud="another-bot")
+        with patch("helpdesk.copilot.teams.frappe.log_error") as logged:
+            for n in range(teams.REFUSALS_PER_HOUR + 5):
+                teams.note_refusal(
+                    "bad Bot Framework token: Invalid audience",
+                    self.activity(**{"from": {"id": f"29:sender-{n}"}}),
+                    refused,
+                )
+
+        self.assertEqual(logged.call_count, teams.REFUSALS_PER_HOUR)
+
+
+def forget_refusals(case):
+    """The hourly notes of refused calls (and their count), before and after a test."""
+    frappe.cache().delete_keys(teams.REFUSED_KEY)
+    case.addCleanup(frappe.cache().delete_keys, teams.REFUSED_KEY)
 
 
 class FakeHttpReply:
@@ -899,9 +927,35 @@ class TestTheBotsKey(FrappeTestCase):
         with self.assertRaises(teams.TeamsError) as refused:
             self.send()
 
-        self.assertIn("401", str(refused.exception))
-        self.assertIn("Microsoft App Type and App Tenant ID", str(refused.exception))
+        said = str(refused.exception)
+        self.assertIn("401", said)
+        self.assertIn("Microsoft App Type and App Tenant ID", said)
+        # for each key: Bot Framework refused it, or Microsoft would not issue it, and why
+        self.assertIn("tenant-1: Bot Framework refused its key", said)
+        self.assertIn(
+            f"{teams.BOT_FRAMEWORK_TENANT}: Microsoft gave no key"
+            " (The Teams bot could not sign in: AADSTS700016: no such app here)",
+            said,
+        )
+        self.assertNotIn("Trace ID", said)
         self.assertEqual(self.asked, ["tenant-1", teams.BOT_FRAMEWORK_TENANT])
+
+    def test_a_refused_key_is_not_used_again(self):
+        """After the Azure Bot changes, the next call asks Microsoft for a new key."""
+        with self.assertRaises(teams.TeamsError):
+            self.send()
+        self.accepted = {"key-tenant-1"}
+        self.asked.clear()
+
+        self.assertEqual(self.send(), {"id": "act-1"})
+        self.assertEqual(self.asked[0], "tenant-1")
+
+    def test_the_error_says_who_issued_a_refused_key(self):
+        issued = jwt.encode(
+            {"tid": "tenant-1", "appid": "bot-app-id"}, "k" * 32, algorithm="HS256"
+        )
+        self.assertEqual(teams.key_says(issued), "tenant tenant-1, app bot-app-id")
+        self.assertEqual(teams.key_says("key-tenant-1"), "not readable")
 
 
 class TestTheTeamsLink(TeamsCase):

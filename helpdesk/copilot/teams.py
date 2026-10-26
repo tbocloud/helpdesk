@@ -114,6 +114,7 @@ def check_token(header: str | None, service_url: str | None) -> dict:
 
 
 REFUSED_KEY = "copilot_teams_refused:"
+REFUSALS_PER_HOUR = 20
 ENDPOINT = "helpdesk.api.copilot_teams.messages"
 # the bot's own user: no roles, no password; requests Bot Framework signed run as it
 BOT_USER = "teams.bot@tbo-copilot.internal"
@@ -171,17 +172,26 @@ def authenticate():
 def note_refusal(
     reason: str, activity: dict, header: str | None = None, keep: bool = False
 ):
-    """A call from Teams the bot refused, written down once an hour per reason, so a setup
-    that never connects says why: the IDs Teams sent next to ours, never the token itself.
+    """A call from Teams the bot refused, written down once an hour per reason and sender, so a
+    setup that never connects says why, and one person's refusal (or a test's) never hides
+    another's: the IDs Teams sent next to ours, never the token itself. The sender is not
+    proven yet, so at most REFUSALS_PER_HOUR notes are written an hour.
 
     A call without a Bot Framework token is ignored (anyone on the internet can send one).
     """
     if not (header or "").startswith("Bearer ") and "tenant" not in reason:
         return
     kind = reason.split(":")[0].strip()[:60]
-    marker = frappe.cache().make_key(REFUSED_KEY + kind)
-    if frappe.cache().get(marker):  # the site's own key (make_key) - nosemgrep
-        return  # the same refusal is written down once an hour
+    sender = activity.get("from") or {}
+    who = str(sender.get("aadObjectId") or sender.get("id") or "")[:80]
+    cache = frappe.cache()
+    marker = cache.make_key(f"{REFUSED_KEY}{reason[:120]}|{who}")
+    if cache.get(marker):  # the site's own key (make_key) - nosemgrep
+        return  # the same refusal from the same sender is written down once an hour
+    counter = cache.make_key(REFUSED_KEY + "count")
+    cache.set(counter, 0, ex=3600, nx=True)  # nosemgrep
+    if cache.incr(counter) > REFUSALS_PER_HOUR:
+        return
     claims = {}
     if (header or "").startswith("Bearer "):
         try:
@@ -202,6 +212,7 @@ def note_refusal(
         "our_tenant": tenant(),
         "to_bot": (activity.get("recipient") or {}).get("id"),
         "our_bot": app_id(),
+        "from": {key: sender.get(key) for key in ("id", "aadObjectId", "name")},
         "token_says": claims,
     }
     frappe.log_error(
@@ -258,11 +269,11 @@ def bot_token(authority: str | None = None) -> str:
     )
     data = response.json() if response.content else {}
     if response.status_code >= 300 or not data.get("access_token"):
+        # Microsoft's first sentence carries its code (AADSTS…); the rest is trace IDs
+        said = (data.get("error_description") or "").split(". ")[0][:200]
         raise TeamsError(
             _("The Teams bot could not sign in: {0}").format(
-                data.get("error_description")
-                or data.get("error")
-                or response.status_code
+                said or data.get("error") or response.status_code
             )
         )
     frappe.cache.set_value(
@@ -273,15 +284,28 @@ def bot_token(authority: str | None = None) -> str:
     return data["access_token"]
 
 
+def key_says(token: str) -> str:
+    """Who issued the bot's key and for which app, read from the key itself (not secret)."""
+    try:
+        claims = jwt.decode(token, options={"verify_signature": False})
+    except jwt.PyJWTError:
+        return "not readable"
+    return "tenant {0}, app {1}".format(
+        claims.get("tid"), claims.get("appid") or claims.get("azp")
+    )
+
+
 def call(method: str, service_url: str, path: str, body: dict | None = None) -> dict:
     """One Bot Framework call with the bot's key: its tenant's first; when Bot Framework refuses
-    it (a bot registered as Multi Tenant), once more with Bot Framework's own."""
+    it (a bot registered as Multi Tenant), once more with Bot Framework's own. When none works,
+    the error says for each where it came from: Microsoft would not issue it (with its AADSTS
+    code), or Bot Framework refused it (with who issued it)."""
     response, tried = None, []
     for authority in authorities():
         try:
             token = bot_token(authority)
         except TeamsError as e:
-            tried.append(f"{authority}: {e}")
+            tried.append(f"{authority}: Microsoft gave no key ({e})")
             continue
         response = requests.request(
             method,
@@ -295,14 +319,20 @@ def call(method: str, service_url: str, path: str, body: dict | None = None) -> 
                 AUTHORITY_KEY, authority, expires_in_sec=7 * 24 * 3600
             )
             break
-        tried.append(f"{authority}: refused")
+        # a refused key is not used again: the next call asks Microsoft for a new one
+        frappe.cache.delete_value(f"{TOKEN_KEY}:{authority}")
+        tried.append(
+            f"{authority}: Bot Framework refused its key (issued by {key_says(token)})"
+        )
     if response is None:
-        raise TeamsError(" ; ".join(tried)[:500])
+        raise TeamsError(
+            "The Teams bot has no key Bot Framework accepts: " + "; ".join(tried)
+        )
     if response.status_code >= 300:
         hint = (
-            " (Bot Framework refused the bot's key from "
-            + ", ".join(t.split(":")[0] for t in tried)
-            + ": check the Azure Bot's Microsoft App Type and App Tenant ID against"
+            " ("
+            + "; ".join(tried)
+            + ". Check the Azure Bot's Microsoft App Type and App Tenant ID against"
             " the Tenant ID in Teams bot settings)"
             if response.status_code == 401
             else ""
