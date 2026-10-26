@@ -1068,3 +1068,17 @@ class TestTheTeamsLink(TeamsCase):
 
         self.assertEqual(self.confirm_as(self.dev, "0" * 32), "Cannot link")
         self.assertFalse(self.record().user)
+
+    def test_someone_is_kept_even_when_the_answer_cannot_be_sent(self):
+        """A refused answer fails the job, and Frappe undoes what it wrote: the person was lost."""
+        kept = []
+        frappe.db.commit.side_effect = lambda: kept.append(
+            frappe.db.exists(teams.TEAMS_USER, {"aad_object_id": "aad-dev"})
+        )
+        self.addCleanup(setattr, frappe.db.commit, "side_effect", None)
+        with patch.object(
+            teams, "call", side_effect=teams.TeamsError("401 Authorization denied")
+        ), self.assertRaises(teams.TeamsError):
+            teams.answer_message(self.activity(type="message", text="hi"))
+
+        self.assertTrue(kept and kept[0])  # saved before the answer was tried

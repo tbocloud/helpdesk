@@ -338,7 +338,8 @@ def call(method: str, service_url: str, path: str, body: dict | None = None) -> 
             else ""
         )
         raise TeamsError(
-            f"Bot Framework {method} {path}: {response.status_code} {response.text[:300]}{hint}"
+            f"Bot Framework {method} {service_url.rstrip('/')}{path}:"
+            f" {response.status_code} {response.text[:300]}{hint}"
         )
     return response.json() if response.content else {}
 
@@ -687,10 +688,15 @@ def handle_activity(activity: dict) -> dict | None:
 
 
 def answer_message(activity: dict):
-    """Background: a person's message read and answered in the same chat."""
+    """Background: a person's message read and answered in the same chat.
+
+    The person, their message and what it did are saved before the answer goes out: a failed
+    answer fails the job, and Frappe would undo them with it, so nobody would ever appear.
+    """
     from helpdesk.copilot import assistant
 
     user = remember(activity)
+    frappe.db.commit()  # kept even when the answer cannot be sent - nosemgrep
     if not user:
         reply_in(activity, unknown_card(activity))
         return
@@ -702,6 +708,7 @@ def answer_message(activity: dict):
     except frappe.ValidationError as e:
         frappe.clear_last_message()
         replies = [assistant.text_card(str(e), "warning")]
+    frappe.db.commit()  # kept even when the answer cannot be sent - nosemgrep
     for reply in replies:
         reply_in(activity, reply)
 
