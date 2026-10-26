@@ -12,6 +12,7 @@ from frappe import _
 from frappe.utils import cint
 from frappe.utils.html_utils import sanitize_html
 
+from helpdesk.api.leads import clear_cached_reads
 from helpdesk.integrations.crm.leads import call, require_leads
 
 PROPOSALS = "tbo_smart.api.hub_proposals"
@@ -86,6 +87,7 @@ def create_proposal(
     )
     if result.get("proposal"):
         clean_letter_head(result["proposal"])
+    clear_cached_reads()
     return result
 
 
@@ -505,7 +507,7 @@ def send_proposal(
     attach_pdf: int | str = 0,
 ) -> dict:
     require_leads()
-    return proposal(
+    sent = proposal(
         "send_proposal",
         post=True,
         name=name,
@@ -513,6 +515,8 @@ def send_proposal(
         message=(message or "").strip() or None,
         attach_pdf=1 if cint(attach_pdf) else 0,
     )
+    clear_cached_reads()
+    return sent
 
 
 @frappe.whitelist(methods=["POST"])

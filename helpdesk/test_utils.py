@@ -3567,11 +3567,13 @@ def get_doc_refusing_agents(get_doc):
 
 def enable_leads(teams: tuple[str, ...] = ()):
     """Turns on the CRM connection and the Leads page, for `teams` (every agent when
-    none). The connection itself is faked with FakeCRM in the tests."""
+    none). The connection itself is faked with FakeCRM in the tests. Clears the Leads
+    page's cached reads (Redis outlives a test) so each test asks the fake CRM afresh."""
     frappe.db.set_single_value(
         "HD CRM Settings",
         {"enabled": 1, "enable_leads": 1, "leads_teams": "\n".join(teams)},
     )
+    frappe.cache.delete_keys("hd_leads:")
 
 
 def sales_person(user: str, **counts) -> dict:

@@ -123,13 +123,34 @@ The ERP site's `tbo_smart.api.telephony` takes the same `acting_user`:
 ## Hub endpoints
 
 `helpdesk/api/leads.py`, thin typed proxies (writes are POST only): `get_options`,
-`list_leads`, `get_overview`, `get_lead_intake`, `get_proposal_money`, `get_lead`, `get_lead_ai`, `refresh_lead_ai`, `apply_ai_stage`,
+`list_leads`, `get_overview_page`, `get_overview`, `get_lead_intake`, `get_proposal_money`, `get_lead`, `get_lead_ai`, `refresh_lead_ai`, `apply_ai_stage`,
 `dismiss_ai_stage`, `draft_lead_message`, `log_message_sent`, `create_lead`, `update_lead`,
 `set_stage`, `add_note`, `click_to_call`, `call_recording`. They check
 `can_use_leads`, validate the view and page size, trim notes, and pass `acting_user`. The
 client is `CRMClient.call` in `helpdesk/integrations/crm/client.py`; the call and error
 mapping live in `helpdesk/integrations/crm/leads.py`. The API key and secret never reach the
 browser.
+
+### How the Overview loads
+
+One request: `get_overview_page` reads the overview, the proposals and money and the intake
+from the ERP site one after another and answers `{overview, money, intake, errors}`. Money and
+intake are optional: one that fails (or an ERP site too old to have it) leaves the overview
+whole, with its message in `errors` for the section's own error state. Only a failed overview
+fails the page. The list view asks `get_lead_intake` on its own; `get_overview`,
+`get_proposal_money` and `get_lead_intake` stay as they were.
+
+Why: the hub and the ERP site share one Frappe Cloud bench, so one gunicorn worker pool. Four
+parallel hub requests each held a worker while waiting for the ERP site, which needed a worker
+from the same pool: all of them waited and timed out after 20 s ("Couldn't reach the ERP
+site"). One request at a time needs one worker at a time.
+
+Reads are also kept in Redis (`frappe.cache`), per signed-in person, key
+`hd_leads:<user>:<part>:<params>`: overview, money and intake for 60 s, `get_options` for
+10 minutes. Only successful answers are kept (not an error, not "older ERP site"); the intake's
+daily target is read live. The refresh button and "Try again" send `fresh=1`, which skips the
+copy and renews it. Creating or updating a lead, moving its stage, and creating or sending a
+proposal clear the signed-in person's copies; other people's age out within a minute.
 
 ### Errors people see
 
@@ -288,6 +309,8 @@ yesterday sent as one-day custom ranges; the intake with the daily target (a neg
 none); the money read for the period and owner; an older ERP site hides both quietly (no
 message queued) while other errors still show; the
 AI calls are the signed-in person's (POST for every change) and the channels checked.
+The one-request Overview page (all parts, money or intake failing alone, cache hit, `fresh`,
+per-person cache, a write clearing it) is tested there too.
 `helpdesk/tests/test_sales_wall.py`: a Sales Employee outside the Leads teams lists, opens,
 creates, moves and notes a lead as themselves.
 `helpdesk/tests/test_lead_calls.py`: Call posted as the signed-in person to TBO Smart's
