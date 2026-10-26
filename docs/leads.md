@@ -232,12 +232,12 @@ doesn't show without its fields. The hub can be deployed before TBO Smart.
   new-lead target per salesperson*, `daily_lead_target`, 0 = no target). Two halves, Today
   and Yesterday: the total new leads (mono) and a chip per salesperson in the person's view,
   "Shahana 7 / 10" (just the count without a target), most first; someone who took none
-  shows 0. Only the **sales team** gets a chip (the hub's enabled users with the Sales
-  Employee role, set in Settings → Agents → Department wall → Sales team; the ERP site
-  lists everyone with a sales role, which is every agent here), plus anyone else who took
-  a lead that day. The header total stays the ERP site's real total. With no sales team
-  yet, only people with leads show; with none, "No new leads yet today", and managers also
-  see "Pick your salespeople in Settings → Agents → Department wall → Sales team"
+  shows 0. Only the **sales team** gets a chip
+  (the hub's enabled users with the Sales Employee role, set in Settings → Agents →
+  Department wall → Sales team; the ERP site lists everyone with a sales role, which is
+  every agent here); nobody else is shown, whatever they took, and each day's total is the
+  sum of the chips shown. With no sales team yet: "No new leads yet today", and managers
+  also see "Pick your salespeople in Settings → Agents → Department wall → Sales team"
   (`team_empty` in the answer). The filter runs after the cached ERP read. Reaching the target is a green check and green count with "target met" for
   screen readers; short of it stays neutral (no red: it isn't a failure to shame). Leads
   copied in from the old CRM don't count. The total and every chip open the list of exactly
@@ -330,10 +330,10 @@ positive lead, a new quotation and a new lead are) is in TBO Smart's `docs/hub-l
   days. A person is *On track* when each metric is at or above that share, else *Behind by
   N meetings* (rounded up), one chip per metric behind. Quiet colour only: warning, never red.
 - **Who is listed**: the same sales-team rule as the New leads strip
-  (`content_team.only_sales_team`): sales-team members, plus anyone with a figure that day,
-  plus the person picked (`owner`) and, for a non-manager, themselves. It also decides the
-  team text and the 6 pm message. With no sales team the empty state tells managers where to
-  pick one (`team_empty`).
+  (`content_team.only_sales_team`): sales-team members only, plus the person picked
+  (`owner`) and, for a non-manager, themselves. It also decides the team text and the 6 pm
+  message. With no sales team the empty state tells managers where to pick one
+  (`team_empty`).
 - **Team view** (a manager, nobody picked): one row per salesperson: calls (and how many
   connected), fresh, follow-up, positive, quotations (count and value), new leads and the
   pace chips; a row opens that person's card. A salesperson, or anyone who picks a person,
