@@ -112,6 +112,50 @@ def check_token(header: str | None, service_url: str | None) -> dict:
     return claims
 
 
+REFUSED_KEY = "copilot_teams_refused:"
+
+
+def note_refusal(reason: str, activity: dict, header: str | None = None):
+    """A call from Teams the bot refused, written down once an hour per reason, so a setup
+    that never connects says why: the IDs Teams sent next to ours, never the token itself.
+
+    A call without a Bot Framework token is ignored (anyone on the internet can send one).
+    """
+    if not (header or "").startswith("Bearer ") and "tenant" not in reason:
+        return
+    kind = reason.split(":")[0].strip()[:60]
+    marker = frappe.cache().make_key(REFUSED_KEY + kind)
+    # SET NX with an expiry: the same refusal is written down once an hour - nosemgrep
+    if not frappe.cache().set(marker, 1, ex=3600, nx=True):
+        return
+    claims = {}
+    if (header or "").startswith("Bearer "):
+        try:
+            unverified = jwt.decode(
+                header[len("Bearer ") :].strip(), options={"verify_signature": False}
+            )
+            claims = {key: unverified.get(key) for key in ("iss", "aud", "serviceurl")}
+        except jwt.PyJWTError:
+            claims = {"token": "not readable"}
+    details = {
+        "reason": reason[:300],
+        "activity": activity.get("type"),
+        "channel": activity.get("channelId"),
+        "service_url": activity.get("serviceUrl"),
+        "their_tenant": ((activity.get("channelData") or {}).get("tenant") or {}).get(
+            "id"
+        ),
+        "our_tenant": tenant(),
+        "to_bot": (activity.get("recipient") or {}).get("id"),
+        "our_bot": app_id(),
+        "token_says": claims,
+    }
+    frappe.log_error(
+        title=f"Copilot Teams bot refused a call: {kind}",
+        message=json.dumps(details, indent=1, default=str),
+    )
+
+
 def from_our_tenant(activity: dict) -> bool:
     return ((activity.get("channelData") or {}).get("tenant") or {}).get(
         "id"

@@ -631,3 +631,56 @@ class TestTheEndpoint(TeamsCase):
             )
             make_copilot_settings(enabled=1, teams_bot_enabled=0)
             self.assertEqual(copilot_teams.messages().status_code, 404)
+
+    def test_a_refused_call_from_teams_is_written_down_once_an_hour_with_the_ids(self):
+        from unittest.mock import MagicMock
+
+        from helpdesk.api import copilot_teams
+
+        for kind in (
+            "bad Bot Framework token",
+            "another tenant",
+            "no Bot Framework token",
+        ):
+            frappe.cache().delete(frappe.cache().make_key(teams.REFUSED_KEY + kind))
+            self.addCleanup(
+                frappe.cache().delete, frappe.cache().make_key(teams.REFUSED_KEY + kind)
+            )
+        request = MagicMock()
+        request.get_json.return_value = self.activity(
+            type="message", text="help", recipient={"id": "28:another-bot"}
+        )
+        # an Error Log outlives the test's rollback, so the call is caught instead
+        with patch.object(frappe, "request", request, create=True), patch(
+            "helpdesk.copilot.teams.frappe.log_error"
+        ) as logged:
+            wrong_bot = self.token(aud="another-bot")
+            with patch("frappe.get_request_header", return_value=wrong_bot):
+                self.assertEqual(copilot_teams.messages().status_code, 401)
+                self.assertEqual(copilot_teams.messages().status_code, 401)
+            with patch("frappe.get_request_header", return_value=None):
+                self.assertEqual(copilot_teams.messages().status_code, 401)
+            request.get_json.return_value = self.activity(
+                type="message", text="help", channelData={"tenant": {"id": "other"}}
+            )
+            with patch("frappe.get_request_header", return_value=self.token()):
+                self.assertEqual(copilot_teams.messages().status_code, 403)
+
+        titles = [c.kwargs["title"] for c in logged.call_args_list]
+        self.assertEqual(
+            titles,
+            [
+                "Copilot Teams bot refused a call: bad Bot Framework token",
+                "Copilot Teams bot refused a call: another tenant",
+            ],
+        )
+        first = json.loads(logged.call_args_list[0].kwargs["message"])
+        self.assertEqual(
+            (first["to_bot"], first["our_bot"], first["token_says"]["aud"]),
+            ("28:another-bot", "bot-app-id", "another-bot"),
+        )
+        self.assertNotIn("Bearer", logged.call_args_list[0].kwargs["message"])
+        second = json.loads(logged.call_args_list[1].kwargs["message"])
+        self.assertEqual(
+            (second["their_tenant"], second["our_tenant"]), ("other", "tenant-1")
+        )

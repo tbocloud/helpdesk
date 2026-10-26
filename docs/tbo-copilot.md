@@ -284,6 +284,11 @@ Every action runs **as the person** (their permissions), only after **Yes** (a p
 5. As a System Manager, download the Teams app: `/api/method/helpdesk.api.copilot_teams.app_package`. Teams admin center → Teams apps → Manage apps → **Upload new app**; then Setup policies → Installed apps → add **TBO Copilot** for the support staff (so reminders can reach everyone).
 6. In Teams, write `help` to TBO Copilot.
 
+**When the bot does not answer.** Anyone who installs or messages the bot appears in **HDS Teams User**, even someone it does not know. If nobody appears, Teams' messages are not reaching the hub, or the hub refuses them. A refused call that carries a Bot Framework token is written to the **Error Log** once an hour per reason, as "Copilot Teams bot refused a call: …", with the bot Teams sent it to next to ours, the tenant it came from next to ours, and what the token says (issuer, audience, service URL), never the token:
+- **bad Bot Framework token** with another audience: the Azure Bot's Microsoft App ID is not the App ID in Teams bot settings;
+- **another tenant**: the Tenant ID in Teams bot settings is not the Microsoft 365 tenant the message came from;
+- **nothing at all**: the Azure Bot's messaging endpoint does not point at the hub, or its Teams channel is off. In the Azure portal, the bot's **Test in Web Chat** shows the hub's answer: *Forbidden* means it reached the hub with the right App ID (Web Chat has no Teams tenant), *Unauthorized* a wrong App ID, a timeout a wrong address. The bot's Channels → Microsoft Teams page lists Teams' own delivery errors.
+
 ## MCP server (`helpdesk/api/copilot_mcp.py`, `helpdesk/copilot/mcp/`)
 
 TBO staff use tickets, tasks and the knowledge base from the TBO Copilot desktop app, or any MCP client, **as themselves, with their own permissions** (TASK-2026-00013).

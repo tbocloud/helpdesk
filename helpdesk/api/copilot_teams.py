@@ -17,17 +17,18 @@ def messages():
     if not teams.enabled():
         return Response("The Teams bot is not set up.", status=404)
     activity = frappe.request.get_json(silent=True) or {}
+    header = frappe.get_request_header("Authorization")
     try:
-        teams.check_token(
-            frappe.get_request_header("Authorization"), activity.get("serviceUrl")
-        )
+        teams.check_token(header, activity.get("serviceUrl"))
     except frappe.PermissionError as e:
         frappe.clear_last_message()
+        teams.note_refusal(str(e), activity, header)
         return Response(str(e), status=401)
     try:
         answer = teams.handle_activity(activity)
     except frappe.PermissionError as e:
         frappe.clear_last_message()
+        teams.note_refusal(str(e), activity, header)
         return Response(str(e), status=403)
     if answer is None:
         return Response(status=200)
