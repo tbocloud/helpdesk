@@ -661,10 +661,19 @@ class TestTheEndpoint(TeamsCase):
         quiet = patch("helpdesk.copilot.teams.frappe.log_error")
         logged = quiet.start()
         self.addCleanup(quiet.stop)
+        # Frappe rolls a refused request back, so the note is saved before that
+        kept = patch.object(frappe.db, "commit")
+        committed = kept.start()
+        self.addCleanup(kept.stop)
         marker = frappe.cache().make_key(teams.REFUSED_KEY + "bad Bot Framework token")
         frappe.cache().delete(marker)
         self.addCleanup(frappe.cache().delete, marker)
 
+        with self.assertRaises(frappe.AuthenticationError):
+            self.through_frappe_sign_in(self.token(aud="another-bot"))
+        self.assertEqual(logged.call_count, 1)
+        committed.assert_called()
+        # once an hour: the second refusal is not written again
         with self.assertRaises(frappe.AuthenticationError):
             self.through_frappe_sign_in(self.token(aud="another-bot"))
         self.assertEqual(logged.call_count, 1)
@@ -710,6 +719,30 @@ class TestTheEndpoint(TeamsCase):
         refused = post(self.token(aud="another-bot"))
         self.assertEqual(refused.status_code, 401)
         self.assertIn("AuthenticationError", refused.get_data(as_text=True))
+
+    def test_a_call_the_endpoint_cannot_handle_is_written_down_and_kept(self):
+        from unittest.mock import MagicMock
+
+        from helpdesk.api import copilot_teams
+
+        request = MagicMock()
+        request.get_json.return_value = self.activity(type="message", text="help")
+        quiet = patch("helpdesk.api.copilot_teams.frappe.log_error")
+        logged = quiet.start()
+        self.addCleanup(quiet.stop)
+        with patch.object(frappe, "request", request, create=True), patch(
+            "frappe.get_request_header", return_value=self.token()
+        ), patch.object(
+            teams, "handle_activity", side_effect=RuntimeError("boom")
+        ), patch.object(
+            frappe.db, "commit"
+        ) as committed, patch.object(
+            frappe.db, "rollback"
+        ):  # the test's own data stays
+            self.assertEqual(copilot_teams.messages().status_code, 500)
+
+        self.assertIn("could not handle", logged.call_args.kwargs["title"])
+        committed.assert_called()
 
     def test_a_refused_call_from_teams_is_written_down_once_an_hour_with_the_ids(self):
         from unittest.mock import MagicMock

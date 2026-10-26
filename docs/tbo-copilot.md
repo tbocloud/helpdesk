@@ -288,6 +288,7 @@ Every action runs **as the person** (their permissions), only after **Yes** (a p
 - **bad Bot Framework token** with another audience: the Azure Bot's Microsoft App ID is not the App ID in Teams bot settings;
 - **another tenant**: the Tenant ID in Teams bot settings is not the Microsoft 365 tenant the message came from;
 - **messages arrive, replies fail** (an HDS Teams User appears or `answer_message` fails with "401 Authorization has been denied"): Bot Framework refused the bot's own key. The hub asks for it from the bot's tenant first (a Single Tenant bot) and, when Bot Framework refuses that one, once more from Bot Framework's own tenant (a Multi Tenant bot), and remembers which worked. When both are refused, compare the Azure Bot's Microsoft App Type and App Tenant ID with the Tenant ID in Teams bot settings;
+- **could not handle a call**: the endpoint failed on a message from Teams; the Error Log has the traceback. A refusal at sign-in and a failure like this are saved straight away, because Frappe undoes everything else the request wrote;
 - **nothing at all**: the Azure Bot's messaging endpoint does not point at the hub, or its Teams channel is off. In the Azure portal, the bot's **Test in Web Chat** shows the hub's answer: *Forbidden* means it reached the hub with the right App ID (Web Chat has no Teams tenant), *Unauthorized* a wrong App ID, a timeout a wrong address. The bot's Channels → Microsoft Teams page lists Teams' own delivery errors.
 
 ## MCP server (`helpdesk/api/copilot_mcp.py`, `helpdesk/copilot/mcp/`)

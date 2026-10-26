@@ -162,12 +162,14 @@ def authenticate():
         check_token(header, activity.get("serviceUrl"))
     except frappe.PermissionError as e:
         frappe.clear_last_message()
-        note_refusal(str(e), activity, header)
+        note_refusal(str(e), activity, header, keep=True)
         return  # Frappe answers 401
     frappe.set_user(ensure_bot_user())
 
 
-def note_refusal(reason: str, activity: dict, header: str | None = None):
+def note_refusal(
+    reason: str, activity: dict, header: str | None = None, keep: bool = False
+):
     """A call from Teams the bot refused, written down once an hour per reason, so a setup
     that never connects says why: the IDs Teams sent next to ours, never the token itself.
 
@@ -177,9 +179,8 @@ def note_refusal(reason: str, activity: dict, header: str | None = None):
         return
     kind = reason.split(":")[0].strip()[:60]
     marker = frappe.cache().make_key(REFUSED_KEY + kind)
-    # SET NX with an expiry: the same refusal is written down once an hour - nosemgrep
-    if not frappe.cache().set(marker, 1, ex=3600, nx=True):
-        return
+    if frappe.cache().get(marker):  # the site's own key (make_key) - nosemgrep
+        return  # the same refusal is written down once an hour
     claims = {}
     if (header or "").startswith("Bearer "):
         try:
@@ -206,6 +207,10 @@ def note_refusal(reason: str, activity: dict, header: str | None = None):
         title=f"Copilot Teams bot refused a call: {kind}",
         message=json.dumps(details, indent=1, default=str),
     )
+    if keep:
+        # refused at sign-in, Frappe rolls the request back: the note is saved first
+        frappe.db.commit()  # nothing else of this request is written - nosemgrep
+    frappe.cache().set(marker, 1, ex=3600)  # the site's own key (make_key) - nosemgrep
 
 
 def from_our_tenant(activity: dict) -> bool:

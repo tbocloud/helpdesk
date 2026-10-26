@@ -30,6 +30,12 @@ def messages():
         frappe.clear_last_message()
         teams.note_refusal(str(e), activity, header)
         return Response(str(e), status=403)
+    except Exception:
+        # written down and kept: a failing call from Teams would otherwise leave no trace
+        frappe.db.rollback()
+        frappe.log_error(title="Copilot Teams bot could not handle a call")
+        frappe.db.commit()  # only the Error Log is written here - nosemgrep
+        return Response("The Teams bot could not handle this.", status=500)
     if answer is None:
         return Response(status=200)
     return Response(json.dumps(answer), status=200, content_type="application/json")
