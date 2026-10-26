@@ -30,7 +30,8 @@ concurrency:
 jobs:
   tests:
     name: Python Unit Tests
-    # ubuntu-latest moved to 26.04, whose MariaDB 11.8 client insists on TLS that the
+    # ubuntu-latest is moving to 26.04 (rolled out gradually; some runs got it from
+    # 26 Oct 2026, all by November). Its MariaDB 11.8 client insists on TLS that the
     # mariadb:10.6 service doesn't offer ("SSL is required, but the server does not support it")
     runs-on: ubuntu-24.04
     timeout-minutes: 60
