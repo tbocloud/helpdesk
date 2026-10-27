@@ -39,7 +39,8 @@ def refresh_from_site(registry, timeout: int | None = None) -> dict:
     A sandbox copy needs all of them (Frappe, ERPNext, HRMS and the custom
     apps), not only the ones a person typed in. An app the site reports
     without a remote that can be cloned (none, or a local path as on Press)
-    keeps the repository already on the card; uncommitted changes on the
+    keeps the repository already on the card, and one on no branch (Press
+    checks out a commit) keeps the card's branch; uncommitted changes on the
     site mark the app as drifted.
     """
     from helpdesk.mcp_client import MCPClient
@@ -60,6 +61,7 @@ def refresh_from_site(registry, timeout: int | None = None) -> dict:
     except ValueError:
         frappe.throw(_("The site's list of apps could not be read."))
     known = {row.app: row.repository for row in registry.apps}
+    branches = {row.app: row.branch for row in registry.apps}
     rows = []
     for info in reported if isinstance(reported, list) else []:
         if not isinstance(info, dict) or not info.get("app"):
@@ -73,7 +75,7 @@ def refresh_from_site(registry, timeout: int | None = None) -> dict:
             {
                 "app": info["app"],
                 "repository": repository,
-                "branch": info.get("branch"),
+                "branch": info.get("branch") or branches.get(info["app"]),
                 "deployed_commit": info.get("commit"),
                 "drift_status": "Drift"
                 if info.get("dirty")
@@ -150,10 +152,12 @@ def refresh_from_press(registry) -> dict:
     """The bench's apps and their commits as Press knows them, and the other sites on the bench.
 
     The commit the site itself reports (Refresh from the site) stays the
-    deployed commit; an app whose Press commit differs is marked Drift. A card
-    the site already filled keeps exactly the site's apps: a shared bench holds
-    every site's apps, so the others are only listed (`bench_only`). An empty
-    card is filled from Press.
+    deployed commit; an app whose Press commit differs is marked Drift. Each
+    app's branch is the one Press deploys it from (a site on Press runs a
+    commit, on no branch), so releases can follow it. A card the site already
+    filled keeps exactly the site's apps: a shared bench holds every site's
+    apps, so the others are only listed (`bench_only`). An empty card is
+    filled from Press.
     """
     from helpdesk.copilot import press
 
@@ -175,6 +179,8 @@ def refresh_from_press(registry) -> dict:
             bench_only.append(name)
             continue
         row = rows.get(name) or registry.append("apps", {"app": name})
+        row.branch = app.get("branch") or app.get("current_branch") or row.branch
+        row.repository = row.repository or app.get("repository_url")
         if not row.deployed_commit:
             row.deployed_commit = commit or None
         if (

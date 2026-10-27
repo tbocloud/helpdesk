@@ -173,6 +173,15 @@ class TestRefreshFromSite(FrappeTestCase):
         )
         self.assertEqual(rows["tax_app"].deployed_commit, "k" * 40)
 
+    def test_an_app_on_no_branch_keeps_the_cards_branch(self):
+        # Press checks out a commit: the site reports no branch, and releases need one
+        self.reported([{"app": "tax_app", "commit": "k" * 40}])
+
+        refresh_from_site(self.registry)
+
+        row = frappe.get_doc("HDS Site Registry", self.registry.name).apps[0]
+        self.assertEqual((row.branch, row.deployed_commit), ("old", "k" * 40))
+
     def test_a_site_that_reports_nothing_changes_nothing(self):
         self.reported([])
         with self.assertRaises(frappe.ValidationError):
@@ -246,6 +255,40 @@ class TestRefreshFromPress(FrappeTestCase):
             (rows["erpnext"].deployed_commit, rows["erpnext"].drift_status),
             ("e" * 40, "In sync"),
         )
+
+    def test_each_app_gets_the_branch_press_deploys_it_from(self):
+        """A site on Press runs a commit, on no branch: the card's branch comes from Press."""
+        self.press.apps[0].update(
+            branch="live", repository_url="https://github.com/tbocloud/demo_app"
+        )
+        card = make_site_registry(
+            self.customer,
+            press_site="site1.example.com",
+            press_release_group="bench-1",
+            apps=[{"app": "demo_app", "deployed_commit": "o" * 40}],
+        )
+
+        refresh_site_card_from_press(card.name)
+
+        row = frappe.get_doc("HDS Site Registry", card.name).apps[0]
+        self.assertEqual(
+            (row.branch, row.repository),
+            ("live", "https://github.com/tbocloud/demo_app"),
+        )
+
+    def test_a_typed_repository_stays(self):
+        self.press.apps[0]["repository_url"] = "https://github.com/someone/fork"
+        card = make_site_registry(
+            self.customer,
+            press_site="site1.example.com",
+            press_release_group="bench-1",
+            apps=[{"app": "demo_app", "repository": "tbocloud/demo_app"}],
+        )
+
+        refresh_site_card_from_press(card.name)
+
+        row = frappe.get_doc("HDS Site Registry", card.name).apps[0]
+        self.assertEqual((row.repository, row.branch), ("tbocloud/demo_app", "main"))
 
     def test_a_card_without_a_bench_says_so(self):
         card = make_site_registry(self.customer)

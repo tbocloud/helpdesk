@@ -4642,6 +4642,7 @@ class FakePress:
                 "hash": current,
                 "next_release": "REL-2",
                 "next_hash": next_hash or current,
+                "branch": "main",
             }
         ]
         self.sites = [
@@ -4665,6 +4666,9 @@ class FakePress:
             "app": app["app"],
             "name": app["app"],
             "source": app.get("source"),
+            "repository_url": app.get("repository_url"),
+            "branch": app.get("branch"),
+            "current_branch": app.get("branch"),
             "current_hash": current,
             "current_release": app.get("release"),
             "next_release": app.get("next_release") if update else app.get("release"),
