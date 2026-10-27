@@ -779,6 +779,33 @@ class TestSandboxCheck(StagingCase):
         self.assertIn("9 passed", release.staging_detail)
         self.assertEqual(release.assigned_to, self.senior)
 
+    def test_the_other_apps_go_to_the_sandbox_with_their_github_address(self):
+        """The sandbox clones each app from https://github.com/…; owner/name was refused."""
+        card = frappe.get_doc("HDS Site Registry", self.card.name)
+        for app, repository in (
+            ("helpdesk_client", "https://github.com/tbocloud/helpdesk_client.git"),
+            ("tax_app", "acme/tax_app"),
+        ):
+            card.append(
+                "apps",
+                {"app": app, "repository": repository, "deployed_commit": "c" * 40},
+            )
+        card.save(ignore_permissions=True)
+        release = self.waiting()
+
+        apps = {a["app"]: a for a in releases.claim_check("w1")["context"]["apps"]}
+
+        self.assertEqual(
+            apps["helpdesk_client"]["repository"],
+            "https://github.com/tbocloud/helpdesk_client",
+        )
+        self.assertEqual(
+            apps["tax_app"]["repository"], "https://github.com/acme/tax_app"
+        )
+        self.assertEqual(apps["tax_app"]["commit"], "c" * 40)
+        self.assertEqual(apps["demo_app"]["commit"], A)
+        self.assertTrue(release.name)
+
     def test_a_failed_check_waits_for_a_fix_or_a_senior(self):
         release = self.waiting()
         job = releases.claim_check("w1")

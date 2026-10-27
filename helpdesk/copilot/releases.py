@@ -23,6 +23,7 @@ Teams or the Copilot panel. Approved releases join the nightly train
 
 import hashlib
 import json
+import re
 
 import frappe
 from frappe import _
@@ -1277,10 +1278,14 @@ def check_context(release) -> dict:
         order_by="idx asc",
     ):
         mine = row.app == app.app
+        name = _repo_name(row.repository) if row.repository else ""
         apps.append(
             {
                 "app": row.app,
-                "repository": _repo_name(row.repository) if row.repository else None,
+                # the sandbox clones each app from its GitHub address, never from owner/name
+                "repository": f"https://github.com/{name}"
+                if re.fullmatch(r"[\w.-]+/[\w.-]+", name)
+                else row.repository,
                 "branch": row.branch,
                 "commit": app.to_commit if mine else row.deployed_commit,
             }
