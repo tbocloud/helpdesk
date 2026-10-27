@@ -47,15 +47,18 @@
     />
 
     <TaskyState
-      v-else-if="overview.error && !data"
+      v-else-if="overviewPage.error && !data"
       error
       :icon="LucideCircleAlert"
       :title="__('Couldn\'t load the overview')"
       :message="
-        errorText(overview.error, __('Check your connection and try again.'))
+        errorText(
+          overviewPage.error,
+          __('Check your connection and try again.')
+        )
       "
     >
-      <Button :label="__('Try again')" @click="overview.reload()" />
+      <Button :label="__('Try again')" @click="refresh()" />
     </TaskyState>
 
     <!-- loading: the tiles' and panels' shape is known -->
@@ -81,7 +84,7 @@
     <template v-else>
       <!-- a failed update keeps the last numbers, and says so -->
       <div
-        v-if="overview.error"
+        v-if="overviewPage.error"
         role="alert"
         class="flex flex-wrap items-center gap-3 rounded-xl border border-outline-gray-2 bg-surface-base px-4 py-3"
       >
@@ -93,15 +96,15 @@
           {{
             __(
               "Couldn't update the overview: {0} These numbers may be out of date.",
-              errorText(overview.error, __("Check your connection."))
+              errorText(overviewPage.error, __("Check your connection."))
             )
           }}
         </p>
-        <Button :label="__('Try again')" @click="overview.reload()" />
+        <Button :label="__('Try again')" @click="refresh()" />
       </div>
       <p class="text-p-sm text-ink-gray-6">
         {{ periodText }}
-        <span v-if="overview.loading" class="sr-only" aria-live="polite">{{
+        <span v-if="overviewPage.loading" class="sr-only" aria-live="polite">{{
           __("Updating")
         }}</span>
       </p>
@@ -395,14 +398,14 @@
 
       <!-- proposals and the money after them; hidden until the ERP site has it -->
       <LeadsMoney
-        v-if="money.data?.available || money.error"
-        :money="money.data"
-        :error="money.error"
-        :loading="money.loading"
+        v-if="proposalMoney?.available || moneyError"
+        :money="proposalMoney ?? undefined"
+        :error="moneyError"
+        :loading="overviewPage.loading"
         :owner-picked="!!owner || data.scope === 'own'"
         :proposals-link="list('quotations')"
         :won-link="list('won')"
-        @retry="money.reload()"
+        @retry="refresh()"
       />
 
       <!-- the hottest leads, to call first -->
@@ -622,7 +625,14 @@ import LucideTrophy from "~icons/lucide/trophy";
 import LucideUserPlus from "~icons/lucide/user-plus";
 import LucideUsers from "~icons/lucide/users";
 import LeadsMoney from "./LeadsMoney.vue";
-import type { LeadMetric, LeadOverview, OverviewPeriod } from "./leads";
+import type {
+  LeadIntake,
+  LeadMetric,
+  LeadOverview,
+  OverviewPage,
+  OverviewPeriod,
+  ProposalMoney,
+} from "./leads";
 
 const PERIODS: { value: OverviewPeriod; label: string }[] = [
   { value: "today", label: __("Today") },
@@ -728,47 +738,58 @@ watch(
   (c) => setQuery({ from: c.from || undefined, to: c.to || undefined })
 );
 
-// the same period and owner, read on its own so an older ERP site leaves it out quietly
-const money = createResource({
-  url: "helpdesk.api.leads.get_proposal_money",
-  makeParams: () => ({
+// one request for the whole page: the hub and the ERP site share their workers, so
+// separate reads at once wait on each other. Money and intake are optional parts.
+function pageParams(fresh: boolean) {
+  return {
     period: period.value,
     from_date: period.value === "custom" ? custom.from : null,
     to_date: period.value === "custom" ? custom.to : null,
     owner: owner.value || null,
-  }),
-  onError() {},
+    fresh: fresh ? 1 : 0,
+  };
+}
+
+const emit = defineEmits<{ intake: [intake: LeadIntake | undefined] }>();
+
+const overviewPage = createResource({
+  url: "helpdesk.api.leads.get_overview_page",
+  makeParams: () => pageParams(false),
+  onSuccess(page: OverviewPage) {
+    emit("intake", page.intake ?? undefined);
+  },
+  onError() {
+    emit("intake", undefined);
+  },
 });
 
-const overview = createResource({
-  url: "helpdesk.api.leads.get_overview",
-  makeParams: () => ({
-    period: period.value,
-    from_date: period.value === "custom" ? custom.from : null,
-    to_date: period.value === "custom" ? custom.to : null,
-    owner: owner.value || null,
-  }),
-});
+// the refresh button and "Try again" ask the ERP site again instead of the 60-second copy
+function refresh() {
+  overviewPage.submit(pageParams(true));
+}
 
 watch(
   [period, owner, () => customReady.value && `${custom.from}:${custom.to}`],
   () => {
-    if (period.value !== "custom" || customReady.value) {
-      overview.reload();
-      money.reload();
-    }
+    if (period.value !== "custom" || customReady.value) overviewPage.reload();
+    // nothing is read until both dates are picked: the strip above must not keep waiting
+    else emit("intake", undefined);
   },
   { immediate: true }
 );
 
-defineExpose({
-  reload: () => {
-    overview.reload();
-    money.reload();
-  },
-});
+defineExpose({ reload: refresh });
 
-const data = computed(() => overview.data as LeadOverview | undefined);
+const data = computed(
+  () => overviewPage.data?.overview as LeadOverview | undefined
+);
+const proposalMoney = computed(
+  () => overviewPage.data?.money as ProposalMoney | null | undefined
+);
+const moneyError = computed(() => {
+  const message = overviewPage.data?.errors?.money;
+  return message ? { message } : undefined;
+});
 const t = computed(() => data.value!.totals);
 const ai = computed(() => data.value?.ai);
 

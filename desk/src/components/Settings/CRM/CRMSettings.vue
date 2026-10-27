@@ -473,6 +473,50 @@
               )
             "
           />
+          <div
+            v-if="form.enable_leads"
+            class="grid grid-cols-1 gap-3 sm:grid-cols-3"
+          >
+            <FormControl
+              v-model="form.weekly_meeting_target"
+              type="number"
+              min="0"
+              step="1"
+              :label="__('Weekly meetings per salesperson')"
+            />
+            <FormControl
+              v-model="form.weekly_proposal_target"
+              type="number"
+              min="0"
+              step="1"
+              :label="__('Weekly proposals per salesperson')"
+            />
+            <FormControl
+              v-model="form.weekly_follow_up_target"
+              type="number"
+              min="0"
+              step="1"
+              :label="__('Weekly follow-ups per salesperson')"
+            />
+            <p class="text-p-xs text-ink-gray-6 sm:col-span-3">
+              {{
+                __(
+                  "The Daily report measures each week against these, pro-rated by the working days gone (Monday to Saturday). 0: no target."
+                )
+              }}
+            </p>
+          </div>
+          <FormControl
+            v-if="form.enable_leads"
+            v-model="form.send_daily_sales_report"
+            type="checkbox"
+            :label="__('Send the Daily Sales Report at 6 pm')"
+            :description="
+              __(
+                'On working days, Sales Managers and System Managers who use Leads get the team\'s day in chat (or email).'
+              )
+            "
+          />
           <fieldset v-if="form.enable_leads" class="flex flex-col gap-2">
             <legend class="text-base text-ink-gray-8">
               {{ __("For these teams") }}
@@ -593,6 +637,11 @@ interface CRMForm {
   enable_leads: boolean;
   /** new leads each salesperson should take a day; 0: no target */
   daily_lead_target: number | "";
+  /** per week; 0: no target */
+  weekly_meeting_target: number | "";
+  weekly_proposal_target: number | "";
+  weekly_follow_up_target: number | "";
+  send_daily_sales_report: boolean;
   /** HD Team names that see Leads; none: every agent */
   leads_teams: string[];
 }
@@ -635,6 +684,11 @@ const holidayStatus = ref<{
 }>({});
 
 /** a Small Text of names, one per line */
+/** a target field's number: whole, never negative, blank is 0 */
+function wholeNumber(value: number | "") {
+  return Math.max(Math.floor(Number(value)) || 0, 0);
+}
+
 function lines(value?: string) {
   return (value || "")
     .split("\n")
@@ -687,7 +741,11 @@ const settings = createResource({
       holiday_lists: lines(doc.holiday_lists),
       sync_leave: onByDefault(doc.sync_leave),
       enable_leads: Boolean(doc.enable_leads),
-      daily_lead_target: doc.daily_lead_target || 0,
+      daily_lead_target: doc.daily_lead_target ?? 10,
+      weekly_meeting_target: doc.weekly_meeting_target ?? 10,
+      weekly_proposal_target: doc.weekly_proposal_target ?? 5,
+      weekly_follow_up_target: doc.weekly_follow_up_target ?? 40,
+      send_daily_sales_report: onByDefault(doc.send_daily_sales_report),
       leads_teams: lines(doc.leads_teams),
     };
     initial.value = JSON.stringify(form.value);
@@ -826,10 +884,11 @@ const save = createResource({
       holiday_lists: f.holiday_lists.join("\n"),
       sync_leave: f.sync_leave ? 1 : 0,
       enable_leads: f.enable_leads ? 1 : 0,
-      daily_lead_target: Math.max(
-        Math.floor(Number(f.daily_lead_target)) || 0,
-        0
-      ),
+      daily_lead_target: wholeNumber(f.daily_lead_target),
+      weekly_meeting_target: wholeNumber(f.weekly_meeting_target),
+      weekly_proposal_target: wholeNumber(f.weekly_proposal_target),
+      weekly_follow_up_target: wholeNumber(f.weekly_follow_up_target),
+      send_daily_sales_report: f.send_daily_sales_report ? 1 : 0,
       leads_teams: f.leads_teams.join("\n"),
     };
     if (!f.api_secret) delete fieldname.api_secret;

@@ -3567,11 +3567,69 @@ def get_doc_refusing_agents(get_doc):
 
 def enable_leads(teams: tuple[str, ...] = ()):
     """Turns on the CRM connection and the Leads page, for `teams` (every agent when
-    none). The connection itself is faked with FakeCRM in the tests."""
+    none). The connection itself is faked with FakeCRM in the tests. Clears the Leads
+    page's cached reads (Redis outlives a test) so each test asks the fake CRM afresh."""
     frappe.db.set_single_value(
         "HD CRM Settings",
         {"enabled": 1, "enable_leads": 1, "leads_teams": "\n".join(teams)},
     )
+    frappe.cache.delete_keys("hd_leads:")
+
+
+def make_sales_manager(email: str, first_name: str = "Manager") -> str:
+    """An agent with the Sales Manager role (created when the hub doesn't have it yet),
+    who may use Leads and gets the 6 pm Daily Sales Report."""
+    create_agent(email, first_name, "Sales")
+    if not frappe.db.exists("Role", "Sales Manager"):
+        frappe.get_doc({"doctype": "Role", "role_name": "Sales Manager"}).insert(
+            ignore_permissions=True
+        )
+    frappe.get_doc("User", email).add_roles("Sales Manager")
+    return email
+
+
+def daily_report_person(user: str, full_name: str, **fields) -> dict:
+    """One salesperson's row as TBO Smart's get_daily_report answers it: every count 0
+    and every list empty unless given."""
+    return {
+        "user": user,
+        "full_name": full_name,
+        "calls_total": 0,
+        "calls_connected": 0,
+        "fresh_leads": 0,
+        "follow_up_leads": 0,
+        "positive_leads": [],
+        "new_quotations": {"count": 0, "value": 0, "items": []},
+        "meetings_held": 0,
+        "follow_ups_done": 0,
+        "follow_ups_overdue": 0,
+        "new_leads": [],
+        "week_to_date": {"leads": 0, "meetings": 0, "proposals": 0, "follow_ups": 0},
+        **fields,
+    }
+
+
+def daily_report(people: list[dict], date: str = "2026-10-26") -> dict:
+    """A get_daily_report answer for `people` (daily_report_person rows) on `date`."""
+    return {
+        "date": date,
+        "week_from": "2026-10-26",
+        "currency": "INR",
+        "people": people,
+    }
+
+
+def lead_intake(people: list[dict], by_owner: list[dict]) -> dict:
+    """A get_lead_intake answer: today's `by_owner` rows ({user, full_name, count}) with
+    yesterday empty, and the scope's `people` ({user, full_name})."""
+    total = sum(row["count"] for row in by_owner)
+    return {
+        "days": [
+            {"date": "2026-10-26", "total": total, "by_owner": by_owner},
+            {"date": "2026-10-25", "total": 0, "by_owner": []},
+        ],
+        "people": people,
+    }
 
 
 def sales_person(user: str, **counts) -> dict:

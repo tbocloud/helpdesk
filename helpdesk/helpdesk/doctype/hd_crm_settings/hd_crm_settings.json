@@ -44,6 +44,10 @@
 		"leads_section",
 		"enable_leads",
 		"daily_lead_target",
+		"weekly_meeting_target",
+		"weekly_proposal_target",
+		"weekly_follow_up_target",
+		"send_daily_sales_report",
 		"column_break_6",
 		"leads_teams",
 		"status_section",
@@ -294,9 +298,40 @@
 			"fieldname": "daily_lead_target",
 			"fieldtype": "Int",
 			"label": "Daily New-Lead Target",
-			"default": "0",
+			"default": "10",
 			"non_negative": 1,
 			"description": "New leads each salesperson should take a day; the Leads page shows each person's count against it. 0: no target."
+		},
+		{
+			"fieldname": "weekly_meeting_target",
+			"fieldtype": "Int",
+			"label": "Weekly Meeting Target",
+			"default": "10",
+			"non_negative": 1,
+			"description": "Meetings held each salesperson should reach in a week (Monday to Saturday). 0: no target."
+		},
+		{
+			"fieldname": "weekly_proposal_target",
+			"fieldtype": "Int",
+			"label": "Weekly Proposal Target",
+			"default": "5",
+			"non_negative": 1,
+			"description": "Proposals sent each salesperson should reach in a week. 0: no target."
+		},
+		{
+			"fieldname": "weekly_follow_up_target",
+			"fieldtype": "Int",
+			"label": "Weekly Follow-up Target",
+			"default": "40",
+			"non_negative": 1,
+			"description": "Follow-ups done each salesperson should reach in a week. 0: no target."
+		},
+		{
+			"fieldname": "send_daily_sales_report",
+			"fieldtype": "Check",
+			"label": "Send the Daily Sales Report at 6 pm",
+			"default": "1",
+			"description": "On working days at 18:00, sends Sales Managers and System Managers who use Leads the day's team report."
 		},
 		{
 			"fieldname": "column_break_6",
@@ -311,7 +346,7 @@
 	],
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-10-24 12:00:00.000000",
+	"modified": "2026-10-26 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD CRM Settings",

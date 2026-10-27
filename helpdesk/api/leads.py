@@ -2,11 +2,16 @@
 signed-in person (docs/leads.md). Thin proxies to `tbo_smart.api.hub_leads`; the CRM
 site decides what each person may see and do, and the API key never leaves the hub."""
 
+import json
+
 import frappe
 from frappe import _
 from frappe.utils import add_days, cint, getdate, today
 
+from helpdesk.content_team import only_sales_team
 from helpdesk.integrations.crm.leads import (
+    LeadsError,
+    LeadsUnavailableError,
     call,
     call_if_deployed,
     download,
@@ -18,17 +23,50 @@ PERIODS = ("today", "yesterday", "week", "month", "quarter", "custom")
 # a day is a custom range of that one day on the ERP site, which an older TBO Smart reads too
 DAYS_AGO = {"today": 0, "yesterday": 1}
 MESSAGE_CHANNELS = ("whatsapp", "email")
+CALL_OUTCOMES = ("Connected", "No answer", "Busy", "Voicemail")
 TELEPHONY = "tbo_smart.api.telephony"
 # what the recording player may be handed back
 AUDIO_TYPES = ("audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/ogg")
 MAX_PAGE = 100
+# the hub and the ERP site share one worker pool on Frappe Cloud, so a read that was just
+# answered is kept per person for a short while instead of asked again (docs/leads.md)
+CACHE_PREFIX = "hd_leads"
+READ_TTL = 60
+OPTIONS_TTL = 600
+
+
+def cached_read(part: str, params: dict, ttl: int, fresh, read, keep=bool):
+    """`read()`'s answer, from the signed-in person's cache while it is fresh enough.
+    `fresh` skips the cache and renews it. A failed read caches nothing, nor does an
+    answer `keep` refuses (an ERP site that doesn't have the part yet)."""
+    key = f"{CACHE_PREFIX}:{frappe.session.user}:{part}:{json.dumps(params, sort_keys=True)}"
+    if not cint(fresh):
+        hit = frappe.cache.get_value(key, expires=True)
+        if hit is not None:
+            return hit
+    result = read()
+    if keep(result):
+        frappe.cache.set_value(key, result, expires_in_sec=ttl)
+    return result
+
+
+def clear_cached_reads() -> None:
+    """After a lead or proposal changes: the signed-in person's cached figures go, so
+    their next Overview is read again. Other people's age out within `READ_TTL`."""
+    frappe.cache.delete_keys(f"{CACHE_PREFIX}:{frappe.session.user}:")
 
 
 @frappe.whitelist()
-def get_options() -> dict:
-    """Stages, sources, segments, owners, territories and industries for the pickers."""
+def get_options(fresh: int | str = 0) -> dict:
+    """Stages, sources, segments, owners, territories and industries for the pickers,
+    and whether the ERP site has the Daily report and can log a call made outside
+    MyOperator (`has_daily_report`, `can_log_call`: both came with the same TBO Smart)."""
     require_leads()
-    return call("get_options") or {}
+    options = cached_read(
+        "options", {}, OPTIONS_TTL, fresh, lambda: call("get_options") or {}
+    )
+    deployed = report_deployed()
+    return {**options, "can_log_call": deployed, "has_daily_report": deployed}
 
 
 @frappe.whitelist()
@@ -87,35 +125,70 @@ def get_overview(
     from_date: str | None = None,
     to_date: str | None = None,
     owner: str | None = None,
+    fresh: int | str = 0,
 ) -> dict:
     """The Overview: the pipeline, the funnel and the period's figures for the
     leads the signed-in person may see (theirs, their team's or everyone's)."""
     require_leads()
     check_period(period, from_date, to_date)
-    return (
-        call(
-            "get_overview",
-            **erp_period(period, from_date, to_date),
-            owner=owner or None,
-        )
-        or {}
+    return read_overview(period, from_date, to_date, owner, fresh)
+
+
+def read_overview(period, from_date, to_date, owner, fresh) -> dict:
+    when = erp_period(period, from_date, to_date)
+    return cached_read(
+        "overview",
+        {**when, "owner": owner or None},
+        READ_TTL,
+        fresh,
+        lambda: call("get_overview", **when, owner=owner or None) or {},
     )
 
 
 @frappe.whitelist()
-def get_lead_intake() -> dict:
+def get_lead_intake(fresh: int | str = 0) -> dict:
     """New leads each salesperson took today and yesterday (imports left out), with the
     daily target from HD CRM Settings (0: none). `available` is false while the ERP
     site's TBO Smart is older than this, so the page leaves the strip out."""
     require_leads()
+    return read_lead_intake(fresh)
+
+
+def read_lead_intake(fresh) -> dict:
     day = getdate(today())
-    result = call_if_deployed(
-        "get_lead_intake", from_date=str(add_days(day, -1)), to_date=str(day)
+    result = cached_read(
+        "intake",
+        {"day": str(day)},
+        READ_TTL,
+        fresh,
+        lambda: call_if_deployed(
+            "get_lead_intake", from_date=str(add_days(day, -1)), to_date=str(day)
+        ),
+        # None: an older ERP site, asked again next time so a deploy shows at once
+        keep=lambda answer: answer is not None,
     )
     if result is None:
         return {"available": False}
+    # the target is the hub's own setting, so it is read live
     target = frappe.db.get_single_value("HD CRM Settings", "daily_lead_target")
-    return {**result, "available": True, "target": max(cint(target), 0)}
+    # the ERP site lists everyone with a sales role; the strip is the sales team only, and
+    # each day's total is the sum of the rows shown so the numbers match the chips
+    people, team_empty = only_sales_team(result.get("people") or [])
+    team = {p.get("user") for p in people}
+    days = []
+    for day in result.get("days") or []:
+        rows = [r for r in day.get("by_owner") or [] if r.get("user") in team]
+        days.append(
+            {**day, "by_owner": rows, "total": sum(cint(r.get("count")) for r in rows)}
+        )
+    return {
+        **result,
+        "days": days,
+        "people": people,
+        "team_empty": team_empty,
+        "available": True,
+        "target": max(cint(target), 0),
+    }
 
 
 @frappe.whitelist()
@@ -124,18 +197,137 @@ def get_proposal_money(
     from_date: str | None = None,
     to_date: str | None = None,
     owner: str | None = None,
+    fresh: int | str = 0,
 ) -> dict:
     """The Overview's "Proposals & money": proposals sent, won, advances received in the
     period, and every payment split still to come in. `available` is false while the
     ERP site's TBO Smart is older than this."""
     require_leads()
     check_period(period, from_date, to_date)
-    result = call_if_deployed(
-        "get_proposal_money",
-        **erp_period(period, from_date, to_date),
-        owner=owner or None,
+    return read_proposal_money(period, from_date, to_date, owner, fresh)
+
+
+def read_proposal_money(period, from_date, to_date, owner, fresh) -> dict:
+    when = erp_period(period, from_date, to_date)
+    result = cached_read(
+        "money",
+        {**when, "owner": owner or None},
+        READ_TTL,
+        fresh,
+        lambda: call_if_deployed("get_proposal_money", **when, owner=owner or None),
+        keep=lambda answer: answer is not None,
     )
     return {**result, "available": True} if result is not None else {"available": False}
+
+
+@frappe.whitelist()
+def get_overview_page(
+    period: str = "month",
+    from_date: str | None = None,
+    to_date: str | None = None,
+    owner: str | None = None,
+    fresh: int | str = 0,
+) -> dict:
+    """Everything the Overview shows, in one request: `overview`, `money` and `intake`.
+    The ERP site shares the hub's worker pool, so the reads go one after another here
+    instead of as parallel requests that wait on each other. Money and intake are
+    optional: one that fails leaves the overview whole and says why in `errors`."""
+    require_leads()
+    check_period(period, from_date, to_date)
+    page = {
+        "overview": read_overview(period, from_date, to_date, owner, fresh),
+        "money": None,
+        "intake": None,
+        "errors": {},
+    }
+    for part, read in (
+        (
+            "money",
+            lambda: read_proposal_money(period, from_date, to_date, owner, fresh),
+        ),
+        ("intake", lambda: read_lead_intake(fresh)),
+    ):
+        try:
+            page[part] = read()
+        except LeadsError as e:
+            # frappe.throw queued the message for a toast; the page shows it in place
+            frappe.clear_last_message()
+            page["errors"][part] = str(e)
+    return page
+
+
+@frappe.whitelist()
+def get_daily_report(
+    date: str | None = None, owner: str | None = None, fresh: int | str = 0
+) -> dict:
+    """The Daily Sales Performance Report for one day (default today): one row per
+    salesperson the signed-in person may see, or just `owner`. The hub adds the targets,
+    each person's pace against them and the text to paste into WhatsApp. `available` is
+    false while the ERP site's TBO Smart is older than this, so the tab stays out."""
+    from helpdesk.daily_sales_report import prepare
+
+    require_leads()
+    day = getdate(date) if date else getdate(today())
+    result = cached_read(
+        "daily_report",
+        {"date": str(day), "owner": owner or None},
+        READ_TTL,
+        fresh,
+        lambda: call_if_deployed(
+            "get_daily_report", date=str(day), owner=owner or None
+        ),
+        keep=lambda answer: answer is not None,
+    )
+    if result is None:
+        return {"available": False}
+    return {**prepare(result, owner=owner), "available": True}
+
+
+def report_deployed() -> bool:
+    """Whether the ERP site has the daily report and `log_call`, which ship together. Asked
+    through the signed-in person's own report, remembered for ten minutes once it is
+    there; any failure is "not now", never an error on the lead page."""
+    require_leads()
+    day = str(getdate(today()))
+    try:
+        return bool(
+            cached_read(
+                "report_deployed",
+                {},
+                OPTIONS_TTL,
+                0,
+                lambda: call_if_deployed(
+                    "get_daily_report", date=day, owner=frappe.session.user
+                )
+                is not None,
+            )
+        )
+    except LeadsError:
+        frappe.clear_last_message()
+        return False
+
+
+@frappe.whitelist(methods=["POST"])
+def log_call(lead: str, outcome: str, note: str | None = None) -> dict:
+    """A call made outside MyOperator, logged on the lead as the signed-in person; it
+    counts in today's report, so their cached reads go."""
+    require_leads()
+    if outcome not in CALL_OUTCOMES:
+        frappe.throw(_("Pick Connected, No answer, Busy or Voicemail."))
+    logged = call_if_deployed(
+        "log_call",
+        post=True,
+        lead=lead,
+        outcome=outcome,
+        note=(note or "").strip() or None,
+    )
+    if logged is None:
+        frappe.throw(
+            _("The ERP site can't log calls yet. It needs the latest TBO Smart."),
+            LeadsUnavailableError,
+        )
+    clear_cached_reads()
+    return logged
 
 
 def check_period(
@@ -176,19 +368,23 @@ def get_lead(name: str) -> dict:
 @frappe.whitelist(methods=["POST"])
 def create_lead(data: dict | str) -> dict:
     require_leads()
-    return call("create_lead", post=True, data=parse_data(data)) or {}
+    result = call("create_lead", post=True, data=parse_data(data)) or {}
+    clear_cached_reads()
+    return result
 
 
 @frappe.whitelist(methods=["POST"])
 def update_lead(name: str, data: dict | str) -> dict:
     require_leads()
-    return call("update_lead", post=True, name=name, data=parse_data(data)) or {}
+    result = call("update_lead", post=True, name=name, data=parse_data(data)) or {}
+    clear_cached_reads()
+    return result
 
 
 @frappe.whitelist(methods=["POST"])
 def set_stage(name: str, stage: str, note: str | None = None) -> dict:
     require_leads()
-    return (
+    result = (
         call(
             "set_stage",
             post=True,
@@ -198,6 +394,8 @@ def set_stage(name: str, stage: str, note: str | None = None) -> dict:
         )
         or {}
     )
+    clear_cached_reads()
+    return result
 
 
 @frappe.whitelist(methods=["POST"])

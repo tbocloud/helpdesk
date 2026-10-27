@@ -34,6 +34,17 @@
           </template>
           <span class="hidden sm:inline">{{ __("Call") }}</span>
         </Button>
+        <!-- for a call made outside MyOperator; only once the ERP site can log it -->
+        <Button
+          v-if="options?.can_log_call"
+          :label="__('Log call')"
+          @click="showLogCall = true"
+        >
+          <template #prefix>
+            <LucidePhoneForwarded class="size-4" aria-hidden="true" />
+          </template>
+          <span class="hidden lg:inline">{{ __("Log call") }}</span>
+        </Button>
         <Button :label="__('Edit')" @click="showEdit = true">
           <template #prefix>
             <LucidePencil class="size-4" aria-hidden="true" />
@@ -237,6 +248,11 @@
       </div>
     </div>
 
+    <LogCallDialog
+      v-model:open="showLogCall"
+      :lead-id="leadId"
+      @logged="detail.reload()"
+    />
     <LeadFormDialog
       v-if="lead"
       v-model:open="showEdit"
@@ -329,6 +345,7 @@ import LucideFileText from "~icons/lucide/file-text";
 import LucideHistory from "~icons/lucide/history";
 import LucideMessageSquare from "~icons/lucide/message-square";
 import LucidePhone from "~icons/lucide/phone";
+import LucidePhoneForwarded from "~icons/lucide/phone-forwarded";
 import LucidePhoneIncoming from "~icons/lucide/phone-incoming";
 import LucidePhoneMissed from "~icons/lucide/phone-missed";
 import LucidePhoneOutgoing from "~icons/lucide/phone-outgoing";
@@ -338,6 +355,7 @@ import LeadCallEntry from "./LeadCallEntry.vue";
 import LucideScrollText from "~icons/lucide/scroll-text";
 import LeadFormDialog from "./LeadFormDialog.vue";
 import LeadDocuments from "./LeadDocuments.vue";
+import LogCallDialog from "./LogCallDialog.vue";
 import LeadProposals from "./LeadProposals.vue";
 import LeadQuotations from "./LeadQuotations.vue";
 import {
@@ -387,6 +405,7 @@ function timelineIcon(entry: LeadTimelineEntry): Component {
 }
 
 const showEdit = ref(false);
+const showLogCall = ref(false);
 const stageFormId = `lead-stage-${useId()}`;
 
 loadLeadOptions();
