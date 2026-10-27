@@ -65,9 +65,22 @@
             </router-link>
           </li>
         </ul>
-        <p v-else class="text-p-xs text-ink-gray-6">
-          {{ __("No salespeople in your view yet.") }}
-        </p>
+        <template v-else>
+          <p class="text-p-xs text-ink-gray-6">
+            {{
+              day.key === "today"
+                ? __("No new leads yet today")
+                : __("No new leads yesterday")
+            }}
+          </p>
+          <p v-if="pickHint" class="text-p-xs text-ink-gray-6">
+            {{
+              __(
+                "Pick your salespeople in Settings → Agents → Department wall → Sales team"
+              )
+            }}
+          </p>
+        </template>
       </div>
     </div>
   </section>
@@ -79,12 +92,18 @@ import { dayjs } from "frappe-ui";
 import { computed, useId } from "vue";
 import type { RouteLocationRaw } from "vue-router";
 import LucideCircleCheck from "~icons/lucide/circle-check";
+import { useAuthStore } from "@/stores/auth";
 import type { LeadIntake } from "./leads";
 
 const props = defineProps<{ intake: LeadIntake }>();
 
 const headingId = useId();
 const target = computed(() => props.intake.target || 0);
+const authStore = useAuthStore();
+// no one is picked as a salesperson yet: only a manager can fix that
+const pickHint = computed(
+  () => !!props.intake.team_empty && authStore.isManager
+);
 
 // the ERP site answers newest first: today, then yesterday
 const days = computed(() => {
@@ -95,7 +114,7 @@ const days = computed(() => {
         .filter((row) => row.user)
         .map((row) => [row.user as string, row])
     );
-    // the scope's salespeople, plus anyone else who took a lead that day
+    // the sales team (the hub drops the rest), plus anyone else who took a lead that day
     const users = new Map(people.map((p) => [p.user, p.full_name]));
     counts.forEach((row, user) => {
       if (!users.has(user)) users.set(user, row.full_name || user);

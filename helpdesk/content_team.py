@@ -196,6 +196,14 @@ def head_approvers() -> list[str]:
     return [u for u in _users_with_role("System Manager") if u != "Administrator"]
 
 
+def only_sales_team(rows: list[dict], keep=()) -> tuple[list[dict], bool]:
+    """`rows` (each with a `user`) cut to the sales team, the enabled users with the Sales
+    Employee role, plus anyone in `keep` (picked explicitly), and whether that team is
+    empty. The ERP site lists everyone with a sales role, which on the hub is every agent."""
+    team = set(_users_with_role(SALES_EMPLOYEE_ROLE))
+    return [r for r in rows if r.get("user") in team or r.get("user") in keep], not team
+
+
 def _users_with_role(role: str) -> list[str]:
     has_role = frappe.qb.DocType("Has Role")
     user = frappe.qb.DocType("User")

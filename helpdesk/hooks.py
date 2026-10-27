@@ -90,6 +90,11 @@ scheduler_events = {
         "0 11 * * *": [
             "helpdesk.content_follow_up.send_client_follow_ups",
         ],
+        # 18:00: the day's team report to the Sales Managers and System Managers, on
+        # working days (docs/leads.md, "Daily report")
+        "0 18 * * *": [
+            "helpdesk.daily_sales_report.run",
+        ],
         # 06:15: holidays and approved leave from the CRM site, before the working day
         "15 6 * * *": [
             "helpdesk.integrations.crm.holidays.sync_holidays_job",

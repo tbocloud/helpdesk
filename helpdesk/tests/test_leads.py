@@ -13,11 +13,14 @@ from helpdesk.test_utils import (
     create_agent,
     enable_leads,
     hold_commits,
+    lead_intake,
+    make_sales_employee,
     make_team,
 )
 
 BDE = "bde.agent@leads.example"
 SUPPORT = "support.agent@leads.example"
+SALES = "sales.employee@leads.example"
 TEAM = "Leads Test Sales"
 FROM_SETTINGS = "helpdesk.integrations.crm.client.CRMClient.from_settings"
 
@@ -174,6 +177,38 @@ class TestLeads(FrappeTestCase):
         frappe.db.set_single_value("HD CRM Settings", "daily_lead_target", -3)
         self.assertEqual(leads_api.get_lead_intake()["target"], 0)
 
+    def intake_users(self, **answer):
+        self.crm.lead_answers["get_lead_intake"] = lead_intake(**answer)
+        self.as_bde()
+        result = leads_api.get_lead_intake(fresh=1)
+        return [p["user"] for p in result["people"]], result
+
+    def test_the_intake_lists_the_sales_team_only_and_totals_what_is_shown(self):
+        make_sales_employee(SALES, "Sia Sales")
+        everyone = [{"user": u, "full_name": u} for u in (SALES, BDE, SUPPORT)]
+        users, result = self.intake_users(
+            people=everyone,
+            by_owner=[
+                {"user": SUPPORT, "full_name": "Sunil", "count": 3},
+                {"user": SALES, "full_name": "Sia", "count": 2},
+            ],
+        )
+        self.assertEqual(users, [SALES])
+        self.assertFalse(result["team_empty"])
+        self.assertEqual([r["user"] for r in result["days"][0]["by_owner"]], [SALES])
+        self.assertEqual(result["days"][0]["total"], 2)
+
+    def test_an_empty_sales_team_shows_nobody(self):
+        everyone = [{"user": u, "full_name": u} for u in (BDE, SUPPORT)]
+        with patch("helpdesk.content_team._users_with_role", return_value=[]):
+            users, result = self.intake_users(
+                people=everyone, by_owner=[{"user": BDE, "full_name": "B", "count": 2}]
+            )
+        self.assertEqual(users, [])
+        self.assertTrue(result["team_empty"])
+        self.assertEqual(result["days"][0]["by_owner"], [])
+        self.assertEqual(result["days"][0]["total"], 0)
+
     def test_the_money_is_read_for_the_period_and_owner(self):
         self.crm.lead_answers["get_proposal_money"] = {"totals": {"to_collect": 5}}
         self.as_bde()
@@ -205,6 +240,103 @@ class TestLeads(FrappeTestCase):
         self.crm.lead_answers["get_lead_intake"] = CRMError("x", 502, "")
         with self.assertRaises(LeadsUnavailableError):
             leads_api.get_lead_intake()
+
+    def test_the_overview_page_is_one_request_with_every_part(self):
+        self.crm.lead_answers["get_overview"] = {"totals": {"new": 3}}
+        self.crm.lead_answers["get_proposal_money"] = {"totals": {"to_collect": 5}}
+        self.crm.lead_answers["get_lead_intake"] = {"days": [], "people": []}
+        self.as_bde()
+        page = leads_api.get_overview_page(period="week", owner=BDE)
+
+        self.assertEqual(page["overview"]["totals"]["new"], 3)
+        self.assertEqual(page["money"]["totals"]["to_collect"], 5)
+        self.assertTrue(page["money"]["available"])
+        self.assertTrue(page["intake"]["available"])
+        self.assertEqual(page["errors"], {})
+        self.assertEqual(
+            [m for m, _p, _q in self.crm.lead_calls],
+            ["get_overview", "get_proposal_money", "get_lead_intake"],
+        )
+        with self.assertRaises(frappe.ValidationError):
+            leads_api.get_overview_page(period="custom", from_date="2026-10-01")
+
+    def test_a_failed_money_or_intake_leaves_the_overview_whole(self):
+        self.crm.lead_answers["get_overview"] = {"totals": {"new": 3}}
+        self.crm.lead_answers["get_proposal_money"] = CRMError("x", 502, "")
+        self.crm.lead_answers["get_lead_intake"] = CRMError("x", 502, "")
+        self.as_bde()
+        frappe.clear_messages()
+        page = leads_api.get_overview_page()
+
+        self.assertEqual(page["overview"]["totals"]["new"], 3)
+        self.assertEqual((page["money"], page["intake"]), (None, None))
+        self.assertEqual(set(page["errors"]), {"money", "intake"})
+        self.assertIn("ERP site", page["errors"]["money"])
+        self.assertEqual(frappe.message_log, [])
+        # a failed read is not remembered: the next one asks again
+        self.crm.lead_answers["get_proposal_money"] = {"totals": {}}
+        self.assertTrue(leads_api.get_overview_page()["money"]["available"])
+
+        # the overview itself failing fails the page
+        self.crm.lead_answers["get_overview"] = CRMError("x", 502, "")
+        with self.assertRaises(LeadsUnavailableError):
+            leads_api.get_overview_page(period="quarter")
+
+    def test_a_read_just_answered_is_not_asked_of_the_erp_site_again(self):
+        self.crm.lead_answers["get_overview"] = {"totals": {"new": 3}}
+        self.crm.lead_answers["get_options"] = {"stages": []}
+        self.crm.lead_answers["get_proposal_money"] = {"totals": {}}
+        self.crm.lead_answers["get_lead_intake"] = {"days": [], "people": []}
+        # the options also ask whether calls can be logged, which is kept too
+        self.crm.lead_answers["get_daily_report"] = {"people": []}
+        self.as_bde()
+        leads_api.get_overview_page()
+        leads_api.get_options()
+        asked = len(self.crm.lead_calls)
+
+        self.crm.lead_answers["get_overview"] = {"totals": {"new": 9}}
+        again = leads_api.get_overview_page()
+        leads_api.get_options()
+        leads_api.get_overview(period="month")
+        self.assertEqual(len(self.crm.lead_calls), asked)
+        self.assertEqual(again["overview"]["totals"]["new"], 3)
+
+        # another period is another read
+        leads_api.get_overview_page(period="week")
+        self.assertGreater(len(self.crm.lead_calls), asked)
+
+    def test_fresh_skips_the_cache_and_renews_it(self):
+        self.crm.lead_answers["get_overview"] = {"totals": {"new": 3}}
+        self.as_bde()
+        leads_api.get_overview_page()
+        self.crm.lead_answers["get_overview"] = {"totals": {"new": 9}}
+
+        self.assertEqual(
+            leads_api.get_overview_page(fresh=1)["overview"]["totals"]["new"], 9
+        )
+        self.assertEqual(leads_api.get_overview_page()["overview"]["totals"]["new"], 9)
+
+    def test_the_cache_is_per_person(self):
+        self.crm.lead_answers["get_overview"] = {"totals": {"new": 3}}
+        self.as_bde()
+        leads_api.get_overview_page()
+        self.crm.lead_answers["get_overview"] = {"totals": {"new": 7}}
+        frappe.set_user("Administrator")
+
+        page = leads_api.get_overview_page()
+        self.assertEqual(page["overview"]["totals"]["new"], 7)
+        acting = {p["acting_user"] for _m, _post, p in self.crm.lead_calls}
+        self.assertEqual(acting, {BDE, "Administrator"})
+
+    def test_changing_a_lead_clears_that_persons_cached_figures(self):
+        self.crm.lead_answers["get_overview"] = {"totals": {"new": 3}}
+        self.crm.lead_answers["set_stage"] = {"name": "CRM-LEAD-0001"}
+        self.as_bde()
+        leads_api.get_overview_page()
+        self.crm.lead_answers["get_overview"] = {"totals": {"new": 4}}
+        leads_api.set_stage("CRM-LEAD-0001", "Contacted")
+
+        self.assertEqual(leads_api.get_overview_page()["overview"]["totals"]["new"], 4)
 
     def test_ai_suggestions_are_the_signed_in_persons_to_act_on(self):
         self.crm.lead_answers["get_lead_ai"] = {"enabled": True, "insight": None}
@@ -262,7 +394,8 @@ class TestLeads(FrappeTestCase):
         # managers always see Leads
         frappe.set_user("Administrator")
         leads_api.get_options()
-        self.assertEqual(len(self.crm.lead_calls), 2)
+        asked = [method for method, _post, _params in self.crm.lead_calls]
+        self.assertEqual(asked.count("get_options"), 2)
 
     def test_an_inactive_agent_doesnt_see_leads(self):
         frappe.db.set_value("HD Agent", BDE, "is_active", 0)
