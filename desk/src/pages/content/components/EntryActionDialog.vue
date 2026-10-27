@@ -178,7 +178,9 @@ const dueNote = computed(() => {
     );
   if (due.value && due.value < dayjs().format("YYYY-MM-DD"))
     notes.push(
-      __("This date has already passed, so the task will show as overdue.")
+      __(
+        "This date has already passed, so the task will show as overdue unless it's on hold."
+      )
     );
   return notes.length
     ? notes.join(" ")
