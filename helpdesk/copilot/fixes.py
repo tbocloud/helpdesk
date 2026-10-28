@@ -1122,6 +1122,16 @@ def on_merged(run, pull: dict, by_hub: bool = False):
         + ("" if approved else " without the approval"),
         merge_commit=pull.get("merge_commit_sha") or None,
     )
+    from helpdesk.copilot import known_issues
+
+    frappe.db.savepoint("copilot_known_issue")
+    try:  # the known issue is Fixed by this merge; never stops the merge's own steps
+        known_issues.on_merged(run)
+    except Exception:
+        frappe.db.rollback(save_point="copilot_known_issue")
+        frappe.log_error(
+            title=f"Copilot could not mark the known issue of {run.name} fixed"
+        )
     if not approved:
         runs.add_event(
             run,

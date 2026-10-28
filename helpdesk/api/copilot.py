@@ -10,7 +10,7 @@ from frappe import _
 from frappe.utils import format_datetime, get_fullname, now_datetime, sbool
 
 from helpdesk.api.customization import is_ticket_customer
-from helpdesk.copilot import customer, router, runs
+from helpdesk.copilot import customer, known_issues, router, runs
 from helpdesk.copilot import settings as copilot_settings
 from helpdesk.copilot import suspicious
 from helpdesk.utils import agent_only, is_agent
@@ -117,6 +117,11 @@ def get_run(ticket: str | int) -> dict:
         "categories": list(router.CATEGORIES),
         "fix": _fix_card(run),
         "build": _build_card(run),
+        # what Copilot remembers about this error: every site, the fix, who has it (Phase 9)
+        "known_issue": known_issues.card(run),
+        "raised_by_copilot": frappe.db.get_value(
+            "HD Ticket", run.ticket, "custom_copilot_source"
+        ),
     }
 
 
@@ -328,6 +333,16 @@ def build_customization(ticket: str | int) -> dict:
     frappe.has_permission("HD Ticket", "write", str(ticket), throw=True)
     fixes.request_build(_run_of(ticket), frappe.session.user)
     return get_run(ticket)
+
+
+@frappe.whitelist(methods=["POST"])
+@agent_only
+def draft_known_issue_article(ticket: str | int) -> dict:
+    """A KB draft from the ticket's answer for its known issue (a customer-side cause); an agent
+    reviews and publishes it."""
+    frappe.has_permission("HD Ticket", "read", str(ticket), throw=True)
+    frappe.has_permission("HD Article", "create", throw=True)
+    return known_issues.draft_kb(_run_of(ticket))
 
 
 @frappe.whitelist(methods=["POST"])

@@ -550,6 +550,7 @@ def resolve(user: str, intent: dict, kind: str):
 def run_record(run) -> dict:
     """What the answer may use: the diagnosis, the fix and its checks, and the run's events."""
     from helpdesk.api.copilot import _fix_card
+    from helpdesk.copilot import known_issues
 
     fix = _fix_card(run) or {}
     events = frappe.get_all(
@@ -588,6 +589,8 @@ def run_record(run) -> dict:
             )
             if fix.get(k)
         },
+        # the error as Copilot remembers it: every site, the fix, which sites have it
+        "known_issue": known_issues.card(run),
         "events": [
             {
                 "type": e.event_type,

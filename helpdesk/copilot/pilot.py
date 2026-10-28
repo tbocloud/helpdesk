@@ -13,17 +13,9 @@ from zoneinfo import ZoneInfo
 
 import frappe
 from frappe import _
-from frappe.utils import (
-    add_days,
-    escape_html,
-    flt,
-    get_datetime,
-    get_first_day,
-    get_url,
-    getdate,
-    now_datetime,
-    time_diff_in_hours,
-)
+from frappe.utils import (add_days, escape_html, flt, get_datetime,
+                          get_first_day, get_url, getdate, now_datetime,
+                          time_diff_in_hours)
 
 from helpdesk.copilot import settings as copilot_settings
 
@@ -225,6 +217,33 @@ def pilot_rows(from_date, to_date, customer: str | None = None) -> list[dict]:
         )
     )
     tickets = list({run.ticket for run in runs})
+    # Phase 9: tickets the error watch raised, and tickets whose error Copilot already knew
+    ticket_info = {
+        t.name: t
+        for t in frappe.get_all(
+            "HD Ticket",
+            filters={"name": ["in", tickets]},
+            fields=["name", "creation", "custom_copilot_source", "custom_known_issue"],
+        )
+    }
+    issue_made = {
+        i.name: i.creation
+        for i in frappe.get_all(
+            "HDS Known Issue",
+            filters={
+                "name": [
+                    "in",
+                    [
+                        t.custom_known_issue
+                        for t in ticket_info.values()
+                        if t.custom_known_issue
+                    ]
+                    or [""],
+                ]
+            },
+            fields=["name", "creation"],
+        )
+    }
     costs = {
         row.ticket: flt(row.usd)
         for row in frappe.get_all(
@@ -301,6 +320,21 @@ def pilot_rows(from_date, to_date, customer: str | None = None) -> list[dict]:
                 "fixes_merged": sum(1 for r in group if r.merge_commit),
                 "fixes_deployed": sum(1 for r in group if r.deployed_at),
                 "fixes_undone": sum(1 for r in group if r.name in undone_fixes),
+                "watch_tickets": sum(
+                    1
+                    for t in group_tickets
+                    if (ticket_info.get(t) or {}).get("custom_copilot_source")
+                    == "Error watch"
+                ),
+                # linked to a known issue made before the ticket: Copilot had seen the error
+                "repeats_known": sum(
+                    1
+                    for t in group_tickets
+                    if (ticket_info.get(t) or {}).get("custom_known_issue")
+                    in issue_made
+                    and issue_made[ticket_info[t].custom_known_issue]
+                    < ticket_info[t].creation
+                ),
                 "builds_started": len(builds),
                 "builds_merged": sum(1 for r in builds if r.merge_commit),
                 "builds_reopened": sum(1 for r in builds if r.state == "Escalated"),
@@ -409,6 +443,8 @@ EMAIL_COLUMNS = (
     ("fixes_deployed", "Deployed"),
     ("fixes_undone", "Undone"),
     ("builds_merged", "Builds merged"),
+    ("watch_tickets", "Watch tickets"),
+    ("repeats_known", "Known repeats"),
     ("corrections_applied", "Corrections"),
     ("median_approval_hours", "Approval wait (h)"),
     ("ai_cost", "AI cost ($)"),

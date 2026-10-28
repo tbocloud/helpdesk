@@ -61,6 +61,8 @@ scheduler_events = {
             "helpdesk.copilot.deploy.run_due",
             # releases of every merge: the CI gate and approval reminders (off by default)
             "helpdesk.copilot.releases.run_due",
+            # customer sites' new errors become tickets (off by default; docs/tbo-copilot.md, Error watch)
+            "helpdesk.copilot.watch.run_due",
             "helpdesk.tasks.push_ticket_statuses",
             "helpdesk.tasks.sync_conversations",
             "helpdesk.content_sync.sync_content_approvals",

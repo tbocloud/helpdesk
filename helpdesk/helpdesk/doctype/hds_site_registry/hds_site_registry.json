@@ -16,7 +16,11 @@
 		"shared_group",
 		"apps_section",
 		"apps",
-		"last_synced"
+		"last_synced",
+		"watch_section",
+		"watch_checked_at",
+		"watch_failures",
+		"watch_note"
 	],
 	"fields": [
 		{
@@ -97,10 +101,38 @@
 			"fieldtype": "Datetime",
 			"label": "Last Synced",
 			"read_only": 1
+		},
+		{
+			"fieldname": "watch_section",
+			"fieldtype": "Section Break",
+			"label": "Error Watch",
+			"collapsible": 1
+		},
+		{
+			"fieldname": "watch_checked_at",
+			"fieldtype": "Datetime",
+			"label": "Errors Checked At",
+			"read_only": 1,
+			"no_copy": 1
+		},
+		{
+			"fieldname": "watch_failures",
+			"fieldtype": "Int",
+			"label": "Checks Failed in a Row",
+			"read_only": 1,
+			"no_copy": 1,
+			"default": "0"
+		},
+		{
+			"fieldname": "watch_note",
+			"fieldtype": "Small Text",
+			"label": "Watch Note",
+			"read_only": 1,
+			"no_copy": 1
 		}
 	],
 	"links": [],
-	"modified": "2026-10-13 03:00:00.000000",
+	"modified": "2026-10-28 18:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Site Registry",

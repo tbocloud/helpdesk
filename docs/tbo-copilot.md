@@ -342,6 +342,65 @@ Every action runs **as the person** (their permissions), only after **Yes** or a
 - **could not handle a call**: the endpoint failed on a message from Teams; the Error Log has the traceback. A refusal at sign-in and a failure like this are saved straight away, because Frappe undoes everything else the request wrote;
 - **nothing at all**: the Azure Bot's messaging endpoint does not point at the hub, or its Teams channel is off. In the Azure portal, the bot's **Test in Web Chat** shows the hub's answer: *Forbidden* means it reached the hub with the right App ID (Web Chat has no Teams tenant), *Unauthorized* a wrong App ID, a timeout a wrong address. The bot's Channels → Microsoft Teams page lists Teams' own delivery errors.
 
+## Error watch (Phase 9: `watch.py`)
+
+Copilot notices a new error on a customer's site and opens a ticket for it before the customer reports it. Switch it on in HDS Copilot Settings → **Error Watch** (**Watch Customer Errors**, off by default) and per customer with **Watch Errors** on HD Customer. A customer's site is watched when the customer has Copilot enabled, its site card has a connection, and the card is not a Sandbox.
+
+**The check.** Every **Minutes Between Checks** (default 15; the cron runs every 5 minutes), one site at a time, the hub asks the site for its error signatures since the last check, with the connector's own `get_deploy_status`: the top 10 by count, as `app | method | the error's last line`. Nothing changes on the customer's site for this. Each signature is one **HDS Site Error** row per site, keyed by the signature with its digits as `#` (so "row 12" and "row 13" are one error). A row is counted while the error lasts. After **New After** days without it (default 14), it starts again as new. The site card keeps **Errors Checked At**. A site that does not answer is tried again at the next check, from the same time. After 4 failures in a row, the card's **Watch Note** says so.
+
+**The first check of a site** only records what is there over the last 14 days, as **Baseline** rows, with no tickets.
+
+**A new error becomes a ticket** when it happened **Times Before a Ticket** times (default 3), or to **Users Before a Ticket** different users (default 2; the site's `get_error_log` gives each error's user since helpdesk_client `owner`). In accounting, stock or payroll code (`accounts`, `stock` or `payroll` in the method or app), once is enough. Never a ticket:
+
+- the connector's own errors (`helpdesk_client`);
+- **Ignored Errors**, one pattern per line matched in the signature. Blank means Session Stopped.
+
+**The ticket.**
+
+- **Subject:** "Copilot noticed: <the error>".
+- **Raised for:** the customer's first contact, with source **Error watch** (`custom_copilot_source`), linked to its known issue (`custom_known_issue`).
+- **Description:** when it started, how often, the users, and up to 5 samples (time, document, code lines).
+- **What follows:** Copilot investigates it like any ticket.
+- **Who hears it:** the customer's assigned developer (else the Agent Managers) gets it in the Copilot chat, and the diagnosis later.
+- **The customer hears nothing from Copilot** until a person replies on the ticket: no acknowledgement email, and every stage except Resolved is held (`watch.held`; the stage event says `held`).
+
+**Limits.** At most **Tickets per Site per Day** (default 3) and **Tickets per Day** in all (default 10). Past them the error keeps being counted and waits for the next day, and the Agent Managers hear it once a day. The watch itself uses no AI; investigations count toward the monthly budget as usual.
+
+## Known issues (Phase 9: `known_issues.py`)
+
+One **HDS Known Issue** per error signature, across every site that runs the app. It holds:
+
+- the title (the error's type and method, never its message);
+- status Open, Fixed or Not a bug;
+- the app and its repository;
+- the root cause;
+- the fix: pull request, title, changed files, merge commit, the run that fixed it;
+- a KB article;
+- the sites it was seen on (**HDS Known Issue Site**: customer, count, first and last seen, ticket, **has the fix**).
+
+**How it is filled:**
+
+- the error watch makes and counts it;
+- a diagnosis links its run (`known_issue`) and its ticket. A watch ticket's issue comes first. Otherwise the worker's `error_signatures` in `submit_investigation` decide, but only errors the site really gave this run count: the hub remembers each signature `get_error_log` returned through `customer_erp_read` and keeps a reported one only when it matches one of those (the same signature without its digits, or the same method and error type);
+- a customer-side root cause (`question`, `customer_mistake`, `wrong_setting`, `not_allowed_request`) makes an open issue **Not a bug**;
+- a merged fix of a linked run (`fixes.on_merged`) makes it **Fixed** with the merge commit and the pull request.
+
+**Has the fix** is a GitHub compare between the merge commit and the commit the site card says the site runs, cached a day per pair.
+
+**What the watch does with a fixed issue:**
+
+- **On a site that has the fix, the error came back.** A ticket "Came back after the fix: …" opens at once (High priority, assigned to a senior approver), and the issue is Open again with **Came Back After the Fix** counted.
+- **On a site without the fix**, once the error is enough, a ticket "Fixed elsewhere, not on this site yet: …" names the missing fix. No investigation (`flags.no_copilot_run`), because the release flow offers that site's release.
+
+**What a worker sees.** The run context has `known_issues` (the ticket's own, then those the site had in the last 30 days) and `raised_by_copilot`. Each issue says whether this site has the fix. The site's latest deploys through TBO Support are in `site.deploys`, so the worker can tell an error logged before the latest deploy from one after it. Another customer's issue reaches a worker as **code facts only**: the error's type and method, the root cause, the fix. Never the signature's message, a ticket's text or records, which may hold that customer's data. The signature is shown only when the issue was seen at the run's own customer.
+
+**In TBO Support:**
+
+- The Copilot dialog shows the **Known issue** section: the signature, first and last seen, the fix, and each site with its count, ticket and "has the fix".
+- The staff assistant's questions are answered with it too.
+- When a linked ticket with a customer-side cause is resolved, **Draft a KB article** writes a draft from the team's answer through the existing KB drafts (`helpdesk.api.copilot.draft_known_issue_article`). An agent reviews and publishes it; Copilot never publishes.
+- The Copilot Pilot report and the Monday email count **Error watch tickets** and **Known repeats** (tickets linked to an issue made before them).
+
 ## MCP server (`helpdesk/api/copilot_mcp.py`, `helpdesk/copilot/mcp/`)
 
 TBO staff use tickets, tasks and the knowledge base from the TBO Copilot desktop app, or any MCP client, **as themselves, with their own permissions** (TASK-2026-00013).

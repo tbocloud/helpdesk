@@ -195,6 +195,9 @@ function showCopilotRunDialog(info, doc, call, toast, $dialog) {
   if (info.build) {
     html += copilotBuildSummary(info.build);
   }
+  if (info.known_issue) {
+    html += copilotKnownIssueHtml(info.known_issue, info.raised_by_copilot);
+  }
   if (info.events && info.events.length) {
     html +=
       '<div style="margin-top:8px"><b>Latest events</b><ul style="margin:4px 0 0 16px;color:#6b7280">';
@@ -381,6 +384,25 @@ function showCopilotRunDialog(info, doc, call, toast, $dialog) {
           _ref.close();
         } catch (error) {
           toast.error(copilotError(error, "Failed to start the build"));
+        }
+      },
+    });
+  }
+  if (info.known_issue && info.known_issue.can_draft_kb) {
+    actions.push({
+      label: "Draft a KB article",
+      onClick: async function (_ref) {
+        try {
+          var made = await call(
+            "helpdesk.api.copilot.draft_known_issue_article",
+            { ticket: doc.name }
+          );
+          toast.success(
+            "Draft " + made.article + " is ready for review; nothing is published."
+          );
+          _ref.close();
+        } catch (error) {
+          toast.error(copilotError(error, "Failed to draft the article"));
         }
       },
     });
@@ -670,6 +692,75 @@ function copilotFixSummary(fix) {
 }
 
 // A customization: the scope the customer approved, and whether Copilot can build it.
+// What Copilot remembers about this error (Phase 9): where it was seen, the fix, which sites have it.
+function copilotKnownIssueHtml(issue, source) {
+  var html =
+    '<div style="margin-top:8px"><b>Known issue ' +
+    copilotEscape(issue.name) +
+    "</b> " +
+    '<span style="color:#6b7280">' +
+    copilotEscape(issue.status) +
+    (issue.came_back ? ", came back " + issue.came_back + "x after a fix" : "") +
+    "</span>";
+  if (source === "Error watch") {
+    html +=
+      '<div style="color:#6b7280">Raised by Copilot\'s error watch: the customer hears nothing from Copilot until a person replies.</div>';
+  }
+  html +=
+    "<div>" +
+    copilotEscape(issue.title) +
+    '</div><div style="color:#6b7280;font-size:12px"><code>' +
+    copilotEscape(issue.signature) +
+    "</code></div>" +
+    '<div style="color:#6b7280">First seen ' +
+    copilotEscape(issue.first_seen) +
+    ", last seen " +
+    copilotEscape(issue.last_seen) +
+    "</div>";
+  if (issue.fix) {
+    html +=
+      "<div>Fixed by " +
+      (issue.fix.pull_request
+        ? '<a href="' +
+          copilotEscape(issue.fix.pull_request) +
+          '" target="_blank">' +
+          copilotEscape(issue.fix.title || issue.fix.pull_request) +
+          "</a>"
+        : copilotEscape(issue.fix.title || "-")) +
+      " (" +
+      copilotEscape(issue.fix.merge_commit) +
+      ", " +
+      copilotEscape(issue.fix.fixed_at) +
+      ")</div>";
+  }
+  if (issue.sites && issue.sites.length) {
+    html +=
+      '<table style="width:100%;font-size:12px;margin-top:4px"><tr style="color:#6b7280"><td>Site</td><td>Customer</td><td>Times</td><td>Last seen</td><td>Ticket</td><td>Has the fix</td></tr>';
+    for (var i = 0; i < issue.sites.length; i++) {
+      var row = issue.sites[i];
+      html +=
+        "<tr><td>" +
+        copilotEscape(row.site) +
+        "</td><td>" +
+        copilotEscape(row.customer || "-") +
+        "</td><td>" +
+        copilotEscape(row.count) +
+        "</td><td>" +
+        copilotEscape(row.last_seen) +
+        "</td><td>" +
+        copilotEscape(row.ticket || "-") +
+        "</td><td>" +
+        copilotEscape(row.has_fix || "-") +
+        "</td></tr>";
+    }
+    html += "</table>";
+  }
+  if (issue.kb_article) {
+    html += "<div>KB article: " + copilotEscape(issue.kb_article) + "</div>";
+  }
+  return html + "</div>";
+}
+
 function copilotBuildSummary(build) {
   var html =
     '<div style="margin-top:8px"><b>' +

@@ -4857,6 +4857,95 @@ def site_tool_replies(replies: dict):
     return call_tool
 
 
+class FakeErrorSite:
+    """A customer site's Error Log as Copilot's error watch reads it through the connector:
+    `get_deploy_status` (the top signatures by count since a time) and `get_error_log` (samples,
+    newest first, filtered by method). Other tools are refused.
+
+    `install(test_case)` routes helpdesk.mcp_client.MCPClient here for one test.
+    """
+
+    def __init__(self):
+        self.errors: list[dict] = []
+        self.calls: list = []
+        self.down = False  # the site does not answer
+
+    def install(self, test_case):
+        patcher = patch("helpdesk.mcp_client.MCPClient")
+        mocked = patcher.start()
+        test_case.addCleanup(patcher.stop)
+        mocked.return_value.call_tool.side_effect = self.call_tool
+        return self
+
+    def error(
+        self,
+        method: str,
+        last_line: str,
+        app: str = "alpha_trading",
+        times: int = 1,
+        owner: str = "ali@alpha.example.com",
+        document: str = "",
+        at=None,
+    ):
+        """`times` error logs ending in `last_line`, raised in `app` by `method`."""
+        doctype, _sep, name = document.partition("/")
+        for _n in range(times):
+            self.errors.append(
+                {
+                    "name": frappe.generate_hash(length=10),
+                    "method": method,
+                    "error": "Traceback (most recent call last):\n"
+                    f'  File "apps/{app}/{app}/module.py", line 10, in run\n{last_line}',
+                    "app": app,
+                    "top_frames": [f'{app}/{app}/module.py", line 10, in run'],
+                    "creation": str(at or now_datetime()),
+                    "owner": owner,
+                    "reference_doctype": doctype or None,
+                    "reference_name": name or None,
+                }
+            )
+
+    def call_tool(self, tool, arguments=None, session_id=None):
+        from frappe.utils import get_datetime
+
+        from helpdesk.copilot.verify import signature
+
+        args = arguments or {}
+        self.calls.append((tool, args))
+        if self.down:
+            return {"content": [{"type": "text", "text": "site down"}], "isError": True}
+        since = get_datetime(args["since"]) if args.get("since") else None
+        rows = [
+            e for e in self.errors if not since or get_datetime(e["creation"]) >= since
+        ]
+        if tool == "get_deploy_status":
+            counts: dict = {}
+            for row in rows:
+                counts[signature(row)] = counts.get(signature(row), 0) + 1
+            value = {
+                "since": args.get("since"),
+                "errors": {
+                    "count": len(rows),
+                    "top": [
+                        {"signature": key, "count": count}
+                        for key, count in sorted(counts.items(), key=lambda kv: -kv[1])[
+                            :10
+                        ]
+                    ],
+                },
+            }
+        elif tool == "get_error_log":
+            if args.get("method"):
+                rows = [e for e in rows if args["method"] in e["method"]]
+            value = list(reversed(rows))[: int(args.get("limit") or 20)]
+        else:
+            return {
+                "content": [{"type": "text", "text": f"{tool} refused"}],
+                "isError": True,
+            }
+        return {"content": [{"type": "text", "text": json.dumps(value, default=str)}]}
+
+
 class FakeCustomerSite:
     """The customer's site as Copilot's corrections reach it, in memory: its records,
     `check_change` and `apply_change`, and its guard on the hub's signed approval

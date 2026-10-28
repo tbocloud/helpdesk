@@ -1,24 +1,21 @@
 from datetime import datetime
 
 import frappe
-from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
+from frappe.custom.doctype.custom_field.custom_field import \
+    create_custom_fields
 from frappe.permissions import add_permission, update_permission_property
 
-from helpdesk.api.customization import (
-    ensure_ticket_type as ensure_customization_ticket_type,
-)
+from helpdesk.api.customization import \
+    ensure_ticket_type as ensure_customization_ticket_type
 from helpdesk.consts import DEFAULT_ARTICLE_CATEGORY
 from helpdesk.content_options import ensure_default_content_options
 from helpdesk.content_team import ensure_role as ensure_content_team_role
-from helpdesk.helpdesk.doctype.hd_content_occasion.hd_content_occasion import (
-    ensure_default_occasions,
-)
-from helpdesk.helpdesk.doctype.hd_department.hd_department import (
-    ensure_default_departments,
-)
-from helpdesk.helpdesk.doctype.hd_signoff_template.hd_signoff_template import (
-    ensure_default_signoff_templates,
-)
+from helpdesk.helpdesk.doctype.hd_content_occasion.hd_content_occasion import \
+    ensure_default_occasions
+from helpdesk.helpdesk.doctype.hd_department.hd_department import \
+    ensure_default_departments
+from helpdesk.helpdesk.doctype.hd_signoff_template.hd_signoff_template import \
+    ensure_default_signoff_templates
 from helpdesk.intake import ensure_intake_defaults
 from helpdesk.setup.default_views import add_default_views
 from helpdesk.setup.form_scripts import install_form_scripts
@@ -509,6 +506,14 @@ def get_custom_fields():
                 "insert_after": "custom_assigned_developer",
                 "description": "How far Copilot may go on this customer's tickets: Diagnose only (the team sees the diagnosis), Explain (the customer sees stages and the explanations agents send), Fix (Copilot also writes fixes), Correct (a senior may also approve setting and data corrections). Blank: the default in HDS Copilot Settings",
             },
+            {
+                "fieldname": "custom_copilot_watch",
+                "fieldtype": "Check",
+                "label": "Watch Errors",
+                "default": "0",
+                "insert_after": "custom_copilot_level",
+                "description": "Copilot checks this customer's sites for new errors and opens a ticket for one before they report it (HDS Copilot Settings → Error Watch)",
+            },
         ],
         "HD Ticket": [
             {
@@ -587,6 +592,25 @@ def get_custom_fields():
                 "options": "\nConfirmed\nReopened",
                 "label": "Customer Confirmation",
                 "insert_after": "custom_root_cause",
+                "read_only": 1,
+                "no_copy": 1,
+            },
+            {
+                "fieldname": "custom_copilot_source",
+                "fieldtype": "Select",
+                "options": "\nError watch",
+                "label": "Raised By Copilot",
+                "insert_after": "custom_customer_confirmation",
+                "read_only": 1,
+                "no_copy": 1,
+                "description": "Error watch: Copilot opened it for a new error on the customer's site; the customer hears nothing from Copilot until a person replies",
+            },
+            {
+                "fieldname": "custom_known_issue",
+                "fieldtype": "Link",
+                "options": "HDS Known Issue",
+                "label": "Known Issue",
+                "insert_after": "custom_copilot_source",
                 "read_only": 1,
                 "no_copy": 1,
             },

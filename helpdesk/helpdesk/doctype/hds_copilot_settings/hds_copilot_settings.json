@@ -79,7 +79,17 @@
 		"column_break_chat",
 		"chat_opening_text",
 		"chat_recording_consent",
-		"chat_recording_consent_ar"
+		"chat_recording_consent_ar",
+		"watch_section",
+		"watch_enabled",
+		"watch_minutes",
+		"watch_new_after_days",
+		"watch_min_count",
+		"watch_min_users",
+		"column_break_watch",
+		"watch_site_daily_cap",
+		"watch_daily_cap",
+		"watch_ignored"
 	],
 	"fields": [
 		{
@@ -556,11 +566,80 @@
 			"fieldname": "chat_recording_consent_ar",
 			"fieldtype": "Small Text",
 			"label": "Recording Request (Arabic)"
+		},
+		{
+			"fieldname": "watch_section",
+			"fieldtype": "Section Break",
+			"label": "Error Watch (Phase 9)",
+			"collapsible": 1,
+			"description": "Copilot asks each watched customer site for its new errors and opens a ticket for one before the customer reports it (docs/tbo-copilot.md, Error watch). A customer is watched when Watch Errors is ticked on HD Customer."
+		},
+		{
+			"fieldname": "watch_enabled",
+			"fieldtype": "Check",
+			"label": "Watch Customer Errors",
+			"default": "0"
+		},
+		{
+			"fieldname": "watch_minutes",
+			"fieldtype": "Int",
+			"label": "Minutes Between Checks",
+			"default": "15",
+			"non_negative": 1
+		},
+		{
+			"fieldname": "watch_new_after_days",
+			"fieldtype": "Int",
+			"label": "New After (Days)",
+			"default": "14",
+			"non_negative": 1,
+			"description": "An error the site has not had for this many days counts as new."
+		},
+		{
+			"fieldname": "watch_min_count",
+			"fieldtype": "Int",
+			"label": "Times Before a Ticket",
+			"default": "3",
+			"non_negative": 1,
+			"description": "Or the users below; once is enough in accounting, stock or payroll code."
+		},
+		{
+			"fieldname": "watch_min_users",
+			"fieldtype": "Int",
+			"label": "Users Before a Ticket",
+			"default": "2",
+			"non_negative": 1
+		},
+		{
+			"fieldname": "column_break_watch",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "watch_site_daily_cap",
+			"fieldtype": "Int",
+			"label": "Tickets per Site per Day",
+			"default": "3",
+			"non_negative": 1
+		},
+		{
+			"fieldname": "watch_daily_cap",
+			"fieldtype": "Int",
+			"label": "Tickets per Day",
+			"default": "10",
+			"non_negative": 1,
+			"description": "Past either cap the error keeps being counted, and the Agent Managers get one note a day."
+		},
+		{
+			"fieldname": "watch_ignored",
+			"fieldtype": "Small Text",
+			"label": "Ignored Errors",
+			"default": "helpdesk_client\nSession Stopped",
+			"description": "One per line; an error whose signature (app | method | last line) contains one is never a ticket. The connector's own errors (helpdesk_client) never are. Blank: Session Stopped."
 		}
 	],
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-10-28 13:30:00.000000",
+	"modified": "2026-10-28 18:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Copilot Settings",

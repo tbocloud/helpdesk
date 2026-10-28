@@ -1,0 +1,233 @@
+{
+	"actions": [],
+	"autoname": "TBO-KI-.YYYY.-.#####",
+	"creation": "2026-10-28 18:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"title",
+		"status",
+		"app",
+		"repository",
+		"column_break_main",
+		"root_cause_category",
+		"first_seen",
+		"last_seen",
+		"came_back",
+		"signature_section",
+		"signature",
+		"signature_key",
+		"error_type",
+		"method",
+		"fix_section",
+		"fix_pull_request",
+		"fix_title",
+		"fix_files",
+		"column_break_fix",
+		"merge_commit",
+		"fixed_at",
+		"fix_run",
+		"kb_article",
+		"sites_section",
+		"sites"
+	],
+	"fields": [
+		{
+			"description": "The error's type and where it happens in the code; no customer data.",
+			"fieldname": "title",
+			"fieldtype": "Data",
+			"in_list_view": 1,
+			"label": "Title",
+			"reqd": 1
+		},
+		{
+			"default": "Open",
+			"fieldname": "status",
+			"fieldtype": "Select",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"label": "Status",
+			"options": "Open\nFixed\nNot a bug"
+		},
+		{
+			"fieldname": "app",
+			"fieldtype": "Data",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"label": "App"
+		},
+		{
+			"description": "owner/repo of the app, from the site cards",
+			"fieldname": "repository",
+			"fieldtype": "Data",
+			"label": "Repository"
+		},
+		{
+			"fieldname": "column_break_main",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "root_cause_category",
+			"fieldtype": "Data",
+			"label": "Root Cause"
+		},
+		{
+			"fieldname": "first_seen",
+			"fieldtype": "Datetime",
+			"label": "First Seen",
+			"read_only": 1
+		},
+		{
+			"fieldname": "last_seen",
+			"fieldtype": "Datetime",
+			"label": "Last Seen",
+			"read_only": 1
+		},
+		{
+			"default": "0",
+			"fieldname": "came_back",
+			"fieldtype": "Int",
+			"label": "Came Back After the Fix",
+			"non_negative": 1,
+			"read_only": 1
+		},
+		{
+			"fieldname": "signature_section",
+			"fieldtype": "Section Break",
+			"label": "Error"
+		},
+		{
+			"description": "app | method | the error's last line, digits as #.",
+			"fieldname": "signature",
+			"fieldtype": "Small Text",
+			"label": "Signature",
+			"read_only": 1
+		},
+		{
+			"fieldname": "signature_key",
+			"fieldtype": "Data",
+			"hidden": 1,
+			"label": "Signature Key",
+			"read_only": 1,
+			"unique": 1
+		},
+		{
+			"fieldname": "error_type",
+			"fieldtype": "Data",
+			"label": "Error Type",
+			"read_only": 1
+		},
+		{
+			"fieldname": "method",
+			"fieldtype": "Data",
+			"label": "Method",
+			"read_only": 1
+		},
+		{
+			"fieldname": "fix_section",
+			"fieldtype": "Section Break",
+			"label": "Fix"
+		},
+		{
+			"fieldname": "fix_pull_request",
+			"fieldtype": "Data",
+			"label": "Fix Pull Request",
+			"options": "URL"
+		},
+		{
+			"fieldname": "fix_title",
+			"fieldtype": "Data",
+			"label": "Fix Title"
+		},
+		{
+			"description": "One per line.",
+			"fieldname": "fix_files",
+			"fieldtype": "Small Text",
+			"label": "Files the Fix Changed"
+		},
+		{
+			"fieldname": "column_break_fix",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "merge_commit",
+			"fieldtype": "Data",
+			"label": "Merge Commit"
+		},
+		{
+			"fieldname": "fixed_at",
+			"fieldtype": "Datetime",
+			"label": "Fixed At",
+			"read_only": 1
+		},
+		{
+			"fieldname": "fix_run",
+			"fieldtype": "Link",
+			"label": "Fix Run",
+			"options": "HDS Copilot Run",
+			"read_only": 1
+		},
+		{
+			"fieldname": "kb_article",
+			"fieldtype": "Link",
+			"label": "KB Article",
+			"options": "HD Article"
+		},
+		{
+			"fieldname": "sites_section",
+			"fieldtype": "Section Break",
+			"label": "Where It Was Seen"
+		},
+		{
+			"fieldname": "sites",
+			"fieldtype": "Table",
+			"label": "Sites",
+			"options": "HDS Known Issue Site"
+		}
+	],
+	"links": [],
+	"modified": "2026-10-28 18:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HDS Known Issue",
+	"naming_rule": "Expression (old style)",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "System Manager",
+			"share": 1,
+			"write": 1
+		},
+		{
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "Agent Manager",
+			"share": 1,
+			"write": 1
+		},
+		{
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "Agent",
+			"share": 1
+		}
+	],
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": [],
+	"title_field": "title",
+	"track_changes": 1
+}

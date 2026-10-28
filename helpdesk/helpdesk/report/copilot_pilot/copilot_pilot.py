@@ -32,6 +32,8 @@ COLUMNS = (
     ("builds_reopened", "Builds reopened", "Int", 120),
     ("build_hours", "Build hours estimated", "Float", 140),
     ("build_ai_cost", "Build AI cost ($)", "Float", 130),
+    ("watch_tickets", "Error watch tickets", "Int", 130),
+    ("repeats_known", "Known repeats", "Int", 110),
     ("corrections_applied", "Corrections applied", "Int", 140),
     ("records_skipped", "Records skipped", "Int", 120),
     ("corrections_undone", "Corrections undone", "Int", 140),

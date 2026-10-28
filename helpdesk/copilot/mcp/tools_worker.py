@@ -58,6 +58,7 @@ def submit_investigation(
     questions: list | None = None,
     cost: dict | None = None,
     change_set: dict | None = None,
+    error_signatures: list | None = None,
 ) -> dict:
     if runs.fixing(_run(caller)):
         frappe.throw(
@@ -77,6 +78,7 @@ def submit_investigation(
             "questions": questions or [],
             "cost": cost or {},
             "change_set": change_set,
+            "error_signatures": error_signatures or [],
         },
     )
     _log_usage(doc.name, cost, "investigate", 1)
@@ -165,9 +167,15 @@ def customer_erp_read(caller, tool: str, arguments: dict | None = None) -> dict:
             "result": text[:MAX_SITE_RESULT_CHARS],
         }
     try:
-        return {"tool": tool, "result": json.loads(text)}
+        result = json.loads(text)
     except ValueError:
         return {"tool": tool, "result": text}
+    if tool == "get_error_log":
+        from helpdesk.copilot import known_issues
+
+        # the diagnosis may name these errors; only the ones the site really gave are remembered
+        known_issues.remember_signatures(run.name, result)
+    return {"tool": tool, "result": result}
 
 
 register_tool(
@@ -208,6 +216,13 @@ register_tool(
             "description": "For a wrong setting or wrong data: {summary, customer_note, found_by, "
             "changes: [{action: update|create, doctype, name, values, rows, add_rows, why}], "
             "set_aside: [{doctype, name, why}]}. Never deletes; submitted documents go in set_aside.",
+        },
+        "error_signatures": {
+            "type": "array",
+            "items": {"type": "string", "maxLength": 600},
+            "maxItems": 10,
+            "description": "The site errors the diagnosis rests on, each as 'app | method | the error's last line' "
+            "from get_error_log (app, method and the last line of error). Links the ticket to Copilot's known issues.",
         },
     },
     required=["root_cause_category", "confidence"],

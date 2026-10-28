@@ -92,6 +92,14 @@ def validate_investigation(result: dict) -> dict:
         "questions": [_text(q, LIMITS["text"]) for q in questions],
         "cost": _cost(cost),
         "change_set": change_set,
+        # the errors the diagnosis rests on, as the site gave them (app | method | last line)
+        "error_signatures": [
+            _text(sig, 600)
+            for sig in (result.get("error_signatures") or [])[:10]
+            if isinstance(sig, str) and sig.strip()
+        ]
+        if isinstance(result.get("error_signatures"), list)
+        else [],
     }
 
 
@@ -168,6 +176,9 @@ def route(run, result: dict):
         investigated_at=now_datetime(),
     )
     runs.update_ticket(doc, root_cause=effective)
+    from helpdesk.copilot import known_issues
+
+    known_issues.link_run(doc, investigation.get("error_signatures"))
     _flag_suspicious(doc)
     customer.note_diagnosis(doc, investigation)
     if doc.state == "Explaining":

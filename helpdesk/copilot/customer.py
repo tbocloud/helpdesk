@@ -70,9 +70,10 @@ def send_stage(run, stage: str, context: dict | None = None) -> bool:
 
     A shadow run tells the customer nothing: the event alone records what
     they would have seen. Nor does a revert run (an undo): the ticket is
-    with a person by then.
+    with a person by then. Nor does a ticket the error watch opened, until
+    a person replied on it or the fix is live.
     """
-    from helpdesk.copilot import conversation
+    from helpdesk.copilot import conversation, watch
 
     language = conversation.language_of(run.ticket)
     text = render(stage, context, build=bool(run.get("build_scope")), language=language)
@@ -83,7 +84,11 @@ def send_stage(run, stage: str, context: dict | None = None) -> bool:
         + 1
     )
     hub_ref = f"{run.name}:{stage}:{number}"
-    if run.get("shadow") or run.get("kind") == "revert":
+    if (
+        run.get("shadow")
+        or run.get("kind") == "revert"
+        or (stage != "Resolved" and watch.held(run.ticket))
+    ):
         runs.add_event(
             run,
             "stage",
@@ -93,6 +98,11 @@ def send_stage(run, stage: str, context: dict | None = None) -> bool:
                 "hub_ref": hub_ref,
                 "pushed": False,
                 "shadow": True,
+                **(
+                    {"held": "error watch"}
+                    if not run.get("shadow") and run.get("kind") != "revert"
+                    else {}
+                ),
             },
             runs.SYSTEM,
         )

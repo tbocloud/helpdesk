@@ -193,8 +193,13 @@ def start_run(
 
 
 def on_ticket_insert(doc, method=None):
-    """after_insert hook: a new ticket of a Copilot-enabled customer gets a run."""
-    if not doc.customer or not copilot_settings.is_enabled():
+    """after_insert hook: a new ticket of a Copilot-enabled customer gets a run (not one
+    the error watch raised for a fix that only has to reach the site)."""
+    if (
+        not doc.customer
+        or not copilot_settings.is_enabled()
+        or doc.flags.get("no_copilot_run")
+    ):
         return
     if not frappe.db.get_value("HD Customer", doc.customer, "custom_copilot_enabled"):
         return
@@ -586,7 +591,7 @@ def run_context(run) -> dict:
         else None
     )
     from helpdesk.ai_engine import worker_models
-    from helpdesk.copilot import changes, fixes
+    from helpdesk.copilot import changes, fixes, known_issues
 
     return {
         "run": run.name,
@@ -647,6 +652,8 @@ def run_context(run) -> dict:
             "apps": apps_for(registry),
             # when the commits were last read from the site (the claim reads them again when it can)
             "apps_read_at": str(registry.last_synced or ""),
+            # an error logged before the latest deploy may be fixed already
+            "deploys": last_deploys(registry.name),
         }
         if registry
         else None,
@@ -666,7 +673,43 @@ def run_context(run) -> dict:
             fields=["name", "state", "root_cause_category", "summary"],
             order_by="creation asc",
         ),
+        # what Copilot remembers about this ticket's and this site's errors (Phase 9)
+        "known_issues": known_issues.for_run(run),
+        "raised_by_copilot": ticket.get("custom_copilot_source") or "",
     }
+
+
+def last_deploys(registry: str, limit: int = 5) -> list[dict]:
+    """The site's latest deploys through TBO Support, newest first: when, and each app's commit."""
+    requests = frappe.get_all(
+        "HDS Deploy Site",
+        filters={"registry": registry, "parenttype": "HDS Deploy Request"},
+        pluck="parent",
+    )
+    done = frappe.get_all(
+        "HDS Deploy Request",
+        filters={"name": ["in", requests or [""]], "status": "Succeeded"},
+        fields=["name", "finished_at"],
+        order_by="finished_at desc",
+        limit=limit,
+    )
+    return [
+        {
+            "finished_at": str(request.finished_at or ""),
+            "apps": [
+                {"app": app.app, "commit": (app.to_commit or "")[:12]}
+                for app in frappe.get_all(
+                    "HDS Deploy App",
+                    filters={
+                        "parent": request.name,
+                        "parenttype": "HDS Deploy Request",
+                    },
+                    fields=["app", "to_commit"],
+                )
+            ],
+        }
+        for request in done
+    ]
 
 
 def _conversation(ticket: str, limit: int = 20) -> list[dict]:
