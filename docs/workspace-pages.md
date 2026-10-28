@@ -550,8 +550,16 @@ Completed, Cancelled. `get_kanban_tasks()` without `project` returns tasks assig
 the user (through `frappe.get_list`, so permissions and department walls apply), with finished
 and cancelled ones only if changed in the last 30 days. Each card names its project. Dragging,
 the timer, hold/resume, complete, edit, ask for help and hand over work as on a project board,
-each using the task's own project; project-level actions (New task, Plan, Approve/Send back,
-Make recurring) stay on the project's board.
+each using the task's own project; project-level actions (Plan, Approve/Send back, Make
+recurring) stay on the project's board.
+
+**New task** (header, the primary action) opens the same `NewTaskDialog` as a project, with a
+**Project** picker first: `get_projects` cut to open projects where `can_add_tasks` is true (the
+rule `add_task` checks), with a note when there are none. Picking a project loads its team,
+open tasks (for Depends on) and the default assignee: the person themselves when they're on
+that project's team, so the new task lands on their board, which reloads once it's created.
+Changing the project clears Depends on and an assignee the person didn't pick. Phase
+suggestions are only offered on a project's own board.
 
 ## Tasks: assigned by, on hold, moving, the timer
 

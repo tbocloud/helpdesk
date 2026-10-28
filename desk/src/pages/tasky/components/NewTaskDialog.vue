@@ -11,6 +11,43 @@
       novalidate
       @submit.prevent="submit"
     >
+      <!-- opened outside a project (My board), the task's project is picked here -->
+      <template v-if="!projectId">
+        <div
+          v-if="projects.error && !projects.data"
+          role="alert"
+          class="flex items-start gap-2 rounded-md bg-danger-soft px-3 py-2 text-p-sm text-danger"
+        >
+          <LucideCircleAlert
+            class="mt-0.5 size-4 shrink-0"
+            aria-hidden="true"
+          />
+          <span class="flex-1">{{ __("Couldn't load your projects.") }}</span>
+          <Button size="sm" :label="__('Retry')" @click="projects.reload()" />
+        </div>
+        <template v-else>
+          <Combobox
+            v-model="pickedProject"
+            :label="__('Project')"
+            :options="projectOptions"
+            :placeholder="__('Pick a project')"
+            :loading="projects.loading"
+            :empty-text="__('No matching project')"
+            required
+          />
+          <p
+            v-if="projects.data && !projectOptions.length"
+            class="text-p-sm text-ink-gray-6"
+          >
+            {{
+              __(
+                "There's no open project you can add tasks to. Ask a project manager to add you to one."
+              )
+            }}
+          </p>
+        </template>
+      </template>
+
       <TextInput
         v-model="form.task_name"
         :label="__('Task name')"
@@ -139,7 +176,7 @@
           :form="formId"
           :label="__('Create task')"
           :loading="addTask.loading"
-          :disabled="!form.task_name.trim()"
+          :disabled="!form.task_name.trim() || !project"
         />
       </div>
     </template>
@@ -173,7 +210,8 @@ interface Member {
 
 const props = defineProps<{
   open: boolean;
-  projectId: string;
+  /** Without one, the dialog asks which of the person's projects the task is for. */
+  projectId?: string;
   /** Existing phase names, offered as suggestions. */
   phases?: string[];
   defaultPhase?: string;
@@ -185,6 +223,34 @@ const emit = defineEmits<{
 }>();
 
 const formId = `tasky-new-task-${useId()}`;
+
+const pickedProject = ref<string | null>(null);
+const project = computed(() => props.projectId || pickedProject.value || "");
+
+const projects = createResource({
+  url: "helpdesk.tasky.api.get_projects",
+  // shown inline in the dialog
+  onError() {},
+});
+
+// add_task only takes projects the person is on; closed ones get no new work
+const projectOptions = computed(() =>
+  (
+    (projects.data ?? []) as {
+      name: string;
+      project_name?: string;
+      customer?: string;
+      status?: string;
+      can_add_tasks?: boolean;
+    }[]
+  )
+    .filter((p) => p.can_add_tasks && (p.status || "Open") === "Open")
+    .map((p) => ({
+      label: p.project_name || p.name,
+      value: p.name,
+      description: p.customer || p.name,
+    }))
+);
 
 const form = reactive({
   task_name: "",
@@ -209,7 +275,7 @@ const aiText = ref<string | null>(null);
 
 const draftContext = computed<DraftContext>(() => ({
   task_name: form.task_name,
-  project: props.projectId,
+  project: project.value,
   category: form.category,
   phase: form.phase.trim(),
   priority: form.priority,
@@ -235,18 +301,21 @@ function resetForm() {
 
 const projectDetail = createResource({
   url: "helpdesk.tasky.api.get_project_detail",
-  makeParams: () => ({ project: props.projectId }),
+  makeParams: () => ({ project: project.value }),
 });
 
 const openTasks = createResource({
   url: "helpdesk.tasky.api.get_project_tasks",
-  makeParams: () => ({ project: props.projectId }),
+  makeParams: () => ({ project: project.value }),
   onError() {},
 });
 
 const dependencyOptions = computed(() => [
   {
-    label: openTasks.data ? __("No dependency") : __("Loading tasks…"),
+    label:
+      openTasks.data || !project.value
+        ? __("No dependency")
+        : __("Loading tasks…"),
     value: "",
   },
   ...((openTasks.data ?? []) as { name: string; subject: string }[]).map(
@@ -256,7 +325,7 @@ const dependencyOptions = computed(() => [
 
 const members = computed<Member[]>(() => projectDetail.data?.users ?? []);
 const membersLoaded = computed(
-  () => !!projectDetail.data || !!projectDetail.error
+  () => !project.value || !!projectDetail.data || !!projectDetail.error
 );
 
 // active agents with enabled accounts; deleted or disabled people never appear
@@ -344,19 +413,33 @@ watch(
     if (!open) return;
     resetForm();
     addTask.reset();
+    pickedProject.value = null;
     if (props.projectId) {
       projectDetail.reload();
       openTasks.reload();
+    } else {
+      projects.reload();
     }
     assignable.reload();
   },
   { immediate: true }
 );
 
+// the team, dependencies and default assignee all belong to the picked project
+watch(pickedProject, (picked) => {
+  form.depends_on_task = "";
+  if (!assigneeTouched.value) form.assigned_to = "";
+  projectDetail.reset();
+  openTasks.reset();
+  if (!picked) return;
+  projectDetail.reload();
+  openTasks.reload();
+});
+
 function submit() {
-  if (!form.task_name.trim() || addTask.loading) return;
+  if (!form.task_name.trim() || !project.value || addTask.loading) return;
   addTask.submit({
-    project: props.projectId,
+    project: project.value,
     task_name: form.task_name.trim(),
     description: form.description,
     phase: form.phase.trim(),
