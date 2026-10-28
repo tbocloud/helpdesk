@@ -91,7 +91,7 @@
     :aria-label="__('Project sections')"
   >
     <router-link
-      v-for="tab in tabs"
+      v-for="tab in visibleTabs"
       :key="tab.to"
       :to="{ name: tab.to, params: { projectId } }"
       class="-mb-px flex h-10 shrink-0 items-center gap-1.5 border-b-2 px-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-outline-gray-4"
@@ -169,6 +169,7 @@ import LucideUserStar from "~icons/lucide/user-star";
 import LucideUserX from "~icons/lucide/user-x";
 import LucideKanban from "~icons/lucide/square-kanban";
 import LucideLayoutDashboard from "~icons/lucide/layout-dashboard";
+import LucideKeyRound from "~icons/lucide/key-round";
 import LucideListChecks from "~icons/lucide/list-checks";
 import LucidePaperclip from "~icons/lucide/paperclip";
 import LucidePencil from "~icons/lucide/pencil";
@@ -205,6 +206,13 @@ const tabs = [
   { label: "Recurring", to: "TaskyRecurring", icon: LucideRepeat },
   { label: "Files", to: "TaskyFiles", icon: LucidePaperclip },
   {
+    label: "Credentials",
+    to: "TaskyCredentials",
+    icon: LucideKeyRound,
+    // only the project's managers, lead and department head; the server decides
+    needs: "can_handle_credentials",
+  },
+  {
     label: "Sign-off",
     to: "TaskySignoffs",
     icon: LucideClipboardCheck,
@@ -213,12 +221,16 @@ const tabs = [
   },
 ];
 
+const visibleTabs = computed(() =>
+  tabs.filter((tab) => !tab.needs || detail.data?.[tab.needs])
+);
+
 function isCurrent(tab: { to: string; also?: string[] }) {
   const name = String(route.name);
   return name === tab.to || !!tab.also?.includes(name);
 }
 
-// the tabs that list the project's tasks (Files and Sign-off don't)
+// the tabs that list the project's tasks (Files, Credentials and Sign-off don't)
 const TASK_TABS = [
   "TaskyProject",
   "TaskyChecklist",

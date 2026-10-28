@@ -4089,3 +4089,42 @@ def record_status_change(task: str, old: str, new: str, at) -> None:
 def get_in_progress_as(user: str, **filters) -> dict:
     """The In progress page's answer (helpdesk.api.in_progress.get_in_progress) for `user`."""
     return call_as_user(user, "helpdesk.api.in_progress.get_in_progress", **filters)
+
+
+def make_credentials(
+    project: str,
+    platform: str = "Facebook",
+    username: str = "brand@client.example",
+    password: str = "s3cret-Pass!",
+    user: str = "Administrator",
+) -> dict:
+    """Records one login the client handed over on `project`, through the credentials
+    API as `user`, and returns the saved handover (without passwords)."""
+    from helpdesk.api.client_credentials import save_handover
+
+    return run_as_user(
+        user,
+        lambda: save_handover(
+            project,
+            handed_over_by="Client Owner",
+            items=[{"platform": platform, "username": username, "password": password}],
+        ),
+    )
+
+
+def make_accepted_proposal(**values) -> dict:
+    """What the ERP site's accepted strategy proposal endpoint answers (the contract
+    helpdesk.api.proposals.accepted_proposal reads), with `values` overriding."""
+    return {
+        "proposal": "PROP-2026-00042",
+        "lead": "CRM-LEAD-42",
+        "customer": "Malabar Spices",
+        "tbo_lead_type": "Digital Marketing",
+        "tbo_department": "Digital",
+        "start": "2026-11-02",
+        "end": "2027-04-30",
+        "project_name": "Malabar Spices - Digital Marketing",
+        "deliverables": "12 posts a month, 4 reels",
+        "hub_project": None,
+        **values,
+    }

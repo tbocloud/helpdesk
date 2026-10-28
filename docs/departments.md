@@ -337,6 +337,12 @@ insights for the departments they head (`manage_team`, read-only; see
   Managers (write permission on HD Department) can save; anyone else gets a permission error.
 - Renaming a department keeps its heads.
 
+- **Client credentials** of a project (the logins a Digital client hands over) are seen by
+  the project's managers and lead, the heads of the project's department (the Digital
+  Marketing Head for Digital) and System Managers, and nobody else; Sales Employees never
+  ([client-credentials.md](client-credentials.md)). A strategy proposal's project is made in the
+  Digital department ([leads.md](leads.md#content-and-digital-marketing-leads)).
+
 ## Decisions
 
 - **A Project Coordinator runs the project's tasks, not the project.** Coordinators

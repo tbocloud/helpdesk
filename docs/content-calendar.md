@@ -672,6 +672,22 @@ delivery report counts it under In review; the client portal shows it to the cli
 "Approved · final check" and counts it with their approved posts. The legacy calendar import
 still maps "Client Approved" straight to Approved (old calendars, already past both approvals).
 
+## Client approval colour
+
+Each post shows where the client stands, beside its status (`ClientApprovalChip.vue`,
+`clientApproval()` in `desk/src/pages/content/constants.ts`). The status machine is unchanged.
+
+| Status | Shown | Colour |
+| --- | --- | --- |
+| Client Review, Changes Requested | clock icon, "Awaiting client" | `danger` |
+| Head Review, Approved, Scheduled, Published | check icon, "Client approved" | `success` |
+| Earlier statuses, Cancelled | nothing: the post hasn't reached the client | |
+
+The chip is on the board's list and entry cards and in the Sheet. The calendar colours these
+posts red and green and adds the label to the event's text, and its legend reads Planning,
+Internal review, Awaiting client, Client approved. Head Review counts as client approved
+because it is entered only from the client's approval.
+
 ## Colour rules
 
 From `desk/src/theme.css`: the brand teal is only for the primary action (Add entry) and the

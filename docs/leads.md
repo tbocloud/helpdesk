@@ -419,6 +419,29 @@ positive lead, a new quotation and a new lead are) is in TBO Smart's `docs/hub-l
 The Lead page's **Proposals** section, the proposal builder and Settings → Rates and proposals
 are specified in [proposals.md](proposals.md).
 
+## Content and Digital Marketing leads
+
+A lead whose `tbo_lead_type` is Content / Digital Marketing runs a different chain on the ERP
+site: a **6-month strategy proposal** → the client accepts → the **credentials handover** →
+the content calendar → the project and team. When the ERP site's next action is
+`create_project` for such a proposal (`next.source_type == "Proposal"`), the lead's documents
+strip calls `helpdesk.api.proposals.create_project_from_proposal(proposal)`; plans keep
+`create_project_from_plan`. Both share `ensure_project`.
+
+- The project is in the **Digital** department (looked up by name; none when it is missing or
+  inactive), has the project type **Content Calendar** (so the client's posts find it, see
+  [content-calendar.md](content-calendar.md#which-project-the-tasks-go-to)), the proposal's
+  dates and client, and the deliverables summary as its notes.
+- It carries `custom_crm_lead` and the new `custom_crm_proposal` (protected like the plan
+  link), and the ERP site is told with `hub_proposals.link_project(lead, project, proposal,
+  url)`. A second call finds the project already made.
+- **Assumed ERP contract** (not final): `hub_proposals.get_accepted_proposal(name)` answers
+  `proposal, lead, customer, tbo_lead_type, tbo_department, start, end, project_name,
+  deliverables, hub_project`. It is read in one function, `proposals.accepted_proposal`, through
+  `call_if_deployed`: an older ERP site gets a plain "needs the latest TBO Smart" message.
+- The project's **Credentials** tab holds the client's logins and the hand-back when the client
+  leaves: [client-credentials.md](client-credentials.md).
+
 ## Tests
 
 `helpdesk/tests/test_leads.py` with `test_utils.FakeCRM` (`lead_answers`, `lead_calls`,

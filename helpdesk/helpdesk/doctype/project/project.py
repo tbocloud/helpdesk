@@ -9,7 +9,12 @@ from frappe.utils import getdate
 from helpdesk.tasky.permissions import hidden_departments
 
 # set by Create project on the lead's documents strip (docs/proposals.md)
-PLAN_LINK = ("custom_crm_lead", "custom_crm_plan", "custom_crm_acting_user")
+PLAN_LINK = (
+    "custom_crm_lead",
+    "custom_crm_plan",
+    "custom_crm_proposal",
+    "custom_crm_acting_user",
+)
 
 
 class Project(Document):
@@ -32,9 +37,9 @@ class Project(Document):
             frappe.delete_doc("HD Project Folder", folder, ignore_permissions=True)
 
     def protect_plan_link(self):
-        """The lead, plan and plan maker are written only by Create project
-        (helpdesk.api.proposals.create_project_from_plan), never by a save: the hub asks
-        the ERP site about the plan as that maker."""
+        """The lead, plan, proposal and maker are written only by Create project
+        (helpdesk.api.proposals), never by a save: the hub asks the ERP site about
+        the plan as that maker."""
         before = None if self.is_new() else self.get_doc_before_save()
         for field in PLAN_LINK:
             # an unset link reads as None or "" depending on where the doc came from

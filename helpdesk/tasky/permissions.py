@@ -239,6 +239,24 @@ def can_manage_project(project: str | None, user: str | None = None) -> bool:
     )
 
 
+def can_handle_credentials(project: str | None, user: str | None = None) -> bool:
+    """Who may see and change a project's client credentials (docs/client-credentials.md):
+    System Managers, the project's managers and lead, and the heads of its department
+    (the Digital Marketing Head for Digital). Nobody else: not members, coordinators,
+    Agent Managers or Sales Employees."""
+    user = user or frappe.session.user
+    if not project or is_sales_employee(user):
+        return False
+    if user == "Administrator" or "System Manager" in frappe.get_roles(user):
+        return True
+    if project in get_managed_projects(user):
+        return True
+    lead, department = frappe.db.get_value(
+        "Project", project, ["project_lead", "custom_department"]
+    ) or (None, None)
+    return lead == user or (bool(department) and user in department_heads(department))
+
+
 def is_project_coordinator(project: str | None, user: str | None = None) -> bool:
     """Listed on the project's team with the Project Coordinator project role."""
     user = user or frappe.session.user

@@ -145,6 +145,9 @@ export interface DocumentChain {
     label: string;
     /** create: the accepted document to make it from */
     source?: string;
+    /** create_project: "Proposal" when the project comes from an accepted strategy
+     *  proposal (Content / Digital Marketing leads), else an implementation plan */
+    source_type?: "Proposal" | "Implementation Plan";
     /** open: the document in progress; uat: the project */
     name?: string;
   };

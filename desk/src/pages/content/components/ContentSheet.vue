@@ -81,7 +81,13 @@
             {{ platformsOf(post).join(", ") }}
           </td>
           <td class="px-3 py-2 text-ink-gray-7">{{ post.format }}</td>
-          <td class="px-3 py-2"><StatusPill :post="post" /></td>
+          <td class="px-3 py-2">
+            <div class="flex flex-wrap items-center gap-1">
+              <StatusPill :post="post" /><ClientApprovalChip
+                :status="post.status"
+              />
+            </div>
+          </td>
           <td
             v-for="role in TEAM_ROLES"
             :key="role.field"
@@ -120,6 +126,7 @@ import {
 } from "../constants";
 import { firstFromToday, revealIfLow } from "../dayFocus";
 import SpecialDayBadge from "./SpecialDayBadge.vue";
+import ClientApprovalChip from "./ClientApprovalChip.vue";
 import StatusPill from "./StatusPill.vue";
 
 const props = defineProps<{
