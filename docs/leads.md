@@ -289,7 +289,11 @@ doesn't show without its fields. The hub can be deployed before TBO Smart.
   leads yet" on first use.
 - **New lead** (`LeadFormDialog.vue`, the one primary action on the list): contact name
   (required), company, email, mobile, source, segment, territory, industry, owner (defaults
-  to you on the ERP site) and next follow-up. Opens the new lead when it's created.
+  to you on the ERP site), next follow-up and remarks. Opens the new lead when it's created.
+  Remarks aren't a lead field: the ERP site's `create_lead` takes only the `data` keys above,
+  so the dialog saves them with `add_note` once the lead exists (they're the first entry on
+  its timeline). If that note fails the lead stays created and a warning says to add the
+  remarks as a note. Edit lead has no Remarks; the lead page's note composer does that.
 - **Lead** (`/helpdesk/leads/<name>`, `Lead.vue`): details, *Move stage* (the primary
   action; only `allowed_stages`, with an optional note), *Edit* (the same dialog, sending
   only changed fields), a note composer and the timeline, and the quotations read-only

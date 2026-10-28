@@ -98,6 +98,15 @@
         />
       </div>
 
+      <FormControl
+        v-if="!lead"
+        v-model="remarks"
+        type="textarea"
+        :label="__('Remarks')"
+        :rows="3"
+        :description="__('Saved as the lead\'s first note.')"
+      />
+
       <p v-if="!lead" class="text-p-xs text-ink-gray-6">
         {{
           __("The lead is created in ERPNext on the ERP site, under your name.")
@@ -172,6 +181,8 @@ function blank(): LeadForm {
 }
 
 const form = reactive<LeadForm>(blank());
+// not a lead field: the ERP site's create takes only those, so remarks go in as a note
+const remarks = ref("");
 
 // a fresh form each time it opens: the lead's values, or empty
 watch(
@@ -179,6 +190,7 @@ watch(
   (open) => {
     if (!open) return;
     errorMessage.value = "";
+    remarks.value = "";
     const values = blank();
     for (const field of LEAD_FORM_FIELDS) {
       values[field] = String(props.lead?.[field] ?? "");
@@ -277,7 +289,19 @@ function submit() {
     lead ? "helpdesk.api.leads.update_lead" : "helpdesk.api.leads.create_lead",
     lead ? { name: lead.name, data } : { data }
   )
-    .then((result: { name?: string } | null) => {
+    .then(async (result: { name?: string } | null) => {
+      const note = remarks.value.trim();
+      if (!lead && note && result?.name) {
+        // the lead exists now, so a failed note mustn't send the person back to create it again
+        await call("helpdesk.api.leads.add_note", {
+          name: result.name,
+          note,
+        }).catch(() =>
+          toast.warning(
+            __("The remarks weren't saved. Add them as a note on the lead.")
+          )
+        );
+      }
       toast.success(lead ? __("Lead saved") : __("Lead created"));
       emit("saved", result?.name || lead?.name || "");
       emit("update:open", false);
