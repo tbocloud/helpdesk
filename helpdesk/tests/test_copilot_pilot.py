@@ -89,8 +89,8 @@ class TestTheLevel(PilotCase):
 
     def test_copilot_writes_fixes_only_from_the_fix_level(self):
         make_customer_project(self.customer, "Pilot Co support")
-        make_copilot_settings(
-            enabled=1, default_copilot_level="Diagnose only", copilot_writes_fixes=1
+        make_copilot_settings(  # Phase 11: ordinary bugs are fixed by themselves from the Fix level
+            enabled=1, default_copilot_level="Diagnose only", ask_before_every_fix=0
         )
         self.at("Explain")
         run = self.routed("bug")

@@ -4059,6 +4059,9 @@ def make_copilot_settings(templates: dict[str, str] | None = None, **values):
     """
     values.setdefault("shadow_mode", 0)
     values.setdefault("default_copilot_level", "Correct")
+    # before Phase 11 a person asked for every fix and pressed every deploy; tests of that flow keep it
+    values.setdefault("ask_before_every_fix", 1)
+    values.setdefault("deploy_needs_a_press", 1)
     settings = frappe.get_single("HDS Copilot Settings")
     settings.update(values)
     for stage, message in (templates or {}).items():

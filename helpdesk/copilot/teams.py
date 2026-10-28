@@ -703,14 +703,68 @@ def answer_message(activity: dict):
     chat = assistant.chat_for(user, "Teams")
     files = save_files(activity, chat)
     text = frappe.utils.strip_html_tags(activity.get("text") or "").strip()
+    ticket = quoted_ticket(activity)
     try:
-        replies = assistant.receive(user, "Teams", text, files)
+        if ticket:
+            # a reply to one of a ticket's messages: it goes on in that ticket's chat (Phase 11)
+            replies = ticket_reply(user, ticket, text, files, chat)
+        else:
+            replies = assistant.receive(user, "Teams", text, files)
     except frappe.ValidationError as e:
         frappe.clear_last_message()
         replies = [assistant.text_card(str(e), "warning")]
     frappe.db.commit()  # kept even when the answer cannot be sent - nosemgrep
     for reply in replies:
         reply_in(activity, reply)
+
+
+REPLY_QUOTE = re.compile(
+    r'<blockquote[^>]*itemtype="http://schema\.skype\.com/Reply"[^>]*>', re.I
+)
+QUOTE_ID = re.compile(r'itemid="([^"]+)"', re.I)
+
+
+def quoted_ticket(activity: dict) -> str | None:
+    """The ticket of the bot's message the person replied to: Teams quotes it in the reply's HTML
+    (or gives its id as replyToId). None when the reply quotes nothing of a ticket."""
+    from helpdesk.copilot import assistant
+
+    ids = [str(activity["replyToId"])] if activity.get("replyToId") else []
+    for attachment in activity.get("attachments") or []:
+        content = attachment.get("content")
+        if str(attachment.get("contentType") or "").startswith(
+            "text/html"
+        ) and isinstance(content, str):
+            for quote in REPLY_QUOTE.findall(content):
+                ids += QUOTE_ID.findall(quote)
+    for message_id in ids:
+        ticket = frappe.db.get_value(
+            assistant.MESSAGE,
+            {"teams_activity": message_id, "ticket": ["is", "set"]},
+            "ticket",
+        )
+        if ticket:
+            return ticket
+    return None
+
+
+def ticket_reply(
+    user: str, ticket: str, text: str, files: list[str], chat
+) -> list[dict]:
+    """The person's reply in that ticket's chat; the answers come back headed with the ticket, and
+    stay in their own Teams chat too (the TBO Copilot panel shows it)."""
+    from helpdesk.copilot import assistant, thread
+
+    replies = thread.receive(user, ticket, text, files, via="Teams")
+    assistant.record(chat, "In", text, ticket=ticket)
+    shown = []
+    for reply in replies:
+        labelled = thread.labelled(reply, ticket)
+        labelled["message"] = assistant.record(
+            chat, "Out", labelled.get("title") or "", labelled, ticket=ticket
+        ).name
+        shown.append(labelled)
+    return shown
 
 
 def invoke_answer(reply: dict | None) -> dict:

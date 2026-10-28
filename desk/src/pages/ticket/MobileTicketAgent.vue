@@ -55,8 +55,14 @@
             class="[&_[role='tab']]:px-0 [&_[role='tablist']]:px-5 [&_[role='tablist']]:gap-7.5"
           >
             <template #tab-panel="{ tab }">
-              <!-- the same side panel as on desktop, as a tab -->
+              <!-- the same side panel as on desktop, as tabs -->
               <TicketDetailsTab v-if="tab.name === 'details'" />
+              <div
+                v-else-if="tab.name === 'copilot'"
+                class="flex h-[calc(100dvh-15rem)] flex-col"
+              >
+                <CopilotThread :ticket="String(ticket.doc.name)" />
+              </div>
 
               <!-- Rest Activities -->
               <TicketAgentActivities
@@ -173,7 +179,9 @@ import { TicketAgentActivities } from "@/components/ticket";
 
 import CustomActions from "@/components/CustomActions.vue";
 import AssignTo from "@/components/ticket-agent/AssignTo.vue";
+import CopilotThread from "@/components/ticket-agent/CopilotThread.vue";
 import TicketDetailsTab from "@/components/ticket-agent/TicketDetailsTab.vue";
+import CopilotIcon from "~icons/lucide/bot";
 import SetContactPhoneModal from "@/components/ticket/SetContactPhoneModal.vue";
 import { setupCustomizations } from "@/composables/formCustomisation";
 import { useScreenSize } from "@/composables/screen";
@@ -356,6 +364,13 @@ const dropdownOptions = computed(() =>
 
 const tabs: ComputedRef<TabObject[]> = computed(() => {
   const _tabs = [
+    // the ticket's Copilot chat (Phase 11), first on a phone too
+    {
+      name: "copilot",
+      label: __("Copilot"),
+      icon: CopilotIcon,
+      condition: () => isMobileView.value,
+    },
     {
       name: "details",
       label: __("Details"),

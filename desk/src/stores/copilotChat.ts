@@ -25,6 +25,8 @@ export interface CopilotMessage {
   card: CopilotCard | null;
   status: string | null;
   at: string;
+  /** "Teams": said in the person's Teams chat with the bot, shown here too (Phase 11) */
+  via?: string;
 }
 
 /** The Copilot panel: the staff assistant's chat on the web (helpdesk.api.copilot_chat). */

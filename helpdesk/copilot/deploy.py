@@ -223,8 +223,10 @@ def _app_of(run, approval) -> dict:
 def request_deploy(run, when: str, user: str, auto: bool = False):
     """Deploy the merged fix Tonight (the next window) or Now (seniors and Agent Managers).
 
-    `auto`: asked by Auto-deploy categories on the approver's behalf, never for a bench
-    other customers' sites share (TBO Support's own site on it does not count).
+    `auto`: asked on the approver's behalf once the fix is approved and merged (Phase 11, or an
+    Auto-deploy category). Their approval is the go: a low-risk fix may go now without a senior;
+    a bench other customers' sites share still needs a senior approver, and waits for the night
+    window (TBO Support's own site on it does not count).
     """
     from helpdesk.copilot import customer
 
@@ -243,7 +245,7 @@ def request_deploy(run, when: str, user: str, auto: bool = False):
             frappe.PermissionError,
         )
     now = str(when).strip().lower() == "now"
-    if now and not may_deploy_now(user):
+    if now and not auto and not may_deploy_now(user):
         frappe.throw(
             _(
                 "Only senior approvers and Agent Managers may deploy now; schedule it for tonight."
@@ -267,13 +269,15 @@ def request_deploy(run, when: str, user: str, auto: bool = False):
         )
     others = [site for site in on_bench if site not in sites]
     customers = [site for site in others if site != hub_site()]
-    if customers and (auto or user not in approvals.seniors()):
+    if customers and user not in approvals.seniors():
         frappe.throw(
             _(
                 "Other sites share this bench ({0}); only a senior approver may deploy it."
             ).format(", ".join(customers[:5])),
             frappe.PermissionError,
         )
+    if customers and auto:
+        now = False  # other customers' sites move too: the night window
     at = now_datetime() if now else next_opening()
     doc = frappe.get_doc(
         {
@@ -314,6 +318,9 @@ def request_deploy(run, when: str, user: str, auto: bool = False):
         runs.SYSTEM if auto else runs.AGENT,
     )
     customer.send_stage(run, "Fix scheduled", {"date": local_time(at)})
+    from helpdesk.copilot import thread
+
+    thread.on_deploy(run, "now" if now else "tonight", at)
     runs.publish_run(run)
     return doc
 
@@ -324,14 +331,20 @@ def auto_categories() -> set[str]:
 
 
 def auto_request(run, approval):
-    """Schedules a merged fix for the next window by itself when its root cause or risk is
-    listed in Auto-deploy categories (empty in the pilot).
-
-    Never a sensitive or high-risk fix, an undo, or a bench other customers share; whatever
-    stops it is noted on the run and leaves Deploy to a person.
+    """Deploys a merged fix by itself once it is approved (Phase 11, unless Deploy Needs a
+    Press): a low-risk one at once, a high-risk or sensitive one (or a bench other customers
+    share) in the night window. With Deploy Needs a Press, only the root causes or risks listed
+    in Auto-deploy categories go by themselves, in the window, never a sensitive or high-risk
+    fix or an undo. Whatever stops it is said in the ticket's chat and leaves Deploy to a person.
     """
-    wanted = auto_categories()
     risk = (approval.risk_level or "").lower()
+    if not copilot_settings.get_settings().get("deploy_needs_a_press"):
+        # Phase 11: an approved fix deploys by itself; low risk at once, the rest tonight
+        if not press.configured():
+            return None
+        when = "now" if risk != "high" and not approval.sensitive else "tonight"
+        return _auto(run, approval, when)
+    wanted = auto_categories()
     if (
         not wanted
         or run.get("kind") == "revert"
@@ -341,8 +354,12 @@ def auto_request(run, approval):
         or not press.configured()
     ):
         return None
+    return _auto(run, approval, "tonight")
+
+
+def _auto(run, approval, when: str):
     try:
-        return request_deploy(run, "tonight", approval.decided_by, auto=True)
+        return request_deploy(run, when, approval.decided_by, auto=True)
     except Exception as e:
         frappe.clear_last_message()  # the approver's click merged the fix; this is no error of theirs
         if not isinstance(e, (frappe.ValidationError, frappe.PermissionError)):
@@ -351,6 +368,23 @@ def auto_request(run, approval):
             )
         runs.add_event(
             run, "auto_deploy_skipped", {"reason": str(e)[:300]}, runs.SYSTEM
+        )
+        from helpdesk.copilot import thread
+
+        thread.post(
+            run.ticket,
+            thread._card(
+                "",
+                [
+                    _("Copilot could not deploy it by itself: {0}").format(
+                        str(e)[:300]
+                    ),
+                    _("A senior or an Agent Manager presses Deploy."),
+                ],
+                tone="warning",
+            ),
+            run=run.name,
+            status=True,
         )
         return None
 

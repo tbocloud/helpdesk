@@ -6,13 +6,21 @@ import frappe
 
 FORM_SCRIPTS = {
     "Helpdesk AI Support Actions": "ai_support_actions.js",
-    "Helpdesk Copilot Actions": "copilot_actions.js",
 }
+# shipped before and taken out again: the Copilot dialog and its buttons became the ticket's
+# Copilot chat (Phase 11, desk/src/components/ticket-agent/CopilotThread.vue)
+RETIRED = ("Helpdesk Copilot Actions",)
 
 
 def install_form_scripts():
     for name, file_name in FORM_SCRIPTS.items():
         _install(name, file_name)
+    for name in RETIRED:
+        if frappe.db.exists("HD Form Script", name):
+            frappe.delete_doc(
+                "HD Form Script", name, ignore_permissions=True, force=True
+            )
+            print(f"Removed HD Form Script: {name}")
     frappe.db.commit()  # migration step - nosemgrep
 
 

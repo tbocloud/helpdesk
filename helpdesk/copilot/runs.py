@@ -240,17 +240,11 @@ def _move(doc, to: str, actor: str, note: str = "", **fields):
     doc.save(ignore_permissions=True)
     add_event(doc, "state_change", {"from": previous, "to": to, "note": note}, actor)
     update_ticket(doc)
-    if to in NEWS_STATES and not doc.shadow:
-        # the people on the fix hear it in Teams or the Copilot panel (helpdesk.copilot.assistant)
-        frappe.enqueue(
-            "helpdesk.copilot.assistant.tell_news",
-            queue="short",
-            run=doc.name,
-            state=to,
-            note=note,
-            enqueue_after_commit=True,
-            now=frappe.flags.in_test,
-        )
+    from helpdesk.copilot import thread
+
+    # the step as one plain message in the ticket's chat; the news ones reach the people on the
+    # ticket in Teams or their Copilot panel (Phase 11, helpdesk.copilot.thread)
+    thread.on_state(doc, previous, to, note)
     if STAGE_FOR_STATE.get(to):
         send_stage(doc, STAGE_FOR_STATE[to])
     publish_run(doc)
@@ -594,7 +588,7 @@ def run_context(run) -> dict:
         else None
     )
     from helpdesk.ai_engine import worker_models
-    from helpdesk.copilot import changes, fixes, known_issues
+    from helpdesk.copilot import changes, fixes, known_issues, thread
 
     return {
         "run": run.name,
@@ -678,6 +672,8 @@ def run_context(run) -> dict:
         ),
         # what Copilot remembers about this ticket's and this site's errors (Phase 9)
         "known_issues": known_issues.for_run(run),
+        # the ticket's chat: its summary and what people told Copilot to do (Phase 11)
+        "ticket_chat": thread.for_worker(ticket.name),
         "raised_by_copilot": ticket.get("custom_copilot_source") or "",
     }
 

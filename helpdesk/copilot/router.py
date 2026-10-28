@@ -181,6 +181,7 @@ def route(run, result: dict):
     known_issues.link_run(doc, investigation.get("error_signatures"))
     _flag_suspicious(doc)
     customer.note_diagnosis(doc, investigation)
+    asking = None  # why Copilot asks before it fixes, when it does
     if doc.state == "Explaining":
         customer.draft_explanation(doc, explanation_text(investigation, effective))
         if effective == "customization_request" and not doc.shadow:
@@ -207,13 +208,12 @@ def route(run, result: dict):
         if not doc.shadow and not (
             corrected and effective in ("wrong_setting", "customer_mistake")
         ):
-            _fix_task(doc)
+            asking = _fix_task(doc)
     customer.send_stage(doc, STAGE_FOR_CATEGORY[effective])
-    from helpdesk.copilot import assistant
+    from helpdesk.copilot import thread
 
-    assistant.tell_watchers(
-        doc
-    )  # people who started this work from a Copilot chat hear it there
+    # the ticket's chat says what Copilot found and what happens next; the people on the ticket hear it
+    thread.on_diagnosis(doc, asking)
     return doc
 
 
@@ -229,17 +229,20 @@ def _flag_suspicious(run):
         )
 
 
-def _fix_task(run):
-    """A live run that needs a code fix gets its fix task at once; a failure never undoes the routing."""
+def _fix_task(run) -> str | None:
+    """A live run that needs a code fix gets its fix task at once, and Copilot starts the fix by
+    itself unless it must ask first (Phase 11: data or settings, a sensitive area, high risk); the
+    reason it asks, or None. A failure never undoes the routing."""
     from helpdesk.copilot import fixes
 
+    asking = None
     frappe.db.savepoint("copilot_fix_task")
     try:
         fixes.create_fix_task(run)
-        if copilot_settings.get_settings().get(
-            "copilot_writes_fixes"
-        ) and copilot_settings.allows(run.customer, copilot_settings.FIX):
-            fixes.request_copilot_fix(run)
+        if copilot_settings.allows(run.customer, copilot_settings.FIX):
+            asking = fixes.needs_asking(run)
+            if not asking and not fixes.fix_refusal(run):
+                fixes.request_copilot_fix(run)
     except fixes.NoProject:
         # a setup gap, not a failure: the agents see it on the ticket and can create the task later
         frappe.db.rollback(save_point="copilot_fix_task")
@@ -262,6 +265,7 @@ def _fix_task(run):
                 run.ticket
             ),
         )
+    return asking
 
 
 def explanation_text(investigation: dict, category: str) -> str:

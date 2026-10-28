@@ -297,6 +297,36 @@ def fix_refusal(run) -> str | None:
     return None
 
 
+def needs_asking(run) -> str | None:
+    """Why Copilot asks before it edits (Phase 11), or None when it fixes an ordinary bug by
+    itself: data or settings change, a sensitive area named by the diagnosis, a diagnosis that
+    rates its fix high risk, or the setting that asks every time."""
+    from helpdesk.copilot import risk
+
+    if copilot_settings.get_settings().get("ask_before_every_fix"):
+        return _("the settings ask before every fix")
+    if run.root_cause_category in ("data_damaged_by_bug", "wrong_setting") or run.get(
+        "change_set"
+    ):
+        return _("it changes data or settings on the customer's site")
+    proposal = frappe.parse_json(run.proposal or "{}") or {}
+    if str(proposal.get("risk") or "").lower() == "high":
+        return _("the diagnosis rates the fix high risk")
+    named = [str(f) for f in (proposal.get("files") or []) if f]
+    for item in frappe.parse_json(run.evidence or "[]") or []:
+        if isinstance(item, dict) and str(item.get("type") or "").lower() in (
+            "code",
+            "commit",
+            "customization",
+        ):
+            named.append(str(item.get("ref") or "").split(":")[0])
+    for path in named:
+        for reason, pattern in risk.SENSITIVE_PATHS:
+            if pattern.search(path):
+                return _("it touches {0} ({1})").format(_(reason), path)
+    return None
+
+
 def request_copilot_fix(run, user: str | None = None):
     """Queues a fix job: a worker reproduces the bug on a sandbox copy, fixes it and opens the pull request."""
     from helpdesk.copilot import customer
@@ -630,9 +660,10 @@ def fix_failed(run, reason: str, actor: str = runs.WORKER):
             once=False,
         )
     customer.comment(run.ticket, escape_html(text))
-    from helpdesk.copilot import assistant
+    from helpdesk.copilot import thread
 
-    assistant.tell_watchers(run, assistant.text_card(text, "warning"))
+    # the ticket's chat says so, and the people on the ticket hear it
+    thread.on_fix_failed(run, text)
     runs.publish_run(run)
 
 

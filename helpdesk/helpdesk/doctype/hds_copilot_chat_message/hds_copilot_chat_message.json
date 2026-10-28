@@ -9,6 +9,7 @@
 	"field_order": [
 		"chat",
 		"user",
+		"via",
 		"direction",
 		"text",
 		"intent",
@@ -42,6 +43,13 @@
 			"in_list_view": 1,
 			"in_standard_filter": 1,
 			"read_only": 1
+		},
+		{
+			"fieldname": "via",
+			"fieldtype": "Select",
+			"label": "Via",
+			"options": "\nWeb\nTeams",
+			"description": "Where a person wrote it, in a ticket's chat."
 		},
 		{
 			"fieldname": "direction",
@@ -141,7 +149,7 @@
 		}
 	],
 	"links": [],
-	"modified": "2026-10-24 14:00:00.000000",
+	"modified": "2026-10-28 22:30:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Copilot Chat Message",

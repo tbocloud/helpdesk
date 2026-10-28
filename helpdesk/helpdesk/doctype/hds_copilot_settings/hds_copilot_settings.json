@@ -89,7 +89,11 @@
 		"column_break_watch",
 		"watch_site_daily_cap",
 		"watch_daily_cap",
-		"watch_ignored"
+		"watch_ignored",
+		"ticket_chat_section",
+		"ask_before_every_fix",
+		"column_break_ticket_chat",
+		"deploy_needs_a_press"
 	],
 	"fields": [
 		{
@@ -635,11 +639,36 @@
 			"label": "Ignored Errors",
 			"default": "helpdesk_client\nSession Stopped",
 			"description": "One per line; an error whose signature (app | method | last line) contains one is never a ticket. The connector's own errors (helpdesk_client) never are. Blank: Session Stopped."
+		},
+		{
+			"fieldname": "ticket_chat_section",
+			"fieldtype": "Section Break",
+			"label": "Ticket Chat (Phase 11)",
+			"collapsible": 1,
+			"description": "Every ticket is a chat with Copilot, on the ticket page and in Teams (docs/tbo-copilot.md, Ticket chat)."
+		},
+		{
+			"fieldname": "ask_before_every_fix",
+			"fieldtype": "Check",
+			"label": "Ask Before Every Fix",
+			"default": "0",
+			"description": "Off: Copilot starts fixing an ordinary bug by itself (customers at the Fix level) and asks once, when the fix is ready. It always asks first for data or settings changes, sensitive areas and high-risk fixes. On: it asks first every time."
+		},
+		{
+			"fieldname": "column_break_ticket_chat",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "deploy_needs_a_press",
+			"fieldtype": "Check",
+			"label": "Deploy Needs a Press",
+			"default": "0",
+			"description": "Off: an approved fix deploys by itself, a low-risk one at once, the rest in the night window. On: a person presses Deploy, as before."
 		}
 	],
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-10-28 18:00:00.000000",
+	"modified": "2026-10-28 22:30:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Copilot Settings",

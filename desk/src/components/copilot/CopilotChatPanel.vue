@@ -26,74 +26,26 @@
       <div
         v-for="m in store.messages"
         :key="m.name"
-        :class="m.direction === 'In' ? 'flex justify-end' : ''"
+        :class="m.direction === 'In' ? 'flex flex-col items-end' : ''"
       >
+        <span
+          v-if="m.via === 'Teams'"
+          class="mb-0.5 text-xs text-ink-gray-5"
+        >
+          {{ __("in Teams") }}
+        </span>
         <div
           v-if="m.direction === 'In'"
           class="max-w-[85%] whitespace-pre-line rounded-lg bg-surface-gray-3 px-3 py-2 text-base text-ink-gray-9"
         >
           {{ m.text }}
         </div>
-        <div
+        <CopilotCard
           v-else-if="m.card"
-          class="rounded-lg border px-3 py-2 text-base"
-          :class="toneClass(m.card.tone)"
-        >
-          <div v-if="m.card.title" class="mb-1 font-medium text-ink-gray-9">
-            {{ m.card.title }}
-          </div>
-          <p
-            v-for="(line, i) in m.card.lines"
-            :key="i"
-            class="whitespace-pre-line text-ink-gray-8"
-          >
-            {{ line }}
-          </p>
-          <dl
-            v-if="m.card.facts.length"
-            class="mt-1.5 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-sm"
-          >
-            <template v-for="([k, v], i) in m.card.facts" :key="i">
-              <dt class="text-ink-gray-5">{{ k }}</dt>
-              <dd class="text-ink-gray-8">{{ v }}</dd>
-            </template>
-          </dl>
-          <textarea
-            v-for="field in m.card.inputs"
-            :key="field.id"
-            v-model="inputs[m.name + ':' + field.id]"
-            :placeholder="field.label"
-            :aria-label="field.label"
-            rows="2"
-            class="mt-2 w-full rounded border-outline-gray-2 bg-surface-white text-sm"
-          />
-          <div
-            v-if="m.card.actions.length || m.card.links.length"
-            class="mt-2 flex flex-wrap gap-1.5"
-          >
-            <Button
-              v-for="(a, i) in m.card.actions"
-              :key="i"
-              size="sm"
-              :variant="a.style === 'positive' ? 'solid' : 'subtle'"
-              :theme="a.style === 'destructive' ? 'red' : 'gray'"
-              :loading="store.busy"
-              @click="press(m, a)"
-            >
-              {{ a.label }}
-            </Button>
-            <a
-              v-for="([label, url], i) in m.card.links"
-              :key="'l' + i"
-              :href="url"
-              target="_blank"
-              rel="noopener"
-              class="inline-flex items-center rounded px-2 py-1 text-sm text-ink-blue-3 hover:underline"
-            >
-              {{ label }}
-            </a>
-          </div>
-        </div>
+          :card="m.card"
+          :busy="store.busy"
+          @press="(a, values) => store.press(m.name, a.verb, a.data, values)"
+        />
         <div v-else class="text-base text-ink-gray-8">{{ m.text }}</div>
       </div>
     </div>
@@ -153,24 +105,18 @@
 </template>
 
 <script setup lang="ts">
-import { useCopilotChatStore, type CopilotMessage } from "@/stores/copilotChat";
+import CopilotCard from "@/components/copilot/CopilotCard.vue";
+import { useCopilotChatStore } from "@/stores/copilotChat";
 import { __ } from "@/translation";
 import { Button, FileUploader } from "frappe-ui";
-import { nextTick, reactive, ref, watch } from "vue";
+import { nextTick, ref, watch } from "vue";
 import LucidePaperclip from "~icons/lucide/paperclip";
 import LucideX from "~icons/lucide/x";
 
 const store = useCopilotChatStore();
 const draft = ref("");
 const files = ref<{ name: string; file_name: string }[]>([]);
-const inputs = reactive<Record<string, string>>({});
 const scroller = ref<HTMLElement | null>(null);
-
-function toneClass(tone: string) {
-  if (tone === "good") return "border-outline-green-2 bg-surface-green-1";
-  if (tone === "warning") return "border-outline-amber-2 bg-surface-amber-1";
-  return "border-outline-gray-2 bg-surface-white";
-}
 
 async function send() {
   if (!draft.value.trim() && !files.value.length) return;
@@ -179,17 +125,6 @@ async function send() {
   draft.value = "";
   files.value = [];
   await store.send(text, names);
-}
-
-function press(
-  m: CopilotMessage,
-  a: { verb: string; data: Record<string, unknown> }
-) {
-  const values: Record<string, string> = {};
-  for (const field of m.card?.inputs || []) {
-    values[field.id] = inputs[m.name + ":" + field.id] || "";
-  }
-  store.press(m.name, a.verb, a.data, values);
 }
 
 watch(

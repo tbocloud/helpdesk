@@ -327,7 +327,10 @@ class TestNewWork(AssistantCase):
             assistant.MESSAGE,
             filters={"user": self.dev, "direction": "Out", "run": run.name},
         )
-        self.assertIn("diagnosis", json.loads(news.card)["title"])
+        # Phase 11: the ticket's status reaches its people headed with the ticket
+        card = json.loads(news.card)
+        self.assertTrue(card["title"].startswith(f"#{ticket.name} · "))
+        self.assertTrue(card["lines"][0].startswith("Found it"))
 
     def test_an_unclear_customer_is_asked_with_buttons(self):
         make_site_registry(

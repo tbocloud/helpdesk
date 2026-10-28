@@ -257,6 +257,11 @@ def draft_explanation(run, text: str):
             }
         ],
     )
+    from helpdesk.copilot import thread
+
+    thread.on_explanation(
+        run, text
+    )  # the ticket's chat: the draft with Send to customer
 
 
 def as_html(text: str) -> str:

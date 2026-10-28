@@ -224,12 +224,19 @@ class TestFixJobs(FixJobCase):
 
 
 class TestAskedBySettings(FixCase):
-    def test_with_the_setting_on_copilot_is_asked_by_itself(self):
-        self.settings(shadow_mode=0, copilot_writes_fixes=1)
+    def test_an_ordinary_bug_is_fixed_by_itself_unless_the_settings_ask_first(self):
+        self.settings(shadow_mode=0, ask_before_every_fix=0)
         self.diagnosed()
         run = self.current_run()
         self.assertEqual((run.fix_requested, run.fix_status), (1, "Queued"))
         self.assertTrue(run.task)
+
+    def test_with_ask_before_every_fix_copilot_waits_for_a_yes(self):
+        self.settings(shadow_mode=0, ask_before_every_fix=1)
+        self.diagnosed()
+        run = self.current_run()
+        self.assertEqual((run.fix_requested, run.fix_status or None), (0, None))
+        self.assertIn("ask before every fix", fixes.needs_asking(run))
 
 
 class TestAskedFromTheChat(FixJobCase):

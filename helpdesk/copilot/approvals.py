@@ -261,6 +261,11 @@ def open_approval(
         ),
         skip=(doc.assigned_to,),
     )
+    from helpdesk.copilot import thread
+
+    thread.on_fix_ready(
+        doc, run
+    )  # the ticket's chat: what changed, the checks, Approve
     return doc
 
 
@@ -333,6 +338,9 @@ def open_change_set_approval(run, change_set):
             run.ticket
         ),
     )
+    from helpdesk.copilot import thread
+
+    thread.on_correction_ready(doc, run, len(ready))
     return doc
 
 
@@ -578,8 +586,7 @@ def announce(
     the TBO Support panel plus the usual chat message or email. A sensitive fix or a long wait
     also goes to the team's channel."""
     from helpdesk.copilot import assistant
-    from helpdesk.work_reminders import (helpdesk_path, new_notification,
-                                         notify_users)
+    from helpdesk.work_reminders import helpdesk_path, new_notification, notify_users
 
     people = [approval.assigned_to] if approval.assigned_to else _managers()
     people = list(dict.fromkeys(people + (also or [])))
