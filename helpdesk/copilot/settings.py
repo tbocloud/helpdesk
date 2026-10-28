@@ -28,6 +28,13 @@ DEFAULT_TEMPLATES = {
     "Waiting for you": "We need some information from you; please see our reply.",
 }
 
+# a build of an approved customization (Phase 8) tells the customer about their change
+BUILD_TEMPLATES = {
+    "Working on it": "We are building the change you approved. We will update you here.",
+    "Fix scheduled": "Your change is ready and will go live on {date}.",
+    "Resolved": "Your change is live. {resolution} Please check it, then confirm, or reopen the ticket if it is not what you approved.",
+}
+
 
 def get_settings():
     return frappe.get_cached_doc("HDS Copilot Settings")
@@ -67,10 +74,12 @@ def allows(customer: str | None, level: str) -> bool:
     return LEVELS.index(level_of(customer)) >= LEVELS.index(level)
 
 
-def template_for(stage: str) -> str:
-    """The message text for a stage: the configured row, else the built-in text."""
+def template_for(stage: str, build: bool = False) -> str:
+    """The message text for a stage: a build's own text, else the configured row, else the built-in text."""
     if stage not in STAGES:
         raise ValueError(f"Unknown Copilot stage: {stage}")
+    if build and stage in BUILD_TEMPLATES:
+        return BUILD_TEMPLATES[stage]
     for row in get_settings().message_templates:
         if row.stage == stage and (row.message or "").strip():
             return row.message.strip()

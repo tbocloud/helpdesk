@@ -39,8 +39,8 @@ class _Blank(dict):
         return ""
 
 
-def render(stage: str, context: dict | None = None) -> str:
-    template = copilot_settings.template_for(stage)
+def render(stage: str, context: dict | None = None, build: bool = False) -> str:
+    template = copilot_settings.template_for(stage, build)
     try:
         return template.format_map(_Blank(context or {})).strip()
     except (ValueError, IndexError):
@@ -68,7 +68,7 @@ def send_stage(run, stage: str, context: dict | None = None) -> bool:
     they would have seen. Nor does a revert run (an undo): the ticket is
     with a person by then.
     """
-    text = render(stage, context)
+    text = render(stage, context, build=bool(run.get("build_scope")))
     if _last_stage(run) == (stage, text):
         return False
     number = (

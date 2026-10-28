@@ -137,6 +137,9 @@ def payload_hash(payload: dict) -> str:
     content = {key: payload.get(key) for key in keys}
     if payload.get("change_set_digest"):
         content["change_set_digest"] = payload["change_set_digest"]
+    if payload.get("scope_hash"):
+        # a build: approved for the scope the customer approved, not another
+        content["scope_hash"] = payload["scope_hash"]
     canonical = json.dumps(content, sort_keys=True)
     return hashlib.sha256(canonical.encode()).hexdigest()
 

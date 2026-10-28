@@ -355,12 +355,28 @@ def record_decision(
     ).insert(ignore_permissions=True)
     if not by_customer:
         return
-    # the agents on the ticket act next: create the task, or talk to the customer
+    # the agents on the ticket act next: create the task (or Copilot builds it), or talk to the customer
+    if not approved:
+        text = _("#{0}: the customer declined the estimate.").format(doc.name)
+    elif copilot_can_build(doc.name):
+        text = _(
+            "#{0}: the customer approved the estimate. Copilot can build it: press Build with Copilot."
+        ).format(doc.name)
+    else:
+        text = _("#{0}: the customer approved the estimate. Create the task.").format(
+            doc.name
+        )
     notify_users(
-        frappe.parse_json(doc.get("_assign") or "[]"),
-        "HD Ticket",
-        doc.name,
-        _("#{0}: the customer approved the estimate. Create the task.").format(doc.name)
-        if approved
-        else _("#{0}: the customer declined the estimate.").format(doc.name),
+        frappe.parse_json(doc.get("_assign") or "[]"), "HD Ticket", doc.name, text
     )
+
+
+def copilot_can_build(ticket: str) -> bool:
+    """Copilot found this customization and may build it now (Phase 8)."""
+    from helpdesk.copilot import customer as copilot_customer
+    from helpdesk.copilot import fixes
+
+    run = copilot_customer.latest_run(ticket)
+    return bool(
+        run and run.root_cause_category == "customization_request"
+    ) and not fixes.build_refusal(run)

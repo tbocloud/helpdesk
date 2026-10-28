@@ -9,6 +9,11 @@ and calls `on_pull_request`; from then on the run follows the pull request:
 held with a label so no bot merges it, one approval per head commit, merged by
 the hub with the approved commit pinned, then Mark deployed once an engineer
 has deployed it. `refresh` reads GitHub directly, for a webhook that never came.
+
+A build (Phase 8) is the same path for a customization whose written scope the
+customer approved: `request_build` gives the run that scope, a "Copilot build"
+task and the fix job; the worker builds to the scope and the approval is bound
+to it.
 """
 
 import contextlib
@@ -17,7 +22,7 @@ import re
 
 import frappe
 from frappe import _
-from frappe.utils import escape_html, formatdate, now_datetime
+from frappe.utils import escape_html, flt, formatdate, now_datetime
 
 from helpdesk.copilot import approvals, github, risk, runs
 from helpdesk.copilot import settings as copilot_settings
@@ -27,6 +32,10 @@ FIX_STATES = ("Preparing Fix", "Awaiting Approval", "Approved")
 FOLLOWED = FIX_STATES + ("Merged",)
 FIX_TASK_PREFIX = "Copilot fix: "
 REVERT_TASK_PREFIX = "Copilot revert: "
+BUILD_TASK_PREFIX = "Copilot build: "
+# the states a run leaves for good: a build after them gets a new run
+BUILD_AFTER = ("Closed", "Escalated", "Cancelled", "Failed", "Resolved", "Handed Over")
+CHECK_RESULTS = ("pass", "fail", "not_testable")
 DEFAULT_COMMIT_EMAIL = "copilot@teambackoffice.com"
 EVIDENCE_RESULTS = ("pass", "fail", "not_run")
 DEFAULT_HOLD_LABEL = "no-auto-merge"
@@ -223,14 +232,17 @@ def site_repositories(run) -> list[str]:
 
 
 def fix_context(run) -> dict:
-    """What the worker needs beyond the run's context to write the fix."""
+    """What the worker needs beyond the run's context to write the fix (or the build)."""
     settings = copilot_settings.get_settings()
-    return {
+    build = build_of(run)
+    context = {
         "task": run.task,
         "closes": f"Closes {run.task}",
         "branch": copilot_branch(run),
         "attempt": run.fix_attempts or 1,
-        "max_usd": settings.get("max_fix_usd") or 0,
+        "max_usd": build_settings()["max_usd"]
+        if build
+        else settings.get("max_fix_usd") or 0,
         "commit_email": commit_email(),
         "repositories": site_repositories(run),
         # what people asked for when they rejected earlier fixes of this run (newest first)
@@ -242,6 +254,12 @@ def fix_context(run) -> dict:
             limit=3,
         ),
     }
+    if build:
+        # what the customer approved: Copilot builds exactly this, one test per check
+        context["build"] = {
+            key: build.get(key) for key in ("scope", "checks", "hours", "hash")
+        }
+    return context
 
 
 def open_pull_request(run) -> bool:
@@ -309,12 +327,168 @@ def request_copilot_fix(run, user: str | None = None):
     return run
 
 
+# --- a build of an approved customization (Phase 8) ------------------------------------------
+
+
+def build_settings() -> dict:
+    settings = copilot_settings.get_settings()
+    return {
+        "enabled": bool(settings.get("build_enabled")),
+        "max_hours": flt(settings.get("max_build_hours")) or 8,
+        "max_usd": flt(settings.get("max_build_usd"))
+        or 2 * flt(settings.get("max_fix_usd")),
+    }
+
+
+def build_of(run) -> dict | None:
+    """The approved scope a run builds, or None for a fix."""
+    return frappe.parse_json(run.get("build_scope") or "null") or None
+
+
+def build_refusal(run) -> str | None:
+    """Why Copilot may not build the ticket's customization now, or None when it may."""
+    from helpdesk.api.customization import APPROVED, approved_scope
+
+    if run.root_cause_category != "customization_request":
+        return _("Copilot builds only a request it found to be a customization.")
+    if run.state not in ("Explaining", "Answered", *BUILD_AFTER):
+        return _("Copilot is still working on this run ({0}).").format(run.state)
+    if not build_settings()["enabled"]:
+        return _(
+            "Copilot builds are switched off (HDS Copilot Settings → Copilot Builds Approved Customizations)."
+        )
+    ticket = frappe.get_doc("HD Ticket", run.ticket)
+    if ticket.get("custom_estimate_status") != APPROVED:
+        return _("The customer has not approved the estimate yet.")
+    scope = approved_scope(ticket)
+    if not scope:
+        return _(
+            "The estimate changed after the customer approved it: send it again for their approval."
+        )
+    if not scope["scope"] or not scope["checks"]:
+        return _(
+            "The approved estimate has no written scope with Done-when checks: send it again with them."
+        )
+    limit = build_settings()["max_hours"]
+    if scope["hours"] > limit:
+        return _(
+            "Copilot builds estimates of up to {0} hours; this one ({1} hours) goes to a developer."
+        ).format(frappe.format(limit, "Float"), frappe.format(scope["hours"], "Float"))
+    if not copilot_settings.allows(run.customer, copilot_settings.FIX):
+        return _(
+            "Copilot writes code only for customers at the Fix level or above ({0} is at {1})."
+        ).format(
+            run.customer or _("no customer"), copilot_settings.level_of(run.customer)
+        )
+    if not site_repositories(run):
+        return _("The customer's site card lists no app repository to build in.")
+    if open_pull_request(run):
+        return _("A pull request is already open for this ticket; review that one.")
+    return None
+
+
+def ticket_task(ticket: str) -> str | None:
+    """The ticket's open task (Create task on the estimate card), which a build then uses."""
+    return frappe.db.get_value(
+        "Task",
+        {"hd_ticket": ticket, "status": ["not in", ("Completed", "Cancelled")]},
+        "name",
+        order_by="creation desc",
+    )
+
+
+def request_build(run, user: str):
+    """Build the customization the customer approved: the run (or a new one) prepares it like a fix.
+
+    The run keeps the approved scope; the job's worker builds to it with one test
+    per Done-when check, and the approval binds the scope to the pull request.
+    """
+    from helpdesk.api.customization import approved_scope
+
+    run = frappe.get_doc("HDS Copilot Run", run.name)
+    reason = build_refusal(run)
+    if reason:
+        frappe.throw(reason)
+    scope = approved_scope(frappe.get_doc("HD Ticket", run.ticket))
+    note = _("build of the customization the customer approved")
+    if run.state in BUILD_AFTER:
+        run = _new_build_run(run, scope)
+    else:
+        run = runs.transition(
+            run,
+            "Preparing Fix",
+            runs.AGENT,
+            note=note,
+            build_scope=json.dumps(scope, indent=1),
+        )
+    task = ticket_task(run.ticket)
+    if task:
+        run.db_set("task", task, update_modified=False)
+        runs.add_event(run, "fix_task", {"task": task, "reused": True}, runs.AGENT)
+    else:
+        create_fix_task(run, runs.AGENT, prefix=BUILD_TASK_PREFIX)
+    runs.add_event(
+        run,
+        "build_requested",
+        {"by": user, "hours": scope["hours"], "checks": len(scope["checks"])},
+        runs.AGENT,
+    )
+    return request_copilot_fix(frappe.get_doc("HDS Copilot Run", run.name), user)
+
+
+def _new_build_run(run, scope: dict):
+    """The run ended before the build (closed, say): a code run carries the investigation on."""
+    build = frappe.get_doc(
+        {
+            "doctype": "HDS Copilot Run",
+            "ticket": run.ticket,
+            "customer": run.customer,
+            "connection": run.connection,
+            "registry": run.registry,
+            "kind": "code",
+            "state": "Preparing Fix",
+            "shadow": run.shadow,
+            "root_cause_category": run.root_cause_category,
+            "confidence": run.confidence,
+            "summary": run.summary,
+            "investigation": run.investigation,
+            "evidence": run.evidence,
+            "proposal": run.proposal,
+            "build_scope": json.dumps(scope, indent=1),
+            "queued_at": now_datetime(),
+        }
+    ).insert(ignore_permissions=True)
+    runs.add_event(
+        build,
+        "state_change",
+        {"from": None, "to": "Preparing Fix", "note": f"builds for {run.name}"},
+        runs.AGENT,
+    )
+    runs.update_ticket(build)
+    runs.send_stage(build, runs.STAGE_FOR_STATE["Preparing Fix"])
+    return build
+
+
 def _evidence_row(row: dict) -> dict:
     result = str(row.get("result") or "").strip().lower()
     return {
         "check": str(row.get("check") or "")[:140],
         "result": result if result in EVIDENCE_RESULTS else "not_run",
         "detail": str(row.get("detail") or "")[:500],
+    }
+
+
+def _check_result(row: dict) -> dict:
+    def result(value) -> str:
+        value = str(value or "").strip().lower().replace(" ", "_")
+        return value if value in CHECK_RESULTS else "fail"
+
+    return {
+        "check": str(row.get("check") or "")[:300],
+        "test": str(row.get("test") or "")[:300],
+        "before": result(row.get("before")),
+        "after": result(row.get("after")),
+        "note": str(row.get("note") or "")[:500],
     }
 
 
@@ -353,6 +527,12 @@ def on_change(run, change: dict):
         ],
         "risk_notes": str(change.get("risk_notes") or "")[:2000],
         "cost": change.get("cost") if isinstance(change.get("cost"), dict) else {},
+        # a build: each Done-when check with its test, failing before and passing after
+        "check_results": [
+            _check_result(row)
+            for row in (change.get("check_results") or [])[:30]
+            if isinstance(row, dict)
+        ],
     }
     run.db_set(
         {
@@ -645,9 +825,18 @@ def open_for(run, row_name: str, pull: dict):
                 "tested_on",
                 "people_checks",
                 "risk_notes",
+                "check_results",
             )
         }
         extra["change"]["tested_commit"] = change.get("head_sha")
+    build = build_of(run)
+    if build:
+        # the approval is for this scope too: the customer's words next to the change
+        extra["build"] = {
+            key: build.get(key)
+            for key in ("scope", "checks", "hours", "approved_by", "approved_on")
+        }
+        extra["scope_hash"] = build.get("hash")
     with contextlib.suppress(GitHubError):
         extra["copilot_only"] = github.copilot_only(pull["repo"], pull, commit_email())
     from helpdesk.copilot import changes

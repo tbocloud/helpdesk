@@ -120,6 +120,33 @@ def get_run(ticket: str | int) -> dict:
         "can_review": bool(run.root_cause_category),
         "categories": list(router.CATEGORIES),
         "fix": _fix_card(run),
+        "build": _build_card(run),
+    }
+
+
+def _build_card(run) -> dict | None:
+    """A customization: Build with Copilot with the approved scope, or why it can't be built yet."""
+    from helpdesk.api.customization import checks_of
+    from helpdesk.copilot import fixes
+
+    if run.root_cause_category != "customization_request":
+        return None
+    ticket = frappe.db.get_value(
+        "HD Ticket",
+        run.ticket,
+        ["custom_estimate_scope", "custom_estimate_checks", "custom_estimate_hours"],
+        as_dict=True,
+    )
+    building = fixes.build_of(run)
+    reason = None if building else fixes.build_refusal(run)
+    return {
+        "building": bool(building),
+        "scope": (building or {}).get("scope") or ticket.custom_estimate_scope or "",
+        "checks": (building or {}).get("checks")
+        or checks_of(ticket.custom_estimate_checks),
+        "hours": (building or {}).get("hours") or ticket.custom_estimate_hours,
+        "can_build": not building and reason is None,
+        "reason": reason,
     }
 
 
@@ -197,6 +224,8 @@ def _fix_card(run) -> dict | None:
             else None,
             # what Copilot tested, when it made the fix, and on which commit
             "change": payload.get("change"),
+            # a build: the scope the customer approved, shown next to what changed
+            "build": payload.get("build"),
             "copilot_only": bool(payload.get("copilot_only")),
             "evidence_stale": bool(
                 payload.get("change")
@@ -296,6 +325,17 @@ def refresh_site_card(registry: str) -> dict:
 
     frappe.has_permission("HDS Site Registry", "write", registry, throw=True)
     return refresh_from_site(frappe.get_doc("HDS Site Registry", registry))
+
+
+@frappe.whitelist(methods=["POST"])
+@agent_only
+def build_customization(ticket: str | int) -> dict:
+    """Copilot builds the customization whose written scope the customer approved (Phase 8)."""
+    from helpdesk.copilot import fixes
+
+    frappe.has_permission("HD Ticket", "write", str(ticket), throw=True)
+    fixes.request_build(_run_of(ticket), frappe.session.user)
+    return get_run(ticket)
 
 
 @frappe.whitelist(methods=["POST"])

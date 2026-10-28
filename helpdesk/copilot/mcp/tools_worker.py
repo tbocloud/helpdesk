@@ -106,6 +106,7 @@ def submit_change(
     people_checks: list | None = None,
     risk_notes: str = "",
     cost: dict | None = None,
+    check_results: list | None = None,
 ) -> dict:
     from helpdesk.copilot import fixes
 
@@ -125,6 +126,7 @@ def submit_change(
             "people_checks": people_checks or [],
             "risk_notes": risk_notes,
             "cost": cost or {},
+            "check_results": check_results or [],
         },
     )
     _log_usage(doc.name, cost, "fix", doc.get("fix_attempts") or 1)
@@ -214,7 +216,8 @@ register_tool(
 register_tool(
     "submit_change",
     kind=WORKER_TOOL,
-    description="Report the pull request a fix job opened and what it tested; ends this run's fix job.",
+    description="Report the pull request a fix job opened and what it tested; ends this run's fix job. "
+    "A build also reports check_results: each Done-when check with its test, failing before and passing after.",
     handler=submit_change,
     properties={
         "repository": {"type": "string", "maxLength": 200},
@@ -227,6 +230,10 @@ register_tool(
         "people_checks": {"type": "array"},
         "risk_notes": {"type": "string", "maxLength": 2000},
         "cost": {"type": "object"},
+        "check_results": {
+            "type": "array",
+            "description": "A build: [{check, test, before: fail|pass|not_testable, after: pass|fail|not_testable, note}].",
+        },
     },
     required=["repository", "number", "head_sha"],
     read_only=False,

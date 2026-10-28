@@ -46,6 +46,9 @@ TRANSITIONS = {
     ("Investigating", "Preparing Fix"): {SYSTEM},
     ("Investigating", "Handed Over"): {SYSTEM},
     ("Explaining", "Answered"): {SYSTEM, AGENT},
+    # an approved customization: a person starts Copilot's build (helpdesk.copilot.fixes.request_build)
+    ("Explaining", "Preparing Fix"): {AGENT},
+    ("Answered", "Preparing Fix"): {AGENT},
     ("Answered", "Closed"): {CUSTOMER, AGENT, SYSTEM},
     ("Answered", "Escalated"): {CUSTOMER, AGENT},
     ("Preparing Fix", "Escalated"): {CUSTOMER, AGENT},

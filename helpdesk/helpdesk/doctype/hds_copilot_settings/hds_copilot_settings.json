@@ -26,6 +26,9 @@
 		"max_fix_attempts",
 		"column_break_fixes",
 		"max_fix_usd",
+		"build_enabled",
+		"max_build_hours",
+		"max_build_usd",
 		"copilot_commit_email",
 		"github_app_section",
 		"github_app_id",
@@ -203,6 +206,28 @@
 			"fieldname": "max_fix_usd",
 			"fieldtype": "Float",
 			"label": "Dollar cap per fix",
+			"non_negative": 1
+		},
+		{
+			"default": "0",
+			"description": "Build with Copilot on a customization whose written scope the customer approved (Phase 8). Off: customizations go to a developer.",
+			"fieldname": "build_enabled",
+			"fieldtype": "Check",
+			"label": "Copilot Builds Approved Customizations"
+		},
+		{
+			"default": "8",
+			"description": "Copilot builds estimates up to this many hours; bigger ones go to a developer.",
+			"fieldname": "max_build_hours",
+			"fieldtype": "Float",
+			"label": "Max Build Hours",
+			"non_negative": 1
+		},
+		{
+			"description": "The AI budget of one build. Blank: twice the dollar cap per fix.",
+			"fieldname": "max_build_usd",
+			"fieldtype": "Float",
+			"label": "Dollar cap per build",
 			"non_negative": 1
 		},
 		{
@@ -462,7 +487,7 @@
 	],
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-10-24 16:00:00.000000",
+	"modified": "2026-10-28 11:30:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Copilot Settings",

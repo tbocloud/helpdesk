@@ -38,6 +38,7 @@
 		"investigation",
 		"evidence",
 		"proposal",
+		"build_scope",
 		"fix_section",
 		"pull_request",
 		"approval",
@@ -284,6 +285,14 @@
 			"read_only": 1
 		},
 		{
+			"description": "A build of an approved customization (Phase 8): the scope, the Done-when checks, the hours, who approved it and when, and the hash of what was approved.",
+			"fieldname": "build_scope",
+			"fieldtype": "Code",
+			"label": "Build Scope",
+			"options": "JSON",
+			"read_only": 1
+		},
+		{
 			"fieldname": "fix_section",
 			"fieldtype": "Section Break",
 			"label": "Fix"
@@ -484,7 +493,7 @@
 		}
 	],
 	"links": [],
-	"modified": "2026-10-17 23:57:37.497010",
+	"modified": "2026-10-28 11:30:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Copilot Run",

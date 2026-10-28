@@ -189,6 +189,7 @@ def pilot_rows(from_date, to_date, customer: str | None = None) -> list[dict]:
             "change_set",
             "queued_at",
             "finished_at",
+            "build_scope",
         ],
     )
     if not runs:
@@ -261,6 +262,11 @@ def pilot_rows(from_date, to_date, customer: str | None = None) -> list[dict]:
         ]
         group_tickets = {r.ticket for r in group}
         cost = sum(costs.get(t, 0) for t in group_tickets)
+        # Phase 8: Copilot's builds of approved customizations, and their cost next to the hours sold
+        builds = [r for r in group if r.build_scope]
+        build_hours = sum(
+            flt((frappe.parse_json(r.build_scope) or {}).get("hours")) for r in builds
+        )
         categories: dict[str, int] = {}
         for r in diagnosed:
             categories[r.root_cause_category] = (
@@ -293,6 +299,13 @@ def pilot_rows(from_date, to_date, customer: str | None = None) -> list[dict]:
                 "fixes_merged": sum(1 for r in group if r.merge_commit),
                 "fixes_deployed": sum(1 for r in group if r.deployed_at),
                 "fixes_undone": sum(1 for r in group if r.name in undone_fixes),
+                "builds_started": len(builds),
+                "builds_merged": sum(1 for r in builds if r.merge_commit),
+                "builds_reopened": sum(1 for r in builds if r.state == "Escalated"),
+                "build_hours": round(build_hours, 1),
+                "build_ai_cost": round(
+                    sum(costs.get(t, 0) for t in {r.ticket for r in builds}), 4
+                ),
                 "corrections_applied": sum(
                     1 for c in its_changes if c.status in ("Applied", "Undone")
                 ),
@@ -393,6 +406,7 @@ EMAIL_COLUMNS = (
     ("fixes_merged", "Fixes merged"),
     ("fixes_deployed", "Deployed"),
     ("fixes_undone", "Undone"),
+    ("builds_merged", "Builds merged"),
     ("corrections_applied", "Corrections"),
     ("median_approval_hours", "Approval wait (h)"),
     ("ai_cost", "AI cost ($)"),

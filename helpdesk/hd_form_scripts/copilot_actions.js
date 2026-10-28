@@ -192,6 +192,9 @@ function showCopilotRunDialog(info, doc, call, toast, $dialog) {
   if (info.fix) {
     html += copilotFixSummary(info.fix);
   }
+  if (info.build) {
+    html += copilotBuildSummary(info.build);
+  }
   if (info.events && info.events.length) {
     html +=
       '<div style="margin-top:8px"><b>Latest events</b><ul style="margin:4px 0 0 16px;color:#6b7280">';
@@ -377,6 +380,25 @@ function showCopilotRunDialog(info, doc, call, toast, $dialog) {
           _ref.close();
         } catch (error) {
           toast.error(copilotError(error, "Failed to start the estimate"));
+        }
+      },
+    });
+  }
+  if (info.build && info.build.can_build) {
+    actions.push({
+      label: "Build with Copilot",
+      variant: "solid",
+      onClick: async function (_ref) {
+        try {
+          await call("helpdesk.api.copilot.build_customization", {
+            ticket: doc.name,
+          });
+          toast.success(
+            "Copilot will build the approved change on a sandbox copy, then open the pull request for the one approval."
+          );
+          _ref.close();
+        } catch (error) {
+          toast.error(copilotError(error, "Failed to start the build"));
         }
       },
     });
@@ -665,6 +687,89 @@ function copilotFixSummary(fix) {
   return html + "</div>";
 }
 
+// A customization: the scope the customer approved, and whether Copilot can build it.
+function copilotBuildSummary(build) {
+  var html =
+    '<div style="margin-top:8px"><b>' +
+    (build.building ? "Copilot builds the approved change" : "Customization") +
+    "</b>" +
+    (build.hours
+      ? ' <span style="color:#6b7280">(' +
+        copilotEscape(build.hours) +
+        " hours estimated)</span>"
+      : "");
+  html += copilotScopeHtml(build.scope, build.checks, null);
+  if (!build.building && !build.can_build && build.reason) {
+    html +=
+      '<div style="color:#6b7280;margin-top:4px">Build with Copilot: ' +
+      copilotEscape(build.reason) +
+      "</div>";
+  }
+  return html + "</div>";
+}
+
+// The scope and its Done-when checks; with a build's results, each check's test before and after.
+function copilotScopeHtml(scope, checks, results) {
+  var html = "";
+  if (scope) {
+    html +=
+      '<div style="margin-top:4px;white-space:pre-line">' +
+      copilotEscape(scope) +
+      "</div>";
+  }
+  if (!checks || !checks.length) {
+    return html;
+  }
+  var byCheck = {};
+  for (var r = 0; r < (results || []).length; r++) {
+    byCheck[
+      String(results[r].check || "")
+        .trim()
+        .toLowerCase()
+    ] = results[r];
+  }
+  html +=
+    '<div style="margin-top:4px"><b>Done when</b></div><table style="width:100%;font-size:13px">';
+  for (var i = 0; i < checks.length; i++) {
+    var row = byCheck[String(checks[i]).trim().toLowerCase()];
+    var result = "";
+    if (results) {
+      // fails before and passes after shows the change; holds before and after is a check kept
+      var proven = row && row.before === "fail" && row.after === "pass";
+      var kept = row && row.before === "pass" && row.after === "pass";
+      result = !row
+        ? '<span style="color:#b91c1c">no test</span>'
+        : row.after === "not_testable"
+        ? '<span style="color:#b45309">not testable: ' +
+          copilotEscape(row.note) +
+          "</span>"
+        : '<span style="color:' +
+          (proven ? "#047857" : kept ? "#6b7280" : "#b91c1c") +
+          '">' +
+          copilotEscape(
+            proven
+              ? "fails before, passes after"
+              : kept
+              ? "holds before and after"
+              : row.before + " before, " + row.after + " after"
+          ) +
+          "</span>" +
+          (row.test
+            ? ' <span style="color:#6b7280">' +
+              copilotEscape(row.test) +
+              "</span>"
+            : "");
+    }
+    html +=
+      '<tr><td style="padding:2px 8px 2px 0">• ' +
+      copilotEscape(checks[i]) +
+      "</td><td>" +
+      result +
+      "</td></tr>";
+  }
+  return html + "</table>";
+}
+
 // What Copilot tested on its sandbox copy, when it made the fix itself.
 function copilotTestedByCopilot(a) {
   var change = a.change;
@@ -739,12 +844,29 @@ function showCopilotFixReview(info, doc, call, toast, $dialog) {
   var field =
     "width:100%;padding:6px;border:1px solid #d1d5db;border-radius:4px;font-size:13px";
   var html = '<div style="padding:8px;font-size:13px">';
-  html +=
-    "<div><b>Cause</b> (" +
-    copilotEscape(info.root_cause) +
-    "): " +
-    copilotEscape(info.summary || "") +
-    "</div>";
+  if (a.build) {
+    html +=
+      '<div><b>What the customer approved</b> <span style="color:#6b7280">(' +
+      copilotEscape(a.build.hours) +
+      " hours" +
+      (a.build.approved_by
+        ? ", by " + copilotEscape(a.build.approved_by)
+        : "") +
+      ")</span>" +
+      copilotScopeHtml(
+        a.build.scope,
+        a.build.checks,
+        (a.change && a.change.check_results) || []
+      ) +
+      "</div>";
+  } else {
+    html +=
+      "<div><b>Cause</b> (" +
+      copilotEscape(info.root_cause) +
+      "): " +
+      copilotEscape(info.summary || "") +
+      "</div>";
+  }
   html +=
     '<div style="margin-top:8px"><b>Pull request</b> ' +
     copilotEscape((pr.repo || "") + "#" + (pr.number || "")) +
