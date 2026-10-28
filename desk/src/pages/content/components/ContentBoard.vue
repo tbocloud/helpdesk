@@ -230,7 +230,10 @@
                 }}
                 · {{ dayjs(p.publish_on).format("h:mm A") }}</span
               >
-              <StatusPill :post="p" class="ml-auto" />
+              <span class="ml-auto flex items-center gap-1">
+                <ClientApprovalChip :status="p.status" />
+                <StatusPill :post="p" />
+              </span>
             </span>
             <span class="truncate text-sm" aria-hidden="true">
               <span class="font-semibold text-ink-gray-9">{{
@@ -505,6 +508,7 @@
                   }}</time></span
                 >
                 <StatusPill :post="post" size="md" />
+                <ClientApprovalChip :status="post.status" />
                 <Tooltip
                   :text="
                     auth.canEditContent
@@ -803,6 +807,7 @@ import ChannelIcon from "./ChannelIcon.vue";
 import PostTypeIcon from "./PostTypeIcon.vue";
 import RoleBox from "./RoleBox.vue";
 import SpecialDayBadge from "./SpecialDayBadge.vue";
+import ClientApprovalChip from "./ClientApprovalChip.vue";
 import StatusPill from "./StatusPill.vue";
 
 const auth = useAuthStore();

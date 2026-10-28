@@ -21,6 +21,7 @@ from helpdesk.tasky.permissions import (
     MANAGER_PROJECT_ROLE,
     can_add_tasks,
     can_coordinate_project,
+    can_handle_credentials,
     can_manage_project,
     can_move_task,
     can_rate_task,
@@ -1999,6 +2000,8 @@ def get_project_detail(project: str):
         "sees_all_tasks": sees_all_tasks(doc.name),
         "can_add_tasks": can_add_tasks(doc.name),
         "can_change_lead": is_project_owner(doc.name),
+        # shows the Credentials tab (docs/client-credentials.md)
+        "can_handle_credentials": can_handle_credentials(doc.name),
         "project_lead": doc.project_lead,
         "project_lead_name": (
             frappe.db.get_value("User", doc.project_lead, "full_name")
