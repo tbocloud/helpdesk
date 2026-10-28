@@ -26,6 +26,28 @@ export interface LeadOptions {
   can_call?: boolean;
   /** the ERP site can log a call made outside MyOperator (TBO Smart's log_call) */
   can_log_call?: boolean;
+  /** lead departments (absent from an older TBO Smart; the department UI stays out) */
+  departments?: LeadDepartmentOption[];
+  lead_types?: string[];
+}
+
+/** A department as `get_options` lists it, with the signed-in person's part in it. */
+export interface LeadDepartmentOption {
+  name: string;
+  lead_type?: string;
+  is_active?: boolean | number;
+  is_head?: boolean | number;
+  is_member?: boolean | number;
+}
+
+/** A lead department with its people, as `get_lead_departments` answers (Settings → CRM). */
+export interface LeadDepartment {
+  name: string;
+  department_name: string;
+  lead_type: string;
+  is_active: boolean | number;
+  heads: { user: string; full_name?: string }[];
+  members: { user: string; full_name?: string }[];
 }
 
 export interface LeadRow {
@@ -38,6 +60,8 @@ export interface LeadRow {
   segment?: string;
   lead_owner?: string;
   owner_name?: string;
+  tbo_department?: string | null;
+  tbo_lead_type?: string | null;
   score?: number | null;
   next_follow_up?: string | null;
   modified?: string;
@@ -113,7 +137,11 @@ const QUOTE_STATUS: Record<string, StatusLook> = {
     tone: "neutral",
     open: true,
   },
-  "Under Negotiation": { label: __("Negotiating"), tone: "neutral", open: true },
+  "Under Negotiation": {
+    label: __("Negotiating"),
+    tone: "neutral",
+    open: true,
+  },
   "Revision Required": {
     label: __("Revision asked"),
     tone: "neutral",
@@ -145,6 +173,7 @@ export interface LeadForm {
   industry: string;
   lead_owner: string;
   next_follow_up: string;
+  tbo_department: string;
 }
 
 export const LEAD_FORM_FIELDS: (keyof LeadForm)[] = [
@@ -158,6 +187,7 @@ export const LEAD_FORM_FIELDS: (keyof LeadForm)[] = [
   "industry",
   "lead_owner",
   "next_follow_up",
+  "tbo_department",
 ];
 
 /** One entry of a lead's timeline, newest first (TBO Smart's hub-leads-api.md). */
@@ -246,6 +276,32 @@ export function loadLeadOptions() {
   leadOptionsFetched = true;
   leadOptions.fetch();
 }
+
+/** The departments the signed-in person can put a lead in: active ones, and the one a
+ * lead already has. Empty while the ERP site has none (or is too old), so the pickers stay out. */
+export function usableDepartments(options: LeadOptions | undefined, keep = "") {
+  return (options?.departments ?? []).filter(
+    (d) => d.is_active || d.name === keep
+  );
+}
+
+/** The department a new lead starts in: the only one the person belongs to. */
+export function ownDepartment(options: LeadOptions | undefined) {
+  const own = usableDepartments(options).filter(
+    (d) => d.is_head || d.is_member
+  );
+  return own.length === 1 ? own[0].name : "";
+}
+
+/** "GrowthX · ERP / Software" for a lead's row; empty without a department. */
+export function departmentLabel(row: LeadRow) {
+  return [row.tbo_department, row.tbo_lead_type].filter(Boolean).join(" · ");
+}
+
+// each department's heads and members: the form prefers them as owner, Settings edits them
+export const leadDepartments = createResource({
+  url: "helpdesk.api.leads.get_lead_departments",
+});
 
 /** Asks MyOperator to ring the signed-in person's phone, then the lead. */
 export function useClickToCall() {
@@ -503,7 +559,11 @@ export interface LeadIntake {
   days?: {
     date: string;
     total: number;
-    by_owner: { user: string | null; full_name: string | null; count: number }[];
+    by_owner: {
+      user: string | null;
+      full_name: string | null;
+      count: number;
+    }[];
   }[];
   /** the sales team, so someone who took none still shows */
   people?: { user: string; full_name: string }[];

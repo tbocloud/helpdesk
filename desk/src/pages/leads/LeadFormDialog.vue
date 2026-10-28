@@ -74,6 +74,13 @@
           :label="__('Industry')"
           :options="choices(options?.industries, __('Not set'))"
         />
+        <FormControl
+          v-if="departmentChoices.length"
+          v-model="form.tbo_department"
+          type="select"
+          :label="__('Department')"
+          :options="departmentChoices"
+        />
         <!-- Combobox layers inside the dialog, so Escape and clicking outside still close it -->
         <Combobox
           :label="__('Owner')"
@@ -134,7 +141,11 @@ import {
   choices,
   LEAD_FORM_FIELDS,
   loadLeadOptions,
+  leadDepartments,
   leadOptions,
+  ownDepartment,
+  usableDepartments,
+  type LeadDepartment,
   type LeadForm,
   type LeadOptions,
   type LeadRow,
@@ -174,17 +185,61 @@ watch(
     }
     Object.assign(form, values);
     loadLeadOptions();
+    if (options.value?.departments?.length && !leadDepartments.loading)
+      leadDepartments.fetch();
+    startInOwnDepartment();
   },
   { immediate: true }
 );
 
-const ownerOptions = computed(() =>
-  (options.value?.owners ?? []).map((o) => ({
+const departmentChoices = computed(() => {
+  const list = usableDepartments(options.value, form.tbo_department).map(
+    (d) => ({
+      label: d.lead_type ? `${d.name} · ${d.lead_type}` : d.name,
+      value: d.name,
+    })
+  );
+  return list.length ? [{ label: __("Not set"), value: "" }, ...list] : [];
+});
+
+// a new lead starts in the person's only department, once the options are there
+function startInOwnDepartment() {
+  if (props.open && !props.lead && !form.tbo_department)
+    form.tbo_department = ownDepartment(options.value);
+}
+watch(options, startInOwnDepartment);
+
+/** The picked department's heads and members: who the owner picker puts first. */
+const departmentPeople = computed(() => {
+  const department = (
+    leadDepartments.data?.departments as LeadDepartment[] | undefined
+  )?.find((d) => d.name === form.tbo_department);
+  return new Set(
+    [...(department?.heads ?? []), ...(department?.members ?? [])].map(
+      (p) => p.user
+    )
+  );
+});
+
+const ownerOptions = computed(() => {
+  const owners = (options.value?.owners ?? []).map((o) => ({
     label: o.full_name || o.email,
     value: o.email,
     description: o.full_name ? o.email : undefined,
-  }))
-);
+  }));
+  if (!departmentPeople.value.size) return owners;
+  const inDepartment = owners.filter((o) =>
+    departmentPeople.value.has(o.value)
+  );
+  if (!inDepartment.length) return owners;
+  return [
+    { group: __("In {0}", form.tbo_department), items: inDepartment },
+    {
+      group: __("Everyone else"),
+      items: owners.filter((o) => !departmentPeople.value.has(o.value)),
+    },
+  ];
+});
 
 /** Only what changed on an edit; every filled field on a new lead. */
 function payload() {

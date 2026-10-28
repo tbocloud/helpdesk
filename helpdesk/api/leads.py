@@ -84,9 +84,11 @@ def list_leads(
     period: str | None = None,
     from_date: str | None = None,
     to_date: str | None = None,
+    department: str | None = None,
 ) -> dict:
     """A page of leads. `metric` with its period keeps the leads one number of the
-    Overview counts (the ERP site picks them)."""
+    Overview counts (the ERP site picks them). `department` keeps one lead department's
+    leads; the ERP site still shows only what the person may see."""
     require_leads()
     if view not in VIEWS:
         frappe.throw(_("Pick All, Mine, Call today or Follow-up."))
@@ -109,6 +111,7 @@ def list_leads(
         segment=segment or None,
         source=source or None,
         temperature=temperature or None,
+        department=department or None,
         metric=metric or None,
         **when,
         view=view,
@@ -363,6 +366,67 @@ def get_lead(name: str) -> dict:
     """The lead, its timeline, its quotations and the stages it may move to."""
     require_leads()
     return call("get_lead", name=name) or {}
+
+
+@frappe.whitelist()
+def get_lead_departments(fresh: int | str = 0) -> dict:
+    """Every lead department with its heads and members, for Settings → CRM.
+    `available` is false while the ERP site's TBO Smart is older than departments, so
+    the section stays out."""
+    require_leads()
+    result = cached_read(
+        "departments",
+        {},
+        READ_TTL,
+        fresh,
+        lambda: call_if_deployed("get_lead_departments"),
+        keep=lambda answer: answer is not None,
+    )
+    if result is None:
+        return {"available": False, "departments": []}
+    return {"available": True, "departments": result}
+
+
+@frappe.whitelist(methods=["POST"])
+def save_lead_department(values: dict | str, name: str | None = None) -> dict:
+    """Adds a lead department (or edits `name`): `department_name`, `lead_type`,
+    `is_active`, `heads` and `members` (users). Only System Managers and Sales Managers
+    on the ERP site may; it says so when it refuses."""
+    require_leads()
+    return change_department(
+        "save_lead_department", values=parse_data(values), name=name or None
+    )
+
+
+@frappe.whitelist(methods=["POST"])
+def set_lead_department_active(name: str, active: int | str = 1) -> dict:
+    """Turns a lead department on or off; its leads stay where they are."""
+    require_leads()
+    return change_department(
+        "set_lead_department_active", name=name, active=1 if cint(active) else 0
+    )
+
+
+def change_department(method: str, **params) -> dict:
+    """A department write on the ERP site; the signed-in person's cached reads go, as the
+    departments (and what they may see) changed."""
+    saved = call_if_deployed(
+        method,
+        post=True,
+        permission_message=_(
+            "Only a System Manager or Sales Manager on the ERP site can manage lead departments."
+        ),
+        **params,
+    )
+    if saved is None:
+        frappe.throw(
+            _(
+                "The ERP site can't manage lead departments yet. It needs the latest TBO Smart."
+            ),
+            LeadsUnavailableError,
+        )
+    clear_cached_reads()
+    return saved
 
 
 @frappe.whitelist(methods=["POST"])

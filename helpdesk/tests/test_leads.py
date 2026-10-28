@@ -13,6 +13,7 @@ from helpdesk.test_utils import (
     create_agent,
     enable_leads,
     hold_commits,
+    lead_department,
     lead_intake,
     make_sales_employee,
     make_team,
@@ -514,6 +515,97 @@ class TestLeads(FrappeTestCase):
             message = self.assert_integration_role_error()
         self.assertNotIn("(None)", message)
         self.assertIn("Hub integration role", message)
+
+    def test_the_department_filter_goes_to_the_erp_site_only_when_picked(self):
+        self.as_bde()
+        leads_api.list_leads(department="")
+        leads_api.list_leads(department="GrowthX")
+        (blank, picked) = self.crm.lead_calls
+        self.assertIsNone(blank[2]["department"])
+        self.assertEqual(picked[2]["department"], "GrowthX")
+
+    def test_departments_are_read_cached_and_cleared_when_they_change(self):
+        self.crm.lead_answers["get_lead_departments"] = [lead_department()]
+        self.crm.lead_answers["save_lead_department"] = lead_department("Sales Pod")
+        self.as_bde()
+        result = leads_api.get_lead_departments()
+        self.assertTrue(result["available"])
+        self.assertEqual(result["departments"][0]["name"], "GrowthX")
+        leads_api.get_lead_departments()
+        self.assertEqual(len(self.crm.lead_calls), 1)
+
+        self.crm.lead_answers["get_lead_departments"] = [lead_department("Sales Pod")]
+        leads_api.save_lead_department({"department_name": "Sales Pod"})
+        self.assertEqual(
+            leads_api.get_lead_departments()["departments"][0]["name"], "Sales Pod"
+        )
+
+    def test_a_department_is_saved_as_the_signed_in_person(self):
+        self.crm.lead_answers["save_lead_department"] = lead_department()
+        self.crm.lead_answers["set_lead_department_active"] = lead_department(
+            is_active=0
+        )
+        self.as_bde()
+        values = {"department_name": "GrowthX", "heads": [BDE], "members": []}
+        leads_api.save_lead_department(frappe.as_json(values), name="GrowthX")
+        leads_api.set_lead_department_active("GrowthX", active="0")
+
+        (
+            (save, save_post, save_params),
+            (toggle, toggle_post, toggle_params),
+        ) = self.crm.lead_calls
+        self.assertEqual(
+            (save, save_post, toggle, toggle_post),
+            ("save_lead_department", True, "set_lead_department_active", True),
+        )
+        self.assertEqual(save_params["values"], values)
+        self.assertEqual(
+            (save_params["name"], save_params["acting_user"]), ("GrowthX", BDE)
+        )
+        self.assertEqual(
+            (toggle_params["name"], toggle_params["active"]), ("GrowthX", 0)
+        )
+
+    def test_an_older_erp_site_hides_departments_quietly(self):
+        older = CRMError(
+            "x", 417, "Failed to get method for command tbo_smart.api.hub_leads.x"
+        )
+        self.crm.lead_answers["get_lead_departments"] = older
+        self.crm.lead_answers["save_lead_department"] = older
+        self.as_bde()
+        frappe.clear_messages()
+        self.assertEqual(
+            leads_api.get_lead_departments(), {"available": False, "departments": []}
+        )
+        self.assertEqual(frappe.message_log, [])
+        with self.assertRaises(LeadsUnavailableError) as caught:
+            leads_api.save_lead_department({"department_name": "GrowthX"})
+        self.assertIn("latest TBO Smart", str(caught.exception))
+
+    def test_a_refused_department_change_says_who_may_manage_them(self):
+        self.crm.lead_answers["save_lead_department"] = CRMError(
+            "x", 403, "PermissionError"
+        )
+        self.crm.lead_answers["set_lead_department_active"] = CRMError(
+            "x", 403, "PermissionError", "Only Sales Managers."
+        )
+        self.as_bde()
+        with self.assertRaises(LeadsError) as caught:
+            leads_api.save_lead_department({"department_name": "GrowthX"})
+        self.assertIn("System Manager or Sales Manager", str(caught.exception))
+        self.assertNotIn("sales account", str(caught.exception))
+        with self.assertRaises(LeadsError) as caught:
+            leads_api.set_lead_department_active("GrowthX", 0)
+        self.assertIn("Only Sales Managers.", str(caught.exception))
+
+    def test_departments_are_for_people_who_use_leads(self):
+        frappe.db.set_single_value("HD CRM Settings", "enable_leads", 0)
+        self.as_bde()
+        with self.assertRaises(frappe.PermissionError):
+            leads_api.get_lead_departments()
+        with self.assertRaises(frappe.PermissionError):
+            leads_api.save_lead_department({})
+        self.assertEqual(self.crm.lead_calls, [])
 
 
 class TestCRMCallErrors(FrappeTestCase):
