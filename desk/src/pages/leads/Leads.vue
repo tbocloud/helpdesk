@@ -100,6 +100,13 @@
               :options="choices(options?.segments, __('Any segment'))"
             />
             <FormControl
+              v-if="departmentFilter.length"
+              v-model="filters.department"
+              type="select"
+              :label="__('Department')"
+              :options="departmentFilter"
+            />
+            <FormControl
               v-if="intakeOn"
               v-model="created"
               type="select"
@@ -271,6 +278,17 @@
                       <span v-if="row.company_name" class="truncate">{{
                         row.company_name
                       }}</span>
+                      <template v-if="departmentLabel(row)">
+                        <span aria-hidden="true">·</span>
+                        <span class="inline-flex items-center gap-1">
+                          <LucideBuilding2
+                            class="size-3.5 shrink-0 text-ink-gray-5"
+                            aria-hidden="true"
+                          />
+                          <span class="sr-only">{{ __("Department") }}</span>
+                          {{ departmentLabel(row) }}
+                        </span>
+                      </template>
                       <template v-if="row.segment">
                         <span aria-hidden="true">·</span>
                         <span>{{ row.segment }}</span>
@@ -398,6 +416,7 @@ import {
 } from "frappe-ui";
 import { computed, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import LucideBuilding2 from "~icons/lucide/building-2";
 import LucideCalendar from "~icons/lucide/calendar";
 import LucideCalendarRange from "~icons/lucide/calendar-range";
 import LucideCalendarX from "~icons/lucide/calendar-x";
@@ -419,6 +438,7 @@ import LeadsOverview from "./LeadsOverview.vue";
 import {
   choices,
   clientStatus,
+  departmentLabel,
   LEAD_VIEWS,
   loadLeadOptions,
   useClickToCall,
@@ -427,6 +447,7 @@ import {
   ownerName,
   stageLabel,
   stageTone,
+  usableDepartments,
   type LeadIntake,
   type LeadOptions,
   type LeadRow,
@@ -494,6 +515,7 @@ const filters = reactive({
   stage: queryValue("stage"),
   owner: queryValue("owner"),
   segment: queryValue("segment"),
+  department: queryValue("department"),
 });
 // set by a number on the Overview: the leads it counts, and its period
 function queryExtra() {
@@ -544,6 +566,7 @@ const hasFilters = computed(
       filters.stage ||
       filters.owner ||
       filters.segment ||
+      filters.department ||
       extra.metric ||
       extraChips.value.length
     )
@@ -576,7 +599,12 @@ const waitingForDates = computed(
 
 function clearFilters() {
   search.value = "";
-  Object.assign(filters, { stage: "", owner: "", segment: "" });
+  Object.assign(filters, {
+    stage: "",
+    owner: "",
+    segment: "",
+    department: "",
+  });
   Object.assign(extra, {
     source: "",
     temperature: "",
@@ -612,6 +640,16 @@ const stageOptions = computed(() => [
     value: s.name,
   })),
 ]);
+// only once the ERP site has departments; an older TBO Smart leaves the filter out
+const departmentFilter = computed(() => {
+  const list = usableDepartments(options.value, filters.department);
+  return list.length
+    ? [
+        { label: __("Any department"), value: "" },
+        ...list.map((d) => ({ label: d.name, value: d.name })),
+      ]
+    : [];
+});
 const ownerOptions = computed(() => [
   { label: __("Anyone"), value: "" },
   ...(options.value?.owners ?? []).map((o) => ({
@@ -627,6 +665,7 @@ const leads = createResource({
     stage: filters.stage || null,
     owner: filters.owner || null,
     segment: filters.segment || null,
+    department: filters.department || null,
     source: extra.source || null,
     temperature: extra.temperature || null,
     metric: extra.metric || null,
@@ -709,6 +748,7 @@ watch(
       stage: queryValue("stage"),
       owner: queryValue("owner"),
       segment: queryValue("segment"),
+      department: queryValue("department"),
       page: queryPage(),
       extra: queryExtra(),
     };
@@ -719,6 +759,7 @@ watch(
       filters.stage === wanted.stage &&
       filters.owner === wanted.owner &&
       filters.segment === wanted.segment &&
+      filters.department === wanted.department &&
       page.value === wanted.page
     )
       return;
@@ -729,6 +770,7 @@ watch(
       stage: wanted.stage,
       owner: wanted.owner,
       segment: wanted.segment,
+      department: wanted.department,
     });
     Object.assign(extra, wanted.extra);
     page.value = wanted.page;
@@ -755,6 +797,7 @@ watch(
         stage: f.stage || undefined,
         owner: f.owner || undefined,
         segment: f.segment || undefined,
+        department: f.department || undefined,
         source: x.source || undefined,
         temperature: x.temperature || undefined,
         metric: x.metric || undefined,

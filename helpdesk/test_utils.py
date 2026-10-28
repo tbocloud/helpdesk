@@ -3576,6 +3576,25 @@ def enable_leads(teams: tuple[str, ...] = ()):
     frappe.cache.delete_keys("hd_leads:")
 
 
+def lead_department(
+    name: str = "GrowthX",
+    lead_type: str = "Content / Digital Marketing",
+    heads: tuple[str, ...] = (),
+    members: tuple[str, ...] = (),
+    is_active: int = 1,
+) -> dict:
+    """A lead department as the ERP site's get_lead_departments and save_lead_department
+    answer it."""
+    return {
+        "name": name,
+        "department_name": name,
+        "lead_type": lead_type,
+        "is_active": is_active,
+        "heads": [{"user": u, "full_name": u} for u in heads],
+        "members": [{"user": u, "full_name": u} for u in members],
+    }
+
+
 def make_sales_manager(email: str, first_name: str = "Manager") -> str:
     """An agent with the Sales Manager role (created when the hub doesn't have it yet),
     who may use Leads and gets the 6 pm Daily Sales Report."""

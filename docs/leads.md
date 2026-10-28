@@ -50,8 +50,8 @@ user exists there with a sales role, applies what they may see, and records writ
 
 | Method | HTTP | Arguments | Returns |
 | --- | --- | --- | --- |
-| `get_options` | GET | | `{stages: [{name, label, type, color}], sources, segments, owners: [{email, full_name}], territories, industries, can_call}` |
-| `list_leads` | GET | `search, stage, owner, segment, source, temperature, metric, period, from_date, to_date, view, start, page_length` | `{rows: [{name, lead_name, company_name, email_id, mobile_no, tbo_stage, segment, lead_owner, owner_name, score, next_follow_up, modified, latest_quotation, latest_proposal}], total}` |
+| `get_options` | GET | | `{stages: [{name, label, type, color}], sources, segments, owners: [{email, full_name}], territories, industries, can_call, departments: [{name, lead_type, is_active, is_head, is_member}], lead_types}` (the last two from the departments release of TBO Smart) |
+| `list_leads` | GET | `search, stage, owner, segment, department, source, temperature, metric, period, from_date, to_date, view, start, page_length` | `{rows: [{name, lead_name, company_name, email_id, mobile_no, tbo_stage, segment, lead_owner, owner_name, score, next_follow_up, modified, latest_quotation, latest_proposal, tbo_department, tbo_lead_type}], total}` |
 | `get_overview` | GET | `period, from_date, to_date, owner` | the Overview's figures (TBO Smart's `hub-leads-api.md` §2.4) |
 | `get_lead_intake` | GET | `from_date, to_date` (the hub sends yesterday and today) | new leads taken each day by owner, imports left out, and the scope's salespeople (§2.4.1) |
 | `get_proposal_money` | GET | `period, from_date, to_date, owner` | proposals sent, won, advances and every payment split still to collect (§2.8) |
@@ -62,6 +62,9 @@ user exists there with a sales role, applies what they may see, and records writ
 | `draft_lead_message` | POST | `name, channel (whatsapp / email), language` | `{channel, subject, text, to?, url?}`; nothing is sent |
 | `log_message_sent` | POST | `name, channel, text` | the timeline entry |
 | `get_sales_activity` | GET | `from_date, to_date`, **no** `acting_user` | each salesperson's activity, for the Scoreboard ([team-dashboard.md](team-dashboard.md#sales)) |
+| `get_lead_departments` | GET | | `[{name, department_name, lead_type, is_active, heads: [{user, full_name}], members: [{user, full_name}]}]` |
+| `save_lead_department` | POST | `values: {department_name, lead_type, is_active, heads: [user], members: [user]}, name` (edit) | the saved department; only System Manager / Sales Manager on the ERP site, others get PermissionError |
+| `set_lead_department_active` | POST | `name, active` | the department |
 | `get_lead` | GET | `name` | `{lead: {...}, timeline: [...], quotations: [...], proposals: [...], allowed_stages: [...]}` |
 | `create_lead` | POST | `data` | the lead (at least `name`) |
 | `update_lead` | POST | `name, data` | the lead |
@@ -80,7 +83,7 @@ user exists there with a sales role, applies what they may see, and records writ
 - `view` is `all`, `mine`, `call_today` or `follow_up`. The hub sends `page_length` 20
   (at most 100) and `start` from 0.
 - `data` (create and update) uses these keys: `lead_name, company_name, email_id, mobile_no,
-  source, segment, territory, industry, lead_owner, next_follow_up` (date, `YYYY-MM-DD`).
+  source, segment, territory, industry, lead_owner, next_follow_up` (date, `YYYY-MM-DD`), and `tbo_department` (a department's name).
   An update sends only the fields that changed; an empty string clears a field.
 - `allowed_stages` may be stage names or stage objects; the hub offers only those (minus the
   current stage).
@@ -98,6 +101,34 @@ user exists there with a sales role, applies what they may see, and records writ
   ERP site (tbo_smart#25); clearing it adds nothing and doesn't close the open one.
 - Stage colours from the ERP site are not used, to keep the hub's one-accent rule: a stage
   whose `type` is `Won` is green, `Lost` red, every other stage gray, always with its label.
+
+## Lead departments
+
+Departments (GrowthX, ...) are created in the hub, kept on the ERP site and put on leads:
+each has a **lead type** (`ERP / Software` or `Content / Digital Marketing`), **heads** and
+**members** (users, by the email both sites share) and an active switch. A head sees every
+lead in the department, a member the leads they own; **the ERP site enforces that**, the hub
+only filters and shows. The department's type is the lead's type (`tbo_lead_type`).
+
+- **Settings → CRM → Lead departments** (`LeadDepartments.vue`, only for System Managers and
+  Agent Managers, once Leads is on): list with type, heads, member count and an active
+  switch, and an add/edit dialog (name is fixed once saved; type; heads and members are
+  pickers of the hub's agents). If the ERP site refuses (only its System Manager or Sales
+  Manager may), its reason shows in the dialog.
+- **Leads list:** a Department filter (`department` in the URL) and, on each row, the
+  department and its type as plain text.
+- **New lead / Edit lead:** a Department picker. A new lead starts in the person's only
+  department (they are a head or member of exactly one active department). Once a
+  department is picked, its heads and members come first in the Owner picker.
+- **Older TBO Smart:** without departments on the ERP site, `get_options` has no
+  `departments`, `get_lead_departments` answers `available: false`, and the Settings section,
+  the filter and the pickers stay out without an error. Writes then say the ERP site needs
+  the latest TBO Smart.
+- Hub endpoints: `get_lead_departments` (cached 60 s per person, key part `departments`),
+  `save_lead_department`, `set_lead_department_active`; a change clears the signed-in
+  person's cached reads (including `get_options`, which carries `is_head` and `is_member`).
+  `list_leads` takes `department`. The Overview and Daily report don't filter by department
+  yet.
 
 ## Calls through MyOperator
 
@@ -127,7 +158,7 @@ The ERP site's `tbo_smart.api.telephony` takes the same `acting_user`:
 `helpdesk/api/leads.py`, thin typed proxies (writes are POST only): `get_options`,
 `list_leads`, `get_overview_page`, `get_overview`, `get_lead_intake`, `get_proposal_money`, `get_lead`, `get_lead_ai`, `refresh_lead_ai`, `apply_ai_stage`,
 `dismiss_ai_stage`, `draft_lead_message`, `log_message_sent`, `create_lead`, `update_lead`,
-`set_stage`, `add_note`, `click_to_call`, `call_recording`, `get_daily_report`, `log_call`. They check
+`set_stage`, `add_note`, `get_lead_departments`, `save_lead_department`, `set_lead_department_active`, `click_to_call`, `call_recording`, `get_daily_report`, `log_call`. They check
 `can_use_leads`, validate the view and page size, trim notes, and pass `acting_user`. The
 client is `CRMClient.call` in `helpdesk/integrations/crm/client.py`; the call and error
 mapping live in `helpdesk/integrations/crm/leads.py`. The API key and secret never reach the

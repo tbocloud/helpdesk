@@ -583,6 +583,8 @@
             </ul>
           </fieldset>
         </SettingsSection>
+
+        <LeadDepartments v-if="form.enable_leads && canManageLeads" />
       </div>
     </template>
   </SettingsLayoutBase>
@@ -590,6 +592,7 @@
 
 <script setup lang="ts">
 import SettingsLayoutBase from "@/components/layouts/SettingsLayoutBase.vue";
+import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
 import {
@@ -611,6 +614,7 @@ import LucidePlugZap from "~icons/lucide/plug-zap";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideUserCheck from "~icons/lucide/user-check";
 import SettingsSection from "../SettingsSection.vue";
+import LeadDepartments from "./LeadDepartments.vue";
 
 interface CRMForm {
   enabled: boolean;
@@ -933,6 +937,10 @@ const fillOwners = createResource({
 });
 
 // --- leads ---
+
+// the ERP site has the final say on who may change departments
+const auth = useAuthStore();
+const canManageLeads = computed(() => auth.isAdmin || auth.isManager);
 
 const teams = createListResource({
   doctype: "HD Team",
