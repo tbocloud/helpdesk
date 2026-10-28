@@ -378,6 +378,21 @@ watch([assignableUsers, memberIds], () => {
     form.assigned_to = me;
 });
 
+// an assignee picked for another project stays only if this one can take them:
+// they're on its team, or the person may bring them onto it
+watch(
+  () => projectDetail.data,
+  (detail) => {
+    if (
+      detail &&
+      form.assigned_to &&
+      !memberIds.value.has(form.assigned_to) &&
+      !detail.can_manage
+    )
+      form.assigned_to = "";
+  }
+);
+
 const assigneeIsNew = computed(
   () => !!form.assigned_to && !memberIds.value.has(form.assigned_to)
 );
@@ -429,6 +444,9 @@ watch(
 watch(pickedProject, (picked) => {
   form.depends_on_task = "";
   if (!assigneeTouched.value) form.assigned_to = "";
+  // a late answer for the previous project would otherwise land after the reset
+  projectDetail.abort();
+  openTasks.abort();
   projectDetail.reset();
   openTasks.reset();
   if (!picked) return;

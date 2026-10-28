@@ -558,7 +558,9 @@ recurring) stay on the project's board.
 rule `add_task` checks), with a note when there are none. Picking a project loads its team,
 open tasks (for Depends on) and the default assignee: the person themselves when they're on
 that project's team, so the new task lands on their board, which reloads once it's created.
-Changing the project clears Depends on and an assignee the person didn't pick. Phase
+Changing the project cancels the previous project's loads, clears Depends on and an assignee
+the person didn't pick, and drops a picked assignee the new project can't take (not on its
+team, and the person can't bring them onto it). Phase
 suggestions are only offered on a project's own board.
 
 ## Tasks: assigned by, on hold, moving, the timer
