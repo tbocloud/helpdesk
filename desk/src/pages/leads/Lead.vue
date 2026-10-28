@@ -478,8 +478,16 @@ const detailFields = computed(() => {
 
 // --- notes ---
 
-const note = ref("");
+const note = ref(takeUnsavedNote());
 const noteError = ref("");
+
+/** Remarks the New lead dialog couldn't save, handed over to add here. Taken out of the
+ * history entry so a reload or Back doesn't bring them back once added. */
+function takeUnsavedNote() {
+  const { unsavedNote, ...state } = window.history.state ?? {};
+  if (unsavedNote) window.history.replaceState(state, "");
+  return typeof unsavedNote === "string" ? unsavedNote : "";
+}
 
 const addNote = createResource({
   url: "helpdesk.api.leads.add_note",

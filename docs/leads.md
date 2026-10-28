@@ -292,8 +292,12 @@ doesn't show without its fields. The hub can be deployed before TBO Smart.
   to you on the ERP site), next follow-up and remarks. Opens the new lead when it's created.
   Remarks aren't a lead field: the ERP site's `create_lead` takes only the `data` keys above,
   so the dialog saves them with `add_note` once the lead exists (they're the first entry on
-  its timeline). If that note fails the lead stays created and a warning says to add the
-  remarks as a note. Edit lead has no Remarks; the lead page's note composer does that.
+  its timeline). If that note fails the lead stays created, a warning says so, and the
+  remarks are handed to the new lead's page (in the history entry's state, `unsavedNote`)
+  pre-filled in its note box to add again; the page takes them out of the history entry so
+  a reload or Back doesn't refill them. A save that finishes after the dialog was closed and
+  opened again leaves the reopened form alone. Edit lead has no Remarks; the lead page's
+  note composer does that.
 - **Lead** (`/helpdesk/leads/<name>`, `Lead.vue`): details, *Move stage* (the primary
   action; only `allowed_stages`, with an optional note), *Edit* (the same dialog, sending
   only changed fields), a note composer and the timeline, and the quotations read-only

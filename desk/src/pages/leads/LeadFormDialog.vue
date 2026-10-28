@@ -167,7 +167,8 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{
   (e: "update:open", value: boolean): void;
-  (e: "saved", name: string): void;
+  /** `unsavedNote`: remarks on a new lead that didn't save, for the lead page's note box */
+  (e: "saved", name: string, unsavedNote?: string): void;
 }>();
 
 const formId = `lead-form-${useId()}`;
@@ -183,12 +184,16 @@ function blank(): LeadForm {
 const form = reactive<LeadForm>(blank());
 // not a lead field: the ERP site's create takes only those, so remarks go in as a note
 const remarks = ref("");
+// bumped on each open, so a save that finishes after the form was closed and opened
+// again leaves that form alone
+let opening = 0;
 
 // a fresh form each time it opens: the lead's values, or empty
 watch(
   () => props.open,
   (open) => {
     if (!open) return;
+    opening++;
     errorMessage.value = "";
     remarks.value = "";
     const values = blank();
@@ -284,29 +289,36 @@ function submit() {
   }
   // create or update is decided now, from the lead the dialog has at this moment
   const lead = props.lead;
+  const note = lead ? "" : remarks.value.trim();
+  const opened = opening;
   saving.value = true;
   call(
     lead ? "helpdesk.api.leads.update_lead" : "helpdesk.api.leads.create_lead",
     lead ? { name: lead.name, data } : { data }
   )
     .then(async (result: { name?: string } | null) => {
-      const note = remarks.value.trim();
-      if (!lead && note && result?.name) {
+      let unsavedNote = "";
+      if (note && result?.name) {
         // the lead exists now, so a failed note mustn't send the person back to create it again
         await call("helpdesk.api.leads.add_note", {
           name: result.name,
           note,
-        }).catch(() =>
+        }).catch(() => {
+          unsavedNote = note;
           toast.warning(
-            __("The remarks weren't saved. Add them as a note on the lead.")
-          )
-        );
+            __(
+              "The remarks weren't saved. They're in the lead's note box to add again."
+            )
+          );
+        });
       }
       toast.success(lead ? __("Lead saved") : __("Lead created"));
-      emit("saved", result?.name || lead?.name || "");
+      if (opened !== opening) return;
+      emit("saved", result?.name || lead?.name || "", unsavedNote || undefined);
       emit("update:open", false);
     })
     .catch((e: unknown) => {
+      if (opened !== opening) return;
       errorMessage.value = errorText(
         e,
         __("Couldn't save the lead. Check your connection and try again.")
