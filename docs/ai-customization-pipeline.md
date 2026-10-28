@@ -98,8 +98,10 @@ with developers; the agent may draft, a developer finishes.
   approval keeps `custom_estimate_scope_hash` (the hours, scope and checks as approved);
   `approved_scope(doc)` returns them only while they still match, so a scope edited after the
   approval needs the estimate sent again. Sending an estimate again clears the approval.
-  **Start estimate** on a Copilot customization run fills an empty scope from Copilot's
-  `scope` and `done_when` (else its proposed action) until the estimate is sent.
+  When a live Copilot run finds a customization request, the estimate starts by itself
+  (`estimate_from_copilot`): Copilot's hours unless the ticket has an estimate already, and an
+  empty scope filled from Copilot's `scope` and `done_when` (else its proposed action), until
+  the estimate is sent. There is no button for it.
 - Customer: an **Approve estimate / Decline** banner on their ticket in the portal, with the
   scope and checks; the estimate email links to it.
 - An approval made after the proposed date moves the date by the days that passed. The

@@ -13,6 +13,7 @@ from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_to_date, now_datetime
 
 from helpdesk.api import copilot as api
+from helpdesk.api.customization import get_estimate
 from helpdesk.copilot import customer, fixes, pilot, router, runs
 from helpdesk.copilot import settings as copilot_settings
 from helpdesk.test_utils import (
@@ -302,7 +303,7 @@ class TestTheWeeklyEmail(PilotCase):
 
 
 class TestACustomizationRequest(PilotCase):
-    def test_explained_with_an_estimate_offer_then_the_estimate_flow(self):
+    def test_explained_and_the_estimate_starts_by_itself(self):
         self.at("Explain")
         run = self.routed("customization_request")
         self.assertEqual(run.state, "Explaining")
@@ -312,11 +313,12 @@ class TestACustomizationRequest(PilotCase):
         )
         self.assertIn("estimate of the work", draft)
 
-        info = api.get_run(run.ticket)
-        self.assertTrue(info["can_start_estimate"])
-        estimate = api.start_estimate(run.ticket)
-        self.assertEqual((estimate["is_customization"], estimate["hours"]), (True, 4))
-        self.assertFalse(api.get_run(run.ticket)["can_start_estimate"])
+        # no button: the estimate card is ready for an agent to check and send
+        estimate = get_estimate(run.ticket)
+        self.assertEqual(
+            (estimate["is_customization"], estimate["hours"], estimate["status"]),
+            (True, 4, "Estimated"),
+        )
 
     def test_the_estimate_starts_with_copilots_scope_and_checks(self):
         self.at("Explain")
@@ -330,14 +332,46 @@ class TestACustomizationRequest(PilotCase):
             },
         )
 
-        estimate = api.start_estimate(run.ticket)
+        estimate = get_estimate(run.ticket)
 
         self.assertEqual(
-            (estimate["scope"], estimate["checks"]),
+            (estimate["scope"], estimate["checks"], estimate["hours"]),
             (
                 "Require a Sales Team row on Sales Invoice.",
                 ["an invoice without one is refused", "a return is not"],
+                3,
             ),
+        )
+
+    def test_triages_own_hours_stay_and_copilots_scope_is_added(self):
+        self.at("Explain")
+        ticket = self.ticket()
+        frappe.db.set_value(
+            "HD Ticket",
+            ticket,
+            {"custom_estimate_status": "Estimated", "custom_estimate_hours": 4},
+        )
+        run = runs.transition(runs.start_run(ticket), "Investigating", runs.WORKER)
+        router.route(
+            run,
+            fake_investigation(
+                "customization_request",
+                0.9,
+                proposal={"estimate_hours": 3, "scope": "Require a Sales Team row."},
+            ),
+        )
+
+        estimate = get_estimate(ticket)
+        self.assertEqual(
+            (estimate["scope"], estimate["hours"]), ("Require a Sales Team row.", 4)
+        )
+
+    def test_a_shadow_run_leaves_the_estimate_alone(self):
+        run = self.routed("customization_request")  # Diagnose only: a shadow run
+
+        self.assertTrue(run.shadow)
+        self.assertFalse(
+            frappe.db.get_value("HD Ticket", run.ticket, "custom_estimate_scope")
         )
 
     def test_the_agents_reply_answers_it_and_measures_the_edit(self):

@@ -11,7 +11,8 @@ fixed resolution SLA, because the work differs every time. Instead:
 
 The estimate can carry a written scope: **What we will build** and **Done when** (one
 check per line). The customer approves that text with the hours, and its hash is kept:
-Copilot builds only an approved scope that was not edited afterwards (Phase 8).
+Copilot builds only an approved scope that was not edited afterwards (Phase 8). When
+Copilot finds a customization request, the estimate starts by itself from its proposal.
 
 The usual SLA still covers the first reply. See docs/ai-customization-pipeline.md.
 """
@@ -169,6 +170,37 @@ def fill_scope(ticket: str, scope: str, checks: str | list):
         updates["custom_estimate_checks"] = "\n".join(checks_of(checks))
     if updates:
         frappe.db.set_value("HD Ticket", ticket, updates, update_modified=False)
+
+
+def estimate_from_copilot(run):
+    """Copilot found a feature request: the ticket becomes a Customization with Copilot's hours
+    (unless triage or an agent estimated it already) and its draft of the scope, ready on the
+    estimate card for an agent to check and send. Nothing goes to the customer here."""
+    from helpdesk.copilot import runs
+
+    proposal = frappe.parse_json(run.proposal or "{}") or {}
+    hours = next(
+        (
+            proposal.get(key)
+            for key in ("estimate_hours", "hours")
+            if str(proposal.get(key) or "").replace(".", "", 1).isdigit()
+        ),
+        0,
+    )
+    record_triage_estimate(
+        run.ticket,
+        {
+            "request_type": "customization",
+            "estimate_hours": hours,
+            "estimate_note": _("From Copilot run {0}: {1}").format(
+                run.name, run.summary or ""
+            ),
+        },
+    )
+    # what will be built: the worker's scope and checks when it wrote them, else its proposal
+    scope = proposal.get("scope") or proposal.get("action") or run.summary or ""
+    fill_scope(run.ticket, str(scope), proposal.get("done_when") or "")
+    runs.add_event(run, "estimate_started", {"hours": hours}, runs.SYSTEM)
 
 
 @frappe.whitelist()

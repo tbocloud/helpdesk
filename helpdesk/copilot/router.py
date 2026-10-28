@@ -172,6 +172,11 @@ def route(run, result: dict):
     customer.note_diagnosis(doc, investigation)
     if doc.state == "Explaining":
         customer.draft_explanation(doc, explanation_text(investigation, effective))
+        if effective == "customization_request" and not doc.shadow:
+            from helpdesk.api.customization import estimate_from_copilot
+
+            # the estimate card is ready with Copilot's hours, scope and checks
+            estimate_from_copilot(doc)
     elif doc.state == "Handed Over":
         customer.hand_over(
             doc,

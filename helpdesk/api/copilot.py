@@ -95,10 +95,6 @@ def get_run(ticket: str | int) -> dict:
         and run.get("kind") != "revert"
         and runs.active_run(run.ticket) is None
         and copilot_settings.allows(run.customer, copilot_settings.CORRECT),
-        # a feature request: the agent starts the estimate flow from Copilot's proposal
-        "can_start_estimate": run.root_cause_category == "customization_request"
-        and frappe.db.get_value("HD Ticket", run.ticket, "custom_estimate_status")
-        in (None, ""),
         "level": copilot_settings.level_of(run.customer),
         # text that tried to instruct the AI, found by the hub (ticket) or the worker (what it read)
         "suspicious": suspicious.seen(run.name),
@@ -466,48 +462,6 @@ def prepare_correction(ticket: str | int) -> dict:
     frappe.has_permission("HD Ticket", "write", str(ticket), throw=True)
     changes.prepare_correction(str(ticket), frappe.session.user)
     return get_run(ticket)
-
-
-@frappe.whitelist(methods=["POST"])
-@agent_only
-def start_estimate(ticket: str | int) -> dict:
-    """Copilot found a feature request: the ticket becomes a Customization with Copilot's
-    estimate (when it gave hours) and its draft of the scope, for the agent to check and
-    send from the estimate card."""
-    from helpdesk.api.customization import (
-        fill_scope,
-        get_estimate,
-        record_triage_estimate,
-    )
-
-    frappe.has_permission("HD Ticket", "write", str(ticket), throw=True)
-    run = _run_of(ticket)
-    if run.root_cause_category != "customization_request":
-        frappe.throw(_("Copilot did not find a customization request on this ticket."))
-    proposal = frappe.parse_json(run.proposal or "{}") or {}
-    hours = next(
-        (
-            proposal.get(key)
-            for key in ("estimate_hours", "hours")
-            if str(proposal.get(key) or "").replace(".", "", 1).isdigit()
-        ),
-        0,
-    )
-    record_triage_estimate(
-        str(ticket),
-        {
-            "request_type": "customization",
-            "estimate_hours": hours,
-            "estimate_note": _("From Copilot run {0}: {1}").format(
-                run.name, run.summary or ""
-            ),
-        },
-    )
-    # what will be built: the worker's scope and checks when it wrote them, else its proposal
-    scope = proposal.get("scope") or proposal.get("action") or run.summary or ""
-    fill_scope(str(ticket), str(scope), proposal.get("done_when") or "")
-    runs.add_event(run, "estimate_started", {"hours": hours}, runs.AGENT)
-    return get_estimate(ticket)
 
 
 @frappe.whitelist(methods=["GET"])
