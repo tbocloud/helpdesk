@@ -148,6 +148,7 @@ import { computed, reactive, ref, useId, watch } from "vue";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import {
   choices,
+  keepUnsavedNote,
   LEAD_FORM_FIELDS,
   loadLeadOptions,
   leadDepartments,
@@ -167,8 +168,7 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{
   (e: "update:open", value: boolean): void;
-  /** `unsavedNote`: remarks on a new lead that didn't save, for the lead page's note box */
-  (e: "saved", name: string, unsavedNote?: string): void;
+  (e: "saved", name: string): void;
 }>();
 
 const formId = `lead-form-${useId()}`;
@@ -297,14 +297,11 @@ function submit() {
     lead ? { name: lead.name, data } : { data }
   )
     .then(async (result: { name?: string } | null) => {
-      let unsavedNote = "";
       if (note && result?.name) {
+        const name = result.name;
         // the lead exists now, so a failed note mustn't send the person back to create it again
-        await call("helpdesk.api.leads.add_note", {
-          name: result.name,
-          note,
-        }).catch(() => {
-          unsavedNote = note;
+        await call("helpdesk.api.leads.add_note", { name, note }).catch(() => {
+          keepUnsavedNote(name, note);
           toast.warning(
             __(
               "The remarks weren't saved. They're in the lead's note box to add again."
@@ -314,7 +311,7 @@ function submit() {
       }
       toast.success(lead ? __("Lead saved") : __("Lead created"));
       if (opened !== opening) return;
-      emit("saved", result?.name || lead?.name || "", unsavedNote || undefined);
+      emit("saved", result?.name || lead?.name || "");
       emit("update:open", false);
     })
     .catch((e: unknown) => {

@@ -359,11 +359,13 @@ import LogCallDialog from "./LogCallDialog.vue";
 import LeadProposals from "./LeadProposals.vue";
 import LeadQuotations from "./LeadQuotations.vue";
 import {
+  dropUnsavedNote,
   loadLeadOptions,
   leadOptions,
   ownerName,
   stageLabel,
   stageTone,
+  unsavedNote,
   useClickToCall,
   type LeadDetail,
   type LeadOptions,
@@ -478,21 +480,19 @@ const detailFields = computed(() => {
 
 // --- notes ---
 
-const note = ref(takeUnsavedNote());
+// starts with the remarks the New lead dialog couldn't save, kept until they're added
+const note = ref(unsavedNote(props.leadId));
 const noteError = ref("");
-
-/** Remarks the New lead dialog couldn't save, handed over to add here. Taken out of the
- * history entry so a reload or Back doesn't bring them back once added. */
-function takeUnsavedNote() {
-  const { unsavedNote, ...state } = window.history.state ?? {};
-  if (unsavedNote) window.history.replaceState(state, "");
-  return typeof unsavedNote === "string" ? unsavedNote : "";
-}
+watch(
+  () => props.leadId,
+  (lead) => (note.value = unsavedNote(lead))
+);
 
 const addNote = createResource({
   url: "helpdesk.api.leads.add_note",
   method: "POST",
   onSuccess() {
+    dropUnsavedNote(addNote.params.name);
     note.value = "";
     toast.success(__("Note added"));
     detail.reload();

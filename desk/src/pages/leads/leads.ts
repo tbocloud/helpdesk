@@ -277,6 +277,31 @@ export function loadLeadOptions() {
   leadOptions.fetch();
 }
 
+// Remarks the New lead dialog couldn't save as the lead's first note. Kept in this browser
+// per lead until the note is added, so neither a reload nor reopening the dialog loses them;
+// storage can be off (private windows), and then they're only lost as before.
+const unsavedNoteKey = (lead: string) => `hd-lead-unsaved-note:${lead}`;
+
+export function keepUnsavedNote(lead: string, note: string) {
+  try {
+    localStorage.setItem(unsavedNoteKey(lead), note);
+  } catch {}
+}
+
+export function unsavedNote(lead: string) {
+  try {
+    return localStorage.getItem(unsavedNoteKey(lead)) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+export function dropUnsavedNote(lead: string) {
+  try {
+    localStorage.removeItem(unsavedNoteKey(lead));
+  } catch {}
+}
+
 /** The departments the signed-in person can put a lead in: active ones, and the one a
  * lead already has. Empty while the ERP site has none (or is too old), so the pickers stay out. */
 export function usableDepartments(options: LeadOptions | undefined, keep = "") {

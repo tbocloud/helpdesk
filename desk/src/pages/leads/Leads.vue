@@ -827,13 +827,8 @@ function followUpText(row: LeadRow) {
   return __("Follow up {0}", day.format("D MMM"));
 }
 
-function openLead(name: string, unsavedNote?: string) {
-  if (name)
-    router.push({
-      name: "Lead",
-      params: { leadId: name },
-      state: unsavedNote ? { unsavedNote } : undefined,
-    });
+function openLead(name: string) {
+  if (name) router.push({ name: "Lead", params: { leadId: name } });
   else leads.reload();
 }
 </script>
