@@ -35,6 +35,22 @@ BUILD_TEMPLATES = {
     "Resolved": "Your change is live. {resolution} Please check it, then confirm, or reopen the ticket if it is not what you approved.",
 }
 
+# a chat with an Arabic-speaking customer (Phase 5): the same stages in Arabic, unless a settings row says otherwise
+ARABIC_TEMPLATES = {
+    "Received": "استلمنا طلبك ونعمل على دراسته.",
+    "Working on it": "وجدنا سبب المشكلة ونعمل على حلها. سنوافيك بالتحديثات هنا.",
+    "Fix scheduled": "الإصلاح جاهز وسيتم تفعيله في {date}.",
+    "Resolved": "{resolution} يرجى تأكيد أن المشكلة قد حُلّت، أو إعادة فتح التذكرة إن لم تُحل.",
+    "With our team": "أحد مهندسي TBO يتابع طلبك شخصيًا.",
+    "Waiting for you": "نحتاج بعض المعلومات منك؛ يرجى الاطلاع على ردنا.",
+}
+ARABIC_BUILD_TEMPLATES = {
+    "Working on it": "نعمل على تنفيذ التعديل الذي وافقت عليه. سنوافيك بالتحديثات هنا.",
+    "Fix scheduled": "التعديل جاهز وسيتم تفعيله في {date}.",
+    "Resolved": "أصبح التعديل متاحًا. {resolution} يرجى التحقق منه ثم التأكيد، أو إعادة فتح التذكرة إن لم يكن كما وافقت عليه.",
+}
+LANGUAGE_ROWS = {"en": ("", None), "ar": ("Arabic",)}
+
 
 def get_settings():
     return frappe.get_cached_doc("HDS Copilot Settings")
@@ -74,21 +90,29 @@ def allows(customer: str | None, level: str) -> bool:
     return LEVELS.index(level_of(customer)) >= LEVELS.index(level)
 
 
-def template_for(stage: str, build: bool = False) -> str:
-    """The message text for a stage: a build's own text, else the configured row, else the built-in text."""
+def template_for(stage: str, build: bool = False, language: str = "en") -> str:
+    """The message text for a stage: a build's own text, else the configured row in the language,
+    else the built-in text (English, or Arabic for an Arabic-speaking customer's chat)."""
     if stage not in STAGES:
         raise ValueError(f"Unknown Copilot stage: {stage}")
+    arabic = language == "ar"
     if build and stage in BUILD_TEMPLATES:
-        return BUILD_TEMPLATES[stage]
+        return (ARABIC_BUILD_TEMPLATES if arabic else BUILD_TEMPLATES)[stage]
     for row in get_settings().message_templates:
-        if row.stage == stage and (row.message or "").strip():
+        if (
+            row.stage == stage
+            and (row.get("language") or "") in LANGUAGE_ROWS["ar" if arabic else "en"]
+            and (row.message or "").strip()
+        ):
             return row.message.strip()
-    return DEFAULT_TEMPLATES[stage]
+    return (ARABIC_TEMPLATES if arabic else DEFAULT_TEMPLATES)[stage]
 
 
 def seed_default_templates(settings) -> None:
     """Appends a row with the built-in text for every stage the settings don't have yet."""
-    present = {row.stage for row in settings.message_templates}
+    present = {
+        row.stage for row in settings.message_templates if not row.get("language")
+    }
     for stage in STAGES:
         if stage not in present:
             settings.append(

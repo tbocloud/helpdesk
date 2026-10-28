@@ -40,8 +40,10 @@ class _Blank(dict):
         return ""
 
 
-def render(stage: str, context: dict | None = None, build: bool = False) -> str:
-    template = copilot_settings.template_for(stage, build)
+def render(
+    stage: str, context: dict | None = None, build: bool = False, language: str = "en"
+) -> str:
+    template = copilot_settings.template_for(stage, build, language)
     try:
         # an empty value leaves no double space behind
         return re.sub(r" {2,}", " ", template.format_map(_Blank(context or {}))).strip()
@@ -70,7 +72,10 @@ def send_stage(run, stage: str, context: dict | None = None) -> bool:
     they would have seen. Nor does a revert run (an undo): the ticket is
     with a person by then.
     """
-    text = render(stage, context, build=bool(run.get("build_scope")))
+    from helpdesk.copilot import conversation
+
+    language = conversation.language_of(run.ticket)
+    text = render(stage, context, build=bool(run.get("build_scope")), language=language)
     if _last_stage(run) == (stage, text):
         return False
     number = (
@@ -106,6 +111,7 @@ def send_stage(run, stage: str, context: dict | None = None) -> bool:
         runs.SYSTEM,
     )
     runs.update_ticket(run, stage=stage)
+    conversation.tell_stage(run, stage, text)  # a chat hears it at once (Phase 5)
     return True
 
 

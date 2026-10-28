@@ -64,14 +64,16 @@ def _tell_managers(subject: str, doctype: str = "HDS Copilot Settings", name=Non
 
 
 def month_spend(now=None) -> float:
-    """What Copilot's runs cost this calendar month, from the AI usage log."""
+    """What Copilot's runs and the customers' chats cost this calendar month."""
+    from helpdesk.copilot import conversation
+
     start = get_first_day(getdate(now or now_datetime()))
     total = frappe.db.sql(
         """select coalesce(sum(estimated_cost_usd), 0) from `tabHDS AI Usage Log`
         where copilot_run is not null and copilot_run != '' and creation >= %s""",
         (start,),
     )[0][0]
-    return flt(total)
+    return flt(total) + conversation.month_cost(start)
 
 
 def budget_allows_work() -> bool:

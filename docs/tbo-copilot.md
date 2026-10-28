@@ -265,6 +265,35 @@ API (agents): `helpdesk.api.copilot.decide_fix` (also for corrections), `change_
 
 **Weekly pilot email** (hourly check, sent once on Monday from 08:00 Riyadh time): last week's rows, the cost, links to the runs rated Wrong and to the report, to the **Weekly pilot email to** addresses and the Agent Managers.
 
+## Customer chat (Phase 5: `conversation.py`, `api/copilot_conversation.py`; helpdesk_client `chat.py`)
+
+The Support button in a customer's ERP opens a chat with TBO Copilot instead of the form, when HDS Copilot Settings → **Customer Chat** is on here and **Support Chat** is on on the site (helpdesk_client advertising `chat_v1`). Off on either side, the site shows today's form.
+
+- **How messages travel.**
+  - The site relays each message server to server to `helpdesk.api.copilot_conversation.message` (guest, POST).
+  - Each message is signed: headers `X-TBO-Connection`, `-Timestamp`, `-Nonce` and `-Signature`. The signature is HMAC-SHA256 over `"{timestamp}.{nonce}." + body`, under `HMAC(approval_key, "conversation-v1")`, the pairing key both sites already hold, so nothing is re-paired.
+  - The hub refuses a site that isn't paired and active, a signature that doesn't match, a timestamp more than 5 minutes off, or a nonce it has seen.
+  - The site vouches for its own logged-in user, as it does for tickets. The hub answers in the same call.
+  - Messages the hub starts go to the site at once with `hub_api.post_message` (once per reference), and the panel shows them live. These are Copilot's stages (the Resolved stage with **It's fixed** and **Still broken**) and the agents' replies (any Sent Communication on the ticket).
+- **The conversation** is an **HDS Conversation** with its **HDS Conversation Message** rows. It holds the site's user, the gathered fields (title, what happened, expected, steps, records, since, one or many, worked before), the page context the site sent, the language, the turns and the AI cost.
+- **Each turn,** one `call_haiku(job="chat")` returns JSON with the fields it heard and the next message: a question, a recording request, a summary, a knowledge base answer or a hand-over. The model never acts; the customer's buttons do. The code checks every message before it goes out:
+  - an answer must quote a Published article it was given, or it becomes the offer to raise a ticket;
+  - links stay only to those articles;
+  - a sentence that promises a date, a time, a price, a refund or a data change is removed (`safe_text`);
+  - text that looks like an instruction to the AI is flagged on the message, and is data in the prompt.
+- **Raise the ticket** on the summary creates the HD Ticket, as the ticket pull does (`via_customer_portal`, the connection). The description has the fields, the page context the import never read before (page, record, roles, recent errors) and the chat transcript.
+  - The site then makes its own Support Ticket for it, Open with the hub's number, so the pull never imports it again. It sends **linked**, and the hub fetches the chat's files from that ticket (`import_files`).
+  - From then on the chat is the ticket's channel: the customer's messages become Received Communications (a Copilot run waiting for an answer gets it, as from email), and no AI runs.
+  - **Talk to a person** raises the ticket with the transcript at any point.
+- **Limits:**
+  - per customer, 10 messages a minute and 200 a day;
+  - per conversation, a dollar cap (0.25) and 40 turns;
+  - the monthly AI budget (`pilot.month_spend` counts the chats).
+
+  Past any limit, the chat hands over to a person instead of answering.
+- **Languages:** the customer's language, English or Arabic. Arabic stage texts are built in (`settings.ARABIC_TEMPLATES`, or a Stage Messages row with Language Arabic), and a Copilot fix in an Arabic chat says so in Arabic.
+- **Settings** (HDS Copilot Settings → Customer Chat): on/off, the per-customer rates, the cap and turns, the opening text, and the recording request in English and Arabic.
+
 ## Staff assistant (Phase 6: `assistant.py`, `teams.py`, `api/copilot_teams.py`, `api/copilot_chat.py`)
 
 One engine for the **TBO Copilot bot in Teams** (personal chat) and the **TBO Copilot panel** in the agent app (sidebar → TBO Copilot). Chats and messages: **HDS Copilot Chat** and **HDS Copilot Chat Message** (kept 90 days, `assistant.prune` daily).

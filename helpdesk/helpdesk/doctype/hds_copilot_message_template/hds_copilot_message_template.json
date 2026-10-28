@@ -6,7 +6,8 @@
 	"engine": "InnoDB",
 	"field_order": [
 		"stage",
-		"message"
+		"message",
+		"language"
 	],
 	"fields": [
 		{
@@ -26,11 +27,19 @@
 			"in_list_view": 1,
 			"label": "Message",
 			"reqd": 1
+		},
+		{
+			"fieldname": "language",
+			"fieldtype": "Select",
+			"options": "\nArabic",
+			"label": "Language",
+			"in_list_view": 1,
+			"description": "Blank: English. An Arabic row is used in a chat with an Arabic-speaking customer (Phase 5)."
 		}
 	],
 	"istable": 1,
 	"links": [],
-	"modified": "2026-10-08 12:00:00.000000",
+	"modified": "2026-10-28 13:30:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Copilot Message Template",

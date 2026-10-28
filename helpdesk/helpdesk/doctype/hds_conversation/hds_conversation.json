@@ -1,0 +1,229 @@
+{
+	"actions": [],
+	"autoname": "TBO-CONV-.YYYY.-.#####",
+	"creation": "2026-10-28 13:30:00.000000",
+	"description": "A customer's chat with TBO Copilot from their ERP (or TBO Chat): what it gathered for the ticket, and the ticket it raised (Phase 5).",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"connection",
+		"customer",
+		"site_user",
+		"site_user_name",
+		"channel",
+		"column_break_state",
+		"state",
+		"ticket",
+		"client_conversation",
+		"language",
+		"turns",
+		"cost_usd",
+		"last_message_at",
+		"gathered_section",
+		"title",
+		"actual",
+		"expected",
+		"steps",
+		"column_break_gathered",
+		"records",
+		"since",
+		"scope",
+		"worked_before",
+		"context_section",
+		"context"
+	],
+	"fields": [
+		{
+			"fieldname": "connection",
+			"fieldtype": "Link",
+			"options": "HDS Support Connection",
+			"label": "Connection",
+			"in_standard_filter": 1,
+			"read_only": 1
+		},
+		{
+			"fieldname": "customer",
+			"fieldtype": "Link",
+			"options": "HD Customer",
+			"label": "Customer",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"read_only": 1
+		},
+		{
+			"fieldname": "site_user",
+			"fieldtype": "Data",
+			"options": "Email",
+			"label": "Customer's User",
+			"description": "The user on the customer's site who wrote, as that site vouches.",
+			"read_only": 1
+		},
+		{
+			"fieldname": "site_user_name",
+			"fieldtype": "Data",
+			"label": "Name",
+			"read_only": 1
+		},
+		{
+			"fieldname": "channel",
+			"fieldtype": "Select",
+			"options": "ERP\nTBO Chat",
+			"default": "ERP",
+			"label": "Channel",
+			"in_standard_filter": 1,
+			"read_only": 1
+		},
+		{
+			"fieldname": "column_break_state",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "state",
+			"fieldtype": "Select",
+			"options": "Talking\nSummary\nTicket raised\nWith a person\nClosed",
+			"default": "Talking",
+			"label": "State",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"read_only": 1
+		},
+		{
+			"fieldname": "ticket",
+			"fieldtype": "Link",
+			"options": "HD Ticket",
+			"label": "Ticket",
+			"in_list_view": 1,
+			"read_only": 1
+		},
+		{
+			"fieldname": "client_conversation",
+			"fieldtype": "Data",
+			"label": "Conversation on the Site",
+			"read_only": 1
+		},
+		{
+			"fieldname": "language",
+			"fieldtype": "Data",
+			"label": "Language",
+			"default": "en",
+			"read_only": 1
+		},
+		{
+			"fieldname": "turns",
+			"fieldtype": "Int",
+			"label": "Turns",
+			"read_only": 1
+		},
+		{
+			"fieldname": "cost_usd",
+			"fieldtype": "Float",
+			"label": "AI Cost (USD)",
+			"precision": "4",
+			"read_only": 1
+		},
+		{
+			"fieldname": "last_message_at",
+			"fieldtype": "Datetime",
+			"label": "Last Message",
+			"read_only": 1
+		},
+		{
+			"fieldname": "gathered_section",
+			"fieldtype": "Section Break",
+			"label": "What It Gathered"
+		},
+		{
+			"fieldname": "title",
+			"fieldtype": "Data",
+			"label": "Title",
+			"read_only": 1
+		},
+		{
+			"fieldname": "actual",
+			"fieldtype": "Small Text",
+			"label": "What Happened",
+			"read_only": 1
+		},
+		{
+			"fieldname": "expected",
+			"fieldtype": "Small Text",
+			"label": "What They Expected",
+			"read_only": 1
+		},
+		{
+			"fieldname": "steps",
+			"fieldtype": "Small Text",
+			"label": "Steps",
+			"read_only": 1
+		},
+		{
+			"fieldname": "column_break_gathered",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "records",
+			"fieldtype": "Small Text",
+			"label": "Records",
+			"read_only": 1
+		},
+		{
+			"fieldname": "since",
+			"fieldtype": "Data",
+			"label": "Since When",
+			"read_only": 1
+		},
+		{
+			"fieldname": "scope",
+			"fieldtype": "Data",
+			"label": "One Record or Many",
+			"read_only": 1
+		},
+		{
+			"fieldname": "worked_before",
+			"fieldtype": "Data",
+			"label": "Worked Before",
+			"read_only": 1
+		},
+		{
+			"fieldname": "context_section",
+			"fieldtype": "Section Break",
+			"label": "Context From the Site"
+		},
+		{
+			"fieldname": "context",
+			"fieldtype": "Code",
+			"options": "JSON",
+			"label": "Context",
+			"description": "The page, document, roles, recent errors and app versions the customer's site sent with the first message.",
+			"read_only": 1
+		}
+	],
+	"in_create": 1,
+	"links": [],
+	"modified": "2026-10-28 13:30:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HDS Conversation",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"delete": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "System Manager",
+			"share": 1
+		},
+		{
+			"export": 1,
+			"read": 1,
+			"report": 1,
+			"role": "Agent Manager"
+		}
+	],
+	"sort_field": "creation",
+	"sort_order": "DESC",
+	"states": [],
+	"title_field": "title"
+}

@@ -69,7 +69,17 @@
 		"releases_enabled",
 		"release_repositories",
 		"release_staging",
-		"release_check_hours"
+		"release_check_hours",
+		"chat_section",
+		"chat_enabled",
+		"chat_messages_per_minute",
+		"chat_messages_per_day",
+		"chat_max_usd",
+		"chat_max_turns",
+		"column_break_chat",
+		"chat_opening_text",
+		"chat_recording_consent",
+		"chat_recording_consent_ar"
 	],
 	"fields": [
 		{
@@ -483,11 +493,74 @@
 			"fieldname": "release_check_hours",
 			"fieldtype": "Int",
 			"label": "Hours a sandbox check may wait for a worker"
+		},
+		{
+			"fieldname": "chat_section",
+			"fieldtype": "Section Break",
+			"label": "Customer Chat (Phase 5)",
+			"collapsible": 1,
+			"description": "The Support button in a customer's ERP opens a chat with TBO Copilot (helpdesk_client with chat_v1). Off: the customer gets today's form."
+		},
+		{
+			"fieldname": "chat_enabled",
+			"fieldtype": "Check",
+			"label": "Customer Chat",
+			"default": "0"
+		},
+		{
+			"fieldname": "chat_messages_per_minute",
+			"fieldtype": "Int",
+			"label": "Messages per Minute (per Customer)",
+			"default": "10",
+			"non_negative": 1
+		},
+		{
+			"fieldname": "chat_messages_per_day",
+			"fieldtype": "Int",
+			"label": "Messages per Day (per Customer)",
+			"default": "200",
+			"non_negative": 1
+		},
+		{
+			"fieldname": "chat_max_usd",
+			"fieldtype": "Float",
+			"label": "Dollar cap per conversation",
+			"default": "0.25",
+			"non_negative": 1,
+			"description": "Past it, or past the turns below, the chat hands over to a person."
+		},
+		{
+			"fieldname": "chat_max_turns",
+			"fieldtype": "Int",
+			"label": "Max Turns per Conversation",
+			"default": "40",
+			"non_negative": 1
+		},
+		{
+			"fieldname": "column_break_chat",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "chat_opening_text",
+			"fieldtype": "Small Text",
+			"label": "Opening (English)",
+			"description": "Blank: the built-in greeting. {name} is the customer's first name, {where} the record they are on."
+		},
+		{
+			"fieldname": "chat_recording_consent",
+			"fieldtype": "Small Text",
+			"label": "Recording Request (English)",
+			"description": "Blank: the built-in text saying what is recorded and who sees it."
+		},
+		{
+			"fieldname": "chat_recording_consent_ar",
+			"fieldtype": "Small Text",
+			"label": "Recording Request (Arabic)"
 		}
 	],
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-10-28 11:30:00.000000",
+	"modified": "2026-10-28 13:30:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Copilot Settings",

@@ -332,7 +332,13 @@ def request_copilot_fix(run, user: str | None = None):
 
 def live_text(run) -> str:
     """What the customer reads when a fix is live; a build's own text already says its change is."""
-    return "" if run.get("build_scope") else _("The fix is live.")
+    from helpdesk.copilot import conversation
+
+    if run.get("build_scope"):
+        return ""
+    if conversation.language_of(run.ticket) == "ar":
+        return "أصبح الإصلاح متاحًا."
+    return _("The fix is live.")
 
 
 def build_settings() -> dict:
