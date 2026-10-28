@@ -91,12 +91,7 @@
             v-model="due"
             type="date"
             :label="__('Due date')"
-            :max="publishDay"
-            :description="
-              __(
-                'When the task is due. Set from the posting date; change it here.'
-              )
-            "
+            :description="dueNote"
             required
           />
           <p class="text-p-sm text-ink-gray-5">
@@ -170,6 +165,27 @@ const publishDay = computed(() =>
     ? dayjs(props.post.publish_on).format("YYYY-MM-DD")
     : undefined
 );
+// any date can be picked; one after go-live or in the past is only pointed out
+// a date can be both (a post that already went live), so both notes show
+const dueNote = computed(() => {
+  const notes: string[] = [];
+  if (due.value && publishDay.value && due.value > publishDay.value)
+    notes.push(
+      __(
+        "This is after the post goes live on {0}.",
+        dayjs(publishDay.value).format("D MMM")
+      )
+    );
+  if (due.value && due.value < dayjs().format("YYYY-MM-DD"))
+    notes.push(
+      __(
+        "This date has already passed, so the task will show as overdue unless it's on hold."
+      )
+    );
+  return notes.length
+    ? notes.join(" ")
+    : __("When the task is due. Set from the posting date; change it here.");
+});
 const error = ref("");
 const saving = ref(false);
 // saving before everyone on the role has loaded would take the others off it

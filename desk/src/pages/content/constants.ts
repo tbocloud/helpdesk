@@ -160,9 +160,13 @@ export function textToHtml(text: string) {
     .join("");
 }
 
-// What a post is called: its copy, else its post type until the copy is written
-export function copyOf(post: { title?: string; format?: string }) {
-  return post.title || post.format || __("Untitled post");
+// What a post is called: its copy, else its post type, then its ID, until the copy is written
+export function copyOf(post: {
+  title?: string;
+  format?: string;
+  name?: string;
+}) {
+  return post.title || post.format || post.name || __("Untitled post");
 }
 
 // Every platform a post goes out on; older posts only have their channel

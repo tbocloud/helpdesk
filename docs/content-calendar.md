@@ -443,8 +443,9 @@ The Assign dialog (`EntryActionDialog.vue`) has a **Due date** beside the people
 (owner's request, 2026-10-24). It starts at the role's task date, or, before the role has a
 task, the date it would get (`get_role_due`; `HDContentPost.role_due`, from the days before in
 Content Settings; the shared task follows the designer's). Saving passes `due` to `assign`,
-which sets it on the role's open task (`set_role_due`): never after the post goes live, and a
-new date can't be in the past; an unchanged date is left alone, so a late task still saves.
+which sets it on the role's open task (`set_role_due`). Any date can be picked (owner's
+request, 2026-10-26): a date after the post goes live, or one already past, is only pointed out
+under the field, not refused. An unchanged date is left alone.
 Postponing the post to a later day moves the task's date again, as before.
 
 ### Which project the tasks go to
