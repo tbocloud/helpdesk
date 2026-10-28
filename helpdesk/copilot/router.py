@@ -88,9 +88,7 @@ def validate_investigation(result: dict) -> dict:
             result.get("customer_message"), LIMITS["customer_message"]
         ),
         "evidence": [_item(e) for e in evidence],
-        "proposal": {
-            str(k)[:40]: _text(v, LIMITS["text"]) for k, v in proposal.items()
-        },
+        "proposal": {str(k)[:40]: _proposal_value(v) for k, v in proposal.items()},
         "questions": [_text(q, LIMITS["text"]) for q in questions],
         "cost": _cost(cost),
         "change_set": change_set,
@@ -113,6 +111,15 @@ def _cost(cost: dict) -> dict:
 
 def _text(value, limit: int) -> str:
     return "" if value is None else str(value)[:limit]
+
+
+def _proposal_value(value):
+    """Text, or a list of texts (the files a fix touches, a build's Done-when checks)."""
+    if isinstance(value, list | tuple):
+        return [
+            _text(v, 300) for v in value[: LIMITS["questions"] * 2] if v is not None
+        ]
+    return _text(value, LIMITS["text"])
 
 
 def _item(item) -> dict:

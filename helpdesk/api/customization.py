@@ -9,10 +9,17 @@ fixed resolution SLA, because the work differs every time. Instead:
 4. The task is created with that date; the ticket waits on it ("Waiting on Task"
    pauses the SLA clock) and the agreed delivery date is the target.
 
+The estimate can carry a written scope: **What we will build** and **Done when** (one
+check per line). The customer approves that text with the hours, and its hash is kept:
+Copilot builds only an approved scope that was not edited afterwards (Phase 8).
+
 The usual SLA still covers the first reply. See docs/ai-customization-pipeline.md.
 """
 
+import hashlib
+import json
 import math
+import re
 
 import frappe
 from frappe import _
@@ -35,6 +42,9 @@ CUSTOMIZATION = "Customization"
 ESTIMATED, SENT, APPROVED, DECLINED = "Estimated", "Sent", "Approved", "Declined"
 DEFAULT_HOURS_PER_DAY = 6
 MAX_HOURS = 2000
+MAX_SCOPE_CHARS = 4000
+MAX_CHECKS = 15
+MAX_CHECK_CHARS = 300
 
 
 def ensure_ticket_type():
@@ -94,6 +104,73 @@ def record_triage_estimate(ticket_id: str, triage: dict):
         frappe.db.set_value("HD Ticket", ticket_id, updates, update_modified=False)
 
 
+def checks_of(text: str | list | None) -> list[str]:
+    """The Done-when checks, one per line, without bullets or numbers."""
+    lines = text if isinstance(text, list) else (text or "").splitlines()
+    checks = []
+    for line in lines:
+        line = re.sub(r"^\s*(?:[-*•]|\d+[.)])\s*", "", str(line or "")).strip()
+        if line:
+            checks.append(line[:MAX_CHECK_CHARS])
+    return checks[:MAX_CHECKS]
+
+
+def scope_hash(hours, scope: str | None, checks: str | list | None) -> str:
+    """What the customer approves: the hours, the scope and the checks, as written."""
+    content = {
+        "hours": round(flt(hours), 1),
+        "scope": (scope or "").strip(),
+        "checks": checks_of(checks),
+    }
+    return hashlib.sha256(json.dumps(content, sort_keys=True).encode()).hexdigest()
+
+
+def current_scope_hash(doc) -> str:
+    return scope_hash(
+        doc.get("custom_estimate_hours"),
+        doc.get("custom_estimate_scope"),
+        doc.get("custom_estimate_checks"),
+    )
+
+
+def approved_scope(doc) -> dict | None:
+    """The scope the customer approved, when it is still exactly what they approved."""
+    stored = doc.get("custom_estimate_scope_hash")
+    if (
+        doc.get("custom_estimate_status") != APPROVED
+        or not stored
+        or stored != current_scope_hash(doc)
+    ):
+        return None
+    return {
+        "hours": flt(doc.get("custom_estimate_hours")),
+        "scope": doc.get("custom_estimate_scope") or "",
+        "checks": checks_of(doc.get("custom_estimate_checks")),
+        "approved_by": doc.get("custom_estimate_decided_by"),
+        "approved_on": str(doc.get("custom_estimate_decided_on") or ""),
+        "hash": stored,
+    }
+
+
+def fill_scope(ticket: str, scope: str, checks: str | list):
+    """A first draft of the scope (Copilot's), kept until the estimate is sent."""
+    doc = frappe.db.get_value(
+        "HD Ticket",
+        ticket,
+        ["custom_estimate_status", "custom_estimate_scope", "custom_estimate_checks"],
+        as_dict=True,
+    )
+    if not doc or doc.custom_estimate_status in (SENT, APPROVED):
+        return
+    updates = {}
+    if scope and not doc.custom_estimate_scope:
+        updates["custom_estimate_scope"] = scope.strip()[:MAX_SCOPE_CHARS]
+    if checks and not doc.custom_estimate_checks:
+        updates["custom_estimate_checks"] = "\n".join(checks_of(checks))
+    if updates:
+        frappe.db.set_value("HD Ticket", ticket, updates, update_modified=False)
+
+
 @frappe.whitelist()
 def get_estimate(ticket: str | int) -> dict:
     """The ticket's estimate, for the agent card and the customer's approval banner."""
@@ -107,6 +184,12 @@ def get_estimate(ticket: str | int) -> dict:
         "hours": hours,
         "status": status,
         "note": doc.get("custom_estimate_note") or "",
+        "scope": doc.get("custom_estimate_scope") or "",
+        "checks": checks_of(doc.get("custom_estimate_checks")),
+        # approved, and not edited since: what Copilot may build
+        "scope_approved": bool(
+            approved_scope(doc) and doc.get("custom_estimate_scope")
+        ),
         "delivery_date": doc.get("custom_agreed_delivery"),
         "suggested_delivery": str(delivery_for(hours)) if hours else None,
         "hours_per_day": hours_per_day(),
@@ -124,9 +207,14 @@ def get_estimate(ticket: str | int) -> dict:
 @frappe.whitelist(methods=["POST"])
 @agent_only
 def send_estimate(
-    ticket: str | int, hours: float | str, delivery_date: str, note: str = ""
+    ticket: str | int,
+    hours: float | str,
+    delivery_date: str,
+    note: str = "",
+    scope: str = "",
+    checks: str = "",
 ) -> dict:
-    """Email the estimate to the customer and wait for their approval."""
+    """Email the estimate (and the scope, when written) to the customer and wait for their approval."""
     doc = frappe.get_doc("HD Ticket", str(ticket))
     doc.check_permission("write")
     hours = flt(hours)
@@ -135,8 +223,12 @@ def send_estimate(
     delivery = getdate(delivery_date)
     if delivery < getdate(nowdate()):
         frappe.throw(_("The delivery date can't be in the past."))
+    scope = (scope or "").strip()[:MAX_SCOPE_CHARS]
+    checks = checks_of(checks)
+    if checks and not scope:
+        frappe.throw(_("Write what we will build before the Done-when checks."))
 
-    doc.reply_via_agent(estimate_message(doc, hours, delivery, note))
+    doc.reply_via_agent(estimate_message(doc, hours, delivery, note, scope, checks))
     doc.reload()
     doc.db_set(
         {
@@ -144,6 +236,10 @@ def send_estimate(
             "custom_estimate_hours": round(hours, 1),
             "custom_estimate_status": SENT,
             "custom_estimate_note": (note or "")[:500],
+            "custom_estimate_scope": scope,
+            "custom_estimate_checks": "\n".join(checks),
+            # a new estimate is approved afresh
+            "custom_estimate_scope_hash": None,
             "custom_agreed_delivery": delivery,
             "custom_estimate_sent_on": now_datetime(),
             "custom_estimate_decided_on": None,
@@ -186,6 +282,7 @@ def decide_estimate(
             else doc.get("custom_agreed_delivery"),
             "custom_estimate_decided_on": now_datetime(),
             "custom_estimate_decided_by": frappe.session.user,
+            "custom_estimate_scope_hash": current_scope_hash(doc) if approved else None,
         }
     )
     record_decision(doc, approved, hours, delivery, note, by_customer=not agent)
@@ -196,7 +293,9 @@ def is_ticket_customer(doc) -> bool:
     return frappe.session.user in {doc.raised_by, doc.contact, doc.owner} - {None, ""}
 
 
-def estimate_message(doc, hours: float, delivery, note: str) -> str:
+def estimate_message(
+    doc, hours: float, delivery, note: str, scope: str = "", checks: list | None = None
+) -> str:
     portal = get_url(f"/helpdesk/my-tickets/{doc.name}")
     parts = [
         "<p>{0}</p>".format(_("Thank you for the request. Here is our estimate:")),
@@ -207,6 +306,20 @@ def estimate_message(doc, hours: float, delivery, note: str) -> str:
             ),
         ),
     ]
+    if scope:
+        parts.append(
+            "<p><b>{0}</b></p><p>{1}</p>".format(
+                escape_html(_("What we will build")),
+                escape_html(scope).replace("\n", "<br>"),
+            )
+        )
+    if checks:
+        parts.append(
+            "<p><b>{0}</b></p><ul>{1}</ul>".format(
+                escape_html(_("Done when")),
+                "".join(f"<li>{escape_html(check)}</li>" for check in checks),
+            )
+        )
     if note:
         parts.append(f"<p>{escape_html(note)}</p>")
     parts.append(

@@ -318,6 +318,28 @@ class TestACustomizationRequest(PilotCase):
         self.assertEqual((estimate["is_customization"], estimate["hours"]), (True, 4))
         self.assertFalse(api.get_run(run.ticket)["can_start_estimate"])
 
+    def test_the_estimate_starts_with_copilots_scope_and_checks(self):
+        self.at("Explain")
+        run = self.routed(
+            "customization_request",
+            proposal={
+                "action": "Add a validation",
+                "estimate_hours": 3,
+                "scope": "Require a Sales Team row on Sales Invoice.",
+                "done_when": ["an invoice without one is refused", "a return is not"],
+            },
+        )
+
+        estimate = api.start_estimate(run.ticket)
+
+        self.assertEqual(
+            (estimate["scope"], estimate["checks"]),
+            (
+                "Require a Sales Team row on Sales Invoice.",
+                ["an invoice without one is refused", "a return is not"],
+            ),
+        )
+
     def test_the_agents_reply_answers_it_and_measures_the_edit(self):
         self.at("Explain")
         run = self.routed("customization_request")

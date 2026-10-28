@@ -21,6 +21,7 @@
         </dd>
       </div>
     </dl>
+    <EstimateScope :scope="estimate.scope" :checks="estimate.checks" />
     <p
       v-if="estimate.note"
       class="whitespace-pre-line text-p-sm text-ink-gray-7"
@@ -30,7 +31,7 @@
     <p class="text-p-sm text-ink-gray-6">
       {{
         __(
-          "Approve to start the work. If you approve after today, the date may move by the days that passed."
+          "Approve to start the work on what is written here. If you approve after today, the date may move by the days that passed."
         )
       }}
     </p>
@@ -56,6 +57,7 @@
 import { __ } from "@/translation";
 import { Button, call, createResource, dayjs, toast } from "frappe-ui";
 import { computed, ref, useId } from "vue";
+import EstimateScope from "@/components/ticket-agent/EstimateScope.vue";
 
 const props = defineProps<{ ticketId: string }>();
 const emit = defineEmits<{ decided: [] }>();

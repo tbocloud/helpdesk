@@ -198,7 +198,13 @@ def note_diagnosis(run, investigation: dict):
         parts.append(
             "<div><b>{0}:</b> {1}</div>".format(
                 _("Proposal"),
-                escape_html(" ".join(str(v) for v in proposal.values() if v)),
+                escape_html(
+                    " ".join(
+                        ", ".join(v) if isinstance(v, list) else str(v)
+                        for v in proposal.values()
+                        if v
+                    )
+                ),
             )
         )
     if shadow:

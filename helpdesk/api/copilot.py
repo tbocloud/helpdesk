@@ -432,8 +432,13 @@ def prepare_correction(ticket: str | int) -> dict:
 @agent_only
 def start_estimate(ticket: str | int) -> dict:
     """Copilot found a feature request: the ticket becomes a Customization with Copilot's
-    estimate (when it gave hours), for the agent to check and send from the estimate card."""
-    from helpdesk.api.customization import get_estimate, record_triage_estimate
+    estimate (when it gave hours) and its draft of the scope, for the agent to check and
+    send from the estimate card."""
+    from helpdesk.api.customization import (
+        fill_scope,
+        get_estimate,
+        record_triage_estimate,
+    )
 
     frappe.has_permission("HD Ticket", "write", str(ticket), throw=True)
     run = _run_of(ticket)
@@ -458,6 +463,9 @@ def start_estimate(ticket: str | int) -> dict:
             ),
         },
     )
+    # what will be built: the worker's scope and checks when it wrote them, else its proposal
+    scope = proposal.get("scope") or proposal.get("action") or run.summary or ""
+    fill_scope(str(ticket), str(scope), proposal.get("done_when") or "")
     runs.add_event(run, "estimate_started", {"hours": hours}, runs.AGENT)
     return get_estimate(ticket)
 

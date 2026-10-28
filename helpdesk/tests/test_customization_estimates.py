@@ -148,3 +148,111 @@ class TestEstimateFlow(CustomizationCase):
             getdate(doc.exp_end_date), getdate(self.field("custom_agreed_delivery"))
         )
         self.assertEqual(doc.custom_estimated_hours, 10)
+
+
+SCOPE = "A Sales Invoice cannot be submitted without a Sales Team row."
+CHECKS = "- a normal invoice without one cannot be submitted\n2) a credit note without one can\n\n"
+
+
+class TestTheWrittenScope(CustomizationCase):
+    """The customer approves what will be built, not only the hours (Phase 8)."""
+
+    def send(self, scope=SCOPE, checks=CHECKS, hours=4):
+        frappe.set_user(AGENT)
+        result = customization.send_estimate(
+            self.ticket,
+            hours,
+            str(add_working_days(nowdate(), 1)),
+            "",
+            scope,
+            checks,
+        )
+        frappe.set_user("Administrator")
+        return result
+
+    def approve(self):
+        frappe.set_user(CUSTOMER_EMAIL)
+        result = customization.decide_estimate(self.ticket, 1)
+        frappe.set_user("Administrator")
+        return result
+
+    def doc(self):
+        return frappe.get_doc("HD Ticket", self.ticket)
+
+    def test_the_scope_and_checks_go_to_the_customer(self):
+        sent = self.send()
+
+        self.assertEqual(sent["scope"], SCOPE)
+        # one check per line, bullets and numbers dropped
+        self.assertEqual(
+            sent["checks"],
+            [
+                "a normal invoice without one cannot be submitted",
+                "a credit note without one can",
+            ],
+        )
+        reply = frappe.get_all(
+            "Communication",
+            filters={"reference_doctype": "HD Ticket", "reference_name": self.ticket},
+            pluck="content",
+            order_by="creation desc",
+            limit=1,
+        )[0]
+        self.assertIn("What we will build", reply)
+        self.assertIn("<li>a credit note without one can</li>", reply)
+        frappe.set_user(CUSTOMER_EMAIL)
+        seen = customization.get_estimate(self.ticket)
+        self.assertEqual((seen["scope"], len(seen["checks"])), (SCOPE, 2))
+
+    def test_checks_without_a_scope_are_refused(self):
+        with self.assertRaises(frappe.ValidationError):
+            self.send(scope="")
+
+    def test_the_approval_keeps_what_was_approved(self):
+        self.send()
+        self.assertIsNone(customization.approved_scope(self.doc()))
+
+        decided = self.approve()
+
+        self.assertTrue(decided["scope_approved"])
+        approved = customization.approved_scope(self.doc())
+        self.assertEqual(
+            (approved["scope"], approved["hours"], approved["approved_by"]),
+            (SCOPE, 4, CUSTOMER_EMAIL),
+        )
+        self.assertEqual(len(approved["checks"]), 2)
+
+    def test_a_scope_edited_after_the_approval_no_longer_counts(self):
+        self.send()
+        self.approve()
+        for field, value in (
+            ("custom_estimate_scope", SCOPE + " Also on POS."),
+            ("custom_estimate_checks", "a POS invoice without one cannot be submitted"),
+            ("custom_estimate_hours", 6),
+        ):
+            original = self.doc().get(field)
+            frappe.db.set_value("HD Ticket", self.ticket, field, value)
+            self.assertIsNone(customization.approved_scope(self.doc()), field)
+            self.assertFalse(customization.get_estimate(self.ticket)["scope_approved"])
+            frappe.db.set_value("HD Ticket", self.ticket, field, original)
+        self.assertTrue(customization.approved_scope(self.doc()))
+
+    def test_sending_it_again_needs_a_new_approval_and_a_decline_keeps_none(self):
+        self.send()
+        self.approve()
+        self.send(scope=SCOPE + " Also on POS.")
+        self.assertIsNone(customization.approved_scope(self.doc()))
+
+        frappe.set_user(CUSTOMER_EMAIL)
+        customization.decide_estimate(self.ticket, 0)
+        frappe.set_user("Administrator")
+        self.assertFalse(self.doc().custom_estimate_scope_hash)
+
+    def test_copilots_draft_fills_an_empty_scope_until_it_is_sent(self):
+        customization.fill_scope(self.ticket, SCOPE, ["first check", "second check"])
+        self.assertEqual(self.doc().custom_estimate_checks, "first check\nsecond check")
+
+        customization.fill_scope(self.ticket, "Something else", "another")
+        self.assertEqual(
+            self.doc().custom_estimate_scope, SCOPE
+        )  # a person's text stays

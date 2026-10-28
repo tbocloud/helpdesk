@@ -85,14 +85,23 @@ with developers; the agent may draft, a developer finishes.
   `helpdesk/api/customization.py` (`record_triage_estimate`).
 - HD Ticket fields: `custom_estimate_hours`, `custom_estimate_status`
   (Estimated, Sent, Approved, Declined), `custom_agreed_delivery`, `custom_estimate_note`,
+  `custom_estimate_scope`, `custom_estimate_checks`, `custom_estimate_scope_hash`,
   `custom_estimate_sent_on`, `custom_estimate_decided_on`, `custom_estimate_decided_by`.
 - HD Work Settings → **Development Hours per Day** (default 6) turns hours into working
   days, skipping the weekly off.
-- Agent: the **Customization estimate** card on the ticket (hours, ready-by date, note,
-  Send estimate; Customer approved / declined for answers by email or phone; Create task
-  once approved).
-- Customer: an **Approve estimate / Decline** banner on their ticket in the portal; the
-  estimate email links to it.
+- Agent: the **Customization estimate** card on the ticket (hours, ready-by date, **What we
+  will build**, **Done when** (one check per line), note, Send estimate; Customer approved /
+  declined for answers by email or phone; Create task once approved).
+- **The written scope** (TBO Copilot Phase 8): `custom_estimate_scope` and
+  `custom_estimate_checks` go out in the estimate email and on the approval banner, so the
+  customer approves what will be built, not only the hours. Checks need a scope. The
+  approval keeps `custom_estimate_scope_hash` (the hours, scope and checks as approved);
+  `approved_scope(doc)` returns them only while they still match, so a scope edited after the
+  approval needs the estimate sent again. Sending an estimate again clears the approval.
+  **Start estimate** on a Copilot customization run fills an empty scope from Copilot's
+  `scope` and `done_when` (else its proposed action) until the estimate is sent.
+- Customer: an **Approve estimate / Decline** banner on their ticket in the portal, with the
+  scope and checks; the estimate email links to it.
 - An approval made after the proposed date moves the date by the days that passed. The
   agents on the ticket are notified when the customer decides.
 - **Create task** on an approved estimate fills the task's due date and estimated hours
