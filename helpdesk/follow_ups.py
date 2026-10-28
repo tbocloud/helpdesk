@@ -45,6 +45,7 @@ from frappe.utils import (
     now_datetime,
 )
 
+from helpdesk.api.leads import read_stale_leads, stale_days
 from helpdesk.api.ticket import _sla_calendar
 from helpdesk.api.work import (
     ON_HOLD,
@@ -55,6 +56,7 @@ from helpdesk.api.work import (
 )
 from helpdesk.automation import automation_user
 from helpdesk.consts import ALERT_TICKET_TYPE
+from helpdesk.integrations.crm.leads import LeadsError, call_if_deployed, leads_on
 from helpdesk.recurrence import working_day_checker
 from helpdesk.tasky.permissions import (
     COORDINATOR_PROJECT_ROLE,
@@ -80,6 +82,9 @@ CACHE_SECONDS = 16 * 60
 NOTICE_PREFIX = "follow-up"
 OPEN_TASK_STATUSES = ("Completed", "Cancelled", "Template")
 WAITING_ON_CUSTOMER = "Waiting on customer"
+# leads live on the ERP site, so a lead's notice points at a doctype the hub does have;
+# the notice is keyed by the lead's name (HD Notification skips the link check for it)
+LEAD_DOCTYPE = "HD CRM Settings"
 # working days counted one by one; anything older is simply "very late"
 LOOKBACK_DAYS = 400
 DIGEST_ITEMS_PER_SECTION = 8
@@ -159,6 +164,7 @@ def rule_labels() -> dict[str, str]:
         "unassigned": _("Unassigned ticket"),
         "customer_replied": _("Customer waiting for an answer"),
         "awaiting_customer": _("Waiting on the customer"),
+        "stale_lead": _("Lead gone quiet"),
     }
 
 
@@ -324,7 +330,11 @@ class Context:
 def evaluate(ctx: Context | None = None) -> list[FollowUp]:
     """Every follow-up due now, without sending anything."""
     ctx = ctx or Context()
-    return [*TaskRules(ctx).evaluate(), *TicketRules(ctx).evaluate()]
+    return [
+        *TaskRules(ctx).evaluate(),
+        *TicketRules(ctx).evaluate(),
+        *LeadRules(ctx).evaluate(),
+    ]
 
 
 def _unique(users) -> list[str]:
@@ -987,6 +997,75 @@ class TicketRules:
         )
 
 
+class LeadRules:
+    """Leads (live on the ERP site) with no activity for longer than their department's
+    `stale_after_days`: the owner hears at L0; at twice the days the department's heads
+    do too. Quiet while leads are off, the rule is off or the ERP site can't answer."""
+
+    def __init__(self, ctx: Context):
+        self.ctx = ctx
+
+    def evaluate(self) -> list[FollowUp]:
+        if not self.ctx.settings.stale_leads or not leads_on():
+            return []
+        try:
+            departments, leads = self.read()
+        except LeadsError:
+            # frappe.throw queued a toast message; nobody is waiting on this run
+            frappe.clear_last_message()
+            return []
+        if not leads:
+            return []
+        heads = {
+            d["name"]: [p["user"] for p in d.get("heads") or []] for d in departments
+        }
+        return [self.follow_up(lead, departments, heads) for lead in leads]
+
+    def read(self) -> tuple[list[dict], list[dict]]:
+        """(departments with their heads, stale leads) as the first manager the ERP
+        site answers for sees them: a manager sees every lead."""
+        from helpdesk.daily_sales_report import recipients
+
+        for user in recipients():
+            try:
+                departments = (
+                    call_if_deployed("get_lead_departments", acting_user=user) or []
+                )
+                leads = read_stale_leads(departments, acting_user=user)
+            except LeadsError:
+                frappe.clear_last_message()
+                continue
+            return departments, leads or []
+        return [], []
+
+    def follow_up(self, lead: dict, departments: list[dict], heads: dict) -> FollowUp:
+        idle = cint(lead.get("idle_days"))
+        threshold = stale_days(lead.get("tbo_department"), departments)
+        level = 1 if idle >= 2 * threshold else 0
+        owners = [lead["lead_owner"]] if lead.get("lead_owner") else []
+        department_heads = heads.get(lead.get("tbo_department"), [])
+        recipients = [*owners, *(department_heads if level or not owners else [])]
+        recipients, away = self.ctx.cover_leave(recipients, owners, department_heads)
+        title = lead.get("lead_name") or lead.get("company_name") or lead["name"]
+        text = _("{0} has had no activity for {1} days: follow up or update it").format(
+            title, idle
+        )
+        return FollowUp(
+            doctype=LEAD_DOCTYPE,
+            name=str(lead["name"]),
+            title=title,
+            rule="stale_lead",
+            stage=f"L{level}",
+            severity="waiting",
+            text=f"{text} · {away}" if away else text,
+            recipients=recipients,
+            owners=owners,
+            level=level,
+            link=f"/leads/{lead['name']}",
+            days=idle,
+        )
+
+
 # --- the run -----------------------------------------------------------------
 
 
@@ -1136,7 +1215,14 @@ def post_notices(follow_ups: list[FollowUp], today) -> None:
         old = existing.get((user, doctype, name))
         if old is None:
             new_notification(
-                user, doctype, name, f.text, f.link, dedupe_key=key, deliver=f.immediate
+                user,
+                doctype,
+                name,
+                f.text,
+                f.link,
+                dedupe_key=key,
+                deliver=f.immediate,
+                ignore_links=doctype == LEAD_DOCTYPE,
             )
         elif notice_stage(old.dedupe_key) == f.key:
             if old.message != f.text:
@@ -1152,6 +1238,8 @@ def post_notices(follow_ups: list[FollowUp], today) -> None:
             doc.update(
                 {"message": f.text, "link": f.link, "dedupe_key": key, "read": 0}
             )
+            # a single doctype's link check would rename the lead to the doctype
+            doc.flags.ignore_links = doctype == LEAD_DOCTYPE
             doc.save(ignore_permissions=True)
             doc.announce()
             if f.immediate:

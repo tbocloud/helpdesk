@@ -57,6 +57,10 @@
           }}</span>
           <span class="text-p-xs text-ink-gray-6">
             {{ department.lead_type }}
+            <template v-if="department.assignment">
+              · {{ __("Assignment") }}:
+              {{ ASSIGNMENT_LABELS[department.assignment] }}
+            </template>
             <template v-if="department.heads.length">
               · {{ __("Heads") }}: {{ people(department.heads) }}
             </template>
@@ -117,6 +121,40 @@
         :label="__('Lead type')"
         :options="typeOptions"
       />
+      <div v-if="hasAssignment" class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div class="flex flex-col gap-1.5">
+          <FormControl
+            v-model="form.assignment"
+            type="select"
+            :label="__('Assignment')"
+            :options="assignmentOptions"
+          />
+          <p class="text-p-xs text-ink-gray-6">
+            {{
+              form.assignment === "Round robin"
+                ? __(
+                    "A lead created with no owner goes to the next member, in turn."
+                  )
+                : __("The person creating a lead picks its owner.")
+            }}
+          </p>
+        </div>
+        <div class="flex flex-col gap-1.5">
+          <FormControl
+            v-model="form.stale_after_days"
+            type="number"
+            min="1"
+            :label="__('Follow-up alert after N days')"
+          />
+          <p class="text-p-xs text-ink-gray-6">
+            {{
+              __(
+                "The owner is told when a lead has no activity for this many days; the heads at twice that."
+              )
+            }}
+          </p>
+        </div>
+      </div>
       <div class="flex flex-col gap-1.5">
         <FormLabel :label="__('Heads')" size="md" />
         <MultiSelect
@@ -173,9 +211,12 @@ import { useAgentStore } from "@/stores/agent";
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
 import {
+  ASSIGNMENT_LABELS,
+  DEFAULT_STALE_DAYS,
   loadLeadOptions,
   leadDepartments,
   leadOptions,
+  type LeadAssignment,
   type LeadDepartment,
   type LeadOptions,
 } from "@/pages/leads/leads";
@@ -255,9 +296,23 @@ const userOptions = computed(() => {
   return [...options.values()];
 });
 
+/** Shown once the ERP site has them: its departments carry `assignment`, and a site with
+ * none yet is asked anyway (the ERP site is deployed before the hub). */
+const hasAssignment = computed(
+  () =>
+    !departments.value.length ||
+    departments.value.some((d) => d.assignment !== undefined)
+);
+
+const assignmentOptions = Object.entries(ASSIGNMENT_LABELS).map(
+  ([value, label]) => ({ label, value })
+);
+
 interface DepartmentForm {
   department_name: string;
   lead_type: string;
+  assignment: LeadAssignment;
+  stale_after_days: number | string;
   is_active: boolean;
   heads: string[];
   members: string[];
@@ -270,6 +325,8 @@ const saving = ref(false);
 const form = reactive<DepartmentForm>({
   department_name: "",
   lead_type: "",
+  assignment: "Manual",
+  stale_after_days: DEFAULT_STALE_DAYS,
   is_active: true,
   heads: [],
   members: [],
@@ -281,6 +338,8 @@ function openDialog(department: LeadDepartment | null) {
   Object.assign(form, {
     department_name: department?.department_name ?? "",
     lead_type: department?.lead_type || typeOptions.value[0]?.value || "",
+    assignment: department?.assignment ?? "Manual",
+    stale_after_days: department?.stale_after_days ?? DEFAULT_STALE_DAYS,
     is_active: department ? !!department.is_active : true,
     heads: department?.heads.map((p) => p.user) ?? [],
     members: department?.members.map((p) => p.user) ?? [],
@@ -294,12 +353,19 @@ function save() {
     errorMessage.value = __("Give the department a name.");
     return;
   }
+  const days = Math.floor(Number(form.stale_after_days));
+  if (hasAssignment.value && !(days >= 1)) {
+    errorMessage.value = __("Give the alert a number of days, 1 or more.");
+    return;
+  }
   errorMessage.value = "";
   saving.value = true;
+  const { assignment, stale_after_days, ...values } = form;
   call("helpdesk.api.leads.save_lead_department", {
     name: editing.value?.name ?? null,
     values: {
-      ...form,
+      ...values,
+      ...(hasAssignment.value ? { assignment, stale_after_days: days } : {}),
       department_name: form.department_name.trim(),
       is_active: form.is_active ? 1 : 0,
     },

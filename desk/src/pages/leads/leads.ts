@@ -38,7 +38,12 @@ export interface LeadDepartmentOption {
   is_active?: boolean | number;
   is_head?: boolean | number;
   is_member?: boolean | number;
+  /** how a lead with no owner is given one (absent from an older TBO Smart) */
+  assignment?: LeadAssignment;
+  stale_after_days?: number;
 }
+
+export type LeadAssignment = "Manual" | "Round robin";
 
 /** A lead department with its people, as `get_lead_departments` answers (Settings → CRM). */
 export interface LeadDepartment {
@@ -46,9 +51,57 @@ export interface LeadDepartment {
   department_name: string;
   lead_type: string;
   is_active: boolean | number;
+  /** Manual: the creator picks the owner; Round robin: the ERP site picks one */
+  assignment?: LeadAssignment;
+  /** days without activity before a lead is chased (absent from an older TBO Smart) */
+  stale_after_days?: number;
   heads: { user: string; full_name?: string }[];
   members: { user: string; full_name?: string }[];
 }
+
+/** A lead that shares an email, phone or company with the one being entered. */
+export interface DuplicateLead {
+  name: string;
+  lead_name?: string;
+  company_name?: string;
+  email_id?: string;
+  mobile_no?: string;
+  lead_owner?: string;
+  owner_name?: string | null;
+  tbo_stage?: string;
+  matched_on: ("email" | "phone" | "company")[];
+}
+
+/** A lead with no activity for longer than its department allows. */
+export interface StaleLead {
+  name: string;
+  idle_days: number;
+  last_activity_on?: string | null;
+}
+
+export const ASSIGNMENT_LABELS: Record<LeadAssignment, string> = {
+  Manual: __("Manual"),
+  "Round robin": __("Round robin"),
+};
+
+/** The department's own idle days, else the default the ERP site and the hub share. */
+export const DEFAULT_STALE_DAYS = 3;
+
+/** Whether the picked department hands out leads with no owner in turn. */
+export function isRoundRobin(options: LeadOptions | undefined, name: string) {
+  return (
+    !!name &&
+    options?.departments?.find((d) => d.name === name)?.assignment ===
+      "Round robin"
+  );
+}
+
+/** Leads of the signed-in person gone quiet, by lead name; empty on an older TBO Smart. */
+export const staleLeads = createResource({
+  url: "helpdesk.api.leads.get_stale_leads",
+  // the chip is a bonus on the list: a failed read just leaves it out
+  onError() {},
+});
 
 export interface LeadRow {
   name: string;

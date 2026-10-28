@@ -33,6 +33,8 @@ MAX_PAGE = 100
 CACHE_PREFIX = "hd_leads"
 READ_TTL = 60
 OPTIONS_TTL = 600
+# a lead with no department, or a department without its own setting, goes quiet after this
+DEFAULT_STALE_DAYS = 3
 
 
 def cached_read(part: str, params: dict, ttl: int, fresh, read, keep=bool):
@@ -62,11 +64,15 @@ def get_options(fresh: int | str = 0) -> dict:
     and whether the ERP site has the Daily report and can log a call made outside
     MyOperator (`has_daily_report`, `can_log_call`: both came with the same TBO Smart)."""
     require_leads()
-    options = cached_read(
-        "options", {}, OPTIONS_TTL, fresh, lambda: call("get_options") or {}
-    )
+    options = read_options(fresh)
     deployed = report_deployed()
     return {**options, "can_log_call": deployed, "has_daily_report": deployed}
+
+
+def read_options(fresh: int | str = 0) -> dict:
+    return cached_read(
+        "options", {}, OPTIONS_TTL, fresh, lambda: call("get_options") or {}
+    )
 
 
 @frappe.whitelist()
@@ -429,10 +435,92 @@ def change_department(method: str, **params) -> dict:
     return saved
 
 
-@frappe.whitelist(methods=["POST"])
-def create_lead(data: dict | str) -> dict:
+@frappe.whitelist()
+def find_duplicate_leads(
+    email: str | None = None,
+    phone: str | None = None,
+    company: str | None = None,
+    exclude: str | None = None,
+) -> dict:
+    """Leads the signed-in person can see that share the email, phone or company typed on
+    the lead form (`exclude`: the lead being edited), each with what it matched on.
+    `available` is false while the ERP site's TBO Smart is older than this, so the
+    form skips the check."""
     require_leads()
-    result = call("create_lead", post=True, data=parse_data(data)) or {}
+    email, phone, company = ((value or "").strip() for value in (email, phone, company))
+    if not (email or phone or company):
+        return {"available": True, "matches": []}
+    matches = call_if_deployed(
+        "find_duplicate_leads",
+        email=email or None,
+        phone=phone or None,
+        company=company or None,
+        exclude=(exclude or "").strip() or None,
+    )
+    if matches is None:
+        return {"available": False, "matches": []}
+    return {"available": True, "matches": matches}
+
+
+@frappe.whitelist()
+def get_stale_leads(fresh: int | str = 0) -> dict:
+    """The signed-in person's leads with no activity for longer than their department
+    allows, for the "No activity" chip on the list. `available` is false while the ERP
+    site's TBO Smart is older than this."""
+    require_leads()
+    rows = cached_read(
+        "stale",
+        {},
+        READ_TTL,
+        fresh,
+        lambda: read_stale_leads(read_options(fresh).get("departments") or []),
+        keep=lambda answer: answer is not None,
+    )
+    if rows is None:
+        return {"available": False, "leads": []}
+    return {"available": True, "leads": rows}
+
+
+def stale_days(department: str | None, departments: list[dict]) -> int:
+    """How many idle days make a lead in `department` stale: the department's own
+    `stale_after_days`, else the default."""
+    for row in departments:
+        if row.get("name") == department and cint(row.get("stale_after_days")) > 0:
+            return cint(row["stale_after_days"])
+    return DEFAULT_STALE_DAYS
+
+
+def read_stale_leads(departments: list[dict], acting_user: str | None = None):
+    """The stale leads the acting user (default: the signed-in person) may see, each kept
+    only once idle for its own department's days; None while the ERP site's TBO Smart is
+    older than `get_stale_leads`. The ERP site is asked for the shortest of the
+    departments' days, so every department's threshold can be applied here."""
+    days = min(
+        [DEFAULT_STALE_DAYS]
+        + [
+            cint(d.get("stale_after_days"))
+            for d in departments
+            if cint(d.get("stale_after_days")) > 0
+        ]
+    )
+    rows = call_if_deployed("get_stale_leads", acting_user=acting_user, days=days)
+    if rows is None:
+        return None
+    return [
+        row
+        for row in rows
+        if cint(row.get("idle_days"))
+        >= stale_days(row.get("tbo_department"), departments)
+    ]
+
+
+@frappe.whitelist(methods=["POST"])
+def create_lead(data: dict | str, allow_duplicate: int | str = 0) -> dict:
+    """A new lead. The ERP site refuses one whose email or phone another lead already
+    has, until the person confirms with `allow_duplicate`."""
+    require_leads()
+    extra = {"allow_duplicate": 1} if cint(allow_duplicate) else {}
+    result = call("create_lead", post=True, data=parse_data(data), **extra) or {}
     clear_cached_reads()
     return result
 
