@@ -119,7 +119,7 @@ so with an empty table every job runs as before. A change applies from the job's
 | `draft` | `ai_suggestion.py`, `kb_drafts.py`, `content_topics.py`, `api/content.py` |
 | `summary` | `work_summary.py`, `team_dashboard.py`, `team_insights.py`, `home_plan.py`, `repeat_issues.py`, `standup.py`, the Chatwoot transcript summary |
 | `task` | `task_descriptions.py`, `task_estimates.py` |
-| `chat` | none yet: the chatbot of a later phase |
+| `chat` | the staff assistant (Teams and the Copilot panel) and the customer chat (the ERP chat and TBO Chat's bot) |
 | `investigate`, `fix`, `review` | the TBO Copilot worker (below) |
 
 - `get_providers(job)` gives each section with the job's model. A provider with its own

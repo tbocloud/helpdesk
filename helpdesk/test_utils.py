@@ -3089,9 +3089,24 @@ def make_phone_contact(first_name: str, phone: str):
 
 
 def ai_chat_answer(reply: str, action: str = "answer", **fields) -> dict:
-    """What call_haiku returns for a chat reply: `reply`, `action` and any ticket_subject / ticket_summary."""
+    """What call_haiku returns to the customer chat's engine (Copilot Phase 5) for a TBO Chat reply:
+    `reply` as its next message; `action` "answer" (a reply that is no knowledge base answer: a
+    question), "ticket" (a summary whose fields are ticket_subject and ticket_summary) or "human"."""
+    step = {"answer": "question", "ticket": "summary", "human": "handover"}.get(
+        action, action
+    )
+    gathered = {
+        "title": fields.get("ticket_subject"),
+        "actual": fields.get("ticket_summary"),
+    }
     return {
-        "response": {"reply": reply, "action": action, **fields},
+        "response": {
+            "fields": {k: v for k, v in gathered.items() if v},
+            "next": step,
+            "text": reply,
+            "sources": fields.get("sources", []),
+            "language": "en",
+        },
         "usage": {},
         "cost": 0,
     }

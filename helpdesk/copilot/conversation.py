@@ -70,6 +70,8 @@ RATE_KEY = "copilot-conversation-rate:"
 HISTORY = 12
 MAX_TEXT = 4000
 
+# Reply order (acknowledge, help, check back) adapted from The Agency's Support Responder
+# (github.com/msitarzewski/agency-agents, MIT), as TBO Chat's bot used it before this engine.
 PROMPT = """You are TBO Copilot, the support assistant of Team Back Office (TBO), an ERPNext partner. You chat with a
 user of one of TBO's customers, inside their own ERP. You gather what a support engineer needs to raise a ticket,
 or answer a simple question from TBO's knowledge base. You never act yourself: the customer's buttons do.
@@ -94,7 +96,11 @@ How to choose next:
 - handover: they ask for a person, are upset, or it is about money, contracts, prices, dates, refunds or data changes.
 
 Rules:
-- Write in the customer's language (English or Arabic), short and kind. No blame.
+- Write in the customer's language (English or Arabic), short and kind: 1-4 sentences, this is chat. No blame.
+- When the customer reports a problem, acknowledge it in a few words first (no long apology). When you give
+  steps, end by asking whether it worked.
+- Never invent causes or fixes. Never claim to be a person.
+- If one of the customer's open tickets already covers it, say so instead of gathering a new one.
 - Never promise a date, a time, a price, a refund, a discount or that something will be fixed. Never say you changed,
   will change or can change their data.
 - Never ask for passwords, keys or card numbers, and never repeat them.
@@ -306,11 +312,11 @@ def _within_limits(doc) -> bool:
         return False
     if not pilot.budget_allows_work():
         return False
-    return _rate_ok(doc.connection)
+    return _rate_ok(doc.connection or doc.customer or doc.name)
 
 
 def _rate_ok(connection: str) -> bool:
-    """Per customer: messages a minute and a day (Redis counters, as the staff assistant's)."""
+    """Per customer (its site's connection; a TBO Chat by its customer): messages a minute and a day."""
     settings = copilot_settings.get_settings()
     cache = frappe.cache()
     for window, limit in (
@@ -814,6 +820,8 @@ def tell(
 def _deliver(doc, message) -> bool:
     from helpdesk import client_api
 
+    if doc.channel == "TBO Chat":
+        return _deliver_to_tbo_chat(doc, message)
     conn = frappe.get_doc("HDS Support Connection", doc.connection)
     if not client_api.supports(conn, CHAT_CAPABILITY):
         return False
@@ -839,7 +847,30 @@ def _deliver(doc, message) -> bool:
     return True
 
 
+def _deliver_to_tbo_chat(doc, message) -> bool:
+    """A stage on a TBO Chat ticket, posted into the chat by the Chatwoot bridge."""
+    from helpdesk.chatwoot_bridge import ChatConversation
+
+    chat = ChatConversation.for_ticket(doc.ticket) if doc.ticket else None
+    if not chat or message.kind != "Stage":
+        return False
+    try:
+        chat.post_agent_reply(escape_html(message.text or ""))
+    except Exception:
+        frappe.log_error(title=f"Copilot stage not posted to TBO Chat {doc.chat}")
+        return False
+    message.db_set("delivered", 1, update_modified=False)
+    return True
+
+
 def tell_stage(run, stage: str, text: str):
+    name = for_ticket(run.ticket)
+    if (
+        name
+        and stage == "Resolved"
+        and frappe.db.get_value(CONVERSATION, name, "channel") == "TBO Chat"
+    ):
+        return  # the Chatwoot bridge announces the resolution itself
     actions = []
     if stage == "Resolved":
         actions = [
@@ -851,11 +882,15 @@ def tell_stage(run, stage: str, text: str):
 
 def on_communication_insert(doc, method=None):
     """An agent's reply on a ticket with a chat goes to the chat at once (the site sync also keeps it)."""
+    name = (
+        for_ticket(doc.reference_name) if doc.reference_doctype == "HD Ticket" else None
+    )
     if (
-        doc.reference_doctype != "HD Ticket"
+        not name
         or doc.sent_or_received != "Sent"
         or doc.flags.get("from_conversation")
-        or not for_ticket(doc.reference_name)
+        # a TBO Chat gets its agents' replies from the Chatwoot bridge already
+        or frappe.db.get_value(CONVERSATION, name, "channel") == "TBO Chat"
     ):
         return
     from frappe.core.utils import html2text
@@ -867,6 +902,130 @@ def on_communication_insert(doc, method=None):
         "Text",
         text,
         card(get_fullname(doc.sender) or _("TBO Support"), [text]),
+    )
+
+
+# --- TBO Chat (Chatwoot): the same engine behind the bot (H27) ------------------------------------
+
+TBO_CHAT_NOTE = (
+    "Channel: TBO Chat, the website chat. There are no buttons: on summary the ticket is raised at once; "
+    "instead of recording the screen, ask for a screenshot or a short video attached to the chat."
+)
+
+
+def chatwoot_decision(row, chat_prompt: str, articles: list[dict]) -> dict | None:
+    """The Chatwoot bot's reply and action ("answer", "ticket" or "human"), from this engine.
+
+    `row` is the HD Chat Conversation; `chat_prompt` is the bridge's own view of the chat
+    (who wrote, their open tickets, the matching articles, the transcript).
+    """
+    from helpdesk.ai_engine import call_haiku
+
+    doc = _tbo_chat(row)
+    if not _within_limits(doc):
+        return {
+            "action": "human",
+            "reply": "",
+            "ticket_subject": "",
+            "ticket_summary": "",
+        }
+    message = "\n\n".join(
+        [
+            TBO_CHAT_NOTE,
+            "Fields so far: "
+            + json.dumps(
+                {f: doc.get(f) for f in FIELDS if doc.get(f)}, ensure_ascii=False
+            ),
+            "Knowledge base article names: "
+            + (", ".join(a["name"] for a in articles) or "none"),
+            "The chat, as data:",
+            "<<<",
+            chat_prompt,
+            ">>>",
+        ]
+    )
+    result = call_haiku(PROMPT, message, job="chat")
+    answer = result.get("response") if isinstance(result.get("response"), dict) else {}
+    doc.db_set(
+        {
+            "turns": cint(doc.turns) + 1,
+            "cost_usd": flt(doc.cost_usd) + flt(result.get("cost")),
+        },
+        update_modified=False,
+    )
+    if not answer or answer.get("parse_error"):
+        return None
+    for field, value in (answer.get("fields") or {}).items():
+        if field in FIELDS and value:
+            doc.db_set(
+                field,
+                str(value)[: 140 if field == "title" else 2000],
+                update_modified=False,
+            )
+    if answer.get("language") in ("en", "ar"):
+        doc.db_set("language", answer["language"], update_modified=False)
+    doc.reload()
+    step = answer.get("next") if answer.get("next") in NEXT else "question"
+    text = safe_text(str(answer.get("text") or ""), articles)
+    sources = [a for a in articles if a["name"] in (answer.get("sources") or [])]
+    if step == "answer" and not sources:
+        step, text = "question", _offer(doc)
+    if step == "summary" and doc.title and doc.actual:
+        summary = "\n".join(
+            f"{_(FIELD_LABELS[f])}: {doc.get(f)}"
+            for f in FIELDS
+            if f != "title" and doc.get(f)
+        )
+        return {
+            "action": "ticket",
+            "reply": text,
+            "ticket_subject": doc.title,
+            "ticket_summary": summary,
+        }
+    if step == "handover":
+        return {
+            "action": "human",
+            "reply": text,
+            "ticket_subject": "",
+            "ticket_summary": "",
+        }
+    if step == "record":
+        text = " ".join(
+            filter(
+                None, (text, _("You can attach a screenshot or a short video here."))
+            )
+        )
+    return {
+        "action": "answer",
+        "reply": text or _offer(doc),
+        "ticket_subject": "",
+        "ticket_summary": "",
+    }
+
+
+def _tbo_chat(row):
+    name = frappe.db.get_value(CONVERSATION, {"chat": row.name}, "name")
+    if name:
+        return frappe.get_doc(CONVERSATION, name)
+    return frappe.get_doc(
+        {
+            "doctype": CONVERSATION,
+            "channel": "TBO Chat",
+            "chat": row.name,
+            "customer": row.hd_customer,
+            "site_user": row.contact_email,
+            "site_user_name": row.contact_name,
+        }
+    ).insert(ignore_permissions=True)
+
+
+def tbo_chat_ticket(chat: str, ticket: str):
+    """The bridge raised the chat's ticket: Copilot's stages now reach the chat."""
+    frappe.db.set_value(
+        CONVERSATION,
+        {"chat": chat},
+        {"ticket": ticket, "state": "Ticket raised"},
+        update_modified=False,
     )
 
 

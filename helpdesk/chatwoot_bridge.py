@@ -79,7 +79,6 @@ CHANNEL_LABELS = {
 }
 # a website visitor types any email they like; only Chatwoot's HMAC identity check proves it
 SELF_ASSERTED_CHANNELS = ("Channel::WebWidget",)
-AI_ACTIONS = ("answer", "ticket", "human")
 
 MAX_TRANSCRIPT_MESSAGES = 20
 MAX_MESSAGE_CHARS = 800
@@ -98,36 +97,6 @@ URL_PATTERN = re.compile(r"https?://[^\s<>()\"']+")
 LINK_PATTERN = re.compile(
     r'(?is)<a\s[^>]*?href\s*=\s*["\']([^"\']+)["\'][^>]*>(.*?)</a>'
 )
-
-# Reply order (acknowledge, help, confirm) adapted from The Agency's Support Responder
-# (github.com/msitarzewski/agency-agents, MIT).
-CHAT_SYSTEM_PROMPT = """You are TBO Support's assistant, answering a customer in a live chat (website chat or WhatsApp).
-Our support team can see this chat and takes over whenever you hand it to them.
-
-Write in the language of the customer's latest message (English if unsure). Be warm and brief: this is
-chat, not email. Use 1-4 short sentences, no greeting after the first message, no signature.
-When the customer reports a problem, acknowledge it in a few words before helping (no long apology).
-When you give steps, end by asking whether it worked, so the chat doesn't stall.
-
-Use only facts from the knowledge base articles, the customer's open tickets and the chat below.
-Never invent causes, fixes, prices, refunds, dates, deadlines or commitments. When an article answers
-the question, give the steps and you may add its URL exactly as given; never write any other URL.
-Never claim to be a person.
-
-Choose one action:
-- "answer": you can answer from the articles or the chat, the customer is greeting you, asking about
-  one of their open tickets, or you need one more detail before you can help (ask for it).
-- "ticket": the customer reports a problem our team has to work on (an error, a bug, wrong data,
-  a change or access request) and you know what is wrong and where. Fill ticket_subject (under 100
-  characters) and ticket_summary (3-6 short lines: what happens, where, since when, the exact error
-  text, what they tried). Your reply tells them the team will look into it; do not mention a ticket
-  number, it is added for you. Do not raise a ticket for something an open ticket already covers.
-- "human": the customer asks for a person, is upset, the question is about billing, contracts or
-  prices, or you cannot help.
-
-Reply with JSON only:
-{"reply": "<the chat message>", "action": "answer, ticket or human",
- "ticket_subject": "<only for ticket>", "ticket_summary": "<only for ticket>"}"""
 
 SUMMARY_SYSTEM_PROMPT = """You turn a support chat into a ticket for the support team.
 Use only what the chat says; never invent details.
@@ -606,18 +575,15 @@ class ChatConversation:
             # a newer message is on its way; its job answers with the fuller chat
             return False
         try:
+            from helpdesk.copilot import conversation
+
             articles = self.find_articles(messages)
-            result = call_haiku(
-                CHAT_SYSTEM_PROMPT,
-                self.build_prompt(messages, articles),
-                job="triage",
+            # the same engine as the chat in a customer's ERP (Copilot Phase 5)
+            decision = conversation.chatwoot_decision(
+                self.row, self.build_prompt(messages, articles), articles
             )
-            decision = parse_decision(result.get("response"), articles)
             if not decision:
-                raise ValueError(
-                    "AI chat reply was empty or not JSON: "
-                    + str(result.get("response"))[:1000]
-                )
+                raise ValueError("AI chat reply was empty or not JSON")
         except Exception:  # noqa: BLE001 - whatever failed, the customer gets a person
             frappe.log_error(
                 title=_("TBO Chat AI reply failed for conversation {0}").format(
@@ -639,6 +605,9 @@ class ChatConversation:
                 decision["ticket_summary"],
                 messages,
             )
+            from helpdesk.copilot import conversation
+
+            conversation.tbo_chat_ticket(self.row.name, ticket)
             reply = "\n\n".join(
                 part
                 for part in (decision["reply"], ticket_created_text(ticket))
@@ -1185,27 +1154,6 @@ def is_enabled() -> bool:
 
 
 # --- text ---
-
-
-def parse_decision(response, articles: list[dict]) -> dict | None:
-    """The AI's reply and action; None for an empty or unreadable answer."""
-    if not isinstance(response, dict) or response.get("parse_error"):
-        return None
-    reply = remove_unknown_urls(
-        html_to_text(str(response.get("reply") or "")), articles
-    )
-    action = str(response.get("action") or "").strip().lower()
-    if action not in AI_ACTIONS:
-        # unsure what it meant: a person decides
-        action = "human"
-    if not reply and action == "answer":
-        return None
-    return {
-        "reply": reply,
-        "action": action,
-        "ticket_subject": one_line(response.get("ticket_subject")),
-        "ticket_summary": html_to_text(str(response.get("ticket_summary") or "")),
-    }
 
 
 def remove_unknown_urls(text: str, articles: list[dict]) -> str:

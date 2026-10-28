@@ -293,6 +293,13 @@ The Support button in a customer's ERP opens a chat with TBO Copilot instead of 
   Past any limit, the chat hands over to a person instead of answering.
 - **Languages:** the customer's language, English or Arabic. Arabic stage texts are built in (`settings.ARABIC_TEMPLATES`, or a Stage Messages row with Language Arabic), and a Copilot fix in an Arabic chat says so in Arabic.
 - **Settings** (HDS Copilot Settings → Customer Chat): on/off, the per-customer rates, the cap and turns, the opening text, and the recording request in English and Arabic.
+- **TBO Chat (Chatwoot) uses the same engine** (`conversation.chatwoot_decision`, called by the bot's first reply in `chatwoot_bridge.py`). The bot's own view of the chat (who wrote, their open tickets, the matching articles, the transcript) is the data. The engine's answer becomes the bridge's decision:
+  - a question or a knowledge base answer is posted;
+  - a summary raises the ticket at once (there are no buttons in Chatwoot);
+  - a hand-over opens the chat for people;
+  - a recording request asks for a screenshot or a short video instead.
+
+  The same checks apply (sources, links, promises), its cost goes on an HDS Conversation of channel TBO Chat (and so into the monthly budget), and the bot's reply cap still holds. Once the bridge raises the ticket, Copilot's stages reach the chat through the bridge. Its agents' replies and the resolution go there as before.
 
 ## Staff assistant (Phase 6: `assistant.py`, `teams.py`, `api/copilot_teams.py`, `api/copilot_chat.py`)
 
