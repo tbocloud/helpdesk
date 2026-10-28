@@ -239,6 +239,28 @@ def open_approval(
     announce(
         doc, _("A Copilot fix waits for your approval on ticket {0}").format(run.ticket)
     )
+    from helpdesk.copilot import assistant
+
+    # whoever asked for the fix from a chat hears it is ready; the approver has its card already
+    assistant.tell_watchers(
+        run,
+        assistant.card(
+            "",
+            [
+                _(
+                    "The fix for ticket {0} is ready and waits for {1}'s approval."
+                ).format(
+                    run.ticket,
+                    frappe.utils.get_fullname(doc.assigned_to)
+                    if doc.assigned_to
+                    else _("the managers"),
+                )
+            ],
+            links=[(_("Open the pull request"), doc.pr_url)],
+            tone="good",
+        ),
+        skip=(doc.assigned_to,),
+    )
     return doc
 
 
@@ -556,7 +578,8 @@ def announce(
     the TBO Support panel plus the usual chat message or email. A sensitive fix or a long wait
     also goes to the team's channel."""
     from helpdesk.copilot import assistant
-    from helpdesk.work_reminders import helpdesk_path, new_notification, notify_users
+    from helpdesk.work_reminders import (helpdesk_path, new_notification,
+                                         notify_users)
 
     people = [approval.assigned_to] if approval.assigned_to else _managers()
     people = list(dict.fromkeys(people + (also or [])))

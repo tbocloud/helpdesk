@@ -258,11 +258,7 @@ def _fix_card(run) -> dict | None:
             "attempts": run.fix_attempts or 0,
             "max_attempts": attempts,
         },
-        "can_request_fix": run.state == "Preparing Fix"
-        and copilot_settings.allows(run.customer, copilot_settings.FIX)
-        and run.fix_status not in ("Queued", "Working")
-        and not fixes.open_pull_request(run)
-        and (run.fix_attempts or 0) < attempts,
+        "can_request_fix": not fixes.fix_refusal(run),
         "merge_commit": run.merge_commit,
         "deployed_at": str(run.deployed_at)[:16] if run.deployed_at else None,
         "change_set": changes.card(frappe.get_doc(changes.CHANGE_SET, run.change_set))

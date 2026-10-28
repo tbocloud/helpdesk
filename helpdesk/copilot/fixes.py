@@ -270,39 +270,43 @@ def open_pull_request(run) -> bool:
     )
 
 
+def fix_refusal(run) -> str | None:
+    """Why Copilot may not start a fix on the run now, or None when it may."""
+    if run.state != "Preparing Fix":
+        return _(
+            "Copilot fixes a run that is preparing a fix (this one is {0})."
+        ).format(run.state)
+    if run.fix_status in ("Queued", "Working"):
+        return _("Copilot is already working on this fix.")
+    if not copilot_settings.allows(run.customer, copilot_settings.FIX):
+        return _(
+            "Copilot writes fixes only for customers at the Fix level or above ({0} is at {1})."
+        ).format(
+            run.customer or _("no customer"),
+            copilot_settings.level_of(run.customer),
+        )
+    if open_pull_request(run):
+        return _(
+            "A pull request is already open for this fix; review that one instead."
+        )
+    limit = copilot_settings.get_settings().get("max_fix_attempts") or 2
+    if (run.fix_attempts or 0) >= limit:
+        return _("Copilot has tried {0} times; a developer takes it from here.").format(
+            limit
+        )
+    return None
+
+
 def request_copilot_fix(run, user: str | None = None):
     """Queues a fix job: a worker reproduces the bug on a sandbox copy, fixes it and opens the pull request."""
     from helpdesk.copilot import customer
 
     run = frappe.get_doc("HDS Copilot Run", run.name)
-    if run.state != "Preparing Fix":
-        frappe.throw(
-            _("Copilot fixes a run that is preparing a fix (this one is {0}).").format(
-                run.state
-            )
-        )
-    if run.fix_status in ("Queued", "Working"):
+    if run.state == "Preparing Fix" and run.fix_status in ("Queued", "Working"):
         return run
-    if not copilot_settings.allows(run.customer, copilot_settings.FIX):
-        frappe.throw(
-            _(
-                "Copilot writes fixes only for customers at the Fix level or above ({0} is at {1})."
-            ).format(
-                run.customer or _("no customer"),
-                copilot_settings.level_of(run.customer),
-            )
-        )
-    if open_pull_request(run):
-        frappe.throw(
-            _("A pull request is already open for this fix; review that one instead.")
-        )
-    limit = copilot_settings.get_settings().get("max_fix_attempts") or 2
-    if (run.fix_attempts or 0) >= limit:
-        frappe.throw(
-            _("Copilot has tried {0} times; a developer takes it from here.").format(
-                limit
-            )
-        )
+    reason = fix_refusal(run)
+    if reason:
+        frappe.throw(reason)
     actor = runs.AGENT if user else runs.SYSTEM
     if not run.task or frappe.db.get_value("Task", run.task, "status") in (
         "Completed",
@@ -626,6 +630,9 @@ def fix_failed(run, reason: str, actor: str = runs.WORKER):
             once=False,
         )
     customer.comment(run.ticket, escape_html(text))
+    from helpdesk.copilot import assistant
+
+    assistant.tell_watchers(run, assistant.text_card(text, "warning"))
     runs.publish_run(run)
 
 

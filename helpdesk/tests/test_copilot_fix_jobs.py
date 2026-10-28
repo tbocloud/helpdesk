@@ -11,7 +11,7 @@ from frappe.utils import add_to_date, now_datetime
 
 from helpdesk.api import copilot as api
 from helpdesk.api import copilot_worker as worker_api
-from helpdesk.copilot import approvals, fixes, runs
+from helpdesk.copilot import approvals, assistant, fixes, runs
 from helpdesk.copilot.mcp import tools_worker
 from helpdesk.copilot.mcp.auth import WORKER, Caller
 from helpdesk.test_utils import make_copilot_settings, make_site_registry
@@ -230,3 +230,120 @@ class TestAskedBySettings(FixCase):
         run = self.current_run()
         self.assertEqual((run.fix_requested, run.fix_status), (1, "Queued"))
         self.assertTrue(run.task)
+
+
+class TestAskedFromTheChat(FixJobCase):
+    """Teams or the panel: the diagnosis card's button, or "fix it" in words, starts the same fix."""
+
+    def chat_lines(self, user):
+        return [
+            " ".join(json.loads(m.card or "{}").get("lines") or [m.text or ""])
+            for m in frappe.get_all(
+                assistant.MESSAGE,
+                filters={"user": user, "direction": "Out"},
+                fields=["card", "text"],
+                order_by="creation asc",
+            )
+        ]
+
+    def test_the_diagnosis_card_offers_the_fix_and_its_button_starts_it(self):
+        run = self.current_run()
+        self.assertEqual(
+            [a["verb"] for a in assistant.diagnosis_card(run)["actions"]], ["fix"]
+        )
+
+        pressed = assistant.press(self.approver, "Web", "fix", {"run": run.name})
+
+        run = self.current_run()
+        self.assertEqual(
+            (run.fix_status, run.fix_requested_by), ("Queued", self.approver)
+        )
+        self.assertEqual(pressed["card"]["actions"], [])  # the button goes
+        self.assertIn(run.ticket, pressed["replies"][0]["lines"][0])
+        self.assertEqual(assistant.watchers(run), [self.approver])
+        again = assistant.press(self.approver, "Web", "fix", {"run": run.name})
+        self.assertIn("already working", again["replies"][0]["lines"][0])
+
+    def test_fix_it_in_words_asks_first_and_means_the_last_diagnosis(self):
+        run = self.current_run()
+        assistant.send(
+            self.approver,
+            assistant.diagnosis_card(run),
+            run=run.name,
+            ticket=run.ticket,
+        )
+        with patch(
+            "helpdesk.ai_engine.call_haiku",
+            return_value={"response": {"intent": "fix"}, "cost": 0.0001},
+        ):
+            proposal = assistant.receive(self.approver, "Web", "go ahead and fix it")[0]
+        self.assertEqual(proposal["title"], f"Let Copilot fix ticket {run.ticket}?")
+        self.assertFalse(self.current_run().fix_status)  # nothing until Yes
+
+        assistant.press(
+            self.approver, "Web", "confirm", {"message": proposal["message"]}
+        )
+
+        self.assertEqual(self.current_run().fix_status, "Queued")
+
+    def test_below_the_fix_level_there_is_no_button_and_words_get_the_reason(self):
+        frappe.db.set_value(
+            "HD Customer", self.customer, "custom_copilot_level", "Diagnose only"
+        )
+        run = self.current_run()
+        self.assertEqual(assistant.diagnosis_card(run)["actions"], [])
+        with patch(
+            "helpdesk.ai_engine.call_haiku",
+            return_value={
+                "response": {"intent": "fix", "ticket": run.ticket},
+                "cost": 0,
+            },
+        ):
+            reply = assistant.receive(self.approver, "Web", f"fix ticket {run.ticket}")[
+                0
+            ]
+        self.assertIn("Fix level", reply["lines"][0])
+        self.assertFalse(self.current_run().fix_status)
+
+    def test_who_asked_hears_when_the_fix_waits_for_approval_or_failed(self):
+        make_copilot_settings(  # the customer's developer approves, not the one who asked
+            enabled=1,
+            approvers=[
+                {"user": self.developer, "senior": 0, "active": 1},
+                {"user": self.approver, "senior": 0, "active": 1},
+            ],
+        )
+        run = self.current_run()
+        assistant.press(self.approver, "Web", "fix", {"run": run.name})
+        job = self.claim()
+        task = self.current_run().task
+        self.github.add_pull(
+            REPO, 31, NEW_SHA, body=f"Closes {task}", author="tbo-copilot[bot]"
+        )
+        caller = Caller(user="Administrator", kind=WORKER, run=job["run"])
+        with patch("helpdesk.copilot.github.copilot_only", return_value=True):
+            tools_worker.submit_change(
+                caller,
+                REPO,
+                31,
+                NEW_SHA,
+                branch=fixes.copilot_branch(self.current_run()),
+                summary="The margin is now a share of the selling price.",
+                evidence=[{"check": "the bug shows before the fix", "result": "pass"}],
+                tested_on="a sandbox site",
+            )
+        approval = frappe.get_doc("HDS Copilot Approval", self.current_run().approval)
+        self.assertNotEqual(approval.assigned_to, self.approver)
+        self.assertIn(
+            "waits for {0}'s approval".format(
+                frappe.utils.get_fullname(approval.assigned_to)
+            ),
+            self.chat_lines(self.approver)[-1],
+        )
+
+        fixes.fix_failed(self.current_run(), "the bug did not show on the copy")
+
+        self.assertIn(
+            "Copilot could not fix it: the bug did not show on the copy",
+            self.chat_lines(self.approver)[-1],
+        )
