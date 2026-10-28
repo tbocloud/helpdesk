@@ -3582,6 +3582,8 @@ def lead_department(
     heads: tuple[str, ...] = (),
     members: tuple[str, ...] = (),
     is_active: int = 1,
+    assignment: str = "Manual",
+    stale_after_days: int = 3,
 ) -> dict:
     """A lead department as the ERP site's get_lead_departments and save_lead_department
     answer it."""
@@ -3590,8 +3592,26 @@ def lead_department(
         "department_name": name,
         "lead_type": lead_type,
         "is_active": is_active,
+        "assignment": assignment,
+        "stale_after_days": stale_after_days,
         "heads": [{"user": u, "full_name": u} for u in heads],
         "members": [{"user": u, "full_name": u} for u in members],
+    }
+
+
+def stale_lead(name: str, idle_days: int, **fields) -> dict:
+    """A row of the ERP site's get_stale_leads: a lead of GrowthX owned by Asha with no
+    activity for `idle_days`, unless `fields` say otherwise."""
+    return {
+        "name": name,
+        "lead_name": f"Lead {name}",
+        "company_name": "Bright Co",
+        "lead_owner": "asha.sales@leads.example",
+        "tbo_department": "GrowthX",
+        "tbo_stage": "Contacted",
+        "last_activity_on": "2026-10-01 10:00:00",
+        "idle_days": idle_days,
+        **fields,
     }
 
 

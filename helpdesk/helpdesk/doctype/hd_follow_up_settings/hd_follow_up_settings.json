@@ -40,6 +40,8 @@
 		"customer_replied_hours",
 		"awaiting_customer",
 		"awaiting_customer_days",
+		"lead_section",
+		"stale_leads",
 		"customer_section",
 		"customer_follow_up_email",
 		"customer_follow_up_message",
@@ -269,6 +271,17 @@
 			"default": "3"
 		},
 		{
+			"fieldname": "lead_section",
+			"fieldtype": "Section Break",
+			"label": "Lead rules"
+		},
+		{
+			"fieldname": "stale_leads",
+			"fieldtype": "Check",
+			"label": "Leads gone quiet",
+			"default": "1"
+		},
+		{
 			"fieldname": "customer_section",
 			"fieldtype": "Section Break",
 			"label": "Customer follow-up"
@@ -303,7 +316,7 @@
 	"index_web_pages_for_search": 0,
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-10-11 12:00:00.000000",
+	"modified": "2026-10-28 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Follow Up Settings",

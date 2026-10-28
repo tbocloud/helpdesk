@@ -263,6 +263,19 @@
                         :label="stageLabel(options, row.tbo_stage)"
                         :tone="stageTone(options, row.tbo_stage)"
                       />
+                      <!-- gone quiet: no activity for longer than its department allows -->
+                      <TaskyBadge
+                        v-if="quiet.get(row.name)"
+                        tone="warning"
+                        :icon="LucideClock"
+                        :label="
+                          __(
+                            'No activity {0} days',
+                            String(quiet.get(row.name))
+                          )
+                        "
+                        class="font-normal tabular-nums"
+                      />
                       <!-- where it stands with the client: the proposal or quotation -->
                       <TaskyBadge
                         v-if="statuses.get(row.name)"
@@ -423,6 +436,7 @@ import LucideCalendarX from "~icons/lucide/calendar-x";
 import LucideChevronLeft from "~icons/lucide/chevron-left";
 import LucideChevronRight from "~icons/lucide/chevron-right";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
+import LucideClock from "~icons/lucide/clock";
 import LucidePhone from "~icons/lucide/phone";
 import LucidePlus from "~icons/lucide/plus";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
@@ -447,8 +461,10 @@ import {
   ownerName,
   stageLabel,
   stageTone,
+  staleLeads,
   usableDepartments,
   type LeadIntake,
+  type StaleLead,
   type LeadOptions,
   type LeadRow,
   type LeadMetric,
@@ -701,8 +717,13 @@ function takeOverviewIntake(value: LeadIntake | undefined) {
   if (value) intakeData.value = value;
 }
 
+// the cached answer shows at once, and is asked again each time the page opens
+if (isList.value) staleLeads.fetch();
+
 watch(view, (tab) => {
   if (isList.value && !intakeData.value) intake.fetch();
+  if (isList.value && !staleLeads.data && !staleLeads.loading)
+    staleLeads.fetch();
 });
 
 function refresh() {
@@ -710,12 +731,23 @@ function refresh() {
   else if (view.value === "daily") dailyPanel.value?.reload();
   else {
     intake.submit({ fresh: 1 });
+    staleLeads.submit({ fresh: 1 });
     if (!waitingForDates.value) leads.reload();
   }
 }
 
 const data = computed(
   () => leads.data as { rows: LeadRow[]; total: number } | undefined
+);
+// idle days by lead name; empty while the ERP site's TBO Smart is older than this
+const quiet = computed(
+  () =>
+    new Map(
+      ((staleLeads.data?.leads ?? []) as StaleLead[]).map((l) => [
+        l.name,
+        l.idle_days,
+      ])
+    )
 );
 const statuses = computed(
   () => new Map((data.value?.rows ?? []).map((r) => [r.name, clientStatus(r)]))

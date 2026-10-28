@@ -585,6 +585,10 @@
         </SettingsSection>
 
         <LeadDepartments v-if="form.enable_leads && canManageLeads" />
+        <WebsiteLeadForm
+          v-if="form.enable_leads && auth.isAdmin"
+          :site-url="form.site_url"
+        />
       </div>
     </template>
   </SettingsLayoutBase>
@@ -615,6 +619,7 @@ import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideUserCheck from "~icons/lucide/user-check";
 import SettingsSection from "../SettingsSection.vue";
 import LeadDepartments from "./LeadDepartments.vue";
+import WebsiteLeadForm from "./WebsiteLeadForm.vue";
 
 interface CRMForm {
   enabled: boolean;
