@@ -6,14 +6,25 @@
         <div class="text-lg-medium text-ink-gray-9">{{ __("My board") }}</div>
       </template>
       <template #right-header>
-        <Button
-          variant="ghost"
-          :label="__('Refresh')"
-          :loading="kanban.loading && !!kanban.data"
-          @click="kanban.reload()"
-        >
-          <template #icon><LucideRefreshCw class="size-4" /></template>
-        </Button>
+        <div class="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            :label="__('Refresh')"
+            :loading="kanban.loading && !!kanban.data"
+            @click="kanban.reload()"
+          >
+            <template #icon><LucideRefreshCw class="size-4" /></template>
+          </Button>
+          <Button
+            variant="solid"
+            :label="__('New task')"
+            @click="showNewTask = true"
+          >
+            <template #prefix
+              ><LucidePlus class="size-4" aria-hidden="true"
+            /></template>
+          </Button>
+        </div>
       </template>
     </LayoutHeader>
     <ProjectNav
@@ -455,6 +466,11 @@
       </div>
     </div>
 
+    <NewTaskDialog
+      v-if="!projectId"
+      v-model:open="showNewTask"
+      @created="kanban.reload()"
+    />
     <HoldTaskDialog v-model:task="holdingTask" @held="onHoldChanged" />
     <ResumeTaskDialog v-model:task="resumingTask" @resumed="onHoldChanged" />
     <RequestHelpDialog
@@ -529,6 +545,7 @@ import LucidePause from "~icons/lucide/pause";
 import LucidePanelRight from "~icons/lucide/panel-right";
 import LucidePencil from "~icons/lucide/pencil";
 import LucidePlay from "~icons/lucide/play";
+import LucidePlus from "~icons/lucide/plus";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideRepeat from "~icons/lucide/repeat";
 import LucideStar from "~icons/lucide/star";
@@ -541,6 +558,7 @@ import HoldNote from "./components/HoldNote.vue";
 import HoldTaskDialog from "./components/HoldTaskDialog.vue";
 import MilestoneMark from "./components/MilestoneMark.vue";
 import MoveTaskDialog from "./components/MoveTaskDialog.vue";
+import NewTaskDialog from "./components/NewTaskDialog.vue";
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import ProjectNav from "./components/ProjectNav.vue";
 import RecurringTaskDialog from "./components/RecurringTaskDialog.vue";
@@ -769,6 +787,8 @@ function phasesOf(project?: string) {
     .map((t) => t.phase || "")
     .filter(Boolean);
 }
+
+const showNewTask = ref(false);
 
 const completingTask = ref<Task | null>(null);
 // dropped on In review, so it waits there for the lead whatever the project's setting
