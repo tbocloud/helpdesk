@@ -268,6 +268,12 @@ const portalRoutes = [
     name: "Standup",
     component: () => import("@/pages/standup/Standup.vue"),
   },
+  // agents: all of Copilot's work on one page; each sees what their permissions allow (docs/tbo-copilot.md)
+  {
+    path: "/copilot",
+    name: "CopilotBoard",
+    component: () => import("@/pages/copilot/CopilotBoard.vue"),
+  },
   {
     path: "/overview",
     name: "WorkOverview",

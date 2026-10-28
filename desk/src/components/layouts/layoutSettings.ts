@@ -20,6 +20,7 @@ import LucideTrophy from "~icons/lucide/trophy";
 import LucideActivity from "~icons/lucide/activity";
 import LucideMessagesSquare from "~icons/lucide/messages-square";
 import LucideHandshake from "~icons/lucide/handshake";
+import LucideBot from "~icons/lucide/bot";
 import { __ } from "@/translation";
 
 export const agentPortalSidebarOptions = [
@@ -53,6 +54,15 @@ export const agentPortalSidebarOptions = [
     to: "Standup",
     tone: "blue",
     section: "Workspace",
+  },
+  // agents: Copilot's runs, approvals, releases, sites and known issues (Phase 10)
+  {
+    label: __("Copilot board"),
+    icon: LucideBot,
+    to: "CopilotBoard",
+    tone: "purple",
+    section: "Workspace",
+    ticketWorkersOnly: true,
   },
   // everyone: their own numbers and the champions; the server decides the rest
   {

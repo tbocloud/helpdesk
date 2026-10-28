@@ -401,6 +401,31 @@ One **HDS Known Issue** per error signature, across every site that runs the app
 - When a linked ticket with a customer-side cause is resolved, **Draft a KB article** writes a draft from the team's answer through the existing KB drafts (`helpdesk.api.copilot.draft_known_issue_article`). An agent reviews and publishes it; Copilot never publishes.
 - The Copilot Pilot report and the Monday email count **Error watch tickets** and **Known repeats** (tickets linked to an issue made before them).
 
+## Copilot board (Phase 10: `board.py`, `api/copilot_board.py`, `desk/src/pages/copilot/`)
+
+All of Copilot's work on one page: **Copilot board** in the agent app's sidebar (`/helpdesk/copilot`, agents who work tickets). It is for looking, not deciding. Every item links to where it is decided today: the ticket's Copilot dialog, the release (HDS Deploy Request), or the card in Teams. So the senior rule, "first decision wins" and the audit trail stay in one place.
+
+**Who sees what.** Every list is read with the person's own permissions. A run, an approval, a release made for a ticket, or a known issue's ticket shows only when the person may read that ticket (HD Ticket's own rules, team restrictions included). The worker's status and the month's AI spend are for Agent Managers.
+
+**The top strip** (`summary`):
+- the worker: online when it asked for work in the last 2 minutes. `claim_job` notes each worker's last request in the cache (`copilot:workers-seen`);
+- runs waiting for a worker, or queued;
+- the month's AI spend against **Monthly AI budget**;
+- whether shadow mode is on;
+- whether the error watch is on.
+
+**The tabs:**
+
+| Tab | What it shows |
+|---|---|
+| Work (`work`) | Each ticket's latest run in its column. **Investigating**: Queued, Investigating. **With the customer**: Explaining, Answered. **Fixing**: Preparing Fix, with Copilot's fix status. **Waiting for approval**. **Shipping**: Approved to Verifying, and Applying. **Needs a person**: Escalated, Handed Over, Failed, Rejected; dropped after 30 days. Each card shows the ticket, customer, root cause, how long it has waited, and who or what it waits on. At most 50 cards a column, then "and N more". Filters: customer; **Only mine** (assigned to the ticket, approving it, or it was handed over to you); **Raised by the error watch**. Also the count resolved this week |
+| Approvals (`approvals`) | Every fix and correction (HDS Copilot Approval, Pending) and every release waiting for approval, the longest wait first. Each shows its assignee, how long it waited, when it escalates, whether it is snoozed, the risk, and the senior flag |
+| Releases (`releases`) | The pipeline (Waiting for CI to Checking), then the releases finished in the last 7 days. Each shows CI, the sandbox check, the apps' commits, the sites, and who decided |
+| Sites (`sites`) | Each site card: its Copilot level, each app's commit and drift, when the apps were last read, the error watch (on or off, last check, failures, note), open known issues, and known fixes the site does not have yet |
+| Known issues (`known_issues`) | Open, Fixed or Not a bug issues, the latest seen first. Each shows its fix, how many times it came back, and its sites with "has the fix" |
+
+**Freshness.** The page refreshes when any run changes: `runs.publish_run` also sends `helpdesk:copilot-board`, a signal without a ticket or run name, so each board asks again with its own permissions. It also refreshes every minute.
+
 ## MCP server (`helpdesk/api/copilot_mcp.py`, `helpdesk/copilot/mcp/`)
 
 TBO staff use tickets, tasks and the knowledge base from the TBO Copilot desktop app, or any MCP client, **as themselves, with their own permissions** (TASK-2026-00013).

@@ -569,6 +569,9 @@ def publish_run(run):
         room=get_doc_room("HD Ticket", run.ticket),
         data={"ticket": run.ticket, "run": run.name},
     )
+    from helpdesk.copilot import board
+
+    board.changed()  # open Copilot boards ask again, each with its own permissions
 
 
 def run_context(run) -> dict:

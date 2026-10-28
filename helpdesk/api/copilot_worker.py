@@ -52,6 +52,9 @@ def claim_job(
     worker_id = (worker_id or "").strip()[:140]
     if not worker_id:
         frappe.throw(_("worker_id is required"))
+    from helpdesk.copilot import board
+
+    board.worker_seen(worker_id)  # the Copilot board shows when each worker last asked
     if int(free_slots) < 1:
         return {}
     from helpdesk.copilot import pilot
