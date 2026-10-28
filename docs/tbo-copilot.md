@@ -274,10 +274,12 @@ The Support button in a customer's ERP opens a chat with TBO Copilot instead of 
   - Each message is signed: headers `X-TBO-Connection`, `-Timestamp`, `-Nonce` and `-Signature`. The signature is HMAC-SHA256 over `"{timestamp}.{nonce}." + body`, under `HMAC(approval_key, "conversation-v1")`, the pairing key both sites already hold, so nothing is re-paired.
   - The hub refuses a site that isn't paired and active, a signature that doesn't match, a timestamp more than 5 minutes off, or a nonce it has seen.
   - The site vouches for its own logged-in user, as it does for tickets. The hub answers in the same call.
+  - A site paired before the pairing key existed (before Phase 3) has no key, so its chat is refused. Press **Connect to TBO Support** on the site once more to give it one; Phase 3's corrections need the same key.
   - Messages the hub starts go to the site at once with `hub_api.post_message` (once per reference), and the panel shows them live. These are Copilot's stages (the Resolved stage with **It's fixed** and **Still broken**) and the agents' replies (any Sent Communication on the ticket).
 - **The conversation** is an **HDS Conversation** with its **HDS Conversation Message** rows. It holds the site's user, the gathered fields (title, what happened, expected, steps, records, since, one or many, worked before), the page context the site sent, the language, the turns and the AI cost.
 - **Each turn,** one `call_haiku(job="chat")` returns JSON with the fields it heard and the next message: a question, a recording request, a summary, a knowledge base answer or a hand-over. The model never acts; the customer's buttons do. The code checks every message before it goes out:
-  - an answer must quote a Published article it was given, or it becomes the offer to raise a ticket;
+  - an answer must quote a Published article it was given, by name or title, or it becomes the offer to raise a ticket;
+  - the recording is asked for at most once, and never again once a recording is attached or the customer said no;
   - links stay only to those articles;
   - a sentence that promises a date, a time, a price, a refund or a data change is removed (`safe_text`);
   - text that looks like an instruction to the AI is flagged on the message, and is data in the prompt.
@@ -291,7 +293,7 @@ The Support button in a customer's ERP opens a chat with TBO Copilot instead of 
   - the monthly AI budget (`pilot.month_spend` counts the chats).
 
   Past any limit, the chat hands over to a person instead of answering.
-- **Languages:** the customer's language, English or Arabic. Arabic stage texts are built in (`settings.ARABIC_TEMPLATES`, or a Stage Messages row with Language Arabic), and a Copilot fix in an Arabic chat says so in Arabic.
+- **Languages:** the customer's language, English or Arabic, decided by the letters the customer writes (the model's report only when they write neither). Arabic stage texts are built in (`settings.ARABIC_TEMPLATES`, or a Stage Messages row with Language Arabic), and a Copilot fix in an Arabic chat says so in Arabic.
 - **Settings** (HDS Copilot Settings → Customer Chat): on/off, the per-customer rates, the cap and turns, the opening text, and the recording request in English and Arabic.
 - **TBO Chat (Chatwoot) uses the same engine** (`conversation.chatwoot_decision`, called by the bot's first reply in `chatwoot_bridge.py`). The bot's own view of the chat (who wrote, their open tickets, the matching articles, the transcript) is the data. The engine's answer becomes the bridge's decision:
   - a question or a knowledge base answer is posted;

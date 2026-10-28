@@ -88,15 +88,17 @@ How to choose next:
 - question: ask ONE question a support engineer would ask, the most useful one still open: what happened (the exact
   error), what they expected, which record, one record or many, since when, whether it worked before, the steps.
 - record: once you know what happened and it can be shown on screen, ask whether you may record their screen while they
-  try again (the app shows the consent text and the button; say it in one short sentence).
+  try again, in one short sentence. Never mention the app, buttons or consent text: they are added to your message.
+  Ask at most once, and never when a recording is attached already or the customer said no.
 - summary: when you know at least what happened (and a title for it), plus whatever else they could tell you. The app
   shows the fields with "Raise the ticket" and "Change something"; your text introduces them in one sentence.
 - answer: only for a "how do I" question that one of the knowledge base articles below answers. Answer from the
-  article alone, in a few sentences, and give its name in sources. If no article answers it, ask what happened instead.
+  article alone, in a few sentences, and give its title in sources. If no article answers it, ask what happened instead.
 - handover: they ask for a person, are upset, or it is about money, contracts, prices, dates, refunds or data changes.
 
 Rules:
 - Write in the customer's language (English or Arabic), short and kind: 1-4 sentences, this is chat. No blame.
+  Write the fields in that language too, and never mix two languages in one sentence.
 - When the customer reports a problem, acknowledge it in a few words first (no long apology). When you give
   steps, end by asking whether it worked.
 - Never invent causes or fixes. Never claim to be a person.
@@ -259,8 +261,26 @@ def _say(doc, kind: str, text: str, the_card: dict | None = None, **values):
     return _record(doc, "Assistant", kind, text, card=the_card, **values)
 
 
+ARABIC_LETTERS = re.compile(r"[\u0600-\u06FF]")
+LATIN_LETTERS = re.compile(r"[A-Za-z]")
+
+
+def language_of_text(text: str) -> str | None:
+    """Arabic when the customer writes Arabic letters, English when only Latin ones; else unknown."""
+    if ARABIC_LETTERS.search(text or ""):
+        return "ar"
+    if LATIN_LETTERS.search(text or ""):
+        return "en"
+    return None
+
+
 def _customer_said(doc, text: str, files: list[dict]):
     from helpdesk.copilot import suspicious
+
+    language = language_of_text(text)
+    if language and language != doc.language:
+        # the customer's own letters decide, whatever the model reports
+        doc.db_set("language", language, update_modified=False)
 
     message = _record(
         doc,
@@ -349,6 +369,13 @@ def _turn(doc):
                 {f: doc.get(f) for f in FIELDS if doc.get(f)}, ensure_ascii=False
             ),
             "Page context: " + json.dumps(_page(doc), ensure_ascii=False),
+            "Attached by the customer: "
+            + (
+                ", ".join(f.get("file_name") or "a file" for f in _files(doc))
+                or "nothing"
+            ),
+            "Recording already asked for: "
+            + ("yes" if _asked_to_record(doc) else "no"),
             "Knowledge base articles: "
             + (
                 json.dumps(
@@ -391,14 +418,22 @@ def _turn(doc):
                 str(value)[: 140 if field == "title" else 2000],
                 update_modified=False,
             )
-    if answer.get("language") in ("en", "ar"):
-        doc.db_set("language", answer["language"], update_modified=False)
+    reported = str(answer.get("language") or "").lower()[:2]
+    if reported in ("en", "ar") and not language_of_text(
+        " ".join(_customer_text(doc)[-1:])
+    ):
+        doc.db_set("language", reported, update_modified=False)
     doc.reload()
     step = answer.get("next") if answer.get("next") in NEXT else "question"
     text = safe_text(str(answer.get("text") or ""), articles)
-    sources = [a for a in articles if a["name"] in (answer.get("sources") or [])]
+    sources = cited(answer, articles)
     if step == "answer" and not sources:
         # an answer must come from an article it was given: else, the offer to raise a ticket
+        step, text = "question", _offer(doc)
+    if step == "record" and (_files(doc) or _asked_to_record(doc)):
+        # asked once already, or a recording is here: on to the summary (or what is still missing)
+        if doc.title and doc.actual:
+            return _summary(doc, _("Thanks. Here is what I'll send to our team."), cost)
         step, text = "question", _offer(doc)
     if step == "summary" and not (doc.title and doc.actual):
         step = "question"
@@ -448,11 +483,26 @@ PROMISES = re.compile(
 )
 
 
+def cited(answer: dict, articles: list[dict]) -> list[dict]:
+    """The given articles the answer names as its sources, by name or by title."""
+    named = {
+        str(source).strip().lower()
+        for source in (answer.get("sources") or [])
+        if isinstance(source, str)
+    }
+    return [
+        a
+        for a in articles
+        if {a["name"].lower(), (a["title"] or "").strip().lower()} & named
+    ]
+
+
 def safe_text(text: str, articles: list[dict]) -> str:
     """What may reach the customer unreviewed: links only to the given articles, no sentence that promises."""
     from helpdesk.chatwoot_bridge import remove_unknown_urls
 
     text = remove_unknown_urls(text, articles)
+    text = re.sub(r"\*\*|__", "", text)  # the chat shows plain text
     sentences = re.split(r"(?<=[.!?؟])\s+", text)
     kept = [s for s in sentences if s and not PROMISES.search(s)]
     return " ".join(kept).strip()[:MAX_TEXT]
@@ -962,12 +1012,15 @@ def chatwoot_decision(row, chat_prompt: str, articles: list[dict]) -> dict | Non
                 str(value)[: 140 if field == "title" else 2000],
                 update_modified=False,
             )
-    if answer.get("language") in ("en", "ar"):
-        doc.db_set("language", answer["language"], update_modified=False)
+    reported = str(answer.get("language") or "").lower()[:2]
+    if reported in ("en", "ar") and not language_of_text(
+        " ".join(_customer_text(doc)[-1:])
+    ):
+        doc.db_set("language", reported, update_modified=False)
     doc.reload()
     step = answer.get("next") if answer.get("next") in NEXT else "question"
     text = safe_text(str(answer.get("text") or ""), articles)
-    sources = [a for a in articles if a["name"] in (answer.get("sources") or [])]
+    sources = cited(answer, articles)
     if step == "answer" and not sources:
         step, text = "question", _offer(doc)
     if step == "summary" and doc.title and doc.actual:
@@ -1066,6 +1119,14 @@ def _files(doc) -> list[dict]:
     ):
         files.extend(frappe.parse_json(raw) or [])
     return files
+
+
+def _asked_to_record(doc) -> bool:
+    return bool(
+        frappe.db.exists(
+            MESSAGE, {"conversation": doc.name, "kind": "Recording request"}
+        )
+    )
 
 
 def _last_message_name(doc) -> str | None:

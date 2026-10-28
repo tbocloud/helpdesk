@@ -36,7 +36,12 @@ class ChatCase(FrappeTestCase):
         hold_commits(self)
         self.addCleanup(frappe.set_user, "Administrator")
         make_copilot_settings(
-            enabled=1, chat_enabled=1, chat_max_usd=0.25, chat_max_turns=40
+            enabled=1,
+            chat_enabled=1,
+            chat_max_usd=0.25,
+            chat_max_turns=40,
+            chat_messages_per_minute=10,
+            chat_messages_per_day=200,
         )
         self.customer = create_customer("Chat Trading Co").name
         conn = make_support_connection(
@@ -208,6 +213,16 @@ class TestTheConversation(ChatCase):
         self.assertEqual(reply["messages"][0]["text"], "منذ متى يحدث هذا؟")
         self.assertEqual(self.doc().language, "ar")
 
+    def test_the_customers_own_letters_decide_the_language(self):
+        self.say(action="start")
+        self.answers.append(
+            {"next": "question", "text": "منذ متى؟", "language": "English"}
+        )
+        self.say("لا أستطيع ترحيل الفاتورة")
+        self.assertEqual(self.doc().language, "ar")
+        reply = self.say(action="person")
+        self.assertIn("سيتابع أحد أعضاء فريقنا", reply["messages"][-1]["text"])
+
     def test_fields_fill_over_turns_and_nothing_is_raised_before_the_button(self):
         reply = self.gathered()
 
@@ -263,6 +278,27 @@ class TestTheConversation(ChatCase):
         )
         fetched.assert_called_once_with(conversation=self.chat)
 
+    def test_the_recording_is_asked_for_once(self):
+        self.say(action="start")
+        self.answers.append(
+            {
+                "fields": {"title": "Invoice won't submit", "actual": "A margin error"},
+                "next": "record",
+                "text": "May I record your screen?",
+            }
+        )
+        self.assertEqual(
+            self.say("it won't submit")["messages"][0]["kind"], "Recording request"
+        )
+        self.answers.append({"next": "record", "text": "May I record your screen?"})
+        reply = self.say(
+            action="recorded",
+            files=[{"file_url": "/private/files/rec.webm", "file_name": "rec.webm"}],
+        )
+        # a recording is here: never asked again; on to the summary
+        self.assertEqual(reply["messages"][-1]["kind"], "Summary")
+        self.assertIn("rec.webm", json.dumps(reply["messages"][-1]["card"]))
+
     def test_change_something_goes_back_to_talking(self):
         self.gathered()
         reply = self.say(action="change")
@@ -292,6 +328,17 @@ class TestWhatItMaySay(ChatCase):
         self.assertEqual(
             [a["verb"] for a in answer["card"]["actions"]], ["answered", "not_answered"]
         )
+
+        self.answers.append(
+            {
+                "next": "answer",
+                "text": "Press **Cancel**, then Amend.",
+                "sources": ["Cancel a submitted invoice"],
+            }
+        )
+        reply = self.say("and by its title?")
+        self.assertEqual(reply["messages"][0]["kind"], "Answer")  # cited by its title
+        self.assertEqual(reply["messages"][0]["text"], "Press Cancel, then Amend.")
 
         self.answers.append(
             {
