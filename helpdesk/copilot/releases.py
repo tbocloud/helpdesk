@@ -930,7 +930,9 @@ def succeeded(release, results: list[dict]):
             deployed_by=release.decided_by,
         )
         if run.get("kind") != "revert":
-            customer.send_stage(run, "Resolved", {"resolution": _("The fix is live.")})
+            from helpdesk.copilot import fixes
+
+            customer.send_stage(run, "Resolved", {"resolution": fixes.live_text(run)})
     if release.ticket:
         customer.comment(
             release.ticket,

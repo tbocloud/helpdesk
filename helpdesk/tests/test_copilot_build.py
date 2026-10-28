@@ -203,7 +203,10 @@ class TestTheBuildGoesLive(BuildCase):
             )
         ]
         self.assertEqual(stages[-1]["stage"], "Resolved")
-        self.assertIn("Your change is live.", stages[-1]["message"])
+        self.assertTrue(
+            stages[-1]["message"].startswith("Your change is live. Please check it")
+        )
+        self.assertNotIn("The fix is live", stages[-1]["message"])
 
         frappe.set_user(CUSTOMER_EMAIL)
         try:

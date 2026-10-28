@@ -843,4 +843,6 @@ def succeed(request, results: list[dict]):
     )
     runs.add_event(run, "deploy_checked", {"request": request.name}, runs.SYSTEM)
     if run.get("kind") != "revert":
-        customer.send_stage(run, "Resolved", {"resolution": _("The fix is live.")})
+        from helpdesk.copilot import fixes
+
+        customer.send_stage(run, "Resolved", {"resolution": fixes.live_text(run)})

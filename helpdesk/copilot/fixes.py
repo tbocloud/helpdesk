@@ -330,6 +330,11 @@ def request_copilot_fix(run, user: str | None = None):
 # --- a build of an approved customization (Phase 8) ------------------------------------------
 
 
+def live_text(run) -> str:
+    """What the customer reads when a fix is live; a build's own text already says its change is."""
+    return "" if run.get("build_scope") else _("The fix is live.")
+
+
 def build_settings() -> dict:
     settings = copilot_settings.get_settings()
     return {
@@ -1325,7 +1330,7 @@ def mark_deployed(run, user: str, note: str = ""):
         deployed_at=now_datetime(),
         deployed_by=user,
     )
-    resolution = _("The fix is live.") + (f" {note}" if note else "")
+    resolution = " ".join(part for part in (live_text(run), note) if part)
     customer.send_stage(run, "Resolved", {"resolution": resolution})
     return run
 

@@ -12,6 +12,7 @@ their site.
 """
 
 import json
+import re
 from contextlib import contextmanager
 
 import frappe
@@ -42,7 +43,8 @@ class _Blank(dict):
 def render(stage: str, context: dict | None = None, build: bool = False) -> str:
     template = copilot_settings.template_for(stage, build)
     try:
-        return template.format_map(_Blank(context or {})).strip()
+        # an empty value leaves no double space behind
+        return re.sub(r" {2,}", " ", template.format_map(_Blank(context or {}))).strip()
     except (ValueError, IndexError):
         return (
             template.strip()
