@@ -50,6 +50,8 @@ export function useTicketActivities(
       creation: comment.creation,
       content: comment.content,
       attachments: comment.attachments,
+      // Copilot's and the hub's own notes (helpdesk/hd_ticket/api.py get_comments)
+      byAutomation: !!comment.by_automation,
     }));
 
     const history = [...data.history, ...data.views].map((h: any) => {
@@ -129,5 +131,18 @@ export function useTicketActivities(
     return all.value.filter((activity) => activity.type === tab);
   }
 
-  return { activities: all, filterActivities };
+  /** The conversation with the customer (Phase 12's Customer tab): emails, calls, people's
+   * notes and the feedback, without the history and Copilot's own notes; `kind` narrows it
+   * to emails, comments or calls. */
+  function filterConversation(
+    kind: "all" | "email" | "comment" | "call"
+  ): TicketActivity[] {
+    return all.value.filter((activity: any) => {
+      if (activity.type === "comment" && activity.byAutomation) return false;
+      if (kind === "all") return activity.type !== "history";
+      return activity.type === kind;
+    });
+  }
+
+  return { activities: all, filterActivities, filterConversation };
 }

@@ -78,6 +78,8 @@ scheduler_events = {
             "helpdesk.copilot.pilot.watch_workers",
             # every merge into a branch a customer site runs becomes a release (off by default)
             "helpdesk.copilot.releases.watch",
+            # a customer's new ticket nobody could take goes to its coordinators
+            "helpdesk.ticket_assignment.ask_for_unassigned",
         ],
         # every 10 minutes, off the error digest's minutes: ask GitHub to run the org
         # merge bot, whose own schedule doesn't fire (off by default; docs/github-sync.md)
@@ -100,6 +102,11 @@ scheduler_events = {
         # 06:15: holidays and approved leave from the CRM site, before the working day
         "15 6 * * *": [
             "helpdesk.integrations.crm.holidays.sync_holidays_job",
+        ],
+        # 06:30, after the leave sync: tickets of people on leave today move along the
+        # assignment chain, and come back to whoever returned (docs/ticket-owners.md)
+        "30 6 * * *": [
+            "helpdesk.ticket_assignment.daily",
         ],
         # hourly at :40: disable people TBO removed from Microsoft (off by default;
         # docs/tbo-smart-api.md, "Offboarding")

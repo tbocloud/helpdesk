@@ -16,6 +16,7 @@ from helpdesk.copilot import assistant, deploy, fixes, router, runs, teams, thre
 from helpdesk.test_utils import (
     create_agent,
     fake_investigation,
+    make_assignment,
     make_copilot_run,
     make_team,
     make_ticket,
@@ -103,6 +104,8 @@ class TestTheNarration(ThreadCase):
             [a["verb"] for a in diagnosis["card"]["actions"]], ["fix_yes", "not_now"]
         )
 
+        # the people who may write in the chat press its buttons (Phase 12)
+        make_assignment("HD Ticket", self.ticket.name, self.approver)
         thread.press(self.approver, self.ticket.name, "fix_yes", {"run": run.name})
 
         run.reload()
@@ -343,6 +346,12 @@ class TestTeamsAndThePanel(ThreadCase):
         )
         self.settings(shadow_mode=0, ask_before_every_fix=1)
         self.routed("bug")
+        # someone who only reads the chat keeps just the buttons anyone may press (Phase 12)
+        self.assertNotIn(
+            "fix",
+            [a["verb"] for a in thread.now(self.ticket.name, self.approver)["actions"]],
+        )
+        make_assignment("HD Ticket", self.ticket.name, self.approver)
         now = thread.now(self.ticket.name, self.approver)
         self.assertIn("fix", [a["verb"] for a in now["actions"]])
         self.assertIn("mute", [a["verb"] for a in now["more"]])

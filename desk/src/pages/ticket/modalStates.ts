@@ -19,8 +19,14 @@ export function toggleCommentBox() {
   showCommentBox.value = !showCommentBox.value;
 }
 
-/** The header's Reply: opens the email composer, never closes it. */
+/** The ticket page's main view (Phase 12): a ticket opens on its chat with Copilot and
+ * the team; the conversation with the customer and the full activity are beside it. */
+export type TicketView = "chat" | "customer" | "activity";
+export const ticketView = ref<TicketView>("chat");
+
+/** The header's Reply: the customer tab with the email composer open, never closed. */
 export function openReplyBox() {
+  if (ticketView.value === "chat") ticketView.value = "customer";
   showCommentBox.value = false;
   showEmailBox.value = true;
 }

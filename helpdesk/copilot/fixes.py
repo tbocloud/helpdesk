@@ -24,6 +24,7 @@ import frappe
 from frappe import _
 from frappe.utils import escape_html, flt, formatdate, now_datetime
 
+from helpdesk import ticket_assignment
 from helpdesk.copilot import approvals, github, risk, runs
 from helpdesk.copilot import settings as copilot_settings
 from helpdesk.copilot.github import GitHubError
@@ -104,11 +105,7 @@ def create_fix_task(
             ),
             NoProject,
         )
-    developer = (
-        frappe.db.get_value("HD Customer", ticket.customer, "custom_assigned_developer")
-        if ticket.customer
-        else None
-    )
+    developer = ticket_assignment.developer_of(ticket.customer)
     assignee = developer if developer and _is_project_member(project, developer) else ""
     with customer.as_automation_user():
         result = create_task_from_ticket(

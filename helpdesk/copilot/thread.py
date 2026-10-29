@@ -24,6 +24,7 @@ import frappe
 from frappe import _
 from frappe.utils import add_to_date, get_fullname, get_url, now_datetime
 
+from helpdesk import ticket_assignment
 from helpdesk.copilot import assistant
 
 CHAT, MESSAGE = assistant.CHAT, assistant.MESSAGE
@@ -208,13 +209,11 @@ def on_ticket(ticket: str) -> list[str]:
         frappe.parse_json(frappe.db.get_value("HD Ticket", ticket, "_assign") or "[]")
         or []
     )
-    customer = frappe.db.get_value("HD Ticket", ticket, "customer")
-    if customer:
-        developer = frappe.db.get_value(
-            "HD Customer", customer, "custom_assigned_developer"
-        )
-        if developer:
-            people.add(developer)
+    developer = ticket_assignment.developer_of(
+        frappe.db.get_value("HD Ticket", ticket, "customer")
+    )
+    if developer:
+        people.add(developer)
     people.update(
         frappe.get_all(
             "HDS Copilot Approval",
@@ -304,6 +303,64 @@ def readable(user: str, ticket: str) -> bool:
         return bool(frappe.has_permission("HD Ticket", "read", str(ticket)))
 
 
+# buttons anyone who may read the ticket may press: an approval has its own rule (its approver,
+# a senior for sensitive changes), and muting is each person's own
+OPEN_VERBS = {
+    "approve",
+    "reject",
+    "snooze",
+    "show_fix",
+    "release_approve",
+    "release_now",
+    "release_reject",
+    "mute",
+    "unmute",
+}
+
+
+def assignees(ticket: str) -> list[str]:
+    return (
+        frappe.parse_json(
+            frappe.db.get_value("HD Ticket", str(ticket), "_assign") or "[]"
+        )
+        or []
+    )
+
+
+def may_write(user: str, ticket: str) -> bool:
+    """Who writes in a ticket's chat and presses its buttons (Phase 12): the people it is
+    assigned to, the Project Coordinators of the customer's open projects, and the admins
+    (System Manager, Agent Manager). Everyone else who may read the ticket reads its chat."""
+    from helpdesk.tasky.permissions import is_tasky_admin
+
+    if is_tasky_admin(user) or user in assignees(ticket):
+        return True
+    customer = frappe.db.get_value("HD Ticket", str(ticket), "customer")
+    return user in ticket_assignment.coordinators(customer)
+
+
+def people(ticket: str) -> list[dict]:
+    """Who writes in the chat besides Copilot and the admins: the assignees, then the
+    customer's project coordinators; [{user, name, role: developer or coordinator}]."""
+    customer = frappe.db.get_value("HD Ticket", str(ticket), "customer")
+    found = [(user, "developer") for user in assignees(ticket)]
+    taken = {user for user, _role in found}
+    found += [
+        (user, "coordinator")
+        for user in ticket_assignment.coordinators(customer)
+        if user not in taken
+    ]
+    return [
+        {"user": user, "name": get_fullname(user), "role": role} for user, role in found
+    ]
+
+
+def write_refused() -> str:
+    return _(
+        "Only the developer the ticket is assigned to, its project coordinators and admins can write in this ticket's chat."
+    )
+
+
 def receive(
     user: str,
     ticket: str,
@@ -323,6 +380,8 @@ def receive(
             _("You do not have access to ticket {0}.").format(ticket),
             frappe.PermissionError,
         )
+    if not may_write(user, ticket):
+        return [assistant.text_card(write_refused(), "warning")]
     chat = thread_for(ticket)
     text = (text or "").strip()
     incoming = assistant.record(
@@ -382,6 +441,11 @@ def press(
             _("You do not have access to ticket {0}.").format(ticket),
             frappe.PermissionError,
         )
+    if verb not in OPEN_VERBS and not may_write(user, ticket):
+        return {
+            "replies": [assistant.text_card(write_refused(), "warning")],
+            "card": None,
+        }
     chat = thread_for(ticket)
     inputs = inputs or {}
     if via == "Teams":
@@ -420,8 +484,8 @@ def press(
 
 def mirror(ticket: str, user: str, via: str, text: str, replies: list[dict]):
     """A person's message about the ticket in their own chat, and Copilot's answer, copied into
-    the ticket's chat. Never stops the caller."""
-    if not readable(user, ticket):
+    the ticket's chat (only from the people who may write in it). Never stops the caller."""
+    if not readable(user, ticket) or not may_write(user, ticket):
         return
     try:
         chat = thread_for(ticket)
@@ -450,7 +514,17 @@ def mirror(ticket: str, user: str, via: str, text: str, replies: list[dict]):
 
 def now(ticket: str, user: str) -> dict:
     """The ticket's state for this person: one line, the buttons for the step it is at, and the
-    rest of what they may do in a menu."""
+    rest of what they may do in a menu. Someone who may only read the chat keeps the buttons
+    anyone may press (OPEN_VERBS)."""
+    state = _now(ticket, user)
+    state["can_write"] = may_write(user, ticket)
+    if not state["can_write"]:
+        state["actions"] = [a for a in state["actions"] if a["verb"] in OPEN_VERBS]
+        state["more"] = [a for a in state["more"] if a["verb"] in OPEN_VERBS]
+    return state
+
+
+def _now(ticket: str, user: str) -> dict:
     from helpdesk.api import copilot as api
 
     with assistant.as_user(user):
@@ -640,11 +714,7 @@ def _to_developer(user, ticket, data, inputs):
     from helpdesk.copilot import customer
 
     run = customer.latest_run(ticket)
-    developer = (
-        frappe.db.get_value("HD Customer", run.customer, "custom_assigned_developer")
-        if run and run.customer
-        else None
-    )
+    developer = ticket_assignment.developer_of(run.customer) if run else None
     if run:
         from helpdesk.copilot import runs
 

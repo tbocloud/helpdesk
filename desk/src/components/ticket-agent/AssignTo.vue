@@ -111,11 +111,13 @@
                 :key="agent.value"
                 :ref="(el) => setOptionRef(index, el as Element)"
                 class="group flex h-7 w-full items-center rounded px-2 text-base text-ink-gray-6 gap-2"
-                :class="
+                :class="[
                   index === highlightedIndex
                     ? 'bg-surface-gray-3'
-                    : 'hover:bg-surface-gray-3'
-                "
+                    : 'hover:bg-surface-gray-3',
+                  offLimits(agent) && 'opacity-60',
+                ]"
+                :aria-disabled="offLimits(agent) || undefined"
                 @click="toggleAgent(agent)"
               >
                 <Checkbox
@@ -223,7 +225,12 @@ const activities = inject(ActivitiesSymbol)!;
 const { getUser } = useUserStore();
 const currentUser = computed(() => getUser("")); // empty string returns current user
 const agentStatusStore = useAgentStatusStore();
-const { leaveLabel } = useOnLeave();
+const { leaveLabel, awayAllDay } = useOnLeave();
+// someone on leave all day is not given the ticket (docs/ticket-owners.md); they can still
+// be taken off it
+function offLimits(agent: AgentOption) {
+  return awayAllDay(agent.value) && !isSelected(agent.value);
+}
 const currentAgentName = window.agent;
 
 const searchText = ref("");
@@ -436,6 +443,16 @@ function isSelected(agentName: string): boolean {
 }
 
 function toggleAgent(agent: AgentOption) {
+  if (offLimits(agent)) {
+    toast.warning(
+      __(
+        "{0} · {1}. Pick someone who is working today.",
+        agent.label,
+        leaveLabel(agent.value)
+      )
+    );
+    return;
+  }
   const isSearching = searchText.value.length > 0;
   if (isSelected(agent.value)) {
     localAssignees.value = localAssignees.value.filter(

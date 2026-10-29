@@ -415,7 +415,17 @@ One **HDS Known Issue** per error signature, across every site that runs the app
 
 Every ticket is a chat with Copilot: one **HDS Copilot Chat** per ticket (`channel` Ticket, `ticket`), shared by everyone on the ticket.
 
-**On the ticket page** the side panel has two tabs, **Copilot** and **Details**. It opens on Copilot when the ticket has a Copilot run, and on a phone Copilot is the first tab of the ticket.
+**On the ticket page** (Phase 12, the owner's rule: "when a ticket opens, the view must go to the chatbot view") the ticket opens on its chat. Nothing on the old page was removed; it is arranged in three places:
+
+- **Header:** the number and subject, previous and next ticket, the status, the **assignee** (the picker does not offer someone on leave, see [ticket-owners.md](ticket-owners.md)), Reply (the Customer tab with the composer open) and one **⋯** menu in three groups: **Customer site** (Login to site, View Sessions), **Copilot and AI** (AI Triage, Start Investigation, Copy and Download the fix brief, Re-run Triage, Approvals) from the form script `ai_support_actions.js`, and **Ticket** (Create task, Schedule Teams meeting, Merge, Delete).
+- **Three tabs** in the main area (`TicketViews.vue`), always opening on **Chat**: the customer's request on top (who, when, their words), who is in the chat, then the chat below. **Customer** is the conversation with the customer (emails, calls, people's notes; filters All, Emails, Comments, Calls) with the reply box; **Activity** is everything, Copilot's own notes included (`get_comments` flags them `by_automation`).
+- **Details** on the right, in folded sections with a line each (Contact, SLA, Linked work, Session replay, AI assist, Ticket Info, Recent and Similar tickets); the ticket's fields stay open.
+
+On a phone the tabs are Chat, Customer, Activity and Details.
+
+**Who writes in the chat** (`thread.may_write`): the people the ticket is assigned to, the **Project Coordinators** of the customer's open projects, and the admins (System Manager, Agent Manager). Everyone else who may read the ticket reads its chat: the box says who can write, and their buttons are only the ones anyone may press (`thread.OPEN_VERBS`: an approval keeps its own rule, the approver; mute and unmute are each person's own). A message or button from anyone else, on the web or in Teams, gets "Only the developer the ticket is assigned to, its project coordinators and admins can write in this ticket's chat." and is not recorded; nothing from their own chat is copied in (`thread.mirror`). `history` returns the chat's `people` (assignees, then coordinators) and `now.can_write`.
+
+Lines in the chat that are notes, not Copilot speaking (`tone` "note"), show centered: who the ticket was assigned to and why, moves while someone is on leave, and the coordinators asked when nobody is free.
 
 - **The top card:** where the work stands, in a few words (`thread.now`). It shows at most two buttons for this step, for this person (Approve and Reject for the approver, Let Copilot fix it, Build with Copilot, Deploy tonight or now, Start Copilot). The **⋯** menu holds everything else they may do:
   - cancel the deploy, mark deployed, read the pull request again;
@@ -428,6 +438,7 @@ Every ticket is a chat with Copilot: one **HDS Copilot Chat** per ticket (`chann
   - people's messages, with name, time and "in Teams";
   - a box: "Ask Copilot or tell it what to do", with files.
 - It refreshes on `helpdesk:copilot-thread` and `helpdesk:copilot-run` in the ticket's room. The old Copilot dialog (form script) is gone.
+- Copilot's ⋯ button is labelled "More Copilot actions", apart from the header's "More actions".
 
 **What Copilot says** (`thread.on_*`, fixed templates, no AI). Each step of a run is one message:
 
@@ -449,7 +460,7 @@ Every ticket is a chat with Copilot: one **HDS Copilot Chat** per ticket (`chann
 - needs a person, failed, handed over;
 - a fix that could not be made or deployed.
 
-The people on a ticket are: the agents assigned to it, the customer's developer, the approvers of its fixes, anyone who wrote in its chat, and whoever started its work from a chat. Each can mute a ticket. The fix card itself goes to its approver as before. What people type on the ticket page stays there.
+The people on a ticket are: the agents assigned to it, the customer's developer (whoever takes the customer's tickets today: the ticket owner, else the backup, else the project team, `ticket_assignment.developer_of`; see [ticket-owners.md](ticket-owners.md#copilots-developer)), the approvers of its fixes, anyone who wrote in its chat, and whoever started its work from a chat. Each can mute a ticket. The fix card itself goes to its approver as before. What people type on the ticket page stays there.
 
 **Talking to it** (`thread.receive`, the Phase 6 engine with the ticket fixed):
 

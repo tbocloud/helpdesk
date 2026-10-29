@@ -17,7 +17,6 @@ from frappe.utils import (
     add_to_date,
     cint,
     format_datetime,
-    formatdate,
     get_fullname,
     getdate,
     now_datetime,
@@ -708,8 +707,9 @@ class HDTicket(Document):
             self.notify_agent(agent, "Assignment")
 
     def assign_customer_owner(self):
-        """Give a new ticket to its customer's ticket owner, or the backup while the
-        owner is away (docs/ticket-owners.md).
+        """Give a new ticket to its customer's ticket owner, the backup while the owner is
+        away, or else the least busy on the customer's project team who is working today
+        (helpdesk.ticket_assignment, docs/ticket-owners.md).
 
         Runs in after_insert, before Frappe's Assignment Rules (an on_update doc event),
         which skip a ticket that already has an open assignment, so the owner wins over
@@ -718,8 +718,10 @@ class HDTicket(Document):
         """
         if not self.customer:
             return
+        from helpdesk import ticket_assignment
+
         customer = frappe.get_doc("HD Customer", self.customer)
-        pick = customer.ticket_owner_today()
+        pick = ticket_assignment.pick(customer)
         if not pick:
             return
         open_todos = self.open_assignments()
@@ -745,6 +747,7 @@ class HDTicket(Document):
         self.log_owner_assignment(pick, customer.name)
         self.notify_ticket_owner(pick)
         self.notify_backup_owner(pick, customer.backup_ticket_owner)
+        ticket_assignment.tell_chat_about(self.name, pick, customer.name)
 
     def assign_owner_of_customer_set_later(self):
         """A ticket that came in without a customer and is still unassigned gets the
@@ -772,22 +775,26 @@ class HDTicket(Document):
     def log_owner_assignment(self, pick: dict, customer: str):
         """The activity line, credited to the automation user, not whoever's session
         created the ticket (a portal customer, an email, a job)."""
+        from helpdesk.ticket_assignment import why_text
+
         name = get_fullname(pick["user"])
-        if not pick["backup"]:
-            action = _("assigned {0}, ticket owner of {1}").format(name, customer)
-        elif pick["until"]:
-            action = _(
-                "assigned {0}, backup ticket owner of {1} ({2} is on leave until {3})"
-            ).format(
-                name,
-                customer,
-                get_fullname(pick["away"]),
-                formatdate(pick["until"], "EEE d MMM"),
+        why = why_text(pick)
+        if pick.get("step") == "project":
+            action = (
+                _("assigned {0}, the least busy on {1}'s project team ({2})").format(
+                    name, customer, why
+                )
+                if why
+                else _("assigned {0}, the least busy on {1}'s project team").format(
+                    name, customer
+                )
             )
+        elif not pick["backup"]:
+            action = _("assigned {0}, ticket owner of {1}").format(name, customer)
         else:
-            action = _(
-                "assigned {0}, backup ticket owner of {1} ({2} is inactive)"
-            ).format(name, customer, get_fullname(pick["away"]))
+            action = _("assigned {0}, backup ticket owner of {1} ({2})").format(
+                name, customer, why
+            )
         activity = log_ticket_activity(self.name, action)
         activity.db_set("owner", automation_user(), update_modified=False)
 
@@ -812,7 +819,13 @@ class HDTicket(Document):
             )
         if details:
             lines.append(" · ".join(details))
-        if pick["backup"]:
+        if pick.get("step") == "project":
+            lines.append(
+                _(
+                    "You're on {0}'s project team and the least busy there today."
+                ).format(self.customer)
+            )
+        elif pick["backup"]:
             lines.append(
                 _("You're the backup owner while {0} is away.").format(
                     get_fullname(pick["away"])

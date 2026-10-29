@@ -9,7 +9,6 @@ from frappe.core.api.user_invitation import invite_by_email
 from frappe.model.document import Document
 from frappe.utils import validate_email_address
 
-from helpdesk.content_team import is_sales_employee
 from helpdesk.integrations.erpnext.utils import (
     cascade_rename,
     in_cascade,
@@ -22,7 +21,6 @@ from helpdesk.integrations.erpnext.utils import (
 )
 from helpdesk.tasky.permissions import can_manage_team, is_project_manager
 from helpdesk.utils import agent_only, get_customers, is_agent
-from helpdesk.work_calendar import on_leave
 
 CUSTOMER_ROLES = ("HD Customer", "HD Customer Manager")
 TICKET_OWNER_FIELDS = ("ticket_owner", "backup_ticket_owner")
@@ -112,29 +110,30 @@ class HDCustomer(Document):
             )
 
     def ticket_owner_today(self) -> dict | None:
-        """Who takes this customer's new tickets today: the owner, else the backup while
-        the owner is on approved leave (a half day still counts as working) or inactive.
-        None when neither can, and the assignment rules decide as before.
+        """Who takes this customer's new tickets today: the owner, else the backup while the
+        owner is not working (on approved leave, inactive, or set to Unavailable; a half day
+        still counts as working). None when neither can, and helpdesk.ticket_assignment tries
+        the customer's project team next.
 
-        Returns {"user", "backup", "away": the owner when the backup takes it, "until":
-        the last day of the owner's leave, or None when the owner is inactive}.
+        Returns {"user", "backup", "step": owner or backup, and when the backup takes it
+        "away": the owner, "until": the last day of the owner's leave or None, "reason":
+        leave, inactive or unavailable}.
         """
+        from helpdesk.ticket_assignment import absence, working_today
+
         if not self.ticket_owner:
             return None
-        people = [p for p in (self.ticket_owner, self.backup_ticket_owner) if p]
-        # a Sales Employee can't be given tickets, so counts as not working here
-        working = [u for u in active_agents(people) if not is_sales_employee(u)]
-        away = on_leave(users=people)
-        if self.ticket_owner in working and self.ticket_owner not in away:
-            return {"user": self.ticket_owner, "backup": False}
+        working = working_today([self.ticket_owner, self.backup_ticket_owner])
+        if self.ticket_owner in working:
+            return {"user": self.ticket_owner, "backup": False, "step": "owner"}
         backup = self.backup_ticket_owner
-        if not backup or backup not in working or backup in away:
+        if not backup or backup not in working:
             return None
         return {
             "user": backup,
             "backup": True,
-            "away": self.ticket_owner,
-            "until": away.get(self.ticket_owner),
+            "step": "backup",
+            **absence(self.ticket_owner),
         }
 
     def validate_contacts(self):

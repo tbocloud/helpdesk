@@ -37,19 +37,56 @@ Everyone else sees the owners read-only.
 
 ## Who gets a new ticket
 
-`HDCustomer.ticket_owner_today()` decides, for today:
+A ticket only ever goes to someone **working today** (the owner's rule of 29 Oct 2026,
+Phase 12): an active agent, not a Sales Employee, not on approved leave and not set to an
+**Unavailable** status (`ticket_assignment.working_today`). `ticket_assignment.pick` follows
+this chain, and the first person working today takes it:
 
-1. The owner, when they are an active agent and not on approved leave.
-2. Otherwise the backup, when they are an active agent and not on leave.
-3. Otherwise nobody: the ticket goes to the assignment rules as before.
+1. The **owner** (`HDCustomer.ticket_owner_today`).
+2. The **backup**, while the owner is not working.
+3. The **least busy on the customer's project team**: members of the customer's open projects
+   whose project role is Developer or Support Engineer, the fewest open ticket assignments
+   first (`ticket_assignment.from_project_team`).
+4. The **team's assignment rule**, which for tickets only picks people working today, the
+   Active ones before the Away ones, and of those the least busy (Weighted Distribution keeps
+   its weights among them). It never falls back to someone on leave or Unavailable
+   (`HelpdeskAssignmentRule.get_ticket_user`); other doctypes keep the old rule.
+5. **Nobody**: the ticket waits. Every 10 minutes `ticket_assignment.ask_for_unassigned` brings
+   a customer's open ticket that is still unassigned 5 minutes after it came in to the
+   customer's **Project Coordinators** working today, else the admins (System Manager, Agent
+   Manager), once per ticket: a Teams message (or email) and a line in the ticket's chat.
 
 A Sales Employee counts as not working here (they can't be given tickets,
-[departments.md](departments.md#sales-wall-sales-employee)), and the assignment rules pass
-them over too.
+[departments.md](departments.md#sales-wall-sales-employee)).
 
-Leave is the approved leave synced from tboindia into **HD Leave**
+Leave is the approved leave synced from tboindia into **HD Leave** at 06:15
 (`work_calendar.on_leave`, the same reader the follow-ups use). A **half day still counts as
 working**, as in the follow-ups.
+
+### When someone goes on leave, and comes back
+
+Every morning at 06:30, after the leave sync (and after **Sync holidays now**),
+`ticket_assignment.daily` runs:
+
+- **Give back** (`give_back`): a ticket moved away from someone goes back to them once they work
+  again, **if nobody worked on it meanwhile** (no reply sent, no comment and no chat message
+  by a person since the move). Otherwise it stays with whoever has it.
+- **Move** (`hand_over_from_leave`): an open or paused ticket whose assignees are **all** on
+  leave today goes to the next in the chain above (someone working who still has it keeps
+  it). The ticket remembers whose it was (`custom_away_assignee`, `custom_moved_on`); the new
+  assignee is told in Teams; the ticket's chat says "Moved to Vishnu Prasad: Rahul Nair is on
+  leave until Fri 31 Oct." When nobody is free, the coordinators are asked.
+
+The assignee picker on the ticket shows "On leave until …" and does not offer someone on
+leave all day (a half day still can); they can still be taken off a ticket.
+
+### Copilot's developer
+
+Copilot's "the customer's developer" (hand-overs, approvals, the error watch, ticket news) is
+whoever takes the customer's tickets today: `ticket_assignment.developer_of`. The older
+Copilot field **Assigned Developer** on HD Customer is hidden; it only counts for a customer
+with no owner, and the patch `copilot_developer_is_ticket_owner` made it the owner where a
+customer had none.
 
 ### When it runs
 
@@ -109,7 +146,10 @@ robin skips the ticket because it already has an open assignment: the owner keep
 - A ticket activity, credited to the automation user, not to whoever's session created the
   ticket (a portal customer, an email job): "assigned Reshma Rao, ticket owner of Hydrotech",
   or "assigned Anu Varghese, backup ticket owner of Hydrotech (Reshma Rao is on leave until
-  Fri 16 Oct)", or "(… is inactive)".
+  Fri 16 Oct)", "(… is inactive)" or "(… is set to Unavailable)", or "assigned Arjun Menon,
+  the least busy on Hydrotech's project team (…)".
+- The same, in a sentence, in the ticket's chat (`ticket_assignment.tell_chat_about`), so
+  everyone who opens the ticket sees who has it and why.
 
 ## Notification
 
@@ -306,6 +346,11 @@ is a one-time action, run when someone clicks it:
   `desk/src/components/notifications/Notifications.vue`, `NotificationIcon.vue`,
   `desk/src/pages/MobileNotifications.vue`,
   `desk/src/components/Settings/Preferences/Preferences.vue`, `desk/src/stores/auth.ts`
-- Tests: `helpdesk/tests/test_ticket_owners.py`, `helpdesk/tests/test_ticket_alerts.py`
+- `helpdesk/ticket_assignment.py` (the chain, leave moves, coordinators asked, Copilot's
+  developer), `helpdesk/overrides/assignment_rule.py` (`get_ticket_user`), the patch
+  `helpdesk/patches/v16_0_2/copilot_developer_is_ticket_owner.py`,
+  `desk/src/components/ticket-agent/AssignTo.vue` and `desk/src/composables/onLeave.ts`
+  (`awayAllDay`)
+- Tests: `helpdesk/tests/test_ticket_assignment.py`, `helpdesk/tests/test_ticket_owners.py`, `helpdesk/tests/test_ticket_alerts.py`
   (helpers `make_owned_customer`, `get_open_assignees`, `get_ticket_owner_activity`,
   `get_ticket_notices`, `FakeCRM.account_managers` in `test_utils.py`)

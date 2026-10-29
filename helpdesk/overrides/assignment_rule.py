@@ -31,7 +31,11 @@ class HelpdeskAssignmentRule(AssignmentRule):
         is available, so the ticket is never left unassigned.
         Sales Employees are never in the pool: they can't be given tickets or tasks
         (docs/departments.md), and picking one would fail the document's save.
+
+        Tickets follow helpdesk.ticket_assignment instead (get_ticket_user).
         """
+        if self.document_type == "HD Ticket" and self.rule != "Based on Field":
+            return self.get_ticket_user(doc)
 
         # "Based on Field" assigns through the document field, so the
         # availability filter does not apply.
@@ -67,3 +71,29 @@ class HelpdeskAssignmentRule(AssignmentRule):
             return super().get_user(doc)
         finally:
             setattr(self, user_pool_fieldname, original_pool)
+
+    def get_ticket_user(self, doc):
+        """A ticket goes to someone working today (not on leave, not Unavailable, an active
+        agent, not a Sales Employee), Active before Away: the least busy for Round Robin
+        and Load Balancing, the weighted pick for Weighted Distribution. Nobody when no one
+        in the rule is working: the ticket then waits for its coordinators
+        (ticket_assignment.ask_for_unassigned) instead of going to someone away."""
+        from helpdesk.ticket_assignment import least_busy, working_today
+
+        fieldname = (
+            "weighted_users" if self.rule == "Weighted Distribution" else "users"
+        )
+        original_pool = getattr(self, fieldname)
+        working = working_today([u.user for u in original_pool])
+        pool = [u for u in original_pool if u.user in working]
+        away = get_agents_by_category("Away")
+        pool = [u for u in pool if u.user not in away] or pool
+        if not pool:
+            return None
+        if self.rule != "Weighted Distribution":
+            return least_busy([u.user for u in pool])
+        setattr(self, fieldname, pool)
+        try:
+            return super().get_user(doc)
+        finally:
+            setattr(self, fieldname, original_pool)

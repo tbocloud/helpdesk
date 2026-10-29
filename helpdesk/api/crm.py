@@ -148,6 +148,10 @@ def sync_holidays_now() -> dict:
     """Holidays and approved leave from the CRM site, now."""
     require_admin()
     result = sync_holidays_and_leave()
+    # leave that starts today moves its tickets now, not tomorrow morning
+    frappe.enqueue(
+        "helpdesk.ticket_assignment.daily", queue="short", enqueue_after_commit=True
+    )
     return {
         "ok": result["ok"],
         "message": "\n".join(result["problems"])

@@ -35,6 +35,7 @@ def history(ticket: str | int) -> dict:
         "messages": thread.history(str(ticket)),
         "now": thread.now(str(ticket), frappe.session.user),
         "chat": thread.thread_for(str(ticket)).name,
+        "people": thread.people(str(ticket)),
     }
 
 

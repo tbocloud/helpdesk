@@ -24,7 +24,7 @@
         class="flex h-12 shrink-0 items-center justify-between border-b border-outline-gray-1 px-5 lg:hidden"
       >
         <span class="text-base-medium text-ink-gray-9">
-          {{ tab === "copilot" ? __("Copilot") : __("Details") }}
+          {{ __("Details") }}
         </span>
         <Button
           variant="ghost"
@@ -36,37 +36,18 @@
           </template>
         </Button>
       </div>
-      <!-- the ticket's Copilot chat (Phase 11) beside its details; Copilot first once it has worked on it -->
-      <div class="shrink-0 border-b border-outline-gray-1 px-4 py-2">
-        <TabButtons
-          :model-value="tab"
-          size="sm"
-          :aria-label="__('Side panel')"
-          :options="[
-            { label: __('Copilot'), value: 'copilot' },
-            { label: __('Details'), value: 'details' },
-          ]"
-          @update:model-value="choose"
-        />
-      </div>
-      <CopilotThread
-        v-if="tab === 'copilot' && ticket.doc?.name"
-        :ticket="String(ticket.doc.name)"
-      />
-      <TicketDetailsTab v-else />
+      <!-- the ticket's chat is the main view now (Phase 12): the panel holds its details -->
+      <TicketDetailsTab />
     </aside>
   </Resizer>
 </template>
 
 <script setup lang="ts">
-import { TicketSymbol } from "@/types";
 import { __ } from "@/translation";
 import { useEventListener } from "@vueuse/core";
-import { TabButtons } from "frappe-ui";
-import { computed, inject, nextTick, ref, watch } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import LucideX from "~icons/lucide/x";
 import Resizer from "../Resizer.vue";
-import CopilotThread from "./CopilotThread.vue";
 import TicketDetailsTab from "./TicketDetailsTab.vue";
 
 const props = defineProps<{
@@ -76,21 +57,6 @@ const props = defineProps<{
 
 const open = defineModel<boolean>("open", { default: false });
 
-const ticket = inject(TicketSymbol)!;
-// Copilot first once it has worked on the ticket; the person's own choice wins after that
-const tab = ref<"copilot" | "details">("details");
-let chosen = false;
-watch(
-  () => ticket.value?.doc?.custom_copilot_run,
-  (run) => {
-    if (!chosen) tab.value = run ? "copilot" : "details";
-  },
-  { immediate: true }
-);
-function choose(value: "copilot" | "details") {
-  tab.value = value;
-  chosen = true;
-}
 const modal = computed(() => props.sheet && open.value);
 
 const panelRef = ref<HTMLElement | null>(null);

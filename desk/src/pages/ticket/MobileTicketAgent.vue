@@ -58,17 +58,25 @@
               <!-- the same side panel as on desktop, as tabs -->
               <TicketDetailsTab v-if="tab.name === 'details'" />
               <div
-                v-else-if="tab.name === 'copilot'"
+                v-else-if="tab.name === 'chat'"
                 class="flex h-[calc(100dvh-15rem)] flex-col"
               >
-                <CopilotThread :ticket="String(ticket.doc.name)" />
+                <CopilotThread
+                  :ticket="String(ticket.doc.name)"
+                  :request="ticketRequest(ticket.doc)"
+                  wide
+                />
               </div>
 
-              <!-- Rest Activities -->
+              <!-- the conversation with the customer, or everything that happened -->
               <TicketAgentActivities
                 v-else
                 ref="ticketAgentActivitiesRef"
-                :activities="filterActivities(tab.name)"
+                :activities="
+                  tab.name === 'customer'
+                    ? filterConversation('all')
+                    : filterActivities('activity')
+                "
                 :title="tab.label"
                 :ticket-status="ticket.doc?.status"
                 @update="() => reloadTicket(props.ticketId)"
@@ -80,7 +88,9 @@
               />
             </template>
           </Tabs>
+          <!-- the chat has its own box; replies and comments belong to the other tabs -->
           <CommunicationArea
+            v-show="tabs[tabIndex]?.name !== 'chat'"
             class="sticky bottom-0 z-50 bg-surface-base"
             ref="communicationAreaRef"
             v-model="ticket.doc"
@@ -180,6 +190,7 @@ import { TicketAgentActivities } from "@/components/ticket";
 import CustomActions from "@/components/CustomActions.vue";
 import AssignTo from "@/components/ticket-agent/AssignTo.vue";
 import CopilotThread from "@/components/ticket-agent/CopilotThread.vue";
+import { ticketRequest } from "@/components/ticket-agent/ticketRequest";
 import TicketDetailsTab from "@/components/ticket-agent/TicketDetailsTab.vue";
 import CopilotIcon from "~icons/lucide/bot";
 import SetContactPhoneModal from "@/components/ticket/SetContactPhoneModal.vue";
@@ -364,18 +375,17 @@ const dropdownOptions = computed(() =>
 
 const tabs: ComputedRef<TabObject[]> = computed(() => {
   const _tabs = [
-    // the ticket's Copilot chat (Phase 11), first on a phone too
+    // the ticket opens on its chat (Phase 12), then the customer, everything, its details
     {
-      name: "copilot",
-      label: __("Copilot"),
+      name: "chat",
+      label: __("Chat"),
       icon: CopilotIcon,
       condition: () => isMobileView.value,
     },
     {
-      name: "details",
-      label: __("Details"),
-      icon: DetailsIcon,
-      condition: () => isMobileView.value,
+      name: "customer",
+      label: __("Customer"),
+      icon: EmailIcon,
     },
     {
       name: "activity",
@@ -383,30 +393,18 @@ const tabs: ComputedRef<TabObject[]> = computed(() => {
       icon: ActivityIcon,
     },
     {
-      name: "email",
-      label: __("Emails"),
-      icon: EmailIcon,
-    },
-    {
-      name: "comment",
-      label: __("Comments"),
-      icon: CommentIcon,
+      name: "details",
+      label: __("Details"),
+      icon: DetailsIcon,
+      condition: () => isMobileView.value,
     },
   ];
-
-  if (isCallingEnabled.value) {
-    _tabs.push({
-      name: "call",
-      label: __("Calls"),
-      icon: PhoneIcon,
-    });
-  }
   return _tabs;
 });
 
 const { tabIndex, changeTabTo } = useActiveTabManager(tabs);
 
-const { filterActivities } = useTicketActivities(
+const { filterActivities, filterConversation } = useTicketActivities(
   activities,
   computed(() => ticket.value?.doc)
 );

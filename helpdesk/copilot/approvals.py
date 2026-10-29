@@ -17,6 +17,7 @@ import frappe
 from frappe import _
 from frappe.utils import add_to_date, get_datetime, getdate, now_datetime
 
+from helpdesk import ticket_assignment
 from helpdesk.copilot import runs
 from helpdesk.copilot import settings as copilot_settings
 
@@ -108,11 +109,7 @@ def pick_approver(
     """The customer's developer when they may; else the least loaded approver; else nobody."""
     excluded = (set() if copilot_only else authors(run)) | (exclude or set())
     allowed = seniors() if sensitive else list(dict.fromkeys(approvers() + seniors()))
-    developer = (
-        frappe.db.get_value("HD Customer", run.customer, "custom_assigned_developer")
-        if run.customer
-        else None
-    )
+    developer = ticket_assignment.developer_of(run.customer)
     if developer and developer in allowed and developer not in excluded:
         return developer
     candidates = [user for user in allowed if user not in excluded]

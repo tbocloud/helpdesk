@@ -32,6 +32,7 @@ from frappe.utils import (
     today,
 )
 
+from helpdesk import ticket_assignment
 from helpdesk.automation import automation_user
 from helpdesk.copilot import known_issues
 from helpdesk.copilot import settings as copilot_settings
@@ -520,9 +521,7 @@ def tell(card, ticket, run, kind: str):
     hear the diagnosis there too. Never stops the watch."""
     from helpdesk.copilot import approvals, assistant
 
-    developer = frappe.db.get_value(
-        "HD Customer", card.customer_name, "custom_assigned_developer"
-    )
+    developer = ticket_assignment.developer_of(card.customer_name)
     people = (
         [developer]
         if developer and assistant.is_agent(developer)

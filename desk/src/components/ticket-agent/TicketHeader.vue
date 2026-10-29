@@ -67,6 +67,8 @@
             </Button>
           </template>
         </Dropdown>
+        <!-- who has it (Phase 12): pick someone working today -->
+        <AssignTo hide-label quiet class="hidden w-48 sm:flex" />
         <!-- the side panel is a sheet below lg -->
         <Button
           class="lg:hidden"
@@ -78,9 +80,8 @@
             <LucidePanelRight class="size-4" aria-hidden="true" />
           </template>
         </Button>
-        <!-- Primary action (R) -->
+        <!-- Reply (R): the customer tab with the composer open -->
         <Button
-          variant="solid"
           :label="__('Reply')"
           aria-keyshortcuts="r"
           @click="openReplyBox()"
@@ -169,6 +170,7 @@ import LucideMerge from "~icons/lucide/merge";
 import LucidePanelRight from "~icons/lucide/panel-right";
 import LucideReply from "~icons/lucide/reply";
 import { IndicatorIcon } from "../icons";
+import AssignTo from "./AssignTo.vue";
 import TicketNavigation from "./TicketNavigation.vue";
 import TicketSubjectModal from "./TicketSubjectModal.vue";
 import TicketTitle from "./TicketTitle.vue";
@@ -339,34 +341,22 @@ const defaultActions = computed(() => {
     });
   }
 
-  return [
-    {
-      group: __("Default actions"),
-      hideLabel: true,
-      items,
-    },
-  ];
+  return items;
 });
 
 const deleteAction = computed(() => {
   if (!isAdmin) return [];
   return [
     {
-      group: __("Default actions"),
-      hideLabel: true,
-      items: [
-        {
-          label: __("Delete"),
-          component: h(Button, {
-            label: __("Delete"),
-            variant: "ghost",
-            iconLeft: "trash-2",
-            theme: "red",
-            style: "width: 100%; justify-content: flex-start;",
-            onClick: handleDeleteTicket,
-          }),
-        },
-      ],
+      label: __("Delete"),
+      component: h(Button, {
+        label: __("Delete"),
+        variant: "ghost",
+        iconLeft: "trash-2",
+        theme: "red",
+        style: "width: 100%; justify-content: flex-start;",
+        onClick: handleDeleteTicket,
+      }),
     },
   ];
 });
@@ -397,15 +387,15 @@ const groupedWithLabelActions = computed(() => {
   return _actions;
 });
 
-const groupedActions = computed(() => {
-  let _actions = [];
-  _actions = _actions.concat(defaultActions.value);
-  _actions = _actions.concat(
-    actions.value.filter((action) => action.group && !action.buttonLabel)
-  );
-  _actions = _actions.concat(deleteAction.value);
-  return _actions;
-});
+// the ⋯ menu (Phase 12): the form scripts' groups (Customer site, Copilot and AI) first,
+// then the ticket's own actions
+const groupedActions = computed(() => [
+  ...actions.value.filter((action) => action.group && !action.buttonLabel),
+  {
+    group: __("Ticket"),
+    items: [...defaultActions.value, ...deleteAction.value],
+  },
+]);
 
 const customizationCtx = computed(() => ({
   doc: ticket?.value?.doc,

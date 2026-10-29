@@ -19,7 +19,7 @@ import frappe
 from frappe import _
 from frappe.utils import escape_html
 
-from helpdesk import client_api
+from helpdesk import client_api, ticket_assignment
 from helpdesk.automation import automation_user
 from helpdesk.copilot import runs
 from helpdesk.copilot import settings as copilot_settings
@@ -315,11 +315,7 @@ def hand_over(run, reason: str) -> str | None:
         )
         return None
     ticket = frappe.get_doc("HD Ticket", run.ticket)
-    developer = (
-        frappe.db.get_value("HD Customer", ticket.customer, "custom_assigned_developer")
-        if ticket.customer
-        else None
-    )
+    developer = ticket_assignment.developer_of(ticket.customer)
     project = project_for(ticket.customer)
     task = _create_task(ticket, project, developer, run, reason) if project else None
     run.db_set({"task": task, "handed_over_to": developer}, update_modified=False)

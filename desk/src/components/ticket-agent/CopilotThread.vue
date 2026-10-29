@@ -4,15 +4,35 @@
   <div class="flex min-h-0 flex-1 flex-col">
     <div
       v-if="now"
-      class="flex flex-col gap-2 border-b border-outline-gray-1 px-4 py-3"
+      class="flex gap-2 border-b border-outline-gray-1 bg-surface-gray-1"
+      :class="
+        wide ? 'flex-wrap items-center px-5 py-2.5' : 'flex-col px-4 py-3'
+      "
     >
-      <div class="flex items-start justify-between gap-2">
-        <p class="text-base text-ink-gray-8">
-          <span v-if="now.state" class="mr-1 text-ink-gray-5">{{ now.state }} ·</span>
+      <div
+        class="flex items-start justify-between gap-2"
+        :class="wide && 'min-w-0 flex-1 items-center'"
+      >
+        <p class="text-base text-ink-gray-8" :class="wide && 'min-w-0 flex-1'">
+          <span
+            v-if="needsYou"
+            class="me-2 rounded-full bg-surface-amber-2 px-2 py-0.5 text-xs font-semibold text-ink-amber-9"
+          >
+            {{ __("Needs you") }}
+          </span>
+          <span
+            v-else-if="now.state && now.state !== now.line"
+            class="mr-1 text-ink-gray-5"
+            >{{ now.state }} ·</span
+          >
           {{ now.line }}
         </p>
         <Dropdown v-if="now.more.length || now.links.length" :options="menu">
-          <Button variant="ghost" size="sm" :aria-label="__('More actions')">
+          <Button
+            variant="ghost"
+            size="sm"
+            :aria-label="__('More Copilot actions')"
+          >
             <template #icon>
               <LucideEllipsis class="size-4" aria-hidden="true" />
             </template>
@@ -34,11 +54,63 @@
       </div>
     </div>
 
+    <p
+      v-if="wide && thread.data"
+      class="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-outline-gray-1 px-5 py-2 text-sm text-ink-gray-6"
+    >
+      {{ __("In this chat:") }}
+      <span class="text-ink-gray-8">{{ __("Copilot") }}</span>
+      <template v-for="p in people" :key="p.user">
+        <span aria-hidden="true">·</span>
+        <span class="text-ink-gray-8">
+          {{ p.name }},
+          {{ p.role === "developer" ? __("developer") : __("coordinator") }}
+        </span>
+      </template>
+      <span aria-hidden="true">·</span>
+      <span class="text-ink-gray-8">{{ __("Admins") }}</span>
+    </p>
     <div
       ref="scroller"
-      class="flex-1 space-y-3 overflow-y-auto px-4 py-3"
+      class="flex-1 space-y-3 overflow-y-auto"
+      :class="wide ? 'px-5 py-4' : 'px-4 py-3'"
       aria-live="polite"
     >
+      <article
+        v-if="wide && request && (request.text || request.subject)"
+        class="max-w-3xl rounded-lg border border-outline-gray-2 px-4 py-3"
+        :aria-label="__('The customer\'s request')"
+      >
+        <div
+          class="mb-1.5 flex flex-wrap items-center gap-2 text-sm text-ink-gray-6"
+        >
+          <span class="font-medium text-ink-gray-9">{{ request.who }}</span>
+          <span v-if="request.customer">· {{ request.customer }}</span>
+          <span v-if="request.at">· {{ when(request.at) }}</span>
+          <span
+            class="rounded-full bg-surface-gray-2 px-2 py-0.5 text-xs text-ink-gray-7"
+          >
+            {{ __("Customer's request") }}
+          </span>
+        </div>
+        <p class="font-medium text-ink-gray-9">{{ request.subject }}</p>
+        <p
+          v-if="request.text"
+          class="mt-1 whitespace-pre-line text-base text-ink-gray-8"
+          :class="!requestOpen && 'line-clamp-4'"
+        >
+          {{ request.text }}
+        </p>
+        <button
+          v-if="request.text.length > 300"
+          type="button"
+          class="mt-1 text-sm text-ink-gray-6 underline underline-offset-2 hover:text-ink-gray-9"
+          :aria-expanded="requestOpen"
+          @click="requestOpen = !requestOpen"
+        >
+          {{ requestOpen ? __("Show less") : __("Show more") }}
+        </button>
+      </article>
       <p
         v-if="thread.data && !messages.length"
         class="text-p-sm text-ink-gray-6"
@@ -49,44 +121,70 @@
           )
         }}
       </p>
-      <div
-        v-for="m in messages"
-        :key="m.name"
-        :class="m.direction === 'In' ? 'flex flex-col items-end' : ''"
-      >
-        <span
-          v-if="m.direction === 'In'"
-          class="mb-0.5 text-xs text-ink-gray-5"
+      <template v-for="m in messages" :key="m.name">
+        <p
+          v-if="m.direction === 'Out' && m.card?.tone === 'note'"
+          class="mx-auto max-w-xl text-center text-sm text-ink-gray-6"
         >
-          {{ m.author || __("Someone") }}
-          <template v-if="m.via === 'Teams'"> · {{ __("in Teams") }}</template>
-          · {{ when(m.at) }}
-        </span>
-        <span v-else class="mb-0.5 block text-xs text-ink-gray-5">
-          {{ __("Copilot") }} · {{ when(m.at) }}
-        </span>
+          {{ (m.card.lines || []).join(" ") }}
+        </p>
         <div
-          v-if="m.direction === 'In'"
-          class="max-w-[85%] whitespace-pre-line rounded-lg bg-surface-gray-3 px-3 py-2 text-base text-ink-gray-9"
+          v-else
+          :class="[
+            m.direction === 'In' ? 'flex flex-col items-end' : '',
+            wide && 'max-w-3xl',
+          ]"
         >
-          {{ m.text }}
+          <span
+            v-if="m.direction === 'In'"
+            class="mb-0.5 text-xs text-ink-gray-5"
+          >
+            {{ m.author || __("Someone") }}
+            <template v-if="m.via === 'Teams'">
+              · {{ __("in Teams") }}</template
+            >
+            · {{ when(m.at) }}
+          </span>
+          <span v-else class="mb-0.5 block text-xs text-ink-gray-5">
+            {{ __("Copilot") }} · {{ when(m.at) }}
+          </span>
+          <div
+            v-if="m.direction === 'In'"
+            class="max-w-[85%] whitespace-pre-line rounded-lg bg-surface-gray-3 px-3 py-2 text-base text-ink-gray-9"
+          >
+            {{ m.text }}
+          </div>
+          <CopilotCard
+            v-else-if="m.card"
+            :card="forThisPerson(m.card)"
+            :busy="busy"
+            :status="m.status === 'Done' ? __('Done') : null"
+            @press="(a, values) => press(a, values, m.name)"
+          />
+          <div v-else class="text-base text-ink-gray-8">{{ m.text }}</div>
         </div>
-        <CopilotCard
-          v-else-if="m.card"
-          :card="m.card"
-          :busy="busy"
-          :status="m.status === 'Done' ? __('Done') : null"
-          @press="(a, values) => press(a, values, m.name)"
-        />
-        <div v-else class="text-base text-ink-gray-8">{{ m.text }}</div>
-      </div>
+      </template>
       <div
         v-if="!thread.data && thread.loading"
         class="h-24 animate-pulse rounded-lg bg-surface-gray-1"
       />
     </div>
 
-    <footer class="border-t border-outline-gray-1 p-3">
+    <p
+      v-if="now && now.can_write === false"
+      class="border-t border-outline-gray-1 px-5 py-3 text-sm text-ink-gray-6"
+    >
+      {{
+        __(
+          "Only the developer the ticket is assigned to, its project coordinators and admins can write here. You can read the chat."
+        )
+      }}
+    </p>
+    <footer
+      v-else
+      class="border-t border-outline-gray-1"
+      :class="wide ? 'px-5 py-3' : 'p-3'"
+    >
       <div v-if="files.length" class="mb-2 flex flex-wrap gap-1">
         <span
           v-for="f in files"
@@ -171,6 +269,7 @@ import CopilotCard, {
   type CopilotCardData,
 } from "@/components/copilot/CopilotCard.vue";
 import { globalStore } from "@/stores/globalStore";
+import type { TicketRequest } from "./ticketRequest";
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
 import {
@@ -183,7 +282,15 @@ import {
   toast,
   dayjs,
 } from "frappe-ui";
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  reactive,
+  ref,
+  watch,
+} from "vue";
 import LucideEllipsis from "~icons/lucide/ellipsis";
 import LucidePaperclip from "~icons/lucide/paperclip";
 
@@ -205,9 +312,17 @@ type Now = {
   links: [string, string][];
   muted: boolean;
   categories?: string[];
+  /** false: this person reads the chat but may not write in it (Phase 12) */
+  can_write?: boolean;
 };
+type Person = { user: string; name: string; role: "developer" | "coordinator" };
 
-const props = defineProps<{ ticket: string }>();
+const props = defineProps<{
+  ticket: string;
+  /** the ticket page's main view (Phase 12): the customer's request on top, who is in the chat */
+  wide?: boolean;
+  request?: TicketRequest | null;
+}>();
 const API = "helpdesk.api.copilot_thread";
 
 const thread = createResource({
@@ -219,6 +334,31 @@ const messages = computed(
   () => (thread.data?.messages as ThreadMessage[] | undefined) || []
 );
 const now = computed(() => thread.data?.now as Now | undefined);
+const people = computed(
+  () => (thread.data?.people as Person[] | undefined) || []
+);
+const needsYou = computed(() => Boolean(now.value?.actions?.length));
+const requestOpen = ref(false);
+
+// buttons anyone who may read the ticket may press (helpdesk.copilot.thread.OPEN_VERBS)
+const OPEN_VERBS = new Set([
+  "approve",
+  "reject",
+  "snooze",
+  "show_fix",
+  "release_approve",
+  "release_now",
+  "release_reject",
+  "mute",
+  "unmute",
+]);
+function forThisPerson(card: CopilotCardData): CopilotCardData {
+  if (now.value?.can_write !== false || !card.actions?.length) return card;
+  return {
+    ...card,
+    actions: card.actions.filter((a) => OPEN_VERBS.has(a.verb)),
+  };
+}
 
 const busy = ref(false);
 const draft = ref("");
@@ -288,7 +428,9 @@ function act(a: CopilotAction) {
   asking.label = NEEDS[needs]?.label || needs;
   asking.placeholder =
     needs === "root_cause"
-      ? (now.value?.categories || []).join(", ") || NEEDS.root_cause.placeholder || ""
+      ? (now.value?.categories || []).join(", ") ||
+        NEEDS.root_cause.placeholder ||
+        ""
       : "";
   asking.open = true;
 }

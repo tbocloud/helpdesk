@@ -33,9 +33,15 @@
           >
             {{ count }}
           </span>
+          <span
+            v-if="summary && !opened"
+            class="ms-auto min-w-0 truncate text-xs font-normal normal-case tracking-normal text-ink-gray-6"
+          >
+            {{ summary }}
+          </span>
           <LucideChevronRight
-            class="ms-auto size-4 shrink-0 transition-transform"
-            :class="{ 'rotate-90': opened }"
+            class="size-4 shrink-0 transition-transform"
+            :class="{ 'ms-auto': !(summary && !opened), 'rotate-90': opened }"
             aria-hidden="true"
           />
         </button>
@@ -86,6 +92,8 @@ const props = withDefaults(
     level?: 2 | 3;
     /** The body runs edge to edge, for nested sections that pad themselves. */
     flush?: boolean;
+    /** One line shown beside the title while a collapsible section is closed. */
+    summary?: string;
   }>(),
   { level: 2 }
 );

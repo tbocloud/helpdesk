@@ -215,6 +215,38 @@ def get_ticket_owner_activity(ticket) -> list[str]:
     )
 
 
+def get_ticket_chat_notes(ticket) -> list[str]:
+    """The note lines in a ticket's Copilot chat (who it was assigned to and why, moves while
+    someone is on leave), oldest first."""
+    chat = frappe.db.get_value("HDS Copilot Chat", {"ticket": str(ticket)})
+    if not chat:
+        return []
+    lines = []
+    for card in frappe.get_all(
+        "HDS Copilot Chat Message",
+        filters={"chat": chat, "direction": "Out"},
+        pluck="card",
+        order_by="creation asc, name asc",
+    ):
+        card = frappe.parse_json(card or "{}") or {}
+        if card.get("tone") == "note":
+            lines += card.get("lines") or []
+    return lines
+
+
+def age_ticket(ticket, minutes: int):
+    """Moves a ticket's creation `minutes` into the past."""
+    from frappe.utils import add_to_date, now_datetime
+
+    frappe.db.set_value(
+        "HD Ticket",
+        str(ticket),
+        "creation",
+        add_to_date(now_datetime(), minutes=-minutes),
+        update_modified=False,
+    )
+
+
 def get_ticket_notices(ticket, notification_type: str) -> list[tuple[str, str]]:
     """The (user_to, message) pairs of a ticket's HD Notifications of one type
     (e.g. New Ticket, Ticket Update), sorted."""

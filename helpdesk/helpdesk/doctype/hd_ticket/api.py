@@ -15,6 +15,7 @@ from frappe.utils.caching import redis_cache
 from pypika import Criterion, Order
 
 from helpdesk.api.doc import handle_at_me_support
+from helpdesk.automation import automation_user
 from helpdesk.consts import DEFAULT_TICKET_TEMPLATE
 from helpdesk.helpdesk.doctype.hd_form_script.hd_form_script import get_form_script
 from helpdesk.helpdesk.doctype.hd_settings.helpers import get_rendered_banner_msg
@@ -227,9 +228,12 @@ def get_comments(ticket: str):
         .orderby(QBComment.creation, order=Order.asc)
         .run(as_dict=True)
     )
+    bot = automation_user()
     for c in comments:
         c.user = get_user_info_for_avatar(c.commented_by)
         c.attachments = get_attachments("HD Ticket Comment", c.name)
+        # Copilot's and the hub's own notes: the Activity tab shows them, the customer tab not
+        c.by_automation = c.commented_by == bot
     return comments
 
 
