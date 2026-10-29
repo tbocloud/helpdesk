@@ -1260,6 +1260,34 @@ def on_correction_ready(approval, run, records: int):
     )
 
 
+def on_hand_over(ticket: str, line: str = ""):
+    """The customer asked for a person in the chat: the people on the ticket (else the Agent
+    Managers) are told at once; Copilot keeps quiet to the customer until a person replies."""
+    from helpdesk.copilot import approvals
+
+    if not ticket:
+        return None
+    people = on_ticket(ticket) or [
+        m for m in approvals._managers() if assistant.is_agent(m)
+    ]
+    return post(
+        ticket,
+        _card(
+            _("The customer asked for a person"),
+            [
+                _("They wrote: {0}").format(line[:300])
+                if line
+                else _("They have not said what it is about yet."),
+                _(
+                    "Copilot looks into it for you but says nothing to them until a person replies."
+                ),
+            ],
+            tone="warning",
+        ),
+        to=people,
+    )
+
+
 def on_watch(ticket: str, text: str):
     post(
         ticket,

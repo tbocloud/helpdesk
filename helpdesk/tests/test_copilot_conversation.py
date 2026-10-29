@@ -14,8 +14,10 @@ from frappe.tests.utils import FrappeTestCase
 from helpdesk.api import copilot_conversation
 from helpdesk.copilot import conversation, customer, pilot, runs
 from helpdesk.test_utils import (
+    create_agent,
     create_customer,
     hold_commits,
+    make_copilot_run,
     make_copilot_settings,
     make_support_connection,
 )
@@ -390,6 +392,102 @@ class TestWhatItMaySay(ChatCase):
         self.assertIn(
             "my report is empty",
             frappe.db.get_value("HD Ticket", self.doc().ticket, "description"),
+        )
+
+
+class TestTalkToAPerson(ChatCase):
+    """Talk to a person before saying anything: one line first, then a person is told at once,
+    and Copilot keeps quiet to the customer until that person replies."""
+
+    def setUp(self):
+        super().setUp()
+        self.agent = create_agent("chat.person@example.com").name
+        patcher = patch(
+            "helpdesk.copilot.approvals._managers", return_value=[self.agent]
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.told = []
+        patcher = patch(
+            "helpdesk.copilot.assistant.send",
+            side_effect=lambda person, reply, **links: self.told.append(
+                (person, reply)
+            ),
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_without_a_word_yet_it_asks_one_line_then_hands_over_with_it(self):
+        self.say(action="start")
+        reply = self.say(action="person")
+
+        self.assertEqual(
+            (self.doc().state, self.doc().ticket), ("Before a person", None)
+        )
+        asked = reply["messages"][-1]
+        self.assertIn("In one line", asked["text"])
+        self.assertEqual([a["verb"] for a in asked["card"]["actions"]], ["person_now"])
+
+        reply = self.say("the margin report lists the wrong invoices")
+
+        doc = self.doc()
+        self.assertEqual(doc.state, "With a person")
+        self.assertEqual(reply["messages"][-1]["kind"], "Hand-over")
+        self.assertEqual(
+            frappe.db.get_value("HD Ticket", doc.ticket, "subject"),
+            "the margin report lists the wrong invoices",
+        )
+        # a person hears it at once, with their line
+        [(person, card)] = self.told
+        self.assertEqual(person, self.agent)
+        self.assertIn("the margin report lists the wrong invoices", json.dumps(card))
+
+    def test_just_connect_me_hands_over_at_once(self):
+        self.say(action="start")
+        self.say(action="person")
+        self.say(action="person_now")
+        self.assertEqual(self.doc().state, "With a person")
+        self.assertTrue(self.doc().ticket)
+        self.assertIn("not said what it is about", json.dumps(self.told[0][1]))
+
+    def test_copilot_keeps_quiet_to_the_customer_until_a_person_replies(self):
+        self.say(action="start")
+        self.say("my invoice will not submit")
+        self.say(action="person")
+        ticket = self.doc().ticket
+        run = make_copilot_run(ticket, "Investigating")
+
+        self.assertFalse(customer.send_stage(run, "Working on it"))
+        frappe.get_doc(
+            {
+                "doctype": "Communication",
+                "communication_type": "Communication",
+                "sent_or_received": "Sent",
+                "reference_doctype": "HD Ticket",
+                "reference_name": ticket,
+                "content": "Looking at it now.",
+                "subject": "Re: my invoice",
+            }
+        ).insert(ignore_permissions=True)
+        customer.send_stage(run, "Fix scheduled", {"date": "tonight"})
+
+        kinds = [
+            m.kind
+            for m in frappe.get_all(
+                "HDS Conversation Message",
+                filters={"conversation": self.chat},
+                fields=["kind"],
+                order_by="creation asc",
+            )
+        ]
+        self.assertEqual(
+            kinds.count("Stage"), 1
+        )  # only the one after the person replied
+
+    def test_the_roles_are_kept_short(self):
+        roles = [f"Role {i}" for i in range(30)]
+        self.assertEqual(
+            conversation._roles(roles), ", ".join(roles[:8]) + " and 22 more"
         )
 
 

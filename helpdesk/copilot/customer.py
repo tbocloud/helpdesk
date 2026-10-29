@@ -73,7 +73,7 @@ def send_stage(run, stage: str, context: dict | None = None) -> bool:
     with a person by then. Nor does a ticket the error watch opened, until
     a person replied on it or the fix is live.
     """
-    from helpdesk.copilot import conversation, watch
+    from helpdesk.copilot import conversation
 
     language = conversation.language_of(run.ticket)
     text = render(stage, context, build=bool(run.get("build_scope")), language=language)
@@ -87,7 +87,7 @@ def send_stage(run, stage: str, context: dict | None = None) -> bool:
     if (
         run.get("shadow")
         or run.get("kind") == "revert"
-        or (stage != "Resolved" and watch.held(run.ticket))
+        or (stage != "Resolved" and quiet_for_customer(run.ticket))
     ):
         runs.add_event(
             run,
@@ -99,7 +99,7 @@ def send_stage(run, stage: str, context: dict | None = None) -> bool:
                 "pushed": False,
                 "shadow": True,
                 **(
-                    {"held": "error watch"}
+                    {"held": "until a person replies"}
                     if not run.get("shadow") and run.get("kind") != "revert"
                     else {}
                 ),
@@ -137,6 +137,31 @@ def _last_stage(run) -> tuple | None:
         return None
     payload = json.loads(rows[0].payload or "{}")
     return (payload.get("stage"), payload.get("message"))
+
+
+def quiet_for_customer(ticket: str) -> bool:
+    """Copilot says nothing to the customer until a person replied when the error watch raised
+    the ticket (Phase 9), or when the customer asked for a person in the chat ("Talk to a
+    person"): Copilot still works on it for the team."""
+    from helpdesk.copilot import conversation, watch
+
+    if watch.held(ticket):
+        return True
+    name = conversation.for_ticket(ticket)
+    if (
+        not name
+        or frappe.db.get_value(conversation.CONVERSATION, name, "state")
+        != "With a person"
+    ):
+        return False
+    return not frappe.db.exists(
+        "Communication",
+        {
+            "reference_doctype": "HD Ticket",
+            "reference_name": ticket,
+            "sent_or_received": "Sent",
+        },
+    )
 
 
 def _push_stage(run, hub_ref: str, stage: str, text: str) -> bool:

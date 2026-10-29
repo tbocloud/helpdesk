@@ -338,7 +338,7 @@ class TestTheCustomerHearsNothingFirst(WatchCase):
         held = frappe.get_last_doc(
             "HDS Copilot Event", filters={"run": run.name, "event_type": "stage"}
         )
-        self.assertEqual(json.loads(held.payload).get("held"), "error watch")
+        self.assertEqual(json.loads(held.payload).get("held"), "until a person replies")
 
         frappe.get_doc(
             {

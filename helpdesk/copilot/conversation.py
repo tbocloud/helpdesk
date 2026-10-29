@@ -56,6 +56,7 @@ ACTIONS = (
     "record",
     "recorded",
     "person",
+    "person_now",
     "answered",
     "not_answered",
     "fixed",
@@ -190,6 +191,8 @@ def receive(connection: str, payload: dict) -> dict:
         _greet(doc, payload.get("context") or {}, user)
     elif action:
         _act(doc, action, payload)
+    elif doc.state == "Before a person" and (text or files):
+        _hand_over(doc, "")  # their one line about it goes with the ticket
     elif doc.state in ("Ticket raised", "With a person", "Closed"):
         pass  # the ticket's channel now: the team answers in the chat
     elif not _within_limits(doc):
@@ -597,6 +600,22 @@ def _act(doc, action: str, payload: dict):
             return _turn(doc)
         return _summary(doc, "")
     if action == "person":
+        if not doc.ticket and not _customer_text(doc):
+            # nothing said yet: one line first, so the person who picks it up knows what it is about
+            doc.db_set("state", "Before a person", update_modified=False)
+            text = (
+                "بالتأكيد. في سطر واحد، ما الموضوع؟"
+                if doc.language == "ar"
+                else _("Sure. In one line, what is it about?")
+            )
+            return _say(
+                doc,
+                "Question",
+                text,
+                card("", [text], actions=[button(_("Just connect me"), "person_now")]),
+            )
+        return _hand_over(doc, "")
+    if action == "person_now":
         return _hand_over(doc, "")
     if action == "answered":
         doc.db_set("state", "Closed", update_modified=False)
@@ -662,11 +681,15 @@ def _linked(doc, client_ticket: str):
 
 
 def _hand_over(doc, text: str):
+    from helpdesk.copilot import thread
+
     if not doc.ticket:
         _raise(doc, transcript_only=True)
         doc.reload()
     else:
         doc.db_set("state", "With a person", update_modified=False)
+    # a person is told at once; Copilot says nothing to the customer until one replies
+    thread.on_hand_over(doc.ticket, (_customer_text(doc) or [""])[-1])
     text = text or (
         "سيتابع أحد أعضاء فريقنا هذه المحادثة ويرد عليك هنا."
         if doc.language == "ar"
@@ -701,6 +724,13 @@ def _resolution(doc, confirmed: bool, note: str):
 # --- the ticket ----------------------------------------------------------------------------------
 
 
+def _roles(roles: list) -> str:
+    """At most 8 of the user's roles; the rest counted (an administrator has dozens)."""
+    roles = [str(r) for r in roles if r]
+    shown = ", ".join(roles[:8])
+    return shown + (_(" and {0} more").format(len(roles) - 8) if len(roles) > 8 else "")
+
+
 def _description(doc) -> str:
     rows = "".join(
         "<p><b>{0}:</b> {1}</p>".format(
@@ -720,7 +750,7 @@ def _description(doc) -> str:
                     filter(None, (page.get("ref_doctype"), page.get("ref_docname")))
                 ),
             ),
-            (_("Roles"), ", ".join(page.get("user_roles") or [])),
+            (_("Roles"), _roles(page.get("user_roles") or [])),
             (_("Recent errors"), "; ".join(page.get("errors") or [])),
         )
         if value
