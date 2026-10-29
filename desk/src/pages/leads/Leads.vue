@@ -100,6 +100,13 @@
               :options="choices(options?.segments, __('Any segment'))"
             />
             <FormControl
+              v-if="departmentFilter.length"
+              v-model="filters.department"
+              type="select"
+              :label="__('Department')"
+              :options="departmentFilter"
+            />
+            <FormControl
               v-if="intakeOn"
               v-model="created"
               type="select"
@@ -256,6 +263,19 @@
                         :label="stageLabel(options, row.tbo_stage)"
                         :tone="stageTone(options, row.tbo_stage)"
                       />
+                      <!-- gone quiet: no activity for longer than its department allows -->
+                      <TaskyBadge
+                        v-if="quiet.get(row.name)"
+                        tone="warning"
+                        :icon="LucideClock"
+                        :label="
+                          __(
+                            'No activity {0} days',
+                            String(quiet.get(row.name))
+                          )
+                        "
+                        class="font-normal tabular-nums"
+                      />
                       <!-- where it stands with the client: the proposal or quotation -->
                       <TaskyBadge
                         v-if="statuses.get(row.name)"
@@ -271,6 +291,17 @@
                       <span v-if="row.company_name" class="truncate">{{
                         row.company_name
                       }}</span>
+                      <template v-if="departmentLabel(row)">
+                        <span aria-hidden="true">·</span>
+                        <span class="inline-flex items-center gap-1">
+                          <LucideBuilding2
+                            class="size-3.5 shrink-0 text-ink-gray-5"
+                            aria-hidden="true"
+                          />
+                          <span class="sr-only">{{ __("Department") }}</span>
+                          {{ departmentLabel(row) }}
+                        </span>
+                      </template>
                       <template v-if="row.segment">
                         <span aria-hidden="true">·</span>
                         <span>{{ row.segment }}</span>
@@ -398,12 +429,14 @@ import {
 } from "frappe-ui";
 import { computed, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import LucideBuilding2 from "~icons/lucide/building-2";
 import LucideCalendar from "~icons/lucide/calendar";
 import LucideCalendarRange from "~icons/lucide/calendar-range";
 import LucideCalendarX from "~icons/lucide/calendar-x";
 import LucideChevronLeft from "~icons/lucide/chevron-left";
 import LucideChevronRight from "~icons/lucide/chevron-right";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
+import LucideClock from "~icons/lucide/clock";
 import LucidePhone from "~icons/lucide/phone";
 import LucidePlus from "~icons/lucide/plus";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
@@ -419,6 +452,7 @@ import LeadsOverview from "./LeadsOverview.vue";
 import {
   choices,
   clientStatus,
+  departmentLabel,
   LEAD_VIEWS,
   loadLeadOptions,
   useClickToCall,
@@ -427,7 +461,10 @@ import {
   ownerName,
   stageLabel,
   stageTone,
+  staleLeads,
+  usableDepartments,
   type LeadIntake,
+  type StaleLead,
   type LeadOptions,
   type LeadRow,
   type LeadMetric,
@@ -494,6 +531,7 @@ const filters = reactive({
   stage: queryValue("stage"),
   owner: queryValue("owner"),
   segment: queryValue("segment"),
+  department: queryValue("department"),
 });
 // set by a number on the Overview: the leads it counts, and its period
 function queryExtra() {
@@ -544,6 +582,7 @@ const hasFilters = computed(
       filters.stage ||
       filters.owner ||
       filters.segment ||
+      filters.department ||
       extra.metric ||
       extraChips.value.length
     )
@@ -576,7 +615,12 @@ const waitingForDates = computed(
 
 function clearFilters() {
   search.value = "";
-  Object.assign(filters, { stage: "", owner: "", segment: "" });
+  Object.assign(filters, {
+    stage: "",
+    owner: "",
+    segment: "",
+    department: "",
+  });
   Object.assign(extra, {
     source: "",
     temperature: "",
@@ -612,6 +656,16 @@ const stageOptions = computed(() => [
     value: s.name,
   })),
 ]);
+// only once the ERP site has departments; an older TBO Smart leaves the filter out
+const departmentFilter = computed(() => {
+  const list = usableDepartments(options.value, filters.department);
+  return list.length
+    ? [
+        { label: __("Any department"), value: "" },
+        ...list.map((d) => ({ label: d.name, value: d.name })),
+      ]
+    : [];
+});
 const ownerOptions = computed(() => [
   { label: __("Anyone"), value: "" },
   ...(options.value?.owners ?? []).map((o) => ({
@@ -627,6 +681,7 @@ const leads = createResource({
     stage: filters.stage || null,
     owner: filters.owner || null,
     segment: filters.segment || null,
+    department: filters.department || null,
     source: extra.source || null,
     temperature: extra.temperature || null,
     metric: extra.metric || null,
@@ -662,8 +717,13 @@ function takeOverviewIntake(value: LeadIntake | undefined) {
   if (value) intakeData.value = value;
 }
 
+// the cached answer shows at once, and is asked again each time the page opens
+if (isList.value) staleLeads.fetch();
+
 watch(view, (tab) => {
   if (isList.value && !intakeData.value) intake.fetch();
+  if (isList.value && !staleLeads.data && !staleLeads.loading)
+    staleLeads.fetch();
 });
 
 function refresh() {
@@ -671,12 +731,23 @@ function refresh() {
   else if (view.value === "daily") dailyPanel.value?.reload();
   else {
     intake.submit({ fresh: 1 });
+    staleLeads.submit({ fresh: 1 });
     if (!waitingForDates.value) leads.reload();
   }
 }
 
 const data = computed(
   () => leads.data as { rows: LeadRow[]; total: number } | undefined
+);
+// idle days by lead name; empty while the ERP site's TBO Smart is older than this
+const quiet = computed(
+  () =>
+    new Map(
+      ((staleLeads.data?.leads ?? []) as StaleLead[]).map((l) => [
+        l.name,
+        l.idle_days,
+      ])
+    )
 );
 const statuses = computed(
   () => new Map((data.value?.rows ?? []).map((r) => [r.name, clientStatus(r)]))
@@ -709,6 +780,7 @@ watch(
       stage: queryValue("stage"),
       owner: queryValue("owner"),
       segment: queryValue("segment"),
+      department: queryValue("department"),
       page: queryPage(),
       extra: queryExtra(),
     };
@@ -719,6 +791,7 @@ watch(
       filters.stage === wanted.stage &&
       filters.owner === wanted.owner &&
       filters.segment === wanted.segment &&
+      filters.department === wanted.department &&
       page.value === wanted.page
     )
       return;
@@ -729,6 +802,7 @@ watch(
       stage: wanted.stage,
       owner: wanted.owner,
       segment: wanted.segment,
+      department: wanted.department,
     });
     Object.assign(extra, wanted.extra);
     page.value = wanted.page;
@@ -755,6 +829,7 @@ watch(
         stage: f.stage || undefined,
         owner: f.owner || undefined,
         segment: f.segment || undefined,
+        department: f.department || undefined,
         source: x.source || undefined,
         temperature: x.temperature || undefined,
         metric: x.metric || undefined,

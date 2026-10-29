@@ -194,7 +194,21 @@ const createProject = createResource({
   },
 });
 
-const busy = computed(() => create.loading || createProject.loading);
+const createProposalProject = createResource({
+  url: "helpdesk.api.proposals.create_project_from_proposal",
+  method: "POST",
+  onSuccess(d: { project: string }) {
+    toast.success(__("Project {0} created from the proposal", d.project));
+    router.push({ name: "TaskyProject", params: { projectId: d.project } });
+  },
+  onError(e: unknown) {
+    toast.error(errorText(e, __("Couldn't create the project. Try again.")));
+  },
+});
+
+const busy = computed(
+  () => create.loading || createProject.loading || createProposalProject.loading
+);
 
 function runNext() {
   const next = props.chain?.next;
@@ -204,6 +218,8 @@ function runNext() {
   else if (next.action === "open" && next.name) open(next.name);
   else if (next.action === "create")
     create.submit({ source: next.source, document_type: next.document_type });
+  else if (next.action === "create_project" && next.source_type === "Proposal")
+    createProposalProject.submit({ proposal: next.source });
   else if (next.action === "create_project")
     createProject.submit({ plan: next.source });
   else if (next.action === "uat" && next.name)

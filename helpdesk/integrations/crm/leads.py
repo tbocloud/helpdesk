@@ -103,11 +103,14 @@ def call(
     post: bool = False,
     api: str = API,
     acting_user: str | None = None,
+    permission_message: str | None = None,
     **params,
 ):
     """`<api>.<method>` on the CRM site (TBO Smart's hub leads API by default, or its hub
     proposals API) as the signed-in person (or `acting_user`, for a call the hub makes on
-    someone's behalf); any failure becomes a LeadsError the person can act on."""
+    someone's behalf); any failure becomes a LeadsError the person can act on.
+    `permission_message` is what a 403 means for a call that needs more than a sales
+    account (e.g. managing departments), instead of "no sales account"."""
     try:
         client = CRMClient.from_settings()
     except CRMError:
@@ -124,7 +127,7 @@ def call(
             **params,
         )
     except CRMError as e:
-        fail(friendly_error(e, client, acting_user))
+        fail(friendly_error(e, client, acting_user, permission_message))
 
 
 def call_if_deployed(method: str, **params):
@@ -164,7 +167,10 @@ def fail(error: LeadsError):
 
 
 def friendly_error(
-    error: CRMError, client, acting_user: str | None = None
+    error: CRMError,
+    client,
+    acting_user: str | None = None,
+    permission_message: str | None = None,
 ) -> LeadsError:
     """A message the person can act on; it names the user the ERP site checked (`acting_user`
     for a call made on someone's behalf)."""
@@ -199,6 +205,8 @@ def friendly_error(
                 "The hub's API user{0} on {1} isn't the site's integration user: it needs the role in TBO Smart Settings → Hub integration role there (blank: Hub Integration). Ask an admin to add the role that field names to that user."
             ).format(api_user(client), site)
         )
+    if error.status == 403 and permission_message:
+        return LeadsError(error.user_message or permission_message)
     if error.status == 403:
         return LeadsError(
             _(

@@ -49,6 +49,19 @@ export function stageColor(status: string) {
   return "blue";
 }
 
+export type ClientApproval = "awaiting" | "approved";
+
+// What the client's approval looks like on a post: the client still has to decide
+// (Client Review, or sent back with changes), or has approved (every later stage:
+// Head Review is entered only from the client's approval). Earlier stages and
+// Cancelled say nothing yet.
+export function clientApproval(status: string): ClientApproval | null {
+  if (["Client Review", "Changes Requested"].includes(status)) return "awaiting";
+  if (["Head Review", "Approved", "Scheduled", "Published"].includes(status))
+    return "approved";
+  return null;
+}
+
 export interface ContentPost {
   name: string;
   title: string;

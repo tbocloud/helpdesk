@@ -3591,6 +3591,45 @@ def enable_leads(teams: tuple[str, ...] = ()):
     frappe.cache.delete_keys("hd_leads:")
 
 
+def lead_department(
+    name: str = "GrowthX",
+    lead_type: str = "Content / Digital Marketing",
+    heads: tuple[str, ...] = (),
+    members: tuple[str, ...] = (),
+    is_active: int = 1,
+    assignment: str = "Manual",
+    stale_after_days: int = 3,
+) -> dict:
+    """A lead department as the ERP site's get_lead_departments and save_lead_department
+    answer it."""
+    return {
+        "name": name,
+        "department_name": name,
+        "lead_type": lead_type,
+        "is_active": is_active,
+        "assignment": assignment,
+        "stale_after_days": stale_after_days,
+        "heads": [{"user": u, "full_name": u} for u in heads],
+        "members": [{"user": u, "full_name": u} for u in members],
+    }
+
+
+def stale_lead(name: str, idle_days: int, **fields) -> dict:
+    """A row of the ERP site's get_stale_leads: a lead of GrowthX owned by Asha with no
+    activity for `idle_days`, unless `fields` say otherwise."""
+    return {
+        "name": name,
+        "lead_name": f"Lead {name}",
+        "company_name": "Bright Co",
+        "lead_owner": "asha.sales@leads.example",
+        "tbo_department": "GrowthX",
+        "tbo_stage": "Contacted",
+        "last_activity_on": "2026-10-01 10:00:00",
+        "idle_days": idle_days,
+        **fields,
+    }
+
+
 def make_sales_manager(email: str, first_name: str = "Manager") -> str:
     """An agent with the Sales Manager role (created when the hub doesn't have it yet),
     who may use Leads and gets the 6 pm Daily Sales Report."""
@@ -5123,3 +5162,42 @@ class FakeCustomerSite:
             "old": before,
             "new": self._current(change),
         }
+
+
+def make_credentials(
+    project: str,
+    platform: str = "Facebook",
+    username: str = "brand@client.example",
+    password: str = "s3cret-Pass!",
+    user: str = "Administrator",
+) -> dict:
+    """Records one login the client handed over on `project`, through the credentials
+    API as `user`, and returns the saved handover (without passwords)."""
+    from helpdesk.api.client_credentials import save_handover
+
+    return run_as_user(
+        user,
+        lambda: save_handover(
+            project,
+            handed_over_by="Client Owner",
+            items=[{"platform": platform, "username": username, "password": password}],
+        ),
+    )
+
+
+def make_accepted_proposal(**values) -> dict:
+    """What the ERP site's accepted strategy proposal endpoint answers (the contract
+    helpdesk.api.proposals.accepted_proposal reads), with `values` overriding."""
+    return {
+        "proposal": "PROP-2026-00042",
+        "lead": "CRM-LEAD-42",
+        "customer": "Malabar Spices",
+        "tbo_lead_type": "Digital Marketing",
+        "tbo_department": "Digital",
+        "start": "2026-11-02",
+        "end": "2027-04-30",
+        "project_name": "Malabar Spices - Digital Marketing",
+        "deliverables": "12 posts a month, 4 reels",
+        "hub_project": None,
+        **values,
+    }

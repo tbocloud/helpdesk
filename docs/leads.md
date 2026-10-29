@@ -50,8 +50,8 @@ user exists there with a sales role, applies what they may see, and records writ
 
 | Method | HTTP | Arguments | Returns |
 | --- | --- | --- | --- |
-| `get_options` | GET | | `{stages: [{name, label, type, color}], sources, segments, owners: [{email, full_name}], territories, industries, can_call}` |
-| `list_leads` | GET | `search, stage, owner, segment, source, temperature, metric, period, from_date, to_date, view, start, page_length` | `{rows: [{name, lead_name, company_name, email_id, mobile_no, tbo_stage, segment, lead_owner, owner_name, score, next_follow_up, modified, latest_quotation, latest_proposal}], total}` |
+| `get_options` | GET | | `{stages: [{name, label, type, color}], sources, segments, owners: [{email, full_name}], territories, industries, can_call, departments: [{name, lead_type, is_active, is_head, is_member}], lead_types}` (the last two from the departments release of TBO Smart) |
+| `list_leads` | GET | `search, stage, owner, segment, department, source, temperature, metric, period, from_date, to_date, view, start, page_length` | `{rows: [{name, lead_name, company_name, email_id, mobile_no, tbo_stage, segment, lead_owner, owner_name, score, next_follow_up, modified, latest_quotation, latest_proposal, tbo_department, tbo_lead_type}], total}` |
 | `get_overview` | GET | `period, from_date, to_date, owner` | the Overview's figures (TBO Smart's `hub-leads-api.md` §2.4) |
 | `get_lead_intake` | GET | `from_date, to_date` (the hub sends yesterday and today) | new leads taken each day by owner, imports left out, and the scope's salespeople (§2.4.1) |
 | `get_proposal_money` | GET | `period, from_date, to_date, owner` | proposals sent, won, advances and every payment split still to collect (§2.8) |
@@ -62,8 +62,13 @@ user exists there with a sales role, applies what they may see, and records writ
 | `draft_lead_message` | POST | `name, channel (whatsapp / email), language` | `{channel, subject, text, to?, url?}`; nothing is sent |
 | `log_message_sent` | POST | `name, channel, text` | the timeline entry |
 | `get_sales_activity` | GET | `from_date, to_date`, **no** `acting_user` | each salesperson's activity, for the Scoreboard ([team-dashboard.md](team-dashboard.md#sales)) |
+| `get_lead_departments` | GET | | `[{name, department_name, lead_type, is_active, assignment, stale_after_days, heads: [{user, full_name}], members: [{user, full_name}]}]` |
+| `save_lead_department` | POST | `values: {department_name, lead_type, is_active, assignment, stale_after_days, heads: [user], members: [user]}, name` (edit) | the saved department; only System Manager / Sales Manager on the ERP site, others get PermissionError |
+| `set_lead_department_active` | POST | `name, active` | the department |
 | `get_lead` | GET | `name` | `{lead: {...}, timeline: [...], quotations: [...], proposals: [...], allowed_stages: [...]}` |
-| `create_lead` | POST | `data` | the lead (at least `name`) |
+| `find_duplicate_leads` | GET | `email, phone, company, exclude` | `[{name, lead_name, company_name, email_id, mobile_no, lead_owner, owner_name, tbo_stage, matched_on: ["email" / "phone" / "company"]}]`, only leads the person may see |
+| `get_stale_leads` | GET | `days` | `[{name, lead_name, company_name, lead_owner, tbo_department, tbo_stage, last_activity_on, idle_days}]` idle for `days` or more, scoped to the acting user's visibility |
+| `create_lead` | POST | `data, allow_duplicate` (1 only after the person confirmed) | the lead (at least `name`); an email or phone another lead has is refused with DuplicateEntryError "Possible duplicate of <lead> (<owner>)" unless `allow_duplicate` |
 | `update_lead` | POST | `name, data` | the lead |
 | `set_stage` | POST | `name, stage, note` | the lead |
 | `add_note` | POST | `name, note` | the note |
@@ -80,7 +85,7 @@ user exists there with a sales role, applies what they may see, and records writ
 - `view` is `all`, `mine`, `call_today` or `follow_up`. The hub sends `page_length` 20
   (at most 100) and `start` from 0.
 - `data` (create and update) uses these keys: `lead_name, company_name, email_id, mobile_no,
-  source, segment, territory, industry, lead_owner, next_follow_up` (date, `YYYY-MM-DD`).
+  source, segment, territory, industry, lead_owner, next_follow_up` (date, `YYYY-MM-DD`), and `tbo_department` (a department's name).
   An update sends only the fields that changed; an empty string clears a field.
 - `allowed_stages` may be stage names or stage objects; the hub offers only those (minus the
   current stage).
@@ -98,6 +103,67 @@ user exists there with a sales role, applies what they may see, and records writ
   ERP site (tbo_smart#25); clearing it adds nothing and doesn't close the open one.
 - Stage colours from the ERP site are not used, to keep the hub's one-accent rule: a stage
   whose `type` is `Won` is green, `Lost` red, every other stage gray, always with its label.
+
+## Lead departments
+
+Departments (GrowthX, ...) are created in the hub, kept on the ERP site and put on leads:
+each has a **lead type** (`ERP / Software` or `Content / Digital Marketing`), **heads** and
+**members** (users, by the email both sites share) and an active switch. A head sees every
+lead in the department, a member the leads they own; **the ERP site enforces that**, the hub
+only filters and shows. The department's type is the lead's type (`tbo_lead_type`).
+
+- **Settings → CRM → Lead departments** (`LeadDepartments.vue`, only for System Managers and
+  Agent Managers, once Leads is on): list with type, heads, member count and an active
+  switch, and an add/edit dialog (name is fixed once saved; type; heads and members are
+  pickers of the hub's agents). If the ERP site refuses (only its System Manager or Sales
+  Manager may), its reason shows in the dialog.
+- **Leads list:** a Department filter (`department` in the URL) and, on each row, the
+  department and its type as plain text.
+- **New lead / Edit lead:** a Department picker. A new lead starts in the person's only
+  department (they are a head or member of exactly one active department). Once a
+  department is picked, its heads and members come first in the Owner picker.
+- **Older TBO Smart:** without departments on the ERP site, `get_options` has no
+  `departments`, `get_lead_departments` answers `available: false`, and the Settings section,
+  the filter and the pickers stay out without an error. Writes then say the ERP site needs
+  the latest TBO Smart.
+- Hub endpoints: `get_lead_departments` (cached 60 s per person, key part `departments`),
+  `save_lead_department`, `set_lead_department_active`; a change clears the signed-in
+  person's cached reads (including `get_options`, which carries `is_head` and `is_member`).
+  `list_leads` takes `department`. The Overview and Daily report don't filter by department
+  yet.
+
+### Wave 1: assignment, duplicates, quiet leads, website form
+
+All of it comes with the wave 1 release of TBO Smart and stays out (no error, no message)
+on an older one; every hub proxy asks through `call_if_deployed`.
+
+- **Assignment** (department dialog): *Manual* (the creator picks the owner) or *Round robin*
+  (a lead created with no owner is given to the department's next member by the ERP site),
+  with a one-line explanation under the select, and *Follow-up alert after N days*
+  (`stale_after_days`, default 3). The assignment shows in the department list. In the lead
+  form, a Round robin department lets the Owner stay empty, with the hint "Assigned
+  automatically (round robin)". The fields show when the ERP site's departments carry
+  `assignment`, or when there are no departments yet.
+- **Duplicates** (lead form): on leaving the Email or Mobile field (debounced 300 ms) the form
+  calls `find_duplicate_leads` and lists matches under the fields: name (opens the lead in a
+  new tab), company, owner, stage and what matched. On a new lead, an email or phone match
+  turns the button into **Create anyway**, which sends `allow_duplicate=1`; a company-only
+  match is shown but doesn't block. Pressing Create lead before leaving the field checks
+  first and stops to show the match. If the ERP site still refuses ("Possible duplicate of
+  ..." about a lead the person can't see, so none was listed), the button also becomes Create
+  anyway. On an edit the matches are only shown (`exclude` is the lead itself).
+- **No activity chip** (Leads list): `get_stale_leads` (cached 60 s per person, key part
+  `stale`) gives the person's quiet leads; a row shows a warning-toned "No activity N days"
+  chip with a clock icon. The hub asks the ERP site for the shortest department threshold
+  (the default 3 days for leads with no department) and keeps each lead only when its idle
+  days reach its own department's `stale_after_days` (`helpdesk.api.leads.read_stale_leads`).
+  The same rows drive the follow-up rule in [follow-ups.md](follow-ups.md#lead-rules).
+- **Website lead form** (Settings → CRM, System Managers only, once Leads is on;
+  `WebsiteLeadForm.vue`): read-only. It shows the endpoint
+  `https://<ERP site>/api/method/tbo_smart.api.hub_leads.submit_website_lead` (guest-callable;
+  the hub never calls it) and a copyable HTML form snippet, and a note that emails BCC'd to the
+  logging address are filed on the lead's timeline. That address is set on the ERP site, not
+  here.
 
 ## Calls through MyOperator
 
@@ -127,7 +193,7 @@ The ERP site's `tbo_smart.api.telephony` takes the same `acting_user`:
 `helpdesk/api/leads.py`, thin typed proxies (writes are POST only): `get_options`,
 `list_leads`, `get_overview_page`, `get_overview`, `get_lead_intake`, `get_proposal_money`, `get_lead`, `get_lead_ai`, `refresh_lead_ai`, `apply_ai_stage`,
 `dismiss_ai_stage`, `draft_lead_message`, `log_message_sent`, `create_lead`, `update_lead`,
-`set_stage`, `add_note`, `click_to_call`, `call_recording`, `get_daily_report`, `log_call`. They check
+`set_stage`, `add_note`, `find_duplicate_leads`, `get_stale_leads`, `get_lead_departments`, `save_lead_department`, `set_lead_department_active`, `click_to_call`, `call_recording`, `get_daily_report`, `log_call`. They check
 `can_use_leads`, validate the view and page size, trim notes, and pass `acting_user`. The
 client is `CRMClient.call` in `helpdesk/integrations/crm/client.py`; the call and error
 mapping live in `helpdesk/integrations/crm/leads.py`. The API key and secret never reach the
@@ -388,6 +454,29 @@ positive lead, a new quotation and a new lead are) is in TBO Smart's `docs/hub-l
 The Lead page's **Proposals** section, the proposal builder and Settings → Rates and proposals
 are specified in [proposals.md](proposals.md).
 
+## Content and Digital Marketing leads
+
+A lead whose `tbo_lead_type` is Content / Digital Marketing runs a different chain on the ERP
+site: a **6-month strategy proposal** → the client accepts → the **credentials handover** →
+the content calendar → the project and team. When the ERP site's next action is
+`create_project` for such a proposal (`next.source_type == "Proposal"`), the lead's documents
+strip calls `helpdesk.api.proposals.create_project_from_proposal(proposal)`; plans keep
+`create_project_from_plan`. Both share `ensure_project`.
+
+- The project is in the **Digital** department (looked up by name; none when it is missing or
+  inactive), has the project type **Content Calendar** (so the client's posts find it, see
+  [content-calendar.md](content-calendar.md#which-project-the-tasks-go-to)), the proposal's
+  dates and client, and the deliverables summary as its notes.
+- It carries `custom_crm_lead` and the new `custom_crm_proposal` (protected like the plan
+  link), and the ERP site is told with `hub_proposals.link_project(lead, project, proposal,
+  url)`. A second call finds the project already made.
+- **Assumed ERP contract** (not final): `hub_proposals.get_accepted_proposal(name)` answers
+  `proposal, lead, customer, tbo_lead_type, tbo_department, start, end, project_name,
+  deliverables, hub_project`. It is read in one function, `proposals.accepted_proposal`, through
+  `call_if_deployed`: an older ERP site gets a plain "needs the latest TBO Smart" message.
+- The project's **Credentials** tab holds the client's logins and the hand-back when the client
+  leaves: [client-credentials.md](client-credentials.md).
+
 ## Tests
 
 `helpdesk/tests/test_leads.py` with `test_utils.FakeCRM` (`lead_answers`, `lead_calls`,
@@ -400,6 +489,11 @@ message queued) while other errors still show; the
 AI calls are the signed-in person's (POST for every change) and the channels checked.
 The one-request Overview page (all parts, money or intake failing alone, cache hit, `fresh`,
 per-person cache, a write clearing it) is tested there too.
+`helpdesk/tests/test_stale_leads.py`: wave 1: the duplicate check proxied as the person (and skipped
+quietly on an older ERP site), `allow_duplicate` sent only when confirmed, the quiet leads kept
+per department threshold and cached per person, and the follow-up rule (owner at L0, heads at
+twice the days, one notice per person and lead, off switch, older ERP site and ERP errors add
+nothing).
 `helpdesk/tests/test_sales_wall.py`: a Sales Employee outside the Leads teams lists, opens,
 creates, moves and notes a lead as themselves.
 `helpdesk/tests/test_daily_sales_report.py`: the report proxied as the person, targets and

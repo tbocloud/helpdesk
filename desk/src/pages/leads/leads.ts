@@ -26,7 +26,82 @@ export interface LeadOptions {
   can_call?: boolean;
   /** the ERP site can log a call made outside MyOperator (TBO Smart's log_call) */
   can_log_call?: boolean;
+  /** lead departments (absent from an older TBO Smart; the department UI stays out) */
+  departments?: LeadDepartmentOption[];
+  lead_types?: string[];
 }
+
+/** A department as `get_options` lists it, with the signed-in person's part in it. */
+export interface LeadDepartmentOption {
+  name: string;
+  lead_type?: string;
+  is_active?: boolean | number;
+  is_head?: boolean | number;
+  is_member?: boolean | number;
+  /** how a lead with no owner is given one (absent from an older TBO Smart) */
+  assignment?: LeadAssignment;
+  stale_after_days?: number;
+}
+
+export type LeadAssignment = "Manual" | "Round robin";
+
+/** A lead department with its people, as `get_lead_departments` answers (Settings → CRM). */
+export interface LeadDepartment {
+  name: string;
+  department_name: string;
+  lead_type: string;
+  is_active: boolean | number;
+  /** Manual: the creator picks the owner; Round robin: the ERP site picks one */
+  assignment?: LeadAssignment;
+  /** days without activity before a lead is chased (absent from an older TBO Smart) */
+  stale_after_days?: number;
+  heads: { user: string; full_name?: string }[];
+  members: { user: string; full_name?: string }[];
+}
+
+/** A lead that shares an email, phone or company with the one being entered. */
+export interface DuplicateLead {
+  name: string;
+  lead_name?: string;
+  company_name?: string;
+  email_id?: string;
+  mobile_no?: string;
+  lead_owner?: string;
+  owner_name?: string | null;
+  tbo_stage?: string;
+  matched_on: ("email" | "phone" | "company")[];
+}
+
+/** A lead with no activity for longer than its department allows. */
+export interface StaleLead {
+  name: string;
+  idle_days: number;
+  last_activity_on?: string | null;
+}
+
+export const ASSIGNMENT_LABELS: Record<LeadAssignment, string> = {
+  Manual: __("Manual"),
+  "Round robin": __("Round robin"),
+};
+
+/** The department's own idle days, else the default the ERP site and the hub share. */
+export const DEFAULT_STALE_DAYS = 3;
+
+/** Whether the picked department hands out leads with no owner in turn. */
+export function isRoundRobin(options: LeadOptions | undefined, name: string) {
+  return (
+    !!name &&
+    options?.departments?.find((d) => d.name === name)?.assignment ===
+      "Round robin"
+  );
+}
+
+/** Leads of the signed-in person gone quiet, by lead name; empty on an older TBO Smart. */
+export const staleLeads = createResource({
+  url: "helpdesk.api.leads.get_stale_leads",
+  // the chip is a bonus on the list: a failed read just leaves it out
+  onError() {},
+});
 
 export interface LeadRow {
   name: string;
@@ -38,6 +113,8 @@ export interface LeadRow {
   segment?: string;
   lead_owner?: string;
   owner_name?: string;
+  tbo_department?: string | null;
+  tbo_lead_type?: string | null;
   score?: number | null;
   next_follow_up?: string | null;
   modified?: string;
@@ -113,7 +190,11 @@ const QUOTE_STATUS: Record<string, StatusLook> = {
     tone: "neutral",
     open: true,
   },
-  "Under Negotiation": { label: __("Negotiating"), tone: "neutral", open: true },
+  "Under Negotiation": {
+    label: __("Negotiating"),
+    tone: "neutral",
+    open: true,
+  },
   "Revision Required": {
     label: __("Revision asked"),
     tone: "neutral",
@@ -145,6 +226,7 @@ export interface LeadForm {
   industry: string;
   lead_owner: string;
   next_follow_up: string;
+  tbo_department: string;
 }
 
 export const LEAD_FORM_FIELDS: (keyof LeadForm)[] = [
@@ -158,6 +240,7 @@ export const LEAD_FORM_FIELDS: (keyof LeadForm)[] = [
   "industry",
   "lead_owner",
   "next_follow_up",
+  "tbo_department",
 ];
 
 /** One entry of a lead's timeline, newest first (TBO Smart's hub-leads-api.md). */
@@ -246,6 +329,32 @@ export function loadLeadOptions() {
   leadOptionsFetched = true;
   leadOptions.fetch();
 }
+
+/** The departments the signed-in person can put a lead in: active ones, and the one a
+ * lead already has. Empty while the ERP site has none (or is too old), so the pickers stay out. */
+export function usableDepartments(options: LeadOptions | undefined, keep = "") {
+  return (options?.departments ?? []).filter(
+    (d) => d.is_active || d.name === keep
+  );
+}
+
+/** The department a new lead starts in: the only one the person belongs to. */
+export function ownDepartment(options: LeadOptions | undefined) {
+  const own = usableDepartments(options).filter(
+    (d) => d.is_head || d.is_member
+  );
+  return own.length === 1 ? own[0].name : "";
+}
+
+/** "GrowthX · ERP / Software" for a lead's row; empty without a department. */
+export function departmentLabel(row: LeadRow) {
+  return [row.tbo_department, row.tbo_lead_type].filter(Boolean).join(" · ");
+}
+
+// each department's heads and members: the form prefers them as owner, Settings edits them
+export const leadDepartments = createResource({
+  url: "helpdesk.api.leads.get_lead_departments",
+});
 
 /** Asks MyOperator to ring the signed-in person's phone, then the lead. */
 export function useClickToCall() {
@@ -503,7 +612,11 @@ export interface LeadIntake {
   days?: {
     date: string;
     total: number;
-    by_owner: { user: string | null; full_name: string | null; count: number }[];
+    by_owner: {
+      user: string | null;
+      full_name: string | null;
+      count: number;
+    }[];
   }[];
   /** the sales team, so someone who took none still shows */
   people?: { user: string; full_name: string }[];

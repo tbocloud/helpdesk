@@ -860,12 +860,22 @@ def get_custom_fields():
                 "search_index": 1,
             },
             {
+                # the strategy proposal a Content / Digital Marketing project was made from
+                "fieldname": "custom_crm_proposal",
+                "fieldtype": "Data",
+                "label": "Strategy Proposal",
+                "insert_after": "custom_crm_plan",
+                "read_only": 1,
+                "no_copy": 1,
+                "search_index": 1,
+            },
+            {
                 # who made it from the plan: the hub asks the ERP site about the plan as them
                 "fieldname": "custom_crm_acting_user",
                 "fieldtype": "Link",
                 "options": "User",
                 "label": "Made From Plan By",
-                "insert_after": "custom_crm_plan",
+                "insert_after": "custom_crm_proposal",
                 "read_only": 1,
                 "no_copy": 1,
             },

@@ -9,11 +9,11 @@ import re
 
 import frappe
 from frappe import _
-from frappe.utils import cint
+from frappe.utils import cint, cstr, escape_html
 from frappe.utils.html_utils import sanitize_html
 
 from helpdesk.api.leads import clear_cached_reads
-from helpdesk.integrations.crm.leads import call, require_leads
+from helpdesk.integrations.crm.leads import call, call_if_deployed, require_leads
 
 PROPOSALS = "tbo_smart.api.hub_proposals"
 
@@ -187,45 +187,127 @@ def create_project_from_plan(plan: str) -> dict:
     plan's dates and the client, a task for each phase's deliverable and a milestone at
     each phase's end (the phase on every task). The plan is told its project, and the
     lead's chain moves on. A second call finds the project already made."""
-    from helpdesk.tasky.api import create_project
-
     require_leads()
     data = proposals("get_project_plan", name=plan) or {}
-    project = data.get("hub_project") or frappe.db.get_value(
-        "Project", {"custom_crm_plan": data.get("plan") or plan}, "name"
+    project, created = ensure_project(
+        data.get("hub_project")
+        or frappe.db.get_value(
+            "Project", {"custom_crm_plan": data.get("plan") or plan}, "name"
+        ),
+        {"custom_crm_lead": data.get("lead"), "custom_crm_plan": data.get("plan")},
+        project_name=data["project_name"],
+        expected_start_date=data.get("start"),
+        expected_end_date=data.get("end"),
+        customer=frappe.db.exists("HD Customer", data.get("client") or "") or None,
+        project_type=project_type_for(data.get("solution_type")),
     )
-    if not project or not frappe.db.exists("Project", project):
-        project = create_project(
-            project_name=unique_project_name(data["project_name"]),
-            expected_start_date=data.get("start"),
-            expected_end_date=data.get("end"),
-            customer=frappe.db.exists("HD Customer", data.get("client") or "") or None,
-            project_type=project_type_for(data.get("solution_type")),
-        )["name"]
-        frappe.db.set_value(
-            "Project",
-            project,
-            {
-                "custom_crm_lead": data.get("lead"),
-                "custom_crm_plan": data.get("plan"),
-                # the ERP site let this person read the plan: the hub asks it as them later
-                "custom_crm_acting_user": frappe.session.user,
-            },
-        )
+    if created:
         add_plan_tasks(project, data.get("phases") or [])
-    elif not frappe.db.get_value("Project", project, "custom_crm_acting_user"):
-        # a project made before this was kept: the person who links it now read the plan
-        frappe.db.set_value(
-            "Project", project, "custom_crm_acting_user", frappe.session.user
-        )
     chain = proposals(
         "link_project",
         post=True,
-        name=plan,
+        lead=data.get("lead"),
+        plan=data.get("plan") or plan,
         project=project,
-        url=frappe.utils.get_url(f"/helpdesk/projects/{project}"),
+        url=project_url(project),
     )
     return {"project": project, "chain": chain}
+
+
+# What the ERP site answers for an accepted strategy proposal (TBO Smart, docs/leads.md):
+# proposal, lead, customer, tbo_lead_type, tbo_department, start, end, project_name,
+# deliverables, hub_project. This is the only place that reads it.
+ACCEPTED_PROPOSAL = "get_accepted_proposal"
+# the hub department a strategy proposal's project belongs to, by its name
+DIGITAL_DEPARTMENT = "Digital"
+
+
+def accepted_proposal(proposal: str) -> dict:
+    """The accepted strategy proposal's data from the ERP site, or a message when that
+    site doesn't have it yet."""
+    data = call_if_deployed(ACCEPTED_PROPOSAL, api=PROPOSALS, name=proposal)
+    if not data:
+        frappe.throw(
+            _(
+                "The ERP site can't give this proposal's details yet. It needs the latest TBO Smart."
+            )
+        )
+    return data
+
+
+@frappe.whitelist(methods=["POST"])
+def create_project_from_proposal(proposal: str) -> dict:
+    """The hub project from an accepted strategy proposal (Content / Digital Marketing
+    leads), once: in the Digital department when it exists, with the proposal's dates and
+    the client. The proposal is told its project, and the lead's chain moves on. A second
+    call finds the project already made."""
+    from helpdesk.helpdesk.doctype.hd_content_post.hd_content_post import (
+        CONTENT_PROJECT_TYPE,
+    )
+
+    require_leads()
+    data = accepted_proposal(proposal)
+    code = data.get("proposal") or proposal
+    project, _created = ensure_project(
+        data.get("hub_project")
+        or frappe.db.get_value("Project", {"custom_crm_proposal": code}, "name"),
+        {
+            "custom_crm_lead": data.get("lead"),
+            "custom_crm_proposal": code,
+            "notes": escape_html(cstr(data.get("deliverables"))) or None,
+        },
+        project_name=data.get("project_name")
+        or f"{data.get('customer') or code} - Digital Marketing",
+        expected_start_date=data.get("start"),
+        expected_end_date=data.get("end"),
+        customer=frappe.db.exists("HD Customer", data.get("customer") or "") or None,
+        project_type=CONTENT_PROJECT_TYPE,
+        department=frappe.db.get_value(
+            "HD Department", {"name": DIGITAL_DEPARTMENT, "is_active": 1}, "name"
+        ),
+    )
+    chain = proposals(
+        "link_project",
+        post=True,
+        lead=data.get("lead"),
+        project=project,
+        proposal=code,
+        url=project_url(project),
+    )
+    return {"project": project, "chain": chain}
+
+
+def project_url(project: str) -> str:
+    return frappe.utils.get_url(f"/helpdesk/projects/{project}")
+
+
+def ensure_project(
+    existing: str | None, values: dict, **create_args
+) -> tuple[str, bool]:
+    """The project made from an ERP document: `existing` if it is still there, else a new
+    one from `create_args` (its name made unique) with `values` (the CRM link, kept only
+    by this code) written on it. Returns (project, whether it was just made)."""
+    from helpdesk.tasky.api import create_project
+
+    if existing and frappe.db.exists("Project", existing):
+        if not frappe.db.get_value("Project", existing, "custom_crm_acting_user"):
+            # a project made before this was kept: the person who links it now read it
+            frappe.db.set_value(
+                "Project", existing, "custom_crm_acting_user", frappe.session.user
+            )
+        return existing, False
+    create_args["project_name"] = unique_project_name(create_args["project_name"])
+    project = create_project(**create_args)["name"]
+    frappe.db.set_value(
+        "Project",
+        project,
+        {
+            **values,
+            # the ERP site let this person read it: the hub asks it as them later
+            "custom_crm_acting_user": frappe.session.user,
+        },
+    )
+    return project, True
 
 
 def unique_project_name(name: str) -> str:

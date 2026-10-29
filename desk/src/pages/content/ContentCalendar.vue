@@ -611,6 +611,7 @@ import {
   type EntryAction,
   isMissed,
   platformsOf,
+  clientApproval,
   stageColor,
   STATUSES,
   TEAM_ROLES,
@@ -660,10 +661,25 @@ const STEP_BTN =
 
 const legend = [
   { label: __("Planning"), swatch: "bg-info" },
-  { label: __("In review"), swatch: "bg-warning" },
-  { label: __("Approved"), swatch: "bg-brand" },
-  { label: __("Published"), swatch: "bg-success" },
+  { label: __("Internal review"), swatch: "bg-warning" },
+  { label: __("Awaiting client"), swatch: "bg-danger" },
+  { label: __("Client approved"), swatch: "bg-success" },
 ];
+
+const CLIENT_COLOR: Record<string, string> = {
+  awaiting: "red",
+  approved: "green",
+};
+
+// the status text says it too, so the colour is never the only cue
+function clientLabel(status: string) {
+  const state = clientApproval(status);
+  return state
+    ? ` (${
+        state === "awaiting" ? __("Awaiting client") : __("Client approved")
+      })`
+    : "";
+}
 
 type View = "board" | "calendar" | "sheet" | "tasks";
 const VIEWS: { key: View; label: string; icon: unknown }[] = [
@@ -966,12 +982,14 @@ const events = computed(() =>
       title: `${p.special_day ? `★ ${p.special_day} · ` : ""}${platformsOf(
         p
       ).join(", ")} · ${copyOf(p)}`,
-      participant: `${p.status} · ${p.customer}`,
+      participant: `${p.status}${clientLabel(p.status)} · ${p.customer}`,
       fromDate: start.format("YYYY-MM-DD"),
       toDate: start.format("YYYY-MM-DD"),
       fromTime: start.format("HH:mm"),
       toTime: start.add(30, "minute").format("HH:mm"),
-      color: stageColor(p.status),
+      // the client's decision is what the calendar is for: red until they approve
+      color:
+        CLIENT_COLOR[clientApproval(p.status) ?? ""] ?? stageColor(p.status),
     };
   })
 );
