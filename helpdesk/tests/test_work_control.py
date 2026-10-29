@@ -22,6 +22,7 @@ from helpdesk.tasky.permissions import hidden_departments
 from helpdesk.test_utils import (
     call_as_user,
     create_customer,
+    freeze_work_day,
     get_task_completed_notices,
     hold_commits,
     make_assignment,
@@ -1508,6 +1509,11 @@ class TestHelpAndHandOver(WorkControlCase):
 
 
 class TestCompletionNeedsTime(WorkControlCase):
+    def setUp(self):
+        super().setUp()
+        # timers only run in work hours
+        freeze_work_day(self, 12)
+
     def test_board_and_status_changes_cannot_complete_without_hours(self):
         task = self.make_task("Payroll setup", add_days(nowdate(), 3))
         for status in ("Completed", "Pending Review"):

@@ -84,3 +84,4 @@ helpdesk.patches.v16_0_2.reset_seeded_afternoon_nudge
 helpdesk.patches.v16_0_2.set_offboarding_defaults
 helpdesk.patches.v16_0_2.seed_sales_departments
 helpdesk.patches.v16_0_2.enable_stale_lead_follow_up
+helpdesk.patches.v16_0_2.clip_unlogged_time_sessions
