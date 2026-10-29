@@ -402,6 +402,17 @@ from the tasks the viewer can see, so a plain member's card counts their own tas
   [departments.md](departments.md)). Counts on tabs and chips follow the other filters.
 - **URL**: `status` (Open is the default and left out), `department` (`__none__` for No
   department), `q`, `show` (`overdue` or `ending`).
+- **Back keeps the place**: the page is kept alive (`<keep-alive include="Projects">` in
+  `desk/src/roots/AgentRoot.vue`), so Back from a project's board, checklist or any page
+  shows it at once with its cards, then refreshes everything in the background (what's on
+  screen stays while it loads). The list scrolls inside a panel, which the router's own
+  scroll restore doesn't cover, so `useScrollRestore` (`desk/src/composables/scrollRestore.ts`)
+  keeps the panel's position per history entry (vue-router's `history.state.position` and
+  the path on leaving) and puts it back on Back. A fresh visit (sidebar, link) is a new
+  entry: it starts at the top and takes that link's filters. While kept alive the page never
+  writes its filters into another page's URL. If the page wasn't alive (a reload, or the
+  mobile and desktop layouts switched), Back puts the position back once the projects,
+  recent row, departments and every card's stats are in, as the cards grow with their stats.
 - **Card**: name (links to the project), customer and ID; status badge only when not Open;
   lead and dates, with "N days past end" in red (with an icon) or "Ends in N days" for open
   projects; one neutral progress bar (green once the project is Completed) with done/total
