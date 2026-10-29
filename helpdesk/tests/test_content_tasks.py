@@ -302,6 +302,71 @@ class TestTasksFromPosts(ContentTaskCase):
             1,
         )
 
+    def test_reassigning_a_part_everyone_was_taken_off_reopens_its_task(self):
+        from helpdesk.api import content_board
+
+        post = self.post()
+        content_board.assign(post.name, "writer", [])
+        self.assertNotIn("Writer", self.tasks(post))
+
+        content_board.assign(post.name, "writer", [OTHER[0]])
+
+        tasks = self.tasks(post)
+        self.assertEqual(self.assignees(tasks["Writer"]), [OTHER[0]])
+        self.assertEqual(
+            getdate(tasks["Writer"].exp_end_date),
+            add_days(getdate(self.publish), -3),
+        )
+        # the same task opened again, not a second one for the part
+        self.assertEqual(
+            frappe.db.count(
+                "Task", {"content_post": post.name, "content_role": "Writer"}
+            ),
+            1,
+        )
+        self.assertTrue(
+            frappe.db.exists(
+                "HD Notification",
+                {"user_to": OTHER[0], "message": ("like", "New content task:%")},
+            )
+        )
+
+    def test_putting_the_same_person_back_gives_them_the_task_again(self):
+        from helpdesk.api import content_board
+
+        post = self.post()
+        content_board.assign(post.name, "writer", [])
+        content_board.assign(post.name, "writer", [WRITER[0]])
+
+        task = self.tasks(post)["Writer"]
+        self.assertEqual(self.assignees(task), [WRITER[0]])
+        self.assertTrue(
+            frappe.db.exists(
+                "ToDo",
+                {
+                    "reference_type": "Task",
+                    "reference_name": task.name,
+                    "allocated_to": WRITER[0],
+                    "status": "Open",
+                },
+            )
+        )
+
+    def test_a_finished_part_is_not_redone_when_reassigned(self):
+        from helpdesk.api import content_board
+
+        post = self.post()
+        writer_task = frappe.get_doc("Task", self.tasks(post)["Writer"].name)
+        writer_task.status = "Completed"
+        writer_task.save(ignore_permissions=True)
+
+        content_board.assign(post.name, "writer", [OTHER[0]])
+
+        self.assertNotIn("Writer", self.tasks(post))
+        self.assertEqual(
+            frappe.db.get_value("Task", writer_task.name, "status"), "Completed"
+        )
+
     def test_finishing_the_writing_moves_the_post_to_design(self):
         post = self.post()
         writer_task = frappe.get_doc("Task", self.tasks(post)["Writer"].name)

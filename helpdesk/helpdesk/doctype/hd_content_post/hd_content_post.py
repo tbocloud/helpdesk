@@ -172,8 +172,10 @@ class HDContentPost(Document):
         open_tasks = {
             t.content_role: t.name for t in tasks if t.status not in DONE_TASK_STATUSES
         }
-        # a part that was finished or cancelled isn't recreated; reopen its task instead
-        handled = {t.content_role for t in tasks if t.status in DONE_TASK_STATUSES}
+        # a finished part isn't redone, and a cancelled one isn't recreated; its task
+        # reopens only when someone new is put on the part (after everyone was taken off it)
+        finished = {t.content_role for t in tasks if t.status == "Completed"}
+        cancelled = {t.content_role: t.name for t in tasks if t.status == "Cancelled"}
         closing = CLOSE_TASKS_AS.get(self.status)
         wanted = {} if closing else self.wanted_tasks()
         project = self.content_project() if wanted else None
@@ -189,7 +191,12 @@ class HDContentPost(Document):
                 # the task closes its own ToDos (Task.close_assignments)
                 task.save(ignore_permissions=True)
         for role, plan in wanted.items():
-            if role not in open_tasks and role not in handled:
+            if role in open_tasks or role in finished:
+                continue
+            if role in cancelled:
+                if self.has_new_people(role, plan["users"]):
+                    self.reopen_task(cancelled[role], plan, project)
+            else:
                 self.create_task(role, plan, project)
 
     def content_tasks(self) -> list:
@@ -322,6 +329,34 @@ class HDContentPost(Document):
                 "custom_estimated_hours": plan["hours"] or None,
             }
         ).insert(ignore_permissions=True)
+        for user in plan["users"]:
+            self.give_task(task, user)
+
+    def has_new_people(self, role: str, users: list) -> bool:
+        """Whether this save puts someone on the part who wasn't on it before: a reassign,
+        not a save that leaves a part cancelled on purpose as it was."""
+        before = self.get_doc_before_save()
+        if not before:
+            return False
+        if role == SHARED_ROLE:
+            had = before.everyone()
+        else:
+            field = next(f for f, label in TASK_ROLES.items() if label == role)
+            had = before.people(field)
+        return bool(set(users) - set(had))
+
+    def reopen_task(self, name: str, plan: dict, project: str | None):
+        """The part's cancelled task opens again for the people now on it, due when the
+        post says (its old date belongs to the people taken off it)."""
+        task = frappe.get_doc("Task", name)
+        task.status = "Open"
+        if plan["due"]:
+            task.exp_end_date = plan["due"]
+        self.plan_task(task, plan, project)
+        task.save(ignore_permissions=True)
+        # its assignments were closed with it, so the people on it now are given it afresh
+        for user in set(task.assignees()) - set(plan["users"]):
+            remove_assignment("Task", task.name, user, ignore_permissions=True)
         for user in plan["users"]:
             self.give_task(task, user)
 
