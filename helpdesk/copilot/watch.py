@@ -22,8 +22,15 @@ import re
 
 import frappe
 from frappe import _
-from frappe.utils import (add_days, add_to_date, escape_html, get_datetime,
-                          get_url, now_datetime, today)
+from frappe.utils import (
+    add_days,
+    add_to_date,
+    escape_html,
+    get_datetime,
+    get_url,
+    now_datetime,
+    today,
+)
 
 from helpdesk.automation import automation_user
 from helpdesk.copilot import known_issues
@@ -34,8 +41,9 @@ SOURCE = "Error watch"
 SENSITIVE = re.compile(r"(^|[./\s])(accounts|stock|payroll)([./\s]|$)", re.I)
 FAILURES_NOTED = 4  # checks failed in a row before the site card says so
 MAX_SAMPLES = 5
-# never a ticket: the connector's own errors (its MCP calls), whatever the setting says
-ALWAYS_IGNORED = ("helpdesk_client",)
+# never a ticket: the connector's own errors (its MCP calls, logged as "MCP tool error: <tool>"
+# with no app of their own), whatever the setting says
+ALWAYS_IGNORED = ("helpdesk_client", "mcp tool error")
 # Ignored Errors left blank (an existing site's settings get no default on migrate)
 DEFAULT_IGNORED = ("session stopped",)
 

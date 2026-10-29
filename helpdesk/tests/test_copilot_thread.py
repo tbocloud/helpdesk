@@ -12,11 +12,15 @@ from unittest.mock import patch
 import frappe
 
 from helpdesk.api import copilot_thread as api
-from helpdesk.copilot import (assistant, deploy, fixes, router, runs, teams,
-                              thread)
-from helpdesk.test_utils import (create_agent, fake_investigation,
-                                 make_copilot_run, make_team, make_ticket,
-                                 run_as_user)
+from helpdesk.copilot import assistant, deploy, fixes, router, runs, teams, thread
+from helpdesk.test_utils import (
+    create_agent,
+    fake_investigation,
+    make_copilot_run,
+    make_team,
+    make_ticket,
+    run_as_user,
+)
 from helpdesk.tests.test_copilot_fix_flow import FixCase
 
 MESSAGE = assistant.MESSAGE

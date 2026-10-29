@@ -1,21 +1,24 @@
 from datetime import datetime
 
 import frappe
-from frappe.custom.doctype.custom_field.custom_field import \
-    create_custom_fields
+from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 from frappe.permissions import add_permission, update_permission_property
 
-from helpdesk.api.customization import \
-    ensure_ticket_type as ensure_customization_ticket_type
+from helpdesk.api.customization import (
+    ensure_ticket_type as ensure_customization_ticket_type,
+)
 from helpdesk.consts import DEFAULT_ARTICLE_CATEGORY
 from helpdesk.content_options import ensure_default_content_options
 from helpdesk.content_team import ensure_role as ensure_content_team_role
-from helpdesk.helpdesk.doctype.hd_content_occasion.hd_content_occasion import \
-    ensure_default_occasions
-from helpdesk.helpdesk.doctype.hd_department.hd_department import \
-    ensure_default_departments
-from helpdesk.helpdesk.doctype.hd_signoff_template.hd_signoff_template import \
-    ensure_default_signoff_templates
+from helpdesk.helpdesk.doctype.hd_content_occasion.hd_content_occasion import (
+    ensure_default_occasions,
+)
+from helpdesk.helpdesk.doctype.hd_department.hd_department import (
+    ensure_default_departments,
+)
+from helpdesk.helpdesk.doctype.hd_signoff_template.hd_signoff_template import (
+    ensure_default_signoff_templates,
+)
 from helpdesk.intake import ensure_intake_defaults
 from helpdesk.setup.default_views import add_default_views
 from helpdesk.setup.form_scripts import install_form_scripts

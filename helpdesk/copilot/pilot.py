@@ -13,9 +13,17 @@ from zoneinfo import ZoneInfo
 
 import frappe
 from frappe import _
-from frappe.utils import (add_days, escape_html, flt, get_datetime,
-                          get_first_day, get_url, getdate, now_datetime,
-                          time_diff_in_hours)
+from frappe.utils import (
+    add_days,
+    escape_html,
+    flt,
+    get_datetime,
+    get_first_day,
+    get_url,
+    getdate,
+    now_datetime,
+    time_diff_in_hours,
+)
 
 from helpdesk.copilot import settings as copilot_settings
 

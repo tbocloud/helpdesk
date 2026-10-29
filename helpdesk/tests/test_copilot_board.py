@@ -12,10 +12,18 @@ from frappe.utils import add_days, now_datetime
 
 from helpdesk.api import copilot_board as api
 from helpdesk.copilot import board, runs
-from helpdesk.test_utils import (create_agent, create_customer, create_user,
-                                 hold_commits, make_copilot_run,
-                                 make_copilot_settings, make_site_registry,
-                                 make_team, make_ticket, run_as_user)
+from helpdesk.test_utils import (
+    create_agent,
+    create_customer,
+    create_user,
+    hold_commits,
+    make_copilot_run,
+    make_copilot_settings,
+    make_site_registry,
+    make_team,
+    make_ticket,
+    run_as_user,
+)
 
 APPROVAL = "HDS Copilot Approval"
 DEPLOY = "HDS Deploy Request"

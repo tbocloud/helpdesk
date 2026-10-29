@@ -13,10 +13,16 @@ from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_days, now_datetime
 
 from helpdesk.copilot import assistant, customer, known_issues, runs, watch
-from helpdesk.test_utils import (FakeErrorSite, create_agent, create_customer,
-                                 hold_commits, make_copilot_run,
-                                 make_copilot_settings, make_site_registry,
-                                 make_support_connection)
+from helpdesk.test_utils import (
+    FakeErrorSite,
+    create_agent,
+    create_customer,
+    hold_commits,
+    make_copilot_run,
+    make_copilot_settings,
+    make_site_registry,
+    make_support_connection,
+)
 
 ISSUE = "HDS Known Issue"
 SITE_ERROR = "HDS Site Error"
@@ -63,7 +69,9 @@ class WatchCase(FrappeTestCase):
             "HDS Copilot Run", {"state": "Queued"}, "state", "Cancelled"
         )
         # GitHub's answers are cached a day; each test asks again
-        frappe.cache.delete_keys("copilot:has-fix:")  # other queued runs on the site would be counted
+        frappe.cache.delete_keys(
+            "copilot:has-fix:"
+        )  # other queued runs on the site would be counted
 
     def watched(self, name: str) -> str:
         customer_name = create_customer(name).name
@@ -232,6 +240,13 @@ class TestTheWatch(WatchCase):
         )
         self.site_errors.error(
             "frappe.sessions", "Session Stopped", app="frappe", times=5
+        )
+        # the connector's failed tool calls carry no app of their own (seen on the demo bench)
+        self.site_errors.error(
+            "MCP tool error: get_list",
+            "('DocType', 'Alpha Discount Settings')",
+            app="?",
+            times=5,
         )
 
         self.check()
