@@ -100,6 +100,24 @@ All thresholds are in HD Follow Up Settings (**Settings → Follow-ups**). Defau
 
 A ticket without an assignee goes to its team (HD Team members), else the Agent Managers.
 
+### Lead rules
+
+| Rule | When | Who | Severity |
+| --- | --- | --- | --- |
+| **Lead gone quiet** (`stale_lead`) | A lead on the ERP site has had no activity for its department's `stale_after_days` (default 3; [leads.md](leads.md#wave-1-assignment-duplicates-quiet-leads-website-form)) | L0: the lead's owner ("<Lead> has had no activity for N days"); L1, at idle days of twice the threshold or more: also the department's heads (a lead with no owner goes to the heads) | Waiting on you |
+
+`LeadRules` in `follow_ups.py` reads the leads from the ERP site through the first manager
+(`daily_sales_report.recipients()`) it answers for, since a manager sees every lead:
+`get_lead_departments` for the thresholds and heads, then `get_stale_leads` (asked for the
+shortest threshold, each lead kept at its own department's, `api.leads.read_stale_leads`). Owners
+and heads are the ERP users' emails, which are the hub users'. A lead is not a hub record, so its
+notice points at HD CRM Settings (`LEAD_DOCTYPE`) with the lead's name as the reference (the link
+check is skipped for it) and opens `/leads/<name>`. Leave cover, dedupe (one notice per person
+and lead; unread again only when L0 becomes L1) and the digest work as for any rule. The rule is
+skipped while Leads is off, the switch (`stale_leads`, **Lead rules** in Settings → Follow-ups)
+is off, or the ERP site can't answer (an older TBO Smart, or any error: nothing is added, the
+run goes on). It is not snoozable and has no badge.
+
 ## The ladder
 
 Each level **adds** people; nobody drops off.
@@ -228,6 +246,8 @@ gives the same two roles write access):
 - **Escalation ladder**: the three days and the key-task switch.
 - **Task rules** and **Ticket rules**: a switch per rule and its threshold; the support
   department.
+- **Lead rules**: the switch for leads gone quiet (the days are per department, in Settings
+  → CRM → Lead departments).
 - **Customer follow-up**: the email switch and its template; a line on HD Settings'
   auto-close with a button to General.
 - **Working hours**: read from the default SLA policy, with a button to SLA policies.
@@ -246,7 +266,9 @@ or more, and the SLA warnings are 1–99% with the second after the first. On th
 cleared number box keeps its last value rather than sending 0.
 
 Existing sites get the defaults stored by the patch `v16_0_2.seed_follow_up_settings`
-(post model sync), since a new Single has nothing stored until it is saved.
+(post model sync), since a new Single has nothing stored until it is saved; a site whose
+settings were stored earlier gets the lead rule switched on by
+`v16_0_2.enable_stale_lead_follow_up`.
 
 ## Where escalation shows
 
@@ -274,7 +296,7 @@ Existing sites get the defaults stored by the patch `v16_0_2.seed_follow_up_sett
   (custom fields in `setup/install.py`); `HD Notification.dedupe_key`.
 - UI: `FollowUpSettings.vue`, `EscalationBadge.vue`, `FollowUpStrip.vue`, `followUps.ts`,
   `pages/work/components/FollowUpControl.vue` and `FollowUpList.vue`.
-- Tests: `helpdesk/tests/test_follow_ups.py`.
+- Tests: `helpdesk/tests/test_follow_ups.py`, `helpdesk/tests/test_stale_leads.py` (lead rule).
 
 ## After deploy
 

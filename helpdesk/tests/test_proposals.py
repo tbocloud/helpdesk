@@ -375,6 +375,9 @@ class TestProposals(FrappeTestCase):
         )
         calls = {name: params for name, _post, params in self.crm.lead_calls}
         self.assertEqual(calls["link_project"]["project"], project.name)
+        # the ERP's link_project takes the lead and the plan (tbo_smart#56)
+        self.assertEqual(calls["link_project"]["plan"], "PIP-2026-00001")
+        self.assertNotIn("name", calls["link_project"])
         # again: the same project, no second set of tasks; a missing maker is filled in
         frappe.db.set_value("Project", project.name, "custom_crm_acting_user", None)
         again = proposals_api.create_project_from_plan("PIP-2026-00001")

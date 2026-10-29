@@ -206,7 +206,8 @@ def create_project_from_plan(plan: str) -> dict:
     chain = proposals(
         "link_project",
         post=True,
-        name=plan,
+        lead=data.get("lead"),
+        plan=data.get("plan") or plan,
         project=project,
         url=project_url(project),
     )

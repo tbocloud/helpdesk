@@ -218,6 +218,27 @@
         </SettingsSection>
 
         <SettingsSection
+          :title="__('Lead rules')"
+          :description="
+            __(
+              'Leads live on the ERP site. Each lead department sets how many days of silence count (Settings → CRM → Lead departments).'
+            )
+          "
+        >
+          <SettingRow
+            v-slot="{ id }"
+            :label="__('Lead gone quiet')"
+            :description="
+              __(
+                'The lead\'s owner is asked to follow up; at twice the days the department\'s heads are told too.'
+              )
+            "
+          >
+            <Switch :id="id" v-model="form.stale_leads" />
+          </SettingRow>
+        </SettingsSection>
+
+        <SettingsSection
           :title="__('Customer follow-up')"
           :description="autoCloseLine"
         >
@@ -467,6 +488,7 @@ const CHECKS = [
   "unassigned",
   "customer_replied",
   "awaiting_customer",
+  "stale_leads",
   "customer_follow_up_email",
 ];
 

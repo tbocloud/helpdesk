@@ -105,9 +105,11 @@ def new_notification(
     user_from: str | None = None,
     dedupe_key: str | None = None,
     deliver: bool = True,
+    ignore_links: bool = False,
 ):
     """One HD Notification. `deliver=False` keeps it in the panel only: no chat
-    message or email (follow-ups reach chat in the digest instead). A Sales Employee
+    message or email (follow-ups reach chat in the digest instead). `ignore_links`
+    is for a record that lives on another site (a lead on the ERP site). A Sales Employee
     left on a project's or a post's team hears nothing about work they can't open."""
     if doctype in SALES_HIDDEN_DOCTYPES and is_sales_employee(user):
         return None
@@ -126,6 +128,7 @@ def new_notification(
         }
     )
     doc.flags.skip_delivery = not deliver
+    doc.flags.ignore_links = ignore_links
     doc.insert(ignore_permissions=True)
     return doc
 
