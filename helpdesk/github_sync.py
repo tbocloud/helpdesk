@@ -45,7 +45,7 @@ from frappe.utils import (
 
 from helpdesk import merge_bot
 from helpdesk.automation import acting_user, credit
-from helpdesk.tasky.time_sessions import record_session
+from helpdesk.tasky.time_sessions import counted_hours, record_session
 from helpdesk.work_reminders import notify_users
 
 SETTINGS = "HD GitHub Settings"
@@ -329,10 +329,11 @@ class PullRequestLink:
         end = now_datetime()
         # saved by move_task once the move goes through
         self._stopped = (start, end)
-        hours = round((end - get_datetime(start)).total_seconds() / 3600, 2)
+        hours = counted_hours(start, end)
         task.custom_actual_hours = (task.get("custom_actual_hours") or 0) + hours
         task.custom_timer_elapsed = (task.get("custom_timer_elapsed") or 0) + hours
         task.custom_timer_start = None
+        task.custom_timer_user = None
 
     # --- events ---
 

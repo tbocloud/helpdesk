@@ -33,9 +33,13 @@ from helpdesk.tasky.permissions import (
     sees_all_tasks,
 )
 from helpdesk.tasky.time_sessions import (
+    begin_timer,
+    check_hand_entered,
     completion_days,
+    counted_hours,
     first_start_on,
     mark_logged,
+    pause_timer,
     record_session,
 )
 from helpdesk.utils import (
@@ -230,6 +234,7 @@ def complete_task(
     notes: str | None = None,
     for_review: bool | str | None = False,
     days: str | list | None = None,
+    backdate_reason: str | None = None,
 ) -> dict:
     """Complete a task and log the time spent on it to the user's timesheet.
 
@@ -237,6 +242,10 @@ def complete_task(
     its own date; without it, `hours_worked` goes on today. The timesheet is part of
     the completion: if it can't be saved, the task stays as it was. `for_review` sends
     it to the lead for review on any project, not only those that ask for a review.
+
+    A day holds at most the work day's hours (helpdesk.work_hours), counting what the person
+    already has on it; hours entered by hand are for today or yesterday only, or an older
+    day with a `backdate_reason` from a System Manager (`check_hand_entered`).
     """
     doc = frappe.get_doc("Task", str(task))
     doc.check_permission("write")
@@ -246,6 +255,7 @@ def complete_task(
         worked = _completion_days(doc, days)
     else:
         worked = [(frappe.utils.getdate(), _completion_hours(hours_worked))]
+    check_hand_entered(doc, frappe.session.user, worked, backdate_reason)
     hours = round(sum(h for _day, h in worked), 2)
     notes = _completion_notes(notes)
 
@@ -290,8 +300,9 @@ def _completion_hours(value: float | str | None) -> float:
 
 @frappe.whitelist()
 def get_completion_days(task: str) -> dict:
-    """The hours to offer when completing the task: {today, days: [{date, hours, from_time,
-    long}]}, one per day its timer ran (helpdesk.tasky.time_sessions.completion_days)."""
+    """The hours to offer when completing the task: {today, yesterday, days: [{date, hours,
+    from_time}], left: {date: hours still free that day}}, one entry in `days` per day its
+    timer ran (helpdesk.tasky.time_sessions.completion_days)."""
     doc = frappe.get_doc("Task", str(task))
     doc.check_permission("read")
     return completion_days(doc)
@@ -373,6 +384,7 @@ def _mark_completed(doc, hours: float, for_review: bool = False):
         max(frappe.utils.flt(doc.custom_actual_hours) - counted, 0) + hours
     )
     doc.custom_timer_start = None
+    doc.custom_timer_user = None
     doc.custom_timer_elapsed = 0
     doc.save()
 
@@ -2283,7 +2295,9 @@ def start_timer(task: str):
     """Resume the paused timer of a task in progress.
 
     Only this task's timer, and only when asked: pausing (stop_timer) keeps the
-    task in Working with its time banked, and nothing else starts it again.
+    task in Working with its time banked, and nothing else starts it again. The
+    person's other running timer is paused first (one timer at a time), and
+    outside work hours it is refused.
     """
     task_id = str(task)
     frappe.has_permission("Task", "write", task_id, throw=True)
@@ -2293,7 +2307,8 @@ def start_timer(task: str):
     if status != "Working":
         frappe.throw(_("Start the task first; its timer runs while it's in progress."))
     if not running:
-        frappe.db.set_value("Task", task_id, "custom_timer_start", frappe.utils.now())
+        for other in begin_timer(task_id, frappe.session.user):
+            notify_task_list(other)
         notify_task_list(task_id)
     return {"ok": 1}
 
@@ -2306,17 +2321,7 @@ def stop_timer(task: str):
     timer_start = frappe.db.get_value("Task", task_id, "custom_timer_start")
     if not timer_start:
         return {"elapsed": 0}
-    elapsed = _timer_hours(timer_start)
-    actual = frappe.db.get_value("Task", task_id, "custom_actual_hours") or 0
-    paused = frappe.db.get_value("Task", task_id, "custom_timer_elapsed") or 0
-    record_session(task_id, timer_start)
-    frappe.db.set_value("Task", task_id, "custom_timer_start", None)
-    frappe.db.set_value(
-        "Task", task_id, "custom_actual_hours", actual + round(elapsed, 2)
-    )
-    frappe.db.set_value(
-        "Task", task_id, "custom_timer_elapsed", paused + round(elapsed, 2)
-    )
+    elapsed = pause_timer(task_id)
     notify_task_list(task_id)
     return {"elapsed": round(elapsed, 2)}
 
@@ -2340,15 +2345,16 @@ def move_task(task: str, new_status: str):
 
     # Leaving Working: accumulate elapsed from running timer
     if old_status == "Working" and timer_start:
-        elapsed_this_move = _timer_hours(timer_start)
         # only Open and Pending Review bank the stretch for completion (below); cancelling
         # drops it from what completion offers, as before, but it's kept for the record
-        record_session(
+        elapsed_this_move = record_session(
             task_id,
             timer_start,
             settled=new_status not in ("Open", "Pending Review"),
         )
-        frappe.db.set_value("Task", task_id, "custom_timer_start", None)
+        frappe.db.set_value(
+            "Task", task_id, {"custom_timer_start": None, "custom_timer_user": None}
+        )
         frappe.db.set_value(
             "Task", task_id, "custom_actual_hours", actual + round(elapsed_this_move, 2)
         )
@@ -2363,8 +2369,10 @@ def move_task(task: str, new_status: str):
             )
 
     # Entering Working: start timer (fresh or resume)
+    # (outside work hours the task goes in progress with its timer paused)
     if new_status == "Working":
-        frappe.db.set_value("Task", task_id, "custom_timer_start", frappe.utils.now())
+        for other in begin_timer(task_id, frappe.session.user, strict=False):
+            notify_task_list(other)
 
     # the controller checks dependencies, review and ticket hand-back
     status = _save_status(task_id, new_status)
@@ -2378,7 +2386,7 @@ def get_timer(task: str):
     doc.check_permission("read")
     if not doc.custom_timer_start:
         return {"running": False, "elapsed": 0, "timer_start": None}
-    elapsed = _timer_hours(doc.custom_timer_start)
+    elapsed = counted_hours(doc.custom_timer_start)
     return {
         "running": True,
         "elapsed": round(elapsed, 2),
@@ -2404,14 +2412,6 @@ def notify_task_assignment(doc, method=None):
     `_assign` without saving the task."""
     if doc.reference_type == "Task" and doc.reference_name:
         notify_task_list(doc.reference_name)
-
-
-def _timer_hours(timer_start) -> float:
-    """Hours the timer has run. The start was stored in the site's time zone, so
-    compare with now in that zone, not the server clock (UTC on our servers)."""
-    started = frappe.utils.get_datetime(timer_start)
-    elapsed = (frappe.utils.now_datetime() - started).total_seconds() / 3600.0
-    return max(elapsed, 0.0)
 
 
 @frappe.whitelist()

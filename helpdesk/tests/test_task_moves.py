@@ -11,6 +11,7 @@ from helpdesk.api import work
 from helpdesk.tasky import api
 from helpdesk.test_utils import (
     capture_list_updates,
+    freeze_work_day,
     get_reminder_messages,
     get_task_comments,
     hold_commits,
@@ -299,6 +300,11 @@ class TestRecentProjects(TaskMovesCase):
 
 
 class TestPausedTimerStaysPaused(TaskMovesCase):
+    def setUp(self):
+        super().setUp()
+        # timers only run in work hours
+        freeze_work_day(self, 12)
+
     def test_a_paused_task_stays_paused_when_another_task_starts(self):
         first = self.task("Configure payroll")
         second = self.task("Import employees")
@@ -331,6 +337,11 @@ class TestPausedTimerStaysPaused(TaskMovesCase):
 
 
 class TestTaskListUpdates(TaskMovesCase):
+    def setUp(self):
+        super().setUp()
+        # timers only run in work hours
+        freeze_work_day(self, 12)
+
     """In progress and Overview reload on Task `list_update`: every change they
     show must send one, including those made without saving the task."""
 
