@@ -424,10 +424,13 @@ async function submit() {
   if (saving.value) return;
   errorMessage.value = validate();
   if (errorMessage.value) return;
+  const opened = opening;
   if (!props.lead) {
     // not left the field yet: check now, and stop to show a likely repeat first
     const shown = likelyRepeat.value && checkedFor === currentKey();
     await checkDuplicates();
+    // closed and opened again meanwhile: that form is sent by its own click
+    if (opened !== opening) return;
     if (likelyRepeat.value && !shown) return;
   }
   const data = payload();
@@ -438,7 +441,6 @@ async function submit() {
   // create or update is decided now, from the lead the dialog has at this moment
   const lead = props.lead;
   const note = lead ? "" : remarks.value.trim();
-  const opened = opening;
   saving.value = true;
   call(
     lead ? "helpdesk.api.leads.update_lead" : "helpdesk.api.leads.create_lead",

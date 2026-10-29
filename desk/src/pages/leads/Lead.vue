@@ -492,9 +492,12 @@ const addNote = createResource({
   url: "helpdesk.api.leads.add_note",
   method: "POST",
   onSuccess() {
-    dropUnsavedNote(addNote.params.name);
-    note.value = "";
+    const { name, note: sent } = addNote.params;
+    dropUnsavedNote(name);
     toast.success(__("Note added"));
+    // moved to another lead, or typed on, while it was sent: that text isn't this note
+    if (name !== props.leadId) return;
+    if (note.value === sent) note.value = "";
     detail.reload();
   },
   onError(e: unknown) {

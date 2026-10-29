@@ -328,10 +328,14 @@ doesn't show without its fields. The hub can be deployed before TBO Smart.
   Remarks aren't a lead field: the ERP site's `create_lead` takes only the `data` keys above,
   so the dialog saves them with `add_note` once the lead exists (they're the first entry on
   its timeline). If that note fails the lead stays created, a warning says so, and the
-  remarks are kept in the browser per lead (`localStorage` `hd-lead-unsaved-note:<lead>`,
-  `keepUnsavedNote` in `leads.ts`): the lead's page opens with them in its note box, and
-  they stay through reloads until that note is added. A save that finishes after the dialog
-  was closed and opened again keeps those remarks but leaves the reopened form alone. Edit
+  remarks are kept per person and lead (`keepUnsavedNote` in `leads.ts`): in `localStorage`
+  under `hd-lead-unsaved-note:<user>:<lead>`, and in memory as well so blocked or full
+  storage still hands them over. The lead's page opens with them in its note box, and they
+  stay through reloads until that note is added; logout clears them (`stores/auth.ts`), so
+  the next person on a shared browser never sees them. A save (or its duplicate check) that
+  finishes after the dialog was closed and opened again keeps those remarks but leaves the
+  reopened form alone, and a note added on the lead page clears the box only if it's still
+  that lead and the text wasn't changed meanwhile. Edit
   lead has no Remarks; the lead page's note composer does that.
 - **Lead** (`/helpdesk/leads/<name>`, `Lead.vue`): details, *Move stage* (the primary
   action; only `allowed_stages`, with an optional note), *Edit* (the same dialog, sending
