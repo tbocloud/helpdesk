@@ -571,6 +571,15 @@ the timer, hold/resume, complete, edit, ask for help and hand over work as on a 
 each using the task's own project; project-level actions (Plan, Approve/Send back, Make
 recurring) stay on the project's board.
 
+**Column order** is each person's own: dragging a column by its header moves it (a brand line
+shows where it lands), and the grip button in the header does the same from the keyboard with
+the left and right arrow keys. The order is kept in this browser per person
+(`hd-board-columns:<user>` in `localStorage`) and applies to every board, the project boards
+too; a status it doesn't list yet joins at its usual place at the end. Dragging a task still
+moves it between columns. While a task or column is dragged near the board's left or right edge
+(96px), the board scrolls that way, faster the closer it gets, so a column off screen (e.g.
+Completed) is reached in one drag; it stops on drop, at the end of the drag or on leaving the board.
+
 **New task** (header, the primary action) opens the same `NewTaskDialog` as a project, with a
 **Project** picker first: `get_projects` cut to open projects where `can_add_tasks` is true (the
 rule `add_task` checks), with a note when there are none. Picking a project loads its team,
