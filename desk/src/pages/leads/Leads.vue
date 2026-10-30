@@ -15,6 +15,15 @@
             <LucideRefreshCw class="size-4" aria-hidden="true" />
           </template>
         </Button>
+        <Button
+          v-if="options?.can_find_prospects"
+          :label="__('Find prospects')"
+          :route="{ name: 'FindProspects' }"
+        >
+          <template #prefix>
+            <LucideRadar class="size-4" aria-hidden="true" />
+          </template>
+        </Button>
         <Button variant="solid" :label="__('New lead')" @click="showNew = true">
           <template #prefix>
             <LucidePlus class="size-4" aria-hidden="true" />
@@ -516,6 +525,7 @@ import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideClock from "~icons/lucide/clock";
 import LucidePhone from "~icons/lucide/phone";
 import LucidePlus from "~icons/lucide/plus";
+import LucideRadar from "~icons/lucide/radar";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideListChecks from "~icons/lucide/list-checks";
 import LucideSearch from "~icons/lucide/search";

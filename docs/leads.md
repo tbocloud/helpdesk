@@ -61,6 +61,7 @@ user exists there with a sales role, applies what they may see, and records writ
 | `get_daily_report` | GET | `date, owner` | each salesperson's day and week to date (§2.5.1) |
 | `log_call` | POST | `lead, outcome, note` | `{name, status, outcomes}` (§2.7) |
 | `get_my_calls`, `get_next_batch`, `record_call_outcome`, `get_call_batches_report` | GET, POST, POST, GET | see [Today's calls](#todays-calls) | TBO Smart's `hub-leads-api.md` §2.13 |
+| `estimate_prospect_run`, `start_prospect_run`, `get_prospect_runs`, `get_prospect_run` | POST, POST, GET, GET | `values: {industry, state, districts, provider, max_results, department, require_phone}`; `name` | a run and its price, the started run, the runs, one run with its leads; see [Find prospects](#find-prospects), TBO Smart's `hub-leads-api.md` §2.15 |
 | `get_lead_ai` | GET | `name` | what the AI proposes, the lead's health and likely duplicates (TBO Smart's `hub-leads-api.md` §2.6) |
 | `refresh_lead_ai`, `apply_ai_stage`, `dismiss_ai_stage` | POST | `name` | as above, or the lead (apply) |
 | `draft_lead_message` | POST | `name, channel (whatsapp / email), language` | `{channel, subject, text, to?, url?}`; nothing is sent |
@@ -245,12 +246,51 @@ Code: `helpdesk/api/call_batches.py` (proxies; `report_lines` for the 6 pm text)
 `TodaysCalls.vue`, `CallRow.vue`, `CallOutcomeDialog.vue`, `CallBatchesTable.vue`,
 `desk/src/components/Settings/CRM/CallBatchRules.vue`.
 
+## Find prospects
+
+TBO sells mainly by phone. Managers and department heads find businesses by industry and district
+(for example Resorts in Idukki) and drop them into a department's **unassigned pool**; the call
+batches ([Today's calls](#todays-calls)) hand them out. The ERP site does everything (providers,
+prices, the monthly spend cap, the search, the import, the duplicate check and reading each
+business's own website); the hub only asks and shows. TBO Smart's `docs/prospecting.md` is the
+spec.
+
+**Who.** `get_options` carries `can_find_prospects` (System Manager, Sales Manager or a department
+head, while TBO Smart Settings → Prospecting → Enable Find prospects is on) and `prospecting`
+(providers with `available`, the default department, the largest run, the monthly cap and spend).
+Everyone else gets neither: no button, and the page says it is not available. The ERP site
+refuses the calls too.
+
+**The page** `/leads/prospects` (button *Find prospects* in the Leads header, only with the flag).
+One purpose, one primary action. On the left the search: Industry, State, District(s) (a multi
+select from the ERP site's district lists, or comma separated text without them), Provider (each
+with its coverage, one that is switched off or has no key is listed as "not set up" and cannot be
+used), Max results, Department and "Only businesses with a phone number". The primary action is
+**Estimate**; it prices the run (nothing is searched or bought), shows the cost, the number of
+businesses (OpenStreetMap: how many the map holds; a paid provider: "up to" the maximum) and the
+coverage note, and the button becomes **Start run**. Changing any field drops the estimate. A paid
+run over the monthly cap is refused with the ERP site's words. On the right the runs, newest first,
+each with its status (icon and word), counts (found, new, duplicates) and cost; a running one
+refreshes every 5 seconds. A run opens in a dialog: counts, the leads it created (each links to its
+lead page and shows its Why call line, or "In the pool" while it has no owner), the log, and a link
+to the Leads list filtered by the source `Prospecting – <provider>`.
+
+**On the lead page.** A lead found by a run (or any lead whose website was read) shows **Why call**
+above the AI suggestions: the one-line reason and four chips, each with an icon and words in both
+states (Website / No website, Online booking / No online booking, WhatsApp / No WhatsApp, Hiring /
+Not hiring). Neutral styling, no colour meaning. Nothing shows while the site was not read or could
+not be read.
+
+**Errors.** An older ERP site: the runs list is empty with "The ERP site can't find prospects yet";
+estimate and start say "needs the latest TBO Smart". A refusal says only managers and department
+heads can find prospects, or the ERP site's own reason.
+
 ## Hub endpoints
 
 `helpdesk/api/leads.py`, thin typed proxies (writes are POST only): `get_options`,
 `list_leads`, `get_overview_page`, `get_overview`, `get_business_overview`, `get_lead_intake`, `get_proposal_money`, `get_lead`, `get_lead_ai`, `refresh_lead_ai`, `apply_ai_stage`,
 `dismiss_ai_stage`, `draft_lead_message`, `log_message_sent`, `create_lead`, `update_lead`,
-`set_stage`, `add_note`, `get_category_counts`, `add_industry`, `bulk_set_lead_category`, `find_duplicate_leads`, `get_stale_leads`, `get_lead_departments`, `save_lead_department`, `set_lead_department_active`, `click_to_call`, `call_recording`, `get_daily_report`, `log_call`, `get_lead_photos`, `upload_lead_photo`, `delete_lead_photo`, `lead_photo`. They check
+`set_stage`, `add_note`, `get_category_counts`, `add_industry`, `bulk_set_lead_category`, `find_duplicate_leads`, `get_stale_leads`, `get_lead_departments`, `save_lead_department`, `set_lead_department_active`, `click_to_call`, `call_recording`, `get_daily_report`, `log_call`, `get_lead_photos`, `upload_lead_photo`, `delete_lead_photo`, `lead_photo`. Find prospects has its own `helpdesk/api/prospects.py`: `estimate_prospect_run`, `start_prospect_run`, `get_prospect_runs`, `get_prospect_run`. They check
 `can_use_leads`, validate the view and page size, trim notes, and pass `acting_user`. The
 client is `CRMClient.call` in `helpdesk/integrations/crm/client.py`; the call and error
 mapping live in `helpdesk/integrations/crm/leads.py`. The API key and secret never reach the
@@ -689,3 +729,4 @@ site's reason reaching the person, the next batch's reason passed on, the manage
 `helpdesk/tests/test_lead_calls.py`: Call posted as the signed-in person to TBO Smart's
 telephony API, the recording streamed (audio only) and a refusal refused, the MyOperator
 settings for admins only and proxied.
+`helpdesk/tests/test_prospects.py`: an estimate and a start proxied as the person (POST, the values as a set of fields), the runs read live, a refusal naming who may, an older ERP site (the list hides quietly, estimate and start say so), and no access without leads.

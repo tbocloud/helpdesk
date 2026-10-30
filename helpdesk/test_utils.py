@@ -4431,3 +4431,33 @@ def call_batches_report(people: list[dict]) -> dict:
         "people": [{"department": "GrowthX", "batches": [], **p} for p in people],
         "totals": {key: sum(p[key] for p in people) for key in keys},
     }
+
+
+def prospect_run(name: str = "PR-0001", **fields) -> dict:
+    """A TBO Prospect Run as the ERP site's prospect methods answer it: Resorts in Idukki
+    through OpenStreetMap, Estimated, nothing found yet."""
+    return {
+        "name": name,
+        "industry": "Resorts",
+        "state": "Kerala",
+        "districts": ["Idukki"],
+        "provider": "OpenStreetMap",
+        "department": "GrowthX",
+        "max_results": 50,
+        "require_phone": 1,
+        "status": "Estimated",
+        "estimated_cost": 0,
+        "expected_count": 37,
+        "estimate_note": "37 on the map with a phone number.",
+        "actual_cost": 0,
+        "count_found": 0,
+        "count_duplicates": 0,
+        "count_skipped": 0,
+        "count_created": 0,
+        "started_at": None,
+        "finished_at": None,
+        "creation": "2026-10-30 10:00:00",
+        "owner": "manager@leads.example",
+        "owner_name": "Mia Manager",
+        **fields,
+    }

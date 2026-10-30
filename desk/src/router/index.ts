@@ -159,6 +159,11 @@ const portalRoutes = [
     component: () => import("@/pages/leads/Leads.vue"),
   },
   {
+    path: "/leads/prospects",
+    name: "FindProspects",
+    component: () => import("@/pages/leads/FindProspects.vue"),
+  },
+  {
     path: "/leads/:leadId",
     name: "Lead",
     component: () => import("@/pages/leads/Lead.vue"),
