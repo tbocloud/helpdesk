@@ -506,7 +506,6 @@ import {
 } from "frappe-ui";
 import { computed, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { useAuthStore } from "@/stores/auth";
 import LucideBuilding2 from "~icons/lucide/building-2";
 import LucideCalendar from "~icons/lucide/calendar";
 import LucideCalendarRange from "~icons/lucide/calendar-range";
