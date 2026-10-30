@@ -4209,3 +4209,88 @@ def make_accepted_proposal(**values) -> dict:
         "hub_project": None,
         **values,
     }
+
+
+def queue_call(item: str, lead: str = "LEAD-1", **fields) -> dict:
+    """One call of TBO Smart's get_my_calls queue (pending, scheduled or overdue)."""
+    return {
+        "item": item,
+        "batch": "CB-261030-0001",
+        "slot": "Morning",
+        "lead": lead,
+        "priority": 3,
+        "reason": "Never called",
+        "is_repeat": 0,
+        "retry_at": None,
+        "attempts": 0,
+        "batch_ends_at": "2026-10-30 13:00:00",
+        "summary": {
+            "name": lead,
+            "lead_name": f"Lead {lead}",
+            "company_name": "Bright Co",
+            "industry": "Retail",
+            "district": "Kozhikode",
+            "phone": "9847012345",
+            "stage": "New Lead",
+            "temperature": None,
+            "last_note": None,
+            "next_step": None,
+            "wrong_number": 0,
+        },
+        **fields,
+    }
+
+
+def my_calls(
+    pending: tuple[dict, ...] = (),
+    overdue: tuple[dict, ...] = (),
+    called: int = 0,
+    enabled: bool = True,
+    **fields,
+) -> dict:
+    """A get_my_calls answer: a Morning batch of `called` + the pending calls, with
+    `overdue` after it and the next batch refused until the pending ones are done."""
+    size = called + len(pending)
+    return {
+        "enabled": enabled,
+        "date": "2026-10-30",
+        "batch": {
+            "name": "CB-261030-0001",
+            "slot": "Morning",
+            "department": "GrowthX",
+            "starts_at": "2026-10-30 10:00:00",
+            "ends_at": "2026-10-30 13:00:00",
+            "seconds_left": 5400,
+            "batches": ["CB-261030-0001"],
+        },
+        "counts": {
+            "size": size,
+            "called": called,
+            "connected": 0,
+            "pending": len(pending),
+            "scheduled": 0,
+            "overdue": len(overdue),
+        },
+        "today": {"size": size, "called": called, "connected": 0},
+        "pending": list(pending),
+        "scheduled": [],
+        "overdue": list(overdue),
+        "can_call": False,
+        "next_batch": {
+            "allowed": False,
+            "reason": "Finish the calls still waiting first.",
+        },
+        "next_slot": None,
+        **fields,
+    }
+
+
+def call_batches_report(people: list[dict]) -> dict:
+    """A get_call_batches_report answer for `people` ({user, user_name, size, called,
+    connected, overdue}) with the totals."""
+    keys = ("size", "called", "connected", "overdue")
+    return {
+        "date": "2026-10-26",
+        "people": [{"department": "GrowthX", "batches": [], **p} for p in people],
+        "totals": {key: sum(p[key] for p in people) for key in keys},
+    }
