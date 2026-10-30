@@ -172,10 +172,12 @@ def needs_push(post) -> bool:
     if get_datetime(post.modified) > sent:
         return True
     # attaching an image doesn't touch the post's `modified`
+    # the newest attachment; v16 rejects "max(creation)" as a field string
     latest_image = frappe.db.get_value(
         "File",
         {"attached_to_doctype": "HD Content Post", "attached_to_name": post.name},
-        "max(creation)",
+        "creation",
+        order_by="creation desc",
     )
     return bool(latest_image) and get_datetime(latest_image) > sent
 

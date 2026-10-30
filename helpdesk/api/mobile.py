@@ -955,9 +955,12 @@ def _message(name, kind: str, user: dict, at, content, attachments) -> dict:
 
 
 def _ticket_statuses() -> list[str]:
-    return frappe.get_all(
-        "HD Ticket Status", filters={"enabled": 1}, pluck="name", order_by="`order` asc"
+    # `order` is a reserved word: v15 needs it backticked in order_by and v16 rejects
+    # backticks there, so sort here
+    rows = frappe.get_all(
+        "HD Ticket Status", filters={"enabled": 1}, fields=["name", "order"]
     )
+    return [row.name for row in sorted(rows, key=lambda row: row.order or 0)]
 
 
 def _own_files(files: list[str] | None) -> list[str]:

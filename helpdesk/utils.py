@@ -404,6 +404,17 @@ def is_frappe_version(version: str, above: bool = False, below: bool = False):
     return major_version == target_version
 
 
+def aggregate(function: str, field: str, alias: str):
+    """An aggregate for a `fields` list, e.g. aggregate("count", "name", "count").
+
+    Frappe v16 accepts only {"COUNT": "name", "as": "count"} and rejects SQL functions
+    written as strings; v15 accepts only "count(name) as count".
+    """
+    if is_frappe_version("16", above=True):
+        return {function.upper(): field, "as": alias}
+    return f"{function}({field}) as {alias}"
+
+
 def format_time_difference(dt, context="ago"):
     if not dt:
         return ""
