@@ -39,7 +39,9 @@
             />
           </div>
           <!-- the Daily report has the day's new leads itself, and loads in one request -->
-          <template v-if="view !== 'daily' && view !== 'today'">
+          <template
+            v-if="view !== 'daily' && view !== 'today' && view !== 'business'"
+          >
             <!-- hidden quietly until the ERP site's TBO Smart counts it, and on a failed read -->
             <div
               v-if="!intakeData && intakeLoading"
@@ -66,6 +68,16 @@
           ref="dailyPanel"
           class="mt-4"
         />
+
+        <!-- management only: the ERP site decides who (System Manager or TBO Management) -->
+        <template v-else-if="view === 'business'">
+          <LeadsBusiness
+            v-if="canViewBusiness"
+            ref="businessPanel"
+            class="mt-4"
+            :options="options"
+          />
+        </template>
 
         <div v-else class="mt-3 flex flex-col gap-3">
           <div
@@ -454,6 +466,7 @@ import LucideUserPlus from "~icons/lucide/user-plus";
 import LucideX from "~icons/lucide/x";
 import LeadFormDialog from "./LeadFormDialog.vue";
 import LeadIntakeStrip from "./LeadIntakeStrip.vue";
+import LeadsBusiness from "./LeadsBusiness.vue";
 import LeadsDailyReport from "./LeadsDailyReport.vue";
 import LeadsOverview from "./LeadsOverview.vue";
 import TodaysCalls from "./TodaysCalls.vue";
@@ -483,11 +496,12 @@ import {
 const PAGE_LENGTH = 20;
 // the Overview comes first and is where the page opens (docs/leads.md)
 // and the Daily report sits next to it, once the ERP site has it
-type LeadTab = LeadView | "overview" | "daily" | "today";
+type LeadTab = LeadView | "overview" | "daily" | "business" | "today";
 const TABS: { value: LeadTab; label: string }[] = [
   { value: "today", label: __("Today's calls") },
   { value: "overview", label: __("Overview") },
   { value: "daily", label: __("Daily report") },
+  { value: "business", label: __("Business") },
   ...LEAD_VIEWS,
 ];
 const PERIOD_LABELS: Record<string, string> = {
@@ -509,6 +523,7 @@ const CREATED = [
 const overviewPanel = ref<InstanceType<typeof LeadsOverview> | null>(null);
 const dailyPanel = ref<InstanceType<typeof LeadsDailyReport> | null>(null);
 const todayPanel = ref<InstanceType<typeof TodaysCalls> | null>(null);
+const businessPanel = ref<InstanceType<typeof LeadsBusiness> | null>(null);
 
 const authStore = useAuthStore();
 const route = useRoute();
@@ -547,7 +562,8 @@ const isList = computed(
   () =>
     view.value !== "overview" &&
     view.value !== "daily" &&
-    view.value !== "today"
+    view.value !== "today" &&
+    view.value !== "business"
 );
 const search = ref(queryValue("q"));
 // what the list is searched for: the box, once typing pauses
@@ -665,11 +681,13 @@ function showAll() {
 loadLeadOptions();
 const options = computed(() => leadOptions.data as LeadOptions | undefined);
 const hasDaily = computed(() => !!options.value?.has_daily_report);
+const canViewBusiness = computed(() => !!options.value?.can_view_business);
 const hasBatches = computed(() => batchesOn(options.value));
 // Today's calls is the Call today list for people who get call batches: one place
 const tabs = computed(() =>
   TABS.filter((tab) => {
     if (tab.value === "daily") return hasDaily.value;
+    if (tab.value === "business") return canViewBusiness.value;
     if (tab.value === "today") return hasBatches.value;
     if (tab.value === "call_today") return !hasBatches.value;
     return true;
@@ -687,6 +705,9 @@ watch(options, (value) => {
     view.value = "overview";
   if (!hasBatches.value && view.value === "today") view.value = "overview";
   if (hasBatches.value && view.value === "call_today") view.value = "today";
+  // a link to a tab the person may not open
+  if (value && !value.can_view_business && view.value === "business")
+    view.value = "overview";
 });
 const clickToCall = useClickToCall();
 
@@ -771,6 +792,7 @@ function refresh() {
   if (view.value === "today") todayPanel.value?.reload();
   else if (view.value === "overview") overviewPanel.value?.reload();
   else if (view.value === "daily") dailyPanel.value?.reload();
+  else if (view.value === "business") businessPanel.value?.reload();
   else {
     intake.submit({ fresh: 1 });
     staleLeads.submit({ fresh: 1 });

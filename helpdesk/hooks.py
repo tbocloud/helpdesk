@@ -31,6 +31,9 @@ after_migrate = [
     "helpdesk.setup.after_migrate",
 ]
 
+# a lead photo's bytes are cached by the browser, for that person only
+after_request = ["helpdesk.api.leads.cache_lead_photo"]
+
 # Full Text Search
 # ------------------
 
@@ -61,6 +64,8 @@ scheduler_events = {
             "helpdesk.tasks.push_ticket_statuses",
             "helpdesk.tasks.sync_conversations",
             "helpdesk.content_sync.sync_content_approvals",
+            # posts the content calendar scheduled for Facebook / Instagram (docs/meta-publishing.md)
+            "helpdesk.integrations.meta.publisher.publish_due",
             "helpdesk.helpdesk.doctype.hd_meeting.hd_meeting.send_reminders",
         ],
         # every 10 minutes: new hub errors to the team's chat channel
