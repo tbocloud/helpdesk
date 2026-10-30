@@ -412,6 +412,10 @@ from the tasks the viewer can see, so a plain member's card counts their own tas
   storage is blocked) and puts it back only when coming back to that entry (its
   `history.state.forward` is set). A fresh visit (sidebar, link) starts at the top and takes
   that link's filters, even where it reuses a history position an older entry saved under.
+  The background refresh can change the cards' heights, so the position is put back again
+  once it's in, unless the person scrolled meanwhile (wheel, touch, key or pointer on the
+  panel). The in-memory copy is read first, as it has the latest save even when storage
+  refused it.
   While kept alive the page never writes its filters into another page's URL. If the page
   wasn't alive (a full reload, or the mobile and desktop layouts switched), Back puts the
   position back once the projects, recent row, departments and every card's stats are in,

@@ -671,15 +671,17 @@ useScrollRestore(
   // shown again: what's on screen stays while it refreshes
   (back) => {
     if (!back) readFilters();
-    reloadAll();
+    return reloadAll();
   }
 );
 
 function reloadAll() {
-  projects.reload();
-  recent.reload();
-  departments.reload();
-  Object.values(dashboards).forEach((d) => d.reload());
+  return Promise.allSettled([
+    projects.reload(),
+    recent.reload(),
+    departments.reload(),
+    ...Object.values(dashboards).map((d) => d.reload()),
+  ]);
 }
 
 function statsFor(project: ProjectSummary): ProjectStats | null {

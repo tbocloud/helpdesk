@@ -18,12 +18,26 @@ function keep(key: string, top: number) {
   } catch {}
 }
 
+// memory first: it has the latest save even when storage refused it; storage after a reload
 function savedAt(key: string): number | undefined {
+  if (positions.has(key)) return positions.get(key);
   try {
     const stored = sessionStorage.getItem(STORE_PREFIX + key);
     if (stored !== null) return Number(stored);
   } catch {}
-  return positions.get(key);
+  return undefined;
+}
+
+/** Whether the person moves the panel themselves from now on (a scroll event can't tell). */
+function watchForMoves(el: HTMLElement) {
+  let moved = false;
+  const events = ["wheel", "touchstart", "keydown", "pointerdown"];
+  const mark = () => (moved = true);
+  events.forEach((e) => el.addEventListener(e, mark, { passive: true }));
+  return {
+    moved: () => moved,
+    stop: () => events.forEach((e) => el.removeEventListener(e, mark)),
+  };
 }
 
 /**
@@ -32,12 +46,13 @@ function savedAt(key: string): number | undefined {
  * A page kept alive comes back with its content, so the position is put back at once;
  * otherwise `ready` turns true once the content is in, so it lands on the full list.
  * `onReturn` runs when a kept-alive page shows again, with whether it's Back to the same
- * entry (`false`: a fresh visit, e.g. from the sidebar).
+ * entry (`false`: a fresh visit, e.g. from the sidebar); the promise it may return is its
+ * refresh, after which the position is put back again.
  */
 export function useScrollRestore(
   panel: Ref<HTMLElement | null | undefined>,
   ready: Ref<boolean>,
-  onReturn?: (back: boolean) => void
+  onReturn?: (back: boolean) => Promise<unknown> | void
 ) {
   const route = useRoute();
 
@@ -75,8 +90,18 @@ export function useScrollRestore(
       return;
     }
     const top = saved();
-    onReturn?.(top !== undefined);
+    const refreshed = onReturn?.(top !== undefined);
     await nextTick();
-    if (panel.value) panel.value.scrollTop = top ?? 0;
+    if (!panel.value) return;
+    panel.value.scrollTop = top ?? 0;
+    if (top === undefined || !refreshed) return;
+    // the refresh can change the content's height: the place again once it's in, unless
+    // the person has moved on by then
+    const moves = watchForMoves(panel.value);
+    await refreshed;
+    await nextTick();
+    moves.stop();
+    // left again meanwhile: the panel is off the page, and the next Back restores it
+    if (!moves.moved() && panel.value?.isConnected) panel.value.scrollTop = top;
   });
 }
