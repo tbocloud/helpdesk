@@ -1,6 +1,11 @@
 <template>
   <Layout class="isolate">
-    <router-view class="flex flex-1 flex-col overflow-auto" />
+    <router-view v-slot="{ Component }">
+      <!-- Projects stays alive behind a project, so Back shows it at once, in its place -->
+      <keep-alive include="Projects">
+        <component :is="Component" class="flex flex-1 flex-col overflow-auto" />
+      </keep-alive>
+    </router-view>
   </Layout>
 </template>
 

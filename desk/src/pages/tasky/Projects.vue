@@ -28,7 +28,7 @@
       </template>
     </LayoutHeader>
 
-    <div class="flex-1 overflow-auto">
+    <div ref="panel" class="flex-1 overflow-auto">
       <div class="mx-auto w-full max-w-6xl px-4 py-5 md:px-6">
         <p class="text-p-sm text-ink-gray-6">
           {{
@@ -357,6 +357,7 @@
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import StatTile from "@/components/StatTile.vue";
 import TaskyState from "@/components/TaskyState.vue";
+import { useScrollRestore } from "@/composables/scrollRestore";
 import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
 import { watchDebounced } from "@vueuse/core";
@@ -450,22 +451,38 @@ function queryValue(key: string) {
   return typeof value === "string" ? value : "";
 }
 
-const activeStatus = ref<StatusTab>(
-  STATUS_TABS.find((t) => t === queryValue("status")) ?? "Open"
-);
-const activeDepartment = ref(
-  queryValue("department") === NO_DEPARTMENT_PARAM
-    ? NO_DEPARTMENT
-    : queryValue("department")
-);
-const search = ref(queryValue("q"));
-const show = ref<Show>(
-  (["overdue", "ending"] as const).find((s) => s === queryValue("show")) ?? ""
-);
+function filtersFromQuery() {
+  const department = queryValue("department");
+  return {
+    status: STATUS_TABS.find((t) => t === queryValue("status")) ?? "Open",
+    department: department === NO_DEPARTMENT_PARAM ? NO_DEPARTMENT : department,
+    q: queryValue("q"),
+    show:
+      (["overdue", "ending"] as const).find((s) => s === queryValue("show")) ??
+      ("" as Show),
+  };
+}
+
+const initialFilters = filtersFromQuery();
+const activeStatus = ref<StatusTab>(initialFilters.status);
+const activeDepartment = ref(initialFilters.department);
+const search = ref(initialFilters.q);
+const show = ref<Show>(initialFilters.show);
+
+/** A fresh visit to the kept-alive page takes that link's filters. */
+function readFilters() {
+  const filters = filtersFromQuery();
+  activeStatus.value = filters.status;
+  activeDepartment.value = filters.department;
+  search.value = filters.q;
+  show.value = filters.show;
+}
 
 watchDebounced(
   [activeStatus, activeDepartment, search, show],
   () => {
+    // the page stays alive behind a project: never write its filters into another page's URL
+    if (route.name !== "TaskyProjects") return;
     router.replace({
       query: {
         ...route.query,
@@ -634,11 +651,37 @@ watch(
   { immediate: true }
 );
 
+// --- Back from a project lands where the list was; the page is kept alive (AgentRoot) ---
+
+const panel = ref<HTMLElement | null>(null);
+const settled = (r: { fetched: boolean; error: unknown }) =>
+  r.fetched || !!r.error;
+// the cards grow once their stats are in, so the position waits for those too
+useScrollRestore(
+  panel,
+  computed(
+    () =>
+      projects.fetched &&
+      settled(recent) &&
+      settled(departments) &&
+      allProjects.value.every(
+        (p) => dashboards[p.name] && settled(dashboards[p.name])
+      )
+  ),
+  // shown again: what's on screen stays while it refreshes
+  (back) => {
+    if (!back) readFilters();
+    return reloadAll();
+  }
+);
+
 function reloadAll() {
-  projects.reload();
-  recent.reload();
-  departments.reload();
-  Object.values(dashboards).forEach((d) => d.reload());
+  return Promise.allSettled([
+    projects.reload(),
+    recent.reload(),
+    departments.reload(),
+    ...Object.values(dashboards).map((d) => d.reload()),
+  ]);
 }
 
 function statsFor(project: ProjectSummary): ProjectStats | null {

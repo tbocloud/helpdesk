@@ -302,6 +302,71 @@ class TestTasksFromPosts(ContentTaskCase):
             1,
         )
 
+    def test_reassigning_a_part_everyone_was_taken_off_reopens_its_task(self):
+        from helpdesk.api import content_board
+
+        post = self.post()
+        content_board.assign(post.name, "writer", [])
+        self.assertNotIn("Writer", self.tasks(post))
+
+        content_board.assign(post.name, "writer", [OTHER[0]])
+
+        tasks = self.tasks(post)
+        self.assertEqual(self.assignees(tasks["Writer"]), [OTHER[0]])
+        self.assertEqual(
+            getdate(tasks["Writer"].exp_end_date),
+            add_days(getdate(self.publish), -3),
+        )
+        # the same task opened again, not a second one for the part
+        self.assertEqual(
+            frappe.db.count(
+                "Task", {"content_post": post.name, "content_role": "Writer"}
+            ),
+            1,
+        )
+        self.assertTrue(
+            frappe.db.exists(
+                "HD Notification",
+                {"user_to": OTHER[0], "message": ("like", "New content task:%")},
+            )
+        )
+
+    def test_putting_the_same_person_back_gives_them_the_task_again(self):
+        from helpdesk.api import content_board
+
+        post = self.post()
+        content_board.assign(post.name, "writer", [])
+        content_board.assign(post.name, "writer", [WRITER[0]])
+
+        task = self.tasks(post)["Writer"]
+        self.assertEqual(self.assignees(task), [WRITER[0]])
+        self.assertTrue(
+            frappe.db.exists(
+                "ToDo",
+                {
+                    "reference_type": "Task",
+                    "reference_name": task.name,
+                    "allocated_to": WRITER[0],
+                    "status": "Open",
+                },
+            )
+        )
+
+    def test_a_finished_part_is_not_redone_when_reassigned(self):
+        from helpdesk.api import content_board
+
+        post = self.post()
+        writer_task = frappe.get_doc("Task", self.tasks(post)["Writer"].name)
+        writer_task.status = "Completed"
+        writer_task.save(ignore_permissions=True)
+
+        content_board.assign(post.name, "writer", [OTHER[0]])
+
+        self.assertNotIn("Writer", self.tasks(post))
+        self.assertEqual(
+            frappe.db.get_value("Task", writer_task.name, "status"), "Completed"
+        )
+
     def test_finishing_the_writing_moves_the_post_to_design(self):
         post = self.post()
         writer_task = frappe.get_doc("Task", self.tasks(post)["Writer"].name)
@@ -734,6 +799,36 @@ class TestContentProject(ContentTaskCase):
         post.save()
 
         self.assertEqual({t.project for t in self.tasks(post).values()}, {theirs})
+
+    def test_a_part_reopened_after_a_customer_change_joins_their_project(self):
+        from helpdesk.api import content_board
+
+        post = self.post()
+        content_board.assign(post.name, "writer", [])
+        create_customer("Content Tasks Movers")
+        theirs = make_project("Content Tasks Movers - Social media").name
+        frappe.db.set_value(
+            "Project",
+            theirs,
+            {"customer": "Content Tasks Movers", "project_type": "Content Calendar"},
+        )
+        post.reload()
+        post.customer = "Content Tasks Movers"
+        post.save()
+
+        content_board.assign(post.name, "writer", [OTHER[0]])
+
+        self.assertEqual(self.tasks(post)["Writer"].project, theirs)
+
+    def test_reopening_a_part_for_a_customer_without_a_project_is_blocked(self):
+        from helpdesk.api import content_board
+
+        post = self.post()
+        content_board.assign(post.name, "writer", [])
+        self.without_project_customer()
+
+        with self.assertRaisesRegex(frappe.ValidationError, "has no open project"):
+            content_board.assign(post.name, "writer", [OTHER[0]])
 
     def test_the_dialog_is_told_which_project_tasks_go_to(self):
         self.assertEqual(get_content_project(CUSTOMER)["name"], self.project)

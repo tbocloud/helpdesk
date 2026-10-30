@@ -437,6 +437,24 @@ designer's. In `wanted_tasks` (`due()`):
 - **A part reopened by hand** (cancelled or completed, then reopened in Tasky) keeps the date
   it had; whoever reopens it sets a new one if the post has moved since.
 
+### Reassigning a part whose task was cancelled
+
+Taking everyone off a role (Assign or Reassign with nobody picked) cancels that part's task.
+A cancelled part is never recreated as a second task, so before 2026-10-29 putting someone
+back on it did nothing: the task stayed cancelled with the old person and the new one got no
+task. Now, when a save puts **someone new** on the part (`has_new_people`, comparing with the
+post before the save), `sync_tasks` reopens that same task (`reopen_task`): status Open, due
+on the post's date for the role (the old date belonged to the people taken off it), the
+post's hours, the old people's assignments cancelled and the people on it now given it
+afresh, each told about their new task. The same applies to the shared task in "One task
+for the post" mode, and to a part cancelled because only ERP or Sales Employees were left on
+it. A save that doesn't add anyone (a part cancelled on purpose while its person stays on
+the post, then the post edited) leaves it cancelled, and a **completed** part is never redone
+by a reassign. If the post moved to another customer while the part was cancelled, the
+reopened task joins the current customer's content project (`is_customers_project`), and
+reopening needs that project like adding people does (`require_content_project` →
+`reopens_tasks`, from the same `parts_to_reopen` that `sync_tasks` uses).
+
 When a task counts as overdue (past its date, or due today and past its estimated hours) is
 described in [workspace-pages.md](workspace-pages.md#when-a-task-is-overdue), and who hears
 about it in [follow-ups.md](follow-ups.md).
