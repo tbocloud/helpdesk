@@ -70,11 +70,12 @@
           :label="__('Territory')"
           :options="choices(options?.territories, __('Not set'))"
         />
-        <FormControl
-          v-model="form.industry"
-          type="select"
-          :label="__('Industry')"
-          :options="choices(options?.industries, __('Not set'))"
+        <LeadCategoryFields
+          v-model:industry="form.industry"
+          v-model:state="form.state"
+          v-model:district="form.district"
+          v-model:org-size="form.org_size"
+          :options="options"
         />
         <FormControl
           v-if="departmentChoices.length"
@@ -229,6 +230,7 @@ import {
   type LeadOptions,
   type LeadRow,
 } from "./leads";
+import LeadCategoryFields from "./LeadCategoryFields.vue";
 
 const props = defineProps<{
   open: boolean;

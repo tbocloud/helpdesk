@@ -3660,6 +3660,18 @@ def lead_department(
     }
 
 
+def lead_category_options() -> dict:
+    """The category part of the ERP site's get_options: industries, organisation sizes,
+    states, Kerala's districts and the districts used on leads, by state."""
+    return {
+        "industries": ["Resorts", "Builders & Developers"],
+        "org_sizes": ["1-10", "11-50", "51-200"],
+        "states": ["Kerala", "Tamil Nadu", "Dubai"],
+        "kerala_districts": ["Kozhikode", "Ernakulam"],
+        "districts_by_state": {"Kerala": ["Kozhikode"], "": ["Chennai"]},
+    }
+
+
 def stale_lead(name: str, idle_days: int, **fields) -> dict:
     """A row of the ERP site's get_stale_leads: a lead of GrowthX owned by Asha with no
     activity for `idle_days`, unless `fields` say otherwise."""
@@ -4208,4 +4220,214 @@ def make_accepted_proposal(**values) -> dict:
         "deliverables": "12 posts a month, 4 reels",
         "hub_project": None,
         **values,
+    }
+
+
+def enable_meta(app_id: str = "123456", app_secret: str = "app-secret"):
+    """Turns on Meta publishing with a fake app (HD Meta Settings), for tests that mock Graph."""
+    settings = frappe.get_doc("HD Meta Settings")
+    settings.update({"enabled": 1, "app_id": app_id, "app_secret": app_secret})
+    settings.save(ignore_permissions=True)
+    frappe.clear_cache(doctype="HD Meta Settings")
+
+
+def make_meta_connection(project: str, instagram: bool = True, **values):
+    """Creates a Connected HD Meta Connection for `project` with a Page (and, unless
+    `instagram` is False, an Instagram account) and fake tokens."""
+    return frappe.get_doc(
+        {
+            "doctype": "HD Meta Connection",
+            "project": project,
+            "status": "Connected",
+            "facebook_page_id": "page-1",
+            "facebook_page_name": "Client Page",
+            "page_access_token": "page-token",
+            "instagram_user_id": "ig-1" if instagram else None,
+            "instagram_username": "client_ig" if instagram else None,
+            **values,
+        }
+    ).insert(ignore_permissions=True)
+
+
+def make_approved_post(title: str, customer: str, status: str = "Approved", **values):
+    """Creates an HD Content Post in a status the client has approved, due in two hours,
+    with a caption and hashtags (the customer gets a content project)."""
+    from frappe.utils import add_to_date
+
+    return make_content_post(
+        title,
+        customer,
+        status=status,
+        publish_on=add_to_date(now_datetime(), hours=2),
+        caption="<p>Fresh <b>Monday</b> offer</p>",
+        hashtags="#sale, summer",
+        **values,
+    )
+
+
+class FakeGraph:
+    """Stands in for Meta's Graph API: patch `requests` in the graph client with `patch()`.
+
+    `routes` maps "METHOD path-suffix" (for example "POST ig-1/media") to a dict, a list of
+    dicts (one per call, the last repeats) or an exception to raise. Every call is kept in
+    `calls` as (method, path, params), without the access token."""
+
+    def __init__(self, routes: dict | None = None):
+        self.routes = routes or {}
+        self.calls: list[tuple[str, str, dict]] = []
+
+    def handle(self, method: str, url: str, params: dict):
+        # drop the host and the version: ".../v25.0/ig-1/media" -> "ig-1/media"
+        path = url.split("graph.facebook.com/", 1)[-1].split("/", 1)[-1]
+        params = {
+            k: v
+            for k, v in params.items()
+            if k not in ("access_token", "appsecret_proof")
+        }
+        self.calls.append((method, path, params))
+        route = next(
+            (
+                v
+                for k, v in self.routes.items()
+                if k.split(" ", 1)[0] == method and path.endswith(k.split(" ", 1)[1])
+            ),
+            {},
+        )
+        if isinstance(route, list):
+            route = route.pop(0) if len(route) > 1 else route[0]
+        if isinstance(route, Exception):
+            raise route
+        status = route.get("_status", 200)
+        return FakeGraphResponse(route, status)
+
+    def patch(self):
+        return patch.multiple(
+            "helpdesk.integrations.meta.graph.requests",
+            get=lambda url, params=None, timeout=None: self.handle(
+                "GET", url, params or {}
+            ),
+            post=lambda url, data=None, timeout=None: self.handle(
+                "POST", url, data or {}
+            ),
+        )
+
+    def paths(self, method: str | None = None) -> list[str]:
+        return [p for m, p, _ in self.calls if method in (None, m)]
+
+
+class FakeGraphResponse:
+    """The bit of a requests response the Graph client reads."""
+
+    def __init__(self, body: dict, status: int = 200):
+        self.body = body
+        self.status_code = status
+        self.ok = status < 400
+
+    def json(self):
+        return self.body
+
+
+def attach_media(post: str, file_name: str):
+    """Attaches a real small image (by the file name's extension) or, for .mp4 and .mov,
+    a few placeholder bytes to a content post as a private file."""
+    ext = file_name.rsplit(".", 1)[-1].lower()
+    content = (
+        make_image_bytes({"jpg": "JPEG", "jpeg": "JPEG", "png": "PNG"}.get(ext, "WEBP"))
+        if ext in ("jpg", "jpeg", "png", "webp")
+        else b"video-bytes"
+    )
+    return frappe.get_doc(
+        {
+            "doctype": "File",
+            "file_name": file_name,
+            "attached_to_doctype": "HD Content Post",
+            "attached_to_name": post,
+            "is_private": 1,
+            "content": content,
+        }
+    ).insert(ignore_permissions=True)
+
+
+def queue_call(item: str, lead: str = "LEAD-1", **fields) -> dict:
+    """One call of TBO Smart's get_my_calls queue (pending, scheduled or overdue)."""
+    return {
+        "item": item,
+        "batch": "CB-261030-0001",
+        "slot": "Morning",
+        "lead": lead,
+        "priority": 3,
+        "reason": "Never called",
+        "is_repeat": 0,
+        "retry_at": None,
+        "attempts": 0,
+        "batch_ends_at": "2026-10-30 13:00:00",
+        "summary": {
+            "name": lead,
+            "lead_name": f"Lead {lead}",
+            "company_name": "Bright Co",
+            "industry": "Retail",
+            "district": "Kozhikode",
+            "phone": "9847012345",
+            "stage": "New Lead",
+            "temperature": None,
+            "last_note": None,
+            "next_step": None,
+            "wrong_number": 0,
+        },
+        **fields,
+    }
+
+
+def my_calls(
+    pending: tuple[dict, ...] = (),
+    overdue: tuple[dict, ...] = (),
+    called: int = 0,
+    enabled: bool = True,
+    **fields,
+) -> dict:
+    """A get_my_calls answer: a Morning batch of `called` + the pending calls, with
+    `overdue` after it and the next batch refused until the pending ones are done."""
+    size = called + len(pending)
+    return {
+        "enabled": enabled,
+        "date": "2026-10-30",
+        "batch": {
+            "name": "CB-261030-0001",
+            "slot": "Morning",
+            "department": "GrowthX",
+            "starts_at": "2026-10-30 10:00:00",
+            "ends_at": "2026-10-30 13:00:00",
+            "seconds_left": 5400,
+            "batches": ["CB-261030-0001"],
+        },
+        "counts": {
+            "size": size,
+            "called": called,
+            "connected": 0,
+            "pending": len(pending),
+            "scheduled": 0,
+            "overdue": len(overdue),
+        },
+        "today": {"size": size, "called": called, "connected": 0},
+        "pending": list(pending),
+        "scheduled": [],
+        "overdue": list(overdue),
+        "can_call": False,
+        "next_batch": {
+            "allowed": False,
+            "reason": "Finish the calls still waiting first.",
+        },
+        "next_slot": None,
+        **fields,
+    }
+
+
+def call_batches_report(people: list[dict]) -> dict:
+    """A get_call_batches_report answer for `people` ({user, user_name, size, called,
+    connected, overdue}) with the totals."""
+    keys = ("size", "called", "connected", "overdue")
+    return {
+        "date": "2026-10-26",
+        "people": [{"department": "GrowthX", "batches": [], **p} for p in people],
+        "totals": {key: sum(p[key] for p in people) for key in keys},
     }

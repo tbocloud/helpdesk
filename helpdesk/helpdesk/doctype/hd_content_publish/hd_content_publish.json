@@ -1,0 +1,106 @@
+{
+	"istable": 1,
+	"fields": [
+		{
+			"fieldname": "target",
+			"fieldtype": "Select",
+			"label": "Target",
+			"options": "Facebook\nInstagram",
+			"reqd": 1,
+			"in_list_view": 1
+		},
+		{
+			"fieldname": "status",
+			"fieldtype": "Select",
+			"label": "Status",
+			"options": "Queued\nPublishing\nPublished\nFailed",
+			"default": "Queued",
+			"in_list_view": 1
+		},
+		{
+			"fieldname": "publish_kind",
+			"fieldtype": "Select",
+			"label": "Format",
+			"options": "Image\nCarousel\nVideo\nStory\nText"
+		},
+		{
+			"fieldname": "publish_at",
+			"fieldtype": "Datetime",
+			"label": "Publish At",
+			"in_list_view": 1
+		},
+		{
+			"fieldname": "attempts",
+			"fieldtype": "Int",
+			"label": "Tries",
+			"default": "0"
+		},
+		{
+			"fieldname": "next_try_on",
+			"fieldtype": "Datetime",
+			"label": "Next Try"
+		},
+		{
+			"fieldname": "queued_by",
+			"fieldtype": "Link",
+			"options": "User",
+			"label": "Queued By"
+		},
+		{
+			"fieldname": "link",
+			"fieldtype": "Data",
+			"label": "Link To Share",
+			"options": "URL"
+		},
+		{
+			"fieldname": "meta_post_id",
+			"fieldtype": "Data",
+			"label": "Meta Post ID"
+		},
+		{
+			"fieldname": "permalink",
+			"fieldtype": "Data",
+			"label": "Live Link",
+			"options": "URL"
+		},
+		{
+			"fieldname": "published_on",
+			"fieldtype": "Datetime",
+			"label": "Published On"
+		},
+		{
+			"fieldname": "error",
+			"fieldtype": "Small Text",
+			"label": "Error"
+		}
+	],
+	"permissions": [],
+	"actions": [],
+	"creation": "2026-10-30 12:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"index_web_pages_for_search": 0,
+	"links": [],
+	"modified": "2026-10-30 12:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD Content Publish",
+	"owner": "Administrator",
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": [],
+	"field_order": [
+		"target",
+		"status",
+		"publish_kind",
+		"publish_at",
+		"attempts",
+		"next_try_on",
+		"queued_by",
+		"link",
+		"meta_post_id",
+		"permalink",
+		"published_on",
+		"error"
+	]
+}

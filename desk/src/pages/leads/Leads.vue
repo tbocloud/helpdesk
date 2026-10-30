@@ -32,11 +32,16 @@
               size="md"
               :aria-label="__('Which leads')"
               :options="tabs"
-              @update:model-value="view = $event as LeadTab"
+              @update:model-value="
+                view = $event as LeadTab;
+                picked = true;
+              "
             />
           </div>
           <!-- the Daily report has the day's new leads itself, and loads in one request -->
-          <template v-if="view !== 'daily'">
+          <template
+            v-if="view !== 'daily' && view !== 'today' && view !== 'business'"
+          >
             <!-- hidden quietly until the ERP site's TBO Smart counts it, and on a failed read -->
             <div
               v-if="!intakeData && intakeLoading"
@@ -47,8 +52,11 @@
           </template>
         </div>
 
+        <!-- the batch of calls for this slot; it replaces Call today for those who have it -->
+        <TodaysCalls v-if="view === 'today'" ref="todayPanel" class="mt-4" />
+
         <LeadsOverview
-          v-if="view === 'overview'"
+          v-else-if="view === 'overview'"
           ref="overviewPanel"
           class="mt-4"
           @intake="takeOverviewIntake"
@@ -60,6 +68,16 @@
           ref="dailyPanel"
           class="mt-4"
         />
+
+        <!-- management only: the ERP site decides who (System Manager or TBO Management) -->
+        <template v-else-if="view === 'business'">
+          <LeadsBusiness
+            v-if="canViewBusiness"
+            ref="businessPanel"
+            class="mt-4"
+            :options="options"
+          />
+        </template>
 
         <div v-else class="mt-3 flex flex-col gap-3">
           <div
@@ -114,6 +132,11 @@
               :options="CREATED"
             />
           </div>
+          <LeadCategoryFilters
+            ref="categoryPanel"
+            v-model="categories"
+            :options="options"
+          />
           <div
             v-if="created === 'custom'"
             class="flex flex-wrap items-end gap-3"
@@ -134,9 +157,37 @@
             />
           </div>
           <div
-            v-if="hasFilters"
+            v-if="hasFilters || canCategorise"
             class="flex flex-wrap items-center justify-end gap-2"
           >
+            <template v-if="canCategorise">
+              <span
+                v-if="selecting"
+                class="mr-auto font-mono text-p-sm tabular-nums text-ink-gray-7"
+                aria-live="polite"
+                >{{ __("{0} selected", String(selected.size)) }}</span
+              >
+              <Button
+                v-if="selecting"
+                :label="__('Select this page')"
+                @click="selectPage"
+              />
+              <Button
+                v-if="selecting"
+                variant="solid"
+                :label="__('Set category')"
+                :disabled="!selected.size"
+                @click="showSet = true"
+              />
+              <Button
+                :label="selecting ? __('Done') : __('Select leads')"
+                @click="toggleSelecting"
+              >
+                <template #prefix>
+                  <LucideListChecks class="size-4" aria-hidden="true" />
+                </template>
+              </Button>
+            </template>
             <!-- what the Overview opened this list with -->
             <span
               v-for="chip in extraChips"
@@ -145,6 +196,7 @@
               >{{ chip }}</span
             >
             <Button
+              v-if="hasFilters"
               variant="ghost"
               :label="__('Clear filters')"
               @click="clearFilters"
@@ -156,7 +208,7 @@
           </div>
         </div>
 
-        <template v-if="view !== 'overview'">
+        <template v-if="isList">
           <TaskyState
             v-if="waitingForDates"
             class="mt-6"
@@ -247,6 +299,13 @@
                 :key="row.name"
                 class="flex items-center border-b border-outline-gray-1 last:border-b-0"
               >
+                <Checkbox
+                  v-if="selecting"
+                  class="ml-4 shrink-0"
+                  :model-value="selected.has(row.name)"
+                  :label="__('Select {0}', row.lead_name || row.name)"
+                  @update:model-value="toggleRow(row.name)"
+                />
                 <router-link
                   :to="{ name: 'Lead', params: { leadId: row.name } }"
                   class="flex min-w-0 flex-1 flex-col gap-2 px-4 py-3 transition-colors hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-outline-gray-4 md:flex-row md:items-center md:gap-4"
@@ -305,6 +364,17 @@
                       <template v-if="row.segment">
                         <span aria-hidden="true">·</span>
                         <span>{{ row.segment }}</span>
+                      </template>
+                      <template v-if="categoryLabel(row)">
+                        <span aria-hidden="true">·</span>
+                        <span class="inline-flex items-center gap-1">
+                          <LucideTag
+                            class="size-3.5 shrink-0 text-ink-gray-5"
+                            aria-hidden="true"
+                          />
+                          <span class="sr-only">{{ __("Category") }}</span>
+                          {{ categoryLabel(row) }}
+                        </span>
                       </template>
                       <template v-if="row.mobile_no || row.email_id">
                         <span aria-hidden="true">·</span>
@@ -410,6 +480,11 @@
     </div>
 
     <LeadFormDialog v-model:open="showNew" @saved="openLead" />
+    <LeadSetCategoryDialog
+      v-model:open="showSet"
+      :leads="[...selected]"
+      @saved="categorised"
+    />
   </div>
 </template>
 
@@ -417,11 +492,13 @@
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import TaskyBadge from "@/components/TaskyBadge.vue";
 import TaskyState from "@/components/TaskyState.vue";
+import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
 import { watchDebounced } from "@vueuse/core";
 import {
   Button,
+  Checkbox,
   createResource,
   dayjs,
   FormControl,
@@ -429,6 +506,7 @@ import {
 } from "frappe-ui";
 import { computed, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { useAuthStore } from "@/stores/auth";
 import LucideBuilding2 from "~icons/lucide/building-2";
 import LucideCalendar from "~icons/lucide/calendar";
 import LucideCalendarRange from "~icons/lucide/calendar-range";
@@ -440,16 +518,24 @@ import LucideClock from "~icons/lucide/clock";
 import LucidePhone from "~icons/lucide/phone";
 import LucidePlus from "~icons/lucide/plus";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
+import LucideListChecks from "~icons/lucide/list-checks";
 import LucideSearch from "~icons/lucide/search";
 import LucideSearchX from "~icons/lucide/search-x";
+import LucideTag from "~icons/lucide/tag";
 import LucideUser from "~icons/lucide/user";
 import LucideUserPlus from "~icons/lucide/user-plus";
 import LucideX from "~icons/lucide/x";
+import LeadCategoryFilters from "./LeadCategoryFilters.vue";
 import LeadFormDialog from "./LeadFormDialog.vue";
+import LeadSetCategoryDialog from "./LeadSetCategoryDialog.vue";
 import LeadIntakeStrip from "./LeadIntakeStrip.vue";
+import LeadsBusiness from "./LeadsBusiness.vue";
 import LeadsDailyReport from "./LeadsDailyReport.vue";
 import LeadsOverview from "./LeadsOverview.vue";
+import TodaysCalls from "./TodaysCalls.vue";
+import { batchesOn } from "./callBatches";
 import {
+  categoryLabel,
   choices,
   clientStatus,
   departmentLabel,
@@ -465,6 +551,7 @@ import {
   usableDepartments,
   type LeadIntake,
   type StaleLead,
+  type LeadCategories,
   type LeadOptions,
   type LeadRow,
   type LeadMetric,
@@ -474,10 +561,12 @@ import {
 const PAGE_LENGTH = 20;
 // the Overview comes first and is where the page opens (docs/leads.md)
 // and the Daily report sits next to it, once the ERP site has it
-type LeadTab = LeadView | "overview" | "daily";
+type LeadTab = LeadView | "overview" | "daily" | "business" | "today";
 const TABS: { value: LeadTab; label: string }[] = [
+  { value: "today", label: __("Today's calls") },
   { value: "overview", label: __("Overview") },
   { value: "daily", label: __("Daily report") },
+  { value: "business", label: __("Business") },
   ...LEAD_VIEWS,
 ];
 const PERIOD_LABELS: Record<string, string> = {
@@ -498,7 +587,10 @@ const CREATED = [
 ];
 const overviewPanel = ref<InstanceType<typeof LeadsOverview> | null>(null);
 const dailyPanel = ref<InstanceType<typeof LeadsDailyReport> | null>(null);
+const todayPanel = ref<InstanceType<typeof TodaysCalls> | null>(null);
+const businessPanel = ref<InstanceType<typeof LeadsBusiness> | null>(null);
 
+const authStore = useAuthStore();
 const route = useRoute();
 const router = useRouter();
 const showNew = ref(false);
@@ -508,9 +600,20 @@ function queryValue(key: string) {
   return typeof value === "string" ? value : "";
 }
 
+// a salesperson whose department hands out call batches opens on them, anyone else on
+// the Overview
+function defaultTab(): LeadTab {
+  return authStore.isSalesEmployee &&
+    batchesOn(leadOptions.data as LeadOptions | undefined)
+    ? "today"
+    : "overview";
+}
+
 function queryView(): LeadTab {
   const value = queryValue("view");
-  return TABS.some((v) => v.value === value) ? (value as LeadTab) : "overview";
+  return TABS.some((v) => v.value === value)
+    ? (value as LeadTab)
+    : defaultTab();
 }
 
 function queryPage() {
@@ -521,7 +624,11 @@ function queryPage() {
 const view = ref<LeadTab>(queryView());
 // a list of leads, not one of the two report tabs
 const isList = computed(
-  () => view.value !== "overview" && view.value !== "daily"
+  () =>
+    view.value !== "overview" &&
+    view.value !== "daily" &&
+    view.value !== "today" &&
+    view.value !== "business"
 );
 const search = ref(queryValue("q"));
 // what the list is searched for: the box, once typing pauses
@@ -533,6 +640,64 @@ const filters = reactive({
   segment: queryValue("segment"),
   department: queryValue("department"),
 });
+// Industry, State, District and Organisation size: each any of its values, kept in the
+// URL as repeated keys (?industry=Resorts&industry=Hotels…)
+const CATEGORY_KEYS = ["industry", "state", "district", "org_size"] as const;
+function queryList(key: string) {
+  const value = route.query[key];
+  return (Array.isArray(value) ? value : [value]).filter(
+    (v): v is string => typeof v === "string" && !!v
+  );
+}
+function queryCategories(): LeadCategories {
+  return Object.fromEntries(
+    CATEGORY_KEYS.map((key) => [key, queryList(key)])
+  ) as unknown as LeadCategories;
+}
+const categories = ref<LeadCategories>(queryCategories());
+const categoryPanel = ref<InstanceType<typeof LeadCategoryFilters> | null>(
+  null
+);
+const hasCategories = computed(() =>
+  CATEGORY_KEYS.some((key) => categories.value[key].length)
+);
+const emptyCategories = (): LeadCategories => ({
+  industry: [],
+  state: [],
+  district: [],
+  org_size: [],
+});
+
+// managers pick many leads and set their category at once
+const auth = useAuthStore();
+const canCategorise = computed(
+  () => auth.isManager && !!options.value?.org_sizes
+);
+const selecting = ref(false);
+const selected = ref(new Set<string>());
+const showSet = ref(false);
+function toggleSelecting() {
+  selecting.value = !selecting.value;
+  selected.value = new Set();
+}
+function toggleRow(name: string) {
+  const next = new Set(selected.value);
+  if (!next.delete(name)) next.add(name);
+  selected.value = next;
+}
+function selectPage() {
+  selected.value = new Set([
+    ...selected.value,
+    ...(data.value?.rows ?? []).map((r) => r.name),
+  ]);
+}
+function categorised() {
+  leads.reload();
+  categoryPanel.value?.reload();
+  leadOptions.reload();
+  toggleSelecting();
+}
+
 // set by a number on the Overview: the leads it counts, and its period
 function queryExtra() {
   return {
@@ -583,6 +748,7 @@ const hasFilters = computed(
       filters.owner ||
       filters.segment ||
       filters.department ||
+      hasCategories.value ||
       extra.metric ||
       extraChips.value.length
     )
@@ -621,6 +787,7 @@ function clearFilters() {
     segment: "",
     department: "",
   });
+  categories.value = emptyCategories();
   Object.assign(extra, {
     source: "",
     temperature: "",
@@ -639,12 +806,32 @@ function showAll() {
 loadLeadOptions();
 const options = computed(() => leadOptions.data as LeadOptions | undefined);
 const hasDaily = computed(() => !!options.value?.has_daily_report);
+const canViewBusiness = computed(() => !!options.value?.can_view_business);
+const hasBatches = computed(() => batchesOn(options.value));
+// Today's calls is the Call today list for people who get call batches: one place
 const tabs = computed(() =>
-  TABS.filter((tab) => tab.value !== "daily" || hasDaily.value)
+  TABS.filter((tab) => {
+    if (tab.value === "daily") return hasDaily.value;
+    if (tab.value === "business") return canViewBusiness.value;
+    if (tab.value === "today") return hasBatches.value;
+    if (tab.value === "call_today") return !hasBatches.value;
+    return true;
+  })
 );
-// an old link to a report the ERP site doesn't have
+const homeTab = computed<LeadTab>(defaultTab);
+// the tab was picked by hand: the options arriving later don't move it
+const picked = ref(false);
+// an old link to a tab this person or the ERP site doesn't have
 watch(options, (value) => {
-  if (value && !value.has_daily_report && view.value === "daily")
+  if (!value) return;
+  if (!picked.value && !queryValue("view") && view.value === "overview")
+    view.value = homeTab.value;
+  if (!value.has_daily_report && view.value === "daily")
+    view.value = "overview";
+  if (!hasBatches.value && view.value === "today") view.value = "overview";
+  if (hasBatches.value && view.value === "call_today") view.value = "today";
+  // a link to a tab the person may not open
+  if (value && !value.can_view_business && view.value === "business")
     view.value = "overview";
 });
 const clickToCall = useClickToCall();
@@ -682,6 +869,7 @@ const leads = createResource({
     owner: filters.owner || null,
     segment: filters.segment || null,
     department: filters.department || null,
+    ...categories.value,
     source: extra.source || null,
     temperature: extra.temperature || null,
     metric: extra.metric || null,
@@ -727,8 +915,10 @@ watch(view, (tab) => {
 });
 
 function refresh() {
-  if (view.value === "overview") overviewPanel.value?.reload();
+  if (view.value === "today") todayPanel.value?.reload();
+  else if (view.value === "overview") overviewPanel.value?.reload();
   else if (view.value === "daily") dailyPanel.value?.reload();
+  else if (view.value === "business") businessPanel.value?.reload();
   else {
     intake.submit({ fresh: 1 });
     staleLeads.submit({ fresh: 1 });
@@ -783,9 +973,11 @@ watch(
       department: queryValue("department"),
       page: queryPage(),
       extra: queryExtra(),
+      categories: queryCategories(),
     };
     if (
       JSON.stringify({ ...extra }) === JSON.stringify(wanted.extra) &&
+      JSON.stringify(categories.value) === JSON.stringify(wanted.categories) &&
       view.value === wanted.view &&
       appliedSearch.value.trim() === wanted.q.trim() &&
       filters.stage === wanted.stage &&
@@ -805,31 +997,49 @@ watch(
       department: wanted.department,
     });
     Object.assign(extra, wanted.extra);
+    categories.value = wanted.categories;
     page.value = wanted.page;
   }
 );
 
 // a new view, search or filter starts again at page 1
 watch(
-  [view, appliedSearch, () => ({ ...filters }), () => ({ ...extra })],
+  [
+    view,
+    appliedSearch,
+    () => ({ ...filters }),
+    () => ({ ...extra }),
+    categories,
+  ],
   () => {
     if (!fromRoute) page.value = 1;
   }
 );
 
 watch(
-  [view, appliedSearch, () => ({ ...filters }), () => ({ ...extra }), page],
-  ([v, q, f, x, p]) => {
+  [
+    view,
+    appliedSearch,
+    () => ({ ...filters }),
+    () => ({ ...extra }),
+    page,
+    categories,
+  ],
+  ([v, q, f, x, p, c]) => {
     fromRoute = false;
     router.replace({
       query: {
         ...route.query,
-        view: v === "overview" ? undefined : v,
+        view: v === homeTab.value ? undefined : v,
         q: q.trim() || undefined,
         stage: f.stage || undefined,
         owner: f.owner || undefined,
         segment: f.segment || undefined,
         department: f.department || undefined,
+        industry: c.industry.length ? c.industry : undefined,
+        state: c.state.length ? c.state : undefined,
+        district: c.district.length ? c.district : undefined,
+        org_size: c.org_size.length ? c.org_size : undefined,
         source: x.source || undefined,
         temperature: x.temperature || undefined,
         metric: x.metric || undefined,

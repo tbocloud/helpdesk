@@ -224,6 +224,9 @@
           @copy="copy($event, __('Report copied'))"
         />
       </template>
+
+      <!-- who was handed how many calls, and how many they made -->
+      <CallBatchesTable v-if="showTeam" ref="batchesTable" :date="date" />
     </template>
 
     <!-- when the browser won't let the page copy: the text, ready to select -->
@@ -276,6 +279,7 @@ import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideClock from "~icons/lucide/clock";
 import LucideCopy from "~icons/lucide/copy";
 import LucideUsers from "~icons/lucide/users";
+import CallBatchesTable from "./CallBatchesTable.vue";
 import DailyReportCard from "./DailyReportCard.vue";
 import {
   copyText,
@@ -402,6 +406,7 @@ const personOptions = computed(() => [
   ...roster.value.map((p) => ({ label: p.full_name, value: p.user })),
 ]);
 // no one picked and more than one in view: the team; a salesperson sees their own card
+const batchesTable = ref<InstanceType<typeof CallBatchesTable> | null>(null);
 const showTeam = computed(() => !person.value && people.value.length > 1);
 
 function shift(days: number) {
@@ -413,6 +418,7 @@ function reload() {
   fresh = 1;
   report.reload();
   fresh = 0;
+  batchesTable.value?.reload();
 }
 defineExpose({ reload });
 

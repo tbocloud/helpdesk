@@ -165,6 +165,7 @@ import LucideClipboardCheck from "~icons/lucide/clipboard-check";
 import LucideEyeOff from "~icons/lucide/eye-off";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideRepeat from "~icons/lucide/repeat";
+import LucideShare2 from "~icons/lucide/share-2";
 import LucideUserStar from "~icons/lucide/user-star";
 import LucideUserX from "~icons/lucide/user-x";
 import LucideKanban from "~icons/lucide/square-kanban";
@@ -213,6 +214,13 @@ const tabs = [
     needs: "can_handle_credentials",
   },
   {
+    label: "Meta",
+    to: "TaskyMeta",
+    icon: LucideShare2,
+    // the same people as Credentials: whoever handles the client's accounts
+    needs: "can_handle_credentials",
+  },
+  {
     label: "Sign-off",
     to: "TaskySignoffs",
     icon: LucideClipboardCheck,
@@ -230,7 +238,7 @@ function isCurrent(tab: { to: string; also?: string[] }) {
   return name === tab.to || !!tab.also?.includes(name);
 }
 
-// the tabs that list the project's tasks (Files, Credentials and Sign-off don't)
+// the tabs that list the project's tasks (Files, Credentials, Meta and Sign-off don't)
 const TASK_TABS = [
   "TaskyProject",
   "TaskyChecklist",
