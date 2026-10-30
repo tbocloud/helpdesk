@@ -453,11 +453,14 @@ async function submit() {
         const name = result.name;
         // the lead exists now, so a failed note mustn't send the person back to create it again
         await call("helpdesk.api.leads.add_note", { name, note }).catch(() => {
-          keepUnsavedNote(name, note);
           toast.warning(
-            __(
-              "The remarks weren't saved. They're in the lead's note box to add again."
-            )
+            keepUnsavedNote(name, note)
+              ? __(
+                  "The remarks weren't saved. They're in the lead's note box to add again."
+                )
+              : __(
+                  "The remarks weren't saved. They're in the lead's note box: add them before reloading the page, or they'll be lost."
+                )
           );
         });
       }

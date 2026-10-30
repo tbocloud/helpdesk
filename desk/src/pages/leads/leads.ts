@@ -339,11 +339,15 @@ const unsavedNotes = new Map<string, string>();
 const unsavedNoteKey = (lead: string) =>
   `${UNSAVED_NOTE_PREFIX}${useAuthStore().userId}:${lead}`;
 
+/** Whether the browser kept them too: when not, a reload loses them. */
 export function keepUnsavedNote(lead: string, note: string) {
   unsavedNotes.set(unsavedNoteKey(lead), note);
   try {
     localStorage.setItem(unsavedNoteKey(lead), note);
-  } catch {}
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function unsavedNote(lead: string) {
