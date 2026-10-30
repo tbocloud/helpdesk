@@ -108,8 +108,13 @@ def list_leads(
     from_date: str | None = None,
     to_date: str | None = None,
     department: str | None = None,
+    industry: list | str | None = None,
+    state: list | str | None = None,
+    district: list | str | None = None,
+    org_size: list | str | None = None,
 ) -> dict:
-    """A page of leads. `metric` with its period keeps the leads one number of the
+    """A page of leads. `industry`, `state`, `district` and `org_size` each take one value
+    or a list (any of them); a list goes to the ERP site as JSON. `metric` with its period keeps the leads one number of the
     Overview counts (the ERP site picks them). `department` keeps one lead department's
     leads; the ERP site still shows only what the person may see."""
     require_leads()
@@ -136,6 +141,9 @@ def list_leads(
         temperature=temperature or None,
         department=department or None,
         metric=metric or None,
+        **category_params(
+            industry=industry, state=state, district=district, org_size=org_size
+        ),
         **when,
         view=view,
         # cint: a malformed number is 0, never a server error
@@ -143,6 +151,23 @@ def list_leads(
         page_length=min(max(cint(page_length) or 20, 1), MAX_PAGE),
     )
     return result or {"rows": [], "total": 0}
+
+
+def category_params(**filters) -> dict:
+    """The category filters as the ERP site takes them: a JSON list, or None for no filter."""
+    return {
+        key: json.dumps(values) if (values := as_list(value)) else None
+        for key, value in filters.items()
+    }
+
+
+def as_list(value) -> list[str]:
+    """One value, a list or a JSON list, as a list of non-empty strings."""
+    if isinstance(value, str) and value.strip().startswith("["):
+        value = frappe.parse_json(value)
+    if not isinstance(value, list):
+        value = [value]
+    return [text for item in value if (text := str(item or "").strip())]
 
 
 @frappe.whitelist()
@@ -612,6 +637,73 @@ def create_lead(data: dict | str, allow_duplicate: int | str = 0) -> dict:
 def update_lead(name: str, data: dict | str) -> dict:
     require_leads()
     result = call("update_lead", post=True, name=name, data=parse_data(data)) or {}
+    clear_cached_reads()
+    return result
+
+
+@frappe.whitelist()
+def get_category_counts(fresh: int | str = 0) -> dict:
+    """How many of the person's leads have each industry, state, district and
+    organisation size, for the list's filter counts. Empty on an older TBO Smart, where
+    the filters simply show no counts."""
+    require_leads()
+    return (
+        cached_read(
+            "category_counts",
+            {},
+            READ_TTL,
+            fresh,
+            lambda: call_if_deployed("get_category_counts"),
+            keep=lambda answer: answer is not None,
+        )
+        or {}
+    )
+
+
+@frappe.whitelist(methods=["POST"])
+def add_industry(name: str) -> dict:
+    """A new industry for the pick list: {name, created}. Managers only (the ERP site
+    says so when it refuses)."""
+    require_leads()
+    result = category_write(
+        "add_industry",
+        _(
+            "Only a System Manager or Sales Manager on the ERP site can add an industry."
+        ),
+        name=(name or "").strip(),
+    )
+    # the pick list is cached for ten minutes: this person sees the new one at once
+    frappe.cache.delete_keys(f"{CACHE_PREFIX}:{frappe.session.user}:options")
+    return result
+
+
+@frappe.whitelist(methods=["POST"])
+def bulk_set_lead_category(leads: list | str, values: dict | str) -> dict:
+    """Sets industry, state, district and/or organisation size (`values`; an empty value
+    clears one) on many leads: {updated, skipped}. Managers only."""
+    require_leads()
+    names = as_list(leads)
+    if not names:
+        frappe.throw(_("Pick the leads first."))
+    return category_write(
+        "bulk_set_lead_category",
+        _(
+            "Only a System Manager or Sales Manager on the ERP site can set categories in bulk."
+        ),
+        leads=names,
+        values=parse_data(values),
+    )
+
+
+def category_write(method: str, permission_message: str, **params) -> dict:
+    result = call_if_deployed(
+        method, post=True, permission_message=permission_message, **params
+    )
+    if result is None:
+        frappe.throw(
+            _("The ERP site can't do this yet. It needs the latest TBO Smart."),
+            LeadsUnavailableError,
+        )
     clear_cached_reads()
     return result
 

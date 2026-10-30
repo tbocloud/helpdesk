@@ -124,6 +124,11 @@
               :options="CREATED"
             />
           </div>
+          <LeadCategoryFilters
+            ref="categoryPanel"
+            v-model="categories"
+            :options="options"
+          />
           <div
             v-if="created === 'custom'"
             class="flex flex-wrap items-end gap-3"
@@ -144,9 +149,37 @@
             />
           </div>
           <div
-            v-if="hasFilters"
+            v-if="hasFilters || canCategorise"
             class="flex flex-wrap items-center justify-end gap-2"
           >
+            <template v-if="canCategorise">
+              <span
+                v-if="selecting"
+                class="mr-auto font-mono text-p-sm tabular-nums text-ink-gray-7"
+                aria-live="polite"
+                >{{ __("{0} selected", String(selected.size)) }}</span
+              >
+              <Button
+                v-if="selecting"
+                :label="__('Select this page')"
+                @click="selectPage"
+              />
+              <Button
+                v-if="selecting"
+                variant="solid"
+                :label="__('Set category')"
+                :disabled="!selected.size"
+                @click="showSet = true"
+              />
+              <Button
+                :label="selecting ? __('Done') : __('Select leads')"
+                @click="toggleSelecting"
+              >
+                <template #prefix>
+                  <LucideListChecks class="size-4" aria-hidden="true" />
+                </template>
+              </Button>
+            </template>
             <!-- what the Overview opened this list with -->
             <span
               v-for="chip in extraChips"
@@ -155,6 +188,7 @@
               >{{ chip }}</span
             >
             <Button
+              v-if="hasFilters"
               variant="ghost"
               :label="__('Clear filters')"
               @click="clearFilters"
@@ -257,6 +291,13 @@
                 :key="row.name"
                 class="flex items-center border-b border-outline-gray-1 last:border-b-0"
               >
+                <Checkbox
+                  v-if="selecting"
+                  class="ml-4 shrink-0"
+                  :model-value="selected.has(row.name)"
+                  :label="__('Select {0}', row.lead_name || row.name)"
+                  @update:model-value="toggleRow(row.name)"
+                />
                 <router-link
                   :to="{ name: 'Lead', params: { leadId: row.name } }"
                   class="flex min-w-0 flex-1 flex-col gap-2 px-4 py-3 transition-colors hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-outline-gray-4 md:flex-row md:items-center md:gap-4"
@@ -315,6 +356,17 @@
                       <template v-if="row.segment">
                         <span aria-hidden="true">·</span>
                         <span>{{ row.segment }}</span>
+                      </template>
+                      <template v-if="categoryLabel(row)">
+                        <span aria-hidden="true">·</span>
+                        <span class="inline-flex items-center gap-1">
+                          <LucideTag
+                            class="size-3.5 shrink-0 text-ink-gray-5"
+                            aria-hidden="true"
+                          />
+                          <span class="sr-only">{{ __("Category") }}</span>
+                          {{ categoryLabel(row) }}
+                        </span>
                       </template>
                       <template v-if="row.mobile_no || row.email_id">
                         <span aria-hidden="true">·</span>
@@ -420,6 +472,11 @@
     </div>
 
     <LeadFormDialog v-model:open="showNew" @saved="openLead" />
+    <LeadSetCategoryDialog
+      v-model:open="showSet"
+      :leads="[...selected]"
+      @saved="categorised"
+    />
   </div>
 </template>
 
@@ -432,6 +489,7 @@ import { errorText } from "@/utils";
 import { watchDebounced } from "@vueuse/core";
 import {
   Button,
+  Checkbox,
   createResource,
   dayjs,
   FormControl,
@@ -439,6 +497,7 @@ import {
 } from "frappe-ui";
 import { computed, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { useAuthStore } from "@/stores/auth";
 import LucideBuilding2 from "~icons/lucide/building-2";
 import LucideCalendar from "~icons/lucide/calendar";
 import LucideCalendarRange from "~icons/lucide/calendar-range";
@@ -450,17 +509,22 @@ import LucideClock from "~icons/lucide/clock";
 import LucidePhone from "~icons/lucide/phone";
 import LucidePlus from "~icons/lucide/plus";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
+import LucideListChecks from "~icons/lucide/list-checks";
 import LucideSearch from "~icons/lucide/search";
 import LucideSearchX from "~icons/lucide/search-x";
+import LucideTag from "~icons/lucide/tag";
 import LucideUser from "~icons/lucide/user";
 import LucideUserPlus from "~icons/lucide/user-plus";
 import LucideX from "~icons/lucide/x";
+import LeadCategoryFilters from "./LeadCategoryFilters.vue";
 import LeadFormDialog from "./LeadFormDialog.vue";
+import LeadSetCategoryDialog from "./LeadSetCategoryDialog.vue";
 import LeadIntakeStrip from "./LeadIntakeStrip.vue";
 import LeadsBusiness from "./LeadsBusiness.vue";
 import LeadsDailyReport from "./LeadsDailyReport.vue";
 import LeadsOverview from "./LeadsOverview.vue";
 import {
+  categoryLabel,
   choices,
   clientStatus,
   departmentLabel,
@@ -476,6 +540,7 @@ import {
   usableDepartments,
   type LeadIntake,
   type StaleLead,
+  type LeadCategories,
   type LeadOptions,
   type LeadRow,
   type LeadMetric,
@@ -549,6 +614,64 @@ const filters = reactive({
   segment: queryValue("segment"),
   department: queryValue("department"),
 });
+// Industry, State, District and Organisation size: each any of its values, kept in the
+// URL as repeated keys (?industry=Resorts&industry=Hotels…)
+const CATEGORY_KEYS = ["industry", "state", "district", "org_size"] as const;
+function queryList(key: string) {
+  const value = route.query[key];
+  return (Array.isArray(value) ? value : [value]).filter(
+    (v): v is string => typeof v === "string" && !!v
+  );
+}
+function queryCategories(): LeadCategories {
+  return Object.fromEntries(
+    CATEGORY_KEYS.map((key) => [key, queryList(key)])
+  ) as unknown as LeadCategories;
+}
+const categories = ref<LeadCategories>(queryCategories());
+const categoryPanel = ref<InstanceType<typeof LeadCategoryFilters> | null>(
+  null
+);
+const hasCategories = computed(() =>
+  CATEGORY_KEYS.some((key) => categories.value[key].length)
+);
+const emptyCategories = (): LeadCategories => ({
+  industry: [],
+  state: [],
+  district: [],
+  org_size: [],
+});
+
+// managers pick many leads and set their category at once
+const auth = useAuthStore();
+const canCategorise = computed(
+  () => auth.isManager && !!options.value?.org_sizes
+);
+const selecting = ref(false);
+const selected = ref(new Set<string>());
+const showSet = ref(false);
+function toggleSelecting() {
+  selecting.value = !selecting.value;
+  selected.value = new Set();
+}
+function toggleRow(name: string) {
+  const next = new Set(selected.value);
+  if (!next.delete(name)) next.add(name);
+  selected.value = next;
+}
+function selectPage() {
+  selected.value = new Set([
+    ...selected.value,
+    ...(data.value?.rows ?? []).map((r) => r.name),
+  ]);
+}
+function categorised() {
+  leads.reload();
+  categoryPanel.value?.reload();
+  leadOptions.reload();
+  toggleSelecting();
+}
+
 // set by a number on the Overview: the leads it counts, and its period
 function queryExtra() {
   return {
@@ -599,6 +722,7 @@ const hasFilters = computed(
       filters.owner ||
       filters.segment ||
       filters.department ||
+      hasCategories.value ||
       extra.metric ||
       extraChips.value.length
     )
@@ -637,6 +761,7 @@ function clearFilters() {
     segment: "",
     department: "",
   });
+  categories.value = emptyCategories();
   Object.assign(extra, {
     source: "",
     temperature: "",
@@ -706,6 +831,7 @@ const leads = createResource({
     owner: filters.owner || null,
     segment: filters.segment || null,
     department: filters.department || null,
+    ...categories.value,
     source: extra.source || null,
     temperature: extra.temperature || null,
     metric: extra.metric || null,
@@ -808,9 +934,11 @@ watch(
       department: queryValue("department"),
       page: queryPage(),
       extra: queryExtra(),
+      categories: queryCategories(),
     };
     if (
       JSON.stringify({ ...extra }) === JSON.stringify(wanted.extra) &&
+      JSON.stringify(categories.value) === JSON.stringify(wanted.categories) &&
       view.value === wanted.view &&
       appliedSearch.value.trim() === wanted.q.trim() &&
       filters.stage === wanted.stage &&
@@ -830,21 +958,35 @@ watch(
       department: wanted.department,
     });
     Object.assign(extra, wanted.extra);
+    categories.value = wanted.categories;
     page.value = wanted.page;
   }
 );
 
 // a new view, search or filter starts again at page 1
 watch(
-  [view, appliedSearch, () => ({ ...filters }), () => ({ ...extra })],
+  [
+    view,
+    appliedSearch,
+    () => ({ ...filters }),
+    () => ({ ...extra }),
+    categories,
+  ],
   () => {
     if (!fromRoute) page.value = 1;
   }
 );
 
 watch(
-  [view, appliedSearch, () => ({ ...filters }), () => ({ ...extra }), page],
-  ([v, q, f, x, p]) => {
+  [
+    view,
+    appliedSearch,
+    () => ({ ...filters }),
+    () => ({ ...extra }),
+    page,
+    categories,
+  ],
+  ([v, q, f, x, p, c]) => {
     fromRoute = false;
     router.replace({
       query: {
@@ -855,6 +997,10 @@ watch(
         owner: f.owner || undefined,
         segment: f.segment || undefined,
         department: f.department || undefined,
+        industry: c.industry.length ? c.industry : undefined,
+        state: c.state.length ? c.state : undefined,
+        district: c.district.length ? c.district : undefined,
+        org_size: c.org_size.length ? c.org_size : undefined,
         source: x.source || undefined,
         temperature: x.temperature || undefined,
         metric: x.metric || undefined,
