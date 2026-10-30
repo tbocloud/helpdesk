@@ -102,25 +102,41 @@
           }}
         </p>
 
-        <div class="flex min-h-0 flex-1 gap-3 overflow-x-auto p-4">
+        <div
+          ref="board"
+          class="flex min-h-0 flex-1 gap-3 overflow-x-auto p-4"
+          @dragover="scrollNearEdge"
+          @dragleave="onBoardDragLeave"
+          @drop="stopEdgeScroll"
+        >
           <section
-            v-for="col in columnList"
+            v-for="col in orderedColumns.map((key) => ({ key }))"
             :key="col.key"
-            class="flex w-72 shrink-0 flex-col rounded-xl border bg-surface-gray-1 transition-colors"
-            :class="
+            class="relative flex w-72 shrink-0 flex-col rounded-xl border bg-surface-gray-1 transition-colors"
+            :class="[
               dragOverCol === col.key
                 ? 'border-outline-gray-4 bg-surface-gray-2'
-                : 'border-outline-gray-1'
-            "
+                : 'border-outline-gray-1',
+              { 'opacity-50': draggingColumn === col.key },
+            ]"
             :aria-labelledby="`col-${col.key}`"
-            @dragover.prevent="dragOverCol = col.key"
+            @dragover.prevent="onColumnDragOver($event, col.key)"
             @dragleave="onColumnDragLeave($event)"
-            @drop.prevent="
-              onDrop($event, col.key);
-              dragOverCol = null;
-            "
+            @drop.prevent="onColumnDrop($event, col.key)"
           >
-            <header class="flex items-center justify-between gap-2 px-3 py-2.5">
+            <div
+              v-if="columnDrop?.key === col.key && draggingColumn !== col.key"
+              class="pointer-events-none absolute inset-y-1 w-0.5 rounded-full bg-brand"
+              :class="columnDrop.before ? '-left-2' : '-right-2'"
+              aria-hidden="true"
+            />
+            <header
+              class="group flex cursor-grab items-center justify-between gap-2 px-3 py-2.5 active:cursor-grabbing"
+              draggable="true"
+              :title="__('Drag to move this column')"
+              @dragstart="onColumnDragStart($event, col.key)"
+              @dragend="onColumnDragEnd"
+            >
               <h2
                 :id="`col-${col.key}`"
                 class="flex items-center gap-2 text-sm font-medium text-ink-gray-8"
@@ -139,6 +155,20 @@
                 />
                 {{ __(taskStatusMeta(col.key).label) }}
               </h2>
+              <button
+                type="button"
+                class="ml-auto rounded text-ink-gray-5 opacity-0 hover:text-ink-gray-7 focus-visible:opacity-100 group-hover:opacity-100"
+                :aria-label="
+                  __(
+                    'Move the {0} column: left and right arrow keys',
+                    __(taskStatusMeta(col.key).label)
+                  )
+                "
+                @keydown.left.prevent="stepColumn(col.key, -1)"
+                @keydown.right.prevent="stepColumn(col.key, 1)"
+              >
+                <LucideGripHorizontal class="size-4" aria-hidden="true" />
+              </button>
               <span
                 class="rounded bg-surface-gray-3 px-1.5 font-mono text-xs tabular-nums text-ink-gray-6"
                 :aria-label="
@@ -526,6 +556,7 @@
 import { errorText } from "@/utils";
 import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
+import { useLocalStorage } from "@vueuse/core";
 import { Button, Dropdown, call, createResource, toast } from "frappe-ui";
 import { computed, onUnmounted, ref, watch } from "vue";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
@@ -537,6 +568,7 @@ import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideCirclePause from "~icons/lucide/circle-pause";
 import LucideFolderInput from "~icons/lucide/folder-input";
+import LucideGripHorizontal from "~icons/lucide/grip-horizontal";
 import LucideGripVertical from "~icons/lucide/grip-vertical";
 import LucideImage from "~icons/lucide/image";
 import LucideInfo from "~icons/lucide/info";
@@ -612,6 +644,20 @@ const columnList = [
   { key: "Cancelled" },
 ];
 const columnKeys = columnList.map((c) => c.key);
+
+// each person drags the columns into their own order, kept in this browser for every board;
+// a status the saved order doesn't know yet joins at its usual place, at the end
+const savedColumnOrder = useLocalStorage<string[]>(
+  `hd-board-columns:${authStore.userId}`,
+  []
+);
+const orderedColumns = computed(() => {
+  const saved = savedColumnOrder.value.filter((k) => columnKeys.includes(k));
+  return [...saved, ...columnKeys.filter((k) => !saved.includes(k))];
+});
+const COLUMN_DRAG = "application/x-board-column";
+const draggingColumn = ref<string | null>(null);
+const columnDrop = ref<{ key: string; before: boolean } | null>(null);
 const columnTasks = ref<Record<string, Task[]>>({});
 const draggingTask = ref<string | null>(null);
 const dragOverCol = ref<string | null>(null);
@@ -813,6 +859,7 @@ let tickInterval: ReturnType<typeof setInterval> | null = null;
 })();
 onUnmounted(() => {
   if (tickInterval) clearInterval(tickInterval);
+  stopEdgeScroll();
 });
 
 watch(
@@ -908,7 +955,47 @@ function onDragStart(e: DragEvent, task: Task) {
   if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
   e.dataTransfer?.setData("application/x-task-name", task.name);
 }
+// a task or column dragged near the board's left or right edge scrolls it, faster the
+// closer it gets, so a column off screen (e.g. Completed) is reached in one drag
+const board = ref<HTMLElement | null>(null);
+const EDGE = 96;
+let edgeSpeed = 0;
+let edgeFrame = 0;
+
+function scrollNearEdge(e: DragEvent) {
+  const rect = board.value?.getBoundingClientRect();
+  if (!rect) return;
+  const fromLeft = e.clientX - rect.left;
+  const fromRight = rect.right - e.clientX;
+  edgeSpeed =
+    fromRight < EDGE
+      ? Math.ceil((EDGE - fromRight) / 4)
+      : fromLeft < EDGE
+      ? -Math.ceil((EDGE - fromLeft) / 4)
+      : 0;
+  if (edgeSpeed && !edgeFrame)
+    edgeFrame = requestAnimationFrame(stepEdgeScroll);
+}
+
+function stepEdgeScroll() {
+  edgeFrame = 0;
+  if (!edgeSpeed || !board.value) return;
+  board.value.scrollLeft += edgeSpeed;
+  edgeFrame = requestAnimationFrame(stepEdgeScroll);
+}
+
+function stopEdgeScroll() {
+  edgeSpeed = 0;
+  cancelAnimationFrame(edgeFrame);
+  edgeFrame = 0;
+}
+
+function onBoardDragLeave(e: DragEvent) {
+  if (!board.value?.contains(e.relatedTarget as Node | null)) stopEdgeScroll();
+}
+
 function onDragEnd() {
+  stopEdgeScroll();
   draggingTask.value = null;
   dropTarget.value = null;
   dragOverCol.value = null;
@@ -921,7 +1008,52 @@ function onColumnDragLeave(e: DragEvent) {
     dragOverCol.value = null;
 }
 
+function onColumnDragStart(e: DragEvent, key: string) {
+  draggingColumn.value = key;
+  if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+  e.dataTransfer?.setData(COLUMN_DRAG, key);
+}
+function onColumnDragEnd() {
+  stopEdgeScroll();
+  draggingColumn.value = null;
+  columnDrop.value = null;
+}
+
+function onColumnDragOver(e: DragEvent, key: string) {
+  if (!draggingColumn.value) {
+    dragOverCol.value = key;
+    return;
+  }
+  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+  columnDrop.value = { key, before: e.clientX < rect.left + rect.width / 2 };
+}
+
+function onColumnDrop(e: DragEvent, key: string) {
+  dragOverCol.value = null;
+  const moved = e.dataTransfer?.getData(COLUMN_DRAG);
+  if (!moved) {
+    onDrop(e, key);
+    return;
+  }
+  const order = orderedColumns.value.filter((k) => k !== moved);
+  const at = order.indexOf(key) + (columnDrop.value?.before === false ? 1 : 0);
+  order.splice(at, 0, moved);
+  savedColumnOrder.value = order;
+  onColumnDragEnd();
+}
+
+/** The keyboard's way: arrow left or right moves the column one place. */
+function stepColumn(key: string, step: number) {
+  const order = [...orderedColumns.value];
+  const from = order.indexOf(key);
+  const to = from + step;
+  if (to < 0 || to >= order.length) return;
+  [order[from], order[to]] = [order[to], order[from]];
+  savedColumnOrder.value = order;
+}
+
 function onCardDragOver(e: DragEvent, task: Task) {
+  if (draggingColumn.value) return;
   const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
   const above = e.clientY < rect.top + rect.height / 2;
   dropTarget.value = { name: task.name, above };
