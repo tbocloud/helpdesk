@@ -32,11 +32,16 @@
               size="md"
               :aria-label="__('Which leads')"
               :options="tabs"
-              @update:model-value="view = $event as LeadTab"
+              @update:model-value="
+                view = $event as LeadTab;
+                picked = true;
+              "
             />
           </div>
           <!-- the Daily report has the day's new leads itself, and loads in one request -->
-          <template v-if="view !== 'daily' && view !== 'business'">
+          <template
+            v-if="view !== 'daily' && view !== 'today' && view !== 'business'"
+          >
             <!-- hidden quietly until the ERP site's TBO Smart counts it, and on a failed read -->
             <div
               v-if="!intakeData && intakeLoading"
@@ -47,8 +52,11 @@
           </template>
         </div>
 
+        <!-- the batch of calls for this slot; it replaces Call today for those who have it -->
+        <TodaysCalls v-if="view === 'today'" ref="todayPanel" class="mt-4" />
+
         <LeadsOverview
-          v-if="view === 'overview'"
+          v-else-if="view === 'overview'"
           ref="overviewPanel"
           class="mt-4"
           @intake="takeOverviewIntake"
@@ -200,7 +208,7 @@
           </div>
         </div>
 
-        <template v-if="view !== 'overview'">
+        <template v-if="isList">
           <TaskyState
             v-if="waitingForDates"
             class="mt-6"
@@ -484,6 +492,7 @@
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import TaskyBadge from "@/components/TaskyBadge.vue";
 import TaskyState from "@/components/TaskyState.vue";
+import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
 import { watchDebounced } from "@vueuse/core";
@@ -523,6 +532,8 @@ import LeadIntakeStrip from "./LeadIntakeStrip.vue";
 import LeadsBusiness from "./LeadsBusiness.vue";
 import LeadsDailyReport from "./LeadsDailyReport.vue";
 import LeadsOverview from "./LeadsOverview.vue";
+import TodaysCalls from "./TodaysCalls.vue";
+import { batchesOn } from "./callBatches";
 import {
   categoryLabel,
   choices,
@@ -550,8 +561,9 @@ import {
 const PAGE_LENGTH = 20;
 // the Overview comes first and is where the page opens (docs/leads.md)
 // and the Daily report sits next to it, once the ERP site has it
-type LeadTab = LeadView | "overview" | "daily" | "business";
+type LeadTab = LeadView | "overview" | "daily" | "business" | "today";
 const TABS: { value: LeadTab; label: string }[] = [
+  { value: "today", label: __("Today's calls") },
   { value: "overview", label: __("Overview") },
   { value: "daily", label: __("Daily report") },
   { value: "business", label: __("Business") },
@@ -575,8 +587,10 @@ const CREATED = [
 ];
 const overviewPanel = ref<InstanceType<typeof LeadsOverview> | null>(null);
 const dailyPanel = ref<InstanceType<typeof LeadsDailyReport> | null>(null);
+const todayPanel = ref<InstanceType<typeof TodaysCalls> | null>(null);
 const businessPanel = ref<InstanceType<typeof LeadsBusiness> | null>(null);
 
+const authStore = useAuthStore();
 const route = useRoute();
 const router = useRouter();
 const showNew = ref(false);
@@ -586,9 +600,20 @@ function queryValue(key: string) {
   return typeof value === "string" ? value : "";
 }
 
+// a salesperson whose department hands out call batches opens on them, anyone else on
+// the Overview
+function defaultTab(): LeadTab {
+  return authStore.isSalesEmployee &&
+    batchesOn(leadOptions.data as LeadOptions | undefined)
+    ? "today"
+    : "overview";
+}
+
 function queryView(): LeadTab {
   const value = queryValue("view");
-  return TABS.some((v) => v.value === value) ? (value as LeadTab) : "overview";
+  return TABS.some((v) => v.value === value)
+    ? (value as LeadTab)
+    : defaultTab();
 }
 
 function queryPage() {
@@ -602,6 +627,7 @@ const isList = computed(
   () =>
     view.value !== "overview" &&
     view.value !== "daily" &&
+    view.value !== "today" &&
     view.value !== "business"
 );
 const search = ref(queryValue("q"));
@@ -781,17 +807,29 @@ loadLeadOptions();
 const options = computed(() => leadOptions.data as LeadOptions | undefined);
 const hasDaily = computed(() => !!options.value?.has_daily_report);
 const canViewBusiness = computed(() => !!options.value?.can_view_business);
+const hasBatches = computed(() => batchesOn(options.value));
+// Today's calls is the Call today list for people who get call batches: one place
 const tabs = computed(() =>
-  TABS.filter(
-    (tab) =>
-      (tab.value !== "daily" || hasDaily.value) &&
-      (tab.value !== "business" || canViewBusiness.value)
-  )
+  TABS.filter((tab) => {
+    if (tab.value === "daily") return hasDaily.value;
+    if (tab.value === "business") return canViewBusiness.value;
+    if (tab.value === "today") return hasBatches.value;
+    if (tab.value === "call_today") return !hasBatches.value;
+    return true;
+  })
 );
-// an old link to a report the ERP site doesn't have
+const homeTab = computed<LeadTab>(defaultTab);
+// the tab was picked by hand: the options arriving later don't move it
+const picked = ref(false);
+// an old link to a tab this person or the ERP site doesn't have
 watch(options, (value) => {
-  if (value && !value.has_daily_report && view.value === "daily")
+  if (!value) return;
+  if (!picked.value && !queryValue("view") && view.value === "overview")
+    view.value = homeTab.value;
+  if (!value.has_daily_report && view.value === "daily")
     view.value = "overview";
+  if (!hasBatches.value && view.value === "today") view.value = "overview";
+  if (hasBatches.value && view.value === "call_today") view.value = "today";
   // a link to a tab the person may not open
   if (value && !value.can_view_business && view.value === "business")
     view.value = "overview";
@@ -877,7 +915,8 @@ watch(view, (tab) => {
 });
 
 function refresh() {
-  if (view.value === "overview") overviewPanel.value?.reload();
+  if (view.value === "today") todayPanel.value?.reload();
+  else if (view.value === "overview") overviewPanel.value?.reload();
   else if (view.value === "daily") dailyPanel.value?.reload();
   else if (view.value === "business") businessPanel.value?.reload();
   else {
@@ -991,7 +1030,7 @@ watch(
     router.replace({
       query: {
         ...route.query,
-        view: v === "overview" ? undefined : v,
+        view: v === homeTab.value ? undefined : v,
         q: q.trim() || undefined,
         stage: f.stage || undefined,
         owner: f.owner || undefined,
