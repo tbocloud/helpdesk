@@ -1035,6 +1035,11 @@ function onColumnDrop(e: DragEvent, key: string) {
     onDrop(e, key);
     return;
   }
+  // dropped back on itself: nothing moves (the target would be gone from the order)
+  if (moved === key) {
+    onColumnDragEnd();
+    return;
+  }
   const order = orderedColumns.value.filter((k) => k !== moved);
   const at = order.indexOf(key) + (columnDrop.value?.before === false ? 1 : 0);
   order.splice(at, 0, moved);
