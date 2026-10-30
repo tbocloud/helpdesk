@@ -6,7 +6,15 @@ import json
 
 import frappe
 from frappe import _
-from frappe.utils import add_days, cint, getdate, today
+from frappe.utils import (
+    add_days,
+    add_months,
+    cint,
+    get_first_day,
+    get_last_day,
+    getdate,
+    today,
+)
 
 from helpdesk.content_team import only_sales_team
 from helpdesk.integrations.crm.leads import (
@@ -22,11 +30,20 @@ VIEWS = ("all", "mine", "call_today", "follow_up")
 PERIODS = ("today", "yesterday", "week", "month", "quarter", "custom")
 # a day is a custom range of that one day on the ERP site, which an older TBO Smart reads too
 DAYS_AGO = {"today": 0, "yesterday": 1}
+# the Business overview's periods: the financial year starts on 1 April (India)
+BUSINESS_PERIODS = ("month", "last_month", "quarter", "fy", "custom")
+FY_START_MONTH = 4
 MESSAGE_CHANNELS = ("whatsapp", "email")
 CALL_OUTCOMES = ("Connected", "No answer", "Busy", "Voicemail")
 TELEPHONY = "tbo_smart.api.telephony"
 # what the recording player may be handed back
 AUDIO_TYPES = ("audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/ogg")
+# what a lead photo may be handed back as: the ERP site only stores these
+PHOTO_TYPES = ("image/jpeg", "image/png", "image/webp")
+# a photo is at most 10 MB on the ERP site; as base64 a third more
+MAX_PHOTO_BASE64 = 14 * 1024 * 1024
+PHOTO_METHOD = "helpdesk.api.leads.lead_photo"
+PHOTO_CACHE = "private, max-age=3600"
 MAX_PAGE = 100
 # the hub and the ERP site share one worker pool on Frappe Cloud, so a read that was just
 # answered is kept per person for a short while instead of asked again (docs/leads.md)
@@ -252,6 +269,72 @@ def read_proposal_money(period, from_date, to_date, owner, fresh) -> dict:
         keep=lambda answer: answer is not None,
     )
     return {**result, "available": True} if result is not None else {"available": False}
+
+
+@frappe.whitelist()
+def get_business_overview(
+    period: str = "month",
+    from_date: str | None = None,
+    to_date: str | None = None,
+    department: str | None = None,
+    include_profit: int | str = 0,
+    fresh: int | str = 0,
+) -> dict:
+    """The management-only Business overview (docs/leads.md): company-wide pipeline,
+    proposals, onboardings and revenue. Who may see it is decided on the ERP site
+    (System Manager or its TBO Management role) and nowhere else: a refusal there is a
+    403 here. `available` is false while the ERP site's TBO Smart is older than this."""
+    require_leads()
+    start, end = business_range(period, from_date, to_date)
+    params = {
+        "from_date": str(start),
+        "to_date": str(end),
+        "department": department or None,
+        "include_profit": 1 if cint(include_profit) else 0,
+    }
+    result = cached_read(
+        "business",
+        params,
+        READ_TTL,
+        fresh,
+        lambda: call_if_deployed(
+            "get_business_overview",
+            permission_message=_("Only management can see the Business overview."),
+            **params,
+        ),
+        keep=lambda answer: answer is not None,
+    )
+    return (
+        {**result, "available": True, "period": period}
+        if result is not None
+        else {"available": False}
+    )
+
+
+def business_range(period: str, from_date: str | None, to_date: str | None) -> tuple:
+    """(from, to) of this month, last month, this quarter or financial year to date, or
+    the dates picked."""
+    if period not in BUSINESS_PERIODS:
+        frappe.throw(
+            _("Pick this month, last month, this quarter, this year or your own dates.")
+        )
+    now = getdate(today())
+    if period == "custom":
+        if not (from_date and to_date):
+            frappe.throw(_("Pick both dates for your own period."))
+        start, end = getdate(from_date), getdate(to_date)
+        if end < start:
+            frappe.throw(_("The to date is before the from date."))
+        return start, end
+    if period == "month":
+        return getdate(get_first_day(now)), now
+    if period == "last_month":
+        first = getdate(add_months(get_first_day(now), -1))
+        return first, getdate(get_last_day(first))
+    if period == "quarter":
+        return getdate(f"{now.year}-{3 * ((now.month - 1) // 3) + 1:02d}-01"), now
+    year = now.year if now.month >= FY_START_MONTH else now.year - 1
+    return getdate(f"{year}-{FY_START_MONTH:02d}-01"), now
 
 
 @frappe.whitelist()
@@ -750,6 +833,72 @@ def call_recording(call: str) -> None:
     )
     frappe.local.response.display_content_as = "inline"
     frappe.local.response.type = "download"
+
+
+# --- place and photos (docs/leads.md) ----------------------------------------------
+
+
+@frappe.whitelist()
+def get_lead_photos(lead: str) -> dict:
+    """{available, photos}: the lead's photos newest first. `available` is false while the
+    ERP site's TBO Smart is older than lead photos, so the card stays out."""
+    require_leads()
+    photos = call_if_deployed("get_lead_photos", lead=lead)
+    if photos is None:
+        return {"available": False, "photos": []}
+    return {"available": True, "photos": photos}
+
+
+@frappe.whitelist(methods=["POST"])
+def upload_lead_photo(
+    lead: str, filename: str, content: str, caption: str | None = None
+) -> dict:
+    """A photo on the lead as the signed-in person (`content` base64; the ERP site checks
+    it is a PNG, JPEG or WebP of at most 10 MB and that the lead has room)."""
+    require_leads()
+    if not content or len(content) > MAX_PHOTO_BASE64:
+        frappe.throw(_("Choose a photo of at most 10 MB."))
+    return (
+        call(
+            "upload_lead_photo",
+            post=True,
+            lead=lead,
+            filename=(filename or "").strip()[:120] or "photo",
+            content=content,
+            caption=(caption or "").strip()[:140] or None,
+        )
+        or {}
+    )
+
+
+@frappe.whitelist(methods=["POST"])
+def delete_lead_photo(lead: str, file: str) -> dict:
+    require_leads()
+    return call("delete_lead_photo", post=True, lead=lead, file=file) or {}
+
+
+@frappe.whitelist()
+def lead_photo(lead: str, file: str, thumb: int | str = 0) -> None:
+    """A lead photo's image (`thumb` 1: a small one), streamed from the ERP site, which
+    shows it only to people who may read the lead."""
+    require_leads()
+    content, content_type = download(
+        "get_lead_photo", lead=lead, file=file, thumb=1 if cint(thumb) else 0
+    )
+    if content_type not in PHOTO_TYPES:
+        frappe.throw(_("That photo isn't available."), frappe.DoesNotExistError)
+    frappe.local.response.filename = f"{file}.{content_type.split('/')[1]}"
+    frappe.local.response.filecontent = content
+    frappe.local.response.content_type = content_type
+    frappe.local.response.display_content_as = "inline"
+    frappe.local.response.type = "download"
+
+
+def cache_lead_photo(response, request) -> None:
+    """after_request hook: a photo is the same bytes every time (its file never changes), so
+    the browser keeps it for an hour, for that person only."""
+    if request.path.endswith(PHOTO_METHOD) and response.status_code == 200:
+        response.headers["Cache-Control"] = PHOTO_CACHE
 
 
 def parse_data(data: dict | str) -> dict:

@@ -194,9 +194,9 @@ The ERP site's `tbo_smart.api.telephony` takes the same `acting_user`:
 ## Hub endpoints
 
 `helpdesk/api/leads.py`, thin typed proxies (writes are POST only): `get_options`,
-`list_leads`, `get_overview_page`, `get_overview`, `get_lead_intake`, `get_proposal_money`, `get_lead`, `get_lead_ai`, `refresh_lead_ai`, `apply_ai_stage`,
+`list_leads`, `get_overview_page`, `get_overview`, `get_business_overview`, `get_lead_intake`, `get_proposal_money`, `get_lead`, `get_lead_ai`, `refresh_lead_ai`, `apply_ai_stage`,
 `dismiss_ai_stage`, `draft_lead_message`, `log_message_sent`, `create_lead`, `update_lead`,
-`set_stage`, `add_note`, `get_category_counts`, `add_industry`, `bulk_set_lead_category`, `find_duplicate_leads`, `get_stale_leads`, `get_lead_departments`, `save_lead_department`, `set_lead_department_active`, `click_to_call`, `call_recording`, `get_daily_report`, `log_call`. They check
+`set_stage`, `add_note`, `get_category_counts`, `add_industry`, `bulk_set_lead_category`, `find_duplicate_leads`, `get_stale_leads`, `get_lead_departments`, `save_lead_department`, `set_lead_department_active`, `click_to_call`, `call_recording`, `get_daily_report`, `log_call`, `get_lead_photos`, `upload_lead_photo`, `delete_lead_photo`, `lead_photo`. They check
 `can_use_leads`, validate the view and page size, trim notes, and pass `acting_user`. The
 client is `CRMClient.call` in `helpdesk/integrations/crm/client.py`; the call and error
 mapping live in `helpdesk/integrations/crm/leads.py`. The API key and secret never reach the
@@ -367,6 +367,35 @@ doesn't show without its fields. The hub can be deployed before TBO Smart.
   (asks first; the new secret shows once, with Copy), the people mapping, unknown callers,
   recordings (days kept, the recording notice for the IVR greeting under the DPDP Act) and
   the AI call summary.
+- **Place and Photos** (needs TBO Smart's hub leads API v1.11, `hub-leads-api.md` §2.11; both
+  cards stay out while the ERP site is older: no `place` on `get_lead`, and `get_lead_photos`
+  answers `available: false` through `call_if_deployed`), under Details in the left column, for
+  a BD who is about to visit:
+  - **Place** (`LeadPlace.vue`): the location note, **Get directions** (Google Maps
+    `dir/?api=1&destination=<lat,lng>`, which opens the Maps app on a phone; only with a pin),
+    **Open in Maps** (the pasted map link, when there is no pin), **Google profile** (opens the
+    client's Business Profile), and **Show map** (Google's key-free embed
+    `maps?q=<lat,lng>&output=embed`, loaded only when asked, to spare mobile data). The
+    coordinates show in mono. Empty: a line saying what to add and an *Add place* button (read
+    only: "No place has been saved"). *Edit* (anyone who can write the lead) saves through
+    `update_lead` with the links, the pin and the note; **Use my current location** asks the
+    browser for one fix (needs https and permission) and says plainly when it is denied, can't
+    be found, times out or isn't supported; a long Google Maps link fills the pin when it is
+    empty. Latitude and longitude go together and are range-checked before they are sent; the
+    ERP site checks the links are Google's.
+  - **Photos** (`LeadPhotos.vue`): a grid of thumbnails (square, lazy), **Take photo** (camera
+    on a phone: `accept="image/*" capture="environment"`) and **Add photos** (several, from the
+    gallery). Chosen pictures open a dialog with previews and one optional caption for them;
+    each is scaled to 2000 px as a JPEG in the browser (so a phone upload is quick, HEIC works
+    where the browser decodes it, and the GPS in EXIF is dropped) and uploaded one at a time with
+    a status line per file, a named error for a refused one and a toast when done. At most 20
+    per lead (the buttons disable, with the reason). Tapping a thumbnail opens the shared
+    `MediaLightbox` (arrow keys, buttons and a swipe, Esc to close); *Remove* asks once. The
+    ERP site lets only the uploader, the lead's owner or a manager delete and says so.
+  - The images are private on the ERP site. The browser loads them from
+    `helpdesk.api.leads.lead_photo?lead=&file=&thumb=`, which streams the ERP bytes as the signed-in
+    person (only PNG, JPEG or WebP are passed on, `Content-Disposition: inline`) and, through the
+    `after_request` hook `cache_lead_photo`, `Cache-Control: private, max-age=3600`.
 - The pickers' options (`get_options`) are fetched once per session (`leadOptions` in
   `desk/src/pages/leads/leads.ts`).
 - Sidebar: *Leads* in Workspace (teal group), shown when `can_use_leads`.
@@ -482,6 +511,46 @@ positive lead, a new quotation and a new lead are) is in TBO Smart's `docs/hub-l
 - **Colour**: this tab is colourful on the owner's request, an exception recorded in
   [ui-guidelines.md](ui-guidelines.md) §8.
 
+## Business (management only)
+
+The Leads page's **Business** tab (`LeadsBusiness.vue`, `business/`) is the owner's meeting
+view: how many clients are in the pipeline and what they are worth, proposals given,
+onboardings (clients won, projects started) and the revenue that came in. It is company-wide,
+not the signed-in person's sales scope, and it can be taken to a meeting.
+
+**Who can see it, and how to grant it.** One place decides: the ERP site. A person sees the tab
+and gets the figures when they are a **System Manager** or have the **TBO Management** role
+there (created by TBO Smart's migrate; it is given to nobody). To grant it, add the role to the
+person's user on the ERP site (User → Roles). The hub keeps no list of its own. The tab shows
+when `get_options` answers `can_view_business` (kept up to 10 minutes per person, so a new
+grant may need a refresh); the figures are checked again on every read, so a link or API call by
+anyone else is refused (403: "Only management can see the Business overview"), and a role taken
+away stops the figures within the 60-second cache. The person still has to be a hub user who
+can open Leads (System Manager, Agent Manager, or an active agent in the Leads teams).
+
+`helpdesk.api.leads.get_business_overview(period, from_date, to_date, department, include_profit,
+fresh)` proxies TBO Smart's `get_business_overview` (hub-leads-api.md §2.11 in the tbo_smart repo),
+through `call_if_deployed` (an older ERP site answers `available: false` and the page says so),
+cached per person for 60 seconds, `fresh=1` skips it. Periods: this month, last month, this
+quarter, this FY (from 1 April) and custom (at most two years); the hub works the dates out.
+
+**The page:** a period picker, a department filter (shown when the ERP site has departments),
+a Show profit switch, then a headline row (clients in pipeline, pipeline value, proposals sent,
+onboarded, revenue invoiced, collected, outstanding, each saying whether it is the period or
+now), revenue by month, the funnel, pipeline by stage, proposals and onboarding facts, the last six
+months, top clients, profit (when asked and available) and a department table. Charts are plain
+SVG (`BusinessBars`) and bar rows (`BusinessRows`); no chart library is added. The pipeline value is
+the open clients' latest quotations, **unweighted** (lead stages have no probability) and says so.
+Outstanding is what customers owe today, not the period's.
+
+**Downloads:** *Download data (CSV)* writes the page's numbers as rows (section, item, count, amount,
+note) with a byte-order mark for Excel. *Download as slides (PDF)* prints `BusinessSlides.vue`: a
+title slide (logo, "Sales & Business overview", period, generated date) and six 16:9 landscape slides
+(headline numbers, pipeline and funnel, proposals and onboarding, revenue, last six months,
+departments and clients) in fixed light colours, through the browser's Save as PDF. The slides sit on
+`<body>` and add their `@page { size: 297mm 167mm }` rule only while the tab is open, so printing any
+other page is unchanged; turn "Background graphics" on in the print dialog for the bars.
+
 ## Proposals
 
 The Lead page's **Proposals** section, the proposal builder and Settings → Rates and proposals
@@ -525,11 +594,18 @@ per-person cache, a write clearing it) is tested there too.
 `helpdesk/tests/test_lead_categories.py`: the filters sent as JSON lists (none when empty), a lead
 saved with its categories, the counts (empty on an older ERP site), `add_industry` and
 `bulk_set_lead_category` proxied as the person, a refusal naming who may, empty picks refused.
+`helpdesk/tests/test_lead_place.py`: the photo list (and the card staying out on an older ERP
+site), an upload passed on with a trimmed caption, an empty or oversize upload kept at the hub,
+the ERP site's refusal reaching the person, delete, the image streamed (and only image types),
+no access without leads, and the private cache header.
 `helpdesk/tests/test_stale_leads.py`: wave 1: the duplicate check proxied as the person (and skipped
 quietly on an older ERP site), `allow_duplicate` sent only when confirmed, the quiet leads kept
 per department threshold and cached per person, and the follow-up rule (owner at L0, heads at
 twice the days, one notice per person and lead, off switch, older ERP site and ERP errors add
 nothing).
+`helpdesk/tests/test_leads_business.py`: the period dates, the proxy as the signed-in person,
+the 60-second per-person cache (and `fresh`), a refusal from the ERP site shown and never kept, an
+older ERP site, and the tab flag passed through `get_options`.
 `helpdesk/tests/test_sales_wall.py`: a Sales Employee outside the Leads teams lists, opens,
 creates, moves and notes a lead as themselves.
 `helpdesk/tests/test_daily_sales_report.py`: the report proxied as the person, targets and

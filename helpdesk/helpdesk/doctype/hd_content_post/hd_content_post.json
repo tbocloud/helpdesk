@@ -54,7 +54,10 @@
 		"task_mode",
 		"task",
 		"missed_alert_sent",
-		"times_postponed"
+		"times_postponed",
+		"meta_section",
+		"meta_publish_on",
+		"meta_publishes"
 	],
 	"fields": [
 		{
@@ -392,6 +395,28 @@
 			"label": "Head Feedback",
 			"read_only": 1,
 			"description": "Why the Digital Marketing Head sent the post back."
+		},
+		{
+			"fieldname": "meta_section",
+			"fieldtype": "Section Break",
+			"label": "Publish To Meta",
+			"collapsible": 1
+		},
+		{
+			"fieldname": "meta_publish_on",
+			"fieldtype": "Datetime",
+			"label": "Auto-publish At",
+			"read_only": 1,
+			"no_copy": 1,
+			"description": "When the hub will post it to Facebook / Instagram. Set by Publish to Meta."
+		},
+		{
+			"fieldname": "meta_publishes",
+			"fieldtype": "Table",
+			"options": "HD Content Publish",
+			"label": "Meta Posts",
+			"read_only": 1,
+			"no_copy": 1
 		}
 	],
 	"index_web_pages_for_search": 0,

@@ -179,8 +179,12 @@ screens the day's date column stays pinned at the top of the list while its card
   "2 days late" in red with an alert icon. Hidden on published and cancelled posts and on
   posts with nobody on them.
 - **Footer:** "Goes live …" (or the published / missed / cancelled line), then **Mark
-  published** (primary), **Postpone**, and a cancel icon button, all through
-  `EntryActionDialog.vue`. Published posts link to the live post instead.
+  published** (primary), **Publish to Meta** (Approved / Scheduled posts, for content editors
+  and the Digital Marketing Head), **Postpone**, and a cancel icon button, all through
+  `EntryActionDialog.vue`. A post scheduled to Facebook / Instagram also shows an
+  **Auto-publish <time>** chip (and the time in its Calendar-view title). Published posts link to
+  the live post instead. **Publish to Meta** posts the approved entry to the client's Page and
+  Instagram and writes the live link back; see [meta-publishing.md](meta-publishing.md).
 
 This is the owner's mockup design, so the cards carry a tint (an exception to the neutral-card
 rule in [ui-guidelines.md](ui-guidelines.md)). The tint always comes with text that says the

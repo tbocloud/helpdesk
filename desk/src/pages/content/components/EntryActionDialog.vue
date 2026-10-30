@@ -103,6 +103,13 @@
           </p>
         </template>
 
+        <MetaPublishPanel
+          v-if="action === 'meta'"
+          :post="post"
+          :open="open"
+          @changed="emit('done')"
+        />
+
         <ErrorMessage :message="error" />
       </form>
     </template>
@@ -110,6 +117,7 @@
       <div class="flex justify-end gap-2">
         <Button :label="__('Close')" @click="open = false" />
         <Button
+          v-if="action !== 'meta'"
           :variant="action === 'cancel' ? 'subtle' : 'solid'"
           :theme="action === 'cancel' ? 'red' : undefined"
           type="submit"
@@ -135,6 +143,7 @@ import {
   toast,
 } from "frappe-ui";
 import { computed, ref, watch } from "vue";
+import MetaPublishPanel from "./MetaPublishPanel.vue";
 import RoleHoursField from "./RoleHoursField.vue";
 import {
   type ContentPost,
@@ -228,6 +237,14 @@ const copy = computed(() => {
         ),
         submit: __("Send back"),
       };
+    case "meta":
+      return {
+        title: __("Publish to Meta"),
+        help: __(
+          "Post this approved entry to the client's Facebook Page and Instagram from here."
+        ),
+        submit: "",
+      };
     case "cancel":
       return {
         title: __("Cancel this post"),
@@ -291,7 +308,8 @@ watch(open, (isOpen) => {
 });
 
 async function submit() {
-  if (!teamLoaded.value) return;
+  // the Meta panel has its own buttons; Enter in its fields must not run another action
+  if (!teamLoaded.value || props.action === "meta") return;
   const post = props.post!;
   error.value = "";
   saving.value = true;

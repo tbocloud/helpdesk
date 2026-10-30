@@ -36,7 +36,7 @@
             />
           </div>
           <!-- the Daily report has the day's new leads itself, and loads in one request -->
-          <template v-if="view !== 'daily'">
+          <template v-if="view !== 'daily' && view !== 'business'">
             <!-- hidden quietly until the ERP site's TBO Smart counts it, and on a failed read -->
             <div
               v-if="!intakeData && intakeLoading"
@@ -60,6 +60,16 @@
           ref="dailyPanel"
           class="mt-4"
         />
+
+        <!-- management only: the ERP site decides who (System Manager or TBO Management) -->
+        <template v-else-if="view === 'business'">
+          <LeadsBusiness
+            v-if="canViewBusiness"
+            ref="businessPanel"
+            class="mt-4"
+            :options="options"
+          />
+        </template>
 
         <div v-else class="mt-3 flex flex-col gap-3">
           <div
@@ -510,6 +520,7 @@ import LeadCategoryFilters from "./LeadCategoryFilters.vue";
 import LeadFormDialog from "./LeadFormDialog.vue";
 import LeadSetCategoryDialog from "./LeadSetCategoryDialog.vue";
 import LeadIntakeStrip from "./LeadIntakeStrip.vue";
+import LeadsBusiness from "./LeadsBusiness.vue";
 import LeadsDailyReport from "./LeadsDailyReport.vue";
 import LeadsOverview from "./LeadsOverview.vue";
 import {
@@ -539,10 +550,11 @@ import {
 const PAGE_LENGTH = 20;
 // the Overview comes first and is where the page opens (docs/leads.md)
 // and the Daily report sits next to it, once the ERP site has it
-type LeadTab = LeadView | "overview" | "daily";
+type LeadTab = LeadView | "overview" | "daily" | "business";
 const TABS: { value: LeadTab; label: string }[] = [
   { value: "overview", label: __("Overview") },
   { value: "daily", label: __("Daily report") },
+  { value: "business", label: __("Business") },
   ...LEAD_VIEWS,
 ];
 const PERIOD_LABELS: Record<string, string> = {
@@ -563,6 +575,7 @@ const CREATED = [
 ];
 const overviewPanel = ref<InstanceType<typeof LeadsOverview> | null>(null);
 const dailyPanel = ref<InstanceType<typeof LeadsDailyReport> | null>(null);
+const businessPanel = ref<InstanceType<typeof LeadsBusiness> | null>(null);
 
 const route = useRoute();
 const router = useRouter();
@@ -586,7 +599,10 @@ function queryPage() {
 const view = ref<LeadTab>(queryView());
 // a list of leads, not one of the two report tabs
 const isList = computed(
-  () => view.value !== "overview" && view.value !== "daily"
+  () =>
+    view.value !== "overview" &&
+    view.value !== "daily" &&
+    view.value !== "business"
 );
 const search = ref(queryValue("q"));
 // what the list is searched for: the box, once typing pauses
@@ -764,12 +780,20 @@ function showAll() {
 loadLeadOptions();
 const options = computed(() => leadOptions.data as LeadOptions | undefined);
 const hasDaily = computed(() => !!options.value?.has_daily_report);
+const canViewBusiness = computed(() => !!options.value?.can_view_business);
 const tabs = computed(() =>
-  TABS.filter((tab) => tab.value !== "daily" || hasDaily.value)
+  TABS.filter(
+    (tab) =>
+      (tab.value !== "daily" || hasDaily.value) &&
+      (tab.value !== "business" || canViewBusiness.value)
+  )
 );
 // an old link to a report the ERP site doesn't have
 watch(options, (value) => {
   if (value && !value.has_daily_report && view.value === "daily")
+    view.value = "overview";
+  // a link to a tab the person may not open
+  if (value && !value.can_view_business && view.value === "business")
     view.value = "overview";
 });
 const clickToCall = useClickToCall();
@@ -855,6 +879,7 @@ watch(view, (tab) => {
 function refresh() {
   if (view.value === "overview") overviewPanel.value?.reload();
   else if (view.value === "daily") dailyPanel.value?.reload();
+  else if (view.value === "business") businessPanel.value?.reload();
   else {
     intake.submit({ fresh: 1 });
     staleLeads.submit({ fresh: 1 });
