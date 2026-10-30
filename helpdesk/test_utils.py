@@ -3660,6 +3660,18 @@ def lead_department(
     }
 
 
+def lead_category_options() -> dict:
+    """The category part of the ERP site's get_options: industries, organisation sizes,
+    states, Kerala's districts and the districts used on leads, by state."""
+    return {
+        "industries": ["Resorts", "Builders & Developers"],
+        "org_sizes": ["1-10", "11-50", "51-200"],
+        "states": ["Kerala", "Tamil Nadu", "Dubai"],
+        "kerala_districts": ["Kozhikode", "Ernakulam"],
+        "districts_by_state": {"Kerala": ["Kozhikode"], "": ["Chennai"]},
+    }
+
+
 def stale_lead(name: str, idle_days: int, **fields) -> dict:
     """A row of the ERP site's get_stale_leads: a lead of GrowthX owned by Asha with no
     activity for `idle_days`, unless `fields` say otherwise."""

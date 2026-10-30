@@ -22,6 +22,12 @@ export interface LeadOptions {
   owners: { email: string; full_name?: string }[];
   territories: string[];
   industries: string[];
+  /** the categories (absent from an older TBO Smart: the category pickers stay out) */
+  org_sizes?: string[];
+  states?: string[];
+  kerala_districts?: string[];
+  /** districts used on leads, by state ("" for leads without a state) */
+  districts_by_state?: Record<string, string[]>;
   /** MyOperator click-to-call is set up for the signed-in person on the ERP site */
   can_call?: boolean;
   /** the ERP site can log a call made outside MyOperator (TBO Smart's log_call) */
@@ -115,6 +121,10 @@ export interface LeadRow {
   owner_name?: string;
   tbo_department?: string | null;
   tbo_lead_type?: string | null;
+  industry?: string | null;
+  state?: string | null;
+  district?: string | null;
+  org_size?: string | null;
   score?: number | null;
   next_follow_up?: string | null;
   modified?: string;
@@ -224,6 +234,9 @@ export interface LeadForm {
   segment: string;
   territory: string;
   industry: string;
+  state: string;
+  district: string;
+  org_size: string;
   lead_owner: string;
   next_follow_up: string;
   tbo_department: string;
@@ -238,6 +251,9 @@ export const LEAD_FORM_FIELDS: (keyof LeadForm)[] = [
   "segment",
   "territory",
   "industry",
+  "state",
+  "district",
+  "org_size",
   "lead_owner",
   "next_follow_up",
   "tbo_department",
@@ -349,6 +365,22 @@ export function ownDepartment(options: LeadOptions | undefined) {
 /** "GrowthX · ERP / Software" for a lead's row; empty without a department. */
 export function departmentLabel(row: LeadRow) {
   return [row.tbo_department, row.tbo_lead_type].filter(Boolean).join(" · ");
+}
+
+/** The bulk Set category choice that empties a field (an empty choice leaves it alone). */
+export const CLEAR = "__clear__";
+
+/** The category filters of the list; each is any of its values. */
+export interface LeadCategories {
+  industry: string[];
+  state: string[];
+  district: string[];
+  org_size: string[];
+}
+
+/** "Resorts · Kozhikode" for a lead's row; empty without either. */
+export function categoryLabel(row: LeadRow) {
+  return [row.industry, row.district || row.state].filter(Boolean).join(" · ");
 }
 
 // each department's heads and members: the form prefers them as owner, Settings edits them

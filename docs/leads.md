@@ -50,8 +50,11 @@ user exists there with a sales role, applies what they may see, and records writ
 
 | Method | HTTP | Arguments | Returns |
 | --- | --- | --- | --- |
-| `get_options` | GET | | `{stages: [{name, label, type, color}], sources, segments, owners: [{email, full_name}], territories, industries, can_call, departments: [{name, lead_type, is_active, is_head, is_member}], lead_types}` (the last two from the departments release of TBO Smart) |
-| `list_leads` | GET | `search, stage, owner, segment, department, source, temperature, metric, period, from_date, to_date, view, start, page_length` | `{rows: [{name, lead_name, company_name, email_id, mobile_no, tbo_stage, segment, lead_owner, owner_name, score, next_follow_up, modified, latest_quotation, latest_proposal, tbo_department, tbo_lead_type}], total}` |
+| `get_options` | GET | | `{stages: [{name, label, type, color}], sources, segments, owners: [{email, full_name}], territories, industries, org_sizes, states, kerala_districts, districts_by_state, can_call, departments: [{name, lead_type, is_active, is_head, is_member}], lead_types}` (the last two from the departments release of TBO Smart) |
+| `list_leads` | GET | `search, stage, owner, segment, department, industry, state, district, org_size, source, temperature, metric, period, from_date, to_date, view, start, page_length` | `{rows: [{name, lead_name, company_name, email_id, mobile_no, tbo_stage, segment, lead_owner, owner_name, score, next_follow_up, modified, latest_quotation, latest_proposal, tbo_department, tbo_lead_type, industry, state, district, org_size}], total}` |
+| `get_category_counts` | GET | | `{industry, state, district, org_size}`, each `{value: leads}` (TBO Smart v1.11, `hub-leads-api.md` §2.11) |
+| `add_industry` | POST | `name` | `{name, created}`; managers only |
+| `bulk_set_lead_category` | POST | `leads, values` | `{updated, skipped}`; managers only |
 | `get_overview` | GET | `period, from_date, to_date, owner` | the Overview's figures (TBO Smart's `hub-leads-api.md` §2.4) |
 | `get_lead_intake` | GET | `from_date, to_date` (the hub sends yesterday and today) | new leads taken each day by owner, imports left out, and the scope's salespeople (§2.4.1) |
 | `get_proposal_money` | GET | `period, from_date, to_date, owner` | proposals sent, won, advances and every payment split still to collect (§2.8) |
@@ -85,7 +88,7 @@ user exists there with a sales role, applies what they may see, and records writ
 - `view` is `all`, `mine`, `call_today` or `follow_up`. The hub sends `page_length` 20
   (at most 100) and `start` from 0.
 - `data` (create and update) uses these keys: `lead_name, company_name, email_id, mobile_no,
-  source, segment, territory, industry, lead_owner, next_follow_up` (date, `YYYY-MM-DD`), and `tbo_department` (a department's name).
+  source, segment, territory, industry, state, district, org_size, lead_owner, next_follow_up` (date, `YYYY-MM-DD`), and `tbo_department` (a department's name).
   An update sends only the fields that changed; an empty string clears a field.
 - `allowed_stages` may be stage names or stage objects; the hub offers only those (minus the
   current stage).
@@ -193,7 +196,7 @@ The ERP site's `tbo_smart.api.telephony` takes the same `acting_user`:
 `helpdesk/api/leads.py`, thin typed proxies (writes are POST only): `get_options`,
 `list_leads`, `get_overview_page`, `get_overview`, `get_lead_intake`, `get_proposal_money`, `get_lead`, `get_lead_ai`, `refresh_lead_ai`, `apply_ai_stage`,
 `dismiss_ai_stage`, `draft_lead_message`, `log_message_sent`, `create_lead`, `update_lead`,
-`set_stage`, `add_note`, `find_duplicate_leads`, `get_stale_leads`, `get_lead_departments`, `save_lead_department`, `set_lead_department_active`, `click_to_call`, `call_recording`, `get_daily_report`, `log_call`. They check
+`set_stage`, `add_note`, `get_category_counts`, `add_industry`, `bulk_set_lead_category`, `find_duplicate_leads`, `get_stale_leads`, `get_lead_departments`, `save_lead_department`, `set_lead_department_active`, `click_to_call`, `call_recording`, `get_daily_report`, `log_call`. They check
 `can_use_leads`, validate the view and page size, trim notes, and pass `acting_user`. The
 client is `CRMClient.call` in `helpdesk/integrations/crm/client.py`; the call and error
 mapping live in `helpdesk/integrations/crm/leads.py`. The API key and secret never reach the
@@ -368,6 +371,36 @@ doesn't show without its fields. The hub can be deployed before TBO Smart.
   `desk/src/pages/leads/leads.ts`).
 - Sidebar: *Leads* in Workspace (teal group), shown when `can_use_leads`.
 
+## Lead categories (industry, state, district, organisation size)
+
+Each lead says what kind of client it is, so the list can be filtered and counted by it.
+The four fields are ERPNext's own (`industry`, `state`, `no_of_employees`) plus TBO's
+`tbo_district`; the hub's names are `industry`, `state`, `district`, `org_size`. The contract
+is TBO Smart's `hub-leads-api.md` §2.11.
+
+- **Lead form** (`LeadCategoryFields.vue`, inside `LeadFormDialog.vue`): Industry and State
+  are searchable lists. A manager who types an industry that isn't there gets "Add as a new
+  industry" (`add_industry`; the ERP site refuses anyone else). District is a combobox that
+  accepts any text: with State Kerala it suggests the 14 districts, with another state the
+  districts leads there already use, with no state all of those. Organisation size is
+  ERPNext's employee band. The lead page's Details card shows all four.
+- **Filters** (`LeadCategoryFilters.vue`, under the other filters): four multi-selects (any of
+  the picked values; different fields all apply). They are in the URL as repeated keys
+  (`?industry=Resorts&industry=Hotels…&state=Kerala`), clear with "Clear filters", and apply
+  with every view and with an Overview number's list. Each value shows how many of the
+  person's leads have it (`get_category_counts`, cached a minute; no counts on an older ERP
+  site). District lists only the districts in use.
+- **Rows** show "Industry · District" (the state when there is no district) after the segment.
+- **Bulk set** (managers): "Select leads" turns on checkboxes (this page, or one by one across
+  pages), and "Set category" opens a form for the four values. A field left as it is changes
+  nothing; "Clear" empties it on every selected lead. Up to 500 leads per call; leads the
+  person may not write come back as `skipped` and are listed.
+- **Overview and dashboards are not filtered by category**: the ERP site builds their figures
+  per owner and period (`hub-leads-api.md` §2.11). Opening a number's list and then filtering it
+  by category works.
+- Needs TBO Smart v1.11 on the ERP site; before that the pickers show empty lists and the
+  filters send nothing it understands.
+
 ## Daily report
 
 The Leads page's **Daily report** tab (next to Overview; `LeadsDailyReport.vue`,
@@ -489,6 +522,9 @@ message queued) while other errors still show; the
 AI calls are the signed-in person's (POST for every change) and the channels checked.
 The one-request Overview page (all parts, money or intake failing alone, cache hit, `fresh`,
 per-person cache, a write clearing it) is tested there too.
+`helpdesk/tests/test_lead_categories.py`: the filters sent as JSON lists (none when empty), a lead
+saved with its categories, the counts (empty on an older ERP site), `add_industry` and
+`bulk_set_lead_category` proxied as the person, a refusal naming who may, empty picks refused.
 `helpdesk/tests/test_stale_leads.py`: wave 1: the duplicate check proxied as the person (and skipped
 quietly on an older ERP site), `allow_duplicate` sent only when confirmed, the quiet leads kept
 per department threshold and cached per person, and the follow-up rule (owner at L0, heads at

@@ -467,6 +467,9 @@ const detailFields = computed(() => {
     { label: __("Segment"), value: l.segment || "" },
     { label: __("Territory"), value: l.territory || "" },
     { label: __("Industry"), value: l.industry || "" },
+    { label: __("State"), value: l.state || "" },
+    { label: __("District"), value: l.district || "" },
+    { label: __("Organisation size"), value: l.org_size || "" },
     {
       label: __("Score"),
       value: l.score === null || l.score === undefined ? "" : String(l.score),
