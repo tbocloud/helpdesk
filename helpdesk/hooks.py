@@ -61,6 +61,8 @@ scheduler_events = {
             "helpdesk.tasks.push_ticket_statuses",
             "helpdesk.tasks.sync_conversations",
             "helpdesk.content_sync.sync_content_approvals",
+            # posts the content calendar scheduled for Facebook / Instagram (docs/meta-publishing.md)
+            "helpdesk.integrations.meta.publisher.publish_due",
             "helpdesk.helpdesk.doctype.hd_meeting.hd_meeting.send_reminders",
         ],
         # every 10 minutes: new hub errors to the team's chat channel
