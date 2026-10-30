@@ -5,13 +5,10 @@ from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_days, add_to_date, get_datetime, getdate, now_datetime
 
 from helpdesk.tasky import api as tasky
-from helpdesk.tasky.time_sessions import (
-    LONG_DAY_HOURS,
-    SESSION,
-    record_session,
-    split_by_day,
-)
+from helpdesk.tasky.time_sessions import record_session
 from helpdesk.test_utils import (
+    freeze_work_day,
+    get_task_sessions,
     get_task_timesheets,
     hold_commits,
     make_assignment,
@@ -33,6 +30,8 @@ class TestTimerSessions(FrappeTestCase):
     def setUp(self):
         hold_commits(self)
         self.addCleanup(frappe.set_user, "Administrator")
+        # a working day at 11:00 that follows one: the timer only counts work time
+        freeze_work_day(self, 11)
         make_tasky_user(*DEV)
         self.project = make_project(
             "Timer Sessions - Website", members=[(DEV[0], "Developer")]
@@ -51,22 +50,12 @@ class TestTimerSessions(FrappeTestCase):
         )
 
     def sessions(self, logged=None):
-        filters = {"task": self.task}
-        if logged is not None:
-            filters["logged"] = logged
-        return frappe.get_all(
-            SESSION,
-            filters=filters,
-            fields=["started_at", "ended_at", "hours", "user", "logged", "timesheet"],
-            order_by="started_at asc",
-        )
+        return get_task_sessions(self.task, logged)
 
     def run_timer_today(self, hours: float) -> float:
-        """Start the task's timer `hours` ago, but never before midnight, so the stretch
-        stays on today whenever the test runs; returns the hours it has run."""
-        hours = min(
-            hours, (now_datetime() - at(self.today, 0)).total_seconds() / 3600 * 0.9
-        )
+        """Start the task's timer `hours` ago, but never before the day starts at 10:00,
+        so the stretch stays within today's work window; returns the hours it has run."""
+        hours = min(hours, (now_datetime() - at(self.today, 10)).total_seconds() / 3600)
         start_task_timer(self.task, hours_ago=hours)
         return hours
 
@@ -78,33 +67,20 @@ class TestTimerSessions(FrappeTestCase):
         params.update(kwargs)
         return self.as_dev(lambda: tasky.complete_task(**params))
 
-    def test_a_stretch_past_midnight_is_split_by_day(self):
-        pieces = split_by_day(at(self.yesterday, 22), at(self.today, 1, 30))
-        self.assertEqual(
-            pieces,
-            [
-                (at(self.yesterday, 22), at(self.today, 0)),
-                (at(self.today, 0), at(self.today, 1, 30)),
-            ],
-        )
-        self.assertEqual(split_by_day(at(self.today, 9), at(self.today, 9)), [])
-
     def test_pausing_the_timer_saves_the_stretch_by_day(self):
         start_task_timer(self.task, hours_ago=1)
         frappe.db.set_value(
-            "Task",
-            self.task,
-            "custom_timer_start",
-            add_to_date(at(self.today, 0), hours=-2),
+            "Task", self.task, "custom_timer_start", at(self.yesterday, 16)
         )
 
         self.as_dev(lambda: tasky.stop_timer(self.task))
 
         rows = self.sessions()
+        # yesterday's 16:00 to 18:00, then today's 10:00 to 11:00: nothing in between
         self.assertEqual(
             [getdate(r.started_at) for r in rows], [self.yesterday, self.today]
         )
-        self.assertEqual(rows[0].hours, 2.0)
+        self.assertEqual([r.hours for r in rows], [2.0, 1.0])
         self.assertEqual({r.user for r in rows}, {DEV[0]})
 
     def test_putting_it_on_hold_saves_the_running_stretch(self):
@@ -131,7 +107,7 @@ class TestTimerSessions(FrappeTestCase):
         self.assertEqual(days[0]["hours"], 4.0)
         self.assertEqual(get_datetime(days[0]["from_time"]), at(self.yesterday, 14))
         self.assertAlmostEqual(days[1]["hours"], ran, places=1)
-        self.assertFalse(days[0]["long"])
+        self.assertNotIn("long", days[0])
 
     def test_time_banked_before_sessions_were_kept_goes_on_today(self):
         frappe.db.set_value("Task", self.task, "custom_timer_elapsed", 3)
@@ -141,16 +117,6 @@ class TestTimerSessions(FrappeTestCase):
         self.assertEqual(day["date"], str(self.today))
         self.assertEqual(day["hours"], 3.0)
         self.assertIsNone(day["from_time"])
-
-    def test_a_timer_left_running_overnight_is_flagged(self):
-        record_session(
-            self.task, at(self.yesterday, 8), at(self.yesterday, 23, 30), DEV[0]
-        )
-
-        [day] = self.as_dev(lambda: tasky.get_completion_days(self.task))["days"]
-
-        self.assertGreater(day["hours"], LONG_DAY_HOURS)
-        self.assertTrue(day["long"])
 
     def test_each_day_gets_its_own_timesheet(self):
         record_session(
@@ -231,7 +197,7 @@ class TestTimerSessions(FrappeTestCase):
                 {"date": str(self.today), "hours": 1},
                 {"date": str(self.today), "hours": 2},
             ],
-            "over a day": [{"date": str(self.today), "hours": 25}],
+            "over the day": [{"date": str(self.today), "hours": 9}],
             "no hours": [{"date": str(self.today), "hours": 0}],
             "no date": [{"date": "", "hours": 1}],
         }
@@ -272,18 +238,6 @@ class TestTimerSessions(FrappeTestCase):
         self.assertEqual(self.sessions(), [])
         # the timer is still running, so its whole stretch is saved once, later
         self.assertTrue(frappe.db.get_value("Task", self.task, "custom_timer_start"))
-
-    def test_a_days_log_stays_within_that_day(self):
-        record_session(
-            self.task, at(self.yesterday, 22), at(self.yesterday, 23, 30), DEV[0]
-        )
-
-        result = self.complete(days=[{"date": str(self.yesterday), "hours": 3}])
-
-        [log] = frappe.get_doc("Timesheet", result["timesheet"]).time_logs
-        # started earlier than the timer did, so the 3 hours end by midnight
-        self.assertEqual(get_datetime(log.from_time), at(self.yesterday, 21))
-        self.assertLessEqual(get_datetime(log.to_time), at(self.today, 0))
 
     def test_a_malformed_days_payload_gets_a_message(self):
         for days in ('{"date": "2026-10-15", "hours": 2}', "[1, 2]", '["x"]'):
