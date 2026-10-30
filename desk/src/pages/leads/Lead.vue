@@ -150,6 +150,7 @@
               />
               <LeadPhotos :lead-id="leadId" :can-write="!!lead.can_write" />
             </template>
+            <LeadWhyCall :prospect="lead?.prospect" />
             <LeadAISuggests :lead-id="leadId" @changed="detail.reload()" />
             <LeadQuotations :quotations="data.quotations || []" />
             <LeadProposals
@@ -365,6 +366,7 @@ import LucideScrollText from "~icons/lucide/scroll-text";
 import LeadFormDialog from "./LeadFormDialog.vue";
 import LeadPhotos from "./LeadPhotos.vue";
 import LeadPlace from "./LeadPlace.vue";
+import LeadWhyCall from "./LeadWhyCall.vue";
 import LeadDocuments from "./LeadDocuments.vue";
 import LogCallDialog from "./LogCallDialog.vue";
 import LeadProposals from "./LeadProposals.vue";

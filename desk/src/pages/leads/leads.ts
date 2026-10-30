@@ -2,6 +2,7 @@
 // them there as the signed-in person (docs/leads.md).
 import type { Tone } from "@/components/tone";
 import { __ } from "@/translation";
+import type { LeadProspect, ProspectingOptions } from "./prospects";
 import { money } from "@/components/invoicing/invoices";
 import { UNSAVED_NOTE_PREFIX, useAuthStore } from "@/stores/auth";
 import { errorText } from "@/utils";
@@ -40,6 +41,10 @@ export interface LeadOptions {
   /** the signed-in person may open the Business tab: System Manager or the TBO Management
    * role on the ERP site, which decides it (absent from an older TBO Smart) */
   can_view_business?: boolean;
+  /** the signed-in person may open Find prospects (managers and department heads, while it is
+   * on); absent from an older TBO Smart */
+  can_find_prospects?: boolean;
+  prospecting?: ProspectingOptions | null;
 }
 
 /** A department as `get_options` lists it, with the signed-in person's part in it. */
@@ -333,6 +338,8 @@ export interface LeadDetail {
       /** absent from an older TBO Smart */
       place?: LeadPlace;
       photo_count?: number;
+      /** what the lead's website says, for a lead found by Find prospects */
+      prospect?: LeadProspect | null;
     };
   timeline: LeadTimelineEntry[];
   quotations: LeadQuotation[];
