@@ -460,12 +460,22 @@ def get_custom_fields():
                 "read_only": 1,
             },
             {
+                # whose timer is running, so a person has one at a time (time_sessions)
+                "fieldname": "custom_timer_user",
+                "fieldtype": "Link",
+                "options": "User",
+                "label": "Timer Of",
+                "insert_after": "custom_timer_elapsed",
+                "read_only": 1,
+                "no_copy": 1,
+            },
+            {
                 # the schedule that created this task (docs/recurring-tasks.md)
                 "fieldname": "custom_recurring_task",
                 "fieldtype": "Link",
                 "options": "HD Recurring Task",
                 "label": "Recurring Task",
-                "insert_after": "custom_timer_elapsed",
+                "insert_after": "custom_timer_user",
                 "read_only": 1,
                 "no_copy": 1,
                 "search_index": 1,

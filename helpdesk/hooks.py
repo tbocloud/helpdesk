@@ -55,6 +55,9 @@ scheduler_events = {
             "helpdesk.helpdesk.doctype.hd_meeting.hd_meeting.sync_with_outlook",
         ],
         "*/5 * * * *": [
+            # pauses every running timer once the work day (or the morning, with a lunch
+            # break set) has closed
+            "helpdesk.tasky.time_sessions.stop_timers_outside_work_hours",
             "helpdesk.tasks.push_ticket_statuses",
             "helpdesk.tasks.sync_conversations",
             "helpdesk.content_sync.sync_content_approvals",

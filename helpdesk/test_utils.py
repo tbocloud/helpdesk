@@ -2105,6 +2105,67 @@ def set_work_settings(**values):
     return doc
 
 
+def freeze_work_day(test, hour: int = 11, minute: int = 0) -> datetime:
+    """Stops the clock for `test` at `hour`:`minute` on the latest day that is a working day
+    and follows one (so "yesterday" can hold hours too), undone when the test ends.
+    Timer tests need it: what counts depends on the time of day the suite happens to run.
+    Returns the moment."""
+    from datetime import time
+
+    from frappe.utils import add_days
+
+    from helpdesk.work_hours import is_working_day
+
+    day = getdate()
+    while not (is_working_day(day) and is_working_day(add_days(day, -1))):
+        day = add_days(day, -1)
+    moment = datetime.combine(day, time(hour, minute))
+    # it keeps ticking: saving a document twice in one frozen second fails
+    frozen = test.freeze_time(moment, tick=True)
+    frozen.__enter__()
+    test.addCleanup(frozen.__exit__, None, None, None)
+    return moment
+
+
+def make_time_session(
+    task: str, user: str, start, end, logged: int = 0, hours: float | None = None
+):
+    """Inserts an HD Task Time Session straight (no clipping), as older timers saved them:
+    `hours` defaults to the time between `start` and `end`."""
+    from frappe.utils import get_datetime
+
+    start, end = get_datetime(start), get_datetime(end)
+    return frappe.get_doc(
+        {
+            "doctype": "HD Task Time Session",
+            "task": task,
+            "user": user,
+            "started_at": start,
+            "ended_at": end,
+            "hours": (
+                hours
+                if hours is not None
+                else round((end - start).total_seconds() / 3600, 2)
+            ),
+            "logged": logged,
+        }
+    ).insert(ignore_permissions=True)
+
+
+def get_task_sessions(task: str, logged: int | None = None) -> list:
+    """The task's HD Task Time Sessions (started_at, ended_at, hours, user, logged, timesheet),
+    earliest first; only the `logged` (1) or not yet logged (0) ones when given."""
+    filters = {"task": task}
+    if logged is not None:
+        filters["logged"] = logged
+    return frappe.get_all(
+        "HD Task Time Session",
+        filters=filters,
+        fields=["started_at", "ended_at", "hours", "user", "logged", "timesheet"],
+        order_by="started_at asc",
+    )
+
+
 REPLAY_START_MS = 1_790_000_000_000
 REPLAY_ERROR_MESSAGE = "Posting Date cannot be before the Invoice Date"
 
