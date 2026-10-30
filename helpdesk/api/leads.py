@@ -27,6 +27,12 @@ CALL_OUTCOMES = ("Connected", "No answer", "Busy", "Voicemail")
 TELEPHONY = "tbo_smart.api.telephony"
 # what the recording player may be handed back
 AUDIO_TYPES = ("audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/ogg")
+# what a lead photo may be handed back as: the ERP site only stores these
+PHOTO_TYPES = ("image/jpeg", "image/png", "image/webp")
+# a photo is at most 10 MB on the ERP site; as base64 a third more
+MAX_PHOTO_BASE64 = 14 * 1024 * 1024
+PHOTO_METHOD = "helpdesk.api.leads.lead_photo"
+PHOTO_CACHE = "private, max-age=3600"
 MAX_PAGE = 100
 # the hub and the ERP site share one worker pool on Frappe Cloud, so a read that was just
 # answered is kept per person for a short while instead of asked again (docs/leads.md)
@@ -658,6 +664,72 @@ def call_recording(call: str) -> None:
     )
     frappe.local.response.display_content_as = "inline"
     frappe.local.response.type = "download"
+
+
+# --- place and photos (docs/leads.md) ----------------------------------------------
+
+
+@frappe.whitelist()
+def get_lead_photos(lead: str) -> dict:
+    """{available, photos}: the lead's photos newest first. `available` is false while the
+    ERP site's TBO Smart is older than lead photos, so the card stays out."""
+    require_leads()
+    photos = call_if_deployed("get_lead_photos", lead=lead)
+    if photos is None:
+        return {"available": False, "photos": []}
+    return {"available": True, "photos": photos}
+
+
+@frappe.whitelist(methods=["POST"])
+def upload_lead_photo(
+    lead: str, filename: str, content: str, caption: str | None = None
+) -> dict:
+    """A photo on the lead as the signed-in person (`content` base64; the ERP site checks
+    it is a PNG, JPEG or WebP of at most 10 MB and that the lead has room)."""
+    require_leads()
+    if not content or len(content) > MAX_PHOTO_BASE64:
+        frappe.throw(_("Choose a photo of at most 10 MB."))
+    return (
+        call(
+            "upload_lead_photo",
+            post=True,
+            lead=lead,
+            filename=(filename or "").strip()[:120] or "photo",
+            content=content,
+            caption=(caption or "").strip()[:140] or None,
+        )
+        or {}
+    )
+
+
+@frappe.whitelist(methods=["POST"])
+def delete_lead_photo(lead: str, file: str) -> dict:
+    require_leads()
+    return call("delete_lead_photo", post=True, lead=lead, file=file) or {}
+
+
+@frappe.whitelist()
+def lead_photo(lead: str, file: str, thumb: int | str = 0) -> None:
+    """A lead photo's image (`thumb` 1: a small one), streamed from the ERP site, which
+    shows it only to people who may read the lead."""
+    require_leads()
+    content, content_type = download(
+        "get_lead_photo", lead=lead, file=file, thumb=1 if cint(thumb) else 0
+    )
+    if content_type not in PHOTO_TYPES:
+        frappe.throw(_("That photo isn't available."), frappe.DoesNotExistError)
+    frappe.local.response.filename = f"{file}.{content_type.split('/')[1]}"
+    frappe.local.response.filecontent = content
+    frappe.local.response.content_type = content_type
+    frappe.local.response.display_content_as = "inline"
+    frappe.local.response.type = "download"
+
+
+def cache_lead_photo(response, request) -> None:
+    """after_request hook: a photo is the same bytes every time (its file never changes), so
+    the browser keeps it for an hour, for that person only."""
+    if request.path.endswith(PHOTO_METHOD) and response.status_code == 200:
+        response.headers["Cache-Control"] = PHOTO_CACHE
 
 
 def parse_data(data: dict | str) -> dict:

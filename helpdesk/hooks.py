@@ -31,6 +31,9 @@ after_migrate = [
     "helpdesk.setup.after_migrate",
 ]
 
+# a lead photo's bytes are cached by the browser, for that person only
+after_request = ["helpdesk.api.leads.cache_lead_photo"]
+
 # Full Text Search
 # ------------------
 
