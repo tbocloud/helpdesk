@@ -341,6 +341,8 @@ const unsavedNoteKey = (lead: string) =>
 
 /** Whether the browser kept them too: when not, a reload loses them. */
 export function keepUnsavedNote(lead: string, note: string) {
+  // a failure that lands after logout began: logout has cleared the drafts already
+  if (!useAuthStore().isLoggedIn) return false;
   unsavedNotes.set(unsavedNoteKey(lead), note);
   try {
     localStorage.setItem(unsavedNoteKey(lead), note);

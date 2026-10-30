@@ -307,6 +307,9 @@ async function checkDuplicates() {
   const key = currentKey();
   if (key === checkedFor) return;
   checkedFor = key;
+  // the form may be closed and opened again, with the same email, before the answer comes
+  const opened = opening;
+  const current = () => opened === opening && checkedFor === key;
   refusedAsRepeat.value = false;
   if (!email && !phone) {
     duplicates.value = [];
@@ -320,9 +323,9 @@ async function checkDuplicates() {
       exclude: props.lead?.name,
     });
     // the person kept typing while it was asked
-    if (checkedFor === key) duplicates.value = result?.matches ?? [];
+    if (current()) duplicates.value = result?.matches ?? [];
   } catch {
-    if (checkedFor === key) duplicates.value = [];
+    if (current()) duplicates.value = [];
   }
 }
 const checkSoon = useDebounceFn(checkDuplicates, 300);

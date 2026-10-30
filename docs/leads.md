@@ -331,12 +331,14 @@ doesn't show without its fields. The hub can be deployed before TBO Smart.
   remarks are kept per person and lead (`keepUnsavedNote` in `leads.ts`): in `localStorage`
   under `hd-lead-unsaved-note:<user>:<lead>`, and in memory as well so blocked or full
   storage still hands them over (the warning then says a reload would lose them). The lead's
-  page opens with them in its note box, and they stay through reloads until that note is added; logout clears them (`stores/auth.ts`), so
-  the next person on a shared browser never sees them. A save (or its duplicate check) that
-  finishes after the dialog was closed and opened again keeps those remarks but leaves the
-  reopened form alone, and a note added on the lead page clears the box only if it's still
-  that lead and the text wasn't changed meanwhile. Edit
-  lead has no Remarks; the lead page's note composer does that.
+  page opens with them in its note box, and they stay through reloads until a note sent from
+  them (edited or not) is added; a fresh note typed after clearing the box leaves them
+  stored. Logout clears them (`stores/auth.ts`), so the next person on a shared browser
+  never sees them, and a failure landing after logout began stores nothing. A save (or its
+  duplicate check) that finishes after the dialog was closed and opened again keeps those
+  remarks but leaves the reopened form alone, and a note added on the lead page clears the
+  box only if it's still that lead and the text wasn't changed meanwhile. Edit lead has no
+  Remarks; the lead page's note composer does that.
 - **Lead** (`/helpdesk/leads/<name>`, `Lead.vue`): details, *Move stage* (the primary
   action; only `allowed_stages`, with an optional note), *Edit* (the same dialog, sending
   only changed fields), a note composer and the timeline, and the quotations read-only
