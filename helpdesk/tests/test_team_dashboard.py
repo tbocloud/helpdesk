@@ -262,7 +262,9 @@ class TestTeamDashboard(FrappeTestCase):
         ).name
         make_assignment("Task", overdue, RAHUL)
         log_hours(ANU, self.project, 5, "2031-03-10")
-        log_hours(RAHUL, self.project, 30, "2031-03-11")
+        # thirty hours over five days: a day never counts for more than the work day
+        for day in range(10, 15):
+            log_hours(RAHUL, self.project, 6, f"2031-03-{day}")
 
     def test_people_departments_and_projects(self):
         data = call_team_dashboard(
