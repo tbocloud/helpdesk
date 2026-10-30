@@ -800,6 +800,36 @@ class TestContentProject(ContentTaskCase):
 
         self.assertEqual({t.project for t in self.tasks(post).values()}, {theirs})
 
+    def test_a_part_reopened_after_a_customer_change_joins_their_project(self):
+        from helpdesk.api import content_board
+
+        post = self.post()
+        content_board.assign(post.name, "writer", [])
+        create_customer("Content Tasks Movers")
+        theirs = make_project("Content Tasks Movers - Social media").name
+        frappe.db.set_value(
+            "Project",
+            theirs,
+            {"customer": "Content Tasks Movers", "project_type": "Content Calendar"},
+        )
+        post.reload()
+        post.customer = "Content Tasks Movers"
+        post.save()
+
+        content_board.assign(post.name, "writer", [OTHER[0]])
+
+        self.assertEqual(self.tasks(post)["Writer"].project, theirs)
+
+    def test_reopening_a_part_for_a_customer_without_a_project_is_blocked(self):
+        from helpdesk.api import content_board
+
+        post = self.post()
+        content_board.assign(post.name, "writer", [])
+        self.without_project_customer()
+
+        with self.assertRaisesRegex(frappe.ValidationError, "has no open project"):
+            content_board.assign(post.name, "writer", [OTHER[0]])
+
     def test_the_dialog_is_told_which_project_tasks_go_to(self):
         self.assertEqual(get_content_project(CUSTOMER)["name"], self.project)
         self.without_project_customer()

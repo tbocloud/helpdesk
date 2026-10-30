@@ -2,11 +2,28 @@ import { nextTick, onActivated, watch, type Ref } from "vue";
 import { onBeforeRouteLeave, useRoute } from "vue-router";
 
 // per history entry (its position and path): Back to that entry restores, a fresh visit to
-// the same page is a new entry and starts at the top
+// the same page is a new entry and starts at the top. In this tab's sessionStorage, so a
+// reload keeps them like the history itself; in memory too, for when storage is blocked
+const STORE_PREFIX = "hd-scroll:";
 const positions = new Map<string, number>();
 
 function entryKey(path: string) {
   return `${window.history.state?.position ?? ""}:${path}`;
+}
+
+function keep(key: string, top: number) {
+  positions.set(key, top);
+  try {
+    sessionStorage.setItem(STORE_PREFIX + key, String(top));
+  } catch {}
+}
+
+function savedAt(key: string): number | undefined {
+  try {
+    const stored = sessionStorage.getItem(STORE_PREFIX + key);
+    if (stored !== null) return Number(stored);
+  } catch {}
+  return positions.get(key);
 }
 
 /**
@@ -26,12 +43,14 @@ export function useScrollRestore(
 
   // the path as it is on leaving: filters kept in the query change it in place
   onBeforeRouteLeave((_to, from) => {
-    if (panel.value)
-      positions.set(entryKey(from.fullPath), panel.value.scrollTop);
+    if (panel.value) keep(entryKey(from.fullPath), panel.value.scrollTop);
   });
 
+  // only coming back to an entry: a fresh visit can reuse a history position that an
+  // earlier entry, now gone, had saved under, but has no page ahead of it
   function saved() {
-    return positions.get(entryKey(route.fullPath));
+    if (!window.history.state?.forward) return undefined;
+    return savedAt(entryKey(route.fullPath));
   }
 
   let restored = false;

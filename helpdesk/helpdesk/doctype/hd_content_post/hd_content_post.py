@@ -172,12 +172,12 @@ class HDContentPost(Document):
         open_tasks = {
             t.content_role: t.name for t in tasks if t.status not in DONE_TASK_STATUSES
         }
-        # a finished part isn't redone, and a cancelled one isn't recreated; its task
-        # reopens only when someone new is put on the part (after everyone was taken off it)
-        finished = {t.content_role for t in tasks if t.status == "Completed"}
-        cancelled = {t.content_role: t.name for t in tasks if t.status == "Cancelled"}
+        # a part that was finished or cancelled isn't recreated; a cancelled one reopens
+        # its task when someone new is put on it (parts_to_reopen)
+        handled = {t.content_role for t in tasks if t.status in DONE_TASK_STATUSES}
         closing = CLOSE_TASKS_AS.get(self.status)
         wanted = {} if closing else self.wanted_tasks()
+        reopening = self.parts_to_reopen(tasks, wanted)
         project = self.content_project() if wanted else None
 
         for role, name in open_tasks.items():
@@ -191,12 +191,9 @@ class HDContentPost(Document):
                 # the task closes its own ToDos (Task.close_assignments)
                 task.save(ignore_permissions=True)
         for role, plan in wanted.items():
-            if role in open_tasks or role in finished:
-                continue
-            if role in cancelled:
-                if self.has_new_people(role, plan["users"]):
-                    self.reopen_task(cancelled[role], plan, project)
-            else:
+            if role in reopening:
+                self.reopen_task(reopening[role], plan, project)
+            elif role not in open_tasks and role not in handled:
                 self.create_task(role, plan, project)
 
     def content_tasks(self) -> list:
@@ -273,13 +270,13 @@ class HDContentPost(Document):
 
     def require_content_project(self):
         """Tasks go to one of the customer's projects, so adding people to a post, or moving a
-        post with open tasks to another customer, needs one. Saves that add nobody (finishing a
+        post with open tasks to another customer, needs one (and so does reopening a cancelled part for someone new). Saves that add nobody (finishing a
         task, approvals) still go through, and so do background jobs that set
         flags.tasks_join_project_later: their tasks join the project once the customer has one
         (attach_content_tasks)."""
         if self.flags.skip_task_sync or self.flags.tasks_join_project_later:
             return
-        if not (self.adds_tasks() or self.moves_tasks()):
+        if not (self.adds_tasks() or self.moves_tasks() or self.reopens_tasks()):
             return
         if not self.content_project():
             frappe.throw(
@@ -332,6 +329,24 @@ class HDContentPost(Document):
         for user in plan["users"]:
             self.give_task(task, user)
 
+    def parts_to_reopen(self, tasks: list, wanted: dict) -> dict:
+        """{role: its cancelled task} for the parts this save puts someone new on. A part
+        with an open or finished task has nothing to reopen."""
+        kept = {t.content_role for t in tasks if t.status != "Cancelled"}
+        return {
+            t.content_role: t.name
+            for t in tasks
+            if t.status == "Cancelled"
+            and t.content_role in wanted
+            and t.content_role not in kept
+            and self.has_new_people(t.content_role, wanted[t.content_role]["users"])
+        }
+
+    def reopens_tasks(self) -> bool:
+        if CLOSE_TASKS_AS.get(self.status) or self.is_new():
+            return False
+        return bool(self.parts_to_reopen(self.content_tasks(), self.wanted_tasks()))
+
     def has_new_people(self, role: str, users: list) -> bool:
         """Whether this save puts someone on the part who wasn't on it before: a reassign,
         not a save that leaves a part cancelled on purpose as it was."""
@@ -352,6 +367,9 @@ class HDContentPost(Document):
         task.status = "Open"
         if plan["due"]:
             task.exp_end_date = plan["due"]
+        # the customer may have changed while it was cancelled
+        if project and not self.is_customers_project(task.project):
+            task.project = project
         self.plan_task(task, plan, project)
         task.save(ignore_permissions=True)
         # its assignments were closed with it, so the people on it now are given it afresh
@@ -359,6 +377,14 @@ class HDContentPost(Document):
             remove_assignment("Task", task.name, user, ignore_permissions=True)
         for user in plan["users"]:
             self.give_task(task, user)
+
+    def is_customers_project(self, project: str | None) -> bool:
+        if not project:
+            return False
+        values = frappe.db.get_value(
+            "Project", project, project_customer_fields(), as_dict=True
+        )
+        return bool(values) and self.customer in values.values()
 
     def plan_task(self, task, plan: dict, project: str | None) -> bool:
         """Set the task's due date, subject, hours and project from the post; True if anything changed."""

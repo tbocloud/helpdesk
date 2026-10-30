@@ -446,7 +446,10 @@ afresh, each told about their new task. The same applies to the shared task in "
 for the post" mode, and to a part cancelled because only ERP or Sales Employees were left on
 it. A save that doesn't add anyone (a part cancelled on purpose while its person stays on
 the post, then the post edited) leaves it cancelled, and a **completed** part is never redone
-by a reassign.
+by a reassign. If the post moved to another customer while the part was cancelled, the
+reopened task joins the current customer's content project (`is_customers_project`), and
+reopening needs that project like adding people does (`require_content_project` →
+`reopens_tasks`, from the same `parts_to_reopen` that `sync_tasks` uses).
 
 When a task counts as overdue (past its date, or due today and past its estimated hours) is
 described in [workspace-pages.md](workspace-pages.md#when-a-task-is-overdue), and who hears
