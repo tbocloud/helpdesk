@@ -292,6 +292,12 @@
                     }}</time>
                   </span>
                 </button>
+                <div
+                  v-if="run.status === 'Done' && run.count_created"
+                  class="px-4 pb-3"
+                >
+                  <DraftFirstMessages :run="run.name" size="sm" />
+                </div>
               </li>
             </ul>
           </section>
@@ -327,6 +333,7 @@ import LucideLock from "~icons/lucide/lock";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideSearch from "~icons/lucide/search";
 import LucideSearchX from "~icons/lucide/search-x";
+import DraftFirstMessages from "./DraftFirstMessages.vue";
 import ProspectRunDialog from "./ProspectRunDialog.vue";
 import {
   choices,

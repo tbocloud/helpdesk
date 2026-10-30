@@ -47,6 +47,17 @@ CALL_OUTCOMES = (
     "Voicemail",
 )
 CALL_RESULTS = CALL_OUTCOMES[:6]
+# how the ERP site sorted a lead's last email reply (TBO Smart, docs/prospecting.md Phase 2)
+REPLY_CLASSES = (
+    "Interested",
+    "Question",
+    "Objection",
+    "Not now",
+    "Not interested",
+    "Unsubscribe",
+    "Out of office",
+    "New reply",
+)
 TELEPHONY = "tbo_smart.api.telephony"
 # what the recording player may be handed back
 AUDIO_TYPES = ("audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/ogg")
@@ -125,9 +136,11 @@ def list_leads(
     district: list | str | None = None,
     org_size: list | str | None = None,
     last_call_result: list | str | None = None,
+    last_reply_class: list | str | None = None,
 ) -> dict:
-    """A page of leads. `industry`, `state`, `district`, `org_size` and `last_call_result`
-    (the outcome of the lead's last call) each take one value or a list (any of them); a
+    """A page of leads. `industry`, `state`, `district`, `org_size`, `last_call_result`
+    (the outcome of the lead's last call) and `last_reply_class` (how its last email reply
+    was sorted) each take one value or a list (any of them); a
     list goes to the ERP site as JSON. `metric` with its period keeps the leads one number of the
     Overview counts (the ERP site picks them). `department` keeps one lead department's
     leads; the ERP site still shows only what the person may see."""
@@ -161,6 +174,7 @@ def list_leads(
             district=district,
             org_size=org_size,
             last_call_result=check_call_results(last_call_result),
+            last_reply_class=check_reply_classes(last_reply_class),
         ),
         **when,
         view=view,
@@ -176,6 +190,13 @@ def check_call_results(value) -> list[str]:
     if bad := [result for result in results if result not in CALL_RESULTS]:
         frappe.throw(_("{0} is not a call result.").format(", ".join(bad)))
     return results
+
+
+def check_reply_classes(value) -> list[str]:
+    classes = as_list(value)
+    if bad := [name for name in classes if name not in REPLY_CLASSES]:
+        frappe.throw(_("{0} is not a reply class.").format(", ".join(bad)))
+    return classes
 
 
 def category_params(**filters) -> dict:

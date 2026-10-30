@@ -49,7 +49,12 @@
           </div>
           <!-- the Daily report has the day's new leads itself, and loads in one request -->
           <template
-            v-if="view !== 'daily' && view !== 'today' && view !== 'business'"
+            v-if="
+              view !== 'daily' &&
+              view !== 'today' &&
+              view !== 'business' &&
+              view !== 'outreach'
+            "
           >
             <!-- hidden quietly until the ERP site's TBO Smart counts it, and on a failed read -->
             <div
@@ -87,6 +92,14 @@
             :options="options"
           />
         </template>
+
+        <!-- first messages the AI drafted, for a person to approve; only while Outreach is on -->
+        <LeadsOutreach
+          v-else-if="view === 'outreach'"
+          ref="outreachPanel"
+          class="mt-4"
+          :options="options"
+        />
 
         <div v-else class="mt-3 flex flex-col gap-3">
           <div
@@ -549,6 +562,7 @@ import LeadFormDialog from "./LeadFormDialog.vue";
 import LeadSetCategoryDialog from "./LeadSetCategoryDialog.vue";
 import LeadIntakeStrip from "./LeadIntakeStrip.vue";
 import LeadsBusiness from "./LeadsBusiness.vue";
+import LeadsOutreach from "./LeadsOutreach.vue";
 import LeadsDailyReport from "./LeadsDailyReport.vue";
 import LeadsOverview from "./LeadsOverview.vue";
 import TodaysCalls from "./TodaysCalls.vue";
@@ -582,11 +596,18 @@ import {
 const PAGE_LENGTH = 20;
 // the Overview comes first and is where the page opens (docs/leads.md)
 // and the Daily report sits next to it, once the ERP site has it
-type LeadTab = LeadView | "overview" | "daily" | "business" | "today";
+type LeadTab =
+  | LeadView
+  | "overview"
+  | "daily"
+  | "business"
+  | "today"
+  | "outreach";
 const TABS: { value: LeadTab; label: string }[] = [
   { value: "today", label: __("Today's calls") },
   { value: "overview", label: __("Overview") },
   { value: "daily", label: __("Daily report") },
+  { value: "outreach", label: __("Outreach") },
   { value: "business", label: __("Business") },
   ...LEAD_VIEWS,
 ];
@@ -610,6 +631,7 @@ const overviewPanel = ref<InstanceType<typeof LeadsOverview> | null>(null);
 const dailyPanel = ref<InstanceType<typeof LeadsDailyReport> | null>(null);
 const todayPanel = ref<InstanceType<typeof TodaysCalls> | null>(null);
 const businessPanel = ref<InstanceType<typeof LeadsBusiness> | null>(null);
+const outreachPanel = ref<InstanceType<typeof LeadsOutreach> | null>(null);
 
 const authStore = useAuthStore();
 const route = useRoute();
@@ -649,7 +671,8 @@ const isList = computed(
     view.value !== "overview" &&
     view.value !== "daily" &&
     view.value !== "today" &&
-    view.value !== "business"
+    view.value !== "business" &&
+    view.value !== "outreach"
 );
 const search = ref(queryValue("q"));
 // what the list is searched for: the box, once typing pauses
@@ -669,6 +692,7 @@ const CATEGORY_KEYS = [
   "district",
   "org_size",
   "last_call_result",
+  "last_reply_class",
 ] as const;
 function queryList(key: string) {
   const value = route.query[key];
@@ -694,6 +718,7 @@ const emptyCategories = (): LeadCategories => ({
   district: [],
   org_size: [],
   last_call_result: [],
+  last_reply_class: [],
 });
 
 // managers pick many leads and set their category at once
@@ -835,11 +860,13 @@ const options = computed(() => leadOptions.data as LeadOptions | undefined);
 const hasDaily = computed(() => !!options.value?.has_daily_report);
 const canViewBusiness = computed(() => !!options.value?.can_view_business);
 const hasBatches = computed(() => batchesOn(options.value));
+const hasOutreach = computed(() => !!options.value?.outreach);
 // Today's calls is the Call today list for people who get call batches: one place
 const tabs = computed(() =>
   TABS.filter((tab) => {
     if (tab.value === "daily") return hasDaily.value;
     if (tab.value === "business") return canViewBusiness.value;
+    if (tab.value === "outreach") return hasOutreach.value;
     if (tab.value === "today") return hasBatches.value;
     if (tab.value === "call_today") return !hasBatches.value;
     return true;
@@ -860,6 +887,7 @@ watch(options, (value) => {
   // a link to a tab the person may not open
   if (value && !value.can_view_business && view.value === "business")
     view.value = "overview";
+  if (!value.outreach && view.value === "outreach") view.value = "overview";
 });
 const clickToCall = useClickToCall();
 
@@ -946,6 +974,7 @@ function refresh() {
   else if (view.value === "overview") overviewPanel.value?.reload();
   else if (view.value === "daily") dailyPanel.value?.reload();
   else if (view.value === "business") businessPanel.value?.reload();
+  else if (view.value === "outreach") outreachPanel.value?.reload();
   else {
     intake.submit({ fresh: 1 });
     staleLeads.submit({ fresh: 1 });
@@ -1069,6 +1098,9 @@ watch(
         org_size: c.org_size.length ? c.org_size : undefined,
         last_call_result: c.last_call_result.length
           ? c.last_call_result
+          : undefined,
+        last_reply_class: c.last_reply_class.length
+          ? c.last_reply_class
           : undefined,
         source: x.source || undefined,
         temperature: x.temperature || undefined,

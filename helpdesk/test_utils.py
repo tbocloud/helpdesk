@@ -4461,3 +4461,59 @@ def prospect_run(name: str = "PR-0001", **fields) -> dict:
         "owner_name": "Mia Manager",
         **fields,
     }
+
+
+def outreach_message(name: str = "OUT-00001", **fields) -> dict:
+    """A TBO Outreach Message as the ERP site's outbox lists it: a drafted first email to
+    Palm Resort, not sent."""
+    return {
+        "name": name,
+        "lead": "CRM-LEAD-1",
+        "lead_name": "Palm Resort",
+        "company_name": "Palm Resort",
+        "lead_stage": "New Lead",
+        "unsubscribed": 0,
+        "last_reply_class": None,
+        "department": "GrowthX",
+        "channel": "Email",
+        "status": "Draft",
+        "subject": "Online bookings for Palm Resort",
+        "body": "Hi, I saw you take bookings by phone only. Could we talk? Sam",
+        "recipient": "info@palm.test",
+        "drafted_by": "AI",
+        "owner": "bde@leads.example",
+        "owner_name": "Bina",
+        "approved_by": None,
+        "approved_on": None,
+        "sent_on": None,
+        "error": None,
+        "communication": None,
+        "prospect_run": "PR-0001",
+        "batch": "abc123",
+        "url": None,
+        "queued": False,
+        "creation": "2026-10-30 10:00:00",
+        "modified": "2026-10-30 10:00:00",
+        **fields,
+    }
+
+
+def outbox(rows: list[dict] | None = None, **fields) -> dict:
+    """The ERP site's get_outbox answer with Outreach on, an outgoing email account and 30
+    emails a day."""
+    return {
+        "enabled": True,
+        "email_ready": True,
+        "rows": rows or [],
+        "counts": {"Draft": len(rows or [])},
+        "cap": {"limit": 30, "used": 0, "left": 30, "queued": 0},
+        "window": {
+            "start": "09:30",
+            "end": "18:00",
+            "open": True,
+            "next": "2026-10-30 10:00:00",
+        },
+        "drafting": None,
+        "opt_out": "If you would rather not hear from us, reply unsubscribe.",
+        **fields,
+    }

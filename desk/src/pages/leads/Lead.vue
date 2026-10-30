@@ -160,7 +160,14 @@
               <LeadPhotos :lead-id="leadId" :can-write="!!lead.can_write" />
             </template>
             <LeadWhyCall :prospect="lead?.prospect" />
-            <LeadAISuggests :lead-id="leadId" @changed="detail.reload()" />
+            <LeadAISuggests
+              :lead-id="leadId"
+              :last-reply="{
+                class: lead?.last_reply_class,
+                on: lead?.last_reply_on,
+              }"
+              @changed="detail.reload()"
+            />
             <LeadQuotations :quotations="data.quotations || []" />
             <LeadProposals
               :lead-id="leadId"

@@ -1,6 +1,6 @@
 <template>
   <div
-    class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5"
+    class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6"
     role="group"
     :aria-label="__('Filter by category')"
   >
@@ -30,6 +30,7 @@ import { createResource, MultiSelect } from "frappe-ui";
 import { computed } from "vue";
 import { OUTCOMES } from "./callBatches";
 import type { LeadCategories, LeadOptions } from "./leads";
+import { REPLY_CLASSES, REPLY_LOOK, type ReplyClass } from "./outreach";
 
 const props = defineProps<{
   options?: LeadOptions;
@@ -116,6 +117,20 @@ const facets = computed(() => {
               label:
                 OUTCOMES.find((o) => o.value === item.value)?.label ||
                 item.label,
+            })),
+          },
+        ]
+      : []),
+    // only once the ERP site sorts replies (it counts them)
+    ...(counts.data && "last_reply_class" in counts.data
+      ? [
+          {
+            key: "last_reply_class" as const,
+            label: __("Replied"),
+            any: __("Any reply"),
+            options: build("last_reply_class", REPLY_CLASSES).map((item) => ({
+              ...item,
+              label: REPLY_LOOK[item.value as ReplyClass]?.label || item.label,
             })),
           },
         ]
