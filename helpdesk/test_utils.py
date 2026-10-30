@@ -4209,3 +4209,128 @@ def make_accepted_proposal(**values) -> dict:
         "hub_project": None,
         **values,
     }
+
+
+def enable_meta(app_id: str = "123456", app_secret: str = "app-secret"):
+    """Turns on Meta publishing with a fake app (HD Meta Settings), for tests that mock Graph."""
+    settings = frappe.get_doc("HD Meta Settings")
+    settings.update({"enabled": 1, "app_id": app_id, "app_secret": app_secret})
+    settings.save(ignore_permissions=True)
+    frappe.clear_cache(doctype="HD Meta Settings")
+
+
+def make_meta_connection(project: str, instagram: bool = True, **values):
+    """Creates a Connected HD Meta Connection for `project` with a Page (and, unless
+    `instagram` is False, an Instagram account) and fake tokens."""
+    return frappe.get_doc(
+        {
+            "doctype": "HD Meta Connection",
+            "project": project,
+            "status": "Connected",
+            "facebook_page_id": "page-1",
+            "facebook_page_name": "Client Page",
+            "page_access_token": "page-token",
+            "instagram_user_id": "ig-1" if instagram else None,
+            "instagram_username": "client_ig" if instagram else None,
+            **values,
+        }
+    ).insert(ignore_permissions=True)
+
+
+def make_approved_post(title: str, customer: str, status: str = "Approved", **values):
+    """Creates an HD Content Post in a status the client has approved, due in two hours,
+    with a caption and hashtags (the customer gets a content project)."""
+    from frappe.utils import add_to_date
+
+    return make_content_post(
+        title,
+        customer,
+        status=status,
+        publish_on=add_to_date(now_datetime(), hours=2),
+        caption="<p>Fresh <b>Monday</b> offer</p>",
+        hashtags="#sale, summer",
+        **values,
+    )
+
+
+class FakeGraph:
+    """Stands in for Meta's Graph API: patch `requests` in the graph client with `patch()`.
+
+    `routes` maps "METHOD path-suffix" (for example "POST ig-1/media") to a dict, a list of
+    dicts (one per call, the last repeats) or an exception to raise. Every call is kept in
+    `calls` as (method, path, params), without the access token."""
+
+    def __init__(self, routes: dict | None = None):
+        self.routes = routes or {}
+        self.calls: list[tuple[str, str, dict]] = []
+
+    def handle(self, method: str, url: str, params: dict):
+        # drop the host and the version: ".../v25.0/ig-1/media" -> "ig-1/media"
+        path = url.split("graph.facebook.com/", 1)[-1].split("/", 1)[-1]
+        params = {
+            k: v
+            for k, v in params.items()
+            if k not in ("access_token", "appsecret_proof")
+        }
+        self.calls.append((method, path, params))
+        route = next(
+            (
+                v
+                for k, v in self.routes.items()
+                if k.split(" ", 1)[0] == method and path.endswith(k.split(" ", 1)[1])
+            ),
+            {},
+        )
+        if isinstance(route, list):
+            route = route.pop(0) if len(route) > 1 else route[0]
+        if isinstance(route, Exception):
+            raise route
+        status = route.get("_status", 200)
+        return FakeGraphResponse(route, status)
+
+    def patch(self):
+        return patch.multiple(
+            "helpdesk.integrations.meta.graph.requests",
+            get=lambda url, params=None, timeout=None: self.handle(
+                "GET", url, params or {}
+            ),
+            post=lambda url, data=None, timeout=None: self.handle(
+                "POST", url, data or {}
+            ),
+        )
+
+    def paths(self, method: str | None = None) -> list[str]:
+        return [p for m, p, _ in self.calls if method in (None, m)]
+
+
+class FakeGraphResponse:
+    """The bit of a requests response the Graph client reads."""
+
+    def __init__(self, body: dict, status: int = 200):
+        self.body = body
+        self.status_code = status
+        self.ok = status < 400
+
+    def json(self):
+        return self.body
+
+
+def attach_media(post: str, file_name: str):
+    """Attaches a real small image (by the file name's extension) or, for .mp4 and .mov,
+    a few placeholder bytes to a content post as a private file."""
+    ext = file_name.rsplit(".", 1)[-1].lower()
+    content = (
+        make_image_bytes({"jpg": "JPEG", "jpeg": "JPEG", "png": "PNG"}.get(ext, "WEBP"))
+        if ext in ("jpg", "jpeg", "png", "webp")
+        else b"video-bytes"
+    )
+    return frappe.get_doc(
+        {
+            "doctype": "File",
+            "file_name": file_name,
+            "attached_to_doctype": "HD Content Post",
+            "attached_to_name": post,
+            "is_private": 1,
+            "content": content,
+        }
+    ).insert(ignore_permissions=True)

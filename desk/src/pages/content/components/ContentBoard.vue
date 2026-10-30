@@ -647,6 +647,18 @@
                 />
                 {{ statusLine(post) }}
               </p>
+              <!-- scheduled to go out on Facebook / Instagram by the hub itself -->
+              <TaskyBadge
+                v-if="post.meta_publish_on && post.status === 'Scheduled'"
+                tone="info"
+                :icon="LucideClock"
+                :label="
+                  __(
+                    'Auto-publish {0}',
+                    dayjs(post.meta_publish_on).format('ddd D MMM, h:mm A')
+                  )
+                "
+              />
               <template v-if="!CLOSED_STATUSES.includes(post.status)">
                 <!-- waiting on the head: only they move it on, so no Mark published -->
                 <template v-if="post.status === HEAD_REVIEW">
@@ -683,6 +695,21 @@
                 >
                   <LucideSend class="size-4" aria-hidden="true" />
                   {{ __("Mark published") }}
+                </button>
+                <button
+                  v-if="
+                    ['Approved', 'Scheduled'].includes(post.status) &&
+                    (auth.canEditContent || auth.isDmHead)
+                  "
+                  type="button"
+                  :class="OUTLINE_BTN"
+                  @click="emit('action', post, 'meta')"
+                >
+                  <LucideShare2
+                    class="size-4 text-ink-gray-6"
+                    aria-hidden="true"
+                  />
+                  {{ __("Publish to Meta") }}
                 </button>
                 <button
                   v-if="auth.canEditContent"
@@ -748,6 +775,7 @@
 </template>
 
 <script setup lang="ts">
+import TaskyBadge from "@/components/TaskyBadge.vue";
 import { useToday } from "@/composables/today";
 import { __ } from "@/translation";
 import TaskDetailDialog from "@/pages/tasky/components/TaskDetailDialog.vue";
@@ -772,6 +800,7 @@ import LucideHistory from "~icons/lucide/history";
 import LucideListChecks from "~icons/lucide/list-checks";
 import LucidePlus from "~icons/lucide/plus";
 import LucideSend from "~icons/lucide/send";
+import LucideShare2 from "~icons/lucide/share-2";
 import LucideBuilding2 from "~icons/lucide/building-2";
 import LucidePaperclip from "~icons/lucide/paperclip";
 import LucidePencil from "~icons/lucide/pencil";
