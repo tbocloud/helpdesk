@@ -59,7 +59,7 @@ user exists there with a sales role, applies what they may see, and records writ
 | `get_lead_intake` | GET | `from_date, to_date` (the hub sends yesterday and today) | new leads taken each day by owner, imports left out, and the scope's salespeople (§2.4.1) |
 | `get_proposal_money` | GET | `period, from_date, to_date, owner` | proposals sent, won, advances and every payment split still to collect (§2.8) |
 | `get_daily_report` | GET | `date, owner` | each salesperson's day and week to date (§2.5.1) |
-| `log_call` | POST | `lead, outcome, note` | `{name, status, outcomes}` (§2.7) |
+| `log_call` | POST | `lead, outcome, note, callback_at` | `{name, status, outcomes, stage}` (§2.7, §2.16) |
 | `get_my_calls`, `get_next_batch`, `record_call_outcome`, `get_call_batches_report` | GET, POST, POST, GET | see [Today's calls](#todays-calls) | TBO Smart's `hub-leads-api.md` §2.13 |
 | `estimate_prospect_run`, `start_prospect_run`, `get_prospect_runs`, `get_prospect_run` | POST, POST, GET, GET | `values: {industry, state, districts, provider, max_results, department, require_phone}`; `name` | a run and its price, the started run, the runs, one run with its leads; see [Find prospects](#find-prospects), TBO Smart's `hub-leads-api.md` §2.15 |
 | `get_lead_ai` | GET | `name` | what the AI proposes, the lead's health and likely duplicates (TBO Smart's `hub-leads-api.md` §2.6) |
@@ -215,7 +215,7 @@ neither; they have the batch table on the Daily report.
   district, phone, last note, the AI's next step, why it is in the batch, and six outcome chips;
 - **Connected** opens a quick sheet (what was said, the stage to move the lead to, an optional next
   follow-up); **Call back** asks for a date and time (with quick choices); **Not interested** asks
-  for a reason and offers to close the lead as lost. *Not answered*, *Busy* and *Wrong number* save
+  for a reason (the ERP site moves the lead to Not Interested, no second step). *Not answered*, *Busy* and *Wrong number* save
   at once. The counter drops the moment an outcome is chosen and is put back with the reason if the
   ERP site refuses;
 - calls that come back later (a retry two hours after Not answered or Busy, or a call back) wait
@@ -611,11 +611,39 @@ positive lead, a new quotation and a new lead are) is in TBO Smart's `docs/hub-l
   (chat when set up, else email, as the follow-up digest: `deliver_digest`). A manager the
   ERP site refuses is skipped, one failure doesn't stop the rest, and the whole run is
   silent while the ERP site is older.
-- **Log call** (`LogCallDialog.vue`, `helpdesk.api.leads.log_call(lead, outcome, note)`,
-  POST): a *Log call* button on the lead page beside Call, for calls made outside
-  MyOperator: Connected, No answer, Busy or Voicemail and an optional note; the ERP site
-  records an outgoing call as the signed-in person, which counts in the report. Shown only
-  with `can_log_call`; the person's cached reads are cleared after it.
+- **Log call** (`LogCallDialog.vue`, `helpdesk.api.leads.log_call(lead, outcome, note,
+  callback_at)`, POST): a *Log call* button on the lead page beside Call, for calls made outside
+  MyOperator. The six outcomes are the ones Today's calls has (Connected, Not answered, Busy,
+  Call back with a time, Not interested, Wrong number), each with its icon, and a line says
+  what it does to the stage. The ERP site records an outgoing call as the signed-in person
+  (which counts in the report), sets the lead's last call result and moves its stage (below).
+  Shown only with `can_log_call`; the person's cached reads are cleared after it, and the
+  lead page reloads. `No answer` and `Voicemail` are still accepted by the proxy and read as
+  Not answered.
+
+## Call outcomes: stages and the last call
+
+Owner's problem: stages were only progress ones, so every call became "Contacted" plus a note
+and positive and negative calls could not be told apart. TBO Smart now has the stages **Not
+Responding** (called, not answered: call again), **Not Interested** and **Wrong Number** (both
+lost, reason filled in), and keeps each lead's **last call result**
+(`hub-leads-api.md` §2.16; the ERP site moves the stage, the hub only shows it).
+
+- **Stage picker** (Move stage on the lead page) lists them from `get_options` like any stage.
+  The call stages carry an icon next to the label and the colour the ERP site gives them
+  (`stageTone`/`stageIcon` in `leads.ts`): Not Responding warning, Not Interested danger, Wrong
+  Number neutral. Setting Not Interested or Wrong Number needs no reason.
+- **Last call chip** (`lastCall` in `leads.ts`): "Not answered · 2d ago" on each list row and in
+  the lead page's Details header, with the outcome's icon (`OUTCOME_LOOK` in `callBatches.ts`,
+  shared with Today's calls). Colour only where it means something: Connected success, Not
+  answered and Busy warning, Call back info, Not interested danger, Wrong number neutral. A lead
+  never called shows none.
+- **Last call filter** (`LeadCategoryFilters.vue`): a fifth multi-select next to the categories,
+  any of the picked outcomes, kept in the URL (`?last_call_result=Busy&last_call_result=…`),
+  cleared with "Clear filters", with each outcome's count from `get_category_counts`. It is
+  left out until the ERP site has it.
+- Needs the TBO Smart release with §2.16. Before it the stages, chips and filter simply do not
+  appear.
 - **Colour**: this tab is colourful on the owner's request, an exception recorded in
   [ui-guidelines.md](ui-guidelines.md) §8.
 
@@ -699,7 +727,7 @@ message queued) while other errors still show; the
 AI calls are the signed-in person's (POST for every change) and the channels checked.
 The one-request Overview page (all parts, money or intake failing alone, cache hit, `fresh`,
 per-person cache, a write clearing it) is tested there too.
-`helpdesk/tests/test_lead_categories.py`: the filters sent as JSON lists (none when empty), a lead
+`helpdesk/tests/test_lead_categories.py`: the filters (and the last call result, checked) sent as JSON lists (none when empty), a lead
 saved with its categories, the counts (empty on an older ERP site), `add_industry` and
 `bulk_set_lead_category` proxied as the person, a refusal naming who may, empty picks refused.
 `helpdesk/tests/test_lead_place.py`: the photo list (and the card staying out on an older ERP
@@ -719,7 +747,7 @@ creates, moves and notes a lead as themselves.
 `helpdesk/tests/test_daily_sales_report.py`: the report proxied as the person, targets and
 pace (pro-rated by working days, zero targets left out), the exact WhatsApp text, the cache
 (`fresh`, another day, a logged call clearing it), an older ERP site hiding it quietly,
-`log_call`, and the 6 pm job (one message per manager, not on a day off, not when the setting
+`log_call` (the six outcomes and `callback_at`, a call back needing its time), and the 6 pm job (one message per manager, not on a day off, not when the setting
 is off, silent on an older ERP site, a refused manager skipped).
 `helpdesk/tests/test_call_batches.py`: the queue read live as the person (never cached; an older
 ERP site and a department without batches told apart), an outcome posted with a trimmed note, a

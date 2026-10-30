@@ -111,19 +111,14 @@ import TaskyBadge from "@/components/TaskyBadge.vue";
 import { __ } from "@/translation";
 import { computed } from "vue";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
-import LucideCalendarClock from "~icons/lucide/calendar-clock";
-import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideFlame from "~icons/lucide/flame";
 import LucideInfo from "~icons/lucide/info";
 import LucideLoaderCircle from "~icons/lucide/loader-circle";
 import LucidePhone from "~icons/lucide/phone";
-import LucidePhoneMissed from "~icons/lucide/phone-missed";
-import LucidePhoneOff from "~icons/lucide/phone-off";
 import LucideSparkles from "~icons/lucide/sparkles";
-import LucideThumbsDown from "~icons/lucide/thumbs-down";
-import LucideX from "~icons/lucide/x";
 import {
   dialNumber,
+  OUTCOME_LOOK,
   OUTCOMES,
   type CallOutcome,
   type QueueCall,
@@ -144,15 +139,7 @@ const emit = defineEmits<{
 const CALL_BUTTON =
   "inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-brand px-4 text-base-medium text-brand-on transition-colors hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight focus-visible:ring-offset-2 disabled:opacity-60 sm:w-48";
 
-const ICONS = {
-  Connected: LucideCircleCheck,
-  "Not answered": LucidePhoneMissed,
-  Busy: LucidePhoneOff,
-  "Call back": LucideCalendarClock,
-  "Not interested": LucideThumbsDown,
-  "Wrong number": LucideX,
-};
-const CHIPS = OUTCOMES.map((o) => ({ ...o, icon: ICONS[o.value] }));
+const CHIPS = OUTCOMES.map((o) => ({ ...o, icon: OUTCOME_LOOK[o.value].icon }));
 
 const name = computed(
   () =>

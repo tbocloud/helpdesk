@@ -61,12 +61,35 @@ class TestLeadCategories(FrappeTestCase):
         self.assertEqual(json.loads(params["district"]), ["Kozhikode", "Wayanad"])
         self.assertEqual(json.loads(params["org_size"]), ["11-50"])
 
+    def test_the_last_call_result_is_sent_as_a_json_list_and_checked(self):
+        leads_api.list_leads(last_call_result=["Busy", "Not answered"])
+        params = self.last_params("list_leads")
+        self.assertEqual(
+            json.loads(params["last_call_result"]), ["Busy", "Not answered"]
+        )
+        leads_api.list_leads(last_call_result="Not interested")
+        params = self.last_params("list_leads")
+        self.assertEqual(json.loads(params["last_call_result"]), ["Not interested"])
+        calls = len(self.crm.lead_calls)
+        with self.assertRaises(frappe.ValidationError):
+            leads_api.list_leads(last_call_result="Talked")
+        self.assertEqual(len(self.crm.lead_calls), calls)
+
     def test_no_filter_sends_none(self):
         leads_api.list_leads(industry=[], state="  ")
         params = self.last_params("list_leads")
         self.assertEqual(
-            [params[key] for key in ("industry", "state", "district", "org_size")],
-            [None, None, None, None],
+            [
+                params[key]
+                for key in (
+                    "industry",
+                    "state",
+                    "district",
+                    "org_size",
+                    "last_call_result",
+                )
+            ],
+            [None, None, None, None, None],
         )
 
     def test_a_lead_is_saved_with_its_categories(self):

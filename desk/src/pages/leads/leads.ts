@@ -7,6 +7,11 @@ import { money } from "@/components/invoicing/invoices";
 import { UNSAVED_NOTE_PREFIX, useAuthStore } from "@/stores/auth";
 import { errorText } from "@/utils";
 import { createResource, dayjs, toast } from "frappe-ui";
+import type { Component } from "vue";
+import LucidePhoneMissed from "~icons/lucide/phone-missed";
+import LucidePhoneOff from "~icons/lucide/phone-off";
+import LucideThumbsDown from "~icons/lucide/thumbs-down";
+import { OUTCOME_LOOK, OUTCOMES, type CallOutcome } from "./callBatches";
 import type { LeadPlace } from "./place";
 import type { DocumentChain, ProposalRow } from "./proposals";
 
@@ -128,6 +133,9 @@ export interface LeadRow {
   email_id?: string;
   mobile_no?: string;
   tbo_stage?: string;
+  /** how the lead's last call went and when (absent from an older TBO Smart) */
+  last_call_result?: CallOutcome | null;
+  last_call_on?: string | null;
   segment?: string;
   lead_owner?: string;
   owner_name?: string;
@@ -433,6 +441,8 @@ export interface LeadCategories {
   state: string[];
   district: string[];
   org_size: string[];
+  /** the outcome of the lead's last call: Connected, Not answered, … */
+  last_call_result: string[];
 }
 
 /** "Resorts · Kozhikode" for a lead's row; empty without either. */
@@ -472,14 +482,58 @@ export function stageLabel(options: LeadOptions | undefined, stage?: string) {
   return options?.stages.find((s) => s.name === stage)?.label || stage;
 }
 
-/** Won and Lost say how a lead went; every other stage stays neutral. */
+/** The stages a call puts a lead in: an icon and a tone, from the colour the ERP site gives
+ * the stage (orange: call again, red: declined, gray: nothing to call). */
+const CALL_STAGES: Record<string, Component> = {
+  "Not Responding": LucidePhoneMissed,
+  "Not Interested": LucideThumbsDown,
+  "Wrong Number": LucidePhoneOff,
+};
+const COLOR_TONE: Record<string, Tone> = {
+  orange: "warning",
+  amber: "warning",
+  red: "danger",
+};
+
+/** Won and Lost say how a lead went, and so do the stages a call sets; every other stage
+ * stays neutral. */
 export function stageTone(options: LeadOptions | undefined, stage?: string) {
-  const type = (
-    options?.stages.find((s) => s.name === stage)?.type || ""
-  ).toLowerCase();
+  const found = options?.stages.find((s) => s.name === stage);
+  const type = (found?.type || "").toLowerCase();
   if (type === "won") return "success" as Tone;
+  if (stage && stage in CALL_STAGES)
+    return COLOR_TONE[found?.color || ""] ?? ("neutral" as Tone);
   if (type === "lost") return "danger" as Tone;
   return "neutral" as Tone;
+}
+
+/** The icon beside a stage's label where colour alone would say it (the call stages). */
+export function stageIcon(stage?: string): Component | undefined {
+  return stage ? CALL_STAGES[stage] : undefined;
+}
+
+/** "5m", "3h", "2d": how long ago, compactly, for a chip. */
+export function shortAgo(when?: string | null) {
+  if (!when) return "";
+  const minutes = Math.max(0, dayjs().diff(dayjs(when), "minute"));
+  if (minutes < 60) return __("{0}m ago", String(minutes));
+  if (minutes < 60 * 24) return __("{0}h ago", String(Math.floor(minutes / 60)));
+  return __("{0}d ago", String(Math.floor(minutes / 60 / 24)));
+}
+
+/** A lead's last call as one chip: "Not answered · 2d ago", with its icon and a tone only
+ * where it means something. Null for a lead never called. */
+export function lastCall(
+  row: Pick<LeadRow, "last_call_result" | "last_call_on">
+) {
+  const result = row.last_call_result;
+  if (!result || !(result in OUTCOME_LOOK)) return null;
+  const ago = shortAgo(row.last_call_on);
+  const name = OUTCOMES.find((o) => o.value === result)?.label || result;
+  return {
+    label: ago ? `${name} · ${ago}` : name,
+    ...OUTCOME_LOOK[result],
+  };
 }
 
 export function ownerName(options: LeadOptions | undefined, email?: string) {
