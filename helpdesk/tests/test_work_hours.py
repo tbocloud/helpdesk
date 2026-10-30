@@ -214,6 +214,23 @@ class TestAutoStop(WorkHoursCase):
         self.assertEqual((users, name), ([DEV[0]], self.task))
         self.assertIn("stopped at 6:00 pm", subject)
 
+    def test_a_missed_close_still_stops_the_timer_at_that_days_end(self):
+        # left on yesterday at 15:00 and the job didn't run at 18:00: by today's 11:00 it
+        # is stopped at yesterday's close, and today's hours aren't counted as worked
+        self.start(self.task, 1)
+        frappe.db.set_value(
+            "Task", self.task, "custom_timer_start", at(self.yesterday, 15)
+        )
+        with patch("helpdesk.work_reminders.notify_users") as notify:
+            self.assertEqual(stop_timers_outside_work_hours(), [self.task])
+
+        [row] = get_task_sessions(self.task)
+        self.assertEqual(row.ended_at, at(self.yesterday, 18))
+        self.assertEqual(
+            frappe.db.get_value("Task", self.task, "custom_timer_elapsed"), 3
+        )
+        self.assertIn("stopped at 6:00 pm", notify.call_args.args[3])
+
     def test_the_timer_stops_at_lunch_when_a_lunch_break_is_set(self):
         set_work_settings(lunch_start="13:00:00", lunch_end="14:00:00")
         self.start(self.task, 1)

@@ -16,6 +16,7 @@ from helpdesk.test_utils import (
     make_task,
     make_tasky_user,
     run_as_user,
+    set_work_settings,
     start_task_timer,
 )
 
@@ -38,6 +39,11 @@ class TestTimerSessions(FrappeTestCase):
         ).name
         self.task = make_task(self.project, "Build the pricing page").name
         make_assignment("Task", self.task, DEV[0])
+        # the work day as these tests expect it, whatever ran before: a lunch break set by
+        # another test can outlive its rollback in frappe.db's value cache, and a task name
+        # freed by a rollback comes back here, so stretches saved on it elsewhere don't count
+        set_work_settings(lunch_start=None, lunch_end=None, max_hours_per_day=8)
+        frappe.db.delete("HD Task Time Session", {"task": self.task})
         self.today = getdate()
         self.yesterday = add_days(self.today, -1)
         # made a few days ago, so yesterday's hours are allowed

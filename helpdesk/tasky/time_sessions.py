@@ -173,9 +173,9 @@ def running_timers(user: str, except_task: str | None = None) -> list[str]:
     return [r.name for r in rows if r.name != except_task and timer_user(r) == user]
 
 
-def pause_timer(task: str, user: str | None = None) -> float:
-    """Pause the task's timer: save its stretch and bank the hours; the task stays in
-    progress. Returns the hours banked (0 when it wasn't running)."""
+def pause_timer(task: str, user: str | None = None, end=None) -> float:
+    """Pause the task's timer: save its stretch (to `end`, now by default) and bank the
+    hours; the task stays in progress. Returns the hours banked (0 when it wasn't running)."""
     start, actual, paused = frappe.db.get_value(
         "Task",
         task,
@@ -183,7 +183,7 @@ def pause_timer(task: str, user: str | None = None) -> float:
     )
     if not start:
         return 0.0
-    hours = record_session(task, start, user=user)
+    hours = record_session(task, start, end, user=user)
     frappe.db.set_value(
         "Task",
         task,
@@ -225,14 +225,14 @@ def begin_timer(task: str, user: str, strict: bool = True) -> list[str]:
 
 
 def stop_timers_outside_work_hours() -> list[str]:
-    """Scheduler job: pause every running timer once the work day (or the stretch before
-    lunch) has closed, and tell its person. Safe to run often; it does nothing while a
-    window is open. Returns the tasks paused."""
+    """Scheduler job: pause every running timer whose work window (the day, or the stretch
+    before lunch) has closed, at that window's end, and tell its person. A run missed at
+    the close (the scheduler down overnight) still stops it there once it runs, even inside
+    the next window, so the days after aren't counted as worked. Safe to run often.
+    Returns the tasks paused."""
     from helpdesk.tasky.api import notify_task_list
 
     now_ = now_datetime()
-    if in_work_window(now_):
-        return []
     paused = []
     rows = frappe.get_all(
         "Task",
@@ -247,11 +247,16 @@ def stop_timers_outside_work_hours() -> list[str]:
         limit_page_length=0,
     )
     for row in rows:
+        worked = clip_to_windows(row.custom_timer_start, now_)
+        if worked and worked[0][1] >= now_:
+            continue  # still in the window it started in
+        if not worked and in_work_window(now_):
+            continue  # started ahead of the clock: nothing has closed on it
+        stop_at = worked[0][1] if worked else now_
         user = timer_user(row)
-        stopped = clip_to_windows(row.custom_timer_start, now_)
-        pause_timer(row.name, user)
+        pause_timer(row.name, user, stop_at)
         paused.append(row.name)
-        notify_timer_stopped(row, user, stopped[-1][1] if stopped else now_)
+        notify_timer_stopped(row, user, stop_at)
         notify_task_list(row.name)
     return paused
 
