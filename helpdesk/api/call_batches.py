@@ -108,18 +108,20 @@ def report_lines(report: dict) -> list[tuple[str, None]]:
         return []
     lines = [
         (
-            f"• {p.get('user_name') or p.get('user')}: {cint(p.get('called'))}/{cint(p.get('size'))} "
-            f"called, {cint(p.get('connected'))} connected, {cint(p.get('overdue'))} overdue",
+            f"• {p.get('user_name') or p.get('user')}: {line_counts(p)}",
             None,
         )
         for p in people
     ]
     totals = report.get("totals") or {}
-    lines.append(
-        (
-            f"Total: {cint(totals.get('called'))}/{cint(totals.get('size'))} called, "
-            f"{cint(totals.get('overdue'))} overdue",
-            None,
-        )
-    )
+    lines.append((f"Total: {line_counts(totals, connected=False)}", None))
     return lines
+
+
+def line_counts(row: dict, connected: bool = True) -> str:
+    """"87/100 called, 41 connected, 4 overdue" for a person or the day's totals."""
+    parts = [f"{cint(row.get('called'))}/{cint(row.get('size'))} called"]
+    if connected:
+        parts.append(f"{cint(row.get('connected'))} connected")
+    parts.append(f"{cint(row.get('overdue'))} overdue")
+    return ", ".join(parts)
