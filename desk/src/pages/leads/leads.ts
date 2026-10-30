@@ -12,6 +12,7 @@ import LucidePhoneMissed from "~icons/lucide/phone-missed";
 import LucidePhoneOff from "~icons/lucide/phone-off";
 import LucideThumbsDown from "~icons/lucide/thumbs-down";
 import { OUTCOME_LOOK, OUTCOMES, type CallOutcome } from "./callBatches";
+import type { ReplyClass } from "./outreach";
 import type { LeadPlace } from "./place";
 import type { DocumentChain, ProposalRow } from "./proposals";
 
@@ -50,6 +51,9 @@ export interface LeadOptions {
    * on); absent from an older TBO Smart */
   can_find_prospects?: boolean;
   prospecting?: ProspectingOptions | null;
+  /** Outreach is on (first messages a person approves): the Outreach tab shows; absent from
+   * an older TBO Smart */
+  outreach?: boolean;
 }
 
 /** A department as `get_options` lists it, with the signed-in person's part in it. */
@@ -136,6 +140,9 @@ export interface LeadRow {
   /** how the lead's last call went and when (absent from an older TBO Smart) */
   last_call_result?: CallOutcome | null;
   last_call_on?: string | null;
+  /** how the lead's last email reply was sorted (absent from an older TBO Smart) */
+  last_reply_class?: ReplyClass | null;
+  last_reply_on?: string | null;
   segment?: string;
   lead_owner?: string;
   owner_name?: string;
@@ -443,6 +450,8 @@ export interface LeadCategories {
   org_size: string[];
   /** the outcome of the lead's last call: Connected, Not answered, … */
   last_call_result: string[];
+  /** how the lead's last email reply was sorted: Interested, Question, Not now, … */
+  last_reply_class: string[];
 }
 
 /** "Resorts · Kozhikode" for a lead's row; empty without either. */

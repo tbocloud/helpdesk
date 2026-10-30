@@ -51,7 +51,7 @@ user exists there with a sales role, applies what they may see, and records writ
 | Method | HTTP | Arguments | Returns |
 | --- | --- | --- | --- |
 | `get_options` | GET | | `{stages: [{name, label, type, color}], sources, segments, owners: [{email, full_name}], territories, industries, org_sizes, states, kerala_districts, districts_by_state, can_call, departments: [{name, lead_type, is_active, is_head, is_member}], lead_types}` (the last two from the departments release of TBO Smart) |
-| `list_leads` | GET | `search, stage, owner, segment, department, industry, state, district, org_size, source, temperature, metric, period, from_date, to_date, view, start, page_length` | `{rows: [{name, lead_name, company_name, email_id, mobile_no, tbo_stage, segment, lead_owner, owner_name, score, next_follow_up, modified, latest_quotation, latest_proposal, tbo_department, tbo_lead_type, industry, state, district, org_size}], total}` |
+| `list_leads` | GET | `search, stage, owner, segment, department, industry, state, district, org_size, last_call_result, last_reply_class, source, temperature, metric, period, from_date, to_date, view, start, page_length` | `{rows: [{name, lead_name, company_name, email_id, mobile_no, tbo_stage, segment, lead_owner, owner_name, score, next_follow_up, modified, latest_quotation, latest_proposal, tbo_department, tbo_lead_type, industry, state, district, org_size}], total}` |
 | `get_category_counts` | GET | | `{industry, state, district, org_size}`, each `{value: leads}` (TBO Smart v1.14, `hub-leads-api.md` §2.14) |
 | `add_industry` | POST | `name` | `{name, created}`; managers only |
 | `bulk_set_lead_category` | POST | `leads, values` | `{updated, skipped}`; managers only |
@@ -285,12 +285,61 @@ not be read.
 estimate and start say "needs the latest TBO Smart". A refusal says only managers and department
 heads can find prospects, or the ERP site's own reason.
 
+## Outreach
+
+Phase 2 of Find prospects (TBO Smart's `docs/prospecting.md` §10 and §11 is the spec): the AI
+writes a first message for each lead of a prospect run, **a person reads, edits and approves it**,
+and the replies are sorted by the ERP site. The hub proxies `tbo_smart.api.hub_outreach` through
+`helpdesk/api/outreach.py` (`get_outbox`, `draft_outreach`, `update_outreach`,
+`regenerate_outreach`, `approve_outreach`, `cancel_outreach`, `mark_outreach_sent`); the ERP site
+holds the outbox, the daily cap, the send window and sends the email. The hub sends nothing.
+
+**Who and when.** `get_options` carries `outreach` (TBO Smart Settings → Outreach → Enable
+Outreach, off by default). While it is on, everyone who uses Leads gets the **Outreach** tab and
+sees their own messages; a department head also sees the department's, a manager everyone's (the
+ERP site decides). An older TBO Smart: the tab stays out; the endpoints answer "needs the latest
+TBO Smart". The options are cached for ten minutes, so the tab can take that long to appear after
+the switch is turned on.
+
+**The tab** (`LeadsOutreach.vue`, `OutreachRow.vue`). One purpose: review and approve. A status
+switch (Draft, Approved, Sent, Failed, Cancelled, each with its count; Draft first), today's email
+count against the daily limit, and the sending hours when they are closed. Each row shows the
+company, the status (icon and words, "Approved, waiting to go" for an email held for the window or
+the limit), the lead's last reply class, the recipient, the owner (when other people's messages
+show) and the subject or the start of the text; it opens to an editable subject and text with
+**Approve** (the one primary action), **Save changes**, **Regenerate** and **Cancel message**, the
+opt-out line the email will carry, and an error in words on a Failed message. Approving saves any
+edit first. Select rows (Draft, Approved, Failed) to **Approve selected** or **Cancel selected**.
+WhatsApp has no API yet: an approved WhatsApp row shows **Open WhatsApp** (the `wa.me` link with
+the text filled in) and **Mark sent**, which the person presses after sending it by hand.
+Results are told in words (sent, approved, a message that was held and why); approving an email
+with no outgoing email account on the ERP site shows "Set up an outgoing email account first".
+The list refreshes by itself while drafts are being written.
+
+**Drafting.** In Find prospects, a Done run offers **Draft first messages** on its row and in its
+dialog (only while Outreach is on): pick Email or WhatsApp, and the ERP site drafts in the
+background, skipping and explaining the leads that unsubscribed, are lost, have no address, are
+not the person's to edit or already have a first message. Nothing is sent. The ERP site writes the
+message from the lead's website findings and Why call line, and throws away a draft that has a
+number that is not in them.
+
+**Replies.** The lead page's AI card shows the last reply's class (Interested, Question,
+Objection, Not now, Not interested, Unsubscribe, Out of office, or New reply when the AI could
+not sort it) with when it came and what the ERP site did about it. The Leads list has a
+**Replied** filter (any of the classes, with counts) beside Last call; `list_leads` takes
+`last_reply_class`, which is validated here and sent as a JSON list.
+
+Tests: `helpdesk/tests/test_outreach.py` (the outbox read live as the person and never cached,
+status filters, an older ERP site, the ERP site's refusals reaching the person, drafting posted
+with its channel, the names checked before the ERP site is asked, edits trimmed, no leads access,
+the reply-class filter).
+
 ## Hub endpoints
 
 `helpdesk/api/leads.py`, thin typed proxies (writes are POST only): `get_options`,
 `list_leads`, `get_overview_page`, `get_overview`, `get_business_overview`, `get_lead_intake`, `get_proposal_money`, `get_lead`, `get_lead_ai`, `refresh_lead_ai`, `apply_ai_stage`,
 `dismiss_ai_stage`, `draft_lead_message`, `log_message_sent`, `create_lead`, `update_lead`,
-`set_stage`, `add_note`, `get_category_counts`, `add_industry`, `bulk_set_lead_category`, `find_duplicate_leads`, `get_stale_leads`, `get_lead_departments`, `save_lead_department`, `set_lead_department_active`, `click_to_call`, `call_recording`, `get_daily_report`, `log_call`, `get_lead_photos`, `upload_lead_photo`, `delete_lead_photo`, `lead_photo`. Find prospects has its own `helpdesk/api/prospects.py`: `estimate_prospect_run`, `start_prospect_run`, `get_prospect_runs`, `get_prospect_run`. They check
+`set_stage`, `add_note`, `get_category_counts`, `add_industry`, `bulk_set_lead_category`, `find_duplicate_leads`, `get_stale_leads`, `get_lead_departments`, `save_lead_department`, `set_lead_department_active`, `click_to_call`, `call_recording`, `get_daily_report`, `log_call`, `get_lead_photos`, `upload_lead_photo`, `delete_lead_photo`, `lead_photo`. Find prospects has its own `helpdesk/api/prospects.py`: `estimate_prospect_run`, `start_prospect_run`, `get_prospect_runs`, `get_prospect_run`; Outreach has `helpdesk/api/outreach.py` (see [Outreach](#outreach)). They check
 `can_use_leads`, validate the view and page size, trim notes, and pass `acting_user`. The
 client is `CRMClient.call` in `helpdesk/integrations/crm/client.py`; the call and error
 mapping live in `helpdesk/integrations/crm/leads.py`. The API key and secret never reach the
@@ -757,4 +806,5 @@ site's reason reaching the person, the next batch's reason passed on, the manage
 `helpdesk/tests/test_lead_calls.py`: Call posted as the signed-in person to TBO Smart's
 telephony API, the recording streamed (audio only) and a refusal refused, the MyOperator
 settings for admins only and proxied.
+`helpdesk/tests/test_outreach.py`: see [Outreach](#outreach).
 `helpdesk/tests/test_prospects.py`: an estimate and a start proxied as the person (POST, the values as a set of fields), the runs read live, a refusal naming who may, an older ERP site (the list hides quietly, estimate and start say so), and no access without leads.

@@ -42,12 +42,18 @@
               )
             }}
           </p>
-          <router-link
-            v-if="run.count_created"
-            :to="{ name: 'Leads', query: { source: sourceName } }"
-            class="ml-auto rounded text-p-sm text-ink-gray-8 underline decoration-outline-gray-3 underline-offset-2 hover:text-ink-gray-9 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
-            >{{ __("Open source {0} in Leads", sourceName) }}</router-link
-          >
+          <div class="ml-auto flex flex-wrap items-center gap-3">
+            <router-link
+              v-if="run.count_created"
+              :to="{ name: 'Leads', query: { source: sourceName } }"
+              class="rounded text-p-sm text-ink-gray-8 underline decoration-outline-gray-3 underline-offset-2 hover:text-ink-gray-9 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+              >{{ __("Open source {0} in Leads", sourceName) }}</router-link
+            >
+            <DraftFirstMessages
+              v-if="run.status === 'Done' && run.count_created"
+              :run="run.name"
+            />
+          </div>
         </div>
 
         <dl class="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -141,6 +147,7 @@ import { useIntervalFn } from "@vueuse/core";
 import { Button, createResource, Dialog } from "frappe-ui";
 import { computed, watch } from "vue";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
+import DraftFirstMessages from "./DraftFirstMessages.vue";
 import { runTitle, STATUS, usd, type ProspectRunDetail } from "./prospects";
 
 const props = defineProps<{ open: boolean; name: string }>();

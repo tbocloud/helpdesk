@@ -71,6 +71,30 @@
         {{ actionError }}
       </p>
 
+      <!-- how the ERP site sorted the lead's last email reply -->
+      <div
+        v-if="lastReply?.class && REPLY_LOOK[lastReply.class]"
+        class="flex flex-col gap-1.5 px-4 py-3"
+      >
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-xs text-ink-gray-5">{{ __("Last reply") }}</span>
+          <TaskyBadge
+            :label="REPLY_LOOK[lastReply.class].label"
+            :tone="REPLY_LOOK[lastReply.class].tone"
+            :icon="REPLY_LOOK[lastReply.class].icon"
+          />
+          <span
+            v-if="lastReply.on"
+            class="text-xs text-ink-gray-5"
+            :title="dayjs(lastReply.on).format('D MMM YYYY, h:mm a')"
+            >{{ dayjs(lastReply.on).fromNow() }}</span
+          >
+        </div>
+        <p class="text-p-sm text-ink-gray-7">
+          {{ REPLY_HINT[lastReply.class] }}
+        </p>
+      </div>
+
       <!-- the AI's read -->
       <template v-if="ai.enabled && ai.open">
         <div v-if="!insight" class="flex flex-col items-start gap-2 px-4 py-4">
@@ -324,8 +348,13 @@ import LucideSmile from "~icons/lucide/smile";
 import LucideTarget from "~icons/lucide/target";
 import LucideTriangleAlert from "~icons/lucide/triangle-alert";
 import type { LeadAI, LeadDraft } from "./leads";
+import { REPLY_HINT, REPLY_LOOK, type ReplyClass } from "./outreach";
 
-const props = defineProps<{ leadId: string }>();
+const props = defineProps<{
+  leadId: string;
+  /** how the lead's last email reply was sorted (absent from an older TBO Smart) */
+  lastReply?: { class?: ReplyClass | null; on?: string | null };
+}>();
 /** the lead changed here (a stage applied, a message logged): reload it */
 const emit = defineEmits<{ changed: [] }>();
 
