@@ -57,6 +57,7 @@ user exists there with a sales role, applies what they may see, and records writ
 | `get_proposal_money` | GET | `period, from_date, to_date, owner` | proposals sent, won, advances and every payment split still to collect (§2.8) |
 | `get_daily_report` | GET | `date, owner` | each salesperson's day and week to date (§2.5.1) |
 | `log_call` | POST | `lead, outcome, note` | `{name, status, outcomes}` (§2.7) |
+| `get_my_calls`, `get_next_batch`, `record_call_outcome`, `get_call_batches_report` | GET, POST, POST, GET | see [Today's calls](#todays-calls) | TBO Smart's `hub-leads-api.md` §2.13 |
 | `get_lead_ai` | GET | `name` | what the AI proposes, the lead's health and likely duplicates (TBO Smart's `hub-leads-api.md` §2.6) |
 | `refresh_lead_ai`, `apply_ai_stage`, `dismiss_ai_stage` | POST | `name` | as above, or the lead (apply) |
 | `draft_lead_message` | POST | `name, channel (whatsapp / email), language` | `{channel, subject, text, to?, url?}`; nothing is sent |
@@ -187,6 +188,59 @@ The ERP site's `tbo_smart.api.telephony` takes the same `acting_user`:
   site's file through `CRMClient.download`, served inline as audio), and
   `helpdesk/api/myoperator.py` for the settings (hub admins and managers who use leads; the
   ERP site checks its own System Manager role).
+
+## Today's calls
+
+Salespeople used to see every lead at once and cherry-picked, skipping many. For a department
+that switches it on (Settings, CRM, Lead departments, *Hand out daily call batches*), each member
+is handed a **batch** of leads per time slot and must call them within it. TBO Smart builds the
+batches and keeps the outcomes ([call-batches.md](https://github.com/tbocloud/tbo_smart/blob/main/docs/call-batches.md));
+the hub shows them. Nothing is stored here.
+
+**The tab.** *Today's calls* is the first tab of Leads for people in a department that hands out
+batches, and the page opens on it for Sales Employees. It **replaces Call today** for those people
+(an old `?view=call_today` link lands on it): both answer "who do I phone now", so they would be two
+places for one job. People without batches keep Call today. Managers who are not members see
+neither; they have the batch table on the Daily report.
+
+**What it shows** (`desk/src/pages/leads/TodaysCalls.vue`):
+- the batch header: slot name, time left (a live countdown, a warning icon under 15 minutes),
+  *37 / 50 called* with a progress bar, and the day's total;
+- the calls to make now, best priority first. Each row has a big **Call** button (MyOperator
+  click-to-call when set up for the person, otherwise a `tel:` link), the lead's company, industry,
+  district, phone, last note, the AI's next step, why it is in the batch, and six outcome chips;
+- **Connected** opens a quick sheet (what was said, the stage to move the lead to, an optional next
+  follow-up); **Call back** asks for a date and time (with quick choices); **Not interested** asks
+  for a reason and offers to close the lead as lost. *Not answered*, *Busy* and *Wrong number* save
+  at once. The counter drops the moment an outcome is chosen and is put back with the reason if the
+  ERP site refuses;
+- calls that come back later (a retry two hours after Not answered or Busy, or a call back) wait
+  under the list and join it at their time;
+- **Get next batch**, disabled with the ERP site's reason in words under it (calls still pending,
+  too many overdue, the day's limit reached, no slot open);
+- **Overdue** at the bottom: calls of a slot that ended, with a danger icon and the word
+  *Overdue*. They stay, and are still callable.
+
+States: loading skeleton, error with retry (and a banner that keeps the last queue when an update
+fails), an older ERP site, a department without batches, no batch right now (with the next slot),
+and nothing left to call. The queue is read again every minute and when the tab comes back, so a
+call made through MyOperator or the Log call dialog counts without a tap. It is never cached.
+
+**The Daily report.** For managers and department heads, the team view of the Daily report ends
+with a *Call batches* table: per person, the batches (slot called/size), called, connected and
+overdue. `get_call_batches_report`; it stays out for anyone else and for an older ERP site. The 6 pm
+message lists the same, one line per person and a total, when the ERP site has it.
+
+**Settings.** The department dialog has a *Daily call batches* box: the switch, the slots (name,
+from, to, calls; add and remove), calls a day per person, a limit for one person, overdue calls that
+block the next batch, pull unassigned leads, and an optional campaign filter (industry, state,
+district). The same rules are validated here (no overlaps, an end after the start) and by the ERP
+site.
+
+Code: `helpdesk/api/call_batches.py` (proxies; `report_lines` for the 6 pm text),
+`desk/src/pages/leads/callBatches.ts` (types, outcome list, optimistic update, rules helpers),
+`TodaysCalls.vue`, `CallRow.vue`, `CallOutcomeDialog.vue`, `CallBatchesTable.vue`,
+`desk/src/components/Settings/CRM/CallBatchRules.vue`.
 
 ## Hub endpoints
 
@@ -577,6 +631,11 @@ pace (pro-rated by working days, zero targets left out), the exact WhatsApp text
 (`fresh`, another day, a logged call clearing it), an older ERP site hiding it quietly,
 `log_call`, and the 6 pm job (one message per manager, not on a day off, not when the setting
 is off, silent on an older ERP site, a refused manager skipped).
+`helpdesk/tests/test_call_batches.py`: the queue read live as the person (never cached; an older
+ERP site and a department without batches told apart), an outcome posted with a trimmed note, a
+made-up outcome and a call back without a future time refused before the ERP site is asked, the ERP
+site's reason reaching the person, the next batch's reason passed on, the manager report, and the
+6 pm message's batches section (and its absence on an older ERP site).
 `helpdesk/tests/test_lead_calls.py`: Call posted as the signed-in person to TBO Smart's
 telephony API, the recording streamed (audio only) and a refusal refused, the MyOperator
 settings for admins only and proxied.

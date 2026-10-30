@@ -42,6 +42,8 @@ export interface LeadDepartmentOption {
   is_active?: boolean | number;
   is_head?: boolean | number;
   is_member?: boolean | number;
+  /** members get daily call batches (Today's calls); absent from an older TBO Smart */
+  call_batches_enabled?: boolean | number;
   /** how a lead with no owner is given one (absent from an older TBO Smart) */
   assignment?: LeadAssignment;
   stale_after_days?: number;
