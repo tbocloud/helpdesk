@@ -29,6 +29,9 @@ export interface LeadOptions {
   /** lead departments (absent from an older TBO Smart; the department UI stays out) */
   departments?: LeadDepartmentOption[];
   lead_types?: string[];
+  /** the signed-in person may open the Business tab: System Manager or the TBO Management
+   * role on the ERP site, which decides it (absent from an older TBO Smart) */
+  can_view_business?: boolean;
 }
 
 /** A department as `get_options` lists it, with the signed-in person's part in it. */
@@ -777,4 +780,85 @@ export interface OverviewPage {
   money: ProposalMoney | null;
   intake: LeadIntake | null;
   errors: { money?: string; intake?: string };
+}
+
+export type BusinessPeriod =
+  | "month"
+  | "last_month"
+  | "quarter"
+  | "fy"
+  | "custom";
+
+export interface BusinessStage {
+  stage: string;
+  color: string;
+  count: number;
+  value: number;
+}
+
+export interface BusinessDepartment {
+  /** null: leads with no department, or (with the label) money not traced to a lead */
+  department: string | null;
+  label: string;
+  open: number;
+  open_value: number;
+  won: number;
+  won_value: number;
+  invoiced: number;
+  collected: number;
+}
+
+/** helpdesk.api.leads.get_business_overview (TBO Smart's get_business_overview): the
+ * company-wide figures, management only. Amounts are in `currency`. */
+export interface BusinessOverview {
+  available: boolean;
+  period?: BusinessPeriod;
+  from_date: string;
+  to_date: string;
+  department: string | null;
+  currency: string;
+  pipeline: {
+    count: number;
+    value: number;
+    /** open leads without a quotation: no value */
+    unpriced: number;
+    /** false: lead stages have no probability, so the value is not weighted */
+    weighted: boolean;
+    stages: BusinessStage[];
+  };
+  proposals: {
+    sent: { count: number; value: number; unpriced: number };
+    accepted: { count: number; value: number };
+    declined: number;
+    acceptance_rate: number;
+  };
+  onboarding: {
+    won: { count: number; value: number; unpriced: number };
+    projects_started: number;
+  };
+  revenue: {
+    invoiced: number;
+    collected: number;
+    outstanding: number;
+    months: { month: string; invoiced: number; collected: number }[];
+  };
+  funnel: { step: string; count: number; rate: number }[];
+  new_leads: number;
+  meetings_held: number;
+  trend: {
+    month: string;
+    new: number;
+    won: number;
+    invoiced: number;
+    collected: number;
+  }[];
+  top_clients: { customer: string; name: string; invoiced: number }[];
+  by_department: BusinessDepartment[];
+  profit: {
+    available: boolean;
+    reason: string | null;
+    income: number | null;
+    expense: number | null;
+    profit: number | null;
+  };
 }

@@ -6,7 +6,15 @@ import json
 
 import frappe
 from frappe import _
-from frappe.utils import add_days, cint, getdate, today
+from frappe.utils import (
+    add_days,
+    add_months,
+    cint,
+    get_first_day,
+    get_last_day,
+    getdate,
+    today,
+)
 
 from helpdesk.content_team import only_sales_team
 from helpdesk.integrations.crm.leads import (
@@ -22,6 +30,9 @@ VIEWS = ("all", "mine", "call_today", "follow_up")
 PERIODS = ("today", "yesterday", "week", "month", "quarter", "custom")
 # a day is a custom range of that one day on the ERP site, which an older TBO Smart reads too
 DAYS_AGO = {"today": 0, "yesterday": 1}
+# the Business overview's periods: the financial year starts on 1 April (India)
+BUSINESS_PERIODS = ("month", "last_month", "quarter", "fy", "custom")
+FY_START_MONTH = 4
 MESSAGE_CHANNELS = ("whatsapp", "email")
 CALL_OUTCOMES = ("Connected", "No answer", "Busy", "Voicemail")
 TELEPHONY = "tbo_smart.api.telephony"
@@ -227,6 +238,72 @@ def read_proposal_money(period, from_date, to_date, owner, fresh) -> dict:
         keep=lambda answer: answer is not None,
     )
     return {**result, "available": True} if result is not None else {"available": False}
+
+
+@frappe.whitelist()
+def get_business_overview(
+    period: str = "month",
+    from_date: str | None = None,
+    to_date: str | None = None,
+    department: str | None = None,
+    include_profit: int | str = 0,
+    fresh: int | str = 0,
+) -> dict:
+    """The management-only Business overview (docs/leads.md): company-wide pipeline,
+    proposals, onboardings and revenue. Who may see it is decided on the ERP site
+    (System Manager or its TBO Management role) and nowhere else: a refusal there is a
+    403 here. `available` is false while the ERP site's TBO Smart is older than this."""
+    require_leads()
+    start, end = business_range(period, from_date, to_date)
+    params = {
+        "from_date": str(start),
+        "to_date": str(end),
+        "department": department or None,
+        "include_profit": 1 if cint(include_profit) else 0,
+    }
+    result = cached_read(
+        "business",
+        params,
+        READ_TTL,
+        fresh,
+        lambda: call_if_deployed(
+            "get_business_overview",
+            permission_message=_("Only management can see the Business overview."),
+            **params,
+        ),
+        keep=lambda answer: answer is not None,
+    )
+    return (
+        {**result, "available": True, "period": period}
+        if result is not None
+        else {"available": False}
+    )
+
+
+def business_range(period: str, from_date: str | None, to_date: str | None) -> tuple:
+    """(from, to) of this month, last month, this quarter or financial year to date, or
+    the dates picked."""
+    if period not in BUSINESS_PERIODS:
+        frappe.throw(
+            _("Pick this month, last month, this quarter, this year or your own dates.")
+        )
+    now = getdate(today())
+    if period == "custom":
+        if not (from_date and to_date):
+            frappe.throw(_("Pick both dates for your own period."))
+        start, end = getdate(from_date), getdate(to_date)
+        if end < start:
+            frappe.throw(_("The to date is before the from date."))
+        return start, end
+    if period == "month":
+        return getdate(get_first_day(now)), now
+    if period == "last_month":
+        first = getdate(add_months(get_first_day(now), -1))
+        return first, getdate(get_last_day(first))
+    if period == "quarter":
+        return getdate(f"{now.year}-{3 * ((now.month - 1) // 3) + 1:02d}-01"), now
+    year = now.year if now.month >= FY_START_MONTH else now.year - 1
+    return getdate(f"{year}-{FY_START_MONTH:02d}-01"), now
 
 
 @frappe.whitelist()

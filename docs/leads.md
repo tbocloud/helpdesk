@@ -191,7 +191,7 @@ The ERP site's `tbo_smart.api.telephony` takes the same `acting_user`:
 ## Hub endpoints
 
 `helpdesk/api/leads.py`, thin typed proxies (writes are POST only): `get_options`,
-`list_leads`, `get_overview_page`, `get_overview`, `get_lead_intake`, `get_proposal_money`, `get_lead`, `get_lead_ai`, `refresh_lead_ai`, `apply_ai_stage`,
+`list_leads`, `get_overview_page`, `get_overview`, `get_business_overview`, `get_lead_intake`, `get_proposal_money`, `get_lead`, `get_lead_ai`, `refresh_lead_ai`, `apply_ai_stage`,
 `dismiss_ai_stage`, `draft_lead_message`, `log_message_sent`, `create_lead`, `update_lead`,
 `set_stage`, `add_note`, `find_duplicate_leads`, `get_stale_leads`, `get_lead_departments`, `save_lead_department`, `set_lead_department_active`, `click_to_call`, `call_recording`, `get_daily_report`, `log_call`. They check
 `can_use_leads`, validate the view and page size, trim notes, and pass `acting_user`. The
@@ -449,6 +449,46 @@ positive lead, a new quotation and a new lead are) is in TBO Smart's `docs/hub-l
 - **Colour**: this tab is colourful on the owner's request, an exception recorded in
   [ui-guidelines.md](ui-guidelines.md) §8.
 
+## Business (management only)
+
+The Leads page's **Business** tab (`LeadsBusiness.vue`, `business/`) is the owner's meeting
+view: how many clients are in the pipeline and what they are worth, proposals given,
+onboardings (clients won, projects started) and the revenue that came in. It is company-wide,
+not the signed-in person's sales scope, and it can be taken to a meeting.
+
+**Who can see it, and how to grant it.** One place decides: the ERP site. A person sees the tab
+and gets the figures when they are a **System Manager** or have the **TBO Management** role
+there (created by TBO Smart's migrate; it is given to nobody). To grant it, add the role to the
+person's user on the ERP site (User → Roles). The hub keeps no list of its own. The tab shows
+when `get_options` answers `can_view_business` (kept up to 10 minutes per person, so a new
+grant may need a refresh); the figures are checked again on every read, so a link or API call by
+anyone else is refused (403: "Only management can see the Business overview"), and a role taken
+away stops the figures within the 60-second cache. The person still has to be a hub user who
+can open Leads (System Manager, Agent Manager, or an active agent in the Leads teams).
+
+`helpdesk.api.leads.get_business_overview(period, from_date, to_date, department, include_profit,
+fresh)` proxies TBO Smart's `get_business_overview` (hub-leads-api.md §2.11 in the tbo_smart repo),
+through `call_if_deployed` (an older ERP site answers `available: false` and the page says so),
+cached per person for 60 seconds, `fresh=1` skips it. Periods: this month, last month, this
+quarter, this FY (from 1 April) and custom (at most two years); the hub works the dates out.
+
+**The page:** a period picker, a department filter (shown when the ERP site has departments),
+a Show profit switch, then a headline row (clients in pipeline, pipeline value, proposals sent,
+onboarded, revenue invoiced, collected, outstanding, each saying whether it is the period or
+now), revenue by month, the funnel, pipeline by stage, proposals and onboarding facts, the last six
+months, top clients, profit (when asked and available) and a department table. Charts are plain
+SVG (`BusinessBars`) and bar rows (`BusinessRows`); no chart library is added. The pipeline value is
+the open clients' latest quotations, **unweighted** (lead stages have no probability) and says so.
+Outstanding is what customers owe today, not the period's.
+
+**Downloads:** *Download data (CSV)* writes the page's numbers as rows (section, item, count, amount,
+note) with a byte-order mark for Excel. *Download as slides (PDF)* prints `BusinessSlides.vue`: a
+title slide (logo, "Sales & Business overview", period, generated date) and six 16:9 landscape slides
+(headline numbers, pipeline and funnel, proposals and onboarding, revenue, last six months,
+departments and clients) in fixed light colours, through the browser's Save as PDF. The slides sit on
+`<body>` and add their `@page { size: 297mm 167mm }` rule only while the tab is open, so printing any
+other page is unchanged; turn "Background graphics" on in the print dialog for the bars.
+
 ## Proposals
 
 The Lead page's **Proposals** section, the proposal builder and Settings → Rates and proposals
@@ -494,6 +534,9 @@ quietly on an older ERP site), `allow_duplicate` sent only when confirmed, the q
 per department threshold and cached per person, and the follow-up rule (owner at L0, heads at
 twice the days, one notice per person and lead, off switch, older ERP site and ERP errors add
 nothing).
+`helpdesk/tests/test_leads_business.py`: the period dates, the proxy as the signed-in person,
+the 60-second per-person cache (and `fresh`), a refusal from the ERP site shown and never kept, an
+older ERP site, and the tab flag passed through `get_options`.
 `helpdesk/tests/test_sales_wall.py`: a Sales Employee outside the Leads teams lists, opens,
 creates, moves and notes a lead as themselves.
 `helpdesk/tests/test_daily_sales_report.py`: the report proxied as the person, targets and
