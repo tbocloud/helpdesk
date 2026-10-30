@@ -828,9 +828,12 @@ dialog and the reports (`helpdesk/work_hours.py`):
   the day starts, at lunch, after it ends or on a day off, and nothing past what the day has left
   for the person (`day_left`). The hours it keeps are what the timer banks
   (`custom_timer_elapsed`, `custom_actual_hours`).
-- **Auto-stop:** `stop_timers_outside_work_hours` runs every 5 minutes; whenever no window is
-  open it pauses every running timer (the task stays In progress, the session is saved) and tells
-  the person "Your timer on X stopped at 6:00 pm. Start it again when you resume."
+- **Auto-stop:** `stop_timers_outside_work_hours` runs every 5 minutes and pauses every running
+  timer whose window has closed, at that window's end (the task stays In progress, the session is
+  saved), and tells the person "Your timer on X stopped at 6:00 pm. Start it again when you
+  resume." A run missed at the close (the scheduler down overnight) still stops it at that close
+  once it runs, even inside the next window, so a timer never carries on into the next days and
+  they aren't counted as worked; a timer still in the window it started in keeps running.
 - **One timer per person:** the task records whose timer runs (`custom_timer_user`). Starting a
   timer (Start, moving a task to In progress, resuming from hold) pauses the person's other
   running timer first and saves its session. Start is refused outside a window; moving a task to
