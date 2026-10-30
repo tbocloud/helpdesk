@@ -3,6 +3,7 @@
 import type { Tone } from "@/components/tone";
 import { __ } from "@/translation";
 import { money } from "@/components/invoicing/invoices";
+import { UNSAVED_NOTE_PREFIX, useAuthStore } from "@/stores/auth";
 import { errorText } from "@/utils";
 import { createResource, dayjs, toast } from "frappe-ui";
 import type { LeadPlace } from "./place";
@@ -356,6 +357,43 @@ export function loadLeadOptions() {
   if (leadOptionsFetched || leadOptions.loading) return;
   leadOptionsFetched = true;
   leadOptions.fetch();
+}
+
+// Remarks the New lead dialog couldn't save as the lead's first note, kept per person and
+// lead until the note is added: in this browser, so neither a reload nor reopening the
+// dialog loses them, and in memory too, so blocked or full storage still hands them to the
+// lead's page. Logout clears the stored ones.
+const unsavedNotes = new Map<string, string>();
+const unsavedNoteKey = (lead: string) =>
+  `${UNSAVED_NOTE_PREFIX}${useAuthStore().userId}:${lead}`;
+
+/** Whether the browser kept them too: when not, a reload loses them. */
+export function keepUnsavedNote(lead: string, note: string) {
+  // a failure that lands after logout began: logout has cleared the drafts already
+  if (!useAuthStore().isLoggedIn) return false;
+  unsavedNotes.set(unsavedNoteKey(lead), note);
+  try {
+    localStorage.setItem(unsavedNoteKey(lead), note);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function unsavedNote(lead: string) {
+  const key = unsavedNoteKey(lead);
+  try {
+    return localStorage.getItem(key) ?? unsavedNotes.get(key) ?? "";
+  } catch {
+    return unsavedNotes.get(key) ?? "";
+  }
+}
+
+export function dropUnsavedNote(lead: string) {
+  unsavedNotes.delete(unsavedNoteKey(lead));
+  try {
+    localStorage.removeItem(unsavedNoteKey(lead));
+  } catch {}
 }
 
 /** The departments the signed-in person can put a lead in: active ones, and the one a

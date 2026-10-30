@@ -115,6 +115,14 @@
         />
       </div>
 
+      <FormControl
+        v-if="!lead"
+        v-model="remarks"
+        type="textarea"
+        :label="__('Remarks')"
+        :rows="3"
+        :description="__('Saved as the lead\'s first note.')"
+      />
       <div
         v-if="duplicates.length"
         role="status"
@@ -206,6 +214,7 @@ import LucideExternalLink from "~icons/lucide/external-link";
 import LucideTriangleAlert from "~icons/lucide/triangle-alert";
 import {
   choices,
+  keepUnsavedNote,
   isRoundRobin,
   ownerName,
   stageLabel,
@@ -244,6 +253,11 @@ function blank(): LeadForm {
 }
 
 const form = reactive<LeadForm>(blank());
+// not a lead field: the ERP site's create takes only those, so remarks go in as a note
+const remarks = ref("");
+// bumped on each open, so a save that finishes after the form was closed and opened
+// again leaves that form alone
+let opening = 0;
 
 // the department hands out ownerless leads in turn: the owner may stay empty
 const roundRobin = computed(
@@ -295,6 +309,9 @@ async function checkDuplicates() {
   const key = currentKey();
   if (key === checkedFor) return;
   checkedFor = key;
+  // the form may be closed and opened again, with the same email, before the answer comes
+  const opened = opening;
+  const current = () => opened === opening && checkedFor === key;
   refusedAsRepeat.value = false;
   if (!email && !phone) {
     duplicates.value = [];
@@ -308,9 +325,9 @@ async function checkDuplicates() {
       exclude: props.lead?.name,
     });
     // the person kept typing while it was asked
-    if (checkedFor === key) duplicates.value = result?.matches ?? [];
+    if (current()) duplicates.value = result?.matches ?? [];
   } catch {
-    if (checkedFor === key) duplicates.value = [];
+    if (current()) duplicates.value = [];
   }
 }
 const checkSoon = useDebounceFn(checkDuplicates, 300);
@@ -320,7 +337,9 @@ watch(
   () => props.open,
   (open) => {
     if (!open) return;
+    opening++;
     errorMessage.value = "";
+    remarks.value = "";
     duplicates.value = [];
     refusedAsRepeat.value = false;
     checkedFor = "";
@@ -410,10 +429,13 @@ async function submit() {
   if (saving.value) return;
   errorMessage.value = validate();
   if (errorMessage.value) return;
+  const opened = opening;
   if (!props.lead) {
     // not left the field yet: check now, and stop to show a likely repeat first
     const shown = likelyRepeat.value && checkedFor === currentKey();
     await checkDuplicates();
+    // closed and opened again meanwhile: that form is sent by its own click
+    if (opened !== opening) return;
     if (likelyRepeat.value && !shown) return;
   }
   const data = payload();
@@ -423,6 +445,7 @@ async function submit() {
   }
   // create or update is decided now, from the lead the dialog has at this moment
   const lead = props.lead;
+  const note = lead ? "" : remarks.value.trim();
   saving.value = true;
   call(
     lead ? "helpdesk.api.leads.update_lead" : "helpdesk.api.leads.create_lead",
@@ -430,12 +453,29 @@ async function submit() {
       ? { name: lead.name, data }
       : { data, allow_duplicate: needsConfirm.value ? 1 : 0 }
   )
-    .then((result: { name?: string } | null) => {
+    .then(async (result: { name?: string } | null) => {
+      if (note && result?.name) {
+        const name = result.name;
+        // the lead exists now, so a failed note mustn't send the person back to create it again
+        await call("helpdesk.api.leads.add_note", { name, note }).catch(() => {
+          toast.warning(
+            keepUnsavedNote(name, note)
+              ? __(
+                  "The remarks weren't saved. They're in the lead's note box to add again."
+                )
+              : __(
+                  "The remarks weren't saved. They're in the lead's note box: add them before reloading the page, or they'll be lost."
+                )
+          );
+        });
+      }
       toast.success(lead ? __("Lead saved") : __("Lead created"));
+      if (opened !== opening) return;
       emit("saved", result?.name || lead?.name || "");
       emit("update:open", false);
     })
     .catch((e: unknown) => {
+      if (opened !== opening) return;
       errorMessage.value = errorText(
         e,
         __("Couldn't save the lead. Check your connection and try again.")

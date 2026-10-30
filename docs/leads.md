@@ -381,7 +381,21 @@ doesn't show without its fields. The hub can be deployed before TBO Smart.
   leads yet" on first use.
 - **New lead** (`LeadFormDialog.vue`, the one primary action on the list): contact name
   (required), company, email, mobile, source, segment, territory, industry, owner (defaults
-  to you on the ERP site) and next follow-up. Opens the new lead when it's created.
+  to you on the ERP site), next follow-up and remarks. Opens the new lead when it's created.
+  Remarks aren't a lead field: the ERP site's `create_lead` takes only the `data` keys above,
+  so the dialog saves them with `add_note` once the lead exists (they're the first entry on
+  its timeline). If that note fails the lead stays created, a warning says so, and the
+  remarks are kept per person and lead (`keepUnsavedNote` in `leads.ts`): in `localStorage`
+  under `hd-lead-unsaved-note:<user>:<lead>`, and in memory as well so blocked or full
+  storage still hands them over (the warning then says a reload would lose them). The lead's
+  page opens with them in its note box, and they stay through reloads until a note sent from
+  them (edited or not) is added; a fresh note typed after clearing the box leaves them
+  stored. Logout clears them (`stores/auth.ts`), so the next person on a shared browser
+  never sees them, and a failure landing after logout began stores nothing. A save (or its
+  duplicate check) that finishes after the dialog was closed and opened again keeps those
+  remarks but leaves the reopened form alone, and a note added on the lead page clears the
+  box only if it's still that lead and the text wasn't changed meanwhile. Edit lead has no
+  Remarks; the lead page's note composer does that.
 - **Lead** (`/helpdesk/leads/<name>`, `Lead.vue`): details, *Move stage* (the primary
   action; only `allowed_stages`, with an optional note), *Edit* (the same dialog, sending
   only changed fields), a note composer and the timeline, and the quotations read-only

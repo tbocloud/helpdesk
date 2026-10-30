@@ -370,11 +370,13 @@ import LogCallDialog from "./LogCallDialog.vue";
 import LeadProposals from "./LeadProposals.vue";
 import LeadQuotations from "./LeadQuotations.vue";
 import {
+  dropUnsavedNote,
   loadLeadOptions,
   leadOptions,
   ownerName,
   stageLabel,
   stageTone,
+  unsavedNote,
   useClickToCall,
   type LeadDetail,
   type LeadOptions,
@@ -492,15 +494,33 @@ const detailFields = computed(() => {
 
 // --- notes ---
 
-const note = ref("");
+// starts with the remarks the New lead dialog couldn't save, kept until they're added
+const note = ref(unsavedNote(props.leadId));
+// whether the box holds those remarks (edited or not) rather than a note started afresh
+const fromDraft = ref(!!note.value);
 const noteError = ref("");
+watch(
+  () => props.leadId,
+  (lead) => {
+    note.value = unsavedNote(lead);
+    fromDraft.value = !!note.value;
+  }
+);
+watch(note, (text) => {
+  if (!text.trim()) fromDraft.value = false;
+});
+let draftSent = false;
 
 const addNote = createResource({
   url: "helpdesk.api.leads.add_note",
   method: "POST",
   onSuccess() {
-    note.value = "";
+    const { name, note: sent } = addNote.params;
+    if (draftSent) dropUnsavedNote(name);
     toast.success(__("Note added"));
+    // moved to another lead, or typed on, while it was sent: that text isn't this note
+    if (name !== props.leadId) return;
+    if (note.value === sent) note.value = "";
     detail.reload();
   },
   onError(e: unknown) {
@@ -514,6 +534,7 @@ const addNote = createResource({
 function submitNote() {
   if (addNote.loading || !note.value.trim()) return;
   noteError.value = "";
+  draftSent = fromDraft.value;
   addNote.submit({ name: props.leadId, note: note.value });
 }
 

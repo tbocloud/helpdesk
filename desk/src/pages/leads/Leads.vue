@@ -506,7 +506,6 @@ import {
 } from "frappe-ui";
 import { computed, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { useAuthStore } from "@/stores/auth";
 import LucideBuilding2 from "~icons/lucide/building-2";
 import LucideCalendar from "~icons/lucide/calendar";
 import LucideCalendarRange from "~icons/lucide/calendar-range";
@@ -669,9 +668,8 @@ const emptyCategories = (): LeadCategories => ({
 });
 
 // managers pick many leads and set their category at once
-const auth = useAuthStore();
 const canCategorise = computed(
-  () => auth.isManager && !!options.value?.org_sizes
+  () => authStore.isManager && !!options.value?.org_sizes
 );
 const selecting = ref(false);
 const selected = ref(new Set<string>());

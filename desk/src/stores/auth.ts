@@ -5,6 +5,8 @@ import { computed, ComputedRef, Ref, ref } from "vue";
 
 const URI_LOGIN = "login";
 const URI_LOGOUT = "logout";
+/** A lead's remarks that didn't save (pages/leads/leads.ts): only for the person who typed them. */
+export const UNSAVED_NOTE_PREFIX = "hd-lead-unsaved-note:";
 const URI_USER_INFO = "helpdesk.api.auth.get_user";
 
 /**
@@ -144,9 +146,18 @@ export const useAuthStore = defineStore("auth", () => {
 
   function logout() {
     user.value = null;
+    dropSignedInDrafts();
     call(URI_LOGOUT).then(() => {
       window.location.href = LOGIN_PAGE;
     });
+  }
+
+  function dropSignedInDrafts() {
+    try {
+      Object.keys(localStorage)
+        .filter((key) => key.startsWith(UNSAVED_NOTE_PREFIX))
+        .forEach((key) => localStorage.removeItem(key));
+    } catch {}
   }
 
   return {
