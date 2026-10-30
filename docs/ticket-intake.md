@@ -212,7 +212,9 @@ sender wasn't a contact at all. Now:
 - The sender is the Support Ticket's **Raised By**, else its **owner** (the customer site
   user who created it), else the customer's own **Email ID**. A user ID such as
   `Administrator` is no address; before, an empty one became the hub's session user, which is
-  why two tickets had `raised_by = Administrator`.
+  why two tickets had `raised_by = Administrator`. TBO Support's own user on the site (the
+  connection's **Support User**, signed in with Login to site) is skipped too: replies to it
+  would come back to us.
 - The sender becomes a contact of the connection's customer (`add_customer_contact`).
 - The ticket is inserted as the automation user, so the import never depends on who the job
   runs as.

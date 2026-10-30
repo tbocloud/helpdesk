@@ -593,6 +593,29 @@ class TestClientSiteImport(IntakeCase):
             "it@adka-intake.example",
         )
 
+    def test_tbo_support_signed_in_on_the_site_is_no_sender(self):
+        customer = make_domain_customer("Hamra Intake")
+        customer.db_set("email_id", "it@hamra-intake.example")
+        connection = make_support_connection(
+            "Hamra Intake", support_user="support@teambackoffice.com"
+        ).name
+
+        name = _create_hd_ticket(
+            connection,
+            "Hamra Intake",
+            {
+                "name": "SUP-2026-90004",
+                "subject": "Report won't load",
+                "raised_by": "support@teambackoffice.com",
+                "owner": "support@teambackoffice.com",
+            },
+        )
+
+        self.assertEqual(
+            frappe.db.get_value("HD Ticket", name, "raised_by"),
+            "it@hamra-intake.example",
+        )
+
 
 class TestFeedbackOnClose(IntakeCase):
     def setUp(self):

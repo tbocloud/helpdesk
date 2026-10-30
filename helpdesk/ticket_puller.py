@@ -124,7 +124,7 @@ def _create_hd_ticket(connection_name: str, customer: str, ticket: dict) -> str:
     AI triage fires automatically from the HD Ticket after_insert hook
     (see hooks.py doc_events) — do not enqueue it again here.
     """
-    raised_by = _sender(ticket, customer)
+    raised_by = _sender(ticket, customer, connection_name)
     if customer and raised_by:
         add_customer_contact(customer, raised_by)
     # the hub imports it, so the import is the automation user's, whoever's session
@@ -148,14 +148,17 @@ def _create_hd_ticket(connection_name: str, customer: str, ticket: dict) -> str:
     return hd.name
 
 
-def _sender(ticket: dict, customer: str | None) -> str | None:
+def _sender(
+    ticket: dict, customer: str | None, connection: str | None = None
+) -> str | None:
     """The customer's address for a pulled ticket: its Raised By, else the user who
     created it on their site, else the customer's own email. A user ID such as
     Administrator is no address, and the hub would otherwise fill in its own session
-    user (Administrator, or Guest after a ping)."""
+    user (Administrator, or Guest after a ping). TBO's own support user (signed in
+    with Login to site) is no customer either: replies would come back to us."""
     for value in (ticket.get("raised_by"), ticket.get("owner")):
         email = validate_email_address(parseaddr(value or "")[1].strip().lower())
-        if email:
+        if email and not (connection and client_api.is_support_user(connection, email)):
             return email
     if customer:
         return frappe.db.get_value("HD Customer", customer, "email_id") or None

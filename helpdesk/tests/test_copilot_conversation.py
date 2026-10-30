@@ -526,6 +526,25 @@ class TestTheLimits(ChatCase):
                 user={"email": "someone.else@chat-trading.example", "name": "Someone"},
             )
 
+    def test_tbo_support_signed_in_on_the_site_starts_no_chat(self):
+        frappe.db.set_value(
+            "HDS Support Connection",
+            self.connection,
+            "support_user",
+            "support@teambackoffice.com",
+        )
+        with self.assertRaises(frappe.PermissionError):
+            self.say(
+                action="start",
+                user={
+                    "email": "Support@TeamBackOffice.com",
+                    "name": "Helpdesk Support",
+                },
+            )
+        self.assertFalse(
+            frappe.db.exists(conversation.CONVERSATION, {"connection": self.connection})
+        )
+
 
 class TestTheTicketsChannel(ChatCase):
     def raised(self):

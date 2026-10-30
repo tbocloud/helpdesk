@@ -60,6 +60,16 @@ def call(conn, path: str, payload: dict | None = None) -> dict:
     return response.json().get("message", {})
 
 
+def is_support_user(connection: str, email: str | None) -> bool:
+    """Whether `email` is the user this hub signs in as on the connection's site
+    (Login to site): TBO's own, never the customer who raises a ticket."""
+    ours = (
+        frappe.db.get_value("HDS Support Connection", connection, "support_user")
+        or LEGACY_SUPPORT_USER
+    )
+    return (email or "").strip().lower() == ours.strip().lower()
+
+
 def hub_api(conn, method: str, payload: dict | None = None) -> dict:
     """A `helpdesk_client.hub_api` call on the customer site."""
     return call(conn, conn.client_method(f"hub_api.{method}"), payload)

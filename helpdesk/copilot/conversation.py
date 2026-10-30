@@ -23,6 +23,7 @@ import frappe
 from frappe import _
 from frappe.utils import cint, escape_html, flt, get_fullname, now_datetime
 
+from helpdesk import client_api
 from helpdesk.copilot import settings as copilot_settings
 from helpdesk.copilot.assistant import button, card
 
@@ -170,6 +171,14 @@ def receive(connection: str, payload: dict) -> dict:
     email = str(user.get("email") or "").strip().lower()[:140]
     if not frappe.utils.validate_email_address(email):
         frappe.throw(_("The chat needs the customer's email."), frappe.PermissionError)
+    if client_api.is_support_user(connection, email):
+        # signed in with Login to site: the ticket and every reply would be TBO's own
+        frappe.throw(
+            _(
+                "You're signed in as TBO Support. The support chat is for the customer's own users."
+            ),
+            frappe.PermissionError,
+        )
     action = str(payload.get("action") or "").strip()
     if action and action not in ACTIONS:
         frappe.throw(_("Unknown action {0}").format(action))
@@ -898,8 +907,6 @@ def tell(
 
 
 def _deliver(doc, message) -> bool:
-    from helpdesk import client_api
-
     if doc.channel == "TBO Chat":
         return _deliver_to_tbo_chat(doc, message)
     conn = frappe.get_doc("HDS Support Connection", doc.connection)
