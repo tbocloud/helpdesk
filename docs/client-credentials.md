@@ -11,6 +11,9 @@ Lead → 6-month strategy proposal → client accepts → **credentials handover
 cancels (say after three months): **Hand back & close** returns the credentials with the
 client's sign-off, then closes the project.
 
+The **Meta** tab beside it connects the client's Facebook Page and Instagram for publishing
+from the content calendar, under the same permission rule ([meta-publishing.md](meta-publishing.md)).
+
 ## Data
 
 - **HD Client Credential Handover**: `project`, `direction` (Received from client / Returned to

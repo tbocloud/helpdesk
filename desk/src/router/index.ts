@@ -236,6 +236,12 @@ const portalRoutes = [
     props: true,
   },
   {
+    path: "/projects/:projectId/meta",
+    name: "TaskyMeta",
+    component: () => import("@/pages/tasky/ProjectMeta.vue"),
+    props: true,
+  },
+  {
     path: "/projects/:projectId/signoff",
     name: "TaskySignoffs",
     component: () => import("@/pages/tasky/ProjectSignoffs.vue"),
