@@ -1,6 +1,6 @@
 <template>
   <div
-    class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4"
+    class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5"
     role="group"
     :aria-label="__('Filter by category')"
   >
@@ -28,6 +28,7 @@
 import { __ } from "@/translation";
 import { createResource, MultiSelect } from "frappe-ui";
 import { computed } from "vue";
+import { OUTCOMES } from "./callBatches";
 import type { LeadCategories, LeadOptions } from "./leads";
 
 const props = defineProps<{
@@ -100,6 +101,25 @@ const facets = computed(() => {
       any: __("Any size"),
       options: build("org_size", o?.org_sizes ?? []),
     },
+    // only once the ERP site keeps a last call result (it counts them)
+    ...(counts.data && "last_call_result" in counts.data
+      ? [
+          {
+            key: "last_call_result" as const,
+            label: __("Last call"),
+            any: __("Any result"),
+            options: build(
+              "last_call_result",
+              OUTCOMES.map((outcome) => outcome.value)
+            ).map((item) => ({
+              ...item,
+              label:
+                OUTCOMES.find((o) => o.value === item.value)?.label ||
+                item.label,
+            })),
+          },
+        ]
+      : []),
   ];
 });
 

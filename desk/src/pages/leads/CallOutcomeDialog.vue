@@ -76,7 +76,7 @@
         />
       </template>
 
-      <!-- Not interested: why, and whether to close the lead -->
+      <!-- Not interested: why -->
       <template v-else-if="mode === 'Not interested'">
         <fieldset class="flex flex-col gap-2">
           <legend class="mb-1 text-xs text-ink-gray-5">
@@ -103,13 +103,9 @@
           maxlength="500"
           required
         />
-        <Switch
-          v-model="closeLost"
-          :label="__('Close this lead as lost')"
-          :description="
-            __('Leave it off to keep the lead open and only log the call.')
-          "
-        />
+        <p class="text-p-sm text-ink-gray-6">
+          {{ __("The lead moves to Not Interested.") }}
+        </p>
       </template>
 
       <div
@@ -128,7 +124,7 @@
           variant="solid"
           type="submit"
           :form="formId"
-          :label="submitLabel"
+          :label="__('Save call')"
         />
       </div>
     </template>
@@ -137,7 +133,7 @@
 
 <script setup lang="ts">
 import { __ } from "@/translation";
-import { Button, Dialog, FormControl, Switch } from "frappe-ui";
+import { Button, Dialog, FormControl } from "frappe-ui";
 import { dayjs } from "frappe-ui";
 import { computed, ref, useId, watch } from "vue";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
@@ -193,7 +189,6 @@ const note = ref("");
 const stage = ref("");
 const followUp = ref("");
 const callbackAt = ref("");
-const closeLost = ref(false);
 const errorMessage = ref("");
 
 const title = computed(
@@ -203,11 +198,6 @@ const title = computed(
       "Call back": __("Call back later"),
       "Not interested": __("Not interested"),
     }[props.mode || "Connected"])
-);
-const submitLabel = computed(() =>
-  props.mode === "Not interested" && closeLost.value
-    ? __("Save and close lead")
-    : __("Save call")
 );
 
 const lostStage = computed(
@@ -229,7 +219,6 @@ watch(
   (open) => {
     if (!open) return;
     note.value = followUp.value = callbackAt.value = errorMessage.value = "";
-    closeLost.value = false;
     stage.value = props.call?.summary.stage || "";
   }
 );
@@ -270,7 +259,6 @@ function submit() {
       errorMessage.value = __("Give a reason.");
       return;
     }
-    if (closeLost.value) moveTo = lostStage.value;
   }
   emit("answer", { outcome, note: text, callback_at: when, stage: moveTo });
   emit("update:open", false);

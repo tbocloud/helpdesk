@@ -34,7 +34,19 @@ DAYS_AGO = {"today": 0, "yesterday": 1}
 BUSINESS_PERIODS = ("month", "last_month", "quarter", "fy", "custom")
 FY_START_MONTH = 4
 MESSAGE_CHANNELS = ("whatsapp", "email")
-CALL_OUTCOMES = ("Connected", "No answer", "Busy", "Voicemail")
+# the call batch outcomes; an ERP site before them also takes the first two below, which
+# TBO Smart still reads as Not answered
+CALL_OUTCOMES = (
+    "Connected",
+    "Not answered",
+    "Busy",
+    "Call back",
+    "Not interested",
+    "Wrong number",
+    "No answer",
+    "Voicemail",
+)
+CALL_RESULTS = CALL_OUTCOMES[:6]
 TELEPHONY = "tbo_smart.api.telephony"
 # what the recording player may be handed back
 AUDIO_TYPES = ("audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/ogg")
@@ -112,9 +124,11 @@ def list_leads(
     state: list | str | None = None,
     district: list | str | None = None,
     org_size: list | str | None = None,
+    last_call_result: list | str | None = None,
 ) -> dict:
-    """A page of leads. `industry`, `state`, `district` and `org_size` each take one value
-    or a list (any of them); a list goes to the ERP site as JSON. `metric` with its period keeps the leads one number of the
+    """A page of leads. `industry`, `state`, `district`, `org_size` and `last_call_result`
+    (the outcome of the lead's last call) each take one value or a list (any of them); a
+    list goes to the ERP site as JSON. `metric` with its period keeps the leads one number of the
     Overview counts (the ERP site picks them). `department` keeps one lead department's
     leads; the ERP site still shows only what the person may see."""
     require_leads()
@@ -142,7 +156,11 @@ def list_leads(
         department=department or None,
         metric=metric or None,
         **category_params(
-            industry=industry, state=state, district=district, org_size=org_size
+            industry=industry,
+            state=state,
+            district=district,
+            org_size=org_size,
+            last_call_result=check_call_results(last_call_result),
         ),
         **when,
         view=view,
@@ -151,6 +169,13 @@ def list_leads(
         page_length=min(max(cint(page_length) or 20, 1), MAX_PAGE),
     )
     return result or {"rows": [], "total": 0}
+
+
+def check_call_results(value) -> list[str]:
+    results = as_list(value)
+    if bad := [result for result in results if result not in CALL_RESULTS]:
+        frappe.throw(_("{0} is not a call result.").format(", ".join(bad)))
+    return results
 
 
 def category_params(**filters) -> dict:
@@ -425,18 +450,29 @@ def report_deployed() -> bool:
 
 
 @frappe.whitelist(methods=["POST"])
-def log_call(lead: str, outcome: str, note: str | None = None) -> dict:
+def log_call(
+    lead: str, outcome: str, note: str | None = None, callback_at: str | None = None
+) -> dict:
     """A call made outside MyOperator, logged on the lead as the signed-in person; it
-    counts in today's report, so their cached reads go."""
+    counts in today's report, so their cached reads go. The ERP site also sets the
+    lead's last call result and moves its stage (`stage` in the answer). Call back needs
+    `callback_at`, the follow-up."""
     require_leads()
     if outcome not in CALL_OUTCOMES:
-        frappe.throw(_("Pick Connected, No answer, Busy or Voicemail."))
+        frappe.throw(
+            _(
+                "Pick Connected, Not answered, Busy, Call back, Not interested or Wrong number."
+            )
+        )
+    if outcome == "Call back" and not (callback_at or "").strip():
+        frappe.throw(_("Say when to call back."))
     logged = call_if_deployed(
         "log_call",
         post=True,
         lead=lead,
         outcome=outcome,
         note=(note or "").strip() or None,
+        callback_at=(callback_at or "").strip() or None,
     )
     if logged is None:
         frappe.throw(
@@ -643,8 +679,8 @@ def update_lead(name: str, data: dict | str) -> dict:
 
 @frappe.whitelist()
 def get_category_counts(fresh: int | str = 0) -> dict:
-    """How many of the person's leads have each industry, state, district and
-    organisation size, for the list's filter counts. Empty on an older TBO Smart, where
+    """How many of the person's leads have each industry, state, district,
+    organisation size and last call result, for the list's filter counts. Empty on an older TBO Smart, where
     the filters simply show no counts."""
     require_leads()
     return (

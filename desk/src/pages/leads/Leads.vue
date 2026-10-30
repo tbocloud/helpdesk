@@ -330,6 +330,16 @@
                         v-if="row.tbo_stage"
                         :label="stageLabel(options, row.tbo_stage)"
                         :tone="stageTone(options, row.tbo_stage)"
+                        :icon="stageIcon(row.tbo_stage)"
+                      />
+                      <!-- how the last call went -->
+                      <TaskyBadge
+                        v-if="lastCall(row)"
+                        :label="lastCall(row)!.label"
+                        :tone="lastCall(row)!.tone"
+                        :icon="lastCall(row)!.icon"
+                        :title="__('Last call')"
+                        class="font-normal tabular-nums"
                       />
                       <!-- gone quiet: no activity for longer than its department allows -->
                       <TaskyBadge
@@ -548,12 +558,14 @@ import {
   choices,
   clientStatus,
   departmentLabel,
+  lastCall,
   LEAD_VIEWS,
   loadLeadOptions,
   useClickToCall,
   leadOptions,
   METRIC_LABELS,
   ownerName,
+  stageIcon,
   stageLabel,
   stageTone,
   staleLeads,
@@ -649,9 +661,15 @@ const filters = reactive({
   segment: queryValue("segment"),
   department: queryValue("department"),
 });
-// Industry, State, District and Organisation size: each any of its values, kept in the
+// Industry, State, District, Organisation size and Last call: each any of its values, kept in the
 // URL as repeated keys (?industry=Resorts&industry=Hotels…)
-const CATEGORY_KEYS = ["industry", "state", "district", "org_size"] as const;
+const CATEGORY_KEYS = [
+  "industry",
+  "state",
+  "district",
+  "org_size",
+  "last_call_result",
+] as const;
 function queryList(key: string) {
   const value = route.query[key];
   return (Array.isArray(value) ? value : [value]).filter(
@@ -675,6 +693,7 @@ const emptyCategories = (): LeadCategories => ({
   state: [],
   district: [],
   org_size: [],
+  last_call_result: [],
 });
 
 // managers pick many leads and set their category at once
@@ -1048,6 +1067,9 @@ watch(
         state: c.state.length ? c.state : undefined,
         district: c.district.length ? c.district : undefined,
         org_size: c.org_size.length ? c.org_size : undefined,
+        last_call_result: c.last_call_result.length
+          ? c.last_call_result
+          : undefined,
         source: x.source || undefined,
         temperature: x.temperature || undefined,
         metric: x.metric || undefined,

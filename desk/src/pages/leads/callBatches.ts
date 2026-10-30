@@ -3,6 +3,14 @@
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
 import { createResource, toast } from "frappe-ui";
+import type { Component } from "vue";
+import LucideCalendarClock from "~icons/lucide/calendar-clock";
+import LucideCircleCheck from "~icons/lucide/circle-check";
+import LucidePhoneMissed from "~icons/lucide/phone-missed";
+import LucidePhoneOff from "~icons/lucide/phone-off";
+import LucideThumbsDown from "~icons/lucide/thumbs-down";
+import LucideX from "~icons/lucide/x";
+import type { Tone } from "@/components/tone";
 import type { LeadOptions } from "./leads";
 
 export type CallOutcome =
@@ -23,6 +31,18 @@ export const OUTCOMES: { value: CallOutcome; label: string; flow: boolean }[] =
     { value: "Not interested", label: __("Not interested"), flow: true },
     { value: "Wrong number", label: __("Wrong number"), flow: false },
   ];
+
+/** An outcome's icon, and the tone it shows in on a lead's row: colour only where it says
+ * something (a call that got through, one to repeat, a no), never for the plain ones. */
+export const OUTCOME_LOOK: Record<CallOutcome, { icon: Component; tone: Tone }> =
+  {
+    Connected: { icon: LucideCircleCheck, tone: "success" },
+    "Not answered": { icon: LucidePhoneMissed, tone: "warning" },
+    Busy: { icon: LucidePhoneOff, tone: "warning" },
+    "Call back": { icon: LucideCalendarClock, tone: "info" },
+    "Not interested": { icon: LucideThumbsDown, tone: "danger" },
+    "Wrong number": { icon: LucideX, tone: "neutral" },
+  };
 
 export interface QueueLead {
   name: string;

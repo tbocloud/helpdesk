@@ -113,10 +113,19 @@
                   {{ __("Details") }}
                 </h2>
                 <TaskyBadge
+                  v-if="lead && lastCall(lead)"
+                  class="ml-auto font-normal tabular-nums"
+                  :label="lastCall(lead)!.label"
+                  :tone="lastCall(lead)!.tone"
+                  :icon="lastCall(lead)!.icon"
+                  :title="__('Last call')"
+                />
+                <TaskyBadge
                   v-if="lead?.tbo_stage"
-                  class="ml-auto"
+                  :class="lead && lastCall(lead) ? '' : 'ml-auto'"
                   :label="stageLabel(options, lead.tbo_stage)"
                   :tone="stageTone(options, lead.tbo_stage)"
+                  :icon="stageIcon(lead.tbo_stage)"
                 />
               </div>
               <dl class="flex flex-col gap-3 px-4 py-4">
@@ -294,6 +303,13 @@
               :value="stage.name"
               class="size-4 border-outline-gray-4 text-ink-gray-9 focus-visible:ring-2 focus-visible:ring-highlight"
             />
+            <component
+              :is="stageIcon(stage.name)"
+              v-if="stageIcon(stage.name)"
+              class="size-4 shrink-0"
+              :class="INK[stageTone(options, stage.name)]"
+              aria-hidden="true"
+            />
             <span class="text-base text-ink-gray-8">{{
               stage.label || stage.name
             }}</span>
@@ -334,6 +350,7 @@
 <script setup lang="ts">
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import TaskyBadge from "@/components/TaskyBadge.vue";
+import { INK } from "@/components/tone";
 import TaskyState from "@/components/TaskyState.vue";
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
@@ -376,6 +393,8 @@ import {
   loadLeadOptions,
   leadOptions,
   ownerName,
+  lastCall,
+  stageIcon,
   stageLabel,
   stageTone,
   unsavedNote,
