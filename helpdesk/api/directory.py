@@ -10,7 +10,7 @@ from frappe import _
 from helpdesk.api.home import OPEN_TICKET_CATEGORIES
 from helpdesk.customer_health import AT_RISK, HEALTHY, WATCH, all_health, brief
 from helpdesk.customer_health import sort_key as health_order
-from helpdesk.utils import agent_only
+from helpdesk.utils import agent_only, aggregate
 
 PAGE_LENGTH = 50
 CLOSED_PROJECT_STATUSES = ("not in", ["Completed", "Cancelled"])
@@ -214,7 +214,7 @@ def page(
 def count(doctype: str, or_filters: list | None, filters: dict | None = None) -> int:
     rows = frappe.get_list(
         doctype,
-        fields=["count(name) as total"],
+        fields=[aggregate("count", "name", "total")],
         filters=filters,
         or_filters=or_filters,
     )
@@ -228,7 +228,7 @@ def open_ticket_counts(field: str, names: list[str]) -> dict[str, int]:
     rows = frappe.get_list(
         "HD Ticket",
         filters={field: ("in", names), "status_category": OPEN_TICKET_CATEGORIES},
-        fields=[f"{field} as owner_name", "count(name) as count"],
+        fields=[f"{field} as owner_name", aggregate("count", "name", "count")],
         group_by=field,
     )
     return {r.owner_name: r.count for r in rows}
@@ -241,7 +241,7 @@ def active_project_counts(customers: list[str]) -> dict[str, int]:
     rows = frappe.get_list(
         "Project",
         filters={"customer": ("in", customers), "status": CLOSED_PROJECT_STATUSES},
-        fields=["customer", "count(name) as count"],
+        fields=["customer", aggregate("count", "name", "count")],
         group_by="customer",
     )
     return {r.customer: r.count for r in rows}

@@ -44,6 +44,7 @@ from helpdesk.tasky.time_sessions import (
 )
 from helpdesk.utils import (
     add_assignment,
+    aggregate,
     assigned_to_filter,
     csv_safe,
     remove_assignment,
@@ -2575,7 +2576,7 @@ def get_timesheet_summary(
         frappe.get_all(
             "Timesheet Detail",
             filters=_time_log_filters(sheets, from_date, to_date, project),
-            fields=["parent", "project", "sum(hours) as hours"],
+            fields=["parent", "project", aggregate("sum", "hours", "hours")],
             group_by="parent, project",
         )
         if sheets
