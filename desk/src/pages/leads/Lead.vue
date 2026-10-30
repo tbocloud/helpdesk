@@ -141,6 +141,15 @@
                 </div>
               </dl>
             </section>
+            <template v-if="lead?.place">
+              <LeadPlace
+                :lead-id="leadId"
+                :place="lead.place"
+                :can-write="!!lead.can_write"
+                @saved="detail.reload()"
+              />
+              <LeadPhotos :lead-id="leadId" :can-write="!!lead.can_write" />
+            </template>
             <LeadAISuggests :lead-id="leadId" @changed="detail.reload()" />
             <LeadQuotations :quotations="data.quotations || []" />
             <LeadProposals
@@ -354,6 +363,8 @@ import LeadAISuggests from "./LeadAISuggests.vue";
 import LeadCallEntry from "./LeadCallEntry.vue";
 import LucideScrollText from "~icons/lucide/scroll-text";
 import LeadFormDialog from "./LeadFormDialog.vue";
+import LeadPhotos from "./LeadPhotos.vue";
+import LeadPlace from "./LeadPlace.vue";
 import LeadDocuments from "./LeadDocuments.vue";
 import LogCallDialog from "./LogCallDialog.vue";
 import LeadProposals from "./LeadProposals.vue";

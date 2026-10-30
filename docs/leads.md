@@ -193,7 +193,7 @@ The ERP site's `tbo_smart.api.telephony` takes the same `acting_user`:
 `helpdesk/api/leads.py`, thin typed proxies (writes are POST only): `get_options`,
 `list_leads`, `get_overview_page`, `get_overview`, `get_lead_intake`, `get_proposal_money`, `get_lead`, `get_lead_ai`, `refresh_lead_ai`, `apply_ai_stage`,
 `dismiss_ai_stage`, `draft_lead_message`, `log_message_sent`, `create_lead`, `update_lead`,
-`set_stage`, `add_note`, `find_duplicate_leads`, `get_stale_leads`, `get_lead_departments`, `save_lead_department`, `set_lead_department_active`, `click_to_call`, `call_recording`, `get_daily_report`, `log_call`. They check
+`set_stage`, `add_note`, `find_duplicate_leads`, `get_stale_leads`, `get_lead_departments`, `save_lead_department`, `set_lead_department_active`, `click_to_call`, `call_recording`, `get_daily_report`, `log_call`, `get_lead_photos`, `upload_lead_photo`, `delete_lead_photo`, `lead_photo`. They check
 `can_use_leads`, validate the view and page size, trim notes, and pass `acting_user`. The
 client is `CRMClient.call` in `helpdesk/integrations/crm/client.py`; the call and error
 mapping live in `helpdesk/integrations/crm/leads.py`. The API key and secret never reach the
@@ -364,6 +364,35 @@ doesn't show without its fields. The hub can be deployed before TBO Smart.
   (asks first; the new secret shows once, with Copy), the people mapping, unknown callers,
   recordings (days kept, the recording notice for the IVR greeting under the DPDP Act) and
   the AI call summary.
+- **Place and Photos** (needs TBO Smart's hub leads API v1.11, `hub-leads-api.md` §2.11; both
+  cards stay out while the ERP site is older: no `place` on `get_lead`, and `get_lead_photos`
+  answers `available: false` through `call_if_deployed`), under Details in the left column, for
+  a BD who is about to visit:
+  - **Place** (`LeadPlace.vue`): the location note, **Get directions** (Google Maps
+    `dir/?api=1&destination=<lat,lng>`, which opens the Maps app on a phone; only with a pin),
+    **Open in Maps** (the pasted map link, when there is no pin), **Google profile** (opens the
+    client's Business Profile), and **Show map** (Google's key-free embed
+    `maps?q=<lat,lng>&output=embed`, loaded only when asked, to spare mobile data). The
+    coordinates show in mono. Empty: a line saying what to add and an *Add place* button (read
+    only: "No place has been saved"). *Edit* (anyone who can write the lead) saves through
+    `update_lead` with the links, the pin and the note; **Use my current location** asks the
+    browser for one fix (needs https and permission) and says plainly when it is denied, can't
+    be found, times out or isn't supported; a long Google Maps link fills the pin when it is
+    empty. Latitude and longitude go together and are range-checked before they are sent; the
+    ERP site checks the links are Google's.
+  - **Photos** (`LeadPhotos.vue`): a grid of thumbnails (square, lazy), **Take photo** (camera
+    on a phone: `accept="image/*" capture="environment"`) and **Add photos** (several, from the
+    gallery). Chosen pictures open a dialog with previews and one optional caption for them;
+    each is scaled to 2000 px as a JPEG in the browser (so a phone upload is quick, HEIC works
+    where the browser decodes it, and the GPS in EXIF is dropped) and uploaded one at a time with
+    a status line per file, a named error for a refused one and a toast when done. At most 20
+    per lead (the buttons disable, with the reason). Tapping a thumbnail opens the shared
+    `MediaLightbox` (arrow keys, buttons and a swipe, Esc to close); *Remove* asks once. The
+    ERP site lets only the uploader, the lead's owner or a manager delete and says so.
+  - The images are private on the ERP site. The browser loads them from
+    `helpdesk.api.leads.lead_photo?lead=&file=&thumb=`, which streams the ERP bytes as the signed-in
+    person (only PNG, JPEG or WebP are passed on, `Content-Disposition: inline`) and, through the
+    `after_request` hook `cache_lead_photo`, `Cache-Control: private, max-age=3600`.
 - The pickers' options (`get_options`) are fetched once per session (`leadOptions` in
   `desk/src/pages/leads/leads.ts`).
 - Sidebar: *Leads* in Workspace (teal group), shown when `can_use_leads`.
@@ -489,6 +518,10 @@ message queued) while other errors still show; the
 AI calls are the signed-in person's (POST for every change) and the channels checked.
 The one-request Overview page (all parts, money or intake failing alone, cache hit, `fresh`,
 per-person cache, a write clearing it) is tested there too.
+`helpdesk/tests/test_lead_place.py`: the photo list (and the card staying out on an older ERP
+site), an upload passed on with a trimmed caption, an empty or oversize upload kept at the hub,
+the ERP site's refusal reaching the person, delete, the image streamed (and only image types),
+no access without leads, and the private cache header.
 `helpdesk/tests/test_stale_leads.py`: wave 1: the duplicate check proxied as the person (and skipped
 quietly on an older ERP site), `allow_duplicate` sent only when confirmed, the quiet leads kept
 per department threshold and cached per person, and the follow-up rule (owner at L0, heads at

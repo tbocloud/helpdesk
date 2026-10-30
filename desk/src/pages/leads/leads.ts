@@ -5,6 +5,7 @@ import { __ } from "@/translation";
 import { money } from "@/components/invoicing/invoices";
 import { errorText } from "@/utils";
 import { createResource, dayjs, toast } from "frappe-ui";
+import type { LeadPlace } from "./place";
 import type { DocumentChain, ProposalRow } from "./proposals";
 
 export interface LeadStage {
@@ -304,7 +305,13 @@ export interface LeadQuotation {
 }
 
 export interface LeadDetail {
-  lead: LeadRow & Partial<LeadForm> & Record<string, unknown>;
+  lead: LeadRow &
+    Partial<LeadForm> &
+    Record<string, unknown> & {
+      /** absent from an older TBO Smart */
+      place?: LeadPlace;
+      photo_count?: number;
+    };
   timeline: LeadTimelineEntry[];
   quotations: LeadQuotation[];
   /** the lead's proposals (empty while proposals are off on the ERP site) */
