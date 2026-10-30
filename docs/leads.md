@@ -52,7 +52,7 @@ user exists there with a sales role, applies what they may see, and records writ
 | --- | --- | --- | --- |
 | `get_options` | GET | | `{stages: [{name, label, type, color}], sources, segments, owners: [{email, full_name}], territories, industries, org_sizes, states, kerala_districts, districts_by_state, can_call, departments: [{name, lead_type, is_active, is_head, is_member}], lead_types}` (the last two from the departments release of TBO Smart) |
 | `list_leads` | GET | `search, stage, owner, segment, department, industry, state, district, org_size, source, temperature, metric, period, from_date, to_date, view, start, page_length` | `{rows: [{name, lead_name, company_name, email_id, mobile_no, tbo_stage, segment, lead_owner, owner_name, score, next_follow_up, modified, latest_quotation, latest_proposal, tbo_department, tbo_lead_type, industry, state, district, org_size}], total}` |
-| `get_category_counts` | GET | | `{industry, state, district, org_size}`, each `{value: leads}` (TBO Smart v1.13, `hub-leads-api.md` §2.13) |
+| `get_category_counts` | GET | | `{industry, state, district, org_size}`, each `{value: leads}` (TBO Smart v1.14, `hub-leads-api.md` §2.14) |
 | `add_industry` | POST | `name` | `{name, created}`; managers only |
 | `bulk_set_lead_category` | POST | `leads, values` | `{updated, skipped}`; managers only |
 | `get_overview` | GET | `period, from_date, to_date, owner` | the Overview's figures (TBO Smart's `hub-leads-api.md` §2.4) |
@@ -405,7 +405,7 @@ doesn't show without its fields. The hub can be deployed before TBO Smart.
 Each lead says what kind of client it is, so the list can be filtered and counted by it.
 The four fields are ERPNext's own (`industry`, `state`, `no_of_employees`) plus TBO's
 `tbo_district`; the hub's names are `industry`, `state`, `district`, `org_size`. The contract
-is TBO Smart's `hub-leads-api.md` §2.13.
+is TBO Smart's `hub-leads-api.md` §2.14.
 
 - **Lead form** (`LeadCategoryFields.vue`, inside `LeadFormDialog.vue`): Industry and State
   are searchable lists. A manager who types an industry that isn't there gets "Add as a new
@@ -425,9 +425,9 @@ is TBO Smart's `hub-leads-api.md` §2.13.
   nothing; "Clear" empties it on every selected lead. Up to 500 leads per call; leads the
   person may not write come back as `skipped` and are listed.
 - **Overview and dashboards are not filtered by category**: the ERP site builds their figures
-  per owner and period (`hub-leads-api.md` §2.13). Opening a number's list and then filtering it
+  per owner and period (`hub-leads-api.md` §2.14). Opening a number's list and then filtering it
   by category works.
-- Needs TBO Smart v1.13 on the ERP site; before that the pickers show empty lists and the
+- Needs TBO Smart v1.14 on the ERP site; before that the pickers show empty lists and the
   filters send nothing it understands.
 
 ## Daily report
