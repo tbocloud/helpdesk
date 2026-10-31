@@ -152,6 +152,7 @@ let lastRecorded = "";
 
 <script setup lang="ts">
 import LayoutHeader from "@/components/LayoutHeader.vue";
+import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
 import { Button, call, createResource, Dropdown, toast } from "frappe-ui";
 import { computed, ref, watch } from "vue";
@@ -162,6 +163,7 @@ import LucideChevronDown from "~icons/lucide/chevron-down";
 import LucideArrowLeft from "~icons/lucide/arrow-left";
 import LucideChevronRight from "~icons/lucide/chevron-right";
 import LucideClipboardCheck from "~icons/lucide/clipboard-check";
+import LucideCoins from "~icons/lucide/coins";
 import LucideEyeOff from "~icons/lucide/eye-off";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideRepeat from "~icons/lucide/repeat";
@@ -221,6 +223,13 @@ const tabs = [
     needs: "can_handle_credentials",
   },
   {
+    label: "Commission",
+    to: "TaskyCommission",
+    icon: LucideCoins,
+    // managers only; the ERP site decides who may read or change a project's commission
+    needs: "@manager",
+  },
+  {
     label: "Sign-off",
     to: "TaskySignoffs",
     icon: LucideClipboardCheck,
@@ -229,8 +238,15 @@ const tabs = [
   },
 ];
 
+const auth = useAuthStore();
 const visibleTabs = computed(() =>
-  tabs.filter((tab) => !tab.needs || detail.data?.[tab.needs])
+  tabs.filter(
+    (tab) =>
+      !tab.needs ||
+      (tab.needs === "@manager"
+        ? auth.isAdmin || auth.isManager
+        : detail.data?.[tab.needs])
+  )
 );
 
 function isCurrent(tab: { to: string; also?: string[] }) {

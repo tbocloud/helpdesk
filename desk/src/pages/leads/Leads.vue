@@ -53,7 +53,8 @@
               view !== 'daily' &&
               view !== 'today' &&
               view !== 'business' &&
-              view !== 'outreach'
+              view !== 'outreach' &&
+              view !== 'commission'
             "
           >
             <!-- hidden quietly until the ERP site's TBO Smart counts it, and on a failed read -->
@@ -92,6 +93,13 @@
             :options="options"
           />
         </template>
+
+        <!-- each person's commission on money collected, per project; what a person may see is decided on the ERP site -->
+        <LeadsCommission
+          v-else-if="view === 'commission'"
+          ref="commissionPanel"
+          class="mt-4"
+        />
 
         <!-- first messages the AI drafted, for a person to approve; only while Outreach is on -->
         <LeadsOutreach
@@ -562,6 +570,7 @@ import LeadFormDialog from "./LeadFormDialog.vue";
 import LeadSetCategoryDialog from "./LeadSetCategoryDialog.vue";
 import LeadIntakeStrip from "./LeadIntakeStrip.vue";
 import LeadsBusiness from "./LeadsBusiness.vue";
+import LeadsCommission from "./LeadsCommission.vue";
 import LeadsOutreach from "./LeadsOutreach.vue";
 import LeadsDailyReport from "./LeadsDailyReport.vue";
 import LeadsOverview from "./LeadsOverview.vue";
@@ -602,12 +611,14 @@ type LeadTab =
   | "daily"
   | "business"
   | "today"
-  | "outreach";
+  | "outreach"
+  | "commission";
 const TABS: { value: LeadTab; label: string }[] = [
   { value: "today", label: __("Today's calls") },
   { value: "overview", label: __("Overview") },
   { value: "daily", label: __("Daily report") },
   { value: "outreach", label: __("Outreach") },
+  { value: "commission", label: __("Commission") },
   { value: "business", label: __("Business") },
   ...LEAD_VIEWS,
 ];
@@ -632,6 +643,7 @@ const dailyPanel = ref<InstanceType<typeof LeadsDailyReport> | null>(null);
 const todayPanel = ref<InstanceType<typeof TodaysCalls> | null>(null);
 const businessPanel = ref<InstanceType<typeof LeadsBusiness> | null>(null);
 const outreachPanel = ref<InstanceType<typeof LeadsOutreach> | null>(null);
+const commissionPanel = ref<InstanceType<typeof LeadsCommission> | null>(null);
 
 const authStore = useAuthStore();
 const route = useRoute();
@@ -672,7 +684,8 @@ const isList = computed(
     view.value !== "daily" &&
     view.value !== "today" &&
     view.value !== "business" &&
-    view.value !== "outreach"
+    view.value !== "outreach" &&
+    view.value !== "commission"
 );
 const search = ref(queryValue("q"));
 // what the list is searched for: the box, once typing pauses
@@ -975,6 +988,7 @@ function refresh() {
   else if (view.value === "daily") dailyPanel.value?.reload();
   else if (view.value === "business") businessPanel.value?.reload();
   else if (view.value === "outreach") outreachPanel.value?.reload();
+  else if (view.value === "commission") commissionPanel.value?.reload();
   else {
     intake.submit({ fresh: 1 });
     staleLeads.submit({ fresh: 1 });

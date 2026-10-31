@@ -585,6 +585,7 @@
         </SettingsSection>
 
         <LeadDepartments v-if="form.enable_leads && canManageLeads" />
+        <CommissionPlans v-if="form.enable_leads && canManageLeads" />
         <WebsiteLeadForm
           v-if="form.enable_leads && auth.isAdmin"
           :site-url="form.site_url"
@@ -618,6 +619,7 @@ import LucidePlugZap from "~icons/lucide/plug-zap";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideUserCheck from "~icons/lucide/user-check";
 import SettingsSection from "../SettingsSection.vue";
+import CommissionPlans from "./CommissionPlans.vue";
 import LeadDepartments from "./LeadDepartments.vue";
 import WebsiteLeadForm from "./WebsiteLeadForm.vue";
 
