@@ -212,6 +212,60 @@ class TestConfirmAndReopen(CustomerCase):
             customer.decide_resolution(self.ticket.name, False, "")
 
 
+class TestOnlyTheCustomerCloses(CustomerCase):
+    """Phase 13: a ticket the customer follows on their site closes when they confirm it there."""
+
+    def test_the_team_marks_it_resolved_and_cannot_close_it(self):
+        self.ticket.reload()
+        self.ticket.status = "Resolved"
+        self.ticket.save()
+
+        self.ticket.status = "Closed"
+        with self.assertRaisesRegex(frappe.ValidationError, "Mark it Resolved"):
+            self.ticket.save()
+
+    def test_the_customers_confirmation_closes_it(self):
+        customer.decide_resolution(self.ticket.name, True)
+        self.assertEqual(self.ticket_value("status"), "Closed")
+
+    def test_a_ticket_that_came_by_email_closes_as_before(self):
+        ticket = make_ticket(subject="By email", customer=self.customer)
+        ticket.reload()
+        ticket.status = "Closed"
+        ticket.save()
+        self.assertEqual(ticket.status, "Closed")
+
+    def test_auto_close_skips_it(self):
+        from helpdesk.helpdesk.doctype.hd_ticket.hd_ticket import (
+            close_tickets_after_n_days,
+        )
+
+        by_email = make_ticket(subject="By email", customer=self.customer)
+        for ticket in (self.ticket, by_email):
+            ticket.reload()
+            ticket.status = "Replied"
+            ticket.save()
+            frappe.db.set_value(
+                "Communication",
+                {"reference_doctype": "HD Ticket", "reference_name": ticket.name},
+                "communication_date",
+                frappe.utils.add_days(frappe.utils.now_datetime(), -30),
+            )
+        frappe.db.set_single_value(
+            "HD Settings",
+            {
+                "auto_close_tickets": 1,
+                "auto_close_status": "Replied",
+                "auto_close_after_days": 3,
+            },
+        )
+
+        close_tickets_after_n_days()
+
+        self.assertEqual(self.ticket_value("status"), "Replied")
+        self.assertEqual(self.ticket_value("status", by_email), "Closed")
+
+
 class TestResolutionApi(CustomerCase):
     def test_write_endpoints_are_post_only(self):
         for fn in (api.start_run, api.cancel_run, api.decide_resolution):

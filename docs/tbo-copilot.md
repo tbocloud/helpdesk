@@ -300,6 +300,18 @@ The Support button in a customer's ERP opens a chat with TBO Copilot instead of 
   - Copilot still looks into the ticket for the team, but its stage messages are held until a person has replied (`customer.quiet_for_customer`, as for a ticket the error watch raised).
   - **Just connect me** before the customer has written anything starts no Copilot run: there is nothing to investigate, and a run would only guess from the page context. The people's card says Copilot waits. They ask in the chat, then press **Start Copilot** if it helps.
   - The ticket's context lists at most 8 of the user's roles.
+- **One chat per ticket (Phase 13).** On the customer's site, the Support panel and its full page show:
+  - each ticket as a chat, with a dot: 🟢 confirmed, 🔴 waiting for the customer, 🟠 the team is on it;
+  - the red tickets again under **Action needed**;
+  - the chats that did not become tickets, under **New chat**.
+
+  The site does most of this itself (helpdesk_client `inbox.py`, README "The Support panel"). The hub adds two things:
+  - **A chat for a ticket raised with the form** (`open_ticket`, `conversation._ticket_chat`). The site asks for it the first time the customer opens such a ticket. The hub checks the HD Ticket came from that connection (`custom_client_ticket`) and links an HDS Conversation to it, in **With a person**, with no AI. If the ticket already has a chat, it is pointed at the site's new side of it.
+  - **Only the customer closes a ticket they follow on their site** (`HDTicket.check_customer_closes`). This covers a connected site's ticket (`custom_client_ticket`) or one with a Copilot chat.
+    - Nobody on the team can set **Closed**; they mark it **Resolved**, and the customer is asked to check it.
+    - The customer's **It's fixed** (`decide_resolution`), their close request and their email feedback still close it (`flags.closed_by_customer`). Merging still closes the duplicate.
+    - Auto-close skips these tickets: they wait for the customer however long it takes, and the site reminds them every 3 days.
+    - Tickets that came by email are not affected.
 - **Limits:**
   - per customer, 10 messages a minute and 200 a day;
   - per conversation, a dollar cap (0.25) and 40 turns;

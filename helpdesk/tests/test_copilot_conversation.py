@@ -541,6 +541,70 @@ class TestTalkToAPerson(ChatCase):
         )
 
 
+class TestAFormTicketsChat(ChatCase):
+    """Phase 13: a ticket raised with the site's form gets its chat the first time it is opened."""
+
+    def setUp(self):
+        super().setUp()
+        self.ticket = make_ticket(
+            subject="Stock report is empty", raised_by="ali@chat-trading.example"
+        )
+        self.ticket.db_set(
+            {
+                "custom_qcs_connection": self.connection,
+                "custom_client_ticket": "SUP-2026-00031",
+            }
+        )
+
+    def open(self, client_ticket="SUP-2026-00031", client_conversation="SUPCONV-0031"):
+        return self.say(
+            action="open_ticket",
+            client_ticket=client_ticket,
+            client_conversation=client_conversation,
+        )
+
+    def test_it_opens_with_a_person_and_the_customers_messages_reach_the_ticket(self):
+        frappe.set_user("Guest")  # as the site's call arrives
+        reply = self.open()
+        self.assertEqual(
+            (reply["state"], reply["ticket"]), ("With a person", self.ticket.name)
+        )
+        self.assertEqual(reply["messages"], [])
+        self.say("it is still empty today")
+        frappe.set_user("Administrator")
+
+        self.assertTrue(
+            frappe.db.exists(
+                "Communication",
+                {
+                    "reference_name": self.ticket.name,
+                    "sent_or_received": "Received",
+                    "content": ["like", "%still empty today%"],
+                },
+            )
+        )
+        self.assertEqual(self.ai_calls.call_count, 0)
+
+    def test_opening_again_moves_the_chat_to_the_sites_new_side(self):
+        first = self.open()["conversation"]
+        self.chat = None
+        again = self.open(client_conversation="SUPCONV-0032")["conversation"]
+
+        self.assertEqual(again, first)
+        self.assertEqual(
+            frappe.db.get_value(
+                conversation.CONVERSATION, first, "client_conversation"
+            ),
+            "SUPCONV-0032",
+        )
+
+    def test_a_ticket_from_another_site_is_refused(self):
+        other = make_support_connection(create_customer("Other Chat Co").name).name
+        self.ticket.db_set("custom_qcs_connection", other)
+        with self.assertRaises(frappe.DoesNotExistError):
+            self.open()
+
+
 class TestTheLimits(ChatCase):
     def test_a_conversation_past_its_cap_goes_to_a_person(self):
         self.say(action="start")

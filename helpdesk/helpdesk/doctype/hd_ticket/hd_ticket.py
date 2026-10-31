@@ -121,6 +121,34 @@ class HDTicket(Document):
 
     def validate(self):
         self.validate_feedback()
+        self.check_customer_closes()
+
+    def customer_confirms_on_their_site(self) -> bool:
+        """A ticket the customer follows in their own ERP (raised there or in its chat): it is
+        closed when they confirm the fix there (Phase 13), never by the team."""
+        from helpdesk.copilot.conversation import for_ticket
+
+        return bool(
+            self.get("custom_qcs_connection")
+            and (self.get("custom_client_ticket") or for_ticket(self.name))
+        )
+
+    def check_customer_closes(self):
+        if (
+            self.status != "Closed"
+            or not self.has_value_changed("status")
+            or self.is_merged
+            or self.flags.closed_by_customer
+            or self.get("custom_customer_confirmation") == "Confirmed"
+            or not self.customer_confirms_on_their_site()
+        ):
+            return
+        frappe.throw(
+            _(
+                "The customer closes this ticket when they confirm the fix on their site. Mark it Resolved instead."
+            ),
+            title=_("Only the customer closes this ticket"),
+        )
 
     def before_save(self):
         self.apply_sla()
@@ -1918,6 +1946,8 @@ def close_tickets_after_n_days():
     # cant do set_value because SLA will not be applied as setting directly to db and doc is not running.
     for ticket in tickets_to_close:
         doc = frappe.get_doc("HD Ticket", ticket)
+        if doc.customer_confirms_on_their_site():
+            continue  # it waits for the customer's confirmation, however long
         doc.status = "Closed"
         doc.flags.ignore_validate = True
         try:

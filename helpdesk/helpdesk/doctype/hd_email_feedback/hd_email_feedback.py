@@ -42,6 +42,8 @@ class HDEmailFeedback(Document):
         ticket_doc.feedback_rating = self.feedback_rating
         ticket_doc.feedback_extra = self.feedback_extra
         ticket_doc.status = "Closed"
+        # the customer's own feedback closes it (HDTicket.check_customer_closes)
+        ticket_doc.flags.closed_by_customer = True
         ticket_doc.save(ignore_permissions=True)
 
         self.ticket = ticket_doc.name

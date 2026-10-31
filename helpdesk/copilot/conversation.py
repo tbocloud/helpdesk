@@ -63,6 +63,7 @@ ACTIONS = (
     "not_answered",
     "fixed",
     "still_broken",
+    "open_ticket",
 )
 # what a customer's site advertises when its Support button opens the chat (helpdesk_client)
 CHAT_CAPABILITY = "chat_v1"
@@ -183,6 +184,8 @@ def receive(connection: str, payload: dict) -> dict:
     action = str(payload.get("action") or "").strip()
     if action and action not in ACTIONS:
         frappe.throw(_("Unknown action {0}").format(action))
+    if action == "open_ticket":
+        return _reply(_ticket_chat(connection, payload, email, user), None)
     doc = _conversation(connection, payload, email, user)
     before = _last_message_name(doc)
     text = str(payload.get("text") or "").strip()[:MAX_TEXT]
@@ -235,6 +238,51 @@ def _conversation(connection: str, payload: dict, email: str, user: dict):
             if str(user.get("language") or "").startswith("ar")
             else "en",
             "context": json.dumps(_context(payload.get("context") or {}), indent=1),
+        }
+    ).insert(ignore_permissions=True)
+
+
+def _ticket_chat(connection: str, payload: dict, email: str, user: dict):
+    """The chat of a ticket raised on the site with the form (Phase 13): with a person, no AI.
+    The site checked the ticket is its user's; the hub checks it came from that site."""
+    client_ticket = str(payload.get("client_ticket") or "")[:140]
+    ticket = client_ticket and frappe.db.get_value(
+        "HD Ticket",
+        {"custom_qcs_connection": connection, "custom_client_ticket": client_ticket},
+        "name",
+    )
+    if not ticket:
+        frappe.throw(
+            _("TBO Support has no such ticket from this site."),
+            frappe.DoesNotExistError,
+        )
+    values = {
+        "client_conversation": str(payload.get("client_conversation") or "")[:140],
+        "site_user": email,
+        "site_user_name": str(user.get("name") or "")[:140],
+    }
+    name = for_ticket(ticket)
+    if name:
+        # the site made its side of the chat again: messages go to that one now
+        doc = frappe.get_doc(CONVERSATION, name)
+        if doc.connection != connection:
+            raise frappe.PermissionError("not this site's ticket")
+        doc.db_set(values, update_modified=False)
+        return doc
+    return frappe.get_doc(
+        {
+            "doctype": CONVERSATION,
+            "connection": connection,
+            "customer": frappe.db.get_value(
+                "HDS Support Connection", connection, "customer_name"
+            ),
+            "language": "ar"
+            if str(user.get("language") or "").startswith("ar")
+            else "en",
+            "ticket": ticket,
+            "state": "With a person",
+            "title": frappe.db.get_value("HD Ticket", ticket, "subject"),
+            **values,
         }
     ).insert(ignore_permissions=True)
 

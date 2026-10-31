@@ -895,4 +895,6 @@ def _close_ticket(ticket: str) -> None:
     if doc.status == "Closed":
         return
     doc.status = "Closed"
+    # only the customer's own confirmation or close request comes here
+    doc.flags.closed_by_customer = True
     doc.save(ignore_permissions=True)
