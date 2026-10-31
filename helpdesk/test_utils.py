@@ -4573,3 +4573,56 @@ def commission_month(rows: list[dict] | None = None, **fields) -> dict:
         "unattributed": None,
         **fields,
     }
+
+
+def make_status_update(project: str, days_ago: int = 0, **values):
+    """Writes an HD Project Status Update for `project` (stage Development, waiting on
+    nothing unless `values` say otherwise) and dates it `days_ago` days back, as the
+    Friday report and the stale reminder read its age from its creation."""
+    doc = frappe.get_doc(
+        {
+            "doctype": "HD Project Status Update",
+            "project": project,
+            "stage": "Development",
+            "waiting_on": "Nothing",
+            **values,
+        }
+    ).insert(ignore_permissions=True)
+    if days_ago:
+        doc.db_set("creation", add_to_date(now_datetime(), days=-days_ago))
+    return doc
+
+
+def make_held_task(project: str, subject: str, reason: str, days_ago: int = 0):
+    """An On Hold task in `project` held for `reason` since `days_ago` days back."""
+    return make_task_in_status(
+        project,
+        subject,
+        "On Hold",
+        hold_reason=reason,
+        hold_since=add_to_date(getdate(), days=-days_ago),
+    )
+
+
+def age_project(project: str, days: int):
+    """Makes `project` look `days` days old, for the stale reminder that counts from
+    the day a project started when it never had an update."""
+    frappe.db.set_value(
+        "Project",
+        project,
+        "creation",
+        add_to_date(now_datetime(), days=-days),
+        update_modified=False,
+    )
+
+
+def status_split_answer(*updates: dict) -> dict:
+    """What call_haiku returns when the AI splits a weekly update into `updates`."""
+    return {"response": {"updates": list(updates)}, "usage": {}, "cost": 0}
+
+
+def set_status_report_recipients(*users: str):
+    """Names who gets the Friday project status report in HD Work Settings."""
+    return set_work_settings(
+        status_report_recipients=[{"user": user} for user in users]
+    )
