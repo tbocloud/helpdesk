@@ -103,6 +103,10 @@ scheduler_events = {
         "30 0 * * *": [
             "helpdesk.team_dashboard.close_periods",
         ],
+        # Friday 17:00: the project status report to its recipients (docs/project-status-report.md)
+        "0 17 * * 5": [
+            "helpdesk.project_status.send_weekly_report",
+        ],
         # Monday 08:00: last week's summary per customer
         "0 8 * * 1": [
             "helpdesk.work_summary.send_weekly_summaries",
@@ -272,6 +276,7 @@ permission_query_conditions = {
     "HD Content Post": "helpdesk.helpdesk.doctype.hd_content_post.hd_content_post.permission_query",
     "HD Content Campaign": "helpdesk.helpdesk.doctype.hd_content_campaign.hd_content_campaign.permission_query",
     "HD Work Summary": "helpdesk.helpdesk.doctype.hd_work_summary.hd_work_summary.permission_query",
+    "HD Project Status Update": "helpdesk.helpdesk.doctype.hd_project_status_update.hd_project_status_update.permission_query",
 }
 
 has_permission = {
@@ -285,6 +290,7 @@ has_permission = {
     "HD Content Post": "helpdesk.helpdesk.doctype.hd_content_post.hd_content_post.has_permission",
     "HD Content Campaign": "helpdesk.helpdesk.doctype.hd_content_campaign.hd_content_campaign.has_permission",
     "HD Work Summary": "helpdesk.helpdesk.doctype.hd_work_summary.hd_work_summary.has_permission",
+    "HD Project Status Update": "helpdesk.helpdesk.doctype.hd_project_status_update.hd_project_status_update.has_permission",
 }
 
 

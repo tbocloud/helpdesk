@@ -248,6 +248,7 @@ gives the same two roles write access):
   department.
 - **Lead rules**: the switch for leads gone quiet (the days are per department, in Settings
   → CRM → Lead departments).
+- **Project rules**: the switch for project status updates gone stale (7 days).
 - **Customer follow-up**: the email switch and its template; a line on HD Settings'
   auto-close with a button to General.
 - **Working hours**: read from the default SLA policy, with a button to SLA policies.
@@ -268,7 +269,20 @@ cleared number box keeps its last value rather than sending 0.
 Existing sites get the defaults stored by the patch `v16_0_2.seed_follow_up_settings`
 (post model sync), since a new Single has nothing stored until it is saved; a site whose
 settings were stored earlier gets the lead rule switched on by
-`v16_0_2.enable_stale_lead_follow_up`.
+`v16_0_2.enable_stale_lead_follow_up`, and the project status rule by
+`v16_0_2.enable_project_status_follow_up`.
+
+### Project rules
+
+| Rule | When | Who | Severity |
+| --- | --- | --- | --- |
+| **Project status out of date** (`stale_status`) | An Open project's newest status update is more than 7 days old (none yet: 7 days since the project was created); not for a project whose stage is On hold | L0: the project lead and its coordinators; the managers when there is no lead | Waiting on you |
+
+`ProjectRules` in `follow_ups.py` reads `project_status.stale_projects`. The notice is on the
+Project, opens `/project-status?project=<name>` (the update dialog), and follows the usual
+dedupe: one per person and project, unread again only if the rule changes. The switch is
+`project_status` (**Project rules** in Settings → Follow-ups). Details and the report itself:
+[project-status-report.md](project-status-report.md).
 
 ## Where escalation shows
 
@@ -296,7 +310,8 @@ settings were stored earlier gets the lead rule switched on by
   (custom fields in `setup/install.py`); `HD Notification.dedupe_key`.
 - UI: `FollowUpSettings.vue`, `EscalationBadge.vue`, `FollowUpStrip.vue`, `followUps.ts`,
   `pages/work/components/FollowUpControl.vue` and `FollowUpList.vue`.
-- Tests: `helpdesk/tests/test_follow_ups.py`, `helpdesk/tests/test_stale_leads.py` (lead rule).
+- Tests: `helpdesk/tests/test_follow_ups.py`, `helpdesk/tests/test_stale_leads.py` (lead rule),
+  `helpdesk/tests/test_project_status.py` (project status rule).
 
 ## After deploy
 

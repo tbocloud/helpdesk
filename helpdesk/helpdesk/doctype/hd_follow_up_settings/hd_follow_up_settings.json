@@ -42,6 +42,8 @@
 		"awaiting_customer_days",
 		"lead_section",
 		"stale_leads",
+		"project_section",
+		"project_status",
 		"customer_section",
 		"customer_follow_up_email",
 		"customer_follow_up_message",
@@ -279,6 +281,17 @@
 			"fieldname": "stale_leads",
 			"fieldtype": "Check",
 			"label": "Leads gone quiet",
+			"default": "1"
+		},
+		{
+			"fieldname": "project_section",
+			"fieldtype": "Section Break",
+			"label": "Project rules"
+		},
+		{
+			"fieldname": "project_status",
+			"fieldtype": "Check",
+			"label": "Project status out of date",
 			"default": "1"
 		},
 		{

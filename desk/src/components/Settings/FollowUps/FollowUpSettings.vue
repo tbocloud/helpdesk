@@ -239,6 +239,27 @@
         </SettingsSection>
 
         <SettingsSection
+          :title="__('Project rules')"
+          :description="
+            __(
+              'Project status updates are written on the Project status page and go out every Friday at 17:00 (Settings → Tasks).'
+            )
+          "
+        >
+          <SettingRow
+            v-slot="{ id }"
+            :label="__('Project status out of date')"
+            :description="
+              __(
+                'A project whose status update is more than 7 days old asks its lead and coordinators to write it. Projects on hold are left alone.'
+              )
+            "
+          >
+            <Switch :id="id" v-model="form.project_status" />
+          </SettingRow>
+        </SettingsSection>
+
+        <SettingsSection
           :title="__('Customer follow-up')"
           :description="autoCloseLine"
         >
@@ -489,6 +510,7 @@ const CHECKS = [
   "customer_replied",
   "awaiting_customer",
   "stale_leads",
+  "project_status",
   "customer_follow_up_email",
 ];
 
