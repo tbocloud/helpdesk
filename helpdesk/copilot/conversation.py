@@ -24,6 +24,7 @@ from frappe import _
 from frappe.utils import cint, escape_html, flt, get_fullname, now_datetime
 
 from helpdesk import client_api
+from helpdesk.automation import as_automation_user
 from helpdesk.copilot import settings as copilot_settings
 from helpdesk.copilot.assistant import button, card
 
@@ -651,7 +652,10 @@ def _raise(doc, transcript_only: bool = False):
             "subject": title,
             "description": _description(doc),
             "raised_by": doc.site_user,
+            "raised_by_name": doc.site_user_name,
         },
+        # "Just connect me" before a word: nothing to investigate, a person asks first
+        start_copilot=bool(_customer_text(doc)),
     )
     doc.db_set(
         {
@@ -837,7 +841,9 @@ def _to_ticket(doc, message, text: str, files: list[dict]):
         }
     )
     communication.flags.from_conversation = True
-    communication.insert(ignore_permissions=True)
+    # the site's call runs as Guest, who may not save the ticket the reply reopens
+    with as_automation_user():
+        communication.insert(ignore_permissions=True)
     message.db_set("communication", communication.name, update_modified=False)
     if files:
         frappe.enqueue(

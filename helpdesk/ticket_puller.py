@@ -112,7 +112,9 @@ def _already_imported(connection_name: str, client_ticket: str) -> bool:
     )
 
 
-def _create_hd_ticket(connection_name: str, customer: str, ticket: dict) -> str:
+def _create_hd_ticket(
+    connection_name: str, customer: str, ticket: dict, start_copilot: bool = True
+) -> str:
     """Create the Helpdesk ticket for a pulled customer request.
 
     HD Ticket only accepts a customer the contact belongs to unless an agent raises it,
@@ -122,7 +124,8 @@ def _create_hd_ticket(connection_name: str, customer: str, ticket: dict) -> str:
     as the automation user (docs/ticket-intake.md).
 
     AI triage fires automatically from the HD Ticket after_insert hook
-    (see hooks.py doc_events) — do not enqueue it again here.
+    (see hooks.py doc_events) — do not enqueue it again here. `start_copilot=False`
+    keeps Copilot off a ticket with nothing to investigate yet.
     """
     raised_by = _sender(ticket, customer, connection_name)
     if customer and raised_by:
@@ -143,9 +146,30 @@ def _create_hd_ticket(connection_name: str, customer: str, ticket: dict) -> str:
                 "custom_qcs_connection": connection_name,
                 "custom_client_ticket": ticket.get("name"),
             }
-        ).insert(ignore_permissions=True)
+        )
+        hd.flags.no_copilot_run = not start_copilot
+        hd.insert(ignore_permissions=True)
+    if raised_by:
+        _credit_opening_message(hd.name, raised_by, ticket.get("raised_by_name"))
 
     return hd.name
+
+
+def _credit_opening_message(ticket: str, sender: str, sender_name: str | None = None):
+    """HD Ticket records its description as a message from the session user (the
+    automation user here); the words are the customer's (as chatwoot_bridge does)."""
+    communication = frappe.qb.DocType("Communication")
+    name = sender_name or frappe.db.get_value(
+        "Contact", {"email_id": sender}, "full_name"
+    )
+    (
+        frappe.qb.update(communication)
+        .set(communication.sender, sender)
+        .set(communication.sender_full_name, name or sender)
+        .where(communication.reference_doctype == "HD Ticket")
+        .where(communication.reference_name == str(ticket))
+        .where(communication.sent_or_received == "Received")
+    ).run()
 
 
 def _sender(

@@ -217,7 +217,9 @@ sender wasn't a contact at all. Now:
   would come back to us.
 - The sender becomes a contact of the connection's customer (`add_customer_contact`).
 - The ticket is inserted as the automation user, so the import never depends on who the job
-  runs as.
+  runs as. HD Ticket records the description as a message from that user (shown as
+  `admin@example.com` when no automation user is set); the import then credits it to the
+  sender, with their contact's name (`_credit_opening_message`, as TBO Chat does).
 
 The two existing tickets raised by Administrator are not changed.
 

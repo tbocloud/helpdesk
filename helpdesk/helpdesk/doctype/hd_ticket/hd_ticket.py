@@ -908,6 +908,37 @@ class HDTicket(Document):
 
         return bool(int(skip))
 
+    def _emails_reply(self, skip_email_workflow, recipients, sender_email) -> bool:
+        """Whether an agent's reply also goes out by email. With no outgoing email account,
+        a ticket the customer follows in a chat or on their own site still gets the reply
+        there; any other ticket refuses the reply before anything is saved or sent."""
+        if skip_email_workflow or not frappe.db.get_single_value(
+            "HD Settings", "enable_reply_email_via_agent"
+        ):
+            return False
+        if recipients and not strip_chat_placeholders(recipients):
+            # a chat-only contact gets the reply in the chat (helpdesk.chatwoot_bridge)
+            return False
+        if sender_email:
+            return True
+        if not self.reaches_customer_without_email():
+            frappe.throw(
+                _("Unable to send email. Please setup default outgoing email account.")
+            )
+        return False
+
+    def reaches_customer_without_email(self) -> bool:
+        """A reply reaches the customer in the Copilot chat, in TBO Chat, or as a reply on
+        their own site's ticket (the ticket sync), so email is not the only way."""
+        from helpdesk.chatwoot_bridge import CONVERSATION as TBO_CHAT
+        from helpdesk.copilot.conversation import for_ticket
+
+        return bool(
+            (self.get("custom_qcs_connection") and self.get("custom_client_ticket"))
+            or for_ticket(self.name)
+            or frappe.db.exists(TBO_CHAT, {"hd_ticket": str(self.name)})
+        )
+
     def _resolve_sender_email(self, email_account_name, from_email_id):
         if not email_account_name:
             sender_email = self.sender_email()
@@ -1071,6 +1102,9 @@ class HDTicket(Document):
         if recipients == "Administrator":
             recipients = frappe.get_value("User", "Administrator", "email")
 
+        # decided before the reply is saved: its copy to the ticket's chat goes out on insert
+        emailing = self._emails_reply(skip_email_workflow, recipients, sender_email)
+
         communication = frappe.get_doc(
             {
                 "bcc": bcc,
@@ -1108,21 +1142,11 @@ class HDTicket(Document):
             self.attach_file_with_doc("HD Ticket", self.name, file_url)
             _attachments.append({"file_url": file_url})
 
-        if skip_email_workflow or not frappe.db.get_single_value(
-            "HD Settings", "enable_reply_email_via_agent"
-        ):
+        if not emailing:
             return
 
         if recipients:
             recipients = strip_chat_placeholders(recipients)
-            if not recipients:
-                # a chat-only contact gets the reply in the chat (helpdesk.chatwoot_bridge)
-                return
-
-        if not sender_email:
-            frappe.throw(
-                _("Unable to send email. Please setup default outgoing email account.")
-            )
 
         message = self.parse_content(message)
 

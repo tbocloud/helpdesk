@@ -616,6 +616,35 @@ class TestClientSiteImport(IntakeCase):
             "it@hamra-intake.example",
         )
 
+    def test_the_first_message_is_the_customers(self):
+        make_domain_customer("Sadu Intake")
+        connection = make_support_connection("Sadu Intake").name
+
+        name = _create_hd_ticket(
+            connection,
+            "Sadu Intake",
+            {
+                "name": "SUP-2026-90005",
+                "subject": "Stock report is empty",
+                "description": "<p>The stock report shows nothing since Monday.</p>",
+                "raised_by": "noor@sadu-intake.example",
+            },
+        )
+
+        # not the automation user's, who imported the ticket
+        self.assertEqual(
+            frappe.get_all(
+                "Communication",
+                filters={
+                    "reference_doctype": "HD Ticket",
+                    "reference_name": name,
+                    "sent_or_received": "Received",
+                },
+                fields=["sender", "sender_full_name"],
+            ),
+            [{"sender": "noor@sadu-intake.example", "sender_full_name": "noor"}],
+        )
+
 
 class TestFeedbackOnClose(IntakeCase):
     def setUp(self):

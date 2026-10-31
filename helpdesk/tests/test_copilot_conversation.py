@@ -20,6 +20,7 @@ from helpdesk.test_utils import (
     make_copilot_run,
     make_copilot_settings,
     make_support_connection,
+    make_ticket,
 )
 
 KEY = "pairing-key-of-the-site"
@@ -450,6 +451,55 @@ class TestTalkToAPerson(ChatCase):
         self.assertTrue(self.doc().ticket)
         self.assertIn("not said what it is about", json.dumps(self.told[0][1]))
 
+    def test_just_connect_me_before_a_word_starts_no_copilot_run(self):
+        frappe.db.set_value("HD Customer", self.customer, "custom_copilot_enabled", 1)
+        self.say(action="start")
+        self.say(action="person")
+        self.say(action="person_now")
+
+        self.assertFalse(
+            frappe.db.exists("HDS Copilot Run", {"ticket": self.doc().ticket})
+        )
+        self.assertIn("Copilot waits", json.dumps(self.told[0][1]))
+
+    def test_with_their_words_copilot_looks_into_it(self):
+        frappe.db.set_value("HD Customer", self.customer, "custom_copilot_enabled", 1)
+        self.say(action="start")
+        self.say(action="person")
+        self.say("the margin report lists the wrong invoices")
+
+        self.assertTrue(
+            frappe.db.exists("HDS Copilot Run", {"ticket": self.doc().ticket})
+        )
+
+    def test_after_the_hand_over_the_customers_messages_reach_the_ticket(self):
+        # the site's call arrives as Guest, who may not save the ticket the message reopens
+        frappe.set_user("Guest")
+        self.say(action="start")
+        self.say(action="person")
+        self.say(action="person_now")
+        self.say("want a customization in the user list")
+        frappe.set_user("Administrator")
+
+        received = frappe.get_all(
+            "Communication",
+            filters={
+                "reference_doctype": "HD Ticket",
+                "reference_name": self.doc().ticket,
+                "sent_or_received": "Received",
+            },
+            fields=["sender", "sender_full_name", "content"],
+        )
+        # the opening message and the new line, both the customer's
+        self.assertEqual(len(received), 2)
+        self.assertEqual(
+            {(r.sender, r.sender_full_name) for r in received},
+            {("ali@chat-trading.example", "Ali Hassan")},
+        )
+        self.assertTrue(
+            any("customization in the user list" in r.content for r in received)
+        )
+
     def test_copilot_keeps_quiet_to_the_customer_until_a_person_replies(self):
         self.say(action="start")
         self.say("my invoice will not submit")
@@ -598,6 +648,64 @@ class TestTheTicketsChannel(ChatCase):
             (payload["direction"], payload["text"]),
             ("Agent", "We are looking at SINV-0042."),
         )
+
+    def test_with_no_email_account_the_agents_reply_still_reaches_the_chat(self):
+        ticket = self.raised()
+        self.without_an_email_account()
+
+        frappe.get_doc("HD Ticket", ticket).reply_via_agent("<p>hi</p>")
+
+        self.assertTrue(
+            frappe.db.exists(
+                "Communication",
+                {"reference_name": ticket, "sent_or_received": "Sent"},
+            )
+        )
+        method, payload = self.pushed[-1]
+        self.assertEqual(
+            (method, payload["direction"], payload["text"]),
+            ("post_message", "Agent", "hi"),
+        )
+
+    def test_with_no_email_account_an_email_only_ticket_refuses_before_saving(self):
+        ticket = make_ticket(raised_by="ali@chat-trading.example")
+        self.without_an_email_account()
+
+        with self.assertRaisesRegex(frappe.ValidationError, "Unable to send email"):
+            ticket.reply_via_agent("<p>hi</p>")
+        self.assertFalse(
+            frappe.db.exists(
+                "Communication",
+                {"reference_name": ticket.name, "sent_or_received": "Sent"},
+            )
+        )
+
+        # a ticket on a connected site gets the reply there, through the ticket sync
+        ticket.db_set(
+            {
+                "custom_qcs_connection": self.connection,
+                "custom_client_ticket": "SUP-2026-00001",
+            }
+        )
+        ticket.reply_via_agent("<p>hi</p>")
+        self.assertTrue(
+            frappe.db.exists(
+                "Communication",
+                {"reference_name": ticket.name, "sent_or_received": "Sent"},
+            )
+        )
+
+    def without_an_email_account(self):
+        frappe.db.set_single_value(
+            "HD Settings",
+            {"skip_email_workflow": 0, "enable_reply_email_via_agent": 1},
+        )
+        patcher = patch(
+            "helpdesk.helpdesk.doctype.hd_ticket.hd_ticket.HDTicket._resolve_sender_email",
+            return_value=(None, None),
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def test_a_chat_in_arabic_gets_the_arabic_stage_text(self):
         ticket = self.raised()

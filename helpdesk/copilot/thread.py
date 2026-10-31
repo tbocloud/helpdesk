@@ -1350,6 +1350,10 @@ def on_hand_over(ticket: str, line: str = ""):
                 else _("They have not said what it is about yet."),
                 _(
                     "Copilot looks into it for you but says nothing to them until a person replies."
+                )
+                if line
+                else _(
+                    "Copilot waits: ask them in the chat, then press Start Copilot if it helps."
                 ),
             ],
             tone="warning",

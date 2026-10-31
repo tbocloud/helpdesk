@@ -293,10 +293,12 @@ The Support button in a customer's ERP opens a chat with TBO Copilot instead of 
   - text that looks like an instruction to the AI is flagged on the message, and is data in the prompt.
 - **Raise the ticket** on the summary creates the HD Ticket, as the ticket pull does (`via_customer_portal`, the connection). The description has the fields, the page context the import never read before (page, record, roles, recent errors) and the chat transcript.
   - The site then makes its own Support Ticket for it, Open with the hub's number, so the pull never imports it again. It sends **linked**, and the hub fetches the chat's files from that ticket (`import_files`).
-  - From then on the chat is the ticket's channel: the customer's messages become Received Communications (a Copilot run waiting for an answer gets it, as from email), and no AI runs.
+  - From then on the chat is the ticket's channel: the customer's messages become Received Communications (a Copilot run waiting for an answer gets it, as from email), and no AI runs. The site's call runs as Guest, so the message is saved as the automation user: it reopens the ticket, and Guest may not save a ticket. Until 31 Oct 2026 every such message failed with "That did not reach TBO Support".
+  - An agent's reply reaches the chat even when the hub has no outgoing email account. A ticket the customer follows in a chat (this one or TBO Chat) or on their own site skips the email instead of failing (`HDTicket.reaches_customer_without_email`). Any other ticket refuses the reply before anything is saved or sent. Before, the reply failed after its chat copy had gone, so the customer saw a reply the ticket did not keep.
   - **Talk to a person** raises the ticket with the transcript at any point. When the customer has not said anything yet, the chat first asks "Sure. In one line, what is it about?" (state **Before a person**). Their line becomes the ticket's subject, or **Just connect me** raises it at once.
   - On a hand-over, the people on the ticket (else the Agent Managers) are told at once in Teams or their Copilot panel (`thread.on_hand_over`).
   - Copilot still looks into the ticket for the team, but its stage messages are held until a person has replied (`customer.quiet_for_customer`, as for a ticket the error watch raised).
+  - **Just connect me** before the customer has written anything starts no Copilot run: there is nothing to investigate, and a run would only guess from the page context. The people's card says Copilot waits. They ask in the chat, then press **Start Copilot** if it helps.
   - The ticket's context lists at most 8 of the user's roles.
 - **Limits:**
   - per customer, 10 messages a minute and 200 a day;
