@@ -555,6 +555,20 @@ class TestAFormTicketsChat(ChatCase):
                 "custom_client_ticket": "SUP-2026-00031",
             }
         )
+        # Phase 14: an unknown ticket makes the hub pull the site's new tickets once
+        self.pulled = []
+        self.import_on_pull = None
+        patcher = patch(
+            "helpdesk.ticket_puller.pull_connection", side_effect=self.fake_pull
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def fake_pull(self, connection):
+        self.pulled.append(connection)
+        if self.import_on_pull:
+            self.ticket.db_set("custom_client_ticket", self.import_on_pull)
+        return 1
 
     def open(self, client_ticket="SUP-2026-00031", client_conversation="SUPCONV-0031"):
         return self.say(
@@ -603,6 +617,24 @@ class TestAFormTicketsChat(ChatCase):
         self.ticket.db_set("custom_qcs_connection", other)
         with self.assertRaises(frappe.DoesNotExistError):
             self.open()
+        self.assertEqual(
+            self.pulled, [self.connection]
+        )  # it looked once, on its own site
+
+    def test_a_ticket_raised_a_moment_ago_is_picked_up_at_once(self):
+        # Phase 14: the form opens the new ticket's chat before the next pull
+        self.ticket.db_set("custom_client_ticket", None)
+        self.import_on_pull = "SUP-2026-00040"
+        frappe.set_user("Guest")  # as the site's call arrives
+        reply = self.open(client_ticket="SUP-2026-00040")
+        self.assertEqual(
+            frappe.session.user, "Guest"
+        )  # the pull's own user did not stay
+
+        self.assertEqual(
+            (reply["state"], reply["ticket"]), ("With a person", self.ticket.name)
+        )
+        self.assertEqual(self.pulled, [self.connection])
 
 
 class TestTheLimits(ChatCase):
@@ -791,3 +823,113 @@ class TestTheTicketsChannel(ChatCase):
             self.say(action="fixed")
             self.assertEqual(decided.call_args.args[:2], (ticket, True))
         self.assertEqual(self.doc().state, "Closed")
+
+
+class TestGetHelpWithAnError(ChatCase):
+    """Phase 14: from an error on a form, the record and the error are facts, not questions."""
+
+    def start(self, **context):
+        return self.say(
+            "Submit failed on Sales Invoice SINV-0042: Row 7: margin below minimum",
+            action="start",
+            context={
+                "ref_doctype": "Sales Invoice",
+                "ref_docname": "SINV-0042",
+                "shown_error": "Row 7:   margin below minimum",
+                "error_action": "Submit",
+                **context,
+            },
+        )
+
+    def test_the_record_and_the_error_are_not_asked_again(self):
+        reply = self.start()
+        doc = self.doc()
+
+        self.assertEqual(doc.records, "Sales Invoice SINV-0042")
+        self.assertEqual(doc.actual, "The system showed: Row 7: margin below minimum")
+        self.assertEqual(doc.steps, "Press Submit on Sales Invoice SINV-0042")
+        greeting = reply["messages"][-1]["text"]
+        self.assertIn("I have Sales Invoice SINV-0042 and the error", greeting)
+        self.assertIn("Since when", greeting)
+        self.assertTrue(
+            frappe.db.exists(
+                conversation.MESSAGE,
+                {
+                    "conversation": doc.name,
+                    "direction": "Customer",
+                    "text": ["like", "Submit failed on Sales Invoice SINV-0042%"],
+                },
+            )
+        )
+        self.assertEqual(self.ai_calls.call_count, 0)
+        self.assertIn("Error shown", conversation._description(doc))
+
+    def test_an_unknown_action_is_dropped_and_a_long_error_is_cut(self):
+        self.start(error_action="Delete everything", shown_error="x" * 900)
+        doc = self.doc()
+        context = json.loads(doc.context)
+        self.assertEqual(len(context["shown_error"]), conversation.MAX_ERROR)
+        self.assertNotIn("error_action", context)
+        self.assertFalse(doc.steps)
+
+    def test_without_an_error_it_greets_as_before(self):
+        reply = self.say(
+            action="start",
+            context={"ref_doctype": "Sales Invoice", "ref_docname": "SINV-0042"},
+        )
+        self.assertIn("I see you are on", reply["messages"][-1]["text"])
+        self.assertFalse(self.doc().actual)
+
+
+class TestJoiningAColleaguesTicket(ChatCase):
+    """Phase 14: "This is my issue, add me to it": nothing new is raised, the ticket notes the follower."""
+
+    def setUp(self):
+        super().setUp()
+        self.ticket = make_ticket(
+            subject="Invoices blocked by the margin rule",
+            raised_by="sara@chat-trading.example",
+        )
+        self.ticket.db_set(
+            {
+                "custom_qcs_connection": self.connection,
+                "custom_client_ticket": "SUP-2026-00031",
+            }
+        )
+
+    def test_it_notes_the_follower_and_closes_the_chat(self):
+        self.say(action="start")
+        self.answers.append(
+            {"next": "question", "text": "Which invoice?", "language": "en"}
+        )
+        self.say("my invoices are blocked by the margin rule too")
+        tickets = frappe.db.count("HD Ticket")
+
+        reply = self.say(action="joined", client_ticket="SUP-2026-00031")
+
+        self.assertEqual(reply["state"], "Closed")
+        self.assertIn("You now follow SUP-2026-00031", reply["messages"][-1]["text"])
+        self.assertEqual(frappe.db.count("HD Ticket"), tickets)
+        note = frappe.get_all(
+            "HD Ticket Comment",
+            filters={"reference_ticket": self.ticket.name},
+            pluck="content",
+        )
+        self.assertEqual(len(note), 1)
+        self.assertIn(
+            "Ali Hassan (ali@chat-trading.example) has the same problem", note[0]
+        )
+        self.assertIn("blocked by the margin rule too", note[0])
+
+    def test_a_ticket_from_another_site_cannot_be_joined(self):
+        other = make_support_connection(create_customer("Other Chat Co").name).name
+        self.ticket.db_set("custom_qcs_connection", other)
+        self.say(action="start")
+        with self.assertRaises(frappe.DoesNotExistError):
+            self.say(action="joined", client_ticket="SUP-2026-00031")
+
+    def test_a_chat_that_is_a_ticket_joins_nothing(self):
+        self.gathered()
+        self.say(action="raise")
+        with self.assertRaises(frappe.ValidationError):
+            self.say(action="joined", client_ticket="SUP-2026-00031")

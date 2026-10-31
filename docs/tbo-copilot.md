@@ -312,6 +312,10 @@ The Support button in a customer's ERP opens a chat with TBO Copilot instead of 
     - The customer's **It's fixed** (`decide_resolution`), their close request and their email feedback still close it (`flags.closed_by_customer`). Merging still closes the duplicate.
     - Auto-close skips these tickets: they wait for the customer however long it takes, and the site reminds them every 3 days.
     - Tickets that came by email are not affected.
+- **Help from where the problem is (Phase 14).** The site's Get help and Get help with this error (helpdesk_client README) reach the hub through the chat's start:
+  - **The record and the error as facts:** the start context may carry `shown_error` (500 characters at most) and `error_action` (Save, Submit, Cancel, Update or Amend; anything else is dropped). The conversation's **Records**, **What happened** ("The system showed: …") and, with the action, **Steps** ("Press Submit on …") are filled at once, the greeting says so and asks since when, and the ticket's context lists the error. A hub without this ignores the keys.
+  - **A form ticket's chat at once:** when `open_ticket` names a ticket the hub has not pulled yet, the hub pulls that site's new tickets once (`ticket_puller.pull_connection`, under its lock) and links the chat. Today's tickets keep working as before.
+  - **Joining a colleague's ticket** (hub action `joined`): the customer follows an open ticket from their own site instead of raising one. The hub checks the ticket came from that connection, adds an internal note "Name (email) has the same problem…" with what they said, and closes their chat without a ticket.
 - **Limits:**
   - per customer, 10 messages a minute and 200 a day;
   - per conversation, a dollar cap (0.25) and 40 turns;

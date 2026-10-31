@@ -64,7 +64,11 @@ ACTIONS = (
     "fixed",
     "still_broken",
     "open_ticket",
+    "joined",
 )
+# what a customer pressed on a form when the error came (Get help with this error, Phase 14)
+FORM_ACTIONS = ("Save", "Submit", "Cancel", "Update", "Amend")
+MAX_ERROR = 500
 # what a customer's site advertises when its Support button opens the chat (helpdesk_client)
 CHAT_CAPABILITY = "chat_v1"
 SIGNING_CONTEXT = b"conversation-v1"
@@ -251,6 +255,17 @@ def _ticket_chat(connection: str, payload: dict, email: str, user: dict):
         {"custom_qcs_connection": connection, "custom_client_ticket": client_ticket},
         "name",
     )
+    if not ticket and client_ticket:
+        # a form ticket raised a moment ago (Phase 14): pick it up now, not at the next pull
+        _pull_now(connection)
+        ticket = frappe.db.get_value(
+            "HD Ticket",
+            {
+                "custom_qcs_connection": connection,
+                "custom_client_ticket": client_ticket,
+            },
+            "name",
+        )
     if not ticket:
         frappe.throw(
             _("TBO Support has no such ticket from this site."),
@@ -287,8 +302,26 @@ def _ticket_chat(connection: str, payload: dict, email: str, user: dict):
     ).insert(ignore_permissions=True)
 
 
+def _pull_now(connection: str) -> None:
+    """Import the site's new form tickets now; never breaks the chat (the next pull tries again)."""
+    from helpdesk.ticket_puller import pull_connection
+
+    user = frappe.session.user
+    try:
+        pull_connection(connection)
+    except Exception:
+        frappe.log_error(
+            title=f"Form ticket not picked up for {connection}",
+            message=frappe.get_traceback(),
+        )
+    finally:
+        if frappe.session.user != user:
+            frappe.set_user(user)
+
+
 def _context(context: dict) -> dict:
-    """What the site saw: the page and record, the user's roles, their recent errors, the app versions."""
+    """What the site saw: the page and record, the user's roles, their recent errors, the app versions;
+    from Get help with this error (Phase 14), the error as the user saw it and what they pressed."""
     keep = (
         "page_route",
         "ref_doctype",
@@ -297,7 +330,14 @@ def _context(context: dict) -> dict:
         "error_logs",
         "code_identity",
     )
-    return {key: context[key] for key in keep if context.get(key)}
+    kept = {key: context[key] for key in keep if context.get(key)}
+    error = " ".join(str(context.get("shown_error") or "").split())[:MAX_ERROR]
+    if error:
+        kept["shown_error"] = error
+        action = str(context.get("error_action") or "").strip()
+        if action in FORM_ACTIONS:
+            kept["error_action"] = action
+    return kept
 
 
 def _record(doc, direction: str, kind: str, text: str = "", **values):
@@ -355,9 +395,51 @@ def _customer_said(doc, text: str, files: list[dict]):
         _to_ticket(doc, message, text, files)
 
 
+def _known_facts(doc, context: dict) -> bool:
+    """Get help with this error (Phase 14): the record and the error are facts, so the model does not
+    ask for them again. True when there was an error."""
+    kept = _context(context)
+    error = kept.get("shown_error")
+    if not error:
+        return False
+    record = " ".join(filter(None, (kept.get("ref_doctype"), kept.get("ref_docname"))))
+    facts = {"actual": _("The system showed: {0}").format(error)}
+    if record:
+        facts["records"] = record
+        if kept.get("error_action"):
+            facts["steps"] = _("Press {0} on {1}").format(
+                _(kept["error_action"]), record
+            )
+    doc.db_set(facts, update_modified=False)
+    return True
+
+
+def _greet_error(doc, first: str):
+    page = _page(doc)
+    record = " ".join(filter(None, (page.get("ref_doctype"), page.get("ref_docname"))))
+    if doc.language == "ar":
+        text = (
+            "مرحبًا {0}. لدي {1} والخطأ، فلا داعي لكتابتهما. منذ متى يحدث هذا؟".format(
+                first, record or "الصفحة"
+            ).replace("  ", " ")
+        )
+    else:
+        text = _(
+            "Hi {0}. I have {1} and the error, so you don't need to type them. Since when does this happen?"
+        ).format(first, record or _("the page"))
+    _say(
+        doc,
+        "Question",
+        text,
+        card("", [text], actions=[button(_("Talk to a person"), "person")]),
+    )
+
+
 def _greet(doc, context: dict, user: dict):
     settings = copilot_settings.get_settings()
     first = (str(user.get("name") or "").split() or [""])[0]
+    if _known_facts(doc, context):
+        return _greet_error(doc, first)
     where = ""
     if context.get("ref_doctype") and context.get("ref_docname"):
         where = _("I see you are on {0} {1}. ").format(
@@ -648,6 +730,8 @@ def _act(doc, action: str, payload: dict):
         return _raise(doc)
     if action == "linked":
         return _linked(doc, str(payload.get("client_ticket") or "")[:140])
+    if action == "joined":
+        return _joined(doc, str(payload.get("client_ticket") or "")[:140])
     if action == "change":
         doc.db_set("state", "Talking", update_modified=False)
         return _say(doc, "Question", _("Of course. What should I change or add?"))
@@ -718,6 +802,52 @@ def _raise(doc, transcript_only: bool = False):
         else _("Ticket #{0} is raised. Our team will answer you here.").format(ticket)
     )
     return _say(doc, "Ticket", text, card("", [text], facts=[(_("Ticket"), ticket)]))
+
+
+def _joined(doc, client_ticket: str):
+    """The customer follows a colleague's open ticket with the same problem (Phase 14): nothing new is
+    raised, the ticket notes one more person has it, and this chat closes."""
+    from helpdesk.copilot import customer
+
+    if doc.ticket:
+        frappe.throw(_("This chat is about a ticket already."))
+    ticket = client_ticket and frappe.db.get_value(
+        "HD Ticket",
+        {
+            "custom_qcs_connection": doc.connection,
+            "custom_client_ticket": client_ticket,
+        },
+        "name",
+    )
+    if not ticket:
+        frappe.throw(
+            _("TBO Support has no such ticket from this site."),
+            frappe.DoesNotExistError,
+        )
+    said = " ".join(reversed(_customer_text(doc)))[:600]
+    who = doc.site_user_name or doc.site_user
+    customer.comment(
+        ticket,
+        "<p>{0}</p>{1}".format(
+            escape_html(
+                _(
+                    "{0} ({1}) has the same problem and now follows this ticket on their site."
+                ).format(who, doc.site_user)
+            ),
+            f"<p>{escape_html(said)}</p>" if said else "",
+        ),
+    )
+    doc.db_set("state", "Closed", update_modified=False)
+    text = (
+        "أنت الآن تتابع {0} مع زملائك، وتظهر تحديثاتها في تذاكرك. لم تُرفع تذكرة جديدة.".format(
+            client_ticket
+        )
+        if doc.language == "ar"
+        else _(
+            "You now follow {0} with your colleagues: its updates show in your Tickets. Nothing new was raised."
+        ).format(client_ticket)
+    )
+    return _say(doc, "Text", text)
 
 
 def _linked(doc, client_ticket: str):
@@ -811,6 +941,7 @@ def _description(doc) -> str:
                     filter(None, (page.get("ref_doctype"), page.get("ref_docname")))
                 ),
             ),
+            (_("Error shown"), page.get("shown_error")),
             (_("Roles"), _roles(page.get("user_roles") or [])),
             (_("Recent errors"), "; ".join(page.get("errors") or [])),
         )
@@ -847,6 +978,8 @@ def _page(doc) -> dict:
         "page_route": context.get("page_route"),
         "ref_doctype": context.get("ref_doctype"),
         "ref_docname": context.get("ref_docname"),
+        "shown_error": context.get("shown_error"),
+        "error_action": context.get("error_action"),
         "user_roles": frappe.parse_json(roles)
         if isinstance(roles, str)
         else roles or [],
