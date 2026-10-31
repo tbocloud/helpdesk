@@ -4517,3 +4517,57 @@ def outbox(rows: list[dict] | None = None, **fields) -> dict:
         "opt_out": "If you would rather not hear from us, reply unsubscribe.",
         **fields,
     }
+
+
+def commission_person(user: str = "bde@x.example", **fields) -> dict:
+    """One person's month as the ERP site's get_commission lists it: 3,00,000 collected on one
+    project against a 2,00,000 target, on slab 3 at the above-target rate, ₹11,000 as a Draft."""
+    return {
+        "user": user,
+        "full_name": "Bina",
+        "plans": ["Default"],
+        "collected": 300000.0,
+        "target": 200000.0,
+        "achievement": 150.0,
+        "reached": {"slab_no": 3, "rate": 6.0, "above_target": 1},
+        "commission": 11000.0,
+        "statement": None,
+        "status": None,
+        "frozen": 0,
+        "approved_by": None,
+        "approved_on": None,
+        "paid_on": None,
+        "projects": [
+            {
+                "project": "PROJ-0001",
+                "plan": "Default",
+                "collected": 300000.0,
+                "share_percent": 100.0,
+                "credited": 300000.0,
+                "target": 200000.0,
+                "commission": 11000.0,
+            }
+        ],
+        "breakdown": [],
+        "payments": [],
+        **fields,
+    }
+
+
+def commission_month(rows: list[dict] | None = None, **fields) -> dict:
+    """The ERP site's get_commission answer for a manager: `rows`, their totals and no
+    unattributed money unless `unattributed` is given."""
+    rows = [commission_person()] if rows is None else rows
+    return {
+        "month": "2026-10-01",
+        "currency": "INR",
+        "scope": "all",
+        "can_manage": True,
+        "rows": rows,
+        "totals": {
+            "collected": sum(r["collected"] for r in rows),
+            "commission": sum(r["commission"] for r in rows),
+        },
+        "unattributed": None,
+        **fields,
+    }

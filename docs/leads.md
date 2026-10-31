@@ -334,6 +334,58 @@ status filters, an older ERP site, the ERP site's refusals reaching the person, 
 with its channel, the names checked before the ERP site is asked, edits trimmed, no leads access,
 the reply-class filter).
 
+## Commission
+
+Commission is a percentage of the money **collected** on a project, per month, in progressive
+slabs with a higher rate above a target. The ERP site holds the plans, the project set-ups and the
+statements and works the money out from its customer receipts (TBO Smart's `docs/commission.md` is
+the spec, `docs/hub-leads-api.md` section 2.18 the contract). The hub proxies
+`tbo_smart.api.hub_commission` through `helpdesk/api/commission.py` (`get_commission`,
+`generate_statements`, `approve_statement`, `mark_paid`, `get_commission_plans`,
+`save_commission_plan`, `get_project_commission`, `save_project_commission`). Nothing is cached;
+an older TBO Smart answers `available: false` (reads) or "needs the latest TBO Smart" (writes).
+
+**Where it lives, and why.** A **Commission** tab on Leads, not a Scoreboard section. It needs a
+month, a person-then-project drill-down and approval actions, and the Scoreboard is a live
+activity count; the tab sits beside Business and the Daily report, which are the other
+"report for a period" views, and it reads as one purpose: who earns what this month.
+
+**The tab** (`LeadsCommission.vue`, `CommissionPayments.vue`). A month picker (this month and the
+12 before) and, for managers, **Generate drafts** (the one primary action; approved statements are
+left as they are and the toast says how many). Tiles: collected and commission (for a salesperson
+"My collected" and "My commission", with the target reached and the slab), people, and, for managers,
+**Unattributed**. One card per person: collected with an achievement bar against the target (the
+percentage is always written; the bar turns green at 100%), the slab reached, commission and the
+status (Draft, Approved, Paid, or "Not drafted"). A manager sees **Approve** on a Draft and **Mark
+paid** on an Approved statement. A card opens to the projects (collected, share, commission), the
+slab breakdown (each slab's part of the money, its rate, whether it was above target) and the
+payments. An approved or paid statement is shown as approved and says so. What a person may see is
+decided on the ERP site: a salesperson only themselves (their card opens by itself), a department
+head their department, a manager everyone. **Unattributed** explains in words that it is money that
+could not be followed to a project and a person (an advance not matched to an order or invoice, an
+order with no project, a lead with no owner), lists the reasons with amounts and opens to the
+payments. States: loading skeletons, an error with Try again (and a banner over stale figures), "needs
+the latest TBO Smart", and an empty month that says what makes commission appear.
+
+**Commission plans** (Settings → CRM, `CommissionPlans.vue`, `CommissionSlabs.vue`; System Manager and
+managers). A plan has optional conditions (department, lead type, project type, person), a basis
+(Project collected: each project's money through the slabs on its own, target per project; Collected
+(all): the person's whole month once, target per person), a monthly target, an above-target rate and
+slabs (from, to blank for no limit, rate). The dialog checks the slabs as you type and shows a live
+example, "On Rs 3,00,000 collected: Rs X", with the slab pieces under it; the maths is the same as the
+ERP site's (`previewCommission` in `commission.ts`), which has the last word on save. The plan whose
+conditions all hold and match the most wins: person, then project type, lead type, department.
+
+**Project page** (`ProjectCommission.vue`, a **Commission** tab for managers). Who earns on the
+project with their shares (they must add up to 100), the plan (or "Match by rules") or the project's
+own slabs, what was collected on the project so far and the commission credited in statements. With
+no earners the owner of the lead behind each payment earns all of it. The project name defaults to
+the hub project; type the ERP Project name when the invoices use another.
+
+Tests: `helpdesk/tests/test_commission.py` (reads live as the person and never cached, filters
+trimmed, an older ERP site hidden quietly, refusals, writes as POSTs, plan and project values sent as
+JSON). The ERP site's own tests cover the maths, attribution and statements.
+
 ## Hub endpoints
 
 `helpdesk/api/leads.py`, thin typed proxies (writes are POST only): `get_options`,
