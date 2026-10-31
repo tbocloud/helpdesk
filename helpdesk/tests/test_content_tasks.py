@@ -695,7 +695,7 @@ class TestSeveralPeopleAndVideoEditor(ContentTaskCase):
         self.assertFalse(has_permission(post, "read", OTHER[0]))
         post.set_people("marketer", [MARKETER[0], OTHER[0]])
         post.save(ignore_permissions=True)
-        self.assertIsNone(has_permission(post, "read", OTHER[0]))
+        self.assertTrue(has_permission(post, "read", OTHER[0]))
         frappe.set_user(OTHER[0])
         self.assertIn(post.name, frappe.get_list("HD Content Post", pluck="name"))
 
