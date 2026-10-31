@@ -2114,10 +2114,12 @@ def freeze_work_day(test, hour: int = 11, minute: int = 0) -> datetime:
 
     from frappe.utils import add_days
 
-    from helpdesk.work_hours import is_working_day
+    from helpdesk.work_hours import work_windows
 
+    # a day with work hours, not just off the holiday list: a Saturday can be a working day
+    # on the calendar yet have no hours on the default SLA
     day = getdate()
-    while not (is_working_day(day) and is_working_day(add_days(day, -1))):
+    while not (work_windows(day) and work_windows(add_days(day, -1))):
         day = add_days(day, -1)
     moment = datetime.combine(day, time(hour, minute))
     # it keeps ticking: saving a document twice in one frozen second fails

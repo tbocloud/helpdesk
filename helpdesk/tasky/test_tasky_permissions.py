@@ -16,6 +16,7 @@ from helpdesk.tasky import api
 from helpdesk.test_utils import (
     create_customer,
     create_user,
+    freeze_work_day,
     make_assignment,
     make_project,
     make_tasky_user,
@@ -47,6 +48,8 @@ class TestTaskyPermissions(FrappeTestCase):
         frappe.db.commit()  # nosemgrep
 
     def setUp(self):
+        # completing a task checks its hours against the work day
+        freeze_work_day(self)
         # the tasky API commits; keep each test's data inside its own transaction
         commit = patch.object(frappe.db, "commit")
         commit.start()

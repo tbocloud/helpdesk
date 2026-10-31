@@ -51,6 +51,8 @@ TEAMMATE = ("teammate.control@work-control.example", "Anjali Menon")
 class WorkControlCase(FrappeTestCase):
     def setUp(self):
         hold_commits(self)
+        # completing and timing tasks depend on a working day, whatever day the suite runs
+        freeze_work_day(self)
         self.addCleanup(frappe.set_user, "Administrator")
 
         create_customer(CUSTOMER)
