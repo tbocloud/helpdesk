@@ -1185,17 +1185,15 @@ def permission_query(user: str | None = None) -> str | None:
     )
 
 
-def has_permission(
-    doc, ptype: str | None = None, user: str | None = None
-) -> bool | None:
+def has_permission(doc, ptype: str | None = None, user: str | None = None) -> bool:
     user = user or frappe.session.user
     if ptype == "create":
-        return None
+        return True
     if not in_content_team(user):
         return False
     if _is_content_lead(user):
-        return None
+        return True
     on_team = any(user in people for people in team_of(doc).values())
     if on_team or user == doc.owner or doc.customer in member_customers(user):
-        return None
+        return True
     return False

@@ -40,9 +40,7 @@ def permission_query(user: str | None = None) -> str | None:
     )
 
 
-def has_permission(
-    doc, ptype: str | None = None, user: str | None = None
-) -> bool | None:
+def has_permission(doc, ptype: str | None = None, user: str | None = None) -> bool:
     from helpdesk.helpdesk.doctype.hd_content_post.hd_content_post import (
         _is_content_lead,
         member_customers,
@@ -52,7 +50,7 @@ def has_permission(
     if is_sales_employee(user):
         return False
     if ptype == "create" or _is_content_lead(user):
-        return None
+        return True
     if doc.owner == user or doc.customer in member_customers(user):
-        return None
+        return True
     return False
