@@ -47,7 +47,7 @@
               inputmode="decimal"
               step="0.25"
               min="0.25"
-              :max="MAX_HOURS"
+              :max="leftFor(row.date) ?? MAX_HOURS"
               class="w-24 shrink-0"
               :placeholder="__('Hours')"
               :aria-label="__('Hours on day {0}', String(index + 1))"
@@ -64,23 +64,11 @@
               </template>
             </Button>
           </div>
-          <p
-            v-if="row.long"
-            class="flex items-start gap-1.5 text-p-xs text-warning"
-          >
-            <LucideTriangleAlert
-              class="mt-0.5 size-3.5 shrink-0"
-              aria-hidden="true"
-            />
-            {{
-              __(
-                "The timer ran over {0} hours this day. Was it left running? Check the hours.",
-                String(LONG_DAY_HOURS)
-              )
-            }}
-          </p>
-          <p v-if="row.fromTimer" class="text-p-xs text-ink-gray-5">
-            {{ __("From the timer: {0} h", String(row.fromTimer)) }}
+          <p class="text-p-xs tabular-nums text-ink-gray-5">
+            <template v-if="row.fromTimer">
+              {{ __("From the timer: {0} h", String(row.fromTimer)) }} ·
+            </template>
+            {{ leftLabel(row) }}
           </p>
         </div>
         <div class="flex items-center justify-between gap-2">
@@ -180,14 +168,11 @@ import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucidePlus from "~icons/lucide/plus";
 import LucideTimer from "~icons/lucide/timer";
-import LucideTriangleAlert from "~icons/lucide/triangle-alert";
 import LucideX from "~icons/lucide/x";
 import { PENDING_REVIEW } from "../taskMeta";
 
 /** A day's cap: MAX_HOURS_PER_COMPLETION in helpdesk/tasky/api.py. */
 const MAX_HOURS = 24;
-/** LONG_DAY_HOURS in helpdesk/tasky/time_sessions.py. */
-const LONG_DAY_HOURS = 10;
 
 interface CompletableTask {
   name: string;
@@ -231,13 +216,11 @@ interface DayRow {
   hours: string;
   /** what the timer recorded that day, shown beside the row */
   fromTimer?: number;
-  long?: boolean;
 }
 
 interface CompletionDay {
   date: string;
   hours: number;
-  long: boolean;
 }
 
 const formId = `tasky-complete-task-${useId()}`;
@@ -249,6 +232,10 @@ const hoursErrorId = `${formId}-hours-error`;
 // the site's today, from the server when the days load (the browser's clock and time zone
 // can differ from the site's); the browser's until then
 const today = ref(dayjs().format("YYYY-MM-DD"));
+// hours still free on each day (a day holds at most the work day, counting what the person
+// already has on it), and the oldest day hours can be typed in for: both from the server
+const left = ref<Record<string, number>>({});
+const yesterday = ref("");
 const earliest = computed(() =>
   props.task?.creation
     ? dayjsLocal(props.task.creation).format("YYYY-MM-DD")
@@ -269,12 +256,16 @@ async function loadDays(task: string) {
   const request = ++daysRequest;
   daysLoading.value = true;
   try {
-    const data: { today: string; days: CompletionDay[] } = await call(
-      "helpdesk.tasky.api.get_completion_days",
-      { task }
-    );
+    const data: {
+      today: string;
+      yesterday: string;
+      days: CompletionDay[];
+      left: Record<string, number>;
+    } = await call("helpdesk.tasky.api.get_completion_days", { task });
     if (request !== daysRequest || props.task?.name !== task) return;
     today.value = data.today || today.value;
+    yesterday.value = data.yesterday || "";
+    left.value = data.left || {};
     fillRows(data.days || []);
   } catch {
     // without the days, the timer's total goes on today, as before
@@ -289,11 +280,13 @@ async function loadDays(task: string) {
 function fillRows(data: CompletionDay[]) {
   rows.value = [];
   for (const d of data) {
-    const hours = Math.min(Math.round(d.hours * 4) / 4, MAX_HOURS);
+    const hours = Math.min(
+      Math.round(d.hours * 4) / 4,
+      leftFor(d.date) ?? MAX_HOURS
+    );
     if (hours > 0)
       addRow(d.date, String(hours), {
         fromTimer: Math.round(d.hours * 100) / 100,
-        long: d.long,
       });
   }
   const tracked = data.reduce((n, d) => n + d.hours, 0);
@@ -325,6 +318,19 @@ const completeTask = createResource({
   // shown inline so the hours and notes aren't lost
   onError() {},
 });
+
+function leftFor(date: string): number | undefined {
+  return date in left.value ? left.value[date] : undefined;
+}
+
+function leftLabel(row: DayRow) {
+  const free = leftFor(row.date);
+  if (free === undefined) return "";
+  const hours = String(Math.round(free * 100) / 100);
+  return row.date === today.value
+    ? __("{0} h left today", hours)
+    : __("{0} h left this day", hours);
+}
 
 const rowHours = (row: DayRow) =>
   String(row.hours ?? "").trim() === "" ? NaN : Number(row.hours);
@@ -361,6 +367,19 @@ const hoursError = computed(() => {
     if (!(h > 0)) return __("Hours must be more than 0.");
     if (h > MAX_HOURS)
       return __("A day has at most {0} hours.", String(MAX_HOURS));
+    // typed-in hours are for today or yesterday; older days only keep what the timer recorded
+    if (yesterday.value && row.date < yesterday.value && !row.fromTimer)
+      return __(
+        "{0} is too long ago to enter hours by hand. Log hours for today or yesterday.",
+        row.date
+      );
+    const free = leftFor(row.date);
+    if (free !== undefined && h > free + 0.01)
+      return __(
+        "{0}: you can log at most {1} h more; a working day has a limit.",
+        row.date,
+        String(Math.round(free * 100) / 100)
+      );
   }
   return "";
 });

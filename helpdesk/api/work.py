@@ -37,7 +37,7 @@ from helpdesk.tasky.permissions import (
     is_project_manager,
     is_tasky_admin,
 )
-from helpdesk.utils import agent_only, assigned_to_filter
+from helpdesk.utils import agent_only, aggregate, assigned_to_filter
 from helpdesk.work_calendar import on_leave
 
 KEY_TICKET_PRIORITIES = ("Urgent", "High")
@@ -655,7 +655,9 @@ def _open_project_count(task_filters: dict, by_assignee: bool) -> int:
         filters["name"] = ("in", [p for p in projects if p] or [""])
     elif "project" in task_filters:
         filters["name"] = task_filters["project"]
-    rows = frappe.get_list("Project", filters=filters, fields=["count(name) as count"])
+    rows = frappe.get_list(
+        "Project", filters=filters, fields=[aggregate("count", "name", "count")]
+    )
     return rows[0].count if rows else 0
 
 
@@ -716,7 +718,7 @@ def _tasks_by_project(task_filters: dict) -> list[dict]:
     rows = frappe.get_list(
         "Task",
         filters=filters,
-        fields=["project", "count(*) as count"],
+        fields=["project", aggregate("count", "*", "count")],
         group_by="project",
         order_by="count desc, project asc",
         limit_page_length=TOP_PROJECTS,
@@ -777,7 +779,7 @@ def _latest_summaries(customers: set[str]) -> dict:
     latest = frappe.get_list(
         "HD Work Summary",
         filters={"customer": ("in", list(customers))},
-        fields=["customer", "max(period_end) as period_end"],
+        fields=["customer", aggregate("max", "period_end", "period_end")],
         group_by="customer",
         order_by="customer asc",
     )

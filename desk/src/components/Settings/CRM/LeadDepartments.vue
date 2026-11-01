@@ -181,6 +181,11 @@
           {{ __("Members see the leads they own.") }}
         </p>
       </div>
+      <CallBatchRules
+        v-if="hasBatches"
+        v-model="rules"
+        :members="form.members.map((m) => ({ label: m, value: m }))"
+      />
       <Switch v-model="form.is_active" :label="__('Active')" />
       <div
         v-if="errorMessage"
@@ -234,7 +239,14 @@ import { computed, onMounted, reactive, ref, useId } from "vue";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucidePencil from "~icons/lucide/pencil";
 import LucidePlus from "~icons/lucide/plus";
+import {
+  rulesFrom,
+  rulesPayload,
+  rulesProblem,
+  type CallRules,
+} from "@/pages/leads/callBatches";
 import SettingsSection from "../SettingsSection.vue";
+import CallBatchRules from "./CallBatchRules.vue";
 
 const { agents } = useAgentStore();
 const formId = `lead-department-${useId()}`;
@@ -304,6 +316,15 @@ const hasAssignment = computed(
     departments.value.some((d) => d.assignment !== undefined)
 );
 
+// the call-batch rules show once the ERP site's departments carry them
+const hasBatches = computed(
+  () =>
+    !departments.value.length ||
+    departments.value.some(
+      (d) => (d as LeadDepartment & Partial<CallRules>).call_slots !== undefined
+    )
+);
+
 const assignmentOptions = Object.entries(ASSIGNMENT_LABELS).map(
   ([value, label]) => ({ label, value })
 );
@@ -322,6 +343,7 @@ const showDialog = ref(false);
 const editing = ref<LeadDepartment | null>(null);
 const errorMessage = ref("");
 const saving = ref(false);
+const rules = ref<CallRules>(rulesFrom());
 const form = reactive<DepartmentForm>({
   department_name: "",
   lead_type: "",
@@ -344,6 +366,7 @@ function openDialog(department: LeadDepartment | null) {
     heads: department?.heads.map((p) => p.user) ?? [],
     members: department?.members.map((p) => p.user) ?? [],
   });
+  rules.value = rulesFrom(department as Partial<CallRules> | null);
   showDialog.value = true;
 }
 
@@ -358,6 +381,11 @@ function save() {
     errorMessage.value = __("Give the alert a number of days, 1 or more.");
     return;
   }
+  const problem = hasBatches.value ? rulesProblem(rules.value) : "";
+  if (problem) {
+    errorMessage.value = problem;
+    return;
+  }
   errorMessage.value = "";
   saving.value = true;
   const { assignment, stale_after_days, ...values } = form;
@@ -366,6 +394,7 @@ function save() {
     values: {
       ...values,
       ...(hasAssignment.value ? { assignment, stale_after_days: days } : {}),
+      ...(hasBatches.value ? rulesPayload(rules.value) : {}),
       department_name: form.department_name.trim(),
       is_active: form.is_active ? 1 : 0,
     },

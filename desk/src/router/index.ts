@@ -159,6 +159,11 @@ const portalRoutes = [
     component: () => import("@/pages/leads/Leads.vue"),
   },
   {
+    path: "/leads/prospects",
+    name: "FindProspects",
+    component: () => import("@/pages/leads/FindProspects.vue"),
+  },
+  {
     path: "/leads/:leadId",
     name: "Lead",
     component: () => import("@/pages/leads/Lead.vue"),
@@ -233,6 +238,18 @@ const portalRoutes = [
     path: "/projects/:projectId/credentials",
     name: "TaskyCredentials",
     component: () => import("@/pages/tasky/ProjectCredentials.vue"),
+    props: true,
+  },
+  {
+    path: "/projects/:projectId/meta",
+    name: "TaskyMeta",
+    component: () => import("@/pages/tasky/ProjectMeta.vue"),
+    props: true,
+  },
+  {
+    path: "/projects/:projectId/commission",
+    name: "TaskyCommission",
+    component: () => import("@/pages/tasky/ProjectCommission.vue"),
     props: true,
   },
   {

@@ -55,6 +55,8 @@ import TboChatSettings from "./Chat/TboChatSettings.vue";
 import LucideMessageCircle from "~icons/lucide/message-circle";
 import LucideMessagesSquare from "~icons/lucide/messages-square";
 import GitHubSettings from "./GitHub/GitHubSettings.vue";
+import MetaSettings from "./Meta/MetaSettings.vue";
+import LucideShare2 from "~icons/lucide/share-2";
 import AIProviderSettings from "./AI/AIProviderSettings.vue";
 import SalesSettings from "./Sales/SalesSettings.vue";
 import LucideReceipt from "~icons/lucide/receipt";
@@ -262,6 +264,13 @@ export const tabs = computed(() => {
           condition: () => auth.isAdmin || auth.isManager,
         },
         {
+          label: __("Meta"),
+          icon: markRaw(LucideShare2),
+          component: markRaw(MetaSettings),
+          // HD Meta Settings through helpdesk.api.meta, which checks System Manager
+          condition: () => auth.isAdmin,
+        },
+        {
           label: __("AI providers"),
           icon: markRaw(LucideBot),
           component: markRaw(AIProviderSettings),
@@ -334,6 +343,7 @@ type TabName =
   | "Chat & Teams"
   | "TBO Chat"
   | "GitHub"
+  | "Meta"
   | "AI providers"
   | "Sign-off templates"
   | "File storage"

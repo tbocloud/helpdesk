@@ -402,6 +402,24 @@ from the tasks the viewer can see, so a plain member's card counts their own tas
   [departments.md](departments.md)). Counts on tabs and chips follow the other filters.
 - **URL**: `status` (Open is the default and left out), `department` (`__none__` for No
   department), `q`, `show` (`overdue` or `ending`).
+- **Back keeps the place**: the page is kept alive (`<keep-alive include="Projects">` in
+  `desk/src/roots/AgentRoot.vue`), so Back from a project's board, checklist or any page
+  shows it at once with its cards, then refreshes everything in the background (what's on
+  screen stays while it loads). The list scrolls inside a panel, which the router's own
+  scroll restore doesn't cover, so `useScrollRestore` (`desk/src/composables/scrollRestore.ts`)
+  keeps the panel's position per history entry (vue-router's `history.state.position` and
+  the path on leaving) in the tab's `sessionStorage` (`hd-scroll:` keys; in memory too when
+  storage is blocked) and puts it back only when coming back to that entry (its
+  `history.state.forward` is set). A fresh visit (sidebar, link) starts at the top and takes
+  that link's filters, even where it reuses a history position an older entry saved under.
+  The background refresh can change the cards' heights, so the position is put back again
+  once it's in, unless the person scrolled meanwhile (wheel, touch, key or pointer on the
+  panel). The in-memory copy is read first, as it has the latest save even when storage
+  refused it.
+  While kept alive the page never writes its filters into another page's URL. If the page
+  wasn't alive (a full reload, or the mobile and desktop layouts switched), Back puts the
+  position back once the projects, recent row, departments and every card's stats are in,
+  as the cards grow with their stats.
 - **Card**: name (links to the project), customer and ID; status badge only when not Open;
   lead and dates, with "N days past end" in red (with an icon) or "Ends in N days" for open
   projects; one neutral progress bar (green once the project is Completed) with done/total
@@ -552,6 +570,15 @@ and cancelled ones only if changed in the last 30 days. Each card names its proj
 the timer, hold/resume, complete, edit, ask for help and hand over work as on a project board,
 each using the task's own project; project-level actions (Plan, Approve/Send back, Make
 recurring) stay on the project's board.
+
+**Column order** is each person's own: dragging a column by its header moves it (a brand line
+shows where it lands), and the grip button in the header does the same from the keyboard with
+the left and right arrow keys. The order is kept in this browser per person
+(`hd-board-columns:<user>` in `localStorage`) and applies to every board, the project boards
+too; a status it doesn't list yet joins at its usual place at the end. Dragging a task still
+moves it between columns. While a task or column is dragged near the board's left or right edge
+(96px), the board scrolls that way, faster the closer it gets, so a column off screen (e.g.
+Completed) is reached in one drag; it stops on drop, at the end of the drag or on leaving the board.
 
 **New task** (header, the primary action) opens the same `NewTaskDialog` as a project, with a
 **Project** picker first: `get_projects` cut to open projects where `can_add_tasks` is true (the
@@ -750,8 +777,8 @@ logged it all as one time log ending now, so yesterday's work landed on today.
 
 - **Sessions:** every stretch the timer runs is saved as an **HD Task Time Session** (task, user,
   `started_at`, `ended_at`, hours, `logged`, `timesheet`; not `start`/`end`, which newer Frappe's
-  list-query check rejects as SQL keywords), split at midnight so each row is one day
-  (`helpdesk/tasky/time_sessions.py`, `record_session`). It's written wherever the timer stops:
+  list-query check rejects as SQL keywords), clipped to the work day so each row is one stretch
+  of one day (`helpdesk/tasky/time_sessions.py`, `record_session`). It's written wherever the timer stops:
   Pause (`stop_timer`), leaving In progress (`move_task`), going on hold (`Task.start_hold`), a
   GitHub event moving the task (`github_sync`, on the task's only assignee rather than the
   webhook's Administrator, else the automation user; only once the move is saved: a refused move keeps
@@ -766,10 +793,12 @@ logged it all as one time log ending now, so yesterday's work landed on today.
   The dialog shows a row per day (date and hours, each rounded to the nearest quarter hour, so a
   few minutes on a day are left out unless that leaves no time at all; "From the timer: …"),
   with **+ Add another day** and remove. Only the latest request's answer fills the rows, so a
-  slow reply for a task closed a moment ago never fills another's. A day over 10 hours
-  (`LONG_DAY_HOURS`) is flagged: "The timer ran over 10 hours this day. Was it left running?"
+  slow reply for a task closed a moment ago never fills another's. The response also has
+  `yesterday` and `left` (`{date: hours still free}` for those days, today and yesterday); each
+  row shows "x h left today" and the dialog refuses more than that.
 - **Saving:** `complete_task(task, notes, days=[{date, hours}])` checks each day (a date, not in
-  the future, not before the task was created, listed once, more than 0 and at most 24 hours)
+  the future, not before the task was created, listed once, more than 0 hours, within the day's
+  remaining capacity and, for hand-entered hours, today or yesterday: see "The work day" below)
   (a malformed `days` gets a message, not an error) and logs **one timesheet per day**, each with that day's single time log, so a person reading
   their timesheets sees each day's hours on their own (owner's decision, 2026-10-16: one
   timesheet holding several days read as one larger number). The response lists them in
@@ -787,6 +816,50 @@ logged it all as one time log ending now, so yesterday's work landed on today.
   its assignees would need a timer per person, which this doesn't add.
 - Hours land on their own day everywhere timesheets are read: Timesheets, the Scoreboard, the
   customer report and support hours.
+
+### The work day: time is recorded in real time
+
+Owner's decision, 2026-10-29: staff work 10:00 to 18:00, so no day can show 16.8 or 20.4 hours.
+Those came from timers left running overnight (a 00:00 to 10:12 session), two timers running at
+once for one person, hours typed in the Complete dialog against no real day, and reports summing a
+task's `custom_actual_hours` on the day it was completed. One definition now serves the timer, the
+dialog and the reports (`helpdesk/work_hours.py`):
+
+- **Days and hours:** the hub's working days (HD Work Settings' weekly off and Saturdays off, and
+  the default SLA's holiday list, as the follow-ups use) and the default SLA's hours for that
+  weekday; without a default SLA, 10:00 to 18:00. `work_windows(day)` returns the day's
+  `(start, end)` windows (none on a day off) and `max_hours(day)` is the **daily maximum**: the
+  smaller of HD Work Settings' **Most Hours a Day** (`max_hours_per_day`, 8) and the windows' sum.
+- **Lunch is optional.** HD Work Settings' `lunch_start` and `lunch_end` are empty by default, so
+  the day is one window. Set them (say 13:00 and 14:00) and the day has two windows, time at
+  lunch isn't counted, and the timers stop at lunch.
+- **Clipping:** `record_session` keeps only the part of a stretch inside a window: nothing before
+  the day starts, at lunch, after it ends or on a day off, and nothing past what the day has left
+  for the person (`day_left`). The hours it keeps are what the timer banks
+  (`custom_timer_elapsed`, `custom_actual_hours`).
+- **Auto-stop:** `stop_timers_outside_work_hours` runs every 5 minutes and pauses every running
+  timer whose window has closed, at that window's end (the task stays In progress, the session is
+  saved), and tells the person "Your timer on X stopped at 6:00 pm. Start it again when you
+  resume." A run missed at the close (the scheduler down overnight) still stops it at that close
+  once it runs, even inside the next window, so a timer never carries on into the next days and
+  they aren't counted as worked; a timer still in the window it started in keeps running.
+- **One timer per person:** the task records whose timer runs (`custom_timer_user`). Starting a
+  timer (Start, moving a task to In progress, resuming from hold) pauses the person's other
+  running timer first and saves its session. Start is refused outside a window; moving a task to
+  In progress then leaves its timer paused.
+- **Daily cap:** per person per day, timesheet hours plus not-yet-logged sessions can't pass
+  `max_hours(day)`. `complete_task` checks every day's hours against what is left (the task's own
+  sessions are replaced by the dialog's rows, so they don't count against it). Typed-in hours
+  are for today or yesterday only; an older day takes only what the task's timer recorded on it,
+  unless a System Manager passes `backdate_reason`.
+- **Reports:** hours per person per day come from timesheets (one per day worked, see above) and
+  sessions, never from a completed task's `custom_actual_hours`. The Scoreboard's and the
+  stand-up's hours (`team_dashboard.logged_hours`) scale a person's day down to `max_hours` for
+  logs older than the cap. The done list in My Work shows a task's own total, not a day's hours,
+  and has no per-day source.
+- **Old data:** the patch `clip_unlogged_time_sessions` clips sessions not yet logged to the
+  windows, keeps one of exact duplicates for the same person and takes the cut hours off the
+  task's banked time; logged sessions are left alone, and it reports its counts. Safe to rerun.
 
 ### Telling the assigner a task is done
 
@@ -826,8 +899,8 @@ Cancelled or On Hold is overdue when:
   open at 12:01: overdue.
 
 The hours clock is the board timer, so it starts when the task moves to In progress (not when it
-was created or assigned), stops while the timer is paused, and counts plain clock hours (nights
-too, while the timer runs). Tasks due on a later day only go overdue when their date passes; a
+was created or assigned), stops while the timer is paused, and counts work-day hours only (the
+timer stops at the end of the day and lunch, see "The work day"). Tasks due on a later day only go overdue when their date passes; a
 task with no estimate only by date. An overdue task carries no "at risk" reasons, so it's counted once (overdue), not in both buckets.
 My tasks and the phase checklist load the timer fields for this. Where it shows: My Work
 (Overdue group and tab; the label

@@ -894,6 +894,7 @@ const FIELDS = [
   "customer",
   "special_day",
   "publish_on",
+  "meta_publish_on",
 ];
 
 const posts = createResource({
@@ -981,7 +982,14 @@ const events = computed(() =>
       // ★ marks a special-day post on the month and week grid
       title: `${p.special_day ? `★ ${p.special_day} · ` : ""}${platformsOf(
         p
-      ).join(", ")} · ${copyOf(p)}`,
+      ).join(", ")} · ${copyOf(p)}${
+        p.meta_publish_on
+          ? ` · ${__(
+              "Auto-publish {0}",
+              dayjs(p.meta_publish_on).format("h:mm A")
+            )}`
+          : ""
+      }`,
       participant: `${p.status}${clientLabel(p.status)} · ${p.customer}`,
       fromDate: start.format("YYYY-MM-DD"),
       toDate: start.format("YYYY-MM-DD"),

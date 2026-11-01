@@ -2,9 +2,18 @@
 // them there as the signed-in person (docs/leads.md).
 import type { Tone } from "@/components/tone";
 import { __ } from "@/translation";
+import type { LeadProspect, ProspectingOptions } from "./prospects";
 import { money } from "@/components/invoicing/invoices";
+import { UNSAVED_NOTE_PREFIX, useAuthStore } from "@/stores/auth";
 import { errorText } from "@/utils";
 import { createResource, dayjs, toast } from "frappe-ui";
+import type { Component } from "vue";
+import LucidePhoneMissed from "~icons/lucide/phone-missed";
+import LucidePhoneOff from "~icons/lucide/phone-off";
+import LucideThumbsDown from "~icons/lucide/thumbs-down";
+import { OUTCOME_LOOK, OUTCOMES, type CallOutcome } from "./callBatches";
+import type { ReplyClass } from "./outreach";
+import type { LeadPlace } from "./place";
 import type { DocumentChain, ProposalRow } from "./proposals";
 
 export interface LeadStage {
@@ -22,6 +31,12 @@ export interface LeadOptions {
   owners: { email: string; full_name?: string }[];
   territories: string[];
   industries: string[];
+  /** the categories (absent from an older TBO Smart: the category pickers stay out) */
+  org_sizes?: string[];
+  states?: string[];
+  kerala_districts?: string[];
+  /** districts used on leads, by state ("" for leads without a state) */
+  districts_by_state?: Record<string, string[]>;
   /** MyOperator click-to-call is set up for the signed-in person on the ERP site */
   can_call?: boolean;
   /** the ERP site can log a call made outside MyOperator (TBO Smart's log_call) */
@@ -29,6 +44,16 @@ export interface LeadOptions {
   /** lead departments (absent from an older TBO Smart; the department UI stays out) */
   departments?: LeadDepartmentOption[];
   lead_types?: string[];
+  /** the signed-in person may open the Business tab: System Manager or the TBO Management
+   * role on the ERP site, which decides it (absent from an older TBO Smart) */
+  can_view_business?: boolean;
+  /** the signed-in person may open Find prospects (managers and department heads, while it is
+   * on); absent from an older TBO Smart */
+  can_find_prospects?: boolean;
+  prospecting?: ProspectingOptions | null;
+  /** Outreach is on (first messages a person approves): the Outreach tab shows; absent from
+   * an older TBO Smart */
+  outreach?: boolean;
 }
 
 /** A department as `get_options` lists it, with the signed-in person's part in it. */
@@ -38,6 +63,8 @@ export interface LeadDepartmentOption {
   is_active?: boolean | number;
   is_head?: boolean | number;
   is_member?: boolean | number;
+  /** members get daily call batches (Today's calls); absent from an older TBO Smart */
+  call_batches_enabled?: boolean | number;
   /** how a lead with no owner is given one (absent from an older TBO Smart) */
   assignment?: LeadAssignment;
   stale_after_days?: number;
@@ -110,11 +137,21 @@ export interface LeadRow {
   email_id?: string;
   mobile_no?: string;
   tbo_stage?: string;
+  /** how the lead's last call went and when (absent from an older TBO Smart) */
+  last_call_result?: CallOutcome | null;
+  last_call_on?: string | null;
+  /** how the lead's last email reply was sorted (absent from an older TBO Smart) */
+  last_reply_class?: ReplyClass | null;
+  last_reply_on?: string | null;
   segment?: string;
   lead_owner?: string;
   owner_name?: string;
   tbo_department?: string | null;
   tbo_lead_type?: string | null;
+  industry?: string | null;
+  state?: string | null;
+  district?: string | null;
+  org_size?: string | null;
   score?: number | null;
   next_follow_up?: string | null;
   modified?: string;
@@ -224,6 +261,9 @@ export interface LeadForm {
   segment: string;
   territory: string;
   industry: string;
+  state: string;
+  district: string;
+  org_size: string;
   lead_owner: string;
   next_follow_up: string;
   tbo_department: string;
@@ -238,6 +278,9 @@ export const LEAD_FORM_FIELDS: (keyof LeadForm)[] = [
   "segment",
   "territory",
   "industry",
+  "state",
+  "district",
+  "org_size",
   "lead_owner",
   "next_follow_up",
   "tbo_department",
@@ -304,7 +347,15 @@ export interface LeadQuotation {
 }
 
 export interface LeadDetail {
-  lead: LeadRow & Partial<LeadForm> & Record<string, unknown>;
+  lead: LeadRow &
+    Partial<LeadForm> &
+    Record<string, unknown> & {
+      /** absent from an older TBO Smart */
+      place?: LeadPlace;
+      photo_count?: number;
+      /** what the lead's website says, for a lead found by Find prospects */
+      prospect?: LeadProspect | null;
+    };
   timeline: LeadTimelineEntry[];
   quotations: LeadQuotation[];
   /** the lead's proposals (empty while proposals are off on the ERP site) */
@@ -330,6 +381,43 @@ export function loadLeadOptions() {
   leadOptions.fetch();
 }
 
+// Remarks the New lead dialog couldn't save as the lead's first note, kept per person and
+// lead until the note is added: in this browser, so neither a reload nor reopening the
+// dialog loses them, and in memory too, so blocked or full storage still hands them to the
+// lead's page. Logout clears the stored ones.
+const unsavedNotes = new Map<string, string>();
+const unsavedNoteKey = (lead: string) =>
+  `${UNSAVED_NOTE_PREFIX}${useAuthStore().userId}:${lead}`;
+
+/** Whether the browser kept them too: when not, a reload loses them. */
+export function keepUnsavedNote(lead: string, note: string) {
+  // a failure that lands after logout began: logout has cleared the drafts already
+  if (!useAuthStore().isLoggedIn) return false;
+  unsavedNotes.set(unsavedNoteKey(lead), note);
+  try {
+    localStorage.setItem(unsavedNoteKey(lead), note);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function unsavedNote(lead: string) {
+  const key = unsavedNoteKey(lead);
+  try {
+    return localStorage.getItem(key) ?? unsavedNotes.get(key) ?? "";
+  } catch {
+    return unsavedNotes.get(key) ?? "";
+  }
+}
+
+export function dropUnsavedNote(lead: string) {
+  unsavedNotes.delete(unsavedNoteKey(lead));
+  try {
+    localStorage.removeItem(unsavedNoteKey(lead));
+  } catch {}
+}
+
 /** The departments the signed-in person can put a lead in: active ones, and the one a
  * lead already has. Empty while the ERP site has none (or is too old), so the pickers stay out. */
 export function usableDepartments(options: LeadOptions | undefined, keep = "") {
@@ -349,6 +437,26 @@ export function ownDepartment(options: LeadOptions | undefined) {
 /** "GrowthX · ERP / Software" for a lead's row; empty without a department. */
 export function departmentLabel(row: LeadRow) {
   return [row.tbo_department, row.tbo_lead_type].filter(Boolean).join(" · ");
+}
+
+/** The bulk Set category choice that empties a field (an empty choice leaves it alone). */
+export const CLEAR = "__clear__";
+
+/** The category filters of the list; each is any of its values. */
+export interface LeadCategories {
+  industry: string[];
+  state: string[];
+  district: string[];
+  org_size: string[];
+  /** the outcome of the lead's last call: Connected, Not answered, … */
+  last_call_result: string[];
+  /** how the lead's last email reply was sorted: Interested, Question, Not now, … */
+  last_reply_class: string[];
+}
+
+/** "Resorts · Kozhikode" for a lead's row; empty without either. */
+export function categoryLabel(row: LeadRow) {
+  return [row.industry, row.district || row.state].filter(Boolean).join(" · ");
 }
 
 // each department's heads and members: the form prefers them as owner, Settings edits them
@@ -383,14 +491,58 @@ export function stageLabel(options: LeadOptions | undefined, stage?: string) {
   return options?.stages.find((s) => s.name === stage)?.label || stage;
 }
 
-/** Won and Lost say how a lead went; every other stage stays neutral. */
+/** The stages a call puts a lead in: an icon and a tone, from the colour the ERP site gives
+ * the stage (orange: call again, red: declined, gray: nothing to call). */
+const CALL_STAGES: Record<string, Component> = {
+  "Not Responding": LucidePhoneMissed,
+  "Not Interested": LucideThumbsDown,
+  "Wrong Number": LucidePhoneOff,
+};
+const COLOR_TONE: Record<string, Tone> = {
+  orange: "warning",
+  amber: "warning",
+  red: "danger",
+};
+
+/** Won and Lost say how a lead went, and so do the stages a call sets; every other stage
+ * stays neutral. */
 export function stageTone(options: LeadOptions | undefined, stage?: string) {
-  const type = (
-    options?.stages.find((s) => s.name === stage)?.type || ""
-  ).toLowerCase();
+  const found = options?.stages.find((s) => s.name === stage);
+  const type = (found?.type || "").toLowerCase();
   if (type === "won") return "success" as Tone;
+  if (stage && stage in CALL_STAGES)
+    return COLOR_TONE[found?.color || ""] ?? ("neutral" as Tone);
   if (type === "lost") return "danger" as Tone;
   return "neutral" as Tone;
+}
+
+/** The icon beside a stage's label where colour alone would say it (the call stages). */
+export function stageIcon(stage?: string): Component | undefined {
+  return stage ? CALL_STAGES[stage] : undefined;
+}
+
+/** "5m", "3h", "2d": how long ago, compactly, for a chip. */
+export function shortAgo(when?: string | null) {
+  if (!when) return "";
+  const minutes = Math.max(0, dayjs().diff(dayjs(when), "minute"));
+  if (minutes < 60) return __("{0}m ago", String(minutes));
+  if (minutes < 60 * 24) return __("{0}h ago", String(Math.floor(minutes / 60)));
+  return __("{0}d ago", String(Math.floor(minutes / 60 / 24)));
+}
+
+/** A lead's last call as one chip: "Not answered · 2d ago", with its icon and a tone only
+ * where it means something. Null for a lead never called. */
+export function lastCall(
+  row: Pick<LeadRow, "last_call_result" | "last_call_on">
+) {
+  const result = row.last_call_result;
+  if (!result || !(result in OUTCOME_LOOK)) return null;
+  const ago = shortAgo(row.last_call_on);
+  const name = OUTCOMES.find((o) => o.value === result)?.label || result;
+  return {
+    label: ago ? `${name} · ${ago}` : name,
+    ...OUTCOME_LOOK[result],
+  };
 }
 
 export function ownerName(options: LeadOptions | undefined, email?: string) {
@@ -777,4 +929,85 @@ export interface OverviewPage {
   money: ProposalMoney | null;
   intake: LeadIntake | null;
   errors: { money?: string; intake?: string };
+}
+
+export type BusinessPeriod =
+  | "month"
+  | "last_month"
+  | "quarter"
+  | "fy"
+  | "custom";
+
+export interface BusinessStage {
+  stage: string;
+  color: string;
+  count: number;
+  value: number;
+}
+
+export interface BusinessDepartment {
+  /** null: leads with no department, or (with the label) money not traced to a lead */
+  department: string | null;
+  label: string;
+  open: number;
+  open_value: number;
+  won: number;
+  won_value: number;
+  invoiced: number;
+  collected: number;
+}
+
+/** helpdesk.api.leads.get_business_overview (TBO Smart's get_business_overview): the
+ * company-wide figures, management only. Amounts are in `currency`. */
+export interface BusinessOverview {
+  available: boolean;
+  period?: BusinessPeriod;
+  from_date: string;
+  to_date: string;
+  department: string | null;
+  currency: string;
+  pipeline: {
+    count: number;
+    value: number;
+    /** open leads without a quotation: no value */
+    unpriced: number;
+    /** false: lead stages have no probability, so the value is not weighted */
+    weighted: boolean;
+    stages: BusinessStage[];
+  };
+  proposals: {
+    sent: { count: number; value: number; unpriced: number };
+    accepted: { count: number; value: number };
+    declined: number;
+    acceptance_rate: number;
+  };
+  onboarding: {
+    won: { count: number; value: number; unpriced: number };
+    projects_started: number;
+  };
+  revenue: {
+    invoiced: number;
+    collected: number;
+    outstanding: number;
+    months: { month: string; invoiced: number; collected: number }[];
+  };
+  funnel: { step: string; count: number; rate: number }[];
+  new_leads: number;
+  meetings_held: number;
+  trend: {
+    month: string;
+    new: number;
+    won: number;
+    invoiced: number;
+    collected: number;
+  }[];
+  top_clients: { customer: string; name: string; invoiced: number }[];
+  by_department: BusinessDepartment[];
+  profit: {
+    available: boolean;
+    reason: string | null;
+    income: number | null;
+    expense: number | null;
+    profit: number | null;
+  };
 }

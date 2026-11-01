@@ -1,0 +1,72 @@
+{
+	"issingle": 1,
+	"track_changes": 1,
+	"permissions": [
+		{
+			"role": "System Manager",
+			"read": 1,
+			"write": 1,
+			"create": 1,
+			"delete": 1,
+			"report": 1,
+			"export": 1,
+			"share": 1
+		}
+	],
+	"fields": [
+		{
+			"fieldname": "enabled",
+			"fieldtype": "Check",
+			"label": "Enabled",
+			"default": "0",
+			"description": "Turns on Connect Meta on projects and publishing from the content calendar."
+		},
+		{
+			"fieldname": "app_id",
+			"fieldtype": "Data",
+			"label": "App ID",
+			"mandatory_depends_on": "enabled"
+		},
+		{
+			"fieldname": "app_secret",
+			"fieldtype": "Password",
+			"label": "App Secret",
+			"mandatory_depends_on": "enabled"
+		},
+		{
+			"fieldname": "graph_api_version",
+			"fieldtype": "Data",
+			"label": "Graph API Version",
+			"default": "v25.0",
+			"description": "Meta retires each version about two years after release; change it here when the owner upgrades."
+		},
+		{
+			"fieldname": "redirect_url",
+			"fieldtype": "Data",
+			"label": "OAuth Redirect URL",
+			"read_only": 1,
+			"description": "Add this under Facebook Login > Settings > Valid OAuth Redirect URIs."
+		}
+	],
+	"actions": [],
+	"creation": "2026-10-30 12:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"index_web_pages_for_search": 0,
+	"links": [],
+	"modified": "2026-10-30 12:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD Meta Settings",
+	"owner": "Administrator",
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": [],
+	"field_order": [
+		"enabled",
+		"app_id",
+		"app_secret",
+		"graph_api_version",
+		"redirect_url"
+	]
+}

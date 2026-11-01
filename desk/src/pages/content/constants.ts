@@ -75,6 +75,8 @@ export interface ContentPost {
   publish_on?: string;
   published_on?: string;
   published_url?: string;
+  // when the hub will post it to Facebook / Instagram (Publish to Meta)
+  meta_publish_on?: string;
   caption?: string;
   brief?: string;
   writer?: string;
@@ -120,7 +122,8 @@ export type EntryAction =
   | "cancel"
   | "assign"
   | "head_approve"
-  | "head_send_back";
+  | "head_send_back"
+  | "meta";
 
 // the client approved; the Digital Marketing Head approves before it can go out
 export const HEAD_REVIEW = "Head Review";

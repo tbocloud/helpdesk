@@ -2137,6 +2137,69 @@ def set_work_settings(**values):
     return doc
 
 
+def freeze_work_day(test, hour: int = 11, minute: int = 0) -> datetime:
+    """Stops the clock for `test` at `hour`:`minute` on the latest day that is a working day
+    and follows one (so "yesterday" can hold hours too), undone when the test ends.
+    Timer tests need it: what counts depends on the time of day the suite happens to run.
+    Returns the moment."""
+    from datetime import time
+
+    from frappe.utils import add_days
+
+    from helpdesk.work_hours import work_windows
+
+    # a day with work hours, not just off the holiday list: a Saturday can be a working day
+    # on the calendar yet have no hours on the default SLA
+    day = getdate()
+    while not (work_windows(day) and work_windows(add_days(day, -1))):
+        day = add_days(day, -1)
+    moment = datetime.combine(day, time(hour, minute))
+    # it keeps ticking: saving a document twice in one frozen second fails
+    frozen = test.freeze_time(moment, tick=True)
+    frozen.__enter__()
+    test.addCleanup(frozen.__exit__, None, None, None)
+    return moment
+
+
+def make_time_session(
+    task: str, user: str, start, end, logged: int = 0, hours: float | None = None
+):
+    """Inserts an HD Task Time Session straight (no clipping), as older timers saved them:
+    `hours` defaults to the time between `start` and `end`."""
+    from frappe.utils import get_datetime
+
+    start, end = get_datetime(start), get_datetime(end)
+    return frappe.get_doc(
+        {
+            "doctype": "HD Task Time Session",
+            "task": task,
+            "user": user,
+            "started_at": start,
+            "ended_at": end,
+            "hours": (
+                hours
+                if hours is not None
+                else round((end - start).total_seconds() / 3600, 2)
+            ),
+            "logged": logged,
+        }
+    ).insert(ignore_permissions=True)
+
+
+def get_task_sessions(task: str, logged: int | None = None) -> list:
+    """The task's HD Task Time Sessions (started_at, ended_at, hours, user, logged, timesheet),
+    earliest first; only the `logged` (1) or not yet logged (0) ones when given."""
+    filters = {"task": task}
+    if logged is not None:
+        filters["logged"] = logged
+    return frappe.get_all(
+        "HD Task Time Session",
+        filters=filters,
+        fields=["started_at", "ended_at", "hours", "user", "logged", "timesheet"],
+        order_by="started_at asc",
+    )
+
+
 REPLAY_START_MS = 1_790_000_000_000
 REPLAY_ERROR_MESSAGE = "Posting Date cannot be before the Invoice Date"
 
@@ -3643,6 +3706,18 @@ def lead_department(
         "stale_after_days": stale_after_days,
         "heads": [{"user": u, "full_name": u} for u in heads],
         "members": [{"user": u, "full_name": u} for u in members],
+    }
+
+
+def lead_category_options() -> dict:
+    """The category part of the ERP site's get_options: industries, organisation sizes,
+    states, Kerala's districts and the districts used on leads, by state."""
+    return {
+        "industries": ["Resorts", "Builders & Developers"],
+        "org_sizes": ["1-10", "11-50", "51-200"],
+        "states": ["Kerala", "Tamil Nadu", "Dubai"],
+        "kerala_districts": ["Kozhikode", "Ernakulam"],
+        "districts_by_state": {"Kerala": ["Kozhikode"], "": ["Chennai"]},
     }
 
 
@@ -5232,4 +5307,354 @@ def make_accepted_proposal(**values) -> dict:
         "deliverables": "12 posts a month, 4 reels",
         "hub_project": None,
         **values,
+    }
+
+
+def enable_meta(app_id: str = "123456", app_secret: str = "app-secret"):
+    """Turns on Meta publishing with a fake app (HD Meta Settings), for tests that mock Graph."""
+    settings = frappe.get_doc("HD Meta Settings")
+    settings.update({"enabled": 1, "app_id": app_id, "app_secret": app_secret})
+    settings.save(ignore_permissions=True)
+    frappe.clear_cache(doctype="HD Meta Settings")
+
+
+def make_meta_connection(project: str, instagram: bool = True, **values):
+    """Creates a Connected HD Meta Connection for `project` with a Page (and, unless
+    `instagram` is False, an Instagram account) and fake tokens."""
+    return frappe.get_doc(
+        {
+            "doctype": "HD Meta Connection",
+            "project": project,
+            "status": "Connected",
+            "facebook_page_id": "page-1",
+            "facebook_page_name": "Client Page",
+            "page_access_token": "page-token",
+            "instagram_user_id": "ig-1" if instagram else None,
+            "instagram_username": "client_ig" if instagram else None,
+            **values,
+        }
+    ).insert(ignore_permissions=True)
+
+
+def make_approved_post(title: str, customer: str, status: str = "Approved", **values):
+    """Creates an HD Content Post in a status the client has approved, due in two hours,
+    with a caption and hashtags (the customer gets a content project)."""
+    from frappe.utils import add_to_date
+
+    return make_content_post(
+        title,
+        customer,
+        status=status,
+        publish_on=add_to_date(now_datetime(), hours=2),
+        caption="<p>Fresh <b>Monday</b> offer</p>",
+        hashtags="#sale, summer",
+        **values,
+    )
+
+
+class FakeGraph:
+    """Stands in for Meta's Graph API: patch `requests` in the graph client with `patch()`.
+
+    `routes` maps "METHOD path-suffix" (for example "POST ig-1/media") to a dict, a list of
+    dicts (one per call, the last repeats) or an exception to raise. Every call is kept in
+    `calls` as (method, path, params), without the access token."""
+
+    def __init__(self, routes: dict | None = None):
+        self.routes = routes or {}
+        self.calls: list[tuple[str, str, dict]] = []
+
+    def handle(self, method: str, url: str, params: dict):
+        # drop the host and the version: ".../v25.0/ig-1/media" -> "ig-1/media"
+        path = url.split("graph.facebook.com/", 1)[-1].split("/", 1)[-1]
+        params = {
+            k: v
+            for k, v in params.items()
+            if k not in ("access_token", "appsecret_proof")
+        }
+        self.calls.append((method, path, params))
+        route = next(
+            (
+                v
+                for k, v in self.routes.items()
+                if k.split(" ", 1)[0] == method and path.endswith(k.split(" ", 1)[1])
+            ),
+            {},
+        )
+        if isinstance(route, list):
+            route = route.pop(0) if len(route) > 1 else route[0]
+        if isinstance(route, Exception):
+            raise route
+        status = route.get("_status", 200)
+        return FakeGraphResponse(route, status)
+
+    def patch(self):
+        return patch.multiple(
+            "helpdesk.integrations.meta.graph.requests",
+            get=lambda url, params=None, timeout=None: self.handle(
+                "GET", url, params or {}
+            ),
+            post=lambda url, data=None, timeout=None: self.handle(
+                "POST", url, data or {}
+            ),
+        )
+
+    def paths(self, method: str | None = None) -> list[str]:
+        return [p for m, p, _ in self.calls if method in (None, m)]
+
+
+class FakeGraphResponse:
+    """The bit of a requests response the Graph client reads."""
+
+    def __init__(self, body: dict, status: int = 200):
+        self.body = body
+        self.status_code = status
+        self.ok = status < 400
+
+    def json(self):
+        return self.body
+
+
+def attach_media(post: str, file_name: str):
+    """Attaches a real small image (by the file name's extension) or, for .mp4 and .mov,
+    a few placeholder bytes to a content post as a private file."""
+    ext = file_name.rsplit(".", 1)[-1].lower()
+    content = (
+        make_image_bytes({"jpg": "JPEG", "jpeg": "JPEG", "png": "PNG"}.get(ext, "WEBP"))
+        if ext in ("jpg", "jpeg", "png", "webp")
+        else b"video-bytes"
+    )
+    return frappe.get_doc(
+        {
+            "doctype": "File",
+            "file_name": file_name,
+            "attached_to_doctype": "HD Content Post",
+            "attached_to_name": post,
+            "is_private": 1,
+            "content": content,
+        }
+    ).insert(ignore_permissions=True)
+
+
+def queue_call(item: str, lead: str = "LEAD-1", **fields) -> dict:
+    """One call of TBO Smart's get_my_calls queue (pending, scheduled or overdue)."""
+    return {
+        "item": item,
+        "batch": "CB-261030-0001",
+        "slot": "Morning",
+        "lead": lead,
+        "priority": 3,
+        "reason": "Never called",
+        "is_repeat": 0,
+        "retry_at": None,
+        "attempts": 0,
+        "batch_ends_at": "2026-10-30 13:00:00",
+        "summary": {
+            "name": lead,
+            "lead_name": f"Lead {lead}",
+            "company_name": "Bright Co",
+            "industry": "Retail",
+            "district": "Kozhikode",
+            "phone": "9847012345",
+            "stage": "New Lead",
+            "temperature": None,
+            "last_note": None,
+            "next_step": None,
+            "wrong_number": 0,
+        },
+        **fields,
+    }
+
+
+def my_calls(
+    pending: tuple[dict, ...] = (),
+    overdue: tuple[dict, ...] = (),
+    called: int = 0,
+    enabled: bool = True,
+    **fields,
+) -> dict:
+    """A get_my_calls answer: a Morning batch of `called` + the pending calls, with
+    `overdue` after it and the next batch refused until the pending ones are done."""
+    size = called + len(pending)
+    return {
+        "enabled": enabled,
+        "date": "2026-10-30",
+        "batch": {
+            "name": "CB-261030-0001",
+            "slot": "Morning",
+            "department": "GrowthX",
+            "starts_at": "2026-10-30 10:00:00",
+            "ends_at": "2026-10-30 13:00:00",
+            "seconds_left": 5400,
+            "batches": ["CB-261030-0001"],
+        },
+        "counts": {
+            "size": size,
+            "called": called,
+            "connected": 0,
+            "pending": len(pending),
+            "scheduled": 0,
+            "overdue": len(overdue),
+        },
+        "today": {"size": size, "called": called, "connected": 0},
+        "pending": list(pending),
+        "scheduled": [],
+        "overdue": list(overdue),
+        "can_call": False,
+        "next_batch": {
+            "allowed": False,
+            "reason": "Finish the calls still waiting first.",
+        },
+        "next_slot": None,
+        **fields,
+    }
+
+
+def call_batches_report(people: list[dict]) -> dict:
+    """A get_call_batches_report answer for `people` ({user, user_name, size, called,
+    connected, overdue}) with the totals."""
+    keys = ("size", "called", "connected", "overdue")
+    return {
+        "date": "2026-10-26",
+        "people": [{"department": "GrowthX", "batches": [], **p} for p in people],
+        "totals": {key: sum(p[key] for p in people) for key in keys},
+    }
+
+
+def prospect_run(name: str = "PR-0001", **fields) -> dict:
+    """A TBO Prospect Run as the ERP site's prospect methods answer it: Resorts in Idukki
+    through OpenStreetMap, Estimated, nothing found yet."""
+    return {
+        "name": name,
+        "industry": "Resorts",
+        "state": "Kerala",
+        "districts": ["Idukki"],
+        "provider": "OpenStreetMap",
+        "department": "GrowthX",
+        "max_results": 50,
+        "require_phone": 1,
+        "status": "Estimated",
+        "estimated_cost": 0,
+        "expected_count": 37,
+        "estimate_note": "37 on the map with a phone number.",
+        "actual_cost": 0,
+        "count_found": 0,
+        "count_duplicates": 0,
+        "count_skipped": 0,
+        "count_created": 0,
+        "started_at": None,
+        "finished_at": None,
+        "creation": "2026-10-30 10:00:00",
+        "owner": "manager@leads.example",
+        "owner_name": "Mia Manager",
+        **fields,
+    }
+
+
+def outreach_message(name: str = "OUT-00001", **fields) -> dict:
+    """A TBO Outreach Message as the ERP site's outbox lists it: a drafted first email to
+    Palm Resort, not sent."""
+    return {
+        "name": name,
+        "lead": "CRM-LEAD-1",
+        "lead_name": "Palm Resort",
+        "company_name": "Palm Resort",
+        "lead_stage": "New Lead",
+        "unsubscribed": 0,
+        "last_reply_class": None,
+        "department": "GrowthX",
+        "channel": "Email",
+        "status": "Draft",
+        "subject": "Online bookings for Palm Resort",
+        "body": "Hi, I saw you take bookings by phone only. Could we talk? Sam",
+        "recipient": "info@palm.test",
+        "drafted_by": "AI",
+        "owner": "bde@leads.example",
+        "owner_name": "Bina",
+        "approved_by": None,
+        "approved_on": None,
+        "sent_on": None,
+        "error": None,
+        "communication": None,
+        "prospect_run": "PR-0001",
+        "batch": "abc123",
+        "url": None,
+        "queued": False,
+        "creation": "2026-10-30 10:00:00",
+        "modified": "2026-10-30 10:00:00",
+        **fields,
+    }
+
+
+def outbox(rows: list[dict] | None = None, **fields) -> dict:
+    """The ERP site's get_outbox answer with Outreach on, an outgoing email account and 30
+    emails a day."""
+    return {
+        "enabled": True,
+        "email_ready": True,
+        "rows": rows or [],
+        "counts": {"Draft": len(rows or [])},
+        "cap": {"limit": 30, "used": 0, "left": 30, "queued": 0},
+        "window": {
+            "start": "09:30",
+            "end": "18:00",
+            "open": True,
+            "next": "2026-10-30 10:00:00",
+        },
+        "drafting": None,
+        "opt_out": "If you would rather not hear from us, reply unsubscribe.",
+        **fields,
+    }
+
+
+def commission_person(user: str = "bde@x.example", **fields) -> dict:
+    """One person's month as the ERP site's get_commission lists it: 3,00,000 collected on one
+    project against a 2,00,000 target, on slab 3 at the above-target rate, ₹11,000 as a Draft."""
+    return {
+        "user": user,
+        "full_name": "Bina",
+        "plans": ["Default"],
+        "collected": 300000.0,
+        "target": 200000.0,
+        "achievement": 150.0,
+        "reached": {"slab_no": 3, "rate": 6.0, "above_target": 1},
+        "commission": 11000.0,
+        "statement": None,
+        "status": None,
+        "frozen": 0,
+        "approved_by": None,
+        "approved_on": None,
+        "paid_on": None,
+        "projects": [
+            {
+                "project": "PROJ-0001",
+                "plan": "Default",
+                "collected": 300000.0,
+                "share_percent": 100.0,
+                "credited": 300000.0,
+                "target": 200000.0,
+                "commission": 11000.0,
+            }
+        ],
+        "breakdown": [],
+        "payments": [],
+        **fields,
+    }
+
+
+def commission_month(rows: list[dict] | None = None, **fields) -> dict:
+    """The ERP site's get_commission answer for a manager: `rows`, their totals and no
+    unattributed money unless `unattributed` is given."""
+    rows = [commission_person()] if rows is None else rows
+    return {
+        "month": "2026-10-01",
+        "currency": "INR",
+        "scope": "all",
+        "can_manage": True,
+        "rows": rows,
+        "totals": {
+            "collected": sum(r["collected"] for r in rows),
+            "commission": sum(r["commission"] for r in rows),
+        },
+        "unattributed": None,
+        **fields,
     }

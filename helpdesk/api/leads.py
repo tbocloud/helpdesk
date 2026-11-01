@@ -6,7 +6,15 @@ import json
 
 import frappe
 from frappe import _
-from frappe.utils import add_days, cint, getdate, today
+from frappe.utils import (
+    add_days,
+    add_months,
+    cint,
+    get_first_day,
+    get_last_day,
+    getdate,
+    today,
+)
 
 from helpdesk.content_team import only_sales_team
 from helpdesk.integrations.crm.leads import (
@@ -22,11 +30,43 @@ VIEWS = ("all", "mine", "call_today", "follow_up")
 PERIODS = ("today", "yesterday", "week", "month", "quarter", "custom")
 # a day is a custom range of that one day on the ERP site, which an older TBO Smart reads too
 DAYS_AGO = {"today": 0, "yesterday": 1}
+# the Business overview's periods: the financial year starts on 1 April (India)
+BUSINESS_PERIODS = ("month", "last_month", "quarter", "fy", "custom")
+FY_START_MONTH = 4
 MESSAGE_CHANNELS = ("whatsapp", "email")
-CALL_OUTCOMES = ("Connected", "No answer", "Busy", "Voicemail")
+# the call batch outcomes; an ERP site before them also takes the first two below, which
+# TBO Smart still reads as Not answered
+CALL_OUTCOMES = (
+    "Connected",
+    "Not answered",
+    "Busy",
+    "Call back",
+    "Not interested",
+    "Wrong number",
+    "No answer",
+    "Voicemail",
+)
+CALL_RESULTS = CALL_OUTCOMES[:6]
+# how the ERP site sorted a lead's last email reply (TBO Smart, docs/prospecting.md Phase 2)
+REPLY_CLASSES = (
+    "Interested",
+    "Question",
+    "Objection",
+    "Not now",
+    "Not interested",
+    "Unsubscribe",
+    "Out of office",
+    "New reply",
+)
 TELEPHONY = "tbo_smart.api.telephony"
 # what the recording player may be handed back
 AUDIO_TYPES = ("audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/ogg")
+# what a lead photo may be handed back as: the ERP site only stores these
+PHOTO_TYPES = ("image/jpeg", "image/png", "image/webp")
+# a photo is at most 10 MB on the ERP site; as base64 a third more
+MAX_PHOTO_BASE64 = 14 * 1024 * 1024
+PHOTO_METHOD = "helpdesk.api.leads.lead_photo"
+PHOTO_CACHE = "private, max-age=3600"
 MAX_PAGE = 100
 # the hub and the ERP site share one worker pool on Frappe Cloud, so a read that was just
 # answered is kept per person for a short while instead of asked again (docs/leads.md)
@@ -91,8 +131,17 @@ def list_leads(
     from_date: str | None = None,
     to_date: str | None = None,
     department: str | None = None,
+    industry: list | str | None = None,
+    state: list | str | None = None,
+    district: list | str | None = None,
+    org_size: list | str | None = None,
+    last_call_result: list | str | None = None,
+    last_reply_class: list | str | None = None,
 ) -> dict:
-    """A page of leads. `metric` with its period keeps the leads one number of the
+    """A page of leads. `industry`, `state`, `district`, `org_size`, `last_call_result`
+    (the outcome of the lead's last call) and `last_reply_class` (how its last email reply
+    was sorted) each take one value or a list (any of them); a
+    list goes to the ERP site as JSON. `metric` with its period keeps the leads one number of the
     Overview counts (the ERP site picks them). `department` keeps one lead department's
     leads; the ERP site still shows only what the person may see."""
     require_leads()
@@ -119,6 +168,14 @@ def list_leads(
         temperature=temperature or None,
         department=department or None,
         metric=metric or None,
+        **category_params(
+            industry=industry,
+            state=state,
+            district=district,
+            org_size=org_size,
+            last_call_result=check_call_results(last_call_result),
+            last_reply_class=check_reply_classes(last_reply_class),
+        ),
         **when,
         view=view,
         # cint: a malformed number is 0, never a server error
@@ -126,6 +183,37 @@ def list_leads(
         page_length=min(max(cint(page_length) or 20, 1), MAX_PAGE),
     )
     return result or {"rows": [], "total": 0}
+
+
+def check_call_results(value) -> list[str]:
+    results = as_list(value)
+    if bad := [result for result in results if result not in CALL_RESULTS]:
+        frappe.throw(_("{0} is not a call result.").format(", ".join(bad)))
+    return results
+
+
+def check_reply_classes(value) -> list[str]:
+    classes = as_list(value)
+    if bad := [name for name in classes if name not in REPLY_CLASSES]:
+        frappe.throw(_("{0} is not a reply class.").format(", ".join(bad)))
+    return classes
+
+
+def category_params(**filters) -> dict:
+    """The category filters as the ERP site takes them: a JSON list, or None for no filter."""
+    return {
+        key: json.dumps(values) if (values := as_list(value)) else None
+        for key, value in filters.items()
+    }
+
+
+def as_list(value) -> list[str]:
+    """One value, a list or a JSON list, as a list of non-empty strings."""
+    if isinstance(value, str) and value.strip().startswith("["):
+        value = frappe.parse_json(value)
+    if not isinstance(value, list):
+        value = [value]
+    return [text for item in value if (text := str(item or "").strip())]
 
 
 @frappe.whitelist()
@@ -230,6 +318,72 @@ def read_proposal_money(period, from_date, to_date, owner, fresh) -> dict:
 
 
 @frappe.whitelist()
+def get_business_overview(
+    period: str = "month",
+    from_date: str | None = None,
+    to_date: str | None = None,
+    department: str | None = None,
+    include_profit: int | str = 0,
+    fresh: int | str = 0,
+) -> dict:
+    """The management-only Business overview (docs/leads.md): company-wide pipeline,
+    proposals, onboardings and revenue. Who may see it is decided on the ERP site
+    (System Manager or its TBO Management role) and nowhere else: a refusal there is a
+    403 here. `available` is false while the ERP site's TBO Smart is older than this."""
+    require_leads()
+    start, end = business_range(period, from_date, to_date)
+    params = {
+        "from_date": str(start),
+        "to_date": str(end),
+        "department": department or None,
+        "include_profit": 1 if cint(include_profit) else 0,
+    }
+    result = cached_read(
+        "business",
+        params,
+        READ_TTL,
+        fresh,
+        lambda: call_if_deployed(
+            "get_business_overview",
+            permission_message=_("Only management can see the Business overview."),
+            **params,
+        ),
+        keep=lambda answer: answer is not None,
+    )
+    return (
+        {**result, "available": True, "period": period}
+        if result is not None
+        else {"available": False}
+    )
+
+
+def business_range(period: str, from_date: str | None, to_date: str | None) -> tuple:
+    """(from, to) of this month, last month, this quarter or financial year to date, or
+    the dates picked."""
+    if period not in BUSINESS_PERIODS:
+        frappe.throw(
+            _("Pick this month, last month, this quarter, this year or your own dates.")
+        )
+    now = getdate(today())
+    if period == "custom":
+        if not (from_date and to_date):
+            frappe.throw(_("Pick both dates for your own period."))
+        start, end = getdate(from_date), getdate(to_date)
+        if end < start:
+            frappe.throw(_("The to date is before the from date."))
+        return start, end
+    if period == "month":
+        return getdate(get_first_day(now)), now
+    if period == "last_month":
+        first = getdate(add_months(get_first_day(now), -1))
+        return first, getdate(get_last_day(first))
+    if period == "quarter":
+        return getdate(f"{now.year}-{3 * ((now.month - 1) // 3) + 1:02d}-01"), now
+    year = now.year if now.month >= FY_START_MONTH else now.year - 1
+    return getdate(f"{year}-{FY_START_MONTH:02d}-01"), now
+
+
+@frappe.whitelist()
 def get_overview_page(
     period: str = "month",
     from_date: str | None = None,
@@ -317,18 +471,29 @@ def report_deployed() -> bool:
 
 
 @frappe.whitelist(methods=["POST"])
-def log_call(lead: str, outcome: str, note: str | None = None) -> dict:
+def log_call(
+    lead: str, outcome: str, note: str | None = None, callback_at: str | None = None
+) -> dict:
     """A call made outside MyOperator, logged on the lead as the signed-in person; it
-    counts in today's report, so their cached reads go."""
+    counts in today's report, so their cached reads go. The ERP site also sets the
+    lead's last call result and moves its stage (`stage` in the answer). Call back needs
+    `callback_at`, the follow-up."""
     require_leads()
     if outcome not in CALL_OUTCOMES:
-        frappe.throw(_("Pick Connected, No answer, Busy or Voicemail."))
+        frappe.throw(
+            _(
+                "Pick Connected, Not answered, Busy, Call back, Not interested or Wrong number."
+            )
+        )
+    if outcome == "Call back" and not (callback_at or "").strip():
+        frappe.throw(_("Say when to call back."))
     logged = call_if_deployed(
         "log_call",
         post=True,
         lead=lead,
         outcome=outcome,
         note=(note or "").strip() or None,
+        callback_at=(callback_at or "").strip() or None,
     )
     if logged is None:
         frappe.throw(
@@ -533,6 +698,73 @@ def update_lead(name: str, data: dict | str) -> dict:
     return result
 
 
+@frappe.whitelist()
+def get_category_counts(fresh: int | str = 0) -> dict:
+    """How many of the person's leads have each industry, state, district,
+    organisation size and last call result, for the list's filter counts. Empty on an older TBO Smart, where
+    the filters simply show no counts."""
+    require_leads()
+    return (
+        cached_read(
+            "category_counts",
+            {},
+            READ_TTL,
+            fresh,
+            lambda: call_if_deployed("get_category_counts"),
+            keep=lambda answer: answer is not None,
+        )
+        or {}
+    )
+
+
+@frappe.whitelist(methods=["POST"])
+def add_industry(name: str) -> dict:
+    """A new industry for the pick list: {name, created}. Managers only (the ERP site
+    says so when it refuses)."""
+    require_leads()
+    result = category_write(
+        "add_industry",
+        _(
+            "Only a System Manager or Sales Manager on the ERP site can add an industry."
+        ),
+        name=(name or "").strip(),
+    )
+    # the pick list is cached for ten minutes: this person sees the new one at once
+    frappe.cache.delete_keys(f"{CACHE_PREFIX}:{frappe.session.user}:options")
+    return result
+
+
+@frappe.whitelist(methods=["POST"])
+def bulk_set_lead_category(leads: list | str, values: dict | str) -> dict:
+    """Sets industry, state, district and/or organisation size (`values`; an empty value
+    clears one) on many leads: {updated, skipped}. Managers only."""
+    require_leads()
+    names = as_list(leads)
+    if not names:
+        frappe.throw(_("Pick the leads first."))
+    return category_write(
+        "bulk_set_lead_category",
+        _(
+            "Only a System Manager or Sales Manager on the ERP site can set categories in bulk."
+        ),
+        leads=names,
+        values=parse_data(values),
+    )
+
+
+def category_write(method: str, permission_message: str, **params) -> dict:
+    result = call_if_deployed(
+        method, post=True, permission_message=permission_message, **params
+    )
+    if result is None:
+        frappe.throw(
+            _("The ERP site can't do this yet. It needs the latest TBO Smart."),
+            LeadsUnavailableError,
+        )
+    clear_cached_reads()
+    return result
+
+
 @frappe.whitelist(methods=["POST"])
 def set_stage(name: str, stage: str, note: str | None = None) -> dict:
     require_leads()
@@ -658,6 +890,72 @@ def call_recording(call: str) -> None:
     )
     frappe.local.response.display_content_as = "inline"
     frappe.local.response.type = "download"
+
+
+# --- place and photos (docs/leads.md) ----------------------------------------------
+
+
+@frappe.whitelist()
+def get_lead_photos(lead: str) -> dict:
+    """{available, photos}: the lead's photos newest first. `available` is false while the
+    ERP site's TBO Smart is older than lead photos, so the card stays out."""
+    require_leads()
+    photos = call_if_deployed("get_lead_photos", lead=lead)
+    if photos is None:
+        return {"available": False, "photos": []}
+    return {"available": True, "photos": photos}
+
+
+@frappe.whitelist(methods=["POST"])
+def upload_lead_photo(
+    lead: str, filename: str, content: str, caption: str | None = None
+) -> dict:
+    """A photo on the lead as the signed-in person (`content` base64; the ERP site checks
+    it is a PNG, JPEG or WebP of at most 10 MB and that the lead has room)."""
+    require_leads()
+    if not content or len(content) > MAX_PHOTO_BASE64:
+        frappe.throw(_("Choose a photo of at most 10 MB."))
+    return (
+        call(
+            "upload_lead_photo",
+            post=True,
+            lead=lead,
+            filename=(filename or "").strip()[:120] or "photo",
+            content=content,
+            caption=(caption or "").strip()[:140] or None,
+        )
+        or {}
+    )
+
+
+@frappe.whitelist(methods=["POST"])
+def delete_lead_photo(lead: str, file: str) -> dict:
+    require_leads()
+    return call("delete_lead_photo", post=True, lead=lead, file=file) or {}
+
+
+@frappe.whitelist()
+def lead_photo(lead: str, file: str, thumb: int | str = 0) -> None:
+    """A lead photo's image (`thumb` 1: a small one), streamed from the ERP site, which
+    shows it only to people who may read the lead."""
+    require_leads()
+    content, content_type = download(
+        "get_lead_photo", lead=lead, file=file, thumb=1 if cint(thumb) else 0
+    )
+    if content_type not in PHOTO_TYPES:
+        frappe.throw(_("That photo isn't available."), frappe.DoesNotExistError)
+    frappe.local.response.filename = f"{file}.{content_type.split('/')[1]}"
+    frappe.local.response.filecontent = content
+    frappe.local.response.content_type = content_type
+    frappe.local.response.display_content_as = "inline"
+    frappe.local.response.type = "download"
+
+
+def cache_lead_photo(response, request) -> None:
+    """after_request hook: a photo is the same bytes every time (its file never changes), so
+    the browser keeps it for an hour, for that person only."""
+    if request.path.endswith(PHOTO_METHOD) and response.status_code == 200:
+        response.headers["Cache-Control"] = PHOTO_CACHE
 
 
 def parse_data(data: dict | str) -> dict:

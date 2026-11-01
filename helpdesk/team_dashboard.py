@@ -19,13 +19,14 @@ from urllib.parse import quote
 
 import frappe
 from frappe import _
-from frappe.query_builder.functions import Count, Sum
+from frappe.query_builder.functions import Count, Date, Sum
 from frappe.utils import add_days, flt, get_last_day, getdate, now_datetime, nowdate
 
 from helpdesk import sales_scoreboard as sales
 from helpdesk.ai_engine import call_haiku, fact_numbers, invents_numbers
 from helpdesk.api.content_performance import members, scored_posts
 from helpdesk.api.ticket_ai import truncate
+from helpdesk.work_hours import max_hours
 from helpdesk.work_reminders import SKIP, notify_users
 
 # period key -> (HD Team Champion period type, least weighted work delivered to be
@@ -346,7 +347,9 @@ def overdue_tasks(today) -> list[dict]:
 
 
 def logged_hours(start, end) -> list[dict]:
-    """Hours in draft and submitted time logs of the period, per person and project."""
+    """Hours in draft and submitted time logs of the period, per person and project. A
+    person's day never counts for more than the work day (helpdesk.work_hours.max_hours):
+    older logs that run past it are scaled down, so no one shows 16 hours in a day."""
     log = frappe.qb.DocType("Timesheet Detail")
     sheet = frappe.qb.DocType("Timesheet")
     project = frappe.qb.DocType("Project")
@@ -360,6 +363,7 @@ def logged_hours(start, end) -> list[dict]:
             sheet.owner.as_("user"),
             log.project,
             project.custom_department.as_("department"),
+            Date(log.from_time).as_("day"),
             Sum(log.hours).as_("hours"),
         )
         .where(
@@ -367,17 +371,26 @@ def logged_hours(start, end) -> list[dict]:
             & (sheet.docstatus < 2)
             & log.from_time.between(f"{start} 00:00:00", f"{end} 23:59:59")
         )
-        .groupby(sheet.owner, log.project, project.custom_department)
+        .groupby(
+            sheet.owner, log.project, project.custom_department, Date(log.from_time)
+        )
         .run(as_dict=True)
     )
+    day_totals: dict = {}
+    for r in rows:
+        key = (r.user, r.day)
+        day_totals[key] = day_totals.get(key, 0) + flt(r.hours)
+    share = {
+        key: min(1.0, max_hours(key[1]) / total) if total else 1.0
+        for key, total in day_totals.items()
+    }
+    combined: dict = {}
+    for r in rows:
+        key = (r.user, r.project, r.department)
+        combined[key] = combined.get(key, 0) + flt(r.hours) * share[(r.user, r.day)]
     return [
-        {
-            "user": r.user,
-            "project": r.project,
-            "department": r.department,
-            "hours": flt(r.hours),
-        }
-        for r in rows
+        {"user": u, "project": p, "department": d, "hours": h}
+        for (u, p, d), h in combined.items()
     ]
 
 

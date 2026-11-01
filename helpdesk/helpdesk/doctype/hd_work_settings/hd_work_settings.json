@@ -10,6 +10,10 @@
 		"weekly_off",
 		"saturdays_off",
 		"dev_hours_per_day",
+		"work_day_section",
+		"max_hours_per_day",
+		"lunch_start",
+		"lunch_end",
 		"support_hours_section",
 		"support_hours_email_customer"
 	],
@@ -57,6 +61,29 @@
 			"options": "\n2nd and 4th\n1st and 3rd\nAll",
 			"depends_on": "eval:doc.weekly_off=='Sunday'",
 			"description": "When Saturday is a working day: which Saturdays of the month are off. They're skipped in task and estimate dates and added to every SLA's holiday list for the coming year."
+		},
+		{
+			"fieldname": "work_day_section",
+			"fieldtype": "Section Break",
+			"label": "Work Day"
+		},
+		{
+			"fieldname": "max_hours_per_day",
+			"fieldtype": "Float",
+			"label": "Most Hours a Day",
+			"default": "8",
+			"description": "The most time one person can record in a day, by timer and by hand together. Work hours come from the default SLA."
+		},
+		{
+			"fieldname": "lunch_start",
+			"fieldtype": "Time",
+			"label": "Lunch Starts",
+			"description": "Optional. Timers stop at the start of lunch, and time in the break isn't counted."
+		},
+		{
+			"fieldname": "lunch_end",
+			"fieldtype": "Time",
+			"label": "Lunch Ends"
 		},
 		{
 			"fieldname": "support_hours_section",

@@ -225,7 +225,30 @@ def send_report(user: str, report: dict):
         )
         for p in people
     ]
+    batches = batch_section(user, day)
+    if batches:
+        sections.append(batches)
     subject = _("📊 Daily sales performance · {0}").format(
         formatdate(day, "dd MMM yyyy")
     )
     return deliver_digest(user, subject, sections)
+
+
+def batch_section(user: str, day):
+    """The day's call batches for the message (docs/leads.md, "Today's calls"): one line
+    each salesperson, or None when `user` may not see them, nobody had one or the ERP site
+    doesn't have them yet."""
+    from helpdesk.api.call_batches import report_lines
+
+    try:
+        report = call_if_deployed(
+            "get_call_batches_report", acting_user=user, date=str(day)
+        )
+    except LeadsError:
+        frappe.clear_last_message()
+        return None
+    except Exception:  # noqa: BLE001 - the batches are extra: the team's day goes out anyway
+        frappe.log_error(title=f"Call batches for the daily report failed for {user}")
+        return None
+    lines = report_lines(report or {})
+    return (_("📞 Call batches"), lines) if lines else None

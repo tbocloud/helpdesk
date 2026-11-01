@@ -32,9 +32,28 @@
             :label="choice.label"
             :aria-pressed="outcome === choice.value"
             @click="outcome = choice.value"
-          />
+          >
+            <template #prefix>
+              <component
+                :is="OUTCOME_LOOK[choice.value].icon"
+                class="size-4"
+                aria-hidden="true"
+              />
+            </template>
+          </Button>
         </div>
       </fieldset>
+      <FormControl
+        v-if="outcome === 'Call back'"
+        v-model="callbackAt"
+        type="datetime-local"
+        :label="__('Call back at')"
+        :min="nowLocal()"
+        required
+      />
+      <p v-else-if="outcome" class="text-p-sm text-ink-gray-6">
+        {{ hint }}
+      </p>
       <FormControl
         v-model="note"
         type="textarea"
@@ -62,8 +81,9 @@
 <script setup lang="ts">
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
-import { Button, Dialog, FormControl, toast } from "frappe-ui";
-import { ref, useId, watch } from "vue";
+import { Button, Dialog, FormControl, dayjs, toast } from "frappe-ui";
+import { computed, ref, useId, watch } from "vue";
+import { OUTCOME_LOOK, OUTCOMES, type CallOutcome } from "./callBatches";
 import { useLogCall } from "./leads";
 
 const props = defineProps<{ open: boolean; leadId: string }>();
@@ -72,30 +92,58 @@ const emit = defineEmits<{
   (e: "logged"): void;
 }>();
 
-const OUTCOMES = [
-  { value: "Connected", label: __("Connected") },
-  { value: "No answer", label: __("No answer") },
-  { value: "Busy", label: __("Busy") },
-  { value: "Voicemail", label: __("Voicemail") },
-];
+// the same six answers as Today's calls; the ERP site moves the lead's stage from them
+const HINTS: Record<CallOutcome, string> = {
+  Connected: __("A new lead becomes Contacted."),
+  "Not answered": __("The lead becomes Not Responding: call again."),
+  Busy: __("The lead becomes Not Responding: call again."),
+  "Call back": __("The lead becomes Follow-up Required."),
+  "Not interested": __("The lead becomes Not Interested."),
+  "Wrong number": __("The lead becomes Wrong Number."),
+};
+const LOCAL = "YYYY-MM-DDTHH:mm";
 
 const formId = `log-call-${useId()}`;
-const outcome = ref("");
+const outcome = ref<CallOutcome | "">("");
 const note = ref("");
+const callbackAt = ref("");
 const logCall = useLogCall();
+const hint = computed(() => (outcome.value ? HINTS[outcome.value] : ""));
+
+function nowLocal() {
+  return dayjs().format(LOCAL);
+}
 
 // each time it opens it starts empty
 watch(
   () => props.open,
   (open) => {
-    if (open) outcome.value = note.value = "";
+    if (open) {
+      outcome.value = "";
+      note.value = callbackAt.value = "";
+    }
   }
 );
 
 function submit() {
   if (!outcome.value) return;
+  if (
+    outcome.value === "Call back" &&
+    (!callbackAt.value || dayjs(callbackAt.value).isBefore(dayjs()))
+  ) {
+    toast.error(__("Pick a time in the future to call back."));
+    return;
+  }
   logCall.submit(
-    { lead: props.leadId, outcome: outcome.value, note: note.value },
+    {
+      lead: props.leadId,
+      outcome: outcome.value,
+      note: note.value,
+      callback_at:
+        outcome.value === "Call back"
+          ? dayjs(callbackAt.value).format("YYYY-MM-DD HH:mm:ss")
+          : null,
+    },
     {
       onSuccess() {
         toast.success(__("Call logged"));

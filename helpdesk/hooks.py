@@ -31,6 +31,9 @@ after_migrate = [
     "helpdesk.setup.after_migrate",
 ]
 
+# a lead photo's bytes are cached by the browser, for that person only
+after_request = ["helpdesk.api.leads.cache_lead_photo"]
+
 # Full Text Search
 # ------------------
 
@@ -63,9 +66,14 @@ scheduler_events = {
             "helpdesk.copilot.releases.run_due",
             # customer sites' new errors become tickets (off by default; docs/tbo-copilot.md, Error watch)
             "helpdesk.copilot.watch.run_due",
+            # pauses every running timer once the work day (or the morning, with a lunch
+            # break set) has closed
+            "helpdesk.tasky.time_sessions.stop_timers_outside_work_hours",
             "helpdesk.tasks.push_ticket_statuses",
             "helpdesk.tasks.sync_conversations",
             "helpdesk.content_sync.sync_content_approvals",
+            # posts the content calendar scheduled for Facebook / Instagram (docs/meta-publishing.md)
+            "helpdesk.integrations.meta.publisher.publish_due",
             "helpdesk.helpdesk.doctype.hd_meeting.hd_meeting.send_reminders",
             "helpdesk.copilot.runs.expire_stale_leases",
         ],

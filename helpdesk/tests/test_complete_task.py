@@ -6,6 +6,7 @@ from frappe.tests.utils import FrappeTestCase
 from helpdesk.helpdesk.doctype.timesheet.timesheet import Timesheet
 from helpdesk.tasky import api as tasky
 from helpdesk.test_utils import (
+    freeze_work_day,
     get_task_timesheets,
     hold_commits,
     make_assignment,
@@ -25,6 +26,8 @@ OTHER_DEV = ("other.complete@complete-task.example", "Vivek Kumar")
 class TestCompleteTask(FrappeTestCase):
     def setUp(self):
         hold_commits(self)
+        # hours are checked against the work day: not a weekend or a day with no hours
+        freeze_work_day(self)
         self.addCleanup(frappe.set_user, "Administrator")
 
         make_tasky_user(*PM, roles=("Project Manager",))

@@ -50,13 +50,18 @@ user exists there with a sales role, applies what they may see, and records writ
 
 | Method | HTTP | Arguments | Returns |
 | --- | --- | --- | --- |
-| `get_options` | GET | | `{stages: [{name, label, type, color}], sources, segments, owners: [{email, full_name}], territories, industries, can_call, departments: [{name, lead_type, is_active, is_head, is_member}], lead_types}` (the last two from the departments release of TBO Smart) |
-| `list_leads` | GET | `search, stage, owner, segment, department, source, temperature, metric, period, from_date, to_date, view, start, page_length` | `{rows: [{name, lead_name, company_name, email_id, mobile_no, tbo_stage, segment, lead_owner, owner_name, score, next_follow_up, modified, latest_quotation, latest_proposal, tbo_department, tbo_lead_type}], total}` |
+| `get_options` | GET | | `{stages: [{name, label, type, color}], sources, segments, owners: [{email, full_name}], territories, industries, org_sizes, states, kerala_districts, districts_by_state, can_call, departments: [{name, lead_type, is_active, is_head, is_member}], lead_types}` (the last two from the departments release of TBO Smart) |
+| `list_leads` | GET | `search, stage, owner, segment, department, industry, state, district, org_size, last_call_result, last_reply_class, source, temperature, metric, period, from_date, to_date, view, start, page_length` | `{rows: [{name, lead_name, company_name, email_id, mobile_no, tbo_stage, segment, lead_owner, owner_name, score, next_follow_up, modified, latest_quotation, latest_proposal, tbo_department, tbo_lead_type, industry, state, district, org_size}], total}` |
+| `get_category_counts` | GET | | `{industry, state, district, org_size}`, each `{value: leads}` (TBO Smart v1.14, `hub-leads-api.md` §2.14) |
+| `add_industry` | POST | `name` | `{name, created}`; managers only |
+| `bulk_set_lead_category` | POST | `leads, values` | `{updated, skipped}`; managers only |
 | `get_overview` | GET | `period, from_date, to_date, owner` | the Overview's figures (TBO Smart's `hub-leads-api.md` §2.4) |
 | `get_lead_intake` | GET | `from_date, to_date` (the hub sends yesterday and today) | new leads taken each day by owner, imports left out, and the scope's salespeople (§2.4.1) |
 | `get_proposal_money` | GET | `period, from_date, to_date, owner` | proposals sent, won, advances and every payment split still to collect (§2.8) |
 | `get_daily_report` | GET | `date, owner` | each salesperson's day and week to date (§2.5.1) |
-| `log_call` | POST | `lead, outcome, note` | `{name, status, outcomes}` (§2.7) |
+| `log_call` | POST | `lead, outcome, note, callback_at` | `{name, status, outcomes, stage}` (§2.7, §2.16) |
+| `get_my_calls`, `get_next_batch`, `record_call_outcome`, `get_call_batches_report` | GET, POST, POST, GET | see [Today's calls](#todays-calls) | TBO Smart's `hub-leads-api.md` §2.13 |
+| `estimate_prospect_run`, `start_prospect_run`, `get_prospect_runs`, `get_prospect_run` | POST, POST, GET, GET | `values: {industry, state, districts, provider, max_results, department, require_phone}`; `name` | a run and its price, the started run, the runs, one run with its leads; see [Find prospects](#find-prospects), TBO Smart's `hub-leads-api.md` §2.15 |
 | `get_lead_ai` | GET | `name` | what the AI proposes, the lead's health and likely duplicates (TBO Smart's `hub-leads-api.md` §2.6) |
 | `refresh_lead_ai`, `apply_ai_stage`, `dismiss_ai_stage` | POST | `name` | as above, or the lead (apply) |
 | `draft_lead_message` | POST | `name, channel (whatsapp / email), language` | `{channel, subject, text, to?, url?}`; nothing is sent |
@@ -85,7 +90,7 @@ user exists there with a sales role, applies what they may see, and records writ
 - `view` is `all`, `mine`, `call_today` or `follow_up`. The hub sends `page_length` 20
   (at most 100) and `start` from 0.
 - `data` (create and update) uses these keys: `lead_name, company_name, email_id, mobile_no,
-  source, segment, territory, industry, lead_owner, next_follow_up` (date, `YYYY-MM-DD`), and `tbo_department` (a department's name).
+  source, segment, territory, industry, state, district, org_size, lead_owner, next_follow_up` (date, `YYYY-MM-DD`), and `tbo_department` (a department's name).
   An update sends only the fields that changed; an empty string clears a field.
 - `allowed_stages` may be stage names or stage objects; the hub offers only those (minus the
   current stage).
@@ -188,12 +193,205 @@ The ERP site's `tbo_smart.api.telephony` takes the same `acting_user`:
   `helpdesk/api/myoperator.py` for the settings (hub admins and managers who use leads; the
   ERP site checks its own System Manager role).
 
+## Today's calls
+
+Salespeople used to see every lead at once and cherry-picked, skipping many. For a department
+that switches it on (Settings, CRM, Lead departments, *Hand out daily call batches*), each member
+is handed a **batch** of leads per time slot and must call them within it. TBO Smart builds the
+batches and keeps the outcomes ([call-batches.md](https://github.com/tbocloud/tbo_smart/blob/main/docs/call-batches.md));
+the hub shows them. Nothing is stored here.
+
+**The tab.** *Today's calls* is the first tab of Leads for people in a department that hands out
+batches, and the page opens on it for Sales Employees. It **replaces Call today** for those people
+(an old `?view=call_today` link lands on it): both answer "who do I phone now", so they would be two
+places for one job. People without batches keep Call today. Managers who are not members see
+neither; they have the batch table on the Daily report.
+
+**What it shows** (`desk/src/pages/leads/TodaysCalls.vue`):
+- the batch header: slot name, time left (a live countdown, a warning icon under 15 minutes),
+  *37 / 50 called* with a progress bar, and the day's total;
+- the calls to make now, best priority first. Each row has a big **Call** button (MyOperator
+  click-to-call when set up for the person, otherwise a `tel:` link), the lead's company, industry,
+  district, phone, last note, the AI's next step, why it is in the batch, and six outcome chips;
+- **Connected** opens a quick sheet (what was said, the stage to move the lead to, an optional next
+  follow-up); **Call back** asks for a date and time (with quick choices); **Not interested** asks
+  for a reason (the ERP site moves the lead to Not Interested, no second step). *Not answered*, *Busy* and *Wrong number* save
+  at once. The counter drops the moment an outcome is chosen and is put back with the reason if the
+  ERP site refuses;
+- calls that come back later (a retry two hours after Not answered or Busy, or a call back) wait
+  under the list and join it at their time;
+- **Get next batch**, disabled with the ERP site's reason in words under it (calls still pending,
+  too many overdue, the day's limit reached, no slot open);
+- **Overdue** at the bottom: calls of a slot that ended, with a danger icon and the word
+  *Overdue*. They stay, and are still callable.
+
+States: loading skeleton, error with retry (and a banner that keeps the last queue when an update
+fails), an older ERP site, a department without batches, no batch right now (with the next slot),
+and nothing left to call. The queue is read again every minute and when the tab comes back, so a
+call made through MyOperator or the Log call dialog counts without a tap. It is never cached.
+
+**The Daily report.** For managers and department heads, the team view of the Daily report ends
+with a *Call batches* table: per person, the batches (slot called/size), called, connected and
+overdue. `get_call_batches_report`; it stays out for anyone else and for an older ERP site. The 6 pm
+message lists the same, one line per person and a total, when the ERP site has it.
+
+**Settings.** The department dialog has a *Daily call batches* box: the switch, the slots (name,
+from, to, calls; add and remove), calls a day per person, a limit for one person, overdue calls that
+block the next batch, pull unassigned leads, and an optional campaign filter (industry, state,
+district). The same rules are validated here (no overlaps, an end after the start) and by the ERP
+site.
+
+Code: `helpdesk/api/call_batches.py` (proxies; `report_lines` for the 6 pm text),
+`desk/src/pages/leads/callBatches.ts` (types, outcome list, optimistic update, rules helpers),
+`TodaysCalls.vue`, `CallRow.vue`, `CallOutcomeDialog.vue`, `CallBatchesTable.vue`,
+`desk/src/components/Settings/CRM/CallBatchRules.vue`.
+
+## Find prospects
+
+TBO sells mainly by phone. Managers and department heads find businesses by industry and district
+(for example Resorts in Idukki) and drop them into a department's **unassigned pool**; the call
+batches ([Today's calls](#todays-calls)) hand them out. The ERP site does everything (providers,
+prices, the monthly spend cap, the search, the import, the duplicate check and reading each
+business's own website); the hub only asks and shows. TBO Smart's `docs/prospecting.md` is the
+spec.
+
+**Who.** `get_options` carries `can_find_prospects` (System Manager, Sales Manager or a department
+head, while TBO Smart Settings → Prospecting → Enable Find prospects is on) and `prospecting`
+(providers with `available`, the default department, the largest run, the monthly cap and spend).
+Everyone else gets neither: no button, and the page says it is not available. The ERP site
+refuses the calls too.
+
+**The page** `/leads/prospects` (button *Find prospects* in the Leads header, only with the flag).
+One purpose, one primary action. On the left the search: Industry, State, District(s) (a multi
+select from the ERP site's district lists, or comma separated text without them), Provider (each
+with its coverage, one that is switched off or has no key is listed as "not set up" and cannot be
+used), Max results, Department and "Only businesses with a phone number". The primary action is
+**Estimate**; it prices the run (nothing is searched or bought), shows the cost, the number of
+businesses (OpenStreetMap: how many the map holds; a paid provider: "up to" the maximum) and the
+coverage note, and the button becomes **Start run**. Changing any field drops the estimate. A paid
+run over the monthly cap is refused with the ERP site's words. On the right the runs, newest first,
+each with its status (icon and word), counts (found, new, duplicates) and cost; a running one
+refreshes every 5 seconds. A run opens in a dialog: counts, the leads it created (each links to its
+lead page and shows its Why call line, or "In the pool" while it has no owner), the log, and a link
+to the Leads list filtered by the source `Prospecting – <provider>`.
+
+**On the lead page.** A lead found by a run (or any lead whose website was read) shows **Why call**
+above the AI suggestions: the one-line reason and four chips, each with an icon and words in both
+states (Website / No website, Online booking / No online booking, WhatsApp / No WhatsApp, Hiring /
+Not hiring). Neutral styling, no colour meaning. Nothing shows while the site was not read or could
+not be read.
+
+**Errors.** An older ERP site: the runs list is empty with "The ERP site can't find prospects yet";
+estimate and start say "needs the latest TBO Smart". A refusal says only managers and department
+heads can find prospects, or the ERP site's own reason.
+
+## Outreach
+
+Phase 2 of Find prospects (TBO Smart's `docs/prospecting.md` §10 and §11 is the spec): the AI
+writes a first message for each lead of a prospect run, **a person reads, edits and approves it**,
+and the replies are sorted by the ERP site. The hub proxies `tbo_smart.api.hub_outreach` through
+`helpdesk/api/outreach.py` (`get_outbox`, `draft_outreach`, `update_outreach`,
+`regenerate_outreach`, `approve_outreach`, `cancel_outreach`, `mark_outreach_sent`); the ERP site
+holds the outbox, the daily cap, the send window and sends the email. The hub sends nothing.
+
+**Who and when.** `get_options` carries `outreach` (TBO Smart Settings → Outreach → Enable
+Outreach, off by default). While it is on, everyone who uses Leads gets the **Outreach** tab and
+sees their own messages; a department head also sees the department's, a manager everyone's (the
+ERP site decides). An older TBO Smart: the tab stays out; the endpoints answer "needs the latest
+TBO Smart". The options are cached for ten minutes, so the tab can take that long to appear after
+the switch is turned on.
+
+**The tab** (`LeadsOutreach.vue`, `OutreachRow.vue`). One purpose: review and approve. A status
+switch (Draft, Approved, Sent, Failed, Cancelled, each with its count; Draft first), today's email
+count against the daily limit, and the sending hours when they are closed. Each row shows the
+company, the status (icon and words, "Approved, waiting to go" for an email held for the window or
+the limit), the lead's last reply class, the recipient, the owner (when other people's messages
+show) and the subject or the start of the text; it opens to an editable subject and text with
+**Approve** (the one primary action), **Save changes**, **Regenerate** and **Cancel message**, the
+opt-out line the email will carry, and an error in words on a Failed message. Approving saves any
+edit first. Select rows (Draft, Approved, Failed) to **Approve selected** or **Cancel selected**.
+WhatsApp has no API yet: an approved WhatsApp row shows **Open WhatsApp** (the `wa.me` link with
+the text filled in) and **Mark sent**, which the person presses after sending it by hand.
+Results are told in words (sent, approved, a message that was held and why); approving an email
+with no outgoing email account on the ERP site shows "Set up an outgoing email account first".
+The list refreshes by itself while drafts are being written.
+
+**Drafting.** In Find prospects, a Done run offers **Draft first messages** on its row and in its
+dialog (only while Outreach is on): pick Email or WhatsApp, and the ERP site drafts in the
+background, skipping and explaining the leads that unsubscribed, are lost, have no address, are
+not the person's to edit or already have a first message. Nothing is sent. The ERP site writes the
+message from the lead's website findings and Why call line, and throws away a draft that has a
+number that is not in them.
+
+**Replies.** The lead page's AI card shows the last reply's class (Interested, Question,
+Objection, Not now, Not interested, Unsubscribe, Out of office, or New reply when the AI could
+not sort it) with when it came and what the ERP site did about it. The Leads list has a
+**Replied** filter (any of the classes, with counts) beside Last call; `list_leads` takes
+`last_reply_class`, which is validated here and sent as a JSON list.
+
+Tests: `helpdesk/tests/test_outreach.py` (the outbox read live as the person and never cached,
+status filters, an older ERP site, the ERP site's refusals reaching the person, drafting posted
+with its channel, the names checked before the ERP site is asked, edits trimmed, no leads access,
+the reply-class filter).
+
+## Commission
+
+Commission is a percentage of the money **collected** on a project, per month, in progressive
+slabs with a higher rate above a target. The ERP site holds the plans, the project set-ups and the
+statements and works the money out from its customer receipts (TBO Smart's `docs/commission.md` is
+the spec, `docs/hub-leads-api.md` section 2.18 the contract). The hub proxies
+`tbo_smart.api.hub_commission` through `helpdesk/api/commission.py` (`get_commission`,
+`generate_statements`, `approve_statement`, `mark_paid`, `get_commission_plans`,
+`save_commission_plan`, `get_project_commission`, `save_project_commission`). Nothing is cached;
+an older TBO Smart answers `available: false` (reads) or "needs the latest TBO Smart" (writes).
+
+**Where it lives, and why.** A **Commission** tab on Leads, not a Scoreboard section. It needs a
+month, a person-then-project drill-down and approval actions, and the Scoreboard is a live
+activity count; the tab sits beside Business and the Daily report, which are the other
+"report for a period" views, and it reads as one purpose: who earns what this month.
+
+**The tab** (`LeadsCommission.vue`, `CommissionPayments.vue`). A month picker (this month and the
+12 before) and, for managers, **Generate drafts** (the one primary action; approved statements are
+left as they are and the toast says how many). Tiles: collected and commission (for a salesperson
+"My collected" and "My commission", with the target reached and the slab), people, and, for managers,
+**Unattributed**. One card per person: collected with an achievement bar against the target (the
+percentage is always written; the bar turns green at 100%), the slab reached, commission and the
+status (Draft, Approved, Paid, or "Not drafted"). A manager sees **Approve** on a Draft and **Mark
+paid** on an Approved statement. A card opens to the projects (collected, share, commission), the
+slab breakdown (each slab's part of the money, its rate, whether it was above target) and the
+payments. An approved or paid statement is shown as approved and says so. What a person may see is
+decided on the ERP site: a salesperson only themselves (their card opens by itself), a department
+head their department, a manager everyone. **Unattributed** explains in words that it is money that
+could not be followed to a project and a person (an advance not matched to an order or invoice, an
+order with no project, a lead with no owner), lists the reasons with amounts and opens to the
+payments. States: loading skeletons, an error with Try again (and a banner over stale figures), "needs
+the latest TBO Smart", and an empty month that says what makes commission appear.
+
+**Commission plans** (Settings → CRM, `CommissionPlans.vue`, `CommissionSlabs.vue`; System Manager and
+managers). A plan has optional conditions (department, lead type, project type, person), a basis
+(Project collected: each project's money through the slabs on its own, target per project; Collected
+(all): the person's whole month once, target per person), a monthly target, an above-target rate and
+slabs (from, to blank for no limit, rate). The dialog checks the slabs as you type and shows a live
+example, "On Rs 3,00,000 collected: Rs X", with the slab pieces under it; the maths is the same as the
+ERP site's (`previewCommission` in `commission.ts`), which has the last word on save. The plan whose
+conditions all hold and match the most wins: person, then project type, lead type, department.
+
+**Project page** (`ProjectCommission.vue`, a **Commission** tab for managers). Who earns on the
+project with their shares (they must add up to 100), the plan (or "Match by rules") or the project's
+own slabs, what was collected on the project so far and the commission credited in statements. With
+no earners the owner of the lead behind each payment earns all of it. The project name defaults to
+the hub project; type the ERP Project name when the invoices use another.
+
+Tests: `helpdesk/tests/test_commission.py` (reads live as the person and never cached, filters
+trimmed, an older ERP site hidden quietly, refusals, writes as POSTs, plan and project values sent as
+JSON). The ERP site's own tests cover the maths, attribution and statements.
+
 ## Hub endpoints
 
 `helpdesk/api/leads.py`, thin typed proxies (writes are POST only): `get_options`,
-`list_leads`, `get_overview_page`, `get_overview`, `get_lead_intake`, `get_proposal_money`, `get_lead`, `get_lead_ai`, `refresh_lead_ai`, `apply_ai_stage`,
+`list_leads`, `get_overview_page`, `get_overview`, `get_business_overview`, `get_lead_intake`, `get_proposal_money`, `get_lead`, `get_lead_ai`, `refresh_lead_ai`, `apply_ai_stage`,
 `dismiss_ai_stage`, `draft_lead_message`, `log_message_sent`, `create_lead`, `update_lead`,
-`set_stage`, `add_note`, `find_duplicate_leads`, `get_stale_leads`, `get_lead_departments`, `save_lead_department`, `set_lead_department_active`, `click_to_call`, `call_recording`, `get_daily_report`, `log_call`. They check
+`set_stage`, `add_note`, `get_category_counts`, `add_industry`, `bulk_set_lead_category`, `find_duplicate_leads`, `get_stale_leads`, `get_lead_departments`, `save_lead_department`, `set_lead_department_active`, `click_to_call`, `call_recording`, `get_daily_report`, `log_call`, `get_lead_photos`, `upload_lead_photo`, `delete_lead_photo`, `lead_photo`. Find prospects has its own `helpdesk/api/prospects.py`: `estimate_prospect_run`, `start_prospect_run`, `get_prospect_runs`, `get_prospect_run`; Outreach has `helpdesk/api/outreach.py` (see [Outreach](#outreach)). They check
 `can_use_leads`, validate the view and page size, trim notes, and pass `acting_user`. The
 client is `CRMClient.call` in `helpdesk/integrations/crm/client.py`; the call and error
 mapping live in `helpdesk/integrations/crm/leads.py`. The API key and secret never reach the
@@ -324,7 +522,21 @@ doesn't show without its fields. The hub can be deployed before TBO Smart.
   leads yet" on first use.
 - **New lead** (`LeadFormDialog.vue`, the one primary action on the list): contact name
   (required), company, email, mobile, source, segment, territory, industry, owner (defaults
-  to you on the ERP site) and next follow-up. Opens the new lead when it's created.
+  to you on the ERP site), next follow-up and remarks. Opens the new lead when it's created.
+  Remarks aren't a lead field: the ERP site's `create_lead` takes only the `data` keys above,
+  so the dialog saves them with `add_note` once the lead exists (they're the first entry on
+  its timeline). If that note fails the lead stays created, a warning says so, and the
+  remarks are kept per person and lead (`keepUnsavedNote` in `leads.ts`): in `localStorage`
+  under `hd-lead-unsaved-note:<user>:<lead>`, and in memory as well so blocked or full
+  storage still hands them over (the warning then says a reload would lose them). The lead's
+  page opens with them in its note box, and they stay through reloads until a note sent from
+  them (edited or not) is added; a fresh note typed after clearing the box leaves them
+  stored. Logout clears them (`stores/auth.ts`), so the next person on a shared browser
+  never sees them, and a failure landing after logout began stores nothing. A save (or its
+  duplicate check) that finishes after the dialog was closed and opened again keeps those
+  remarks but leaves the reopened form alone, and a note added on the lead page clears the
+  box only if it's still that lead and the text wasn't changed meanwhile. Edit lead has no
+  Remarks; the lead page's note composer does that.
 - **Lead** (`/helpdesk/leads/<name>`, `Lead.vue`): details, *Move stage* (the primary
   action; only `allowed_stages`, with an optional note), *Edit* (the same dialog, sending
   only changed fields), a note composer and the timeline, and the quotations read-only
@@ -364,9 +576,68 @@ doesn't show without its fields. The hub can be deployed before TBO Smart.
   (asks first; the new secret shows once, with Copy), the people mapping, unknown callers,
   recordings (days kept, the recording notice for the IVR greeting under the DPDP Act) and
   the AI call summary.
+- **Place and Photos** (needs TBO Smart's hub leads API v1.11, `hub-leads-api.md` §2.11; both
+  cards stay out while the ERP site is older: no `place` on `get_lead`, and `get_lead_photos`
+  answers `available: false` through `call_if_deployed`), under Details in the left column, for
+  a BD who is about to visit:
+  - **Place** (`LeadPlace.vue`): the location note, **Get directions** (Google Maps
+    `dir/?api=1&destination=<lat,lng>`, which opens the Maps app on a phone; only with a pin),
+    **Open in Maps** (the pasted map link, when there is no pin), **Google profile** (opens the
+    client's Business Profile), and **Show map** (Google's key-free embed
+    `maps?q=<lat,lng>&output=embed`, loaded only when asked, to spare mobile data). The
+    coordinates show in mono. Empty: a line saying what to add and an *Add place* button (read
+    only: "No place has been saved"). *Edit* (anyone who can write the lead) saves through
+    `update_lead` with the links, the pin and the note; **Use my current location** asks the
+    browser for one fix (needs https and permission) and says plainly when it is denied, can't
+    be found, times out or isn't supported; a long Google Maps link fills the pin when it is
+    empty. Latitude and longitude go together and are range-checked before they are sent; the
+    ERP site checks the links are Google's.
+  - **Photos** (`LeadPhotos.vue`): a grid of thumbnails (square, lazy), **Take photo** (camera
+    on a phone: `accept="image/*" capture="environment"`) and **Add photos** (several, from the
+    gallery). Chosen pictures open a dialog with previews and one optional caption for them;
+    each is scaled to 2000 px as a JPEG in the browser (so a phone upload is quick, HEIC works
+    where the browser decodes it, and the GPS in EXIF is dropped) and uploaded one at a time with
+    a status line per file, a named error for a refused one and a toast when done. At most 20
+    per lead (the buttons disable, with the reason). Tapping a thumbnail opens the shared
+    `MediaLightbox` (arrow keys, buttons and a swipe, Esc to close); *Remove* asks once. The
+    ERP site lets only the uploader, the lead's owner or a manager delete and says so.
+  - The images are private on the ERP site. The browser loads them from
+    `helpdesk.api.leads.lead_photo?lead=&file=&thumb=`, which streams the ERP bytes as the signed-in
+    person (only PNG, JPEG or WebP are passed on, `Content-Disposition: inline`) and, through the
+    `after_request` hook `cache_lead_photo`, `Cache-Control: private, max-age=3600`.
 - The pickers' options (`get_options`) are fetched once per session (`leadOptions` in
   `desk/src/pages/leads/leads.ts`).
 - Sidebar: *Leads* in Workspace (teal group), shown when `can_use_leads`.
+
+## Lead categories (industry, state, district, organisation size)
+
+Each lead says what kind of client it is, so the list can be filtered and counted by it.
+The four fields are ERPNext's own (`industry`, `state`, `no_of_employees`) plus TBO's
+`tbo_district`; the hub's names are `industry`, `state`, `district`, `org_size`. The contract
+is TBO Smart's `hub-leads-api.md` §2.14.
+
+- **Lead form** (`LeadCategoryFields.vue`, inside `LeadFormDialog.vue`): Industry and State
+  are searchable lists. A manager who types an industry that isn't there gets "Add as a new
+  industry" (`add_industry`; the ERP site refuses anyone else). District is a combobox that
+  accepts any text: with State Kerala it suggests the 14 districts, with another state the
+  districts leads there already use, with no state all of those. Organisation size is
+  ERPNext's employee band. The lead page's Details card shows all four.
+- **Filters** (`LeadCategoryFilters.vue`, under the other filters): four multi-selects (any of
+  the picked values; different fields all apply). They are in the URL as repeated keys
+  (`?industry=Resorts&industry=Hotels…&state=Kerala`), clear with "Clear filters", and apply
+  with every view and with an Overview number's list. Each value shows how many of the
+  person's leads have it (`get_category_counts`, cached a minute; no counts on an older ERP
+  site). District lists only the districts in use.
+- **Rows** show "Industry · District" (the state when there is no district) after the segment.
+- **Bulk set** (managers): "Select leads" turns on checkboxes (this page, or one by one across
+  pages), and "Set category" opens a form for the four values. A field left as it is changes
+  nothing; "Clear" empties it on every selected lead. Up to 500 leads per call; leads the
+  person may not write come back as `skipped` and are listed.
+- **Overview and dashboards are not filtered by category**: the ERP site builds their figures
+  per owner and period (`hub-leads-api.md` §2.14). Opening a number's list and then filtering it
+  by category works.
+- Needs TBO Smart v1.14 on the ERP site; before that the pickers show empty lists and the
+  filters send nothing it understands.
 
 ## Daily report
 
@@ -441,13 +712,81 @@ positive lead, a new quotation and a new lead are) is in TBO Smart's `docs/hub-l
   (chat when set up, else email, as the follow-up digest: `deliver_digest`). A manager the
   ERP site refuses is skipped, one failure doesn't stop the rest, and the whole run is
   silent while the ERP site is older.
-- **Log call** (`LogCallDialog.vue`, `helpdesk.api.leads.log_call(lead, outcome, note)`,
-  POST): a *Log call* button on the lead page beside Call, for calls made outside
-  MyOperator: Connected, No answer, Busy or Voicemail and an optional note; the ERP site
-  records an outgoing call as the signed-in person, which counts in the report. Shown only
-  with `can_log_call`; the person's cached reads are cleared after it.
+- **Log call** (`LogCallDialog.vue`, `helpdesk.api.leads.log_call(lead, outcome, note,
+  callback_at)`, POST): a *Log call* button on the lead page beside Call, for calls made outside
+  MyOperator. The six outcomes are the ones Today's calls has (Connected, Not answered, Busy,
+  Call back with a time, Not interested, Wrong number), each with its icon, and a line says
+  what it does to the stage. The ERP site records an outgoing call as the signed-in person
+  (which counts in the report), sets the lead's last call result and moves its stage (below).
+  Shown only with `can_log_call`; the person's cached reads are cleared after it, and the
+  lead page reloads. `No answer` and `Voicemail` are still accepted by the proxy and read as
+  Not answered.
+
+## Call outcomes: stages and the last call
+
+Owner's problem: stages were only progress ones, so every call became "Contacted" plus a note
+and positive and negative calls could not be told apart. TBO Smart now has the stages **Not
+Responding** (called, not answered: call again), **Not Interested** and **Wrong Number** (both
+lost, reason filled in), and keeps each lead's **last call result**
+(`hub-leads-api.md` §2.16; the ERP site moves the stage, the hub only shows it).
+
+- **Stage picker** (Move stage on the lead page) lists them from `get_options` like any stage.
+  The call stages carry an icon next to the label and the colour the ERP site gives them
+  (`stageTone`/`stageIcon` in `leads.ts`): Not Responding warning, Not Interested danger, Wrong
+  Number neutral. Setting Not Interested or Wrong Number needs no reason.
+- **Last call chip** (`lastCall` in `leads.ts`): "Not answered · 2d ago" on each list row and in
+  the lead page's Details header, with the outcome's icon (`OUTCOME_LOOK` in `callBatches.ts`,
+  shared with Today's calls). Colour only where it means something: Connected success, Not
+  answered and Busy warning, Call back info, Not interested danger, Wrong number neutral. A lead
+  never called shows none.
+- **Last call filter** (`LeadCategoryFilters.vue`): a fifth multi-select next to the categories,
+  any of the picked outcomes, kept in the URL (`?last_call_result=Busy&last_call_result=…`),
+  cleared with "Clear filters", with each outcome's count from `get_category_counts`. It is
+  left out until the ERP site has it.
+- Needs the TBO Smart release with §2.16. Before it the stages, chips and filter simply do not
+  appear.
 - **Colour**: this tab is colourful on the owner's request, an exception recorded in
   [ui-guidelines.md](ui-guidelines.md) §8.
+
+## Business (management only)
+
+The Leads page's **Business** tab (`LeadsBusiness.vue`, `business/`) is the owner's meeting
+view: how many clients are in the pipeline and what they are worth, proposals given,
+onboardings (clients won, projects started) and the revenue that came in. It is company-wide,
+not the signed-in person's sales scope, and it can be taken to a meeting.
+
+**Who can see it, and how to grant it.** One place decides: the ERP site. A person sees the tab
+and gets the figures when they are a **System Manager** or have the **TBO Management** role
+there (created by TBO Smart's migrate; it is given to nobody). To grant it, add the role to the
+person's user on the ERP site (User → Roles). The hub keeps no list of its own. The tab shows
+when `get_options` answers `can_view_business` (kept up to 10 minutes per person, so a new
+grant may need a refresh); the figures are checked again on every read, so a link or API call by
+anyone else is refused (403: "Only management can see the Business overview"), and a role taken
+away stops the figures within the 60-second cache. The person still has to be a hub user who
+can open Leads (System Manager, Agent Manager, or an active agent in the Leads teams).
+
+`helpdesk.api.leads.get_business_overview(period, from_date, to_date, department, include_profit,
+fresh)` proxies TBO Smart's `get_business_overview` (hub-leads-api.md §2.11 in the tbo_smart repo),
+through `call_if_deployed` (an older ERP site answers `available: false` and the page says so),
+cached per person for 60 seconds, `fresh=1` skips it. Periods: this month, last month, this
+quarter, this FY (from 1 April) and custom (at most two years); the hub works the dates out.
+
+**The page:** a period picker, a department filter (shown when the ERP site has departments),
+a Show profit switch, then a headline row (clients in pipeline, pipeline value, proposals sent,
+onboarded, revenue invoiced, collected, outstanding, each saying whether it is the period or
+now), revenue by month, the funnel, pipeline by stage, proposals and onboarding facts, the last six
+months, top clients, profit (when asked and available) and a department table. Charts are plain
+SVG (`BusinessBars`) and bar rows (`BusinessRows`); no chart library is added. The pipeline value is
+the open clients' latest quotations, **unweighted** (lead stages have no probability) and says so.
+Outstanding is what customers owe today, not the period's.
+
+**Downloads:** *Download data (CSV)* writes the page's numbers as rows (section, item, count, amount,
+note) with a byte-order mark for Excel. *Download as slides (PDF)* prints `BusinessSlides.vue`: a
+title slide (logo, "Sales & Business overview", period, generated date) and six 16:9 landscape slides
+(headline numbers, pipeline and funnel, proposals and onboarding, revenue, last six months,
+departments and clients) in fixed light colours, through the browser's Save as PDF. The slides sit on
+`<body>` and add their `@page { size: 297mm 167mm }` rule only while the tab is open, so printing any
+other page is unchanged; turn "Background graphics" on in the print dialog for the bars.
 
 ## Proposals
 
@@ -489,18 +828,35 @@ message queued) while other errors still show; the
 AI calls are the signed-in person's (POST for every change) and the channels checked.
 The one-request Overview page (all parts, money or intake failing alone, cache hit, `fresh`,
 per-person cache, a write clearing it) is tested there too.
+`helpdesk/tests/test_lead_categories.py`: the filters (and the last call result, checked) sent as JSON lists (none when empty), a lead
+saved with its categories, the counts (empty on an older ERP site), `add_industry` and
+`bulk_set_lead_category` proxied as the person, a refusal naming who may, empty picks refused.
+`helpdesk/tests/test_lead_place.py`: the photo list (and the card staying out on an older ERP
+site), an upload passed on with a trimmed caption, an empty or oversize upload kept at the hub,
+the ERP site's refusal reaching the person, delete, the image streamed (and only image types),
+no access without leads, and the private cache header.
 `helpdesk/tests/test_stale_leads.py`: wave 1: the duplicate check proxied as the person (and skipped
 quietly on an older ERP site), `allow_duplicate` sent only when confirmed, the quiet leads kept
 per department threshold and cached per person, and the follow-up rule (owner at L0, heads at
 twice the days, one notice per person and lead, off switch, older ERP site and ERP errors add
 nothing).
+`helpdesk/tests/test_leads_business.py`: the period dates, the proxy as the signed-in person,
+the 60-second per-person cache (and `fresh`), a refusal from the ERP site shown and never kept, an
+older ERP site, and the tab flag passed through `get_options`.
 `helpdesk/tests/test_sales_wall.py`: a Sales Employee outside the Leads teams lists, opens,
 creates, moves and notes a lead as themselves.
 `helpdesk/tests/test_daily_sales_report.py`: the report proxied as the person, targets and
 pace (pro-rated by working days, zero targets left out), the exact WhatsApp text, the cache
 (`fresh`, another day, a logged call clearing it), an older ERP site hiding it quietly,
-`log_call`, and the 6 pm job (one message per manager, not on a day off, not when the setting
+`log_call` (the six outcomes and `callback_at`, a call back needing its time), and the 6 pm job (one message per manager, not on a day off, not when the setting
 is off, silent on an older ERP site, a refused manager skipped).
+`helpdesk/tests/test_call_batches.py`: the queue read live as the person (never cached; an older
+ERP site and a department without batches told apart), an outcome posted with a trimmed note, a
+made-up outcome and a call back without a future time refused before the ERP site is asked, the ERP
+site's reason reaching the person, the next batch's reason passed on, the manager report, and the
+6 pm message's batches section (and its absence on an older ERP site).
 `helpdesk/tests/test_lead_calls.py`: Call posted as the signed-in person to TBO Smart's
 telephony API, the recording streamed (audio only) and a refusal refused, the MyOperator
 settings for admins only and proxied.
+`helpdesk/tests/test_outreach.py`: see [Outreach](#outreach).
+`helpdesk/tests/test_prospects.py`: an estimate and a start proxied as the person (POST, the values as a set of fields), the runs read live, a refusal naming who may, an older ERP site (the list hides quietly, estimate and start say so), and no access without leads.

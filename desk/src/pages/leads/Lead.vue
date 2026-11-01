@@ -113,10 +113,19 @@
                   {{ __("Details") }}
                 </h2>
                 <TaskyBadge
+                  v-if="lead && lastCall(lead)"
+                  class="ml-auto font-normal tabular-nums"
+                  :label="lastCall(lead)!.label"
+                  :tone="lastCall(lead)!.tone"
+                  :icon="lastCall(lead)!.icon"
+                  :title="__('Last call')"
+                />
+                <TaskyBadge
                   v-if="lead?.tbo_stage"
-                  class="ml-auto"
+                  :class="lead && lastCall(lead) ? '' : 'ml-auto'"
                   :label="stageLabel(options, lead.tbo_stage)"
                   :tone="stageTone(options, lead.tbo_stage)"
+                  :icon="stageIcon(lead.tbo_stage)"
                 />
               </div>
               <dl class="flex flex-col gap-3 px-4 py-4">
@@ -141,7 +150,24 @@
                 </div>
               </dl>
             </section>
-            <LeadAISuggests :lead-id="leadId" @changed="detail.reload()" />
+            <template v-if="lead?.place">
+              <LeadPlace
+                :lead-id="leadId"
+                :place="lead.place"
+                :can-write="!!lead.can_write"
+                @saved="detail.reload()"
+              />
+              <LeadPhotos :lead-id="leadId" :can-write="!!lead.can_write" />
+            </template>
+            <LeadWhyCall :prospect="lead?.prospect" />
+            <LeadAISuggests
+              :lead-id="leadId"
+              :last-reply="{
+                class: lead?.last_reply_class,
+                on: lead?.last_reply_on,
+              }"
+              @changed="detail.reload()"
+            />
             <LeadQuotations :quotations="data.quotations || []" />
             <LeadProposals
               :lead-id="leadId"
@@ -284,6 +310,13 @@
               :value="stage.name"
               class="size-4 border-outline-gray-4 text-ink-gray-9 focus-visible:ring-2 focus-visible:ring-highlight"
             />
+            <component
+              :is="stageIcon(stage.name)"
+              v-if="stageIcon(stage.name)"
+              class="size-4 shrink-0"
+              :class="INK[stageTone(options, stage.name)]"
+              aria-hidden="true"
+            />
             <span class="text-base text-ink-gray-8">{{
               stage.label || stage.name
             }}</span>
@@ -324,6 +357,7 @@
 <script setup lang="ts">
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import TaskyBadge from "@/components/TaskyBadge.vue";
+import { INK } from "@/components/tone";
 import TaskyState from "@/components/TaskyState.vue";
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
@@ -354,16 +388,23 @@ import LeadAISuggests from "./LeadAISuggests.vue";
 import LeadCallEntry from "./LeadCallEntry.vue";
 import LucideScrollText from "~icons/lucide/scroll-text";
 import LeadFormDialog from "./LeadFormDialog.vue";
+import LeadPhotos from "./LeadPhotos.vue";
+import LeadPlace from "./LeadPlace.vue";
+import LeadWhyCall from "./LeadWhyCall.vue";
 import LeadDocuments from "./LeadDocuments.vue";
 import LogCallDialog from "./LogCallDialog.vue";
 import LeadProposals from "./LeadProposals.vue";
 import LeadQuotations from "./LeadQuotations.vue";
 import {
+  dropUnsavedNote,
   loadLeadOptions,
   leadOptions,
   ownerName,
+  lastCall,
+  stageIcon,
   stageLabel,
   stageTone,
+  unsavedNote,
   useClickToCall,
   type LeadDetail,
   type LeadOptions,
@@ -467,6 +508,9 @@ const detailFields = computed(() => {
     { label: __("Segment"), value: l.segment || "" },
     { label: __("Territory"), value: l.territory || "" },
     { label: __("Industry"), value: l.industry || "" },
+    { label: __("State"), value: l.state || "" },
+    { label: __("District"), value: l.district || "" },
+    { label: __("Organisation size"), value: l.org_size || "" },
     {
       label: __("Score"),
       value: l.score === null || l.score === undefined ? "" : String(l.score),
@@ -478,15 +522,33 @@ const detailFields = computed(() => {
 
 // --- notes ---
 
-const note = ref("");
+// starts with the remarks the New lead dialog couldn't save, kept until they're added
+const note = ref(unsavedNote(props.leadId));
+// whether the box holds those remarks (edited or not) rather than a note started afresh
+const fromDraft = ref(!!note.value);
 const noteError = ref("");
+watch(
+  () => props.leadId,
+  (lead) => {
+    note.value = unsavedNote(lead);
+    fromDraft.value = !!note.value;
+  }
+);
+watch(note, (text) => {
+  if (!text.trim()) fromDraft.value = false;
+});
+let draftSent = false;
 
 const addNote = createResource({
   url: "helpdesk.api.leads.add_note",
   method: "POST",
   onSuccess() {
-    note.value = "";
+    const { name, note: sent } = addNote.params;
+    if (draftSent) dropUnsavedNote(name);
     toast.success(__("Note added"));
+    // moved to another lead, or typed on, while it was sent: that text isn't this note
+    if (name !== props.leadId) return;
+    if (note.value === sent) note.value = "";
     detail.reload();
   },
   onError(e: unknown) {
@@ -500,6 +562,7 @@ const addNote = createResource({
 function submitNote() {
   if (addNote.loading || !note.value.trim()) return;
   noteError.value = "";
+  draftSent = fromDraft.value;
   addNote.submit({ name: props.leadId, note: note.value });
 }
 

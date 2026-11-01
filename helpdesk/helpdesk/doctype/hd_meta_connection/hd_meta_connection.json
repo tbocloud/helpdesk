@@ -1,0 +1,158 @@
+{
+	"autoname": "field:project",
+	"title_field": "facebook_page_name",
+	"permissions": [
+		{
+			"role": "System Manager",
+			"read": 1,
+			"write": 1,
+			"create": 1,
+			"delete": 1,
+			"report": 1,
+			"export": 1,
+			"share": 1
+		}
+	],
+	"fields": [
+		{
+			"fieldname": "project",
+			"fieldtype": "Link",
+			"options": "Project",
+			"label": "Project",
+			"reqd": 1,
+			"unique": 1,
+			"set_only_once": 1
+		},
+		{
+			"fieldname": "customer",
+			"fieldtype": "Link",
+			"options": "HD Customer",
+			"label": "Customer",
+			"in_list_view": 1
+		},
+		{
+			"fieldname": "status",
+			"fieldtype": "Select",
+			"label": "Status",
+			"options": "Pending\nConnected\nExpired\nError",
+			"default": "Pending",
+			"in_list_view": 1,
+			"description": "Pending: signed in with Facebook, no Page picked yet."
+		},
+		{
+			"fieldname": "last_error",
+			"fieldtype": "Small Text",
+			"label": "Last Error",
+			"read_only": 1
+		},
+		{
+			"fieldname": "page_section",
+			"fieldtype": "Section Break",
+			"label": "Facebook Page"
+		},
+		{
+			"fieldname": "facebook_page_id",
+			"fieldtype": "Data",
+			"label": "Page ID",
+			"read_only": 1
+		},
+		{
+			"fieldname": "facebook_page_name",
+			"fieldtype": "Data",
+			"label": "Page Name",
+			"read_only": 1,
+			"in_list_view": 1
+		},
+		{
+			"fieldname": "page_access_token",
+			"fieldtype": "Password",
+			"label": "Page Access Token",
+			"read_only": 1
+		},
+		{
+			"fieldname": "user_access_token",
+			"fieldtype": "Password",
+			"label": "Sign-in Token",
+			"read_only": 1,
+			"description": "Only kept between signing in and picking the Page; then deleted."
+		},
+		{
+			"fieldname": "column_break_ig",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "instagram_user_id",
+			"fieldtype": "Data",
+			"label": "Instagram Account ID",
+			"read_only": 1
+		},
+		{
+			"fieldname": "instagram_username",
+			"fieldtype": "Data",
+			"label": "Instagram Username",
+			"read_only": 1
+		},
+		{
+			"fieldname": "audit_section",
+			"fieldtype": "Section Break",
+			"label": "Who Connected"
+		},
+		{
+			"fieldname": "connected_by",
+			"fieldtype": "Link",
+			"options": "User",
+			"label": "Connected By",
+			"read_only": 1
+		},
+		{
+			"fieldname": "connected_on",
+			"fieldtype": "Datetime",
+			"label": "Connected On",
+			"read_only": 1
+		},
+		{
+			"fieldname": "column_break_audit",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "granted_scopes",
+			"fieldtype": "Small Text",
+			"label": "Granted Permissions",
+			"read_only": 1,
+			"description": "What the client's admin allowed. Paid ads (Phase 2) will ask for more by signing in again."
+		}
+	],
+	"actions": [],
+	"creation": "2026-10-30 12:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"index_web_pages_for_search": 0,
+	"links": [],
+	"modified": "2026-10-30 12:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD Meta Connection",
+	"owner": "Administrator",
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": [],
+	"field_order": [
+		"project",
+		"customer",
+		"status",
+		"last_error",
+		"page_section",
+		"facebook_page_id",
+		"facebook_page_name",
+		"page_access_token",
+		"user_access_token",
+		"column_break_ig",
+		"instagram_user_id",
+		"instagram_username",
+		"audit_section",
+		"connected_by",
+		"connected_on",
+		"column_break_audit",
+		"granted_scopes"
+	]
+}

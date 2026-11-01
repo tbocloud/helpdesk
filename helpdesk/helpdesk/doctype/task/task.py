@@ -5,10 +5,11 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 from frappe.query_builder.functions import Coalesce
-from frappe.utils import add_days, formatdate, get_datetime, getdate, now, nowdate
+from frappe.utils import add_days, formatdate, getdate, now, now_datetime, nowdate
 
 from helpdesk.automation import acting_user
-from helpdesk.tasky.time_sessions import record_session
+from helpdesk.tasky.time_sessions import pause_other_timers, record_session
+from helpdesk.work_hours import in_work_window
 
 WAITING_ON_TASK = "Waiting on Task"
 ON_HOLD = "On Hold"
@@ -501,15 +502,11 @@ class Task(Document):
         self.hold_by = frappe.session.user
         self.hold_previous_status = before.status if before else "Open"
         if self.get("custom_timer_start"):
-            record_session(self.name, self.custom_timer_start)
-            hours = (
-                get_datetime(now()) - get_datetime(self.custom_timer_start)
-            ).total_seconds() / 3600
-            self.custom_actual_hours = (self.custom_actual_hours or 0) + round(hours, 2)
-            self.custom_timer_elapsed = (self.custom_timer_elapsed or 0) + round(
-                hours, 2
-            )
+            hours = record_session(self.name, self.custom_timer_start)
+            self.custom_actual_hours = (self.custom_actual_hours or 0) + hours
+            self.custom_timer_elapsed = (self.custom_timer_elapsed or 0) + hours
             self.custom_timer_start = None
+            self.custom_timer_user = None
         self.flags.hold_started = True
 
     def end_hold(self):
@@ -520,7 +517,7 @@ class Task(Document):
             self.exp_end_date = add_days(self.exp_end_date, days)
         self.hold_days_total = (self.hold_days_total or 0) + days
         if self.status == "Working" and not self.get("custom_timer_start"):
-            self.custom_timer_start = now()
+            self.restart_timer()
         self.flags.hold_ended = {
             "days": days,
             "reason": self.hold_reason,
@@ -531,6 +528,16 @@ class Task(Document):
         self.hold_since = None
         self.hold_by = None
         self.hold_previous_status = None
+
+    def restart_timer(self):
+        """The timer picks up where the hold stopped it, if it is work time; the person's other
+        timer is paused (one at a time). Outside work hours it stays paused."""
+        if not in_work_window(now_datetime()):
+            return
+        user = frappe.session.user
+        pause_other_timers(self.name, user)
+        self.custom_timer_start = now()
+        self.custom_timer_user = user
 
     def announce_hold(self):
         """Tell the project lead (or its managers) right away, and keep it in the task's history."""

@@ -11,6 +11,7 @@ from helpdesk.test_utils import (
     call_mobile_as,
     disable_mobile_push,
     enable_mobile_push,
+    freeze_work_day,
     get_pushed_messages,
     graph_response,
     hold_commits,
@@ -35,6 +36,8 @@ POST = "helpdesk.mobile_push.requests.post"
 class TestMobileAPI(FrappeTestCase):
     def setUp(self):
         hold_commits(self)
+        # timers only run in work hours
+        freeze_work_day(self, 12)
         self.addCleanup(frappe.set_user, "Administrator")
         self.addCleanup(disable_mobile_push)
         make_tasky_user(*PM, roles=("Project Manager",))

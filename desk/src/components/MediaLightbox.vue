@@ -21,6 +21,7 @@
       </div>
 
       <div
+        ref="stage"
         class="relative flex min-h-[40vh] items-center justify-center overflow-hidden rounded-lg border border-outline-gray-2 bg-surface-gray-1"
       >
         <video
@@ -106,7 +107,7 @@
 import { downloadHref, formatBytes } from "@/pages/tasky/projectFiles";
 import { __ } from "@/translation";
 import { Button, Dialog } from "frappe-ui";
-import { useEventListener } from "@vueuse/core";
+import { useEventListener, useSwipe } from "@vueuse/core";
 import { computed, ref, watch } from "vue";
 import LucideChevronLeft from "~icons/lucide/chevron-left";
 import LucideChevronRight from "~icons/lucide/chevron-right";
@@ -157,6 +158,16 @@ function step(by: number) {
   if (props.index === null || count < 2) return;
   emit("update:index", (props.index + by + count) % count);
 }
+
+// a swipe on a phone turns the page, as the arrows do on a keyboard
+const stage = ref<HTMLElement | null>(null);
+useSwipe(stage, {
+  threshold: 50,
+  onSwipeEnd(_event, direction) {
+    if (direction === "left") step(1);
+    else if (direction === "right") step(-1);
+  },
+});
 
 // arrow keys belong to a focused video (seeking) and to text fields
 useEventListener(document, "keydown", (event: KeyboardEvent) => {

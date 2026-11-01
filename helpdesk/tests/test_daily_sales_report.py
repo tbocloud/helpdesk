@@ -277,6 +277,24 @@ class TestDailySalesReport(FrappeTestCase):
         with self.assertRaises(frappe.ValidationError):
             leads_api.log_call("CRM-LEAD-0001", "Hung up")
 
+    def test_log_call_takes_the_call_batch_outcomes_and_a_call_back_time(self):
+        self.crm.lead_answers["log_call"] = {"name": "CALL-2", "stage": "Contacted"}
+        frappe.set_user(BDE)
+        for outcome in ("Connected", "Not answered", "Not interested", "Wrong number"):
+            leads_api.log_call("CRM-LEAD-0001", outcome)
+        with self.assertRaises(frappe.ValidationError):
+            leads_api.log_call("CRM-LEAD-0001", "Call back")
+        result = leads_api.log_call(
+            "CRM-LEAD-0001", "Call back", callback_at=" 2026-11-02 10:00:00 "
+        )
+        self.assertEqual(result["stage"], "Contacted")
+        params = self.crm.lead_calls[-1][2]
+        self.assertEqual(
+            (params["outcome"], params["callback_at"]),
+            ("Call back", "2026-11-02 10:00:00"),
+        )
+        self.assertEqual(self.crm.lead_calls[0][2]["callback_at"], None)
+
     def test_log_call_without_the_erp_method_says_so(self):
         self.crm.lead_answers["log_call"] = OLDER
         frappe.set_user(BDE)
