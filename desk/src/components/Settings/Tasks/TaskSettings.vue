@@ -2,7 +2,9 @@
   <SettingsLayoutBase
     :title="__('Tasks')"
     :description="
-      __('How the AI helps when tasks are created, and support hours alerts.')
+      __(
+        'How the AI helps when tasks are created, support hours alerts and who gets the Friday project status report.'
+      )
     "
     :dirty="isDirty"
     :saving="save.loading"
@@ -79,6 +81,27 @@
             <Switch :id="id" v-model="form.support_hours_email_customer" />
           </SettingRow>
         </SettingsSection>
+        <SettingsSection
+          :title="__('Project status report')"
+          :description="
+            __(
+              'Every Friday at 17:00 the report goes to these people, in chat or by email. Left empty it goes to the System Managers and the project coordinators.'
+            )
+          "
+        >
+          <div class="flex flex-col gap-2">
+            <span class="text-base-medium text-ink-gray-8">{{
+              __("Send to")
+            }}</span>
+            <ChipListInput
+              v-model="form.status_report_recipients"
+              doctype="User"
+              :filters="{ enabled: 1, user_type: 'System User' }"
+              :placeholder="__('Add a person')"
+              mono
+            />
+          </div>
+        </SettingsSection>
       </div>
     </template>
   </SettingsLayoutBase>
@@ -89,6 +112,7 @@ import SettingsLayoutBase from "@/components/layouts/SettingsLayoutBase.vue";
 import { __ } from "@/translation";
 import { createResource, FormControl, Switch, toast } from "frappe-ui";
 import { computed, ref } from "vue";
+import ChipListInput from "../ChipListInput.vue";
 import SettingRow from "../SettingRow.vue";
 import SettingsSection from "../SettingsSection.vue";
 
@@ -97,6 +121,7 @@ interface TaskSettingsForm {
   ai_task_estimates: boolean;
   max_task_days: number;
   support_hours_email_customer: boolean;
+  status_report_recipients: string[];
 }
 
 const DOCTYPE = "HD Work Settings";
@@ -113,6 +138,9 @@ const settings = createResource({
       ai_task_estimates: Boolean(doc.ai_task_estimates),
       max_task_days: doc.max_task_days || 15,
       support_hours_email_customer: Boolean(doc.support_hours_email_customer),
+      status_report_recipients: (doc.status_report_recipients || []).map(
+        (row: { user: string }) => row.user
+      ),
     };
     initial.value = JSON.stringify(form.value);
   },
@@ -140,6 +168,9 @@ const save = createResource({
         ai_task_estimates: f.ai_task_estimates ? 1 : 0,
         max_task_days: Math.max(Number(f.max_task_days) || 15, 1),
         support_hours_email_customer: f.support_hours_email_customer ? 1 : 0,
+        status_report_recipients: f.status_report_recipients.map((user) => ({
+          user,
+        })),
       },
     };
   },

@@ -57,6 +57,7 @@ from helpdesk.api.work import (
 from helpdesk.automation import automation_user
 from helpdesk.consts import ALERT_TICKET_TYPE
 from helpdesk.integrations.crm.leads import LeadsError, call_if_deployed, leads_on
+from helpdesk.project_status import CLIENT_HOLD_REASON, PAGE_PATH, stale_projects
 from helpdesk.recurrence import working_day_checker
 from helpdesk.tasky.permissions import (
     COORDINATOR_PROJECT_ROLE,
@@ -81,7 +82,6 @@ CACHE_KEY = "follow_ups"
 CACHE_SECONDS = 16 * 60
 NOTICE_PREFIX = "follow-up"
 OPEN_TASK_STATUSES = ("Completed", "Cancelled", "Template")
-WAITING_ON_CUSTOMER = "Waiting on customer"
 # leads live on the ERP site, so a lead's notice points at a doctype the hub does have;
 # the notice is keyed by the lead's name (HD Notification skips the link check for it)
 LEAD_DOCTYPE = "HD CRM Settings"
@@ -165,6 +165,7 @@ def rule_labels() -> dict[str, str]:
         "customer_replied": _("Customer waiting for an answer"),
         "awaiting_customer": _("Waiting on the customer"),
         "stale_lead": _("Lead gone quiet"),
+        "stale_status": _("Project status out of date"),
     }
 
 
@@ -334,6 +335,7 @@ def evaluate(ctx: Context | None = None) -> list[FollowUp]:
         *TaskRules(ctx).evaluate(),
         *TicketRules(ctx).evaluate(),
         *LeadRules(ctx).evaluate(),
+        *ProjectRules(ctx).evaluate(),
     ]
 
 
@@ -678,7 +680,7 @@ class TaskRules:
             return None
         level = 1 if days >= 2 * threshold else 0
         people = [task.hold_by] if task.hold_by else _assignees(task._assign)
-        waiting_on_customer = task.hold_reason == WAITING_ON_CUSTOMER
+        waiting_on_customer = task.hold_reason == CLIENT_HOLD_REASON
         if waiting_on_customer:
             people += _assignees(task._assign)
             text = _(
@@ -1063,6 +1065,49 @@ class LeadRules:
             level=level,
             link=f"/leads/{lead['name']}",
             days=idle,
+        )
+
+
+class ProjectRules:
+    """Open projects whose status update is more than a week old (or that never had
+    one and are a week old): the lead and the coordinators are asked to write it, and
+    the managers when the project has no lead. One notice per person and project."""
+
+    def __init__(self, ctx: Context):
+        self.ctx = ctx
+
+    def evaluate(self) -> list[FollowUp]:
+        if not self.ctx.settings.project_status:
+            return []
+        stale = stale_projects(self.ctx.today)
+        people = TaskRules.load_people({p["name"] for p in stale})
+        return [
+            self.stale_status(p, people[p["name"]])
+            for p in stale
+            if p["name"] in people
+        ]
+
+    def stale_status(self, project: dict, people) -> FollowUp:
+        owners = [people.lead] if people.lead else list(people.managers)
+        recipients, away = self.ctx.cover_leave(
+            [*owners, *people.coordinators], owners, people.managers
+        )
+        title = project["project_name"]
+        text = _(
+            "No status update for {0} days: write this week's update for {1}"
+        ).format(project["days"], title)
+        return FollowUp(
+            doctype="Project",
+            name=project["name"],
+            title=title,
+            rule="stale_status",
+            stage="L0",
+            severity="waiting",
+            text=f"{text} · {away}" if away else text,
+            recipients=recipients,
+            owners=owners,
+            link=f"{PAGE_PATH}?project={project['name']}",
+            days=project["days"],
         )
 
 

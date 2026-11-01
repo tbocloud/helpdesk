@@ -6,6 +6,14 @@
       </template>
       <template #right-header>
         <Button
+          :route="{ name: 'ProjectStatus' }"
+          :label="__('Project status')"
+        >
+          <template #prefix>
+            <LucideClipboardList class="size-4" aria-hidden="true" />
+          </template>
+        </Button>
+        <Button
           variant="ghost"
           :loading="refreshing"
           :aria-label="__('Refresh')"
@@ -477,6 +485,7 @@ import LucideEye from "~icons/lucide/eye";
 import LucideFolderKanban from "~icons/lucide/folder-kanban";
 import LucideGauge from "~icons/lucide/gauge";
 import LucidePause from "~icons/lucide/pause";
+import LucideClipboardList from "~icons/lucide/clipboard-list";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideTreePalm from "~icons/lucide/tree-palm";
 import LucideUsers from "~icons/lucide/users";

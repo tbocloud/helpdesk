@@ -1,4 +1,4 @@
-# Workspace pages: Overview, In progress, Scoreboard, Team, Summaries, Projects, My Work, Timesheets
+# Workspace pages: Overview, In progress, Scoreboard, Team, Project status, Summaries, Projects, My Work, Timesheets
 
 Pages for the people who run projects (what's late, who is doing what, what each customer was
 told) and for everyone doing the work (their projects, what to do next, the hours logged). They follow [ui-guidelines.md](ui-guidelines.md): neutral tiles, colour only
@@ -359,6 +359,13 @@ project they don't run (it returns no one).
 - **Filters** in the URL: `department` (that department's projects' people) and `project`
   (shared with By person). With a filter, a person's load is still all their planned work,
   since their time is one pool.
+
+## Project status (`/project-status`)
+
+The coordinator's weekly status table, in the hub: one row per open project with the written
+stage, who it waits on and a few lines, beside the facts computed from its tasks, with an AI
+split for a spoken or pasted update, history and a PDF. Linked from the Team and Projects
+headers; members see their own projects. Full spec: [project-status-report.md](project-status-report.md).
 
 ## Summaries (`/work-summaries`)
 

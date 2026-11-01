@@ -15,7 +15,9 @@
 		"lunch_start",
 		"lunch_end",
 		"support_hours_section",
-		"support_hours_email_customer"
+		"support_hours_email_customer",
+		"status_report_section",
+		"status_report_recipients"
 	],
 	"fields": [
 		{
@@ -96,6 +98,18 @@
 			"label": "Email the customer when their support hours run low",
 			"default": "0",
 			"description": "The customer's contacts get the same alerts as the team: once when a period reaches the contract's alert level and once when its hours are used up."
+		},
+		{
+			"fieldname": "status_report_section",
+			"fieldtype": "Section Break",
+			"label": "Project Status Report"
+		},
+		{
+			"fieldname": "status_report_recipients",
+			"fieldtype": "Table MultiSelect",
+			"label": "Project Status Report Recipients",
+			"options": "HD Status Report Recipient",
+			"description": "Get the report every Friday at 17:00. Left empty: the System Managers and the project coordinators."
 		}
 	],
 	"index_web_pages_for_search": 0,
