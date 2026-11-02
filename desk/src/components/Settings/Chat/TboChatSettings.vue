@@ -119,6 +119,7 @@
             >{{ data?.login_url }}</code
           >
         </SettingsSection>
+        <WhatsAppSettings />
       </div>
     </template>
   </SettingsLayoutBase>
@@ -130,6 +131,7 @@ import { __ } from "@/translation";
 import { createResource, FormControl, Switch, toast } from "frappe-ui";
 import { computed, reactive, ref } from "vue";
 import SettingRow from "../SettingRow.vue";
+import WhatsAppSettings from "./WhatsAppSettings.vue";
 import SettingsSection from "../SettingsSection.vue";
 import SecretField, {
   type SecretEdit,

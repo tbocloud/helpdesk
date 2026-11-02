@@ -48,6 +48,8 @@ scheduler_events = {
         # every minute: new customer tickets arrive quickly (sites also ping on raise)
         "* * * * *": [
             "helpdesk.tasks.pull_client_tickets",
+            # approved WhatsApp outreach waiting for TBO Chat (docs/whatsapp-outreach.md)
+            "helpdesk.whatsapp_outreach.send_pending",
         ],
         # every 15 minutes: follow-ups and escalation for tasks and tickets, and the
         # digests at their times (docs/follow-ups.md)

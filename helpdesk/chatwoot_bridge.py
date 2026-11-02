@@ -27,6 +27,7 @@ import hashlib
 import html
 import json
 import re
+from urllib.parse import quote
 
 import frappe
 import phonenumbers
@@ -35,6 +36,7 @@ from frappe import _
 from frappe.utils import cint, escape_html, get_url, strip_html, validate_email_address
 from pypika.functions import Replace
 
+from helpdesk import whatsapp_outreach
 from helpdesk.ai_engine import call_haiku
 from helpdesk.ai_suggestion import find_related_articles, is_ai_configured
 from helpdesk.api.ticket_ai import html_to_text, text_to_html, truncate
@@ -47,6 +49,8 @@ EVENT = "HD Chatwoot Event"
 
 HANDLED_EVENTS = (
     "message_created",
+    # delivery receipts of WhatsApp outreach (helpdesk/whatsapp_outreach.py)
+    "message_updated",
     "conversation_created",
     "conversation_updated",
     "conversation_status_changed",
@@ -223,6 +227,10 @@ def ignore_reason(settings, event: str, payload: dict) -> str | None:
         return _("Account {0} isn't the configured account.").format(account_id)
     if not conversation_id_of(event, payload):
         return _("The delivery names no conversation.")
+    if event == "message_updated":
+        if whatsapp_outreach.is_receipt(settings, payload):
+            return None
+        return _("Only WhatsApp delivery receipts are used.")
     if event != "message_created":
         return None
     # our own replies, agents' replies and notes come back as outgoing or private messages
@@ -237,6 +245,8 @@ def event_key(event: str, payload: dict, raw: bytes) -> str:
     """Identical for the same event whichever webhook (account or bot) delivered it."""
     if event == "message_created":
         return f"message:{payload.get('id')}"
+    if event == "message_updated":
+        return f"message_status:{payload.get('id')}:{payload.get('status')}"
     conversation_id = conversation_id_of(event, payload)
     stamp = payload.get("updated_at") or payload.get("timestamp")
     if stamp:
@@ -341,6 +351,8 @@ class ChatwootEvent:
         """Returns whether the event changed anything we track."""
         if self.event == "message_created":
             return self.on_message()
+        if self.event == "message_updated":
+            return whatsapp_outreach.on_receipt(self.settings, self.payload)
         conversation = ChatConversation.sync(
             self.settings, self.payload, (self.payload.get("meta") or {}).get("sender")
         )
@@ -351,6 +363,9 @@ class ChatwootEvent:
         return True
 
     def on_message(self) -> bool:
+        # a lead answering our WhatsApp outreach is for sales, never for the support AI
+        if whatsapp_outreach.on_incoming(self.settings, self.payload):
+            return True
         details = self.payload.get("conversation") or {}
         conversation = ChatConversation.sync(
             self.settings, details, self.payload.get("sender")
@@ -999,6 +1014,38 @@ class ChatwootClient:
         # the Platform App's token, for TBO Chat sign-in (helpdesk.chatwoot_sso)
         self.platform_token = settings.get_password(
             "platform_api_token", raise_exception=False
+        )
+
+    def get_inbox(self, inbox_id: int):
+        return self.request("GET", f"/inboxes/{inbox_id}")
+
+    def search_contacts(self, query: str):
+        return self.request("GET", f"/contacts/search?q={quote(query)}")
+
+    def create_contact(self, inbox_id: int, name: str, phone: str):
+        return self.request(
+            "POST",
+            "/contacts",
+            {"inbox_id": inbox_id, "name": name, "phone_number": phone},
+        )
+
+    def create_conversation(self, inbox_id: int, contact_id: int):
+        return self.request(
+            "POST", "/conversations", {"inbox_id": inbox_id, "contact_id": contact_id}
+        )
+
+    def post_template(self, conversation_id: int, content: str, template: dict):
+        """A WhatsApp template message: `content` is its text with the blanks filled in,
+        `template` is {name, language, category, processed_params}."""
+        return self.request(
+            "POST",
+            f"/conversations/{conversation_id}/messages",
+            {
+                "content": content,
+                "message_type": "outgoing",
+                "private": False,
+                "template_params": template,
+            },
         )
 
     def get_messages(self, conversation_id: int):

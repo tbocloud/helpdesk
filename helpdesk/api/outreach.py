@@ -6,6 +6,7 @@ the email. The hub sends nothing itself."""
 import frappe
 from frappe import _
 
+from helpdesk import whatsapp_outreach
 from helpdesk.api.leads import as_list
 from helpdesk.integrations.crm.leads import (
     LeadsUnavailableError,
@@ -29,6 +30,7 @@ EMPTY_OUTBOX = {
     "window": None,
     "drafting": None,
     "opt_out": "",
+    "whatsapp": {"connected": False, "sends_by_itself": False},
 }
 
 
@@ -70,7 +72,20 @@ def get_outbox(
     )
     if outbox is None:
         return EMPTY_OUTBOX
-    return {"available": True, **outbox}
+    settings = whatsapp_outreach.get_settings()
+    for row in outbox.get("rows") or []:
+        if row.get("whatsapp"):
+            row["whatsapp"]["plan"] = whatsapp_outreach.plan(
+                {**row["whatsapp"], "body": row.get("body")}, settings
+            )
+    return {
+        "available": True,
+        **outbox,
+        "whatsapp": {
+            "connected": whatsapp_outreach.inbox_ready(settings),
+            "sends_by_itself": whatsapp_outreach.auto_send(settings),
+        },
+    }
 
 
 @frappe.whitelist(methods=["POST"])
@@ -112,9 +127,17 @@ def regenerate_outreach(name: str) -> dict:
 @frappe.whitelist(methods=["POST"])
 def approve_outreach(names: list | str) -> list:
     """Approves drafts as the signed-in person. An email goes out at once when the ERP site's
-    send window is open and the person has sends left today, else it waits; a WhatsApp
-    message becomes ready for the person to send. Each result says what happened."""
-    return ask("approve_outreach", names=message_names(names))
+    send window is open and the person has sends left today, else it waits. A WhatsApp
+    message is sent through TBO Chat when a WhatsApp inbox is set (a template for a first
+    message, see helpdesk/whatsapp_outreach.py), else it becomes ready for the person to
+    send by hand. Each result says what happened."""
+    by_itself = whatsapp_outreach.auto_send()
+    results = ask(
+        "approve_outreach", names=message_names(names), send_whatsapp=int(by_itself)
+    )
+    if by_itself:
+        whatsapp_outreach.send_soon()
+    return results
 
 
 @frappe.whitelist(methods=["POST"])

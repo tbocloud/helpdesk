@@ -4465,6 +4465,75 @@ def prospect_run(name: str = "PR-0001", **fields) -> dict:
     }
 
 
+WHATSAPP_INBOX = 9
+WHATSAPP_LEAD_PHONE = "+919847012345"
+
+
+def whatsapp_template_row(**fields) -> dict:
+    """An approved WhatsApp template as the settings table holds it: tbo_intro, with the lead's
+    first name in {{1}} and the Why call line in {{2}}."""
+    return {
+        "template_name": "tbo_intro",
+        "language": "en",
+        "enabled": 1,
+        "is_default": 1,
+        "body": "Hi {{1}}, this is TBO. {{2}}. Can we talk?",
+        "variables": "name,why_call",
+        **fields,
+    }
+
+
+def enable_whatsapp_outreach(templates: list[dict] | None = None, **values):
+    """TBO Chat on with WhatsApp inbox 9, automatic sending on, country code 91 and the given
+    templates (default: tbo_intro); `values` override any settings field."""
+    return enable_chatwoot_bridge(
+        **{
+            "whatsapp_inbox_id": WHATSAPP_INBOX,
+            "whatsapp_country_code": "91",
+            "whatsapp_auto_send": 1,
+            "whatsapp_templates": [whatsapp_template_row()]
+            if templates is None
+            else templates,
+            **values,
+        }
+    )
+
+
+def whatsapp_queue_row(name: str = "OUT-00001", **fields) -> dict:
+    """A queued message as the ERP site's get_whatsapp_queue hands it out: a first message
+    to Palm Resort outside the 24-hour window."""
+    return {
+        "name": name,
+        "lead": "CRM-LEAD-1",
+        "to": WHATSAPP_LEAD_PHONE,
+        "body": "Hi, we help resorts take bookings online.",
+        "lead_name": "Palm Resort",
+        "first_name": "Palm",
+        "company_name": "Palm Resort",
+        "why_call": "You take bookings by phone only",
+        "contact_id": None,
+        "conversation_id": None,
+        "window_open": False,
+        **fields,
+    }
+
+
+def make_whatsapp_payload(event: str = "message_created", **overrides) -> dict:
+    """A Chatwoot webhook payload for the WhatsApp inbox (id 9) from the lead's number. A
+    `status` makes it a delivery receipt (message_updated, an outgoing message)."""
+    status = overrides.pop("status", None)
+    overrides.setdefault("inbox_id", WHATSAPP_INBOX)
+    overrides.setdefault("phone", WHATSAPP_LEAD_PHONE)
+    overrides.setdefault("channel", "Channel::Whatsapp")
+    if status:
+        overrides.setdefault("message_type", "outgoing")
+        overrides.setdefault("sender_type", "user")
+    payload = make_chatwoot_payload(event, **overrides)
+    if status:
+        payload["status"] = status
+    return payload
+
+
 def outreach_message(name: str = "OUT-00001", **fields) -> dict:
     """A TBO Outreach Message as the ERP site's outbox lists it: a drafted first email to
     Palm Resort, not sent."""

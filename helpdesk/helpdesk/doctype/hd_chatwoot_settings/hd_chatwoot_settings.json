@@ -26,7 +26,13 @@
 		"column_break_sso",
 		"sso_create_users",
 		"sso_default_role",
-		"sso_managers_as_admins"
+		"sso_managers_as_admins",
+		"whatsapp_section",
+		"whatsapp_inbox_id",
+		"whatsapp_country_code",
+		"column_break_whatsapp",
+		"whatsapp_auto_send",
+		"whatsapp_templates"
 	],
 	"fields": [
 		{
@@ -172,12 +178,46 @@
 			"fieldtype": "Check",
 			"label": "Managers join as administrators",
 			"description": "New System Managers and Agent Managers get the administrator role. People already in TBO Chat keep their role."
+		},
+		{
+			"fieldname": "whatsapp_section",
+			"fieldtype": "Section Break",
+			"label": "WhatsApp outreach"
+		},
+		{
+			"fieldname": "whatsapp_inbox_id",
+			"fieldtype": "Int",
+			"label": "WhatsApp inbox ID",
+			"description": "The TBO Chat inbox of the WhatsApp number. Blank: WhatsApp outreach stays manual (Open WhatsApp)."
+		},
+		{
+			"fieldname": "whatsapp_country_code",
+			"fieldtype": "Data",
+			"label": "Default country code",
+			"default": "91",
+			"description": "Added to numbers saved without one, e.g. 91 for India."
+		},
+		{
+			"fieldname": "column_break_whatsapp",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "whatsapp_auto_send",
+			"fieldtype": "Check",
+			"label": "Send WhatsApp automatically after approval",
+			"default": "1"
+		},
+		{
+			"fieldname": "whatsapp_templates",
+			"fieldtype": "Table",
+			"label": "Approved templates",
+			"options": "HD WhatsApp Template"
 		}
 	],
 	"index_web_pages_for_search": 0,
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-10-14 12:00:00.000000",
+	"modified": "2026-11-02 10:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Chatwoot Settings",
