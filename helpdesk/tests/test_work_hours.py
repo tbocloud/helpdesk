@@ -31,6 +31,7 @@ from helpdesk.test_utils import (
 from helpdesk.work_hours import (
     clip_to_windows,
     in_work_window,
+    is_working_day,
     lunch_break,
     max_hours,
     work_windows,
@@ -346,7 +347,10 @@ class TestDailyCap(WorkHoursCase):
         while not max_hours(before):
             before = add_days(before, -1)
         working = "helpdesk.tasky.time_sessions.is_working_day"
-        with patch(working, side_effect=lambda d: getdate(d) != day_off):
+        with patch(
+            working,
+            side_effect=lambda d: getdate(d) != day_off and is_working_day(d),
+        ):
             days = self.as_dev(lambda: tasky.get_completion_days(self.task))
             result = self.complete(days=[{"date": str(before), "hours": 2}])
 
