@@ -151,9 +151,6 @@ class TestAutofill(StandupCase):
         super().setUp()
 
     def test_yesterday_today_and_blockers_from_own_work(self):
-        # on a Monday "yesterday" is a Saturday with no work hours, which scales logged hours to 0
-        freeze_work_day(self)
-        self.today = getdate(now_datetime())
         calendar = standup_calendar(self.today)
         previous = calendar.previous_working_day()
         tomorrow = calendar.next_working_day()
