@@ -476,6 +476,7 @@ const navItems = computed(() => {
     .filter((item) => !item.leadsOnly || authStore.canUseLeads)
     .filter((item) => !item.projectManagerOnly || authStore.isProjectManager)
     .filter((item) => !item.overviewOnly || authStore.canSeeOverview)
+    .filter((item) => !item.adoptionOnly || authStore.canSeeAdoption)
     .filter(
       (item) => !item.customerReportOnly || authStore.canSeeCustomerReport
     )

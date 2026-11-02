@@ -315,6 +315,12 @@ const portalRoutes = [
     component: () => import("@/pages/work/Team.vue"),
     beforeEnter: () => useAuthStore().canSeeOverview || { name: "Home" },
   },
+  {
+    path: "/adoption",
+    name: "Adoption",
+    component: () => import("@/pages/work/Adoption.vue"),
+    beforeEnter: () => useAuthStore().canSeeAdoption || { name: "Home" },
+  },
   // everyone may open it: the server gives members the projects they are on
   {
     path: "/project-status",

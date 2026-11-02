@@ -249,6 +249,7 @@ gives the same two roles write access):
 - **Lead rules**: the switch for leads gone quiet (the days are per department, in Settings
   → CRM → Lead departments).
 - **Project rules**: the switch for project status updates gone stale (7 days).
+- **Adoption**: the switch for the Monday 09:00 adoption digest ([adoption.md](adoption.md)).
 - **Customer follow-up**: the email switch and its template; a line on HD Settings'
   auto-close with a button to General.
 - **Working hours**: read from the default SLA policy, with a button to SLA policies.
