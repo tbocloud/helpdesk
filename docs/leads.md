@@ -310,8 +310,12 @@ show) and the subject or the start of the text; it opens to an editable subject 
 **Approve** (the one primary action), **Save changes**, **Regenerate** and **Cancel message**, the
 opt-out line the email will carry, and an error in words on a Failed message. Approving saves any
 edit first. Select rows (Draft, Approved, Failed) to **Approve selected** or **Cancel selected**.
-WhatsApp has no API yet: an approved WhatsApp row shows **Open WhatsApp** (the `wa.me` link with
-the text filled in) and **Mark sent**, which the person presses after sending it by hand.
+A WhatsApp row shows how it will go (the approved template with the lead's details filled in, or
+the person's own words inside 24 hours of the lead's reply) and, once the WhatsApp inbox is set,
+goes by itself after Approve (Sending on WhatsApp, Sent, Delivered, Read;
+[whatsapp-outreach.md](whatsapp-outreach.md)). Without an inbox or a template an approved WhatsApp
+row shows **Open WhatsApp** (the `wa.me` link with the text filled in) and **Mark sent**, which
+the person presses after sending it by hand.
 Results are told in words (sent, approved, a message that was held and why); approving an email
 with no outgoing email account on the ERP site shows "Set up an outgoing email account first".
 The list refreshes by itself while drafts are being written.
@@ -328,6 +332,13 @@ Objection, Not now, Not interested, Unsubscribe, Out of office, or New reply whe
 not sort it) with when it came and what the ERP site did about it. The Leads list has a
 **Replied** filter (any of the classes, with counts) beside Last call; `list_leads` takes
 `last_reply_class`, which is validated here and sent as a JSON list.
+
+**WhatsApp on the lead page** (`LeadWhatsApp.vue`, backend `helpdesk/api/whatsapp.py`): the
+conversation appears in the Timeline (“The lead, on WhatsApp”); a WhatsApp card has **Open in TBO
+Chat** and a reply box that is enabled only within 24 hours of the lead's last message, otherwise
+it says why and offers the approved template. The card is absent on an older TBO Smart. A lead's
+WhatsApp reply is sorted like an email reply (the ERP site does it). Owner setup, the staff steps
+and the decisions are in [whatsapp-outreach.md](whatsapp-outreach.md).
 
 Tests: `helpdesk/tests/test_outreach.py` (the outbox read live as the person and never cached,
 status filters, an older ERP site, the ERP site's refusals reaching the person, drafting posted
@@ -859,4 +870,5 @@ site's reason reaching the person, the next batch's reason passed on, the manage
 telephony API, the recording streamed (audio only) and a refusal refused, the MyOperator
 settings for admins only and proxied.
 `helpdesk/tests/test_outreach.py`: see [Outreach](#outreach).
+`helpdesk/tests/test_whatsapp_outreach.py`: see [whatsapp-outreach.md](whatsapp-outreach.md).
 `helpdesk/tests/test_prospects.py`: an estimate and a start proxied as the person (POST, the values as a set of fields), the runs read live, a refusal naming who may, an older ERP site (the list hides quietly, estimate and start say so), and no access without leads.

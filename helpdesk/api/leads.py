@@ -16,6 +16,7 @@ from frappe.utils import (
     today,
 )
 
+from helpdesk import whatsapp_outreach
 from helpdesk.content_team import only_sales_team
 from helpdesk.integrations.crm.leads import (
     LeadsError,
@@ -536,7 +537,10 @@ def erp_period(period: str, from_date: str | None, to_date: str | None) -> dict:
 def get_lead(name: str) -> dict:
     """The lead, its timeline, its quotations and the stages it may move to."""
     require_leads()
-    return call("get_lead", name=name) or {}
+    detail = call("get_lead", name=name) or {}
+    if detail.get("lead", {}).get("whatsapp") is not None:
+        detail["lead"]["whatsapp_box"] = whatsapp_outreach.lead_box(detail["lead"])
+    return detail
 
 
 @frappe.whitelist()

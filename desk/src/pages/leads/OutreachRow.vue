@@ -63,9 +63,9 @@
           aria-hidden="true"
         />
       </button>
-      <!-- WhatsApp has no API: the person sends it themselves, then says so -->
+      <!-- no TBO Chat inbox (or no template yet): the person sends it themselves, then says so -->
       <div
-        v-if="message.channel === 'WhatsApp' && message.status === 'Approved'"
+        v-if="goesByHand(message)"
         class="flex shrink-0 flex-wrap justify-end gap-2"
       >
         <Button
@@ -109,6 +109,34 @@
         {{ __("This lead unsubscribed, so this message will not go out.") }}
       </p>
 
+      <div
+        v-if="whatsappPlan && (editable || message.status === 'Approved')"
+        class="flex flex-col gap-1 rounded-lg border border-outline-gray-2 bg-surface-base px-3 py-2"
+      >
+        <p class="flex items-center gap-2 text-p-sm text-ink-gray-9">
+          <LucideMessageCircle
+            class="size-4 shrink-0 text-ink-gray-6"
+            aria-hidden="true"
+          />
+          <span v-if="whatsappPlan.mode === 'template'">{{
+            __("Goes as the approved template “{0}”", whatsappPlan.template)
+          }}</span>
+          <span v-else-if="whatsappPlan.mode === 'text'">{{
+            __("Goes as your own words")
+          }}</span>
+          <span v-else>{{ __("You send it from WhatsApp yourself") }}</span>
+        </p>
+        <p
+          v-if="whatsappPlan.mode === 'template' && whatsappPlan.preview"
+          class="whitespace-pre-wrap rounded bg-surface-gray-1 px-3 py-2 text-p-sm text-ink-gray-9"
+        >
+          {{ whatsappPlan.preview }}
+        </p>
+        <p v-if="whatsappPlan.note" class="text-xs text-ink-gray-6">
+          {{ whatsappPlan.note }}
+        </p>
+      </div>
+
       <template v-if="editable">
         <FormControl
           v-if="message.channel === 'Email'"
@@ -120,7 +148,11 @@
           v-model="body"
           type="textarea"
           :rows="6"
-          :label="__('Message')"
+          :label="
+            whatsappPlan?.mode === 'template'
+              ? __('Your own words (used when they reply first)')
+              : __('Message')
+          "
         />
         <p
           v-if="message.channel === 'Email' && optOut"
@@ -218,6 +250,8 @@ import LucideMessageCircle from "~icons/lucide/message-circle";
 import LucideRotateCw from "~icons/lucide/rotate-cw";
 import {
   approvedLabel,
+  CHAT_STATUS_LABEL,
+  goesByHand,
   REPLY_LOOK,
   STATUS_LOOK,
   type OutreachMessage,
@@ -275,11 +309,16 @@ const canApprove = computed(
     (props.message.channel !== "Email" || !!edits.value.subject) &&
     !props.message.unsubscribed
 );
-const statusLabel = computed(() =>
-  props.message.status === "Approved"
-    ? approvedLabel(props.message)
-    : STATUS_LOOK[props.message.status].label
+const whatsappPlan = computed(() =>
+  props.message.channel === "WhatsApp" ? props.message.whatsapp?.plan : null
 );
+const statusLabel = computed(() => {
+  if (props.message.status === "Approved") return approvedLabel(props.message);
+  const chat = props.message.whatsapp?.chat_status;
+  if (props.message.status === "Sent" && chat && CHAT_STATUS_LABEL[chat])
+    return CHAT_STATUS_LABEL[chat]!;
+  return STATUS_LOOK[props.message.status].label;
+});
 const when = computed(
   () =>
     props.message.sent_on || props.message.approved_on || props.message.creation

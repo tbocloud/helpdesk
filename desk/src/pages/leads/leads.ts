@@ -297,7 +297,8 @@ export interface LeadTimelineEntry {
     | "stage"
     | "quotation"
     | "ai"
-    | "proposal";
+    | "proposal"
+    | "whatsapp";
   /** when it happened (a date only for a quotation) */
   at?: string | null;
   who?: string | null;
@@ -310,6 +311,7 @@ export interface LeadTimelineEntry {
   call?: string;
   /** talk time in seconds */
   duration?: number;
+  /** a call's, or for a WhatsApp message: what the lead wrote (incoming) or we sent */
   direction?: "incoming" | "outgoing" | null;
   status?: "answered" | "missed" | "voicemail" | null;
   /** the call's name when it has a recording (played through call_recording) */
@@ -346,6 +348,26 @@ export interface LeadQuotation {
   url?: string | null;
 }
 
+export interface LeadWhatsApp {
+  /** the lead's number, +E.164 */
+  to: string | null;
+  conversation_id: string | null;
+  last_in: string | null;
+  /** the lead wrote in the last 24 hours, so free text may be sent */
+  window_open: boolean;
+  window_ends: string | null;
+  /** why nothing may be sent (unsubscribed, lost, no number) */
+  blocked: string | null;
+}
+
+/** What the hub adds: TBO Chat's state and the approved templates, filled for this lead. */
+export interface LeadWhatsAppBox {
+  chat_ready: boolean;
+  chat_url: string | null;
+  templates: { name: string; preview: string; is_default: boolean }[];
+  hint: string;
+}
+
 export interface LeadDetail {
   lead: LeadRow &
     Partial<LeadForm> &
@@ -355,6 +377,9 @@ export interface LeadDetail {
       photo_count?: number;
       /** what the lead's website says, for a lead found by Find prospects */
       prospect?: LeadProspect | null;
+      /** the WhatsApp conversation (TBO Smart's hub-leads-api.md §2.19) */
+      whatsapp?: LeadWhatsApp;
+      whatsapp_box?: LeadWhatsAppBox;
     };
   timeline: LeadTimelineEntry[];
   quotations: LeadQuotation[];

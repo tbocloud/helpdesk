@@ -35,6 +35,33 @@ export const OUTREACH_STATUSES: OutreachStatus[] = [
   "Cancelled",
 ];
 
+/** How a WhatsApp message will go (helpdesk/whatsapp_outreach.py `plan`). */
+export interface WhatsAppPlan {
+  /** text: their own words, inside 24 hours of the lead's reply; template: WhatsApp's approved
+   * wording for a first message; manual: the person sends it from their phone */
+  mode: "text" | "template" | "manual";
+  template: string | null;
+  /** the message as the lead will read it */
+  preview: string | null;
+  note: string | null;
+}
+
+export type ChatStatus =
+  | "Queued"
+  | "Sending"
+  | "Sent"
+  | "Delivered"
+  | "Read"
+  | "Failed";
+
+export interface WhatsAppInfo {
+  /** approved to go through TBO Chat rather than by hand */
+  via_chat: boolean;
+  chat_status: ChatStatus | null;
+  template?: string | null;
+  plan?: WhatsAppPlan;
+}
+
 export interface OutreachMessage {
   name: string;
   lead: string;
@@ -60,6 +87,8 @@ export interface OutreachMessage {
   url?: string | null;
   /** an approved email waiting for the send window or the daily limit */
   queued: boolean;
+  /** WhatsApp messages only */
+  whatsapp?: WhatsAppInfo | null;
   creation: string;
 }
 
@@ -81,6 +110,8 @@ export interface Outbox {
   } | null;
   /** the line added under every email when it is sent */
   opt_out: string;
+  /** TBO Chat: a WhatsApp inbox is set, and approved messages go by themselves */
+  whatsapp?: { connected: boolean; sends_by_itself: boolean };
 }
 
 export interface OutreachResult {
@@ -173,7 +204,11 @@ export const STATUS_LOOK: Record<
 
 /** What an approved message is waiting for, in words. */
 export function approvedLabel(message: OutreachMessage) {
-  if (message.channel === "WhatsApp") return __("Ready to send");
+  if (message.channel === "WhatsApp") {
+    return message.whatsapp?.via_chat
+      ? __("Sending on WhatsApp")
+      : __("Ready to send");
+  }
   return message.queued ? __("Approved, waiting to go") : __("Approved");
 }
 
@@ -192,4 +227,19 @@ export function useOutreachAction(
       toast.error(errorText(e, __("That didn't work. Try again.")));
     },
   });
+}
+
+/** A sent WhatsApp message says how far it got, once TBO Chat knows. */
+export const CHAT_STATUS_LABEL: Partial<Record<ChatStatus, string>> = {
+  Delivered: __("Delivered"),
+  Read: __("Read"),
+};
+
+/** Does this approved WhatsApp message go by hand (Open WhatsApp, then Mark sent)? */
+export function goesByHand(message: OutreachMessage) {
+  return (
+    message.channel === "WhatsApp" &&
+    message.status === "Approved" &&
+    !message.whatsapp?.via_chat
+  );
 }
