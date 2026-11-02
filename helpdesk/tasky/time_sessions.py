@@ -22,14 +22,13 @@ from helpdesk.work_hours import (
     day_label,
     hours_between,
     in_work_window,
-    is_working_day,
     max_hours,
 )
 
 SESSION = "HD Task Time Session"
-# hours entered by hand may only be for today and the working day before it; a week off or a
-# long holiday can't push that further back than this
-BACKDATE_LOOKBACK_DAYS = 14
+# hours entered by hand may only be for today and the working day before it, looked for this
+# far back (a year: no break is longer)
+BACKDATE_LOOKBACK_DAYS = 366
 # banked time with no sessions behind it (from before sessions were kept) below this is rounding
 UNTRACKED_MIN_HOURS = 0.05
 # slack for hours kept to two decimals
@@ -118,13 +117,15 @@ def day_left(user: str, day, exclude_task: str | None = None) -> float:
 
 def last_working_day(today) -> date:
     """The working day before `today`, the "yesterday" hours may be entered for by hand:
-    Friday on a Monday, the day before a holiday after it."""
-    day = add_to_date(today, days=-1)
+    Friday on a Monday, the day before a holiday after it. A day counts as the daily cap
+    counts it, by its work hours: a working day whose SLA lists no hours (a Saturday) is
+    skipped. With none in the lookback, `today` itself, so nothing older is typed in."""
+    day = getdate(add_to_date(today, days=-1))
     for _step in range(BACKDATE_LOOKBACK_DAYS):
-        if is_working_day(day):
-            return getdate(day)
-        day = add_to_date(day, days=-1)
-    return getdate(add_to_date(today, days=-1))
+        if max_hours(day) > 0:
+            return day
+        day = getdate(add_to_date(day, days=-1))
+    return getdate(today)
 
 
 def timer_allowance(tracked: float) -> float:

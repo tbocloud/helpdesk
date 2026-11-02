@@ -31,7 +31,6 @@ from helpdesk.test_utils import (
 from helpdesk.work_hours import (
     clip_to_windows,
     in_work_window,
-    is_working_day,
     lunch_break,
     max_hours,
     work_windows,
@@ -339,17 +338,16 @@ class TestDailyCap(WorkHoursCase):
 
         self.assertEqual(result["hours_logged"], 7.25)
 
-    def test_after_a_day_off_the_working_day_before_takes_hours_by_hand(self):
-        # yesterday was a day off (a Monday after the weekend): the working day before it
-        # is "yesterday" for hours typed in
+    def test_after_a_day_without_hours_the_one_before_takes_hours_by_hand(self):
+        # yesterday held no work hours (a Saturday the SLA lists no hours for, on a Monday):
+        # the day with hours before it is "yesterday" for hours typed in
         day_off = self.yesterday
         before = add_days(day_off, -1)
         while not max_hours(before):
             before = add_days(before, -1)
-        working = "helpdesk.tasky.time_sessions.is_working_day"
         with patch(
-            working,
-            side_effect=lambda d: getdate(d) != day_off and is_working_day(d),
+            "helpdesk.tasky.time_sessions.max_hours",
+            side_effect=lambda d: 0 if getdate(d) == day_off else max_hours(d),
         ):
             days = self.as_dev(lambda: tasky.get_completion_days(self.task))
             result = self.complete(days=[{"date": str(before), "hours": 2}])
