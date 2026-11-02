@@ -4626,3 +4626,50 @@ def set_status_report_recipients(*users: str):
     return set_work_settings(
         status_report_recipients=[{"user": user} for user in users]
     )
+
+
+def adoption_finding(report: dict, key: str) -> dict | None:
+    """The finding of the Adoption report with id `key`, or None."""
+    return next((f for f in report["findings"] if f["id"] == key), None)
+
+
+def adoption_person(report: dict, user: str) -> dict:
+    """`user`'s row in the Adoption report's people table."""
+    return next(p for p in report["people"] if p["user"] == user)
+
+
+def age_content_post(post: str, days: int):
+    """Makes the content post `post` look untouched for `days` days."""
+    frappe.db.set_value(
+        "HD Content Post",
+        post,
+        "modified",
+        add_to_date(now_datetime(), days=-days),
+        update_modified=False,
+    )
+
+
+def make_content_edits(post: str, user: str, count: int):
+    """Records `count` edits of the content post `post` by `user`, as the Version log keeps
+    them for the content calendar."""
+    for _i in range(count):
+        version = frappe.get_doc(
+            {
+                "doctype": "Version",
+                "ref_doctype": "HD Content Post",
+                "docname": post,
+                "data": "{}",
+            }
+        ).insert(ignore_permissions=True)
+        frappe.db.set_value("Version", version.name, "owner", user)
+
+
+def age_ticket(ticket: str, hours: int, **values):
+    """Makes the ticket `ticket` look `hours` hours old, with any other `values` (for
+    example agreement_status) set straight in the database."""
+    frappe.db.set_value(
+        "HD Ticket",
+        ticket,
+        {"creation": add_to_date(now_datetime(), hours=-hours), **values},
+        update_modified=False,
+    )

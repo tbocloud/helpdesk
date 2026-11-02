@@ -1,6 +1,7 @@
 import frappe
 
 from helpdesk import chatwoot_sso
+from helpdesk.adoption import can_see_adoption
 from helpdesk.api.work import can_see_overview
 from helpdesk.content_team import (
     can_edit_content,
@@ -85,6 +86,7 @@ def get_user():
         "can_set_ticket_owner": can_set_ticket_owner(current_user),
         "can_see_overview": can_see_overview(current_user)
         and not is_content_only(current_user),
+        "can_see_adoption": can_see_adoption(current_user),
         "is_content_team": is_content_only(current_user),
         "is_dm_head": is_dm_head(current_user),
         "can_edit_content": can_edit_content(current_user),

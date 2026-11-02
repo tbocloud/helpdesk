@@ -1,3 +1,4 @@
+import LucideActivity from "~icons/lucide/activity";
 import LucideContact2 from "~icons/lucide/contact-2";
 import LucideTicket from "~icons/lucide/ticket";
 import LucideBookOpen from "~icons/lucide/book-open";
@@ -69,6 +70,14 @@ export const agentPortalSidebarOptions = [
     tone: "teal",
     section: "Workspace",
     overviewOnly: true,
+  },
+  {
+    label: __("Adoption"),
+    icon: LucideActivity,
+    to: "Adoption",
+    tone: "teal",
+    section: "Workspace",
+    adoptionOnly: true,
   },
   {
     label: __("Summaries"),

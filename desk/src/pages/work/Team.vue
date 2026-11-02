@@ -6,6 +6,15 @@
       </template>
       <template #right-header>
         <Button
+          v-if="authStore.canSeeAdoption"
+          :route="{ name: 'Adoption' }"
+          :label="__('Adoption')"
+        >
+          <template #prefix>
+            <LucideActivity class="size-4" aria-hidden="true" />
+          </template>
+        </Button>
+        <Button
           :route="{ name: 'ProjectStatus' }"
           :label="__('Project status')"
         >
@@ -465,6 +474,7 @@ import SectionCard from "@/components/SectionCard.vue";
 import StatTile from "@/components/StatTile.vue";
 import TaskyBadge from "@/components/TaskyBadge.vue";
 import TaskyState from "@/components/TaskyState.vue";
+import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
 import {
   Button,
@@ -475,6 +485,7 @@ import {
 } from "frappe-ui";
 import { computed, reactive, ref, useId, watch, type Component } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
+import LucideActivity from "~icons/lucide/activity";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
 import LucideChevronRight from "~icons/lucide/chevron-right";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
@@ -576,6 +587,7 @@ const GRID =
   "xl:grid-cols-[minmax(0,13rem)_minmax(0,1fr)_minmax(0,10rem)_4.5rem_4.5rem_minmax(0,7rem)_minmax(0,9rem)_1rem]";
 
 const route = useRoute();
+const authStore = useAuthStore();
 const router = useRouter();
 const { leaveLabel } = useOnLeave();
 const tableId = `team-people-${useId()}`;

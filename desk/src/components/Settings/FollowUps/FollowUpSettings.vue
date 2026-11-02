@@ -314,6 +314,27 @@
         </SettingsSection>
 
         <SettingsSection
+          :title="__('Adoption')"
+          :description="
+            __(
+              'Managers and project coordinators can open the Adoption page to see who is using the system and what is stuck.'
+            )
+          "
+        >
+          <SettingRow
+            v-slot="{ id }"
+            :label="__('Weekly adoption digest')"
+            :description="
+              __(
+                'Monday at 9:00 the most important findings go to the same people, by chat or email. Needs follow-ups to be on.'
+              )
+            "
+          >
+            <Switch :id="id" v-model="form.adoption_digest" />
+          </SettingRow>
+        </SettingsSection>
+
+        <SettingsSection
           :title="__('Working hours')"
           :description="
             __(
@@ -511,6 +532,7 @@ const CHECKS = [
   "awaiting_customer",
   "stale_leads",
   "project_status",
+  "adoption_digest",
   "customer_follow_up_email",
 ];
 
