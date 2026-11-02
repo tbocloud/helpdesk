@@ -77,22 +77,16 @@ def permission_query(user: str | None = None) -> str | None:
     )
 
 
-def has_permission(
-    doc, ptype: str | None = None, user: str | None = None
-) -> bool | None:
+def has_permission(doc, ptype: str | None = None, user: str | None = None) -> bool:
     """Reading follows the project; writing is for the people who coordinate it (its
-    managers, lead and coordinators, and the admins). Hooks deny but never grant."""
+    managers, lead and coordinators, and the admins). Returns True to defer to role permissions: on Frappe v16 None refuses."""
     user = user or frappe.session.user
     if is_tasky_admin(user):
-        return None
+        return True
     if is_sales_employee(user):
         return False
     if ptype in READ_PERMISSIONS:
-        return (
-            None
-            if frappe.has_permission("Project", "read", doc.project, user=user)
-            else False
-        )
+        return bool(frappe.has_permission("Project", "read", doc.project, user=user))
     if ptype in ("create", "write"):
-        return None if can_coordinate_project(doc.project, user) else False
+        return bool(can_coordinate_project(doc.project, user))
     return False
