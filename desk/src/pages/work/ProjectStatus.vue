@@ -29,7 +29,7 @@
         <Button
           v-if="data?.can_write_any"
           variant="solid"
-          :label="__('Paste or record a full update')"
+          :label="__('Paste today\'s update')"
           @click="splitOpen = true"
         >
           <template #prefix>

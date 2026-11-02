@@ -148,6 +148,16 @@ out of date** in Settings → Follow-ups (`HD Follow Up Settings.project_status`
 patch `v16_0_2.enable_project_status_follow_up` switches it on for stored settings). Projects whose
 stage is On hold are left alone.
 
+## How to use (for staff)
+
+1. Open **Project status** (button at the top of Team and Projects). Red and amber rows need you first.
+2. **One project**: press **Update status** on its row. The form already holds last week's answer; change what moved, pick the stage, press **Save update**. Only the stage is required.
+3. **Everything at once**: press **Paste today's update**, then type, paste or press the microphone (EN or ML) and talk through your projects. Press **Read the update**, check each row, fix or remove what is wrong, press **Save all**. Nothing is saved before that.
+4. **See what changed**: **History** on a row. **Send it on**: **Download PDF**, then save from the print window.
+5. A reminder in the bell means a project has had no update for a week: press it, write the update.
+
+The first-screen words are plain on purpose: the button is called what it does, the dialogs start prefilled, and an empty page says what to do next. It stacks into cards on a phone.
+
 ## What the owner sets up
 
 1. **Who writes updates**: make the coordinator (e.g. archana@) a **Project Coordinator** on each

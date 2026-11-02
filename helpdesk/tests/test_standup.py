@@ -145,6 +145,11 @@ class TestWorkingDays(StandupCase):
 
 
 class TestAutofill(StandupCase):
+    def setUp(self):
+        # yesterday's hours count only on a day with work hours: not after a weekend
+        freeze_work_day(self)
+        super().setUp()
+
     def test_yesterday_today_and_blockers_from_own_work(self):
         # on a Monday "yesterday" is a Saturday with no work hours, which scales logged hours to 0
         freeze_work_day(self)
