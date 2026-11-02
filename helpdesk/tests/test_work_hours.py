@@ -327,6 +327,32 @@ class TestDailyCap(WorkHoursCase):
 
         self.assertEqual(result["hours_logged"], 4)
 
+    def test_the_timer_hours_as_the_dialog_rounds_them_can_be_logged(self):
+        # 7.13 h recorded; the dialog offers it to the nearest quarter, 7.25
+        old = add_days(self.today, -2)
+        while not max_hours(old):
+            old = add_days(old, -1)
+        make_time_session(self.task, DEV[0], at(old, 10), at(old, 17), hours=7.13)
+
+        result = self.complete(days=[{"date": str(old), "hours": 7.25}])
+
+        self.assertEqual(result["hours_logged"], 7.25)
+
+    def test_after_a_day_off_the_working_day_before_takes_hours_by_hand(self):
+        # yesterday was a day off (a Monday after the weekend): the working day before it
+        # is "yesterday" for hours typed in
+        day_off = self.yesterday
+        before = add_days(day_off, -1)
+        while not max_hours(before):
+            before = add_days(before, -1)
+        working = "helpdesk.tasky.time_sessions.is_working_day"
+        with patch(working, side_effect=lambda d: getdate(d) != day_off):
+            days = self.as_dev(lambda: tasky.get_completion_days(self.task))
+            result = self.complete(days=[{"date": str(before), "hours": 2}])
+
+        self.assertEqual(days["yesterday"], str(before))
+        self.assertEqual(result["hours_logged"], 2)
+
     def test_a_system_manager_can_back_date_with_a_reason(self):
         old = add_days(self.today, -2)
         while not max_hours(old):

@@ -367,10 +367,10 @@ const hoursError = computed(() => {
     if (!(h > 0)) return __("Hours must be more than 0.");
     if (h > MAX_HOURS)
       return __("A day has at most {0} hours.", String(MAX_HOURS));
-    // typed-in hours are for today or yesterday; older days only keep what the timer recorded
+    // typed-in hours are for today or the working day before; older days only keep what the timer recorded
     if (yesterday.value && row.date < yesterday.value && !row.fromTimer)
       return __(
-        "{0} is too long ago to enter hours by hand. Log hours for today or yesterday.",
+        "{0} is too long ago to enter hours by hand. Log hours for today or the working day before.",
         row.date
       );
     const free = leftFor(row.date);
