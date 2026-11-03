@@ -27,7 +27,7 @@ The report link carries a secret key, so it only opens that one client's report.
 
 ## Connecting the website (one-time)
 
-1. **Migrate.** `bench --site <site> migrate` creates the DocType, and the patch `setup_health_check_api_role` creates the **Health Check API** role. On a brand-new site, where patches are skipped, run `bench --site <site> execute helpdesk.helpdesk.doctype.business_health_check.business_health_check.setup_api_role`.
+1. **Migrate.** `bench --site <site> migrate` creates the DocType, and the patch `setup_health_check_api_role` creates the **Health Check API** role. On a brand-new site, where patches are skipped, run `bench --site <site> execute helpdesk.patches.v16_0_2.setup_health_check_api_role.execute`.
 2. **API user.** Create a user (e.g. `health-check-api@<domain>`) with **only** the Health Check API role.
 3. **API key.** Open that user → **Settings → API Access → Generate Keys**. Give the site URL, API Key and API Secret to the website team privately.
 
@@ -47,6 +47,8 @@ When the client leaves contact details:
 
 ```http
 PUT /api/resource/Business Health Check/BHC-00001
+Authorization: token <api_key>:<api_secret>
+
 {"phone": "+91 98950 22334", "email": "ravi@greenleaf.in", ...}
 ```
 
