@@ -387,7 +387,7 @@ same labels and fields:
 
 | Label | Field | Notes |
 | --- | --- | --- |
-| Copy | `title` | Optional (owner's request, 2026-10-24). Without it the post is named by its post type, then its ID: `label` on the controller, `copyOf()` in `pages/content/constants.ts`, also in task names, reminders and the client approval. |
+| Copy | `title` | Optional (owner's request, 2026-10-24). Without it the post is named by its post type, then its ID: `label` on the controller, `copyOf()` in `pages/content/constants.ts`, also in task names, reminders and the client approval. The dialogs show it in a two-line box that wraps, so a long copy reads in full; it stays one line of at most 140 characters (a Data field): Enter adds no line break and pasted line breaks become spaces (`oneLine()`). |
 | Campaign (optional) | `campaign` | Free text (Data), e.g. "Diwali 2026". |
 | Special day (optional) | `special_day` | Free text, e.g. "Diwali". Highlights the post on the calendar (see below). |
 | Platforms | `platforms`, `channel` | Chips; one post can go out on several. The first is `channel`. |
