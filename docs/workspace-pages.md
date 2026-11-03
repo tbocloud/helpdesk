@@ -619,6 +619,17 @@ shows it as a "Created by" row in the task details and in Edit task, and as "Cre
 before "Assigned by …" on board cards and My Work rows, where it is left out when the same
 person did both. Editing the post later doesn't change either: the task isn't recreated.
 
+### Estimate
+
+A task's estimate is typed as **hours and minutes** (`EstimateInput.vue` in
+`pages/tasky/components`), in New task, Edit task, the recurring task dialog and each template
+task on Templates. It is stored in hours as before (`custom_estimated_hours`,
+`HD Recurring Task.estimated_hours`, `HD Task Template Task.estimated_hours`): 1 h 30 min is
+1.5 and 20 min is 0.333, so workload, overdue and timesheet sums are unchanged. Minutes over 59
+carry into hours (90 min is 1 h 30 min). Task details and Edit task show it the same way
+(`formatEstimate()` in `taskMeta.ts`: "1 h 30 min", "45 min", "2 h"). The content calendar's
+per-role hours are still typed in hours.
+
 ### New tasks
 
 Spec for the request "a newly assigned task must stand out from the ones people already had".

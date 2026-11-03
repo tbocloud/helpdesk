@@ -385,3 +385,18 @@ export function taskTimer(
   }
   return banked > 0 ? { running: false, paused: true, elapsed: banked } : null;
 }
+
+/** Hours as whole hours and minutes: 1.5 is {hours: 1, minutes: 30}. */
+export function splitHours(value: number) {
+  const total = Math.max(Math.round((Number(value) || 0) * 60), 0);
+  return { hours: Math.floor(total / 60), minutes: total % 60 };
+}
+
+/** An estimate as people say it: "1 h 30 min", "45 min", "2 h"; "—" when there's none. */
+export function formatEstimate(value?: number | null) {
+  const { hours, minutes } = splitHours(Number(value) || 0);
+  if (!hours && !minutes) return "—";
+  if (!minutes) return __("{0} h", String(hours));
+  if (!hours) return __("{0} min", String(minutes));
+  return __("{0} h {1} min", String(hours), String(minutes));
+}
