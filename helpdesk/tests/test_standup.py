@@ -197,11 +197,7 @@ class TestAutofill(StandupCase):
         )
         self.addCleanup(frappe.cache.delete_value, home_plan.plan_cache_key(DEV[0]))
 
-        # the stand-up's calendar works Saturdays; the hours report caps a day at the real
-        # work day, which may hold none on a Saturday (the previous day on a Monday)
-        with patch.object(standup, "call_haiku") as ai, patch(
-            "helpdesk.team_dashboard.max_hours", return_value=8
-        ):
+        with patch.object(standup, "call_haiku") as ai:
             filled = standup.autofill(DEV[0], self.today, calendar)
         ai.assert_not_called()
 
