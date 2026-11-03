@@ -138,7 +138,6 @@
           :form="formId"
           :label="forReview ? __('Send for review') : __('Complete task')"
           :loading="completeTask.loading"
-          :disabled="!isValid"
         >
           <template #prefix>
             <LucideCircleCheck class="size-4" aria-hidden="true" />
@@ -409,7 +408,9 @@ const notesError = computed(() =>
 );
 const isValid = computed(() => !hoursError.value && !notesError.value);
 
-// the days' problems show once Complete is pressed, then follow the edits
+// the days' problems show once Complete is pressed, then follow the edits; so Complete is
+// never disabled (a disabled button can't be pressed, which hid why it was greyed out), and
+// submit() refuses what isn't valid
 const shownHoursError = computed(() =>
   hoursTouched.value ? hoursError.value || undefined : undefined
 );

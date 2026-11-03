@@ -879,7 +879,10 @@ dialog and the reports (`helpdesk/work_hours.py`):
   timer's hours by date (`timerByDay` in `CompleteTaskDialog.vue`), not on the row they first
   filled: a row moved to another day shows that day's "From the timer" hours (none if the timer
   didn't run then) and is checked against them with the same rounding (`timerAllowance`), so the
-  dialog never passes a day the server then refuses.
+  dialog never passes a day the server then refuses. Complete is never disabled: pressing it
+  shows what is wrong with the days or the notes (the problems show only once it is pressed),
+  and nothing is sent until they are fixed. It used to be disabled while anything was invalid,
+  so a too-old day left a greyed-out button and no message.
 - **Reports:** hours per person per day come from timesheets (one per day worked, see above) and
   sessions, never from a completed task's `custom_actual_hours`. The Scoreboard's and the
   stand-up's hours (`team_dashboard.logged_hours`) scale a person's day down to `max_hours` for
