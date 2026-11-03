@@ -133,11 +133,18 @@
           </div>
         </fieldset>
 
+        <!-- two lines so a long copy shows in full; it stays one line of text (a
+             Data field of 140 characters) -->
         <FormControl
           ref="titleInput"
-          v-model="form.title"
+          :model-value="form.title"
+          type="textarea"
+          :rows="2"
+          maxlength="140"
           :label="__('Copy')"
           :placeholder="__('e.g. Diwali offer carousel')"
+          @update:model-value="(v: string) => (form.title = oneLine(v))"
+          @keydown.enter.prevent
         />
 
         <div class="flex flex-col gap-1.5">
@@ -242,7 +249,7 @@ import {
   toast,
 } from "frappe-ui";
 import { computed, nextTick, reactive, ref, watch } from "vue";
-import { TEAM_ROLES, type TeamRole, textToHtml } from "../constants";
+import { oneLine, TEAM_ROLES, type TeamRole, textToHtml } from "../constants";
 import { useContentOptions } from "../contentOptions";
 import ContentProjectNote from "./ContentProjectNote.vue";
 import AddOptionChip from "./AddOptionChip.vue";
@@ -408,7 +415,7 @@ async function save(addNext: boolean) {
     // keep customer, date, platforms, team and hours; clear what is specific to one post
     Object.assign(form, { title: "", caption: "", brief: "", hashtags: "" });
     await nextTick();
-    titleInput.value?.$el?.querySelector("input")?.focus();
+    titleInput.value?.$el?.querySelector("textarea")?.focus();
   } catch (e: any) {
     error.value = e?.messages?.[0] || __("Couldn't save the entry");
   } finally {

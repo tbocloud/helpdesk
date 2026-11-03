@@ -178,6 +178,11 @@ export function textToHtml(text: string) {
     .join("");
 }
 
+// The copy is one line (a Data field) shown in a wrapping box: pasted line breaks become spaces
+export function oneLine(text: string) {
+  return text.replace(/\s*[\r\n]+\s*/g, " ");
+}
+
 // What a post is called: its copy, else its post type, then its ID, until the copy is written
 export function copyOf(post: {
   title?: string;
