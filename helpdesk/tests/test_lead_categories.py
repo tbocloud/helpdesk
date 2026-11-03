@@ -13,6 +13,7 @@ from helpdesk.test_utils import (
     enable_leads,
     hold_commits,
     lead_category_options,
+    lead_product,
     make_team,
 )
 
@@ -74,6 +75,50 @@ class TestLeadCategories(FrappeTestCase):
         with self.assertRaises(frappe.ValidationError):
             leads_api.list_leads(last_call_result="Talked")
         self.assertEqual(len(self.crm.lead_calls), calls)
+
+    def test_the_product_is_sent_as_a_json_list(self):
+        leads_api.list_leads(product=["PhoebiX", "BillaX"])
+        self.assertEqual(
+            json.loads(self.last_params("list_leads")["product"]), ["PhoebiX", "BillaX"]
+        )
+        leads_api.list_leads(product="PhoebiX")
+        self.assertEqual(
+            json.loads(self.last_params("list_leads")["product"]), ["PhoebiX"]
+        )
+        leads_api.list_leads(product=[])
+        self.assertIsNone(self.last_params("list_leads")["product"])
+
+    def test_a_lead_is_saved_with_its_product(self):
+        self.crm.lead_answers["update_lead"] = {"name": "L-1"}
+        leads_api.update_lead("L-1", {"product": "PhoebiX"})
+        self.assertEqual(
+            self.last_params("update_lead")["data"], {"product": "PhoebiX"}
+        )
+
+    def test_the_options_carry_each_departments_products(self):
+        self.crm.lead_answers["get_options"] = {
+            "departments": [
+                {"name": "GrowthX", "products": [lead_product("PhoebiX", "Solar ERP")]}
+            ]
+        }
+        department = leads_api.get_options(fresh=1)["departments"][0]
+        self.assertEqual(department["products"][0]["intro_line"], "Solar ERP")
+
+    def test_bulk_set_takes_a_product(self):
+        self.crm.lead_answers["bulk_set_lead_category"] = {"updated": 1, "skipped": []}
+        leads_api.bulk_set_lead_category(["L-1"], {"product": "PhoebiX"})
+        self.assertEqual(
+            self.last_params("bulk_set_lead_category")["values"],
+            {"product": "PhoebiX"},
+        )
+
+    def test_a_refusal_to_set_categories_says_who_may(self):
+        self.crm.lead_answers["bulk_set_lead_category"] = CRMError(
+            "no", 403, "PermissionError"
+        )
+        with self.assertRaises(frappe.ValidationError) as caught:
+            leads_api.bulk_set_lead_category(["L-1"], {"product": "PhoebiX"})
+        self.assertIn("department head", str(caught.exception))
 
     def test_no_filter_sends_none(self):
         leads_api.list_leads(industry=[], state="  ")

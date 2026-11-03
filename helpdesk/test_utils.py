@@ -3639,6 +3639,16 @@ def enable_leads(teams: tuple[str, ...] = ()):
     frappe.cache.delete_keys("hd_leads:")
 
 
+def lead_product(name: str, intro_line: str = "", is_active: int = 1) -> dict:
+    """A product / brand of a lead department, as the ERP site lists it."""
+    return {
+        "product_name": name,
+        "is_active": is_active,
+        "intro_line": intro_line,
+        "website": "",
+    }
+
+
 def lead_department(
     name: str = "GrowthX",
     lead_type: str = "Content / Digital Marketing",
@@ -3647,9 +3657,10 @@ def lead_department(
     is_active: int = 1,
     assignment: str = "Manual",
     stale_after_days: int = 3,
+    products: tuple[dict, ...] = (),
 ) -> dict:
     """A lead department as the ERP site's get_lead_departments and save_lead_department
-    answer it."""
+    answer it (`products`: see lead_product)."""
     return {
         "name": name,
         "department_name": name,
@@ -3659,6 +3670,7 @@ def lead_department(
         "stale_after_days": stale_after_days,
         "heads": [{"user": u, "full_name": u} for u in heads],
         "members": [{"user": u, "full_name": u} for u in members],
+        "products": list(products),
     }
 
 
@@ -4385,10 +4397,12 @@ def my_calls(
     overdue: tuple[dict, ...] = (),
     called: int = 0,
     enabled: bool = True,
+    batch_fields: dict | None = None,
     **fields,
 ) -> dict:
     """A get_my_calls answer: a Morning batch of `called` + the pending calls, with
-    `overdue` after it and the next batch refused until the pending ones are done."""
+    `overdue` after it and the next batch refused until the pending ones are done
+    (`batch_fields` add to the batch, e.g. campaign_product)."""
     size = called + len(pending)
     return {
         "enabled": enabled,
@@ -4401,6 +4415,7 @@ def my_calls(
             "ends_at": "2026-10-30 13:00:00",
             "seconds_left": 5400,
             "batches": ["CB-261030-0001"],
+            **(batch_fields or {}),
         },
         "counts": {
             "size": size,

@@ -33,6 +33,9 @@ SOURCES = {
     "name": ("first_name", "there"),
     "company": ("company_name", "your business"),
     "why_call": ("why_call", "your business"),
+    # the product / brand the lead belongs to under its department; TBO when it has none
+    "product": ("product", "TBO"),
+    "product_intro": ("product_intro", "TBO builds software for businesses like yours"),
 }
 DEFAULT_SOURCES = ("name", "why_call", "company")
 MAX_VALUE_CHARS = 200
@@ -124,7 +127,7 @@ def blanks_of(template) -> int:
 
 def variable_values(template, facts: dict) -> list[str]:
     """What fills {{1}}, {{2}}, … of `template` from the lead's facts (first_name,
-    company_name, why_call). A blank with nothing to fill it gets a neutral word."""
+    company_name, why_call, product, product_intro). A blank with nothing to fill it gets a neutral word."""
     chosen = [part.strip() for part in (template.variables or "").split(",")]
     values = []
     for position in range(blanks_of(template)):
@@ -485,4 +488,6 @@ def lead_facts(lead: dict) -> dict:
         "first_name": name[0] if name else "",
         "company_name": lead.get("company_name"),
         "why_call": ((lead.get("prospect") or {}).get("why_call")),
+        "product": lead.get("product"),
+        "product_intro": lead.get("product_intro"),
     }

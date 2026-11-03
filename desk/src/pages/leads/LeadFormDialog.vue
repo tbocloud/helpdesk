@@ -84,6 +84,14 @@
           :label="__('Department')"
           :options="departmentChoices"
         />
+        <!-- only where the department has products, and only managers and its head set one -->
+        <FormControl
+          v-if="productChoices.length"
+          v-model="form.product"
+          type="select"
+          :label="__('Product')"
+          :options="productChoices"
+        />
         <div class="flex flex-col gap-1.5">
           <!-- Combobox layers inside the dialog, so Escape and clicking outside still close it -->
           <Combobox
@@ -206,6 +214,7 @@
 import TaskyState from "@/components/TaskyState.vue";
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
+import { useAuthStore } from "@/stores/auth";
 import { useDebounceFn } from "@vueuse/core";
 import { Button, Combobox, call, Dialog, FormControl, toast } from "frappe-ui";
 import { computed, reactive, ref, useId, watch } from "vue";
@@ -225,6 +234,8 @@ import {
   leadOptions,
   ownDepartment,
   usableDepartments,
+  canSetProduct,
+  productsOf,
   type LeadDepartment,
   type LeadForm,
   type LeadOptions,
@@ -365,6 +376,41 @@ const departmentChoices = computed(() => {
   );
   return list.length ? [{ label: __("Not set"), value: "" }, ...list] : [];
 });
+
+const auth = useAuthStore();
+const mayPickProduct = computed(
+  () =>
+    !!form.tbo_department &&
+    canSetProduct(options.value, form.tbo_department, auth.isManager)
+);
+/** The department's products that are on, and the lead's own while it stays in that department. */
+const departmentProducts = computed(() =>
+  productsOf(
+    options.value,
+    form.tbo_department,
+    form.tbo_department === props.lead?.tbo_department
+      ? String(props.lead?.product ?? "")
+      : ""
+  )
+);
+const productChoices = computed(() =>
+  mayPickProduct.value && departmentProducts.value.length
+    ? choices(departmentProducts.value, __("Not set"))
+    : []
+);
+
+// another department's product doesn't carry over (a person who may not set one is left alone)
+watch(
+  () => form.tbo_department,
+  () => {
+    if (
+      form.product &&
+      mayPickProduct.value &&
+      !departmentProducts.value.includes(form.product)
+    )
+      form.product = "";
+  }
+);
 
 // a new lead starts in the person's only department, once the options are there
 function startInOwnDepartment() {

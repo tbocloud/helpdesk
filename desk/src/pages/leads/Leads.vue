@@ -353,6 +353,14 @@
                         :tone="stageTone(options, row.tbo_stage)"
                         :icon="stageIcon(row.tbo_stage)"
                       />
+                      <!-- the product / brand it is called under -->
+                      <TaskyBadge
+                        v-if="row.product"
+                        :icon="LucideBox"
+                        :label="row.product"
+                        :title="__('Product')"
+                        class="max-w-40 truncate font-normal"
+                      />
                       <!-- how the last call went -->
                       <TaskyBadge
                         v-if="lastCall(row)"
@@ -546,6 +554,7 @@ import {
 } from "frappe-ui";
 import { computed, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import LucideBox from "~icons/lucide/box";
 import LucideBuilding2 from "~icons/lucide/building-2";
 import LucideCalendar from "~icons/lucide/calendar";
 import LucideCalendarRange from "~icons/lucide/calendar-range";
@@ -704,6 +713,7 @@ const CATEGORY_KEYS = [
   "state",
   "district",
   "org_size",
+  "product",
   "last_call_result",
   "last_reply_class",
 ] as const;
@@ -730,6 +740,7 @@ const emptyCategories = (): LeadCategories => ({
   state: [],
   district: [],
   org_size: [],
+  product: [],
   last_call_result: [],
   last_reply_class: [],
 });
@@ -1110,6 +1121,7 @@ watch(
         state: c.state.length ? c.state : undefined,
         district: c.district.length ? c.district : undefined,
         org_size: c.org_size.length ? c.org_size : undefined,
+        product: c.product.length ? c.product : undefined,
         last_call_result: c.last_call_result.length
           ? c.last_call_result
           : undefined,

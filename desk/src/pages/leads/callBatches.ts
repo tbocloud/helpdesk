@@ -58,8 +58,15 @@ export interface QueueLead {
   wrong_number?: number;
 }
 
+/** What the caller says they are calling under: the lead's product, else its department. */
+export interface CallingFor {
+  product?: string | null;
+  intro_line?: string | null;
+  calling_for?: string | null;
+}
+
 /** One call in the queue; `item` is what an outcome is recorded against. */
-export interface QueueCall {
+export interface QueueCall extends CallingFor {
   item: string;
   batch: string;
   slot: string;
@@ -96,6 +103,8 @@ export interface MyCalls {
     ends_at: string;
     seconds_left: number;
     batches: string[];
+    /** the product the department's batches call for (null: any) */
+    campaign_product?: string | null;
   } | null;
   counts?: CallCounts;
   today?: { size: number; called: number; connected: number };
@@ -220,6 +229,8 @@ export interface CallRules {
   campaign_industry: string;
   campaign_state: string;
   campaign_district: string;
+  /** "Calls for product": new leads in a batch are only of this product ("" for any) */
+  campaign_product: string;
   call_slots: CallSlot[];
   /** a member's own cap, replacing the department's */
   member_caps: Record<string, number | string>;
@@ -233,6 +244,7 @@ export const DEFAULT_RULES: CallRules = {
   campaign_industry: "",
   campaign_state: "",
   campaign_district: "",
+  campaign_product: "",
   call_slots: [
     { label: "Morning", start_time: "10:00", end_time: "13:00", size: 50 },
     { label: "Afternoon", start_time: "14:00", end_time: "18:00", size: 50 },
@@ -280,7 +292,7 @@ export function rulesProblem(rules: CallRules) {
 }
 
 /** The rules as the ERP site takes them. */
-export function rulesPayload(rules: CallRules) {
+export function rulesPayload(rules: CallRules, withProduct = false) {
   const caps: Record<string, number> = {};
   for (const [user, cap] of Object.entries(rules.member_caps))
     if (Math.floor(Number(cap)) >= 1) caps[user] = Math.floor(Number(cap));
@@ -295,6 +307,8 @@ export function rulesPayload(rules: CallRules) {
     campaign_industry: rules.campaign_industry.trim(),
     campaign_state: rules.campaign_state.trim(),
     campaign_district: rules.campaign_district.trim(),
+    // an older TBO Smart refuses a field it doesn't know
+    ...(withProduct ? { campaign_product: rules.campaign_product.trim() } : {}),
     call_slots: rules.call_slots.map((s) => ({
       label: s.label.trim(),
       start_time: s.start_time,

@@ -98,6 +98,40 @@ class TestWhatsAppPlan(WhatsAppCase):
         )
         self.assertIn("approved message templates", plan["note"])
 
+    def test_a_template_can_name_the_leads_product_and_its_intro(self):
+        enable_whatsapp_outreach(
+            templates=[
+                whatsapp_template_row(
+                    body="Hi {{1}}, this is {{2}}. {{3}}",
+                    variables="name,product,product_intro",
+                )
+            ]
+        )
+        plan = wa.plan(
+            self.facts(
+                product="PhoebiX", product_intro="PhoebiX - solar ERP for installers"
+            )
+        )
+        self.assertEqual(
+            plan["preview"],
+            "Hi Palm, this is PhoebiX. PhoebiX - solar ERP for installers",
+        )
+        # a lead with no product is from TBO as before
+        plain = wa.plan(self.facts())
+        self.assertTrue(plain["preview"].startswith("Hi Palm, this is TBO."))
+
+    def test_the_lead_page_facts_carry_the_product(self):
+        facts = wa.lead_facts(
+            {
+                "lead_name": "Palm Resort",
+                "product": "PhoebiX",
+                "product_intro": "Solar ERP",
+            }
+        )
+        self.assertEqual(
+            (facts["product"], facts["product_intro"]), ("PhoebiX", "Solar ERP")
+        )
+
     def test_free_text_is_allowed_only_inside_24_hours(self):
         plan = wa.plan(self.facts(window_open=True))
         self.assertEqual((plan["mode"], plan["preview"]), ("text", "Hello"))

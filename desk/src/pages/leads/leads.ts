@@ -56,6 +56,17 @@ export interface LeadOptions {
   outreach?: boolean;
 }
 
+/** A product or brand a department's people call under (PhoebiX under GrowthX). */
+export interface LeadProduct {
+  product_name: string;
+  is_active: boolean | number;
+  /** the line to say on the call, e.g. "PhoebiX - solar ERP for installers" */
+  intro_line?: string;
+  website?: string;
+  /** when editing: the name it had, so renaming it moves its leads */
+  previous_name?: string;
+}
+
 /** A department as `get_options` lists it, with the signed-in person's part in it. */
 export interface LeadDepartmentOption {
   name: string;
@@ -68,6 +79,8 @@ export interface LeadDepartmentOption {
   /** how a lead with no owner is given one (absent from an older TBO Smart) */
   assignment?: LeadAssignment;
   stale_after_days?: number;
+  /** the active products / brands (absent from an older TBO Smart; empty: none) */
+  products?: LeadProduct[];
 }
 
 export type LeadAssignment = "Manual" | "Round robin";
@@ -84,6 +97,10 @@ export interface LeadDepartment {
   stale_after_days?: number;
   heads: { user: string; full_name?: string }[];
   members: { user: string; full_name?: string }[];
+  /** every product / brand, switched-off ones too (absent from an older TBO Smart) */
+  products?: LeadProduct[];
+  /** the product the department's batches call for ("" for any) */
+  campaign_product?: string;
 }
 
 /** A lead that shares an email, phone or company with the one being entered. */
@@ -148,6 +165,8 @@ export interface LeadRow {
   owner_name?: string;
   tbo_department?: string | null;
   tbo_lead_type?: string | null;
+  /** the product / brand it belongs to under its department (absent from an older TBO Smart) */
+  product?: string | null;
   industry?: string | null;
   state?: string | null;
   district?: string | null;
@@ -267,6 +286,7 @@ export interface LeadForm {
   lead_owner: string;
   next_follow_up: string;
   tbo_department: string;
+  product: string;
 }
 
 export const LEAD_FORM_FIELDS: (keyof LeadForm)[] = [
@@ -284,6 +304,7 @@ export const LEAD_FORM_FIELDS: (keyof LeadForm)[] = [
   "lead_owner",
   "next_follow_up",
   "tbo_department",
+  "product",
 ];
 
 /** One entry of a lead's timeline, newest first (TBO Smart's hub-leads-api.md). */
@@ -459,6 +480,41 @@ export function ownDepartment(options: LeadOptions | undefined) {
   return own.length === 1 ? own[0].name : "";
 }
 
+/** The active products / brands of a department (and the one a lead already has), in order. */
+export function productsOf(
+  options: LeadOptions | undefined,
+  department: string,
+  keep = ""
+) {
+  const products =
+    options?.departments?.find((d) => d.name === department)?.products ?? [];
+  const names = products.map((p) => p.product_name);
+  return keep && !names.includes(keep) ? [keep, ...names] : names;
+}
+
+/** Every active product name across the departments, once each (the bulk picker, the filter). */
+export function allProducts(options: LeadOptions | undefined) {
+  return [
+    ...new Set(
+      (options?.departments ?? []).flatMap((d) =>
+        (d.products ?? []).map((p) => p.product_name)
+      )
+    ),
+  ];
+}
+
+/** Only managers and the department's head may set a product (the ERP site enforces it). */
+export function canSetProduct(
+  options: LeadOptions | undefined,
+  department: string,
+  isManager: boolean
+) {
+  return (
+    isManager ||
+    !!options?.departments?.find((d) => d.name === department)?.is_head
+  );
+}
+
 /** "GrowthX · ERP / Software" for a lead's row; empty without a department. */
 export function departmentLabel(row: LeadRow) {
   return [row.tbo_department, row.tbo_lead_type].filter(Boolean).join(" · ");
@@ -473,6 +529,8 @@ export interface LeadCategories {
   state: string[];
   district: string[];
   org_size: string[];
+  /** the product / brand under a department */
+  product: string[];
   /** the outcome of the lead's last call: Connected, Not answered, … */
   last_call_result: string[];
   /** how the lead's last email reply was sorted: Interested, Question, Not now, … */

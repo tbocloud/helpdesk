@@ -61,6 +61,23 @@ class TestTodaysCalls(FrappeTestCase):
         self.assertEqual(len(self.calls("get_my_calls")), 2)
         self.assertEqual(self.calls("get_my_calls")[0][1]["acting_user"], BDE)
 
+    def test_the_product_a_call_is_for_reaches_the_person(self):
+        call = queue_call(
+            "a",
+            product="PhoebiX",
+            intro_line="PhoebiX - solar ERP for installers",
+            calling_for="PhoebiX",
+        )
+        self.crm.lead_answers["get_my_calls"] = my_calls(
+            pending=(call,), batch_fields={"campaign_product": "PhoebiX"}
+        )
+        result = api.get_my_calls()
+        self.assertEqual(result["pending"][0]["calling_for"], "PhoebiX")
+        self.assertEqual(
+            result["pending"][0]["intro_line"], "PhoebiX - solar ERP for installers"
+        )
+        self.assertEqual(result["batch"]["campaign_product"], "PhoebiX")
+
     def test_an_older_erp_site_says_it_is_not_available(self):
         self.crm.lead_answers["get_my_calls"] = OLDER_ERP
         frappe.clear_messages()
