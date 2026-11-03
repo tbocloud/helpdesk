@@ -578,6 +578,12 @@ the timer, hold/resume, complete, edit, ask for help and hand over work as on a 
 each using the task's own project; project-level actions (Plan, Approve/Send back, Make
 recurring) stay on the project's board.
 
+**Move to** in a card's ••• menu (every board, `cardActions` in `Kanban.vue`) lists the other
+columns, in the person's column order, and moves the card as dropping it there does
+(`changeStatus`): On hold asks why, Completed and In review open the Complete dialog, a blocked
+task is refused, and the timer pauses. It is there because a far column, such as Cancelled,
+was hard to drag a card to. A completed card has no Move to, as it can't be dragged.
+
 **Column order** is each person's own: dragging a column by its header moves it (a brand line
 shows where it lands), and the grip button in the header does the same from the keyboard with
 the left and right arrow keys. The order is kept in this browser per person
