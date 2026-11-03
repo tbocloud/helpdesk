@@ -208,6 +208,7 @@ import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideLock from "~icons/lucide/lock";
 import {
   assignedByName,
+  createdByName,
   categoryOptions,
   isAiDrafted,
   isClosed,
@@ -385,6 +386,7 @@ const readOnlyRows = computed(() => {
     { label: __("Task name"), value: t.subject, wide: true },
     { label: __("Assignee"), value: personName(t.assigned_to) },
     { label: __("Assigned by"), value: assignedBy.value || "—" },
+    { label: __("Created by"), value: createdByName(t) || "—" },
     { label: __("Priority"), value: __(t.priority || "Medium") },
     { label: __("Category"), value: t.category ? __(t.category) : "—" },
     { label: __("Phase"), value: t.phase || "—" },
