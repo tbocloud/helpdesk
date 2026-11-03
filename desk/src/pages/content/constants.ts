@@ -77,6 +77,8 @@ export interface ContentPost {
   published_url?: string;
   // when the hub will post it to Facebook / Instagram (Publish to Meta)
   meta_publish_on?: string;
+  // a paid boost is or was running (Boost this post)
+  meta_boosted?: number;
   caption?: string;
   brief?: string;
   writer?: string;

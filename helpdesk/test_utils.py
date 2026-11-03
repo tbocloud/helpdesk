@@ -4279,6 +4279,99 @@ def make_approved_post(title: str, customer: str, status: str = "Approved", **va
     )
 
 
+def enable_meta_ads():
+    """Switches on Enable Ads in HD Meta Settings (after enable_meta)."""
+    frappe.db.set_single_value("HD Meta Settings", "ads_enabled", 1)
+    frappe.clear_cache(doctype="HD Meta Settings")
+
+
+def make_ads_connection(project: str, **values):
+    """A Connected HD Meta Connection that may run ads: an Active INR ad account, a user
+    token, and a monthly cap of 10,000 unless `monthly_ad_cap` is given."""
+    return make_meta_connection(
+        project,
+        ads_allowed=1,
+        user_access_token="user-token",
+        ad_account_id="act_100",
+        ad_account_name="Client Ads",
+        ad_account_currency="INR",
+        ad_account_status="Active",
+        monthly_ad_cap=10000,
+        **values,
+    )
+
+
+def publish_post_on_meta(post: str, *targets: str, link: str | None = None):
+    """Marks a content post Published on these targets (default Facebook), the way the
+    publisher leaves it: a Published row per target with its Meta post id."""
+    ids = {"Facebook": "page-1_555", "Instagram": "ig-media-9"}
+    doc = frappe.get_doc("HD Content Post", post)
+    for target in targets or ("Facebook",):
+        doc.append(
+            "meta_publishes",
+            {
+                "target": target,
+                "status": "Published",
+                "publish_kind": "Image",
+                "meta_post_id": ids[target],
+                "permalink": f"https://example.com/{target.lower()}",
+                "link": link,
+            },
+        )
+    doc.status = "Published"
+    doc.published_url = "https://example.com/facebook"
+    doc.save(ignore_permissions=True)
+    return doc
+
+
+def boost_values(**overrides) -> dict:
+    """What the Boost dialog sends: Facebook, more reach, 500 a day for 5 days from today,
+    Kerala's region and ages 18 to 55."""
+    from frappe.utils import add_days, today
+
+    return {
+        "target": "Facebook",
+        "goal": "More reach",
+        "budget_type": "Per day",
+        "budget_amount": 500,
+        "start_date": today(),
+        "end_date": add_days(today(), 4),
+        "audience": {
+            "locations": [{"type": "region", "key": "1234", "name": "Kerala"}],
+            "age_min": 18,
+            "age_max": 55,
+            "interests": [],
+            "advantage_audience": True,
+        },
+        **overrides,
+    }
+
+
+def ads_graph_routes(**overrides) -> dict:
+    """FakeGraph routes for a boost that Meta accepts and that then shows its numbers."""
+    return {
+        "POST act_100/campaigns": {"id": "c-100"},
+        "POST act_100/adsets": {"id": "s-200"},
+        "POST act_100/ads": {"id": "a-300"},
+        "POST c-100": {"success": True},
+        "POST s-200": {"success": True},
+        "POST a-300": {"success": True},
+        "GET a-300": {"effective_status": "ACTIVE"},
+        "GET a-300/insights": {
+            "data": [
+                {
+                    "spend": "120.50",
+                    "reach": "4000",
+                    "impressions": "5200",
+                    "clicks": "80",
+                    "actions": [{"action_type": "post_engagement", "value": "60"}],
+                }
+            ]
+        },
+        **overrides,
+    }
+
+
 class FakeGraph:
     """Stands in for Meta's Graph API: patch `requests` in the graph client with `patch()`.
 

@@ -26,7 +26,7 @@ from helpdesk.integrations.meta.graph import (
 
 SETTINGS = "HD Meta Settings"
 CONNECTION = "HD Meta Connection"
-# Phase 2 (paid ads) adds ads_management and ads_read here and asks again; nothing else changes
+# what organic posting needs; clients without ads are asked for nothing more
 SCOPES = (
     "pages_show_list",
     "pages_read_engagement",
@@ -35,8 +35,31 @@ SCOPES = (
     "instagram_content_publish",
     "business_management",
 )
+# added behind HD Meta Settings > Enable Ads, to boost posts (docs/meta-publishing.md)
+ADS_SCOPES = ("ads_management", "ads_read")
+# the ad account's account_status, in words
+ACCOUNT_STATUS = {
+    1: "Active",
+    2: "Disabled",
+    3: "Payment overdue",
+    7: "Under review",
+    8: "Payment being settled",
+    9: "In grace period",
+    100: "Closing",
+    101: "Closed",
+}
 # a Page role that may post (Admin and Editor have one of these)
 POSTING_TASKS = {"CREATE_CONTENT", "MANAGE"}
+
+
+def ads_enabled() -> bool:
+    return bool(frappe.db.get_single_value(SETTINGS, "ads_enabled"))
+
+
+def scopes() -> tuple[str, ...]:
+    """What the sign-in asks for: the posting permissions, plus the ads ones when ads
+    are switched on in the settings."""
+    return SCOPES + ADS_SCOPES if ads_enabled() else SCOPES
 
 
 def app() -> tuple[str, str]:
@@ -60,7 +83,7 @@ def login_url(project: str, user: str) -> str:
             "client_id": app_id,
             "redirect_uri": HDMetaSettings.oauth_redirect_url(),
             "state": signing.make_state(user, project),
-            "scope": ",".join(SCOPES),
+            "scope": ",".join(scopes()),
             "response_type": "code",
         }
     )
@@ -94,6 +117,8 @@ def finish_login(code: str, state: str, session_user: str) -> str:
     permissions = GraphClient(token, secret).get("me/permissions").get("data", [])
     granted = [p["permission"] for p in permissions if p.get("status") == "granted"]
     missing = [s for s in SCOPES if s not in granted]
+    # a client who declines only the ads permissions still gets Phase 1 publishing
+    ads_allowed = ads_enabled() and all(s in granted for s in ADS_SCOPES)
     if missing:
         frappe.throw(
             _(
@@ -106,6 +131,7 @@ def finish_login(code: str, state: str, session_user: str) -> str:
             "status": PENDING,
             "last_error": None,
             "user_access_token": token,
+            "ads_allowed": int(ads_allowed),
             "granted_scopes": ", ".join(granted),
             "connected_by": user,
         }
@@ -155,8 +181,9 @@ def list_pages(project: str) -> list[dict]:
 
 
 def select_page(project: str, page_id: str):
-    """Keep this Page's token (and its Instagram account) on the connection; the
-    sign-in token is deleted, since the Page token does not expire and nothing else needs it."""
+    """Keep this Page's token (and its Instagram account) on the connection. The sign-in
+    token is deleted, since the Page token does not expire and nothing else needs it,
+    unless ads are allowed: ads run under it (it lasts about 60 days)."""
     connection = frappe.get_doc(CONNECTION, project)
     page = next((p for p in user_pages(connection) if p["id"] == page_id), None)
     if not page:
@@ -176,7 +203,53 @@ def select_page(project: str, page_id: str):
         }
     )
     connection.save(ignore_permissions=True)
-    remove_encrypted_password(CONNECTION, project, "user_access_token")
+    if not connection.ads_allowed:
+        remove_encrypted_password(CONNECTION, project, "user_access_token")
+    return connection
+
+
+def list_ad_accounts(project: str) -> list[dict]:
+    """The ad accounts the connecting person can use, with currency and status in words."""
+    connection = frappe.get_doc(CONNECTION, project)
+    token = connection.user_token()
+    if not (connection.ads_allowed and token):
+        frappe.throw(_("Reconnect Meta to allow ads."))
+    _app_id, secret = app()
+    data = GraphClient(token, secret).get(
+        "me/adaccounts",
+        fields="id,name,currency,account_status,business{name}",
+        limit=100,
+    )
+    return [
+        {
+            "id": a["id"],
+            "name": a.get("name") or a["id"],
+            "currency": a.get("currency"),
+            "status": _(ACCOUNT_STATUS.get(a.get("account_status"), "Not available")),
+            "usable": a.get("account_status") == 1,
+            "business": (a.get("business") or {}).get("name"),
+        }
+        for a in data.get("data", [])
+    ]
+
+
+def select_ad_account(project: str, account_id: str):
+    """Keep the client's ad account (and its currency) on the connection."""
+    account = next(
+        (a for a in list_ad_accounts(project) if a["id"] == account_id), None
+    )
+    if not account:
+        frappe.throw(_("That isn't an ad account you can use. Pick another."))
+    connection = frappe.get_doc(CONNECTION, project)
+    connection.update(
+        {
+            "ad_account_id": account["id"],
+            "ad_account_name": account["name"],
+            "ad_account_currency": account["currency"],
+            "ad_account_status": account["status"],
+        }
+    )
+    connection.save(ignore_permissions=True)
     return connection
 
 

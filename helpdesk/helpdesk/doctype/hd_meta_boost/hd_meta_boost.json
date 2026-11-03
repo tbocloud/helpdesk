@@ -1,0 +1,323 @@
+{
+	"actions": [],
+	"autoname": "BOOST-.#####",
+	"creation": "2026-11-03 12:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"project",
+		"customer",
+		"post",
+		"target",
+		"meta_post_id",
+		"status",
+		"failure_reason",
+		"meta_status",
+		"plan_section",
+		"goal",
+		"budget_type",
+		"budget_amount",
+		"currency",
+		"column_break_plan",
+		"start_date",
+		"end_date",
+		"days",
+		"total_budget",
+		"audience_section",
+		"audience",
+		"meta_section",
+		"ad_account_id",
+		"campaign_id",
+		"adset_id",
+		"ad_id",
+		"people_section",
+		"requested_by",
+		"approved_by",
+		"approved_on",
+		"rejection_note",
+		"results_section",
+		"spend",
+		"reach",
+		"impressions",
+		"clicks",
+		"column_break_results",
+		"results",
+		"cost_per_result",
+		"last_synced"
+	],
+	"fields": [
+		{
+			"fieldname": "project",
+			"fieldtype": "Link",
+			"label": "Project",
+			"options": "Project",
+			"reqd": 1,
+			"in_list_view": 1
+		},
+		{
+			"fieldname": "customer",
+			"fieldtype": "Link",
+			"label": "Customer",
+			"options": "HD Customer"
+		},
+		{
+			"fieldname": "post",
+			"fieldtype": "Link",
+			"label": "Post",
+			"options": "HD Content Post",
+			"reqd": 1,
+			"in_list_view": 1
+		},
+		{
+			"fieldname": "target",
+			"fieldtype": "Select",
+			"label": "Boosted On",
+			"options": "Facebook\nInstagram",
+			"reqd": 1
+		},
+		{
+			"fieldname": "meta_post_id",
+			"fieldtype": "Data",
+			"label": "Meta Post ID",
+			"read_only": 1
+		},
+		{
+			"fieldname": "status",
+			"fieldtype": "Select",
+			"label": "Status",
+			"options": "Draft\nPending approval\nActive\nPaused\nCompleted\nFailed\nRejected",
+			"default": "Draft",
+			"in_list_view": 1,
+			"in_standard_filter": 1
+		},
+		{
+			"fieldname": "failure_reason",
+			"fieldtype": "Small Text",
+			"label": "Why It Didn't Run",
+			"read_only": 1
+		},
+		{
+			"fieldname": "meta_status",
+			"fieldtype": "Data",
+			"label": "Meta Status",
+			"read_only": 1,
+			"description": "What Meta says about the ad, as last read."
+		},
+		{
+			"fieldname": "plan_section",
+			"fieldtype": "Section Break",
+			"label": "Plan"
+		},
+		{
+			"fieldname": "goal",
+			"fieldtype": "Select",
+			"label": "Goal",
+			"options": "More reach\nMore engagement\nMore messages\nMore website visits",
+			"reqd": 1
+		},
+		{
+			"fieldname": "budget_type",
+			"fieldtype": "Select",
+			"label": "Budget Type",
+			"options": "Per day\nTotal",
+			"default": "Per day",
+			"reqd": 1
+		},
+		{
+			"fieldname": "budget_amount",
+			"fieldtype": "Currency",
+			"label": "Budget",
+			"reqd": 1,
+			"options": "currency"
+		},
+		{
+			"fieldname": "currency",
+			"fieldtype": "Link",
+			"label": "Currency",
+			"options": "Currency",
+			"read_only": 1
+		},
+		{
+			"fieldname": "column_break_plan",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "start_date",
+			"fieldtype": "Date",
+			"label": "Start Date",
+			"reqd": 1
+		},
+		{
+			"fieldname": "end_date",
+			"fieldtype": "Date",
+			"label": "End Date",
+			"reqd": 1
+		},
+		{
+			"fieldname": "days",
+			"fieldtype": "Int",
+			"label": "Days",
+			"read_only": 1
+		},
+		{
+			"fieldname": "total_budget",
+			"fieldtype": "Currency",
+			"label": "Most It Can Spend",
+			"options": "currency",
+			"read_only": 1,
+			"in_list_view": 1,
+			"description": "The ceiling counted against the monthly cap: the total, or the daily budget times the days."
+		},
+		{
+			"fieldname": "audience_section",
+			"fieldtype": "Section Break",
+			"label": "Audience"
+		},
+		{
+			"fieldname": "audience",
+			"fieldtype": "Code",
+			"label": "Audience",
+			"options": "JSON",
+			"description": "Places, ages and interests sent to Meta."
+		},
+		{
+			"fieldname": "meta_section",
+			"fieldtype": "Section Break",
+			"label": "On Meta"
+		},
+		{
+			"fieldname": "ad_account_id",
+			"fieldtype": "Data",
+			"label": "Ad Account",
+			"read_only": 1
+		},
+		{
+			"fieldname": "campaign_id",
+			"fieldtype": "Data",
+			"label": "Campaign ID",
+			"read_only": 1
+		},
+		{
+			"fieldname": "adset_id",
+			"fieldtype": "Data",
+			"label": "Ad Set ID",
+			"read_only": 1
+		},
+		{
+			"fieldname": "ad_id",
+			"fieldtype": "Data",
+			"label": "Ad ID",
+			"read_only": 1
+		},
+		{
+			"fieldname": "people_section",
+			"fieldtype": "Section Break",
+			"label": "Who"
+		},
+		{
+			"fieldname": "requested_by",
+			"fieldtype": "Link",
+			"label": "Requested By",
+			"options": "User",
+			"read_only": 1
+		},
+		{
+			"fieldname": "approved_by",
+			"fieldtype": "Link",
+			"label": "Approved By",
+			"options": "User",
+			"read_only": 1
+		},
+		{
+			"fieldname": "approved_on",
+			"fieldtype": "Datetime",
+			"label": "Approved On",
+			"read_only": 1
+		},
+		{
+			"fieldname": "rejection_note",
+			"fieldtype": "Small Text",
+			"label": "Why It Was Rejected",
+			"read_only": 1
+		},
+		{
+			"fieldname": "results_section",
+			"fieldtype": "Section Break",
+			"label": "Results"
+		},
+		{
+			"fieldname": "spend",
+			"fieldtype": "Currency",
+			"label": "Spent",
+			"options": "currency",
+			"read_only": 1,
+			"in_list_view": 1
+		},
+		{
+			"fieldname": "reach",
+			"fieldtype": "Int",
+			"label": "Reach",
+			"read_only": 1
+		},
+		{
+			"fieldname": "impressions",
+			"fieldtype": "Int",
+			"label": "Impressions",
+			"read_only": 1
+		},
+		{
+			"fieldname": "clicks",
+			"fieldtype": "Int",
+			"label": "Clicks",
+			"read_only": 1
+		},
+		{
+			"fieldname": "column_break_results",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "results",
+			"fieldtype": "Int",
+			"label": "Results",
+			"read_only": 1,
+			"description": "What the goal counts: people reached, engagements, conversations or website visits."
+		},
+		{
+			"fieldname": "cost_per_result",
+			"fieldtype": "Currency",
+			"label": "Cost Per Result",
+			"options": "currency",
+			"read_only": 1
+		},
+		{
+			"fieldname": "last_synced",
+			"fieldtype": "Datetime",
+			"label": "Last Synced",
+			"read_only": 1
+		}
+	],
+	"index_web_pages_for_search": 0,
+	"links": [],
+	"modified": "2026-11-03 12:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD Meta Boost",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"role": "System Manager",
+			"read": 1,
+			"write": 1,
+			"create": 1,
+			"delete": 1,
+			"report": 1,
+			"export": 1,
+			"share": 1
+		}
+	],
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": [],
+	"title_field": "post",
+	"track_changes": 1
+}

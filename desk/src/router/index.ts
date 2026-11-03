@@ -247,6 +247,12 @@ const portalRoutes = [
     props: true,
   },
   {
+    path: "/projects/:projectId/ads",
+    name: "TaskyAds",
+    component: () => import("@/pages/tasky/ProjectAds.vue"),
+    props: true,
+  },
+  {
     path: "/projects/:projectId/commission",
     name: "TaskyCommission",
     component: () => import("@/pages/tasky/ProjectCommission.vue"),

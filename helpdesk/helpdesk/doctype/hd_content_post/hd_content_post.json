@@ -57,7 +57,8 @@
 		"times_postponed",
 		"meta_section",
 		"meta_publish_on",
-		"meta_publishes"
+		"meta_publishes",
+		"meta_boosted"
 	],
 	"fields": [
 		{
@@ -417,6 +418,14 @@
 			"label": "Meta Posts",
 			"read_only": 1,
 			"no_copy": 1
+		},
+		{
+			"fieldname": "meta_boosted",
+			"fieldtype": "Check",
+			"label": "Boosted",
+			"read_only": 1,
+			"no_copy": 1,
+			"description": "A paid boost is or was running for this post."
 		}
 	],
 	"index_web_pages_for_search": 0,

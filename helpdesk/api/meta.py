@@ -10,13 +10,14 @@ import frappe
 from frappe import _
 from frappe.utils import cstr, strip_html
 
+from helpdesk.content_team import DM_HEAD_ROLE
 from helpdesk.helpdesk.doctype.hd_meta_settings.hd_meta_settings import HDMetaSettings
 from helpdesk.integrations.meta import connect, publisher, signing
 from helpdesk.integrations.meta.graph import MetaError, graph_version
 from helpdesk.tasky.permissions import can_handle_credentials
 
 SETTINGS = connect.SETTINGS
-PLAIN_FIELDS = ("enabled", "app_id", "graph_api_version")
+PLAIN_FIELDS = ("enabled", "ads_enabled", "app_id", "graph_api_version")
 ADMIN_ROLE = "System Manager"
 PROJECT_PAGE = "/helpdesk/projects/{0}/meta"
 
@@ -91,7 +92,18 @@ def connection_summary(project: str) -> dict | None:
         "instagram_username": doc.instagram_username,
         "connected_by": doc.connected_by,
         "connected_on": cstr(doc.connected_on) if doc.connected_on else None,
+        "ads_allowed": bool(doc.ads_allowed),
+        "ad_account_id": doc.ad_account_id,
+        "ad_account_name": doc.ad_account_name,
+        "ad_account_currency": doc.ad_account_currency,
+        "ad_account_status": doc.ad_account_status,
+        "monthly_ad_cap": doc.monthly_ad_cap,
     }
+
+
+def can_change_ad_cap() -> bool:
+    roles = frappe.get_roles()
+    return "System Manager" in roles or DM_HEAD_ROLE in roles
 
 
 @frappe.whitelist()
@@ -100,6 +112,8 @@ def get_connection(project: str) -> dict:
     require_project_access(project)
     return {
         "enabled": bool(frappe.db.get_single_value(SETTINGS, "enabled")),
+        "ads_enabled": connect.ads_enabled(),
+        "can_change_cap": can_change_ad_cap(),
         "connection": connection_summary(project),
     }
 
@@ -162,6 +176,14 @@ def select_page(project: str, page_id: str) -> dict | None:
 def disconnect(project: str):
     """Forget the Page: the tokens are deleted with the connection."""
     require_project_access(project)
+    if frappe.db.exists(
+        "HD Meta Boost", {"project": project, "status": ["in", ["Active", "Paused"]]}
+    ):
+        frappe.throw(
+            _(
+                "This project has boosts running or paused. Stop them before disconnecting."
+            )
+        )
     if frappe.db.exists(connect.CONNECTION, project):
         frappe.delete_doc(connect.CONNECTION, project, ignore_permissions=True)
     return None

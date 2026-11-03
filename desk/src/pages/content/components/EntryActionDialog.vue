@@ -238,13 +238,19 @@ const copy = computed(() => {
         submit: __("Send back"),
       };
     case "meta":
-      return {
-        title: __("Publish to Meta"),
-        help: __(
-          "Post this approved entry to the client's Facebook Page and Instagram from here."
-        ),
-        submit: "",
-      };
+      return props.post?.status === "Published"
+        ? {
+            title: __("Boost this post"),
+            help: __("Pay to show this live post to more people."),
+            submit: "",
+          }
+        : {
+            title: __("Publish to Meta"),
+            help: __(
+              "Post this approved entry to the client's Facebook Page and Instagram from here."
+            ),
+            submit: "",
+          };
     case "cancel":
       return {
         title: __("Cancel this post"),

@@ -72,9 +72,9 @@
 		{
 			"fieldname": "user_access_token",
 			"fieldtype": "Password",
-			"label": "Sign-in Token",
+			"label": "User Access Token",
 			"read_only": 1,
-			"description": "Only kept between signing in and picking the Page; then deleted."
+			"description": "Kept between signing in and picking the Page. When ads are allowed it stays, to run ads; otherwise it is then deleted."
 		},
 		{
 			"fieldname": "column_break_ig",
@@ -119,7 +119,57 @@
 			"fieldtype": "Small Text",
 			"label": "Granted Permissions",
 			"read_only": 1,
-			"description": "What the client's admin allowed. Paid ads (Phase 2) will ask for more by signing in again."
+			"description": "What the client's admin allowed."
+		},
+		{
+			"fieldname": "ads_section",
+			"fieldtype": "Section Break",
+			"label": "Ads",
+			"collapsible": 1
+		},
+		{
+			"fieldname": "ads_allowed",
+			"fieldtype": "Check",
+			"label": "Ads Allowed",
+			"read_only": 1,
+			"description": "The client allowed ads_management and ads_read when connecting."
+		},
+		{
+			"fieldname": "monthly_ad_cap",
+			"fieldtype": "Currency",
+			"label": "Monthly Ad Spend Cap",
+			"default": "10000",
+			"options": "ad_account_currency",
+			"description": "No boost may take this month's planned spend past this amount. Only a System Manager or the Digital Marketing Head changes it."
+		},
+		{
+			"fieldname": "column_break_ads",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "ad_account_id",
+			"fieldtype": "Data",
+			"label": "Ad Account ID",
+			"read_only": 1
+		},
+		{
+			"fieldname": "ad_account_name",
+			"fieldtype": "Data",
+			"label": "Ad Account Name",
+			"read_only": 1
+		},
+		{
+			"fieldname": "ad_account_currency",
+			"fieldtype": "Link",
+			"label": "Ad Account Currency",
+			"options": "Currency",
+			"read_only": 1
+		},
+		{
+			"fieldname": "ad_account_status",
+			"fieldtype": "Data",
+			"label": "Ad Account Status",
+			"read_only": 1
 		}
 	],
 	"actions": [],
@@ -153,6 +203,14 @@
 		"connected_by",
 		"connected_on",
 		"column_break_audit",
-		"granted_scopes"
+		"granted_scopes",
+		"ads_section",
+		"ads_allowed",
+		"monthly_ad_cap",
+		"column_break_ads",
+		"ad_account_id",
+		"ad_account_name",
+		"ad_account_currency",
+		"ad_account_status"
 	]
 }

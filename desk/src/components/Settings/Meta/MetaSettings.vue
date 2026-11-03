@@ -81,6 +81,24 @@
         </SettingsSection>
 
         <SettingsSection
+          :title="__('Paid ads')"
+          :description="
+            __(
+              'Lets staff boost a published post from the content calendar. Clients are asked for the ads permissions when they connect, and each project has a monthly spend limit.'
+            )
+          "
+        >
+          <Switch v-model="form.ads_enabled" :label="__('Enable ads')" />
+          <p class="text-p-sm text-ink-gray-6">
+            {{
+              __(
+                "Turn this on only after App Review has approved ads_management and ads_read, or only testers can connect with them."
+              )
+            }}
+          </p>
+        </SettingsSection>
+
+        <SettingsSection
           :title="__('OAuth redirect URL')"
           :description="
             __(
@@ -122,7 +140,7 @@
             <li>
               {{
                 __(
-                  "Complete Business Verification, then App Review for pages_show_list, pages_read_engagement, pages_manage_posts, instagram_basic, instagram_content_publish and business_management."
+                  "Complete Business Verification, then App Review for pages_show_list, pages_read_engagement, pages_manage_posts, instagram_basic, instagram_content_publish and business_management. For ads, also ads_management and ads_read."
                 )
               }}
             </li>
@@ -171,7 +189,12 @@ import SettingsAction from "../SettingsAction.vue";
 import SettingsSection from "../SettingsSection.vue";
 
 interface SettingsData {
-  settings: { enabled: number; app_id: string; graph_api_version: string };
+  settings: {
+    enabled: number;
+    ads_enabled: number;
+    app_id: string;
+    graph_api_version: string;
+  };
   secrets: { app_secret: SecretStatus };
   redirect_url: string;
 }
@@ -191,7 +214,11 @@ const LABELS: Record<string, string> = {
 };
 
 function load(data: SettingsData) {
-  const f = { ...data.settings, enabled: Boolean(data.settings.enabled) };
+  const f = {
+    ...data.settings,
+    enabled: Boolean(data.settings.enabled),
+    ads_enabled: Boolean(data.settings.ads_enabled),
+  };
   form.value = f;
   initial.value = JSON.stringify(f);
   edit.value = { mode: "keep", value: "" };
@@ -222,6 +249,7 @@ const save = createResource({
     const values: Record<string, any> = {
       ...form.value,
       enabled: form.value?.enabled ? 1 : 0,
+      ads_enabled: form.value?.ads_enabled ? 1 : 0,
     };
     const secretEdit = secretValue(edit.value);
     if (secretEdit !== undefined) values.app_secret = secretEdit;

@@ -167,6 +167,7 @@ import LucideCoins from "~icons/lucide/coins";
 import LucideEyeOff from "~icons/lucide/eye-off";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideRepeat from "~icons/lucide/repeat";
+import LucideMegaphone from "~icons/lucide/megaphone";
 import LucideShare2 from "~icons/lucide/share-2";
 import LucideUserStar from "~icons/lucide/user-star";
 import LucideUserX from "~icons/lucide/user-x";
@@ -220,6 +221,13 @@ const tabs = [
     to: "TaskyMeta",
     icon: LucideShare2,
     // the same people as Credentials: whoever handles the client's accounts
+    needs: "can_handle_credentials",
+  },
+  {
+    label: "Ads",
+    to: "TaskyAds",
+    icon: LucideMegaphone,
+    // boosts and their spend, for whoever handles the client's accounts
     needs: "can_handle_credentials",
   },
   {

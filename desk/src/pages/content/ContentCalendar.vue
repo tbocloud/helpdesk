@@ -895,6 +895,7 @@ const FIELDS = [
   "special_day",
   "publish_on",
   "meta_publish_on",
+  "meta_boosted",
 ];
 
 const posts = createResource({
@@ -989,7 +990,7 @@ const events = computed(() =>
               dayjs(p.meta_publish_on).format("h:mm A")
             )}`
           : ""
-      }`,
+      }${p.meta_boosted ? ` · ${__("Boosted")}` : ""}`,
       participant: `${p.status}${clientLabel(p.status)} · ${p.customer}`,
       fromDate: start.format("YYYY-MM-DD"),
       toDate: start.format("YYYY-MM-DD"),
