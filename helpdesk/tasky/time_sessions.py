@@ -26,9 +26,6 @@ from helpdesk.work_hours import (
 )
 
 SESSION = "HD Task Time Session"
-# hours entered by hand may only be for today and the working day before it, looked for this
-# far back (a year: no break is longer)
-BACKDATE_LOOKBACK_DAYS = 366
 # banked time with no sessions behind it (from before sessions were kept) below this is rounding
 UNTRACKED_MIN_HOURS = 0.05
 # slack for hours kept to two decimals
@@ -115,17 +112,19 @@ def day_left(user: str, day, exclude_task: str | None = None) -> float:
     return max(max_hours(day) - day_logged_hours(user, day, exclude_task), 0.0)
 
 
-def last_working_day(today) -> date:
+def last_working_day(today, since) -> date:
     """The working day before `today`, the "yesterday" hours may be entered for by hand:
     Friday on a Monday, the day before a holiday after it. A day counts as the daily cap
     counts it, by its work hours: a working day whose SLA lists no hours (a Saturday) is
-    skipped. With none in the lookback, `today` itself, so nothing older is typed in."""
+    skipped. The search stops at `since` (the task's creation: no hours go on a day before
+    it); with no working day in between, `today` itself, so nothing older is typed in."""
+    today, since = getdate(today), getdate(since)
     day = getdate(add_to_date(today, days=-1))
-    for _step in range(BACKDATE_LOOKBACK_DAYS):
+    while day >= since:
         if max_hours(day) > 0:
             return day
         day = getdate(add_to_date(day, days=-1))
-    return getdate(today)
+    return today
 
 
 def timer_allowance(tracked: float) -> float:
@@ -144,7 +143,7 @@ def check_hand_entered(task_doc, user: str, worked: list[tuple], reason: str | N
     in by hand; an older day only up to what the task's timer recorded on it, the
     stretch still running included (as the dialog rounds it), unless a System Manager gives a `reason`."""
     today = getdate()
-    oldest = last_working_day(today)
+    oldest = last_working_day(today, task_doc.creation)
     tracked: dict = {}
     for row in unlogged_sessions(task_doc.name):
         day = getdate(row.started_at)
@@ -348,7 +347,7 @@ def completion_days(task_doc, user: str | None = None) -> dict:
         add(str(getdate()), untracked)
 
     today = getdate()
-    yesterday = last_working_day(today)
+    yesterday = last_working_day(today, task_doc.creation)
     shown = {str(today), str(yesterday), *days}
     # the site's today, so the dialog checks dates against the same day the server does
     return {

@@ -859,8 +859,9 @@ dialog and the reports (`helpdesk/work_hours.py`):
   sessions are replaced by the dialog's rows, so they don't count against it). Typed-in hours
   are for today and the working day before it only (`last_working_day`: the latest earlier day
   with work hours, as the cap counts them, so Friday on a Monday even when Saturday is a working
-  day without SLA hours, and the day before a holiday after it; it looks back at most
-  `BACKDATE_LOOKBACK_DAYS`, 366 days, and with no such day only today takes typed-in hours); an
+  day without SLA hours, and the day before a holiday after it; it looks back as far as the
+  task's creation, the earliest day hours can go on, and with no such day only today takes
+  typed-in hours); an
   older day takes only what the task's timer recorded on it, the stretch still running included,
   rounded to the nearest quarter hour as the dialog offers it (`timer_allowance`: 7.13 h may be
   logged as 7.25), unless a System Manager passes `backdate_reason`.

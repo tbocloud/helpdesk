@@ -8,6 +8,7 @@ from frappe.utils import add_days, getdate, now_datetime
 from helpdesk.patches.v16_0_2 import clip_unlogged_time_sessions
 from helpdesk.tasky import api as tasky
 from helpdesk.tasky.time_sessions import (
+    last_working_day,
     pause_timer,
     record_session,
     stop_timers_outside_work_hours,
@@ -377,6 +378,18 @@ class TestDailyCap(WorkHoursCase):
 
         self.assertEqual(days["yesterday"], str(before))
         self.assertEqual(result["hours_logged"], 2)
+
+    def test_the_working_day_before_is_found_past_a_break_longer_than_a_year(self):
+        far = add_days(self.today, -400)
+        with patch(
+            "helpdesk.tasky.time_sessions.max_hours",
+            side_effect=lambda d: 8 if getdate(d) <= far else 0,
+        ):
+            self.assertEqual(last_working_day(self.today, add_days(far, -5)), far)
+            # nothing to find after the task was created: only today takes hours
+            self.assertEqual(
+                last_working_day(self.today, add_days(far, 1)), getdate(self.today)
+            )
 
     def test_a_system_manager_can_back_date_with_a_reason(self):
         old = add_days(self.today, -2)
