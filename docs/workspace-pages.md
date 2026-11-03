@@ -873,7 +873,13 @@ dialog and the reports (`helpdesk/work_hours.py`):
   typed-in hours); an
   older day takes only what the task's timer recorded on it, the stretch still running included,
   rounded to the nearest quarter hour as the dialog offers it (`timer_allowance`: 7.13 h may be
-  logged as 7.25), unless a System Manager passes `backdate_reason`.
+  logged as 7.25), unless a System Manager passes `backdate_reason`. The refusal says what the
+  timer recorded on that day and the most it allows ("…the timer recorded 0.24 h on it, so you
+  can log at most 0.25 h"), or that it recorded nothing. The Complete task dialog keeps the
+  timer's hours by date (`timerByDay` in `CompleteTaskDialog.vue`), not on the row they first
+  filled: a row moved to another day shows that day's "From the timer" hours (none if the timer
+  didn't run then) and is checked against them with the same rounding (`timerAllowance`), so the
+  dialog never passes a day the server then refuses.
 - **Reports:** hours per person per day come from timesheets (one per day worked, see above) and
   sessions, never from a completed task's `custom_actual_hours`. The Scoreboard's and the
   stand-up's hours (`team_dashboard.logged_hours`) scale a person's day down to `max_hours` for

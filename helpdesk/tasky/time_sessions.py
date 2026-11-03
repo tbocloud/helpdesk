@@ -160,9 +160,15 @@ def check_hand_entered(task_doc, user: str, worked: list[tuple], reason: str | N
         label = frappe.utils.formatdate(day)
         allowed = timer_allowance(tracked.get(day, 0))
         if day < oldest and not override and hours > allowed + TOLERANCE:
+            if allowed:
+                frappe.throw(
+                    _(
+                        "{0} is too long ago to enter more hours by hand: the timer recorded {1} h on it, so you can log at most {2} h. Log other hours on today or the working day before."
+                    ).format(label, f"{round(tracked[day], 2):g}", f"{allowed:g}")
+                )
             frappe.throw(
                 _(
-                    "{0} is too long ago to enter hours by hand: you can log hours for today or the working day before, or what the timer recorded."
+                    "{0} is too long ago to enter hours by hand: the timer recorded nothing on it. Log hours for today or the working day before."
                 ).format(label)
             )
         left = day_left(user, day, exclude_task=task_doc.name)
