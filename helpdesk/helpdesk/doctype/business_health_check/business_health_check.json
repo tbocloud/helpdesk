@@ -12,7 +12,9 @@
     "phone",
     "email",
     "section_break_report",
-    "report_link"
+    "report_link",
+    "section_break_lead",
+    "lead"
   ],
   "fields": [
     {
@@ -56,11 +58,25 @@
       "label": "Report Link",
       "options": "URL",
       "reqd": 1
+    },
+    {
+      "fieldname": "section_break_lead",
+      "fieldtype": "Section Break",
+      "label": "Lead"
+    },
+    {
+      "description": "The ERPNext Lead made from this check with the Create Lead button.",
+      "fieldname": "lead",
+      "fieldtype": "Data",
+      "in_list_view": 1,
+      "label": "Lead",
+      "no_copy": 1,
+      "read_only": 1
     }
   ],
   "index_web_pages_for_search": 0,
   "links": [],
-  "modified": "2026-11-03 12:00:00.000000",
+  "modified": "2026-11-03 14:00:00.000000",
   "modified_by": "Administrator",
   "module": "Helpdesk",
   "name": "Business Health Check",
@@ -68,7 +84,6 @@
   "owner": "Administrator",
   "permissions": [
     {
-      "role": "System Manager",
       "create": 1,
       "delete": 1,
       "email": 1,
@@ -76,25 +91,26 @@
       "print": 1,
       "read": 1,
       "report": 1,
+      "role": "System Manager",
       "share": 1,
       "write": 1
     },
     {
-      "role": "Agent Manager",
       "email": 1,
       "export": 1,
       "print": 1,
       "read": 1,
       "report": 1,
+      "role": "Agent Manager",
       "share": 1,
       "write": 1
     },
     {
-      "role": "Agent",
       "email": 1,
       "print": 1,
       "read": 1,
-      "report": 1
+      "report": 1,
+      "role": "Agent"
     }
   ],
   "search_fields": "business_name,phone,email",
