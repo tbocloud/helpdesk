@@ -338,6 +338,29 @@ class TestDailyCap(WorkHoursCase):
 
         self.assertEqual(result["hours_logged"], 7.25)
 
+    def test_hours_above_the_timer_rounded_allowance_are_refused(self):
+        old = add_days(self.today, -2)
+        while not max_hours(old):
+            old = add_days(old, -1)
+        make_time_session(self.task, DEV[0], at(old, 10), at(old, 17), hours=7.13)
+
+        with self.assertRaisesRegex(frappe.ValidationError, "too long ago"):
+            self.complete(days=[{"date": str(old), "hours": 7.75}])
+
+    def test_a_timer_still_running_since_an_older_day_counts_for_that_day(self):
+        old = add_days(self.today, -2)
+        while not max_hours(old):
+            old = add_days(old, -1)
+        frappe.db.set_value(
+            "Task",
+            self.task,
+            {"custom_timer_start": at(old, 10), "custom_timer_user": DEV[0]},
+        )
+
+        result = self.complete(days=[{"date": str(old), "hours": 2}])
+
+        self.assertEqual(result["hours_logged"], 2)
+
     def test_after_a_day_without_hours_the_one_before_takes_hours_by_hand(self):
         # yesterday held no work hours (a Saturday the SLA lists no hours for, on a Monday):
         # the day with hours before it is "yesterday" for hours typed in

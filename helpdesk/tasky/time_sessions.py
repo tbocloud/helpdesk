@@ -141,14 +141,19 @@ def check_hand_entered(task_doc, user: str, worked: list[tuple], reason: str | N
 
     A day takes at most what is left of its work hours (hours already in the person's
     timesheets and timers count). Only today and the working day before it can be filled
-    in by hand; an older day only up to what the task's timer recorded on it (as the
-    dialog rounds it), unless a System Manager gives a `reason`."""
+    in by hand; an older day only up to what the task's timer recorded on it, the
+    stretch still running included (as the dialog rounds it), unless a System Manager gives a `reason`."""
     today = getdate()
     oldest = last_working_day(today)
     tracked: dict = {}
     for row in unlogged_sessions(task_doc.name):
         day = getdate(row.started_at)
         tracked[day] = tracked.get(day, 0) + flt(row.hours)
+    # the stretch still running is offered by the dialog too (`completion_days`)
+    if task_doc.get("custom_timer_start"):
+        for piece in clip_to_windows(task_doc.custom_timer_start, now_datetime()):
+            day = piece[0].date()
+            tracked[day] = tracked.get(day, 0) + hours_between(piece)
     override = "System Manager" in frappe.get_roles(user) and bool(
         (reason or "").strip()
     )
