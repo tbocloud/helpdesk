@@ -14,6 +14,7 @@ from helpdesk.test_utils import (
     call_as_user,
     call_mobile_as,
     enable_chat_notifications,
+    freeze_work_day,
     get_standup_notices,
     hold_commits,
     log_hours,
@@ -144,6 +145,11 @@ class TestWorkingDays(StandupCase):
 
 
 class TestAutofill(StandupCase):
+    def setUp(self):
+        # yesterday's hours count only on a day with work hours: not after a weekend
+        freeze_work_day(self)
+        super().setUp()
+
     def test_yesterday_today_and_blockers_from_own_work(self):
         calendar = standup_calendar(self.today)
         previous = calendar.previous_working_day()

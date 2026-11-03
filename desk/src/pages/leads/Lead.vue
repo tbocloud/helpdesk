@@ -160,6 +160,14 @@
               <LeadPhotos :lead-id="leadId" :can-write="!!lead.can_write" />
             </template>
             <LeadWhyCall :prospect="lead?.prospect" />
+            <LeadWhatsApp
+              v-if="lead?.whatsapp && lead.whatsapp_box"
+              :lead-id="leadId"
+              :whatsapp="lead.whatsapp"
+              :box="lead.whatsapp_box"
+              :can-write="!!lead.can_write"
+              @sent="detail.reload()"
+            />
             <LeadAISuggests
               :lead-id="leadId"
               :last-reply="{
@@ -256,9 +264,19 @@
                     >{{ entry.text }}
                   </p>
                   <p class="text-xs text-ink-gray-5">
-                    {{ entry.who_name || entry.who }}
+                    {{
+                      entry.kind === "whatsapp" &&
+                      entry.direction === "incoming"
+                        ? __("The lead, on WhatsApp")
+                        : entry.who_name || entry.who
+                    }}
                     <template v-if="entry.at">
-                      <span v-if="entry.who" aria-hidden="true"> · </span>
+                      <span
+                        v-if="entry.who || entry.kind === 'whatsapp'"
+                        aria-hidden="true"
+                      >
+                        ·
+                      </span>
                       <time
                         :datetime="entry.at"
                         :title="dayjs(entry.at).format('D MMM YYYY, h:mm a')"
@@ -377,6 +395,8 @@ import LucideChevronRight from "~icons/lucide/chevron-right";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideFileText from "~icons/lucide/file-text";
 import LucideHistory from "~icons/lucide/history";
+import LucideMessageCircle from "~icons/lucide/message-circle";
+import LucideMessageCircleReply from "~icons/lucide/message-circle-reply";
 import LucideMessageSquare from "~icons/lucide/message-square";
 import LucidePhone from "~icons/lucide/phone";
 import LucidePhoneForwarded from "~icons/lucide/phone-forwarded";
@@ -390,6 +410,7 @@ import LucideScrollText from "~icons/lucide/scroll-text";
 import LeadFormDialog from "./LeadFormDialog.vue";
 import LeadPhotos from "./LeadPhotos.vue";
 import LeadPlace from "./LeadPlace.vue";
+import LeadWhatsApp from "./LeadWhatsApp.vue";
 import LeadWhyCall from "./LeadWhyCall.vue";
 import LeadDocuments from "./LeadDocuments.vue";
 import LogCallDialog from "./LogCallDialog.vue";
@@ -423,6 +444,7 @@ const TIMELINE_ICONS: Record<LeadTimelineEntry["kind"], Component> = {
   quotation: LucideFileText,
   ai: LucideBot,
   proposal: LucideScrollText,
+  whatsapp: LucideMessageCircle,
 };
 const TIMELINE_LABELS: Record<LeadTimelineEntry["kind"], string> = {
   note: __("Note"),
@@ -433,6 +455,7 @@ const TIMELINE_LABELS: Record<LeadTimelineEntry["kind"], string> = {
   quotation: __("Quotation"),
   ai: __("TBO AI"),
   proposal: __("Proposal"),
+  whatsapp: __("WhatsApp"),
 };
 
 /** A call through MyOperator shows which way it went, or that it was missed. */
@@ -442,6 +465,8 @@ function timelineIcon(entry: LeadTimelineEntry): Component {
     if (entry.direction === "incoming") return LucidePhoneIncoming;
     if (entry.direction === "outgoing") return LucidePhoneOutgoing;
   }
+  if (entry.kind === "whatsapp" && entry.direction === "outgoing")
+    return LucideMessageCircleReply;
   return TIMELINE_ICONS[entry.kind] || LucideMessageSquare;
 }
 

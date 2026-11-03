@@ -48,6 +48,8 @@ scheduler_events = {
         # every minute: new customer tickets arrive quickly (sites also ping on raise)
         "* * * * *": [
             "helpdesk.tasks.pull_client_tickets",
+            # approved WhatsApp outreach waiting for TBO Chat (docs/whatsapp-outreach.md)
+            "helpdesk.whatsapp_outreach.send_pending",
         ],
         # every 15 minutes: follow-ups and escalation for tasks and tickets, and the
         # digests at their times (docs/follow-ups.md)
@@ -106,6 +108,10 @@ scheduler_events = {
         # Friday 17:00: the project status report to its recipients (docs/project-status-report.md)
         "0 17 * * 5": [
             "helpdesk.project_status.send_weekly_report",
+        ],
+        # Monday 09:00: the week's adoption findings to management (docs/adoption.md)
+        "0 9 * * 1": [
+            "helpdesk.adoption.send_weekly_digest",
         ],
         # Monday 08:00: last week's summary per customer
         "0 8 * * 1": [
