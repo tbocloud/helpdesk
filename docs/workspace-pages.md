@@ -857,8 +857,14 @@ dialog and the reports (`helpdesk/work_hours.py`):
 - **Daily cap:** per person per day, timesheet hours plus not-yet-logged sessions can't pass
   `max_hours(day)`. `complete_task` checks every day's hours against what is left (the task's own
   sessions are replaced by the dialog's rows, so they don't count against it). Typed-in hours
-  are for today or yesterday only; an older day takes only what the task's timer recorded on it,
-  unless a System Manager passes `backdate_reason`.
+  are for today and the working day before it only (`last_working_day`: the latest earlier day
+  with work hours, as the cap counts them, so Friday on a Monday even when Saturday is a working
+  day without SLA hours, and the day before a holiday after it; it looks back as far as the
+  task's creation, the earliest day hours can go on, and with no such day only today takes
+  typed-in hours); an
+  older day takes only what the task's timer recorded on it, the stretch still running included,
+  rounded to the nearest quarter hour as the dialog offers it (`timer_allowance`: 7.13 h may be
+  logged as 7.25), unless a System Manager passes `backdate_reason`.
 - **Reports:** hours per person per day come from timesheets (one per day worked, see above) and
   sessions, never from a completed task's `custom_actual_hours`. The Scoreboard's and the
   stand-up's hours (`team_dashboard.logged_hours`) scale a person's day down to `max_hours` for

@@ -8,6 +8,7 @@ from frappe.utils import add_days, getdate, now_datetime
 from helpdesk.patches.v16_0_2 import clip_unlogged_time_sessions
 from helpdesk.tasky import api as tasky
 from helpdesk.tasky.time_sessions import (
+    last_working_day,
     pause_timer,
     record_session,
     stop_timers_outside_work_hours,
@@ -326,6 +327,69 @@ class TestDailyCap(WorkHoursCase):
         result = self.complete(days=[{"date": str(old), "hours": 4}])
 
         self.assertEqual(result["hours_logged"], 4)
+
+    def test_the_timer_hours_as_the_dialog_rounds_them_can_be_logged(self):
+        # 7.13 h recorded; the dialog offers it to the nearest quarter, 7.25
+        old = add_days(self.today, -2)
+        while not max_hours(old):
+            old = add_days(old, -1)
+        make_time_session(self.task, DEV[0], at(old, 10), at(old, 17), hours=7.13)
+
+        result = self.complete(days=[{"date": str(old), "hours": 7.25}])
+
+        self.assertEqual(result["hours_logged"], 7.25)
+
+    def test_hours_above_the_timer_rounded_allowance_are_refused(self):
+        old = add_days(self.today, -2)
+        while not max_hours(old):
+            old = add_days(old, -1)
+        make_time_session(self.task, DEV[0], at(old, 10), at(old, 17), hours=7.13)
+
+        with self.assertRaisesRegex(frappe.ValidationError, "too long ago"):
+            self.complete(days=[{"date": str(old), "hours": 7.75}])
+
+    def test_a_timer_still_running_since_an_older_day_counts_for_that_day(self):
+        old = add_days(self.today, -2)
+        while not max_hours(old):
+            old = add_days(old, -1)
+        frappe.db.set_value(
+            "Task",
+            self.task,
+            {"custom_timer_start": at(old, 10), "custom_timer_user": DEV[0]},
+        )
+
+        result = self.complete(days=[{"date": str(old), "hours": 2}])
+
+        self.assertEqual(result["hours_logged"], 2)
+
+    def test_after_a_day_without_hours_the_one_before_takes_hours_by_hand(self):
+        # yesterday held no work hours (a Saturday the SLA lists no hours for, on a Monday):
+        # the day with hours before it is "yesterday" for hours typed in
+        day_off = self.yesterday
+        before = add_days(day_off, -1)
+        while not max_hours(before):
+            before = add_days(before, -1)
+        with patch(
+            "helpdesk.tasky.time_sessions.max_hours",
+            side_effect=lambda d: 0 if getdate(d) == day_off else max_hours(d),
+        ):
+            days = self.as_dev(lambda: tasky.get_completion_days(self.task))
+            result = self.complete(days=[{"date": str(before), "hours": 2}])
+
+        self.assertEqual(days["yesterday"], str(before))
+        self.assertEqual(result["hours_logged"], 2)
+
+    def test_the_working_day_before_is_found_past_a_break_longer_than_a_year(self):
+        far = add_days(self.today, -400)
+        with patch(
+            "helpdesk.tasky.time_sessions.max_hours",
+            side_effect=lambda d: 8 if getdate(d) <= far else 0,
+        ):
+            self.assertEqual(last_working_day(self.today, add_days(far, -5)), far)
+            # nothing to find after the task was created: only today takes hours
+            self.assertEqual(
+                last_working_day(self.today, add_days(far, 1)), getdate(self.today)
+            )
 
     def test_a_system_manager_can_back_date_with_a_reason(self):
         old = add_days(self.today, -2)
