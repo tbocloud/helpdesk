@@ -2,8 +2,8 @@
 
 TBO is also a digital-marketing agency. From the content calendar, a client-approved post
 can be pushed straight to the client's Facebook Page and Instagram account, with the
-official Meta Graph API. This is **Phase 1** (organic posts). Paid Boost and Ads are
-[Phase 2](#phase-2-paid-ads).
+official Meta Graph API. **Phase 1** is organic posting. **Phase 2** is paid: a published
+post can be boosted as an ad, see [Phase 2: boost and ads](#phase-2-boost-and-ads).
 
 ## The flow
 
@@ -68,7 +68,9 @@ version**. To upgrade, change the setting; nothing else is edited.
    Facebook: the client can remove it there too).
 
 Scopes: `pages_show_list`, `pages_read_engagement`, `pages_manage_posts`, `instagram_basic`,
-`instagram_content_publish`, `business_management`.
+`instagram_content_publish`, `business_management` (`SCOPES`). With **Enable ads** on in the
+settings, `ADS_SCOPES` (`ads_management`, `ads_read`) are asked for too (`connect.scopes()`);
+clients without ads keep exactly these Phase 1 ones.
 
 ## Publishing
 
@@ -196,25 +198,155 @@ current Content Publishing documentation before quoting numbers to a client.
 ## Not in Phase 1
 
 - Facebook Stories, Instagram mixed image/video carousels, first comments, tagging.
-- Reading insights or comments back.
+- Reading comments back (insights for boosts are read in Phase 2).
 - Deleting a post on Meta from the hub.
 
-## Phase 2: paid ads
+## Phase 2: boost and ads
 
-The connection is built so ads need no rework:
+A **Published** post that has a Facebook or Instagram id can be boosted from the content
+calendar. Code: `helpdesk/integrations/meta/ads.py` (all the logic), `helpdesk/api/meta_ads.py`
+(the endpoints). It reuses Phase 1's `GraphClient` (pinned version, no token in errors),
+`connect.py` (the one scope list), the connection per project, the stored `meta_post_id` as the
+ad creative, and `can_handle_credentials` for who may handle a client's accounts.
 
-- `SCOPES` in `connect.py` is the one list. Phase 2 adds `ads_management` and `ads_read`
-  (and App Review for them); clients who already connected see Connect again, which repeats
-  the same flow with the larger scope list. `HD Meta Connection.granted_scopes` records what
-  each client allowed.
-- Page tokens stay for organic posting. Ads act through a **user** access token of a person
-  with access to the ad account; Phase 2 will keep that token the same encrypted way, in a
-  field next to the Page's, and add the ad account id (`act_...`) to the connection.
-- A Boost is a Marketing API campaign (campaign, ad set, ad with the published post as its
-  creative `object_story_id`, which is why `meta_post_id` is stored per target). It would
-  be a button on a Published row, budget and audience asked in a dialog, with the same
-  permission rule, the same `GraphClient` and the same error handling.
-- Billing stays on the client's ad account; the hub never touches payment.
+### How staff use it (how-to)
+
+1. **Once per client** (project manager or Digital Marketing Head): project, **Meta** tab,
+   **Connect Meta** (or **Reconnect Meta to allow ads** if it was connected before ads), tick
+   everything on Facebook's screen. Pick the Page, then **pick the client's ad account**. The
+   page shows its currency and whether it is Active. Below it is the **monthly limit**.
+2. **Boost a post**: content calendar, a Published post, **Boost this post**. One window:
+   - **What do you want?** More reach, More engagement, More messages or More website visits.
+   - **Budget**: per day or total, in the ad account's currency. Starts as 500 a day for 5 days.
+   - **Starts / Ends**.
+   - **Who sees it** (folded away): places (starts as Kerala for Indian clients, the UAE for UAE
+     clients, else the client's country), ages 18 to 55, optional interests (search by word),
+     and Meta's Advantage+ audience, on.
+   - The grey **summary** says what it will cost and reach, e.g. "₹2,500 total · 5 days · Kerala,
+     18–55 · estimated reach 12,000 to 35,000 people a month", and how much of the month's
+     limit is left.
+3. The button says **Start boost** if you may spend, or **Ask for approval** if you only edit
+   content. Approval: the Digital Marketing Head gets a notification and presses **Approve and
+   start** (or **Reject**) on the post's Boost section or on the project's **Ads** tab.
+4. **Follow it**: the post shows a **Boosted** chip on the board and calendar; the project's
+   **Ads** tab lists every boost with status, budget, spent, people reached, results and cost
+   per result, and this month's planned spend against the limit. Numbers refresh every hour.
+   **Pause**, **Resume** and **Stop boost** are on each boost.
+5. If it didn't run, the red line says why in plain words (payment method missing, no access to
+   the ad account, Meta didn't approve the ad and the policy it broke). Fix that and boost again.
+
+### Who may
+
+| Person | Boost this post | Start / approve / pause / stop | Ads tab | Change the limit |
+| --- | --- | --- | --- | --- |
+| System Manager | yes | yes | yes | yes |
+| Project manager / lead of the project | yes | yes | yes | no |
+| Digital Marketing Head | yes | yes | yes | yes |
+| Anyone who can edit the post (DM Coordinator) | prepares, **asks for approval** | no | no | no |
+| Project member, DM Employee | no | no | no | no |
+| Sales Employee | sees nothing | no | no | no |
+
+The rule for spending is `can_handle_credentials(project)`, so nobody who is not trusted with
+the client's logins can spend their money. The server checks every call.
+
+### Safety
+
+- **Created PAUSED, switched on last.** Campaign, ad set and ad are all made `PAUSED`; the ad,
+  ad set and campaign are set `ACTIVE` only after the cap check and approval. A failure leaves
+  paused objects, which cost nothing.
+- **Monthly cap** (`HD Meta Connection.monthly_ad_cap`, default 10,000 in the account currency;
+  only a System Manager or the Digital Marketing Head changes it). A boost counts at its most it
+  can spend (the total, or the daily budget times the days) in the month it **starts**; a
+  finished or stopped one counts what it really spent. A boost that would take the month past
+  the cap is refused with the amount left, at the dialog, at the request and again at approval,
+  under a lock on the connection so two boosts can't both squeeze in.
+- At most 30 days a boost, one live boost per post and network, no past start dates.
+- **Timeline**: every request, start, pause, resume, stop, rejection and failure is a comment on
+  the project.
+- **Billing** stays on the client's ad account; the hub never touches payment.
+- **Stop** archives the campaign on Meta, so it can't be switched back on from there.
+
+### What is created on Meta
+
+Marketing API, Graph `v25.0` (the setting), all under `act_<ad account>`:
+
+| Call | Notes |
+| --- | --- |
+| `POST /campaigns` | `objective` an outcome-based one: More reach `OUTCOME_AWARENESS`; More engagement and More messages `OUTCOME_ENGAGEMENT`; More website visits `OUTCOME_TRAFFIC`. `special_ad_categories=[]`, `is_adset_budget_sharing_enabled=false`, `status=PAUSED` |
+| `POST /adsets` | `optimization_goal` `REACH`, `POST_ENGAGEMENT` (destination `ON_POST`), `CONVERSATIONS` (destination `MESSENGER`, or `INSTAGRAM_DIRECT` for an Instagram post), `LINK_CLICKS` (destination `WEBSITE`); `billing_event=IMPRESSIONS`, `bid_strategy=LOWEST_COST_WITHOUT_CAP`; `daily_budget` or `lifetime_budget` in minor units (paise, cents; whole units for JPY and the like); `start_time`, `end_time`; `targeting` with `geo_locations`, ages, optional interests and `targeting_automation.advantage_audience`; no placements, so Meta chooses; `promoted_object.page_id` for engagement and messages |
+| `POST /ads` | `creative` is the existing post: `object_story_id` (the Facebook post id) or `source_instagram_media_id` + `instagram_user_id`. No new media is made |
+| `POST /<id>` `status=ACTIVE` | ad, ad set, campaign, in that order |
+| `GET /search?type=adgeolocation` and `adinterest` | places and interests in the dialog |
+| `GET /act_<id>/delivery_estimate` | the reach estimate; if Meta can't give one the summary just leaves it out |
+| `GET /<ad id>` and `/<ad id>/insights` | status, review feedback, spend, reach, impressions, clicks, actions (hourly) |
+
+The objectives and destinations follow Meta's outcome-based (ODAX) campaign structure
+(Marketing API > Campaign, Ad Set reference). **Verify against the current docs before App
+Review**: Meta changes parameter names between versions, and this build could not be run against
+the real API (it is tested with a mocked Graph).
+
+A result is: reach for More reach; `post_engagement` actions; `onsite_conversion.messaging_conversation_started_7d`
+actions; `link_click` actions.
+
+### Data
+
+| Doctype / field | What |
+| --- | --- |
+| **HD Meta Settings** `ads_enabled` | The "Enable ads" switch (Settings → Meta → Paid ads) |
+| **HD Meta Connection** | `ads_allowed` (the client allowed the ads permissions), `monthly_ad_cap`, `ad_account_id`, `ad_account_name`, `ad_account_currency`, `ad_account_status`. `user_access_token` (Password, encrypted) is now **kept** when ads are allowed (about 60 days; it is what ads act under) and deleted otherwise |
+| **HD Meta Boost** | project, customer, post, target, goal, budget type and amount, dates, days, `total_budget`, `audience` (JSON), `campaign_id`, `adset_id`, `ad_id`, `status` (Draft, Pending approval, Active, Paused, Completed, Failed, Rejected), `failure_reason`, `meta_status`, requested/approved by, `spend`, `reach`, `impressions`, `clicks`, `results`, `cost_per_result`, `last_synced`. System Manager only; the API checks access first |
+| **HD Content Post** `meta_boosted` | Drives the Boosted chip |
+
+`helpdesk.integrations.meta.ads.sync_active_boosts` runs hourly for Active and Paused boosts.
+It follows Meta: a pause made in Ads Manager shows as Paused, a disapproved ad becomes **Didn't
+run** with the policy reason, an archived or past-end boost becomes **Finished**. A token error
+(190) marks the connection Expired, and the page says **Reconnect Meta to allow ads**.
+
+### Decisions made for the owner
+
+- **Spend rule**: same as client credentials (`can_handle_credentials`), not a new role.
+- **Editors** draft and ask; the Head (or a manager) approves. Anyone who may spend and presses
+  **Start boost** is the approver too, so there is no second click for them.
+- **Cap counted by start month**, at the full possible spend until the boost ends. Simple and
+  never under-counts.
+- **More messages** opens Messenger (Facebook posts) or Instagram Direct (Instagram posts).
+  WhatsApp needs a WhatsApp number linked to the Page; it is not in this release.
+- **More website visits** needs a link on the post (set when a text post was published with a
+  link); without one the dialog says so.
+- **Location default**: no city is stored on a customer, so the default is Kerala for Indian
+  clients and the customer's country otherwise. Staff can add or remove places.
+- **Tab and chip**: the Ads tab is for the same people as Credentials and Meta; editors use the
+  post's Boost section.
+- Disconnecting Meta is refused while a boost is Active or Paused.
+
+### Owner setup for ads
+
+1. In the Meta app, **App Review** for `ads_management` and `ads_read` (Advanced Access),
+   alongside the Phase 1 permissions. Use the screencast notes below.
+2. Each client must let TBO run ads on their **ad account**: either add **TBO's Business as a
+   partner** on the ad account (Business Settings → Accounts → Ad accounts → Add partner), or
+   the person who connects Meta must have an **advertiser** (or admin) role on that ad account.
+   Without it, Meta answers with a permission error and the hub says to ask for partner access.
+3. The client's ad account needs a **payment method** (Business Settings → Payments). The hub
+   never handles payment; without it a boost stays unable to run and the page says so.
+4. In the hub, **Settings → Meta → Paid ads → Enable ads**. Do this after the review passes (or
+   test with app testers).
+5. Per client: project **Meta** tab, **Reconnect Meta to allow ads**, pick the ad account, and
+   set the **monthly limit** (default 10,000).
+
+### Screencast notes for ads_management and ads_read
+
+Narrated, English, on the live HTTPS hub with a test ad account that has a payment method:
+
+1. Meta tab: **Reconnect Meta to allow ads**, Facebook's dialog listing `ads_management` and
+   `ads_read`, then the ad account list and picking one (shows `ads_read`: listing accounts).
+2. Content calendar: a Published post, **Boost this post**, the goal, budget, dates, audience and
+   the summary. Press **Start boost** and show the campaign in Meta Ads Manager created from the
+   existing post (`ads_management`: creating and editing campaigns, ad sets and ads).
+3. The project **Ads** tab with spend and results (`ads_read`: insights), then **Pause** and
+   **Stop boost**.
+4. Say plainly that the hub only boosts posts staff chose, never spends beyond a monthly cap, and
+   that the client pays Meta directly.
 
 ## Tests
 
@@ -225,3 +357,11 @@ callback storing the encrypted token and never returning it; picking a Page; per
 photo, several photos and text; the quota; not-approved refused; scheduling and cancelling;
 the scheduler publishing a due row once; retry with backoff then failure with a
 notification; an expired token marking the connection; stuck rows; signed media URLs.
+
+`helpdesk/tests/test_meta_ads.py` (same `FakeGraph`): scopes with and without ads; keeping or
+dropping the user token; picking the ad account; "Reconnect Meta to allow ads"; a boost built
+PAUSED and switched on last; Instagram and lifetime-budget variants; the monthly cap (refused
+before anything is sent, counting earlier boosts, re-checked at approval); editor request and
+head approval and rejection; who may spend, view and change the limit (Sales Employee sees
+nothing); insights sync and the hourly job; pause, resume and stop; Meta refusals (payment,
+access, expired token, a disapproved ad) surfaced in plain words.

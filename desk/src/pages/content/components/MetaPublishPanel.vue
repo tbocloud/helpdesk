@@ -54,8 +54,11 @@
         </router-link>
       </div>
 
+      <p v-if="post?.status === 'Published'" class="text-p-sm text-ink-gray-6">
+        {{ __("This post is live. You can boost it below.") }}
+      </p>
       <p
-        v-if="!data.can_publish"
+        v-else-if="!data.can_publish"
         class="flex items-start gap-2 text-p-sm text-ink-gray-7"
         role="note"
       >
@@ -225,6 +228,13 @@
         </div>
       </template>
     </template>
+
+    <MetaBoostSection
+      v-if="post?.status === 'Published'"
+      :post="post"
+      :open="open"
+      @changed="emit('changed')"
+    />
   </section>
 </template>
 
@@ -256,6 +266,7 @@ import LucideSend from "~icons/lucide/send";
 import LucideUnlink from "~icons/lucide/unlink";
 import type { ContentPost } from "../constants";
 import ChannelIcon from "./ChannelIcon.vue";
+import MetaBoostSection from "./MetaBoostSection.vue";
 
 interface PublishRow {
   target: string;

@@ -133,6 +133,8 @@ scheduler_events = {
         "helpdesk.triage.fail_stuck_triages",
         "helpdesk.integrations.crm.users.sync_users_job",
         "helpdesk.helpdesk.doctype.hd_content_post.hd_content_post.send_missed_post_alerts",
+        # spend, reach and status of running boosts (docs/meta-publishing.md)
+        "helpdesk.integrations.meta.ads.sync_active_boosts",
     ],
     "hourly_long": [
         "helpdesk.helpdesk.doctype.hd_ticket.hd_ticket.update_sla_status_in_ticket"

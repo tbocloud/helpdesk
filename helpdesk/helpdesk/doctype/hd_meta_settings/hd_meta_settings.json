@@ -28,6 +28,13 @@
 			"mandatory_depends_on": "enabled"
 		},
 		{
+			"fieldname": "ads_enabled",
+			"fieldtype": "Check",
+			"label": "Enable Ads",
+			"default": "0",
+			"description": "Lets staff boost published posts and asks clients for the ads permissions when they connect. Needs App Review for ads_management and ads_read."
+		},
+		{
 			"fieldname": "app_secret",
 			"fieldtype": "Password",
 			"label": "App Secret",
@@ -65,6 +72,7 @@
 	"field_order": [
 		"enabled",
 		"app_id",
+		"ads_enabled",
 		"app_secret",
 		"graph_api_version",
 		"redirect_url"

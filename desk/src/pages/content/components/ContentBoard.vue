@@ -659,6 +659,12 @@
                   )
                 "
               />
+              <TaskyBadge
+                v-if="post.meta_boosted"
+                tone="info"
+                :icon="LucideRocket"
+                :label="__('Boosted')"
+              />
               <template v-if="!CLOSED_STATUSES.includes(post.status)">
                 <!-- waiting on the head: only they move it on, so no Mark published -->
                 <template v-if="post.status === HEAD_REVIEW">
@@ -745,6 +751,21 @@
                   __("View post")
                 }}
               </a>
+              <button
+                v-if="
+                  post.status === 'Published' &&
+                  (auth.canEditContent || auth.isDmHead)
+                "
+                type="button"
+                :class="OUTLINE_BTN"
+                @click="emit('action', post, 'meta')"
+              >
+                <LucideRocket
+                  class="size-4 text-ink-gray-6"
+                  aria-hidden="true"
+                />
+                {{ __("Boost this post") }}
+              </button>
             </footer>
           </article>
 
@@ -800,6 +821,7 @@ import LucideHistory from "~icons/lucide/history";
 import LucideListChecks from "~icons/lucide/list-checks";
 import LucidePlus from "~icons/lucide/plus";
 import LucideSend from "~icons/lucide/send";
+import LucideRocket from "~icons/lucide/rocket";
 import LucideShare2 from "~icons/lucide/share-2";
 import LucideBuilding2 from "~icons/lucide/building-2";
 import LucidePaperclip from "~icons/lucide/paperclip";
