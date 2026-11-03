@@ -532,6 +532,7 @@ const detailFields = computed(() => {
     { label: __("Source"), value: l.source || "" },
     { label: __("Segment"), value: l.segment || "" },
     { label: __("Territory"), value: l.territory || "" },
+    { label: __("Product"), value: l.product || "" },
     { label: __("Industry"), value: l.industry || "" },
     { label: __("State"), value: l.state || "" },
     { label: __("District"), value: l.district || "" },

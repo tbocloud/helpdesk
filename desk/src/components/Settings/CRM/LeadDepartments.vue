@@ -181,10 +181,16 @@
           {{ __("Members see the leads they own.") }}
         </p>
       </div>
+      <DepartmentProducts v-if="hasProducts" v-model="products" />
       <CallBatchRules
         v-if="hasBatches"
         v-model="rules"
         :members="form.members.map((m) => ({ label: m, value: m }))"
+        :products="
+          products
+            .filter((p) => p.is_active && p.product_name.trim())
+            .map((p) => p.product_name.trim())
+        "
       />
       <Switch v-model="form.is_active" :label="__('Active')" />
       <div
@@ -224,6 +230,7 @@ import {
   type LeadAssignment,
   type LeadDepartment,
   type LeadOptions,
+  type LeadProduct,
 } from "@/pages/leads/leads";
 import {
   Button,
@@ -247,6 +254,7 @@ import {
 } from "@/pages/leads/callBatches";
 import SettingsSection from "../SettingsSection.vue";
 import CallBatchRules from "./CallBatchRules.vue";
+import DepartmentProducts from "./DepartmentProducts.vue";
 
 const { agents } = useAgentStore();
 const formId = `lead-department-${useId()}`;
@@ -325,6 +333,13 @@ const hasBatches = computed(
     )
 );
 
+// the products list shows once the ERP site's departments carry it
+const hasProducts = computed(
+  () =>
+    !departments.value.length ||
+    departments.value.some((d) => d.products !== undefined)
+);
+
 const assignmentOptions = Object.entries(ASSIGNMENT_LABELS).map(
   ([value, label]) => ({ label, value })
 );
@@ -344,6 +359,7 @@ const editing = ref<LeadDepartment | null>(null);
 const errorMessage = ref("");
 const saving = ref(false);
 const rules = ref<CallRules>(rulesFrom());
+const products = ref<LeadProduct[]>([]);
 const form = reactive<DepartmentForm>({
   department_name: "",
   lead_type: "",
@@ -367,6 +383,12 @@ function openDialog(department: LeadDepartment | null) {
     members: department?.members.map((p) => p.user) ?? [],
   });
   rules.value = rulesFrom(department as Partial<CallRules> | null);
+  // each saved product remembers its name: renaming it moves its leads
+  products.value = (department?.products ?? []).map((p) => ({
+    ...p,
+    intro_line: p.intro_line ?? "",
+    previous_name: p.product_name,
+  }));
   showDialog.value = true;
 }
 
@@ -382,6 +404,11 @@ function save() {
     return;
   }
   const problem = hasBatches.value ? rulesProblem(rules.value) : "";
+  const productProblem = hasProducts.value ? productsProblem() : "";
+  if (productProblem) {
+    errorMessage.value = productProblem;
+    return;
+  }
   if (problem) {
     errorMessage.value = problem;
     return;
@@ -394,7 +421,17 @@ function save() {
     values: {
       ...values,
       ...(hasAssignment.value ? { assignment, stale_after_days: days } : {}),
-      ...(hasBatches.value ? rulesPayload(rules.value) : {}),
+      ...(hasBatches.value ? rulesPayload(rules.value, hasProducts.value) : {}),
+      ...(hasProducts.value
+        ? {
+            products: products.value.map((p) => ({
+              product_name: p.product_name.trim(),
+              is_active: p.is_active ? 1 : 0,
+              intro_line: (p.intro_line ?? "").trim(),
+              previous_name: p.previous_name,
+            })),
+          }
+        : {}),
       department_name: form.department_name.trim(),
       is_active: form.is_active ? 1 : 0,
     },
@@ -414,6 +451,27 @@ function save() {
       );
     })
     .finally(() => (saving.value = false));
+}
+
+/** Each product has a name, and none repeats; the campaign product must still be on. */
+function productsProblem() {
+  const names = products.value.map((p) => p.product_name.trim().toLowerCase());
+  if (names.some((n) => !n)) return __("Give each product a name.");
+  if (new Set(names).size !== names.length)
+    return __("Each product name can be used once.");
+  const campaign = rules.value.call_batches_enabled
+    ? rules.value.campaign_product.trim().toLowerCase()
+    : "";
+  if (
+    campaign &&
+    !products.value.some(
+      (p) => p.is_active && p.product_name.trim().toLowerCase() === campaign
+    )
+  )
+    return __(
+      "“Calls for product” is a product that is off or gone. Pick another, or leave it empty."
+    );
+  return "";
 }
 
 const toggling = ref("");

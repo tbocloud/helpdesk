@@ -58,7 +58,7 @@
 			"fieldtype": "Data",
 			"label": "Fills the blanks with",
 			"default": "name,why_call,company",
-			"description": "In order: name, company or why_call. {{1}} is the first, {{2}} the second."
+			"description": "In order: name, company, why_call, product or product_intro. {{1}} is the first, {{2}} the second."
 		}
 	],
 	"index_web_pages_for_search": 0,

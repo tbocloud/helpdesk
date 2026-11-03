@@ -124,7 +124,7 @@
               :label="__('Fills the blanks with')"
               :description="
                 __(
-                  'In order, from: name, company, why_call (the Why call line). Example: name,why_call'
+                  'In order, from: name, company, why_call (the Why call line), product (the brand the lead belongs to) and product_intro (its one-line intro). Example: name,why_call'
                 )
               "
             />

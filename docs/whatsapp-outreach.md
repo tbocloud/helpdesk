@@ -44,7 +44,7 @@ connected: until then Outreach behaves exactly as before (**Open WhatsApp**, the
      wait for the person to send them by hand.
    - **Read from TBO Chat** pulls the approved templates (this also checks the connection and says
      in words what is missing). Tick **For first messages** on the one to use, and set what each
-     blank is filled with (`name`, `company`, `why_call`, in order). Templates can also be added by
+     blank is filled with (`name`, `company`, `why_call`, `product`, `product_intro`, in order; the last two are the lead's product and its intro line, TBO when it has none). Templates can also be added by
      hand.
    - **Save WhatsApp settings.**
 5. On the ERP site: TBO Smart Settings → Outreach → **Enable Outreach** (already needed for

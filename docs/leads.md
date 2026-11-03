@@ -51,10 +51,10 @@ user exists there with a sales role, applies what they may see, and records writ
 | Method | HTTP | Arguments | Returns |
 | --- | --- | --- | --- |
 | `get_options` | GET | | `{stages: [{name, label, type, color}], sources, segments, owners: [{email, full_name}], territories, industries, org_sizes, states, kerala_districts, districts_by_state, can_call, departments: [{name, lead_type, is_active, is_head, is_member}], lead_types}` (the last two from the departments release of TBO Smart) |
-| `list_leads` | GET | `search, stage, owner, segment, department, industry, state, district, org_size, last_call_result, last_reply_class, source, temperature, metric, period, from_date, to_date, view, start, page_length` | `{rows: [{name, lead_name, company_name, email_id, mobile_no, tbo_stage, segment, lead_owner, owner_name, score, next_follow_up, modified, latest_quotation, latest_proposal, tbo_department, tbo_lead_type, industry, state, district, org_size}], total}` |
-| `get_category_counts` | GET | | `{industry, state, district, org_size}`, each `{value: leads}` (TBO Smart v1.14, `hub-leads-api.md` §2.14) |
+| `list_leads` | GET | `search, stage, owner, segment, department, industry, state, district, org_size, product, last_call_result, last_reply_class, source, temperature, metric, period, from_date, to_date, view, start, page_length` | `{rows: [{name, lead_name, company_name, email_id, mobile_no, tbo_stage, segment, lead_owner, owner_name, score, next_follow_up, modified, latest_quotation, latest_proposal, tbo_department, tbo_lead_type, product, industry, state, district, org_size}], total}` |
+| `get_category_counts` | GET | | `{industry, state, district, org_size, product}`, each `{value: leads}` (TBO Smart v1.14, `hub-leads-api.md` §2.14) |
 | `add_industry` | POST | `name` | `{name, created}`; managers only |
-| `bulk_set_lead_category` | POST | `leads, values` | `{updated, skipped}`; managers only |
+| `bulk_set_lead_category` | POST | `leads, values` | `{updated, skipped}`; managers only (a department head may set `product`) |
 | `get_overview` | GET | `period, from_date, to_date, owner` | the Overview's figures (TBO Smart's `hub-leads-api.md` §2.4) |
 | `get_lead_intake` | GET | `from_date, to_date` (the hub sends yesterday and today) | new leads taken each day by owner, imports left out, and the scope's salespeople (§2.4.1) |
 | `get_proposal_money` | GET | `period, from_date, to_date, owner` | proposals sent, won, advances and every payment split still to collect (§2.8) |
@@ -136,6 +136,54 @@ only filters and shows. The department's type is the lead's type (`tbo_lead_type
   person's cached reads (including `get_options`, which carries `is_head` and `is_member`).
   `list_leads` takes `department`. The Overview and Daily report don't filter by department
   yet.
+
+## Products / brands under a department
+
+A department such as GrowthX has sub-teams that sell different things (PhoebiX for solar,
+BillaX, WilpeX, PrintagX, Foamia, Avera). Managers list them on the department; each lead can
+carry one; callers see which name they are calling under. A department with no products works
+exactly as before. TBO Smart holds and enforces everything
+([lead-departments.md](https://github.com/tbocloud/tbo_smart/blob/main/docs/lead-departments.md) §10,
+`hub-leads-api.md` §2.20); the hub shows and edits it.
+
+- **Settings → CRM → Lead departments → Products / brands**
+  (`DepartmentProducts.vue`): add a product, give it a name and one short line to say on the
+  call, switch it off. A saved product is switched off, never removed (its leads keep the name);
+  renaming it moves its leads. Names are unique in the department. Under *Daily call batches*, a
+  **Calls for product** picker gives the next batches only that product's leads (follow-ups due
+  still come).
+- **Lead form and Details card:** a *Product* picker when the department has products, shown only
+  to managers and the department's head (`canSetProduct`; the ERP site refuses anyone else). The
+  owner sees the product in Details. Changing the department clears a product it doesn't have.
+- **Leads list:** a *Product* filter with counts (`?product=PhoebiX` in the URL, repeatable) and a
+  small neutral chip with the product name on each row. Managers' *Set category* has a *Product*
+  choice (a lead only takes a product of its own department; the others are listed as left out).
+- **Today's calls:** every call shows **Calling for: PhoebiX** with the intro line underneath
+  (a lead with no product shows its department's name). The batch header shows *Calls for:
+  PhoebiX* while a campaign product is set.
+- **Messages:** AI drafts and the WhatsApp first message use the product's name and intro. The
+  template's blanks can be `product` and `product_intro` as well as `name`, `company` and
+  `why_call` (Settings → TBO Chat); a lead with no product gets TBO and a neutral line.
+- **Older TBO Smart:** without products the sections, filter, chip and picker stay out; the
+  campaign product is sent only when the ERP site's departments carry `products`.
+
+### How to use (staff)
+
+*Managers*
+1. Settings, CRM, Lead departments, pick GrowthX (the pencil).
+2. Under **Products / brands** press **Add product**. Type the name (PhoebiX) and a short line
+   to say on the call ("PhoebiX – solar ERP for installers"). Add BillaX, WilpeX, PrintagX,
+   Foamia, Avera and Solar the same way. Press **Save changes**.
+3. To call for one product tomorrow, open the department again and set **Calls for product** to
+   PhoebiX, then save. The next batches give each caller only PhoebiX leads.
+4. To tag leads: on **Leads**, press **Select**, tick the leads, press **Set category**, choose
+   the **Product** and apply. Or open a lead, press Edit and pick the **Product**.
+5. To stop using a name, switch it **off**. Its leads keep it; nobody can pick it any more.
+
+*Callers (BDs)*
+- Open **Today's calls**. Each call says **Calling for: PhoebiX** and the line to say. A lead with
+  no product shows the department's name. Say that name when you introduce yourself.
+- You can see a lead's product but only a manager changes it. Ask your manager.
 
 ### Wave 1: assignment, duplicates, quiet leads, website form
 
@@ -842,6 +890,12 @@ per-person cache, a write clearing it) is tested there too.
 `helpdesk/tests/test_lead_categories.py`: the filters (and the last call result, checked) sent as JSON lists (none when empty), a lead
 saved with its categories, the counts (empty on an older ERP site), `add_industry` and
 `bulk_set_lead_category` proxied as the person, a refusal naming who may, empty picks refused.
+Products: `test_lead_categories.py` (the product filter sent as a JSON list, a lead saved with its
+product, the options' products, bulk set with a product and its refusal naming the head),
+`test_leads.py` (products and the campaign product saved as given, `previous_name` for a
+rename), `test_call_batches.py` (`product`, `intro_line`, `calling_for` and `campaign_product`
+reach the person) and `test_whatsapp_outreach.py` (a template naming the product and its intro,
+and the lead page's facts).
 `helpdesk/tests/test_lead_place.py`: the photo list (and the card staying out on an older ERP
 site), an upload passed on with a trimmed caption, an empty or oversize upload kept at the hub,
 the ERP site's refusal reaching the person, delete, the image streamed (and only image types),

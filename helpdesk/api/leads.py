@@ -138,8 +138,9 @@ def list_leads(
     org_size: list | str | None = None,
     last_call_result: list | str | None = None,
     last_reply_class: list | str | None = None,
+    product: list | str | None = None,
 ) -> dict:
-    """A page of leads. `industry`, `state`, `district`, `org_size`, `last_call_result`
+    """A page of leads. `industry`, `state`, `district`, `org_size`, `product`, `last_call_result`
     (the outcome of the lead's last call) and `last_reply_class` (how its last email reply
     was sorted) each take one value or a list (any of them); a
     list goes to the ERP site as JSON. `metric` with its period keeps the leads one number of the
@@ -174,6 +175,7 @@ def list_leads(
             state=state,
             district=district,
             org_size=org_size,
+            product=product,
             last_call_result=check_call_results(last_call_result),
             last_reply_class=check_reply_classes(last_reply_class),
         ),
@@ -565,7 +567,8 @@ def get_lead_departments(fresh: int | str = 0) -> dict:
 @frappe.whitelist(methods=["POST"])
 def save_lead_department(values: dict | str, name: str | None = None) -> dict:
     """Adds a lead department (or edits `name`): `department_name`, `lead_type`,
-    `is_active`, `heads` and `members` (users). Only System Managers and Sales Managers
+    `is_active`, `heads` and `members` (users), `products` (the names callers call under,
+    each with an intro line and an on/off switch) and the call-batch rules. Only System Managers and Sales Managers
     on the ERP site may; it says so when it refuses."""
     require_leads()
     return change_department(
@@ -705,7 +708,7 @@ def update_lead(name: str, data: dict | str) -> dict:
 @frappe.whitelist()
 def get_category_counts(fresh: int | str = 0) -> dict:
     """How many of the person's leads have each industry, state, district,
-    organisation size and last call result, for the list's filter counts. Empty on an older TBO Smart, where
+    organisation size, product and last call result, for the list's filter counts. Empty on an older TBO Smart, where
     the filters simply show no counts."""
     require_leads()
     return (
@@ -740,8 +743,9 @@ def add_industry(name: str) -> dict:
 
 @frappe.whitelist(methods=["POST"])
 def bulk_set_lead_category(leads: list | str, values: dict | str) -> dict:
-    """Sets industry, state, district and/or organisation size (`values`; an empty value
-    clears one) on many leads: {updated, skipped}. Managers only."""
+    """Sets industry, state, district, organisation size and/or product (`values`; an empty
+    value clears one) on many leads: {updated, skipped}. Managers only; a department's head may
+    set the product alone."""
     require_leads()
     names = as_list(leads)
     if not names:
@@ -749,7 +753,7 @@ def bulk_set_lead_category(leads: list | str, values: dict | str) -> dict:
     return category_write(
         "bulk_set_lead_category",
         _(
-            "Only a System Manager or Sales Manager on the ERP site can set categories in bulk."
+            "Only a System Manager or Sales Manager on the ERP site can set categories in bulk. A department head may set the product."
         ),
         leads=names,
         values=parse_data(values),

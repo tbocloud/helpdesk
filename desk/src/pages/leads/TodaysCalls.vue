@@ -74,6 +74,14 @@
             <h2 :id="ids.batch" class="text-lg-medium text-ink-gray-9">
               {{ shown.batch.slot }}
             </h2>
+            <!-- the product the next batches are for, when a manager set one -->
+            <p
+              v-if="shown.batch.campaign_product"
+              class="inline-flex items-center gap-1.5 text-sm text-ink-gray-8"
+            >
+              <LucideBox class="size-4 text-ink-gray-6" aria-hidden="true" />
+              {{ __("Calls for") }}: {{ shown.batch.campaign_product }}
+            </p>
             <span
               class="inline-flex items-center gap-1.5 text-sm tabular-nums"
               :class="hurry ? 'font-medium text-warning' : 'text-ink-gray-7'"
@@ -285,6 +293,7 @@ import { useDocumentVisibility, useIntervalFn, useNow } from "@vueuse/core";
 import { Button, call, dayjs, toast } from "frappe-ui";
 import { computed, ref, useId, watch } from "vue";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
+import LucideBox from "~icons/lucide/box";
 import LucideCalendarClock from "~icons/lucide/calendar-clock";
 import LucideCheckCheck from "~icons/lucide/check-check";
 import LucideCircleAlert from "~icons/lucide/circle-alert";

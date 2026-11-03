@@ -29,6 +29,21 @@
           :blank="__('Leave as it is')"
           :clearable="true"
         />
+        <div v-if="productChoices.length > 2" class="flex flex-col gap-1.5">
+          <FormControl
+            v-model="form.product"
+            type="select"
+            :label="__('Product')"
+            :options="productChoices"
+          />
+          <p class="text-p-xs text-ink-gray-6">
+            {{
+              __(
+                "A lead only takes a product of its own department; the others are listed as left out."
+              )
+            }}
+          </p>
+        </div>
       </div>
       <div
         v-if="skipped.length"
@@ -71,11 +86,11 @@
 <script setup lang="ts">
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
-import { Button, call, Dialog, toast } from "frappe-ui";
+import { Button, call, Dialog, FormControl, toast } from "frappe-ui";
 import { computed, reactive, ref, useId, watch } from "vue";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LeadCategoryFields from "./LeadCategoryFields.vue";
-import { CLEAR, leadOptions, type LeadOptions } from "./leads";
+import { allProducts, CLEAR, leadOptions, type LeadOptions } from "./leads";
 
 const props = defineProps<{ open: boolean; leads: string[] }>();
 const emit = defineEmits<{
@@ -85,7 +100,19 @@ const emit = defineEmits<{
 
 const formId = `set-category-${useId()}`;
 const options = computed(() => leadOptions.data as LeadOptions | undefined);
-const form = reactive({ industry: "", state: "", district: "", org_size: "" });
+const form = reactive({
+  industry: "",
+  state: "",
+  district: "",
+  org_size: "",
+  product: "",
+});
+// shown only where a department has products
+const productChoices = computed(() => [
+  { label: __("Leave as it is"), value: "" },
+  { label: __("Clear"), value: CLEAR },
+  ...allProducts(options.value).map((p) => ({ label: p, value: p })),
+]);
 const errorMessage = ref("");
 const skipped = ref<{ name: string; reason: string }[]>([]);
 const saving = ref(false);
@@ -99,6 +126,7 @@ watch(
       state: "",
       district: "",
       org_size: "",
+      product: "",
     });
     errorMessage.value = "";
     skipped.value = [];
