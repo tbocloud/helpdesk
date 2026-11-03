@@ -280,7 +280,7 @@ function sentenceOf(item: ActivityItem): Part[] {
           { text: `#${item.origin.name}`, mono: true },
         ]);
       if (origin === "content_post")
-        return [{ text: __("Created from a content post") }];
+        return fill(__("{0} created it from a content post"), [by]);
       if (origin === "recurring")
         return [{ text: __("Created by a recurring schedule") }];
       return fill(__("{0} created it"), [by]);

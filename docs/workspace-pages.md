@@ -597,9 +597,9 @@ the person didn't pick, and drops a picked assignee the new project can't take (
 team, and the person can't bring them onto it). Phase
 suggestions are only offered on a project's own board.
 
-## Tasks: assigned by, on hold, moving, the timer
+## Tasks: assigned by, created by, on hold, moving, the timer
 
-### Assigned by
+### Assigned by and created by
 
 Every task payload (`get_task_detail`, `get_kanban_tasks`, `get_my_tasks`, and the task items
 of `get_my_work` and `get_overview`) carries `assigned_by` and `assigned_by_name`, added in
@@ -609,6 +609,15 @@ assignee's latest ToDo that wasn't cancelled (`assign_to` records `assigned_by`)
 created the task. The UI (`assignedByName()` in `taskMeta.ts`) shows it as muted "Assigned by
 …" text on board cards and My Work rows, as a row in the task details and in Edit task, and
 hides it when the assignee took the task themselves.
+
+Who created the task is kept apart from who gave it out: the same payloads carry `created_by`
+and `created_by_name` (`get_creators()` in `helpdesk/tasky/permissions.py`, two queries per
+list). That is the Task's `owner`, except for a content post's task, which names the post's
+creator: the task is made by whoever saves the post with someone on the part, often a lead
+assigning it later, who shows as "Assigned by" instead. `createdByName()` in `taskMeta.ts`
+shows it as a "Created by" row in the task details and in Edit task, and as "Created by …"
+before "Assigned by …" on board cards and My Work rows, where it is left out when the same
+person did both. Editing the post later doesn't change either: the task isn't recreated.
 
 ### New tasks
 
@@ -944,7 +953,8 @@ the logic is `TaskActivity` in `helpdesk/task_activity.py`.
   All names come from one bulk User query (`user_full_names`) over `by` and the `to` of
   `assigned` / `unassigned` items (elsewhere `to` is a status, date or hours, not a person).
 - **Kinds and where they come from:**
-  - `created` — the Task's `owner` and `creation`; `origin` is `{type, name}` with type
+  - `created` — the Task's `owner` (for a content post's task, the post's creator, as
+    `get_creators()` gives it) and `creation`; `origin` is `{type, name}` with type
     `ticket` (`hd_ticket`), `content_post` (`content_post`), `recurring`
     (`custom_recurring_task`) or null.
   - `assigned` — one per ToDo on the task, any status: `to`, `to_name`, `by` = `assigned_by`

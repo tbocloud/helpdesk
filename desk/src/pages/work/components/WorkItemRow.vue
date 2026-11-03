@@ -90,6 +90,10 @@
               >
             </span>
           </template>
+          <template v-if="createdBy">
+            <span aria-hidden="true">·</span>
+            <span class="truncate">{{ __("Created by {0}", createdBy) }}</span>
+          </template>
           <template v-if="assignedBy">
             <span aria-hidden="true">·</span>
             <span class="truncate">{{
@@ -276,7 +280,7 @@ import EscalationBadge from "@/components/EscalationBadge.vue";
 import TaskStatusBadge from "@/pages/tasky/components/TaskStatusBadge.vue";
 import TaskyBadge from "@/components/TaskyBadge.vue";
 import WaitingOn from "@/pages/tasky/components/WaitingOn.vue";
-import { assignedByName } from "@/pages/tasky/taskMeta";
+import { assignedByName, createdByName } from "@/pages/tasky/taskMeta";
 import {
   deadlineInfo,
   isHeldTask,
@@ -332,6 +336,9 @@ const context = computed(() =>
     : props.item.project_name || props.item.project
 );
 
+const createdBy = computed(() =>
+  props.item.kind === "task" ? createdByName(props.item, true) : ""
+);
 const assignedBy = computed(() =>
   props.item.kind === "task" ? assignedByName(props.item) : ""
 );

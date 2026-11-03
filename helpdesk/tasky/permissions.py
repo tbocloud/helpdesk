@@ -426,6 +426,32 @@ def get_assigners(assignees: dict[str, str]) -> dict[str, str]:
     return found
 
 
+def get_creators(tasks: list[str]) -> dict[str, str]:
+    """Who created each task: {task: user}. A task made from a content post was created
+    by whoever created the post, not by whoever later put someone on it (whose save made
+    the task). Two queries for any number of tasks."""
+    if not tasks:
+        return {}
+    task = frappe.qb.DocType("Task")
+    rows = (
+        frappe.qb.from_(task)
+        .select(task.name, task.owner, task.content_post)
+        .where(task.name.isin(tasks))
+        .run(as_dict=True)
+    )
+    posts = {r.content_post for r in rows if r.content_post}
+    post_owners = {}
+    if posts:
+        post = frappe.qb.DocType("HD Content Post")
+        post_owners = dict(
+            frappe.qb.from_(post)
+            .select(post.name, post.owner)
+            .where(post.name.isin(list(posts)))
+            .run()
+        )
+    return {r.name: post_owners.get(r.content_post) or r.owner for r in rows}
+
+
 def can_rate_task(doc, user: str | None = None) -> bool:
     """May give the task its quality rating: whoever assigned it, the project's
     managers, lead and coordinators (who review it), the heads of its project's

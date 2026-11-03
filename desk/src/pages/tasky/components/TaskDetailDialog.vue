@@ -195,6 +195,7 @@ import LucideUserPlus from "~icons/lucide/user-plus";
 import type { TaskPullRequest } from "../pullRequestMeta";
 import {
   assignedByName,
+  createdByName,
   formatElapsed,
   holdByLabel,
   holdDays,
@@ -267,6 +268,8 @@ interface TaskDetail {
   assignees?: string[];
   assigned_by?: string | null;
   assigned_by_name?: string | null;
+  created_by?: string | null;
+  created_by_name?: string | null;
   can_move?: boolean;
   custom_recurring_task?: string | null;
   content_post?: string | null;
@@ -445,6 +448,7 @@ const detailRows = computed(() => {
       value: d.assigned_to_name || d.assigned_to || __("Unassigned"),
     },
     { label: __("Assigned by"), value: assignedByName(d) || "—" },
+    { label: __("Created by"), value: createdByName(d) || "—" },
     {
       label: __("Due"),
       value: d.due_date ? dayjs(d.due_date).format("D MMM YYYY") : "—",

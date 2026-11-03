@@ -320,6 +320,24 @@ export function assignedByName(task: {
 }
 
 /**
+ * Who created the task (for a content post's task, whoever created the post), or ""
+ * when unknown. Short lines pass `besideAssigner` to leave it out when the same person
+ * also gave the task out, so the line names them once.
+ */
+export function createdByName(
+  task: {
+    created_by?: string | null;
+    created_by_name?: string | null;
+    assigned_by?: string | null;
+  },
+  besideAssigner = false
+) {
+  const by = task.created_by;
+  if (!by || (besideAssigner && by === task.assigned_by)) return "";
+  return task.created_by_name || by;
+}
+
+/**
  * A task given to the viewer since they last opened it: "new", or "reassigned" when
  * they had it before (helpdesk.tasky.new_assignments). Cleared once they open it.
  */

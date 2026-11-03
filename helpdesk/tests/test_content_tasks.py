@@ -302,6 +302,22 @@ class TestTasksFromPosts(ContentTaskCase):
             1,
         )
 
+    def test_the_task_names_the_posts_creator_and_its_assigner_apart(self):
+        from helpdesk.api import content_board
+        from helpdesk.tasky.api import get_task_detail
+
+        # the marketer adds the post with nobody writing it; later someone else puts
+        # the writer on, and that save is what creates the task
+        post = self.post(writer=None)
+        frappe.db.set_value("HD Content Post", post.name, "owner", MARKETER[0])
+        content_board.assign(post.name, "writer", [WRITER[0]])
+
+        task = get_task_detail(self.tasks(post)["Writer"].name)
+
+        self.assertEqual(task["created_by"], MARKETER[0])
+        self.assertEqual(task["created_by_name"], MARKETER[1])
+        self.assertEqual(task["assigned_by"], "Administrator")
+
     def test_reassigning_a_part_everyone_was_taken_off_reopens_its_task(self):
         from helpdesk.api import content_board
 
