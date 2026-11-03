@@ -4757,3 +4757,19 @@ def age_ticket(ticket: str, hours: int, **values):
         {"creation": add_to_date(now_datetime(), hours=-hours), **values},
         update_modified=False,
     )
+
+
+BUSINESS_HEALTH_CHECK_LINK = "https://example.com/results/#id=1&k=" + "a" * 24
+
+
+def make_business_health_check(**values):
+    """Inserts a Business Health Check like the TBO website sends one: a report link
+    (BUSINESS_HEALTH_CHECK_LINK unless given) plus any of business_name, contact_name,
+    phone and email."""
+    return frappe.get_doc(
+        {
+            "doctype": "Business Health Check",
+            "report_link": BUSINESS_HEALTH_CHECK_LINK,
+            **values,
+        }
+    ).insert()

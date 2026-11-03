@@ -1,0 +1,107 @@
+{
+  "actions": [],
+  "autoname": "BHC-.#####",
+  "creation": "2026-11-03 12:00:00.000000",
+  "description": "One record per finished Business Health Check on the TBO website: the client's basic details and a link to their report. Created and updated by the website over the REST API (docs/business-health-check.md).",
+  "doctype": "DocType",
+  "engine": "InnoDB",
+  "field_order": [
+    "business_name",
+    "contact_name",
+    "column_break_contact",
+    "phone",
+    "email",
+    "section_break_report",
+    "report_link"
+  ],
+  "fields": [
+    {
+      "bold": 1,
+      "fieldname": "business_name",
+      "fieldtype": "Data",
+      "in_list_view": 1,
+      "label": "Business Name"
+    },
+    {
+      "fieldname": "contact_name",
+      "fieldtype": "Data",
+      "in_list_view": 1,
+      "label": "Contact Name"
+    },
+    {
+      "fieldname": "column_break_contact",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "phone",
+      "fieldtype": "Data",
+      "in_list_view": 1,
+      "label": "Phone",
+      "options": "Phone"
+    },
+    {
+      "fieldname": "email",
+      "fieldtype": "Data",
+      "label": "Email",
+      "options": "Email"
+    },
+    {
+      "fieldname": "section_break_report",
+      "fieldtype": "Section Break"
+    },
+    {
+      "description": "The client's full report on the website. Opens with the Open Report button.",
+      "fieldname": "report_link",
+      "fieldtype": "Data",
+      "label": "Report Link",
+      "options": "URL",
+      "reqd": 1
+    }
+  ],
+  "index_web_pages_for_search": 0,
+  "links": [],
+  "modified": "2026-11-03 12:00:00.000000",
+  "modified_by": "Administrator",
+  "module": "Helpdesk",
+  "name": "Business Health Check",
+  "naming_rule": "Expression (old style)",
+  "owner": "Administrator",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "create": 1,
+      "delete": 1,
+      "email": 1,
+      "export": 1,
+      "print": 1,
+      "read": 1,
+      "report": 1,
+      "share": 1,
+      "write": 1
+    },
+    {
+      "role": "Agent Manager",
+      "email": 1,
+      "export": 1,
+      "print": 1,
+      "read": 1,
+      "report": 1,
+      "share": 1,
+      "write": 1
+    },
+    {
+      "role": "Agent",
+      "email": 1,
+      "print": 1,
+      "read": 1,
+      "report": 1
+    }
+  ],
+  "search_fields": "business_name,phone,email",
+  "show_title_field_in_link": 1,
+  "sort_field": "creation",
+  "sort_order": "DESC",
+  "states": [],
+  "title_field": "business_name",
+  "track_changes": 1
+}
