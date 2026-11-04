@@ -8,6 +8,7 @@ import {
   ERP_EMPLOYEE_HIDDEN_ROUTES,
   CONTENT_TEAM_ROUTES,
   DM_EMPLOYEE_HIDDEN_ROUTES,
+  LEAD_BANK_ROUTES,
   SALES_EMPLOYEE_ROUTES,
 } from "@/pages/content/contentTeam";
 import { createRouter, createWebHistory } from "vue-router";
@@ -181,6 +182,22 @@ const portalRoutes = [
     component: () => import("@/pages/leads/Proposal.vue"),
     props: true,
   },
+  // the Lead Bank: any active agent adds leads by photo and sees their own (docs/lead-bank.md)
+  {
+    path: "/lead-bank",
+    name: "LeadBank",
+    component: () => import("@/pages/lead-bank/LeadBank.vue"),
+  },
+  {
+    path: "/lead-bank/new",
+    name: "LeadBankAdd",
+    component: () => import("@/pages/lead-bank/LeadBankAdd.vue"),
+  },
+  {
+    path: "/lead-bank/team",
+    name: "LeadBankTeam",
+    component: () => import("@/pages/lead-bank/LeadBankTeam.vue"),
+  },
   {
     path: "/projects",
     name: "TaskyProjects",
@@ -244,6 +261,12 @@ const portalRoutes = [
     path: "/projects/:projectId/meta",
     name: "TaskyMeta",
     component: () => import("@/pages/tasky/ProjectMeta.vue"),
+    props: true,
+  },
+  {
+    path: "/projects/:projectId/ads",
+    name: "TaskyAds",
+    component: () => import("@/pages/tasky/ProjectAds.vue"),
     props: true,
   },
   {
@@ -320,6 +343,18 @@ const portalRoutes = [
     name: "TeamWorkload",
     component: () => import("@/pages/work/Team.vue"),
     beforeEnter: () => useAuthStore().canSeeOverview || { name: "Home" },
+  },
+  {
+    path: "/adoption",
+    name: "Adoption",
+    component: () => import("@/pages/work/Adoption.vue"),
+    beforeEnter: () => useAuthStore().canSeeAdoption || { name: "Home" },
+  },
+  // everyone may open it: the server gives members the projects they are on
+  {
+    path: "/project-status",
+    name: "ProjectStatus",
+    component: () => import("@/pages/work/ProjectStatus.vue"),
   },
   // not guarded like Overview: project managers without the Overview get
   // weekly reminders linking here, and the server filters what each user sees
@@ -475,6 +510,11 @@ router.beforeEach(async (to, _, next) => {
       (redirectURL ? `?redirect-to=/helpdesk${redirectURL}` : "/helpdesk");
   } else if (!to.meta.public && !authStore.hasDeskAccess) {
     next({ name: "TicketsCustomer" });
+  } else if (
+    LEAD_BANK_ROUTES.has(String(to.name)) &&
+    !authStore.canUseLeadBank
+  ) {
+    next({ name: "Home" });
   } else if (!to.meta.public && authStore.isSalesEmployee) {
     // salespeople see the sales screens only; the Scoreboard when Leads is off
     const name = String(to.name);

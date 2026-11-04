@@ -48,6 +48,8 @@ scheduler_events = {
         # every minute: new customer tickets arrive quickly (sites also ping on raise)
         "* * * * *": [
             "helpdesk.tasks.pull_client_tickets",
+            # approved WhatsApp outreach waiting for TBO Chat (docs/whatsapp-outreach.md)
+            "helpdesk.whatsapp_outreach.send_pending",
         ],
         # every 15 minutes: follow-ups and escalation for tasks and tickets, and the
         # digests at their times (docs/follow-ups.md)
@@ -125,6 +127,14 @@ scheduler_events = {
         "30 0 * * *": [
             "helpdesk.team_dashboard.close_periods",
         ],
+        # Friday 17:00: the project status report to its recipients (docs/project-status-report.md)
+        "0 17 * * 5": [
+            "helpdesk.project_status.send_weekly_report",
+        ],
+        # Monday 09:00: the week's adoption findings to management (docs/adoption.md)
+        "0 9 * * 1": [
+            "helpdesk.adoption.send_weekly_digest",
+        ],
         # Monday 08:00: last week's summary per customer
         "0 8 * * 1": [
             "helpdesk.work_summary.send_weekly_summaries",
@@ -151,6 +161,8 @@ scheduler_events = {
         "helpdesk.copilot.pilot.send_weekly_email",
         # 09:00 Riyadh time, once a day: what waits for each person, in Teams or the Copilot panel
         "helpdesk.copilot.assistant.send_digest",
+        # spend, reach and status of running boosts (docs/meta-publishing.md)
+        "helpdesk.integrations.meta.ads.sync_active_boosts",
     ],
     "hourly_long": [
         "helpdesk.helpdesk.doctype.hd_ticket.hd_ticket.update_sla_status_in_ticket"
@@ -307,6 +319,7 @@ permission_query_conditions = {
     "HD Content Post": "helpdesk.helpdesk.doctype.hd_content_post.hd_content_post.permission_query",
     "HD Content Campaign": "helpdesk.helpdesk.doctype.hd_content_campaign.hd_content_campaign.permission_query",
     "HD Work Summary": "helpdesk.helpdesk.doctype.hd_work_summary.hd_work_summary.permission_query",
+    "HD Project Status Update": "helpdesk.helpdesk.doctype.hd_project_status_update.hd_project_status_update.permission_query",
 }
 
 has_permission = {
@@ -320,6 +333,7 @@ has_permission = {
     "HD Content Post": "helpdesk.helpdesk.doctype.hd_content_post.hd_content_post.has_permission",
     "HD Content Campaign": "helpdesk.helpdesk.doctype.hd_content_campaign.hd_content_campaign.has_permission",
     "HD Work Summary": "helpdesk.helpdesk.doctype.hd_work_summary.hd_work_summary.has_permission",
+    "HD Project Status Update": "helpdesk.helpdesk.doctype.hd_project_status_update.hd_project_status_update.has_permission",
 }
 
 

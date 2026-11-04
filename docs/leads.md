@@ -36,6 +36,7 @@ The hub never gets ERPNext installed.
   Overview for them, and their documents chain stops at the client documents (the Project
   and UAT steps don't open). The full rules are in
   [departments.md](departments.md#sales-wall-sales-employee).
+- Staff who may not see Leads still get the Lead Bank (`can_use_lead_bank`, [lead-bank.md](lead-bank.md)): Add a lead and My leads only.
 - The check is `helpdesk.integrations.crm.leads.can_use_leads`; `helpdesk.api.auth.get_user`
   sends it as `can_use_leads`, which shows the sidebar item and lets the router open
   `/helpdesk/leads`. Every endpoint checks it again on the server.
@@ -51,10 +52,10 @@ user exists there with a sales role, applies what they may see, and records writ
 | Method | HTTP | Arguments | Returns |
 | --- | --- | --- | --- |
 | `get_options` | GET | | `{stages: [{name, label, type, color}], sources, segments, owners: [{email, full_name}], territories, industries, org_sizes, states, kerala_districts, districts_by_state, can_call, departments: [{name, lead_type, is_active, is_head, is_member}], lead_types}` (the last two from the departments release of TBO Smart) |
-| `list_leads` | GET | `search, stage, owner, segment, department, industry, state, district, org_size, last_call_result, last_reply_class, source, temperature, metric, period, from_date, to_date, view, start, page_length` | `{rows: [{name, lead_name, company_name, email_id, mobile_no, tbo_stage, segment, lead_owner, owner_name, score, next_follow_up, modified, latest_quotation, latest_proposal, tbo_department, tbo_lead_type, industry, state, district, org_size}], total}` |
-| `get_category_counts` | GET | | `{industry, state, district, org_size}`, each `{value: leads}` (TBO Smart v1.14, `hub-leads-api.md` §2.14) |
+| `list_leads` | GET | `search, stage, owner, segment, department, industry, state, district, org_size, product, last_call_result, last_reply_class, source, temperature, metric, period, from_date, to_date, view, start, page_length` | `{rows: [{name, lead_name, company_name, email_id, mobile_no, tbo_stage, segment, lead_owner, owner_name, score, next_follow_up, modified, latest_quotation, latest_proposal, tbo_department, tbo_lead_type, product, industry, state, district, org_size}], total}` |
+| `get_category_counts` | GET | | `{industry, state, district, org_size, product}`, each `{value: leads}` (TBO Smart v1.14, `hub-leads-api.md` §2.14) |
 | `add_industry` | POST | `name` | `{name, created}`; managers only |
-| `bulk_set_lead_category` | POST | `leads, values` | `{updated, skipped}`; managers only |
+| `bulk_set_lead_category` | POST | `leads, values` | `{updated, skipped}`; managers only (a department head may set `product`) |
 | `get_overview` | GET | `period, from_date, to_date, owner` | the Overview's figures (TBO Smart's `hub-leads-api.md` §2.4) |
 | `get_lead_intake` | GET | `from_date, to_date` (the hub sends yesterday and today) | new leads taken each day by owner, imports left out, and the scope's salespeople (§2.4.1) |
 | `get_proposal_money` | GET | `period, from_date, to_date, owner` | proposals sent, won, advances and every payment split still to collect (§2.8) |
@@ -136,6 +137,54 @@ only filters and shows. The department's type is the lead's type (`tbo_lead_type
   person's cached reads (including `get_options`, which carries `is_head` and `is_member`).
   `list_leads` takes `department`. The Overview and Daily report don't filter by department
   yet.
+
+## Products / brands under a department
+
+A department such as GrowthX has sub-teams that sell different things (PhoebiX for solar,
+BillaX, WilpeX, PrintagX, Foamia, Avera). Managers list them on the department; each lead can
+carry one; callers see which name they are calling under. A department with no products works
+exactly as before. TBO Smart holds and enforces everything
+([lead-departments.md](https://github.com/tbocloud/tbo_smart/blob/main/docs/lead-departments.md) §10,
+`hub-leads-api.md` §2.20); the hub shows and edits it.
+
+- **Settings → CRM → Lead departments → Products / brands**
+  (`DepartmentProducts.vue`): add a product, give it a name and one short line to say on the
+  call, switch it off. A saved product is switched off, never removed (its leads keep the name);
+  renaming it moves its leads. Names are unique in the department. Under *Daily call batches*, a
+  **Calls for product** picker gives the next batches only that product's leads (follow-ups due
+  still come).
+- **Lead form and Details card:** a *Product* picker when the department has products, shown only
+  to managers and the department's head (`canSetProduct`; the ERP site refuses anyone else). The
+  owner sees the product in Details. Changing the department clears a product it doesn't have.
+- **Leads list:** a *Product* filter with counts (`?product=PhoebiX` in the URL, repeatable) and a
+  small neutral chip with the product name on each row. Managers' *Set category* has a *Product*
+  choice (a lead only takes a product of its own department; the others are listed as left out).
+- **Today's calls:** every call shows **Calling for: PhoebiX** with the intro line underneath
+  (a lead with no product shows its department's name). The batch header shows *Calls for:
+  PhoebiX* while a campaign product is set.
+- **Messages:** AI drafts and the WhatsApp first message use the product's name and intro. The
+  template's blanks can be `product` and `product_intro` as well as `name`, `company` and
+  `why_call` (Settings → TBO Chat); a lead with no product gets TBO and a neutral line.
+- **Older TBO Smart:** without products the sections, filter, chip and picker stay out; the
+  campaign product is sent only when the ERP site's departments carry `products`.
+
+### How to use (staff)
+
+*Managers*
+1. Settings, CRM, Lead departments, pick GrowthX (the pencil).
+2. Under **Products / brands** press **Add product**. Type the name (PhoebiX) and a short line
+   to say on the call ("PhoebiX – solar ERP for installers"). Add BillaX, WilpeX, PrintagX,
+   Foamia, Avera and Solar the same way. Press **Save changes**.
+3. To call for one product tomorrow, open the department again and set **Calls for product** to
+   PhoebiX, then save. The next batches give each caller only PhoebiX leads.
+4. To tag leads: on **Leads**, press **Select**, tick the leads, press **Set category**, choose
+   the **Product** and apply. Or open a lead, press Edit and pick the **Product**.
+5. To stop using a name, switch it **off**. Its leads keep it; nobody can pick it any more.
+
+*Callers (BDs)*
+- Open **Today's calls**. Each call says **Calling for: PhoebiX** and the line to say. A lead with
+  no product shows the department's name. Say that name when you introduce yourself.
+- You can see a lead's product but only a manager changes it. Ask your manager.
 
 ### Wave 1: assignment, duplicates, quiet leads, website form
 
@@ -246,6 +295,58 @@ Code: `helpdesk/api/call_batches.py` (proxies; `report_lines` for the 6 pm text)
 `TodaysCalls.vue`, `CallRow.vue`, `CallOutcomeDialog.vue`, `CallBatchesTable.vue`,
 `desk/src/components/Settings/CRM/CallBatchRules.vue`.
 
+## BD view, calling for, and recording results
+
+A **BD** is a Sales Employee who is not a System Manager, Agent Manager or Sales Manager and
+heads no department. Another BD may be calling the same lead, so a BD sees only what comes to
+them.
+
+**Tabs.** *Today's calls* (the default; *Call today* in its place while their departments have no
+batches), *My leads* (what they own; renamed from *Mine* for everyone), *Follow-up* and their own
+*Commission*. No Overview, Daily report, Business, All, Outreach or *Find prospects*, and no
+Owner filter. Managers and department heads keep everything.
+
+**On the server too** (`helpdesk.api.leads.is_bd`; `auth.get_user` sends `is_sales_bd` for the
+role, `get_options` sends `is_bd` once the department heads are known): `list_leads` with view *All*
+returns *My leads* and ignores the owner filter; `get_overview`, `get_overview_page`,
+`get_lead_intake`, `get_proposal_money`, `get_business_overview`, `get_daily_report` and the
+Find-prospects endpoints answer *This is for managers* (PermissionError). If the ERP site cannot say
+whether the person heads a department, they are treated as a BD.
+
+**Calling for** (`CallingFor.vue`, top of Today's calls; the ERP side is `call-batches.md` §10).
+A card says what they call for now (*Hotels (StayVeX)*, *PhoebiX (GrowthX) in Kochi*, *All my
+departments*) with a **Change** button when there is anything to switch. The picker lists their
+departments that hand out batches, each product, *All my departments* and an optional district;
+**Start calling** saves it and the answer says in plain words what happens (*Your next 30 calls are
+ready*, or why the next batch has to wait). A department with call batches off is not listed:
+in Settings, Lead departments the box says *Turn on daily call batches so its members can call from
+Today's calls.* `helpdesk.api.call_batches.set_calling_focus`; the choice is remembered per person on
+the ERP site, and `get_my_calls` carries `focus` and `focus_options`.
+
+**Recording results** (`helpdesk/api/pending_calls.py`, `PendingCalls.vue`, `CallResultSheet.vue`).
+Tapping **Call** on a lead (a row in Today's calls, the lead page's Call button or its phone number)
+remembers the lead. The cache holds it per person for 3 days, at most 50. When the person comes back
+to the page (`visibilitychange` or window focus; for MyOperator, 45 seconds later) the **result
+sheet** opens for it: six big buttons (Connected, Not answered, Busy, Call back, Not interested,
+Wrong number), an optional note; Call back asks *In 1 hour / In 2 hours / Tomorrow 10:00*, Not
+interested asks why in one tap. A small banner, *You have N calls without a result*, stays on every
+screen for Sales Employees with **Add results**, which opens them one by one. The result goes to
+`record_call_outcome` (a call from Today's calls) or `log_call` (any other); both take the lead off
+the list. A call can only leave without a result with a reason: *I didn't call* or *Tapped by
+mistake* (`dismiss_pending_call`). Endpoints: `start_call`, `get_pending_calls`,
+`dismiss_pending_call`, `resolve` (internal).
+
+### How to use (BDs)
+
+1. Open **Leads**. You see **Today's calls**: only your own calls, nobody else's.
+2. Check **Calling for** at the top. Tap **Change** to call for another department or product (a
+   district too, if you like), then **Start calling**.
+3. Tap **Call** on a lead and make the call.
+4. Back on the page, tap how it went: Connected, Not answered, Busy, Call back, Not interested or
+   Wrong number. That is all.
+5. If you forget, the banner *You have N calls without a result* waits. Tap **Add results**.
+   If you did not make the call, tap *I didn't call*.
+
 ## Find prospects
 
 TBO sells mainly by phone. Managers and department heads find businesses by industry and district
@@ -310,8 +411,12 @@ show) and the subject or the start of the text; it opens to an editable subject 
 **Approve** (the one primary action), **Save changes**, **Regenerate** and **Cancel message**, the
 opt-out line the email will carry, and an error in words on a Failed message. Approving saves any
 edit first. Select rows (Draft, Approved, Failed) to **Approve selected** or **Cancel selected**.
-WhatsApp has no API yet: an approved WhatsApp row shows **Open WhatsApp** (the `wa.me` link with
-the text filled in) and **Mark sent**, which the person presses after sending it by hand.
+A WhatsApp row shows how it will go (the approved template with the lead's details filled in, or
+the person's own words inside 24 hours of the lead's reply) and, once the WhatsApp inbox is set,
+goes by itself after Approve (Sending on WhatsApp, Sent, Delivered, Read;
+[whatsapp-outreach.md](whatsapp-outreach.md)). Without an inbox or a template an approved WhatsApp
+row shows **Open WhatsApp** (the `wa.me` link with the text filled in) and **Mark sent**, which
+the person presses after sending it by hand.
 Results are told in words (sent, approved, a message that was held and why); approving an email
 with no outgoing email account on the ERP site shows "Set up an outgoing email account first".
 The list refreshes by itself while drafts are being written.
@@ -328,6 +433,13 @@ Objection, Not now, Not interested, Unsubscribe, Out of office, or New reply whe
 not sort it) with when it came and what the ERP site did about it. The Leads list has a
 **Replied** filter (any of the classes, with counts) beside Last call; `list_leads` takes
 `last_reply_class`, which is validated here and sent as a JSON list.
+
+**WhatsApp on the lead page** (`LeadWhatsApp.vue`, backend `helpdesk/api/whatsapp.py`): the
+conversation appears in the Timeline (“The lead, on WhatsApp”); a WhatsApp card has **Open in TBO
+Chat** and a reply box that is enabled only within 24 hours of the lead's last message, otherwise
+it says why and offers the approved template. The card is absent on an older TBO Smart. A lead's
+WhatsApp reply is sorted like an email reply (the ERP site does it). Owner setup, the staff steps
+and the decisions are in [whatsapp-outreach.md](whatsapp-outreach.md).
 
 Tests: `helpdesk/tests/test_outreach.py` (the outbox read live as the person and never cached,
 status filters, an older ERP site, the ERP site's refusals reaching the person, drafting posted
@@ -385,6 +497,22 @@ the hub project; type the ERP Project name when the invoices use another.
 Tests: `helpdesk/tests/test_commission.py` (reads live as the person and never cached, filters
 trimmed, an older ERP site hidden quietly, refusals, writes as POSTs, plan and project values sent as
 JSON). The ERP site's own tests cover the maths, attribution and statements.
+
+## Lead Bank (staff collect leads, referral commission)
+
+Every active agent, whatever their team or wall, can add a lead from a photo and earns a referral
+when it is won and paid. It is a separate path from Leads: `can_use_lead_bank` (Leads switched on in
+Settings → CRM, and an active agent) opens only **Add a lead**, **My leads** and, for managers,
+**Team**; it never opens the CRM, so designers, developers and the Digital team still do not see
+Leads. Specs: [lead-bank.md](lead-bank.md) here, TBO Smart's `docs/lead-bank.md` and
+`docs/commission.md` section 7, the contract `docs/hub-leads-api.md` section 2.21. The hub proxies
+`tbo_smart.api.hub_lead_bank` through `helpdesk/api/lead_bank.py`, and reads the photos with its
+own AI (`helpdesk/lead_bank.py`).
+
+Referral shows in **Commission** like any other line: a statement line of kind Referral, labelled
+"Referral: <lead>" in a person's projects, and the statement's `referral` is the part of its
+commission that is referral. The rates, the cap and the department of each region are set in
+Settings → CRM → **Referral (Lead Bank)** (`ReferralSettings.vue`), under the commission plans.
 
 ## Hub endpoints
 
@@ -818,6 +946,13 @@ strip calls `helpdesk.api.proposals.create_project_from_proposal(proposal)`; pla
 
 ## Tests
 
+`helpdesk/tests/test_bd_view.py`: who is a BD (a manager, a head, an admin and a support agent
+are not), *All* turned into *My leads*, the team screens refused, the calling-for switch and
+queue passed through, and the calls without a result (remembered once per lead, per person, cleared
+by a result from Today's calls or Log call, kept when the result fails, dismissed only with a
+listed reason, forgotten after 3 days, capped at 50). Helpers `bd_options` and
+`clear_pending_calls` in `test_utils.py`.
+`helpdesk/tests/test_lead_bank.py` (the Lead Bank, see [lead-bank.md](lead-bank.md)).
 `helpdesk/tests/test_leads.py` with `test_utils.FakeCRM` (`lead_answers`, `lead_calls`,
 `lead_error`) and `test_utils.enable_leads`: off by default, `acting_user` on every call,
 writes posted, view and page size checked, teams and inactive agents gated, and each error
@@ -831,6 +966,12 @@ per-person cache, a write clearing it) is tested there too.
 `helpdesk/tests/test_lead_categories.py`: the filters (and the last call result, checked) sent as JSON lists (none when empty), a lead
 saved with its categories, the counts (empty on an older ERP site), `add_industry` and
 `bulk_set_lead_category` proxied as the person, a refusal naming who may, empty picks refused.
+Products: `test_lead_categories.py` (the product filter sent as a JSON list, a lead saved with its
+product, the options' products, bulk set with a product and its refusal naming the head),
+`test_leads.py` (products and the campaign product saved as given, `previous_name` for a
+rename), `test_call_batches.py` (`product`, `intro_line`, `calling_for` and `campaign_product`
+reach the person) and `test_whatsapp_outreach.py` (a template naming the product and its intro,
+and the lead page's facts).
 `helpdesk/tests/test_lead_place.py`: the photo list (and the card staying out on an older ERP
 site), an upload passed on with a trimmed caption, an empty or oversize upload kept at the hub,
 the ERP site's refusal reaching the person, delete, the image streamed (and only image types),
@@ -859,4 +1000,5 @@ site's reason reaching the person, the next batch's reason passed on, the manage
 telephony API, the recording streamed (audio only) and a refusal refused, the MyOperator
 settings for admins only and proxied.
 `helpdesk/tests/test_outreach.py`: see [Outreach](#outreach).
+`helpdesk/tests/test_whatsapp_outreach.py`: see [whatsapp-outreach.md](whatsapp-outreach.md).
 `helpdesk/tests/test_prospects.py`: an estimate and a start proxied as the person (POST, the values as a set of fields), the runs read live, a refusal naming who may, an older ERP site (the list hides quietly, estimate and start say so), and no access without leads.

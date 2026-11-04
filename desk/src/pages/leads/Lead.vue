@@ -27,7 +27,7 @@
           :label="__('Call')"
           :loading="clickToCall.loading"
           :tooltip="__('MyOperator rings your phone, then the lead')"
-          @click="clickToCall.submit({ name: leadId })"
+          @click="callWithMyOperator"
         >
           <template #prefix>
             <LucidePhone class="size-4" aria-hidden="true" />
@@ -142,6 +142,7 @@
                     <a
                       v-if="field.href"
                       :href="field.href"
+                      @click="field.href.startsWith('tel:') && phoneCalled()"
                       class="rounded underline decoration-outline-gray-3 underline-offset-2 hover:text-ink-gray-9 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
                       >{{ field.value }}</a
                     >
@@ -160,6 +161,14 @@
               <LeadPhotos :lead-id="leadId" :can-write="!!lead.can_write" />
             </template>
             <LeadWhyCall :prospect="lead?.prospect" />
+            <LeadWhatsApp
+              v-if="lead?.whatsapp && lead.whatsapp_box"
+              :lead-id="leadId"
+              :whatsapp="lead.whatsapp"
+              :box="lead.whatsapp_box"
+              :can-write="!!lead.can_write"
+              @sent="detail.reload()"
+            />
             <LeadAISuggests
               :lead-id="leadId"
               :last-reply="{
@@ -256,9 +265,19 @@
                     >{{ entry.text }}
                   </p>
                   <p class="text-xs text-ink-gray-5">
-                    {{ entry.who_name || entry.who }}
+                    {{
+                      entry.kind === "whatsapp" &&
+                      entry.direction === "incoming"
+                        ? __("The lead, on WhatsApp")
+                        : entry.who_name || entry.who
+                    }}
                     <template v-if="entry.at">
-                      <span v-if="entry.who" aria-hidden="true"> · </span>
+                      <span
+                        v-if="entry.who || entry.kind === 'whatsapp'"
+                        aria-hidden="true"
+                      >
+                        ·
+                      </span>
                       <time
                         :datetime="entry.at"
                         :title="dayjs(entry.at).format('D MMM YYYY, h:mm a')"
@@ -377,6 +396,8 @@ import LucideChevronRight from "~icons/lucide/chevron-right";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideFileText from "~icons/lucide/file-text";
 import LucideHistory from "~icons/lucide/history";
+import LucideMessageCircle from "~icons/lucide/message-circle";
+import LucideMessageCircleReply from "~icons/lucide/message-circle-reply";
 import LucideMessageSquare from "~icons/lucide/message-square";
 import LucidePhone from "~icons/lucide/phone";
 import LucidePhoneForwarded from "~icons/lucide/phone-forwarded";
@@ -390,6 +411,7 @@ import LucideScrollText from "~icons/lucide/scroll-text";
 import LeadFormDialog from "./LeadFormDialog.vue";
 import LeadPhotos from "./LeadPhotos.vue";
 import LeadPlace from "./LeadPlace.vue";
+import LeadWhatsApp from "./LeadWhatsApp.vue";
 import LeadWhyCall from "./LeadWhyCall.vue";
 import LeadDocuments from "./LeadDocuments.vue";
 import LogCallDialog from "./LogCallDialog.vue";
@@ -411,6 +433,7 @@ import {
   type LeadStage,
   type LeadTimelineEntry,
 } from "./leads";
+import { startCall } from "./pendingCalls";
 
 const props = defineProps<{ leadId: string }>();
 
@@ -423,6 +446,7 @@ const TIMELINE_ICONS: Record<LeadTimelineEntry["kind"], Component> = {
   quotation: LucideFileText,
   ai: LucideBot,
   proposal: LucideScrollText,
+  whatsapp: LucideMessageCircle,
 };
 const TIMELINE_LABELS: Record<LeadTimelineEntry["kind"], string> = {
   note: __("Note"),
@@ -433,6 +457,7 @@ const TIMELINE_LABELS: Record<LeadTimelineEntry["kind"], string> = {
   quotation: __("Quotation"),
   ai: __("TBO AI"),
   proposal: __("Proposal"),
+  whatsapp: __("WhatsApp"),
 };
 
 /** A call through MyOperator shows which way it went, or that it was missed. */
@@ -442,6 +467,8 @@ function timelineIcon(entry: LeadTimelineEntry): Component {
     if (entry.direction === "incoming") return LucidePhoneIncoming;
     if (entry.direction === "outgoing") return LucidePhoneOutgoing;
   }
+  if (entry.kind === "whatsapp" && entry.direction === "outgoing")
+    return LucideMessageCircleReply;
   return TIMELINE_ICONS[entry.kind] || LucideMessageSquare;
 }
 
@@ -466,6 +493,23 @@ const data = computed(() => detail.data as LeadDetail | undefined);
 const lead = computed(() => data.value?.lead);
 
 const clickToCall = useClickToCall();
+
+/** A call placed from this lead waits for its result: the sheet asks how it went. */
+function remember(via: "phone" | "myoperator") {
+  startCall({
+    lead: props.leadId,
+    lead_name: lead.value?.lead_name || props.leadId,
+    phone: lead.value?.mobile_no || lead.value?.phone || "",
+    via,
+  });
+}
+function callWithMyOperator() {
+  clickToCall.submit({ name: props.leadId });
+  remember("myoperator");
+}
+function phoneCalled() {
+  remember("phone");
+}
 const canCall = computed(
   () =>
     !!lead.value?.can_call &&
@@ -507,6 +551,7 @@ const detailFields = computed(() => {
     { label: __("Source"), value: l.source || "" },
     { label: __("Segment"), value: l.segment || "" },
     { label: __("Territory"), value: l.territory || "" },
+    { label: __("Product"), value: l.product || "" },
     { label: __("Industry"), value: l.industry || "" },
     { label: __("State"), value: l.state || "" },
     { label: __("District"), value: l.district || "" },

@@ -14,6 +14,7 @@ from frappe.utils import flt, get_datetime, getdate, strip_html
 from frappe.utils.dateutils import parse_date
 
 from helpdesk.api.content_board import user_full_names
+from helpdesk.tasky.permissions import get_creators
 
 MAX_ITEMS = 300
 MAX_COMMENT_LENGTH = 5000
@@ -74,7 +75,8 @@ class TaskActivity:
         return {
             "kind": "created",
             "at": self.doc.creation,
-            "by": self.doc.owner,
+            # a content post's task names the post's creator (tasky.permissions.get_creators)
+            "by": get_creators([self.doc.name]).get(self.doc.name) or self.doc.owner,
             "origin": origin,
         }
 

@@ -29,7 +29,7 @@ import { __ } from "@/translation";
 import { createResource, MultiSelect } from "frappe-ui";
 import { computed } from "vue";
 import { OUTCOMES } from "./callBatches";
-import type { LeadCategories, LeadOptions } from "./leads";
+import { allProducts, type LeadCategories, type LeadOptions } from "./leads";
 import { REPLY_CLASSES, REPLY_LOOK, type ReplyClass } from "./outreach";
 
 const props = defineProps<{
@@ -102,6 +102,17 @@ const facets = computed(() => {
       any: __("Any size"),
       options: build("org_size", o?.org_sizes ?? []),
     },
+    // only where a department has products (or a link filters by one)
+    ...(allProducts(o).length || props.modelValue.product.length
+      ? [
+          {
+            key: "product" as const,
+            label: __("Product"),
+            any: __("Any product"),
+            options: build("product", allProducts(o)),
+          },
+        ]
+      : []),
     // only once the ERP site keeps a last call result (it counts them)
     ...(counts.data && "last_call_result" in counts.data
       ? [

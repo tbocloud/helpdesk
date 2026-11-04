@@ -3,6 +3,7 @@
 
 import hashlib
 import hmac
+import re
 import time
 
 import frappe
@@ -19,6 +20,7 @@ class HDChatwootSettings(Document):
     def validate(self):
         self.normalize_base_url()
         self.check_sign_in()
+        self.check_whatsapp()
 
     def normalize_base_url(self):
         """API paths are appended to it, so a trailing slash would double up."""
@@ -26,6 +28,15 @@ class HDChatwootSettings(Document):
         if url and not url.startswith(("https://", "http://")):
             frappe.throw(_("The Chatwoot URL must start with https://"))
         self.base_url = url
+
+    def check_whatsapp(self):
+        """The country code is digits only ("+91" and "91" both mean 91)."""
+        code = re.sub(r"\D", "", self.whatsapp_country_code or "")
+        if self.whatsapp_country_code and not code:
+            frappe.throw(_("The default country code must be digits, e.g. 91."))
+        self.whatsapp_country_code = code or "91"
+        if (self.whatsapp_inbox_id or 0) < 0:
+            frappe.throw(_("The WhatsApp inbox ID can't be negative."))
 
     def check_sign_in(self):
         """Sign-in needs the account and both tokens: the bridge user finds people in

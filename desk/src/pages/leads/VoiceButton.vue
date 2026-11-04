@@ -62,12 +62,13 @@
 <script setup lang="ts">
 import { __ } from "@/translation";
 import { Button } from "frappe-ui";
-import { onBeforeUnmount, ref } from "vue";
+import { onBeforeUnmount, ref, watch } from "vue";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideMic from "~icons/lucide/mic";
 import LucideMicOff from "~icons/lucide/mic-off";
 
 defineProps<{ disabled?: boolean }>();
+const emit = defineEmits<{ listening: [on: boolean] }>();
 /** The text so far: what was there before speaking, then what is heard (interim included). */
 const text = defineModel<string>({ required: true });
 
@@ -92,6 +93,7 @@ const Speech =
 const supported = !!Speech;
 const lang = ref<"en-IN" | "ml-IN">("en-IN");
 const listening = ref(false);
+watch(listening, (on) => emit("listening", on));
 /** why the last try gave no text, in words */
 const problem = ref("");
 let recognition: Recognition | null = null;

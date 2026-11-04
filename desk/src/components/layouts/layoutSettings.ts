@@ -1,3 +1,4 @@
+import LucideActivity from "~icons/lucide/activity";
 import LucideContact2 from "~icons/lucide/contact-2";
 import LucideTicket from "~icons/lucide/ticket";
 import LucideBookOpen from "~icons/lucide/book-open";
@@ -21,6 +22,7 @@ import LucideActivity from "~icons/lucide/activity";
 import LucideMessagesSquare from "~icons/lucide/messages-square";
 import LucideHandshake from "~icons/lucide/handshake";
 import LucideBot from "~icons/lucide/bot";
+import LucideCamera from "~icons/lucide/camera";
 import { __ } from "@/translation";
 
 export const agentPortalSidebarOptions = [
@@ -81,6 +83,14 @@ export const agentPortalSidebarOptions = [
     overviewOnly: true,
   },
   {
+    label: __("Adoption"),
+    icon: LucideActivity,
+    to: "Adoption",
+    tone: "teal",
+    section: "Workspace",
+    adoptionOnly: true,
+  },
+  {
     label: __("Summaries"),
     icon: LucideNewspaper,
     to: "WorkSummaries",
@@ -121,6 +131,23 @@ export const agentPortalSidebarOptions = [
     tone: "teal",
     section: "Workspace",
     leadsOnly: true,
+  },
+  // the Lead Bank: every active agent adds leads by photo (docs/lead-bank.md)
+  {
+    label: __("Add a lead"),
+    icon: LucideCamera,
+    to: "LeadBankAdd",
+    tone: "teal",
+    section: "Workspace",
+    leadBankOnly: true,
+  },
+  {
+    label: __("My leads"),
+    icon: LucideHandshake,
+    to: "LeadBank",
+    tone: "teal",
+    section: "Workspace",
+    leadBankOnly: true,
   },
   {
     label: __("Projects"),

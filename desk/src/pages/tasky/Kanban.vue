@@ -287,10 +287,21 @@
                   {{ task.project_name || task.project }}
                 </p>
                 <p
-                  v-if="assignedByName(task)"
+                  v-if="createdByName(task, true) || assignedByName(task)"
                   class="mt-1 truncate pl-5 text-xs text-ink-gray-5"
                 >
-                  {{ __("Assigned by {0}", assignedByName(task)) }}
+                  <template v-if="createdByName(task, true)">
+                    {{ __("Created by {0}", createdByName(task, true)) }}
+                  </template>
+                  <span
+                    v-if="createdByName(task, true) && assignedByName(task)"
+                    aria-hidden="true"
+                  >
+                    ·
+                  </span>
+                  <template v-if="assignedByName(task)">
+                    {{ __("Assigned by {0}", assignedByName(task)) }}
+                  </template>
                 </p>
 
                 <div
@@ -608,6 +619,7 @@ import type { TaskPullRequest } from "./pullRequestMeta";
 import {
   ON_HOLD,
   assignedByName,
+  createdByName,
   blockedMessage,
   blocksMove,
   formatElapsed,
@@ -675,6 +687,8 @@ interface Task {
   assignees?: string[];
   assigned_by?: string | null;
   assigned_by_name?: string | null;
+  created_by?: string | null;
+  created_by_name?: string | null;
   can_move?: boolean;
   custom_recurring_task?: string | null;
   content_post?: string | null;

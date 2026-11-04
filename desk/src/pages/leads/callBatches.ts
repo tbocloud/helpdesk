@@ -58,8 +58,15 @@ export interface QueueLead {
   wrong_number?: number;
 }
 
+/** What the caller says they are calling under: the lead's product, else its department. */
+export interface CallingFor {
+  product?: string | null;
+  intro_line?: string | null;
+  calling_for?: string | null;
+}
+
 /** One call in the queue; `item` is what an outcome is recorded against. */
-export interface QueueCall {
+export interface QueueCall extends CallingFor {
   item: string;
   batch: string;
   slot: string;
@@ -82,6 +89,33 @@ export interface CallCounts {
   overdue: number;
 }
 
+/** What a salesperson is calling for: one of their departments, optionally a product and a district. */
+export interface CallFocus {
+  department: string;
+  product: string | null;
+  district: string | null;
+}
+
+/** What they may pick under one department. A department's campaign product or district (a
+ * manager's limit) is the only choice and says so in `locked_*`. */
+export interface FocusOption {
+  department: string;
+  products: { product_name: string; intro_line?: string }[];
+  districts: string[];
+  locked_product: string | null;
+  locked_district: string | null;
+}
+
+/** One line of the "Calling for" picker: a department, or one of its products. */
+export interface FocusChoice {
+  key: string;
+  department: string;
+  product: string;
+  label: string;
+  hint: string;
+  option: FocusOption;
+}
+
 export interface MyCalls {
   available: boolean;
   enabled: boolean;
@@ -96,6 +130,8 @@ export interface MyCalls {
     ends_at: string;
     seconds_left: number;
     batches: string[];
+    /** the product the department's batches call for (null: any) */
+    campaign_product?: string | null;
   } | null;
   counts?: CallCounts;
   today?: { size: number; called: number; connected: number };
@@ -105,6 +141,9 @@ export interface MyCalls {
   can_call?: boolean;
   next_batch?: { allowed: boolean; reason?: string | null };
   next_slot?: { label: string; starts_at: string } | null;
+  /** what the person calls for now (null: every department of theirs) */
+  focus?: CallFocus | null;
+  focus_options?: FocusOption[];
 }
 
 export interface BatchReportPerson {
@@ -178,6 +217,69 @@ export function useMyCalls() {
   });
 }
 
+/** The picker's lines: each department that hands out calls, and each of its products. */
+export function focusChoices(options: FocusOption[]): FocusChoice[] {
+  return options.flatMap((option) => {
+    if (!option.products.length)
+      return [
+        {
+          key: option.department,
+          department: option.department,
+          product: "",
+          label: option.department,
+          hint: "",
+          option,
+        },
+      ];
+    const each = option.products.map((product) => ({
+      key: `${option.department}|${product.product_name}`,
+      department: option.department,
+      product: product.product_name,
+      label: product.product_name,
+      hint: option.department,
+      option,
+    }));
+    // a manager's limit leaves one product: no "all" line to pick
+    return option.locked_product
+      ? each
+      : [
+          ...each,
+          {
+            key: option.department,
+            department: option.department,
+            product: "",
+            label: __("All of {0}", option.department),
+            hint: "",
+            option,
+          },
+        ];
+  });
+}
+
+/** "PhoebiX (GrowthX) in Kochi", "StayVeX", or "All my departments". */
+export function focusLabel(focus?: CallFocus | null) {
+  if (!focus) return __("All my departments");
+  const what = focus.product
+    ? `${focus.product} (${focus.department})`
+    : focus.department;
+  return focus.district ? __("{0} in {1}", what, focus.district) : what;
+}
+
+/** Whether there is anything to switch: more than one line, or a district to narrow to. */
+export function canSwitch(options: FocusOption[]) {
+  return (
+    focusChoices(options).length > 1 ||
+    options.some((o) => o.districts.length > 1 && !o.locked_district)
+  );
+}
+
+export function useSetFocus() {
+  return createResource({
+    url: "helpdesk.api.call_batches.set_calling_focus",
+    method: "POST",
+  });
+}
+
 export function useRecordOutcome() {
   return createResource({
     url: "helpdesk.api.call_batches.record_call_outcome",
@@ -220,6 +322,8 @@ export interface CallRules {
   campaign_industry: string;
   campaign_state: string;
   campaign_district: string;
+  /** "Calls for product": new leads in a batch are only of this product ("" for any) */
+  campaign_product: string;
   call_slots: CallSlot[];
   /** a member's own cap, replacing the department's */
   member_caps: Record<string, number | string>;
@@ -233,6 +337,7 @@ export const DEFAULT_RULES: CallRules = {
   campaign_industry: "",
   campaign_state: "",
   campaign_district: "",
+  campaign_product: "",
   call_slots: [
     { label: "Morning", start_time: "10:00", end_time: "13:00", size: 50 },
     { label: "Afternoon", start_time: "14:00", end_time: "18:00", size: 50 },
@@ -280,7 +385,7 @@ export function rulesProblem(rules: CallRules) {
 }
 
 /** The rules as the ERP site takes them. */
-export function rulesPayload(rules: CallRules) {
+export function rulesPayload(rules: CallRules, withProduct = false) {
   const caps: Record<string, number> = {};
   for (const [user, cap] of Object.entries(rules.member_caps))
     if (Math.floor(Number(cap)) >= 1) caps[user] = Math.floor(Number(cap));
@@ -295,6 +400,8 @@ export function rulesPayload(rules: CallRules) {
     campaign_industry: rules.campaign_industry.trim(),
     campaign_state: rules.campaign_state.trim(),
     campaign_district: rules.campaign_district.trim(),
+    // an older TBO Smart refuses a field it doesn't know
+    ...(withProduct ? { campaign_product: rules.campaign_product.trim() } : {}),
     call_slots: rules.call_slots.map((s) => ({
       label: s.label.trim(),
       start_time: s.start_time,

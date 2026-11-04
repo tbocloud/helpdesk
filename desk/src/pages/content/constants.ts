@@ -77,6 +77,8 @@ export interface ContentPost {
   published_url?: string;
   // when the hub will post it to Facebook / Instagram (Publish to Meta)
   meta_publish_on?: string;
+  // a paid boost is or was running (Boost this post)
+  meta_boosted?: number;
   caption?: string;
   brief?: string;
   writer?: string;
@@ -174,6 +176,11 @@ export function textToHtml(text: string) {
     .split(/\n{2,}/)
     .map((para) => `<p>${escape(para).replace(/\n/g, "<br>")}</p>`)
     .join("");
+}
+
+// The copy is one line (a Data field) shown in a wrapping box: pasted line breaks become spaces
+export function oneLine(text: string) {
+  return text.replace(/\s*[\r\n]+\s*/g, " ");
 }
 
 // What a post is called: its copy, else its post type, then its ID, until the copy is written

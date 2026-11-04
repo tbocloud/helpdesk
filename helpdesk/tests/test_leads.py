@@ -15,6 +15,7 @@ from helpdesk.test_utils import (
     hold_commits,
     lead_department,
     lead_intake,
+    lead_product,
     make_sales_employee,
     make_team,
 )
@@ -539,6 +540,25 @@ class TestLeads(FrappeTestCase):
         self.assertEqual(
             leads_api.get_lead_departments()["departments"][0]["name"], "Sales Pod"
         )
+
+    def test_a_departments_products_and_campaign_product_are_saved_as_given(self):
+        self.crm.lead_answers["save_lead_department"] = lead_department(
+            products=(lead_product("PhoebiX", "Solar ERP"),)
+        )
+        values = {
+            "products": [
+                {
+                    "product_name": "PhoebiX",
+                    "is_active": 1,
+                    "intro_line": "Solar ERP",
+                    "previous_name": "Phoebix",
+                }
+            ],
+            "campaign_product": "PhoebiX",
+        }
+        saved = leads_api.save_lead_department(values, name="GrowthX")
+        self.assertEqual(saved["products"][0]["product_name"], "PhoebiX")
+        self.assertEqual(self.crm.lead_calls[-1][2]["values"], values)
 
     def test_a_department_is_saved_as_the_signed_in_person(self):
         self.crm.lead_answers["save_lead_department"] = lead_department()

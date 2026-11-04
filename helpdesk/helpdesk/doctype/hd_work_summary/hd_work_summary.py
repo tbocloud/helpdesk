@@ -69,12 +69,10 @@ def permission_query(user: str | None = None) -> str | None:
     )
 
 
-def has_permission(
-    doc, ptype: str | None = None, user: str | None = None
-) -> bool | None:
+def has_permission(doc, ptype: str | None = None, user: str | None = None) -> bool:
     user = user or frappe.session.user
     if is_tasky_admin(user):
-        return None
+        return True
     if is_sales_employee(user):
         return False
-    return None if doc.customer in managed_customers(user) else False
+    return doc.customer in managed_customers(user)

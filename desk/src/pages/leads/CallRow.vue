@@ -4,6 +4,26 @@
     :class="overdue ? 'border-danger' : 'border-outline-gray-2'"
   >
     <div class="flex min-w-0 flex-col gap-1">
+      <!-- what to say you are calling under: the product, else the department -->
+      <div
+        v-if="call.calling_for"
+        class="flex min-w-0 flex-col gap-0.5 rounded-lg bg-surface-gray-2 px-3 py-2"
+      >
+        <p
+          class="flex min-w-0 items-center gap-1.5 text-base-medium text-ink-gray-9"
+        >
+          <LucideBox
+            class="size-4 shrink-0 text-ink-gray-6"
+            aria-hidden="true"
+          />
+          <span class="truncate"
+            >{{ __("Calling for") }}: {{ call.calling_for }}</span
+          >
+        </p>
+        <p v-if="call.intro_line" class="text-p-sm text-ink-gray-7">
+          {{ call.intro_line }}
+        </p>
+      </div>
       <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
         <router-link
           :to="{ name: 'Lead', params: { leadId: call.lead } }"
@@ -67,7 +87,7 @@
       :class="CALL_BUTTON"
       :disabled="dialing"
       :aria-label="__('Call {0}', name)"
-      @click="emit('dial', call.lead)"
+      @click="emit('dial', call)"
     >
       <LucideLoaderCircle
         v-if="dialing"
@@ -82,6 +102,7 @@
       :href="`tel:${dialable}`"
       :class="CALL_BUTTON"
       :aria-label="__('Call {0}', name)"
+      @click="emit('dialed', call)"
     >
       <LucidePhone class="size-5" aria-hidden="true" />
       {{ __("Call") }}
@@ -111,6 +132,7 @@ import TaskyBadge from "@/components/TaskyBadge.vue";
 import { __ } from "@/translation";
 import { computed } from "vue";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
+import LucideBox from "~icons/lucide/box";
 import LucideFlame from "~icons/lucide/flame";
 import LucideInfo from "~icons/lucide/info";
 import LucideLoaderCircle from "~icons/lucide/loader-circle";
@@ -131,7 +153,9 @@ const props = defineProps<{
   overdue?: boolean;
 }>();
 const emit = defineEmits<{
-  (e: "dial", lead: string): void;
+  (e: "dial", call: QueueCall): void;
+  // the phone's own dialler was used: a result is expected when the person is back
+  (e: "dialed", call: QueueCall): void;
   (e: "outcome", call: QueueCall, outcome: CallOutcome): void;
 }>();
 

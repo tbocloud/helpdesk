@@ -13,12 +13,17 @@
     <Notifications />
     <CopilotChatPanel v-if="!isCustomerPortal" />
     <CommandPalette />
+    <PendingCalls v-if="authStore.isSalesEmployee && authStore.canUseLeads" />
   </div>
 </template>
 <script setup>
 import { Notifications, CommandPalette } from "@/components";
 import CopilotChatPanel from "@/components/copilot/CopilotChatPanel.vue";
 import { isCustomerPortal } from "@/utils";
+import PendingCalls from "@/pages/leads/PendingCalls.vue";
+import { useAuthStore } from "@/stores/auth";
 import AppHeader from "./AppHeader.vue";
 import Sidebar from "./Sidebar.vue";
+
+const authStore = useAuthStore();
 </script>

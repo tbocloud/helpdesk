@@ -1,4 +1,4 @@
-# Workspace pages: Overview, In progress, Scoreboard, Team, Summaries, Projects, My Work, Timesheets
+# Workspace pages: Overview, In progress, Scoreboard, Team, Project status, Summaries, Projects, My Work, Timesheets
 
 Pages for the people who run projects (what's late, who is doing what, what each customer was
 told) and for everyone doing the work (their projects, what to do next, the hours logged). They follow [ui-guidelines.md](ui-guidelines.md): neutral tiles, colour only
@@ -360,6 +360,13 @@ project they don't run (it returns no one).
   (shared with By person). With a filter, a person's load is still all their planned work,
   since their time is one pool.
 
+## Project status (`/project-status`)
+
+The coordinator's weekly status table, in the hub: one row per open project with the written
+stage, who it waits on and a few lines, beside the facts computed from its tasks, with an AI
+split for a spoken or pasted update, history and a PDF. Linked from the Team and Projects
+headers; members see their own projects. Full spec: [project-status-report.md](project-status-report.md).
+
 ## Summaries (`/work-summaries`)
 
 `desk/src/pages/work/WorkSummaries.vue`; API `helpdesk.api.work_summary.get_summaries(customer,
@@ -590,9 +597,9 @@ the person didn't pick, and drops a picked assignee the new project can't take (
 team, and the person can't bring them onto it). Phase
 suggestions are only offered on a project's own board.
 
-## Tasks: assigned by, on hold, moving, the timer
+## Tasks: assigned by, created by, on hold, moving, the timer
 
-### Assigned by
+### Assigned by and created by
 
 Every task payload (`get_task_detail`, `get_kanban_tasks`, `get_my_tasks`, and the task items
 of `get_my_work` and `get_overview`) carries `assigned_by` and `assigned_by_name`, added in
@@ -602,6 +609,15 @@ assignee's latest ToDo that wasn't cancelled (`assign_to` records `assigned_by`)
 created the task. The UI (`assignedByName()` in `taskMeta.ts`) shows it as muted "Assigned by
 …" text on board cards and My Work rows, as a row in the task details and in Edit task, and
 hides it when the assignee took the task themselves.
+
+Who created the task is kept apart from who gave it out: the same payloads carry `created_by`
+and `created_by_name` (`get_creators()` in `helpdesk/tasky/permissions.py`, two queries per
+list). That is the Task's `owner`, except for a content post's task, which names the post's
+creator: the task is made by whoever saves the post with someone on the part, often a lead
+assigning it later, who shows as "Assigned by" instead. `createdByName()` in `taskMeta.ts`
+shows it as a "Created by" row in the task details and in Edit task, and as "Created by …"
+before "Assigned by …" on board cards and My Work rows, where it is left out when the same
+person did both. Editing the post later doesn't change either: the task isn't recreated.
 
 ### New tasks
 
@@ -753,10 +769,19 @@ in `custom_timer_elapsed`. The server is the only record: the board derives each
 from those fields (`taskTimer()` in `taskMeta.ts`) and replaces its local state on every load.
 Pause calls `stop_timer` (banks the time, the task stays In progress) and Resume calls
 `start_timer`, which only works on a task In progress; resuming a card that left In progress
-moves it back there like a drop. Nothing else starts a paused timer, and starting one task never
-touches another's: there is no one-running-task rule. Before this, Pause only changed the
-board's local state, so the server timer kept running and the next load (moving or editing
-another task, or coming back to the board) showed the paused task running again.
+moves it back there like a drop. Nothing else starts a paused timer. A person may run timers on
+several tasks at once (owner's request, 2026-11-03): starting one (Resume, moving a task to In
+progress, resuming from hold) leaves their other running timers alone (`begin_timer` in
+`helpdesk/tasky/time_sessions.py`), and pausing one pauses only that one. The daily cap still
+holds a day to its work hours across all of them (`record_session` keeps no more than
+`day_left`). Before this, Pause only changed the board's local state, so the server
+timer kept running and the next load (moving or editing another task, or coming back to the
+board) showed the paused task running again.
+
+Every task In progress shows its timer, Paused at 0 when nothing is banked yet, with Resume.
+A stretch of a few seconds banks 0 h (sessions keep two decimals), and `taskTimer()` used to
+return no timer for a paused task with nothing banked, so a task paused that way showed no
+timer and no way to resume it.
 
 ### Dropping a card on In review or Completed
 
@@ -843,15 +868,22 @@ dialog and the reports (`helpdesk/work_hours.py`):
   resume." A run missed at the close (the scheduler down overnight) still stops it at that close
   once it runs, even inside the next window, so a timer never carries on into the next days and
   they aren't counted as worked; a timer still in the window it started in keeps running.
-- **One timer per person:** the task records whose timer runs (`custom_timer_user`). Starting a
-  timer (Start, moving a task to In progress, resuming from hold) pauses the person's other
-  running timer first and saves its session. Start is refused outside a window; moving a task to
-  In progress then leaves its timer paused.
+- **Several timers per person:** the task records whose timer runs (`custom_timer_user`), the
+  person its stretches are saved for. Starting a timer (Start, moving a task to In progress,
+  resuming from hold) doesn't touch the person's other running timers; it used to pause them
+  (one at a time) until the owner asked for several at once. Start is refused outside a window;
+  moving a task to In progress then leaves its timer paused.
 - **Daily cap:** per person per day, timesheet hours plus not-yet-logged sessions can't pass
   `max_hours(day)`. `complete_task` checks every day's hours against what is left (the task's own
   sessions are replaced by the dialog's rows, so they don't count against it). Typed-in hours
-  are for today or yesterday only; an older day takes only what the task's timer recorded on it,
-  unless a System Manager passes `backdate_reason`.
+  are for today and the working day before it only (`last_working_day`: the latest earlier day
+  with work hours, as the cap counts them, so Friday on a Monday even when Saturday is a working
+  day without SLA hours, and the day before a holiday after it; it looks back as far as the
+  task's creation, the earliest day hours can go on, and with no such day only today takes
+  typed-in hours); an
+  older day takes only what the task's timer recorded on it, the stretch still running included,
+  rounded to the nearest quarter hour as the dialog offers it (`timer_allowance`: 7.13 h may be
+  logged as 7.25), unless a System Manager passes `backdate_reason`.
 - **Reports:** hours per person per day come from timesheets (one per day worked, see above) and
   sessions, never from a completed task's `custom_actual_hours`. The Scoreboard's and the
   stand-up's hours (`team_dashboard.logged_hours`) scale a person's day down to `max_hours` for
@@ -937,7 +969,8 @@ the logic is `TaskActivity` in `helpdesk/task_activity.py`.
   All names come from one bulk User query (`user_full_names`) over `by` and the `to` of
   `assigned` / `unassigned` items (elsewhere `to` is a status, date or hours, not a person).
 - **Kinds and where they come from:**
-  - `created` — the Task's `owner` and `creation`; `origin` is `{type, name}` with type
+  - `created` — the Task's `owner` (for a content post's task, the post's creator, as
+    `get_creators()` gives it) and `creation`; `origin` is `{type, name}` with type
     `ticket` (`hd_ticket`), `content_post` (`content_post`), `recurring`
     (`custom_recurring_task`) or null.
   - `assigned` — one per ToDo on the task, any status: `to`, `to_name`, `by` = `assigned_by`

@@ -27,6 +27,7 @@ from helpdesk.tasky.permissions import (
     can_rate_task,
     check_can_take_content_task,
     get_assigners,
+    get_creators,
     is_assigner,
     is_project_owner,
     is_tasky_admin,
@@ -200,8 +201,9 @@ def _dependency_info(depends_on: str | None) -> dict:
 
 
 def add_assigners(tasks: list[dict]) -> list[dict]:
-    """Add who assigned each task (`assigned_by`, `assigned_by_name`) and whether
-    the viewer may move it to another project (`can_move`).
+    """Add who assigned each task (`assigned_by`, `assigned_by_name`), who created it
+    (`created_by`, `created_by_name`: for a content post's task, the post's creator) and
+    whether the viewer may move it to another project (`can_move`).
 
     Takes formatted tasks (name, project, status, assignees); a few queries for
     the whole list, plus one permission lookup per project.
@@ -210,12 +212,16 @@ def add_assigners(tasks: list[dict]) -> list[dict]:
     assigners = get_assigners(
         {t["name"]: t["assignees"][0] for t in tasks if t.get("assignees")}
     )
-    names = user_full_names(set(assigners.values()))
+    creators = get_creators([t["name"] for t in tasks])
+    names = user_full_names({*assigners.values(), *creators.values()})
     manages = {}
     for t in tasks:
         by = assigners.get(t["name"])
         t["assigned_by"] = by
         t["assigned_by_name"] = names.get(by, by) if by else None
+        creator = creators.get(t["name"])
+        t["created_by"] = creator
+        t["created_by_name"] = names.get(creator, creator) if creator else None
         project = t.get("project")
         if not project or t.get("status") in TASK_DONE:
             t["can_move"] = False
@@ -2297,8 +2303,8 @@ def start_timer(task: str):
 
     Only this task's timer, and only when asked: pausing (stop_timer) keeps the
     task in Working with its time banked, and nothing else starts it again. The
-    person's other running timer is paused first (one timer at a time), and
-    outside work hours it is refused.
+    person's timers on other tasks keep running (several at once), and outside
+    work hours it is refused.
     """
     task_id = str(task)
     frappe.has_permission("Task", "write", task_id, throw=True)
@@ -2308,8 +2314,7 @@ def start_timer(task: str):
     if status != "Working":
         frappe.throw(_("Start the task first; its timer runs while it's in progress."))
     if not running:
-        for other in begin_timer(task_id, frappe.session.user):
-            notify_task_list(other)
+        begin_timer(task_id, frappe.session.user)
         notify_task_list(task_id)
     return {"ok": 1}
 
@@ -2372,8 +2377,7 @@ def move_task(task: str, new_status: str):
     # Entering Working: start timer (fresh or resume)
     # (outside work hours the task goes in progress with its timer paused)
     if new_status == "Working":
-        for other in begin_timer(task_id, frappe.session.user, strict=False):
-            notify_task_list(other)
+        begin_timer(task_id, frappe.session.user, strict=False)
 
     # the controller checks dependencies, review and ticket hand-back
     status = _save_status(task_id, new_status)

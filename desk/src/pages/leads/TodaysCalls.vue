@@ -43,6 +43,14 @@
     />
 
     <template v-else>
+      <!-- what they call for now, and the switch; a department with one thing to call has none -->
+      <CallingFor
+        v-if="shown.focus_options?.length"
+        :focus="shown.focus ?? null"
+        :options="shown.focus_options"
+        @changed="reload"
+      />
+
       <!-- a failed update keeps the last queue, and says so -->
       <div
         v-if="myCalls.error"
@@ -74,6 +82,14 @@
             <h2 :id="ids.batch" class="text-lg-medium text-ink-gray-9">
               {{ shown.batch.slot }}
             </h2>
+            <!-- the product the next batches are for, when a manager set one -->
+            <p
+              v-if="shown.batch.campaign_product"
+              class="inline-flex items-center gap-1.5 text-sm text-ink-gray-8"
+            >
+              <LucideBox class="size-4 text-ink-gray-6" aria-hidden="true" />
+              {{ __("Calls for") }}: {{ shown.batch.campaign_product }}
+            </p>
             <span
               class="inline-flex items-center gap-1.5 text-sm tabular-nums"
               :class="hurry ? 'font-medium text-warning' : 'text-ink-gray-7'"
@@ -172,6 +188,7 @@
             :can-call="!!shown.can_call"
             :dialing="dialing === item.lead"
             @dial="dial"
+            @dialed="dialed"
             @outcome="answer"
           />
         </ul>
@@ -260,6 +277,7 @@
             :can-call="!!shown.can_call"
             :dialing="dialing === item.lead"
             @dial="dial"
+            @dialed="dialed"
             @outcome="answer"
           />
         </ul>
@@ -285,6 +303,7 @@ import { useDocumentVisibility, useIntervalFn, useNow } from "@vueuse/core";
 import { Button, call, dayjs, toast } from "frappe-ui";
 import { computed, ref, useId, watch } from "vue";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
+import LucideBox from "~icons/lucide/box";
 import LucideCalendarClock from "~icons/lucide/calendar-clock";
 import LucideCheckCheck from "~icons/lucide/check-check";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
@@ -293,6 +312,7 @@ import LucideClock from "~icons/lucide/clock";
 import LucideCloudOff from "~icons/lucide/cloud-off";
 import LucideInfo from "~icons/lucide/info";
 import LucidePhoneOff from "~icons/lucide/phone-off";
+import CallingFor from "./CallingFor.vue";
 import CallOutcomeDialog, { type OutcomeAnswer } from "./CallOutcomeDialog.vue";
 import CallRow from "./CallRow.vue";
 import {
@@ -306,6 +326,7 @@ import {
   type MyCalls,
   type QueueCall,
 } from "./callBatches";
+import { loadPendingCalls, startCall } from "./pendingCalls";
 import {
   leadOptions,
   loadLeadOptions,
@@ -399,8 +420,24 @@ const dialing = computed(() =>
 );
 
 /** MyOperator rings the person's phone, then the lead; without it the row's tel: link dials. */
-function dial(lead: string) {
-  clickToCall.submit({ name: lead });
+function dial(item: QueueCall) {
+  clickToCall.submit({ name: item.lead });
+  remember(item, "myoperator");
+}
+
+function dialed(item: QueueCall) {
+  remember(item, "phone");
+}
+
+/** A call placed: it waits for its result, and the result sheet follows. */
+function remember(item: QueueCall, via: "phone" | "myoperator") {
+  startCall({
+    lead: item.lead,
+    lead_name: item.summary.lead_name || item.summary.name,
+    phone: item.summary.phone,
+    item: item.item,
+    via,
+  });
 }
 
 // ---------- outcomes ----------
@@ -439,6 +476,7 @@ function save(item: QueueCall, value: OutcomeAnswer) {
   recording.submit(
     {
       batch_item: item.item,
+      lead: item.lead,
       outcome: value.outcome,
       note: value.note || null,
       callback_at: value.callback_at,
@@ -476,6 +514,7 @@ function moveStage(item: QueueCall, value: OutcomeAnswer) {
 
 /** Once nothing is in flight the queue is read again, which also brings a retry or call back. */
 function settle() {
+  loadPendingCalls();
   if (!inflight) reload();
 }
 

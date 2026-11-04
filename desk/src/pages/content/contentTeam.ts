@@ -30,6 +30,14 @@ export const DM_EMPLOYEE_HIDDEN_ROUTES = new Set([
 // Also hidden from ERP Employees, who are never in the content team
 export const ERP_EMPLOYEE_HIDDEN_ROUTES = new Set(["WorkCalendar"]);
 
+// Add a lead, My leads and the managers' Team page: open to every active agent whatever their
+// wall, while Leads is on (authStore.canUseLeadBank, docs/lead-bank.md)
+export const LEAD_BANK_ROUTES = new Set([
+  "LeadBank",
+  "LeadBankAdd",
+  "LeadBankTeam",
+]);
+
 // All a Sales Employee opens (authStore.isSalesEmployee): an allow list, so a page
 // added later stays out of their way until someone decides it's a sales page. Every
 // other route goes to Leads, Home included: Home is their tasks and tickets.
@@ -41,6 +49,7 @@ export const SALES_EMPLOYEE_ROUTES = new Set([
   "TeamDashboard",
   "Notifications",
   "Invalid Page",
+  ...LEAD_BANK_ROUTES,
 ]);
 
 export const CONTENT_TEAM_ROUTES = new Set([
@@ -63,4 +72,5 @@ export const CONTENT_TEAM_ROUTES = new Set([
   "WorkCalendar",
   "TaskyTimesheets",
   "Notifications",
+  ...LEAD_BANK_ROUTES,
 ]);

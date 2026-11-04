@@ -15,6 +15,14 @@
       "
     />
 
+    <p v-if="!rules.call_batches_enabled" class="text-p-sm text-ink-gray-7">
+      {{
+        __(
+          "Turn on daily call batches so its members can call from Today's calls."
+        )
+      }}
+    </p>
+
     <template v-if="rules.call_batches_enabled">
       <div class="flex flex-col gap-2">
         <FormLabel :label="__('Time slots')" size="md" />
@@ -95,6 +103,27 @@
         "
       />
 
+      <div v-if="products.length" class="flex flex-col gap-1.5">
+        <FormControl
+          v-model="rules.campaign_product"
+          type="select"
+          :label="__('Calls for product')"
+          :options="productChoices"
+        />
+        <p class="text-p-xs text-ink-gray-6">
+          {{
+            rules.campaign_product
+              ? __(
+                  "New leads in the next batches are only {0} leads, and callers see “Calling for: {0}”. Follow-ups due are always included.",
+                  rules.campaign_product
+                )
+              : __(
+                  "Pick a product to give the next batches only its leads. Follow-ups due are always included."
+                )
+          }}
+        </p>
+      </div>
+
       <details class="group">
         <summary
           class="cursor-pointer rounded text-sm text-ink-gray-7 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
@@ -160,12 +189,25 @@
 <script setup lang="ts">
 import { __ } from "@/translation";
 import { Button, FormControl, FormLabel, Switch } from "frappe-ui";
+import { computed } from "vue";
 import LucidePlus from "~icons/lucide/plus";
 import LucideTrash2 from "~icons/lucide/trash-2";
 import type { CallRules } from "@/pages/leads/callBatches";
 
 const rules = defineModel<CallRules>({ required: true });
-defineProps<{ members: { label: string; value: string }[] }>();
+const props = withDefaults(
+  defineProps<{
+    members: { label: string; value: string }[];
+    /** the department's products that are on */
+    products?: string[];
+  }>(),
+  { products: () => [] }
+);
+
+const productChoices = computed(() => [
+  { label: __("Any product"), value: "" },
+  ...props.products.map((p) => ({ label: p, value: p })),
+]);
 
 function addSlot() {
   const last = rules.value.call_slots.at(-1);

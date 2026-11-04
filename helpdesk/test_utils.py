@@ -3686,6 +3686,16 @@ def enable_leads(teams: tuple[str, ...] = ()):
     frappe.cache.delete_keys("hd_leads:")
 
 
+def lead_product(name: str, intro_line: str = "", is_active: int = 1) -> dict:
+    """A product / brand of a lead department, as the ERP site lists it."""
+    return {
+        "product_name": name,
+        "is_active": is_active,
+        "intro_line": intro_line,
+        "website": "",
+    }
+
+
 def lead_department(
     name: str = "GrowthX",
     lead_type: str = "Content / Digital Marketing",
@@ -3694,9 +3704,10 @@ def lead_department(
     is_active: int = 1,
     assignment: str = "Manual",
     stale_after_days: int = 3,
+    products: tuple[dict, ...] = (),
 ) -> dict:
     """A lead department as the ERP site's get_lead_departments and save_lead_department
-    answer it."""
+    answer it (`products`: see lead_product)."""
     return {
         "name": name,
         "department_name": name,
@@ -3706,6 +3717,7 @@ def lead_department(
         "stale_after_days": stale_after_days,
         "heads": [{"user": u, "full_name": u} for u in heads],
         "members": [{"user": u, "full_name": u} for u in members],
+        "products": list(products),
     }
 
 
@@ -3719,6 +3731,41 @@ def lead_category_options() -> dict:
         "kerala_districts": ["Kozhikode", "Ernakulam"],
         "districts_by_state": {"Kerala": ["Kozhikode"], "": ["Chennai"]},
     }
+
+
+def bd_options(
+    member_of: tuple[str, ...] = ("GrowthX",), head_of: tuple[str, ...] = ()
+) -> dict:
+    """The ERP site's get_options for a salesperson: a department each for `member_of` (calls
+    handed out in batches) and `head_of` (is_head)."""
+    return {
+        "stages": [],
+        "departments": [
+            {
+                "name": name,
+                "is_member": 1,
+                "is_head": 0,
+                "call_batches_enabled": 1,
+                "products": [],
+            }
+            for name in member_of
+        ]
+        + [
+            {
+                "name": name,
+                "is_member": 0,
+                "is_head": 1,
+                "call_batches_enabled": 1,
+                "products": [],
+            }
+            for name in head_of
+        ],
+    }
+
+
+def clear_pending_calls() -> None:
+    """Forgets every person's calls without a result (the cache outlives a test)."""
+    frappe.cache.delete_keys("hd_pending_calls:")
 
 
 def stale_lead(name: str, idle_days: int, **fields) -> dict:
@@ -5352,6 +5399,99 @@ def make_approved_post(title: str, customer: str, status: str = "Approved", **va
     )
 
 
+def enable_meta_ads():
+    """Switches on Enable Ads in HD Meta Settings (after enable_meta)."""
+    frappe.db.set_single_value("HD Meta Settings", "ads_enabled", 1)
+    frappe.clear_cache(doctype="HD Meta Settings")
+
+
+def make_ads_connection(project: str, **values):
+    """A Connected HD Meta Connection that may run ads: an Active INR ad account, a user
+    token, and a monthly cap of 10,000 unless `monthly_ad_cap` is given."""
+    return make_meta_connection(
+        project,
+        ads_allowed=1,
+        user_access_token="user-token",
+        ad_account_id="act_100",
+        ad_account_name="Client Ads",
+        ad_account_currency="INR",
+        ad_account_status="Active",
+        monthly_ad_cap=10000,
+        **values,
+    )
+
+
+def publish_post_on_meta(post: str, *targets: str, link: str | None = None):
+    """Marks a content post Published on these targets (default Facebook), the way the
+    publisher leaves it: a Published row per target with its Meta post id."""
+    ids = {"Facebook": "page-1_555", "Instagram": "ig-media-9"}
+    doc = frappe.get_doc("HD Content Post", post)
+    for target in targets or ("Facebook",):
+        doc.append(
+            "meta_publishes",
+            {
+                "target": target,
+                "status": "Published",
+                "publish_kind": "Image",
+                "meta_post_id": ids[target],
+                "permalink": f"https://example.com/{target.lower()}",
+                "link": link,
+            },
+        )
+    doc.status = "Published"
+    doc.published_url = "https://example.com/facebook"
+    doc.save(ignore_permissions=True)
+    return doc
+
+
+def boost_values(**overrides) -> dict:
+    """What the Boost dialog sends: Facebook, more reach, 500 a day for 5 days from today,
+    Kerala's region and ages 18 to 55."""
+    from frappe.utils import add_days, today
+
+    return {
+        "target": "Facebook",
+        "goal": "More reach",
+        "budget_type": "Per day",
+        "budget_amount": 500,
+        "start_date": today(),
+        "end_date": add_days(today(), 4),
+        "audience": {
+            "locations": [{"type": "region", "key": "1234", "name": "Kerala"}],
+            "age_min": 18,
+            "age_max": 55,
+            "interests": [],
+            "advantage_audience": True,
+        },
+        **overrides,
+    }
+
+
+def ads_graph_routes(**overrides) -> dict:
+    """FakeGraph routes for a boost that Meta accepts and that then shows its numbers."""
+    return {
+        "POST act_100/campaigns": {"id": "c-100"},
+        "POST act_100/adsets": {"id": "s-200"},
+        "POST act_100/ads": {"id": "a-300"},
+        "POST c-100": {"success": True},
+        "POST s-200": {"success": True},
+        "POST a-300": {"success": True},
+        "GET a-300": {"effective_status": "ACTIVE"},
+        "GET a-300/insights": {
+            "data": [
+                {
+                    "spend": "120.50",
+                    "reach": "4000",
+                    "impressions": "5200",
+                    "clicks": "80",
+                    "actions": [{"action_type": "post_engagement", "value": "60"}],
+                }
+            ]
+        },
+        **overrides,
+    }
+
+
 class FakeGraph:
     """Stands in for Meta's Graph API: patch `requests` in the graph client with `patch()`.
 
@@ -5470,10 +5610,12 @@ def my_calls(
     overdue: tuple[dict, ...] = (),
     called: int = 0,
     enabled: bool = True,
+    batch_fields: dict | None = None,
     **fields,
 ) -> dict:
     """A get_my_calls answer: a Morning batch of `called` + the pending calls, with
-    `overdue` after it and the next batch refused until the pending ones are done."""
+    `overdue` after it and the next batch refused until the pending ones are done
+    (`batch_fields` add to the batch, e.g. campaign_product)."""
     size = called + len(pending)
     return {
         "enabled": enabled,
@@ -5486,6 +5628,7 @@ def my_calls(
             "ends_at": "2026-10-30 13:00:00",
             "seconds_left": 5400,
             "batches": ["CB-261030-0001"],
+            **(batch_fields or {}),
         },
         "counts": {
             "size": size,
@@ -5548,6 +5691,75 @@ def prospect_run(name: str = "PR-0001", **fields) -> dict:
         "owner_name": "Mia Manager",
         **fields,
     }
+
+
+WHATSAPP_INBOX = 9
+WHATSAPP_LEAD_PHONE = "+919847012345"
+
+
+def whatsapp_template_row(**fields) -> dict:
+    """An approved WhatsApp template as the settings table holds it: tbo_intro, with the lead's
+    first name in {{1}} and the Why call line in {{2}}."""
+    return {
+        "template_name": "tbo_intro",
+        "language": "en",
+        "enabled": 1,
+        "is_default": 1,
+        "body": "Hi {{1}}, this is TBO. {{2}}. Can we talk?",
+        "variables": "name,why_call",
+        **fields,
+    }
+
+
+def enable_whatsapp_outreach(templates: list[dict] | None = None, **values):
+    """TBO Chat on with WhatsApp inbox 9, automatic sending on, country code 91 and the given
+    templates (default: tbo_intro); `values` override any settings field."""
+    return enable_chatwoot_bridge(
+        **{
+            "whatsapp_inbox_id": WHATSAPP_INBOX,
+            "whatsapp_country_code": "91",
+            "whatsapp_auto_send": 1,
+            "whatsapp_templates": [whatsapp_template_row()]
+            if templates is None
+            else templates,
+            **values,
+        }
+    )
+
+
+def whatsapp_queue_row(name: str = "OUT-00001", **fields) -> dict:
+    """A queued message as the ERP site's get_whatsapp_queue hands it out: a first message
+    to Palm Resort outside the 24-hour window."""
+    return {
+        "name": name,
+        "lead": "CRM-LEAD-1",
+        "to": WHATSAPP_LEAD_PHONE,
+        "body": "Hi, we help resorts take bookings online.",
+        "lead_name": "Palm Resort",
+        "first_name": "Palm",
+        "company_name": "Palm Resort",
+        "why_call": "You take bookings by phone only",
+        "contact_id": None,
+        "conversation_id": None,
+        "window_open": False,
+        **fields,
+    }
+
+
+def make_whatsapp_payload(event: str = "message_created", **overrides) -> dict:
+    """A Chatwoot webhook payload for the WhatsApp inbox (id 9) from the lead's number. A
+    `status` makes it a delivery receipt (message_updated, an outgoing message)."""
+    status = overrides.pop("status", None)
+    overrides.setdefault("inbox_id", WHATSAPP_INBOX)
+    overrides.setdefault("phone", WHATSAPP_LEAD_PHONE)
+    overrides.setdefault("channel", "Channel::Whatsapp")
+    if status:
+        overrides.setdefault("message_type", "outgoing")
+        overrides.setdefault("sender_type", "user")
+    payload = make_chatwoot_payload(event, **overrides)
+    if status:
+        payload["status"] = status
+    return payload
 
 
 def outreach_message(name: str = "OUT-00001", **fields) -> dict:
@@ -5658,3 +5870,161 @@ def commission_month(rows: list[dict] | None = None, **fields) -> dict:
         "unattributed": None,
         **fields,
     }
+
+
+def make_status_update(project: str, days_ago: int = 0, **values):
+    """Writes an HD Project Status Update for `project` (stage Development, waiting on
+    nothing unless `values` say otherwise) and dates it `days_ago` days back, as the
+    Friday report and the stale reminder read its age from its creation."""
+    doc = frappe.get_doc(
+        {
+            "doctype": "HD Project Status Update",
+            "project": project,
+            "stage": "Development",
+            "waiting_on": "Nothing",
+            **values,
+        }
+    ).insert(ignore_permissions=True)
+    if days_ago:
+        doc.db_set("creation", add_to_date(now_datetime(), days=-days_ago))
+    return doc
+
+
+def make_held_task(project: str, subject: str, reason: str, days_ago: int = 0):
+    """An On Hold task in `project` held for `reason` since `days_ago` days back."""
+    return make_task_in_status(
+        project,
+        subject,
+        "On Hold",
+        hold_reason=reason,
+        hold_since=add_to_date(getdate(), days=-days_ago),
+    )
+
+
+def age_project(project: str, days: int):
+    """Makes `project` look `days` days old, for the stale reminder that counts from
+    the day a project started when it never had an update."""
+    frappe.db.set_value(
+        "Project",
+        project,
+        "creation",
+        add_to_date(now_datetime(), days=-days),
+        update_modified=False,
+    )
+
+
+def status_split_answer(*updates: dict) -> dict:
+    """What call_haiku returns when the AI splits a weekly update into `updates`."""
+    return {"response": {"updates": list(updates)}, "usage": {}, "cost": 0}
+
+
+def set_status_report_recipients(*users: str):
+    """Names who gets the Friday project status report in HD Work Settings."""
+    return set_work_settings(
+        status_report_recipients=[{"user": user} for user in users]
+    )
+
+
+def adoption_finding(report: dict, key: str) -> dict | None:
+    """The finding of the Adoption report with id `key`, or None."""
+    return next((f for f in report["findings"] if f["id"] == key), None)
+
+
+def adoption_person(report: dict, user: str) -> dict:
+    """`user`'s row in the Adoption report's people table."""
+    return next(p for p in report["people"] if p["user"] == user)
+
+
+def age_content_post(post: str, days: int):
+    """Makes the content post `post` look untouched for `days` days."""
+    frappe.db.set_value(
+        "HD Content Post",
+        post,
+        "modified",
+        add_to_date(now_datetime(), days=-days),
+        update_modified=False,
+    )
+
+
+def make_content_edits(post: str, user: str, count: int):
+    """Records `count` edits of the content post `post` by `user`, as the Version log keeps
+    them for the content calendar."""
+    for _i in range(count):
+        version = frappe.get_doc(
+            {
+                "doctype": "Version",
+                "ref_doctype": "HD Content Post",
+                "docname": post,
+                "data": "{}",
+            }
+        ).insert(ignore_permissions=True)
+        frappe.db.set_value("Version", version.name, "owner", user)
+
+
+def age_ticket(ticket: str, hours: int, **values):
+    """Makes the ticket `ticket` look `hours` hours old, with any other `values` (for
+    example agreement_status) set straight in the database."""
+    frappe.db.set_value(
+        "HD Ticket",
+        ticket,
+        {"creation": add_to_date(now_datetime(), hours=-hours), **values},
+        update_modified=False,
+    )
+
+
+BUSINESS_HEALTH_CHECK_LINK = "https://example.com/results/#id=1&k=" + "a" * 24
+
+
+def make_business_health_check(**values):
+    """Inserts a Business Health Check like the TBO website sends one: a report link
+    (BUSINESS_HEALTH_CHECK_LINK unless given) plus any of business_name, contact_name,
+    phone and email."""
+    return frappe.get_doc(
+        {
+            "doctype": "Business Health Check",
+            "report_link": BUSINESS_HEALTH_CHECK_LINK,
+            **values,
+        }
+    ).insert()
+
+
+# ---------- Lead Bank (docs/lead-bank.md) ----------
+
+
+def make_jpeg_photo(filename: str = "board.jpg") -> dict:
+    """A small real JPEG as the Lead Bank takes a photo: {filename, content (base64)}."""
+    import base64
+
+    from PIL import Image
+
+    image = io.BytesIO()
+    Image.new("RGB", (8, 8), "white").save(image, format="JPEG")
+    return {
+        "filename": filename,
+        "content": base64.b64encode(image.getvalue()).decode(),
+    }
+
+
+def ai_reading(**fields) -> dict:
+    """What ai_engine.call_haiku answers when it reads a photo of a shop: a shop board's
+    details unless `fields` change them."""
+    return {
+        "response": {
+            "company_name": "Sree Krishna Jewellers",
+            "contact_name": "Ravi Kumar",
+            "phones": ["+91 98470 12345", "0481 234 5678"],
+            "email": "Sales@SreeKrishna.example",
+            "website": "www.sreekrishna.example",
+            "business_type": "Jewellery shop",
+            "address": "MG Road, Kottayam",
+            "state": "Kerala",
+            **fields,
+        },
+        "usage": {"input_tokens": 100, "output_tokens": 50},
+        "cost": 0,
+    }
+
+
+def clear_lead_bank_scan_limit(user: str) -> None:
+    """Forget how many photo readings `user` has made this hour."""
+    frappe.cache.delete(frappe.cache.make_key(f"lead_bank_scans:{user}"))

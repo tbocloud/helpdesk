@@ -16,7 +16,9 @@ from frappe.utils import (
     today,
 )
 
-from helpdesk.content_team import only_sales_team
+from helpdesk import whatsapp_outreach
+from helpdesk.api import pending_calls
+from helpdesk.content_team import is_sales_bd_role, only_sales_team
 from helpdesk.integrations.crm.leads import (
     LeadsError,
     LeadsUnavailableError,
@@ -77,6 +79,30 @@ OPTIONS_TTL = 600
 DEFAULT_STALE_DAYS = 3
 
 
+def is_bd() -> bool:
+    """The signed-in person is a BD: a Sales Employee who is no manager and heads no
+    department. They call the leads that come to them and see nothing of the team's, so
+    nobody else's lead is ever theirs to call (docs/leads.md, "BD view"). When the ERP site
+    can't say whether they head a department they are treated as a BD."""
+    if not is_sales_bd_role():
+        return False
+    try:
+        departments = read_options(0).get("departments") or []
+    except LeadsError:
+        frappe.clear_last_message()
+        return True
+    return not any(d.get("is_head") for d in departments)
+
+
+def refuse_bd() -> None:
+    """For the screens that show the team's figures and the tools for managers."""
+    if is_bd():
+        frappe.throw(
+            _("This is for managers. Use Today's calls and My leads."),
+            frappe.PermissionError,
+        )
+
+
 def cached_read(part: str, params: dict, ttl: int, fresh, read, keep=bool):
     """`read()`'s answer, from the signed-in person's cache while it is fresh enough.
     `fresh` skips the cache and renews it. A failed read caches nothing, nor does an
@@ -106,7 +132,13 @@ def get_options(fresh: int | str = 0) -> dict:
     require_leads()
     options = read_options(fresh)
     deployed = report_deployed()
-    return {**options, "can_log_call": deployed, "has_daily_report": deployed}
+    return {
+        **options,
+        "can_log_call": deployed,
+        "has_daily_report": deployed,
+        # a BD gets Today's calls, My leads and Follow-up only
+        "is_bd": is_bd(),
+    }
 
 
 def read_options(fresh: int | str = 0) -> dict:
@@ -137,8 +169,9 @@ def list_leads(
     org_size: list | str | None = None,
     last_call_result: list | str | None = None,
     last_reply_class: list | str | None = None,
+    product: list | str | None = None,
 ) -> dict:
-    """A page of leads. `industry`, `state`, `district`, `org_size`, `last_call_result`
+    """A page of leads. `industry`, `state`, `district`, `org_size`, `product`, `last_call_result`
     (the outcome of the lead's last call) and `last_reply_class` (how its last email reply
     was sorted) each take one value or a list (any of them); a
     list goes to the ERP site as JSON. `metric` with its period keeps the leads one number of the
@@ -147,6 +180,10 @@ def list_leads(
     require_leads()
     if view not in VIEWS:
         frappe.throw(_("Pick All, Mine, Call today or Follow-up."))
+    if is_bd():
+        # another BD may be calling the same lead: a BD's list is their own leads
+        view = "mine" if view == "all" else view
+        owner = None
     if period:
         check_period(period, from_date, to_date, dates_required=bool(metric))
     when = {"period": None, "from_date": None, "to_date": None}
@@ -173,6 +210,7 @@ def list_leads(
             state=state,
             district=district,
             org_size=org_size,
+            product=product,
             last_call_result=check_call_results(last_call_result),
             last_reply_class=check_reply_classes(last_reply_class),
         ),
@@ -227,6 +265,7 @@ def get_overview(
     """The Overview: the pipeline, the funnel and the period's figures for the
     leads the signed-in person may see (theirs, their team's or everyone's)."""
     require_leads()
+    refuse_bd()
     check_period(period, from_date, to_date)
     return read_overview(period, from_date, to_date, owner, fresh)
 
@@ -248,6 +287,7 @@ def get_lead_intake(fresh: int | str = 0) -> dict:
     daily target from HD CRM Settings (0: none). `available` is false while the ERP
     site's TBO Smart is older than this, so the page leaves the strip out."""
     require_leads()
+    refuse_bd()
     return read_lead_intake(fresh)
 
 
@@ -300,6 +340,7 @@ def get_proposal_money(
     period, and every payment split still to come in. `available` is false while the
     ERP site's TBO Smart is older than this."""
     require_leads()
+    refuse_bd()
     check_period(period, from_date, to_date)
     return read_proposal_money(period, from_date, to_date, owner, fresh)
 
@@ -331,6 +372,7 @@ def get_business_overview(
     (System Manager or its TBO Management role) and nowhere else: a refusal there is a
     403 here. `available` is false while the ERP site's TBO Smart is older than this."""
     require_leads()
+    refuse_bd()
     start, end = business_range(period, from_date, to_date)
     params = {
         "from_date": str(start),
@@ -396,6 +438,7 @@ def get_overview_page(
     instead of as parallel requests that wait on each other. Money and intake are
     optional: one that fails leaves the overview whole and says why in `errors`."""
     require_leads()
+    refuse_bd()
     check_period(period, from_date, to_date)
     page = {
         "overview": read_overview(period, from_date, to_date, owner, fresh),
@@ -430,6 +473,7 @@ def get_daily_report(
     from helpdesk.daily_sales_report import prepare
 
     require_leads()
+    refuse_bd()
     day = getdate(date) if date else getdate(today())
     result = cached_read(
         "daily_report",
@@ -501,6 +545,7 @@ def log_call(
             LeadsUnavailableError,
         )
     clear_cached_reads()
+    pending_calls.resolve(lead=lead)
     return logged
 
 
@@ -536,7 +581,10 @@ def erp_period(period: str, from_date: str | None, to_date: str | None) -> dict:
 def get_lead(name: str) -> dict:
     """The lead, its timeline, its quotations and the stages it may move to."""
     require_leads()
-    return call("get_lead", name=name) or {}
+    detail = call("get_lead", name=name) or {}
+    if detail.get("lead", {}).get("whatsapp") is not None:
+        detail["lead"]["whatsapp_box"] = whatsapp_outreach.lead_box(detail["lead"])
+    return detail
 
 
 @frappe.whitelist()
@@ -561,7 +609,8 @@ def get_lead_departments(fresh: int | str = 0) -> dict:
 @frappe.whitelist(methods=["POST"])
 def save_lead_department(values: dict | str, name: str | None = None) -> dict:
     """Adds a lead department (or edits `name`): `department_name`, `lead_type`,
-    `is_active`, `heads` and `members` (users). Only System Managers and Sales Managers
+    `is_active`, `heads` and `members` (users), `products` (the names callers call under,
+    each with an intro line and an on/off switch) and the call-batch rules. Only System Managers and Sales Managers
     on the ERP site may; it says so when it refuses."""
     require_leads()
     return change_department(
@@ -701,7 +750,7 @@ def update_lead(name: str, data: dict | str) -> dict:
 @frappe.whitelist()
 def get_category_counts(fresh: int | str = 0) -> dict:
     """How many of the person's leads have each industry, state, district,
-    organisation size and last call result, for the list's filter counts. Empty on an older TBO Smart, where
+    organisation size, product and last call result, for the list's filter counts. Empty on an older TBO Smart, where
     the filters simply show no counts."""
     require_leads()
     return (
@@ -736,8 +785,9 @@ def add_industry(name: str) -> dict:
 
 @frappe.whitelist(methods=["POST"])
 def bulk_set_lead_category(leads: list | str, values: dict | str) -> dict:
-    """Sets industry, state, district and/or organisation size (`values`; an empty value
-    clears one) on many leads: {updated, skipped}. Managers only."""
+    """Sets industry, state, district, organisation size and/or product (`values`; an empty
+    value clears one) on many leads: {updated, skipped}. Managers only; a department's head may
+    set the product alone."""
     require_leads()
     names = as_list(leads)
     if not names:
@@ -745,7 +795,7 @@ def bulk_set_lead_category(leads: list | str, values: dict | str) -> dict:
     return category_write(
         "bulk_set_lead_category",
         _(
-            "Only a System Manager or Sales Manager on the ERP site can set categories in bulk."
+            "Only a System Manager or Sales Manager on the ERP site can set categories in bulk. A department head may set the product."
         ),
         leads=names,
         values=parse_data(values),

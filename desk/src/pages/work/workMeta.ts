@@ -48,6 +48,8 @@ export interface WorkItem {
   /** Tasks: who gave it to its assignee. */
   assigned_by?: string | null;
   assigned_by_name?: string | null;
+  created_by?: string | null;
+  created_by_name?: string | null;
   /** My Work's Assigned by me: the people the assigner gave the task to. */
   given_to?: string[];
   /** My Work, the viewer's own tasks: given to them since they last opened it. */

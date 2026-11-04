@@ -50,10 +50,23 @@ export interface LeadOptions {
   /** the signed-in person may open Find prospects (managers and department heads, while it is
    * on); absent from an older TBO Smart */
   can_find_prospects?: boolean;
+  /** a salesperson who is no manager or head: Today's calls, their own leads and follow-ups only */
+  is_bd?: boolean;
   prospecting?: ProspectingOptions | null;
   /** Outreach is on (first messages a person approves): the Outreach tab shows; absent from
    * an older TBO Smart */
   outreach?: boolean;
+}
+
+/** A product or brand a department's people call under (PhoebiX under GrowthX). */
+export interface LeadProduct {
+  product_name: string;
+  is_active: boolean | number;
+  /** the line to say on the call, e.g. "PhoebiX - solar ERP for installers" */
+  intro_line?: string;
+  website?: string;
+  /** when editing: the name it had, so renaming it moves its leads */
+  previous_name?: string;
 }
 
 /** A department as `get_options` lists it, with the signed-in person's part in it. */
@@ -68,6 +81,8 @@ export interface LeadDepartmentOption {
   /** how a lead with no owner is given one (absent from an older TBO Smart) */
   assignment?: LeadAssignment;
   stale_after_days?: number;
+  /** the active products / brands (absent from an older TBO Smart; empty: none) */
+  products?: LeadProduct[];
 }
 
 export type LeadAssignment = "Manual" | "Round robin";
@@ -84,6 +99,10 @@ export interface LeadDepartment {
   stale_after_days?: number;
   heads: { user: string; full_name?: string }[];
   members: { user: string; full_name?: string }[];
+  /** every product / brand, switched-off ones too (absent from an older TBO Smart) */
+  products?: LeadProduct[];
+  /** the product the department's batches call for ("" for any) */
+  campaign_product?: string;
 }
 
 /** A lead that shares an email, phone or company with the one being entered. */
@@ -148,6 +167,8 @@ export interface LeadRow {
   owner_name?: string;
   tbo_department?: string | null;
   tbo_lead_type?: string | null;
+  /** the product / brand it belongs to under its department (absent from an older TBO Smart) */
+  product?: string | null;
   industry?: string | null;
   state?: string | null;
   district?: string | null;
@@ -246,7 +267,7 @@ export type LeadView = "all" | "mine" | "call_today" | "follow_up";
 
 export const LEAD_VIEWS: { value: LeadView; label: string }[] = [
   { value: "all", label: __("All") },
-  { value: "mine", label: __("Mine") },
+  { value: "mine", label: __("My leads") },
   { value: "call_today", label: __("Call today") },
   { value: "follow_up", label: __("Follow-up") },
 ];
@@ -267,6 +288,7 @@ export interface LeadForm {
   lead_owner: string;
   next_follow_up: string;
   tbo_department: string;
+  product: string;
 }
 
 export const LEAD_FORM_FIELDS: (keyof LeadForm)[] = [
@@ -284,6 +306,7 @@ export const LEAD_FORM_FIELDS: (keyof LeadForm)[] = [
   "lead_owner",
   "next_follow_up",
   "tbo_department",
+  "product",
 ];
 
 /** One entry of a lead's timeline, newest first (TBO Smart's hub-leads-api.md). */
@@ -297,7 +320,8 @@ export interface LeadTimelineEntry {
     | "stage"
     | "quotation"
     | "ai"
-    | "proposal";
+    | "proposal"
+    | "whatsapp";
   /** when it happened (a date only for a quotation) */
   at?: string | null;
   who?: string | null;
@@ -310,6 +334,7 @@ export interface LeadTimelineEntry {
   call?: string;
   /** talk time in seconds */
   duration?: number;
+  /** a call's, or for a WhatsApp message: what the lead wrote (incoming) or we sent */
   direction?: "incoming" | "outgoing" | null;
   status?: "answered" | "missed" | "voicemail" | null;
   /** the call's name when it has a recording (played through call_recording) */
@@ -346,6 +371,26 @@ export interface LeadQuotation {
   url?: string | null;
 }
 
+export interface LeadWhatsApp {
+  /** the lead's number, +E.164 */
+  to: string | null;
+  conversation_id: string | null;
+  last_in: string | null;
+  /** the lead wrote in the last 24 hours, so free text may be sent */
+  window_open: boolean;
+  window_ends: string | null;
+  /** why nothing may be sent (unsubscribed, lost, no number) */
+  blocked: string | null;
+}
+
+/** What the hub adds: TBO Chat's state and the approved templates, filled for this lead. */
+export interface LeadWhatsAppBox {
+  chat_ready: boolean;
+  chat_url: string | null;
+  templates: { name: string; preview: string; is_default: boolean }[];
+  hint: string;
+}
+
 export interface LeadDetail {
   lead: LeadRow &
     Partial<LeadForm> &
@@ -355,6 +400,9 @@ export interface LeadDetail {
       photo_count?: number;
       /** what the lead's website says, for a lead found by Find prospects */
       prospect?: LeadProspect | null;
+      /** the WhatsApp conversation (TBO Smart's hub-leads-api.md §2.19) */
+      whatsapp?: LeadWhatsApp;
+      whatsapp_box?: LeadWhatsAppBox;
     };
   timeline: LeadTimelineEntry[];
   quotations: LeadQuotation[];
@@ -434,6 +482,41 @@ export function ownDepartment(options: LeadOptions | undefined) {
   return own.length === 1 ? own[0].name : "";
 }
 
+/** The active products / brands of a department (and the one a lead already has), in order. */
+export function productsOf(
+  options: LeadOptions | undefined,
+  department: string,
+  keep = ""
+) {
+  const products =
+    options?.departments?.find((d) => d.name === department)?.products ?? [];
+  const names = products.map((p) => p.product_name);
+  return keep && !names.includes(keep) ? [keep, ...names] : names;
+}
+
+/** Every active product name across the departments, once each (the bulk picker, the filter). */
+export function allProducts(options: LeadOptions | undefined) {
+  return [
+    ...new Set(
+      (options?.departments ?? []).flatMap((d) =>
+        (d.products ?? []).map((p) => p.product_name)
+      )
+    ),
+  ];
+}
+
+/** Only managers and the department's head may set a product (the ERP site enforces it). */
+export function canSetProduct(
+  options: LeadOptions | undefined,
+  department: string,
+  isManager: boolean
+) {
+  return (
+    isManager ||
+    !!options?.departments?.find((d) => d.name === department)?.is_head
+  );
+}
+
 /** "GrowthX · ERP / Software" for a lead's row; empty without a department. */
 export function departmentLabel(row: LeadRow) {
   return [row.tbo_department, row.tbo_lead_type].filter(Boolean).join(" · ");
@@ -448,6 +531,8 @@ export interface LeadCategories {
   state: string[];
   district: string[];
   org_size: string[];
+  /** the product / brand under a department */
+  product: string[];
   /** the outcome of the lead's last call: Connected, Not answered, … */
   last_call_result: string[];
   /** how the lead's last email reply was sorted: Interested, Question, Not now, … */

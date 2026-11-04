@@ -61,6 +61,13 @@ export default defineConfig(async ({ mode }) => {
           scope: "/helpdesk/",
           description:
             "Modern, Streamlined, Free and Open Source Customer Service Software",
+          // long-press the home screen icon: straight to the camera form (docs/lead-bank.md)
+          shortcuts: [
+            {
+              name: "Add a lead",
+              url: "/helpdesk/lead-bank/new",
+            },
+          ],
           icons: [
             {
               src: "/assets/helpdesk/desk/manifest/manifest-icon-192.maskable.png",

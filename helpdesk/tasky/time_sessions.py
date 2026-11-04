@@ -5,12 +5,13 @@ hold or being completed) is saved as an HD Task Time Session, clipped to the wor
 (helpdesk.work_hours: nothing before the day starts, at lunch, after it ends or on a day
 off), so the time knows the day it was worked and never exceeds it. Completing the task
 offers those days with their hours (`completion_days`), and the timesheet gets one row per
-day (tasky.api.complete_task). A person has one timer at a time, and a scheduler job pauses
+day (tasky.api.complete_task). A person may run timers on several tasks at once (the daily
+cap still holds the day to its work hours), and a scheduler job pauses
 every timer when a window closes (`stop_timers_outside_work_hours`).
 See docs/workspace-pages.md, "Hours by day".
 """
 
-from datetime import datetime
+from datetime import date, datetime
 
 import frappe
 from frappe import _
@@ -26,8 +27,6 @@ from helpdesk.work_hours import (
 )
 
 SESSION = "HD Task Time Session"
-# hours entered by hand may only be for this many days back (today and yesterday)
-BACKDATE_DAYS = 1
 # banked time with no sessions behind it (from before sessions were kept) below this is rounding
 UNTRACKED_MIN_HOURS = 0.05
 # slack for hours kept to two decimals
@@ -114,28 +113,57 @@ def day_left(user: str, day, exclude_task: str | None = None) -> float:
     return max(max_hours(day) - day_logged_hours(user, day, exclude_task), 0.0)
 
 
+def last_working_day(today, since) -> date:
+    """The working day before `today`, the "yesterday" hours may be entered for by hand:
+    Friday on a Monday, the day before a holiday after it. A day counts as the daily cap
+    counts it, by its work hours: a working day whose SLA lists no hours (a Saturday) is
+    skipped. The search stops at `since` (the task's creation: no hours go on a day before
+    it); with no working day in between, `today` itself, so nothing older is typed in."""
+    today, since = getdate(today), getdate(since)
+    day = getdate(add_to_date(today, days=-1))
+    while day >= since:
+        if max_hours(day) > 0:
+            return day
+        day = getdate(add_to_date(day, days=-1))
+    return today
+
+
+def timer_allowance(tracked: float) -> float:
+    """What may be logged for a day the timer recorded `tracked` hours on: the dialog offers
+    it to the nearest quarter hour (never 0), so that is allowed too."""
+    if tracked <= 0:
+        return 0.0
+    return max(tracked, round(tracked * 4) / 4, 0.25)
+
+
 def check_hand_entered(task_doc, user: str, worked: list[tuple], reason: str | None):
     """Refuse hours that don't fit the days: [(date, hours)] for `task_doc` by `user`.
 
     A day takes at most what is left of its work hours (hours already in the person's
-    timesheets and timers count). Only today and yesterday can be filled in by hand;
-    an older day only up to what the task's timer recorded on it, unless a System
-    Manager gives a `reason`."""
+    timesheets and timers count). Only today and the working day before it can be filled
+    in by hand; an older day only up to what the task's timer recorded on it, the
+    stretch still running included (as the dialog rounds it), unless a System Manager gives a `reason`."""
     today = getdate()
-    oldest = add_to_date(today, days=-BACKDATE_DAYS)
+    oldest = last_working_day(today, task_doc.creation)
     tracked: dict = {}
     for row in unlogged_sessions(task_doc.name):
         day = getdate(row.started_at)
         tracked[day] = tracked.get(day, 0) + flt(row.hours)
+    # the stretch still running is offered by the dialog too (`completion_days`)
+    if task_doc.get("custom_timer_start"):
+        for piece in clip_to_windows(task_doc.custom_timer_start, now_datetime()):
+            day = piece[0].date()
+            tracked[day] = tracked.get(day, 0) + hours_between(piece)
     override = "System Manager" in frappe.get_roles(user) and bool(
         (reason or "").strip()
     )
     for day, hours in worked:
         label = frappe.utils.formatdate(day)
-        if day < oldest and not override and hours > tracked.get(day, 0) + TOLERANCE:
+        allowed = timer_allowance(tracked.get(day, 0))
+        if day < oldest and not override and hours > allowed + TOLERANCE:
             frappe.throw(
                 _(
-                    "{0} is too long ago to enter hours by hand: you can log hours for today or yesterday, or what the timer recorded."
+                    "{0} is too long ago to enter hours by hand: you can log hours for today or the working day before, or what the timer recorded."
                 ).format(label)
             )
         left = day_left(user, day, exclude_task=task_doc.name)
@@ -162,17 +190,6 @@ def timer_user(task: dict) -> str | None:
     return assignees[0] if len(assignees) == 1 else None
 
 
-def running_timers(user: str, except_task: str | None = None) -> list[str]:
-    """The tasks whose timer is running for the person."""
-    rows = frappe.get_all(
-        "Task",
-        filters={"custom_timer_start": ("is", "set"), "status": "Working"},
-        fields=["name", "custom_timer_user", "_assign"],
-        limit_page_length=0,
-    )
-    return [r.name for r in rows if r.name != except_task and timer_user(r) == user]
-
-
 def pause_timer(task: str, user: str | None = None, end=None) -> float:
     """Pause the task's timer: save its stretch (to `end`, now by default) and bank the
     hours; the task stays in progress. Returns the hours banked (0 when it wasn't running)."""
@@ -197,18 +214,9 @@ def pause_timer(task: str, user: str | None = None, end=None) -> float:
     return hours
 
 
-def pause_other_timers(task: str, user: str) -> list[str]:
-    """One timer per person: pause the person's other running timers; returns them."""
-    paused = running_timers(user, except_task=task)
-    for other in paused:
-        pause_timer(other, user)
-    return paused
-
-
-def begin_timer(task: str, user: str, strict: bool = True) -> list[str]:
-    """Start the task's timer for the person: their other running timers are paused first,
-    and outside the work day it is refused (`strict`) or left paused. Returns the tasks
-    paused."""
+def begin_timer(task: str, user: str, strict: bool = True):
+    """Start the task's timer for the person; their timers on other tasks keep running.
+    Outside the work day it is refused (`strict`) or left paused."""
     if not in_work_window(now_datetime()):
         if strict:
             frappe.throw(
@@ -216,12 +224,10 @@ def begin_timer(task: str, user: str, strict: bool = True) -> list[str]:
                     "The work day is over. Timers run during work hours only, so start it again when you resume."
                 )
             )
-        return []
-    paused = pause_other_timers(task, user)
+        return
     frappe.db.set_value(
         "Task", task, {"custom_timer_start": now(), "custom_timer_user": user}
     )
-    return paused
 
 
 def stop_timers_outside_work_hours() -> list[str]:
@@ -320,7 +326,7 @@ def completion_days(task_doc, user: str | None = None) -> dict:
         add(str(getdate()), untracked)
 
     today = getdate()
-    yesterday = add_to_date(today, days=-BACKDATE_DAYS)
+    yesterday = last_working_day(today, task_doc.creation)
     shown = {str(today), str(yesterday), *days}
     # the site's today, so the dialog checks dates against the same day the server does
     return {

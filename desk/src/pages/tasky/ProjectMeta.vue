@@ -233,6 +233,20 @@
               />
             </div>
           </section>
+
+          <ProjectMetaAds
+            v-if="
+              data.enabled &&
+              data.ads_enabled &&
+              conn &&
+              conn.status === 'Connected'
+            "
+            :project-id="projectId"
+            :conn="conn"
+            :can-change-cap="data.can_change_cap"
+            @changed="connection.reload()"
+            @reconnect="startConnect"
+          />
         </template>
       </div>
     </div>
@@ -281,6 +295,7 @@ import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideLink from "~icons/lucide/link";
 import LucidePlugZap from "~icons/lucide/plug-zap";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
+import ProjectMetaAds from "./components/ProjectMetaAds.vue";
 import ProjectNav from "./components/ProjectNav.vue";
 
 interface Connection {
@@ -290,6 +305,12 @@ interface Connection {
   instagram_username?: string | null;
   connected_by?: string | null;
   connected_on?: string | null;
+  ads_allowed: boolean;
+  ad_account_id?: string | null;
+  ad_account_name?: string | null;
+  ad_account_currency?: string | null;
+  ad_account_status?: string | null;
+  monthly_ad_cap?: number;
 }
 interface MetaPage {
   id: string;
@@ -313,7 +334,12 @@ const connection = createResource({
 const data = computed(
   () =>
     connection.data as
-      | { enabled: boolean; connection: Connection | null }
+      | {
+          enabled: boolean;
+          ads_enabled: boolean;
+          can_change_cap: boolean;
+          connection: Connection | null;
+        }
       | undefined
 );
 const conn = computed(() => data.value?.connection ?? null);

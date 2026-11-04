@@ -42,11 +42,15 @@
 		"awaiting_customer_days",
 		"lead_section",
 		"stale_leads",
+		"project_section",
+		"project_status",
 		"customer_section",
 		"customer_follow_up_email",
 		"customer_follow_up_message",
 		"challenge_section",
-		"weekly_challenge"
+		"weekly_challenge",
+		"adoption_section",
+		"adoption_digest"
 	],
 	"fields": [
 		{
@@ -282,6 +286,17 @@
 			"default": "1"
 		},
 		{
+			"fieldname": "project_section",
+			"fieldtype": "Section Break",
+			"label": "Project rules"
+		},
+		{
+			"fieldname": "project_status",
+			"fieldtype": "Check",
+			"label": "Project status out of date",
+			"default": "1"
+		},
+		{
 			"fieldname": "customer_section",
 			"fieldtype": "Section Break",
 			"label": "Customer follow-up"
@@ -311,6 +326,18 @@
 			"fieldtype": "Select",
 			"label": "Weekly challenge",
 			"options": "Key tasks due this week\nEvery task due this week\nOff"
+		},
+		{
+			"fieldname": "adoption_section",
+			"fieldtype": "Section Break",
+			"label": "Adoption"
+		},
+		{
+			"default": "1",
+			"description": "Monday 09:00: the week's top findings from the Adoption page go to managers and project coordinators",
+			"fieldname": "adoption_digest",
+			"fieldtype": "Check",
+			"label": "Weekly adoption digest"
 		}
 	],
 	"index_web_pages_for_search": 0,

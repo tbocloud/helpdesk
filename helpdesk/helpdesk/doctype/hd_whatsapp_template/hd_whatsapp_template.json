@@ -1,0 +1,75 @@
+{
+	"actions": [],
+	"creation": "2026-11-02 10:00:00.000000",
+	"doctype": "DocType",
+	"editable_grid": 1,
+	"engine": "InnoDB",
+	"istable": 1,
+	"field_order": [
+		"template_name",
+		"language",
+		"enabled",
+		"is_default",
+		"body",
+		"variables"
+	],
+	"fields": [
+		{
+			"fieldname": "template_name",
+			"fieldtype": "Data",
+			"label": "Template name",
+			"reqd": 1,
+			"in_list_view": 1,
+			"description": "Exactly as in Meta WhatsApp Manager, e.g. tbo_intro."
+		},
+		{
+			"fieldname": "language",
+			"fieldtype": "Data",
+			"label": "Language",
+			"default": "en",
+			"reqd": 1,
+			"in_list_view": 1,
+			"description": "The template's language code, e.g. en or ml."
+		},
+		{
+			"fieldname": "enabled",
+			"fieldtype": "Check",
+			"label": "In use",
+			"default": "1",
+			"in_list_view": 1
+		},
+		{
+			"fieldname": "is_default",
+			"fieldtype": "Check",
+			"label": "First message",
+			"default": "0",
+			"in_list_view": 1,
+			"description": "Used for the first message to a lead. The first template in use is taken when none is ticked."
+		},
+		{
+			"fieldname": "body",
+			"fieldtype": "Small Text",
+			"label": "Text",
+			"reqd": 1,
+			"description": "The approved text, with {{1}}, {{2}} for the blanks."
+		},
+		{
+			"fieldname": "variables",
+			"fieldtype": "Data",
+			"label": "Fills the blanks with",
+			"default": "name,why_call,company",
+			"description": "In order: name, company, why_call, product or product_intro. {{1}} is the first, {{2}} the second."
+		}
+	],
+	"index_web_pages_for_search": 0,
+	"links": [],
+	"modified": "2026-11-02 10:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD WhatsApp Template",
+	"owner": "Administrator",
+	"permissions": [],
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": []
+}

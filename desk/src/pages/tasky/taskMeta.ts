@@ -320,6 +320,24 @@ export function assignedByName(task: {
 }
 
 /**
+ * Who created the task (for a content post's task, whoever created the post), or ""
+ * when unknown. Short lines pass `besideAssigner` to leave it out when the same person
+ * also gave the task out, so the line names them once.
+ */
+export function createdByName(
+  task: {
+    created_by?: string | null;
+    created_by_name?: string | null;
+    assigned_by?: string | null;
+  },
+  besideAssigner = false
+) {
+  const by = task.created_by;
+  if (!by || (besideAssigner && by === task.assigned_by)) return "";
+  return task.created_by_name || by;
+}
+
+/**
  * A task given to the viewer since they last opened it: "new", or "reassigned" when
  * they had it before (helpdesk.tasky.new_assignments). Cleared once they open it.
  */
@@ -346,6 +364,10 @@ export function formatElapsed(s: number, withSeconds = true) {
  * in progress with a start time; otherwise banked time shows as paused. Pausing
  * and resuming go through the server, so reloading the board (after working on
  * another task, or coming back to it) never restarts a paused timer.
+ *
+ * A task in progress always has a timer, paused at 0 when nothing is banked yet (a
+ * stretch of seconds banks 0 h, and starting another task's timer pauses this one):
+ * otherwise the card would show no timer and no Resume button.
  */
 export function taskTimer(
   task: {
@@ -365,5 +387,7 @@ export function taskTimer(
       elapsed: banked + Math.max(since, 0),
     };
   }
-  return banked > 0 ? { running: false, paused: true, elapsed: banked } : null;
+  return banked > 0 || task.status === "Working"
+    ? { running: false, paused: true, elapsed: banked }
+    : null;
 }

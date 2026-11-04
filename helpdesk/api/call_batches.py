@@ -7,6 +7,7 @@ import frappe
 from frappe import _
 from frappe.utils import cint, get_datetime, getdate, now_datetime, today
 
+from helpdesk.api import pending_calls
 from helpdesk.api.leads import clear_cached_reads
 from helpdesk.integrations.crm.leads import (
     LeadsUnavailableError,
@@ -53,14 +54,40 @@ def get_next_batch() -> dict:
 
 
 @frappe.whitelist(methods=["POST"])
+def set_calling_focus(
+    department: str | None = None,
+    product: str | None = None,
+    district: str | None = None,
+) -> dict:
+    """What the signed-in person calls for now: one of their departments that hands out
+    batches, one of its products and a district (both optional). The ERP site saves it, starts
+    the next batch for it when its rules allow and answers in plain words (`message`). A blank
+    department goes back to every department of theirs."""
+    require_leads()
+    result = call_if_deployed(
+        "set_calling_focus",
+        post=True,
+        department=(department or "").strip() or None,
+        product=(product or "").strip() or None,
+        district=(district or "").strip() or None,
+    )
+    if result is None:
+        frappe.throw(_(OLDER_ERP), LeadsUnavailableError)
+    clear_cached_reads()
+    return result
+
+
+@frappe.whitelist(methods=["POST"])
 def record_call_outcome(
     batch_item: str,
     outcome: str,
     note: str | None = None,
     callback_at: str | None = None,
+    lead: str | None = None,
 ) -> dict:
     """The outcome of one call in the queue (`batch_item` is the call's `item`). The ERP
-    site logs the call and takes it off the queue. A call back needs a time in the future."""
+    site logs the call and takes it off the queue. A call back needs a time in the future.
+    `lead` (when known) takes the lead off the person's calls without a result."""
     require_leads()
     if outcome not in OUTCOMES:
         frappe.throw(_("Pick how the call went."))
@@ -81,6 +108,7 @@ def record_call_outcome(
     if result is None:
         frappe.throw(_(OLDER_ERP), LeadsUnavailableError)
     clear_cached_reads()
+    pending_calls.resolve(item=batch_item, lead=lead)
     return result
 
 

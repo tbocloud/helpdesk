@@ -20,7 +20,8 @@ Hierarchy:
 
 Role permissions on the doctypes decide *what* a role may do; these hooks only
 narrow *which* records. Frappe hooks can deny but never grant, so every hook
-returns False to deny or None to defer to role permissions.
+returns False to deny or True to defer to role permissions (never None: Frappe v16
+reads None as a denial, v15 as "no opinion"; True means the same on both).
 """
 
 import json
@@ -425,6 +426,32 @@ def get_assigners(assignees: dict[str, str]) -> dict[str, str]:
     return found
 
 
+def get_creators(tasks: list[str]) -> dict[str, str]:
+    """Who created each task: {task: user}. A task made from a content post was created
+    by whoever created the post, not by whoever later put someone on it (whose save made
+    the task). Two queries for any number of tasks."""
+    if not tasks:
+        return {}
+    task = frappe.qb.DocType("Task")
+    rows = (
+        frappe.qb.from_(task)
+        .select(task.name, task.owner, task.content_post)
+        .where(task.name.isin(tasks))
+        .run(as_dict=True)
+    )
+    posts = {r.content_post for r in rows if r.content_post}
+    post_owners = {}
+    if posts:
+        post = frappe.qb.DocType("HD Content Post")
+        post_owners = dict(
+            frappe.qb.from_(post)
+            .select(post.name, post.owner)
+            .where(post.name.isin(list(posts)))
+            .run()
+        )
+    return {r.name: post_owners.get(r.content_post) or r.owner for r in rows}
+
+
 def can_rate_task(doc, user: str | None = None) -> bool:
     """May give the task its quality rating: whoever assigned it, the project's
     managers, lead and coordinators (who review it), the heads of its project's
@@ -597,33 +624,31 @@ def timesheet_query(user: str | None = None) -> str | None:
 
 def project_has_permission(
     doc, ptype: str | None = None, user: str | None = None
-) -> bool | None:
+) -> bool:
     user = user or frappe.session.user
     if is_tasky_admin(user):
-        return None
+        return True
     if is_sales_employee(user):
         return False
     if ptype == "create":
-        return None
+        return True
     if doc.get("custom_department") in hidden_departments(user):
         return False
     if is_project_owner(doc.name, user):
-        return None
+        return True
     if ptype in ("read", "print", "email", "report") and (
         doc.get("project_lead") == user
         or is_project_member(doc.name, user)
         or has_assigned_task(doc.name, user)
     ):
-        return None
+        return True
     return False
 
 
-def task_has_permission(
-    doc, ptype: str | None = None, user: str | None = None
-) -> bool | None:
+def task_has_permission(doc, ptype: str | None = None, user: str | None = None) -> bool:
     user = user or frappe.session.user
     if is_tasky_admin(user):
-        return None
+        return True
     if is_sales_employee(user) or is_hidden_project(doc.project, user):
         return False
     # outside the content team, only their own content tasks; never for ERP Employees
@@ -634,27 +659,27 @@ def task_has_permission(
     ):
         return False
     if can_manage_project(doc.project, user):
-        return None
+        return True
     # coordinators run every task of the project; deleting stays with its managers
     if ptype != "delete" and is_project_coordinator(doc.project, user):
-        return None
+        return True
     if ptype == "create":
-        return None if can_add_tasks(doc.project, user) else False
+        return bool(can_add_tasks(doc.project, user))
     if ptype == "delete":
         return False
     if ptype in ("read", "print", "email", "report") and (
         sees_all_tasks(doc.project, user) or is_own_task(doc, user)
     ):
-        return None
-    return None if is_assigned(doc, user) else False
+        return True
+    return bool(is_assigned(doc, user))
 
 
 def timesheet_has_permission(
     doc, ptype: str | None = None, user: str | None = None
-) -> bool | None:
+) -> bool:
     user = user or frappe.session.user
     if ptype == "create" or is_tasky_admin(user) or doc.owner == user:
-        return None
+        return True
     if is_sales_employee(user):
         return False
     # the same projects as timesheet_query: managed or led, so a lead can open
@@ -663,7 +688,7 @@ def timesheet_has_permission(
     if ptype == "read" and any(
         log.project in managed for log in doc.get("time_logs", [])
     ):
-        return None
+        return True
     return False
 
 
@@ -680,16 +705,12 @@ def pull_request_query(user: str | None = None) -> str | None:
 
 def pull_request_has_permission(
     doc, ptype: str | None = None, user: str | None = None
-) -> bool | None:
+) -> bool:
     user = user or frappe.session.user
     if is_tasky_admin(user):
-        return None
+        return True
     if ptype not in ("read", "print", "report", "export"):
         return False
     if not doc.task:
         return False
-    return (
-        None
-        if frappe.has_permission("Task", "read", doc=doc.task, user=user)
-        else False
-    )
+    return bool(frappe.has_permission("Task", "read", doc=doc.task, user=user))

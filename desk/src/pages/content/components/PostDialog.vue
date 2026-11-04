@@ -134,10 +134,17 @@
               maxlength="140"
             />
           </div>
+          <!-- two lines so a long copy shows in full; it stays one line of text (a
+               Data field of 140 characters) -->
           <FormControl
-            v-model="form.title"
+            :model-value="form.title"
+            type="textarea"
+            :rows="2"
+            maxlength="140"
             :label="__('Copy')"
             :placeholder="__('e.g. Diwali offer carousel')"
+            @update:model-value="(v: string) => (form.title = oneLine(v))"
+            @keydown.enter.prevent
           />
           <div class="flex flex-col gap-1.5">
             <div class="flex items-center justify-between gap-2">
@@ -446,6 +453,7 @@ import LucideSparkles from "~icons/lucide/sparkles";
 import {
   STATUSES,
   htmlToText,
+  oneLine,
   platformsOf,
   TEAM_ROLES,
   type TeamRole,

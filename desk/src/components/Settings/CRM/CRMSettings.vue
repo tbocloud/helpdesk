@@ -586,6 +586,7 @@
 
         <LeadDepartments v-if="form.enable_leads && canManageLeads" />
         <CommissionPlans v-if="form.enable_leads && canManageLeads" />
+        <ReferralSettings v-if="form.enable_leads && canManageLeads" />
         <WebsiteLeadForm
           v-if="form.enable_leads && auth.isAdmin"
           :site-url="form.site_url"
@@ -621,6 +622,7 @@ import LucideUserCheck from "~icons/lucide/user-check";
 import SettingsSection from "../SettingsSection.vue";
 import CommissionPlans from "./CommissionPlans.vue";
 import LeadDepartments from "./LeadDepartments.vue";
+import ReferralSettings from "./ReferralSettings.vue";
 import WebsiteLeadForm from "./WebsiteLeadForm.vue";
 
 interface CRMForm {

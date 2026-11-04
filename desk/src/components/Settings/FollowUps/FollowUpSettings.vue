@@ -239,6 +239,27 @@
         </SettingsSection>
 
         <SettingsSection
+          :title="__('Project rules')"
+          :description="
+            __(
+              'Project status updates are written on the Project status page and go out every Friday at 17:00 (Settings → Tasks).'
+            )
+          "
+        >
+          <SettingRow
+            v-slot="{ id }"
+            :label="__('Project status out of date')"
+            :description="
+              __(
+                'A project whose status update is more than 7 days old asks its lead and coordinators to write it. Projects on hold are left alone.'
+              )
+            "
+          >
+            <Switch :id="id" v-model="form.project_status" />
+          </SettingRow>
+        </SettingsSection>
+
+        <SettingsSection
           :title="__('Customer follow-up')"
           :description="autoCloseLine"
         >
@@ -289,6 +310,27 @@
               class="w-full sm:w-72"
               :options="challengeOptions"
             />
+          </SettingRow>
+        </SettingsSection>
+
+        <SettingsSection
+          :title="__('Adoption')"
+          :description="
+            __(
+              'Managers and project coordinators can open the Adoption page to see who is using the system and what is stuck.'
+            )
+          "
+        >
+          <SettingRow
+            v-slot="{ id }"
+            :label="__('Weekly adoption digest')"
+            :description="
+              __(
+                'Monday at 9:00 the most important findings go to the same people, by chat or email. Needs follow-ups to be on.'
+              )
+            "
+          >
+            <Switch :id="id" v-model="form.adoption_digest" />
           </SettingRow>
         </SettingsSection>
 
@@ -489,6 +531,8 @@ const CHECKS = [
   "customer_replied",
   "awaiting_customer",
   "stale_leads",
+  "project_status",
+  "adoption_digest",
   "customer_follow_up_email",
 ];
 
