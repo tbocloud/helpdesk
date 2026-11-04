@@ -3,7 +3,7 @@
   <div
     class="flex h-full min-h-0 flex-1 flex-col divide-y divide-outline-gray-1 overflow-y-auto bg-surface-base"
   >
-    <PanelSection :title="__('Details')">
+    <PanelSection :title="__('Ticket')">
       <div class="flex flex-col gap-0.5">
         <template v-for="field in flatCoreFields" :key="field.fieldname">
           <div
@@ -64,7 +64,7 @@
                 ? "…"
                 : customerOwner
                 ? nameOf(customerOwner)
-                : __("Not set")
+                : __("None set")
             }}
           </span>
         </div>
@@ -97,6 +97,12 @@
     />
 
     <template v-if="ticketId">
+      <SessionReplayCard
+        v-model:opened="openedSections.replay"
+        :ticket-id="ticketId"
+        :summary="__('What the customer did')"
+        collapsible
+      />
       <TicketLinkedWork
         v-model:opened="openedSections.work"
         :ticket-id="ticketId"
@@ -104,12 +110,6 @@
         collapsible
       />
       <MeetingsCard reference-doctype="HD Ticket" :reference-name="ticketId" />
-      <SessionReplayCard
-        v-model:opened="openedSections.replay"
-        :ticket-id="ticketId"
-        :summary="__('What the customer did')"
-        collapsible
-      />
 
       <PanelSection
         v-model:opened="openedSections.ai"
@@ -217,6 +217,8 @@ import {
 } from "@/types";
 import { __ } from "@/translation";
 import { useAssignablePeople } from "@/composables/assignablePeople";
+import { SlaTimeLeftSymbol } from "@/composables/useSlaTimeLeft";
+import { dueBadge } from "@/pages/ticket/ticketMeta";
 import { useStorage } from "@vueuse/core";
 import { Button, createResource, dayjs } from "frappe-ui";
 import { computed, inject, nextTick, ref, watch } from "vue";
@@ -302,8 +304,8 @@ const flatCoreFields = computed(() =>
 );
 
 const coreFieldPlaceholders: Record<string, string> = {
-  ticket_type: __("Select type"),
-  priority: __("Set priority"),
+  ticket_type: __("Add a type"),
+  priority: __("Add a priority"),
   customer: __("Add customer"),
   agent_group: __("Assign team"),
 };
@@ -341,17 +343,19 @@ const customFields = computed(() => {
 });
 
 // the SLA's next due time, for its folded line
+// the same words as the line under the title and the list's Due (Phase 15)
+const slaClock = inject(SlaTimeLeftSymbol, null);
 const slaSummary = computed(() => {
   const doc = ticket.value?.doc;
   if (!doc) return "";
-  if (!doc.first_responded_on && doc.response_by)
-    return __("Reply by {0}", dayjs(doc.response_by).format("D MMM, HH:mm"));
-  if (doc.resolution_by)
-    return __(
-      "Resolve by {0}",
-      dayjs(doc.resolution_by).format("D MMM, HH:mm")
-    );
-  return "";
+  return (
+    dueBadge(
+      doc,
+      doc.status_category === "Paused",
+      (clock) => slaClock?.workingLeft(doc.name, clock),
+      slaClock?.now.value
+    )?.label ?? ""
+  );
 });
 
 const openedSections = useStorage(

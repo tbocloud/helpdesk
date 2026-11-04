@@ -23,9 +23,11 @@
         >
           <div class="flex items-center min-h-[20px] gap-2 w-full">
             <template v-if="localAssignees.length > 0">
+              <!-- the name once: the label beside it says it when there is one person -->
               <MultipleAvatar
                 :avatars="localAssignees.map((a) => a.name)"
                 size="sm"
+                :hide-name="quiet && localAssignees.length === 1"
               />
               <span
                 v-if="localAssignees.length > 1"

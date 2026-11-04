@@ -30,6 +30,8 @@
       :activities="shown"
       :title="title"
       :ticket-status="ticket.doc.status"
+      :compact="mode === 'activity'"
+      @open="openOnCustomerTab"
       @email:reply="
         (e) => {
           communicationAreaRef?.replyToEmail(e);
@@ -92,7 +94,9 @@ import { __ } from "@/translation";
 import { errorText } from "@/utils";
 import { Button } from "frappe-ui";
 import { storeToRefs } from "pinia";
+import { ticketView } from "@/pages/ticket/modalStates";
 import { computed, inject, ref } from "vue";
+import { useRouter } from "vue-router";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import { TicketAgentActivities } from "../ticket";
 
@@ -105,6 +109,7 @@ const props = withDefaults(
 );
 
 const ticket = inject(TicketSymbol)!;
+const router = useRouter();
 const activities = inject(ActivitiesSymbol)!;
 
 const ticketAgentActivitiesRef = ref<InstanceType<
@@ -133,7 +138,7 @@ const chips = computed(() => {
     },
     {
       value: "comment",
-      label: __("Comments"),
+      label: __("Internal notes"),
       count: filterConversation("comment").length,
     },
   ];
@@ -145,6 +150,13 @@ const chips = computed(() => {
     });
   return list;
 });
+
+// an Activity line opens its message on the Customer tab
+function openOnCustomerTab(activity: { key: string }) {
+  ticketView.value = "customer";
+  kind.value = "all";
+  router.replace({ hash: `#${activity.key}` });
+}
 
 const shown = computed(() =>
   props.mode === "customer"

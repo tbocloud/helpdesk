@@ -495,9 +495,14 @@ async function getGeneralCategory() {
   return generalCategory;
 }
 
+// the ticket list and pages stay clear of the panel (Phase 15): it opens from Getting started
+const TICKET_AREA = new Set(["TicketsAgent", "TicketAgent"]);
+
 function setUpOnboarding() {
   if (!authStore.isManager) return;
   setUp(steps);
+  if (TICKET_AREA.has(String(router.currentRoute.value.name)))
+    showHelpModal.value = false;
   useShortcut({ key: "h", meta: true }, () => {
     showHelpModal.value = !showHelpModal.value;
   });

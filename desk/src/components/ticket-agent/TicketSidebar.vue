@@ -8,7 +8,7 @@
   />
   <Resizer
     class="h-full flex-col border-l border-outline-gray-1 bg-surface-base max-lg:fixed max-lg:inset-y-0 max-lg:right-0 max-lg:z-30 max-lg:!w-[min(24rem,100vw)] max-lg:shadow-xl"
-    :class="open ? 'flex' : 'hidden lg:flex'"
+    :class="hidden ? 'hidden' : open ? 'flex' : 'hidden lg:flex'"
     side="right"
   >
     <aside
@@ -53,6 +53,8 @@ import TicketDetailsTab from "./TicketDetailsTab.vue";
 const props = defineProps<{
   /** Below lg: the panel is a sheet rather than an inline column. */
   sheet: boolean;
+  /** From lg: the agent hid the panel (the header's Details button). */
+  hidden?: boolean;
 }>();
 
 const open = defineModel<boolean>("open", { default: false });

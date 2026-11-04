@@ -6,6 +6,7 @@ from frappe.model.document import get_controller
 from frappe.utils.caching import redis_cache
 from pypika import Criterion
 
+from helpdesk.api import ticket_area
 from helpdesk.api.dashboard import COUNT_NAME
 from helpdesk.utils import (
     assigned_to_filter,
@@ -103,6 +104,8 @@ def get_list_data(
     # after the default view's filters, which may name an assignee (or @me) too
     handle_at_me_support(filters)
     handle_assigned_to_filter(filters, doctype)
+    # the ticket list's Overdue queue and its search (Phase 15)
+    ticket_area.resolve_filters(filters, doctype)
 
     if rows is None:
         rows = []
@@ -424,6 +427,31 @@ def get_quick_filters(doctype: str, show_customer_portal_fields: bool = False):
     elif doctype == "TP Call Log":
         quick_filters.append(name_filter)
         return quick_filters
+    if doctype == "HD Ticket" and not show_customer_portal_fields:
+        # the agent's ticket list (Phase 15): one search over number, subject, customer and contact
+        # (api/ticket_area.py), then who it is for, how urgent and who has it
+        return [
+            {"label": _("Search"), "name": "__search", "type": "Data"},
+            {
+                "label": _("Customer"),
+                "name": "customer",
+                "type": "Link",
+                "options": "HD Customer",
+            },
+            {
+                "label": _("Priority"),
+                "name": "priority",
+                "type": "Link",
+                "options": "HD Ticket Priority",
+            },
+            {
+                "label": _("Assigned to"),
+                "name": "_assign",
+                "type": "Link",
+                "options": "HD Agent",
+            },
+        ]
+
     name_filter_doctypes = ["HD Agent", "HD Customer", "HD Ticket"]
     if doctype in name_filter_doctypes:
         quick_filters.append(name_filter)
@@ -571,7 +599,8 @@ def _pop_assigned_to_users(filters) -> list[str]:
     """Users named by `_assign` like filters, which are taken out of `filters`."""
 
     def user_of(operator, value):
-        if str(operator).lower() != "like" or not isinstance(value, str):
+        # like %user% from a filter, = user from the ticket list's Assigned to (Phase 15)
+        if str(operator).lower() not in ("like", "=") or not isinstance(value, str):
             return None
         user = value.strip("%")
         return user if user and frappe.db.exists("User", user) else None

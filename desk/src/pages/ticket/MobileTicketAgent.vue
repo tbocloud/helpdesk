@@ -10,11 +10,11 @@
             <template #default="{ open }">
               <Button :label="ticket.doc.status">
                 <template #prefix>
-                  <IndicatorIcon
-                    :class="
-                      ticketStatusStore.getStatus(ticket.doc.status)
-                        ?.parsed_color
-                    "
+                  <component
+                    :is="statusLook.icon"
+                    class="size-4"
+                    :class="INK[statusLook.tone]"
+                    aria-hidden="true"
                   />
                 </template>
                 <template #suffix>
@@ -45,6 +45,30 @@
         />
       </div>
     </header>
+    <!-- the subject in full and the same line as on desktop (Phase 15) -->
+    <div
+      v-if="ticket.doc?.name"
+      class="border-b border-outline-gray-1 px-4 py-3"
+    >
+      <h1
+        class="text-lg font-semibold leading-6 text-ink-gray-9 [overflow-wrap:anywhere]"
+      >
+        {{ ticket.doc.subject }}
+      </h1>
+      <p
+        class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-sm text-ink-gray-6"
+      >
+        <span class="text-ink-gray-8">{{
+          ticket.doc.contact || ticket.doc.raised_by
+        }}</span>
+        <span v-if="ticket.doc.customer">{{ ticket.doc.customer }}</span>
+        <TaskyBadge v-if="priority" v-bind="priority" />
+        <TaskyBadge v-if="due" :tone="due.tone" :icon="due.icon">
+          {{ due.label }}
+          <span class="sr-only">, {{ due.hint }}</span>
+        </TaskyBadge>
+      </p>
+    </div>
     <div v-if="ticket.doc?.name" class="flex flex-1 overflow-x-hidden">
       <div class="flex flex-1 flex-col overflow-x-hidden">
         <div class="flex-1 flex flex-col">
@@ -79,6 +103,8 @@
                 "
                 :title="tab.label"
                 :ticket-status="ticket.doc?.status"
+                :compact="tab.name === 'activity'"
+                @open="changeTabTo(1)"
                 @update="() => reloadTicket(props.ticketId)"
                 @email:reply="
                   (e) => {
@@ -182,12 +208,18 @@ import {
   CommentIcon,
   DetailsIcon,
   EmailIcon,
-  IndicatorIcon,
   PhoneIcon,
 } from "@/components/icons";
 import { TicketAgentActivities } from "@/components/ticket";
 
 import CustomActions from "@/components/CustomActions.vue";
+import TaskyBadge from "@/components/TaskyBadge.vue";
+import { INK } from "@/components/tone";
+import {
+  dueBadge,
+  priorityBadge,
+  statusBadge,
+} from "@/pages/ticket/ticketMeta";
 import AssignTo from "@/components/ticket-agent/AssignTo.vue";
 import CopilotThread from "@/components/ticket-agent/CopilotThread.vue";
 import { ticketRequest } from "@/components/ticket-agent/ticketRequest";
@@ -308,9 +340,29 @@ const mobileCustomActions = computed(() => {
 });
 
 provide(TicketSymbol, ticket);
-provide(
-  SlaTimeLeftSymbol,
-  useSlaTimeLeft(() => (ticket.value.doc ? [ticket.value.doc] : []))
+const slaClock = useSlaTimeLeft(() =>
+  ticket.value.doc ? [ticket.value.doc] : []
+);
+provide(SlaTimeLeftSymbol, slaClock);
+
+// the line under the subject, as on desktop (Phase 15)
+const priority = computed(() => priorityBadge(ticket.value.doc?.priority));
+const due = computed(() => {
+  const doc = ticket.value.doc;
+  if (!doc) return null;
+  return dueBadge(
+    doc,
+    doc.status_category === "Paused",
+    (clock) => slaClock.workingLeft(doc.name, clock),
+    slaClock.now.value
+  );
+});
+const statusLook = computed(() =>
+  statusBadge(
+    ticket.value.doc?.status ?? "",
+    ticketStatusStore.getStatus(ticket.value.doc?.status)?.category ??
+      ticket.value.doc?.status_category
+  )
 );
 provide(
   AssigneeSymbol,
@@ -354,8 +406,9 @@ const showSubjectDialog = ref(false);
 
 const breadcrumbs = computed(() => {
   let items = [{ label: __("Tickets"), route: { name: "TicketsAgent" } }];
+  // the number here; the subject has its own line below, in full
   items.push({
-    label: ticket.value.doc?.subject,
+    label: `#${ticket.value.doc?.name ?? ""}`,
     route: { name: "TicketAgent" },
   });
   return items;
@@ -366,10 +419,13 @@ const dropdownOptions = computed(() =>
     label: o.label_agent,
     value: o.label_agent,
     onClick: () => ticket.value.setValue.submit({ status: o.label_agent }),
-    icon: () =>
-      h(IndicatorIcon, {
-        class: o.parsed_color,
-      }),
+    icon: () => {
+      const look = statusBadge(o.label_agent, o.category);
+      return h(look.icon, {
+        class: ["size-4", INK[look.tone]],
+        "aria-hidden": "true",
+      });
+    },
   }))
 );
 

@@ -11,6 +11,30 @@ at a glance and act fast. It follows [ui-guidelines.md](ui-guidelines.md); share
   `pages/ticket/TicketCustomer.vue` (`TicketConversation`, `TicketCustomerSidebar`,
   `EstimateApprovalBanner`), none of which this page uses or changes.
 
+**Phase 15 (TBO Copilot, Nov 2026): each fact once.** The number is in the breadcrumb; the status and the assignee
+are in the header (their pickers). Under the title, one line: the contact, the customer, "via Email · opened 3 hours
+ago", the priority and **one** SLA badge, what is due next (`dueBadge`, the list's Due). The ID chip, the status chip
+and "Assigned to …" are gone from the title; **Copy ticket ID** is in the ⋯ menu (and ⌘. still copies it).
+- The status picker and its menu show each status's icon and word in its tone (`statusBadge`), as the list does.
+- **Details** shows at every width: from `lg` it hides or shows the side panel (kept per browser,
+  `helpdesk-ticket-details-hidden`); below `lg` it opens the sheet.
+- The assignee's name shows once (it showed twice: the avatar's label and the name).
+- `[` and `]` go to the previous and next ticket, besides ⇧< and ⇧>.
+- **Chat**: the Copilot line has four looks. Not started has a robot icon and Start Copilot. Working has a spinner.
+  "Needs you" (amber) appears only when a person must decide (Approve, Reject, Let Copilot fix it, Build, Deploy), no
+  longer for Start Copilot. A finding has the sparkle icon.
+- **Customer**: "Comments" is "Internal notes" (filter and composer). When the reply box opens and Copilot has a
+  draft ready, the box offers it ("Use the draft" / "Not now"); the full card with its sources and Draft again stays
+  in Details → AI assist.
+- **Activity**: one line per email, internal note and call ("Aisha Rahman wrote by email", "Agent added an internal
+  note"), and a line opens its message on the Customer tab. Copilot's own notes keep their card there, as they are
+  not on the Customer tab.
+- The customer's rating shows only on a resolved or closed ticket that has one.
+- **Details**: the first section is "Ticket". The customer site (session replay) follows the SLA. Empty fields read
+  "Add a type", "Add a priority", and the owner "None set". The SLA summary uses the same words as the title line.
+- **Phone** (`MobileTicketAgent.vue`): the breadcrumb is "Tickets / #number"; the subject has its own line in full,
+  with the same line under it. Activity lines open the Customer tab.
+
 ## Header
 
 `components/ticket-agent/TicketHeader.vue`, with the title block in `TicketTitle.vue` (teleported

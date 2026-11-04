@@ -8,9 +8,12 @@ import type { Component } from "vue";
 import LucideCheck from "~icons/lucide/check";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideCircleCheck from "~icons/lucide/circle-check";
+import LucideArchive from "~icons/lucide/archive";
 import LucideCircleDot from "~icons/lucide/circle-dot";
 import LucideClock from "~icons/lucide/clock";
+import LucideHourglass from "~icons/lucide/hourglass";
 import LucidePause from "~icons/lucide/pause";
+import LucideReply from "~icons/lucide/reply";
 
 /** What a ticket's SLA clock says: shared by the tickets list and the ticket page. */
 export type SlaState = "failed" | "fulfilled" | "paused" | "due" | "none";
@@ -160,18 +163,134 @@ export function priorityBadge(priority?: string | null): BadgeMeta | null {
 }
 
 const STATUS_CATEGORY: Record<string, { tone: Tone; icon: Component }> = {
-  Open: { tone: "neutral", icon: LucideCircleDot },
-  Paused: { tone: "warning", icon: LucidePause },
+  Open: { tone: "info", icon: LucideCircleDot },
+  Paused: { tone: "neutral", icon: LucidePause },
   Resolved: { tone: "success", icon: LucideCircleCheck },
 };
 
-/** A ticket status by its category: amber while paused, green once resolved. */
+// whose move it is, by the statuses TBO Support ships (Phase 15); others go by their category
+const STATUS_LOOK: Record<string, { tone: Tone; icon: Component }> = {
+  Open: { tone: "info", icon: LucideCircleDot },
+  Replied: { tone: "warning", icon: LucideReply },
+  "Waiting on Task": { tone: "warning", icon: LucideHourglass },
+  "On Hold": { tone: "neutral", icon: LucidePause },
+  Resolved: { tone: "success", icon: LucideCircleCheck },
+  Closed: { tone: "neutral", icon: LucideArchive },
+};
+
+/**
+ * A ticket status as an icon and a word, never by colour alone: blue while it is the team's
+ * move, amber while it waits on the customer or a task, gray on hold or closed, green once
+ * resolved. Red is kept for what is late (the SLA), so no status is red.
+ */
 export function statusBadge(
   status: string,
   category?: string | null
 ): BadgeMeta {
   return {
     label: __(status),
-    ...(STATUS_CATEGORY[category ?? ""] ?? STATUS_CATEGORY.Open),
+    ...(STATUS_LOOK[status] ??
+      STATUS_CATEGORY[category ?? ""] ??
+      STATUS_CATEGORY.Open),
+  };
+}
+
+/** "5m", "3h", "2d": how long ago a deadline passed, on the clock. */
+export function overdueFor(
+  deadline: string,
+  now: Dayjs = dayjsLocal()
+): string {
+  const minutes = Math.max(1, now.diff(dayjsLocal(deadline), "minute"));
+  if (minutes < 60) return __("{0}m", [minutes]);
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return __("{0}h", [hours]);
+  return __("{0}d", [Math.floor(hours / 24)]);
+}
+
+export interface DueBadge extends BadgeMeta {
+  /** the exact deadline and the working time left, for a tooltip and screen readers */
+  hint: string;
+  /** which clock it is */
+  clock: "response" | "resolution";
+}
+
+/**
+ * What is due next, in words (Phase 15's one Due column and the line under a ticket's title):
+ * the first reply until it is sent, then the resolution.
+ * - "Reply by 4:00 PM", "Resolve by Fri 10:00 AM";
+ * - in the last working hour: "Reply in 20 working min" (amber);
+ * - late: "Reply overdue by 3h" (red, the only red);
+ * - "SLA paused" while waiting, "SLA met" / "SLA missed" once resolved.
+ */
+export function dueBadge(
+  ticket: {
+    name?: string | number;
+    first_responded_on?: string | null;
+    response_by?: string | null;
+    resolution_by?: string | null;
+    resolution_date?: string | null;
+  },
+  paused: boolean,
+  workingLeft: (clock: "response" | "resolution") => number | null | undefined,
+  now: Dayjs = dayjsLocal()
+): DueBadge | null {
+  const replyDue = !ticket.first_responded_on && ticket.response_by;
+  const clock: "response" | "resolution" = replyDue ? "response" : "resolution";
+  const deadline = replyDue ? ticket.response_by : ticket.resolution_by;
+  if (!deadline) return null;
+  const state = replyDue
+    ? responseSla(ticket, deadline, now)
+    : resolutionSla(ticket, deadline, paused, now);
+  const what = clock === "response" ? __("Reply") : __("Resolve");
+  const exact = __("Due {0}", [dateFormat(deadline, dateTooltipFormat)]);
+  if (state === "none") return null;
+  if (state === "paused")
+    return {
+      label: __("SLA paused"),
+      tone: "neutral",
+      icon: LucidePause,
+      hint: __("Waiting: the clock is paused. {0}", [exact]),
+      clock,
+    };
+  if (state === "fulfilled")
+    return {
+      label: __("SLA met"),
+      tone: "neutral",
+      icon: LucideCheck,
+      hint: exact,
+      clock,
+    };
+  if (state === "failed") {
+    // still running and late now: red; a missed one that is resolved is history
+    if (ticket.resolution_date)
+      return {
+        label: __("SLA missed"),
+        tone: "neutral",
+        icon: LucideCircleAlert,
+        hint: exact,
+        clock,
+      };
+    return {
+      label: __("{0} overdue by {1}", what, overdueFor(deadline, now)),
+      tone: "danger",
+      icon: LucideCircleAlert,
+      hint: exact,
+      clock,
+    };
+  }
+  const left = workingLeft(clock);
+  const soon = left != null && left <= SLA_RISK_WORKING_SECONDS;
+  return {
+    label: soon
+      ? __(
+          "{0} in {1} working min",
+          what,
+          String(Math.max(1, Math.floor((left ?? 0) / 60)))
+        )
+      : __("{0} by {1}", what, deadlineLabel(deadline, now)),
+    tone: soon ? "warning" : "neutral",
+    icon: LucideClock,
+    hint: slaHint(deadline, left),
+    clock,
   };
 }

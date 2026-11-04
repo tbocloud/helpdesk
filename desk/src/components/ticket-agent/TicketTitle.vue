@@ -15,30 +15,24 @@
         </button>
       </h1>
 
-      <div class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5">
-        <button
-          type="button"
-          class="rounded font-mono text-sm tabular-nums text-ink-gray-6 hover:text-ink-gray-9"
-          :title="__('Copy ticket ID')"
-          @click="copyId"
+      <!-- each fact once (Phase 15): the number, the status and the assignee are in the header;
+           here who it is from, where it came in, how old, how urgent and what is due next -->
+      <p
+        class="mt-2 flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1.5 text-sm text-ink-gray-6"
+      >
+        <span class="inline-flex min-w-0 items-center gap-1.5 text-ink-gray-8">
+          <Avatar size="sm" :label="contactName" />
+          <span class="truncate font-medium">{{ contactName }}</span>
+        </span>
+        <RouterLink
+          v-if="ticket.doc.customer"
+          :to="{ name: 'Customer', params: { id: ticket.doc.customer } }"
+          class="truncate rounded text-ink-gray-7 hover:underline"
         >
-          #{{ ticket.doc.name }}
-        </button>
-        <TaskyBadge v-bind="status" />
-        <TaskyBadge v-if="priority" v-bind="priority" />
-        <Tooltip
-          v-for="sla in slaChips"
-          :key="sla.key"
-          :text="sla.tooltip"
-          :hover-delay="0.3"
-          placement="bottom"
-        >
-          <TaskyBadge :tone="sla.badge.tone" :icon="sla.badge.icon">
-            {{ sla.label }}: {{ sla.badge.label }}
-            <span class="sr-only">, {{ sla.tooltip }}</span>
-          </TaskyBadge>
-        </Tooltip>
-        <span class="inline-flex items-center gap-1 text-xs text-ink-gray-5">
+          {{ ticket.doc.customer }}
+        </RouterLink>
+        <span v-else class="text-ink-gray-5">{{ __("No customer") }}</span>
+        <span class="inline-flex items-center gap-1 text-ink-gray-5">
           <GlobeIcon
             v-if="ticket.doc.via_customer_portal"
             class="size-3.5"
@@ -48,30 +42,23 @@
           {{
             ticket.doc.via_customer_portal ? __("via Portal") : __("via Email")
           }}
+          ·
+          <Tooltip :text="dateFormat(ticket.doc.creation, dateTooltipFormat)">
+            <span>{{ __("opened {0}", [timeAgo(ticket.doc.creation)]) }}</span>
+          </Tooltip>
         </span>
-      </div>
-
-      <p
-        class="mt-2 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-sm text-ink-gray-6"
-      >
-        <RouterLink
-          v-if="ticket.doc.customer"
-          :to="{ name: 'Customer', params: { id: ticket.doc.customer } }"
-          class="truncate rounded font-medium text-ink-gray-8 hover:underline"
+        <TaskyBadge v-if="priority" v-bind="priority" />
+        <Tooltip
+          v-if="due"
+          :text="due.hint"
+          :hover-delay="0.3"
+          placement="bottom"
         >
-          {{ ticket.doc.customer }}
-        </RouterLink>
-        <span v-else class="text-ink-gray-5">{{ __("No customer") }}</span>
-        <span aria-hidden="true">·</span>
-        <span class="truncate">{{ contactName }}</span>
-        <span aria-hidden="true">·</span>
-        <span class="truncate">
-          {{
-            assigneeNames
-              ? __("Assigned to {0}", assigneeNames)
-              : __("Unassigned")
-          }}
-        </span>
+          <TaskyBadge :tone="due.tone" :icon="due.icon">
+            {{ due.label }}
+            <span class="sr-only">, {{ due.hint }}</span>
+          </TaskyBadge>
+        </Tooltip>
       </p>
     </div>
   </teleport>
@@ -82,32 +69,24 @@ import { EmailIcon, GlobeIcon } from "@/components/icons";
 import TaskyBadge from "@/components/TaskyBadge.vue";
 import { useShortcut } from "@/composables/shortcuts";
 import { SlaTimeLeftSymbol } from "@/composables/useSlaTimeLeft";
-import {
-  priorityBadge,
-  resolutionSla,
-  responseSla,
-  slaBadge,
-  slaHint,
-  statusBadge,
-  type BadgeMeta,
-  type SlaState,
-} from "@/pages/ticket/ticketMeta";
+import { dueBadge, priorityBadge } from "@/pages/ticket/ticketMeta";
 import { __ } from "@/translation";
-import { AssigneeSymbol, TicketContactSymbol, TicketSymbol } from "@/types";
-import { copyToClipboard } from "@/utils";
-import { Tooltip } from "frappe-ui";
+import { TicketContactSymbol, TicketSymbol } from "@/types";
+import {
+  copyToClipboard,
+  dateFormat,
+  dateTooltipFormat,
+  timeAgo,
+} from "@/utils";
+import { Avatar, Tooltip } from "frappe-ui";
 import { computed, inject } from "vue";
 
 const emit = defineEmits<{ (e: "edit-subject"): void }>();
 
 const ticket = inject(TicketSymbol)!;
-const assignees = inject(AssigneeSymbol)!;
 const contact = inject(TicketContactSymbol)!;
 const slaClock = inject(SlaTimeLeftSymbol)!;
 
-const status = computed(() =>
-  statusBadge(ticket.value.doc.status, ticket.value.doc.status_category)
-);
 const priority = computed(() => priorityBadge(ticket.value.doc.priority));
 
 const contactName = computed(
@@ -117,51 +96,15 @@ const contactName = computed(
     ticket.value.doc.raised_by
 );
 
-const assigneeNames = computed(() =>
-  (assignees.value?.data ?? []).map((a) => a.agent_name || a.name).join(", ")
-);
-
-interface SlaChip {
-  key: string;
-  label: string;
-  badge: BadgeMeta;
-  tooltip: string;
-}
-
-const slaChips = computed(() => {
+// the one SLA: the first reply until it is sent, then the resolution
+const due = computed(() => {
   const doc = ticket.value.doc;
-  const now = slaClock.now.value;
-  const chips: SlaChip[] = [];
-  const add = (
-    key: "response" | "resolution",
-    label: string,
-    state: SlaState,
-    deadline?: string
-  ) => {
-    const workingLeft =
-      state === "due" ? slaClock.workingLeft(doc.name, key) : null;
-    const badge = slaBadge(state, deadline, workingLeft, now);
-    if (!badge || !deadline) return;
-    chips.push({ key, label, badge, tooltip: slaHint(deadline, workingLeft) });
-  };
-  add(
-    "response",
-    __("First response"),
-    responseSla(doc, doc.response_by, now),
-    doc.response_by
+  return dueBadge(
+    doc,
+    doc.status_category === "Paused",
+    (clock) => slaClock.workingLeft(doc.name, clock),
+    slaClock.now.value
   );
-  add(
-    "resolution",
-    __("Resolution"),
-    resolutionSla(
-      doc,
-      doc.resolution_by,
-      doc.status_category === "Paused",
-      now
-    ),
-    doc.resolution_by
-  );
-  return chips;
 });
 
 function copyId() {

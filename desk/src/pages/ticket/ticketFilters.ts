@@ -44,6 +44,17 @@ export const ticketFilters = {
     ["status", "!=", "Waiting on Task"],
   ],
   rated: (): TicketCondition[] => [["feedback_rating", ">", 0]],
+  // the ticket list's queues (Phase 15); `open` above is All open
+  needsReply: (): TicketCondition[] => [["status_category", "=", "Open"]],
+  // past the first reply (none yet) or the resolution time: an OR, so the server
+  // turns it into the tickets it means (helpdesk.api.ticket_area)
+  overdue: (): TicketCondition[] => [["__overdue", "=", 1]],
+  mine: (): TicketCondition[] => [
+    OPEN_CATEGORIES,
+    ["_assign", "like", "%@me%"],
+  ],
+  waiting: (): TicketCondition[] => [["status_category", "=", "Paused"]],
+  resolved: (): TicketCondition[] => [["status_category", "=", "Resolved"]],
 };
 
 export type TicketFilterKey = keyof typeof ticketFilters;

@@ -56,10 +56,10 @@
             >
               {{ row.subject }}
             </span>
-            <component
-              :is="slaCell(row, 'resolution', row.resolution_by)"
-              v-if="row.resolution_by"
-            />
+            <component :is="dueCell(row)" />
+          </span>
+          <span v-if="lastWords(row)" class="truncate text-sm text-ink-gray-6">
+            {{ lastWords(row) }}
           </span>
           <span
             class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-gray-6"
@@ -74,10 +74,7 @@
             <span v-if="row.customer" class="min-w-0 truncate">
               {{ row.customer }}
             </span>
-            <span class="flex items-center gap-1.5 text-ink-gray-7">
-              <IndicatorIcon :class="getStatus(row.status)?.parsed_color" />
-              {{ getStatus(row.status)?.label_agent ?? row.status }}
-            </span>
+            <component :is="statusCell(row.status)" />
             <component :is="priorityCell(row.priority)" />
             <MultipleAvatar
               v-if="row._assign"
@@ -149,13 +146,21 @@
       :selections="listSelections"
       @success="listViewRef?.unselectAll()"
     />
+    <BulkEditDialog
+      v-model="bulkEdit.open"
+      :mode="bulkEdit.mode"
+      :tickets="bulkEdit.tickets"
+      @done="afterBulkEdit"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { LayoutHeader, ListViewBuilder, MultipleAvatar } from "@/components";
 import { TicketIcon } from "@/components/icons";
-import IndicatorIcon from "@/components/icons/IndicatorIcon.vue";
+import BulkEditDialog, {
+  type BulkMode,
+} from "@/components/ticket-agent/BulkEditDialog.vue";
 import BulkReplyModal from "@/components/ticket-agent/BulkReplyModal.vue";
 import TicketSummaryStrip from "@/components/ticket-agent/TicketSummaryStrip.vue";
 import ExportModal from "@/components/ticket/ExportModal.vue";
@@ -170,6 +175,7 @@ import EscalationBadge from "@/components/EscalationBadge.vue";
 import { useTicketStatusStore } from "@/stores/ticketStatus";
 import { __ } from "@/translation";
 import { View } from "@/types";
+import { useShortcut } from "@/composables/shortcuts";
 import { useSlaTimeLeft } from "@/composables/useSlaTimeLeft";
 import {
   dateFormat,
@@ -177,8 +183,8 @@ import {
   isCustomerPortal,
   timeAgo,
 } from "@/utils";
-import { Badge, Button, Tooltip, usePageMeta } from "frappe-ui";
-import { computed, h, onMounted, onUnmounted, reactive, ref } from "vue";
+import { Badge, Button, call, Tooltip, usePageMeta } from "frappe-ui";
+import { computed, h, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
   firstReplyFact,
@@ -188,11 +194,13 @@ import {
 } from "./customerStatus";
 import LucideX from "~icons/lucide/x";
 import {
+  dueBadge,
   priorityBadge,
   resolutionSla,
   responseSla,
   slaBadge,
   slaHint,
+  statusBadge,
 } from "./ticketMeta";
 
 const router = useRouter();
@@ -228,7 +236,37 @@ const listSelections = ref(new Set());
 
 const showBulkReplyModal = ref(false);
 
+// the selection bar (Phase 15): assign, status and priority for the selected tickets
+const bulkEdit = reactive<{ open: boolean; mode: BulkMode; tickets: string[] }>(
+  { open: false, mode: "assign", tickets: [] }
+);
+function openBulkEdit(mode: BulkMode, selections: Set<string>) {
+  bulkEdit.mode = mode;
+  bulkEdit.tickets = Array.from(selections).map(String);
+  bulkEdit.open = true;
+}
+function afterBulkEdit() {
+  listViewRef.value?.unselectAll();
+  listViewRef.value?.reload();
+  summaryRef.value?.reload();
+}
+
 const selectBannerActions = [
+  {
+    label: __("Assign"),
+    icon: "lucide-user-plus",
+    onClick: (selections: Set<string>) => openBulkEdit("assign", selections),
+  },
+  {
+    label: __("Set status"),
+    icon: "lucide-circle-dot",
+    onClick: (selections: Set<string>) => openBulkEdit("status", selections),
+  },
+  {
+    label: __("Set priority"),
+    icon: "lucide-signal",
+    onClick: (selections: Set<string>) => openBulkEdit("priority", selections),
+  },
   {
     label: __("Bulk Reply"),
     icon: "corner-up-left",
@@ -252,33 +290,16 @@ const options = computed(() => ({
   columnConfig: {
     subject: {
       custom: ({ row, item }) =>
-        h("span", { class: "flex min-w-0 flex-1 items-center gap-1.5" }, [
-          h(
-            "span",
-            { class: ["truncate", isUnseen(row) && "font-semibold"] },
-            item
-          ),
-          // how far up the follow-up ladder its SLA breach has gone (docs/follow-ups.md)
-          !isCustomerPortal.value && row.custom_escalation_level
-            ? h(EscalationBadge, { level: row.custom_escalation_level })
-            : null,
-        ]),
+        isCustomerPortal.value
+          ? h("span", { class: "truncate" }, item)
+          : subjectCell(row, item),
     },
     status: {
       custom: ({ item }) => {
         if (isCustomerPortal.value) {
           return h(TaskyBadge, customerStatus.badge(item));
         }
-        const status = getStatus(item);
-        const label = status?.["label_agent"];
-        return h(
-          "div",
-          { class: "flex items-center gap-1.5 justify-start w-full" },
-          [
-            h(IndicatorIcon, { class: status?.["parsed_color"] }),
-            h("span", { class: "truncate flex-1 text-base" }, label),
-          ]
-        );
+        return statusCell(item);
       },
     },
     agreement_status: {
@@ -300,7 +321,9 @@ const options = computed(() => ({
       custom: ({ row, item }) =>
         isCustomerPortal.value
           ? factCell(resolutionFact(row, customerStatus.stage(row.status)))
-          : slaCell(row, "resolution", item),
+          : showsBothClocks.value
+          ? slaCell(row, "resolution", item)
+          : dueCell(row),
     },
     ...(isCustomerPortal.value
       ? {}
@@ -334,8 +357,121 @@ const options = computed(() => ({
     name: isCustomerPortal.value ? "TicketCustomer" : "TicketAgent",
     prop: "ticketId",
   },
+  // two lines per row: the subject, and who wrote last and what (Phase 15)
+  rowHeight: isCustomerPortal.value ? undefined : 56,
   hideColumnSetting: false,
 }));
+
+// --- the agent's rows (Phase 15) -----------------------------------------------------
+
+// each visible row's newest email: who wrote it, their first words and when
+const lastMessages = ref<
+  Record<string, { by: string; author: string; text: string; at: string }>
+>({});
+watch(
+  () => listViewRef.value?.list?.data?.data,
+  (rows) => {
+    if (isCustomerPortal.value || !rows?.length) return;
+    const names = rows.map((r: any) => String(r.name));
+    call("helpdesk.api.ticket_area.last_messages", { tickets: names })
+      .then((data: typeof lastMessages.value) => (lastMessages.value = data))
+      .catch(() => {});
+  }
+);
+
+function lastWords(row: any): string {
+  const m = lastMessages.value[String(row.name)];
+  if (!m?.text) return "";
+  const who =
+    m.by === "copilot"
+      ? __("Copilot")
+      : m.by === "team"
+      ? __("{0} (team)", [m.author])
+      : m.author;
+  return `${who}: ${m.text} · ${timeAgo(m.at)}`;
+}
+
+function subjectCell(row: any, subject: string) {
+  const unseen = isUnseen(row);
+  const words = lastWords(row);
+  return h("span", { class: "flex min-w-0 flex-1 flex-col justify-center" }, [
+    h("span", { class: "flex min-w-0 items-center gap-1.5" }, [
+      unseen
+        ? h("span", {
+            class: "size-2 shrink-0 rounded-full bg-surface-gray-7",
+            title: __("Not opened by you yet"),
+          })
+        : null,
+      h(
+        "span",
+        {
+          class: [
+            "truncate text-ink-gray-9",
+            unseen ? "font-semibold" : "font-medium",
+          ],
+        },
+        subject
+      ),
+      // how far up the follow-up ladder its SLA breach has gone (docs/follow-ups.md)
+      row.custom_escalation_level
+        ? h(EscalationBadge, { level: row.custom_escalation_level })
+        : null,
+    ]),
+    words
+      ? h("span", { class: "truncate text-sm text-ink-gray-5" }, words)
+      : null,
+  ]);
+}
+
+function statusCell(status: string) {
+  const record = getStatus(status);
+  const label = record?.label_agent ?? status;
+  return h(TaskyBadge, statusBadge(label, record?.category));
+}
+
+// a saved view that still has both clocks keeps them as they were
+const showsBothClocks = computed(() =>
+  (listViewRef.value?.list?.data?.columns ?? []).some(
+    (c: any) => c.key === "response_by"
+  )
+);
+
+function dueCell(row: any) {
+  const badge = dueBadge(
+    row,
+    getStatus(row.status)?.category === "Paused",
+    (clock) => slaClock.workingLeft(row.name, clock),
+    slaClock.now.value
+  );
+  if (!badge) return h("span");
+  return h(Tooltip, { text: badge.hint }, () =>
+    h(TaskyBadge, { tone: badge.tone, icon: badge.icon }, () => [
+      badge.label,
+      h("span", { class: "sr-only" }, `, ${badge.hint}`),
+    ])
+  );
+}
+
+// j and k move between rows (Enter opens one), / goes to the search; not while typing
+function moveRow(step: 1 | -1) {
+  const rows = Array.from(
+    document.querySelectorAll<HTMLElement>(".list-rows a[href]")
+  );
+  if (!rows.length) return;
+  const at = rows.indexOf(document.activeElement as HTMLElement);
+  const next = at < 0 ? 0 : Math.min(rows.length - 1, Math.max(0, at + step));
+  rows[next].focus();
+  rows[next].scrollIntoView({ block: "nearest" });
+}
+if (!isCustomerPortal.value) {
+  useShortcut("j", () => moveRow(1));
+  useShortcut("k", () => moveRow(-1));
+  useShortcut("/", () =>
+    document
+      .querySelector<HTMLInputElement>(".quick-filters input[type=text]")
+      ?.focus()
+  );
+}
 
 function isUnseen(row: any) {
   const seenBy: string[] = row._seen ? JSON.parse(row._seen) : [];

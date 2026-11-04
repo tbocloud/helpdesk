@@ -68,7 +68,7 @@
       showTooltip: false,
       resizeColumn: true,
       // 44px rows on touch keep the row checkboxes' hit areas apart
-      rowHeight: isTouchSized ? 44 : 40,
+      rowHeight: options.rowHeight ?? (isTouchSized ? 44 : 40),
       getRowRoute: (row) => ({
         name: options.rowRoute?.name,
         params: { [options.rowRoute?.prop]: row.name },
@@ -217,6 +217,8 @@ interface P {
     default_page_length?: number;
     isCustomerPortal?: boolean;
     rowRoute?: Record<string, string>;
+    /** a taller row for lists whose cells hold two lines (the tickets list, Phase 15) */
+    rowHeight?: number;
   };
 }
 

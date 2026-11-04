@@ -7,6 +7,35 @@ changes are the summary strip, row readability, states and the phone layouts. Sh
 
 ## Tickets (`/tickets`, agents)
 
+**Phase 15 (TBO Copilot, Nov 2026): a cleaner ticket area.** What changed, on top of what follows below:
+- **Queues instead of the five count tiles** (`TicketSummaryStrip.vue`, now tabs): Needs reply (status category
+  Open), Overdue, Unassigned, Mine, Waiting (Paused), All open, Resolved, and All (the view's own list, without a
+  number). Each counts with `helpdesk.api.ticket_area.count` under the same conditions its tab applies. That goes
+  through `get_list`, so it counts only tickets the agent may read. (`frappe.client.get_count`, which the tiles used,
+  calls `frappe.db.count` and ignores permissions.) The Overdue count shows in red while it has tickets.
+- **Two filters the server resolves** (`api/ticket_area.py`, like `__assigned_on`): `__overdue` (open, past the first
+  reply with none sent, or past the resolution time) and `__search` (every word in the number, subject, customer,
+  contact or raiser). Each becomes a name list of at most 1,000 tickets, newest first.
+- **Quick filters for agents**: Search, Customer, Priority, Assigned to (`_assign` = the agent, matched through their
+  ToDos as the LIKE form is). The portal keeps its own.
+- **A row** is two lines (`options.rowHeight`, 56px, an optional `ListViewBuilder` option): the subject (a dot and
+  bold until you open it), and under it the newest email, e.g. "Aisha: Any update? … · 12 minutes ago", or
+  "Rahul (team): …" / "Copilot: …". It comes from `helpdesk.api.ticket_area.last_messages`: one request per page,
+  only readable tickets, and quoted earlier mail cut off.
+- **One Due column** (`dueBadge` in `ticketMeta.ts`): the first reply until it is sent, then the resolution, as
+  "Reply by 4:17 PM" or "Resolve by Fri 10:00 AM". In the last working hour it reads "Reply in 20 working min"
+  (amber); once late, "Reply overdue by 1h" (red, the only red); then "SLA paused", "SLA met" or "SLA missed". The
+  default columns show Due in place of First response and Resolution. A saved view with both keeps its two cells.
+- **The status** is a chip with an icon and a word (`statusBadge`): Open blue (the team's move), Replied and Waiting
+  on Task amber (waiting on others), On Hold and Closed gray, Resolved green. No status is red. The patch
+  `ticket_area_status_colours` moves Open (Red → Blue), Replied (Blue → Amber) and Waiting on Task (Orange → Amber),
+  but only where a status still has its install colour. New sites install with these colours.
+- **The selection bar** adds **Assign** (people on leave all day not offered), **Set status** and **Set priority**
+  (`BulkEditDialog.vue`; each ticket is changed as the agent, and failures are listed).
+- **Keys**: `j` / `k` move between rows (Enter opens one), `/` goes to the search.
+- **Getting started** no longer opens by itself over the ticket list and ticket pages. The sidebar's Getting started
+  still opens it.
+
 `desk/src/pages/ticket/Tickets.vue` on top of the shared `components/ListViewBuilder.vue`.
 **The customer portal (`/my-tickets`) renders the same `Tickets.vue`**, so every agent-only
 change is behind `isCustomerPortal`: the portal has no summary strip, and its status, SLA cells,
@@ -35,8 +64,8 @@ phone rows and empty state are its own (see [customer-portal-and-kb.md](customer
   exactly what the list shows and a summary tile's count matches its list. With a `view`, the
   URL conditions are merged into the view's filters, overriding the same fields, as before.
 - **Default columns** (`HDTicket.default_list_data`, agents without a saved default view): ID,
-  Subject, Customer, Status, Priority, First response, Resolution, Assigned to, then Type, Team,
-  Contact, Rating, Created. Saved views keep their own columns.
+  Subject, Customer, Status, Priority, Due (Phase 15; First response and Resolution before), Assigned to, then
+  Type, Team, Contact, Rating, Created. Saved views keep their own columns.
 - **Cells** (agents): Priority is a `TaskyBadge` with the signal icon (Urgent red, High amber,
   others neutral). First response and Resolution are `TaskyBadge`s: Failed (red, alert icon),
   Fulfilled (neutral, check), Paused (neutral, pause), or, while the clock runs, **when the

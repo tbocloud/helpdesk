@@ -47,8 +47,27 @@
         class="flex min-w-0 items-center gap-1.5 self-center truncate text-xs text-ink-gray-6"
       >
         <LucideEyeOff class="size-3.5 shrink-0" aria-hidden="true" />
-        {{ __("Only agents see comments") }}
+        {{ __("Only the team sees internal notes") }}
       </p>
+    </div>
+    <!-- Copilot's drafted reply, offered where the reply is written (Phase 15); its sources and
+         Draft again stay in Details → AI assist -->
+    <div
+      v-if="showEmailBox && draftReady"
+      class="flex flex-wrap items-center gap-2 border-t border-outline-gray-1 bg-info-soft px-6 py-2 text-sm text-ink-gray-8 md:px-5"
+      role="status"
+    >
+      <LucideSparkles class="size-4 shrink-0 text-info" aria-hidden="true" />
+      <span class="min-w-0 flex-1">{{
+        __("Copilot drafted a reply from what it found.")
+      }}</span>
+      <Button size="sm" :label="__('Use the draft')" @click="useDraft" />
+      <Button
+        size="sm"
+        variant="ghost"
+        :label="__('Not now')"
+        @click="draftDismissed = true"
+      />
     </div>
     <Transition name="slide">
       <div
@@ -135,6 +154,9 @@ import { showCommentBox, showEmailBox } from "@/pages/ticket/modalStates";
 import { onClickOutside } from "@vueuse/core";
 import { computed, ref, watch } from "vue";
 import LucideEyeOff from "~icons/lucide/eye-off";
+import LucideSparkles from "~icons/lucide/sparkles";
+import { insertIntoReply } from "@/pages/ticket/modalStates";
+import { Button, createResource } from "frappe-ui";
 
 const emit = defineEmits(["update"]);
 const content = defineModel("content");
@@ -173,7 +195,7 @@ const modes = computed(() => [
   },
   {
     key: "comment",
-    label: __("Comment"),
+    label: __("Internal note"),
     icon: CommentIcon,
     shortcut: "c",
     active: showCommentBox.value,
@@ -233,6 +255,32 @@ const props = defineProps({
     default: () => [],
   },
 });
+
+// the same draft as Details → AI assist (helpdesk.api.ai_suggestion), asked for when a reply opens
+const draft = createResource({
+  url: "helpdesk.api.ai_suggestion.get_suggestion",
+  makeParams: () => ({ ticket: props.ticketId }),
+});
+const draftDismissed = ref(false);
+const draftUsed = ref(false);
+const draftReady = computed(
+  () =>
+    !draftDismissed.value &&
+    !draftUsed.value &&
+    draft.data?.status === "Ready" &&
+    Boolean(draft.data?.reply)
+);
+watch(
+  () => showEmailBox.value,
+  (open) => {
+    if (open && props.ticketId && !draft.loading) draft.fetch();
+  },
+  { immediate: true }
+);
+function useDraft() {
+  insertIntoReply(props.ticketId, draft.data.reply);
+  draftUsed.value = true;
+}
 
 // Follows the editor's own recipient list, which changes when replying to a specific email
 const recipientSummary = computed(() => {

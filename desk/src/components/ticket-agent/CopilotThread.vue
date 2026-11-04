@@ -2,30 +2,44 @@
   <!-- the ticket's Copilot chat (Phase 11): where it stands and what you can do now, then the
        conversation (Copilot narrates its work, people write to it), then the box to write in -->
   <div class="flex min-h-0 flex-1 flex-col">
+    <!-- where Copilot stands, one of four looks (Phase 15): not started, working, a decision
+         waits for a person (the only "needs you"), or its finding -->
     <div
       v-if="now"
-      class="flex gap-2 border-b border-outline-gray-1 bg-surface-gray-1"
-      :class="
-        wide ? 'flex-wrap items-center px-5 py-2.5' : 'flex-col px-4 py-3'
-      "
+      class="flex gap-2 border-b border-outline-gray-1"
+      :class="[
+        wide ? 'flex-wrap items-center px-5 py-2.5' : 'flex-col px-4 py-3',
+        needsYou ? 'bg-warning-soft' : 'bg-surface-gray-1',
+      ]"
     >
       <div
         class="flex items-start justify-between gap-2"
         :class="wide && 'min-w-0 flex-1 items-center'"
       >
-        <p class="text-base text-ink-gray-8" :class="wide && 'min-w-0 flex-1'">
-          <span
-            v-if="needsYou"
-            class="me-2 rounded-full bg-surface-amber-2 px-2 py-0.5 text-xs font-semibold text-ink-amber-9"
-          >
-            {{ __("Needs you") }}
+        <p
+          class="flex items-start gap-2 text-base text-ink-gray-8"
+          :class="wide && 'min-w-0 flex-1'"
+        >
+          <component
+            :is="stateIcon.icon"
+            class="mt-0.5 size-4 shrink-0"
+            :class="stateIcon.class"
+            aria-hidden="true"
+          />
+          <span class="min-w-0">
+            <span
+              v-if="needsYou"
+              class="me-2 rounded-full bg-surface-base px-2 py-0.5 text-xs font-semibold text-warning"
+            >
+              {{ __("Needs you") }}
+            </span>
+            <span
+              v-else-if="now.state && now.state !== now.line"
+              class="mr-1 text-ink-gray-5"
+              >{{ now.state }} ·</span
+            >
+            {{ now.line }}
           </span>
-          <span
-            v-else-if="now.state && now.state !== now.line"
-            class="mr-1 text-ink-gray-5"
-            >{{ now.state }} ·</span
-          >
-          {{ now.line }}
         </p>
         <Dropdown v-if="now.more.length || now.links.length" :options="menu">
           <Button
@@ -291,7 +305,11 @@ import {
   ref,
   watch,
 } from "vue";
+import LucideBot from "~icons/lucide/bot";
 import LucideEllipsis from "~icons/lucide/ellipsis";
+import LucideLoaderCircle from "~icons/lucide/loader-circle";
+import LucideShieldAlert from "~icons/lucide/shield-alert";
+import LucideSparkles from "~icons/lucide/sparkles";
 import LucidePaperclip from "~icons/lucide/paperclip";
 
 type ThreadMessage = {
@@ -337,7 +355,32 @@ const now = computed(() => thread.data?.now as Now | undefined);
 const people = computed(
   () => (thread.data?.people as Person[] | undefined) || []
 );
-const needsYou = computed(() => Boolean(now.value?.actions?.length));
+// a decision waits for a person: approve, reject, let Copilot fix it, build, deploy; not
+// "Start Copilot" on a ticket it has not looked at
+const needsYou = computed(() =>
+  (now.value?.actions ?? []).some((a: CopilotAction) => a.verb !== "start")
+);
+const WORKING = new Set([
+  "Queued",
+  "Investigating",
+  "Preparing Fix",
+  "Approved",
+  "Merging",
+  "Deploying",
+  "Verifying",
+  "Applying",
+]);
+const stateIcon = computed(() => {
+  const state = now.value?.state || "";
+  if (needsYou.value) return { icon: LucideShieldAlert, class: "text-warning" };
+  if (!state) return { icon: LucideBot, class: "text-ink-gray-5" };
+  if (WORKING.has(state))
+    return {
+      icon: LucideLoaderCircle,
+      class: "text-ink-gray-6 motion-safe:animate-spin",
+    };
+  return { icon: LucideSparkles, class: "text-ink-gray-6" };
+});
 const requestOpen = ref(false);
 
 // buttons anyone who may read the ticket may press (helpdesk.copilot.thread.OPEN_VERBS)

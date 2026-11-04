@@ -74,8 +74,32 @@
               ) && 'mt-[2px]',
             ]"
           >
+            <!-- Activity (Phase 15): one line per event; the message itself is on the Customer tab -->
+            <button
+              v-if="
+                compact &&
+                (['email', 'call'].includes(activity.type) ||
+                  (activity.type === 'comment' && !activity.byAutomation))
+              "
+              type="button"
+              class="-mx-1 flex w-full min-w-0 items-center justify-between gap-3 rounded px-1 text-start text-base hover:bg-surface-gray-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+              :title="__('Open it on the Customer tab')"
+              @click="emit('open', activity)"
+            >
+              <span class="min-w-0 truncate text-ink-gray-5">
+                <span class="font-medium text-ink-gray-8">{{
+                  oneLine(activity).who
+                }}</span>
+                {{ oneLine(activity).what }}
+              </span>
+              <Tooltip :text="dateFormat(activity.creation, dateTooltipFormat)">
+                <span class="shrink-0 text-sm text-ink-gray-5">{{
+                  timeAgo(activity.creation)
+                }}</span>
+              </Tooltip>
+            </button>
             <EmailArea
-              v-if="activity.type === 'email'"
+              v-else-if="activity.type === 'email'"
               :activity="activity"
               :show-split-option="
                 !activity.isFirstEmail && ticketStatus !== 'Closed'
@@ -123,7 +147,9 @@ import {
 import { useUserStore } from "@/stores/user";
 import { TicketActivity } from "@/types";
 import { isElementInViewport } from "@/utils";
-import { Avatar, FeatherIcon } from "frappe-ui";
+import { __ } from "@/translation";
+import { dateFormat, dateTooltipFormat, timeAgo } from "@/utils";
+import { Avatar, FeatherIcon, Tooltip } from "frappe-ui";
 import { PropType, computed, h, inject, nextTick, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import FeedbackBox from "../ticket-agent/FeedbackBox.vue";
@@ -144,9 +170,34 @@ const props = defineProps({
     type: String,
     default: "",
   },
+  /** one line per email, note and call (the Activity tab) */
+  compact: {
+    type: Boolean,
+    default: false,
+  },
 });
 
-const emit = defineEmits(["email:reply", "update"]);
+const emit = defineEmits(["email:reply", "update", "open"]);
+
+function oneLine(activity: any): { who: string; what: string } {
+  if (activity.type === "email")
+    return {
+      who: activity.sender?.full_name || activity.sender?.name || "",
+      what:
+        activity.direction === "Sent"
+          ? __("replied to the customer")
+          : __("wrote by email"),
+    };
+  if (activity.type === "comment")
+    return {
+      who: activity.commenter || "",
+      what: __("added an internal note"),
+    };
+  return {
+    who: activity.caller || __("Someone"),
+    what: __("made a call ({0})", [activity.duration || "0s"]),
+  };
+}
 
 const route = useRoute();
 const router = useRouter();
