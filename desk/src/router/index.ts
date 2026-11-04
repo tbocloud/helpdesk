@@ -8,6 +8,7 @@ import {
   ERP_EMPLOYEE_HIDDEN_ROUTES,
   CONTENT_TEAM_ROUTES,
   DM_EMPLOYEE_HIDDEN_ROUTES,
+  LEAD_BANK_ROUTES,
   SALES_EMPLOYEE_ROUTES,
 } from "@/pages/content/contentTeam";
 import { createRouter, createWebHistory } from "vue-router";
@@ -180,6 +181,22 @@ const portalRoutes = [
     name: "LeadProposal",
     component: () => import("@/pages/leads/Proposal.vue"),
     props: true,
+  },
+  // the Lead Bank: any active agent adds leads by photo and sees their own (docs/lead-bank.md)
+  {
+    path: "/lead-bank",
+    name: "LeadBank",
+    component: () => import("@/pages/lead-bank/LeadBank.vue"),
+  },
+  {
+    path: "/lead-bank/new",
+    name: "LeadBankAdd",
+    component: () => import("@/pages/lead-bank/LeadBankAdd.vue"),
+  },
+  {
+    path: "/lead-bank/team",
+    name: "LeadBankTeam",
+    component: () => import("@/pages/lead-bank/LeadBankTeam.vue"),
   },
   {
     path: "/projects",
@@ -487,6 +504,11 @@ router.beforeEach(async (to, _, next) => {
       (redirectURL ? `?redirect-to=/helpdesk${redirectURL}` : "/helpdesk");
   } else if (!to.meta.public && !authStore.hasDeskAccess) {
     next({ name: "TicketsCustomer" });
+  } else if (
+    LEAD_BANK_ROUTES.has(String(to.name)) &&
+    !authStore.canUseLeadBank
+  ) {
+    next({ name: "Home" });
   } else if (!to.meta.public && authStore.isSalesEmployee) {
     // salespeople see the sales screens only; the Scoreboard when Leads is off
     const name = String(to.name);

@@ -474,6 +474,7 @@ const navItems = computed(() => {
         SALES_EMPLOYEE_ROUTES.has(item.to)
     )
     .filter((item) => !item.leadsOnly || authStore.canUseLeads)
+    .filter((item) => !item.leadBankOnly || authStore.canUseLeadBank)
     .filter((item) => !item.projectManagerOnly || authStore.isProjectManager)
     .filter((item) => !item.overviewOnly || authStore.canSeeOverview)
     .filter((item) => !item.adoptionOnly || authStore.canSeeAdoption)

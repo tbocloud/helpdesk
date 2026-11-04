@@ -14,6 +14,9 @@ export interface CommissionSlabRow {
 }
 
 export interface CommissionProject {
+  /** A sales line, or a referral on a lead the person collected (Lead Bank). */
+  kind?: "Sales" | "Referral";
+  lead?: string | null;
   project: string;
   plan: string | null;
   collected: number;
@@ -58,6 +61,8 @@ export interface CommissionPerson {
     above_target: number;
   } | null;
   commission: number;
+  /** The part of `commission` that is referral (Lead Bank). */
+  referral?: number;
   statement: string | null;
   status: CommissionStatus | null;
   frozen: number;

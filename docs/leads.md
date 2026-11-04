@@ -36,6 +36,7 @@ The hub never gets ERPNext installed.
   Overview for them, and their documents chain stops at the client documents (the Project
   and UAT steps don't open). The full rules are in
   [departments.md](departments.md#sales-wall-sales-employee).
+- Staff who may not see Leads still get the Lead Bank (`can_use_lead_bank`, [lead-bank.md](lead-bank.md)): Add a lead and My leads only.
 - The check is `helpdesk.integrations.crm.leads.can_use_leads`; `helpdesk.api.auth.get_user`
   sends it as `can_use_leads`, which shows the sidebar item and lets the router open
   `/helpdesk/leads`. Every endpoint checks it again on the server.
@@ -444,6 +445,22 @@ the hub project; type the ERP Project name when the invoices use another.
 Tests: `helpdesk/tests/test_commission.py` (reads live as the person and never cached, filters
 trimmed, an older ERP site hidden quietly, refusals, writes as POSTs, plan and project values sent as
 JSON). The ERP site's own tests cover the maths, attribution and statements.
+
+## Lead Bank (staff collect leads, referral commission)
+
+Every active agent, whatever their team or wall, can add a lead from a photo and earns a referral
+when it is won and paid. It is a separate path from Leads: `can_use_lead_bank` (Leads switched on in
+Settings → CRM, and an active agent) opens only **Add a lead**, **My leads** and, for managers,
+**Team**; it never opens the CRM, so designers, developers and the Digital team still do not see
+Leads. Specs: [lead-bank.md](lead-bank.md) here, TBO Smart's `docs/lead-bank.md` and
+`docs/commission.md` section 7, the contract `docs/hub-leads-api.md` section 2.21. The hub proxies
+`tbo_smart.api.hub_lead_bank` through `helpdesk/api/lead_bank.py`, and reads the photos with its
+own AI (`helpdesk/lead_bank.py`).
+
+Referral shows in **Commission** like any other line: a statement line of kind Referral, labelled
+"Referral: <lead>" in a person's projects, and the statement's `referral` is the part of its
+commission that is referral. The rates, the cap and the department of each region are set in
+Settings → CRM → **Referral (Lead Bank)** (`ReferralSettings.vue`), under the commission plans.
 
 ## Hub endpoints
 
@@ -877,6 +894,7 @@ strip calls `helpdesk.api.proposals.create_project_from_proposal(proposal)`; pla
 
 ## Tests
 
+`helpdesk/tests/test_lead_bank.py` (the Lead Bank, see [lead-bank.md](lead-bank.md)).
 `helpdesk/tests/test_leads.py` with `test_utils.FakeCRM` (`lead_answers`, `lead_calls`,
 `lead_error`) and `test_utils.enable_leads`: off by default, `acting_user` on every call,
 writes posted, view and page size checked, teams and inactive agents gated, and each error

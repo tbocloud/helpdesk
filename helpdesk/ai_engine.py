@@ -424,6 +424,7 @@ def _openai_chat(
     user_message: str,
     max_tokens: int,
     timeout: float,
+    images: list[dict] | None = None,
 ):
     """One /chat/completions call, through requests so there is no openai SDK
     to depend on. Returns (text, _Usage, ran_out_of_tokens).
@@ -438,7 +439,7 @@ def _openai_chat(
         "model": provider.model,
         "messages": [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_message},
+            {"role": "user", "content": _openai_content(user_message, images)},
         ],
     }
     if provider.kind == "OpenAI":
@@ -486,12 +487,50 @@ def _openai_chat(
     )
 
 
+def _openai_content(user_message: str, images: list[dict] | None):
+    """The user message, with `images` ([{media_type, data (base64)}]) as data URLs."""
+    if not images:
+        return user_message
+    return [
+        {"type": "text", "text": user_message},
+        *(
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:{image['media_type']};base64,{image['data']}"
+                },
+            }
+            for image in images
+        ),
+    ]
+
+
+def _anthropic_content(user_message: str, images: list[dict] | None):
+    if not images:
+        return user_message
+    return [
+        *(
+            {
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": image["media_type"],
+                    "data": image["data"],
+                },
+            }
+            for image in images
+        ),
+        {"type": "text", "text": user_message},
+    ]
+
+
 def _anthropic_messages(
     provider: AIProvider,
     system_prompt: str,
     user_message: str,
     max_tokens: int,
     timeout: float,
+    images: list[dict] | None = None,
 ):
     """One Messages API call (Anthropic or a compatible endpoint such as Kimi).
     Returns (text, usage, ran_out_of_tokens)."""
@@ -509,7 +548,9 @@ def _anthropic_messages(
                     "cache_control": {"type": "ephemeral"},
                 }
             ],
-            messages=[{"role": "user", "content": user_message}],
+            messages=[
+                {"role": "user", "content": _anthropic_content(user_message, images)}
+            ],
             timeout=timeout,
         )
     except anthropic.APIStatusError as e:
@@ -536,8 +577,11 @@ def complete(
     ticket_name: str | None = None,
     budgets: tuple[int, ...] | None = None,
     deadline: float | None = None,
+    images: list[dict] | None = None,
 ):
     """One answer from one provider, each attempt logged; AIProviderError if it fails.
+    `images` ([{media_type, data (base64)}]) are shown to the model with the message; the
+    model must read images (docs/lead-bank.md).
 
     Thinking models (Kimi, OpenAI's reasoning models) spend part of the budget
     thinking and can run out before writing the answer: they get room, then more once.
@@ -551,7 +595,7 @@ def complete(
         if timeout < MIN_ATTEMPT_SECONDS:
             raise AIProviderError(provider, "timeout", "no time left for this call")
         text, usage, ran_out = call(
-            provider, system_prompt, user_message, max_tokens, timeout
+            provider, system_prompt, user_message, max_tokens, timeout, images
         )
         log_usage(
             provider.model, usage, ticket_name=ticket_name, provider=provider.slot
@@ -826,7 +870,7 @@ def invents_numbers(text: str, known: set[str]) -> bool:
     return bool(set(NUMBER.findall(text)) - known)
 
 
-def call_haiku(system_prompt, user_message, ticket_name=None):
+def call_haiku(system_prompt, user_message, ticket_name=None, images=None):
     """The cheap, always-on AI call behind triage, drafts and summaries.
 
     Tries the primary provider, then the fallback (docs/ai-providers.md), and
@@ -836,6 +880,7 @@ def call_haiku(system_prompt, user_message, ticket_name=None):
             system_prompt: The instructions; mentioning JSON turns on OpenAI's JSON mode
             user_message: The content to work on
             ticket_name: Optional ticket name for usage logging
+            images: Optional [{media_type, data (base64)}] the model looks at too
 
     Returns:
             dict with keys: response (parsed JSON), usage (token counts), cost (USD)
@@ -853,7 +898,12 @@ def call_haiku(system_prompt, user_message, ticket_name=None):
     for index, provider in enumerate(ready):
         try:
             text, usage = complete(
-                provider, system_prompt, user_message, ticket_name, deadline=deadline
+                provider,
+                system_prompt,
+                user_message,
+                ticket_name,
+                deadline=deadline,
+                images=images,
             )
         except AIProviderError as e:
             error = e
