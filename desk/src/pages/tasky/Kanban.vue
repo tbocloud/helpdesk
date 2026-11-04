@@ -413,6 +413,13 @@
                     {{ shortDate(task.due_date) }}
                     <span v-if="isOverdue(task)">· {{ __("Overdue") }}</span>
                   </span>
+                  <span
+                    v-else-if="isOverdue(task)"
+                    class="flex shrink-0 items-center gap-1 text-xs font-medium text-danger"
+                  >
+                    <LucideAlarmClock class="size-3.5" aria-hidden="true" />
+                    {{ __("Overdue") }}
+                  </span>
                   <SlipBadge
                     v-if="task.slip_count && !isClosed(task)"
                     :count="task.slip_count"

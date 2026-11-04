@@ -166,8 +166,9 @@ export function holdByLabel(task: {
     : __("Put on hold by {0}", task.hold_by_name);
 }
 
-// Due dates are date-only, so a task is overdue from the day after it's due, or on
-// its due day once it has been worked longer than its estimate (server: is_task_overdue).
+// Due dates are date-only, so a task is overdue from the day after it's due, or as soon
+// as it has been worked longer than its estimate, whatever its due date and with none
+// (server: is_task_overdue).
 // A task on hold is never overdue: its due date moves out when it resumes.
 export function isOverdue(
   task: {
@@ -179,10 +180,9 @@ export function isOverdue(
   },
   now = dayjs()
 ) {
-  if (!task.due_date || isClosed(task) || isOnHold(task)) return false;
-  const due = dayjs(task.due_date);
-  if (due.isBefore(now, "day")) return true;
-  return due.isSame(now, "day") && isOverEstimate(task, now);
+  if (isClosed(task) || isOnHold(task)) return false;
+  if (task.due_date && dayjs(task.due_date).isBefore(now, "day")) return true;
+  return isOverEstimate(task, now);
 }
 
 /**
