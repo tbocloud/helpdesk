@@ -1,7 +1,7 @@
 # Lead Bank
 
 **Status:** built 2026-11-04. ERP side and contract: TBO Smart's `docs/lead-bank.md`,
-`docs/commission.md` section 7 and `docs/hub-leads-api.md` section 2.21 (v1.21). Summary in
+`docs/commission.md` section 7 and `docs/hub-leads-api.md` section 2.22 (v1.22). Summary in
 [leads.md](leads.md#lead-bank-staff-collect-leads-referral-commission).
 
 Every staff member can add a lead by taking a photo of a shop board, visiting card, banner or ad.

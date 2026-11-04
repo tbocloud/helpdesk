@@ -2,7 +2,7 @@ import type { Tone } from "@/components/tone";
 import { fullAmount } from "@/pages/leads/commission";
 import { __ } from "@/translation";
 
-/** The Lead Bank's contract with TBO Smart: hub-leads-api.md §2.21 on the ERP site. */
+/** The Lead Bank's contract with TBO Smart: hub-leads-api.md §2.22 on the ERP site. */
 export type Region = "India" | "UAE" | "KSA";
 export const REGIONS: Region[] = ["India", "UAE", "KSA"];
 
