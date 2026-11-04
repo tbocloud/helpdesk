@@ -4901,3 +4901,45 @@ def make_business_health_check(**values):
             **values,
         }
     ).insert()
+
+
+# ---------- Lead Bank (docs/lead-bank.md) ----------
+
+
+def make_jpeg_photo(filename: str = "board.jpg") -> dict:
+    """A small real JPEG as the Lead Bank takes a photo: {filename, content (base64)}."""
+    import base64
+
+    from PIL import Image
+
+    image = io.BytesIO()
+    Image.new("RGB", (8, 8), "white").save(image, format="JPEG")
+    return {
+        "filename": filename,
+        "content": base64.b64encode(image.getvalue()).decode(),
+    }
+
+
+def ai_reading(**fields) -> dict:
+    """What ai_engine.call_haiku answers when it reads a photo of a shop: a shop board's
+    details unless `fields` change them."""
+    return {
+        "response": {
+            "company_name": "Sree Krishna Jewellers",
+            "contact_name": "Ravi Kumar",
+            "phones": ["+91 98470 12345", "0481 234 5678"],
+            "email": "Sales@SreeKrishna.example",
+            "website": "www.sreekrishna.example",
+            "business_type": "Jewellery shop",
+            "address": "MG Road, Kottayam",
+            "state": "Kerala",
+            **fields,
+        },
+        "usage": {"input_tokens": 100, "output_tokens": 50},
+        "cost": 0,
+    }
+
+
+def clear_lead_bank_scan_limit(user: str) -> None:
+    """Forget how many photo readings `user` has made this hour."""
+    frappe.cache.delete(frappe.cache.make_key(f"lead_bank_scans:{user}"))

@@ -88,6 +88,33 @@ def can_use_leads(user: str | None = None) -> bool:
     )
 
 
+def can_use_lead_bank(user: str | None = None) -> bool:
+    """The Lead Bank (docs/lead-bank.md) is open to every active agent while Leads is on in
+    Settings → CRM, whatever their team or role: designers, developers and coordinators
+    collect leads too. It is a separate path from `can_use_leads`: it opens only the Add a lead
+    and My leads screens, never the CRM, and the ERP site answers it for any enabled user."""
+    from helpdesk.utils import is_agent
+
+    user = user or frappe.session.user
+    if user == "Guest" or not leads_on():
+        return False
+    if user == "Administrator":
+        return True
+    if MANAGER_ROLES & set(frappe.get_roles(user)):
+        return True
+    return is_agent(user) and bool(frappe.db.get_value("HD Agent", user, "is_active"))
+
+
+def require_lead_bank():
+    if not can_use_lead_bank():
+        frappe.throw(
+            _(
+                "The Lead Bank isn't turned on for you. Ask an admin to switch on Leads in Settings → CRM."
+            ),
+            frappe.PermissionError,
+        )
+
+
 def require_leads():
     if not can_use_leads():
         frappe.throw(

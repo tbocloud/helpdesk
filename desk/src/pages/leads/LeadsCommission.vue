@@ -291,12 +291,14 @@
                   <tbody>
                     <tr
                       v-for="row in person.projects"
-                      :key="row.project + (row.plan || '')"
+                      :key="(row.lead || row.project) + (row.plan || '')"
                       class="border-t border-outline-gray-1"
                     >
                       <td class="py-1.5 pe-3 text-ink-gray-8">
                         <span class="font-mono">{{
-                          row.project || __("No project")
+                          row.kind === "Referral"
+                            ? __("Referral: {0}", row.lead || "")
+                            : row.project || __("No project")
                         }}</span>
                         <span class="block text-xs text-ink-gray-6">{{
                           row.plan || __("No plan")
