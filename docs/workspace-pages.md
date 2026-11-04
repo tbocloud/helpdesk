@@ -866,16 +866,19 @@ dialog and the reports (`helpdesk/work_hours.py`):
 - **Daily cap:** per person per day, timesheet hours plus not-yet-logged sessions can't pass
   `max_hours(day)`. `complete_task` checks every day's hours against what is left (the task's own
   sessions are replaced by the dialog's rows, so they don't count against it). Typed-in hours
-  are for today and the working day before it only (`last_working_day`: the latest earlier day
-  with work hours, as the cap counts them, so Friday on a Monday even when Saturday is a working
-  day without SLA hours, and the day before a holiday after it; it looks back as far as the
-  task's creation, the earliest day hours can go on, and with no such day only today takes
-  typed-in hours); an
-  older day takes only what the task's timer recorded on it, the stretch still running included,
+  are for today and the last **N working days** (HD Work Settings → Days Hours Can Be Typed
+  In, `hand_entry_days`, 7 by default, 1 to 60; owner's request, 2026-11-03, as staff found
+  older tasks hard to complete when it was the day before only). The days are counted as the
+  cap counts them, by their work hours (`working_days_before`, `oldest_hand_entry_day`): a
+  Saturday without SLA hours and holidays are skipped, and the search stops at the task's
+  creation, the earliest day hours can go on. `get_completion_days` returns the earliest
+  allowed day as `oldest` (and the working day before today as `yesterday`, as before), and
+  `left` for each day in the window. An older day takes only what the task's timer recorded on it, the stretch still running included,
   rounded to the nearest quarter hour as the dialog offers it (`timer_allowance`: 7.13 h may be
   logged as 7.25), unless a System Manager passes `backdate_reason`. The refusal says what the
   timer recorded on that day and the most it allows ("…the timer recorded 0.24 h on it, so you
-  can log at most 0.25 h"), or that it recorded nothing. The Complete task dialog keeps the
+  can log at most 0.25 h"), or that it recorded nothing, and from which day hours can be typed
+  in. The Complete task dialog keeps the
   timer's hours by date (`timerByDay` in `CompleteTaskDialog.vue`), not on the row they first
   filled: a row moved to another day shows that day's "From the timer" hours (none if the timer
   didn't run then) and is checked against them with the same rounding (`timerAllowance`), so the
