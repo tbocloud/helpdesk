@@ -83,6 +83,10 @@ export const useAuthStore = defineStore("auth", () => {
   const canUseLeads: ComputedRef<boolean> = computed(
     () => !!user__.value.can_use_leads
   );
+  // Add a lead and My leads: every active agent while Leads is on (docs/lead-bank.md)
+  const canUseLeadBank: ComputedRef<boolean> = computed(
+    () => !!user__.value.can_use_lead_bank
+  );
   const canSeeCustomerReport: ComputedRef<boolean> = computed(
     () => !!(user__.value.is_manager || user__.value.is_project_manager)
   );
@@ -185,6 +189,7 @@ export const useAuthStore = defineStore("auth", () => {
     isSalesEmployee,
     canWorkTickets,
     canUseLeads,
+    canUseLeadBank,
     telephonyInstalled,
     canOpenChat,
     isLoggedIn,

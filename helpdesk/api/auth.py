@@ -14,7 +14,7 @@ from helpdesk.content_team import (
     is_sales_employee,
 )
 from helpdesk.helpdesk.doctype.hd_customer.hd_customer import can_set_ticket_owner
-from helpdesk.integrations.crm.leads import can_use_leads
+from helpdesk.integrations.crm.leads import can_use_lead_bank, can_use_leads
 from helpdesk.tasky.permissions import is_project_manager as tasky_is_project_manager
 from helpdesk.utils import agent_only, get_agent_name, get_agents_team
 from helpdesk.utils import is_agent as _is_agent
@@ -102,6 +102,8 @@ def get_user():
         "can_work_tickets": can_work_tickets(current_user),
         # the Leads page, live from the CRM site (docs/leads.md)
         "can_use_leads": can_use_leads(current_user),
+        # Add a lead and My leads: every active agent while Leads is on (docs/lead-bank.md)
+        "can_use_lead_bank": can_use_lead_bank(current_user),
         # lets the frontend skip call-integration checks when telephony isn't installed
         "telephony_installed": "telephony" in frappe.get_installed_apps(),
         "user_image": user_image,
