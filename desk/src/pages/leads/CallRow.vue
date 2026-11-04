@@ -87,7 +87,7 @@
       :class="CALL_BUTTON"
       :disabled="dialing"
       :aria-label="__('Call {0}', name)"
-      @click="emit('dial', call.lead)"
+      @click="emit('dial', call)"
     >
       <LucideLoaderCircle
         v-if="dialing"
@@ -102,6 +102,7 @@
       :href="`tel:${dialable}`"
       :class="CALL_BUTTON"
       :aria-label="__('Call {0}', name)"
+      @click="emit('dialed', call)"
     >
       <LucidePhone class="size-5" aria-hidden="true" />
       {{ __("Call") }}
@@ -152,7 +153,9 @@ const props = defineProps<{
   overdue?: boolean;
 }>();
 const emit = defineEmits<{
-  (e: "dial", lead: string): void;
+  (e: "dial", call: QueueCall): void;
+  // the phone's own dialler was used: a result is expected when the person is back
+  (e: "dialed", call: QueueCall): void;
   (e: "outcome", call: QueueCall, outcome: CallOutcome): void;
 }>();
 

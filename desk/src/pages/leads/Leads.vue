@@ -16,7 +16,7 @@
           </template>
         </Button>
         <Button
-          v-if="options?.can_find_prospects"
+          v-if="options?.can_find_prospects && !isBd"
           :label="__('Find prospects')"
           :route="{ name: 'FindProspects' }"
         >
@@ -136,6 +136,7 @@
               :options="stageOptions"
             />
             <FormControl
+              v-if="!isBd"
               v-model="filters.owner"
               type="select"
               :label="__('Owner')"
@@ -631,6 +632,14 @@ const TABS: { value: LeadTab; label: string }[] = [
   { value: "business", label: __("Business") },
   ...LEAD_VIEWS,
 ];
+// what a BD may open; Commission is their own, the ERP site shows them nobody else's
+const BD_TABS: LeadTab[] = [
+  "today",
+  "call_today",
+  "mine",
+  "follow_up",
+  "commission",
+];
 const PERIOD_LABELS: Record<string, string> = {
   today: __("today"),
   yesterday: __("yesterday"),
@@ -667,10 +676,12 @@ function queryValue(key: string) {
 // a salesperson whose department hands out call batches opens on them, anyone else on
 // the Overview
 function defaultTab(): LeadTab {
-  return authStore.isSalesEmployee &&
-    batchesOn(leadOptions.data as LeadOptions | undefined)
-    ? "today"
-    : "overview";
+  const loaded = leadOptions.data as LeadOptions | undefined;
+  // a BD never opens on the team's figures; before the options arrive they get Today's calls
+  if (authStore.isSalesBd && (!loaded || !loaded.departments)) return "today";
+  if (loaded?.is_bd ?? authStore.isSalesBd)
+    return batchesOn(loaded) ? "today" : "call_today";
+  return authStore.isSalesEmployee && batchesOn(loaded) ? "today" : "overview";
 }
 
 function queryView(): LeadTab {
@@ -885,9 +896,13 @@ const hasDaily = computed(() => !!options.value?.has_daily_report);
 const canViewBusiness = computed(() => !!options.value?.can_view_business);
 const hasBatches = computed(() => batchesOn(options.value));
 const hasOutreach = computed(() => !!options.value?.outreach);
+// a BD (a salesperson who is no manager or head) sees Today's calls, their own leads and
+// follow-ups, nothing of the team's: another BD may be calling the same lead (docs/leads.md)
+const isBd = computed(() => options.value?.is_bd ?? authStore.isSalesBd);
 // Today's calls is the Call today list for people who get call batches: one place
 const tabs = computed(() =>
   TABS.filter((tab) => {
+    if (isBd.value && !BD_TABS.includes(tab.value)) return false;
     if (tab.value === "daily") return hasDaily.value;
     if (tab.value === "business") return canViewBusiness.value;
     if (tab.value === "outreach") return hasOutreach.value;
@@ -906,12 +921,15 @@ watch(options, (value) => {
     view.value = homeTab.value;
   if (!value.has_daily_report && view.value === "daily")
     view.value = "overview";
-  if (!hasBatches.value && view.value === "today") view.value = "overview";
+  if (!hasBatches.value && view.value === "today")
+    view.value = isBd.value ? "call_today" : "overview";
   if (hasBatches.value && view.value === "call_today") view.value = "today";
   // a link to a tab the person may not open
   if (value && !value.can_view_business && view.value === "business")
     view.value = "overview";
   if (!value.outreach && view.value === "outreach") view.value = "overview";
+  // an old link to a tab a BD doesn't have
+  if (isBd.value && !BD_TABS.includes(view.value)) view.value = homeTab.value;
 });
 const clickToCall = useClickToCall();
 
@@ -966,7 +984,7 @@ const leads = createResource({
 // Overview brings it with its own request, so only the list asks for it here.
 const intake = createResource({
   url: "helpdesk.api.leads.get_lead_intake",
-  auto: isList.value,
+  auto: isList.value && !authStore.isSalesBd,
   onSuccess(data: LeadIntake) {
     intakeData.value = data;
   },
@@ -988,7 +1006,7 @@ function takeOverviewIntake(value: LeadIntake | undefined) {
 if (isList.value) staleLeads.fetch();
 
 watch(view, (tab) => {
-  if (isList.value && !intakeData.value) intake.fetch();
+  if (isList.value && !intakeData.value && !isBd.value) intake.fetch();
   if (isList.value && !staleLeads.data && !staleLeads.loading)
     staleLeads.fetch();
 });

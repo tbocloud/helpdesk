@@ -27,7 +27,7 @@
           :label="__('Call')"
           :loading="clickToCall.loading"
           :tooltip="__('MyOperator rings your phone, then the lead')"
-          @click="clickToCall.submit({ name: leadId })"
+          @click="callWithMyOperator"
         >
           <template #prefix>
             <LucidePhone class="size-4" aria-hidden="true" />
@@ -142,6 +142,7 @@
                     <a
                       v-if="field.href"
                       :href="field.href"
+                      @click="field.href.startsWith('tel:') && phoneCalled()"
                       class="rounded underline decoration-outline-gray-3 underline-offset-2 hover:text-ink-gray-9 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
                       >{{ field.value }}</a
                     >
@@ -432,6 +433,7 @@ import {
   type LeadStage,
   type LeadTimelineEntry,
 } from "./leads";
+import { startCall } from "./pendingCalls";
 
 const props = defineProps<{ leadId: string }>();
 
@@ -491,6 +493,23 @@ const data = computed(() => detail.data as LeadDetail | undefined);
 const lead = computed(() => data.value?.lead);
 
 const clickToCall = useClickToCall();
+
+/** A call placed from this lead waits for its result: the sheet asks how it went. */
+function remember(via: "phone" | "myoperator") {
+  startCall({
+    lead: props.leadId,
+    lead_name: lead.value?.lead_name || props.leadId,
+    phone: lead.value?.mobile_no || lead.value?.phone || "",
+    via,
+  });
+}
+function callWithMyOperator() {
+  clickToCall.submit({ name: props.leadId });
+  remember("myoperator");
+}
+function phoneCalled() {
+  remember("phone");
+}
 const canCall = computed(
   () =>
     !!lead.value?.can_call &&

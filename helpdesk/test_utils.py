@@ -3686,6 +3686,41 @@ def lead_category_options() -> dict:
     }
 
 
+def bd_options(
+    member_of: tuple[str, ...] = ("GrowthX",), head_of: tuple[str, ...] = ()
+) -> dict:
+    """The ERP site's get_options for a salesperson: a department each for `member_of` (calls
+    handed out in batches) and `head_of` (is_head)."""
+    return {
+        "stages": [],
+        "departments": [
+            {
+                "name": name,
+                "is_member": 1,
+                "is_head": 0,
+                "call_batches_enabled": 1,
+                "products": [],
+            }
+            for name in member_of
+        ]
+        + [
+            {
+                "name": name,
+                "is_member": 0,
+                "is_head": 1,
+                "call_batches_enabled": 1,
+                "products": [],
+            }
+            for name in head_of
+        ],
+    }
+
+
+def clear_pending_calls() -> None:
+    """Forgets every person's calls without a result (the cache outlives a test)."""
+    frappe.cache.delete_keys("hd_pending_calls:")
+
+
 def stale_lead(name: str, idle_days: int, **fields) -> dict:
     """A row of the ERP site's get_stale_leads: a lead of GrowthX owned by Asha with no
     activity for `idle_days`, unless `fields` say otherwise."""

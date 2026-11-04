@@ -11,6 +11,7 @@ from helpdesk.content_team import (
     is_dm_employee,
     is_dm_head,
     is_erp_only,
+    is_sales_bd_role,
     is_sales_employee,
 )
 from helpdesk.helpdesk.doctype.hd_customer.hd_customer import can_set_ticket_owner
@@ -98,6 +99,9 @@ def get_user():
         "is_dm_employee": is_dm_employee(current_user),
         # Sales Employees: the sales screens only (Leads, Scoreboard), docs/departments.md
         "is_sales_employee": is_sales_employee(current_user),
+        # a Sales Employee who is no manager: Leads shows them their own calls and leads only
+        # (a department head is told apart by the Leads options, from the ERP site)
+        "is_sales_bd": is_sales_bd_role(current_user),
         # the Tickets list and New ticket: System / Agent Managers and the ERP team
         "can_work_tickets": can_work_tickets(current_user),
         # the Leads page, live from the CRM site (docs/leads.md)
