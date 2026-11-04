@@ -6,7 +6,7 @@ site decides who may, prices the run, keeps the monthly cap and does the searchi
 import frappe
 from frappe import _
 
-from helpdesk.api.leads import clear_cached_reads, parse_data
+from helpdesk.api.leads import clear_cached_reads, parse_data, refuse_bd
 from helpdesk.integrations.crm.leads import (
     LeadsUnavailableError,
     call_if_deployed,
@@ -20,6 +20,7 @@ NOT_ALLOWED = "Only managers and department heads can find prospects."
 def ask(method: str, post: bool = False, **params):
     """The ERP site's answer; an older TBO Smart says so in words."""
     require_leads()
+    refuse_bd()
     result = call_if_deployed(
         method, post=post, permission_message=_(NOT_ALLOWED), **params
     )
@@ -51,6 +52,7 @@ def get_prospect_runs() -> dict:
     """The newest runs the person may see. Never cached: a running run's counts grow.
     `available` is false while the ERP site is older than this."""
     require_leads()
+    refuse_bd()
     runs = call_if_deployed("get_prospect_runs", permission_message=_(NOT_ALLOWED))
     if runs is None:
         return {"available": False, "runs": []}
