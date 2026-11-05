@@ -65,8 +65,8 @@
             </Button>
           </div>
           <p class="text-p-xs tabular-nums text-ink-gray-5">
-            <template v-if="row.fromTimer">
-              {{ __("From the timer: {0} h", String(row.fromTimer)) }} ·
+            <template v-if="timerOn(row.date)">
+              {{ __("From the timer: {0} h", String(timerOn(row.date))) }} ·
             </template>
             {{ leftLabel(row) }}
           </p>
@@ -138,7 +138,6 @@
           :form="formId"
           :label="forReview ? __('Send for review') : __('Complete task')"
           :loading="completeTask.loading"
-          :disabled="!isValid"
         >
           <template #prefix>
             <LucideCircleCheck class="size-4" aria-hidden="true" />
@@ -214,8 +213,6 @@ interface DayRow {
   key: number;
   date: string;
   hours: string;
-  /** what the timer recorded that day, shown beside the row */
-  fromTimer?: number;
 }
 
 interface CompletionDay {
@@ -236,6 +233,9 @@ const today = ref(dayjs().format("YYYY-MM-DD"));
 // already has on it), and the oldest day hours can be typed in for: both from the server
 const left = ref<Record<string, number>>({});
 const yesterday = ref("");
+// what the timer recorded on each day: kept by date, not by row, so a row moved to another
+// day shows (and is checked against) that day's timer hours, as the server checks them
+const timerByDay = ref<Record<string, number>>({});
 const earliest = computed(() =>
   props.task?.creation
     ? dayjsLocal(props.task.creation).format("YYYY-MM-DD")
@@ -243,8 +243,8 @@ const earliest = computed(() =>
 );
 let nextKey = 0;
 
-function addRow(date = "", hours = "", extra: Partial<DayRow> = {}) {
-  rows.value.push({ key: nextKey++, date, hours, ...extra });
+function addRow(date = "", hours = "") {
+  rows.value.push({ key: nextKey++, date, hours });
 }
 
 // the days the task's timer ran, from its saved sessions; only the latest request's answer
@@ -279,22 +279,20 @@ async function loadDays(task: string) {
 // left out, unless that leaves no time at all
 function fillRows(data: CompletionDay[]) {
   rows.value = [];
+  timerByDay.value = Object.fromEntries(
+    data.map((d) => [d.date, Math.round(d.hours * 100) / 100])
+  );
   for (const d of data) {
     const hours = Math.min(
       Math.round(d.hours * 4) / 4,
       leftFor(d.date) ?? MAX_HOURS
     );
-    if (hours > 0)
-      addRow(d.date, String(hours), {
-        fromTimer: Math.round(d.hours * 100) / 100,
-      });
+    if (hours > 0) addRow(d.date, String(hours));
   }
   const tracked = data.reduce((n, d) => n + d.hours, 0);
   if (!rows.value.length && tracked > 0) {
     const last = data[data.length - 1];
-    addRow(last.date, String(roundToQuarter(tracked)), {
-      fromTimer: Math.round(tracked * 100) / 100,
-    });
+    addRow(last.date, String(roundToQuarter(tracked)));
   }
   if (!rows.value.length) fallbackRow();
 }
@@ -303,9 +301,8 @@ function fallbackRow() {
   if (!props.task) return;
   rows.value = [];
   const tracked = roundToQuarter(props.trackedHours ?? timerHours(props.task));
-  addRow(today.value, tracked ? String(tracked) : "", {
-    fromTimer: tracked || undefined,
-  });
+  timerByDay.value = tracked ? { [today.value]: tracked } : {};
+  addRow(today.value, tracked ? String(tracked) : "");
 }
 
 const completeTask = createResource({
@@ -318,6 +315,17 @@ const completeTask = createResource({
   // shown inline so the hours and notes aren't lost
   onError() {},
 });
+
+function timerOn(date: string): number {
+  return timerByDay.value[date] ?? 0;
+}
+
+// what may be logged for an older day: the timer's hours as the dialog rounds them (to the
+// quarter hour, never under 0.25), as the server allows (time_sessions.timer_allowance)
+function timerAllowance(tracked: number) {
+  if (!(tracked > 0)) return 0;
+  return Math.max(tracked, Math.round(tracked * 4) / 4, 0.25);
+}
 
 function leftFor(date: string): number | undefined {
   return date in left.value ? left.value[date] : undefined;
@@ -367,12 +375,24 @@ const hoursError = computed(() => {
     if (!(h > 0)) return __("Hours must be more than 0.");
     if (h > MAX_HOURS)
       return __("A day has at most {0} hours.", String(MAX_HOURS));
-    // typed-in hours are for today or the working day before; older days only keep what the timer recorded
-    if (yesterday.value && row.date < yesterday.value && !row.fromTimer)
-      return __(
-        "{0} is too long ago to enter hours by hand. Log hours for today or the working day before.",
-        row.date
-      );
+    // typed-in hours are for today or the working day before; older days only take what
+    // the timer recorded on them
+    if (
+      yesterday.value &&
+      row.date < yesterday.value &&
+      h > timerAllowance(timerOn(row.date)) + 0.01
+    )
+      return timerOn(row.date)
+        ? __(
+            "{0} is too long ago to enter more hours by hand: the timer recorded {1} h on it, so you can log at most {2} h. Log other hours on today or the working day before.",
+            row.date,
+            String(timerOn(row.date)),
+            String(timerAllowance(timerOn(row.date)))
+          )
+        : __(
+            "{0} is too long ago to enter hours by hand: the timer recorded nothing on it. Log hours for today or the working day before.",
+            row.date
+          );
     const free = leftFor(row.date);
     if (free !== undefined && h > free + 0.01)
       return __(
@@ -388,7 +408,9 @@ const notesError = computed(() =>
 );
 const isValid = computed(() => !hoursError.value && !notesError.value);
 
-// the days' problems show once Complete is pressed, then follow the edits
+// the days' problems show once Complete is pressed, then follow the edits; so Complete is
+// never disabled (a disabled button can't be pressed, which hid why it was greyed out), and
+// submit() refuses what isn't valid
 const shownHoursError = computed(() =>
   hoursTouched.value ? hoursError.value || undefined : undefined
 );
@@ -407,6 +429,7 @@ watch(
   (name) => {
     if (!name || !props.task) return;
     rows.value = [];
+    timerByDay.value = {};
     loadDays(name);
     notes.value = "";
     hoursTouched.value = false;

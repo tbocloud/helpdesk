@@ -351,7 +351,11 @@ class TestDailyCap(WorkHoursCase):
             old = add_days(old, -1)
         make_time_session(self.task, DEV[0], at(old, 10), at(old, 17), hours=7.13)
 
-        with self.assertRaisesRegex(frappe.ValidationError, "too long ago"):
+        # the message says what the timer recorded that day, so the limit is clear
+        with self.assertRaisesRegex(
+            frappe.ValidationError,
+            "timer recorded 7.13 h on it, so you can log at most 7.25 h",
+        ):
             self.complete(days=[{"date": str(old), "hours": 7.75}])
 
     def test_a_timer_still_running_since_an_older_day_counts_for_that_day(self):
