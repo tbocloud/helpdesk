@@ -15,6 +15,14 @@
       "
     />
 
+    <p v-if="!rules.call_batches_enabled" class="text-p-sm text-ink-gray-7">
+      {{
+        __(
+          "Turn on daily call batches so its members can call from Today's calls."
+        )
+      }}
+    </p>
+
     <template v-if="rules.call_batches_enabled">
       <div class="flex flex-col gap-2">
         <FormLabel :label="__('Time slots')" size="md" />

@@ -75,6 +75,11 @@ export const useAuthStore = defineStore("auth", () => {
   const isSalesEmployee: ComputedRef<boolean> = computed(
     () => !!user__.value.is_sales_employee
   );
+  // a Sales Employee who is no manager: Leads shows them Today's calls and their own leads;
+  // a department head is told apart by the Leads options (is_bd)
+  const isSalesBd: ComputedRef<boolean> = computed(
+    () => !!user__.value.is_sales_bd
+  );
   // the Tickets list and New ticket: System / Agent Managers and the ERP team
   const canWorkTickets: ComputedRef<boolean> = computed(
     () => !!user__.value.can_work_tickets
@@ -82,6 +87,10 @@ export const useAuthStore = defineStore("auth", () => {
   // the Leads page, live from the CRM site (docs/leads.md)
   const canUseLeads: ComputedRef<boolean> = computed(
     () => !!user__.value.can_use_leads
+  );
+  // Add a lead and My leads: every active agent while Leads is on (docs/lead-bank.md)
+  const canUseLeadBank: ComputedRef<boolean> = computed(
+    () => !!user__.value.can_use_lead_bank
   );
   const canSeeCustomerReport: ComputedRef<boolean> = computed(
     () => !!(user__.value.is_manager || user__.value.is_project_manager)
@@ -183,8 +192,10 @@ export const useAuthStore = defineStore("auth", () => {
     isErpOnly,
     isDmEmployee,
     isSalesEmployee,
+    isSalesBd,
     canWorkTickets,
     canUseLeads,
+    canUseLeadBank,
     telephonyInstalled,
     canOpenChat,
     isLoggedIn,

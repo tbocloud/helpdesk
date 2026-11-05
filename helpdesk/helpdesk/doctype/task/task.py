@@ -8,7 +8,7 @@ from frappe.query_builder.functions import Coalesce
 from frappe.utils import add_days, formatdate, getdate, now, now_datetime, nowdate
 
 from helpdesk.automation import acting_user
-from helpdesk.tasky.time_sessions import pause_other_timers, record_session
+from helpdesk.tasky.time_sessions import record_session
 from helpdesk.work_hours import in_work_window
 
 WAITING_ON_TASK = "Waiting on Task"
@@ -530,14 +530,12 @@ class Task(Document):
         self.hold_previous_status = None
 
     def restart_timer(self):
-        """The timer picks up where the hold stopped it, if it is work time; the person's other
-        timer is paused (one at a time). Outside work hours it stays paused."""
+        """The timer picks up where the hold stopped it, if it is work time (the person's
+        timers on other tasks keep running). Outside work hours it stays paused."""
         if not in_work_window(now_datetime()):
             return
-        user = frappe.session.user
-        pause_other_timers(self.name, user)
         self.custom_timer_start = now()
-        self.custom_timer_user = user
+        self.custom_timer_user = frappe.session.user
 
     def announce_hold(self):
         """Tell the project lead (or its managers) right away, and keep it in the task's history."""

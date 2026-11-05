@@ -91,6 +91,15 @@ def is_sales_employee(user: str | None = None) -> bool:
     return SALES_EMPLOYEE_ROLE in frappe.get_roles(user)
 
 
+def is_sales_bd_role(user: str | None = None) -> bool:
+    """A salesperson by role: a Sales Employee who is not a System Manager, Agent Manager or
+    Sales Manager. Whether they also head a department is known on the ERP site only
+    (`helpdesk.api.leads.is_bd` settles it); a BD sees Today's calls, their own leads and
+    follow-ups, nothing of the team's (docs/leads.md)."""
+    user = user or frappe.session.user
+    return is_sales_employee(user) and "Sales Manager" not in frappe.get_roles(user)
+
+
 def sees_no_tickets(user: str | None = None) -> bool:
     """Writers and designers (Content Team), DM Employees and Sales Employees don't work
     tickets; the tickets they raised stay theirs."""

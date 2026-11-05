@@ -247,8 +247,17 @@ class TestLeadsStillWork(SalesWallCase):
         self.assertEqual(listed["total"], 1)
         self.assertEqual(lead["lead"]["name"], "CRM-LEAD-0101")
         methods = [method for method, _post, _params in self.crm.lead_calls]
+        # a salesperson's list first asks whether they head a department (a BD sees no "All")
         self.assertEqual(
-            methods, ["list_leads", "get_lead", "create_lead", "set_stage", "add_note"]
+            methods,
+            [
+                "get_options",
+                "list_leads",
+                "get_lead",
+                "create_lead",
+                "set_stage",
+                "add_note",
+            ],
         )
         self.assertTrue(
             all(p["acting_user"] == self.sales for _m, _post, p in self.crm.lead_calls)

@@ -3686,6 +3686,41 @@ def lead_category_options() -> dict:
     }
 
 
+def bd_options(
+    member_of: tuple[str, ...] = ("GrowthX",), head_of: tuple[str, ...] = ()
+) -> dict:
+    """The ERP site's get_options for a salesperson: a department each for `member_of` (calls
+    handed out in batches) and `head_of` (is_head)."""
+    return {
+        "stages": [],
+        "departments": [
+            {
+                "name": name,
+                "is_member": 1,
+                "is_head": 0,
+                "call_batches_enabled": 1,
+                "products": [],
+            }
+            for name in member_of
+        ]
+        + [
+            {
+                "name": name,
+                "is_member": 0,
+                "is_head": 1,
+                "call_batches_enabled": 1,
+                "products": [],
+            }
+            for name in head_of
+        ],
+    }
+
+
+def clear_pending_calls() -> None:
+    """Forgets every person's calls without a result (the cache outlives a test)."""
+    frappe.cache.delete_keys("hd_pending_calls:")
+
+
 def stale_lead(name: str, idle_days: int, **fields) -> dict:
     """A row of the ERP site's get_stale_leads: a lead of GrowthX owned by Asha with no
     activity for `idle_days`, unless `fields` say otherwise."""
@@ -4866,3 +4901,45 @@ def make_business_health_check(**values):
             **values,
         }
     ).insert()
+
+
+# ---------- Lead Bank (docs/lead-bank.md) ----------
+
+
+def make_jpeg_photo(filename: str = "board.jpg") -> dict:
+    """A small real JPEG as the Lead Bank takes a photo: {filename, content (base64)}."""
+    import base64
+
+    from PIL import Image
+
+    image = io.BytesIO()
+    Image.new("RGB", (8, 8), "white").save(image, format="JPEG")
+    return {
+        "filename": filename,
+        "content": base64.b64encode(image.getvalue()).decode(),
+    }
+
+
+def ai_reading(**fields) -> dict:
+    """What ai_engine.call_haiku answers when it reads a photo of a shop: a shop board's
+    details unless `fields` change them."""
+    return {
+        "response": {
+            "company_name": "Sree Krishna Jewellers",
+            "contact_name": "Ravi Kumar",
+            "phones": ["+91 98470 12345", "0481 234 5678"],
+            "email": "Sales@SreeKrishna.example",
+            "website": "www.sreekrishna.example",
+            "business_type": "Jewellery shop",
+            "address": "MG Road, Kottayam",
+            "state": "Kerala",
+            **fields,
+        },
+        "usage": {"input_tokens": 100, "output_tokens": 50},
+        "cost": 0,
+    }
+
+
+def clear_lead_bank_scan_limit(user: str) -> None:
+    """Forget how many photo readings `user` has made this hour."""
+    frappe.cache.delete(frappe.cache.make_key(f"lead_bank_scans:{user}"))

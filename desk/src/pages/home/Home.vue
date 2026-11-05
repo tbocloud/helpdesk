@@ -5,6 +5,17 @@
         <div class="text-lg-medium text-ink-gray-9">{{ __("Home") }}</div>
       </template>
       <template #right-header>
+        <!-- one tap from Home on the phone (docs/lead-bank.md) -->
+        <Button
+          v-if="canUseLeadBank"
+          variant="solid"
+          :label="__('Add a lead')"
+          :route="{ name: 'LeadBankAdd' }"
+        >
+          <template #prefix>
+            <LucideCamera class="size-4" aria-hidden="true" />
+          </template>
+        </Button>
         <Button
           variant="ghost"
           :loading="home.loading"
@@ -166,6 +177,7 @@ import { __ } from "@/translation";
 import { Button, createResource, dayjs } from "frappe-ui";
 import { storeToRefs } from "pinia";
 import { computed } from "vue";
+import LucideCamera from "~icons/lucide/camera";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideCalendarOff from "~icons/lucide/calendar-off";
@@ -182,7 +194,7 @@ import YourDay from "./components/YourDay.vue";
 import YourProjects from "./components/YourProjects.vue";
 import { greeting, statusParts, type HomeData } from "./homeMeta";
 
-const { userFirstName } = storeToRefs(useAuthStore());
+const { userFirstName, canUseLeadBank } = storeToRefs(useAuthStore());
 
 const home = createResource({
   url: "helpdesk.api.home.get_home",

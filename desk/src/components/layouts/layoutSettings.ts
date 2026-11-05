@@ -21,6 +21,7 @@ import LucideTrophy from "~icons/lucide/trophy";
 import LucideActivity from "~icons/lucide/activity";
 import LucideMessagesSquare from "~icons/lucide/messages-square";
 import LucideHandshake from "~icons/lucide/handshake";
+import LucideCamera from "~icons/lucide/camera";
 import { __ } from "@/translation";
 
 export const agentPortalSidebarOptions = [
@@ -120,6 +121,23 @@ export const agentPortalSidebarOptions = [
     tone: "teal",
     section: "Workspace",
     leadsOnly: true,
+  },
+  // the Lead Bank: every active agent adds leads by photo (docs/lead-bank.md)
+  {
+    label: __("Add a lead"),
+    icon: LucideCamera,
+    to: "LeadBankAdd",
+    tone: "teal",
+    section: "Workspace",
+    leadBankOnly: true,
+  },
+  {
+    label: __("My leads"),
+    icon: LucideHandshake,
+    to: "LeadBank",
+    tone: "teal",
+    section: "Workspace",
+    leadBankOnly: true,
   },
   {
     label: __("Projects"),

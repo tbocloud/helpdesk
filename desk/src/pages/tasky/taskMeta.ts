@@ -364,6 +364,10 @@ export function formatElapsed(s: number, withSeconds = true) {
  * in progress with a start time; otherwise banked time shows as paused. Pausing
  * and resuming go through the server, so reloading the board (after working on
  * another task, or coming back to it) never restarts a paused timer.
+ *
+ * A task in progress always has a timer, paused at 0 when nothing is banked yet (a
+ * stretch of seconds banks 0 h, and starting another task's timer pauses this one):
+ * otherwise the card would show no timer and no Resume button.
  */
 export function taskTimer(
   task: {
@@ -383,7 +387,9 @@ export function taskTimer(
       elapsed: banked + Math.max(since, 0),
     };
   }
-  return banked > 0 ? { running: false, paused: true, elapsed: banked } : null;
+  return banked > 0 || task.status === "Working"
+    ? { running: false, paused: true, elapsed: banked }
+    : null;
 }
 
 /** Hours as whole hours and minutes: 1.5 is {hours: 1, minutes: 30}. */
