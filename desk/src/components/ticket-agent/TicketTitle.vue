@@ -16,7 +16,8 @@
       </h1>
 
       <!-- each fact once (Phase 15): the number, the status and the assignee are in the header;
-           here who it is from, where it came in, how old, how urgent and what is due next -->
+           here who it is from, where it came in, how old and how urgent; what is due next is in
+           the summary over the conversation (Phase 16) -->
       <p
         class="mt-2 flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1.5 text-sm text-ink-gray-6"
       >
@@ -48,17 +49,6 @@
           </Tooltip>
         </span>
         <TaskyBadge v-if="priority" v-bind="priority" />
-        <Tooltip
-          v-if="due"
-          :text="due.hint"
-          :hover-delay="0.3"
-          placement="bottom"
-        >
-          <TaskyBadge :tone="due.tone" :icon="due.icon">
-            {{ due.label }}
-            <span class="sr-only">, {{ due.hint }}</span>
-          </TaskyBadge>
-        </Tooltip>
       </p>
     </div>
   </teleport>
@@ -68,8 +58,7 @@
 import { EmailIcon, GlobeIcon } from "@/components/icons";
 import TaskyBadge from "@/components/TaskyBadge.vue";
 import { useShortcut } from "@/composables/shortcuts";
-import { SlaTimeLeftSymbol } from "@/composables/useSlaTimeLeft";
-import { dueBadge, priorityBadge } from "@/pages/ticket/ticketMeta";
+import { priorityBadge } from "@/pages/ticket/ticketMeta";
 import { __ } from "@/translation";
 import { TicketContactSymbol, TicketSymbol } from "@/types";
 import {
@@ -85,7 +74,6 @@ const emit = defineEmits<{ (e: "edit-subject"): void }>();
 
 const ticket = inject(TicketSymbol)!;
 const contact = inject(TicketContactSymbol)!;
-const slaClock = inject(SlaTimeLeftSymbol)!;
 
 const priority = computed(() => priorityBadge(ticket.value.doc.priority));
 
@@ -95,17 +83,6 @@ const contactName = computed(
     ticket.value.doc.contact ||
     ticket.value.doc.raised_by
 );
-
-// the one SLA: the first reply until it is sent, then the resolution
-const due = computed(() => {
-  const doc = ticket.value.doc;
-  return dueBadge(
-    doc,
-    doc.status_category === "Paused",
-    (clock) => slaClock.workingLeft(doc.name, clock),
-    slaClock.now.value
-  );
-});
 
 function copyId() {
   copyToClipboard(

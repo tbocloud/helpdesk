@@ -11,27 +11,32 @@
             />
           </template>
         </Breadcrumbs>
-        <TicketTitle @edit-subject="showSubjectDialog = true" />
+        <!-- a phone's header is one line: the ticket page shows the title under it -->
+        <TicketTitle
+          v-if="!isMobileView"
+          @edit-subject="showSubjectDialog = true"
+        />
       </div>
     </template>
     <template #right-header>
       <div class="flex items-center gap-2">
         <MultipleAvatar
+          v-if="!isMobileView"
           :avatars="JSON.stringify(viewers)"
           size="md"
           :hide-name="true"
         />
         <!-- Navigation -->
-        <TicketNavigation :key="ticket?.name" />
-        <!-- Custom Actions -->
-        <div v-if="normalActions.length" class="flex gap-2">
+        <TicketNavigation v-if="!isMobileView" :key="ticket?.name" />
+        <!-- Custom Actions (on a phone they are in ⋯) -->
+        <div v-if="normalActions.length && !isMobileView" class="flex gap-2">
           <Button v-for="action in normalActions" v-bind="action">
             <template v-if="action.icon" #prefix>
               <FeatherIcon :name="action.icon" class="h-4 w-4" />
             </template>
           </Button>
         </div>
-        <div v-if="groupedWithLabelActions.length">
+        <div v-if="groupedWithLabelActions.length && !isMobileView">
           <div v-for="g in groupedWithLabelActions" :key="g.label">
             <Dropdown v-slot="{ open }" :options="g.action">
               <Button :label="g.label">
@@ -73,28 +78,24 @@
           </template>
         </Dropdown>
         <!-- who has it (Phase 12): pick someone working today -->
-        <AssignTo hide-label quiet class="hidden w-48 sm:flex" />
+        <!-- on a phone it sits under the title (TicketAgent), so its A shortcut is bound once -->
+        <AssignTo v-if="!isMobileView" hide-label quiet class="w-48" />
         <!-- Details: beside the conversation from lg (shown or hidden), a sheet below -->
+        <!-- on a phone the icon alone; its label is still read out -->
         <Button
           :label="__('Details')"
           :aria-expanded="detailsOpen"
           :title="__('Show or hide the details')"
           @click="emit('toggle-details')"
         >
-          <template #prefix>
+          <template v-if="isMobileView" #icon>
+            <LucidePanelRight class="size-4" aria-hidden="true" />
+          </template>
+          <template v-else #prefix>
             <LucidePanelRight class="size-4" aria-hidden="true" />
           </template>
         </Button>
-        <!-- Reply (R): the customer tab with the composer open -->
-        <Button
-          :label="__('Reply')"
-          aria-keyshortcuts="r"
-          @click="openReplyBox()"
-        >
-          <template #prefix>
-            <LucideReply class="size-4" aria-hidden="true" />
-          </template>
-        </Button>
+        <!-- no Reply here (Phase 16): the box to write in is always under the conversation (R) -->
         <!-- Secondary, core and custom actions -->
         <Dropdown :options="groupedActions" placement="right">
           <Button
@@ -173,15 +174,16 @@ import {
   meetingsEnabled,
 } from "@/components/meetings/meetingsBus";
 import ScheduleMeetingDialog from "@/components/meetings/ScheduleMeetingDialog.vue";
-import { openReplyBox, showCreateTask } from "@/pages/ticket/modalStates";
+import { useScreenSize } from "@/composables/screen";
+import { showCreateTask } from "@/pages/ticket/modalStates";
 import LucideMerge from "~icons/lucide/merge";
 import LucidePanelRight from "~icons/lucide/panel-right";
-import LucideReply from "~icons/lucide/reply";
 import AssignTo from "./AssignTo.vue";
 import TicketNavigation from "./TicketNavigation.vue";
 import TicketSubjectModal from "./TicketSubjectModal.vue";
 import TicketTitle from "./TicketTitle.vue";
 const { isAdmin } = useAuthStore();
+const { isMobileView } = useScreenSize();
 const { $dialog } = globalStore();
 
 defineProps({
@@ -415,6 +417,17 @@ const groupedWithLabelActions = computed(() => {
 // the ⋯ menu (Phase 12): the form scripts' groups (Customer site, Copilot and AI) first,
 // then the ticket's own actions
 const groupedActions = computed(() => [
+  // a phone has no room for the form scripts' own buttons: they come first here
+  ...(isMobileView.value && actions.value.some((a) => !a.group || a.buttonLabel)
+    ? [
+        {
+          group: __("Actions"),
+          items: actions.value
+            .filter((a) => !a.group || a.buttonLabel)
+            .map((a) => ({ label: a.label, icon: a.icon, onClick: a.onClick })),
+        },
+      ]
+    : []),
   ...actions.value.filter((action) => action.group && !action.buttonLabel),
   {
     group: __("Ticket"),

@@ -7,6 +7,30 @@ changes are the summary strip, row readability, states and the phone layouts. Sh
 
 ## Tickets (`/tickets`, agents)
 
+**Phase 16 (TBO Copilot, Nov 2026): the inbox.** `/tickets` is now a page with the list on the left and the open
+ticket beside it (`pages/ticket/TicketsInbox.vue`; the routes `TicketsAgent` and `TicketAgent` are its children, so the
+list keeps its queue, search and scroll while you move between tickets). The Phase 15 table below is one click away
+(**Table** / **Inbox**, kept per browser in `helpdesk-tickets-layout`); a saved view (`?view=`) always opens in the
+table, with its bulk edit, export and columns. Opening a ticket from the table shows the ticket page without the list.
+- **The list** (`components/ticket-inbox/InboxList.vue`): each ticket as a chat row: the contact (or the name the
+  customer's email gave), the customer, how long since the last change, the subject (an arrow for Urgent and High),
+  "Aisha: last message", the number of the customer's emails since our last reply, and at most two signals: Overdue
+  5m / the amber due, **Fix to approve**, **Copilot working**, Waiting on Aisha, Waiting on a task, On hold,
+  Resolved, Unassigned; the assignee's avatar. Not opened by you yet: bold with a dot. **Show more** loads the next
+  50.
+- **Queues as chips** with the Phase 15 counts (All open, Needs reply, Overdue, Mine, Unassigned, Waiting, Resolved)
+  and one search (`/`). A link's `?filters=` (Home) picks its queue, or shows a **Filtered** chip with Clear.
+- **No ticket opens by itself**: opening one marks it seen, so the middle says "Pick a ticket" until you do. `j` /
+  `k` open the next or previous ticket. Below 1024px the list and the ticket take turns (a phone too).
+- The list refreshes on a new ticket, every minute while the page is visible, and when the open ticket changes.
+- **`helpdesk.api.ticket_area.inbox(filters, start, page_length)`**, agents only: a page of the tickets the agent may
+  read under `filters` (the same filter handling as `count`, so a chip's number is its rows), newest change first, at
+  most 100. Each row has `last` (the newest email: who, the first name, its first words, when; `waiting`: the
+  customer's emails since our last reply; `customer_name`) and `copilot`: `approve` while an HDS Copilot Approval is
+  Pending, `working` while the ticket's latest run (`custom_copilot_run`) is Queued, Investigating, Preparing Fix,
+  Approved, Merging, Deploying, Verifying or Applying. `more`: there is a next page. Tests in
+  `helpdesk/tests/test_ticket_area.py`.
+
 **Phase 15 (TBO Copilot, Nov 2026): a cleaner ticket area.** What changed, on top of what follows below:
 - **Queues instead of the five count tiles** (`TicketSummaryStrip.vue`, now tabs): Needs reply (status category
   Open), Overdue, Unassigned, Mine, Waiting (Paused), All open, Resolved, and All (the view's own list, without a

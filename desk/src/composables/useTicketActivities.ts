@@ -38,6 +38,8 @@ export function useTicketActivities(
       // Sent: an agent's reply; Received: from the customer
       direction: email.sent_or_received,
       aiDrafted: !!email.custom_ai_drafted,
+      // Copilot's own update to the customer (helpdesk/hd_ticket/api.py get_communications)
+      byAutomation: !!email.by_automation,
       isFirstEmail: idx === 0,
     }));
 

@@ -148,6 +148,7 @@ import LucideSparkles from "~icons/lucide/sparkles";
 import LucideSplit from "~icons/lucide/split";
 import { ReplyAllIcon, ReplyIcon } from "./icons";
 import TicketSplitModal from "./ticket/TicketSplitModal.vue";
+import { normalizeAndFilter, replyAllTo, replyTo } from "./emailReply";
 
 const props = defineProps({
   activity: {
@@ -207,67 +208,18 @@ const status = computed(() => {
   return { label: _status, color: indicator_color };
 });
 
-const normalizeAndFilter = (
-  field: string | string[],
-  valuesToExclude: string[] = []
-) => {
-  let arr = [];
-  let current = "";
-  let inQuotes = false;
-  if (typeof field === "string") {
-    for (let char of field) {
-      if (char === '"') {
-        inQuotes = !inQuotes;
-        current += char;
-      } else if (char === "," && !inQuotes) {
-        arr.push(current.trim());
-        current = "";
-      } else {
-        current += char;
-      }
-    }
-    if (current) arr.push(current.trim());
-  } else {
-    arr = field || [];
-  }
-  return arr.filter(Boolean).filter((item) => !valuesToExclude.includes(item));
-};
-
 const reply = () => {
-  const user = auth.user.value;
-  emit("reply", {
-    content: content,
-    to: user === sender.name ? to : sender.name,
-  });
+  emit(
+    "reply",
+    replyTo({ content, sender, to, cc, bcc }, auth.user.value as string)
+  );
 };
 
 const replyAll = () => {
-  const user = auth.user.value;
-  const exclude = [user, sender.name];
-  const filteredTo = normalizeAndFilter(to, exclude);
-  const filteredCc = normalizeAndFilter(cc, exclude);
-  const filteredBcc = normalizeAndFilter(bcc, exclude);
-
-  let _to, _cc, _bcc;
-
-  if (user === sender.name) {
-    // User is the sender, reply to all original recipients
-    _to = filteredTo.join(", ");
-    _cc = filteredCc;
-    _bcc = filteredBcc;
-  } else {
-    // User is a recipient, reply to sender with all other recipients in cc
-    _to = sender.name;
-    _cc = [...filteredTo, ...filteredCc];
-    _bcc = filteredBcc;
-  }
-
-  emit("reply", {
-    content: content,
-    to: _to,
-    cc: _cc.filter(Boolean),
-    bcc: _bcc.filter(Boolean),
-  });
+  emit(
+    "reply",
+    replyAllTo({ content, sender, to, cc, bcc }, auth.user.value as string)
+  );
 };
 </script>
 

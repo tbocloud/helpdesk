@@ -4,12 +4,41 @@ The page agents use most: `/tickets/:ticketId` (route `TicketAgent`). Goal: unde
 at a glance and act fast. It follows [ui-guidelines.md](ui-guidelines.md); shared blocks
 (`TaskyBadge`, `TaskyState`, `tone.ts`) are described in [workspace-pages.md](workspace-pages.md).
 
-- **Desktop and tablet** (640px and up when the page loads): `pages/ticket/TicketAgent.vue`.
-- **Phones** (below 640px): `pages/ticket/MobileTicketAgent.vue`; the router picks one when the
-  route loads.
+- **Every width**: `pages/ticket/TicketAgent.vue`, inside the inbox page `pages/ticket/TicketsInbox.vue` (Phase 16;
+  `MobileTicketAgent.vue` is gone).
 - **The customer portal is separate**: `/my-tickets/:ticketId` renders
   `pages/ticket/TicketCustomer.vue` (`TicketConversation`, `TicketCustomerSidebar`,
   `EstimateApprovalBanner`), none of which this page uses or changes.
+
+**Phase 16 (TBO Copilot, Nov 2026): the ticket as one conversation.** The Chat / Customer / Activity tabs are gone.
+The page is the ticket's header, then three parts (`components/ticket-inbox/`), re-mounted per ticket:
+- **Where it stands** (`TicketStanding.vue`), always on top: whose move it is in words, with the SLA (`dueBadge`)
+  while its clock runs ("Aisha is waiting for a reply, and it's overdue.", "Waiting for Aisha to answer. The SLA
+  clock is paused.", "Resolved. Aisha rated it 4/5."), and Copilot's line and buttons (the Phase 11 state from
+  `helpdesk.api.copilot_thread.history`: Approve, Reject, Start Copilot, Deploy…, the rest in its ⋯, and a reason
+  asked first where one is needed). **Reply to Aisha** shows while the customer waits.
+- **One conversation** (`TicketConversation.vue`), oldest first with day separators: the customer's emails on the
+  left (white, `EmailBubble.vue`, the body in the same `EmailContent` frame, Reply / Reply all / Split ticket); our
+  replies on the right (blue, "Sent to Aisha"; Copilot's own update, sent as the automation user, "Automatic update to
+  Aisha"); people's notes on the right (`CommentBox`, the note colour, edit and delete as before); a person's
+  question to Copilot on the right in the note colour ("To Copilot · only the team"); Copilot's messages and cards
+  (`CopilotCard`, its buttons) and its own notes as wide gray cards; history, calls and the rating as small centred
+  lines (folded history: "and 2 more"). Filters: **Everything**, **Customer sees** (emails, calls, the rating),
+  **Team only** (notes, Copilot). A ticket made on the desk with no email of its own opens with its description.
+  The newest message stays in sight while the email frames size themselves.
+- **One box to write in** (`TicketComposer.vue`): **Reply to Aisha** (R; the email editor, "Use Copilot's draft"
+  when one is ready), **Note to team** (C; the note editor, @mentions) and **Ask Copilot** (Q; a chat line, Enter
+  sends, quick questions; people who may only read the Copilot chat see why instead). A collapsed box opens on a
+  click; the open editor folds on a click elsewhere and keeps its draft. `composerMode` / `startWriting()` in
+  `modalStates.ts` let the AI card, the meeting dialog and Getting started open the right mode.
+- The header has no Reply button any more (the box is always there). The SLA moved from the title line into the
+  summary. On a phone the header is one line (status, Details, ⋯ with the form scripts' actions) and the subject,
+  the contact and the assignee are under it.
+- Details is the Phase 15 panel: beside the ticket from `lg`, but a sheet below 1440px when the inbox list is beside
+  the ticket (`TicketSidebar`'s `sheet` prop now decides, not the breakpoint).
+- Whose message is Copilot's: `get_communications` and `get_comments` mark the automation user's emails and notes
+  (`by_automation`), only when one is set up (without it `automation_user()` is Administrator, a person). A sender
+  without a user account shows by the name their email gave.
 
 **Phase 15 (TBO Copilot, Nov 2026): each fact once.** The number is in the breadcrumb; the status and the assignee
 are in the header (their pickers). Under the title, one line: the contact, the customer, "via Email · opened 3 hours
@@ -32,8 +61,8 @@ and "Assigned to …" are gone from the title; **Copy ticket ID** is in the ⋯ 
 - The customer's rating shows only on a resolved or closed ticket that has one.
 - **Details**: the first section is "Ticket". The customer site (session replay) follows the SLA. Empty fields read
   "Add a type", "Add a priority", and the owner "None set". The SLA summary uses the same words as the title line.
-- **Phone** (`MobileTicketAgent.vue`): the breadcrumb is "Tickets / #number"; the subject has its own line in full,
-  with the same line under it. Activity lines open the Customer tab.
+- **Phone**: the breadcrumb is "Tickets / #number"; the subject has its own line in full (Phase 16: under the
+  one-line header, with the contact and the assignee).
 
 ## Header
 
@@ -57,19 +86,20 @@ into the app header).
     [tickets-and-calendar-pages.md](tickets-and-calendar-pages.md) for the wording rule.
   - The working time left comes from `useSlaTimeLeft` (one request for this ticket, refreshed
     every 60 seconds and when a deadline changes). The page provides it (`SlaTimeLeftSymbol`, in
-    `TicketAgent.vue` and `MobileTicketAgent.vue`), so the header and the SLA panel share one
+    `TicketAgent.vue`), so the summary over the conversation and the SLA panel share one
     count.
 - **Actions**, right to left in importance: viewers, previous/next ticket (⇧< / ⇧>), the custom
   actions from HD Form Script, the **status** menu (S; neutral, with the status's colour dot),
-  **Details** (below `lg` only, opens the side panel sheet), **Reply** (the one primary action,
-  brand; R), and the **⋯ menu**: Create task, Schedule Teams meeting (when meetings are on),
+  **Details** (hides or shows the panel, or opens its sheet), and the **⋯ menu** (Phase 16: no Reply here; the
+  box under the conversation is always there): Create task, Schedule Teams meeting (when meetings are on),
   Merge ticket (open tickets, when there is another open ticket), and Delete (admins), plus
   grouped custom actions.
 
 ## Conversation
 
-`TicketActivityPanel.vue` (tabs Activity / Emails / Comments / Calls with counts) over
-`ticket/TicketAgentActivities.vue`.
+Since Phase 16: `components/ticket-inbox/TicketConversation.vue` (see the top of this page). The notes below are the
+timeline it is built from; `TicketActivityPanel.vue` and its tabs are gone (`ticket/TicketAgentActivities.vue`
+stays for other uses).
 
 - **Timeline** built by `composables/useTicketActivities.ts`, shared by the desktop and phone
   pages: emails, comments, calls and history in time order, consecutive history by the same person
@@ -80,7 +110,8 @@ into the app header).
   the `note` / `note-border` tokens with the "Internal note" label (`CommentBox.vue`).
 - **States**: skeleton cards while the activity loads, an error with **Retry** if it fails, and
   the per-tab empty text.
-- **Composer** (`CommunicationArea.vue`, sticky under the timeline): a segmented Reply / Comment
+- **Composer** (Phase 16: `TicketComposer.vue`, three modes, see the top of this page; before it,
+  `CommunicationArea.vue`, sticky under the timeline): a segmented Reply / Comment
   switch with their shortcuts (R / C) shown as keys; the buttons are 44px tall on phones and
   compact from `md`. Reply shows "To: …"; Comment says "Only agents
   see comments" and the editor sits on the note colour. ⌘⏎ sends, Esc closes, as before. The AI
@@ -156,12 +187,16 @@ so contact never showed).
   document is loaded once per request and reads its holiday list once (`get_holidays` keeps it
   on the document). Tests: `helpdesk/tests/test_sla_time_left.py`, with
   `test_utils.make_sla_calendar`.
-- Everything else is unchanged: the ticket document, `get_ticket_activities`, assignees, contact,
-  `get_suggestion`, `get_possible_duplicates`, `get_estimate`, session replay and meetings.
+- `helpdesk.api.ticket_area.inbox(filters, start, page_length)` (Phase 16): see
+  [tickets-and-calendar-pages.md](tickets-and-calendar-pages.md).
+- `get_ticket_activities`: each email also has `by_automation` (Copilot's own update) and the sender's name from the
+  email when they have no user account (Phase 16).
+- Everything else is unchanged: the ticket document, assignees, contact, `get_suggestion`,
+  `get_possible_duplicates`, `get_estimate`, session replay, meetings and `helpdesk.api.copilot_thread`.
 
 ## Kept as they were
 
 Routes, permissions, realtime (`ticket_update`, `helpdesk:ticket-comment`,
 `helpdesk:ticket-update`, `helpdesk:ai-suggestion`, active viewers, typing indicator), every
-keyboard shortcut (R, C, S, T, P, ⇧T, A, ⇧< / ⇧>, ⌘. / ⌘⇧.), custom form-script actions, email
+keyboard shortcut (R, C, S, T, P, ⇧T, A, ⇧< / ⇧>, ⌘. / ⌘⇧.; Phase 16 adds Q, Ask Copilot), custom form-script actions, email
 reply / reply all / split, comment edit and delete, calls, merge, delete and the subject rename.

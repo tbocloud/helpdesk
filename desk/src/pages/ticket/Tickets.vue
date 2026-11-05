@@ -11,6 +11,17 @@
         />
       </template>
       <template #right-header>
+        <!-- back to the inbox (Phase 16): the agent's choice, remembered per browser -->
+        <Button
+          v-if="!isCustomerPortal"
+          :label="__('Inbox')"
+          :title="__('Show the tickets as an inbox, each one a conversation')"
+          @click="toInbox"
+        >
+          <template #prefix>
+            <LucideInbox class="h-4 w-4" aria-hidden="true" />
+          </template>
+        </Button>
         <RouterLink
           class="inline-flex"
           :to="{ name: isCustomerPortal ? 'TicketNew' : 'TicketAgentNew' }"
@@ -192,7 +203,9 @@ import {
   useCustomerStatus,
   type Fact,
 } from "./customerStatus";
+import LucideInbox from "~icons/lucide/inbox";
 import LucideX from "~icons/lucide/x";
+import { ticketsLayout } from "@/components/ticket-inbox/inbox";
 import {
   dueBadge,
   priorityBadge,
@@ -205,6 +218,12 @@ import {
 
 const router = useRouter();
 const route = useRoute();
+
+function toInbox() {
+  ticketsLayout.value = "inbox";
+  // a saved view is a table of its own: the inbox starts from its queues
+  if (route.query.view) router.push({ name: "TicketsAgent" });
+}
 
 const {
   getCurrentUserViews,

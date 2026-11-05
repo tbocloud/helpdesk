@@ -172,6 +172,13 @@ def get_assignee(_assign: str):
     return get_user_info_for_avatar(j.pop())
 
 
+def _automation_sender() -> str | None:
+    """The automation user Copilot acts as, when one is set up. Without one, automation_user() falls back to
+    Administrator, and someone working as Administrator in the browser is a person, not Copilot."""
+    bot = automation_user()
+    return bot if bot and bot != "Administrator" else None
+
+
 def get_communications(ticket: str):
     if not frappe.has_permission("HD Ticket", "read", ticket):
         return []
@@ -193,6 +200,7 @@ def get_communications(ticket: str):
             QBCommunication.communication_date,
             QBCommunication.name,
             QBCommunication.sender,
+            QBCommunication.sender_full_name,
             QBCommunication.recipients,
             QBCommunication.subject,
             QBCommunication.delivery_status,
@@ -204,10 +212,16 @@ def get_communications(ticket: str):
         .orderby(QBCommunication.creation, order=Order.asc)
         .run(as_dict=True)
     )
+    bot = _automation_sender()
     for c in communications:
         c.attachments = get_attachments("Communication", c.name)
         user_id = c.user if c.sent_or_received == "Sent" and c.user else c.sender
+        # Copilot's own updates to the customer (sent as the automation user): the inbox marks them
+        c.by_automation = c.sent_or_received == "Sent" and bool(bot) and user_id == bot
         c.user = get_user_info_for_avatar(user_id)
+        # a sender with no user account: the name their email gave, not the address twice
+        if c.sender_full_name and c.user.get("name") == user_id:
+            c.user["name"] = c.sender_full_name
     return communications
 
 
@@ -228,12 +242,12 @@ def get_comments(ticket: str):
         .orderby(QBComment.creation, order=Order.asc)
         .run(as_dict=True)
     )
-    bot = automation_user()
+    bot = _automation_sender()
     for c in comments:
         c.user = get_user_info_for_avatar(c.commented_by)
         c.attachments = get_attachments("HD Ticket Comment", c.name)
         # Copilot's and the hub's own notes: the Activity tab shows them, the customer tab not
-        c.by_automation = c.commented_by == bot
+        c.by_automation = bool(bot) and c.commented_by == bot
     return comments
 
 

@@ -1,9 +1,11 @@
 # Copyright (c) 2026, Quark Cyber Systems FZC and contributors
 # For license information, please see license.txt
 
-"""The agent's ticket list (Phase 15): queues that count what they show, the search, the last message per row."""
+"""The agent's ticket list (Phase 15): queues that count what they show, the search, the last message per row;
+the inbox (Phase 16): the same rows with their newest email, the customer's emails since our reply, Copilot's signal."""
 
 import json
+from unittest.mock import patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
@@ -11,9 +13,15 @@ from frappe.utils import add_to_date, now_datetime
 
 from helpdesk.api import doc as doc_api
 from helpdesk.api import ticket_area
+from helpdesk.helpdesk.doctype.hd_ticket import api as ticket_api
 from helpdesk.helpdesk.doctype.hd_ticket.hd_ticket import HDTicket
 from helpdesk.patches.v16_0_2 import ticket_area_status_colours
-from helpdesk.test_utils import create_agent, hold_commits, make_ticket
+from helpdesk.test_utils import (
+    create_agent,
+    hold_commits,
+    make_copilot_run,
+    make_ticket,
+)
 
 AGENT = "queue.agent@example.com"
 OPEN = ["status_category", "in", ["Open", "Paused"]]
@@ -238,6 +246,140 @@ class TestTheLastMessage(TicketAreaCase):
         text = ticket_area.last_messages(json.dumps([a.name]))[str(a.name)]["text"]
         self.assertLessEqual(len(text), ticket_area.PREVIEW_CHARS)
         self.assertTrue(text.endswith("…"))
+
+
+class TestTheInbox(TicketAreaCase):
+    def rows(self, filters=(), **kwargs) -> dict:
+        got = ticket_area.inbox(json.dumps(self.ours(list(filters))), **kwargs)
+        return {str(row["name"]): row for row in got["tickets"]}
+
+    def test_a_queues_rows_are_the_ones_it_counts(self):
+        fresh = make_ticket(subject="Inbox fresh")
+        late = make_ticket(subject="Inbox late")
+        late.db_set({"response_by": at(-2), "first_responded_on": None})
+        fresh.db_set({"response_by": at(4)})
+        self.names = [str(fresh.name), str(late.name)]
+        overdue = [["__overdue", "=", 1]]
+        rows = self.rows(overdue)
+        self.assertEqual(set(rows), {str(late.name)})
+        self.assertEqual(ticket_area.count(json.dumps(self.ours(overdue))), len(rows))
+
+    def test_the_newest_email_and_the_customers_emails_since_our_reply(self):
+        t = make_ticket(subject="Inbox conversation")
+        self.names = [str(t.name)]
+        email(
+            t.name, "Received", "aisha@example.com", "Aisha Rahman", "<p>Hello</p>", 1
+        )
+        email(t.name, "Sent", AGENT, "Queue Agent", "<p>Checking</p>", 2)
+        email(
+            t.name,
+            "Received",
+            "aisha@example.com",
+            "Aisha Rahman",
+            "<p>Any news?</p>",
+            3,
+        )
+        email(
+            t.name,
+            "Received",
+            "aisha@example.com",
+            "Aisha Rahman",
+            "<p>Still stuck</p>",
+            4,
+        )
+        last = self.rows()[str(t.name)]["last"]
+        self.assertEqual(
+            (last["by"], last["author"], last["text"]),
+            ("customer", "Aisha", "Still stuck"),
+        )
+        self.assertEqual(last["customer_name"], "Aisha Rahman")
+        # the two after our reply; the opening email came before it
+        self.assertEqual(last["waiting"], 2)
+
+        email(t.name, "Sent", AGENT, "Queue Agent", "<p>Fixed</p>", 5)
+        last = self.rows()[str(t.name)]["last"]
+        self.assertEqual((last["by"], last["waiting"]), ("team", 0))
+
+    def test_copilot_signals_a_fix_to_approve_or_work_in_progress(self):
+        approve = make_ticket(subject="Inbox approve")
+        working = make_ticket(subject="Inbox working")
+        settled = make_ticket(subject="Inbox settled")
+        self.names = [str(t.name) for t in (approve, working, settled)]
+        frappe.get_doc(
+            {
+                "doctype": "HDS Copilot Approval",
+                "ticket": approve.name,
+                "status": "Pending",
+                "kind": "Code Change",
+            }
+        ).db_insert()
+        for ticket, state in ((working, "Investigating"), (settled, "Answered")):
+            run = make_copilot_run(ticket.name, state)
+            ticket.db_set("custom_copilot_run", run.name)
+        rows = self.rows()
+        self.assertEqual(rows[str(approve.name)]["copilot"], "approve")
+        self.assertEqual(rows[str(working.name)]["copilot"], "working")
+        self.assertIsNone(rows[str(settled.name)]["copilot"])
+        self.assertNotIn("custom_copilot_run", rows[str(working.name)])
+
+    def test_pages_and_only_agents(self):
+        tickets = [make_ticket(subject=f"Inbox page {i}") for i in range(3)]
+        self.names = [str(t.name) for t in tickets]
+        first = ticket_area.inbox(json.dumps(self.ours([])), page_length=2)
+        second = ticket_area.inbox(json.dumps(self.ours([])), start=2, page_length=2)
+        self.assertEqual((len(first["tickets"]), first["more"]), (2, True))
+        self.assertEqual((len(second["tickets"]), second["more"]), (1, False))
+        frappe.set_user("Guest")
+        with self.assertRaises(frappe.PermissionError):
+            ticket_area.inbox("[]")
+
+    def test_copilots_own_emails_and_notes_are_marked_on_the_ticket(self):
+        t = make_ticket(subject="Inbox automation")
+        bot = "copilot.bot@example.com"
+        ours = email(t.name, "Sent", AGENT, "Queue Agent", "<p>Done</p>", 1)
+        theirs = email(t.name, "Sent", bot, "TBO AI", "<p>Working on it</p>", 2)
+        for c, user in ((ours, AGENT), (theirs, bot)):
+            frappe.db.set_value("Communication", c.name, "user", user)
+        note = frappe.get_doc(
+            {
+                "doctype": "HD Ticket Comment",
+                "reference_ticket": t.name,
+                "commented_by": bot,
+                "content": "<p>Checked</p>",
+            }
+        )
+        note.db_insert()
+
+        with patch.object(ticket_api, "automation_user", return_value=bot):
+            marks = {
+                c.name: c.by_automation for c in ticket_api.get_communications(t.name)
+            }
+            comments = {
+                c.name: c.by_automation for c in ticket_api.get_comments(t.name)
+            }
+        self.assertFalse(marks[ours.name])
+        self.assertTrue(marks[theirs.name])
+        self.assertTrue(comments[note.name])
+
+        # no automation user set up: Administrator is a person, and nothing is Copilot's
+        frappe.db.set_value("Communication", theirs.name, "user", "Administrator")
+        with patch.object(ticket_api, "automation_user", return_value="Administrator"):
+            self.assertFalse(
+                any(c.by_automation for c in ticket_api.get_communications(t.name))
+            )
+
+    def test_a_sender_without_an_account_shows_by_their_name(self):
+        t = make_ticket(subject="Inbox names")
+        email(
+            t.name,
+            "Received",
+            "aisha.noacct@example.com",
+            "Aisha Rahman",
+            "<p>Hi</p>",
+            1,
+        )
+        names = [c.user["name"] for c in ticket_api.get_communications(t.name)]
+        self.assertIn("Aisha Rahman", names)
 
 
 class TestTheLook(FrappeTestCase):

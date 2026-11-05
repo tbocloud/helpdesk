@@ -19,16 +19,23 @@ export function toggleCommentBox() {
   showCommentBox.value = !showCommentBox.value;
 }
 
-/** The ticket page's main view (Phase 12): a ticket opens on its chat with Copilot and
- * the team; the conversation with the customer and the full activity are beside it. */
-export type TicketView = "chat" | "customer" | "activity";
-export const ticketView = ref<TicketView>("chat");
+/** The ticket's one box to write in (Phase 16): a reply to the customer, a note to the team, or a question to
+ * Copilot. `showEmailBox` / `showCommentBox` say whether the reply or the note editor is open. */
+export type ComposerMode = "reply" | "note" | "copilot";
+export const composerMode = ref<ComposerMode>("reply");
+// counts up each time something asks for the Copilot box, which then takes the focus
+export const copilotFocus = ref(0);
 
-/** The header's Reply: the customer tab with the email composer open, never closed. */
+export function startWriting(mode: ComposerMode) {
+  composerMode.value = mode;
+  showEmailBox.value = mode === "reply";
+  showCommentBox.value = mode === "note";
+  if (mode === "copilot") copilotFocus.value++;
+}
+
+/** The header's and the AI card's Reply: the email editor open, never closed. */
 export function openReplyBox() {
-  if (ticketView.value === "chat") ticketView.value = "customer";
-  showCommentBox.value = false;
-  showEmailBox.value = true;
+  startWriting("reply");
 }
 
 export interface ReplyInsert {

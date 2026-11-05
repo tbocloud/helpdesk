@@ -1,5 +1,5 @@
 <template>
-  <!-- below lg the panel is a modal sheet over the conversation -->
+  <!-- as a sheet (below lg, or below 1440 px beside the inbox list) the panel is modal over the conversation -->
   <div
     v-if="modal"
     class="fixed inset-0 z-20 bg-black/30"
@@ -7,8 +7,17 @@
     @click="open = false"
   />
   <Resizer
-    class="h-full flex-col border-l border-outline-gray-1 bg-surface-base max-lg:fixed max-lg:inset-y-0 max-lg:right-0 max-lg:z-30 max-lg:!w-[min(24rem,100vw)] max-lg:shadow-xl"
-    :class="hidden ? 'hidden' : open ? 'flex' : 'hidden lg:flex'"
+    class="h-full flex-col border-l border-outline-gray-1 bg-surface-base"
+    :class="
+      sheet
+        ? [
+            'fixed inset-y-0 right-0 z-30 !w-[min(24rem,100vw)] shadow-xl',
+            open ? 'flex' : 'hidden',
+          ]
+        : hidden
+        ? 'hidden'
+        : 'flex'
+    "
     side="right"
   >
     <aside
@@ -21,7 +30,8 @@
       @keydown.tab="trapTab"
     >
       <div
-        class="flex h-12 shrink-0 items-center justify-between border-b border-outline-gray-1 px-5 lg:hidden"
+        v-if="sheet"
+        class="flex h-12 shrink-0 items-center justify-between border-b border-outline-gray-1 px-5"
       >
         <span class="text-base-medium text-ink-gray-9">
           {{ __("Details") }}
@@ -51,7 +61,7 @@ import Resizer from "../Resizer.vue";
 import TicketDetailsTab from "./TicketDetailsTab.vue";
 
 const props = defineProps<{
-  /** Below lg: the panel is a sheet rather than an inline column. */
+  /** The panel is a sheet rather than an inline column (below lg, or beside the inbox list below 1440 px). */
   sheet: boolean;
   /** From lg: the agent hid the panel (the header's Details button). */
   hidden?: boolean;
