@@ -51,8 +51,11 @@ class WorkHoursCase(FrappeTestCase):
         self.today_at_11 = freeze_work_day(self, 11)
         self.today = getdate()
         self.yesterday = add_days(self.today, -1)
-        # no lunch break, the default
-        set_work_settings(lunch_start=None, lunch_end=None, max_hours_per_day=8)
+        # no lunch break, the default; hours typed in for the day before only, so an
+        # "older day" in these tests is any day before that (TestHandEntryWindow: more)
+        set_work_settings(
+            lunch_start=None, lunch_end=None, max_hours_per_day=8, hand_entry_days=1
+        )
         make_tasky_user(*DEV)
         self.project = make_project(
             "Work Hours - Website", members=[(DEV[0], "Developer")]
@@ -418,6 +421,56 @@ class TestDailyCap(WorkHoursCase):
             backdate_reason="Forgot to start the timer",
         )
         self.assertEqual(result["hours_logged"], 2)
+
+
+class TestHandEntryWindow(WorkHoursCase):
+    """Hours can be typed in for the last `hand_entry_days` working days (7 by default)."""
+
+    def working_days_back(self, count):
+        """The `count`th working day before today, as the window counts them."""
+        day, found = self.today, 0
+        while found < count:
+            day = add_days(day, -1)
+            if max_hours(day):
+                found += 1
+        return day
+
+    def old_task(self):
+        task = self.new_task("Year-end closing")
+        frappe.db.set_value(
+            "Task",
+            task,
+            "creation",
+            add_days(now_datetime(), -40),
+            update_modified=False,
+        )
+        return task
+
+    def test_by_default_the_last_seven_working_days_take_hours_by_hand(self):
+        set_work_settings(hand_entry_days=0)  # unset: the default, 7
+        task = self.old_task()
+        seventh = self.working_days_back(7)
+
+        days = self.as_dev(lambda: tasky.get_completion_days(task))
+        result = self.complete(task, days=[{"date": str(seventh), "hours": 2}])
+
+        self.assertEqual(days["oldest"], str(seventh))
+        self.assertIn(str(seventh), days["left"])
+        self.assertEqual(result["hours_logged"], 2)
+
+    def test_a_day_before_the_window_is_refused_without_a_timer(self):
+        set_work_settings(hand_entry_days=3)
+        task = self.old_task()
+        third, fourth = self.working_days_back(3), self.working_days_back(4)
+
+        self.complete(task, days=[{"date": str(third), "hours": 1}])
+        other = self.old_task()
+        with self.assertRaisesRegex(frappe.ValidationError, "recorded nothing on it"):
+            self.complete(other, days=[{"date": str(fourth), "hours": 1}])
+
+    def test_the_window_is_at_most_sixty_working_days(self):
+        with self.assertRaises(frappe.ValidationError):
+            set_work_settings(hand_entry_days=61)
 
 
 class TestReports(WorkHoursCase):

@@ -232,7 +232,8 @@ const today = ref(dayjs().format("YYYY-MM-DD"));
 // hours still free on each day (a day holds at most the work day, counting what the person
 // already has on it), and the oldest day hours can be typed in for: both from the server
 const left = ref<Record<string, number>>({});
-const yesterday = ref("");
+// the earliest day hours may be typed in for (HD Work Settings' hand_entry_days)
+const oldest = ref("");
 // what the timer recorded on each day: kept by date, not by row, so a row moved to another
 // day shows (and is checked against) that day's timer hours, as the server checks them
 const timerByDay = ref<Record<string, number>>({});
@@ -259,12 +260,14 @@ async function loadDays(task: string) {
     const data: {
       today: string;
       yesterday: string;
+      oldest?: string;
       days: CompletionDay[];
       left: Record<string, number>;
     } = await call("helpdesk.tasky.api.get_completion_days", { task });
     if (request !== daysRequest || props.task?.name !== task) return;
     today.value = data.today || today.value;
-    yesterday.value = data.yesterday || "";
+    // an older server sends only yesterday, the earliest day it used to allow
+    oldest.value = data.oldest || data.yesterday || "";
     left.value = data.left || {};
     fillRows(data.days || []);
   } catch {
@@ -375,23 +378,25 @@ const hoursError = computed(() => {
     if (!(h > 0)) return __("Hours must be more than 0.");
     if (h > MAX_HOURS)
       return __("A day has at most {0} hours.", String(MAX_HOURS));
-    // typed-in hours are for today or the working day before; older days only take what
-    // the timer recorded on them
+    // typed-in hours are for today and the last few working days; older days only take
+    // what the timer recorded on them
     if (
-      yesterday.value &&
-      row.date < yesterday.value &&
+      oldest.value &&
+      row.date < oldest.value &&
       h > timerAllowance(timerOn(row.date)) + 0.01
     )
       return timerOn(row.date)
         ? __(
-            "{0} is too long ago to enter more hours by hand: the timer recorded {1} h on it, so you can log at most {2} h. Log other hours on today or the working day before.",
+            "{0} is too long ago to enter more hours by hand: the timer recorded {1} h on it, so you can log at most {2} h. Hours can be typed in from {3} to today.",
             row.date,
             String(timerOn(row.date)),
-            String(timerAllowance(timerOn(row.date)))
+            String(timerAllowance(timerOn(row.date))),
+            oldest.value
           )
         : __(
-            "{0} is too long ago to enter hours by hand: the timer recorded nothing on it. Log hours for today or the working day before.",
-            row.date
+            "{0} is too long ago to enter hours by hand: the timer recorded nothing on it. Hours can be typed in from {1} to today; ask a System Manager for an older day.",
+            row.date,
+            oldest.value
           );
     const free = leftFor(row.date);
     if (free !== undefined && h > free + 0.01)

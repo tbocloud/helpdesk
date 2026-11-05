@@ -251,7 +251,8 @@ def complete_task(
     it to the lead for review on any project, not only those that ask for a review.
 
     A day holds at most the work day's hours (helpdesk.work_hours), counting what the person
-    already has on it; hours entered by hand are for today or yesterday only, or an older
+    already has on it; hours entered by hand are for today and the last working days
+    (HD Work Settings' `hand_entry_days`, 7 by default) only, or an older
     day with a `backdate_reason` from a System Manager (`check_hand_entered`).
     """
     doc = frappe.get_doc("Task", str(task))
