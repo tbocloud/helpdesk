@@ -143,7 +143,7 @@
             maxlength="140"
             :label="__('Copy')"
             :placeholder="__('e.g. Diwali offer carousel')"
-            @update:model-value="(v: string) => (form.title = oneLine(v))"
+            @update:model-value="(v: string) => (form.title = joinMalayalamSigns(oneLine(v)))"
             @keydown.enter.prevent
           />
           <div class="flex flex-col gap-1.5">
@@ -185,10 +185,11 @@
                  like the Sub Copy, and what was typed in it was never saved -->
             <FormControl
               id="post-caption"
-              v-model="form.caption"
+              :model-value="form.caption"
               type="textarea"
               :rows="6"
               :placeholder="__('Write the caption…')"
+              @update:model-value="(v: string) => (form.caption = joinMalayalamSigns(v))"
             />
             <label for="post-ai-brief" class="mt-1 text-xs text-ink-gray-5">
               {{ __("Brief for AI (optional, not saved with the post)") }}
@@ -203,17 +204,19 @@
             </p>
           </div>
           <FormControl
-            v-model="form.brief"
+            :model-value="form.brief"
             type="textarea"
             :rows="2"
             :label="__('Description')"
             :placeholder="__('What should the design or video look like?')"
             :description="__('Internal only. The client never sees this.')"
+            @update:model-value="(v: string) => (form.brief = joinMalayalamSigns(v))"
           />
           <FormControl
-            v-model="form.hashtags"
+            :model-value="form.hashtags"
             :label="__('Hashtags')"
             :placeholder="__('#diwali #offers')"
+            @update:model-value="(v: string) => (form.hashtags = joinMalayalamSigns(v))"
           />
           <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <RoleHoursField
@@ -453,6 +456,7 @@ import LucideSparkles from "~icons/lucide/sparkles";
 import {
   STATUSES,
   htmlToText,
+  joinMalayalamSigns,
   oneLine,
   platformsOf,
   TEAM_ROLES,

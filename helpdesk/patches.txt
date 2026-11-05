@@ -88,3 +88,4 @@ helpdesk.patches.v16_0_2.clip_unlogged_time_sessions
 helpdesk.patches.v16_0_2.enable_project_status_follow_up
 helpdesk.patches.v16_0_2.enable_adoption_digest
 helpdesk.patches.v16_0_2.setup_health_check_api_role
+helpdesk.patches.v16_0_2.mend_pasted_malayalam
