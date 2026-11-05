@@ -645,6 +645,18 @@ shows it as a "Created by" row in the task details and in Edit task, and as "Cre
 before "Assigned by …" on board cards and My Work rows, where it is left out when the same
 person did both. Editing the post later doesn't change either: the task isn't recreated.
 
+### Estimate
+
+A task's estimate is typed as **hours and minutes** (`EstimateInput.vue` in
+`pages/tasky/components`), in New task, Edit task, the recurring task dialog and each template
+task on Templates. It is stored in hours as before (`custom_estimated_hours`,
+`HD Recurring Task.estimated_hours`, `HD Task Template Task.estimated_hours`): 1 h 30 min is
+1.5 and 20 min is 0.333, so workload, overdue and timesheet sums are unchanged. Minutes over 59
+carry into hours (90 min is 1 h 30 min). Once the timer passes the estimate the task is
+overdue, whatever its due date (see [When a task is overdue](#when-a-task-is-overdue)). Task details and Edit task show it the same way
+(`formatEstimate()` in `taskMeta.ts`: "1 h 30 min", "45 min", "2 h"). The content calendar's
+per-role hours are still typed in hours.
+
 ### New tasks
 
 Spec for the request "a newly assigned task must stand out from the ones people already had".
@@ -960,15 +972,21 @@ browser (`isOverdue()` / `isOverEstimate()` in `taskMeta.ts`). A task that isn't
 Cancelled or On Hold is overdue when:
 
 - its due date (`exp_end_date`) has passed, or
-- **it is due today and has been worked longer than its estimate**: the timer's banked time plus
-  its running stretch (`custom_timer_elapsed` + now − `custom_timer_start`) exceeds
-  `custom_estimated_hours`. E.g. due today with 2 hours, moved to In progress at 10:00 and still
-  open at 12:01: overdue.
+- **it has been worked longer than its estimate**, whatever its due date and with none
+  (owner's request, 2026-11-03): the timer's banked time plus its running stretch
+  (`custom_timer_elapsed` + now − `custom_timer_start`) exceeds `custom_estimated_hours`. E.g. a
+  30 min task (see [Estimate](#estimate)) moved to In progress at 10:00 and still open at 10:31
+  is overdue, even if it's due next week. Until 2026-11-03 this counted only on the due date.
 
 The hours clock is the board timer, so it starts when the task moves to In progress (not when it
 was created or assigned), stops while the timer is paused, and counts work-day hours only (the
-timer stops at the end of the day and lunch, see "The work day"). Tasks due on a later day only go overdue when their date passes; a
-task with no estimate only by date. An overdue task carries no "at risk" reasons, so it's counted once (overdue), not in both buckets.
+timer stops at the end of the day and lunch, see "The work day"). A task with no estimate is
+overdue only by date. The board card says "Overdue" even when the task has no due date, and
+My tasks and the Overdue page say "Past its estimate". **Escalation still goes by the date:**
+the follow-ups' overdue ladder counts working days past the due date, so a task over its
+estimate before it (or with none) shows as overdue but isn't escalated until it is due
+(`FollowUpRules.overdue` in `helpdesk/follow_ups.py`). Home's "given out" list fetches tasks
+over their estimate whatever their date. An overdue task carries no "at risk" reasons, so it's counted once (overdue), not in both buckets.
 My tasks and the phase checklist load the timer fields for this. Where it shows: My Work
 (Overdue group and tab; the label
 reads "Overdue · past its estimate"), Overview buckets, Team and Projects counts, the

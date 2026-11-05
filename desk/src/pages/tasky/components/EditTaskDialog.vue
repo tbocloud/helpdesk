@@ -99,13 +99,9 @@
             :options="priorityOptions()"
           />
 
-          <TextInput
-            v-model.number="form.estimated_hours"
-            type="number"
-            min="0"
-            step="0.25"
-            :label="__('Estimated hours')"
-            placeholder="0"
+          <EstimateInput
+            v-model="form.estimated_hours"
+            :label="__('Estimate')"
           />
         </div>
 
@@ -210,10 +206,12 @@ import {
   assignedByName,
   createdByName,
   categoryOptions,
+  formatEstimate,
   isAiDrafted,
   isClosed,
   priorityOptions,
 } from "../taskMeta";
+import EstimateInput from "./EstimateInput.vue";
 import TaskDescriptionField, {
   type DraftContext,
 } from "./TaskDescriptionField.vue";
@@ -392,7 +390,7 @@ const readOnlyRows = computed(() => {
     { label: __("Phase"), value: t.phase || "—" },
     {
       label: __("Estimate"),
-      value: t.estimated_hours ? __("{0} hrs", String(t.estimated_hours)) : "—",
+      value: formatEstimate(t.estimated_hours),
     },
   ];
 });

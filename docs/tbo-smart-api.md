@@ -441,7 +441,8 @@ coordinator for its tasks); the app shows them only behind `manage_team` and an 
 
 `Task`: `name`, `subject`, `project`, `project_name`, `customer`, `status` (Open, Working,
 Pending Review, On Hold, Completed, Cancelled), `group`, `exp_end_date`, `is_overdue` (the
-hub's rule: past due, or due today and past its estimate; a held task is never overdue),
+hub's rule: past due, or worked past its estimate whatever its due date; a held task is never
+overdue),
 `is_key`, `is_milestone`, `priority`, `assignees`, `assigned_by` {user, full_name},
 `hold_reason`, `hold_note`, `hold_days`, `escalation` {level, label} or null, `timer`
 {state: running|paused|idle, started_at, logged_hours}, `expected_hours`, `waiting_on`,

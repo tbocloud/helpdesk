@@ -455,7 +455,7 @@ reopened task joins the current customer's content project (`is_customers_projec
 reopening needs that project like adding people does (`require_content_project` →
 `reopens_tasks`, from the same `parts_to_reopen` that `sync_tasks` uses).
 
-When a task counts as overdue (past its date, or due today and past its estimated hours) is
+When a task counts as overdue (past its date, or worked past its estimated hours, whatever its date) is
 described in [workspace-pages.md](workspace-pages.md#when-a-task-is-overdue), and who hears
 about it in [follow-ups.md](follow-ups.md).
 

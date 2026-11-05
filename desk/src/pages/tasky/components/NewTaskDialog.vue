@@ -109,14 +109,7 @@
           :options="priorityOptions()"
         />
 
-        <TextInput
-          v-model.number="form.estimated_hours"
-          type="number"
-          min="0"
-          step="0.25"
-          :label="__('Estimated hours')"
-          placeholder="0"
-        />
+        <EstimateInput v-model="form.estimated_hours" :label="__('Estimate')" />
 
         <TextInput
           v-model="form.due_date"
@@ -199,6 +192,7 @@ import {
 import { computed, reactive, ref, useId, watch } from "vue";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import { categoryOptions, isAiDrafted, priorityOptions } from "../taskMeta";
+import EstimateInput from "./EstimateInput.vue";
 import TaskDescriptionField, {
   type DraftContext,
 } from "./TaskDescriptionField.vue";
