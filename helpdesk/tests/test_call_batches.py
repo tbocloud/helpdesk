@@ -7,9 +7,11 @@ from frappe.utils import add_to_date, now_datetime
 from helpdesk import daily_sales_report as job
 from helpdesk.api import call_batches as api
 from helpdesk.integrations.crm.client import CRMError
+from helpdesk.integrations.crm.leads import LeadsForbiddenError
 from helpdesk.test_utils import (
     FakeCRM,
     call_batches_report,
+    call_plans,
     create_agent,
     enable_leads,
     hold_commits,
@@ -246,3 +248,79 @@ class TestCallBatchesReport(FrappeTestCase):
             job.send_report(MANAGER, report)
         _user, _subject, sections = deliver.call_args.args
         self.assertEqual([title for title, _ in sections], ["👤 Shahana V K"])
+
+
+class TestCallPlans(FrappeTestCase):
+    def setUp(self):
+        hold_commits(self)
+        self.addCleanup(frappe.set_user, "Administrator")
+        make_sales_manager(MANAGER, "Maya")
+        enable_leads()
+        self.crm = FakeCRM()
+        patcher = patch(FROM_SETTINGS, return_value=self.crm)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.crm.lead_answers["get_call_plans"] = call_plans()
+        self.crm.lead_answers["save_call_plan"] = call_plans()["departments"][0]
+        frappe.set_user(MANAGER)
+
+    def calls(self, method):
+        return [
+            (post, params)
+            for name, post, params in self.crm.lead_calls
+            if name == method
+        ]
+
+    def test_the_plans_are_read_as_the_manager(self):
+        plans = api.get_call_plans()
+        self.assertTrue(plans["available"])
+        self.assertEqual(plans["departments"][0]["members"][0]["sizes"]["Morning"], 50)
+        ((_post, params),) = self.calls("get_call_plans")
+        self.assertEqual(params["acting_user"], MANAGER)
+
+    def test_an_older_erp_site_has_no_plans(self):
+        self.crm.lead_answers["get_call_plans"] = OLDER_ERP
+        self.assertEqual(api.get_call_plans(), {"available": False, "departments": []})
+
+    def test_someone_who_may_not_assign_is_told_so(self):
+        self.crm.lead_answers["get_call_plans"] = CRMError("x", 403, "no")
+        with self.assertRaises(LeadsForbiddenError) as raised:
+            api.get_call_plans()
+        self.assertIn("assign leads", str(raised.exception))
+
+    def test_a_plan_is_sent_with_its_people_product_and_sizes(self):
+        result = api.save_call_plan(
+            "GrowthX",
+            frappe.as_json(["shahana@tbo.example"]),
+            "  PhoebiX ",
+            frappe.as_json({"Morning": 50, "Afternoon": 50}),
+        )
+        self.assertEqual(result["department"], "GrowthX")
+        ((post, params),) = self.calls("save_call_plan")
+        self.assertTrue(post)
+        self.assertEqual(params["users"], ["shahana@tbo.example"])
+        self.assertEqual(params["product"], "PhoebiX")
+        self.assertEqual(params["sizes"], {"Morning": 50, "Afternoon": 50})
+        self.assertEqual(params["clear"], 0)
+
+    def test_clearing_sends_no_product_or_sizes(self):
+        api.save_call_plan("GrowthX", ["shahana@tbo.example"], clear=1)
+        ((_post, params),) = self.calls("save_call_plan")
+        self.assertEqual(params["clear"], 1)
+        self.assertIsNone(params["product"])
+        self.assertIsNone(params["sizes"])
+
+    def test_a_plan_needs_people(self):
+        self.assertRaises(
+            frappe.ValidationError, api.save_call_plan, "GrowthX", "[]", "PhoebiX"
+        )
+        self.assertEqual(self.calls("save_call_plan"), [])
+
+    def test_saving_needs_the_latest_erp_site(self):
+        self.crm.lead_answers["save_call_plan"] = OLDER_ERP
+        self.assertRaises(
+            frappe.ValidationError,
+            api.save_call_plan,
+            "GrowthX",
+            ["shahana@tbo.example"],
+        )

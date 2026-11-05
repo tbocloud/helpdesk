@@ -1,7 +1,8 @@
 """Today's calls: the batch of leads a salesperson must call in the current time slot
 (docs/leads.md, "Today's calls"). Thin proxies to TBO Smart's hub leads API
-(`get_my_calls`, `get_next_batch`, `record_call_outcome`, `get_call_batches_report`); the
-ERP site decides the batches, the rules and the outcomes."""
+(`get_my_calls`, `get_next_batch`, `record_call_outcome`, `get_call_batches_report`, and the
+managers' call plans `get_call_plans`, `save_call_plan`); the ERP site decides the batches, the
+rules and the outcomes."""
 
 import frappe
 from frappe import _
@@ -126,6 +127,53 @@ def get_call_batches_report(date: str | None = None) -> dict:
     if result is None:
         return {"available": False, "people": [], "totals": {}}
     return {"available": True, **result}
+
+
+@frappe.whitelist()
+def get_call_plans() -> dict:
+    """Assign leads: per department with call batches on, each member's product and calls per
+    slot, for managers and department heads. `available` is false while the ERP site is older
+    than this."""
+    require_leads()
+    result = call_if_deployed(
+        "get_call_plans",
+        permission_message=_("Only managers and department heads can assign leads."),
+    )
+    if result is None:
+        return {"available": False, "departments": []}
+    return {"available": True, **result}
+
+
+@frappe.whitelist(methods=["POST"])
+def save_call_plan(
+    department: str,
+    users: list | str,
+    product: str | None = None,
+    sizes: dict | str | None = None,
+    clear: int | str | bool = 0,
+) -> dict:
+    """Hand `users` (members of `department`) the `product` and `sizes` ({slot: calls}) from
+    their next slot, or (`clear`) the department's sizes again. The ERP site checks who may and
+    what is valid; it answers with the department as `get_call_plans` lists it."""
+    require_leads()
+    users = frappe.parse_json(users) if isinstance(users, str) else users
+    if not users:
+        frappe.throw(_("Pick the people to assign leads to."))
+    sizes = frappe.parse_json(sizes) if isinstance(sizes, str) else sizes
+    result = call_if_deployed(
+        "save_call_plan",
+        post=True,
+        department=department,
+        users=list(users),
+        product=(product or "").strip() or None,
+        sizes=sizes or None,
+        clear=cint(clear),
+        permission_message=_("Only managers and department heads can assign leads."),
+    )
+    if result is None:
+        frappe.throw(_(OLDER_ERP), LeadsUnavailableError)
+    clear_cached_reads()
+    return result
 
 
 def report_lines(report: dict) -> list[tuple[str, None]]:
