@@ -62,7 +62,7 @@ user exists there with a sales role, applies what they may see, and records writ
 | `get_daily_report` | GET | `date, owner` | each salesperson's day and week to date (§2.5.1) |
 | `log_call` | POST | `lead, outcome, note, callback_at` | `{name, status, outcomes, stage}` (§2.7, §2.16) |
 | `get_my_calls`, `get_next_batch`, `record_call_outcome`, `get_call_batches_report` | GET, POST, POST, GET | see [Today's calls](#todays-calls) | TBO Smart's `hub-leads-api.md` §2.13 |
-| `get_call_plans`, `save_call_plan` | GET, POST | `department, users, product, sizes, clear` (save) | see [Assign leads](#assign-leads), TBO Smart's `hub-leads-api.md` §2.23 (v1.23) |
+| `get_call_plans`, `save_call_plan`, `get_department_leads`, `assign_leads`, `unassign_leads` | GET, POST, GET, POST, POST | `department, users, product, sizes, clear` (save); `department, owner, product, search, start, page_length`; `department, user, leads or count + product`; `department, leads` | see [Assign leads](#assign-leads), TBO Smart's `hub-leads-api.md` §2.23 (v1.23) |
 | `estimate_prospect_run`, `start_prospect_run`, `get_prospect_runs`, `get_prospect_run` | POST, POST, GET, GET | `values: {industry, state, districts, provider, max_results, department, require_phone}`; `name` | a run and its price, the started run, the runs, one run with its leads; see [Find prospects](#find-prospects), TBO Smart's `hub-leads-api.md` §2.15 |
 | `get_lead_ai` | GET | `name` | what the AI proposes, the lead's health and likely duplicates (TBO Smart's `hub-leads-api.md` §2.6) |
 | `refresh_lead_ai`, `apply_ai_stage`, `dismiss_ai_stage` | POST | `name` | as above, or the lead (apply) |
@@ -316,6 +316,21 @@ leads anyway), one primary **Assign leads** button and, for people who have a pl
 department sizes**. A department's campaign product is the only product (the picker is locked
 and says why).
 
+**Each person's leads, and the unassigned ones.** Every row ends with *1,219 leads* (their
+open leads in the department); it opens a window (`MemberLeadsDialog.vue`) with **Their leads** and
+**Unassigned**, a Product filter with counts and a search (name, company, phone):
+- tick leads and **Move to** another member, **Unassign** them (back to the department's pool),
+  or **Set product** (the existing `bulk_set_lead_category`, which a head may do for their
+  department);
+- under Unassigned, tick leads and **Assign to** the person, or **Give the next 25 of PhoebiX**
+  without picking (the ERP site takes the next unassigned leads with a phone, hot then newest);
+- the header's **Unassigned leads** button opens the pool on its own.
+
+The owner, the ToDo assignment and a waiting call in the previous owner's running batch move with
+the lead (TBO Smart's `call-batches.md` §12). At most 500 leads at a time; 50 a page with **Show
+more**. Never cached. `get_department_leads`, `assign_leads`, `unassign_leads` in
+`helpdesk/api/call_batches.py`.
+
 **Who.** The item shows for anyone who is not a BD once a department hands out batches; the ERP
 site decides: Sales Managers and System Managers plan every department, heads theirs. Anyone else
 sees *Assign leads isn't available to you* (`LeadsForbiddenError`, no retry button). Only members
@@ -342,7 +357,10 @@ Code: `helpdesk/api/call_batches.py` (`get_call_plans`, `save_call_plan`; a 403 
 3. Choose the **Product** and type the calls for each slot, for example Morning 50, Afternoon 50.
 4. Check the line under it: if fewer unassigned leads are ready than you plan, the batches give
    what there is.
-5. Press **Assign leads**. It counts from the next slot. To go back to the department's sizes,
+5. Press **Assign leads**. It counts from the next slot.
+6. To see or move someone's leads, press **N leads** on their row. Tick leads to **Move to**
+   someone else, **Unassign** or **Set product**. Under **Unassigned**, tick leads and assign them,
+   or type how many to give (and of which product) and press **Give to**. To go back to the department's sizes,
    tick the person and press **Back to department sizes**.
 
 ## BD view, calling for, and recording results
@@ -355,6 +373,11 @@ them.
 batches), *My leads* (what they own; renamed from *Mine* for everyone), *Follow-up* and their own
 *Commission*. No Overview, Daily report, Business, All, Outreach or *Find prospects*, and no
 Owner filter. Managers and department heads keep everything.
+
+**Only their own leads.** The ERP site also shows a lead to whoever it is assigned to (a
+follow-up given to them on someone else's lead). For a BD the hub sends `owner` as the BD on every
+`list_leads` (All becomes My leads; Follow-up and Call today are their own leads only), and
+`get_lead` refuses a lead someone else owns (*This lead is someone else's*, PermissionError).
 
 **On the server too** (`helpdesk.api.leads.is_bd`; `auth.get_user` sends `is_sales_bd` for the
 role, `get_options` sends `is_bd` once the department heads are known): `list_leads` with view *All*

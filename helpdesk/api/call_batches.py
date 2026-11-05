@@ -24,6 +24,7 @@ OUTCOMES = (
     "Not interested",
     "Wrong number",
 )
+PLANNERS_ONLY = "Only managers and department heads can assign leads."
 OLDER_ERP = (
     "The ERP site can't hand out call batches yet. It needs the latest TBO Smart."
 )
@@ -137,7 +138,7 @@ def get_call_plans() -> dict:
     require_leads()
     result = call_if_deployed(
         "get_call_plans",
-        permission_message=_("Only managers and department heads can assign leads."),
+        permission_message=_(PLANNERS_ONLY),
     )
     if result is None:
         return {"available": False, "departments": []}
@@ -168,7 +169,85 @@ def save_call_plan(
         product=(product or "").strip() or None,
         sizes=sizes or None,
         clear=cint(clear),
-        permission_message=_("Only managers and department heads can assign leads."),
+        permission_message=_(PLANNERS_ONLY),
+    )
+    if result is None:
+        frappe.throw(_(OLDER_ERP), LeadsUnavailableError)
+    clear_cached_reads()
+    return result
+
+
+@frappe.whitelist()
+def get_department_leads(
+    department: str,
+    owner: str | None = None,
+    product: str | None = None,
+    search: str | None = None,
+    start: int | str = 0,
+    page_length: int | str = 50,
+) -> dict:
+    """A page of a department's open leads: a member's (`owner`) or, with no owner, the
+    unassigned ones, with how many there are of each product. Never cached: a lead that
+    was just moved must show where it went."""
+    require_leads()
+    result = call_if_deployed(
+        "get_department_leads",
+        department=department,
+        owner=(owner or "").strip() or None,
+        product=(product or "").strip() or None,
+        search=(search or "").strip() or None,
+        start=max(cint(start), 0),
+        page_length=min(max(cint(page_length) or 50, 1), 100),
+        permission_message=_(PLANNERS_ONLY),
+    )
+    if result is None:
+        frappe.throw(_(OLDER_ERP), LeadsUnavailableError)
+    return result
+
+
+@frappe.whitelist(methods=["POST"])
+def assign_leads(
+    department: str,
+    user: str,
+    leads: list | str | None = None,
+    count: int | str = 0,
+    product: str | None = None,
+) -> dict:
+    """Give a member the `leads` picked (moving them from whoever had them) or the next
+    `count` unassigned leads of `product`: {assigned, skipped}."""
+    require_leads()
+    names = frappe.parse_json(leads) if isinstance(leads, str) else leads
+    if not names and cint(count) <= 0:
+        frappe.throw(_("Pick the leads, or say how many to give."))
+    result = call_if_deployed(
+        "assign_leads",
+        post=True,
+        department=department,
+        user=user,
+        leads=list(names or []) or None,
+        count=0 if names else cint(count),
+        product=(product or "").strip() or None,
+        permission_message=_(PLANNERS_ONLY),
+    )
+    if result is None:
+        frappe.throw(_(OLDER_ERP), LeadsUnavailableError)
+    clear_cached_reads()
+    return result
+
+
+@frappe.whitelist(methods=["POST"])
+def unassign_leads(department: str, leads: list | str) -> dict:
+    """Take the `leads` back to the department's unassigned pool: {unassigned, skipped}."""
+    require_leads()
+    names = frappe.parse_json(leads) if isinstance(leads, str) else leads
+    if not names:
+        frappe.throw(_("Pick the leads first."))
+    result = call_if_deployed(
+        "unassign_leads",
+        post=True,
+        department=department,
+        leads=list(names),
+        permission_message=_(PLANNERS_ONLY),
     )
     if result is None:
         frappe.throw(_(OLDER_ERP), LeadsUnavailableError)

@@ -127,6 +127,10 @@
                       : __("{0} people", String(current.members.length))
                   }}
                 </span>
+                <Button
+                  :label="__('Unassigned leads')"
+                  @click="openLeads(null)"
+                />
               </div>
 
               <TaskyState
@@ -142,7 +146,7 @@
 
               <template v-else>
                 <div
-                  class="hidden grid-cols-[2rem_minmax(0,1fr)_9rem_repeat(var(--slots),4.5rem)_6rem] items-center gap-2 px-4 py-2 text-xs text-ink-gray-6 md:grid"
+                  class="hidden grid-cols-[2rem_minmax(0,1fr)_9rem_repeat(var(--slots),4.5rem)_6rem_6rem] items-center gap-2 px-4 py-2 text-xs text-ink-gray-6 md:grid"
                   :style="{ '--slots': current.slots.length }"
                   aria-hidden="true"
                 >
@@ -156,13 +160,14 @@
                     >{{ slot.label }}</span
                   >
                   <span class="text-right">{{ __("Today") }}</span>
+                  <span class="text-right">{{ __("Leads") }}</span>
                 </div>
                 <ul
                   class="divide-y divide-outline-gray-1 border-t border-outline-gray-1 md:border-t-0"
                 >
                   <li v-for="member in current.members" :key="member.user">
                     <label
-                      class="grid cursor-pointer grid-cols-[2rem_minmax(0,1fr)] items-center gap-x-2 gap-y-1 px-4 py-3 hover:bg-surface-gray-1 md:grid-cols-[2rem_minmax(0,1fr)_9rem_repeat(var(--slots),4.5rem)_6rem]"
+                      class="grid cursor-pointer grid-cols-[2rem_minmax(0,1fr)] items-center gap-x-2 gap-y-1 px-4 py-3 hover:bg-surface-gray-1 md:grid-cols-[2rem_minmax(0,1fr)_9rem_repeat(var(--slots),4.5rem)_6rem_6rem]"
                       :class="isPicked(member.user) && 'bg-surface-gray-1'"
                       :style="{ '--slots': current.slots.length }"
                     >
@@ -211,6 +216,20 @@
                         }}</span>
                         <span class="md:hidden"> {{ __("called today") }}</span>
                       </span>
+                      <!-- a button inside the row's label: it must not tick the person -->
+                      <button
+                        type="button"
+                        class="col-start-2 justify-self-start rounded px-1 text-sm text-ink-gray-8 underline decoration-outline-gray-3 underline-offset-2 hover:text-ink-gray-9 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight md:col-start-auto md:justify-self-end"
+                        :aria-label="
+                          __('See and move the leads of {0}', member.full_name)
+                        "
+                        @click.prevent.stop="openLeads(member)"
+                      >
+                        <span class="font-mono tabular-nums">{{
+                          member.leads
+                        }}</span>
+                        {{ __("leads") }}
+                      </button>
                     </label>
                   </li>
                 </ul>
@@ -376,6 +395,13 @@
       </div>
     </div>
   </div>
+  <MemberLeadsDialog
+    v-if="current"
+    v-model:open="showLeads"
+    :department="current"
+    :member="leadsOf"
+    @changed="plans.reload()"
+  />
 </template>
 
 <script setup lang="ts">
@@ -400,6 +426,7 @@ import LucideLock from "~icons/lucide/lock";
 import LucidePhoneOff from "~icons/lucide/phone-off";
 import LucideTriangleAlert from "~icons/lucide/triangle-alert";
 import LucideUsers from "~icons/lucide/users";
+import MemberLeadsDialog from "./MemberLeadsDialog.vue";
 import {
   leadsReady,
   type CallPlans,
@@ -607,6 +634,15 @@ function clearPlans() {
     users: pickedWithPlan.value.map((m) => m.user),
     clear: 1,
   });
+}
+
+// ---------- a person's leads, or the unassigned ones ----------
+
+const showLeads = ref(false);
+const leadsOf = ref<PlanMember | null>(null);
+function openLeads(member: PlanMember | null) {
+  leadsOf.value = member;
+  showLeads.value = true;
 }
 
 /** "PhoebiX · 50 + 50", the plan on one line for a phone. */
