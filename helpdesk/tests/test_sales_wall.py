@@ -224,7 +224,8 @@ class TestLeadsStillWork(SalesWallCase):
             "total": 1,
         }
         self.crm.lead_answers["get_lead"] = {
-            "lead": {"name": "CRM-LEAD-0101"},
+            # theirs: a BD opens only the leads they own
+            "lead": {"name": "CRM-LEAD-0101", "lead_owner": self.sales},
             "timeline": [],
             "quotations": [],
             "proposals": [],

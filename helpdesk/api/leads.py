@@ -181,9 +181,10 @@ def list_leads(
     if view not in VIEWS:
         frappe.throw(_("Pick All, Mine, Call today or Follow-up."))
     if is_bd():
-        # another BD may be calling the same lead: a BD's list is their own leads
+        # another BD may be calling the same lead: every list of a BD is the leads they own,
+        # Follow-up included (the ERP site also shows a lead to whoever it is assigned to)
         view = "mine" if view == "all" else view
-        owner = None
+        owner = frappe.session.user
     if period:
         check_period(period, from_date, to_date, dates_required=bool(metric))
     when = {"period": None, "from_date": None, "to_date": None}
@@ -582,6 +583,12 @@ def get_lead(name: str) -> dict:
     """The lead, its timeline, its quotations and the stages it may move to."""
     require_leads()
     detail = call("get_lead", name=name) or {}
+    if detail.get("lead", {}).get("lead_owner") != frappe.session.user and is_bd():
+        # the ERP site opens a lead to whoever it is assigned to; a BD sees only their own
+        frappe.throw(
+            _("This lead is someone else's. You can open only your own leads."),
+            frappe.PermissionError,
+        )
     if detail.get("lead", {}).get("whatsapp") is not None:
         detail["lead"]["whatsapp_box"] = whatsapp_outreach.lead_box(detail["lead"])
     return detail
