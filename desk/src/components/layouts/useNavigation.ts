@@ -52,6 +52,12 @@ export function useNavigation() {
     () => leadOptions.data?.is_bd ?? authStore.isSalesBd
   );
   const hasBatches = computed(() => batchesOn(leadOptions.data));
+  // the ERP site decides who may plan (a Sales Manager, a head); a BD never does
+  const canPlanCalls = computed(
+    () =>
+      !isBd.value &&
+      !!leadOptions.data?.departments?.some((d) => d.call_batches_enabled)
+  );
   const canViewBusiness = computed(() => !!leadOptions.data?.can_view_business);
 
   function isLeadTabVisible(tab: NonNullable<NavItem["leadTab"]>) {
@@ -88,6 +94,7 @@ export function useNavigation() {
       (!authStore.isSalesEmployee || SALES_EMPLOYEE_ROUTES.has(to)) &&
       (!item.leadsOnly || authStore.canUseLeads) &&
       (!item.leadBankOnly || authStore.canUseLeadBank) &&
+      (!item.callPlannerOnly || canPlanCalls.value) &&
       (!item.projectManagerOnly || authStore.isProjectManager) &&
       (!item.overviewOnly || authStore.canSeeOverview) &&
       (!item.adoptionOnly || authStore.canSeeAdoption) &&

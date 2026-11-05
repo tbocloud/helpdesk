@@ -27,6 +27,7 @@ import LucideSquareKanban from "~icons/lucide/square-kanban";
 import LucideTicket from "~icons/lucide/ticket";
 import LucideTrophy from "~icons/lucide/trophy";
 import LucideUsers from "~icons/lucide/users";
+import LucideUserRoundCog from "~icons/lucide/user-round-cog";
 import LucideActivity from "~icons/lucide/activity";
 
 /** A page in the sidebar. The flags are the role rules; see `isNavItemVisible`. */
@@ -48,6 +49,8 @@ export interface NavItem {
   ticketWorkersOnly?: boolean;
   leadsOnly?: boolean;
   leadBankOnly?: boolean;
+  /** Assign leads: anyone but a BD, once a department hands out call batches */
+  callPlannerOnly?: boolean;
   projectManagerOnly?: boolean;
   overviewOnly?: boolean;
   adoptionOnly?: boolean;
@@ -322,6 +325,15 @@ export const agentNavAreas: NavArea[] = [
             to: "Leads",
             leadTab: "business",
             leadsOnly: true,
+          },
+          // who is handed which product and how many calls per slot (docs/leads.md)
+          {
+            id: "assign-leads",
+            label: __("Assign leads"),
+            icon: LucideUserRoundCog,
+            to: "AssignLeads",
+            leadsOnly: true,
+            callPlannerOnly: true,
           },
         ],
       },

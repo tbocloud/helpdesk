@@ -62,6 +62,7 @@ user exists there with a sales role, applies what they may see, and records writ
 | `get_daily_report` | GET | `date, owner` | each salesperson's day and week to date (§2.5.1) |
 | `log_call` | POST | `lead, outcome, note, callback_at` | `{name, status, outcomes, stage}` (§2.7, §2.16) |
 | `get_my_calls`, `get_next_batch`, `record_call_outcome`, `get_call_batches_report` | GET, POST, POST, GET | see [Today's calls](#todays-calls) | TBO Smart's `hub-leads-api.md` §2.13 |
+| `get_call_plans`, `save_call_plan` | GET, POST | `department, users, product, sizes, clear` (save) | see [Assign leads](#assign-leads), TBO Smart's `hub-leads-api.md` §2.23 (v1.23) |
 | `estimate_prospect_run`, `start_prospect_run`, `get_prospect_runs`, `get_prospect_run` | POST, POST, GET, GET | `values: {industry, state, districts, provider, max_results, department, require_phone}`; `name` | a run and its price, the started run, the runs, one run with its leads; see [Find prospects](#find-prospects), TBO Smart's `hub-leads-api.md` §2.15 |
 | `get_lead_ai` | GET | `name` | what the AI proposes, the lead's health and likely duplicates (TBO Smart's `hub-leads-api.md` §2.6) |
 | `refresh_lead_ai`, `apply_ai_stage`, `dismiss_ai_stage` | POST | `name` | as above, or the lead (apply) |
@@ -294,6 +295,55 @@ Code: `helpdesk/api/call_batches.py` (proxies; `report_lines` for the 6 pm text)
 `desk/src/pages/leads/callBatches.ts` (types, outcome list, optimistic update, rules helpers),
 `TodaysCalls.vue`, `CallRow.vue`, `CallOutcomeDialog.vue`, `CallBatchesTable.vue`,
 `desk/src/components/Settings/CRM/CallBatchRules.vue`.
+
+## Assign leads
+
+The department's slots hand every member the same number (Morning 50, Afternoon 50). On
+**Assign leads** (Sales, Team; `/leads/assign`, `AssignLeads.vue`) a manager or department head
+plans each person instead: the **product** they are handed and the **calls per slot**. The ERP
+site keeps the plan on the member's row and the call batches follow it from the next slot
+(TBO Smart's `call-batches.md` §11). Nothing is stored here.
+
+**What the page shows.** A **Department** field first (the departments with call batches on;
+`?department=` in the URL). The **People** list and the **Product** choices are that
+department's own. The **People** list has each member's product ("Any product" without one), their calls per
+slot (gray: the department's size, no plan of their own) and today's *called / handed*. On a phone
+each row is the name with "PhoebiX · 50 + 50" under it. The **Assign** panel (beside the list on a
+wide screen, under it on a phone) has the product, one number per slot, the day's total ("100
+calls a day each, 300 together"), how many unassigned leads of that product are ready (with a
+warning icon and words when it is fewer than the plan; each batch starts with the person's own
+leads anyway), one primary **Assign leads** button and, for people who have a plan, **Back to
+department sizes**. A department's campaign product is the only product (the picker is locked
+and says why).
+
+**Who.** The item shows for anyone who is not a BD once a department hands out batches; the ERP
+site decides: Sales Managers and System Managers plan every department, heads theirs. Anyone else
+sees *Assign leads isn't available to you* (`LeadsForbiddenError`, no retry button). Only members
+can be planned; the page says to add people in Settings, CRM, Lead departments.
+
+**States.** Loading skeleton; an error with Try again; an older ERP site (*The ERP site can't
+assign leads yet*); no department with batches (turn them on in Settings); a department with no
+members; the save's own error under the button.
+
+**What a plan does on the ERP site.** The slot's batch holds the person's number (0: none in
+that slot), the day's cap is at least the plan's total, new leads are only the plan's product, the
+person's *Calling for* offers only that product in the department, and their batches there open
+even when they focus on another department. Calls already handed out stay.
+
+Code: `helpdesk/api/call_batches.py` (`get_call_plans`, `save_call_plan`; a 403 becomes
+`LeadsForbiddenError` with the ERP site's reason), `desk/src/pages/leads/callPlans.ts` (types,
+`leadsReady`), `AssignLeads.vue`; the nav item `assign-leads` (`callPlannerOnly` in
+`useNavigation.ts`).
+
+### How to use (managers and heads)
+
+1. Open **Sales → Assign leads** and pick the **Department**. The list shows its people.
+2. Tick the people (or the box at the top for everyone).
+3. Choose the **Product** and type the calls for each slot, for example Morning 50, Afternoon 50.
+4. Check the line under it: if fewer unassigned leads are ready than you plan, the batches give
+   what there is.
+5. Press **Assign leads**. It counts from the next slot. To go back to the department's sizes,
+   tick the person and press **Back to department sizes**.
 
 ## BD view, calling for, and recording results
 
@@ -995,7 +1045,9 @@ is off, silent on an older ERP site, a refused manager skipped).
 ERP site and a department without batches told apart), an outcome posted with a trimmed note, a
 made-up outcome and a call back without a future time refused before the ERP site is asked, the ERP
 site's reason reaching the person, the next batch's reason passed on, the manager report, and the
-6 pm message's batches section (and its absence on an older ERP site).
+6 pm message's batches section (and its absence on an older ERP site), and the call plans (read
+as the manager, an older ERP site, a refusal as `LeadsForbiddenError`, a plan sent with its people,
+trimmed product and sizes, clearing, no people refused before the ERP site is asked).
 `helpdesk/tests/test_lead_calls.py`: Call posted as the signed-in person to TBO Smart's
 telephony API, the recording streamed (audio only) and a refusal refused, the MyOperator
 settings for admins only and proxied.

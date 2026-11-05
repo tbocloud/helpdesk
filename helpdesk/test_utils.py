@@ -4578,6 +4578,53 @@ def call_batches_report(people: list[dict]) -> dict:
     }
 
 
+def call_plans(**department) -> dict:
+    """A get_call_plans answer: GrowthX with Morning and Afternoon slots of 50, the products
+    PhoebiX and BillaX, and Shahana planned for PhoebiX (50 + 50), plus any `department`
+    keys."""
+    return {
+        "date": "2026-11-05",
+        "departments": [
+            {
+                "department": "GrowthX",
+                "slots": [
+                    {
+                        "label": "Morning",
+                        "start_time": "10:00",
+                        "end_time": "13:00",
+                        "size": 50,
+                    },
+                    {
+                        "label": "Afternoon",
+                        "start_time": "14:00",
+                        "end_time": "18:00",
+                        "size": 50,
+                    },
+                ],
+                "products": [
+                    {"product_name": "PhoebiX", "intro_line": "Solar ERP"},
+                    {"product_name": "BillaX", "intro_line": "Billing"},
+                ],
+                "campaign_product": None,
+                "pull_unassigned": 1,
+                "unassigned": {"PhoebiX": 140, "": 12},
+                "members": [
+                    {
+                        "user": "shahana@tbo.example",
+                        "full_name": "Shahana V K",
+                        "product": "PhoebiX",
+                        "sizes": {"Morning": 50, "Afternoon": 50},
+                        "total": 100,
+                        "has_plan": True,
+                        "today": {"size": 50, "called": 12},
+                    }
+                ],
+                **department,
+            }
+        ],
+    }
+
+
 def prospect_run(name: str = "PR-0001", **fields) -> dict:
     """A TBO Prospect Run as the ERP site's prospect methods answer it: Resorts in Idukki
     through OpenStreetMap, Estimated, nothing found yet."""

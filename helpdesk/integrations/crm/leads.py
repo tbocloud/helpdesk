@@ -36,6 +36,11 @@ class LeadsNotDeployedError(LeadsUnavailableError):
     """The CRM site's TBO Smart is older than the method asked for."""
 
 
+class LeadsForbiddenError(LeadsError):
+    """The ERP site refused a call that needs more than a sales account (a manager's or a
+    head's): a page shows it as not for this person, with no retry."""
+
+
 def leads_on() -> bool:
     return bool(
         frappe.db.get_single_value("HD CRM Settings", "enabled")
@@ -233,7 +238,7 @@ def friendly_error(
             ).format(api_user(client), site)
         )
     if error.status == 403 and permission_message:
-        return LeadsError(error.user_message or permission_message)
+        return LeadsForbiddenError(error.user_message or permission_message)
     if error.status == 403:
         return LeadsError(
             _(
