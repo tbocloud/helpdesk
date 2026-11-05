@@ -40,27 +40,42 @@ in `useNavigation.ts`, state in `stores/sidebar.ts`).
 
 - **Rail** (3.5rem, always visible on desktop, dark in both themes): one icon per area,
   Notifications, Settings and the avatar with the account menu at the bottom. Icons are
-  neutral; the selected area is filled with `brand`. Tooltips carry the labels.
-- **Panel** (15rem): the workspace card (logo, "Team Back Office", the person's department),
-  Search (opens the command palette, Ctrl/Cmd+K), the area's groups under small uppercase
-  headings, then the follow-ups strip, the onboarding/permission banners and the
-  "Need help?" card (Raise a ticket, to the existing New ticket page).
-  The current page is tinted `brand-soft` with `aria-current="page"`.
+  neutral and lighten on hover (contrast 9:1 idle, 10:1 hovered, both on the dark rail); the
+  selected area is filled with `brand` (3.3:1 against the rail) and carries a marker on the
+  rail's edge, which also marks the area holding the open page while another is selected.
+  Tooltips carry the labels: they open with no delay on hover and on keyboard focus, and
+  the button has its own `aria-label`, so the tooltip never has to be reached.
+- **Panel** (15rem): a compact workspace card (logo, "Team Back Office", the person's
+  department), Search (opens the command palette, Ctrl/Cmd+K), the selected area's name as a
+  heading, its groups under small uppercase headings, then the follow-ups strip, the
+  onboarding/permission banners and "Help & docs". Only the items list scrolls: the card,
+  Search and the area name stay at the top, the strip and Help & docs at the bottom.
+  The current page is tinted `brand-soft` with `aria-current="page"`. Raising a ticket is
+  on the Tickets page (there is no separate help card).
 - **Areas**, mapped from the old menu (every item keeps the role rule it had; an area with
   no page a person can use never shows):
 
   | Area | Items |
   | --- | --- |
   | Home | Home, Stand-up, Scoreboard |
-  | Work | My work: My Work (count), Board, In progress, Calendar, Timesheets. Projects: Projects, Templates. Team: Overview, Team, Adoption |
+  | Work | My work: My Work (count), Board, In progress, Calendar, Timesheets. Projects: Projects, Project status, Templates. Team: Overview, Team, Adoption |
   | Support | Tickets (count), Saved views (a tree), Knowledge base |
-  | Sales | Leads, Add a lead, My leads |
+  | Sales | Today's calls, Leads, Add a lead, My leads, Commission. Team: Overview, Business |
   | Content | Content, Performance |
   | People | Customers, Contacts |
   | Reports | Summaries, Customer report, Support hours |
 
-  The customer portal has one area, Support (Tickets, Knowledge base). Project status and
-  Commission are project tabs, not sidebar pages, so they stay in their project.
+  The customer portal has one area, Support (Tickets, Knowledge base). The project's own
+  Commission is a project tab, not a sidebar page, so it stays in its project; the Sales
+  Commission is the Leads page's tab. Saved replies have no page of their own (they live in
+  Settings), so Support has no item for them.
+- **Sales items are tabs of the Leads page** (`?view=today|all|overview|business|commission`),
+  shown by the page's own rules (`useNavigation.ts`, from the CRM options): Today's calls only
+  where a department hands out call batches; Overview for everyone who is not a BD; Business
+  only where the CRM site allows it; Commission for everyone with Leads (a BD sees their own).
+  A BD with call batches sees Today's calls in place of Leads (their other tabs sit on that
+  page), and the Sales Employee allow list is unchanged. The Leads page drops the tab from the
+  URL when it is the one it opens on, so the active item is worked out from that default.
 - **Tree:** Saved views (the pinned ticket views) fold open to a tree with a guide line and
   a dot per view; each view keeps its options menu. Its chevron is `aria-expanded`.
 - **Deep links:** the area and item for the open page are selected on every navigation, and
