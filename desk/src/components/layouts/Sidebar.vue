@@ -1,46 +1,37 @@
 <template>
   <AppSidebar :profile-settings="profileSettings">
-    <template #footer="{ isCollapsed }">
-      <div
-        v-if="hasBanner"
-        class="flex flex-col gap-2"
-        :class="isCollapsed && 'items-center'"
-      >
+    <template #footer>
+      <div v-if="hasBanner" class="flex flex-col gap-2">
         <TrialBanner
           v-if="isFCSite && !isCustomerPortal"
-          :isSidebarCollapsed="isCollapsed"
+          :isSidebarCollapsed="false"
         />
         <GettingStartedBanner
           v-if="showOnboardingBanner"
-          :isSidebarCollapsed="isCollapsed"
+          :isSidebarCollapsed="false"
           appName="helpdesk"
         />
         <CustomerPortalPermissionBanner
           v-if="showPermissionNoticeBanner"
-          :isSidebarCollapsed="isCollapsed"
+          :isSidebarCollapsed="false"
         />
       </div>
     </template>
     <template #footer-items>
-      <SidebarItem
+      <button
         v-if="isOnboardingStepsCompleted && !isCustomerPortal"
-        :label="__('Help & docs')"
-        :on-click="
+        type="button"
+        class="flex min-h-9 items-center gap-2.5 rounded-lg px-2 text-base text-ink-gray-7 transition-colors hover:bg-surface-gray-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+        @click="
           () => {
             showHelpModal = minimize ? true : !showHelpModal;
             minimize = !showHelpModal;
           }
         "
       >
-        <template #prefix>
-          <span class="tbo-nav-icon" data-tone="blue">
-            <LucideCircleHelp class="size-3.5" aria-hidden="true" />
-          </span>
-        </template>
-        <span class="tbo-nav-label ms-1 truncate text-base">
-          {{ __("Help & docs") }}
-        </span>
-      </SidebarItem>
+        <LucideCircleHelp class="size-4 shrink-0" aria-hidden="true" />
+        <span class="truncate">{{ __("Help & docs") }}</span>
+      </button>
     </template>
   </AppSidebar>
 
@@ -86,7 +77,7 @@ import { useAuthStore } from "@/stores/auth";
 import { useConfigStore } from "@/stores/config";
 import { capture } from "@/telemetry";
 import { isCustomerPortal } from "@/utils";
-import { call, SidebarItem, toast } from "frappe-ui";
+import { call, toast } from "frappe-ui";
 import {
   GettingStartedBanner,
   HelpModal,
@@ -128,8 +119,6 @@ const configStore = useConfigStore();
 
 const showShortcutsModal = ref(false);
 const { appsMenuOption } = useApps();
-// Agents switch theme from the button beside Notifications; the customer
-// portal has no Notifications row, so it keeps the menu entry.
 const { menuItem: themeMenuItem } = useThemeToggle();
 const { menuItems: chatMenuItems } = useTboChat();
 
@@ -152,6 +141,7 @@ const customerPortalDropdown = computed(() => [
 
 const agentPortalDropdown = computed(() => [
   appsMenuOption.value,
+  themeMenuItem.value,
   {
     label: __("Customer portal"),
     icon: "lucide-users",

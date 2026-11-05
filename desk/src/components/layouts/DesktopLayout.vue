@@ -11,12 +11,11 @@
       <slot />
     </main>
     <Notifications />
-    <CommandPalette />
     <PendingCalls v-if="authStore.isSalesEmployee && authStore.canUseLeads" />
   </div>
 </template>
 <script setup>
-import { Notifications, CommandPalette } from "@/components";
+import { Notifications } from "@/components";
 import PendingCalls from "@/pages/leads/PendingCalls.vue";
 import { useAuthStore } from "@/stores/auth";
 import AppHeader from "./AppHeader.vue";
