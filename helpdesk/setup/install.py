@@ -460,7 +460,7 @@ def get_custom_fields():
                 "read_only": 1,
             },
             {
-                # whose timer is running: the person its stretches are saved for (time_sessions)
+                # whose timer is running, so a person has one at a time (time_sessions)
                 "fieldname": "custom_timer_user",
                 "fieldtype": "Link",
                 "options": "User",
