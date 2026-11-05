@@ -2304,8 +2304,8 @@ def start_timer(task: str):
 
     Only this task's timer, and only when asked: pausing (stop_timer) keeps the
     task in Working with its time banked, and nothing else starts it again. The
-    person's timers on other tasks keep running (several at once), and outside
-    work hours it is refused.
+    person's other running timer is paused first (one timer at a time), and
+    outside work hours it is refused.
     """
     task_id = str(task)
     frappe.has_permission("Task", "write", task_id, throw=True)
@@ -2315,7 +2315,8 @@ def start_timer(task: str):
     if status != "Working":
         frappe.throw(_("Start the task first; its timer runs while it's in progress."))
     if not running:
-        begin_timer(task_id, frappe.session.user)
+        for other in begin_timer(task_id, frappe.session.user):
+            notify_task_list(other)
         notify_task_list(task_id)
     return {"ok": 1}
 
@@ -2378,7 +2379,8 @@ def move_task(task: str, new_status: str):
     # Entering Working: start timer (fresh or resume)
     # (outside work hours the task goes in progress with its timer paused)
     if new_status == "Working":
-        begin_timer(task_id, frappe.session.user, strict=False)
+        for other in begin_timer(task_id, frappe.session.user, strict=False):
+            notify_task_list(other)
 
     # the controller checks dependencies, review and ticket hand-back
     status = _save_status(task_id, new_status)

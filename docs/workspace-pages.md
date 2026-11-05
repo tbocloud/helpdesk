@@ -807,19 +807,10 @@ in `custom_timer_elapsed`. The server is the only record: the board derives each
 from those fields (`taskTimer()` in `taskMeta.ts`) and replaces its local state on every load.
 Pause calls `stop_timer` (banks the time, the task stays In progress) and Resume calls
 `start_timer`, which only works on a task In progress; resuming a card that left In progress
-moves it back there like a drop. Nothing else starts a paused timer. A person may run timers on
-several tasks at once (owner's request, 2026-11-03): starting one (Resume, moving a task to In
-progress, resuming from hold) leaves their other running timers alone (`begin_timer` in
-`helpdesk/tasky/time_sessions.py`), and pausing one pauses only that one. The daily cap still
-holds a day to its work hours across all of them (`record_session` keeps no more than
-`day_left`). Before this, Pause only changed the board's local state, so the server
-timer kept running and the next load (moving or editing another task, or coming back to the
-board) showed the paused task running again.
-
-Every task In progress shows its timer, Paused at 0 when nothing is banked yet, with Resume.
-A stretch of a few seconds banks 0 h (sessions keep two decimals), and `taskTimer()` used to
-return no timer for a paused task with nothing banked, so a task paused that way showed no
-timer and no way to resume it.
+moves it back there like a drop. Nothing else starts a paused timer, and starting one task never
+touches another's: there is no one-running-task rule. Before this, Pause only changed the
+board's local state, so the server timer kept running and the next load (moving or editing
+another task, or coming back to the board) showed the paused task running again.
 
 ### Dropping a card on In review or Completed
 
@@ -906,11 +897,10 @@ dialog and the reports (`helpdesk/work_hours.py`):
   resume." A run missed at the close (the scheduler down overnight) still stops it at that close
   once it runs, even inside the next window, so a timer never carries on into the next days and
   they aren't counted as worked; a timer still in the window it started in keeps running.
-- **Several timers per person:** the task records whose timer runs (`custom_timer_user`), the
-  person its stretches are saved for. Starting a timer (Start, moving a task to In progress,
-  resuming from hold) doesn't touch the person's other running timers; it used to pause them
-  (one at a time) until the owner asked for several at once. Start is refused outside a window;
-  moving a task to In progress then leaves its timer paused.
+- **One timer per person:** the task records whose timer runs (`custom_timer_user`). Starting a
+  timer (Start, moving a task to In progress, resuming from hold) pauses the person's other
+  running timer first and saves its session. Start is refused outside a window; moving a task to
+  In progress then leaves its timer paused.
 - **Daily cap:** per person per day, timesheet hours plus not-yet-logged sessions can't pass
   `max_hours(day)`. `complete_task` checks every day's hours against what is left (the task's own
   sessions are replaced by the dialog's rows, so they don't count against it). Typed-in hours
