@@ -5,9 +5,14 @@
       <MobileAppHeader />
       <slot />
     </div>
+    <PendingCalls v-if="authStore.isSalesEmployee && authStore.canUseLeads" />
   </div>
 </template>
 <script setup>
+import PendingCalls from "@/pages/leads/PendingCalls.vue";
+import { useAuthStore } from "@/stores/auth";
 import MobileSidebar from "./MobileSidebar.vue";
 import MobileAppHeader from "./MobileAppHeader.vue";
+
+const authStore = useAuthStore();
 </script>

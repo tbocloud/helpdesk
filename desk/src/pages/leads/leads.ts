@@ -50,6 +50,8 @@ export interface LeadOptions {
   /** the signed-in person may open Find prospects (managers and department heads, while it is
    * on); absent from an older TBO Smart */
   can_find_prospects?: boolean;
+  /** a salesperson who is no manager or head: Today's calls, their own leads and follow-ups only */
+  is_bd?: boolean;
   prospecting?: ProspectingOptions | null;
   /** Outreach is on (first messages a person approves): the Outreach tab shows; absent from
    * an older TBO Smart */
@@ -265,7 +267,7 @@ export type LeadView = "all" | "mine" | "call_today" | "follow_up";
 
 export const LEAD_VIEWS: { value: LeadView; label: string }[] = [
   { value: "all", label: __("All") },
-  { value: "mine", label: __("Mine") },
+  { value: "mine", label: __("My leads") },
   { value: "call_today", label: __("Call today") },
   { value: "follow_up", label: __("Follow-up") },
 ];

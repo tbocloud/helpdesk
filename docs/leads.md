@@ -36,6 +36,7 @@ The hub never gets ERPNext installed.
   Overview for them, and their documents chain stops at the client documents (the Project
   and UAT steps don't open). The full rules are in
   [departments.md](departments.md#sales-wall-sales-employee).
+- Staff who may not see Leads still get the Lead Bank (`can_use_lead_bank`, [lead-bank.md](lead-bank.md)): Add a lead and My leads only.
 - The check is `helpdesk.integrations.crm.leads.can_use_leads`; `helpdesk.api.auth.get_user`
   sends it as `can_use_leads`, which shows the sidebar item and lets the router open
   `/helpdesk/leads`. Every endpoint checks it again on the server.
@@ -294,6 +295,58 @@ Code: `helpdesk/api/call_batches.py` (proxies; `report_lines` for the 6 pm text)
 `TodaysCalls.vue`, `CallRow.vue`, `CallOutcomeDialog.vue`, `CallBatchesTable.vue`,
 `desk/src/components/Settings/CRM/CallBatchRules.vue`.
 
+## BD view, calling for, and recording results
+
+A **BD** is a Sales Employee who is not a System Manager, Agent Manager or Sales Manager and
+heads no department. Another BD may be calling the same lead, so a BD sees only what comes to
+them.
+
+**Tabs.** *Today's calls* (the default; *Call today* in its place while their departments have no
+batches), *My leads* (what they own; renamed from *Mine* for everyone), *Follow-up* and their own
+*Commission*. No Overview, Daily report, Business, All, Outreach or *Find prospects*, and no
+Owner filter. Managers and department heads keep everything.
+
+**On the server too** (`helpdesk.api.leads.is_bd`; `auth.get_user` sends `is_sales_bd` for the
+role, `get_options` sends `is_bd` once the department heads are known): `list_leads` with view *All*
+returns *My leads* and ignores the owner filter; `get_overview`, `get_overview_page`,
+`get_lead_intake`, `get_proposal_money`, `get_business_overview`, `get_daily_report` and the
+Find-prospects endpoints answer *This is for managers* (PermissionError). If the ERP site cannot say
+whether the person heads a department, they are treated as a BD.
+
+**Calling for** (`CallingFor.vue`, top of Today's calls; the ERP side is `call-batches.md` §10).
+A card says what they call for now (*Hotels (StayVeX)*, *PhoebiX (GrowthX) in Kochi*, *All my
+departments*) with a **Change** button when there is anything to switch. The picker lists their
+departments that hand out batches, each product, *All my departments* and an optional district;
+**Start calling** saves it and the answer says in plain words what happens (*Your next 30 calls are
+ready*, or why the next batch has to wait). A department with call batches off is not listed:
+in Settings, Lead departments the box says *Turn on daily call batches so its members can call from
+Today's calls.* `helpdesk.api.call_batches.set_calling_focus`; the choice is remembered per person on
+the ERP site, and `get_my_calls` carries `focus` and `focus_options`.
+
+**Recording results** (`helpdesk/api/pending_calls.py`, `PendingCalls.vue`, `CallResultSheet.vue`).
+Tapping **Call** on a lead (a row in Today's calls, the lead page's Call button or its phone number)
+remembers the lead. The cache holds it per person for 3 days, at most 50. When the person comes back
+to the page (`visibilitychange` or window focus; for MyOperator, 45 seconds later) the **result
+sheet** opens for it: six big buttons (Connected, Not answered, Busy, Call back, Not interested,
+Wrong number), an optional note; Call back asks *In 1 hour / In 2 hours / Tomorrow 10:00*, Not
+interested asks why in one tap. A small banner, *You have N calls without a result*, stays on every
+screen for Sales Employees with **Add results**, which opens them one by one. The result goes to
+`record_call_outcome` (a call from Today's calls) or `log_call` (any other); both take the lead off
+the list. A call can only leave without a result with a reason: *I didn't call* or *Tapped by
+mistake* (`dismiss_pending_call`). Endpoints: `start_call`, `get_pending_calls`,
+`dismiss_pending_call`, `resolve` (internal).
+
+### How to use (BDs)
+
+1. Open **Leads**. You see **Today's calls**: only your own calls, nobody else's.
+2. Check **Calling for** at the top. Tap **Change** to call for another department or product (a
+   district too, if you like), then **Start calling**.
+3. Tap **Call** on a lead and make the call.
+4. Back on the page, tap how it went: Connected, Not answered, Busy, Call back, Not interested or
+   Wrong number. That is all.
+5. If you forget, the banner *You have N calls without a result* waits. Tap **Add results**.
+   If you did not make the call, tap *I didn't call*.
+
 ## Find prospects
 
 TBO sells mainly by phone. Managers and department heads find businesses by industry and district
@@ -444,6 +497,22 @@ the hub project; type the ERP Project name when the invoices use another.
 Tests: `helpdesk/tests/test_commission.py` (reads live as the person and never cached, filters
 trimmed, an older ERP site hidden quietly, refusals, writes as POSTs, plan and project values sent as
 JSON). The ERP site's own tests cover the maths, attribution and statements.
+
+## Lead Bank (staff collect leads, referral commission)
+
+Every active agent, whatever their team or wall, can add a lead from a photo and earns a referral
+when it is won and paid. It is a separate path from Leads: `can_use_lead_bank` (Leads switched on in
+Settings → CRM, and an active agent) opens only **Add a lead**, **My leads** and, for managers,
+**Team**; it never opens the CRM, so designers, developers and the Digital team still do not see
+Leads. Specs: [lead-bank.md](lead-bank.md) here, TBO Smart's `docs/lead-bank.md` and
+`docs/commission.md` section 7, the contract `docs/hub-leads-api.md` section 2.21. The hub proxies
+`tbo_smart.api.hub_lead_bank` through `helpdesk/api/lead_bank.py`, and reads the photos with its
+own AI (`helpdesk/lead_bank.py`).
+
+Referral shows in **Commission** like any other line: a statement line of kind Referral, labelled
+"Referral: <lead>" in a person's projects, and the statement's `referral` is the part of its
+commission that is referral. The rates, the cap and the department of each region are set in
+Settings → CRM → **Referral (Lead Bank)** (`ReferralSettings.vue`), under the commission plans.
 
 ## Hub endpoints
 
@@ -877,6 +946,13 @@ strip calls `helpdesk.api.proposals.create_project_from_proposal(proposal)`; pla
 
 ## Tests
 
+`helpdesk/tests/test_bd_view.py`: who is a BD (a manager, a head, an admin and a support agent
+are not), *All* turned into *My leads*, the team screens refused, the calling-for switch and
+queue passed through, and the calls without a result (remembered once per lead, per person, cleared
+by a result from Today's calls or Log call, kept when the result fails, dismissed only with a
+listed reason, forgotten after 3 days, capped at 50). Helpers `bd_options` and
+`clear_pending_calls` in `test_utils.py`.
+`helpdesk/tests/test_lead_bank.py` (the Lead Bank, see [lead-bank.md](lead-bank.md)).
 `helpdesk/tests/test_leads.py` with `test_utils.FakeCRM` (`lead_answers`, `lead_calls`,
 `lead_error`) and `test_utils.enable_leads`: off by default, `acting_user` on every call,
 writes posted, view and page size checked, teams and inactive agents gated, and each error

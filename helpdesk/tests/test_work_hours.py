@@ -248,25 +248,31 @@ class TestAutoStop(WorkHoursCase):
         self.assertEqual(get_task_sessions(self.task)[0].hours, 1.0)
 
 
-class TestOneTimerPerPerson(WorkHoursCase):
-    def test_starting_a_second_timer_pauses_the_first(self):
+class TestSeveralTimers(WorkHoursCase):
+    def test_a_person_can_run_timers_on_several_tasks_at_once(self):
         second = self.new_task("Write the pricing copy")
         self.as_dev(lambda: tasky.move_task(self.task, "Working"))
-        frappe.db.set_value("Task", self.task, "custom_timer_start", at(self.today, 10))
+        started = at(self.today, 10)
+        frappe.db.set_value("Task", self.task, "custom_timer_start", started)
         self.as_dev(lambda: tasky.move_task(second, "Working"))
 
-        self.assertIsNone(frappe.db.get_value("Task", self.task, "custom_timer_start"))
+        # the first keeps running from when it started: nothing was saved or paused
+        self.assertEqual(
+            frappe.db.get_value("Task", self.task, "custom_timer_start"), started
+        )
         self.assertTrue(frappe.db.get_value("Task", second, "custom_timer_start"))
-        [row] = get_task_sessions(self.task)
-        self.assertEqual(row.user, DEV[0])
-        self.assertAlmostEqual(row.hours, 1, delta=0.05)
-        # the first stays in progress, paused
-        self.assertEqual(frappe.db.get_value("Task", self.task, "status"), "Working")
+        self.assertEqual(get_task_sessions(self.task), [])
 
-        self.as_dev(lambda: tasky.start_timer(self.task))
-        self.assertIsNone(frappe.db.get_value("Task", second, "custom_timer_start"))
-        self.assertTrue(frappe.db.get_value("Task", self.task, "custom_timer_start"))
-        self.assertEqual(len(get_task_sessions(second)), 1)
+        # pausing one leaves the other running, and resuming it doesn't stop the other
+        self.as_dev(lambda: tasky.stop_timer(second))
+        self.assertEqual(
+            frappe.db.get_value("Task", self.task, "custom_timer_start"), started
+        )
+        self.as_dev(lambda: tasky.start_timer(second))
+        self.assertTrue(frappe.db.get_value("Task", second, "custom_timer_start"))
+        self.assertEqual(
+            frappe.db.get_value("Task", self.task, "custom_timer_start"), started
+        )
 
     def test_starting_outside_work_hours_is_refused(self):
         self.as_dev(lambda: tasky.move_task(self.task, "Working"))
