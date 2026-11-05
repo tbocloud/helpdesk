@@ -442,11 +442,12 @@ const ownerOptions = computed(() => {
     departmentPeople.value.has(o.value)
   );
   if (!inDepartment.length) return owners;
+  // frappe-ui's Combobox reads a group's `options`; any other key breaks the dialog
   return [
-    { group: __("In {0}", form.tbo_department), items: inDepartment },
+    { group: __("In {0}", form.tbo_department), options: inDepartment },
     {
       group: __("Everyone else"),
-      items: owners.filter((o) => !departmentPeople.value.has(o.value)),
+      options: owners.filter((o) => !departmentPeople.value.has(o.value)),
     },
   ];
 });
