@@ -22,6 +22,7 @@ from helpdesk.test_utils import (
     make_content_user,
     make_dm_head,
     make_project,
+    make_task,
     make_tasky_user,
     run_as_user,
     set_content_settings,
@@ -40,6 +41,66 @@ class TestHDContentPost(FrappeTestCase):
         create_customer(CUSTOMER)
         create_customer(OTHER_CUSTOMER)
         make_tasky_user(*WRITER)
+
+    def test_malayalam_pasted_from_a_pdf_is_joined_up(self):
+        # a PDF copies "പോയി" as "പ ോയി": the vowel sign split off its letter
+        post = make_content_post(
+            "വാൻ പ ോയി. കണക്ക് പ ോയ ോ?",
+            CUSTOMER,
+            caption="<p>കണക്ക്&nbsp;പ&nbsp;ോയ ോ?</p>",
+            hashtags="#പ ോയി #sale",
+        )
+        self.assertEqual(post.title, "വാൻ പോയി. കണക്ക് പോയോ?")
+        # the space between words stays; only the one before a vowel sign goes
+        self.assertEqual(post.caption, "<p>കണക്ക്&nbsp;പോയോ?</p>")
+        self.assertEqual(post.hashtags, "#പോയി #sale")
+
+        post.reload()
+        self.assertEqual(post.title, "വാൻ പോയി. കണക്ക് പോയോ?")
+
+    def test_posts_saved_before_are_mended_by_the_patch(self):
+        from helpdesk.patches.v16_0_2.mend_pasted_malayalam import execute
+
+        post = make_content_post("Ramadan greeting", CUSTOMER)
+        frappe.db.set_value(
+            "HD Content Post",
+            post.name,
+            "brief",
+            "ഓര ോ ബിസിന ും",
+            update_modified=False,
+        )
+        task = make_task(make_project("Malayalam copy").name, "Designer").name
+        frappe.db.set_value(
+            "Task", task, "subject", "Designer: വാൻ പ ോയി.", update_modified=False
+        )
+        modified = frappe.db.get_value("HD Content Post", post.name, "modified")
+        execute()
+        self.assertEqual(
+            frappe.db.get_value("HD Content Post", post.name, ["brief", "modified"]),
+            ("ഓരോ ബിസിനും", modified),
+        )
+        # a post's tasks carry its copy
+        self.assertEqual(
+            frappe.db.get_value("Task", task, "subject"), "Designer: വാൻ പോയി."
+        )
+
+    def test_a_task_pasted_into_is_joined_up_too(self):
+        task = make_task(make_project("Malayalam copy").name, "വാൻ പ ോയി.")
+        self.assertEqual(task.subject, "വാൻ പോയി.")
+        task.description = "<p>സത്യം പറയുമ ോ?</p>"
+        task.save(ignore_permissions=True)
+        self.assertEqual(task.description, "<p>സത്യം പറയുമോ?</p>")
+
+    def test_a_plural_ending_split_off_an_english_word_is_joined_up(self):
+        post = make_content_post("ചെറിയ Business-ു കൾ ചെയ്യുന്നു", CUSTOMER)
+        self.assertEqual(post.title, "ചെറിയ Business-ുകൾ ചെയ്യുന്നു")
+
+    def test_other_text_is_left_as_typed(self):
+        post = make_content_post("Summer sale  -  50% off ാ", CUSTOMER)
+        self.assertEqual(post.title, "Summer sale  -  50% off ാ")
+        # a space after a vowel sign is often between two words
+        post = make_content_post("അതു കണ്ടു, business-ും ടാക്സും", CUSTOMER)
+        self.assertEqual(post.title, "അതു കണ്ടു, business-ും ടാക്സും")
 
     def test_every_post_needs_a_date(self):
         # an undated post has no slot on the calendar, so nobody would see it
