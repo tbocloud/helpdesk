@@ -30,7 +30,7 @@ from helpdesk.content_team import (
     is_sales_employee,
 )
 from helpdesk.tasky.new_assignments import told_by_caller
-from helpdesk.utils import add_assignment, remove_assignment
+from helpdesk.utils import add_assignment, join_malayalam_signs, remove_assignment
 from helpdesk.work_reminders import notify_users
 
 # Posts in these statuses are ready to go; anything else close to its date needs attention
@@ -55,6 +55,8 @@ TASK_ROLES = {
 SHARED_ROLE = "All"
 # the design stage's parts: the post leaves Design once all of them are done
 DESIGN_ROLES = ("Designer", "Video Editor")
+# what people type or paste: Malayalam copied from a PDF comes in broken
+PASTED_TEXT_FIELDS = ("title", "caption", "hashtags", "brief")
 CONTENT_PROJECT_TYPE = "Content Calendar"
 DONE_TASK_STATUSES = ("Completed", "Cancelled")
 # publishing ends the post's open work; cancelling the post cancels it
@@ -81,6 +83,7 @@ class HDContentPost(Document):
     def validate(self):
         self.guard_editing()
         self.guard_head_review()
+        self.mend_pasted_malayalam()
         self.clean_team()
         self.sync_platforms()
         self.validate_publish_on()
@@ -621,6 +624,14 @@ class HDContentPost(Document):
         self.head_decided_by = None
         self.head_decided_on = None
         self.head_feedback = None
+
+    # --- the copy ---
+
+    def mend_pasted_malayalam(self):
+        """Joins the vowel signs that a copy from a PDF splits off their letters."""
+        for field in PASTED_TEXT_FIELDS:
+            if self.get(field):
+                self.set(field, join_malayalam_signs(self.get(field)))
 
     # --- the Digital Marketing Head's approval, after the client's ---
 

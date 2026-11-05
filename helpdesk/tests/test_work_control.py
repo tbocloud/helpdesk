@@ -289,7 +289,8 @@ class TestMyWorkAndOverview(WorkControlCase):
 
 
 class TestOverEstimate(WorkControlCase):
-    """A task due today is overdue once it has been worked longer than its estimate."""
+    """A task is overdue once it has been worked longer than its estimate, whatever its
+    due date."""
 
     def my_item(self, task):
         items = self.as_user(DEV, work.get_my_work)["items"]
@@ -307,9 +308,28 @@ class TestOverEstimate(WorkControlCase):
 
         self.assertFalse(self.my_item(task)["is_overdue"])
 
-    def test_due_later_waits_for_its_due_date(self):
-        task = self.make_task("Bank reconciliation", add_days(nowdate(), 1))
+    def test_due_later_and_past_its_hours_is_overdue_already(self):
+        task = self.make_task("Bank reconciliation", add_days(nowdate(), 3))
         start_task_timer(task, hours_ago=3, estimated_hours=2)
+
+        self.assertTrue(self.my_item(task)["is_overdue"])
+
+    def test_a_minute_estimate_is_overdue_once_the_minute_has_passed(self):
+        # 1 min estimate, typed as minutes and stored in hours
+        task = self.make_task("Bank reconciliation", add_days(nowdate(), 3))
+        start_task_timer(task, hours_ago=2 / 60, estimated_hours=round(1 / 60, 3))
+
+        self.assertTrue(self.my_item(task)["is_overdue"])
+
+    def test_no_due_date_and_past_its_hours_is_overdue(self):
+        task = self.make_task("Bank reconciliation", None)
+        start_task_timer(task, hours_ago=3, estimated_hours=2)
+
+        self.assertTrue(self.my_item(task)["is_overdue"])
+
+    def test_due_later_within_its_hours_is_not(self):
+        task = self.make_task("Bank reconciliation", add_days(nowdate(), 3))
+        start_task_timer(task, hours_ago=1, estimated_hours=2)
 
         self.assertFalse(self.my_item(task)["is_overdue"])
 

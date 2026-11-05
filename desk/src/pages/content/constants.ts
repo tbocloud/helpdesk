@@ -183,6 +183,20 @@ export function oneLine(text: string) {
   return text.replace(/\s*[\r\n]+\s*/g, " ");
 }
 
+// Malayalam copied from a PDF splits a vowel sign off its letter ("പ ോയി" for "പോയി");
+// valid Malayalam never has a space there. The server mends saves the same way.
+const MALAYALAM_SPLIT_SIGN =
+  /([\u0D00-\u0D7F])\s+([\u0D02\u0D03\u0D3E-\u0D4D\u0D57\u0D62\u0D63])/g;
+
+// "campaign-ുകൾ" copied as "campaign-ു കൾ"; a "-ു" standing alone means nothing
+const MALAYALAM_SPLIT_PLURAL = /-\u0D41\s+(\u0D15(?:\u0D7E|\u0D33\u0D4D))/g;
+
+export function joinMalayalamSigns(text: string) {
+  return text
+    .replace(MALAYALAM_SPLIT_SIGN, "$1$2")
+    .replace(MALAYALAM_SPLIT_PLURAL, "-\u0D41$1");
+}
+
 // What a post is called: its copy, else its post type, then its ID, until the copy is written
 export function copyOf(post: {
   title?: string;

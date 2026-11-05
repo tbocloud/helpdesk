@@ -129,6 +129,18 @@ class TestOverdueLadder(FollowUpCase):
         self.assertIn(MANAGER[0], l3.recipients)
         self.assertIn("Escalated to head", l2.text)
 
+    def test_over_its_estimate_before_its_due_date_is_not_escalated(self):
+        # overdue on the board already, but the ladder counts days past the due date
+        for due in (TUESDAY, None):
+            task = self.task(
+                "Bank feeds",
+                due,
+                status="Working",
+                custom_estimated_hours=0.5,
+                custom_timer_elapsed=2,
+            )
+            self.assertEqual(self.found(task, rule="overdue"), [])
+
     def test_key_tasks_and_milestones_escalate_one_level_sooner(self):
         key = self.one(self.task("Go-live", FRIDAY, is_key=1), "overdue")
         milestone = self.one(

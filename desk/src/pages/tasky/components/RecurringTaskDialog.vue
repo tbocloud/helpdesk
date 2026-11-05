@@ -83,13 +83,9 @@
             :label="__('Priority')"
             :options="priorityOptions"
           />
-          <TextInput
-            v-model.number="form.estimated_hours"
-            type="number"
-            min="0"
-            step="0.25"
-            :label="__('Estimated hours')"
-            placeholder="0"
+          <EstimateInput
+            v-model="form.estimated_hours"
+            :label="__('Estimate')"
           />
         </div>
         <FormControl
@@ -346,6 +342,7 @@
 <script setup lang="ts">
 import TaskyState from "@/components/TaskyState.vue";
 import { __ } from "@/translation";
+import EstimateInput from "./EstimateInput.vue";
 import { dateFormat, errorText } from "@/utils";
 import { watchDebounced } from "@vueuse/core";
 import {

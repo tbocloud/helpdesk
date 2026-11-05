@@ -151,15 +151,10 @@ means nothing is noise. The mapping is fixed:
 - `StatTile` draws the circle from `iconTone` (`TONE_CLASSES` in `tone.ts`). Without a
   meaning the circle stays neutral gray, never a pastel.
 - **Brand fill** is for the current selection: the active segmented control option
-  (frappe-ui `TabButtons`, themed in `theme.css`) and the current app sidebar item: a white
-  card (`surface-base`, hairline) with its icon in a `brand` tile (`on-brand` icon).
-- **Sidebar icon tiles** are the owner's mockup, an exception to "no pastel icon tiles": each
-  app sidebar icon sits in a tile tinted by page group (`--nav-*` in `theme.css`, `tone` in
-  `layoutSettings.ts`): blue for Home, Overview, In progress, Stand-up, Scoreboard, Performance, Customers and Help;
-  teal for Team, Summaries, Customer report, Leads and Contacts; orange for Notifications, Support
-  hours and Tickets; purple for Projects, My Work, Board, Content and Templates; green for
-  Calendar, Timesheets and Knowledge base; gray for the pin control and the collapsed
-  rail's Search and theme items. The tint only groups pages. It never carries a status.
+  (frappe-ui `TabButtons`, themed in `theme.css`) and the selected rail area (`brand` fill,
+  `on-brand` icon). The current panel item is tinted `brand-soft` with `brand-ink` text.
+- **The sidebar rail** is dark in both themes with neutral icons; only the selected area is
+  filled in `brand`. There are no tinted icon tiles; the old per-group tones are gone.
 - **Champion gold** (`champion`, `champion-soft`, `champion-border`) is only for the
   Scoreboard's champion card, with a trophy and a badge: it marks an award, not a status.
 - Everything else stays neutral: decorative and section
@@ -221,7 +216,14 @@ Reuse when repetition is real; abstract only when it improves clarity.
 
 ## 13. Navigation
 
-- Keep the sidebar hierarchy clear and its sections meaningful.
+- The sidebar is a rail (areas) plus a panel (that area's pages, grouped under small
+  uppercase headings, sub-items as a tree with a guide line and dots). Neutral icons; brand
+  only for the selected area and the current page (`aria-current`).
+- The panel never collapses by itself: only its own button closes it, the choice is
+  remembered per person, and it defaults to open. Expanded groups stay expanded. Only the
+  mobile drawer closes after a page is picked.
+- Keep every control reachable by keyboard with a visible `ring-highlight` focus ring,
+  `aria-expanded` on folding items and `aria-current` on the current page.
 - On mobile, primary destinations must stay reachable.
 - The command palette must never be the only way to get somewhere.
 - Keep meaningful state in the URL: tab, filters, search and page.

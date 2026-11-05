@@ -68,6 +68,7 @@ const customerPortalDropdown = computed(() => [
 
 const agentPortalDropdown = computed(() => [
   appsMenuOption.value,
+  themeMenuItem.value,
   ...(authStore.hasAgentRecord
     ? [
         {
