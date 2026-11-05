@@ -5,7 +5,9 @@
   >
     <RailButton
       v-if="!mobile"
-      :label="sidebarStore.isPanelOpen ? __('Hide menu') : __('Show menu')"
+      :label="
+        sidebarStore.isPanelOpen ? __('Collapse menu') : __('Expand menu')
+      "
       aria-controls="nav-panel"
       :aria-expanded="sidebarStore.isPanelOpen"
       @click="sidebarStore.isPanelOpen = !sidebarStore.isPanelOpen"
@@ -40,12 +42,6 @@
     </ul>
 
     <div class="mt-auto flex flex-col items-center gap-1">
-      <FollowUpStrip
-        v-if="showFollowUps && !mobile && !sidebarStore.isPanelOpen"
-        :summary="followUps"
-        compact
-        rail
-      />
       <RailButton
         v-if="!isCustomerPortal"
         id="notifications-btn"
@@ -85,7 +81,6 @@
 
 <script setup lang="ts">
 import BrandLogo from "@/components/BrandLogo.vue";
-import FollowUpStrip from "@/components/FollowUpStrip.vue";
 import { showSettingsModal } from "@/components/Settings/settingsModal";
 import { useAuthStore } from "@/stores/auth";
 import { useNotificationStore } from "@/stores/notification";
@@ -107,8 +102,6 @@ const props = defineProps<{
   /** the area holding the page being viewed */
   activeAreaId?: string | null;
   profileSettings: any[];
-  followUps?: any;
-  showFollowUps?: boolean;
   mobile?: boolean;
 }>();
 
