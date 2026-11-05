@@ -22,16 +22,28 @@
         v-if="isOnboardingStepsCompleted && !isCustomerPortal"
         type="button"
         class="flex min-h-9 items-center gap-2.5 rounded-lg px-2 text-base text-ink-gray-7 transition-colors hover:bg-surface-gray-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
-        @click="
-          () => {
-            showHelpModal = minimize ? true : !showHelpModal;
-            minimize = !showHelpModal;
-          }
-        "
+        @click="toggleHelp"
       >
         <LucideCircleHelp class="size-4 shrink-0" aria-hidden="true" />
         <span class="truncate">{{ __("Help & docs") }}</span>
       </button>
+    </template>
+    <template #collapsed-footer>
+      <Tooltip
+        v-if="isOnboardingStepsCompleted && !isCustomerPortal"
+        :text="__('Help & docs')"
+        placement="right"
+        :hover-delay="0"
+      >
+        <button
+          type="button"
+          class="grid size-10 place-items-center rounded-[10px] text-ink-gray-7 transition-colors hover:bg-surface-gray-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+          :aria-label="__('Help & docs')"
+          @click="toggleHelp"
+        >
+          <LucideCircleHelp class="size-4" aria-hidden="true" />
+        </button>
+      </Tooltip>
     </template>
   </AppSidebar>
 
@@ -77,7 +89,7 @@ import { useAuthStore } from "@/stores/auth";
 import { useConfigStore } from "@/stores/config";
 import { capture } from "@/telemetry";
 import { isCustomerPortal } from "@/utils";
-import { call, toast } from "frappe-ui";
+import { call, toast, Tooltip } from "frappe-ui";
 import {
   GettingStartedBanner,
   HelpModal,
@@ -500,4 +512,9 @@ onMounted(() => {
     showSettingsModal.value = !showSettingsModal.value;
   });
 });
+
+function toggleHelp() {
+  showHelpModal.value = minimize.value ? true : !showHelpModal.value;
+  minimize.value = !showHelpModal.value;
+}
 </script>

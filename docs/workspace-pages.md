@@ -38,8 +38,8 @@ Two levels, a **rail** and a **panel** (`AppSidebar.vue` holds them; `NavRail.vu
 `NavPanel.vue`, the nav data in `navigation.ts`, the role rules and the active-page logic
 in `useNavigation.ts`, state in `stores/sidebar.ts`).
 
-- **Rail** (3.5rem, always visible on desktop, dark in both themes): one icon per area,
-  Notifications, Settings and the avatar with the account menu at the bottom. Icons are
+- **Rail** (3.5rem, always visible on desktop, dark in both themes): the panel's collapse
+  button, one icon per area, Notifications, Settings and the avatar with the account menu at the bottom. Icons are
   neutral and lighten on hover (contrast 9:1 idle, 10:1 hovered, both on the dark rail); the
   selected area is filled with `brand` (3.3:1 against the rail) and carries a marker on the
   rail's edge, which also marks the area holding the open page while another is selected.
@@ -52,6 +52,20 @@ in `useNavigation.ts`, state in `stores/sidebar.ts`).
   Search and the area name stay at the top, the strip and Help & docs at the bottom.
   The current page is tinted `brand-soft` with `aria-current="page"`. Raising a ticket is
   on the Tickets page (there is no separate help card).
+- **Collapsed panel** (`NavPanelCollapsed.vue`, 3.5rem): the rail's top button (Collapse /
+  Expand menu) folds the panel to an icon-only column instead of hiding it, so the pages
+  stay one click away. It shows Search (opens the command palette), the selected area's
+  items as icons in the same order (groups split by a thin rule), the follow-ups bell with
+  its count and Help & docs. The current page is tinted `brand-soft` with
+  `aria-current="page"`; names show in a tooltip with no delay on hover and focus, and each
+  icon also has an `aria-label`. A count (My Work, Tickets) is a small badge on the icon and
+  is part of the label. A tree (Saved views) shows its icon and **opens a small menu beside
+  it** with the saved views (keyboard and Esc work; the menu is frappe-ui's Dropdown) rather
+  than expanding the panel, so the person keeps their place and the page does not shift. The
+  width animates (200 ms, none under `prefers-reduced-motion`). The choice is remembered per
+  person (`nav_panel_open:<user>`) and changes only when the button is pressed; picking
+  another area on the rail swaps the icons and leaves the column folded. The mobile drawer
+  always shows the full panel.
 - **Areas**, mapped from the old menu (every item keeps the role rule it had; an area with
   no page a person can use never shows):
 

@@ -1,6 +1,6 @@
 <template>
-  <!-- Rail (areas) and panel (the chosen area's pages). The panel only opens and
-       closes with its button; nothing here collapses on its own. -->
+  <!-- Rail (areas) and panel (the chosen area's pages). The panel only folds to
+       icons and opens with its button; nothing here collapses on its own. -->
   <div
     class="flex h-full shrink-0"
     :class="mobile && 'w-[min(20rem,calc(100vw-2rem))] bg-surface-sidebar'"
@@ -10,27 +10,50 @@
       :selected-area-id="selectedArea?.id"
       :active-area-id="active?.areaId"
       :profile-settings="profileSettings"
-      :follow-ups="navCounts.data?.follow_ups"
-      :show-follow-ups="showFollowUps"
       :mobile="mobile"
       @select="selectArea"
       @notifications="openNotifications"
     />
-    <NavPanel
-      v-show="mobile || sidebarStore.isPanelOpen"
-      :area="selectedArea"
-      :active-id="active?.itemId"
-      :counts="navCounts.data"
-      :show-search="showSearch"
-      :show-follow-ups="showFollowUps"
-      :follow-ups="navCounts.data?.follow_ups"
-      :view-actions="viewOptions"
-      :mobile="mobile"
-      @search="showCommandPalette = true"
+    <!-- On desktop the panel folds to an icon column instead of leaving; the wrapper
+         animates the width and clips what the narrower column cannot show. -->
+    <div
+      :class="
+        mobile
+          ? 'contents'
+          : [
+              'h-full shrink-0 overflow-hidden transition-[width] duration-200 motion-reduce:transition-none',
+              sidebarStore.isPanelOpen ? 'w-60' : 'w-14',
+            ]
+      "
     >
-      <template #footer><slot name="footer" /></template>
-      <template #footer-items><slot name="footer-items" /></template>
-    </NavPanel>
+      <NavPanel
+        v-if="mobile || sidebarStore.isPanelOpen"
+        :area="selectedArea"
+        :active-id="active?.itemId"
+        :counts="navCounts.data"
+        :show-search="showSearch"
+        :show-follow-ups="showFollowUps"
+        :follow-ups="navCounts.data?.follow_ups"
+        :view-actions="viewOptions"
+        :mobile="mobile"
+        @search="showCommandPalette = true"
+      >
+        <template #footer><slot name="footer" /></template>
+        <template #footer-items><slot name="footer-items" /></template>
+      </NavPanel>
+      <NavPanelCollapsed
+        v-else
+        :area="selectedArea"
+        :active-id="active?.itemId"
+        :counts="navCounts.data"
+        :show-search="showSearch"
+        :show-follow-ups="showFollowUps"
+        :follow-ups="navCounts.data?.follow_ups"
+        @search="showCommandPalette = true"
+      >
+        <template #footer-items><slot name="collapsed-footer" /></template>
+      </NavPanelCollapsed>
+    </div>
   </div>
   <!-- the palette finds tickets and articles, none of which a salesperson opens -->
   <CP
@@ -55,6 +78,7 @@ import { isCustomerPortal } from "@/utils";
 import { computed, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import NavPanel from "./NavPanel.vue";
+import NavPanelCollapsed from "./NavPanelCollapsed.vue";
 import NavRail from "./NavRail.vue";
 import { useNavigation } from "./useNavigation";
 
@@ -92,10 +116,9 @@ const showFollowUps = computed(
 );
 
 // An area with a single page goes straight to it; otherwise the panel lists its
-// pages. Choosing an area reopens a panel the person had closed.
+// pages. The panel stays as the person left it, open or folded to icons.
 function selectArea(areaId: string) {
   sidebarStore.selectedAreaId = areaId;
-  if (!props.mobile) sidebarStore.isPanelOpen = true;
   const area = areas.value.find((a) => a.id === areaId);
   const pages = area?.groups.flatMap((g) => g.items) || [];
   const treeCount = area?.groups.reduce(
