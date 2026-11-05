@@ -5,13 +5,13 @@
     class="flex h-full shrink-0 flex-col border-e border-outline-gray-2 bg-surface-sidebar"
     :class="mobile ? 'min-w-0 flex-1' : 'w-60'"
   >
-    <div class="flex flex-col gap-2 p-3">
+    <div class="flex shrink-0 flex-col gap-2 px-3 pt-3">
       <!-- who this workspace is; the account menu lives on the rail's avatar -->
       <div
-        class="flex items-center gap-2.5 rounded-xl border border-outline-gray-2 bg-surface-base p-2.5"
+        class="flex items-center gap-2 rounded-xl border border-outline-gray-2 bg-surface-base px-2 py-1.5"
       >
-        <BrandLogo class="!size-9 !rounded-[8px] !font-bold" />
-        <div class="flex min-w-0 flex-1 flex-col gap-1">
+        <BrandLogo class="!size-8 !rounded-[8px] !font-bold" />
+        <div class="flex min-w-0 flex-1 flex-col gap-0.5">
           <div
             class="truncate text-base font-semibold leading-tight text-ink-gray-9"
           >
@@ -26,7 +26,7 @@
       <button
         v-if="showSearch"
         type="button"
-        class="flex h-10 w-full items-center gap-2.5 rounded-xl border border-outline-gray-2 bg-surface-base px-3 text-start transition-colors hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+        class="flex h-9 w-full items-center gap-2.5 rounded-xl border border-outline-gray-2 bg-surface-base px-3 text-start transition-colors hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
         @click="emit('search')"
       >
         <LucideSearch
@@ -49,27 +49,36 @@
       </button>
     </div>
 
+    <!-- the area's name stays put while its items scroll -->
+    <h2
+      v-if="area"
+      :id="`nav-area-${area.id}`"
+      class="shrink-0 px-5 pb-1 pt-3 text-sm font-semibold text-ink-gray-9"
+    >
+      {{ area.label }}
+    </h2>
+
     <nav
       v-if="area"
-      :aria-label="area.label"
-      class="min-h-0 flex-1 overflow-y-auto px-3 pb-2"
+      :aria-labelledby="`nav-area-${area.id}`"
+      class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-2"
     >
       <section
         v-for="(group, index) in area.groups"
         :key="index"
         class="mt-3 first:mt-0"
       >
-        <h2
+        <h3
           v-if="group.label"
           class="mb-1 px-2 text-2xs font-semibold uppercase tracking-wider text-ink-gray-5"
         >
           {{ group.label }}
-        </h2>
+        </h3>
         <ul class="flex flex-col gap-0.5">
           <li v-for="item in group.items" :key="item.id">
             <RouterLink
               custom
-              :to="{ name: item.to }"
+              :to="{ name: item.to, query: item.query }"
               v-slot="{ href, navigate }"
             >
               <a
@@ -180,34 +189,9 @@
       </section>
     </nav>
 
-    <div class="mt-auto flex flex-col gap-2 p-3 pt-2">
+    <div class="flex shrink-0 flex-col gap-1.5 px-3 pb-3 pt-2">
       <FollowUpStrip v-if="showFollowUps" :summary="followUps" compact />
       <slot name="footer" />
-      <div
-        v-if="helpRoute"
-        class="flex flex-col gap-2 rounded-xl border border-outline-gray-2 bg-surface-base p-3"
-      >
-        <div class="flex items-start gap-2.5">
-          <LucideLifeBuoy
-            class="mt-0.5 size-4 shrink-0 text-ink-gray-6"
-            aria-hidden="true"
-          />
-          <div class="min-w-0">
-            <div class="text-base font-semibold leading-tight text-ink-gray-9">
-              {{ __("Need help?") }}
-            </div>
-            <div class="mt-1 text-xs text-ink-gray-6">
-              {{ __("Get support or raise a ticket") }}
-            </div>
-          </div>
-        </div>
-        <Button
-          variant="outline"
-          class="w-full"
-          :label="__('Raise a ticket')"
-          @click="router.push({ name: helpRoute })"
-        />
-      </div>
       <slot name="footer-items" />
     </div>
   </aside>
@@ -224,9 +208,7 @@ import { __ } from "@/translation";
 import { isCustomerPortal } from "@/utils";
 import { Button, Dropdown } from "frappe-ui";
 import { computed } from "vue";
-import { useRouter } from "vue-router";
 import LucideChevronRight from "~icons/lucide/chevron-right";
-import LucideLifeBuoy from "~icons/lucide/life-buoy";
 import LucideSearch from "~icons/lucide/search";
 import type { NavArea, NavChild } from "./navigation";
 
@@ -244,7 +226,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{ (e: "search"): void }>();
 
-const router = useRouter();
 const device = useDevice();
 const authStore = useAuthStore();
 const config = useConfigStore();
@@ -278,11 +259,5 @@ const subLine = computed(() => {
   if (authStore.isDmEmployee) return __("Digital marketing");
   if (authStore.isErpOnly) return __("ERP");
   return authStore.userName;
-});
-
-// raising a ticket goes through the existing New ticket pages
-const helpRoute = computed(() => {
-  if (isCustomerPortal.value) return "TicketNew";
-  return authStore.canWorkTickets ? "TicketAgentNew" : null;
 });
 </script>

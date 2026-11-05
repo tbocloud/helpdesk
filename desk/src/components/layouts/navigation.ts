@@ -1,6 +1,7 @@
 import { __ } from "@/translation";
 import type { Component } from "vue";
 import { OrganizationsIcon } from "../icons";
+import LucideBadgeIndianRupee from "~icons/lucide/badge-indian-rupee";
 import LucideBookOpen from "~icons/lucide/book-open";
 import LucideBriefcase from "~icons/lucide/briefcase";
 import LucideCalendarClock from "~icons/lucide/calendar-clock";
@@ -13,6 +14,7 @@ import LucideContact2 from "~icons/lucide/contact-2";
 import LucideFileSpreadsheet from "~icons/lucide/file-spreadsheet";
 import LucideFolderKanban from "~icons/lucide/folder-kanban";
 import LucideHandshake from "~icons/lucide/handshake";
+import LucideGauge from "~icons/lucide/gauge";
 import LucideHome from "~icons/lucide/home";
 import LucideHourglass from "~icons/lucide/hourglass";
 import LucideLayoutDashboard from "~icons/lucide/layout-dashboard";
@@ -20,6 +22,7 @@ import LucideLifeBuoy from "~icons/lucide/life-buoy";
 import LucideListTodo from "~icons/lucide/list-todo";
 import LucideMessagesSquare from "~icons/lucide/messages-square";
 import LucideNewspaper from "~icons/lucide/newspaper";
+import LucidePhoneCall from "~icons/lucide/phone-call";
 import LucideSquareKanban from "~icons/lucide/square-kanban";
 import LucideTicket from "~icons/lucide/ticket";
 import LucideTrophy from "~icons/lucide/trophy";
@@ -35,6 +38,11 @@ export interface NavItem {
   to: string;
   /** other routes of the same page (detail pages), so they keep it highlighted */
   also?: string[];
+  /** a tab of the Leads page (`?view=`); `useNavigation` decides who gets it, per the
+   * rules the page itself applies */
+  leadTab?: "all" | "today" | "overview" | "business" | "commission";
+  /** the query the link carries; filled in for `leadTab` */
+  query?: Record<string, string>;
   /** key of `helpdesk.api.sidebar.get_nav_counts` shown as the badge */
   countKey?: string;
   ticketWorkersOnly?: boolean;
@@ -171,8 +179,14 @@ export const agentNavAreas: NavArea[] = [
               "TaskyCommission",
               "TaskySignoffs",
               "TaskySignoff",
-              "ProjectStatus",
             ],
+          },
+          // everyone may open it; the server gives members the projects they are on
+          {
+            id: "project-status",
+            label: __("Project status"),
+            icon: LucideGauge,
+            to: "ProjectStatus",
           },
           {
             id: "templates",
@@ -245,6 +259,15 @@ export const agentNavAreas: NavArea[] = [
     groups: [
       {
         items: [
+          // the batch of calls for today; only for people whose department hands them out
+          {
+            id: "todays-calls",
+            label: __("Today's calls"),
+            icon: LucidePhoneCall,
+            to: "Leads",
+            leadTab: "today",
+            leadsOnly: true,
+          },
           // sales leads, live from the CRM site (docs/leads.md)
           {
             id: "leads",
@@ -252,6 +275,7 @@ export const agentNavAreas: NavArea[] = [
             icon: LucideHandshake,
             to: "Leads",
             also: ["Lead", "FindProspects", "LeadNewProposal", "LeadProposal"],
+            leadTab: "all",
             leadsOnly: true,
           },
           // the Lead Bank: every active agent adds leads by photo (docs/lead-bank.md)
@@ -269,6 +293,35 @@ export const agentNavAreas: NavArea[] = [
             to: "LeadBank",
             also: ["LeadBankTeam"],
             leadBankOnly: true,
+          },
+          {
+            id: "lead-commission",
+            label: __("Commission"),
+            icon: LucideBadgeIndianRupee,
+            to: "Leads",
+            leadTab: "commission",
+            leadsOnly: true,
+          },
+        ],
+      },
+      {
+        label: __("Team"),
+        items: [
+          {
+            id: "leads-overview",
+            label: __("Overview"),
+            icon: LucideLayoutDashboard,
+            to: "Leads",
+            leadTab: "overview",
+            leadsOnly: true,
+          },
+          {
+            id: "leads-business",
+            label: __("Business"),
+            icon: LucideChartColumn,
+            to: "Leads",
+            leadTab: "business",
+            leadsOnly: true,
           },
         ],
       },

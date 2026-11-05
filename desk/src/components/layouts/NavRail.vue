@@ -29,6 +29,7 @@
         <RailButton
           :label="area.label"
           :active="area.id === selectedAreaId"
+          :current="area.id === activeAreaId"
           :mobile="mobile"
           :aria-current="area.id === activeAreaId ? 'true' : undefined"
           @click="emit('select', area.id)"

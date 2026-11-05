@@ -24,7 +24,7 @@
       :show-search="showSearch"
       :show-follow-ups="showFollowUps"
       :follow-ups="navCounts.data?.follow_ups"
-      :view-actions="(view: any) => viewActions(view, viewDialogConfig)"
+      :view-actions="viewOptions"
       :mobile="mobile"
       @search="showCommandPalette = true"
     >
@@ -80,6 +80,9 @@ const viewDialogConfig = reactive({
   mode: "create",
 });
 
+// one function for the panel's lifetime: an inline arrow is new on every render and would
+// re-render the whole panel on each route change
+const viewOptions = (view: any) => viewActions(view, viewDialogConfig);
 const showSearch = computed(
   () => !props.mobile && !isCustomerPortal.value && !authStore.isSalesEmployee
 );
