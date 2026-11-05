@@ -34,30 +34,50 @@ A failed call's message comes from `errorText(error, fallback)` in `desk/src/uti
 
 ## Sidebar
 
-The app sidebar (`AppSidebar.vue`, state in `stores/sidebar.ts`). On desktop it **auto-hides**
-by default, like the Mac Dock: it rests as the icon rail and opens only when you go to it.
+Two levels, a **rail** and a **panel** (`AppSidebar.vue` holds them; `NavRail.vue`,
+`NavPanel.vue`, the nav data in `navigation.ts`, the role rules and the active-page logic
+in `useNavigation.ts`, state in `stores/sidebar.ts`).
 
-- **Expands** over the page, never pushing it: the rail keeps its 3rem in the layout and the
-  full sidebar opens above the content with a shadow, in 200ms (instant with reduced motion).
-  It opens after 120ms of hover, so a pointer passing across doesn't open it, and closes
-  250ms after the pointer leaves.
-- **Keyboard:** Tab into it and it opens (only keyboard focus, so a mouse click doesn't hold
-  it open). Tabbing out closes it. Escape closes it and returns focus to where it came from,
-  or to the page.
-- **Touch:** the first tap on the rail opens it without acting; the next tap picks an item.
-  A tap outside, or picking an item, closes it. Hover is never needed.
-- **Stays open** while something it opened is still open: the workspace switcher, a view's
-  options menu (any `aria-haspopup` trigger inside it) or the Notifications panel.
-- **Pin:** the bottom control toggles "Keep sidebar open" and "Auto-hide sidebar". Pinned is
-  the old expanded sidebar, with the page laid out beside it. The choice is kept per browser
-  in localStorage (`sidebar_is_pinned`, default off, so everyone starts on auto-hide);
-  `useStorage` falls back to memory when storage is blocked.
-- **In the rail:** the unread dot on Notifications, Search and the theme toggle as their own
-  items, and the follow-ups strip as a bell with a count (`FollowUpStrip` with `rail`).
-- **Tooltips:** frappe-ui's rail tooltips stay as they are (no extra code). They wait 500ms,
-  and hover, focus and tap all open the sidebar sooner, so in practice they don't show; the
-  items keep their accessible names either way.
-- The mobile drawer is unchanged.
+- **Rail** (3.5rem, always visible on desktop, dark in both themes): one icon per area,
+  Notifications, Settings and the avatar with the account menu at the bottom. Icons are
+  neutral; the selected area is filled with `brand`. Tooltips carry the labels.
+- **Panel** (15rem): the workspace card (logo, "Team Back Office", the person's department),
+  Search (opens the command palette, Ctrl/Cmd+K), the area's groups under small uppercase
+  headings, then the follow-ups strip, the onboarding/permission banners and the
+  "Need help?" card (Raise a ticket, to the existing New ticket page).
+  The current page is tinted `brand-soft` with `aria-current="page"`.
+- **Areas**, mapped from the old menu (every item keeps the role rule it had; an area with
+  no page a person can use never shows):
+
+  | Area | Items |
+  | --- | --- |
+  | Home | Home, Stand-up, Scoreboard |
+  | Work | My work: My Work (count), Board, In progress, Calendar, Timesheets. Projects: Projects, Templates. Team: Overview, Team, Adoption |
+  | Support | Tickets (count), Saved views (a tree), Knowledge base |
+  | Sales | Leads, Add a lead, My leads |
+  | Content | Content, Performance |
+  | People | Customers, Contacts |
+  | Reports | Summaries, Customer report, Support hours |
+
+  The customer portal has one area, Support (Tickets, Knowledge base). Project status and
+  Commission are project tabs, not sidebar pages, so they stay in their project.
+- **Tree:** Saved views (the pinned ticket views) fold open to a tree with a guide line and
+  a dot per view; each view keeps its options menu. Its chevron is `aria-expanded`.
+- **Deep links:** the area and item for the open page are selected on every navigation, and
+  detail pages (a ticket, a project tab, a lead) keep their list page highlighted (`also` in
+  `navigation.ts`). Choosing another rail icon by hand sticks until the next navigation. An
+  area with a single page goes straight to it.
+- **Never collapses by itself.** The panel closes only when the person presses the button at
+  the top of the rail (aria-expanded), not on navigation, on pointer leave or when the window
+  is resized on desktop. It defaults to open, and picking a rail icon reopens a closed panel.
+  Trees stay as the person left them and one opening never closes another. The choice is kept
+  per person in localStorage (`nav_panel_open:<user>`, `nav_trees:<user>`); `useStorage`
+  falls back to memory when storage is blocked.
+- **Mobile:** the hamburger opens a drawer with the rail and the panel side by side; it
+  closes when a page is picked (the only place the menu closes itself). There is no bottom
+  navigation, so nothing is duplicated.
+- **Roles:** Sales Employees get no Search (as before) and see only their sales pages; the
+  content team, DM and ERP employees see the same items as before, regrouped.
 
 ## Who sees which tasks
 

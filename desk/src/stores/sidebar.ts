@@ -1,26 +1,40 @@
 import { computed, ref } from "vue";
 import { defineStore } from "pinia";
 import { useStorage } from "@vueuse/core";
+import { useAuthStore } from "@/stores/auth";
+
+// The rail is 3.5rem and the panel 15rem; the Notifications panel anchors
+// against their sum.
+const RAIL_WIDTH = 3.5;
+const PANEL_WIDTH = 15;
 
 export const useSidebarStore = defineStore("sidebar", () => {
-  // Desktop: pinned keeps the sidebar open beside the page; otherwise it rests
-  // as the icon rail and expands over the page while pointed at or focused.
-  // A new key, so everyone starts on auto-hide rather than inheriting the old
-  // "sidebar_is_expanded" (true for nearly everyone). useStorage already
-  // catches storage that is blocked or full and falls back to memory.
-  const isPinned = useStorage("sidebar_is_pinned", false);
-  const isPeeking = ref(false);
-  const isExpanded = computed(() => isPinned.value || isPeeking.value);
-  // Match frappe-ui Sidebar's width/collapsedWidth props (15rem/3rem),
-  // since the notifications panel anchors against this value.
-  const width = computed(() => {
-    return isExpanded.value ? "15rem" : "3rem";
-  });
+  // Per person, so two people on one browser keep their own menu. The panel opens
+  // and closes only when the person presses its button, never on its own.
+  // useStorage already catches storage that is blocked or full and falls back
+  // to memory.
+  const who = useAuthStore().userId || "guest";
+  const isPanelOpen = useStorage(`nav_panel_open:${who}`, true);
+  // folded-open items (a tree of saved views); only a click folds one shut
+  const openTrees = useStorage<Record<string, boolean>>(`nav_trees:${who}`, {});
+  // the rail icon whose items the panel shows
+  const selectedAreaId = ref<string | null>(null);
+
+  const width = computed(
+    () => `${RAIL_WIDTH + (isPanelOpen.value ? PANEL_WIDTH : 0)}rem`
+  );
+
+  // trees open until their person closes them
+  const isTreeOpen = (id: string) => openTrees.value[id] !== false;
+  function setTreeOpen(id: string, open: boolean) {
+    openTrees.value = { ...openTrees.value, [id]: open };
+  }
 
   return {
-    isExpanded,
-    isPeeking,
-    isPinned,
+    isPanelOpen,
+    selectedAreaId,
     width,
+    isTreeOpen,
+    setTreeOpen,
   };
 });
