@@ -131,52 +131,14 @@
         :rows="3"
         :description="__('Saved as the lead\'s first note.')"
       />
-      <div
-        v-if="duplicates.length"
-        role="status"
-        class="flex flex-col gap-2 rounded-md bg-warning-soft px-3 py-2 text-p-sm text-ink-gray-8"
-      >
-        <p class="flex items-start gap-2 font-medium text-warning">
-          <LucideTriangleAlert
-            class="mt-0.5 size-4 shrink-0"
-            aria-hidden="true"
-          />
-          {{
-            lead
-              ? __("Other leads share these details")
-              : __("This may already be a lead")
-          }}
-        </p>
-        <ul role="list" class="flex flex-col gap-1.5">
-          <li
-            v-for="match in duplicates"
-            :key="match.name"
-            class="flex flex-wrap items-center gap-x-2 gap-y-0.5"
-          >
-            <router-link
-              :to="{ name: 'Lead', params: { leadId: match.name } }"
-              target="_blank"
-              class="inline-flex items-center gap-1 font-medium text-ink-gray-9 underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
-            >
-              {{ match.lead_name || match.name }}
-              <LucideExternalLink class="size-3.5" aria-hidden="true" />
-              <span class="sr-only">{{ __("(opens in a new tab)") }}</span>
-            </router-link>
-            <span class="text-p-xs text-ink-gray-7">
-              {{
-                [
-                  match.company_name,
-                  match.owner_name || ownerName(options, match.lead_owner),
-                  stageLabel(options, match.tbo_stage),
-                  __("Same {0}", matchedOn(match)),
-                ]
-                  .filter(Boolean)
-                  .join(" · ")
-              }}
-            </span>
-          </li>
-        </ul>
-      </div>
+      <DuplicateLeadsNotice
+        :matches="duplicates"
+        :title="
+          lead
+            ? __('Other leads share these details')
+            : __('This may already be a lead')
+        "
+      />
 
       <p v-if="!lead" class="text-p-xs text-ink-gray-6">
         {{
@@ -219,14 +181,10 @@ import { useDebounceFn } from "@vueuse/core";
 import { Button, Combobox, call, Dialog, FormControl, toast } from "frappe-ui";
 import { computed, reactive, ref, useId, watch } from "vue";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
-import LucideExternalLink from "~icons/lucide/external-link";
-import LucideTriangleAlert from "~icons/lucide/triangle-alert";
 import {
   choices,
   keepUnsavedNote,
   isRoundRobin,
-  ownerName,
-  stageLabel,
   type DuplicateLead,
   LEAD_FORM_FIELDS,
   loadLeadOptions,
@@ -241,6 +199,7 @@ import {
   type LeadOptions,
   type LeadRow,
 } from "./leads";
+import DuplicateLeadsNotice from "./DuplicateLeadsNotice.vue";
 import LeadCategoryFields from "./LeadCategoryFields.vue";
 
 const props = defineProps<{
@@ -298,15 +257,6 @@ const submitLabel = computed(() => {
   if (props.lead) return __("Save changes");
   return needsConfirm.value ? __("Create anyway") : __("Create lead");
 });
-
-function matchedOn(match: DuplicateLead) {
-  const names = {
-    email: __("email"),
-    phone: __("phone"),
-    company: __("company"),
-  };
-  return match.matched_on.map((m) => names[m]).join(" + ");
-}
 
 /** Asks the ERP site once per set of typed details; an older one (or a failure) just
  * means no warning, the ERP site still refuses a repeat when it creates the lead. */

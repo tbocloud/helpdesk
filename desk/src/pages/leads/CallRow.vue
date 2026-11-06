@@ -58,6 +58,60 @@
       >
         {{ call.summary.phone }}
       </p>
+      <div v-if="others.length" class="flex flex-col gap-1">
+        <button
+          type="button"
+          class="inline-flex min-h-8 items-center gap-1 self-start rounded text-p-sm text-ink-gray-8 underline decoration-outline-gray-3 underline-offset-2 hover:text-ink-gray-9 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+          :aria-expanded="showOthers"
+          @click="showOthers = !showOthers"
+        >
+          {{ __("+{0} more", String(others.length)) }}
+          <component
+            :is="showOthers ? LucideChevronUp : LucideChevronDown"
+            class="size-3.5"
+            aria-hidden="true"
+          />
+        </button>
+        <ul v-if="showOthers" role="list" class="flex flex-col gap-1">
+          <li
+            v-for="other in others"
+            :key="other.id"
+            class="flex items-center gap-2"
+          >
+            <span class="min-w-0 flex-1">
+              <span class="font-mono text-sm tabular-nums text-ink-gray-8">{{
+                other.number
+              }}</span>
+              <span class="text-p-xs text-ink-gray-6">
+                · {{ other.person || other.label }}</span
+              >
+            </span>
+            <Button
+              v-if="canCall"
+              variant="subtle"
+              :label="__('Call')"
+              :aria-label="__('Call {0}', other.number)"
+              @click="emit('dial', call, other.number)"
+            >
+              <template #prefix>
+                <LucidePhone class="size-4" aria-hidden="true" />
+              </template>
+            </Button>
+            <Button
+              v-else
+              variant="subtle"
+              :link="`tel:${dialNumber(other.number)}`"
+              :label="__('Call')"
+              :aria-label="__('Call {0}', other.number)"
+              @click="emit('dialed', call, other.number)"
+            >
+              <template #prefix>
+                <LucidePhone class="size-4" aria-hidden="true" />
+              </template>
+            </Button>
+          </li>
+        </ul>
+      </div>
       <p
         v-if="call.summary.last_note"
         class="line-clamp-2 text-p-sm text-ink-gray-6"
@@ -130,7 +184,10 @@
 <script setup lang="ts">
 import TaskyBadge from "@/components/TaskyBadge.vue";
 import { __ } from "@/translation";
-import { computed } from "vue";
+import { Button } from "frappe-ui";
+import { computed, ref } from "vue";
+import LucideChevronDown from "~icons/lucide/chevron-down";
+import LucideChevronUp from "~icons/lucide/chevron-up";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
 import LucideBox from "~icons/lucide/box";
 import LucideFlame from "~icons/lucide/flame";
@@ -153,9 +210,10 @@ const props = defineProps<{
   overdue?: boolean;
 }>();
 const emit = defineEmits<{
-  (e: "dial", call: QueueCall): void;
+  // `number`: one of the lead's other numbers; none: the main one
+  (e: "dial", call: QueueCall, number?: string): void;
   // the phone's own dialler was used: a result is expected when the person is back
-  (e: "dialed", call: QueueCall): void;
+  (e: "dialed", call: QueueCall, number?: string): void;
   (e: "outcome", call: QueueCall, outcome: CallOutcome): void;
 }>();
 
@@ -179,4 +237,7 @@ const meta = computed(() =>
     .join(" · ")
 );
 const dialable = computed(() => dialNumber(props.call.summary.phone));
+// the lead's other numbers still in use, behind "+1 more"
+const others = computed(() => props.call.summary.other_numbers ?? []);
+const showOthers = ref(false);
 </script>

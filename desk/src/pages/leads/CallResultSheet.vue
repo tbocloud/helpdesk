@@ -14,6 +14,14 @@
         >
           {{ call.phone }}
         </p>
+        <button
+          type="button"
+          class="mt-0.5 inline-flex min-h-8 items-center gap-1 self-start rounded text-p-sm text-ink-gray-8 underline decoration-outline-gray-3 underline-offset-2 hover:text-ink-gray-9 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+          @click="emit('addNumber', call)"
+        >
+          <LucidePlus class="size-3.5" aria-hidden="true" />
+          {{ __("Got another number?") }}
+        </button>
         <p
           v-if="total > 1"
           class="text-p-sm tabular-nums text-ink-gray-6"
@@ -130,6 +138,7 @@
 import { __ } from "@/translation";
 import { Button, Dialog, FormControl } from "frappe-ui";
 import { ref, watch } from "vue";
+import LucidePlus from "~icons/lucide/plus";
 import { OUTCOME_LOOK, OUTCOMES, type CallOutcome } from "./callBatches";
 import {
   callBackIn,
@@ -154,6 +163,7 @@ const emit = defineEmits<{
     value: { outcome: CallOutcome; note: string; callback_at: string | null }
   ): void;
   (e: "dismiss", call: PendingCall, reason: string): void;
+  (e: "addNumber", call: PendingCall): void;
 }>();
 
 // the big buttons; the plain answers save at once, Call back and Not interested ask one more thing

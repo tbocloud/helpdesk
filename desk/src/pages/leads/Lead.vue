@@ -128,6 +128,20 @@
                   :icon="stageIcon(lead.tbo_stage)"
                 />
               </div>
+              <div
+                v-if="lead?.numbers"
+                class="border-b border-outline-gray-1 px-4 py-3"
+              >
+                <LeadNumbers
+                  :lead-id="leadId"
+                  :lead-name="lead.lead_name || leadId"
+                  :numbers="lead.numbers"
+                  :can-write="!!lead.can_write"
+                  :can-call="!!lead.can_call"
+                  :can-remove="!!lead.can_remove_numbers"
+                  @changed="detail.reload()"
+                />
+              </div>
               <dl class="flex flex-col gap-3 px-4 py-4">
                 <div
                   v-for="field in detailFields"
@@ -296,6 +310,7 @@
     <LogCallDialog
       v-model:open="showLogCall"
       :lead-id="leadId"
+      :numbers="(lead?.numbers ?? []).filter(isUsable)"
       @logged="detail.reload()"
     />
     <LeadFormDialog
@@ -406,6 +421,7 @@ import LucidePhoneMissed from "~icons/lucide/phone-missed";
 import LucidePhoneOutgoing from "~icons/lucide/phone-outgoing";
 import LucidePencil from "~icons/lucide/pencil";
 import LeadAISuggests from "./LeadAISuggests.vue";
+import LeadNumbers from "./LeadNumbers.vue";
 import LeadCallEntry from "./LeadCallEntry.vue";
 import LucideScrollText from "~icons/lucide/scroll-text";
 import LeadFormDialog from "./LeadFormDialog.vue";
@@ -425,6 +441,7 @@ import {
   lastCall,
   stageIcon,
   stageLabel,
+  isUsable,
   stageTone,
   unsavedNote,
   useClickToCall,
@@ -500,6 +517,7 @@ function remember(via: "phone" | "myoperator") {
     lead: props.leadId,
     lead_name: lead.value?.lead_name || props.leadId,
     phone: lead.value?.mobile_no || lead.value?.phone || "",
+    number: lead.value?.mobile_no || null,
     via,
   });
 }
@@ -532,9 +550,10 @@ const detailFields = computed(() => {
       href: l.email_id ? `mailto:${l.email_id}` : undefined,
       mono: true,
     },
+    // an older TBO Smart sends one number; with the list of numbers it shows above
     {
       label: __("Mobile"),
-      value: l.mobile_no || "",
+      value: l.numbers ? "" : l.mobile_no || "",
       href: l.mobile_no ? `tel:${l.mobile_no}` : undefined,
       mono: true,
     },

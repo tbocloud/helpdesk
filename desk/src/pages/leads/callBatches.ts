@@ -34,15 +34,17 @@ export const OUTCOMES: { value: CallOutcome; label: string; flow: boolean }[] =
 
 /** An outcome's icon, and the tone it shows in on a lead's row: colour only where it says
  * something (a call that got through, one to repeat, a no), never for the plain ones. */
-export const OUTCOME_LOOK: Record<CallOutcome, { icon: Component; tone: Tone }> =
-  {
-    Connected: { icon: LucideCircleCheck, tone: "success" },
-    "Not answered": { icon: LucidePhoneMissed, tone: "warning" },
-    Busy: { icon: LucidePhoneOff, tone: "warning" },
-    "Call back": { icon: LucideCalendarClock, tone: "info" },
-    "Not interested": { icon: LucideThumbsDown, tone: "danger" },
-    "Wrong number": { icon: LucideX, tone: "neutral" },
-  };
+export const OUTCOME_LOOK: Record<
+  CallOutcome,
+  { icon: Component; tone: Tone }
+> = {
+  Connected: { icon: LucideCircleCheck, tone: "success" },
+  "Not answered": { icon: LucidePhoneMissed, tone: "warning" },
+  Busy: { icon: LucidePhoneOff, tone: "warning" },
+  "Call back": { icon: LucideCalendarClock, tone: "info" },
+  "Not interested": { icon: LucideThumbsDown, tone: "danger" },
+  "Wrong number": { icon: LucideX, tone: "neutral" },
+};
 
 export interface QueueLead {
   name: string;
@@ -56,6 +58,13 @@ export interface QueueLead {
   last_note?: string | null;
   next_step?: string | null;
   wrong_number?: number;
+  /** the other numbers still in use besides `phone` (absent from an older TBO Smart) */
+  other_numbers?: {
+    id: string;
+    number: string;
+    label: string;
+    person: string;
+  }[];
 }
 
 /** What the caller says they are calling under: the lead's product, else its department. */

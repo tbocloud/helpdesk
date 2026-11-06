@@ -44,6 +44,13 @@
         </div>
       </fieldset>
       <FormControl
+        v-if="numbers.length > 1"
+        v-model="number"
+        type="select"
+        :label="__('Number called')"
+        :options="numberChoices"
+      />
+      <FormControl
         v-if="outcome === 'Call back'"
         v-model="callbackAt"
         type="datetime-local"
@@ -84,9 +91,14 @@ import { errorText } from "@/utils";
 import { Button, Dialog, FormControl, dayjs, toast } from "frappe-ui";
 import { computed, ref, useId, watch } from "vue";
 import { OUTCOME_LOOK, OUTCOMES, type CallOutcome } from "./callBatches";
-import { useLogCall } from "./leads";
+import { useLogCall, type LeadNumber } from "./leads";
 
-const props = defineProps<{ open: boolean; leadId: string }>();
+const props = defineProps<{
+  open: boolean;
+  leadId: string;
+  /** the numbers still in use, the main one first; a choice shows when there are several */
+  numbers: LeadNumber[];
+}>();
 const emit = defineEmits<{
   (e: "update:open", value: boolean): void;
   (e: "logged"): void;
@@ -99,7 +111,9 @@ const HINTS: Record<CallOutcome, string> = {
   Busy: __("The lead becomes Not Responding: call again."),
   "Call back": __("The lead becomes Follow-up Required."),
   "Not interested": __("The lead becomes Not Interested."),
-  "Wrong number": __("The lead becomes Wrong Number."),
+  "Wrong number": __(
+    "That number is marked wrong. The lead becomes Wrong Number once no number is left to try."
+  ),
 };
 const LOCAL = "YYYY-MM-DDTHH:mm";
 
@@ -107,6 +121,13 @@ const formId = `log-call-${useId()}`;
 const outcome = ref<CallOutcome | "">("");
 const note = ref("");
 const callbackAt = ref("");
+const number = ref("");
+const numberChoices = computed(() =>
+  props.numbers.map((n) => ({
+    label: [n.number, n.person || n.label].join(" · "),
+    value: n.number,
+  }))
+);
 const logCall = useLogCall();
 const hint = computed(() => (outcome.value ? HINTS[outcome.value] : ""));
 
@@ -121,6 +142,7 @@ watch(
     if (open) {
       outcome.value = "";
       note.value = callbackAt.value = "";
+      number.value = props.numbers[0]?.number ?? "";
     }
   }
 );
@@ -139,6 +161,7 @@ function submit() {
       lead: props.leadId,
       outcome: outcome.value,
       note: note.value,
+      number: number.value || null,
       callback_at:
         outcome.value === "Call back"
           ? dayjs(callbackAt.value).format("YYYY-MM-DD HH:mm:ss")
