@@ -99,6 +99,18 @@ class TestCompleteTask(FrappeTestCase):
         mine = run_as_user(DEV[0], tasky.get_my_timesheets)
         self.assertIn(result["timesheet"], [t["name"] for t in mine])
 
+    def test_a_task_with_the_longest_subject_still_completes(self):
+        # a content task's subject is cut at 140; "Task: " in front made the
+        # timesheet's title too long, and completing it failed
+        frappe.db.set_value("Task", self.task, "subject", "Writer: " + "x" * 132)
+
+        result = self.complete()
+
+        self.assertEqual(result["status"], "Completed")
+        title = frappe.db.get_value("Timesheet", result["timesheet"], "title")
+        self.assertEqual(len(title), 140)
+        self.assertTrue(title.startswith("Task: Writer: x"))
+
     def test_timesheet_links_the_employee_when_there_is_one(self):
         employee = make_employee(DEV[0], "Meera Joseph").name
         result = self.complete()

@@ -437,7 +437,8 @@ def _log_day(task_doc, day, hours: float, notes: str, today):
     ts = frappe.get_doc(
         {
             "doctype": "Timesheet",
-            "title": _("Task: {0}").format(task_doc.subject),
+            # a Data field of 140: a task's subject can be that long on its own
+            "title": _("Task: {0}").format(task_doc.subject)[:140],
             "employee": frappe.db.get_value("Employee", {"user_id": user}, "name"),
             "time_logs": [
                 {
