@@ -321,6 +321,13 @@ class TestOverEstimate(WorkControlCase):
 
         self.assertTrue(self.my_item(task)["is_overdue"])
 
+    def test_a_task_in_review_is_not_overdue_for_being_past_its_hours(self):
+        task = self.make_task("Bank reconciliation", add_days(nowdate(), 3))
+        start_task_timer(task, hours_ago=3, estimated_hours=2)
+        frappe.db.set_value("Task", task, "status", "Pending Review")
+
+        self.assertFalse(self.my_item(task)["is_overdue"])
+
     def test_no_due_date_and_past_its_hours_is_overdue(self):
         task = self.make_task("Bank reconciliation", None)
         start_task_timer(task, hours_ago=3, estimated_hours=2)

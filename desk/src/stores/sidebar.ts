@@ -13,10 +13,18 @@ export const useSidebarStore = defineStore("sidebar", () => {
   // and closes only when the person presses its button, never on its own.
   // useStorage already catches storage that is blocked or full and falls back
   // to memory.
-  const who = useAuthStore().userId || "guest";
-  const isPanelOpen = useStorage(`nav_panel_open:${who}`, true);
+  // The keys follow the signed-in person: the user loads after the store is made.
+  const auth = useAuthStore();
+  const who = computed(() => auth.userId || "guest");
+  const isPanelOpen = useStorage(
+    computed(() => `nav_panel_open:${who.value}`),
+    true
+  );
   // folded-open items (a tree of saved views); only a click folds one shut
-  const openTrees = useStorage<Record<string, boolean>>(`nav_trees:${who}`, {});
+  const openTrees = useStorage<Record<string, boolean>>(
+    computed(() => `nav_trees:${who.value}`),
+    {}
+  );
   // the rail icon whose items the panel shows
   const selectedAreaId = ref<string | null>(null);
 

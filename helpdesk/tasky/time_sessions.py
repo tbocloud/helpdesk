@@ -145,13 +145,6 @@ def working_days_before(today, since, count: int) -> list[date]:
     return found
 
 
-def last_working_day(today, since) -> date:
-    """The working day before `today` ("yesterday" in the dialog), or `today` itself when
-    there is none since `since`."""
-    days = working_days_before(today, since, 1)
-    return days[0] if days else getdate(today)
-
-
 def oldest_hand_entry_day(today, since) -> date:
     """The earliest day hours may be typed in for: the last of the `hand_entry_days`
     working days before `today` (owner's request, 2026-11-03: it used to be only the day

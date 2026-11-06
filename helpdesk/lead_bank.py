@@ -51,7 +51,8 @@ def check_scan_limit() -> None:
     office shares one)."""
     key = frappe.cache.make_key(f"lead_bank_scans:{frappe.session.user}")
     count = frappe.cache.incrby(key, 1)
-    if count == 1:
+    # not only on the first count: a failed expire must not leave the person blocked for good
+    if count == 1 or frappe.cache.ttl(key) < 0:
         frappe.cache.expire(key, 60 * 60)
     if count > SCANS_PER_HOUR:
         frappe.throw(
@@ -69,16 +70,21 @@ def photo_images(photos) -> list[dict]:
     if len(photos) > MAX_PHOTOS:
         frappe.throw(_("Add up to {0} photos.").format(MAX_PHOTOS))
     images = []
+    if not isinstance(photos, list):
+        frappe.throw(_("That photo couldn't be read. Take it again."))
     for photo in photos:
-        data = (photo.get("content") or "").strip()
+        if not isinstance(photo, dict):
+            frappe.throw(_("That photo couldn't be read. Take it again."))
+        data = str(photo.get("content") or "").strip()
         if len(data) > MAX_PHOTO_BASE64:
             frappe.throw(
                 _("A photo is larger than 10 MB. Take it again at a smaller size.")
             )
         try:
-            head = base64.b64decode(data[:64], validate=False)
+            raw = base64.b64decode(data, validate=True)
         except ValueError:  # binascii.Error is one
             frappe.throw(_("That photo couldn't be read. Take it again."))
+        head = raw[:64]
         images.append({"media_type": media_type(head), "data": data})
     return images
 

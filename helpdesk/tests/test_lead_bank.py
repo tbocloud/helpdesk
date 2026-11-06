@@ -211,6 +211,25 @@ class TestReadingPhotos(LeadBankCase):
         with self.assertRaises(frappe.ValidationError):
             api.scan_photos([{"filename": "a.txt", "content": "bm90IGEgcGhvdG8="}])
 
+    def test_odd_photo_entries_are_refused_in_plain_words(self):
+        for photos in (["board.jpg"], [make_jpeg_photo()["content"]], "{}"):
+            with self.assertRaises(frappe.ValidationError):
+                lead_bank.photo_images(photos)
+        # the whole string must be base64, not only its start
+        bad = {
+            **make_jpeg_photo(),
+            "content": make_jpeg_photo()["content"] + "!!not base64",
+        }
+        with self.assertRaises(frappe.ValidationError):
+            lead_bank.photo_images([bad])
+
+    def test_the_hour_expires_even_when_the_first_expiry_was_lost(self):
+        key = frappe.cache.make_key(f"lead_bank_scans:{DESIGNER}")
+        frappe.cache.incrby(key, 1)  # a count whose expire never happened
+        self.assertLess(frappe.cache.ttl(key), 0)
+        lead_bank.check_scan_limit()
+        self.assertGreater(frappe.cache.ttl(key), 0)
+
     def test_a_person_can_read_only_so_many_photos_an_hour(self):
         with patch.object(lead_bank, "SCANS_PER_HOUR", 2):
             self.scan()
@@ -235,6 +254,22 @@ class TestCallsToTheErpSite(LeadBankCase):
         self.assertEqual(
             self.crm.lead_paths[0], "tbo_smart.api.hub_lead_bank.submit_lead"
         )
+
+    def test_submit_refuses_photos_the_scan_would_refuse(self):
+        for photos in (
+            [make_jpeg_photo()] * 6,
+            [{"filename": "a.txt", "content": "bm90IGEgcGhvdG8="}],
+        ):
+            with self.assertRaises(frappe.ValidationError):
+                api.submit_lead('{"company_name": "Shop"}', photos)
+        self.assertEqual(self.calls("submit_lead"), [])
+
+    def test_my_leads_paging_is_clamped(self):
+        self.crm.lead_answers["get_my_leads"] = {"rows": []}
+        api.get_my_leads(-5, 100000)
+        ((_m, _post, params),) = self.calls("get_my_leads")
+        self.assertEqual(params["start"], 0)
+        self.assertEqual(params["page_length"], 100)
 
     def test_the_other_calls_go_to_the_lead_bank_and_the_referral_settings_to_commission(
         self,
