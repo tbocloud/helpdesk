@@ -267,3 +267,15 @@ class TestCallsWithoutAResult(BDCase):
         frappe.set_user("plain.bd@bdview.example")
         with self.assertRaises(frappe.PermissionError):
             pending_calls.start_call("LEAD-1")
+
+
+class TestWhoGetsTheBDView(BDCase):
+    def test_a_sales_employee_who_also_administers_does_not_get_it(self):
+        from helpdesk.content_team import is_sales_bd_role
+
+        self.assertTrue(is_sales_bd_role(BD))
+        self.assertFalse(is_sales_bd_role(MANAGER))
+        for role in ("System Manager", "Agent Manager"):
+            frappe.get_doc("User", HEAD).add_roles(role)
+            self.assertFalse(is_sales_bd_role(HEAD), role)
+            frappe.get_doc("User", HEAD).remove_roles(role)

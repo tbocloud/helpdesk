@@ -96,8 +96,14 @@ def is_sales_bd_role(user: str | None = None) -> bool:
     Sales Manager. Whether they also head a department is known on the ERP site only
     (`helpdesk.api.leads.is_bd` settles it); a BD sees Today's calls, their own leads and
     follow-ups, nothing of the team's (docs/leads.md)."""
+    from helpdesk.tasky.permissions import is_tasky_admin
+
     user = user or frappe.session.user
-    return is_sales_employee(user) and "Sales Manager" not in frappe.get_roles(user)
+    return (
+        is_sales_employee(user)
+        and not is_tasky_admin(user)
+        and "Sales Manager" not in frappe.get_roles(user)
+    )
 
 
 def sees_no_tickets(user: str | None = None) -> bool:

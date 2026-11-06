@@ -196,15 +196,16 @@ def status_since(tasks) -> dict[str, str]:
 
 
 def is_task_overdue(task, deadline, today) -> bool:
-    """Past its due date, or worked longer than its estimate, whatever the due date and
-    with none (owner's request, 2026-11-03: a 30 min task is overdue once its timer passes
+    """Past its due date, or worked longer than its estimate (not while in review),
+    whatever the due date and with none (owner's request, 2026-11-03: a 30 min task is overdue once its timer passes
     30 min). The due date moves out by the days on hold, so a paused task is never late.
     """
     if task.status in (ON_HOLD, "Completed", "Cancelled"):
         return False
     if deadline and deadline < today:
         return True
-    return _over_estimate(task)
+    # in review the assignee can't act, so running past the estimate is not their lateness
+    return task.status != PENDING_REVIEW and _over_estimate(task)
 
 
 def _over_estimate(task) -> bool:

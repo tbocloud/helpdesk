@@ -404,6 +404,7 @@ const photoError = ref("");
 const errorMessage = ref("");
 const preparing = ref(false);
 const scanning = ref(false);
+let rescan = false;
 const submitting = ref(false);
 const result = ref<SubmitResult | null>(null);
 let nextId = 1;
@@ -452,7 +453,12 @@ async function onPick(event: Event) {
   } finally {
     preparing.value = false;
   }
-  if (!place.value) findPlace(true);
+  // a slow or refused GPS must not hold the reading back
+  if (!place.value)
+    await Promise.race([
+      findPlace(true),
+      new Promise((r) => setTimeout(r, 4000)),
+    ]);
   scan();
 }
 
@@ -466,8 +472,14 @@ function removePhoto(id: number) {
 
 /** Fills what is still empty from the photos, so nothing the person typed is overwritten. */
 async function scan() {
-  if (!photos.value.length || scanning.value) return;
+  if (!photos.value.length) return;
+  if (scanning.value) {
+    // a photo added during a reading is read when this one ends
+    rescan = true;
+    return;
+  }
   scanning.value = true;
+  rescan = false;
   scanMessage.value = "";
   try {
     const found: ScanResult = await call("helpdesk.api.lead_bank.scan_photos", {
@@ -494,6 +506,7 @@ async function scan() {
   } finally {
     scanning.value = false;
   }
+  if (rescan) scan();
 }
 
 async function findPlace(quiet = false) {
