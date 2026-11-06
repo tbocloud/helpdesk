@@ -517,12 +517,18 @@ def report_deployed() -> bool:
 
 @frappe.whitelist(methods=["POST"])
 def log_call(
-    lead: str, outcome: str, note: str | None = None, callback_at: str | None = None
+    lead: str,
+    outcome: str,
+    note: str | None = None,
+    callback_at: str | None = None,
+    number: str | None = None,
 ) -> dict:
     """A call made outside MyOperator, logged on the lead as the signed-in person; it
     counts in today's report, so their cached reads go. The ERP site also sets the
     lead's last call result and moves its stage (`stage` in the answer). Call back needs
-    `callback_at`, the follow-up."""
+    `callback_at`, the follow-up. `number` is the lead's number that was called (default:
+    its main number); a Wrong number marks that number, and the lead only when none is
+    left."""
     require_leads()
     if outcome not in CALL_OUTCOMES:
         frappe.throw(
@@ -539,6 +545,7 @@ def log_call(
         outcome=outcome,
         note=(note or "").strip() or None,
         callback_at=(callback_at or "").strip() or None,
+        number=(number or "").strip() or None,
     )
     if logged is None:
         frappe.throw(
@@ -835,6 +842,95 @@ def set_stage(name: str, stage: str, note: str | None = None) -> dict:
         )
         or {}
     )
+    clear_cached_reads()
+    return result
+
+
+@frappe.whitelist(methods=["POST"])
+def add_lead_number(
+    lead: str,
+    number: str,
+    label: str | None = None,
+    person: str | None = None,
+    designation: str | None = None,
+    make_primary: int | str = 0,
+    note: str | None = None,
+    on_call: int | str = 0,
+) -> dict:
+    """Adds a contact number to the lead: {numbers, duplicates}, `duplicates` being the
+    other leads that have it (a warning, never a refusal). `make_primary` makes it the main
+    number; the old one stays, marked Old. `on_call` records it as added during a call."""
+    require_leads()
+    if not (number or "").strip():
+        frappe.throw(_("Type the number first."))
+    return change_numbers(
+        "add_lead_number",
+        lead=lead,
+        number=number.strip(),
+        label=label or None,
+        person=(person or "").strip() or None,
+        designation=(designation or "").strip() or None,
+        make_primary=1 if cint(make_primary) else 0,
+        note=(note or "").strip() or None,
+        on_call=1 if cint(on_call) else 0,
+    )
+
+
+@frappe.whitelist(methods=["POST"])
+def update_lead_number(
+    lead: str,
+    number_id: str,
+    status: str | None = None,
+    label: str | None = None,
+    person: str | None = None,
+    designation: str | None = None,
+    make_primary: int | str = 0,
+    note: str | None = None,
+) -> dict:
+    """Changes a number's status (Active, Not reachable, Wrong number, Old), label or
+    person, or makes it the main number: {numbers}."""
+    require_leads()
+    return change_numbers(
+        "update_lead_number",
+        lead=lead,
+        number_id=number_id,
+        status=status or None,
+        label=label or None,
+        person=person,
+        designation=designation,
+        make_primary=1 if cint(make_primary) else 0,
+        note=note,
+    )
+
+
+@frappe.whitelist(methods=["POST"])
+def remove_lead_number(lead: str, number_id: str) -> dict:
+    """Takes a number off the lead for good: managers only (the ERP site says so when it
+    refuses). A salesperson marks it Old or Wrong number instead."""
+    require_leads()
+    return change_numbers(
+        "remove_lead_number",
+        permission_message=_("Only a manager can remove a number."),
+        lead=lead,
+        number_id=number_id,
+    )
+
+
+def change_numbers(method: str, **params) -> dict:
+    """A number write on the ERP site. The signed-in person's cached reads go: the lead
+    list and Today's calls show the main number."""
+    result = call_if_deployed(
+        method,
+        post=True,
+        **params,
+    )
+    if result is None:
+        frappe.throw(
+            _(
+                "The ERP site can't keep more than one number yet. It needs the latest TBO Smart."
+            ),
+            LeadsUnavailableError,
+        )
     clear_cached_reads()
     return result
 

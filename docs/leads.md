@@ -420,6 +420,47 @@ mistake* (`dismiss_pending_call`). Endpoints: `start_call`, `get_pending_calls`,
 5. If you forget, the banner *You have N calls without a result* waits. Tap **Add results**.
    If you did not make the call, tap *I didn't call*.
 
+## More than one number per lead
+
+Leads arrive with one number; on a call the person often gives another (the decision-maker's, the
+office's). A lead keeps all of them, and the old one is never lost. TBO Smart stores them
+(`docs/lead-numbers.md` and `hub-leads-api.md` §2.24 there); the hub shows and edits them.
+
+**How to use it (telecallers and BDs):**
+
+- On a call they give a new number: open the lead, tap **+ Add number**, type it, **Save**. The
+  old number stays in the list. Pick *Decision-maker* or *Office* if you know whose it is, and
+  type their name if you have it.
+- It is the number to call from now on: tick **Make this the main number**. The old one moves to
+  **Old numbers** (tap it to see it); nothing is deleted.
+- After a call, the result sheet has **Got another number?**: the same form, so it takes seconds.
+- A number is wrong: pick **Wrong number** as the call's result. That number is greyed out and the
+  next one becomes the main number; the lead is only a Wrong Number lead when none is left. Or use
+  the **...** menu on a number: Make main, Not reachable, Wrong number, Old number, Back in use.
+- The same number on another lead? The form says whose lead it is. You can still save.
+- Only managers remove a number (it is in the **...** menu for them); everyone else marks it Old
+  or Wrong number.
+
+**Where it shows** (`LeadNumbers.vue`, `AddNumberDialog.vue`):
+
+- *Lead page, Details card:* a **Numbers** list: each number with its **Main** tag, label, name and
+  note, a *Not reachable* chip, a **Call** button for that number (MyOperator click-to-call when set
+  up, otherwise the phone's `tel:` link), a WhatsApp link, and the **...** menu. Old and Wrong
+  numbers are greyed and struck through under **Old numbers (n)**. An older TBO Smart, which sends no
+  list, keeps the single Mobile line.
+- *Today's calls:* the row shows the main number and, when the lead has more in use, **+1 more**;
+  tap it to call one of the others. The result is recorded against the number that was dialled
+  (`number` on `record_call_outcome`).
+- *Log call:* a **Number called** choice appears when the lead has several numbers in use.
+- *Calls without a result:* the pending call remembers the number that was dialled
+  (`pending_calls.start_call`'s `number`), and the result sheet sends it with the outcome.
+- *Duplicates:* the Add number form and the lead form ask `find_duplicate_leads`, which now covers
+  every number of every lead (`DuplicateLeadsNotice.vue` shows the matches).
+
+Hub endpoints: `add_lead_number`, `update_lead_number`, `remove_lead_number` (thin proxies; every
+write clears the person's cached reads), and a `number` argument on `log_call` and
+`record_call_outcome`. An ERP site without them answers "needs the latest TBO Smart".
+
 ## Find prospects
 
 TBO sells mainly by phone. Managers and department heads find businesses by industry and district
@@ -592,7 +633,7 @@ Settings → CRM → **Referral (Lead Bank)** (`ReferralSettings.vue`), under th
 `helpdesk/api/leads.py`, thin typed proxies (writes are POST only): `get_options`,
 `list_leads`, `get_overview_page`, `get_overview`, `get_business_overview`, `get_lead_intake`, `get_proposal_money`, `get_lead`, `get_lead_ai`, `refresh_lead_ai`, `apply_ai_stage`,
 `dismiss_ai_stage`, `draft_lead_message`, `log_message_sent`, `create_lead`, `update_lead`,
-`set_stage`, `add_note`, `get_category_counts`, `add_industry`, `bulk_set_lead_category`, `find_duplicate_leads`, `get_stale_leads`, `get_lead_departments`, `save_lead_department`, `set_lead_department_active`, `click_to_call`, `call_recording`, `get_daily_report`, `log_call`, `get_lead_photos`, `upload_lead_photo`, `delete_lead_photo`, `lead_photo`. Find prospects has its own `helpdesk/api/prospects.py`: `estimate_prospect_run`, `start_prospect_run`, `get_prospect_runs`, `get_prospect_run`; Outreach has `helpdesk/api/outreach.py` (see [Outreach](#outreach)). They check
+`set_stage`, `add_note`, `get_category_counts`, `add_industry`, `bulk_set_lead_category`, `find_duplicate_leads`, `get_stale_leads`, `get_lead_departments`, `save_lead_department`, `set_lead_department_active`, `add_lead_number`, `update_lead_number`, `remove_lead_number`, `click_to_call`, `call_recording`, `get_daily_report`, `log_call`, `get_lead_photos`, `upload_lead_photo`, `delete_lead_photo`, `lead_photo`. Find prospects has its own `helpdesk/api/prospects.py`: `estimate_prospect_run`, `start_prospect_run`, `get_prospect_runs`, `get_prospect_run`; Outreach has `helpdesk/api/outreach.py` (see [Outreach](#outreach)). They check
 `can_use_leads`, validate the view and page size, trim notes, and pass `acting_user`. The
 client is `CRMClient.call` in `helpdesk/integrations/crm/client.py`; the call and error
 mapping live in `helpdesk/integrations/crm/leads.py`. The API key and secret never reach the
@@ -1025,6 +1066,10 @@ queue passed through, and the calls without a result (remembered once per lead, 
 by a result from Today's calls or Log call, kept when the result fails, dismissed only with a
 listed reason, forgotten after 3 days, capped at 50). Helpers `bd_options` and
 `clear_pending_calls` in `test_utils.py`.
+`helpdesk/tests/test_lead_numbers.py`: a number posted as the signed-in person with trimmed details, a
+blank number refused, a write clearing the cached reads, removal refused for non-managers, an older
+ERP site, the dialled `number` passed with `log_call` and `record_call_outcome` (none for the main
+number), and a pending call remembering it. Helper `lead_number` in `test_utils.py`.
 `helpdesk/tests/test_lead_bank.py` (the Lead Bank, see [lead-bank.md](lead-bank.md)).
 `helpdesk/tests/test_leads.py` with `test_utils.FakeCRM` (`lead_answers`, `lead_calls`,
 `lead_error`) and `test_utils.enable_leads`: off by default, `acting_user` on every call,

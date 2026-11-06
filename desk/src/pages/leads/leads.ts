@@ -391,10 +391,54 @@ export interface LeadWhatsAppBox {
   hint: string;
 }
 
+export type NumberLabel =
+  | "Mobile"
+  | "Office"
+  | "WhatsApp"
+  | "Decision-maker"
+  | "Other";
+export type NumberStatus = "Active" | "Not reachable" | "Wrong number" | "Old";
+
+/** One contact number of a lead (TBO Smart's hub-leads-api.md §2.24); the main one first. */
+export interface LeadNumber {
+  id: string;
+  number: string;
+  e164: string | null;
+  label: NumberLabel;
+  person: string;
+  designation: string;
+  is_primary: number;
+  status: NumberStatus;
+  note: string;
+  source: string;
+  added_by?: string;
+  added_by_name?: string | null;
+  added_on?: string;
+  tel: string | null;
+  whatsapp: string | null;
+}
+
+/** The labels the number form offers, in the order a caller is likely to need them. */
+export const NUMBER_LABELS: { value: NumberLabel; label: string }[] = [
+  { value: "Mobile", label: __("Mobile") },
+  { value: "Decision-maker", label: __("Decision-maker") },
+  { value: "Office", label: __("Office") },
+  { value: "WhatsApp", label: __("WhatsApp") },
+  { value: "Other", label: __("Other") },
+];
+
+/** Active and Not reachable numbers can still be called; Old and Wrong ones are kept for the record. */
+export function isUsable(n: LeadNumber) {
+  return n.status === "Active" || n.status === "Not reachable";
+}
+
 export interface LeadDetail {
   lead: LeadRow &
     Partial<LeadForm> &
     Record<string, unknown> & {
+      /** every number of the lead; absent from an older TBO Smart */
+      numbers?: LeadNumber[];
+      can_remove_numbers?: boolean;
       /** absent from an older TBO Smart */
       place?: LeadPlace;
       photo_count?: number;
@@ -611,7 +655,8 @@ export function shortAgo(when?: string | null) {
   if (!when) return "";
   const minutes = Math.max(0, dayjs().diff(dayjs(when), "minute"));
   if (minutes < 60) return __("{0}m ago", String(minutes));
-  if (minutes < 60 * 24) return __("{0}h ago", String(Math.floor(minutes / 60)));
+  if (minutes < 60 * 24)
+    return __("{0}h ago", String(Math.floor(minutes / 60)));
   return __("{0}d ago", String(Math.floor(minutes / 60 / 24)));
 }
 

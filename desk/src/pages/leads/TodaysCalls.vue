@@ -419,22 +419,33 @@ const dialing = computed(() =>
   clickToCall.loading ? (clickToCall.params?.name as string) : ""
 );
 
-/** MyOperator rings the person's phone, then the lead; without it the row's tel: link dials. */
-function dial(item: QueueCall) {
-  clickToCall.submit({ name: item.lead });
-  remember(item, "myoperator");
+// the number last dialled for each call, when it was not the main one: the result names it
+const dialledNumbers = new Map<string, string>();
+
+/** MyOperator rings the person's phone, then the lead; without it the row's tel: link dials.
+ * `number` is one of the lead's other numbers (none: the main one). */
+function dial(item: QueueCall, number?: string) {
+  clickToCall.submit({ name: item.lead, number: number || null });
+  remember(item, "myoperator", number);
 }
 
-function dialed(item: QueueCall) {
-  remember(item, "phone");
+function dialed(item: QueueCall, number?: string) {
+  remember(item, "phone", number);
 }
 
 /** A call placed: it waits for its result, and the result sheet follows. */
-function remember(item: QueueCall, via: "phone" | "myoperator") {
+function remember(
+  item: QueueCall,
+  via: "phone" | "myoperator",
+  number?: string
+) {
+  if (number) dialledNumbers.set(item.item, number);
+  else dialledNumbers.delete(item.item);
   startCall({
     lead: item.lead,
     lead_name: item.summary.lead_name || item.summary.name,
-    phone: item.summary.phone,
+    phone: number || item.summary.phone,
+    number: number || null,
     item: item.item,
     via,
   });
@@ -480,6 +491,7 @@ function save(item: QueueCall, value: OutcomeAnswer) {
       outcome: value.outcome,
       note: value.note || null,
       callback_at: value.callback_at,
+      number: dialledNumbers.get(item.item) ?? null,
     },
     {
       onSuccess() {

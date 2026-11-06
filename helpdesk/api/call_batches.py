@@ -86,10 +86,12 @@ def record_call_outcome(
     note: str | None = None,
     callback_at: str | None = None,
     lead: str | None = None,
+    number: str | None = None,
 ) -> dict:
     """The outcome of one call in the queue (`batch_item` is the call's `item`). The ERP
     site logs the call and takes it off the queue. A call back needs a time in the future.
-    `lead` (when known) takes the lead off the person's calls without a result."""
+    `lead` (when known) takes the lead off the person's calls without a result. `number` is
+    the lead's number that was called (default: its main number); a Wrong number marks it."""
     require_leads()
     if outcome not in OUTCOMES:
         frappe.throw(_("Pick how the call went."))
@@ -106,6 +108,7 @@ def record_call_outcome(
         outcome=outcome,
         note=(note or "").strip() or None,
         callback_at=callback_at,
+        number=(number or "").strip() or None,
     )
     if result is None:
         frappe.throw(_(OLDER_ERP), LeadsUnavailableError)

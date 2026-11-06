@@ -4520,6 +4520,24 @@ def queue_call(item: str, lead: str = "LEAD-1", **fields) -> dict:
     }
 
 
+def lead_number(number: str, **fields) -> dict:
+    """One contact number of a lead, as TBO Smart's get_lead and add_lead_number list it
+    (an Active Mobile unless `fields` say otherwise)."""
+    return {
+        "id": f"n-{number}",
+        "number": number,
+        "e164": None,
+        "label": "Mobile",
+        "person": "",
+        "designation": "",
+        "is_primary": 0,
+        "status": "Active",
+        "note": "",
+        "source": "Manual",
+        **fields,
+    }
+
+
 def my_calls(
     pending: tuple[dict, ...] = (),
     overdue: tuple[dict, ...] = (),
