@@ -85,12 +85,33 @@ class TestBDGate(BDCase):
         leads_api.list_leads(view="all", owner="someone@else.example")
         sent = self.calls("list_leads")[-1]
         self.assertEqual(sent["view"], "mine")
-        self.assertIsNone(sent["owner"])
+        self.assertEqual(sent["owner"], BD)
 
-    def test_their_other_views_are_kept(self):
+    def test_their_other_views_are_kept_but_only_their_own_leads(self):
         frappe.set_user(BD)
-        leads_api.list_leads(view="follow_up")
-        self.assertEqual(self.calls("list_leads")[-1]["view"], "follow_up")
+        leads_api.list_leads(view="follow_up", owner="someone@else.example")
+        sent = self.calls("list_leads")[-1]
+        self.assertEqual((sent["view"], sent["owner"]), ("follow_up", BD))
+
+    def test_a_bd_opens_only_their_own_lead(self):
+        self.crm.lead_answers["get_lead"] = {
+            "lead": {"name": "LEAD-1", "lead_owner": "someone@else.example"}
+        }
+        frappe.set_user(BD)
+        with self.assertRaises(frappe.PermissionError):
+            leads_api.get_lead("LEAD-1")
+        self.crm.lead_answers["get_lead"] = {
+            "lead": {"name": "LEAD-1", "lead_owner": BD}
+        }
+        self.assertEqual(leads_api.get_lead("LEAD-1")["lead"]["name"], "LEAD-1")
+
+    def test_a_head_opens_a_lead_of_their_team(self):
+        self.crm.lead_answers["get_lead"] = {
+            "lead": {"name": "LEAD-1", "lead_owner": "someone@else.example"}
+        }
+        frappe.set_user(HEAD)
+        self.head_options()
+        self.assertEqual(leads_api.get_lead("LEAD-1")["lead"]["name"], "LEAD-1")
 
     def test_a_manager_and_a_head_keep_the_all_view(self):
         frappe.set_user(MANAGER)

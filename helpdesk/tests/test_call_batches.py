@@ -324,3 +324,41 @@ class TestCallPlans(FrappeTestCase):
             "GrowthX",
             ["shahana@tbo.example"],
         )
+
+    def test_a_departments_leads_are_read_live_for_one_member_or_the_pool(self):
+        self.crm.lead_answers["get_department_leads"] = {
+            "rows": [],
+            "total": 0,
+            "products": {},
+        }
+        api.get_department_leads("GrowthX", " shahana@tbo.example ", "PhoebiX")
+        api.get_department_leads("GrowthX", page_length=1000)
+        first, second = [params for _post, params in self.calls("get_department_leads")]
+        self.assertEqual(first["owner"], "shahana@tbo.example")
+        self.assertEqual(first["product"], "PhoebiX")
+        self.assertIsNone(second["owner"])
+        self.assertEqual(second["page_length"], 100)
+
+    def test_picked_leads_or_a_number_are_assigned(self):
+        self.crm.lead_answers["assign_leads"] = {"assigned": 2, "skipped": []}
+        api.assign_leads(
+            "GrowthX", "shahana@tbo.example", frappe.as_json(["L-1", "L-2"])
+        )
+        api.assign_leads("GrowthX", "shahana@tbo.example", count="25", product="BillaX")
+        picked, by_number = [params for post, params in self.calls("assign_leads")]
+        self.assertEqual((picked["leads"], picked["count"]), (["L-1", "L-2"], 0))
+        self.assertEqual(
+            (by_number["leads"], by_number["count"], by_number["product"]),
+            (None, 25, "BillaX"),
+        )
+        self.assertRaises(
+            frappe.ValidationError, api.assign_leads, "GrowthX", "x@y.example"
+        )
+
+    def test_leads_go_back_to_the_pool(self):
+        self.crm.lead_answers["unassign_leads"] = {"unassigned": 1, "skipped": []}
+        self.assertEqual(api.unassign_leads("GrowthX", ["L-1"])["unassigned"], 1)
+        ((post, params),) = self.calls("unassign_leads")
+        self.assertTrue(post)
+        self.assertEqual(params["leads"], ["L-1"])
+        self.assertRaises(frappe.ValidationError, api.unassign_leads, "GrowthX", "[]")

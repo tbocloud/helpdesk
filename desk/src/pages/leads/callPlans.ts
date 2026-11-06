@@ -22,6 +22,26 @@ export interface PlanMember {
   has_plan: boolean;
   /** today's batches: calls handed and called, retries not counted */
   today: { size: number; called: number };
+  /** open leads they own in the department */
+  leads: number;
+}
+
+/** One open lead of a department, as the hand-out list shows it. */
+export interface DepartmentLead {
+  name: string;
+  lead_name?: string;
+  company_name?: string;
+  product: string | null;
+  stage?: string;
+  temperature?: string;
+  phone?: string;
+}
+
+export interface DepartmentLeads {
+  rows: DepartmentLead[];
+  total: number;
+  /** open leads per product ("" for none), whatever the product and search */
+  products: Record<string, number>;
 }
 
 export interface PlanDepartment {
