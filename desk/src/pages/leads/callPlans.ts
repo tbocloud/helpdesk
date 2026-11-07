@@ -70,3 +70,13 @@ export function leadsReady(department: PlanDepartment, product: string | null) {
   if (product) return counts[product] ?? 0;
   return Object.values(counts).reduce((sum, count) => sum + count, 0);
 }
+
+/** Why leads waiting in the pool will not be handed to anyone, or null when someone gets them. */
+export function poolStuck(department: PlanDepartment): string | null {
+  if (!leadsReady(department, null)) return null;
+  if (!department.pull_unassigned) return "off";
+  const nobody = department.members.every(
+    (m) => !Object.values(m.sizes).some((calls) => calls > 0)
+  );
+  return nobody ? "zero" : null;
+}
