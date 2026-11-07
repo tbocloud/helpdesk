@@ -348,8 +348,9 @@ export const DEFAULT_RULES: CallRules = {
   campaign_district: "",
   campaign_product: "",
   call_slots: [
-    { label: "Morning", start_time: "10:00", end_time: "13:00", size: 50 },
-    { label: "Afternoon", start_time: "14:00", end_time: "18:00", size: 50 },
+    { label: "Morning", start_time: "10:00", end_time: "13:00", size: 40 },
+    { label: "Afternoon", start_time: "14:00", end_time: "16:00", size: 30 },
+    { label: "Evening", start_time: "16:00", end_time: "18:00", size: 30 },
   ],
   member_caps: {},
 };
