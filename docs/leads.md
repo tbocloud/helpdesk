@@ -58,6 +58,7 @@ user exists there with a sales role, applies what they may see, and records writ
 | `bulk_set_lead_category` | POST | `leads, values` | `{updated, skipped}`; managers only (a department head may set `product`) |
 | `get_overview` | GET | `period, from_date, to_date, owner` | the Overview's figures (TBO Smart's `hub-leads-api.md` §2.4) |
 | `get_lead_intake` | GET | `from_date, to_date` (the hub sends yesterday and today) | new leads taken each day by owner, imports left out, and the scope's salespeople (§2.4.1) |
+| `get_overview_page` | GET | `period, from_date, to_date, owner` | the Overview, its money, the intake and the analysis in one request (see *How the Overview loads*) |
 | `get_proposal_money` | GET | `period, from_date, to_date, owner` | proposals sent, won, advances and every payment split still to collect (§2.8) |
 | `get_daily_report` | GET | `date, owner` | each salesperson's day and week to date (§2.5.1) |
 | `log_call` | POST | `lead, outcome, note, callback_at` | `{name, status, outcomes, stage}` (§2.7, §2.16) |
@@ -641,9 +642,10 @@ browser.
 
 ### How the Overview loads
 
-One request: `get_overview_page` reads the overview, the proposals and money and the intake
-from the ERP site one after another and answers `{overview, money, intake, errors}`. Money and
-intake are optional: one that fails (or an ERP site too old to have it) leaves the overview
+One request: `get_overview_page` reads the overview, the proposals and money, the intake and the
+calling/quality analysis (`get_lead_analysis`, TBO Smart `hub-leads-api.md` §2.25) from the ERP
+site one after another and answers `{overview, money, intake, analysis, errors}`. Money, intake
+and analysis are optional: one that fails (or an ERP site too old to have it) leaves the overview
 whole, with its message in `errors` for the section's own error state. Only a failed overview
 fails the page. The list view asks `get_lead_intake` on its own; `get_overview`,
 `get_proposal_money` and `get_lead_intake` stay as they were.
@@ -728,6 +730,25 @@ doesn't show without its fields. The hub can be deployed before TBO Smart.
     date. A failed read shows an inline error with *Try again*, never a toast.
   - Money is formatted by `money()` (`components/invoicing/invoices.ts`): rupees group the
     Indian way (₹1,55,000) whatever the browser's language, without paise in summaries.
+  - **Calling performance** and **Lead quality** (`LeadsAnalysis.vue`, at the bottom, part of
+    the same request; hidden while the ERP site is older than TBO Smart v1.25, an inline error
+    with *Try again* if it fails). How to read it:
+    - *Calling performance*, one row per person, most called first. **Given**: leads on their
+      daily call lists in the period. **Called**: those they logged an answer for. **Done**:
+      called out of given. **Reached**: the person at the other end picked up (Connected,
+      Call back or Not interested). **Reach rate**: reached out of called. **Overdue**: left
+      uncalled when their list ended (red when above 0). **Calls** and **Missed** are the call
+      log (MyOperator and logged calls), **Talk time** the time on answered calls. A
+      salesperson sees their own row, a team lead the team's, a manager everyone's.
+    - *Lead quality*: the leads that *came in* during the period, grouped by Source, Industry,
+      District, Department or Product (the buttons above the table; a grouping the ERP site
+      lacks is not offered). **Called**, **Wrong number** and **Not interested** are shares of
+      the leads; **Picked up** is the share of the called leads who answered; **Moved on** is
+      how many reached a meeting, a proposal or a win; **Won** how many are won now.
+      The line above the table names the group that picks up most and the one that picks up
+      least, and marks them in the list; it appears only when at least two groups have 10 or
+      more leads called, so a few calls never name a winner. Use it to decide where to spend
+      calls: a source with a high Picked up and many Moved on is worth more of the list.
   - **Your plan for today** (with **AI runs leads** on the ERP site, TBO Smart Settings): the
     person's follow-ups due, Call today and hot leads, each with the AI's next step and its
     day; a manager who picks an owner sees theirs. Its header counts the open leads the AI
