@@ -94,11 +94,14 @@ in `useNavigation.ts`, state in `stores/sidebar.ts`).
   a dot per view; each view keeps its options menu. Its chevron is `aria-expanded`.
 - **Deep links:** the area and item for the open page are selected on every navigation, and
   detail pages (a ticket, a project tab, a lead) keep their list page highlighted (`also` in
-  `navigation.ts`). Choosing another rail icon by hand sticks until the next navigation. An
-  area with a single page goes straight to it.
+  `navigation.ts`). On a desktop, choosing another rail icon opens that area's first page, so
+  a click always changes the screen (with the panel folded to icons, swapping only the links
+  looked like nothing happened). On a phone the drawer lists the area's pages instead, and only
+  an area with a single page goes straight to it. The rail icon of the area already open only
+  shows its pages.
 - **Never collapses by itself.** The panel closes only when the person presses the button at
   the top of the rail (aria-expanded), not on navigation, on pointer leave or when the window
-  is resized on desktop. It defaults to open, and picking a rail icon reopens a closed panel.
+  is resized on desktop. It defaults to open; picking a rail icon leaves it open or folded as it was.
   Trees stay as the person left them and one opening never closes another. The choice is kept
   per person in localStorage (`nav_panel_open:<user>`, `nav_trees:<user>`); `useStorage`
   falls back to memory when storage is blocked.
