@@ -426,6 +426,21 @@ def business_range(period: str, from_date: str | None, to_date: str | None) -> t
     return getdate(f"{year}-{FY_START_MONTH:02d}-01"), now
 
 
+def read_lead_analysis(period, from_date, to_date, owner, fresh) -> dict:
+    """The Overview's Calling performance and Lead quality. `available` is false while
+    the ERP site's TBO Smart is older than this."""
+    when = erp_period(period, from_date, to_date)
+    result = cached_read(
+        "analysis",
+        {**when, "owner": owner or None},
+        READ_TTL,
+        fresh,
+        lambda: call_if_deployed("get_lead_analysis", **when, owner=owner or None),
+        keep=lambda answer: answer is not None,
+    )
+    return {**result, "available": True} if result is not None else {"available": False}
+
+
 @frappe.whitelist()
 def get_overview_page(
     period: str = "month",
@@ -434,10 +449,10 @@ def get_overview_page(
     owner: str | None = None,
     fresh: int | str = 0,
 ) -> dict:
-    """Everything the Overview shows, in one request: `overview`, `money` and `intake`.
-    The ERP site shares the hub's worker pool, so the reads go one after another here
-    instead of as parallel requests that wait on each other. Money and intake are
-    optional: one that fails leaves the overview whole and says why in `errors`."""
+    """Everything the Overview shows, in one request: `overview`, `money`, `intake` and
+    `analysis`. The ERP site shares the hub's worker pool, so the reads go one after
+    another here instead of as parallel requests that wait on each other. The last three
+    are optional: one that fails leaves the overview whole and says why in `errors`."""
     require_leads()
     refuse_bd()
     check_period(period, from_date, to_date)
@@ -445,6 +460,7 @@ def get_overview_page(
         "overview": read_overview(period, from_date, to_date, owner, fresh),
         "money": None,
         "intake": None,
+        "analysis": None,
         "errors": {},
     }
     for part, read in (
@@ -453,6 +469,10 @@ def get_overview_page(
             lambda: read_proposal_money(period, from_date, to_date, owner, fresh),
         ),
         ("intake", lambda: read_lead_intake(fresh)),
+        (
+            "analysis",
+            lambda: read_lead_analysis(period, from_date, to_date, owner, fresh),
+        ),
     ):
         try:
             page[part] = read()

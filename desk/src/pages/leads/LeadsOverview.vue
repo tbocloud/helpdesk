@@ -594,6 +594,15 @@
           </ul>
         </section>
       </div>
+
+      <!-- how well people call and which leads pick up; hidden until the ERP site has it -->
+      <LeadsAnalysis
+        v-if="analysis?.available || analysisError"
+        :analysis="analysis ?? undefined"
+        :error="analysisError"
+        :loading="overviewPage.loading"
+        @retry="refresh()"
+      />
     </template>
   </div>
 </template>
@@ -624,8 +633,10 @@ import LucidePhone from "~icons/lucide/phone";
 import LucideTrophy from "~icons/lucide/trophy";
 import LucideUserPlus from "~icons/lucide/user-plus";
 import LucideUsers from "~icons/lucide/users";
+import LeadsAnalysis from "./LeadsAnalysis.vue";
 import LeadsMoney from "./LeadsMoney.vue";
 import type {
+  LeadAnalysis,
   LeadIntake,
   LeadMetric,
   LeadOverview,
@@ -788,6 +799,13 @@ const proposalMoney = computed(
 );
 const moneyError = computed(() => {
   const message = overviewPage.data?.errors?.money;
+  return message ? { message } : undefined;
+});
+const analysis = computed(
+  () => overviewPage.data?.analysis as LeadAnalysis | null | undefined
+);
+const analysisError = computed(() => {
+  const message = overviewPage.data?.errors?.analysis;
   return message ? { message } : undefined;
 });
 const t = computed(() => data.value!.totals);

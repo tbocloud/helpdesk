@@ -1052,13 +1052,66 @@ export interface ProposalMoney {
   splits_total?: number;
 }
 
-/** helpdesk.api.leads.get_overview_page: the Overview, its money and the intake in one
- * request; a part that failed is null with its message in `errors`. */
+export type QualityGroup =
+  | "source"
+  | "industry"
+  | "district"
+  | "department"
+  | "product";
+
+export interface CallingRow {
+  user: string;
+  full_name: string;
+  given: number;
+  called: number;
+  /** % of the leads handed in batches that were called */
+  completion: number;
+  reached: number;
+  /** % of the leads called that picked up */
+  reach_rate: number;
+  overdue: number;
+  calls: number;
+  missed: number;
+  talk_seconds: number;
+}
+
+export interface QualityRow {
+  /** null: the lead has no value for it */
+  value: string | null;
+  leads: number;
+  called: number;
+  called_rate: number;
+  reached: number;
+  reach_rate: number;
+  wrong_rate: number;
+  not_interested_rate: number;
+  moved_on: number;
+  moved_rate: number;
+  won: number;
+}
+
+/** helpdesk.api.leads.get_overview_page's `analysis`: the Overview's Calling performance
+ * and Lead quality. `available` is false while the ERP site's TBO Smart is older. */
+export interface LeadAnalysis {
+  available: boolean;
+  min_called?: number;
+  calling?: CallingRow[];
+  quality?: Partial<
+    Record<
+      QualityGroup,
+      { rows: QualityRow[]; best: string | null; worst: string | null }
+    >
+  >;
+}
+
+/** helpdesk.api.leads.get_overview_page: the Overview, its money, the intake and the
+ * analysis in one request; a part that failed is null with its message in `errors`. */
 export interface OverviewPage {
   overview: LeadOverview;
   money: ProposalMoney | null;
   intake: LeadIntake | null;
-  errors: { money?: string; intake?: string };
+  analysis: LeadAnalysis | null;
+  errors: { money?: string; intake?: string; analysis?: string };
 }
 
 export type BusinessPeriod =

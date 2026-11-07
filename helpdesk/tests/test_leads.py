@@ -232,10 +232,15 @@ class TestLeads(FrappeTestCase):
         )
         self.crm.lead_answers["get_lead_intake"] = older
         self.crm.lead_answers["get_proposal_money"] = older
+        self.crm.lead_answers["get_lead_analysis"] = older
         self.as_bde()
         frappe.clear_messages()
         self.assertEqual(leads_api.get_lead_intake(), {"available": False})
         self.assertEqual(leads_api.get_proposal_money(), {"available": False})
+        self.crm.lead_answers["get_overview"] = {"totals": {}}
+        self.assertEqual(
+            leads_api.get_overview_page()["analysis"], {"available": False}
+        )
         # nothing for a toast: the parts just stay out
         self.assertEqual(frappe.message_log, [])
         # anything else is still an error the page shows
@@ -247,6 +252,7 @@ class TestLeads(FrappeTestCase):
         self.crm.lead_answers["get_overview"] = {"totals": {"new": 3}}
         self.crm.lead_answers["get_proposal_money"] = {"totals": {"to_collect": 5}}
         self.crm.lead_answers["get_lead_intake"] = {"days": [], "people": []}
+        self.crm.lead_answers["get_lead_analysis"] = {"calling": [], "quality": {}}
         self.as_bde()
         page = leads_api.get_overview_page(period="week", owner=BDE)
 
@@ -257,8 +263,15 @@ class TestLeads(FrappeTestCase):
         self.assertEqual(page["errors"], {})
         self.assertEqual(
             [m for m, _p, _q in self.crm.lead_calls],
-            ["get_overview", "get_proposal_money", "get_lead_intake"],
+            [
+                "get_overview",
+                "get_proposal_money",
+                "get_lead_intake",
+                "get_lead_analysis",
+            ],
         )
+        self.assertTrue(page["analysis"]["available"])
+        self.assertEqual(self.crm.lead_calls[-1][2]["owner"], BDE)
         with self.assertRaises(frappe.ValidationError):
             leads_api.get_overview_page(period="custom", from_date="2026-10-01")
 
