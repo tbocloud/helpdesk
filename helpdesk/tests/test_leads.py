@@ -302,6 +302,7 @@ class TestLeads(FrappeTestCase):
         self.crm.lead_answers["get_options"] = {"stages": []}
         self.crm.lead_answers["get_proposal_money"] = {"totals": {}}
         self.crm.lead_answers["get_lead_intake"] = {"days": [], "people": []}
+        self.crm.lead_answers["get_lead_analysis"] = {"calling": [], "quality": {}}
         # the options also ask whether calls can be logged, which is kept too
         self.crm.lead_answers["get_daily_report"] = {"people": []}
         self.as_bde()
