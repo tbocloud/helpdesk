@@ -115,19 +115,19 @@ const showFollowUps = computed(
   () => !isCustomerPortal.value && !authStore.isSalesEmployee
 );
 
-// An area with a single page goes straight to it; otherwise the panel lists its
-// pages. The panel stays as the person left it, open or folded to icons.
+// On a desktop another area opens its first page, so a click always changes the
+// screen (only swapping the panel's links went unnoticed with the panel folded to
+// icons). On a phone the drawer lists the area's pages to pick from, so only an
+// area with a single page opens it. The area already open only shows its pages.
+// The panel stays as the person left it, open or folded to icons.
 function selectArea(areaId: string) {
   sidebarStore.selectedAreaId = areaId;
+  if (active.value?.areaId === areaId) return;
   const area = areas.value.find((a) => a.id === areaId);
   const pages = area?.groups.flatMap((g) => g.items) || [];
-  const treeCount = area?.groups.reduce(
-    (n, g) => n + (g.trees?.length || 0),
-    0
-  );
-  if (pages.length === 1 && !treeCount && active.value?.areaId !== areaId) {
-    router.push({ name: pages[0].to });
-  }
+  const hasTrees = area?.groups.some((g) => g.trees?.length);
+  if (!pages.length || (props.mobile && (pages.length > 1 || hasTrees))) return;
+  router.push({ name: pages[0].to, query: pages[0].query });
 }
 
 // The Notifications panel's click-outside handler ignores #notifications-btn,
