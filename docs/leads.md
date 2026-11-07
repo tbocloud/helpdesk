@@ -298,7 +298,7 @@ Code: `helpdesk/api/call_batches.py` (proxies; `report_lines` for the 6 pm text)
 
 ## Assign leads
 
-The department's slots hand every member the same number (Morning 50, Afternoon 50). On
+The department's slots hand every member the same number (by default Morning 40, Afternoon 30, Evening 30). On
 **Assign leads** (Sales, Team; `/leads/assign`, `AssignLeads.vue`) a manager or department head
 plans each person instead: the **product** they are handed and the **calls per slot**. The ERP
 site keeps the plan on the member's row and the call batches follow it from the next slot
@@ -354,7 +354,7 @@ Code: `helpdesk/api/call_batches.py` (`get_call_plans`, `save_call_plan`; a 403 
 
 1. Open **Sales → Assign leads** and pick the **Department**. The list shows its people.
 2. Tick the people (or the box at the top for everyone).
-3. Choose the **Product** and type the calls for each slot, for example Morning 50, Afternoon 50.
+3. Choose the **Product** and type the calls for each slot, for example Morning 40, Afternoon 30, Evening 30.
 4. Check the line under it: if fewer unassigned leads are ready than you plan, the batches give
    what there is.
 5. Press **Assign leads**. It counts from the next slot.
