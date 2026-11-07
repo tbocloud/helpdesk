@@ -98,6 +98,37 @@
           />
 
           <div
+            v-if="stuck"
+            class="flex flex-wrap items-center gap-3 rounded-lg border border-outline-gray-2 bg-warning-soft px-4 py-3"
+            role="alert"
+          >
+            <LucideTriangleAlert
+              class="size-4 shrink-0 text-warning"
+              aria-hidden="true"
+            />
+            <p class="min-w-0 flex-1 text-sm text-ink-gray-9">
+              {{
+                stuck === "zero"
+                  ? __(
+                      "No one in {0} gets calls from the pool: everyone's plan is 0. {1} leads are waiting.",
+                      current.department,
+                      String(leadsReady(current, null))
+                    )
+                  : __(
+                      "{0} doesn't hand out pool leads, so the {1} unassigned leads wait. Turn it on in Settings, CRM, Lead departments.",
+                      current.department,
+                      String(leadsReady(current, null))
+                    )
+              }}
+            </p>
+            <Button
+              v-if="stuck === 'zero'"
+              :label="__('Set the plan')"
+              @click="pickAll(true)"
+            />
+          </div>
+
+          <div
             class="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start"
           >
             <!-- the people and what each is handed now -->
@@ -429,6 +460,7 @@ import LucideUsers from "~icons/lucide/users";
 import MemberLeadsDialog from "./MemberLeadsDialog.vue";
 import {
   leadsReady,
+  poolStuck,
   type CallPlans,
   type PlanDepartment,
   type PlanMember,
@@ -460,6 +492,8 @@ const current = computed<PlanDepartment | undefined>(() => {
     departments[0]
   );
 });
+
+const stuck = computed(() => (current.value ? poolStuck(current.value) : null));
 
 const departmentOptions = computed(() =>
   (plans.data?.departments ?? []).map((d) => ({

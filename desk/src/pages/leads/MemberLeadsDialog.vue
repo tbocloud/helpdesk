@@ -86,6 +86,14 @@
                 ? __("{0} picked", String(picked.length))
                 : __("{0} leads", String(leads.data?.total ?? 0))
             }}
+            <template v-if="!picked.length">
+              &middot;
+              {{
+                view === "theirs" && member
+                  ? __("owned by {0}", member.full_name)
+                  : __("no owner yet")
+              }}
+            </template>
           </span>
         </div>
 
@@ -201,16 +209,17 @@
           />
           <Button
             class="sm:ml-auto"
-            :label="__('Unassign ({0})', String(picked.length))"
+            variant="ghost"
+            :label="__('Send {0} back to the pool', String(picked.length))"
             :loading="busy === 'unassign'"
             :disabled="!!busy"
-            @click="unassign"
+            @click="confirmPool = true"
           />
         </div>
         <Button
           v-else-if="member"
           variant="solid"
-          :label="__('Assign {0} to {1}', String(picked.length), firstName)"
+          :label="__('Give {0} to {1}', String(picked.length), firstName)"
           :loading="busy === 'assign'"
           :disabled="!!busy"
           @click="assignPicked"
@@ -218,7 +227,49 @@
       </div>
 
       <ErrorMessage v-if="actionError" :message="actionError" role="alert" />
+      <p
+        v-else-if="resultText"
+        class="rounded-lg bg-success-soft px-3 py-2 text-sm text-ink-gray-9"
+        role="status"
+      >
+        {{ resultText }}
+      </p>
     </div>
+  </Dialog>
+
+  <!-- sending leads back takes them from the person, notes included: ask first -->
+  <Dialog
+    v-model="confirmPool"
+    :options="{ title: __('Send these leads back to the pool?') }"
+  >
+    <template #body-content>
+      <p class="text-p-base text-ink-gray-8">
+        {{
+          member
+            ? __(
+                "{0} leads go back to the pool. {1} will no longer see them or their notes. They go to the next person's call batch.",
+                String(picked.length),
+                member.full_name
+              )
+            : __("{0} leads go back to the pool.", String(picked.length))
+        }}
+      </p>
+    </template>
+    <template #actions>
+      <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <Button
+          variant="subtle"
+          theme="red"
+          :label="__('Send back to the pool')"
+          @click="unassign"
+        />
+        <Button
+          variant="solid"
+          :label="__('Keep them with {0}', firstName)"
+          @click="confirmPool = false"
+        />
+      </div>
+    </template>
   </Dialog>
 </template>
 
@@ -271,6 +322,8 @@ const give = reactive({ count: 25, product: "" });
 const act = reactive({ product: "", to: "" });
 const busy = ref<"" | "give" | "assign" | "move" | "unassign" | "product">("");
 const actionError = ref("");
+const resultText = ref("");
+const confirmPool = ref(false);
 
 const firstName = computed(
   () => props.member?.full_name.split(" ")[0] ?? __("them")
@@ -327,6 +380,7 @@ watch(
     filters.product = "";
     filters.search = "";
     actionError.value = "";
+    resultText.value = "";
     give.product = props.member?.product ?? "";
     load();
   },
@@ -398,10 +452,12 @@ async function run(
   done: (result: any) => string
 ) {
   actionError.value = "";
+  resultText.value = "";
   busy.value = kind;
   try {
     const result = await call(method, params);
-    toast.success(done(result));
+    resultText.value = done(result);
+    toast.success(resultText.value);
     load();
     emit("changed");
   } catch (error) {
@@ -470,12 +526,14 @@ function move() {
 }
 
 function unassign() {
+  confirmPool.value = false;
   run(
     "unassign",
     "helpdesk.api.call_batches.unassign_leads",
     { department: props.department.department, leads: picked.value },
     (r) =>
-      __("{0} leads back with nobody.", String(r.unassigned)) + skippedNote(r)
+      __("{0} leads are now in the pool.", String(r.unassigned)) +
+      skippedNote(r)
   );
 }
 

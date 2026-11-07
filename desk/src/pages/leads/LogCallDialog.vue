@@ -148,7 +148,7 @@ watch(
 );
 
 function submit() {
-  if (!outcome.value) return;
+  if (!outcome.value || logCall.loading) return;
   if (
     outcome.value === "Call back" &&
     (!callbackAt.value || dayjs(callbackAt.value).isBefore(dayjs()))
