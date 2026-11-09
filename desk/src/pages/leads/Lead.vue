@@ -102,6 +102,11 @@
             :can-write="!!lead?.can_write"
           />
           <div class="flex min-w-0 flex-col gap-4">
+            <LeadDuplicates
+              v-if="lead?.can_merge"
+              :lead="lead"
+              @merged="merged"
+            />
             <section
               class="rounded-xl border border-outline-gray-2 bg-surface-base"
               :aria-label="__('Details')"
@@ -404,6 +409,7 @@ import {
   toast,
 } from "frappe-ui";
 import { computed, ref, useId, watch, type Component } from "vue";
+import { useRouter } from "vue-router";
 import LucideArrowRight from "~icons/lucide/arrow-right";
 import LucideBot from "~icons/lucide/bot";
 import LucideCalendar from "~icons/lucide/calendar";
@@ -430,6 +436,7 @@ import LeadPlace from "./LeadPlace.vue";
 import LeadWhatsApp from "./LeadWhatsApp.vue";
 import LeadWhyCall from "./LeadWhyCall.vue";
 import LeadDocuments from "./LeadDocuments.vue";
+import LeadDuplicates from "./LeadDuplicates.vue";
 import LogCallDialog from "./LogCallDialog.vue";
 import LeadProposals from "./LeadProposals.vue";
 import LeadQuotations from "./LeadQuotations.vue";
@@ -487,6 +494,17 @@ function timelineIcon(entry: LeadTimelineEntry): Component {
   if (entry.kind === "whatsapp" && entry.direction === "outgoing")
     return LucideMessageCircleReply;
   return TIMELINE_ICONS[entry.kind] || LucideMessageSquare;
+}
+
+const router = useRouter();
+
+/** After a merge the lead that was kept is the one to see (the merged one is gone). */
+function merged(keep: string) {
+  if (keep !== props.leadId) {
+    router.replace({ name: "Lead", params: { leadId: keep } });
+  } else {
+    detail.reload();
+  }
 }
 
 const showEdit = ref(false);

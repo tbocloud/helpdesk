@@ -75,6 +75,8 @@ user exists there with a sales role, applies what they may see, and records writ
 | `set_lead_department_active` | POST | `name, active` | the department |
 | `get_lead` | GET | `name` | `{lead: {...}, timeline: [...], quotations: [...], proposals: [...], allowed_stages: [...]}` |
 | `find_duplicate_leads` | GET | `email, phone, company, exclude` | `[{name, lead_name, company_name, email_id, mobile_no, lead_owner, owner_name, tbo_stage, matched_on: ["email" / "phone" / "company"]}]`, only leads the person may see |
+| `get_merge_preview` | GET | `first, second` | `{leads: [Summary, Summary]}`: both leads' name, company, email, numbers, stage, owner, creation and what sits on each (`counts`, `new_numbers`) |
+| `merge_leads` | POST | `keep, merge` | the kept lead as `get_lead`; the other lead is deleted. A Sales Manager, System Manager or the head of the leads' department |
 | `get_stale_leads` | GET | `days` | `[{name, lead_name, company_name, lead_owner, tbo_department, tbo_stage, last_activity_on, idle_days}]` idle for `days` or more, scoped to the acting user's visibility |
 | `create_lead` | POST | `data, allow_duplicate` (1 only after the person confirmed) | the lead (at least `name`); an email or phone another lead has is refused with DuplicateEntryError "Possible duplicate of <lead> (<owner>)" unless `allow_duplicate` |
 | `update_lead` | POST | `name, data` | the lead |
@@ -472,6 +474,37 @@ Hub endpoints: `add_lead_number`, `update_lead_number`, `remove_lead_number` (th
 write clears the person's cached reads), and a `number` argument on `log_call` and
 `record_call_outcome`. An ERP site without them answers "needs the latest TBO Smart".
 
+## Merge duplicate leads
+
+The same person sometimes comes in twice (two companies, one phone). A manager or the head of the
+lead's department merges them into one; the ERP side moves everything
+(`hub-leads-api.md` §2.26 in TBO Smart).
+
+### How to use (managers and heads)
+
+1. Open a lead. When another lead has the same email or number, a box says **This may be the same
+   person as another lead**, with a **Merge** button next to it. (Not seeing it means no lead
+   matches, or you are not a manager or head.)
+   From the leads list: **Select leads**, tick exactly two, **Merge**.
+2. The dialog shows both leads side by side. The one further along in the pipeline (else the
+   older one) is ticked **Keep this one**; tap the other to keep that instead.
+3. It says what moves, in words: "12 notes, 4 calls, 2 numbers will move to Ashraf." Check it,
+   then **Merge into Ashraf**. The other lead is removed and cannot be brought back; if you were
+   looking at it, the page opens the kept lead.
+
+The kept lead's timeline records "Merged LD-… (Ashraf, Amana UAE) into this lead by <you>".
+Numbers the kept lead lacks are added (never as the main number), empty fields are filled from
+the merged lead, and nothing the kept lead already has is overwritten. Two leads of different
+departments are merged by a manager only; the kept lead's department stays.
+
+### How it is built
+
+`LeadDuplicates.vue` (on `Lead.vue`, only while `lead.can_merge`) asks `find_duplicate_leads` for
+the lead's email and up to three numbers and lists the matches with `DuplicateLeadsNotice.vue`
+(its `can-merge` prop adds the Merge button). `MergeLeadsDialog.vue` reads `get_merge_preview`,
+picks the lead to keep (further stage, else older), and posts `merge_leads`; the list's Select
+mode opens the same dialog for two ticked leads. Hub tests: `helpdesk/tests/test_lead_merge.py`.
+
 ## Find prospects
 
 TBO sells mainly by phone. Managers and department heads find businesses by industry and district
@@ -644,7 +677,7 @@ Settings → CRM → **Referral (Lead Bank)** (`ReferralSettings.vue`), under th
 `helpdesk/api/leads.py`, thin typed proxies (writes are POST only): `get_options`,
 `list_leads`, `get_overview_page`, `get_overview`, `get_business_overview`, `get_lead_intake`, `get_proposal_money`, `get_lead`, `get_lead_ai`, `refresh_lead_ai`, `apply_ai_stage`,
 `dismiss_ai_stage`, `draft_lead_message`, `log_message_sent`, `create_lead`, `update_lead`,
-`set_stage`, `add_note`, `get_category_counts`, `add_industry`, `bulk_set_lead_category`, `find_duplicate_leads`, `get_stale_leads`, `get_lead_departments`, `save_lead_department`, `set_lead_department_active`, `add_lead_number`, `update_lead_number`, `remove_lead_number`, `click_to_call`, `call_recording`, `get_daily_report`, `log_call`, `get_lead_photos`, `upload_lead_photo`, `delete_lead_photo`, `lead_photo`. Find prospects has its own `helpdesk/api/prospects.py`: `estimate_prospect_run`, `start_prospect_run`, `get_prospect_runs`, `get_prospect_run`; Outreach has `helpdesk/api/outreach.py` (see [Outreach](#outreach)). They check
+`set_stage`, `add_note`, `get_category_counts`, `add_industry`, `bulk_set_lead_category`, `find_duplicate_leads`, `get_stale_leads`, `get_lead_departments`, `save_lead_department`, `set_lead_department_active`, `add_lead_number`, `update_lead_number`, `remove_lead_number`, `get_merge_preview`, `merge_leads`, `click_to_call`, `call_recording`, `get_daily_report`, `log_call`, `get_lead_photos`, `upload_lead_photo`, `delete_lead_photo`, `lead_photo`. Find prospects has its own `helpdesk/api/prospects.py`: `estimate_prospect_run`, `start_prospect_run`, `get_prospect_runs`, `get_prospect_run`; Outreach has `helpdesk/api/outreach.py` (see [Outreach](#outreach)). They check
 `can_use_leads`, validate the view and page size, trim notes, and pass `acting_user`. The
 client is `CRMClient.call` in `helpdesk/integrations/crm/client.py`; the call and error
 mapping live in `helpdesk/integrations/crm/leads.py`. The API key and secret never reach the
