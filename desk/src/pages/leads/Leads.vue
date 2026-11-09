@@ -205,6 +205,19 @@
               />
               <Button
                 v-if="selecting"
+                :label="__('Merge')"
+                :disabled="selected.size !== 2"
+                :tooltip="
+                  selected.size === 2 ? '' : __('Pick the two leads to merge.')
+                "
+                @click="showMerge = true"
+              >
+                <template #prefix>
+                  <LucideMerge class="size-4" aria-hidden="true" />
+                </template>
+              </Button>
+              <Button
+                v-if="selecting"
                 variant="solid"
                 :label="__('Set category')"
                 :disabled="!selected.size"
@@ -529,6 +542,13 @@
     </div>
 
     <LeadFormDialog v-model:open="showNew" @saved="openLead" />
+    <MergeLeadsDialog
+      v-if="selected.size === 2"
+      v-model:open="showMerge"
+      :first="[...selected][0]"
+      :second="[...selected][1]"
+      @merged="mergedLeads"
+    />
     <LeadSetCategoryDialog
       v-model:open="showSet"
       :leads="[...selected]"
@@ -569,6 +589,7 @@ import LucidePlus from "~icons/lucide/plus";
 import LucideRadar from "~icons/lucide/radar";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideListChecks from "~icons/lucide/list-checks";
+import LucideMerge from "~icons/lucide/merge";
 import LucideSearch from "~icons/lucide/search";
 import LucideSearchX from "~icons/lucide/search-x";
 import LucideTag from "~icons/lucide/tag";
@@ -578,6 +599,7 @@ import LucideX from "~icons/lucide/x";
 import LeadCategoryFilters from "./LeadCategoryFilters.vue";
 import LeadFormDialog from "./LeadFormDialog.vue";
 import LeadSetCategoryDialog from "./LeadSetCategoryDialog.vue";
+import MergeLeadsDialog from "./MergeLeadsDialog.vue";
 import LeadIntakeStrip from "./LeadIntakeStrip.vue";
 import LeadsBusiness from "./LeadsBusiness.vue";
 import LeadsCommission from "./LeadsCommission.vue";
@@ -763,6 +785,7 @@ const canCategorise = computed(
 const selecting = ref(false);
 const selected = ref(new Set<string>());
 const showSet = ref(false);
+const showMerge = ref(false);
 function toggleSelecting() {
   selecting.value = !selecting.value;
   selected.value = new Set();
@@ -782,6 +805,12 @@ function categorised() {
   leads.reload();
   categoryPanel.value?.reload();
   leadOptions.reload();
+  toggleSelecting();
+}
+
+function mergedLeads() {
+  leads.reload();
+  categoryPanel.value?.reload();
   toggleSelecting();
 }
 

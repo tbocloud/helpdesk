@@ -118,6 +118,34 @@ export interface DuplicateLead {
   matched_on: ("email" | "phone" | "company")[];
 }
 
+/** What sits on a lead that a merge moves to the lead that is kept. */
+export type MergeCount =
+  | "notes"
+  | "calls"
+  | "follow_ups"
+  | "meetings"
+  | "proposals"
+  | "quotations"
+  | "deals"
+  | "files";
+
+/** One lead in the Merge dialog (TBO Smart's hub-leads-api.md §2.26). */
+export interface MergeLead {
+  name: string;
+  lead_name?: string;
+  company_name?: string;
+  email_id?: string;
+  mobile_no?: string;
+  tbo_stage?: string;
+  lead_owner?: string;
+  owner_name?: string | null;
+  creation: string;
+  numbers: LeadNumber[];
+  /** how many of its numbers the other lead lacks */
+  new_numbers: number;
+  counts: Record<MergeCount, number>;
+}
+
 /** A lead with no activity for longer than its department allows. */
 export interface StaleLead {
   name: string;
@@ -439,6 +467,8 @@ export interface LeadDetail {
       /** every number of the lead; absent from an older TBO Smart */
       numbers?: LeadNumber[];
       can_remove_numbers?: boolean;
+      /** a manager or the head of the lead's department may merge duplicates into it */
+      can_merge?: boolean;
       /** absent from an older TBO Smart */
       place?: LeadPlace;
       photo_count?: number;

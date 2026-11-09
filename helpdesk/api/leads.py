@@ -616,6 +616,11 @@ def get_lead(name: str) -> dict:
             _("This lead is someone else's. You can open only your own leads."),
             frappe.PermissionError,
         )
+    return add_whatsapp_box(detail)
+
+
+def add_whatsapp_box(detail: dict) -> dict:
+    """The lead's WhatsApp reply box, when the ERP site sends its conversation."""
     if detail.get("lead", {}).get("whatsapp") is not None:
         detail["lead"]["whatsapp_box"] = whatsapp_outreach.lead_box(detail["lead"])
     return detail
@@ -708,6 +713,46 @@ def find_duplicate_leads(
     if matches is None:
         return {"available": False, "matches": []}
     return {"available": True, "matches": matches}
+
+
+def merge_call(method: str, post: bool = False, **params) -> dict:
+    """A merge call on the ERP site; a 403 says who may merge."""
+    require_leads()
+    if not all((value or "").strip() for value in params.values()):
+        frappe.throw(_("Pick both leads first."))
+    result = call_if_deployed(
+        method,
+        post=post,
+        permission_message=_(
+            "Only a Sales Manager, a System Manager or the head of the leads' department can merge leads."
+        ),
+        **{key: value.strip() for key, value in params.items()},
+    )
+    if result is None:
+        frappe.throw(
+            _("The ERP site can't merge leads yet. It needs the latest TBO Smart."),
+            LeadsUnavailableError,
+        )
+    return result
+
+
+@frappe.whitelist()
+def get_merge_preview(first: str, second: str) -> dict:
+    """Two leads side by side for the Merge dialog: {leads: [{name, lead_name, company_name,
+    email_id, mobile_no, tbo_stage, owner_name, creation, numbers, new_numbers, counts}]},
+    `counts` being what sits on each (notes, calls, ...) and `new_numbers` how many of its
+    numbers the other lead lacks."""
+    return merge_call("get_merge_preview", first=first, second=second)
+
+
+@frappe.whitelist(methods=["POST"])
+def merge_leads(keep: str, merge: str) -> dict:
+    """Merges lead `merge` into `keep` (a manager, or the head of their department): its
+    numbers, empty fields and everything linked move to `keep`, and it is deleted. Returns
+    the kept lead as `get_lead` does."""
+    detail = merge_call("merge_leads", post=True, keep=keep, merge=merge)
+    clear_cached_reads()
+    return add_whatsapp_box(detail)
 
 
 @frappe.whitelist()
