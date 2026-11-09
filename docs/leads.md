@@ -327,6 +327,16 @@ open leads in the department); it opens a window (`MemberLeadsDialog.vue`) with 
   without picking (the ERP site takes the next unassigned leads with a phone, hot then newest);
 - the header's **Unassigned leads** button opens the pool on its own.
 
+**Made hard to get wrong.** *Send N back to the pool* is a quiet secondary button and asks first
+("Send 71 leads back to the pool? Shahana V K will no longer see them or their notes. They go to
+the next person's call batch."); *Keep them with X* is the primary button of that question. Under
+Unassigned, *Give N to X* is the solid button. Every action leaves a plain result line in the
+window ("71 leads given to Fidha V P", "71 leads are now in the pool") and the list says who owns
+what it shows ("owned by X" / "no owner yet"). When leads wait in a department's pool and nobody
+will be handed them, the page shows a warning above the people: every member's plan is 0 (with a
+*Set the plan* button that picks everyone) or the department doesn't pull unassigned leads
+(`poolStuck` in `callPlans.ts`).
+
 The owner, the ToDo assignment and a waiting call in the previous owner's running batch move with
 the lead (TBO Smart's `call-batches.md` §12). At most 500 leads at a time; 50 a page with **Show
 more**. Never cached. `get_department_leads`, `assign_leads`, `unassign_leads` in
