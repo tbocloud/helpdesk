@@ -8,13 +8,7 @@ from frappe import _
 
 from helpdesk.api.crm import require_admin
 from helpdesk.helpdesk.doctype.hd_lead_mirror.hd_lead_mirror import HDLeadMirror
-from helpdesk.lead_mirror import (
-    MIRROR,
-    STATE,
-    enqueue_backfill,
-    is_running,
-    set_state,
-)
+from helpdesk.lead_mirror import MIRROR, STATE, enqueue_backfill, is_running, set_state
 
 
 @frappe.whitelist()
