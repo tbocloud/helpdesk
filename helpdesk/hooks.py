@@ -50,6 +50,8 @@ scheduler_events = {
             "helpdesk.tasks.pull_client_tickets",
             # approved WhatsApp outreach waiting for TBO Chat (docs/whatsapp-outreach.md)
             "helpdesk.whatsapp_outreach.send_pending",
+            # the local copy of the ERP's leads, while it is on (docs/lead-mirror.md)
+            "helpdesk.lead_mirror.sync_lead_changes",
         ],
         # every 15 minutes: follow-ups and escalation for tasks and tickets, and the
         # digests at their times (docs/follow-ups.md)
@@ -128,6 +130,8 @@ scheduler_events = {
         "helpdesk.helpdesk.doctype.hd_chatwoot_event.hd_chatwoot_event.clear_old_events",
         "helpdesk.support_contracts.send_support_hours_alerts",
         "helpdesk.helpdesk.doctype.hd_recurring_task.hd_recurring_task.create_recurring_tasks",
+        # nightly: the lead copy against the ERP's index of every lead
+        "helpdesk.lead_mirror.check_drift",
     ],
     "hourly": [
         "helpdesk.triage.fail_stuck_triages",

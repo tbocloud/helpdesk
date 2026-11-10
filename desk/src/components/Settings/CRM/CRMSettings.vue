@@ -584,6 +584,7 @@
           </fieldset>
         </SettingsSection>
 
+        <LeadMirror v-if="form.enable_leads && canManageLeads" />
         <LeadDepartments v-if="form.enable_leads && canManageLeads" />
         <CommissionPlans v-if="form.enable_leads && canManageLeads" />
         <ReferralSettings v-if="form.enable_leads && canManageLeads" />
@@ -622,6 +623,7 @@ import LucideUserCheck from "~icons/lucide/user-check";
 import SettingsSection from "../SettingsSection.vue";
 import CommissionPlans from "./CommissionPlans.vue";
 import LeadDepartments from "./LeadDepartments.vue";
+import LeadMirror from "./LeadMirror.vue";
 import ReferralSettings from "./ReferralSettings.vue";
 import WebsiteLeadForm from "./WebsiteLeadForm.vue";
 
