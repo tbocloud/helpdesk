@@ -1,12 +1,12 @@
 import gzip
 import io
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from unittest.mock import patch
 
 import frappe
 from frappe.core.doctype.communication.test_communication import create_email_account
-from frappe.utils import add_to_date, getdate, now_datetime
+from frappe.utils import add_to_date, get_datetime, getdate, now_datetime
 
 from helpdesk.api.settings.field_dependency import create_update_field_dependency
 from helpdesk.integrations.erpnext.utils import create_customer_field
@@ -5008,3 +5008,131 @@ def ai_reading(**fields) -> dict:
 def clear_lead_bank_scan_limit(user: str) -> None:
     """Forget how many photo readings `user` has made this hour."""
     frappe.cache.delete(frappe.cache.make_key(f"lead_bank_scans:{user}"))
+
+
+class FakeLeadERP:
+    """In-memory stand-in for TBO Smart's lead mirror methods on the ERP (hub_lead_mirror):
+    the change feed, the index of every lead, the bulk read and the scopes. Its own clock moves
+    one second with every change, so changes have a strict order. Use it as the CRM client."""
+
+    base = "https://erp.example"
+
+    def __init__(self):
+        self.leads: dict[str, dict] = {}
+        self.changes: list[tuple[datetime, str]] = []
+        self.clock = datetime(2031, 3, 4, 5, 6, 7)
+        self.scopes = {"ann@erp.example": {"all": True, "team": [], "departments": []}}
+        # (method, params) of every call
+        self.calls: list[tuple[str, dict]] = []
+        # lead -> why the bulk read can't give it; an Exception the bulk read raises
+        self.unreadable: dict[str, str] = {}
+        self.bulk_error: Exception | None = None
+
+    def tick(self) -> datetime:
+        self.clock += timedelta(seconds=1)
+        return self.clock
+
+    def put(self, name: str, **fields) -> None:
+        """Make or change a lead (its `modified` moves) and log the change."""
+        now = self.tick()
+        lead = self.leads.setdefault(
+            name,
+            {
+                "lead_name": name,
+                "lead_owner": "ann@erp.example",
+                "tbo_department": None,
+                "assignees": [],
+                "score": 0,
+                "creation": str(now),
+            },
+        )
+        lead.update(fields, modified=str(now))
+        self.changes.append((now, name))
+
+    def note(self, name: str) -> None:
+        """Something on the lead changed that leaves its `modified` alone (a note)."""
+        self.changes.append((self.tick(), name))
+
+    def drop(self, name: str, log: bool = True) -> None:
+        """Delete a lead; `log` False: the change feed misses it, as after an outage."""
+        del self.leads[name]
+        if log:
+            self.changes.append((self.tick(), name))
+
+    def get_calls(self, method: str) -> list[dict]:
+        return [params for called, params in self.calls if called == method]
+
+    def call(self, method, post=False, **params):
+        name = method.rsplit(".", 1)[-1]
+        self.calls.append((name, params))
+        return getattr(self, name)(**params)
+
+    def get_lead_changes(self, since=None, limit=500):
+        latest: dict[str, datetime] = {}
+        for at, lead in self.changes:
+            if not since or at > get_datetime(since):
+                latest[lead] = at
+        rows = sorted(latest.items(), key=lambda item: item[1])
+        page = rows[:limit]
+        return {
+            "changes": [
+                {"lead": lead, "at": str(at), "deleted": lead not in self.leads}
+                for lead, at in page
+            ],
+            "next_since": str(page[-1][1]) if page else since,
+            "more": len(rows) > limit,
+            "now": str(self.clock),
+        }
+
+    def get_lead_index(self, after=None, limit=1000):
+        names = sorted(name for name in self.leads if not after or name > after)
+        page = names[:limit]
+        return {
+            "leads": [{"name": n, "modified": self.leads[n]["modified"]} for n in page],
+            "next_after": page[-1] if page else after,
+            "more": len(names) > limit,
+            "total": len(self.leads) if not after else None,
+            "now": str(self.clock),
+        }
+
+    def get_leads_bulk(self, names):
+        if self.bulk_error:
+            raise self.bulk_error
+        found, errors = [], {}
+        for name in names:
+            if name not in self.leads:
+                continue
+            if name in self.unreadable:
+                errors[name] = self.unreadable[name]
+                continue
+            lead = self.leads[name]
+            row = {
+                key: lead.get(key)
+                for key in ("lead_name", "lead_owner", "tbo_department", "score")
+            }
+            found.append(
+                {
+                    "name": name,
+                    "row": {"name": name, **row, "tbo_stage": lead.get("tbo_stage")},
+                    "payload": {
+                        "lead": {
+                            "name": name,
+                            "status": "Open",
+                            "creation": lead["creation"],
+                        },
+                        "timeline": [],
+                    },
+                    "owner": lead["lead_owner"],
+                    "assignees": lead["assignees"],
+                    "department": lead["tbo_department"],
+                    "modified": lead["modified"],
+                }
+            )
+        return {
+            "leads": found,
+            "missing": [name for name in names if name not in self.leads],
+            "errors": errors,
+        }
+
+    def get_mirror_scopes(self):
+        return {"scopes": self.scopes, "now": str(self.clock)}
