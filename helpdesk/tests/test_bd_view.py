@@ -97,6 +97,12 @@ class TestBDGate(BDCase):
                 (sent["view"], sent["mine"], sent["owner"]), (view, 1, None)
             )
 
+    def test_the_page_may_send_created_by_me_empty(self):
+        # an unset Created by filter comes as null; the type check refused the whole list
+        frappe.set_user(BD)
+        leads_api.list_leads(view="all", created_by_me=None)
+        self.assertIsNone(self.calls("list_leads")[-1]["created_by_me"])
+
     def test_called_takes_its_days_and_created_by_me_is_passed_on(self):
         frappe.set_user(BD)
         leads_api.list_leads(
