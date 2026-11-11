@@ -286,7 +286,7 @@ keeps the department it was posted to.
 `helpdesk/api/standup.py` (agents only): `get_my_standup(date?)`, `save_standup(values)` POST,
 `submit_standup(values?)` POST, `get_team_standup(team?, date?)`, `get_standup_history(user?,
 limit?)`, `nudge(name)` POST, `assign_help(name, row, helper)` POST,
-`create_task_from_blocker(name, row, project, subject, assigned_to?, due_date?)` POST,
+`create_task_from_blocker(name, row, project, subject, assigned_to?, due_date?, estimated_hours?)` POST (a due date or an estimate is required),
 `get_settings()` (with `content`: [{department, include}]), `save_settings(values)` POST
 (`content_off`: the departments switched off).
 

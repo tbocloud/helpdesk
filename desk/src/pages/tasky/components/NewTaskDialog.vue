@@ -116,6 +116,12 @@
           type="date"
           :label="__('Due date')"
         />
+        <p
+          v-if="!hasDueOrEstimate(form.due_date, form.estimated_hours)"
+          class="text-p-xs text-ink-gray-6 sm:col-span-2"
+        >
+          {{ dueOrEstimateHint() }}
+        </p>
       </div>
 
       <FormControl
@@ -169,7 +175,11 @@
           :form="formId"
           :label="__('Create task')"
           :loading="addTask.loading"
-          :disabled="!form.task_name.trim() || !project"
+          :disabled="
+            !form.task_name.trim() ||
+            !project ||
+            !hasDueOrEstimate(form.due_date, form.estimated_hours)
+          "
         />
       </div>
     </template>
@@ -191,7 +201,13 @@ import {
 } from "frappe-ui";
 import { computed, reactive, ref, useId, watch } from "vue";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
-import { categoryOptions, isAiDrafted, priorityOptions } from "../taskMeta";
+import {
+  categoryOptions,
+  dueOrEstimateHint,
+  hasDueOrEstimate,
+  isAiDrafted,
+  priorityOptions,
+} from "../taskMeta";
 import EstimateInput from "./EstimateInput.vue";
 import TaskDescriptionField, {
   type DraftContext,

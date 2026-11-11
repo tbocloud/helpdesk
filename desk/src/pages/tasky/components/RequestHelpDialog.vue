@@ -37,13 +37,16 @@
       />
 
       <div class="flex flex-col gap-1.5">
-        <TextInput
-          v-model="dueDate"
-          type="date"
-          :label="__('Needed by')"
-          :min="today"
-          :max="task?.due_date || undefined"
-        />
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <TextInput
+            v-model="dueDate"
+            type="date"
+            :label="__('Needed by')"
+            :min="today"
+            :max="task?.due_date || undefined"
+          />
+          <EstimateInput v-model="estimate" :label="__('Estimate')" />
+        </div>
         <p class="text-p-sm text-ink-gray-5">{{ dueHint }}</p>
       </div>
 
@@ -78,7 +81,11 @@
           :form="formId"
           :label="__('Ask for help')"
           :loading="requestHelp.loading"
-          :disabled="!teammate || !taskName.trim()"
+          :disabled="
+            !teammate ||
+            !taskName.trim() ||
+            !hasDueOrEstimate(dueDate, estimate)
+          "
         >
           <template #prefix>
             <LucideUserPlus class="size-4" aria-hidden="true" />
@@ -104,6 +111,8 @@ import { computed, ref, useId, watch } from "vue";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideInfo from "~icons/lucide/info";
 import LucideUserPlus from "~icons/lucide/user-plus";
+import { hasDueOrEstimate } from "../taskMeta";
+import EstimateInput from "./EstimateInput.vue";
 import TeammatePicker from "./TeammatePicker.vue";
 
 interface HelpTask {
@@ -131,6 +140,7 @@ const teammate = ref("");
 const taskName = ref("");
 const description = ref("");
 const dueDate = ref("");
+const estimate = ref<number | string>(0);
 const today = dayjs().format("YYYY-MM-DD");
 
 const project = computed(() => props.task?.project || props.projectId || "");
@@ -162,6 +172,7 @@ watch(
     taskName.value = "";
     description.value = "";
     dueDate.value = "";
+    estimate.value = 0;
     requestHelp.reset();
   },
   { immediate: true }
@@ -170,10 +181,12 @@ watch(
 const dueHint = computed(() =>
   props.task?.due_date
     ? __(
-        "By {0} at the latest, when your task is due. Leave it empty and the AI suggests a date.",
+        "By {0} at the latest, when your task is due. Give a date or an estimate; with only an estimate the AI suggests a date.",
         dayjs(props.task.due_date).format("D MMM YYYY")
       )
-    : __("Leave it empty and the AI suggests a date.")
+    : __(
+        "Give a date or an estimate; with only an estimate the AI suggests a date."
+      )
 );
 
 function onOpenChange(open: boolean) {
@@ -182,6 +195,7 @@ function onOpenChange(open: boolean) {
 
 function submit() {
   if (!props.task || !teammate.value || !taskName.value.trim()) return;
+  if (!hasDueOrEstimate(dueDate.value, estimate.value)) return;
   if (requestHelp.loading) return;
   requestHelp.submit({
     task: props.task.name,
@@ -189,6 +203,7 @@ function submit() {
     task_name: taskName.value.trim(),
     description: description.value.trim(),
     due_date: dueDate.value || null,
+    estimated_hours: Number(estimate.value) || 0,
   });
 }
 </script>

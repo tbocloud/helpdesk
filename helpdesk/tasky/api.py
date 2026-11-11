@@ -672,6 +672,15 @@ def _add_member_for_assignment(project: str, user: str):
     )
 
 
+def require_due_or_estimate(due_date, estimated_hours) -> None:
+    """A task a person creates needs a due date or an estimate, so it can be planned (an
+    estimate alone lets the AI date it). Tasks the hub makes itself (content posts,
+    recurring tasks, proposals, GitHub) set their own."""
+    dated = bool(due_date) and str(due_date) != "null"
+    if not dated and not frappe.utils.flt(estimated_hours) > 0:
+        frappe.throw(_("Give the task a due date or an estimate."))
+
+
 def _estimate_if_undated(task_doc):
     """No due date given: the AI sets one in the background (see helpdesk.task_estimates)."""
     from helpdesk.task_estimates import queue_estimate, should_estimate
@@ -758,6 +767,7 @@ def add_task(
         )
     if not str(task_name or "").strip():
         frappe.throw(_("Task name is required"))
+    require_due_or_estimate(due_date, estimated_hours)
     assigned_to = str(assigned_to or "").strip()
     manages = can_manage_project(project)
     if assigned_to and not _is_assignable(assigned_to):
@@ -953,8 +963,10 @@ def request_help(
     task_name: str,
     description: str = "",
     due_date: str | None = None,
+    estimated_hours: float | str | None = None,
 ) -> dict:
-    """The assignee asks a teammate for something their task needs.
+    """The assignee asks a teammate for something their task needs (a due date or an
+    estimate is required, as for any task).
 
     The teammate gets a new task in the same project and the asking task waits
     on it, so it shows as blocked until the help is done. The lead is told.
@@ -962,6 +974,7 @@ def request_help(
     from helpdesk.work_reminders import notify_users
 
     doc = _get_own_task(task)
+    require_due_or_estimate(due_date, estimated_hours)
     teammate = _teammate(doc, teammate)
     if teammate == frappe.session.user:
         frappe.throw(_("Pick a teammate to ask, not yourself."))
@@ -980,6 +993,7 @@ def request_help(
             "priority": doc.priority,
             "status": "Open",
             "exp_end_date": _help_due_date(doc, due_date),
+            "custom_estimated_hours": frappe.utils.flt(estimated_hours) or 0,
         }
     )
     # developers can't create tasks; _get_own_task checked this one is theirs

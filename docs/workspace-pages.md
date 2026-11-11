@@ -208,6 +208,18 @@ counts only on the project where the person holds it.
 | Invoicing | No | admins only (`helpdesk/api/invoices.py`) |
 | Move a task to another project | Only one they assigned, as anyone may | `can_move_task`, also on a plain form save (`Task.check_project_move`) |
 
+**A task needs a due date or an estimate.** Every task a person creates needs at least one of
+the two, so it can be planned (with only an estimate the AI dates it, `task_estimates`): New task
+(`add_task`), Create task on a ticket (`create_task_from_ticket`; an approved customization
+estimate fills both in, and its dialog starts from them), Ask for help (`request_help`), a
+stand-up blocker's task (`create_task_from_blocker`), a repeat issue's root-cause task
+(`create_root_cause_task`) and the app's quick add (`mobile.quick_add_task`). The server refuses
+one with neither (*Give the task a due date or an estimate.*, `tasky.require_due_or_estimate`);
+each form has an Estimate (`EstimateInput.vue`) next to the date, says so under them while both
+are empty, and keeps Create disabled until one is set (`taskMeta.hasDueOrEstimate`). Tasks the
+hub makes itself (content posts, recurring tasks, proposal plans, GitHub, sign-off
+clarifications) set their own dates.
+
 ## Overview (`/overview`)
 
 `desk/src/pages/work/Overview.vue`; API `helpdesk.api.work.get_overview(project, customer,

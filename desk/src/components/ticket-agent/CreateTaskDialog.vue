@@ -123,6 +123,13 @@
           type="date"
           :label="__('Due date')"
         />
+        <EstimateInput v-model="form.estimated_hours" :label="__('Estimate')" />
+        <p
+          v-if="!hasDueOrEstimate(form.due_date, form.estimated_hours)"
+          class="text-p-xs text-ink-gray-6 sm:col-span-2"
+        >
+          {{ dueOrEstimateHint() }}
+        </p>
       </div>
 
       <FormControl
@@ -170,7 +177,9 @@
 
 <script setup lang="ts">
 import { errorText } from "@/utils";
+import EstimateInput from "@/pages/tasky/components/EstimateInput.vue";
 import TaskStatusBadge from "@/pages/tasky/components/TaskStatusBadge.vue";
+import { dueOrEstimateHint, hasDueOrEstimate } from "@/pages/tasky/taskMeta";
 import { __ } from "@/translation";
 import {
   Button,
@@ -204,6 +213,8 @@ interface TicketTaskContext {
   customer?: string | null;
   projects: ContextProject[];
   linked_tasks: LinkedTask[];
+  /** an approved customization estimate's date and hours, to start from */
+  estimate?: { due_date?: string | null; hours?: number } | null;
 }
 
 interface Member {
@@ -230,6 +241,7 @@ const form = reactive({
   description: "",
   assigned_to: "",
   due_date: "",
+  estimated_hours: 0 as number | string,
   is_key: false,
 });
 
@@ -240,6 +252,12 @@ const context = createResource({
     // the server lists the ticket customer's projects first
     if (!data.projects.some((p) => p.name === form.project)) {
       form.project = data.projects[0]?.name ?? "";
+    }
+    // the customer approved a date and hours: the task starts from them
+    if (data.estimate) {
+      form.due_date ||= data.estimate.due_date || "";
+      if (!Number(form.estimated_hours))
+        form.estimated_hours = data.estimate.hours || 0;
     }
   },
   onError() {},
@@ -314,7 +332,11 @@ const errorMessage = computed(() =>
 );
 
 const canSubmit = computed(
-  () => !!form.project && !!form.task_name.trim() && !createTask.loading
+  () =>
+    !!form.project &&
+    !!form.task_name.trim() &&
+    hasDueOrEstimate(form.due_date, form.estimated_hours) &&
+    !createTask.loading
 );
 
 function resetForm() {
@@ -323,6 +345,7 @@ function resetForm() {
   form.description = "";
   form.assigned_to = "";
   form.due_date = "";
+  form.estimated_hours = 0;
   form.is_key = false;
 }
 
@@ -346,6 +369,7 @@ function submit() {
     description: form.description,
     assigned_to: form.assigned_to,
     due_date: form.due_date || null,
+    estimated_hours: Number(form.estimated_hours) || 0,
     is_key: form.is_key,
   });
 }

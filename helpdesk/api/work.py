@@ -846,10 +846,23 @@ def get_ticket_task_context(ticket: str | int) -> dict:
     for p in projects:
         p["members"] = members.get(p.name, [])
 
+    approved = frappe.db.get_value(
+        "HD Ticket",
+        ticket,
+        ["custom_estimate_status", "custom_agreed_delivery", "custom_estimate_hours"],
+        as_dict=True,
+    )
     return {
         "customer": customer,
         "projects": projects,
         "linked_tasks": _linked_tasks(ticket),
+        # an approved customization estimate fills the task's date and hours
+        "estimate": {
+            "due_date": approved.custom_agreed_delivery,
+            "hours": frappe.utils.flt(approved.custom_estimate_hours),
+        }
+        if approved and approved.custom_estimate_status == "Approved"
+        else None,
     }
 
 
@@ -930,6 +943,7 @@ def create_task_from_ticket(
         _format_task,
         _is_project_member,
         _task_dict,
+        require_due_or_estimate,
     )
 
     ticket = str(ticket)
@@ -956,6 +970,7 @@ def create_task_from_ticket(
     if ticket_doc.get("custom_estimate_status") == "Approved":
         due_date = due_date or ticket_doc.get("custom_agreed_delivery")
         estimated_hours = estimated_hours or ticket_doc.get("custom_estimate_hours")
+    require_due_or_estimate(due_date, estimated_hours)
     task = frappe.get_doc(
         {
             "doctype": "Task",

@@ -1464,9 +1464,10 @@ def create_task_from_blocker(
     subject: str,
     assigned_to: str | None = None,
     due_date: str | None = None,
+    estimated_hours: float | str | None = None,
 ) -> dict:
     """A task for what unblocks the person, in a project the viewer may add tasks to
-    (tasky's own checks); the blocker remembers it."""
+    (tasky's own checks, a due date or an estimate included); the blocker remembers it."""
     from helpdesk.tasky.api import add_task
 
     doc = team_doc(viewer, standup)
@@ -1476,6 +1477,7 @@ def create_task_from_blocker(
         task_name=subject,
         assigned_to=assigned_to or "",
         due_date=due_date or None,
+        estimated_hours=estimated_hours or 0,
         description=_("From {0}'s stand-up on {1}: {2}").format(
             doc.full_name or doc.user, formatdate(doc.date, "d MMM"), blocker.title
         ),

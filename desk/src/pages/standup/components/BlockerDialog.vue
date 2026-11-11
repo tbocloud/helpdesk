@@ -42,7 +42,16 @@
           :label="__('Assign to')"
           :placeholder="__('Nobody yet')"
         />
-        <FormControl v-model="dueDate" type="date" :label="__('Due date')" />
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <FormControl v-model="dueDate" type="date" :label="__('Due date')" />
+          <EstimateInput v-model="estimate" :label="__('Estimate')" />
+        </div>
+        <p
+          v-if="!hasDueOrEstimate(dueDate, estimate)"
+          class="text-p-xs text-ink-gray-6"
+        >
+          {{ dueOrEstimateHint() }}
+        </p>
       </template>
       <FormControl
         v-else
@@ -98,6 +107,8 @@ import {
   toast,
 } from "frappe-ui";
 import { computed, ref, useId, watch } from "vue";
+import EstimateInput from "@/pages/tasky/components/EstimateInput.vue";
+import { dueOrEstimateHint, hasDueOrEstimate } from "@/pages/tasky/taskMeta";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import type { TeamBlocker } from "../standupMeta";
 
@@ -110,6 +121,7 @@ const subject = ref("");
 const project = ref("");
 const assignee = ref<string | null>(null);
 const dueDate = ref("");
+const estimate = ref<number | string>(0);
 const comment = ref("");
 const errorMessage = ref("");
 
@@ -127,12 +139,15 @@ watch(blocker, (b) => {
   project.value = b?.project || "";
   assignee.value = null;
   dueDate.value = "";
+  estimate.value = 0;
   comment.value = "";
 });
 
 const ready = computed(() =>
   props.mode === "task"
-    ? !!subject.value.trim() && !!project.value
+    ? !!subject.value.trim() &&
+      !!project.value &&
+      hasDueOrEstimate(dueDate.value, estimate.value)
     : !!comment.value.trim()
 );
 
@@ -163,6 +178,7 @@ async function submit() {
         subject: subject.value.trim(),
         assigned_to: assignee.value || undefined,
         due_date: dueDate.value || undefined,
+        estimated_hours: Number(estimate.value) || undefined,
       });
       toast.success(__("Task {0} created", result.task));
     } else {
