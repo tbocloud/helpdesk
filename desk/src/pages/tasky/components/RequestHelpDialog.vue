@@ -44,8 +44,19 @@
             :label="__('Needed by')"
             :min="today"
             :max="task?.due_date || undefined"
+          >
+            <template #label>
+              {{ __("Needed by") }}
+              <RequiredMark
+                :hint="__('(a due date or an estimate is required)')"
+              />
+            </template>
+          </TextInput>
+          <EstimateInput
+            v-model="estimate"
+            :label="__('Estimate')"
+            due-or-estimate
           />
-          <EstimateInput v-model="estimate" :label="__('Estimate')" />
         </div>
         <p class="text-p-sm text-ink-gray-5">{{ dueHint }}</p>
       </div>
@@ -112,6 +123,7 @@ import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideInfo from "~icons/lucide/info";
 import LucideUserPlus from "~icons/lucide/user-plus";
 import { hasDueOrEstimate } from "../taskMeta";
+import RequiredMark from "@/components/RequiredMark.vue";
 import EstimateInput from "./EstimateInput.vue";
 import TeammatePicker from "./TeammatePicker.vue";
 
