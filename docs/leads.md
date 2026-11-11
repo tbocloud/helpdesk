@@ -333,6 +333,16 @@ leads anyway), one primary **Assign leads** button and, for people who have a pl
 department sizes**. A department's campaign product is the only product (the picker is locked
 and says why).
 
+**A department without products gives leads by industry.** When a department has no products
+(TBO) and the ERP site sends its industries, Assign leads uses **Industry** where it would use
+Product (`callPlans.byIndustry`): the department line says *no products: leads are given by
+industry*, the people table's column and each plan show the industry, the picker counts the
+unassigned leads of each industry (*Hospitality · 120 unassigned*), and See leads, Give now and
+the plan are sent with `industry` (`save_call_plan`, `assign_leads`, `get_department_leads`;
+TBO Smart keeps it as the member's `call_industry`, and the batches and the 11:00 auto-assign
+follow it). The leads window filters and gives by industry too and hides Set product. An older
+TBO Smart sends no industries, so the page stays as it was.
+
 **The product's unassigned leads, there and then.** Each product in the picker says how many
 unassigned leads with a phone it has (*PhoebiX · 120 unassigned*; *Any product* the total). With
 people picked, a box under it says *120 unassigned PhoebiX leads* with **See leads** (the

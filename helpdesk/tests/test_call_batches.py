@@ -310,6 +310,23 @@ class TestCallPlans(FrappeTestCase):
         self.assertIsNone(params["product"])
         self.assertIsNone(params["sizes"])
 
+    def test_a_department_without_products_plans_and_gives_by_industry(self):
+        api.save_call_plan(
+            "TBO",
+            ["shahana@tbo.example"],
+            industry=" Hospitality ",
+            sizes={"Morning": 40},
+        )
+        ((_post, params),) = self.calls("save_call_plan")
+        self.assertEqual((params["industry"], params["product"]), ("Hospitality", None))
+        self.crm.lead_answers["assign_leads"] = {"assigned": 3, "skipped": []}
+        api.assign_leads("TBO", "shahana@tbo.example", count=3, industry="Hospitality")
+        ((_post, params),) = self.calls("assign_leads")
+        self.assertEqual((params["count"], params["industry"]), (3, "Hospitality"))
+        # no industry chosen: nothing is sent for it, so an older ERP site is not asked
+        api.save_call_plan("TBO", ["shahana@tbo.example"], sizes={"Morning": 40})
+        self.assertNotIn("industry", self.calls("save_call_plan")[-1][1])
+
     def test_a_plan_needs_people(self):
         self.assertRaises(
             frappe.ValidationError, api.save_call_plan, "GrowthX", "[]", "PhoebiX"
