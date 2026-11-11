@@ -21,15 +21,18 @@ export type CallOutcome =
   | "Not interested"
   | "Wrong number";
 
-/** The six answers, in the order the chips show them. `flow` outcomes ask for more first. */
+/** The six answers, in the order the chips show them. `flow` outcomes ask for more first.
+ * Each is labelled with the lead stage it moves the lead to, so people see one word for both
+ * (Busy keeps its own: like Not answered it makes the lead Not Responding). `value` is what
+ * the ERP site takes and stays as it is. */
 export const OUTCOMES: { value: CallOutcome; label: string; flow: boolean }[] =
   [
-    { value: "Connected", label: __("Connected"), flow: true },
-    { value: "Not answered", label: __("Not answered"), flow: false },
+    { value: "Connected", label: __("Contacted"), flow: true },
+    { value: "Not answered", label: __("Not Responding"), flow: false },
     { value: "Busy", label: __("Busy"), flow: false },
-    { value: "Call back", label: __("Call back"), flow: true },
-    { value: "Not interested", label: __("Not interested"), flow: true },
-    { value: "Wrong number", label: __("Wrong number"), flow: false },
+    { value: "Call back", label: __("Follow-up Required"), flow: true },
+    { value: "Not interested", label: __("Not Interested"), flow: true },
+    { value: "Wrong number", label: __("Wrong Number"), flow: false },
   ];
 
 /** An outcome's icon, and the tone it shows in on a lead's row: colour only where it says

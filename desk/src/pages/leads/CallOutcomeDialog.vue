@@ -45,7 +45,7 @@
       <template v-else-if="mode === 'Call back'">
         <fieldset class="flex flex-col gap-2">
           <legend class="mb-1 text-xs text-ink-gray-5">
-            {{ __("Call back") }}
+            {{ __("Call back at") }}
           </legend>
           <div class="flex flex-wrap gap-2">
             <Button
@@ -194,9 +194,9 @@ const errorMessage = ref("");
 const title = computed(
   () =>
     ({
-      Connected: __("They picked up"),
-      "Call back": __("Call back later"),
-      "Not interested": __("Not interested"),
+      Connected: __("Contacted: they picked up"),
+      "Call back": __("Follow-up Required: call back later"),
+      "Not interested": __("Not Interested"),
     }[props.mode || "Connected"])
 );
 
