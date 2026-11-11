@@ -277,9 +277,10 @@ def report_lines(report: dict) -> list[tuple[str, None]]:
 
 
 def line_counts(row: dict, connected: bool = True) -> str:
-    """A person's or the day's counts, like 87/100 called, 41 connected, 4 overdue."""
+    """A person's or the day's counts, like 87/100 called, 41 contacted, 4 overdue (the
+    answered calls carry the stage they lead to, Contacted)."""
     parts = [f"{cint(row.get('called'))}/{cint(row.get('size'))} called"]
     if connected:
-        parts.append(f"{cint(row.get('connected'))} connected")
+        parts.append(f"{cint(row.get('connected'))} contacted")
     parts.append(f"{cint(row.get('overdue'))} overdue")
     return ", ".join(parts)

@@ -270,7 +270,7 @@ move the lead to: **Contacted** (Connected), **Not Responding** (Not answered), 
 call sheet, Log call, the Last call filter and each lead's last-call chip
 (`callBatches.OUTCOMES`). Busy keeps its own name; like Not responding it makes the lead Not
 Responding. Only the labels changed: the values the ERP site takes (Connected, Not answered, Call
-back, Not interested, Wrong number) are the same, so the names in brackets below are those values.
+back, Not interested, Wrong number) are the same, so the names in brackets below are those values. The counts say **contacted** for the answered calls too (Today's calls, the Call batches table, the Daily report, Your calls and the Teams summary; the data keeps `connected`), and a lead moved by hand to a stage that means they spoke (for example Not answered, then Move stage to Contacted) counts as contacted (TBO Smart's `call-batches.md` §5).
 
 **What it shows** (`desk/src/pages/leads/TodaysCalls.vue`):
 - the batch header: slot name, time left (a live countdown, a warning icon under 15 minutes),

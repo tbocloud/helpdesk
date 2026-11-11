@@ -215,7 +215,7 @@ class TestCallBatchesReport(FrappeTestCase):
         lines = api.report_lines(self.crm.lead_answers["get_call_batches_report"])
         self.assertEqual(
             lines[0][0],
-            "• Shahana V K: 87/100 called, 41 connected, 4 overdue",
+            "• Shahana V K: 87/100 called, 41 contacted, 4 overdue",
         )
         self.assertEqual(lines[-1][0], "Total: 87/100 called, 4 overdue")
         self.assertEqual(api.report_lines({"people": []}), [])
