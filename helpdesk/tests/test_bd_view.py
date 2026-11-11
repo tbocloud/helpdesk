@@ -85,13 +85,28 @@ class TestBDGate(BDCase):
         leads_api.list_leads(view="all", owner="someone@else.example")
         sent = self.calls("list_leads")[-1]
         self.assertEqual(sent["view"], "mine")
-        self.assertEqual(sent["owner"], BD)
+        # the ones they own or created (the ERP site picks them); no other owner is asked for
+        self.assertEqual((sent["mine"], sent["owner"]), (1, None))
 
     def test_their_other_views_are_kept_but_only_their_own_leads(self):
         frappe.set_user(BD)
-        leads_api.list_leads(view="follow_up", owner="someone@else.example")
+        for view in ("follow_up", "called"):
+            leads_api.list_leads(view=view, owner="someone@else.example")
+            sent = self.calls("list_leads")[-1]
+            self.assertEqual(
+                (sent["view"], sent["mine"], sent["owner"]), (view, 1, None)
+            )
+
+    def test_called_takes_its_days_and_created_by_me_is_passed_on(self):
+        frappe.set_user(BD)
+        leads_api.list_leads(
+            view="called", from_date="2026-11-01", to_date="2026-11-10", created_by_me=1
+        )
         sent = self.calls("list_leads")[-1]
-        self.assertEqual((sent["view"], sent["owner"]), ("follow_up", BD))
+        self.assertEqual(
+            (sent["from_date"], sent["to_date"], sent["created_by_me"]),
+            ("2026-11-01", "2026-11-10", 1),
+        )
 
     def test_a_bd_opens_only_their_own_lead(self):
         self.crm.lead_answers["get_lead"] = {
@@ -102,6 +117,15 @@ class TestBDGate(BDCase):
             leads_api.get_lead("LEAD-1")
         self.crm.lead_answers["get_lead"] = {
             "lead": {"name": "LEAD-1", "lead_owner": BD}
+        }
+        self.assertEqual(leads_api.get_lead("LEAD-1")["lead"]["name"], "LEAD-1")
+        # one they created and handed on opens too (the ERP site keeps it read only)
+        self.crm.lead_answers["get_lead"] = {
+            "lead": {
+                "name": "LEAD-1",
+                "lead_owner": "someone@else.example",
+                "created_by": BD,
+            }
         }
         self.assertEqual(leads_api.get_lead("LEAD-1")["lead"]["name"], "LEAD-1")
 

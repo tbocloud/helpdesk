@@ -143,6 +143,20 @@
               :options="ownerOptions"
             />
             <FormControl
+              v-if="isBd || view === 'mine'"
+              v-model="filters.created_by"
+              type="select"
+              :label="__('Created by')"
+              :options="CREATED_BY"
+            />
+            <FormControl
+              v-if="view === 'called'"
+              v-model="filters.called"
+              type="select"
+              :label="__('Last called')"
+              :options="LAST_CALLED"
+            />
+            <FormControl
               v-model="filters.segment"
               type="select"
               :label="__('Segment')"
@@ -383,6 +397,29 @@
                         :icon="lastCall(row)!.icon"
                         :title="__('Last call')"
                         class="font-normal tabular-nums"
+                      />
+                      <span
+                        v-if="row.call_count"
+                        class="font-mono text-xs tabular-nums text-ink-gray-6"
+                        :title="__('Calls made to this lead')"
+                        >{{
+                          row.call_count === 1
+                            ? __("1 call")
+                            : __("{0} calls", String(row.call_count))
+                        }}</span
+                      >
+                      <!-- one they created and handed on: they read it, its owner works it -->
+                      <TaskyBadge
+                        v-if="createdNotOwned(row)"
+                        :icon="LucideUserPlus"
+                        :label="__('Created by you')"
+                        :title="
+                          __(
+                            'You created this lead; {0} owns it now',
+                            row.owner_name || row.lead_owner || ''
+                          )
+                        "
+                        class="font-normal"
                       />
                       <!-- gone quiet: no activity for longer than its department allows -->
                       <TaskyBadge
@@ -660,6 +697,7 @@ const BD_TABS: LeadTab[] = [
   "call_today",
   "mine",
   "follow_up",
+  "called",
   "commission",
 ];
 const PERIOD_LABELS: Record<string, string> = {
@@ -738,7 +776,33 @@ const filters = reactive({
   owner: queryValue("owner"),
   segment: queryValue("segment"),
   department: queryValue("department"),
+  // "me": only the leads they created, whoever owns them now
+  created_by: queryValue("created_by"),
+  // the Called tab: when the lead was last called
+  called: queryValue("called"),
 });
+const CREATED_BY = [
+  { label: __("Owned or created"), value: "" },
+  { label: __("Created by me"), value: "me" },
+];
+const LAST_CALLED = [
+  { label: __("Any time"), value: "" },
+  { label: __("Today"), value: "today" },
+  { label: __("Yesterday"), value: "yesterday" },
+  { label: __("This week"), value: "week" },
+  { label: __("This month"), value: "month" },
+];
+/** The days the Called tab's "Last called" keeps: [from, to] as YYYY-MM-DD, or nulls. */
+function calledRange(value: string): [string | null, string | null] {
+  const today = dayjs();
+  const day = (d: typeof today) => d.format("YYYY-MM-DD");
+  if (value === "today") return [day(today), day(today)];
+  if (value === "yesterday")
+    return [day(today.subtract(1, "day")), day(today.subtract(1, "day"))];
+  if (value === "week") return [day(today.startOf("week")), day(today)];
+  if (value === "month") return [day(today.startOf("month")), day(today)];
+  return [null, null];
+}
 // Industry, State, District, Organisation size and Last call: each any of its values, kept in the
 // URL as repeated keys (?industry=Resorts&industry=Hotels…)
 const CATEGORY_KEYS = [
@@ -864,6 +928,8 @@ const hasFilters = computed(
       filters.owner ||
       filters.segment ||
       filters.department ||
+      filters.created_by ||
+      filters.called ||
       hasCategories.value ||
       extra.metric ||
       extraChips.value.length
@@ -902,6 +968,8 @@ function clearFilters() {
     owner: "",
     segment: "",
     department: "",
+    created_by: "",
+    called: "",
   });
   categories.value = emptyCategories();
   Object.assign(extra, {
@@ -1000,8 +1068,17 @@ const leads = createResource({
     temperature: extra.temperature || null,
     metric: extra.metric || null,
     period: extra.metric ? extra.period || "month" : null,
-    from_date: extra.metric ? extra.from || null : null,
-    to_date: extra.metric ? extra.to || null : null,
+    from_date: extra.metric
+      ? extra.from || null
+      : view.value === "called"
+      ? calledRange(filters.called)[0]
+      : null,
+    to_date: extra.metric
+      ? extra.to || null
+      : view.value === "called"
+      ? calledRange(filters.called)[1]
+      : null,
+    created_by_me: filters.created_by === "me" ? 1 : null,
     view: isList.value ? view.value : "all",
     start: (page.value - 1) * PAGE_LENGTH,
     page_length: PAGE_LENGTH,
@@ -1164,6 +1241,8 @@ watch(
         owner: f.owner || undefined,
         segment: f.segment || undefined,
         department: f.department || undefined,
+        created_by: f.created_by || undefined,
+        called: f.called || undefined,
         industry: c.industry.length ? c.industry : undefined,
         state: c.state.length ? c.state : undefined,
         district: c.district.length ? c.district : undefined,
@@ -1188,6 +1267,11 @@ watch(
     if (isList.value && !waitingForDates.value) leads.reload();
   }
 );
+
+function createdNotOwned(row: LeadRow) {
+  const me = authStore.userId;
+  return !!row.created_by && row.created_by === me && row.lead_owner !== me;
+}
 
 function followUpLate(row: LeadRow) {
   return (

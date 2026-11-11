@@ -28,7 +28,7 @@ from helpdesk.integrations.crm.leads import (
     require_leads,
 )
 
-VIEWS = ("all", "mine", "call_today", "follow_up")
+VIEWS = ("all", "mine", "call_today", "follow_up", "called")
 PERIODS = ("today", "yesterday", "week", "month", "quarter", "custom")
 # a day is a custom range of that one day on the ERP site, which an older TBO Smart reads too
 DAYS_AGO = {"today": 0, "yesterday": 1}
@@ -170,8 +170,11 @@ def list_leads(
     last_call_result: list | str | None = None,
     last_reply_class: list | str | None = None,
     product: list | str | None = None,
+    created_by_me: bool | int | str = False,
 ) -> dict:
-    """A page of leads. `industry`, `state`, `district`, `org_size`, `product`, `last_call_result`
+    """A page of leads. `view` called lists the leads called at least once, last called first
+    (`from_date` and `to_date` without a `metric` keep those last called in those days);
+    `created_by_me` keeps the leads the person created, whoever owns them now. `industry`, `state`, `district`, `org_size`, `product`, `last_call_result`
     (the outcome of the lead's last call) and `last_reply_class` (how its last email reply
     was sorted) each take one value or a list (any of them); a
     list goes to the ERP site as JSON. `metric` with its period keeps the leads one number of the
@@ -179,12 +182,13 @@ def list_leads(
     leads; the ERP site still shows only what the person may see."""
     require_leads()
     if view not in VIEWS:
-        frappe.throw(_("Pick All, Mine, Call today or Follow-up."))
+        frappe.throw(_("Pick All, Mine, Call today, Follow-up or Called."))
+    mine = False
     if is_bd():
-        # another BD may be calling the same lead: every list of a BD is the leads they own,
-        # Follow-up included (the ERP site also shows a lead to whoever it is assigned to)
+        # another BD may be calling the same lead: every list of a BD is the leads they own or
+        # created, Follow-up included (the ERP site also shows a lead to whoever it is assigned to)
         view = "mine" if view == "all" else view
-        owner = frappe.session.user
+        mine, owner = True, None
     if period:
         check_period(period, from_date, to_date, dates_required=bool(metric))
     when = {"period": None, "from_date": None, "to_date": None}
@@ -196,6 +200,12 @@ def list_leads(
         }
         if period in DAYS_AGO:
             when = erp_period(period, from_date, to_date)
+    elif view == "called":
+        when = {
+            "period": None,
+            "from_date": from_date or None,
+            "to_date": to_date or None,
+        }
     result = call(
         "list_leads",
         search=(search or "").strip() or None,
@@ -217,6 +227,8 @@ def list_leads(
         ),
         **when,
         view=view,
+        mine=1 if mine else None,
+        created_by_me=1 if cint(created_by_me) else None,
         # cint: a malformed number is 0, never a server error
         start=max(cint(start), 0),
         page_length=min(max(cint(page_length) or 20, 1), MAX_PAGE),
@@ -610,8 +622,11 @@ def get_lead(name: str) -> dict:
     """The lead, its timeline, its quotations and the stages it may move to."""
     require_leads()
     detail = call("get_lead", name=name) or {}
-    if detail.get("lead", {}).get("lead_owner") != frappe.session.user and is_bd():
-        # the ERP site opens a lead to whoever it is assigned to; a BD sees only their own
+    lead = detail.get("lead", {})
+    user = frappe.session.user
+    if user not in (lead.get("lead_owner"), lead.get("created_by")) and is_bd():
+        # the ERP site opens a lead to whoever it is assigned to; a BD sees their own and the
+        # ones they created (read only: the ERP site lets them change only their own)
         frappe.throw(
             _("This lead is someone else's. You can open only your own leads."),
             frappe.PermissionError,

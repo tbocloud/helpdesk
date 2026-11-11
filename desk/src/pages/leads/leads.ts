@@ -193,6 +193,10 @@ export interface LeadRow {
   segment?: string;
   lead_owner?: string;
   owner_name?: string;
+  /** who created it: a salesperson also reads the leads they created (absent from an older TBO Smart) */
+  created_by?: string | null;
+  /** calls the lead has had (absent from an older TBO Smart) */
+  call_count?: number;
   tbo_department?: string | null;
   tbo_lead_type?: string | null;
   /** the product / brand it belongs to under its department (absent from an older TBO Smart) */
@@ -291,13 +295,14 @@ const QUOTE_STATUS: Record<string, StatusLook> = {
   Expired: { label: __("Expired"), tone: "danger" },
 };
 
-export type LeadView = "all" | "mine" | "call_today" | "follow_up";
+export type LeadView = "all" | "mine" | "call_today" | "follow_up" | "called";
 
 export const LEAD_VIEWS: { value: LeadView; label: string }[] = [
   { value: "all", label: __("All") },
   { value: "mine", label: __("My leads") },
   { value: "call_today", label: __("Call today") },
   { value: "follow_up", label: __("Follow-up") },
+  { value: "called", label: __("Called") },
 ];
 
 /** What the New lead and Edit lead dialog sends as `data`. */
