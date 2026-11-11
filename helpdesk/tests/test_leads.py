@@ -47,6 +47,19 @@ class TestLeads(FrappeTestCase):
     def as_bde(self):
         frappe.set_user(BDE)
 
+    def test_my_call_counts_come_from_the_erp_site_for_the_person(self):
+        self.crm.lead_answers["get_my_call_counts"] = {
+            "today": {"calls": 12, "connected": 7},
+            "all_time": {"calls": 900, "connected": 410},
+            "days": [{"date": "2026-11-11", "calls": 12, "connected": 7}],
+        }
+        self.as_bde()
+        counts = leads_api.get_my_call_counts(days=9999, fresh=1)
+        self.assertTrue(counts["available"])
+        self.assertEqual(counts["today"], {"calls": 12, "connected": 7})
+        ((method, _post, params),) = self.crm.lead_calls
+        self.assertEqual((method, params["days"]), ("get_my_call_counts", 366))
+
     def test_leads_are_off_by_default(self):
         frappe.db.set_single_value("HD CRM Settings", "enable_leads", 0)
         self.as_bde()
