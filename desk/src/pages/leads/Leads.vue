@@ -111,10 +111,11 @@
 
         <div v-else class="mt-3 flex flex-col gap-3">
           <!-- what they called: today, this week, this month, all time, and by day -->
-          <MyCallCounts v-if="view === 'mine'" />
+          <MyCallCounts v-if="view === 'mine'" ref="callCounts" />
           <!-- overdue, today, tomorrow, the week, later: a card lists its leads -->
           <FollowUpCards
             v-if="view === 'follow_up'"
+            ref="followUpCards"
             v-model="filters.due"
             :owner="filters.owner"
           />
@@ -732,6 +733,8 @@ const todayPanel = ref<InstanceType<typeof TodaysCalls> | null>(null);
 const businessPanel = ref<InstanceType<typeof LeadsBusiness> | null>(null);
 const outreachPanel = ref<InstanceType<typeof LeadsOutreach> | null>(null);
 const commissionPanel = ref<InstanceType<typeof LeadsCommission> | null>(null);
+const callCounts = ref<InstanceType<typeof MyCallCounts> | null>(null);
+const followUpCards = ref<InstanceType<typeof FollowUpCards> | null>(null);
 
 const authStore = useAuthStore();
 const route = useRoute();
@@ -1091,7 +1094,11 @@ const leads = createResource({
       : view.value === "called"
       ? calledRange(filters.called)[1]
       : null,
-    created_by_me: filters.created_by === "me" ? 1 : null,
+    // only where its control shows, so it never narrows another tab unseen
+    created_by_me:
+      (isBd.value || view.value === "mine") && filters.created_by === "me"
+        ? 1
+        : null,
     due: view.value === "follow_up" ? filters.due || null : null,
     view: isList.value ? view.value : "all",
     start: (page.value - 1) * PAGE_LENGTH,
@@ -1141,8 +1148,16 @@ function refresh() {
   else {
     intake.submit({ fresh: 1 });
     staleLeads.submit({ fresh: 1 });
-    if (!waitingForDates.value) leads.reload();
+    callCounts.value?.reload();
+    followUpCards.value?.reload();
+    if (!waitingForDates.value) reloadLeads();
   }
+}
+
+// an older answer must not land over a newer one (a quick tab or filter change)
+function reloadLeads() {
+  leads.abort();
+  leads.reload();
 }
 
 const data = computed(
@@ -1190,6 +1205,9 @@ watch(
       owner: queryValue("owner"),
       segment: queryValue("segment"),
       department: queryValue("department"),
+      created_by: queryValue("created_by"),
+      called: queryValue("called"),
+      due: queryValue("due"),
       page: queryPage(),
       extra: queryExtra(),
       categories: queryCategories(),
@@ -1203,6 +1221,9 @@ watch(
       filters.owner === wanted.owner &&
       filters.segment === wanted.segment &&
       filters.department === wanted.department &&
+      filters.created_by === wanted.created_by &&
+      filters.called === wanted.called &&
+      (wanted.view !== "follow_up" || filters.due === wanted.due) &&
       page.value === wanted.page
     )
       return;
@@ -1214,6 +1235,9 @@ watch(
       owner: wanted.owner,
       segment: wanted.segment,
       department: wanted.department,
+      created_by: wanted.created_by,
+      called: wanted.called,
+      due: wanted.due,
     });
     Object.assign(extra, wanted.extra);
     categories.value = wanted.categories;
@@ -1279,7 +1303,7 @@ watch(
         page: p > 1 ? String(p) : undefined,
       },
     });
-    if (isList.value && !waitingForDates.value) leads.reload();
+    if (isList.value && !waitingForDates.value) reloadLeads();
   }
 );
 

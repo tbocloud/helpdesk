@@ -105,7 +105,7 @@
           <p class="text-p-sm text-ink-gray-7">
             {{ errorText(leads.error, __("Couldn't load the leads.")) }}
           </p>
-          <Button :label="__('Try again')" @click="load()" />
+          <Button :label="__('Try again')" @click="load(0, true)" />
         </div>
         <div
           v-else-if="leads.loading && !rows.length"
@@ -351,21 +351,30 @@ const emptyText = computed(() =>
 
 const leads = createResource<DepartmentLeads>({
   url: "helpdesk.api.call_batches.get_department_leads",
-  onSuccess(data: DepartmentLeads) {
-    const from = Number(leads.params?.start || 0);
-    rows.value = from ? [...rows.value, ...data.rows] : data.rows;
-  },
 });
 
-function load(start = 0) {
-  if (!start) picked.value = [];
-  leads.submit({
+// the list last asked for: a view change sets the product and the search, and their
+// watchers must not ask again for the same list
+let lastAsked = "";
+function load(start = 0, again = false) {
+  const params = {
     department: props.department.department,
     owner: view.value === "theirs" ? props.member?.user : "",
     product: filters.product || null,
     search: filters.search || null,
     start,
     page_length: PAGE,
+  };
+  const key = JSON.stringify(params);
+  if (key === lastAsked && !again) return;
+  lastAsked = key;
+  if (!start) picked.value = [];
+  // an older page or filter's answer must not land over this one
+  leads.abort();
+  leads.submit(params, {
+    onSuccess(data: DepartmentLeads) {
+      rows.value = start ? [...rows.value, ...data.rows] : data.rows;
+    },
   });
 }
 
@@ -386,7 +395,7 @@ watch(
     actionError.value = "";
     resultText.value = "";
     give.product = props.startProduct || props.member?.product || "";
-    load();
+    load(0, true);
   },
   { immediate: true }
 );
@@ -462,7 +471,7 @@ async function run(
     const result = await call(method, params);
     resultText.value = done(result);
     toast.success(resultText.value);
-    load();
+    load(0, true);
     emit("changed");
   } catch (error) {
     actionError.value = errorText(error, __("Couldn't do that. Try again."));

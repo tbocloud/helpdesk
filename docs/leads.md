@@ -760,8 +760,15 @@ Reads are also kept in Redis (`frappe.cache`), per signed-in person, key
 `hd_leads:<user>:<part>:<params>`: overview, money and intake for 60 s, `get_options` for
 10 minutes. Only successful answers are kept (not an error, not "older ERP site"); the intake's
 daily target is read live. The refresh button and "Try again" send `fresh=1`, which skips the
-copy and renews it. Creating or updating a lead, moving its stage, and creating or sending a
-proposal clear the signed-in person's copies; other people's age out within a minute.
+copy and renews it; on the list tabs Refresh also renews the Follow-up cards and the *Your calls*
+strip. Creating or updating a lead, moving its stage (by hand or the AI's suggestion), and
+creating or sending a proposal clear the signed-in person's copies; other people's age out within
+a minute. A department change also clears everyone's `get_options` copy, as it says who heads a
+department: a new head gets the managers' screens at once, not after 10 minutes.
+
+A list request starts only after the previous one is aborted (`leads.abort()`), so a slow answer
+for an old tab or filter never lands over the new one; *Created by me* is sent only on the tabs
+that show it (My leads, and every tab for a BD).
 
 ### Errors people see
 
@@ -772,7 +779,8 @@ proposal clear the signed-in person's copies; other people's age out within a mi
 | 401 | The ERP site refused the hub's API key. Ask an admin to check Settings → CRM. |
 | 403 saying only the hub's integration user may act for someone else | The hub's API user (email, when the ERP site says who the key belongs to) on (host) isn't the site's integration user: it needs the role in TBO Smart Settings → Hub integration role there (blank: Hub Integration). Ask an admin to add the role that field names to that user. |
 | 403, 404 or 417 saying the method isn't there or isn't whitelisted | Leads need the latest TBO Smart on the ERP site (host). |
-| Any other 403 | You don't have a sales account on the ERP site yet. Ask an admin to give (email) the Sales User role on (host). |
+| 403 saying the person has no sales role or isn't an enabled user, or a 403 with no message | You don't have a sales account on the ERP site yet. Ask an admin to give (email) the Sales User role on (host). |
+| Any other 403 with a message (a refusal of the lead, e.g. "No permission for Lead …") | The ERP site's own message: the person has an account, just not that lead. |
 | Any other 404 | That lead isn't on the ERP site any more, or you can't see it. |
 | Other 4xx with a message | The ERP site's own message (e.g. a missing field, a stage it refuses); never its exception text. |
 | 5xx, or a 4xx with only an exception | The ERP site ran into a problem (status). Try again; if it keeps happening, tell an admin. |
