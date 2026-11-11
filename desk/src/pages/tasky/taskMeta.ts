@@ -392,6 +392,19 @@ export function taskTimer(
     : null;
 }
 
+/** A task a person creates needs a due date or an estimate (the server checks it too). */
+export function hasDueOrEstimate(
+  due: string | null | undefined,
+  hours: number | string | null | undefined
+) {
+  return !!due || Number(hours) > 0;
+}
+
+/** Under a task form's Estimate and Due date while both are empty. */
+export function dueOrEstimateHint() {
+  return __("Give a due date or an estimate.");
+}
+
 /** Hours as whole hours and minutes: 1.5 is {hours: 1, minutes: 30}. */
 export function splitHours(value: number) {
   const total = Math.max(Math.round((Number(value) || 0) * 60), 0);

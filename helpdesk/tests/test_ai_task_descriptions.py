@@ -56,6 +56,9 @@ class AITaskDescriptionCase(FrappeTestCase):
 
     def add_task(self, **kwargs):
         name = kwargs.pop("name", "Enable SSO")
+        # a task needs a due date or an estimate
+        if not kwargs.get("due_date"):
+            kwargs.setdefault("estimated_hours", 2)
         return run_as_user(
             PM[0],
             lambda: tasky.add_task(project=self.project, task_name=name, **kwargs),

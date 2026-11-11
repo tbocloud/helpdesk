@@ -78,9 +78,17 @@ def create_task_from_blocker(
     subject: str,
     assigned_to: str | None = None,
     due_date: str | None = None,
+    estimated_hours: float | str | None = None,
 ) -> dict:
     return standup.create_task_from_blocker(
-        frappe.session.user, name, row, project, subject, assigned_to, due_date
+        frappe.session.user,
+        name,
+        row,
+        project,
+        subject,
+        assigned_to,
+        due_date,
+        estimated_hours,
     )
 
 

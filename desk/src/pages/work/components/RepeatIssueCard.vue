@@ -253,6 +253,16 @@
           :label="__('Project')"
           :options="projectOptions"
         />
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <FormControl v-model="dueDate" type="date" :label="__('Due date')" />
+          <EstimateInput v-model="estimate" :label="__('Estimate')" />
+        </div>
+        <p
+          v-if="!hasDueOrEstimate(dueDate, estimate)"
+          class="text-p-xs text-ink-gray-6"
+        >
+          {{ dueOrEstimateHint() }}
+        </p>
         <div
           v-if="rootCause.error"
           role="alert"
@@ -276,7 +286,11 @@
             :form="formId"
             :label="__('Create task')"
             :loading="rootCause.loading"
-            :disabled="!project || rootCause.loading"
+            :disabled="
+              !project ||
+              !hasDueOrEstimate(dueDate, estimate) ||
+              rootCause.loading
+            "
           />
         </div>
       </template>
@@ -298,6 +312,8 @@ import {
   toast,
 } from "frappe-ui";
 import { computed, ref, useId } from "vue";
+import EstimateInput from "@/pages/tasky/components/EstimateInput.vue";
+import { dueOrEstimateHint, hasDueOrEstimate } from "@/pages/tasky/taskMeta";
 import { RouterLink } from "vue-router";
 import LucideBookOpen from "~icons/lucide/book-open";
 import LucideChevronRight from "~icons/lucide/chevron-right";
@@ -410,6 +426,8 @@ const actionError = computed(() => {
 
 const rootCauseOpen = ref(false);
 const project = ref("");
+const dueDate = ref("");
+const estimate = ref<number | string>(0);
 const projectOptions = computed(() =>
   props.projects.map((p) => ({ label: p.project_name, value: p.name }))
 );
@@ -425,11 +443,19 @@ const rootCause = createResource({
 });
 function openRootCause() {
   project.value = props.projects[0]?.name ?? "";
+  dueDate.value = "";
+  estimate.value = 0;
   rootCause.reset();
   rootCauseOpen.value = true;
 }
 function submitRootCause() {
   if (!project.value || rootCause.loading) return;
-  rootCause.submit({ ...params.value, project: project.value });
+  if (!hasDueOrEstimate(dueDate.value, estimate.value)) return;
+  rootCause.submit({
+    ...params.value,
+    project: project.value,
+    due_date: dueDate.value || null,
+    estimated_hours: Number(estimate.value) || 0,
+  });
 }
 </script>
