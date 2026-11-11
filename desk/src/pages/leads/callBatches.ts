@@ -336,7 +336,22 @@ export interface CallRules {
   call_slots: CallSlot[];
   /** a member's own cap, replacing the department's */
   member_caps: Record<string, number | string>;
+  /** at `auto_assign_at` ("HH:mm"), planned members nobody handed leads to today are topped up */
+  auto_assign: boolean;
+  auto_assign_at: string;
+  auto_assign_skip_sunday: boolean;
+  /** Saturdays of the month without it */
+  auto_assign_skip_saturdays: AutoAssignSaturdays;
 }
+
+export type AutoAssignSaturdays = "None" | "2nd" | "2nd and 4th" | "All";
+
+export const AUTO_ASSIGN_SATURDAYS: { label: string; value: AutoAssignSaturdays }[] = [
+  { label: __("Every Saturday is a work day"), value: "None" },
+  { label: __("Not on the 2nd Saturday"), value: "2nd" },
+  { label: __("Not on the 2nd and 4th Saturdays"), value: "2nd and 4th" },
+  { label: __("Not on Saturdays"), value: "All" },
+];
 
 export const DEFAULT_RULES: CallRules = {
   call_batches_enabled: false,
@@ -353,6 +368,10 @@ export const DEFAULT_RULES: CallRules = {
     { label: "Evening", start_time: "16:00", end_time: "18:00", size: 30 },
   ],
   member_caps: {},
+  auto_assign: true,
+  auto_assign_at: "11:00",
+  auto_assign_skip_sunday: true,
+  auto_assign_skip_saturdays: "2nd",
 };
 
 /** A department's rules as the form edits them (a copy): the defaults for a new one. */
@@ -366,6 +385,10 @@ export function rulesFrom(saved?: Partial<CallRules> | null): CallRules {
       );
   rules.call_batches_enabled = !!saved.call_batches_enabled;
   rules.pull_unassigned = !!saved.pull_unassigned;
+  if (saved.auto_assign !== undefined) {
+    rules.auto_assign = !!saved.auto_assign;
+    rules.auto_assign_skip_sunday = !!saved.auto_assign_skip_sunday;
+  }
   return rules;
 }
 
@@ -391,11 +414,17 @@ export function rulesProblem(rules: CallRules) {
       );
   if (!(Math.floor(Number(rules.daily_call_cap)) >= 1))
     return __("Give the daily limit a number, 1 or more.");
+  if (rules.auto_assign && !/^\d{2}:\d{2}/.test(rules.auto_assign_at || ""))
+    return __("Give the auto-assign time, e.g. 11:00.");
   return "";
 }
 
 /** The rules as the ERP site takes them. */
-export function rulesPayload(rules: CallRules, withProduct = false) {
+export function rulesPayload(
+  rules: CallRules,
+  withProduct = false,
+  withAutoAssign = false
+) {
   const caps: Record<string, number> = {};
   for (const [user, cap] of Object.entries(rules.member_caps))
     if (Math.floor(Number(cap)) >= 1) caps[user] = Math.floor(Number(cap));
@@ -419,5 +448,14 @@ export function rulesPayload(rules: CallRules, withProduct = false) {
       size: Math.floor(Number(s.size)),
     })),
     member_caps: caps,
+    // an older TBO Smart refuses fields it doesn't know
+    ...(withAutoAssign
+      ? {
+          auto_assign: rules.auto_assign ? 1 : 0,
+          auto_assign_at: rules.auto_assign_at,
+          auto_assign_skip_sunday: rules.auto_assign_skip_sunday ? 1 : 0,
+          auto_assign_skip_saturdays: rules.auto_assign_skip_saturdays,
+        }
+      : {}),
   };
 }

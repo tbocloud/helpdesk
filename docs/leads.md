@@ -92,8 +92,12 @@ user exists there with a sales role, applies what they may see, and records writ
 - `latest_quotation` (`{name, tbo_quote_status, grand_total, currency, tbo_sent_on}`) and
   `latest_proposal` (`{name, document_type, status, view_count, sent_on}`) say where a lead
   stands with the client; an older TBO Smart leaves them out and the row shows only the stage.
-- `view` is `all`, `mine`, `call_today` or `follow_up`. The hub sends `page_length` 20
-  (at most 100) and `start` from 0.
+- `view` is `all`, `mine` (owned or created), `call_today`, `follow_up` or `called` (called at
+  least once, last called first; `from_date` / `to_date` without a `metric` keep the leads last
+  called in those days). `mine` keeps any view to the leads the person owns or created, and
+  `created_by_me` to the ones they created (whoever owns them now; the ERP site lets them read,
+  not change, those). An older TBO Smart ignores both and has no `called`. Each row also brings
+  `created_by` and `call_count`. The hub sends `page_length` 20 (at most 100) and `start` from 0.
 - `data` (create and update) uses these keys: `lead_name, company_name, email_id, mobile_no,
   source, segment, territory, industry, state, district, org_size, lead_owner, next_follow_up` (date, `YYYY-MM-DD`), and `tbo_department` (a department's name).
   An update sends only the fields that changed; an empty string clears a field.
@@ -276,7 +280,9 @@ neither; they have the batch table on the Daily report.
 - **Get next batch**, disabled with the ERP site's reason in words under it (calls still pending,
   too many overdue, the day's limit reached, no slot open);
 - **Overdue** at the bottom: calls of a slot that ended, with a danger icon and the word
-  *Overdue*. They stay, and are still callable.
+  *Overdue*. They stay, and are still callable. The ERP site lists a lead once (its latest missed
+  call), so the count is leads, not missed days. A lead comes first in a batch only for a
+  follow-up a person set; one the TBO AI scheduled after a call does not bring it back.
 
 States: loading skeleton, error with retry (and a banner that keeps the last queue when an update
 fails), an older ERP site, a department without batches, no batch right now (with the next slot),
@@ -327,6 +333,19 @@ to give picked leads to them) and **Give now** (*Give each now* for several peop
 the next unassigned leads of the product go to each person at once (`assign_leads` with `count`
 and `product`, one call per person, as *Give the next 25* in the window). Given leads are theirs
 straight away and their next batch can call them; the plan below still sets the calls a day.
+
+**Auto-assign when nobody did.** Under the panel, a clock line says when the department hands
+out leads on its own: *At 11:00, anyone with a plan who wasn't given leads here today is topped up
+to their plan automatically. Not on Sundays or the 2nd Saturday.* The ERP site does it (TBO Smart's
+`call-batches.md` §14): once a day at the department's time, each member with a plan of more than
+0 calls who was not handed a lead here by hand today and is not on leave or a holiday gets the
+next unassigned leads of their plan's product, up to their plan minus the leads of that product
+they still have and never called. It is set per department in **Settings → CRM → Lead
+departments**, under the call-batch rules (`CallBatchRules.vue`): **Auto-assign leads nobody
+handed out** (on), **Auto-assign at** (11:00), **Saturdays** (every one a work day / not the 2nd /
+not the 2nd and 4th / none) and **Not on Sundays** (on). While the ERP site's departments don't carry
+these fields yet (`auto_assign`), the block shows disabled with *Auto-assign needs the latest TBO
+Smart on the ERP site*, none of them is sent, and the Assign leads line stays out.
 
 **Each person's leads, and the unassigned ones.** Every row ends with *1,219 leads* (their
 open leads in the department); it opens a window (`MemberLeadsDialog.vue`) with **Their leads** and
@@ -392,14 +411,20 @@ heads no department. Another BD may be calling the same lead, so a BD sees only 
 them.
 
 **Tabs.** *Today's calls* (the default; *Call today* in its place while their departments have no
-batches), *My leads* (what they own; renamed from *Mine* for everyone), *Follow-up* and their own
-*Commission*. No Overview, Daily report, Business, All, Outreach or *Find prospects*, and no
+batches), *My leads* (what they own or created; renamed from *Mine* for everyone), *Follow-up*,
+*Called* and their own *Commission*. No Overview, Daily report, Business, All, Outreach or *Find prospects*, and no
 Owner filter. Managers and department heads keep everything.
 
-**Only their own leads.** The ERP site also shows a lead to whoever it is assigned to (a
-follow-up given to them on someone else's lead). For a BD the hub sends `owner` as the BD on every
-`list_leads` (All becomes My leads; Follow-up and Call today are their own leads only), and
-`get_lead` refuses a lead someone else owns (*This lead is someone else's*, PermissionError).
+**Only their own leads, and the ones they created.** The ERP site also shows a lead to whoever it
+is assigned to (a follow-up given to them on someone else's lead). For a BD the hub sends `mine`
+on every `list_leads` (All becomes My leads; Follow-up, Call today and Called are their own or
+created leads only), and `get_lead` refuses a lead they neither own nor created (*This lead is
+someone else's*, PermissionError). A lead they created and handed on shows *Created by you* and
+opens read only.
+
+**On the list** (everyone): a **Created by** filter on My leads (*Owned or created* / *Created by
+me*); the **Called** tab with a **Last called** filter (Any time, Today, Yesterday, This week, This
+month); and on every row, next to the last call, how many calls the lead has had.
 
 **On the server too** (`helpdesk.api.leads.is_bd`; `auth.get_user` sends `is_sales_bd` for the
 role, `get_options` sends `is_bd` once the department heads are known): `list_leads` with view *All*

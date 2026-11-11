@@ -191,6 +191,7 @@
             .filter((p) => p.is_active && p.product_name.trim())
             .map((p) => p.product_name.trim())
         "
+        :auto-assign="hasAutoAssign"
       />
       <Switch v-model="form.is_active" :label="__('Active')" />
       <div
@@ -324,6 +325,12 @@ const hasAssignment = computed(
     departments.value.some((d) => d.assignment !== undefined)
 );
 
+// the daily auto-assign shows once the ERP site's departments carry it
+const hasAutoAssign = computed(() =>
+  departments.value.some(
+    (d) => (d as LeadDepartment & Partial<CallRules>).auto_assign !== undefined
+  )
+);
 // the call-batch rules show once the ERP site's departments carry them
 const hasBatches = computed(
   () =>
@@ -421,7 +428,9 @@ function save() {
     values: {
       ...values,
       ...(hasAssignment.value ? { assignment, stale_after_days: days } : {}),
-      ...(hasBatches.value ? rulesPayload(rules.value, hasProducts.value) : {}),
+      ...(hasBatches.value
+        ? rulesPayload(rules.value, hasProducts.value, hasAutoAssign.value)
+        : {}),
       ...(hasProducts.value
         ? {
             products: products.value.map((p) => ({
