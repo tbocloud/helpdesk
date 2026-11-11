@@ -29,6 +29,8 @@ from helpdesk.integrations.crm.leads import (
 )
 
 VIEWS = ("all", "mine", "call_today", "follow_up")
+# when a lead's earliest open follow-up is due: the Follow-up view's cards
+DUE_BUCKETS = ("overdue", "today", "tomorrow", "week", "later")
 PERIODS = ("today", "yesterday", "week", "month", "quarter", "custom")
 # a day is a custom range of that one day on the ERP site, which an older TBO Smart reads too
 DAYS_AGO = {"today": 0, "yesterday": 1}
@@ -172,8 +174,10 @@ def list_leads(
     last_call_result: list | str | None = None,
     last_reply_class: list | str | None = None,
     product: list | str | None = None,
+    due: str | None = None,
 ) -> dict:
-    """A page of leads. `industry`, `state`, `district`, `org_size`, `product`, `last_call_result`
+    """A page of leads. `due` (Follow-up only) keeps the leads whose earliest open follow-up is
+    overdue, today, tomorrow, in the week after (`week`) or `later`. `industry`, `state`, `district`, `org_size`, `product`, `last_call_result`
     (the outcome of the lead's last call) and `last_reply_class` (how its last email reply
     was sorted) each take one value or a list (any of them); a
     list goes to the ERP site as JSON. `metric` with its period keeps the leads one number of the
@@ -182,6 +186,8 @@ def list_leads(
     require_leads()
     if view not in VIEWS:
         frappe.throw(_("Pick All, Mine, Call today or Follow-up."))
+    if due and due not in DUE_BUCKETS:
+        frappe.throw(_("Pick when the follow-ups are due."))
     if is_bd():
         # another BD may be calling the same lead: every list of a BD is the leads they own,
         # Follow-up included (the ERP site also shows a lead to whoever it is assigned to)
@@ -219,11 +225,30 @@ def list_leads(
         ),
         **when,
         view=view,
+        **({"due": due} if due and view == "follow_up" else {}),
         # cint: a malformed number is 0, never a server error
         start=max(cint(start), 0),
         page_length=min(max(cint(page_length) or 20, 1), MAX_PAGE),
     )
     return result or {"rows": [], "total": 0}
+
+
+@frappe.whitelist()
+def get_follow_up_counts(owner: str | None = None, fresh: int | str = 0) -> dict:
+    """The Follow-up view's cards: {overdue, today, tomorrow, week, later}, the leads whose
+    earliest open follow-up is due then (a BD's own or created; else `owner`'s, or all they
+    see). `available` is false while the ERP site's TBO Smart is older than this."""
+    require_leads()
+    params = {"mine": 1} if is_bd() else {"owner": owner or None}
+    result = cached_read(
+        "follow_up_counts",
+        params,
+        READ_TTL,
+        fresh,
+        lambda: call_if_deployed("get_follow_up_counts", **params),
+        keep=lambda answer: answer is not None,
+    )
+    return {**result, "available": True} if result is not None else {"available": False}
 
 
 def check_call_results(value) -> list[str]:

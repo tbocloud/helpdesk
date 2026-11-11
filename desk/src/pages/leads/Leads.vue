@@ -112,6 +112,12 @@
         <div v-else class="mt-3 flex flex-col gap-3">
           <!-- what they called: today, this week, this month, all time, and by day -->
           <MyCallCounts v-if="view === 'mine'" />
+          <!-- overdue, today, tomorrow, the week, later: a card lists its leads -->
+          <FollowUpCards
+            v-if="view === 'follow_up'"
+            v-model="filters.due"
+            :owner="filters.owner"
+          />
           <div
             class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(14rem,2fr)_repeat(4,minmax(9rem,1fr))]"
             role="group"
@@ -602,6 +608,7 @@ import LeadCategoryFilters from "./LeadCategoryFilters.vue";
 import LeadFormDialog from "./LeadFormDialog.vue";
 import LeadSetCategoryDialog from "./LeadSetCategoryDialog.vue";
 import MergeLeadsDialog from "./MergeLeadsDialog.vue";
+import FollowUpCards from "./FollowUpCards.vue";
 import MyCallCounts from "./MyCallCounts.vue";
 import LeadIntakeStrip from "./LeadIntakeStrip.vue";
 import LeadsBusiness from "./LeadsBusiness.vue";
@@ -741,6 +748,8 @@ const filters = reactive({
   owner: queryValue("owner"),
   segment: queryValue("segment"),
   department: queryValue("department"),
+  // the Follow-up card picked: when the follow-ups are due ("" overdue and today)
+  due: queryValue("due"),
 });
 // Industry, State, District, Organisation size and Last call: each any of its values, kept in the
 // URL as repeated keys (?industry=Resorts&industry=Hotels…)
@@ -905,6 +914,7 @@ function clearFilters() {
     owner: "",
     segment: "",
     department: "",
+    due: "",
   });
   categories.value = emptyCategories();
   Object.assign(extra, {
@@ -1005,6 +1015,7 @@ const leads = createResource({
     period: extra.metric ? extra.period || "month" : null,
     from_date: extra.metric ? extra.from || null : null,
     to_date: extra.metric ? extra.to || null : null,
+    due: view.value === "follow_up" ? filters.due || null : null,
     view: isList.value ? view.value : "all",
     start: (page.value - 1) * PAGE_LENGTH,
     page_length: PAGE_LENGTH,
@@ -1167,6 +1178,7 @@ watch(
         owner: f.owner || undefined,
         segment: f.segment || undefined,
         department: f.department || undefined,
+        due: v === "follow_up" ? f.due || undefined : undefined,
         industry: c.industry.length ? c.industry : undefined,
         state: c.state.length ? c.state : undefined,
         district: c.district.length ? c.district : undefined,
