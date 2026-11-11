@@ -404,6 +404,14 @@ Code: `helpdesk/api/call_batches.py` (`get_call_plans`, `save_call_plan`; a 403 
    or type how many to give (and of which product) and press **Give to**. To go back to the department's sizes,
    tick the person and press **Back to department sizes**.
 
+**Follow-up cards.** On *Follow-up*, five number cards (`FollowUpCards.vue`): **Overdue** (in red
+with its icon when there are any), **Due today**, **Tomorrow**, **Next 7 days** (2 to 7 days on)
+and **Later**, counting the leads whose earliest open follow-up is due then (a BD's own or
+created; else the Owner filter's, or everyone they see). Picking a card lists its leads (`due`
+on `list_leads`, kept in the URL); picking it again goes back to the list as before, overdue
+and due today. `helpdesk.api.leads.get_follow_up_counts` (cached 60 seconds per person) reads TBO
+Smart's `get_follow_up_counts`; the cards stay out while an older TBO Smart can't count.
+
 **Your calls on My leads.** At the top of *My leads*, a strip (`MyCallCounts.vue`) shows the
 person's own calls **Today**, **This week** (from Monday), **This month** and **All time**, each
 with how many connected; **By day** opens every day with calls in the last year, newest first
