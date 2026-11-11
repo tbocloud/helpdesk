@@ -382,6 +382,16 @@
                     )
                   }}
                 </p>
+                <p
+                  v-if="autoAssignText(current)"
+                  class="flex items-start gap-1.5 text-ink-gray-6"
+                >
+                  <LucideClock
+                    class="mt-0.5 size-4 shrink-0 text-ink-gray-5"
+                    aria-hidden="true"
+                  />
+                  <span>{{ autoAssignText(current) }}</span>
+                </p>
               </div>
 
               <ErrorMessage
@@ -452,6 +462,7 @@ import { computed, reactive, ref, useId, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import LucideChevronRight from "~icons/lucide/chevron-right";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
+import LucideClock from "~icons/lucide/clock";
 import LucideCloudOff from "~icons/lucide/cloud-off";
 import LucideLock from "~icons/lucide/lock";
 import LucidePhoneOff from "~icons/lucide/phone-off";
@@ -459,6 +470,7 @@ import LucideTriangleAlert from "~icons/lucide/triangle-alert";
 import LucideUsers from "~icons/lucide/users";
 import MemberLeadsDialog from "./MemberLeadsDialog.vue";
 import {
+  autoAssignText,
   leadsReady,
   poolStuck,
   type CallPlans,

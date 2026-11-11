@@ -2,6 +2,8 @@
  * (docs/leads.md, "Assign leads"; TBO Smart's call-batches.md §11). The ERP site keeps the
  * plans and hands out the batches; the hub only shows and saves them. */
 
+import { __ } from "@/translation";
+
 export interface PlanSlot {
   label: string;
   /** "HH:mm" */
@@ -55,6 +57,36 @@ export interface PlanDepartment {
   /** open unassigned leads with a phone, per product ("" for none) */
   unassigned: Record<string, number>;
   members: PlanMember[];
+  /** the daily auto-assign (TBO Smart's call-batches.md §14; absent from an older TBO Smart) */
+  auto_assign?: {
+    auto_assign: number;
+    /** "HH:mm" */
+    auto_assign_at: string;
+    auto_assign_skip_sunday: number;
+    auto_assign_skip_saturdays: "None" | "2nd" | "2nd and 4th" | "All";
+    /** the last day it ran */
+    auto_assigned_on: string | null;
+  };
+}
+
+/** When the department tops up the people nobody handed leads to, in words; "" when it doesn't. */
+export function autoAssignText(department: PlanDepartment) {
+  const rules = department.auto_assign;
+  if (!rules?.auto_assign) return "";
+  const off: string[] = [];
+  if (rules.auto_assign_skip_sunday) off.push(__("Sundays"));
+  const saturdays = {
+    None: "",
+    "2nd": __("the 2nd Saturday"),
+    "2nd and 4th": __("the 2nd and 4th Saturdays"),
+    All: __("Saturdays"),
+  }[rules.auto_assign_skip_saturdays];
+  if (saturdays) off.push(saturdays);
+  const when = __(
+    "At {0}, anyone with a plan who wasn't given leads here today is topped up to their plan automatically.",
+    rules.auto_assign_at
+  );
+  return off.length ? `${when} ${__("Not on {0}.", off.join(__(" or ")))}` : when;
 }
 
 export interface CallPlans {

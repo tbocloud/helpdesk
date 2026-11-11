@@ -319,6 +319,19 @@ leads anyway), one primary **Assign leads** button and, for people who have a pl
 department sizes**. A department's campaign product is the only product (the picker is locked
 and says why).
 
+**Auto-assign when nobody did.** Under the panel, a clock line says when the department hands
+out leads on its own: *At 11:00, anyone with a plan who wasn't given leads here today is topped up
+to their plan automatically. Not on Sundays or the 2nd Saturday.* The ERP site does it (TBO Smart's
+`call-batches.md` §14): once a day at the department's time, each member with a plan of more than
+0 calls who was not handed a lead here by hand today and is not on leave or a holiday gets the
+next unassigned leads of their plan's product, up to their plan minus the leads of that product
+they still have and never called. It is set per department in **Settings → CRM → Lead
+departments**, under the call-batch rules (`CallBatchRules.vue`): **Auto-assign leads nobody
+handed out** (on), **Auto-assign at** (11:00), **Saturdays** (every one a work day / not the 2nd /
+not the 2nd and 4th / none) and **Not on Sundays** (on). While the ERP site's departments don't carry
+these fields yet (`auto_assign`), the block shows disabled with *Auto-assign needs the latest TBO
+Smart on the ERP site*, none of them is sent, and the Assign leads line stays out.
+
 **Each person's leads, and the unassigned ones.** Every row ends with *1,219 leads* (their
 open leads in the department); it opens a window (`MemberLeadsDialog.vue`) with **Their leads** and
 **Unassigned**, a Product filter with counts and a search (name, company, phone):
