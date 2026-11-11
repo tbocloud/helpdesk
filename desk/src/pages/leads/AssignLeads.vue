@@ -122,7 +122,7 @@
               }}
             </p>
             <Button
-              v-if="stuck === 'zero'"
+              v-if="stuck === 'zero' && canEdit"
               :label="__('Set the plan')"
               @click="pickAll(true)"
             />
@@ -140,7 +140,7 @@
                 class="flex items-center gap-3 border-b border-outline-gray-1 px-4 py-3"
               >
                 <Checkbox
-                  v-if="current.members.length"
+                  v-if="current.members.length && canEdit"
                   :model-value="allPicked"
                   :aria-label="__('Pick everyone')"
                   @update:model-value="pickAll(!!$event)"
@@ -177,11 +177,12 @@
 
               <template v-else>
                 <div
-                  class="hidden grid-cols-[2rem_minmax(0,1fr)_9rem_repeat(var(--slots),4.5rem)_6rem_6rem] items-center gap-2 px-4 py-2 text-xs text-ink-gray-6 md:grid"
+                  class="hidden items-center gap-2 px-4 py-2 text-xs text-ink-gray-6 md:grid"
+                  :class="rowColumns"
                   :style="{ '--slots': current.slots.length }"
                   aria-hidden="true"
                 >
-                  <span />
+                  <span v-if="canEdit" />
                   <span>{{ __("Name") }}</span>
                   <span>{{ __("Product") }}</span>
                   <span
@@ -197,12 +198,21 @@
                   class="divide-y divide-outline-gray-1 border-t border-outline-gray-1 md:border-t-0"
                 >
                   <li v-for="member in current.members" :key="member.user">
-                    <label
-                      class="grid cursor-pointer grid-cols-[2rem_minmax(0,1fr)] items-center gap-x-2 gap-y-1 px-4 py-3 hover:bg-surface-gray-1 md:grid-cols-[2rem_minmax(0,1fr)_9rem_repeat(var(--slots),4.5rem)_6rem_6rem]"
-                      :class="isPicked(member.user) && 'bg-surface-gray-1'"
+                    <!-- a viewer can't pick anyone: a plain row, not a label -->
+                    <component
+                      :is="canEdit ? 'label' : 'div'"
+                      class="grid items-center gap-x-2 gap-y-1 px-4 py-3"
+                      :class="[
+                        rowColumns,
+                        canEdit
+                          ? 'cursor-pointer grid-cols-[2rem_minmax(0,1fr)] hover:bg-surface-gray-1'
+                          : 'grid-cols-[minmax(0,1fr)]',
+                        isPicked(member.user) && 'bg-surface-gray-1',
+                      ]"
                       :style="{ '--slots': current.slots.length }"
                     >
                       <Checkbox
+                        v-if="canEdit"
                         :model-value="isPicked(member.user)"
                         :aria-label="member.full_name"
                         @update:model-value="toggle(member.user, !!$event)"
@@ -219,7 +229,7 @@
                         </span>
                       </span>
                       <span
-                        class="col-start-2 hidden min-w-0 truncate text-sm md:col-start-auto md:block"
+                        class="hidden min-w-0 truncate text-sm md:block"
                         :class="
                           member.product ? 'text-ink-gray-8' : 'text-ink-gray-5'
                         "
@@ -239,7 +249,8 @@
                         {{ member.sizes[slot.label] ?? slot.size }}
                       </span>
                       <span
-                        class="col-start-2 text-sm text-ink-gray-6 tabular-nums md:col-start-auto md:text-right"
+                        class="text-sm text-ink-gray-6 tabular-nums md:col-start-auto md:text-right"
+                        :class="canEdit && 'col-start-2'"
                         :title="__('Called / handed today')"
                       >
                         <span class="font-mono">{{
@@ -250,9 +261,15 @@
                       <!-- a button inside the row's label: it must not tick the person -->
                       <button
                         type="button"
-                        class="col-start-2 justify-self-start rounded px-1 text-sm text-ink-gray-8 underline decoration-outline-gray-3 underline-offset-2 hover:text-ink-gray-9 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight md:col-start-auto md:justify-self-end"
+                        class="justify-self-start rounded px-1 text-sm text-ink-gray-8 underline decoration-outline-gray-3 underline-offset-2 hover:text-ink-gray-9 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight md:col-start-auto md:justify-self-end"
+                        :class="canEdit && 'col-start-2'"
                         :aria-label="
-                          __('See and move the leads of {0}', member.full_name)
+                          canEdit
+                            ? __(
+                                'See and move the leads of {0}',
+                                member.full_name
+                              )
+                            : __('See the leads of {0}', member.full_name)
                         "
                         @click.prevent.stop="openLeads(member)"
                       >
@@ -261,7 +278,7 @@
                         }}</span>
                         {{ __("leads") }}
                       </button>
-                    </label>
+                    </component>
                   </li>
                 </ul>
                 <p
@@ -276,8 +293,35 @@
               </template>
             </section>
 
+            <!-- a viewer watches: no plan to set -->
+            <section
+              v-if="!canEdit"
+              class="flex flex-col gap-2 rounded-xl border border-outline-gray-2 bg-surface-base p-4 lg:sticky lg:top-0"
+              :aria-labelledby="planHeading"
+            >
+              <h2
+                :id="planHeading"
+                class="flex items-center gap-2 text-base-medium text-ink-gray-9"
+              >
+                <LucideEye class="size-4 text-ink-gray-6" aria-hidden="true" />
+                {{ __("View only") }}
+              </h2>
+              <p class="text-p-sm text-ink-gray-7">
+                {{
+                  __(
+                    "You can watch {0}: plans, today's calls and leads. Ask a Sales Manager or the department head to change them.",
+                    current.department
+                  )
+                }}
+              </p>
+              <p class="text-xs text-ink-gray-5 tabular-nums" aria-live="off">
+                {{ updatedText }}
+              </p>
+            </section>
+
             <!-- the plan for the people picked -->
             <form
+              v-else
               class="flex flex-col gap-4 rounded-xl border border-outline-gray-2 bg-surface-base p-4 lg:sticky lg:top-0"
               novalidate
               :aria-labelledby="planHeading"
@@ -462,13 +506,14 @@
                   variant="ghost"
                   :label="
                     __(
-                      'Back to department sizes ({0})',
-                      String(pickedWithPlan.length)
+                      'Remove plan · use {0} default ({1})',
+                      current.department,
+                      defaultSizes
                     )
                   "
                   :loading="save.loading && clearing"
                   :disabled="save.loading"
-                  @click="clearPlans"
+                  @click="confirmClear = true"
                 />
               </div>
               <p class="text-xs text-ink-gray-5">
@@ -488,11 +533,31 @@
     v-if="current"
     v-model:open="showLeads"
     :department="current"
+    :read-only="!canEdit"
     :member="leadsOf"
     :start-on-pool="leadsOnPool"
     :start-product="leadsProduct"
     @changed="plans.reload()"
   />
+  <Dialog
+    v-if="current"
+    v-model:open="confirmClear"
+    :title="clearTitle"
+    size="sm"
+  >
+    <p class="text-p-base text-ink-gray-7">
+      {{ defaultText }}
+    </p>
+    <div class="mt-6 flex justify-end gap-2">
+      <Button :label="__('Cancel')" @click="confirmClear = false" />
+      <Button
+        variant="solid"
+        :label="__('Remove plan')"
+        :loading="save.loading && clearing"
+        @click="clearPlans"
+      />
+    </div>
+  </Dialog>
 </template>
 
 <script setup lang="ts">
@@ -500,11 +565,13 @@ import LayoutHeader from "@/components/LayoutHeader.vue";
 import TaskyState from "@/components/TaskyState.vue";
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
+import { useDocumentVisibility, useIntervalFn } from "@vueuse/core";
 import {
   Button,
   call,
   Checkbox,
   createResource,
+  Dialog,
   ErrorMessage,
   FormControl,
   toast,
@@ -514,6 +581,7 @@ import { useRoute, useRouter } from "vue-router";
 import LucideChevronRight from "~icons/lucide/chevron-right";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideClock from "~icons/lucide/clock";
+import LucideEye from "~icons/lucide/eye";
 import LucideCloudOff from "~icons/lucide/cloud-off";
 import LucideLock from "~icons/lucide/lock";
 import LucidePhoneOff from "~icons/lucide/phone-off";
@@ -557,6 +625,38 @@ const current = computed<PlanDepartment | undefined>(() => {
 });
 
 const stuck = computed(() => (current.value ? poolStuck(current.value) : null));
+
+// a department's viewer sees the page but changes nothing; an older ERP site sends no can_edit
+const canEdit = computed(() => current.value?.can_edit !== false);
+const rowColumns = computed(() =>
+  canEdit.value
+    ? "md:grid-cols-[2rem_minmax(0,1fr)_9rem_repeat(var(--slots),4.5rem)_6rem_6rem]"
+    : "md:grid-cols-[minmax(0,1fr)_9rem_repeat(var(--slots),4.5rem)_6rem_6rem]"
+);
+
+// live: today's calls and the leads move all day, so the page reads again every 15 seconds
+// while it is in view, and at once when it comes back into view
+const LIVE_EVERY = 15_000;
+const visibility = useDocumentVisibility();
+const updatedAt = ref<Date>();
+watch(
+  () => plans.data,
+  () => (updatedAt.value = new Date())
+);
+useIntervalFn(() => {
+  if (visibility.value === "visible" && !plans.loading) plans.reload();
+}, LIVE_EVERY);
+watch(visibility, (state) => {
+  if (state === "visible" && !plans.loading) plans.reload();
+});
+const updatedText = computed(() =>
+  updatedAt.value
+    ? __(
+        "Updates by itself. Last updated {0}.",
+        updatedAt.value.toLocaleTimeString()
+      )
+    : ""
+);
 
 const departmentOptions = computed(() =>
   (plans.data?.departments ?? []).map((d) => ({
@@ -608,6 +708,41 @@ const pickedLabel = computed(() =>
     ? pickedMembers.value[0].full_name
     : __("{0} people", String(pickedMembers.value.length))
 );
+
+// ---------- removing a plan: back to the department's slot sizes ----------
+
+const confirmClear = ref(false);
+const defaultSizes = computed(() =>
+  (current.value?.slots ?? []).map((s) => String(s.size)).join(" + ")
+);
+const clearLabel = computed(() =>
+  pickedWithPlan.value.length === 1
+    ? pickedWithPlan.value[0].full_name
+    : __("{0} people", String(pickedWithPlan.value.length))
+);
+const clearTitle = computed(() => __("Remove {0}'s plan?", clearLabel.value));
+const defaultText = computed(() => {
+  const department = current.value;
+  if (!department) return "";
+  const sizes = department.slots.map((s) => `${s.label} ${s.size}`).join(" + ");
+  const product = department.campaign_product
+    ? department.campaign_product
+    : department.products.length
+    ? __("any product")
+    : "";
+  return product
+    ? __(
+        "From the next slot they get {0}'s default: {1}, {2}.",
+        department.department,
+        sizes,
+        product
+      )
+    : __(
+        "From the next slot they get {0}'s default: {1}.",
+        department.department,
+        sizes
+      );
+});
 
 // ---------- the plan ----------
 
@@ -710,12 +845,17 @@ const save = createResource({
     }
     toast.success(
       clearing.value
-        ? __("Back to the department's sizes for {0}", pickedLabel.value)
+        ? __(
+            "Plan removed for {0}: they get the department's default",
+            clearLabel.value
+          )
         : __("Leads assigned to {0}", pickedLabel.value)
     );
     picked.value = [];
+    confirmClear.value = false;
   },
   onError(error: unknown) {
+    confirmClear.value = false;
     formError.value = errorText(error, __("Couldn't save. Try again."));
   },
 });

@@ -75,6 +75,8 @@ export interface LeadDepartmentOption {
   lead_type?: string;
   is_active?: boolean | number;
   is_head?: boolean | number;
+  /** may watch the department on Assign leads, read-only */
+  is_viewer?: boolean | number;
   is_member?: boolean | number;
   /** members get daily call batches (Today's calls); absent from an older TBO Smart */
   call_batches_enabled?: boolean | number;
@@ -98,6 +100,8 @@ export interface LeadDepartment {
   /** days without activity before a lead is chased (absent from an older TBO Smart) */
   stale_after_days?: number;
   heads: { user: string; full_name?: string }[];
+  /** watch Assign leads read-only; absent from an older TBO Smart */
+  viewers?: { user: string; full_name?: string }[];
   members: { user: string; full_name?: string }[];
   /** every product / brand, switched-off ones too (absent from an older TBO Smart) */
   products?: LeadProduct[];
