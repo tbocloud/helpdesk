@@ -172,7 +172,8 @@ def list_leads(
     last_call_result: list | str | None = None,
     last_reply_class: list | str | None = None,
     product: list | str | None = None,
-    created_by_me: bool | int | str = False,
+    # the page sends null while the Created by filter is off
+    created_by_me: bool | int | str | None = None,
 ) -> dict:
     """A page of leads. `view` called lists the leads called at least once, last called first
     (`from_date` and `to_date` without a `metric` keep those last called in those days);
