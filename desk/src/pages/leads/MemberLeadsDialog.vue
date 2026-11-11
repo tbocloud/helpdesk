@@ -23,7 +23,7 @@
           v-model="filters.product"
           type="select"
           class="w-full sm:w-56"
-          :label="__('Product')"
+          :label="industryMode ? __('Industry') : __('Product')"
           :options="productFilter"
         />
         <FormControl
@@ -55,8 +55,12 @@
           v-model="give.product"
           type="select"
           class="w-full sm:w-48"
-          :label="__('Of product')"
-          :options="productChoices(__('Any product'))"
+          :label="industryMode ? __('Of industry') : __('Of product')"
+          :options="
+            productChoices(
+              industryMode ? __('Any industry') : __('Any product')
+            )
+          "
         />
         <Button
           type="submit"
@@ -148,9 +152,17 @@
               </span>
               <span
                 class="col-start-2 truncate text-sm sm:col-start-auto"
-                :class="lead.product ? 'text-ink-gray-8' : 'text-ink-gray-5'"
+                :class="
+                  (industryMode ? lead.industry : lead.product)
+                    ? 'text-ink-gray-8'
+                    : 'text-ink-gray-5'
+                "
               >
-                {{ lead.product || __("No product") }}
+                {{
+                  industryMode
+                    ? lead.industry || __("No industry")
+                    : lead.product || __("No product")
+                }}
               </span>
               <span
                 class="col-start-2 hidden truncate font-mono text-xs text-ink-gray-5 sm:col-start-auto sm:block sm:text-right"
@@ -178,7 +190,8 @@
         v-if="picked.length"
         class="flex flex-col gap-3 rounded-lg border border-outline-gray-2 p-3"
       >
-        <div class="flex flex-wrap items-end gap-3">
+        <!-- a department without products has none to set -->
+        <div v-if="!industryMode" class="flex flex-wrap items-end gap-3">
           <FormControl
             v-model="act.product"
             type="select"
@@ -289,11 +302,12 @@ import {
   toast,
 } from "frappe-ui";
 import { computed, reactive, ref, watch } from "vue";
-import type {
-  DepartmentLead,
-  DepartmentLeads,
-  PlanDepartment,
-  PlanMember,
+import {
+  byIndustry,
+  type DepartmentLead,
+  type DepartmentLeads,
+  type PlanDepartment,
+  type PlanMember,
 } from "./callPlans";
 
 type View = "theirs" | "pool";
@@ -362,7 +376,10 @@ function load(start = 0) {
   leads.submit({
     department: props.department.department,
     owner: view.value === "theirs" ? props.member?.user : "",
-    product: filters.product || null,
+    // a department without products: the picker is the industry
+    ...(industryMode.value
+      ? { industry: filters.product || null }
+      : { product: filters.product || null }),
     search: filters.search || null,
     start,
     page_length: PAGE,
@@ -385,7 +402,10 @@ watch(
     filters.search = "";
     actionError.value = "";
     resultText.value = "";
-    give.product = props.startProduct || props.member?.product || "";
+    give.product =
+      props.startProduct ||
+      (industryMode.value ? props.member?.industry : props.member?.product) ||
+      "";
     load();
   },
   { immediate: true }
@@ -418,20 +438,34 @@ function pickAll(on: boolean) {
 
 // ---------- choices ----------
 
+// a department without products picks leads by industry instead (byIndustry)
+const industryMode = computed(() => byIndustry(props.department));
 const productNames = computed(() =>
-  props.department.products.map((p) => p.product_name)
+  industryMode.value
+    ? props.department.industries ?? []
+    : props.department.products.map((p) => p.product_name)
 );
 const productFilter = computed(() => {
-  const counts = leads.data?.products ?? {};
+  const counts =
+    (industryMode.value ? leads.data?.industries : leads.data?.products) ?? {};
   const label = (name: string, key: string) =>
     counts[key] === undefined ? name : `${name} (${counts[key]})`;
   return [
-    { label: __("All products"), value: "" },
+    {
+      label: industryMode.value ? __("All industries") : __("All products"),
+      value: "",
+    },
     ...productNames.value.map((name) => ({
       label: label(name, name),
       value: name,
     })),
-    { label: label(__("No product"), ""), value: "-" },
+    {
+      label: label(
+        industryMode.value ? __("No industry") : __("No product"),
+        ""
+      ),
+      value: "-",
+    },
   ];
 });
 function productChoices(blank: string) {
@@ -492,7 +526,9 @@ function giveByNumber() {
       department: props.department.department,
       user: props.member?.user,
       count,
-      product: give.product || null,
+      ...(industryMode.value
+        ? { industry: give.product || null }
+        : { product: give.product || null }),
     },
     (r) => __("{0} leads given to {1}.", String(r.assigned), firstName.value)
   );
