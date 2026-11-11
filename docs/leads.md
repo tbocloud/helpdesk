@@ -319,6 +319,15 @@ leads anyway), one primary **Assign leads** button and, for people who have a pl
 department sizes**. A department's campaign product is the only product (the picker is locked
 and says why).
 
+**The product's unassigned leads, there and then.** Each product in the picker says how many
+unassigned leads with a phone it has (*PhoebiX · 120 unassigned*; *Any product* the total). With
+people picked, a box under it says *120 unassigned PhoebiX leads* with **See leads** (the
+Unassigned window, already on that product; with one person picked it opens on their pool, ready
+to give picked leads to them) and **Give now** (*Give each now* for several people): that many of
+the next unassigned leads of the product go to each person at once (`assign_leads` with `count`
+and `product`, one call per person, as *Give the next 25* in the window). Given leads are theirs
+straight away and their next batch can call them; the plan below still sets the calls a day.
+
 **Each person's leads, and the unassigned ones.** Every row ends with *1,219 leads* (their
 open leads in the department); it opens a window (`MemberLeadsDialog.vue`) with **Their leads** and
 **Unassigned**, a Product filter with counts and a search (name, company, phone):

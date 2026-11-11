@@ -315,6 +315,54 @@
                 "
               />
 
+              <!-- the product's unassigned leads: see them, or hand some out now -->
+              <div
+                v-if="picked.length"
+                class="flex flex-col gap-2 rounded-lg border border-outline-gray-2 p-3"
+              >
+                <div class="flex items-center justify-between gap-2">
+                  <p class="text-p-sm text-ink-gray-8">
+                    <span class="font-mono tabular-nums">{{ ready }}</span>
+                    {{
+                      form.product
+                        ? __("unassigned {0} leads", form.product)
+                        : __("unassigned leads")
+                    }}
+                  </p>
+                  <Button
+                    :label="__('See leads')"
+                    :disabled="!ready"
+                    @click="openPool"
+                  />
+                </div>
+                <div v-if="ready" class="flex items-end gap-2">
+                  <FormControl
+                    v-model="giveCount"
+                    type="number"
+                    min="1"
+                    :max="MAX_GIVE"
+                    inputmode="numeric"
+                    class="w-28"
+                    :label="
+                      picked.length === 1 ? __('Give now') : __('Give each now')
+                    "
+                  />
+                  <Button
+                    :label="__('Give to {0}', pickedLabel)"
+                    :loading="giving"
+                    :disabled="giving"
+                    @click="giveNow"
+                  />
+                </div>
+                <p class="text-xs text-ink-gray-5">
+                  {{
+                    __(
+                      "Given now: they own the leads at once, and their next batch can call them. The plan below sets how many calls a day."
+                    )
+                  }}
+                </p>
+              </div>
+
               <fieldset class="flex flex-col gap-2" :disabled="!picked.length">
                 <legend class="mb-1.5 text-xs text-ink-gray-5">
                   {{ __("Calls per person") }}
@@ -431,6 +479,8 @@
     v-model:open="showLeads"
     :department="current"
     :member="leadsOf"
+    :start-on-pool="leadsOnPool"
+    :start-product="leadsProduct"
     @changed="plans.reload()"
   />
 </template>
@@ -442,6 +492,7 @@ import { __ } from "@/translation";
 import { errorText } from "@/utils";
 import {
   Button,
+  call,
   Checkbox,
   createResource,
   ErrorMessage,
@@ -584,13 +635,25 @@ watch(
   }
 );
 
-const productOptions = computed(() => [
-  { label: __("Any product"), value: "" },
-  ...(current.value?.products ?? []).map((p) => ({
-    label: p.product_name,
-    value: p.product_name,
-  })),
-]);
+/** "PhoebiX · 120 unassigned": how many leads of each product wait to be handed out. */
+const productOptions = computed(() => {
+  const department = current.value;
+  const label = (name: string, product: string | null) =>
+    department
+      ? __(
+          "{0} · {1} unassigned",
+          name,
+          String(leadsReady(department, product))
+        )
+      : name;
+  return [
+    { label: label(__("Any product"), null), value: "" },
+    ...(department?.products ?? []).map((p) => ({
+      label: label(p.product_name, p.product_name),
+      value: p.product_name,
+    })),
+  ];
+});
 
 const perPerson = computed(() =>
   Object.values(form.sizes).reduce(
@@ -674,9 +737,68 @@ function clearPlans() {
 
 const showLeads = ref(false);
 const leadsOf = ref<PlanMember | null>(null);
+const leadsOnPool = ref(false);
+const leadsProduct = ref("");
 function openLeads(member: PlanMember | null) {
   leadsOf.value = member;
+  leadsOnPool.value = false;
+  leadsProduct.value = "";
   showLeads.value = true;
+}
+
+/** The chosen product's unassigned leads, ready to give to the one person picked. */
+function openPool() {
+  leadsOf.value =
+    pickedMembers.value.length === 1 ? pickedMembers.value[0] : null;
+  leadsOnPool.value = true;
+  leadsProduct.value = form.product;
+  showLeads.value = true;
+}
+
+// ---------- give unassigned leads now ----------
+
+// the ERP site refuses more in one call
+const MAX_GIVE = 500;
+const giveCount = ref<number | string>(25);
+const giving = ref(false);
+
+/** The next N unassigned leads of the chosen product to each person picked, one call each. */
+async function giveNow() {
+  const count = Number(giveCount.value);
+  if (!Number.isInteger(count) || count < 1 || count > MAX_GIVE) {
+    formError.value = __(
+      "Give a whole number from 1 to {0}.",
+      String(MAX_GIVE)
+    );
+    return;
+  }
+  formError.value = "";
+  giving.value = true;
+  let given = 0;
+  try {
+    for (const member of pickedMembers.value) {
+      const result = await call("helpdesk.api.call_batches.assign_leads", {
+        department: current.value?.department,
+        user: member.user,
+        count,
+        product: form.product || null,
+      });
+      given += Number(result?.assigned) || 0;
+    }
+    toast.success(
+      given
+        ? __("{0} leads given to {1}.", String(given), pickedLabel.value)
+        : __("No unassigned leads were left to give.")
+    );
+  } catch (error) {
+    formError.value = errorText(
+      error,
+      __("Couldn't give the leads. Try again.")
+    );
+  } finally {
+    giving.value = false;
+    plans.reload();
+  }
 }
 
 /** "PhoebiX · 50 + 50", the plan on one line for a phone. */

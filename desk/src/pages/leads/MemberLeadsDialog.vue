@@ -303,6 +303,10 @@ const props = defineProps<{
   department: PlanDepartment;
   /** the person whose leads open first; null: the unassigned pool */
   member: PlanMember | null;
+  /** open on the unassigned leads (to give to `member`) instead of theirs */
+  startOnPool?: boolean;
+  /** the product the list opens on ("" or none: every product) */
+  startProduct?: string;
 }>();
 const emit = defineEmits<{
   (e: "update:open", value: boolean): void;
@@ -376,12 +380,12 @@ watch(
   () => props.open,
   (open) => {
     if (!open) return;
-    view.value = props.member ? "theirs" : "pool";
-    filters.product = "";
+    view.value = props.member && !props.startOnPool ? "theirs" : "pool";
+    filters.product = props.startProduct ?? "";
     filters.search = "";
     actionError.value = "";
     resultText.value = "";
-    give.product = props.member?.product ?? "";
+    give.product = props.startProduct || props.member?.product || "";
     load();
   },
   { immediate: true }
