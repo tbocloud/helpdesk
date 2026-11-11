@@ -60,6 +60,26 @@ class TestLeads(FrappeTestCase):
         ((method, _post, params),) = self.crm.lead_calls
         self.assertEqual((method, params["days"]), ("get_my_call_counts", 366))
 
+    def test_follow_up_cards_count_and_list_by_when_they_are_due(self):
+        self.crm.lead_answers["get_follow_up_counts"] = {
+            "overdue": 4,
+            "today": 2,
+            "tomorrow": 1,
+            "week": 3,
+            "later": 0,
+        }
+        self.as_bde()
+        counts = leads_api.get_follow_up_counts(owner="x@y.example", fresh=1)
+        self.assertEqual((counts["available"], counts["overdue"]), (True, 4))
+        leads_api.list_leads(view="follow_up", due="tomorrow")
+        sent = [p for m, _post, p in self.crm.lead_calls if m == "list_leads"][-1]
+        self.assertEqual(sent["due"], "tomorrow")
+        leads_api.list_leads(view="all", due="tomorrow")
+        sent = [p for m, _post, p in self.crm.lead_calls if m == "list_leads"][-1]
+        self.assertNotIn("due", sent)
+        with self.assertRaises(frappe.ValidationError):
+            leads_api.list_leads(view="follow_up", due="soon")
+
     def test_leads_are_off_by_default(self):
         frappe.db.set_single_value("HD CRM Settings", "enable_leads", 0)
         self.as_bde()

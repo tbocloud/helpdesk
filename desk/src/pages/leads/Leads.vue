@@ -112,6 +112,12 @@
         <div v-else class="mt-3 flex flex-col gap-3">
           <!-- what they called: today, this week, this month, all time, and by day -->
           <MyCallCounts v-if="view === 'mine'" />
+          <!-- overdue, today, tomorrow, the week, later: a card lists its leads -->
+          <FollowUpCards
+            v-if="view === 'follow_up'"
+            v-model="filters.due"
+            :owner="filters.owner"
+          />
           <div
             class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(14rem,2fr)_repeat(4,minmax(9rem,1fr))]"
             role="group"
@@ -639,6 +645,7 @@ import LeadCategoryFilters from "./LeadCategoryFilters.vue";
 import LeadFormDialog from "./LeadFormDialog.vue";
 import LeadSetCategoryDialog from "./LeadSetCategoryDialog.vue";
 import MergeLeadsDialog from "./MergeLeadsDialog.vue";
+import FollowUpCards from "./FollowUpCards.vue";
 import MyCallCounts from "./MyCallCounts.vue";
 import LeadIntakeStrip from "./LeadIntakeStrip.vue";
 import LeadsBusiness from "./LeadsBusiness.vue";
@@ -783,6 +790,8 @@ const filters = reactive({
   created_by: queryValue("created_by"),
   // the Called tab: when the lead was last called
   called: queryValue("called"),
+  // the Follow-up card picked: when the follow-ups are due ("" overdue and today)
+  due: queryValue("due"),
 });
 const CREATED_BY = [
   { label: __("Owned or created"), value: "" },
@@ -973,6 +982,7 @@ function clearFilters() {
     department: "",
     created_by: "",
     called: "",
+    due: "",
   });
   categories.value = emptyCategories();
   Object.assign(extra, {
@@ -1082,6 +1092,7 @@ const leads = createResource({
       ? calledRange(filters.called)[1]
       : null,
     created_by_me: filters.created_by === "me" ? 1 : null,
+    due: view.value === "follow_up" ? filters.due || null : null,
     view: isList.value ? view.value : "all",
     start: (page.value - 1) * PAGE_LENGTH,
     page_length: PAGE_LENGTH,
@@ -1246,6 +1257,7 @@ watch(
         department: f.department || undefined,
         created_by: f.created_by || undefined,
         called: f.called || undefined,
+        due: v === "follow_up" ? f.due || undefined : undefined,
         industry: c.industry.length ? c.industry : undefined,
         state: c.state.length ? c.state : undefined,
         district: c.district.length ? c.district : undefined,
