@@ -404,6 +404,14 @@ Code: `helpdesk/api/call_batches.py` (`get_call_plans`, `save_call_plan`; a 403 
    or type how many to give (and of which product) and press **Give to**. To go back to the department's sizes,
    tick the person and press **Back to department sizes**.
 
+**Your calls on My leads.** At the top of *My leads*, a strip (`MyCallCounts.vue`) shows the
+person's own calls **Today**, **This week** (from Monday), **This month** and **All time**, each
+with how many connected; **By day** opens every day with calls in the last year, newest first
+(day, calls, connected). They are counted as the Daily report counts calls: every call the
+person made or took (Today's calls, Log call, MyOperator), answered ones as connected; calling a
+lead twice is two calls. `helpdesk.api.leads.get_my_call_counts` (cached 60 seconds per person)
+reads TBO Smart's `get_my_call_counts`; the strip stays out while an older TBO Smart can't count.
+
 ## BD view, calling for, and recording results
 
 A **BD** is a Sales Employee who is not a System Manager, Agent Manager or Sales Manager and

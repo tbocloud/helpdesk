@@ -70,6 +70,8 @@ MAX_PHOTO_BASE64 = 14 * 1024 * 1024
 PHOTO_METHOD = "helpdesk.api.leads.lead_photo"
 PHOTO_CACHE = "private, max-age=3600"
 MAX_PAGE = 100
+# how far back My leads' day-by-day calls go (the ERP site refuses more)
+MAX_CALL_DAYS = 366
 # the hub and the ERP site share one worker pool on Frappe Cloud, so a read that was just
 # answered is kept per person for a short while instead of asked again (docs/leads.md)
 CACHE_PREFIX = "hd_leads"
@@ -339,6 +341,25 @@ def read_lead_intake(fresh) -> dict:
         "available": True,
         "target": max(cint(target), 0),
     }
+
+
+@frappe.whitelist()
+def get_my_call_counts(days: int | str = 60, fresh: int | str = 0) -> dict:
+    """The signed-in person's own calls for My leads: today, this week, this month and all
+    time ({calls, connected}), and `days` ([{date, calls, connected}], newest first) for the
+    days with calls in the last `days` days, at most 366. Counted as the Daily report counts
+    calls. `available` is false while the ERP site's TBO Smart is older than this."""
+    require_leads()
+    days = min(max(cint(days) or 60, 1), MAX_CALL_DAYS)
+    result = cached_read(
+        "my_calls",
+        {"days": days},
+        READ_TTL,
+        fresh,
+        lambda: call_if_deployed("get_my_call_counts", days=days),
+        keep=lambda answer: answer is not None,
+    )
+    return {**result, "available": True} if result is not None else {"available": False}
 
 
 @frappe.whitelist()

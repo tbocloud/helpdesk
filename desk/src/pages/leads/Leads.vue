@@ -110,6 +110,8 @@
         />
 
         <div v-else class="mt-3 flex flex-col gap-3">
+          <!-- what they called: today, this week, this month, all time, and by day -->
+          <MyCallCounts v-if="view === 'mine'" />
           <div
             class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(14rem,2fr)_repeat(4,minmax(9rem,1fr))]"
             role="group"
@@ -637,6 +639,7 @@ import LeadCategoryFilters from "./LeadCategoryFilters.vue";
 import LeadFormDialog from "./LeadFormDialog.vue";
 import LeadSetCategoryDialog from "./LeadSetCategoryDialog.vue";
 import MergeLeadsDialog from "./MergeLeadsDialog.vue";
+import MyCallCounts from "./MyCallCounts.vue";
 import LeadIntakeStrip from "./LeadIntakeStrip.vue";
 import LeadsBusiness from "./LeadsBusiness.vue";
 import LeadsCommission from "./LeadsCommission.vue";
