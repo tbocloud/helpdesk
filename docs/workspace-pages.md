@@ -215,7 +215,7 @@ estimate fills both in, and its dialog starts from them), Ask for help (`request
 stand-up blocker's task (`create_task_from_blocker`), a repeat issue's root-cause task
 (`create_root_cause_task`) and the app's quick add (`mobile.quick_add_task`). The server refuses
 one with neither (*Give the task a due date or an estimate.*, `tasky.require_due_or_estimate`);
-each form has an Estimate (`EstimateInput.vue`) next to the date, says so under them while both
+each form has an Estimate (`EstimateInput.vue`) next to the date, marks both labels with the red * of a required field (`RequiredMark.vue`, read out as *a due date or an estimate is required*; not the browser's required check, since either one is enough), says so under them while both
 are empty, and keeps Create disabled until one is set (`taskMeta.hasDueOrEstimate`). Tasks the
 hub makes itself (content posts, recurring tasks, proposal plans, GitHub, sign-off
 clarifications) set their own dates.
