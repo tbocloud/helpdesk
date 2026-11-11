@@ -331,13 +331,13 @@ const QUALITY_COLUMNS: {
   },
   {
     key: "wrong",
-    label: __("Wrong number"),
+    label: __("Wrong Number"),
     hint: __("Share of the leads with a wrong number"),
     format: (row) => percent(row.wrong_rate),
   },
   {
     key: "declined",
-    label: __("Not interested"),
+    label: __("Not Interested"),
     hint: __("Share of the leads who said no"),
     format: (row) => percent(row.not_interested_rate),
   },

@@ -106,11 +106,11 @@ const emit = defineEmits<{
 
 // the same six answers as Today's calls; the ERP site moves the lead's stage from them
 const HINTS: Record<CallOutcome, string> = {
-  Connected: __("A new lead becomes Contacted."),
-  "Not answered": __("The lead becomes Not Responding: call again."),
-  Busy: __("The lead becomes Not Responding: call again."),
-  "Call back": __("The lead becomes Follow-up Required."),
-  "Not interested": __("The lead becomes Not Interested."),
+  Connected: __("They picked up. A new lead becomes Contacted."),
+  "Not answered": __("Nobody picked up. Call again later."),
+  Busy: __("The line was busy. The lead becomes Not Responding: call again."),
+  "Call back": __("They asked to be called later: say when."),
+  "Not interested": __("They said no. The lead becomes Not Interested."),
   "Wrong number": __(
     "That number is marked wrong. The lead becomes Wrong Number once no number is left to try."
   ),

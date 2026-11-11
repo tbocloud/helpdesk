@@ -264,6 +264,14 @@ batches, and the page opens on it for Sales Employees. It **replaces Call today*
 places for one job. People without batches keep Call today. Managers who are not members see
 neither; they have the batch table on the Daily report.
 
+**One name for a call and its stage.** The six call answers are labelled with the lead stage they
+move the lead to: **Contacted** (Connected), **Not Responding** (Not answered), **Busy**,
+**Follow-up Required** (Call back), **Not Interested** and **Wrong Number**: on Today's calls, the
+call sheet, Log call, the Last call filter and each lead's last-call chip
+(`callBatches.OUTCOMES`). Busy keeps its own name; like Not responding it makes the lead Not
+Responding. Only the labels changed: the values the ERP site takes (Connected, Not answered, Call
+back, Not interested, Wrong number) are the same, so the names in brackets below are those values.
+
 **What it shows** (`desk/src/pages/leads/TodaysCalls.vue`):
 - the batch header: slot name, time left (a live countdown, a warning icon under 15 minutes),
   *37 / 50 called* with a progress bar, and the day's total;
