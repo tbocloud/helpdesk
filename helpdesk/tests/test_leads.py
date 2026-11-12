@@ -531,6 +531,11 @@ class TestLeads(FrappeTestCase):
                 "ran into a problem (417)",
             ),
             (CRMError("x", 502, ""), LeadsUnavailableError, "ran into a problem (502)"),
+            (
+                CRMError("x", 503, "SessionStopped"),
+                LeadsUnavailableError,
+                "is being updated right now",
+            ),
         ]
         for error, expected_class, text in cases:
             with self.subTest(status=error.status, detail=error.detail):

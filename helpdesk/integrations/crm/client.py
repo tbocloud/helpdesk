@@ -449,4 +449,7 @@ def error_text(response, messages_only: bool = False) -> str:
     if messages_only:
         message = body.get("message")
         return message[:200] if isinstance(message, str) else ""
-    return str(body.get("exception") or body.get("message") or "")[:200]
+    # a bare {"exc_type": "SessionStopped"} is the site in maintenance mode (an update)
+    return str(
+        body.get("exception") or body.get("message") or body.get("exc_type") or ""
+    )[:200]
