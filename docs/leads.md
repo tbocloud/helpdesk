@@ -231,9 +231,21 @@ on an older one; every hub proxy asks through `call_if_deployed`.
 
 Presentation only. **The lead page** (`Lead.vue`): a header with back, `id · department ·
 product`, the name, a temperature pill (when the lead carries one), **WhatsApp** (`wa.me`),
-**Log call**, **Edit** and the primary **Call**; under it the stages as a row of steps (done in
-`brand-soft`, current in `brand`; only the stages the ERP site allows from here are buttons, and
-one opens the Move stage dialog with that stage picked). Left: the AI suggests and WhatsApp cards
+**Log call**, **Edit** and the primary **Call**; under it the stage row. Every stage in one row
+(sixteen on TBO Smart) left the names too narrow to read, so the row shows only the main path as
+steps (`STAGE_PATH` in `leads.ts`): New Lead → Contacted → Meeting → Proposal Sent → Negotiation →
+Closed – Won. **Meeting** is one step for Meeting Scheduled and the First, Second and Third Meeting
+Completed; while the lead is in one of them the step shows that stage's name. Done steps are
+`brand-soft` with a check, the current one `brand` (`aria-current="step"`), later ones gray. Every
+other stage (Not Responding, Positive / Interested, Follow-up Required, On Hold, Closed – Lost, Not
+Interested, Wrong Number, and any stage the ERP site adds) is a side stage: **Move to…** at the end
+of the row lists the ones the ERP site allows from here, and a lead in a side stage shows it as a
+"Now" pill (the list's stage tone and icon). Only what the ERP site allows from here moves the
+lead: a step opens the Move stage dialog with its first allowed stage picked (the current Meeting
+step, the next meeting), and the others stay dimmed but focusable (`aria-disabled`) with the reason
+as a tooltip. The dialog itself is unchanged: an optional note, and the ERP site's message when it
+refuses a move. A path stage the ERP site doesn't have is left out. On a phone the row is one
+**Stage: Contacted** button that opens the same dialog. Left: the AI suggests and WhatsApp cards
 and the **Activity** timeline with the add-note box. Right (first on a phone): the duplicate
 notice (unchanged: Open and Merge), **Next step** (the follow-up date), **Numbers**
 (`LeadNumbers.vue`, old and wrong numbers struck through), **Details**, then place, photos, why
