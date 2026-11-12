@@ -33,65 +33,85 @@
       <div
         class="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-5 md:px-6"
       >
-        <!-- greeting and the one-line status -->
-        <header class="flex flex-col gap-1">
-          <h1 class="text-xl-semibold text-ink-gray-9">
-            {{ greeting(userFirstName || "") }}
-          </h1>
-          <p class="text-p-sm text-ink-gray-6">{{ todayLabel }}</p>
-          <p
-            v-if="nextHoliday || onLeaveToday"
-            class="flex flex-wrap items-center gap-x-4 gap-y-1 text-p-sm text-ink-gray-6"
-          >
-            <RouterLink
-              v-if="nextHoliday"
-              :to="{ name: 'WorkCalendar' }"
-              class="inline-flex items-center gap-1.5 rounded hover:text-ink-gray-8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+        <!-- greeting, date and the few things that need a look today -->
+        <header class="flex flex-wrap items-end gap-x-6 gap-y-3">
+          <div class="flex min-w-0 flex-1 basis-80 flex-col gap-1">
+            <h1 class="text-2xl font-semibold text-ink-gray-9">
+              {{ greeting(userFirstName || "") }}
+            </h1>
+            <p class="text-p-sm text-ink-gray-6">{{ todayLabel }}</p>
+            <p
+              v-if="nextHoliday || onLeaveToday"
+              class="flex flex-wrap items-center gap-x-4 gap-y-1 text-p-sm text-ink-gray-6"
             >
-              <LucideCalendarOff
-                class="size-4 shrink-0 text-info"
-                aria-hidden="true"
-              />
-              {{ nextHoliday }}
-            </RouterLink>
-            <span v-if="onLeaveToday" class="inline-flex items-center gap-1.5">
-              <LucideTreePalm
-                class="size-4 shrink-0 text-ink-gray-5"
-                aria-hidden="true"
-              />
-              {{ onLeaveToday }}
-            </span>
-          </p>
-          <p
-            v-if="data"
-            role="status"
-            class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-p-base"
-          >
-            <!-- only when nothing is open: held, undated and later work all count -->
-            <span
-              v-if="!parts.length"
-              class="inline-flex items-center gap-1.5 text-success"
+              <RouterLink
+                v-if="nextHoliday"
+                :to="{ name: 'WorkCalendar' }"
+                class="inline-flex items-center gap-1.5 rounded hover:text-ink-gray-8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+              >
+                <LucideCalendarOff
+                  class="size-4 shrink-0 text-info"
+                  aria-hidden="true"
+                />
+                {{ nextHoliday }}
+              </RouterLink>
+              <span
+                v-if="onLeaveToday"
+                class="inline-flex items-center gap-1.5"
+              >
+                <LucideTreePalm
+                  class="size-4 shrink-0 text-ink-gray-5"
+                  aria-hidden="true"
+                />
+                {{ onLeaveToday }}
+              </span>
+            </p>
+            <p
+              v-if="data && !parts.length"
+              role="status"
+              class="mt-1 inline-flex items-center gap-1.5 text-p-base text-success"
             >
+              <!-- only when nothing is open: held, undated and later work all count -->
               <LucideCircleCheck class="size-4" aria-hidden="true" />
               {{ __("All clear. You have no open work.") }}
-            </span>
-            <template v-for="(part, index) in parts" :key="part.key">
-              <span v-if="index" class="text-ink-gray-4" aria-hidden="true"
-                >·</span
+            </p>
+            <span
+              v-else-if="!data && home.loading"
+              class="mt-1 h-5 w-72 max-w-full animate-pulse rounded bg-surface-gray-2"
+            />
+          </div>
+          <ul
+            v-if="pills.length"
+            role="list"
+            class="flex flex-wrap gap-2"
+            :aria-label="__('Needs a look today')"
+          >
+            <li v-for="pill in pills" :key="pill.key">
+              <RouterLink
+                v-if="pill.to"
+                :to="pill.to"
+                class="inline-flex h-6 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-xs font-medium tabular-nums focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+                :class="TONE_CLASSES[pill.tone]"
               >
+                <span
+                  class="size-1.5 rounded-full bg-current"
+                  aria-hidden="true"
+                />
+                {{ pill.label }}
+              </RouterLink>
               <span
-                class="inline-flex items-center gap-1.5 tabular-nums"
-                :class="INK[part.tone]"
+                v-else
+                class="inline-flex h-6 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-xs font-medium tabular-nums"
+                :class="TONE_CLASSES[pill.tone]"
               >
-                <component :is="part.icon" class="size-4" aria-hidden="true" />
-                {{ part.label }}
+                <span
+                  class="size-1.5 rounded-full bg-current"
+                  aria-hidden="true"
+                />
+                {{ pill.label }}
               </span>
-            </template>
-          </p>
-          <span
-            v-else-if="home.loading"
-            class="mt-1 h-5 w-72 max-w-full animate-pulse rounded bg-surface-gray-2"
-          />
+            </li>
+          </ul>
         </header>
 
         <FollowUpStrip v-if="data" :summary="data.follow_ups" />
@@ -126,6 +146,8 @@
         </div>
 
         <template v-else>
+          <HomeNumbers :day="data.day" :company="data.company" />
+
           <PulseStrip v-if="data.company" :company="data.company" />
 
           <div
@@ -133,8 +155,17 @@
             :class="hasSide ? 'xl:grid-cols-[minmax(0,1fr)_20rem]' : ''"
           >
             <div class="flex min-w-0 flex-col gap-5">
+              <DoNext
+                v-if="doNext.length"
+                :items="doNext"
+                @changed="home.reload()"
+              />
               <ActionPlan :day="data.day" />
-              <YourDay :day="data.day" @changed="home.reload()" />
+              <YourDay
+                :day="data.day"
+                :hide="doNextKeys"
+                @changed="home.reload()"
+              />
               <NeedsAttention
                 v-if="data.company"
                 :groups="data.company.attention_groups"
@@ -168,7 +199,7 @@ import {
   setActiveSettingsTab,
   showSettingsModal,
 } from "@/components/Settings/settingsModal";
-import { INK } from "@/components/tone";
+import { TONE_CLASSES, type Tone } from "@/components/tone";
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import TaskyState from "@/components/TaskyState.vue";
 import { useScreenSize } from "@/composables/screen";
@@ -192,7 +223,18 @@ import StandupCard from "./components/StandupCard.vue";
 import SystemsCard from "./components/SystemsCard.vue";
 import YourDay from "./components/YourDay.vue";
 import YourProjects from "./components/YourProjects.vue";
-import { greeting, statusParts, type HomeData } from "./homeMeta";
+import DoNext from "./components/DoNext.vue";
+import HomeNumbers from "./components/HomeNumbers.vue";
+import {
+  countLabel,
+  greeting,
+  statusParts,
+  ticketLinks,
+  type DayTask,
+  type HomeData,
+} from "./homeMeta";
+import { itemKey } from "@/pages/work/workMeta";
+import type { RouteLocationRaw } from "vue-router";
 
 const { userFirstName, canUseLeadBank } = storeToRefs(useAuthStore());
 
@@ -203,6 +245,68 @@ const home = createResource({
 
 const data = computed<HomeData | null>(() => home.data ?? null);
 const parts = computed(() => (data.value ? statusParts(data.value.day) : []));
+
+interface Pill {
+  key: string;
+  label: string;
+  tone: Tone;
+  to?: RouteLocationRaw;
+}
+
+// what needs a look today: the user's own late and due work, waiting replies and
+// reviews, and (for people who see the company) tickets past their SLA
+const pills = computed<Pill[]>(() => {
+  const d = data.value;
+  if (!d) return [];
+  const own: Record<string, Pick<Pill, "tone" | "to">> = {
+    overdue: {
+      tone: "danger",
+      to: { name: "MyWork", query: { tab: "overdue" } },
+    },
+    due_today: { tone: "warning", to: { name: "MyWork" } },
+    replies: { tone: "info", to: { name: "MyWork", query: { tab: "ticket" } } },
+    approvals: { tone: "neutral" },
+  };
+  const list: Pill[] = statusParts(d.day)
+    .filter((part) => part.key in own)
+    .map((part) => ({ key: part.key, label: part.label, ...own[part.key] }));
+  const sla = d.company?.tickets.sla_breached ?? 0;
+  if (sla)
+    list.push({
+      key: "sla",
+      label: countLabel(
+        sla,
+        __("1 ticket past SLA"),
+        __("{0} tickets past SLA")
+      ),
+      tone: "danger",
+      to: ticketLinks.slaBreached(),
+    });
+  return list;
+});
+
+// "Do next": the most urgent of what the day already lists, one row each
+const DO_NEXT_LIMIT = 5;
+const doNext = computed<DayTask[]>(() => {
+  const day = data.value?.day;
+  if (!day) return [];
+  const seen = new Set<string>();
+  return [
+    ...day.close_first.items,
+    ...day.replies.items,
+    ...day.approvals.items,
+    ...day.in_progress.items,
+  ]
+    .filter((item) => {
+      const key = itemKey(item);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, DO_NEXT_LIMIT) as DayTask[];
+});
+const doNextKeys = computed(() => new Set(doNext.value.map(itemKey)));
+
 const hasSide = computed(
   () => !!data.value?.company || !!data.value?.day.projects.count
 );
@@ -234,7 +338,7 @@ const nextHoliday = computed(() => {
 const onLeaveToday = computed(() => {
   const people = data.value?.calendar?.on_leave_today;
   if (!people?.length) return "";
-  const span = (p: typeof people[number]) =>
+  const span = (p: (typeof people)[number]) =>
     p.half_day
       ? __("half day")
       : dayjs(p.to_date).isSame(dayjs(), "day")

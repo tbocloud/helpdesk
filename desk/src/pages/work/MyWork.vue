@@ -5,6 +5,18 @@
         <div class="truncate text-lg-medium text-ink-gray-9">
           {{ pageTitle }}
         </div>
+        <span
+          v-if="work.data"
+          class="hidden whitespace-nowrap text-p-sm tabular-nums text-ink-gray-5 sm:inline"
+        >
+          {{
+            __(
+              "{0} open · {1} due today",
+              String(items.length),
+              String(dueToday)
+            )
+          }}
+        </span>
       </template>
       <template #right-header>
         <!-- leads and managers can open a team member's list -->
@@ -27,6 +39,16 @@
         >
           <template #icon>
             <LucideRefreshCw class="size-4" aria-hidden="true" />
+          </template>
+        </Button>
+        <Button
+          v-if="!viewUser"
+          variant="solid"
+          :label="__('New task')"
+          @click="showNewTask = true"
+        >
+          <template #prefix>
+            <LucidePlus class="size-4" aria-hidden="true" />
           </template>
         </Button>
       </template>
@@ -94,341 +116,387 @@
           <Button :label="__('Retry')" @click="work.reload()" />
         </TaskyState>
 
-        <template v-else>
-          <div class="-mx-1 mt-4 overflow-x-auto px-1">
-            <TabButtons
-              v-model="activeTab"
-              size="md"
-              :aria-label="__('Filter work')"
-              :aria-controls="listId"
-              :options="
-                tabs.map((t) => ({
-                  label: t.label,
-                  value: t.key,
-                  iconLeft: t.icon,
-                }))
-              "
-            >
-              <template #suffix="{ button, checked }">
-                <span
-                  class="font-mono text-xs tabular-nums"
-                  :class="checked ? '' : 'text-ink-gray-5'"
-                >
-                  <span
-                    v-if="
-                      button.modelValue === 'assigned'
-                        ? givenLoading
-                        : isLoading
-                    "
-                    class="inline-block h-3 w-3 animate-pulse rounded bg-surface-gray-2 align-middle"
-                  />
-                  <template v-else>{{ countFor(button.modelValue) }}</template>
-                </span>
-              </template>
-            </TabButtons>
-          </div>
-
-          <div
-            :id="listId"
-            class="mt-4"
-            :aria-busy="activeTab === 'assigned' ? given.loading : work.loading"
+        <div
+          v-else
+          class="mt-4 grid grid-cols-1 gap-x-6 gap-y-4 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start"
+        >
+          <!-- the timer comes first on phones, where it matters most -->
+          <WorkingNow
+            v-if="!viewUser"
+            class="order-first lg:order-none lg:col-start-2 lg:row-start-1"
+            :items="items"
+            @complete="(item) => onStep('complete', item)"
+            @changed="reload"
+          />
+          <section
+            class="rounded-xl border border-outline-gray-2 bg-surface-base p-4 lg:col-start-2"
+            :aria-label="__('This week')"
           >
-            <!-- Loading -->
-            <div
-              v-if="activeTab === 'assigned' ? givenLoading : isLoading"
-              class="overflow-hidden rounded-lg border border-outline-gray-2 bg-surface-base"
-              :aria-label="__('Loading')"
-            >
+            <h2 class="text-sm-semibold text-ink-gray-9">
+              {{ __("This week") }}
+            </h2>
+            <dl class="mt-2 text-sm">
               <div
-                v-for="i in 6"
-                :key="i"
-                class="flex items-center gap-3 border-b border-outline-gray-1 px-4 py-3.5 last:border-b-0"
+                v-for="row in weekRows"
+                :key="row.label"
+                class="flex items-center justify-between py-1.5"
               >
-                <div class="size-4 animate-pulse rounded bg-surface-gray-2" />
-                <div class="flex flex-1 flex-col gap-2">
-                  <div
-                    class="h-3.5 w-2/5 animate-pulse rounded bg-surface-gray-2"
+                <dt class="text-ink-gray-6">{{ row.label }}</dt>
+                <dd class="font-mono tabular-nums text-ink-gray-9">
+                  <span
+                    v-if="isLoading"
+                    class="inline-block h-3 w-6 animate-pulse rounded bg-surface-gray-2 align-middle"
                   />
-                  <div
-                    class="h-3 w-1/4 animate-pulse rounded bg-surface-gray-2"
-                  />
-                </div>
-                <div
-                  class="hidden h-3 w-20 animate-pulse rounded bg-surface-gray-2 md:block"
-                />
+                  <template v-else>{{ row.value }}</template>
+                </dd>
               </div>
+            </dl>
+          </section>
+          <div class="min-w-0 lg:col-start-1 lg:row-span-2 lg:row-start-1">
+            <div class="-mx-1 overflow-x-auto px-1">
+              <TabButtons
+                v-model="activeTab"
+                size="md"
+                :aria-label="__('Filter work')"
+                :aria-controls="listId"
+                :options="
+                  tabs.map((t) => ({
+                    label: t.label,
+                    value: t.key,
+                    iconLeft: t.icon,
+                  }))
+                "
+              >
+                <template #suffix="{ button, checked }">
+                  <span
+                    class="font-mono text-xs tabular-nums"
+                    :class="checked ? '' : 'text-ink-gray-5'"
+                  >
+                    <span
+                      v-if="
+                        button.modelValue === 'assigned'
+                          ? givenLoading
+                          : isLoading
+                      "
+                      class="inline-block h-3 w-3 animate-pulse rounded bg-surface-gray-2 align-middle"
+                    />
+                    <template v-else>{{
+                      countFor(button.modelValue)
+                    }}</template>
+                  </span>
+                </template>
+              </TabButtons>
             </div>
 
-            <!-- Tasks the person gave to someone else, by who has them -->
-            <template v-else-if="activeTab === 'assigned'">
+            <div
+              :id="listId"
+              class="mt-4"
+              :aria-busy="
+                activeTab === 'assigned' ? given.loading : work.loading
+              "
+            >
+              <!-- Loading -->
               <div
-                v-if="given.error && !given.data"
-                class="rounded-lg border border-outline-gray-2 bg-surface-base"
+                v-if="activeTab === 'assigned' ? givenLoading : isLoading"
+                class="overflow-hidden rounded-lg border border-outline-gray-2 bg-surface-base"
+                :aria-label="__('Loading')"
               >
-                <TaskyState
-                  :icon="LucideCircleAlert"
-                  :title="__('Couldn\'t load the tasks given out')"
-                  :message="
-                    errorText(
-                      given.error,
-                      __('Check your connection and try again.')
-                    )
-                  "
-                  error
-                >
-                  <Button :label="__('Retry')" @click="given.reload()" />
-                </TaskyState>
-              </div>
-              <div
-                v-else-if="!givenItems.length"
-                class="rounded-lg border border-outline-gray-2 bg-surface-base"
-              >
-                <TaskyState
-                  :icon="LucideInbox"
-                  :title="
-                    viewUser
-                      ? __('{0} hasn\'t assigned any open tasks.', viewName)
-                      : __('You haven\'t assigned any open tasks.')
-                  "
-                  :message="
-                    __(
-                      'Open tasks given to someone else show up here, grouped by who has them.'
-                    )
-                  "
-                />
-              </div>
-              <template v-else>
                 <div
-                  class="mb-4 grid grid-cols-1 items-end gap-3 sm:grid-cols-[repeat(2,minmax(0,16rem))_auto]"
-                  role="group"
-                  :aria-label="__('Filter the tasks given out')"
+                  v-for="i in 6"
+                  :key="i"
+                  class="flex items-center gap-3 border-b border-outline-gray-1 px-4 py-3.5 last:border-b-0"
                 >
-                  <Select
-                    :model-value="givenFilters.to || undefined"
-                    :options="givenPeople"
-                    :label="__('Person')"
-                    :placeholder="__('Everyone')"
-                    @update:model-value="
-                      (v: unknown) => (givenFilters.to = (v as string) || '')
-                    "
+                  <div class="size-4 animate-pulse rounded bg-surface-gray-2" />
+                  <div class="flex flex-1 flex-col gap-2">
+                    <div
+                      class="h-3.5 w-2/5 animate-pulse rounded bg-surface-gray-2"
+                    />
+                    <div
+                      class="h-3 w-1/4 animate-pulse rounded bg-surface-gray-2"
+                    />
+                  </div>
+                  <div
+                    class="hidden h-3 w-20 animate-pulse rounded bg-surface-gray-2 md:block"
                   />
-                  <Select
-                    :model-value="givenFilters.project || undefined"
-                    :options="givenProjects"
-                    :label="__('Project')"
-                    :placeholder="__('All projects')"
-                    @update:model-value="
-                      (v: unknown) =>
-                        (givenFilters.project = (v as string) || '')
-                    "
-                  />
-                  <Button
-                    v-if="givenFilters.to || givenFilters.project"
-                    variant="ghost"
-                    class="justify-self-start"
-                    :label="__('Clear filters')"
-                    @click="clearGivenFilters"
-                  >
-                    <template #prefix>
-                      <LucideX class="size-4" aria-hidden="true" />
-                    </template>
-                  </Button>
                 </div>
+              </div>
+
+              <!-- Tasks the person gave to someone else, by who has them -->
+              <template v-else-if="activeTab === 'assigned'">
                 <div
-                  v-if="!givenGroups.length"
+                  v-if="given.error && !given.data"
                   class="rounded-lg border border-outline-gray-2 bg-surface-base"
                 >
                   <TaskyState
-                    :icon="LucideCircleCheck"
-                    :title="__('Nothing matches these filters')"
-                    :message="__('Pick another person or project.')"
+                    :icon="LucideCircleAlert"
+                    :title="__('Couldn\'t load the tasks given out')"
+                    :message="
+                      errorText(
+                        given.error,
+                        __('Check your connection and try again.')
+                      )
+                    "
+                    error
                   >
-                    <Button
-                      :label="__('Clear filters')"
-                      @click="clearGivenFilters"
-                    />
+                    <Button :label="__('Retry')" @click="given.reload()" />
                   </TaskyState>
                 </div>
-                <div v-else class="flex flex-col gap-4">
-                  <SectionCard
-                    v-for="group in givenGroups"
-                    :key="group.user"
-                    :title="group.name"
-                    :count="group.items.length"
-                    class="overflow-hidden"
-                  >
-                    <ul role="list">
-                      <li
-                        v-for="item in group.items"
-                        :key="itemKey(item)"
-                        class="border-b border-outline-gray-1 last:border-b-0"
-                      >
-                        <WorkItemRow
-                          :item="item"
-                          show-assignees
-                          opens
-                          @open="openTask(item, null, false)"
-                        >
-                          <template #actions>
-                            <WorkItemActions
-                              :item="item"
-                              :mine="false"
-                              :busy="busy === item.name"
-                              @step="(step, i) => onStep(step, i, false)"
-                            />
-                          </template>
-                        </WorkItemRow>
-                      </li>
-                    </ul>
-                  </SectionCard>
-                </div>
-              </template>
-            </template>
-
-            <!-- Completed work -->
-            <SectionCard
-              v-else-if="activeTab === 'done'"
-              :title="__('Completed in the last 30 days')"
-              :count="doneItems.length"
-              class="overflow-hidden"
-            >
-              <div
-                v-if="doneItems.length"
-                class="hidden grid-cols-[1fr_8rem_5rem] gap-4 border-b border-outline-gray-2 bg-surface-gray-1 px-4 py-2 text-xs text-ink-gray-5 md:grid"
-                aria-hidden="true"
-              >
-                <span>{{ __("Work") }}</span>
-                <span>{{ __("Completed") }}</span>
-                <span class="text-right">{{ __("Hours") }}</span>
-              </div>
-              <ul v-if="doneItems.length" role="list">
-                <li
-                  v-for="item in doneItems"
-                  :key="`${item.kind}:${item.name}`"
-                  class="border-b border-outline-gray-1 last:border-b-0"
+                <div
+                  v-else-if="!givenItems.length"
+                  class="rounded-lg border border-outline-gray-2 bg-surface-base"
                 >
-                  <component
-                    :is="doneRoute(item) ? 'router-link' : 'div'"
-                    :to="doneRoute(item) || undefined"
-                    class="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-1 px-4 py-3 hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-outline-gray-4 md:grid-cols-[1fr_8rem_5rem]"
+                  <TaskyState
+                    :icon="LucideInbox"
+                    :title="
+                      viewUser
+                        ? __('{0} hasn\'t assigned any open tasks.', viewName)
+                        : __('You haven\'t assigned any open tasks.')
+                    "
+                    :message="
+                      __(
+                        'Open tasks given to someone else show up here, grouped by who has them.'
+                      )
+                    "
+                  />
+                </div>
+                <template v-else>
+                  <div
+                    class="mb-4 grid grid-cols-1 items-end gap-3 sm:grid-cols-[repeat(2,minmax(0,16rem))_auto]"
+                    role="group"
+                    :aria-label="__('Filter the tasks given out')"
                   >
-                    <div class="flex min-w-0 items-start gap-2.5">
-                      <LucideCircleCheck
-                        class="mt-0.5 size-4 shrink-0 text-success"
-                        aria-hidden="true"
+                    <Select
+                      :model-value="givenFilters.to || undefined"
+                      :options="givenPeople"
+                      :label="__('Person')"
+                      :placeholder="__('Everyone')"
+                      @update:model-value="
+                      (v: unknown) => (givenFilters.to = (v as string) || '')
+                    "
+                    />
+                    <Select
+                      :model-value="givenFilters.project || undefined"
+                      :options="givenProjects"
+                      :label="__('Project')"
+                      :placeholder="__('All projects')"
+                      @update:model-value="
+                      (v: unknown) =>
+                        (givenFilters.project = (v as string) || '')
+                    "
+                    />
+                    <Button
+                      v-if="givenFilters.to || givenFilters.project"
+                      variant="ghost"
+                      class="justify-self-start"
+                      :label="__('Clear filters')"
+                      @click="clearGivenFilters"
+                    >
+                      <template #prefix>
+                        <LucideX class="size-4" aria-hidden="true" />
+                      </template>
+                    </Button>
+                  </div>
+                  <div
+                    v-if="!givenGroups.length"
+                    class="rounded-lg border border-outline-gray-2 bg-surface-base"
+                  >
+                    <TaskyState
+                      :icon="LucideCircleCheck"
+                      :title="__('Nothing matches these filters')"
+                      :message="__('Pick another person or project.')"
+                    >
+                      <Button
+                        :label="__('Clear filters')"
+                        @click="clearGivenFilters"
                       />
-                      <div class="min-w-0">
-                        <div class="truncate text-sm text-ink-gray-9">
-                          {{ item.title }}
-                        </div>
-                        <div
-                          class="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-ink-gray-5"
+                    </TaskyState>
+                  </div>
+                  <div v-else class="flex flex-col gap-4">
+                    <SectionCard
+                      v-for="group in givenGroups"
+                      :key="group.user"
+                      :title="group.name"
+                      :count="group.items.length"
+                      class="overflow-hidden"
+                    >
+                      <ul role="list">
+                        <li
+                          v-for="item in group.items"
+                          :key="itemKey(item)"
+                          class="border-b border-outline-gray-1 last:border-b-0"
                         >
-                          <span>{{
-                            item.kind === "task" ? __("Task") : __("Ticket")
-                          }}</span>
-                          <span class="font-mono">{{ item.name }}</span>
-                          <template v-if="item.project_name || item.customer">
-                            <span aria-hidden="true">·</span>
-                            <span class="truncate">{{
-                              item.project_name || item.customer
-                            }}</span>
-                          </template>
-                        </div>
-                      </div>
-                    </div>
-                    <span
-                      class="font-mono text-xs tabular-nums text-ink-gray-7"
-                    >
-                      {{
-                        item.done_on
-                          ? dayjs(item.done_on).format("D MMM YYYY")
-                          : "—"
-                      }}
-                    </span>
-                    <span
-                      class="hidden text-right font-mono text-xs tabular-nums text-ink-gray-7 md:block"
-                    >
-                      {{
-                        item.hours != null
-                          ? `${Math.round(item.hours * 100) / 100}h`
-                          : "—"
-                      }}
-                    </span>
-                  </component>
-                </li>
-              </ul>
-              <TaskyState
-                v-else
-                :icon="LucideCircleCheck"
-                :title="__('Nothing completed lately')"
-                :message="
-                  __(
-                    'Tasks completed and tickets resolved in the last 30 days show up here.'
-                  )
-                "
-              />
-            </SectionCard>
+                          <WorkItemRow
+                            :item="item"
+                            show-assignees
+                            opens
+                            @open="openTask(item, null, false)"
+                          >
+                            <template #actions>
+                              <WorkItemActions
+                                :item="item"
+                                :mine="false"
+                                :busy="busy === item.name"
+                                @step="(step, i) => onStep(step, i, false)"
+                              />
+                            </template>
+                          </WorkItemRow>
+                        </li>
+                      </ul>
+                    </SectionCard>
+                  </div>
+                </template>
+              </template>
 
-            <!-- Empty: nothing open, or the filter matches nothing -->
-            <div
-              v-else-if="!visibleItems.length"
-              class="rounded-lg border border-outline-gray-2 bg-surface-base"
-            >
-              <TaskyState
-                :icon="emptyState.icon"
-                :title="emptyState.title"
-                :message="emptyState.message"
-              >
-                <Button
-                  v-if="activeTab !== 'all'"
-                  :label="__('Show all')"
-                  @click="activeTab = 'all'"
-                />
-              </TaskyState>
-            </div>
-
-            <!-- Open work, by when it's due -->
-            <div v-else class="flex flex-col gap-4">
+              <!-- Completed work -->
               <SectionCard
-                v-for="group in groups"
-                :key="group.key"
-                :title="group.label"
-                :count="group.items.length"
-                :description="group.description"
-                :icon="group.icon"
-                :icon-class="group.iconClass"
+                v-else-if="activeTab === 'done'"
+                :title="__('Completed in the last 30 days')"
+                :count="doneItems.length"
                 class="overflow-hidden"
               >
-                <ul role="list">
+                <div
+                  v-if="doneItems.length"
+                  class="hidden grid-cols-[1fr_8rem_5rem] gap-4 border-b border-outline-gray-2 bg-surface-gray-1 px-4 py-2 text-xs text-ink-gray-5 md:grid"
+                  aria-hidden="true"
+                >
+                  <span>{{ __("Work") }}</span>
+                  <span>{{ __("Completed") }}</span>
+                  <span class="text-right">{{ __("Hours") }}</span>
+                </div>
+                <ul v-if="doneItems.length" role="list">
                   <li
-                    v-for="item in group.items"
-                    :key="itemKey(item)"
+                    v-for="item in doneItems"
+                    :key="`${item.kind}:${item.name}`"
                     class="border-b border-outline-gray-1 last:border-b-0"
                   >
-                    <!-- a task opens its details here, which also clears its New mark -->
-                    <WorkItemRow
-                      :item="item"
-                      :opens="item.kind === 'task'"
-                      @open="openTask(item, null)"
+                    <component
+                      :is="doneRoute(item) ? 'router-link' : 'div'"
+                      :to="doneRoute(item) || undefined"
+                      class="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-1 px-4 py-3 hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-outline-gray-4 md:grid-cols-[1fr_8rem_5rem]"
                     >
-                      <template v-if="item.kind === 'task'" #actions>
-                        <WorkItemActions
-                          :item="item"
-                          :mine="!viewUser"
-                          :busy="busy === item.name"
-                          @step="onStep"
+                      <div class="flex min-w-0 items-start gap-2.5">
+                        <LucideCircleCheck
+                          class="mt-0.5 size-4 shrink-0 text-success"
+                          aria-hidden="true"
                         />
-                      </template>
-                    </WorkItemRow>
+                        <div class="min-w-0">
+                          <div class="truncate text-sm text-ink-gray-9">
+                            {{ item.title }}
+                          </div>
+                          <div
+                            class="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-ink-gray-5"
+                          >
+                            <span>{{
+                              item.kind === "task" ? __("Task") : __("Ticket")
+                            }}</span>
+                            <span class="font-mono">{{ item.name }}</span>
+                            <template v-if="item.project_name || item.customer">
+                              <span aria-hidden="true">·</span>
+                              <span class="truncate">{{
+                                item.project_name || item.customer
+                              }}</span>
+                            </template>
+                          </div>
+                        </div>
+                      </div>
+                      <span
+                        class="font-mono text-xs tabular-nums text-ink-gray-7"
+                      >
+                        {{
+                          item.done_on
+                            ? dayjs(item.done_on).format("D MMM YYYY")
+                            : "—"
+                        }}
+                      </span>
+                      <span
+                        class="hidden text-right font-mono text-xs tabular-nums text-ink-gray-7 md:block"
+                      >
+                        {{
+                          item.hours != null
+                            ? `${Math.round(item.hours * 100) / 100}h`
+                            : "—"
+                        }}
+                      </span>
+                    </component>
                   </li>
                 </ul>
+                <TaskyState
+                  v-else
+                  :icon="LucideCircleCheck"
+                  :title="__('Nothing completed lately')"
+                  :message="
+                    __(
+                      'Tasks completed and tickets resolved in the last 30 days show up here.'
+                    )
+                  "
+                />
               </SectionCard>
+
+              <!-- Empty: nothing open, or the filter matches nothing -->
+              <div
+                v-else-if="!visibleItems.length"
+                class="rounded-lg border border-outline-gray-2 bg-surface-base"
+              >
+                <TaskyState
+                  :icon="emptyState.icon"
+                  :title="emptyState.title"
+                  :message="emptyState.message"
+                >
+                  <Button
+                    v-if="activeTab !== 'all'"
+                    :label="__('Show all')"
+                    @click="activeTab = 'all'"
+                  />
+                </TaskyState>
+              </div>
+
+              <!-- Open work, by when it's due -->
+              <div v-else class="flex flex-col gap-4">
+                <SectionCard
+                  v-for="group in groups"
+                  :key="group.key"
+                  :title="group.label"
+                  :count="group.items.length"
+                  :description="group.description"
+                  :icon="group.icon"
+                  :icon-class="group.iconClass"
+                  class="overflow-hidden"
+                >
+                  <ul role="list">
+                    <li
+                      v-for="item in group.items"
+                      :key="itemKey(item)"
+                      class="border-b border-outline-gray-1 last:border-b-0"
+                    >
+                      <!-- a task opens its details here, which also clears its New mark -->
+                      <WorkItemRow
+                        :item="item"
+                        :opens="item.kind === 'task'"
+                        card
+                        :checkable="!viewUser && item.kind === 'task'"
+                        @open="openTask(item, null)"
+                        @complete="onStep('complete', item)"
+                      >
+                        <template v-if="item.kind === 'task'" #actions>
+                          <WorkItemActions
+                            :item="item"
+                            :mine="!viewUser"
+                            :busy="busy === item.name"
+                            @step="onStep"
+                          />
+                        </template>
+                      </WorkItemRow>
+                    </li>
+                  </ul>
+                </SectionCard>
+              </div>
             </div>
           </div>
-        </template>
+        </div>
       </div>
     </div>
+
+    <NewTaskDialog v-model:open="showNewTask" @created="reload" />
 
     <TaskDetailDialog
       v-model:task="detailTask"
@@ -447,6 +515,7 @@ import TaskDetailDialog, {
   type TaskAction,
   type TaskRef,
 } from "@/pages/tasky/components/TaskDetailDialog.vue";
+import NewTaskDialog from "@/pages/tasky/components/NewTaskDialog.vue";
 import { useApproveTask } from "@/pages/tasky/useApproveTask";
 import { useAuthStore } from "@/stores/auth";
 import { useUserStore } from "@/stores/user";
@@ -470,6 +539,7 @@ import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideEye from "~icons/lucide/eye";
 import LucideInbox from "~icons/lucide/inbox";
+import LucidePlus from "~icons/lucide/plus";
 import LucidePause from "~icons/lucide/pause";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideStar from "~icons/lucide/star";
@@ -479,6 +549,7 @@ import LucideX from "~icons/lucide/x";
 import WorkItemActions, {
   type WorkStep,
 } from "./components/WorkItemActions.vue";
+import WorkingNow from "./components/WorkingNow.vue";
 import WorkItemRow from "./components/WorkItemRow.vue";
 import {
   DUE_GROUPS,
@@ -651,6 +722,34 @@ function matches(item: WorkItem, tab: Tab) {
 const doneItems = computed<DoneItem[]>(
   () => (work.data as MyWork | undefined)?.done ?? []
 );
+
+const showNewTask = ref(false);
+
+const dueToday = computed(
+  () => items.value.filter((i) => dueGroup(i) === "today").length
+);
+
+// the calendar week (Monday to Sunday), from the data the page already has
+const weekRows = computed(() => {
+  const start = dayjs().startOf("week");
+  const end = dayjs().endOf("week");
+  const done = doneItems.value.filter(
+    (i) => i.done_on && !dayjs(i.done_on).isBefore(start)
+  ).length;
+  const open = items.value.filter((i) => i.kind === "task");
+  const due = open.filter(
+    (i) =>
+      i.deadline &&
+      !dayjs(i.deadline).isBefore(start) &&
+      !dayjs(i.deadline).isAfter(end)
+  ).length;
+  const slipped = open.filter((i) => (i.slip_count ?? 0) > 0).length;
+  return [
+    { label: __("Done"), value: done },
+    { label: __("Due"), value: due },
+    { label: __("Slipped"), value: slipped },
+  ];
+});
 
 function countFor(tab: Tab) {
   if (tab === "done") return doneItems.value.length;
