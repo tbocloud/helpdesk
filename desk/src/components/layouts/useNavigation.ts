@@ -48,15 +48,15 @@ export function useNavigation() {
     (on) => on && loadLeadOptions(),
     { immediate: true }
   );
-  const isBd = computed(
-    () => leadOptions.data?.is_bd ?? authStore.isSalesBd
-  );
+  const isBd = computed(() => leadOptions.data?.is_bd ?? authStore.isSalesBd);
   const hasBatches = computed(() => batchesOn(leadOptions.data));
   // the ERP site decides who may plan (a Sales Manager, a head); a BD never does
+  // a department's viewer watches Assign leads even as a BD
   const canPlanCalls = computed(
     () =>
-      !isBd.value &&
-      !!leadOptions.data?.departments?.some((d) => d.call_batches_enabled)
+      !!leadOptions.data?.departments?.some(
+        (d) => d.call_batches_enabled && (!isBd.value || d.is_viewer)
+      )
   );
   const canViewBusiness = computed(() => !!leadOptions.data?.can_view_business);
 

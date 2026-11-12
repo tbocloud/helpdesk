@@ -419,8 +419,23 @@ Code: `helpdesk/api/call_batches.py` (`get_call_plans`, `save_call_plan`; a 403 
 5. Press **Assign leads**. It counts from the next slot.
 6. To see or move someone's leads, press **N leads** on their row. Tick leads to **Move to**
    someone else, **Unassign** or **Set product**. Under **Unassigned**, tick leads and assign them,
-   or type how many to give (and of which product) and press **Give to**. To go back to the department's sizes,
-   tick the person and press **Back to department sizes**.
+   or type how many to give (and of which product) and press **Give to**.
+7. To remove someone's plan, tick them and press **Remove plan · use (department) default
+   (50 + 50)**; the button shows the department's slot sizes. It asks first ("Remove Fidha V P's
+   plan? From the next slot they get GrowthX's default: Morning 50 + Afternoon 50, any
+   product."), naming the campaign product instead of "any product" when the department has one.
+
+**Viewers (read-only).** A department's **Viewers** (Settings → CRM → Lead departments, next to
+Heads; shown once the ERP site's TBO Smart has them) open Assign leads for it but change nothing:
+`get_call_plans` lists the department with `can_edit: false`, and the page then hides the tick
+boxes, the plan form and the Remove plan button, and shows a **View only** card instead. **N leads**
+still opens the person's leads and the unassigned ones, without tick boxes or actions. A Sales
+Manager listed as a viewer only watches that department. The sidebar shows Assign leads to a
+viewer even when they are a BD (`is_viewer` in `get_options`' departments).
+
+**Live.** Assign leads reads the plans again every 15 seconds while the page is in view, and at
+once when it comes back into view, so today's calls, plans and lead counts follow what others
+change. The view-only card says when it last updated.
 
 **Follow-up cards.** On *Follow-up*, five number cards (`FollowUpCards.vue`): **Overdue** (in red
 with its icon when there are any), **Due today**, **Tomorrow**, **Next 7 days** (2 to 7 days on)

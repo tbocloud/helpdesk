@@ -64,6 +64,9 @@
             <template v-if="department.heads.length">
               · {{ __("Heads") }}: {{ people(department.heads) }}
             </template>
+            <template v-if="department.viewers?.length">
+              · {{ __("Viewers") }}: {{ people(department.viewers) }}
+            </template>
             ·
             <span class="tabular-nums">{{
               __("{0} members", String(department.members.length))
@@ -166,6 +169,23 @@
         />
         <p class="text-p-xs text-ink-gray-6">
           {{ __("Heads see every lead in the department.") }}
+        </p>
+      </div>
+      <div v-if="hasViewers" class="flex flex-col gap-1.5">
+        <FormLabel :label="__('Viewers')" size="md" />
+        <MultiSelect
+          v-model="form.viewers"
+          :options="userOptions"
+          :loading="agents.loading"
+          :placeholder="__('Pick the viewers')"
+          class="w-full"
+        />
+        <p class="text-p-xs text-ink-gray-6">
+          {{
+            __(
+              "Viewers watch Assign leads for this department, live, but can't change it, even a Sales Manager."
+            )
+          }}
         </p>
       </div>
       <div class="flex flex-col gap-1.5">
@@ -308,7 +328,7 @@ const userOptions = computed(() => {
         value: a.user,
       });
   for (const d of departments.value)
-    for (const p of [...d.heads, ...d.members])
+    for (const p of [...d.heads, ...(d.viewers ?? []), ...d.members])
       if (!options.has(p.user))
         options.set(p.user, {
           label: p.full_name ? `${p.full_name} (${p.user})` : p.user,
@@ -341,6 +361,10 @@ const hasBatches = computed(
 );
 
 // the products list shows once the ERP site's departments carry it
+// an older TBO Smart has no viewers and refuses the field
+const hasViewers = computed(() =>
+  departments.value.some((d) => d.viewers !== undefined)
+);
 const hasProducts = computed(
   () =>
     !departments.value.length ||
@@ -358,6 +382,7 @@ interface DepartmentForm {
   stale_after_days: number | string;
   is_active: boolean;
   heads: string[];
+  viewers: string[];
   members: string[];
 }
 
@@ -374,6 +399,7 @@ const form = reactive<DepartmentForm>({
   stale_after_days: DEFAULT_STALE_DAYS,
   is_active: true,
   heads: [],
+  viewers: [],
   members: [],
 });
 
@@ -387,6 +413,7 @@ function openDialog(department: LeadDepartment | null) {
     stale_after_days: department?.stale_after_days ?? DEFAULT_STALE_DAYS,
     is_active: department ? !!department.is_active : true,
     heads: department?.heads.map((p) => p.user) ?? [],
+    viewers: department?.viewers?.map((p) => p.user) ?? [],
     members: department?.members.map((p) => p.user) ?? [],
   });
   rules.value = rulesFrom(department as Partial<CallRules> | null);
@@ -422,11 +449,12 @@ function save() {
   }
   errorMessage.value = "";
   saving.value = true;
-  const { assignment, stale_after_days, ...values } = form;
+  const { assignment, stale_after_days, viewers, ...values } = form;
   call("helpdesk.api.leads.save_lead_department", {
     name: editing.value?.name ?? null,
     values: {
       ...values,
+      ...(hasViewers.value ? { viewers } : {}),
       ...(hasAssignment.value ? { assignment, stale_after_days: days } : {}),
       ...(hasBatches.value
         ? rulesPayload(rules.value, hasProducts.value, hasAutoAssign.value)
