@@ -338,7 +338,7 @@ const nextHoliday = computed(() => {
 const onLeaveToday = computed(() => {
   const people = data.value?.calendar?.on_leave_today;
   if (!people?.length) return "";
-  const span = (p: (typeof people)[number]) =>
+  const span = (p: typeof people[number]) =>
     p.half_day
       ? __("half day")
       : dayjs(p.to_date).isSame(dayjs(), "day")
