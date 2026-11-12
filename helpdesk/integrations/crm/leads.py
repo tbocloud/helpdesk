@@ -220,6 +220,13 @@ def friendly_error(
         return LeadsUnavailableError(
             _("Couldn't reach the ERP site ({0}). Try again in a minute.").format(site)
         )
+    if error.status == 503 and "sessionstopped" in detail.casefold():
+        # Frappe Cloud puts the site in maintenance mode while it updates or migrates it
+        return LeadsUnavailableError(
+            _(
+                "The CRM ({0}) is being updated right now. It's usually back in a few minutes; try again then. Nothing you saved is lost."
+            ).format(site)
+        )
     if error.status == 401:
         return LeadsUnavailableError(
             _(
