@@ -1,6 +1,6 @@
 """Today's calls: the batch of leads a salesperson must call in the current time slot
 (docs/leads.md, "Today's calls"). Thin proxies to TBO Smart's hub leads API
-(`get_my_calls`, `get_next_batch`, `record_call_outcome`, `get_call_batches_report`, and the
+(`get_my_calls`, `get_member_calls`, `get_next_batch`, `record_call_outcome`, `get_call_batches_report`, and the
 managers' call plans `get_call_plans`, `save_call_plan`); the ERP site decides the batches, the
 rules and the outcomes."""
 
@@ -38,6 +38,25 @@ def get_my_calls() -> dict:
     batches."""
     require_leads()
     result = call_if_deployed("get_my_calls")
+    if result is None:
+        return {"available": False, "enabled": False}
+    return {"available": True, **result}
+
+
+@frappe.whitelist()
+def get_member_calls(user: str) -> dict:
+    """A member's Today's calls, read-only, for the people who plan or view one of their
+    departments on Assign leads (TBO Smart's `get_member_calls`): the queue with nothing to
+    act on, `member` and `called` (the day's calls made, newest first). Never cached, like
+    `get_my_calls`. `available` is false while the ERP site is older than this."""
+    require_leads()
+    result = call_if_deployed(
+        "get_member_calls",
+        user=(user or "").strip(),
+        permission_message=_(
+            "Only managers, department heads and viewers can see someone's calls."
+        ),
+    )
     if result is None:
         return {"available": False, "enabled": False}
     return {"available": True, **result}

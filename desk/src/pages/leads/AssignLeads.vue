@@ -257,16 +257,27 @@
                       >
                         {{ member.sizes[slot.label] ?? slot.size }}
                       </span>
-                      <span
-                        class="text-sm text-ink-gray-6 tabular-nums md:col-start-auto md:text-right"
+                      <!-- their Today's calls, read-only; inside the row's label: it must not tick them -->
+                      <button
+                        type="button"
+                        class="justify-self-start rounded px-1 text-sm text-ink-gray-7 tabular-nums underline decoration-outline-gray-3 underline-offset-2 hover:text-ink-gray-9 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight md:col-start-auto md:justify-self-end md:text-right"
                         :class="canEdit && 'col-start-2'"
                         :title="__('Called / handed today')"
+                        :aria-label="
+                          __(
+                            'See today\'s calls of {0}: {1} of {2} called',
+                            member.full_name,
+                            String(member.today.called),
+                            String(member.today.size)
+                          )
+                        "
+                        @click.prevent.stop="openCalls(member)"
                       >
                         <span class="font-mono">{{
                           `${member.today.called}/${member.today.size}`
                         }}</span>
                         <span class="md:hidden"> {{ __("called today") }}</span>
-                      </span>
+                      </button>
                       <!-- a button inside the row's label: it must not tick the person -->
                       <button
                         type="button"
@@ -687,6 +698,14 @@ const departmentOptions = computed(() =>
 
 function pickDepartment(name: string) {
   router.replace({ query: { ...route.query, department: name } });
+}
+
+function openCalls(member: PlanMember) {
+  router.push({
+    name: "MemberCalls",
+    params: { user: member.user },
+    query: { name: member.full_name, department: current.value?.department },
+  });
 }
 
 // ---------- who is picked ----------

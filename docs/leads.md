@@ -433,6 +433,15 @@ still opens the person's leads and the unassigned ones, without tick boxes or ac
 Manager listed as a viewer only watches that department. The sidebar shows Assign leads to a
 viewer even when they are a BD (`is_viewer` in `get_options`' departments).
 
+**A person's Today's calls, read-only.** On Assign leads, each person's **Today** count
+(`12/50`) opens `MemberCalls.vue` (`/leads/assign/calls/<user>`): their Today's calls as they see
+it (`TodaysCalls.vue` with `member`, reading `get_member_calls`), the batch, time left, counts,
+the calls waiting, coming back later and overdue, without the Call button, the answer buttons,
+Get next batch or the calling-for switch, and the lead name is not a link. Below it, **Called
+today** lists the calls they already made, newest first, with the answer, the time and the note.
+It reads again every 15 seconds. Managers, heads and the department's viewers may open it; the ERP
+site refuses anyone else ("Only managers, department heads and viewers can see someone's calls.").
+
 **Live.** Assign leads reads the plans again every 15 seconds while the page is in view, and at
 once when it comes back into view, so today's calls, plans and lead counts follow what others
 change. The view-only card says when it last updated.

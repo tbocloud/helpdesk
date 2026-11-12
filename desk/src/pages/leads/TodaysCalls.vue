@@ -33,7 +33,11 @@
     <TaskyState
       v-else-if="!shown.enabled"
       :icon="LucidePhoneOff"
-      :title="__('No call batches for you')"
+      :title="
+        readOnly
+          ? __('No call batches for them')
+          : __('No call batches for you')
+      "
       :message="
         shown.reason ||
         __(
@@ -45,7 +49,7 @@
     <template v-else>
       <!-- what they call for now, and the switch; a department with one thing to call has none -->
       <CallingFor
-        v-if="shown.focus_options?.length"
+        v-if="!readOnly && shown.focus_options?.length"
         :focus="shown.focus ?? null"
         :options="shown.focus_options"
         @changed="reload"
@@ -147,7 +151,9 @@
           </h2>
           <p class="mt-1 text-p-sm text-ink-gray-7">
             {{
-              shown.next_slot
+              readOnly
+                ? __("They have no batch running now.")
+                : shown.next_slot
                 ? __(
                     "Your next batch, {0}, starts at {1}.",
                     shown.next_slot.label,
@@ -186,6 +192,7 @@
             :key="item.item"
             :call="item"
             :can-call="!!shown.can_call"
+            :read-only="readOnly"
             :dialing="dialing === item.lead"
             @dial="dial"
             @dialed="dialed"
@@ -204,6 +211,10 @@
             {{
               shown.scheduled.length
                 ? __("Some calls come back later, listed below.")
+                : readOnly
+                ? __(
+                    "Their next batch comes when they ask for it or the next slot opens."
+                  )
                 : __("Ask for the next batch below when you are ready.")
             }}
           </p>
@@ -227,7 +238,7 @@
       </section>
 
       <!-- the next batch, or why not yet -->
-      <div class="flex flex-col gap-2">
+      <div v-if="!readOnly" class="flex flex-col gap-2">
         <Button
           class="w-full sm:w-auto sm:self-start"
           size="lg"
@@ -269,7 +280,13 @@
         </h2>
         <p class="text-p-sm text-ink-gray-7">
           {{
-            __("Not called in their slot. They stay here until you call them.")
+            readOnly
+              ? __(
+                  "Not called in their slot. They stay here until they are called."
+                )
+              : __(
+                  "Not called in their slot. They stay here until you call them."
+                )
           }}
         </p>
         <ul role="list" class="flex flex-col gap-3" :aria-label="__('Overdue')">
@@ -278,6 +295,7 @@
             :key="item.item"
             :call="item"
             overdue
+            :read-only="readOnly"
             :can-call="!!shown.can_call"
             :dialing="dialing === item.lead"
             @dial="dial"
@@ -287,6 +305,73 @@
         </ul>
       </section>
     </template>
+
+    <!-- a watcher: what they already called today, newest first -->
+    <section
+      v-if="readOnly && shown?.enabled"
+      :aria-labelledby="ids.called"
+      class="flex flex-col gap-2"
+    >
+      <h2
+        :id="ids.called"
+        class="flex items-center gap-2 text-base-medium text-ink-gray-9"
+      >
+        <LucidePhoneOutgoing
+          class="size-4 text-ink-gray-6"
+          aria-hidden="true"
+        />
+        {{ __("Called today") }}
+        <span class="font-mono tabular-nums text-ink-gray-6">{{
+          shown.called?.length ?? 0
+        }}</span>
+      </h2>
+      <p
+        v-if="!shown.called?.length"
+        class="rounded-xl border border-outline-gray-2 bg-surface-base px-4 py-6 text-center text-p-sm text-ink-gray-6"
+      >
+        {{ __("No calls made yet today.") }}
+      </p>
+      <ul
+        v-else
+        role="list"
+        class="divide-y divide-outline-gray-1 rounded-xl border border-outline-gray-2 bg-surface-base"
+        :aria-label="__('Called today')"
+      >
+        <li
+          v-for="item in shown.called"
+          :key="item.item"
+          class="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3"
+        >
+          <span class="min-w-0 flex-1">
+            <span class="block truncate text-base text-ink-gray-9">
+              {{ item.summary.lead_name || item.summary.name || item.lead }}
+            </span>
+            <span class="block truncate text-p-sm text-ink-gray-6">
+              {{
+                [item.summary.company_name, item.summary.phone]
+                  .filter(Boolean)
+                  .join(" · ")
+              }}
+            </span>
+            <span
+              v-if="item.note"
+              class="block line-clamp-2 text-p-sm text-ink-gray-7"
+              >{{ item.note }}</span
+            >
+          </span>
+          <TaskyBadge
+            :tone="OUTCOME_LOOK[item.outcome]?.tone"
+            :icon="OUTCOME_LOOK[item.outcome]?.icon"
+            :label="outcomeLabel(item.outcome)"
+          />
+          <span
+            v-if="item.called_at"
+            class="w-16 text-right font-mono text-sm tabular-nums text-ink-gray-6"
+            >{{ dayjs(item.called_at).format("h:mm A") }}</span
+          >
+        </li>
+      </ul>
+    </section>
 
     <CallOutcomeDialog
       v-model:open="showOutcome"
@@ -299,6 +384,7 @@
 </template>
 
 <script setup lang="ts">
+import TaskyBadge from "@/components/TaskyBadge.vue";
 import TaskyState from "@/components/TaskyState.vue";
 import { FILL, TRACK } from "@/components/tone";
 import { __ } from "@/translation";
@@ -316,11 +402,15 @@ import LucideClock from "~icons/lucide/clock";
 import LucideCloudOff from "~icons/lucide/cloud-off";
 import LucideInfo from "~icons/lucide/info";
 import LucidePhoneOff from "~icons/lucide/phone-off";
+import LucidePhoneOutgoing from "~icons/lucide/phone-outgoing";
 import CallingFor from "./CallingFor.vue";
 import CallOutcomeDialog, { type OutcomeAnswer } from "./CallOutcomeDialog.vue";
 import CallRow from "./CallRow.vue";
 import {
+  OUTCOME_LOOK,
+  OUTCOMES,
   timeLeftText,
+  useMemberCalls,
   useMyCalls,
   useNextBatch,
   useRecordOutcome,
@@ -343,12 +433,22 @@ const ids = {
   pending: `calls-pending-${useId()}`,
   overdue: `calls-overdue-${useId()}`,
   reason: `calls-reason-${useId()}`,
+  called: `calls-called-${useId()}`,
 };
+
+const props = defineProps<{
+  /** someone else's calls (their email), watched read-only from Assign leads */
+  member?: string;
+}>();
+const readOnly = computed(() => !!props.member);
+const outcomeLabel = (value: CallOutcome) =>
+  OUTCOMES.find((o) => o.value === value)?.label ?? value;
 // under this many seconds left the clock turns to a warning
 const HURRY_SECONDS = 15 * 60;
-const REFRESH_MS = 60_000;
+// a watcher wants it live; the caller's own answers already update it at once
+const REFRESH_MS = props.member ? 15_000 : 60_000;
 
-const myCalls = useMyCalls();
+const myCalls = props.member ? useMemberCalls(props.member) : useMyCalls();
 loadLeadOptions();
 const options = computed(() => leadOptions.data as LeadOptions | undefined);
 

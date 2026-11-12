@@ -25,7 +25,14 @@
         </p>
       </div>
       <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+        <span
+          v-if="readOnly"
+          class="truncate text-base-medium text-ink-gray-9"
+          :title="name"
+          >{{ name }}</span
+        >
         <router-link
+          v-else
           :to="{ name: 'Lead', params: { leadId: call.lead } }"
           class="truncate rounded text-base-medium text-ink-gray-9 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
           :title="name"
@@ -86,8 +93,9 @@
                 · {{ other.person || other.label }}</span
               >
             </span>
+            <template v-if="readOnly" />
             <Button
-              v-if="canCall"
+              v-else-if="canCall"
               variant="subtle"
               :label="__('Call')"
               :aria-label="__('Call {0}', other.number)"
@@ -135,8 +143,9 @@
     </div>
 
     <!-- the one big action: MyOperator rings the person's phone, else the phone dials -->
+    <template v-if="readOnly" />
     <button
-      v-if="canCall"
+      v-else-if="canCall"
       type="button"
       :class="CALL_BUTTON"
       :disabled="dialing"
@@ -163,6 +172,7 @@
     </a>
 
     <div
+      v-if="!readOnly"
       class="flex flex-wrap gap-2"
       role="group"
       :aria-label="__('How did the call with {0} go?', name)"
@@ -208,6 +218,8 @@ const props = defineProps<{
   canCall: boolean;
   dialing?: boolean;
   overdue?: boolean;
+  /** someone else's call, watched: nothing to dial or answer */
+  readOnly?: boolean;
 }>();
 const emit = defineEmits<{
   // `number`: one of the lead's other numbers; none: the main one

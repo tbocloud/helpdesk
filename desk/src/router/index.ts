@@ -21,6 +21,7 @@ const LEADS_ROUTES = new Set([
   "LeadProposal",
   "LeadNewProposal",
   "AssignLeads",
+  "MemberCalls",
 ]);
 
 // type the meta fields
@@ -175,6 +176,12 @@ const portalRoutes = [
     path: "/leads/assign",
     name: "AssignLeads",
     component: () => import("@/pages/leads/AssignLeads.vue"),
+  },
+  {
+    path: "/leads/assign/calls/:user",
+    name: "MemberCalls",
+    component: () => import("@/pages/leads/MemberCalls.vue"),
+    props: true,
   },
   {
     path: "/leads/:leadId",
