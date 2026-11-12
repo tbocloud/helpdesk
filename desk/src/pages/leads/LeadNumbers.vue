@@ -1,7 +1,9 @@
 <template>
   <div class="flex flex-col gap-2" role="group" :aria-labelledby="titleId">
     <div class="flex items-center justify-between gap-2">
-      <h3 :id="titleId" class="text-xs text-ink-gray-5">{{ __("Numbers") }}</h3>
+      <h3 :id="titleId" class="text-base-medium text-ink-gray-9">
+        {{ __("Numbers") }}
+      </h3>
       <Button
         v-if="canWrite"
         variant="subtle"

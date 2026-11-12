@@ -154,6 +154,8 @@ const props = defineProps<{
   mode: "Connected" | "Call back" | "Not interested" | null;
   call: QueueCall | null;
   stages: LeadStage[];
+  /** what was already typed on the call card */
+  startNote?: string;
 }>();
 const emit = defineEmits<{
   (e: "update:open", value: boolean): void;
@@ -213,12 +215,13 @@ function nowLocal() {
   return dayjs().format(LOCAL);
 }
 
-// each time it opens it starts empty, on the lead's own stage
+// each time it opens it starts with the card's note, on the lead's own stage
 watch(
   () => props.open,
   (open) => {
     if (!open) return;
-    note.value = followUp.value = callbackAt.value = errorMessage.value = "";
+    followUp.value = callbackAt.value = errorMessage.value = "";
+    note.value = props.startNote ?? "";
     stage.value = props.call?.summary.stage || "";
   }
 );
