@@ -1,7 +1,9 @@
 <template>
-  <div class="comm-area">
+  <div
+    class="comm-area mx-3 mb-3 overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base md:mx-5 md:mb-5"
+  >
     <div
-      class="flex justify-between gap-3 border-t border-outline-gray-2 bg-surface-gray-1 px-6 py-3 md:px-5 md:py-2"
+      class="flex justify-between gap-3 border-b border-outline-gray-2 bg-surface-gray-1 px-3 py-2 md:px-3 md:py-2"
     >
       <div class="flex items-center gap-2">
         <div
@@ -97,10 +99,10 @@
             ref="commentTextEditorRef"
             :label="
               isMobileView
-                ? 'Comment'
+                ? 'Add note'
                 : isMac
-                ? 'Comment (⌘ + ⏎)'
-                : 'Comment (Ctrl + ⏎)'
+                ? 'Add note (⌘ + ⏎)'
+                : 'Add note (Ctrl + ⏎)'
             "
             :ticketId="ticketId"
             :editable="showCommentBox"
@@ -173,7 +175,7 @@ const modes = computed(() => [
   },
   {
     key: "comment",
-    label: __("Comment"),
+    label: __("Internal note"),
     icon: CommentIcon,
     shortcut: "c",
     active: showCommentBox.value,
@@ -309,7 +311,7 @@ onClickOutside(
 <style>
 @media screen and (max-width: 640px) {
   .comm-area {
-    width: 100vw;
+    width: calc(100vw - 1.5rem);
   }
 }
 

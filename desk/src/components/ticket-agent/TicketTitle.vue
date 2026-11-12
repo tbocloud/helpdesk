@@ -24,6 +24,13 @@
         >
           #{{ ticket.doc.name }}
         </button>
+        <span
+          v-if="ticket.doc.agent_group"
+          class="text-sm text-ink-gray-6"
+          :title="__('Team')"
+        >
+          · {{ ticket.doc.agent_group }}
+        </span>
         <TaskyBadge v-bind="status" />
         <TaskyBadge v-if="priority" v-bind="priority" />
         <Tooltip
