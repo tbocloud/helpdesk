@@ -64,9 +64,7 @@ class TestTodaysCalls(FrappeTestCase):
         self.assertEqual(self.calls("get_my_calls")[0][1]["acting_user"], BDE)
 
     def test_a_members_calls_are_read_live_for_them_by_the_watcher(self):
-        self.crm.lead_answers["get_member_calls"] = my_calls(
-            pending=(queue_call("a"),)
-        )
+        self.crm.lead_answers["get_member_calls"] = my_calls(pending=(queue_call("a"),))
         view = api.get_member_calls(" shahana@tbo.example ")
         api.get_member_calls("shahana@tbo.example")
         self.assertTrue(view["available"])

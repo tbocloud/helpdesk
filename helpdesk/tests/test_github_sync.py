@@ -130,7 +130,9 @@ class TestPullRequestFlow(GitHubSyncCase):
         )
         self.assertEqual(row.author, "dev-octocat")
         self.assertEqual(self.status(), "Working")
-        self.assertEqual(len(get_task_comments(self.task, "%opened by @dev-octocat%")), 1)
+        self.assertEqual(
+            len(get_task_comments(self.task, "%opened by @dev-octocat%")), 1
+        )
 
     def test_task_named_only_in_the_branch_is_a_reference(self):
         self.send(
@@ -191,7 +193,10 @@ class TestPullRequestFlow(GitHubSyncCase):
         )
         self.assertEqual(self.rows()[0].ci_state, "Failing")
         self.assertTrue(
-            any("CI failing on PR #7" in m for m in get_reminder_messages(DEV[0], self.task))
+            any(
+                "CI failing on PR #7" in m
+                for m in get_reminder_messages(DEV[0], self.task)
+            )
         )
 
         # another workflow passing on the same commit doesn't clear the failure
@@ -267,7 +272,9 @@ class TestPullRequestFlow(GitHubSyncCase):
         self.send("pull_request", "closed", body=f"Part of {self.task}", merged=True)
 
         self.assertEqual(self.status(), "Working")
-        self.assertEqual(len(get_task_comments(self.task, "%merged by @lead-octocat%")), 1)
+        self.assertEqual(
+            len(get_task_comments(self.task, "%merged by @lead-octocat%")), 1
+        )
 
     def test_dependency_blocking_a_move_is_noted_not_failed(self):
         blocker = make_task(self.project, "Tax template").name
@@ -280,7 +287,9 @@ class TestPullRequestFlow(GitHubSyncCase):
             frappe.db.get_value("HD GitHub Delivery", result["queued"], "status"),
             "Processed",
         )
-        self.assertEqual(len(get_task_comments(self.task, "%move the task to Working%")), 1)
+        self.assertEqual(
+            len(get_task_comments(self.task, "%move the task to Working%")), 1
+        )
 
     def test_unlinked_pr_gets_a_task_in_the_configured_project(self):
         inbox = make_project("GitHub Sync - Unplanned Work", owner=PM[0]).name
@@ -299,7 +308,9 @@ class TestPullRequestFlow(GitHubSyncCase):
         self.assertFalse(frappe.parse_json(task[0]._assign or "[]"))
 
         # later events follow the created task even though the PR still names none
-        self.send("pull_request", "closed", number=42, title="Fix typo", body="", merged=True)
+        self.send(
+            "pull_request", "closed", number=42, title="Fix typo", body="", merged=True
+        )
         self.assertEqual(self.status(task[0].name), "Completed")
 
     def test_unlinked_pr_without_a_project_asks_on_github(self):
@@ -352,7 +363,9 @@ class TestPullRequestFlow(GitHubSyncCase):
         for delivery in ("gh-twice-1", "gh-twice-2"):
             send_github_webhook(
                 "pull_request",
-                make_github_payload("pull_request", "opened", body=f"Closes {self.task}"),
+                make_github_payload(
+                    "pull_request", "opened", body=f"Closes {self.task}"
+                ),
                 delivery=delivery,
             )
         for delivery in ("gh-twice-3", "gh-twice-4"):
@@ -393,6 +406,8 @@ class TestPullRequestAccess(GitHubSyncCase):
             [(p["repo"], p["number"]) for p in detail["pull_requests"]],
             [(GITHUB_TEST_REPO, 7)],
         )
-        board = run_as_user(LEAD[0], lambda: tasky.get_kanban_tasks(project=self.project))
+        board = run_as_user(
+            LEAD[0], lambda: tasky.get_kanban_tasks(project=self.project)
+        )
         card = next(t for t in board["columns"]["Working"] if t["name"] == self.task)
         self.assertEqual(card["pull_request"]["number"], 7)

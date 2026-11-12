@@ -38,9 +38,9 @@ class HDGitHubSettings(Document):
         invalid = [p for p in patterns if not REPO_PATTERN.match(p)]
         if invalid:
             frappe.throw(
-                _("Allowed Repositories: use owner/repo or owner/* on each line, not {0}").format(
-                    ", ".join(invalid)
-                )
+                _(
+                    "Allowed Repositories: use owner/repo or owner/* on each line, not {0}"
+                ).format(", ".join(invalid))
             )
         self.allowed_repos = "\n".join(patterns)
 
@@ -49,7 +49,9 @@ class HDGitHubSettings(Document):
         for field, default in MERGE_BOT_DEFAULTS.items():
             self.set(field, (self.get(field) or "").strip() or default)
         if not REPO_NAME.match(self.merge_bot_repo) or ".." in self.merge_bot_repo:
-            frappe.throw(_("Merge bot repository: use owner/repo, e.g. tbocloud/ai-review."))
+            frappe.throw(
+                _("Merge bot repository: use owner/repo, e.g. tbocloud/ai-review.")
+            )
         if not MERGE_BOT_WORKFLOW.match(self.merge_bot_workflow):
             frappe.throw(
                 _(
