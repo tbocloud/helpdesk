@@ -1,0 +1,211 @@
+{
+	"actions": [],
+	"autoname": "TBO-REP-.YYYY.-.#####",
+	"creation": "2026-11-12 18:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"runbook",
+		"target",
+		"status",
+		"level",
+		"column_break_1",
+		"alert_key",
+		"ticket",
+		"attempt",
+		"approval",
+		"section_what",
+		"text",
+		"evidence",
+		"action",
+		"verify",
+		"section_when",
+		"started_at",
+		"finished_at",
+		"column_break_2",
+		"escalated",
+		"assigned_to"
+	],
+	"fields": [
+		{
+			"fieldname": "runbook",
+			"fieldtype": "Data",
+			"label": "Runbook",
+			"reqd": 1,
+			"read_only": 1,
+			"in_list_view": 1,
+			"in_standard_filter": 1
+		},
+		{
+			"fieldname": "target",
+			"fieldtype": "Data",
+			"label": "Target",
+			"read_only": 1,
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"description": "The site, bench or server repaired."
+		},
+		{
+			"fieldname": "status",
+			"fieldtype": "Select",
+			"label": "Status",
+			"options": "Running\nFixed\nNot fixed\nRefused\nPaused\nSkipped",
+			"default": "Running",
+			"read_only": 1,
+			"in_list_view": 1,
+			"in_standard_filter": 1
+		},
+		{
+			"fieldname": "level",
+			"fieldtype": "Select",
+			"label": "Level",
+			"options": "Automatic\nApproval",
+			"default": "Automatic",
+			"read_only": 1,
+			"in_standard_filter": 1
+		},
+		{
+			"fieldname": "column_break_1",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "alert_key",
+			"fieldtype": "Data",
+			"label": "Alert key",
+			"read_only": 1,
+			"search_index": 1
+		},
+		{
+			"fieldname": "ticket",
+			"fieldtype": "Link",
+			"label": "Ticket",
+			"options": "HD Ticket",
+			"read_only": 1,
+			"search_index": 1
+		},
+		{
+			"fieldname": "attempt",
+			"fieldtype": "Int",
+			"label": "Attempt",
+			"read_only": 1
+		},
+		{
+			"fieldname": "approval",
+			"fieldtype": "Link",
+			"label": "Approval",
+			"options": "HDS Action Approval",
+			"read_only": 1
+		},
+		{
+			"fieldname": "section_what",
+			"fieldtype": "Section Break",
+			"label": "What happened"
+		},
+		{
+			"fieldname": "text",
+			"fieldtype": "Small Text",
+			"label": "Note",
+			"read_only": 1,
+			"description": "The note written on the ticket: what happened, what Copilot did, whether it worked."
+		},
+		{
+			"fieldname": "evidence",
+			"fieldtype": "Code",
+			"label": "Evidence",
+			"options": "JSON",
+			"read_only": 1
+		},
+		{
+			"fieldname": "action",
+			"fieldtype": "Code",
+			"label": "Action",
+			"options": "JSON",
+			"read_only": 1,
+			"description": "The exact command or Press method and its parameters."
+		},
+		{
+			"fieldname": "verify",
+			"fieldtype": "Code",
+			"label": "Check after",
+			"options": "JSON",
+			"read_only": 1
+		},
+		{
+			"fieldname": "section_when",
+			"fieldtype": "Section Break",
+			"label": "When and who"
+		},
+		{
+			"fieldname": "started_at",
+			"fieldtype": "Datetime",
+			"label": "Started at",
+			"read_only": 1
+		},
+		{
+			"fieldname": "finished_at",
+			"fieldtype": "Datetime",
+			"label": "Finished at",
+			"read_only": 1
+		},
+		{
+			"fieldname": "column_break_2",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "escalated",
+			"fieldtype": "Check",
+			"label": "Escalated",
+			"read_only": 1
+		},
+		{
+			"fieldname": "assigned_to",
+			"fieldtype": "Link",
+			"label": "Assigned to",
+			"options": "User",
+			"read_only": 1
+		}
+	],
+	"in_create": 1,
+	"links": [],
+	"modified": "2026-11-12 18:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HDS Repair",
+	"naming_rule": "Expression (old style)",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"delete": 1,
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "System Manager",
+			"share": 1
+		},
+		{
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "Agent Manager",
+			"share": 1
+		},
+		{
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "Agent",
+			"share": 1
+		}
+	],
+	"sort_field": "creation",
+	"sort_order": "DESC",
+	"states": [],
+	"title_field": "runbook",
+	"track_changes": 1
+}

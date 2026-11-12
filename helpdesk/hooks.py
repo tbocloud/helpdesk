@@ -138,6 +138,8 @@ scheduler_events = {
         # Monday 09:00: the week's adoption findings to management (docs/adoption.md)
         "0 9 * * 1": [
             "helpdesk.adoption.send_weekly_digest",
+            # the week's repairs by the watcher, and root-cause tasks for repeats (Phase 19)
+            "helpdesk.repairs.weekly",
         ],
         # Monday 08:00: last week's summary per customer
         "0 8 * * 1": [

@@ -34,6 +34,8 @@ INTENTS = (
     "press_status",
     "press_backup",
     "press_action",
+    "repair_pause",
+    "repair_resume",
     "help",
     "unclear",
 )
@@ -66,10 +68,10 @@ TICKET_RE = re.compile(r"(?:ticket\s*#?|#)\s*(\d{1,7})\b", re.I)
 
 INTENT_PROMPT = """You read one message that a TBO support engineer sent to TBO Copilot, the team's AI support
 engineer, in a chat. You decide what they want; you never act yourself. Answer with JSON only:
-{"intent": "question" | "approve" | "reject" | "change_request" | "new_work" | "waiting" | "snooze" | "build" | "fix" | "press_status" | "press_backup" | "press_action" | "help" | "unclear",
+{"intent": "question" | "approve" | "reject" | "change_request" | "new_work" | "waiting" | "snooze" | "build" | "fix" | "press_status" | "press_backup" | "press_action" | "repair_pause" | "repair_resume" | "help" | "unclear",
  "ticket": a ticket number they name, like "0312", or "",
  "task": a task they name, like "TASK-2026-00123", or "",
- "reason": for reject or change_request, their reason or the change they want, in their own words, or "",
+ "reason": for reject, change_request or repair_pause, their reason or the change they want, in their own words, or "",
  "customer": for new_work, the customer or site they name, or "",
  "summary": for new_work, a short title of the problem (at most 12 words), or "",
  "question": for question, their question, or "",
@@ -88,6 +90,8 @@ fix: they want Copilot to write the fix for a bug it diagnosed ("let Copilot fix
 press_status: they ask how a hosted site is doing on Press ("what's the status of galom.tbo365.cloud?", "is demoerp up?", "when was alpha last backed up?").
 press_backup: they want a backup of a hosted site taken now ("take a backup of demoerp").
 press_action: they want Press to act on a hosted site or its bench: restart the bench, update or migrate the site, change its plan, deploy the bench group, restore a backup, create a site ("restart the bench of galom").
+repair_pause: they want Copilot's automatic repairs of the servers stopped for now ("pause auto-repair", "stop auto repair: migration tonight").
+repair_resume: they want the automatic repairs running again ("resume auto-repair", "auto repair back on").
 unclear: anything else, or when you are not sure.
 When they say "it" or "this fix", they mean the one fix waiting for them, when there is exactly one; for fix, the
 ticket of the last diagnosis they got.
@@ -444,6 +448,8 @@ def handle(
         return [waiting_card(user)]
     if kind == "new_work" or (files and kind == "unclear"):
         return propose_new_work(user, channel, chat, intent, text, files)
+    if kind in ("repair_pause", "repair_resume"):
+        return [repair_switch(user, channel, kind, intent)]
     if kind in ("press_status", "press_backup", "press_action"):
         return press_reply(user, channel, kind, intent, text)
     if kind in (
@@ -741,9 +747,48 @@ def help_card() -> dict:
                 'Ask Press for more: "restart the bench of galom", "update demoerp", "deploy bench group X"; an approver gets a card first.'
             ),
             _(
+                '"Pause auto-repair: migration tonight" stops the watcher\'s repairs; "resume auto-repair" starts them (managers and DevOps).'
+            ),
+            _(
                 "Nothing happens until you press Yes, and I act with your own permissions."
             ),
         ],
+    )
+
+
+# --- auto-repair's switch (Phase 19) ---------------------------------------------------------------
+
+
+def repair_switch(user: str, channel: str, kind: str, intent: dict) -> dict:
+    """Pause or resume the watcher's repairs at once: a pause is a safety step, so no Yes card."""
+    from helpdesk import repairs
+
+    pause = kind == "repair_pause"
+    reason = (intent.get("reason") or "").strip()
+    arguments = {"paused": pause, "reason": reason}
+    try:
+        state = repairs.set_paused(user, pause, reason)
+    except frappe.PermissionError as e:
+        frappe.clear_last_message()
+        log_action(user, channel, kind, "Refused", arguments, str(e))
+        return text_card(str(e), "warning")
+    log_action(user, channel, kind, "OK", arguments, json.dumps(state, default=str))
+    if pause:
+        return card(
+            _("Auto-repair is paused"),
+            [
+                _(
+                    "The watcher still watches and opens tickets, but repairs nothing, approved repairs included."
+                ),
+                _('Say "resume auto-repair" to start it again.'),
+            ],
+            facts=[(_("Why"), reason)],
+            tone="warning",
+        )
+    return card(
+        _("Auto-repair is running again"),
+        [_("The watcher repairs what its runbooks cover, within its limits.")],
+        tone="good",
     )
 
 

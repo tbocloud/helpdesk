@@ -46,7 +46,15 @@
 		"internal_customer",
 		"internal_project",
 		"column_break_monitoring",
-		"monitor_quiet_minutes"
+		"monitor_quiet_minutes",
+		"auto_repair_section",
+		"auto_repair_paused",
+		"auto_repair_paused_by",
+		"auto_repair_paused_at",
+		"auto_repair_pause_reason",
+		"column_break_auto_repair",
+		"auto_repair_off",
+		"auto_repair_max_per_hour"
 	],
 	"fields": [
 		{
@@ -309,11 +317,60 @@
 			"label": "Watcher quiet after (minutes)",
 			"default": "3",
 			"description": "Minutes without a heartbeat before the Agent Managers hear that the watcher is quiet."
+		},
+		{
+			"fieldname": "auto_repair_section",
+			"fieldtype": "Section Break",
+			"label": "Auto-repair"
+		},
+		{
+			"fieldname": "auto_repair_paused",
+			"fieldtype": "Check",
+			"label": "Pause auto-repair",
+			"description": "While on, the watcher repairs nothing, approved repairs included. Teams: \"pause auto-repair\" / \"resume auto-repair\"."
+		},
+		{
+			"fieldname": "auto_repair_paused_by",
+			"fieldtype": "Link",
+			"label": "Paused by",
+			"options": "User",
+			"read_only": 1,
+			"depends_on": "auto_repair_paused"
+		},
+		{
+			"fieldname": "auto_repair_paused_at",
+			"fieldtype": "Datetime",
+			"label": "Paused at",
+			"read_only": 1,
+			"depends_on": "auto_repair_paused"
+		},
+		{
+			"fieldname": "auto_repair_pause_reason",
+			"fieldtype": "Small Text",
+			"label": "Why paused",
+			"depends_on": "auto_repair_paused"
+		},
+		{
+			"fieldname": "column_break_auto_repair",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "auto_repair_off",
+			"fieldtype": "Small Text",
+			"label": "Runbooks turned off",
+			"description": "One runbook name per line, for example disk-cleanup. The others still run."
+		},
+		{
+			"fieldname": "auto_repair_max_per_hour",
+			"fieldtype": "Int",
+			"label": "Automatic repairs per hour",
+			"default": "6",
+			"description": "Across every runbook; more waits for the next hour."
 		}
 	],
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-11-12 12:00:00.000000",
+	"modified": "2026-11-12 18:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Hub Settings",

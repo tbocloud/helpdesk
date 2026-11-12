@@ -655,3 +655,26 @@ is the guard**:
   no Press tool: the worker activates four tools per profile.
 - **Press side:** the Press user of the key needs a Press Role listing the sites and bench groups
   Copilot may read (Press roles narrow what is *seen*, never what is *done*).
+
+## Auto-repair (Phase 19: `repairs.py`, `api/monitor.py`; the runbooks are in tbocloud-infra `runbooks/`)
+
+The watcher repairs what its runbooks cover; TBO Support holds the switch and the record.
+
+- **The switch** (HDS Hub Settings → Auto-repair): `auto_repair_paused` with who, when and why; `auto_repair_off`
+  (runbooks turned off, one per line); `auto_repair_max_per_hour` (default 6). The watcher reads `repair_policy`
+  every minute. In Teams, "pause auto-repair: <why>" and "resume auto-repair" (intents `repair_pause`,
+  `repair_resume`) act at once for the Agent Managers and the internal project's **DevOps Engineers**; the channel
+  hears either way. While paused the watcher repairs nothing, approved repairs included.
+- **HDS Repair**, one per attempt, credited to TBO AI: runbook, level (Automatic / Approval), target, alert key and
+  ticket, attempt, evidence, the exact action, the check after, outcome (Fixed / Not fixed / Refused / Paused /
+  Skipped). `repair_started` / `repair_finished`; the note goes on the alert's ticket ("Copilot repair (runbook,
+  attempt N): outcome. …"). An automatic fix posts "🔧 Fixed by Copilot" to the channel.
+- **Hand-over:** `repair_finished(escalate=1)` assigns the ticket to the least busy DevOps Engineer of the internal
+  project (the Agent Managers when there is none) and tells the channel.
+- **Repairs that wait for an approver:** `request_repair` makes an action approval of kind **Repair**, requested by
+  the watcher's user, on the alert's ticket (risk `senior` for the heavy ones); `approved_repairs` lists what someone
+  approved and nobody ran, with `payload_hash` = sha256 of `json.dumps(payload, sort_keys=True, default=str,
+  ensure_ascii=False)`; `repair_executed` records the outcome on the approval.
+- **The week** (`repairs.weekly`, Monday 09:00): the repairs by runbook to the channel; the same runbook on the same
+  target 3 times in 7 days becomes a DevOps task "Find the root cause: …" in the internal project (`followup`, key
+  `root-cause:<runbook>:<target>`), given to the least busy DevOps Engineer. Monitor follow-ups are DevOps tasks now.

@@ -238,8 +238,16 @@ def open_followup(key: str) -> str | None:
     )
 
 
-def followup(key, subject: str, details: str = "", priority: str = "Medium") -> dict:
-    """A slow-burning issue becomes one task in the internal project, once per key while open."""
+def followup(
+    key,
+    subject: str,
+    details: str = "",
+    priority: str = "Medium",
+    category: str = "DevOps",
+    assign_to: str | None = None,
+) -> dict:
+    """A slow-burning issue becomes one task in the internal project, once per key while open;
+    infrastructure work, so a DevOps task, given to `assign_to` when there is one."""
     key = normalise_key(key)
     existing = open_followup(key)
     if existing:
@@ -264,11 +272,30 @@ def followup(key, subject: str, details: str = "", priority: str = "Medium") -> 
                 "project": project,
                 "status": "Open",
                 "priority": priority,
-                "custom_category": "Functional",
+                "custom_category": category,
                 "custom_monitor_key": key,
             }
         ).insert(ignore_permissions=True)
+    if assign_to:
+        assign(
+            {
+                "assign_to": [assign_to],
+                "doctype": "Task",
+                "name": task.name,
+                "assigned_by": automation_user(),
+            }
+        )
     return {"task": task.name, "action": "created"}
+
+
+def assign(args: dict):
+    """An assignment made by the hub itself, past the assigner's permissions. Newer Frappe keeps
+    that option on the private `_add`; older Frappe has it on `add`."""
+    from frappe.desk.form import assign_to
+
+    if hasattr(assign_to, "_add"):
+        return assign_to._add(args, ignore_permissions=True)
+    return assign_to.add(args, ignore_permissions=True)
 
 
 # --- heartbeats ------------------------------------------------------------------------------
