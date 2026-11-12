@@ -29,7 +29,9 @@
       :id="titleId"
       class="mt-1.5 text-2xl font-semibold text-ink-gray-9 sm:text-3xl"
     >
+      <span v-if="readOnly">{{ name }}</span>
       <router-link
+        v-else
         :to="{ name: 'Lead', params: { leadId: call.lead } }"
         class="rounded hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
         >{{ name }}</router-link
@@ -38,7 +40,7 @@
     <p v-if="meta" class="mt-1 text-p-base text-ink-gray-7">{{ meta }}</p>
 
     <!-- the one big action: MyOperator rings the person's phone, else the phone dials -->
-    <div class="mt-5 flex flex-wrap items-center gap-3">
+    <div v-if="!readOnly" class="mt-5 flex flex-wrap items-center gap-3">
       <button
         v-if="canCall"
         type="button"
@@ -113,8 +115,9 @@
               · {{ other.person || other.label }}</span
             >
           </span>
+          <template v-if="readOnly" />
           <Button
-            v-if="canCall"
+            v-else-if="canCall"
             variant="subtle"
             :label="__('Call')"
             :aria-label="__('Call {0}', other.number)"
@@ -162,35 +165,37 @@
       </p>
     </div>
 
-    <h3 class="mb-2.5 mt-6 text-base-medium text-ink-gray-9">
-      {{ __("How did it go?") }}
-    </h3>
-    <div
-      class="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-2.5"
-      role="group"
-      :aria-label="__('How did the call with {0} go?', name)"
-    >
-      <button
-        v-for="chip in CHIPS"
-        :key="chip.value"
-        type="button"
-        class="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg border border-outline-gray-2 bg-surface-base px-3 text-sm text-ink-gray-8 transition-colors hover:border-brand hover:bg-brand-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
-        @click="emit('outcome', call, chip.value, note.trim())"
+    <template v-if="!readOnly">
+      <h3 class="mb-2.5 mt-6 text-base-medium text-ink-gray-9">
+        {{ __("How did it go?") }}
+      </h3>
+      <div
+        class="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-2.5"
+        role="group"
+        :aria-label="__('How did the call with {0} go?', name)"
       >
-        <component :is="chip.icon" class="size-4" aria-hidden="true" />
-        {{ chip.label }}
-      </button>
-    </div>
-    <div class="mt-4">
-      <FormControl
-        v-model="note"
-        type="textarea"
-        :rows="3"
-        maxlength="500"
-        :label="__('Note (optional)')"
-        :placeholder="__('What did they say?')"
-      />
-    </div>
+        <button
+          v-for="chip in CHIPS"
+          :key="chip.value"
+          type="button"
+          class="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg border border-outline-gray-2 bg-surface-base px-3 text-sm text-ink-gray-8 transition-colors hover:border-brand hover:bg-brand-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+          @click="emit('outcome', call, chip.value, note.trim())"
+        >
+          <component :is="chip.icon" class="size-4" aria-hidden="true" />
+          {{ chip.label }}
+        </button>
+      </div>
+      <div class="mt-4">
+        <FormControl
+          v-model="note"
+          type="textarea"
+          :rows="3"
+          maxlength="500"
+          :label="__('Note (optional)')"
+          :placeholder="__('What did they say?')"
+        />
+      </div>
+    </template>
 
     <div
       v-if="call.summary.last_note || call.summary.next_step"
@@ -250,6 +255,8 @@ const props = defineProps<{
   overdue?: boolean;
   /** "Call 3 of 14": where this one is in the queue */
   position?: string;
+  /** someone else's call, watched: nothing to dial or answer */
+  readOnly?: boolean;
 }>();
 const emit = defineEmits<{
   // `number`: one of the lead's other numbers; none: the main one

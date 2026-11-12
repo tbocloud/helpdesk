@@ -63,6 +63,25 @@ class TestTodaysCalls(FrappeTestCase):
         self.assertEqual(len(self.calls("get_my_calls")), 2)
         self.assertEqual(self.calls("get_my_calls")[0][1]["acting_user"], BDE)
 
+    def test_a_members_calls_are_read_live_for_them_by_the_watcher(self):
+        self.crm.lead_answers["get_member_calls"] = my_calls(
+            pending=(queue_call("a"),)
+        )
+        view = api.get_member_calls(" shahana@tbo.example ")
+        api.get_member_calls("shahana@tbo.example")
+        self.assertTrue(view["available"])
+        ((_post, params), _again) = self.calls("get_member_calls")
+        self.assertEqual(params["user"], "shahana@tbo.example")
+        self.assertEqual(params["acting_user"], BDE)
+
+    def test_someone_who_may_not_watch_a_members_calls_is_told_so(self):
+        self.crm.lead_answers["get_member_calls"] = CRMError("x", 403, "no")
+        with self.assertRaises(LeadsForbiddenError) as raised:
+            api.get_member_calls("shahana@tbo.example")
+        self.assertIn("viewers", str(raised.exception))
+        self.crm.lead_answers["get_member_calls"] = OLDER_ERP
+        self.assertFalse(api.get_member_calls("shahana@tbo.example")["available"])
+
     def test_the_product_a_call_is_for_reaches_the_person(self):
         call = queue_call(
             "a",

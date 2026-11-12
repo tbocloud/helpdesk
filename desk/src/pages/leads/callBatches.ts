@@ -156,6 +156,16 @@ export interface MyCalls {
   /** what the person calls for now (null: every department of theirs) */
   focus?: CallFocus | null;
   focus_options?: FocusOption[];
+  /** someone else's calls, read-only (get_member_calls): whose, and what they called today */
+  member?: { user: string; full_name: string };
+  called?: CalledCall[];
+}
+
+/** A call already made today, as a watcher sees it. */
+export interface CalledCall extends QueueCall {
+  outcome: CallOutcome;
+  called_at: string | null;
+  note?: string | null;
 }
 
 export interface BatchReportPerson {
@@ -226,6 +236,14 @@ export function withOutcome(data: MyCalls, call: QueueCall): MyCalls {
 export function useMyCalls() {
   return createResource({
     url: "helpdesk.api.call_batches.get_my_calls",
+  });
+}
+
+/** Someone else's Today's calls, read-only, for a manager, head or viewer of their department. */
+export function useMemberCalls(user: string) {
+  return createResource({
+    url: "helpdesk.api.call_batches.get_member_calls",
+    params: { user },
   });
 }
 
@@ -349,7 +367,10 @@ export interface CallRules {
 
 export type AutoAssignSaturdays = "None" | "2nd" | "2nd and 4th" | "All";
 
-export const AUTO_ASSIGN_SATURDAYS: { label: string; value: AutoAssignSaturdays }[] = [
+export const AUTO_ASSIGN_SATURDAYS: {
+  label: string;
+  value: AutoAssignSaturdays;
+}[] = [
   { label: __("Every Saturday is a work day"), value: "None" },
   { label: __("Not on the 2nd Saturday"), value: "2nd" },
   { label: __("Not on the 2nd and 4th Saturdays"), value: "2nd and 4th" },
