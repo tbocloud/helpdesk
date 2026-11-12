@@ -68,13 +68,8 @@
       aria-busy="true"
       :aria-label="__('Loading')"
     >
-      <div class="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <div
-          v-for="i in 6"
-          :key="i"
-          class="h-[74px] animate-pulse rounded-xl bg-surface-gray-2"
-        />
-      </div>
+      <div class="h-24 animate-pulse rounded-xl bg-surface-gray-2" />
+      <div class="h-20 animate-pulse rounded-xl bg-surface-gray-2" />
       <div class="grid gap-5 lg:grid-cols-[3fr_2fr]">
         <div class="h-80 animate-pulse rounded-xl bg-surface-gray-2" />
         <div class="h-80 animate-pulse rounded-xl bg-surface-gray-2" />
@@ -109,86 +104,49 @@
         }}</span>
       </p>
 
-      <!-- what happened in the period -->
+      <!-- what happened in the period, and what needs a person now: one bordered row each -->
       <section
-        class="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6"
+        class="cells grid-cols-2 sm:grid-cols-3 lg:grid-cols-5"
         :aria-label="__('This period')"
       >
-        <StatTile
-          compact
-          :label="__('New leads')"
-          :value="t.new"
-          :icon="LucideUserPlus"
-          :to="list('new')"
-        />
-        <StatTile
-          compact
-          :label="__('Contacted')"
-          :value="t.contacted"
-          :icon="LucidePhone"
-          :to="list('contacted')"
-        />
-        <StatTile
-          compact
-          :label="__('Meetings held')"
-          :value="t.meetings"
-          :icon="LucideUsers"
-          :to="list('meetings')"
-        />
-        <StatTile
-          compact
-          :label="__('Proposals sent')"
-          :value="t.quotations_sent"
-          :icon="LucideFileText"
-          :to="list('quotations')"
-        />
-        <StatTile
-          compact
-          :label="__('Won')"
-          :value="t.won"
-          :sub="t.won ? amount(t.won_value) : undefined"
-          :icon="LucideTrophy"
-          :icon-tone="t.won ? 'success' : 'neutral'"
-          :to="list('won')"
-        />
-        <StatTile
-          compact
-          :label="__('Lost')"
-          :value="t.lost"
-          :icon="LucideCircleX"
-          :to="list('lost')"
-        />
+        <router-link
+          v-for="cell in periodCells"
+          :key="cell.key"
+          :to="cell.to"
+          class="cell"
+        >
+          <span class="text-sm text-ink-gray-6">{{ cell.label }}</span>
+          <span
+            class="mt-1.5 font-mono text-2xl tabular-nums"
+            :class="cell.tone ? INK[cell.tone] : 'text-ink-gray-9'"
+            >{{ cell.value }}</span
+          >
+          <span v-if="cell.sub" class="mt-0.5 text-xs text-ink-gray-6">{{
+            cell.sub
+          }}</span>
+        </router-link>
       </section>
 
-      <!-- what needs a person now -->
       <section
-        class="grid grid-cols-1 gap-3 sm:grid-cols-3"
+        class="cells grid-cols-2 lg:grid-cols-4"
         :aria-label="__('Needs attention')"
       >
-        <StatTile
-          compact
-          :label="__('Overdue follow-ups')"
-          :value="t.overdue"
-          :icon="LucideCalendarX"
-          :icon-tone="t.overdue ? 'danger' : 'neutral'"
-          :value-tone="t.overdue ? 'danger' : 'neutral'"
-          :to="list('overdue', false)"
-        />
-        <StatTile
-          compact
-          :label="__('Gone quiet ({0}+ days)', String(data.stale_days))"
-          :value="t.stale"
-          :icon="LucideHourglass"
-          :icon-tone="t.stale ? 'warning' : 'neutral'"
-          :to="list('stale', false)"
-        />
-        <StatTile
-          compact
-          :label="__('Hot leads')"
-          :value="t.hot"
-          :icon="LucideFlame"
-          :to="list('hot', false)"
-        />
+        <router-link
+          v-for="cell in attentionCells"
+          :key="cell.key"
+          :to="cell.to"
+          class="cell"
+        >
+          <span class="text-sm text-ink-gray-6">{{ cell.label }}</span>
+          <span
+            class="mt-1.5 font-mono text-2xl tabular-nums"
+            :class="cell.tone ? INK[cell.tone] : 'text-ink-gray-9'"
+            >{{ cell.value }}</span
+          >
+          <span v-if="cell.sub" class="mt-0.5 text-xs text-ink-gray-6">{{
+            cell.sub
+          }}</span>
+        </router-link>
       </section>
 
       <!-- AI runs leads: the day's plan, picked from Call today, follow-ups and hot leads -->
@@ -478,15 +436,17 @@
         <div v-else class="overflow-x-auto">
           <table class="w-full min-w-[36rem] text-sm">
             <thead>
-              <tr class="text-left text-xs text-ink-gray-6">
-                <th scope="col" class="px-4 py-2 font-normal">
+              <tr
+                class="bg-surface-gray-1 text-left text-xs font-medium text-ink-gray-6"
+              >
+                <th scope="col" class="px-4 py-2 font-medium">
                   {{ __("Owner") }}
                 </th>
                 <th
                   v-for="col in OWNER_COLUMNS"
                   :key="col.key"
                   scope="col"
-                  class="px-3 py-2 text-right font-normal"
+                  class="px-3 py-2 text-right font-medium"
                 >
                   {{ col.label }}
                 </th>
@@ -609,7 +569,7 @@
 
 <script setup lang="ts">
 import { money } from "@/components/invoicing/invoices";
-import StatTile from "@/components/StatTile.vue";
+import { INK, type Tone } from "@/components/tone";
 import TaskyState from "@/components/TaskyState.vue";
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
@@ -623,16 +583,7 @@ import {
 import { computed, reactive, useId, watch } from "vue";
 import { useRoute, useRouter, type RouteLocationRaw } from "vue-router";
 import LucideCalendarRange from "~icons/lucide/calendar-range";
-import LucideCalendarX from "~icons/lucide/calendar-x";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
-import LucideCircleX from "~icons/lucide/circle-x";
-import LucideFileText from "~icons/lucide/file-text";
-import LucideFlame from "~icons/lucide/flame";
-import LucideHourglass from "~icons/lucide/hourglass";
-import LucidePhone from "~icons/lucide/phone";
-import LucideTrophy from "~icons/lucide/trophy";
-import LucideUserPlus from "~icons/lucide/user-plus";
-import LucideUsers from "~icons/lucide/users";
 import LeadsAnalysis from "./LeadsAnalysis.vue";
 import LeadsMoney from "./LeadsMoney.vue";
 import type {
@@ -815,6 +766,82 @@ const analysisError = computed(() => {
 const t = computed(() => data.value!.totals);
 const ai = computed(() => data.value?.ai);
 
+type Cell = {
+  key: string;
+  label: string;
+  value: number;
+  sub?: string;
+  tone?: Tone;
+  to: RouteLocationRaw;
+};
+
+const periodCells = computed<Cell[]>(() => [
+  { key: "new", label: __("New leads"), value: t.value.new, to: list("new") },
+  {
+    key: "contacted",
+    label: __("Contacted"),
+    value: t.value.contacted,
+    sub: t.value.new
+      ? __("{0}% of new", String(share(t.value.contacted, t.value.new)))
+      : undefined,
+    to: list("contacted"),
+  },
+  {
+    key: "meetings",
+    label: __("Meetings held"),
+    value: t.value.meetings,
+    sub: t.value.contacted
+      ? __(
+          "{0}% of contacted",
+          String(share(t.value.meetings, t.value.contacted))
+        )
+      : undefined,
+    to: list("meetings"),
+  },
+  {
+    key: "quotations",
+    label: __("Proposals sent"),
+    value: t.value.quotations_sent,
+    to: list("quotations"),
+  },
+  {
+    key: "won",
+    label: __("Won"),
+    value: t.value.won,
+    sub: t.value.won ? amount(t.value.won_value) : undefined,
+    tone: t.value.won ? "success" : undefined,
+    to: list("won"),
+  },
+]);
+const attentionCells = computed<Cell[]>(() => [
+  {
+    key: "overdue",
+    label: __("Overdue follow-ups"),
+    value: t.value.overdue,
+    tone: t.value.overdue ? "danger" : undefined,
+    to: list("overdue", false),
+  },
+  {
+    key: "stale",
+    label: __("Gone quiet ({0}+ days)", String(data.value!.stale_days)),
+    value: t.value.stale,
+    tone: t.value.stale ? "warning" : undefined,
+    to: list("stale", false),
+  },
+  {
+    key: "hot",
+    label: __("Hot leads"),
+    value: t.value.hot,
+    to: list("hot", false),
+  },
+  {
+    key: "lost",
+    label: __("Lost this period"),
+    value: t.value.lost,
+    to: list("lost"),
+  },
+]);
+
 const ownerOptions = computed(() => [
   {
     label: data.value?.scope === "team" ? __("My team") : __("Everyone"),
@@ -925,6 +952,13 @@ function fieldLink(
 </script>
 
 <style scoped>
+/* one bordered row of cells, hairlines between them (no tiles) */
+.cells {
+  @apply grid gap-px overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-gray-2;
+}
+.cell {
+  @apply flex min-w-0 flex-col bg-surface-base px-4 py-3.5 transition-colors hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-highlight;
+}
 .panel {
   @apply min-w-0 overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base;
 }

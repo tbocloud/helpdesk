@@ -1,13 +1,17 @@
 <template>
   <div
-    class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6"
+    :class="
+      bare
+        ? ''
+        : 'grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
+    "
     role="group"
     :aria-label="__('Filter by category')"
   >
     <MultiSelect
-      v-for="facet in facets"
+      v-for="facet in shown"
       :key="facet.key"
-      :label="facet.label"
+      :label="bare ? undefined : facet.label"
       :placeholder="facet.any"
       :options="facet.options"
       :model-value="model[facet.key]"
@@ -35,6 +39,11 @@ import { REPLY_CLASSES, REPLY_LOOK, type ReplyClass } from "./outreach";
 const props = defineProps<{
   options?: LeadOptions;
   modelValue: LeadCategories;
+  /** show only these filters, or all but `except`: the list's toolbar and its More filters split them */
+  only?: (keyof LeadCategories)[];
+  except?: (keyof LeadCategories)[];
+  /** no label above the control, no grid: one filter in a toolbar */
+  bare?: boolean;
 }>();
 const emit = defineEmits<{
   (e: "update:modelValue", v: LeadCategories): void;
@@ -148,6 +157,14 @@ const facets = computed(() => {
       : []),
   ];
 });
+
+const shown = computed(() =>
+  facets.value.filter(
+    (f) =>
+      (!props.only || props.only.includes(f.key)) &&
+      !props.except?.includes(f.key)
+  )
+);
 
 function set(key: keyof LeadCategories, value: string[]) {
   emit("update:modelValue", { ...props.modelValue, [key]: value });

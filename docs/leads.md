@@ -227,6 +227,27 @@ on an older one; every hub proxy asks through `call_if_deployed`.
   logging address are filed on the lead's timeline. That address is set on the ERP site, not
   here.
 
+## The lead page and the lead list (2026-11-12 redesign)
+
+Presentation only. **The lead page** (`Lead.vue`): a header with back, `id · department ·
+product`, the name, a temperature pill (when the lead carries one), **WhatsApp** (`wa.me`),
+**Log call**, **Edit** and the primary **Call**; under it the stages as a row of steps (done in
+`brand-soft`, current in `brand`; only the stages the ERP site allows from here are buttons, and
+one opens the Move stage dialog with that stage picked). Left: the AI suggests and WhatsApp cards
+and the **Activity** timeline with the add-note box. Right (first on a phone): the duplicate
+notice (unchanged: Open and Merge), **Next step** (the follow-up date), **Numbers**
+(`LeadNumbers.vue`, old and wrong numbers struck through), **Details**, then place, photos, why
+call, quotations and proposals.
+
+**The list tabs** (All, My leads, Call today, Follow-up, Called): one toolbar row of Search,
+Stage, Owner, Product (and Created by or Last called where they apply), **More filters** (a
+dialog with Segment, Department, Created, Industry, State, District, Organisation size, Last call
+and Replied) and **Select leads**. What narrows the list beyond the toolbar shows as removable
+chips with **Clear all**. The leads are a table: lead (name, company, department, segment,
+category, number, score), stage, owner, product, last call, next follow-up, updated, and the call
+button; on a phone the stage, follow-up and owner fold in under the name. Every filter and URL
+parameter works as before.
+
 ## Calls through MyOperator
 
 Telecallers' calls go through MyOperator, set up on the ERP site (TBO Smart's
@@ -263,6 +284,20 @@ batches, and the page opens on it for Sales Employees. It **replaces Call today*
 (an old `?view=call_today` link lands on it): both answer "who do I phone now", so they would be two
 places for one job. People without batches keep Call today. Managers who are not members see
 neither; they have the batch table on the Daily report.
+
+**The screen (2026-11-12 redesign; presentation only, the data and calls are unchanged).** A
+header with the title, the **Calling for** switch (`CallingFor.vue`, a button that opens the same
+picker) and a red *N overdue* pill. Left: the batch card (slot, time left, progress bar, called,
+contacted, call backs, the product it calls for), then the queue: pending calls first, then the
+overdue ones (red pill), each with its number, name, place and reason; picking a row makes it the
+current call, and the first one is current by default. Right: the **current call** (`CallRow.vue`):
+name and place, a big **Call +91...** button (MyOperator, or the phone's dialler), **WhatsApp**
+(a `wa.me` link on the main number), "+N more numbers", the **Say first** block (the product's
+intro line, under *Calling for*), the six outcomes in a 3-column grid (2 on a phone) and an optional
+note. The note is saved with Not Responding, Busy and Wrong Number, and starts filled in the dialog
+the other three open. On a phone the batch card comes first, then the current call, then the queue.
+Loading, error ("Try again"), empty ("Nothing left to call in this batch") and a failed refresh
+that keeps the last queue are all shown.
 
 **One name for a call and its stage.** The six call answers are labelled with the lead stage they
 move the lead to: **Contacted** (Connected), **Not Responding** (Not answered), **Busy**,
@@ -829,8 +864,9 @@ doesn't show without its fields. The hub can be deployed before TBO Smart.
     to dates) and, for
     a team lead or a manager, **Owner** ("My team" / "Everyone" or one person). Both are in
     the URL (`period`, `from`, `to`, `owner`).
-  - **This period**: New leads, Contacted, Meetings held, Proposals sent, Won (with its
-    value), Lost. **Needs attention** now: Overdue follow-ups (red), Gone quiet (no touch for
+  - **This period** (one bordered row of five cells: New leads, Contacted, Meetings held,
+    Proposals sent, Won with its value; each opens its leads). The second row holds **Needs
+    attention** now and Lost. **Needs attention** now: Overdue follow-ups (red), Gone quiet (no touch for
     the ERP site's stale days, amber), Hot leads.
   - **Pipeline now**: every open stage with its leads and their latest quotations' value, as
     neutral bars (Won and Lost only when they have leads). **Funnel**: of the period's new
