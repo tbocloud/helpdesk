@@ -12,18 +12,20 @@
         tabindex="0"
         :id="activity.key"
       >
+        <!-- system events are a quiet centred line, not a message -->
+        <HistoryBox
+          v-if="!MESSAGE_TYPES.includes(activity.type)"
+          :activity="activity"
+          class="px-6 py-1 md:px-5"
+        />
         <!-- single activity -->
         <div
+          v-else
           class="w-full px-6 md:px-5 grid grid-cols-[30px_minmax(auto,_1fr)] gap-2 sm:gap-4"
         >
           <div
             class="relative flex justify-center after:absolute after:left-[50%] after:top-3 after:-z-10 after:border-l after:border-outline-elevation-2"
-            :class="[
-              i != activities.length - 1 && 'after:h-full',
-              !['email', 'feedback', 'call', 'comment'].includes(
-                activity.type
-              ) && 'after:top-6',
-            ]"
+            :class="[i != activities.length - 1 && 'after:h-full']"
           >
             <div
               class="z-1 flex items-center justify-center rounded-full bg-surface-base"
@@ -31,9 +33,6 @@
                 ['email', 'feedback'].includes(activity.type)
                   ? 'my-1 h-9 w-9'
                   : 'h-6 w-6',
-                !['email', 'feedback', 'call', 'comment'].includes(
-                  activity.type
-                ) && 'mt-[2px]',
               ]"
             >
               <Avatar
@@ -59,20 +58,11 @@
                 "
                 class="text-ink-gray-5 left-[7.5px] size-4"
               />
-              <DotIcon
-                v-else
-                class="text-ink-gray-5 absolute left-[7.5px] top-[6px]"
-              />
             </div>
           </div>
           <div
             class="mb-4 flex flex-1"
-            :class="[
-              i == activities.length - 1 && 'mb-5',
-              !['email', 'feedback', 'call', 'comment'].includes(
-                activity.type
-              ) && 'mt-[2px]',
-            ]"
+            :class="[i == activities.length - 1 && 'mb-5']"
           >
             <EmailArea
               v-if="activity.type === 'email'"
@@ -96,7 +86,6 @@
               :activity="activity"
               v-else-if="activity.type === 'feedback'"
             />
-            <HistoryBox v-else :activity="activity" />
           </div>
         </div>
       </div>
@@ -116,7 +105,6 @@ import { FadedScrollableDiv } from "@/components";
 import {
   ActivityIcon,
   CommentIcon,
-  DotIcon,
   EmailIcon,
   PhoneIcon,
 } from "@/components/icons";
@@ -145,6 +133,8 @@ const props = defineProps({
     default: "",
   },
 });
+
+const MESSAGE_TYPES = ["email", "feedback", "call", "comment"];
 
 const emit = defineEmits(["email:reply", "update"]);
 

@@ -702,7 +702,9 @@ watch(
 
 // one request for the whole page: the hub and the ERP site share their workers, so
 // separate reads at once wait on each other. Money and intake are optional parts.
-function pageParams(fresh: boolean) {
+// set only while Refresh fetches: makeParams overrides whatever is submitted
+let fresh = false;
+function pageParams() {
   return {
     period: period.value,
     from_date: period.value === "custom" ? custom.from : null,
@@ -716,7 +718,7 @@ const emit = defineEmits<{ intake: [intake: LeadIntake | undefined] }>();
 
 const overviewPage = createResource({
   url: "helpdesk.api.leads.get_overview_page",
-  makeParams: () => pageParams(false),
+  makeParams: pageParams,
   onSuccess(page: OverviewPage) {
     emit("intake", page.intake ?? undefined);
   },
@@ -727,7 +729,9 @@ const overviewPage = createResource({
 
 // the refresh button and "Try again" ask the ERP site again instead of the 60-second copy
 function refresh() {
-  overviewPage.submit(pageParams(true));
+  fresh = true;
+  overviewPage.reload();
+  fresh = false;
 }
 
 watch(

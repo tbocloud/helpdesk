@@ -45,18 +45,36 @@ screens), so the side column stays short. The page never scrolls sideways.
 
 ## Header
 
-Greeting by time of day, today's date, and one line of facts about the user's **own** open
-work, most urgent first, joined with "·", each with an icon (never colour alone) and tabular
-numbers, e.g. "1 overdue · 1 due today · 2 on hold · 8 open in 1 project": overdue (red),
-due today, on hold, tickets waiting for your reply, tasks waiting for your review, and
-"N open across M projects" (all open tasks and tickets, including held, undated and later
-ones).
+Greeting by time of day and today's date. To the right (below on phones) a few pills say what
+needs a look today, each with a dot and a text label (never colour alone): the user's own
+overdue (red) and due-today (amber) work, tickets waiting for their reply, tasks waiting for
+their review, and, for people who see the company, tickets past their SLA (red, linking to the
+filtered ticket list). Only pills with a count above zero show.
 
-The green "All clear. You have no open work." shows only when that line is empty: nothing
-open and nothing waiting for the user's review.
+The green "All clear. You have no open work." shows only when the user has nothing open and
+nothing waiting for their review (`statusParts()` in `homeMeta.ts` is empty); held, undated and
+later work all count.
 
-Company problems (SLAs breached, unassigned tickets, overdue work across projects) are not
-repeated here; managers see them in the pulse strip right below.
+Company problems other than SLA (unassigned tickets, overdue work across projects) are not
+repeated here; managers see them in the pulse strip below.
+
+## Your numbers (`components/HomeNumbers.vue`)
+
+One bordered row of four numbers, all from what `get_home` already sends: open work (with
+overdue, else in progress), due today (with on hold), waiting for your reply (with tasks to
+review) and, for people who see the company, open tickets (with past SLA, else new today), else
+the projects the user has tasks in. Two across on phones.
+
+## Do next (`components/DoNext.vue`)
+
+A numbered card of at most five rows, taken from what the day already lists, in this order:
+close first (overdue, due today, key work in progress), tickets waiting for the user's reply,
+tasks waiting for their review, then tasks in progress. Each row: title (opens the task's
+project or the ticket), kind, project or customer and id, the deadline as a pill (red late,
+amber today) and one button: the same next step as in Your day (`useDaySteps.ts`: Start,
+Complete, Resume, Approve, Set date), **Reply** on a ticket, else **Open**. The rows listed
+here are left out of Your day so nothing shows twice. The Teams-style plan below it
+(Your action plan) is unchanged.
 
 Under the date, one quiet line (`calendar`, from `helpdesk.api.home._calendar`):
 

@@ -78,15 +78,38 @@
             <LucidePanelRight class="size-4" aria-hidden="true" />
           </template>
         </Button>
-        <!-- Primary action (R) -->
+        <!-- Assign and Merge stay one click away; the rest of the actions are in More -->
+        <div class="hidden w-40 lg:block">
+          <AssignTo hide-label />
+        </div>
         <Button
-          variant="solid"
+          v-if="showMergeOption"
+          :label="__('Merge')"
+          @click="showMergeModal = true"
+        >
+          <template #prefix>
+            <LucideMerge class="size-4" aria-hidden="true" />
+          </template>
+        </Button>
+        <Button
+          :variant="canResolve ? 'subtle' : 'solid'"
           :label="__('Reply')"
           aria-keyshortcuts="r"
           @click="openReplyBox()"
         >
           <template #prefix>
             <LucideReply class="size-4" aria-hidden="true" />
+          </template>
+        </Button>
+        <!-- Primary action: the ticket is done -->
+        <Button
+          v-if="canResolve"
+          variant="solid"
+          :label="resolveStatus.label_agent"
+          @click="setStatus(resolveStatus.label_agent)"
+        >
+          <template #prefix>
+            <LucideCircleCheck class="size-4" aria-hidden="true" />
           </template>
         </Button>
         <!-- Secondary, core and custom actions -->
@@ -157,6 +180,7 @@ import {
 } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import LucideChevronDown from "~icons/lucide/chevron-down";
+import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideListPlus from "~icons/lucide/list-plus";
 import LucideVideo from "~icons/lucide/video";
 import {
@@ -169,6 +193,7 @@ import LucideMerge from "~icons/lucide/merge";
 import LucidePanelRight from "~icons/lucide/panel-right";
 import LucideReply from "~icons/lucide/reply";
 import { IndicatorIcon } from "../icons";
+import AssignTo from "./AssignTo.vue";
 import TicketNavigation from "./TicketNavigation.vue";
 import TicketSubjectModal from "./TicketSubjectModal.vue";
 import TicketTitle from "./TicketTitle.vue";
@@ -207,24 +232,43 @@ function onMeetingScheduled() {
 }
 
 const { notifyTicketUpdate } = useNotifyTicketUpdate(ticket.value?.name);
+function setStatus(status: string) {
+  notifyTicketUpdate("Status", status);
+  if (ticket.value.doc.status === status) return;
+  ticket.value.setValue.submit(
+    { status },
+    {
+      onSuccess() {
+        activities.value.reload();
+      },
+    }
+  );
+}
+
+// "Resolved" when the site has it, otherwise the first enabled status that stops the SLA clock
+const resolveStatus = computed(() => {
+  const resolved = (ticketStatusStore.statuses.data || []).filter(
+    (s: HDTicketStatus) => s.enabled && s.category === "Resolved"
+  );
+  return (
+    resolved.find((s: HDTicketStatus) => s.label_agent === "Resolved") ??
+    resolved[0]
+  );
+});
+const canResolve = computed(
+  () =>
+    resolveStatus.value &&
+    ticket.value.doc.status_category !== "Resolved" &&
+    ticket.value.doc.status !== resolveStatus.value.label_agent
+);
+
 const statusDropdown = computed(() => {
   const statuses =
     ticketStatusStore.statuses.data?.filter((s) => s.enabled) || [];
   return statuses.map((o: HDTicketStatus) => ({
     label: o.label_agent,
     value: o.label_agent,
-    onClick: () => {
-      notifyTicketUpdate("Status", o.label_agent);
-      if (ticket.value.doc.status === o.label_agent) return;
-      ticket.value.setValue.submit(
-        { status: o.label_agent },
-        {
-          onSuccess() {
-            activities.value.reload();
-          },
-        }
-      );
-    },
+    onClick: () => setStatus(o.label_agent),
     icon: () =>
       h(IndicatorIcon, {
         class: o.parsed_color,
@@ -327,15 +371,6 @@ const defaultActions = computed(() => {
       label: __("Schedule Teams meeting"),
       icon: LucideVideo,
       onClick: () => (showScheduleMeeting.value = true),
-    });
-  }
-
-  if (showMergeOption.value) {
-    items.push({
-      label: __("Merge Ticket"),
-      icon: LucideMerge,
-      condition: () => !ticket.value.doc.is_merged,
-      onClick: () => (showMergeModal.value = true),
     });
   }
 

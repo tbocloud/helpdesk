@@ -72,11 +72,13 @@ const CARDS: { value: FollowUpDue; label: string; icon: unknown }[] = [
   { value: "later", label: __("Later"), icon: LucideCalendarDays },
 ];
 
+// Refresh reads past the server's 60-second cache
+let fresh = 0;
 const counts = createResource<
   { available: boolean } & Partial<Record<FollowUpDue, number>>
 >({
   url: "helpdesk.api.leads.get_follow_up_counts",
-  makeParams: () => ({ owner: props.owner || null }),
+  makeParams: () => ({ owner: props.owner || null, fresh }),
   auto: true,
   onError() {},
 });
@@ -94,5 +96,11 @@ function pick(value: FollowUpDue) {
   due.value = due.value === value ? "" : value;
 }
 
-defineExpose({ reload: () => counts.reload() });
+defineExpose({
+  reload() {
+    fresh = 1;
+    counts.reload();
+    fresh = 0;
+  },
+});
 </script>

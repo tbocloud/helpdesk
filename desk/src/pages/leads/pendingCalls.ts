@@ -43,6 +43,9 @@ export const pendingCalls = computed<PendingCall[]>(
 
 /** The lead whose result sheet should open now (set when the person comes back from a call). */
 export const askFor = ref("");
+/** Bumped when a call of Today's calls is answered from the call result sheet: the queue
+ * reads again at once, so the call can't be answered twice from its row. */
+export const queueChanged = ref(0);
 // a call placed from the phone's dialler: the page loses focus, and the sheet opens on return
 let awaitingReturn = "";
 let timer: ReturnType<typeof setTimeout> | undefined;

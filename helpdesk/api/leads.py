@@ -710,7 +710,7 @@ def get_lead_departments(fresh: int | str = 0) -> dict:
 @frappe.whitelist(methods=["POST"])
 def save_lead_department(values: dict | str, name: str | None = None) -> dict:
     """Adds a lead department (or edits `name`): `department_name`, `lead_type`,
-    `is_active`, `heads` and `members` (users), `products` (the names callers call under,
+    `is_active`, `heads`, `viewers` and `members` (users), `products` (the names callers call under,
     each with an intro line and an on/off switch) and the call-batch rules. Only System Managers and Sales Managers
     on the ERP site may; it says so when it refuses."""
     require_leads()
@@ -730,7 +730,8 @@ def set_lead_department_active(name: str, active: int | str = 1) -> dict:
 
 def change_department(method: str, **params) -> dict:
     """A department write on the ERP site; the signed-in person's cached reads go, as the
-    departments (and what they may see) changed."""
+    departments (and what they may see) changed, and everyone's cached pickers, which say
+    who heads a department (`is_bd`): a new head gets the managers' screens straight away."""
     saved = call_if_deployed(
         method,
         post=True,
@@ -747,6 +748,7 @@ def change_department(method: str, **params) -> dict:
             LeadsUnavailableError,
         )
     clear_cached_reads()
+    frappe.cache.delete_keys(f"{CACHE_PREFIX}:*:options:")
     return saved
 
 
@@ -1092,7 +1094,9 @@ def refresh_lead_ai(name: str) -> dict:
 def apply_ai_stage(name: str) -> dict:
     """Moves the lead to the stage the AI suggested, as the signed-in person."""
     require_leads()
-    return call("apply_ai_stage", post=True, name=name) or {}
+    result = call("apply_ai_stage", post=True, name=name) or {}
+    clear_cached_reads()
+    return result
 
 
 @frappe.whitelist(methods=["POST"])

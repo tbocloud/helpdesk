@@ -198,6 +198,12 @@ def fail(error: LeadsError):
     frappe.throw(str(error), exc=type(error))
 
 
+def no_sales_account(detail: str) -> bool:
+    """The ERP site refused the person, not the lead (its `hub_user_problem`)."""
+    detail = detail.casefold()
+    return "has no sales role" in detail or "is not an enabled user" in detail
+
+
 def friendly_error(
     error: CRMError,
     client,
@@ -213,6 +219,13 @@ def friendly_error(
     if error.status is None:
         return LeadsUnavailableError(
             _("Couldn't reach the ERP site ({0}). Try again in a minute.").format(site)
+        )
+    if error.status == 503 and "sessionstopped" in detail.casefold():
+        # Frappe Cloud puts the site in maintenance mode while it updates or migrates it
+        return LeadsUnavailableError(
+            _(
+                "The CRM ({0}) is being updated right now. It's usually back in a few minutes; try again then. Nothing you saved is lost."
+            ).format(site)
         )
     if error.status == 401:
         return LeadsUnavailableError(
@@ -239,6 +252,9 @@ def friendly_error(
         )
     if error.status == 403 and permission_message:
         return LeadsForbiddenError(error.user_message or permission_message)
+    if error.status == 403 and error.user_message and not no_sales_account(detail):
+        # a refusal of this lead (e.g. "No permission for Lead …"), not of the person
+        return LeadsError(error.user_message)
     if error.status == 403:
         return LeadsError(
             _(

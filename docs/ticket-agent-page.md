@@ -37,10 +37,13 @@ into the app header).
     count.
 - **Actions**, right to left in importance: viewers, previous/next ticket (⇧< / ⇧>), the custom
   actions from HD Form Script, the **status** menu (S; neutral, with the status's colour dot),
-  **Details** (below `lg` only, opens the side panel sheet), **Reply** (the one primary action,
-  brand; R), and the **⋯ menu**: Create task, Schedule Teams meeting (when meetings are on),
-  Merge ticket (open tickets, when there is another open ticket), and Delete (admins), plus
-  grouped custom actions.
+  **Details** (below `lg` only, opens the side panel sheet), **Assign** (the assignee popover,
+  from `lg`), **Merge** (open tickets, when there is another open ticket), **Reply** (R; subtle
+  while the ticket can still be resolved), **Resolve** (the one primary action, brand: sets the
+  site's "Resolved" status, or the first enabled status in the Resolved category; hidden once the
+  ticket is resolved, when Reply becomes the primary), and the **⋯ menu**: Create task, Schedule
+  Teams meeting (when meetings are on) and Delete (admins), plus grouped custom actions. The
+  subject line shows `#id · team` (`TicketTitle.vue`).
 
 ## Conversation
 
@@ -49,17 +52,20 @@ into the app header).
 
 - **Timeline** built by `composables/useTicketActivities.ts`, shared by the desktop and phone
   pages: emails, comments, calls and history in time order, consecutive history by the same person
-  folded, the customer's feedback last.
+  folded, the customer's feedback last. History (status changes, assignments) is a quiet centred
+  line, "Jasir changed status · 2h ago" (`HistoryBox.vue`), without an avatar or timeline dot.
 - **Who wrote it**: an email from the customer (`Communication.sent_or_received` = Received) is a
   white card labelled "Customer" (person icon); an agent's reply (Sent) sits on the gray-1 surface
   labelled "Agent reply" (send icon); "AI-drafted" stays as before. Comments are internal notes on
   the `note` / `note-border` tokens with the "Internal note" label (`CommentBox.vue`).
 - **States**: skeleton cards while the activity loads, an error with **Retry** if it fails, and
   the per-tab empty text.
-- **Composer** (`CommunicationArea.vue`, sticky under the timeline): a segmented Reply / Comment
-  switch with their shortcuts (R / C) shown as keys; the buttons are 44px tall on phones and
-  compact from `md`. Reply shows "To: …"; Comment says "Only agents
-  see comments" and the editor sits on the note colour. ⌘⏎ sends, Esc closes, as before. The AI
+- **Composer** (`CommunicationArea.vue`, a bordered card under the timeline): a segmented Reply /
+  Internal note switch with their shortcuts (R / C) shown as keys; the buttons are 44px tall on
+  phones and compact from `md`. Reply shows "To: …"; Internal note says "Only agents
+  see comments" and the editor sits on the note colour. Next to Send, **Send and set to** (in
+  `EmailEditor.vue`) picks the status the ticket moves to once the reply is sent; the default is
+  "No change", and it uses the same ticket update as the header's status menu. ⌘⏎ sends, Esc closes, as before. The AI
   suggested reply's "Use this reply" and the header's Reply open the email composer
   (`openReplyBox()` in `modalStates.ts`).
 

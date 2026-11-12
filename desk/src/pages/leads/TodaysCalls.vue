@@ -343,7 +343,11 @@
             :label="__('Get next batch')"
             :disabled="!shown.next_batch?.allowed || nextBatch.loading"
             :loading="nextBatch.loading"
-            :aria-describedby="ids.reason"
+            :aria-describedby="
+              !shown.next_batch?.allowed && shown.next_batch?.reason
+                ? ids.reason
+                : undefined
+            "
             @click="getNext"
           />
           <p
@@ -403,7 +407,7 @@ import {
   type MyCalls,
   type QueueCall,
 } from "./callBatches";
-import { loadPendingCalls, startCall } from "./pendingCalls";
+import { loadPendingCalls, queueChanged, startCall } from "./pendingCalls";
 import {
   leadOptions,
   loadLeadOptions,
@@ -444,6 +448,7 @@ function reload() {
   myCalls.reload();
 }
 defineExpose({ reload });
+watch(queueChanged, reload);
 
 // calls made another way (MyOperator, the phone's log) count on the ERP site: ask again
 // every minute and whenever the tab comes back

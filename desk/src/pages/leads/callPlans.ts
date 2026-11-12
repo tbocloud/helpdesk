@@ -57,6 +57,9 @@ export interface PlanDepartment {
   products: { product_name: string; intro_line?: string }[];
   /** a manager's limit on the department: the only product a plan can take */
   campaign_product: string | null;
+  /** false: the person is one of the department's viewers and only watches it (absent from an
+   * older TBO Smart: they plan it) */
+  can_edit?: boolean;
   /** batches pull unassigned leads; off: people only get their own */
   pull_unassigned: number;
   /** open unassigned leads with a phone, per product ("" for none) */
@@ -95,7 +98,9 @@ export function autoAssignText(department: PlanDepartment) {
     "At {0}, anyone with a plan who wasn't given leads here today is topped up to their plan automatically.",
     rules.auto_assign_at
   );
-  return off.length ? `${when} ${__("Not on {0}.", off.join(__(" or ")))}` : when;
+  return off.length
+    ? `${when} ${__("Not on {0}.", off.join(__(" or ")))}`
+    : when;
 }
 
 export interface CallPlans {
