@@ -27,7 +27,7 @@
       <span>{{ __("Salesperson") }}</span>
       <span>{{ __("Batches") }}</span>
       <span class="text-right">{{ __("Called") }}</span>
-      <span class="text-right">{{ __("Connected") }}</span>
+      <span class="text-right">{{ __("Contacted") }}</span>
       <span class="text-right">{{ __("Overdue") }}</span>
     </div>
     <ul role="list" class="divide-y divide-outline-gray-1">
@@ -50,7 +50,7 @@
           >
         </span>
         <span class="cell">
-          <span class="cell-label">{{ __("Connected") }}</span>
+          <span class="cell-label">{{ __("Contacted") }}</span>
           <span class="font-mono text-sm tabular-nums text-ink-gray-9">{{
             p.connected
           }}</span>

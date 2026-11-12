@@ -43,8 +43,19 @@
           :placeholder="__('Nobody yet')"
         />
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <FormControl v-model="dueDate" type="date" :label="__('Due date')" />
-          <EstimateInput v-model="estimate" :label="__('Estimate')" />
+          <FormControl v-model="dueDate" type="date" :label="__('Due date')">
+            <template #label>
+              {{ __("Due date") }}
+              <RequiredMark
+                :hint="__('(a due date or an estimate is required)')"
+              />
+            </template>
+          </FormControl>
+          <EstimateInput
+            v-model="estimate"
+            :label="__('Estimate')"
+            due-or-estimate
+          />
         </div>
         <p
           v-if="!hasDueOrEstimate(dueDate, estimate)"
@@ -107,6 +118,7 @@ import {
   toast,
 } from "frappe-ui";
 import { computed, ref, useId, watch } from "vue";
+import RequiredMark from "@/components/RequiredMark.vue";
 import EstimateInput from "@/pages/tasky/components/EstimateInput.vue";
 import { dueOrEstimateHint, hasDueOrEstimate } from "@/pages/tasky/taskMeta";
 import LucideCircleAlert from "~icons/lucide/circle-alert";

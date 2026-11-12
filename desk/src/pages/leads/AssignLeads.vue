@@ -88,11 +88,16 @@
             :label="__('Department')"
             :options="departmentOptions"
             :description="
-              __(
-                '{0} people, {1} products',
-                String(current.members.length),
-                String(current.products.length)
-              )
+              industryMode
+                ? __(
+                    '{0} people, no products: leads are given by industry',
+                    String(current.members.length)
+                  )
+                : __(
+                    '{0} people, {1} products',
+                    String(current.members.length),
+                    String(current.products.length)
+                  )
             "
             @update:model-value="pickDepartment(String($event))"
           />
@@ -184,7 +189,9 @@
                 >
                   <span v-if="canEdit" />
                   <span>{{ __("Name") }}</span>
-                  <span>{{ __("Product") }}</span>
+                  <span>{{
+                    industryMode ? __("Industry") : __("Product")
+                  }}</span>
                   <span
                     v-for="slot in current.slots"
                     :key="slot.label"
@@ -231,10 +238,12 @@
                       <span
                         class="hidden min-w-0 truncate text-sm md:block"
                         :class="
-                          member.product ? 'text-ink-gray-8' : 'text-ink-gray-5'
+                          planChoice(member)
+                            ? 'text-ink-gray-8'
+                            : 'text-ink-gray-5'
                         "
                       >
-                        {{ member.product || __("Any product") }}
+                        {{ planChoice(member) || anyLabel }}
                       </span>
                       <span
                         v-for="slot in current.slots"
@@ -343,6 +352,15 @@
               </div>
 
               <FormControl
+                v-if="industryMode"
+                v-model="form.industry"
+                type="select"
+                :label="__('Industry')"
+                :disabled="!picked.length"
+                :options="industryOptions"
+              />
+              <FormControl
+                v-else
                 v-model="form.product"
                 type="select"
                 :label="__('Product')"
@@ -368,8 +386,8 @@
                   <p class="text-p-sm text-ink-gray-8">
                     <span class="font-mono tabular-nums">{{ ready }}</span>
                     {{
-                      form.product
-                        ? __("unassigned {0} leads", form.product)
+                      chosen
+                        ? __("unassigned {0} leads", chosen)
                         : __("unassigned leads")
                     }}
                   </p>
@@ -455,7 +473,7 @@
                       __(
                         "{0} unassigned {1} leads are ready.",
                         String(ready),
-                        form.product || __("open")
+                        chosen || __("open")
                       )
                     }}
                     <template v-if="short">
@@ -590,6 +608,8 @@ import LucideUsers from "~icons/lucide/users";
 import MemberLeadsDialog from "./MemberLeadsDialog.vue";
 import {
   autoAssignText,
+  byIndustry,
+  industryReady,
   leadsReady,
   poolStuck,
   type CallPlans,
@@ -746,10 +766,27 @@ const defaultText = computed(() => {
 
 // ---------- the plan ----------
 
-const form = reactive<{ product: string; sizes: Record<string, number> }>({
+const form = reactive<{
+  product: string;
+  industry: string;
+  sizes: Record<string, number>;
+}>({
   product: "",
+  industry: "",
   sizes: {},
 });
+// a department without products plans and gives leads by industry (callPlans.byIndustry)
+const industryMode = computed(() => byIndustry(current.value));
+/** The product, or in industry mode the industry, the plan calls for ("" for any). */
+const chosen = computed(() =>
+  industryMode.value ? form.industry : form.product
+);
+const anyLabel = computed(() =>
+  industryMode.value ? __("Any industry") : __("Any product")
+);
+function planChoice(member: PlanMember) {
+  return (industryMode.value ? member.industry : member.product) || "";
+}
 const formError = ref("");
 
 /** One person picked: their plan to edit. Otherwise the department's slot sizes, or what
@@ -758,6 +795,7 @@ function fillForm(from?: PlanMember) {
   const department = current.value;
   if (!department) return;
   form.product = department.campaign_product || from?.product || "";
+  form.industry = from?.industry || "";
   form.sizes = Object.fromEntries(
     department.slots.map((slot) => [
       slot.label,
@@ -808,9 +846,30 @@ const perPerson = computed(() =>
     0
   )
 );
-const ready = computed(() =>
-  current.value ? leadsReady(current.value, form.product || null) : 0
-);
+const ready = computed(() => {
+  if (!current.value) return 0;
+  return industryMode.value
+    ? industryReady(current.value, form.industry || null)
+    : leadsReady(current.value, form.product || null);
+});
+/** "Hospitality · 120 unassigned", for a department planned by industry. */
+const industryOptions = computed(() => {
+  const department = current.value;
+  if (!department) return [];
+  const label = (name: string, industry: string | null) =>
+    __(
+      "{0} · {1} unassigned",
+      name,
+      String(industryReady(department, industry))
+    );
+  return [
+    { label: label(__("Any industry"), null), value: "" },
+    ...(department.industries ?? []).map((name) => ({
+      label: label(name, name),
+      value: name,
+    })),
+  ];
+});
 const short = computed(
   () => perPerson.value * picked.value.length > ready.value
 );
@@ -869,7 +928,8 @@ function assign() {
   save.submit({
     department: current.value.department,
     users: picked.value,
-    product: form.product || null,
+    product: industryMode.value ? null : form.product || null,
+    ...(industryMode.value ? { industry: form.industry || null } : {}),
     sizes,
   });
 }
@@ -903,7 +963,7 @@ function openPool() {
   leadsOf.value =
     pickedMembers.value.length === 1 ? pickedMembers.value[0] : null;
   leadsOnPool.value = true;
-  leadsProduct.value = form.product;
+  leadsProduct.value = chosen.value;
   showLeads.value = true;
 }
 
@@ -933,7 +993,9 @@ async function giveNow() {
         department: current.value?.department,
         user: member.user,
         count,
-        product: form.product || null,
+        ...(industryMode.value
+          ? { industry: form.industry || null }
+          : { product: form.product || null }),
       });
       given += Number(result?.assigned) || 0;
     }
@@ -958,6 +1020,6 @@ function planLine(member: PlanMember) {
   const sizes = (current.value?.slots ?? [])
     .map((slot) => member.sizes[slot.label] ?? slot.size)
     .join(" + ");
-  return `${member.product || __("Any product")} · ${sizes}`;
+  return `${planChoice(member) || anyLabel.value} · ${sizes}`;
 }
 </script>

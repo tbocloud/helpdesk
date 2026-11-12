@@ -18,6 +18,8 @@ export interface PlanMember {
   full_name: string;
   /** the product they are handed; null: any of the department's */
   product: string | null;
+  /** a department without products plans by industry; null: any (absent from an older TBO Smart) */
+  industry?: string | null;
   /** calls per slot label: the plan's, else the slot's size */
   sizes: Record<string, number>;
   total: number;
@@ -34,6 +36,7 @@ export interface DepartmentLead {
   lead_name?: string;
   company_name?: string;
   product: string | null;
+  industry?: string | null;
   stage?: string;
   temperature?: string;
   phone?: string;
@@ -44,6 +47,8 @@ export interface DepartmentLeads {
   total: number;
   /** open leads per product ("" for none), whatever the product and search */
   products: Record<string, number>;
+  /** open leads per industry ("" for none), whatever the filters (absent from an older TBO Smart) */
+  industries?: Record<string, number>;
 }
 
 export interface PlanDepartment {
@@ -59,6 +64,10 @@ export interface PlanDepartment {
   pull_unassigned: number;
   /** open unassigned leads with a phone, per product ("" for none) */
   unassigned: Record<string, number>;
+  /** the industries its open leads are in (absent from an older TBO Smart) */
+  industries?: string[];
+  /** open unassigned leads with a phone, per industry ("" for none) */
+  unassigned_industries?: Record<string, number>;
   members: PlanMember[];
   /** the daily auto-assign (TBO Smart's call-batches.md §14; absent from an older TBO Smart) */
   auto_assign?: {
@@ -99,6 +108,25 @@ export interface CallPlans {
   available: boolean;
   date?: string;
   departments: PlanDepartment[];
+}
+
+/** A department without products plans and hands out by industry (once the ERP site has it). */
+export function byIndustry(department: PlanDepartment | undefined) {
+  return (
+    !!department &&
+    !department.products.length &&
+    Array.isArray(department.industries)
+  );
+}
+
+/** The unassigned leads a plan for `industry` can be handed ("" or null: every industry). */
+export function industryReady(
+  department: PlanDepartment,
+  industry: string | null
+) {
+  const counts = department.unassigned_industries || {};
+  if (industry) return counts[industry] ?? 0;
+  return Object.values(counts).reduce((sum, count) => sum + count, 0);
 }
 
 /** The unassigned leads a plan for `product` can be handed ("" or null: every product). */

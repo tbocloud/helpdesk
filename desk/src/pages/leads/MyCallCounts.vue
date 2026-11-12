@@ -33,7 +33,7 @@
         <dd class="text-xs text-ink-gray-6">
           {{
             __(
-              "{0} connected",
+              "{0} contacted",
               (counts.data[period.key]?.connected ?? 0).toLocaleString()
             )
           }}
@@ -52,7 +52,7 @@
       <p class="mb-3 text-p-sm text-ink-gray-6">
         {{
           __(
-            "Every call you made or took, as the Daily report counts them; connected are the answered ones. Days without calls are left out."
+            "Every call you made or took, as the Daily report counts them; contacted are the answered ones. Days without calls are left out."
           )
         }}
       </p>
@@ -65,7 +65,7 @@
                 {{ __("Calls") }}
               </th>
               <th scope="col" class="py-2 text-right font-normal">
-                {{ __("Connected") }}
+                {{ __("Contacted") }}
               </th>
             </tr>
           </thead>

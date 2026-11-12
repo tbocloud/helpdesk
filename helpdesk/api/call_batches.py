@@ -155,9 +155,11 @@ def save_call_plan(
     product: str | None = None,
     sizes: dict | str | None = None,
     clear: int | str | bool = 0,
+    industry: str | None = None,
 ) -> dict:
-    """Hand `users` (members of `department`) the `product` and `sizes` ({slot: calls}) from
-    their next slot, or (`clear`) the department's sizes again. The ERP site checks who may and
+    """Hand `users` (members of `department`) the `product` (or, in a department without
+    products, the `industry`) and `sizes` ({slot: calls}) from their next slot, or (`clear`)
+    the department's sizes again. The ERP site checks who may and
     what is valid; it answers with the department as `get_call_plans` lists it."""
     require_leads()
     users = frappe.parse_json(users) if isinstance(users, str) else users
@@ -172,6 +174,7 @@ def save_call_plan(
         product=(product or "").strip() or None,
         sizes=sizes or None,
         clear=cint(clear),
+        **({"industry": industry.strip()} if (industry or "").strip() else {}),
         permission_message=_(PLANNERS_ONLY),
     )
     if result is None:
@@ -188,9 +191,11 @@ def get_department_leads(
     search: str | None = None,
     start: int | str = 0,
     page_length: int | str = 50,
+    industry: str | None = None,
 ) -> dict:
     """A page of a department's open leads: a member's (`owner`) or, with no owner, the
-    unassigned ones, with how many there are of each product. Never cached: a lead that
+    unassigned ones, with how many there are of each product and industry (`industry`
+    narrows to one, "-" for none). Never cached: a lead that
     was just moved must show where it went."""
     require_leads()
     result = call_if_deployed(
@@ -201,6 +206,7 @@ def get_department_leads(
         search=(search or "").strip() or None,
         start=max(cint(start), 0),
         page_length=min(max(cint(page_length) or 50, 1), 100),
+        **({"industry": industry.strip()} if (industry or "").strip() else {}),
         permission_message=_(PLANNERS_ONLY),
     )
     if result is None:
@@ -215,9 +221,10 @@ def assign_leads(
     leads: list | str | None = None,
     count: int | str = 0,
     product: str | None = None,
+    industry: str | None = None,
 ) -> dict:
     """Give a member the `leads` picked (moving them from whoever had them) or the next
-    `count` unassigned leads of `product`: {assigned, skipped}."""
+    `count` unassigned leads of `product` (and of `industry`): {assigned, skipped}."""
     require_leads()
     names = frappe.parse_json(leads) if isinstance(leads, str) else leads
     if not names and cint(count) <= 0:
@@ -230,6 +237,7 @@ def assign_leads(
         leads=list(names or []) or None,
         count=0 if names else cint(count),
         product=(product or "").strip() or None,
+        **({"industry": industry.strip()} if (industry or "").strip() else {}),
         permission_message=_(PLANNERS_ONLY),
     )
     if result is None:
@@ -277,9 +285,10 @@ def report_lines(report: dict) -> list[tuple[str, None]]:
 
 
 def line_counts(row: dict, connected: bool = True) -> str:
-    """A person's or the day's counts, like 87/100 called, 41 connected, 4 overdue."""
+    """A person's or the day's counts, like 87/100 called, 41 contacted, 4 overdue (the
+    answered calls carry the stage they lead to, Contacted)."""
     parts = [f"{cint(row.get('called'))}/{cint(row.get('size'))} called"]
     if connected:
-        parts.append(f"{cint(row.get('connected'))} connected")
+        parts.append(f"{cint(row.get('connected'))} contacted")
     parts.append(f"{cint(row.get('overdue'))} overdue")
     return ", ".join(parts)

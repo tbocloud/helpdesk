@@ -5,6 +5,10 @@
       :class="{ 'sr-only': hideLabel }"
     >
       {{ label || __("Estimate") }}
+      <RequiredMark
+        v-if="dueOrEstimate"
+        :hint="__('(a due date or an estimate is required)')"
+      />
     </legend>
     <div class="flex items-center gap-2">
       <TextInput
@@ -43,6 +47,7 @@
 </template>
 
 <script setup lang="ts">
+import RequiredMark from "@/components/RequiredMark.vue";
 import { TextInput } from "frappe-ui";
 import { computed } from "vue";
 import { splitHours } from "../taskMeta";
@@ -56,6 +61,8 @@ const props = defineProps<{
   label?: string;
   /** the label is read by screen readers only, for a compact row (Templates) */
   hideLabel?: boolean;
+  /** marked required: a new task needs this or a due date (taskMeta.hasDueOrEstimate) */
+  dueOrEstimate?: boolean;
 }>();
 const emit = defineEmits<{ "update:modelValue": [hours: number] }>();
 
