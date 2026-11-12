@@ -23,7 +23,7 @@
           v-model="filters.product"
           type="select"
           class="w-full sm:w-56"
-          :label="__('Product')"
+          :label="industryMode ? __('Industry') : __('Product')"
           :options="productFilter"
         />
         <FormControl
@@ -37,7 +37,7 @@
 
       <!-- give the next N leads of the pool without picking them one by one -->
       <form
-        v-if="member && view === 'pool'"
+        v-if="member && view === 'pool' && !readOnly"
         class="flex flex-wrap items-end gap-3 rounded-lg bg-surface-gray-1 p-3"
         novalidate
         @submit.prevent="giveByNumber"
@@ -55,8 +55,12 @@
           v-model="give.product"
           type="select"
           class="w-full sm:w-48"
-          :label="__('Of product')"
-          :options="productChoices(__('Any product'))"
+          :label="industryMode ? __('Of industry') : __('Of product')"
+          :options="
+            productChoices(
+              industryMode ? __('Any industry') : __('Any product')
+            )
+          "
         />
         <Button
           type="submit"
@@ -75,7 +79,7 @@
           class="flex items-center gap-3 border-b border-outline-gray-1 px-3 py-2"
         >
           <Checkbox
-            v-if="rows.length"
+            v-if="rows.length && !readOnly"
             :model-value="allPicked"
             :aria-label="__('Pick all shown')"
             @update:model-value="pickAll(!!$event)"
@@ -130,10 +134,18 @@
           class="max-h-[50vh] divide-y divide-outline-gray-1 overflow-y-auto"
         >
           <li v-for="lead in rows" :key="lead.name">
-            <label
-              class="grid cursor-pointer grid-cols-[2rem_minmax(0,1fr)] items-center gap-x-2 gap-y-0.5 px-3 py-2.5 hover:bg-surface-gray-1 sm:grid-cols-[2rem_minmax(0,1fr)_8rem_8rem]"
+            <!-- a viewer can't pick leads: a plain row, not a label -->
+            <component
+              :is="readOnly ? 'div' : 'label'"
+              class="grid items-center gap-x-2 gap-y-0.5 px-3 py-2.5"
+              :class="
+                readOnly
+                  ? 'grid-cols-[minmax(0,1fr)] sm:grid-cols-[minmax(0,1fr)_8rem_8rem]'
+                  : 'cursor-pointer grid-cols-[2rem_minmax(0,1fr)] hover:bg-surface-gray-1 sm:grid-cols-[2rem_minmax(0,1fr)_8rem_8rem]'
+              "
             >
               <Checkbox
+                v-if="!readOnly"
                 :model-value="picked.includes(lead.name)"
                 :aria-label="lead.company_name || lead.lead_name || lead.name"
                 @update:model-value="toggle(lead.name, !!$event)"
@@ -147,17 +159,26 @@
                 </span>
               </span>
               <span
-                class="col-start-2 truncate text-sm sm:col-start-auto"
-                :class="lead.product ? 'text-ink-gray-8' : 'text-ink-gray-5'"
+                class="truncate text-sm sm:col-start-auto"
+                :class="[
+                  (industryMode ? lead.industry : lead.product)
+                    ? 'text-ink-gray-8'
+                    : 'text-ink-gray-5',
+                  !readOnly && 'col-start-2',
+                ]"
               >
-                {{ lead.product || __("No product") }}
+                {{
+                  industryMode
+                    ? lead.industry || __("No industry")
+                    : lead.product || __("No product")
+                }}
               </span>
               <span
-                class="col-start-2 hidden truncate font-mono text-xs text-ink-gray-5 sm:col-start-auto sm:block sm:text-right"
+                class="hidden truncate font-mono text-xs text-ink-gray-5 sm:col-start-auto sm:block sm:text-right"
               >
                 {{ lead.name }}
               </span>
-            </label>
+            </component>
           </li>
         </ul>
         <div
@@ -175,10 +196,11 @@
 
       <!-- what to do with the picked leads -->
       <div
-        v-if="picked.length"
+        v-if="picked.length && !readOnly"
         class="flex flex-col gap-3 rounded-lg border border-outline-gray-2 p-3"
       >
-        <div class="flex flex-wrap items-end gap-3">
+        <!-- a department without products has none to set -->
+        <div v-if="!industryMode" class="flex flex-wrap items-end gap-3">
           <FormControl
             v-model="act.product"
             type="select"
@@ -289,11 +311,12 @@ import {
   toast,
 } from "frappe-ui";
 import { computed, reactive, ref, watch } from "vue";
-import type {
-  DepartmentLead,
-  DepartmentLeads,
-  PlanDepartment,
-  PlanMember,
+import {
+  byIndustry,
+  type DepartmentLead,
+  type DepartmentLeads,
+  type PlanDepartment,
+  type PlanMember,
 } from "./callPlans";
 
 type View = "theirs" | "pool";
@@ -307,6 +330,8 @@ const props = defineProps<{
   startOnPool?: boolean;
   /** the product the list opens on ("" or none: every product) */
   startProduct?: string;
+  /** a department viewer: the leads are shown, nothing can be moved */
+  readOnly?: boolean;
 }>();
 const emit = defineEmits<{
   (e: "update:open", value: boolean): void;
@@ -360,7 +385,10 @@ function load(start = 0, again = false) {
   const params = {
     department: props.department.department,
     owner: view.value === "theirs" ? props.member?.user : "",
-    product: filters.product || null,
+    // a department without products: the picker is the industry
+    ...(industryMode.value
+      ? { industry: filters.product || null }
+      : { product: filters.product || null }),
     search: filters.search || null,
     start,
     page_length: PAGE,
@@ -394,7 +422,10 @@ watch(
     filters.search = "";
     actionError.value = "";
     resultText.value = "";
-    give.product = props.startProduct || props.member?.product || "";
+    give.product =
+      props.startProduct ||
+      (industryMode.value ? props.member?.industry : props.member?.product) ||
+      "";
     load(0, true);
   },
   { immediate: true }
@@ -427,20 +458,34 @@ function pickAll(on: boolean) {
 
 // ---------- choices ----------
 
+// a department without products picks leads by industry instead (byIndustry)
+const industryMode = computed(() => byIndustry(props.department));
 const productNames = computed(() =>
-  props.department.products.map((p) => p.product_name)
+  industryMode.value
+    ? props.department.industries ?? []
+    : props.department.products.map((p) => p.product_name)
 );
 const productFilter = computed(() => {
-  const counts = leads.data?.products ?? {};
+  const counts =
+    (industryMode.value ? leads.data?.industries : leads.data?.products) ?? {};
   const label = (name: string, key: string) =>
     counts[key] === undefined ? name : `${name} (${counts[key]})`;
   return [
-    { label: __("All products"), value: "" },
+    {
+      label: industryMode.value ? __("All industries") : __("All products"),
+      value: "",
+    },
     ...productNames.value.map((name) => ({
       label: label(name, name),
       value: name,
     })),
-    { label: label(__("No product"), ""), value: "-" },
+    {
+      label: label(
+        industryMode.value ? __("No industry") : __("No product"),
+        ""
+      ),
+      value: "-",
+    },
   ];
 });
 function productChoices(blank: string) {
@@ -501,7 +546,9 @@ function giveByNumber() {
       department: props.department.department,
       user: props.member?.user,
       count,
-      product: give.product || null,
+      ...(industryMode.value
+        ? { industry: give.product || null }
+        : { product: give.product || null }),
     },
     (r) => __("{0} leads given to {1}.", String(r.assigned), firstName.value)
   );

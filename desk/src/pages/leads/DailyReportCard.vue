@@ -36,7 +36,7 @@
           <span class="figure-value">{{ person.calls_total }}</span>
           <span class="figure-label">{{ __("Total calls made") }}</span>
           <span class="text-xs text-ink-gray-6">{{
-            __("{0} connected", String(person.calls_connected))
+            __("{0} contacted", String(person.calls_connected))
           }}</span>
         </div>
         <div class="figure">

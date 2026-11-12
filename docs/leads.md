@@ -270,7 +270,7 @@ move the lead to: **Contacted** (Connected), **Not Responding** (Not answered), 
 call sheet, Log call, the Last call filter and each lead's last-call chip
 (`callBatches.OUTCOMES`). Busy keeps its own name; like Not responding it makes the lead Not
 Responding. Only the labels changed: the values the ERP site takes (Connected, Not answered, Call
-back, Not interested, Wrong number) are the same, so the names in brackets below are those values.
+back, Not interested, Wrong number) are the same, so the names in brackets below are those values. The counts say **contacted** for the answered calls too (Today's calls, the Call batches table, the Daily report, Your calls and the Teams summary; the data keeps `connected`), and a lead moved by hand to a stage that means they spoke (for example Not answered, then Move stage to Contacted) counts as contacted (TBO Smart's `call-batches.md` §5).
 
 **What it shows** (`desk/src/pages/leads/TodaysCalls.vue`):
 - the batch header: slot name, time left (a live countdown, a warning icon under 15 minutes),
@@ -332,6 +332,16 @@ warning icon and words when it is fewer than the plan; each batch starts with th
 leads anyway), one primary **Assign leads** button and, for people who have a plan, **Back to
 department sizes**. A department's campaign product is the only product (the picker is locked
 and says why).
+
+**A department without products gives leads by industry.** When a department has no products
+(TBO) and the ERP site sends its industries, Assign leads uses **Industry** where it would use
+Product (`callPlans.byIndustry`): the department line says *no products: leads are given by
+industry*, the people table's column and each plan show the industry, the picker counts the
+unassigned leads of each industry (*Hospitality · 120 unassigned*), and See leads, Give now and
+the plan are sent with `industry` (`save_call_plan`, `assign_leads`, `get_department_leads`;
+TBO Smart keeps it as the member's `call_industry`, and the batches and the 11:00 auto-assign
+follow it). The leads window filters and gives by industry too and hides Set product. An older
+TBO Smart sends no industries, so the page stays as it was.
 
 **The product's unassigned leads, there and then.** Each product in the picker says how many
 unassigned leads with a phone it has (*PhoebiX · 120 unassigned*; *Any product* the total). With
@@ -409,8 +419,23 @@ Code: `helpdesk/api/call_batches.py` (`get_call_plans`, `save_call_plan`; a 403 
 5. Press **Assign leads**. It counts from the next slot.
 6. To see or move someone's leads, press **N leads** on their row. Tick leads to **Move to**
    someone else, **Unassign** or **Set product**. Under **Unassigned**, tick leads and assign them,
-   or type how many to give (and of which product) and press **Give to**. To go back to the department's sizes,
-   tick the person and press **Back to department sizes**.
+   or type how many to give (and of which product) and press **Give to**.
+7. To remove someone's plan, tick them and press **Remove plan · use (department) default
+   (50 + 50)**; the button shows the department's slot sizes. It asks first ("Remove Fidha V P's
+   plan? From the next slot they get GrowthX's default: Morning 50 + Afternoon 50, any
+   product."), naming the campaign product instead of "any product" when the department has one.
+
+**Viewers (read-only).** A department's **Viewers** (Settings → CRM → Lead departments, next to
+Heads; shown once the ERP site's TBO Smart has them) open Assign leads for it but change nothing:
+`get_call_plans` lists the department with `can_edit: false`, and the page then hides the tick
+boxes, the plan form and the Remove plan button, and shows a **View only** card instead. **N leads**
+still opens the person's leads and the unassigned ones, without tick boxes or actions. A Sales
+Manager listed as a viewer only watches that department. The sidebar shows Assign leads to a
+viewer even when they are a BD (`is_viewer` in `get_options`' departments).
+
+**Live.** Assign leads reads the plans again every 15 seconds while the page is in view, and at
+once when it comes back into view, so today's calls, plans and lead counts follow what others
+change. The view-only card says when it last updated.
 
 **Follow-up cards.** On *Follow-up*, five number cards (`FollowUpCards.vue`): **Overdue** (in red
 with its icon when there are any), **Due today**, **Tomorrow**, **Next 7 days** (2 to 7 days on)

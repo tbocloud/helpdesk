@@ -163,7 +163,7 @@
         >
           {{
             __(
-              "Today: {0} of {1} called, {2} connected",
+              "Today: {0} of {1} called, {2} contacted",
               String(shown.today.called),
               String(shown.today.size),
               String(shown.today.connected)

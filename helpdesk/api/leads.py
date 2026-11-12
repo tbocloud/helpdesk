@@ -710,7 +710,7 @@ def get_lead_departments(fresh: int | str = 0) -> dict:
 @frappe.whitelist(methods=["POST"])
 def save_lead_department(values: dict | str, name: str | None = None) -> dict:
     """Adds a lead department (or edits `name`): `department_name`, `lead_type`,
-    `is_active`, `heads` and `members` (users), `products` (the names callers call under,
+    `is_active`, `heads`, `viewers` and `members` (users), `products` (the names callers call under,
     each with an intro line and an on/off switch) and the call-batch rules. Only System Managers and Sales Managers
     on the ERP site may; it says so when it refuses."""
     require_leads()

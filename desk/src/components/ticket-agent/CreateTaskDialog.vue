@@ -118,12 +118,19 @@
               : undefined
           "
         />
-        <TextInput
-          v-model="form.due_date"
-          type="date"
-          :label="__('Due date')"
+        <TextInput v-model="form.due_date" type="date" :label="__('Due date')">
+          <template #label>
+            {{ __("Due date") }}
+            <RequiredMark
+              :hint="__('(a due date or an estimate is required)')"
+            />
+          </template>
+        </TextInput>
+        <EstimateInput
+          v-model="form.estimated_hours"
+          :label="__('Estimate')"
+          due-or-estimate
         />
-        <EstimateInput v-model="form.estimated_hours" :label="__('Estimate')" />
         <p
           v-if="!hasDueOrEstimate(form.due_date, form.estimated_hours)"
           class="text-p-xs text-ink-gray-6 sm:col-span-2"
@@ -177,6 +184,7 @@
 
 <script setup lang="ts">
 import { errorText } from "@/utils";
+import RequiredMark from "@/components/RequiredMark.vue";
 import EstimateInput from "@/pages/tasky/components/EstimateInput.vue";
 import TaskStatusBadge from "@/pages/tasky/components/TaskStatusBadge.vue";
 import { dueOrEstimateHint, hasDueOrEstimate } from "@/pages/tasky/taskMeta";

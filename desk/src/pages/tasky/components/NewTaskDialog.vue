@@ -109,13 +109,20 @@
           :options="priorityOptions()"
         />
 
-        <EstimateInput v-model="form.estimated_hours" :label="__('Estimate')" />
-
-        <TextInput
-          v-model="form.due_date"
-          type="date"
-          :label="__('Due date')"
+        <EstimateInput
+          v-model="form.estimated_hours"
+          :label="__('Estimate')"
+          due-or-estimate
         />
+
+        <TextInput v-model="form.due_date" type="date" :label="__('Due date')">
+          <template #label>
+            {{ __("Due date") }}
+            <RequiredMark
+              :hint="__('(a due date or an estimate is required)')"
+            />
+          </template>
+        </TextInput>
         <p
           v-if="!hasDueOrEstimate(form.due_date, form.estimated_hours)"
           class="text-p-xs text-ink-gray-6 sm:col-span-2"
@@ -208,6 +215,7 @@ import {
   isAiDrafted,
   priorityOptions,
 } from "../taskMeta";
+import RequiredMark from "@/components/RequiredMark.vue";
 import EstimateInput from "./EstimateInput.vue";
 import TaskDescriptionField, {
   type DraftContext,
