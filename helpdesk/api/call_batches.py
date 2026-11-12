@@ -175,10 +175,11 @@ def save_call_plan(
     sizes: dict | str | None = None,
     clear: int | str | bool = 0,
     industry: str | None = None,
+    district: str | None = None,
 ) -> dict:
     """Hand `users` (members of `department`) the `product` (or, in a department without
-    products, the `industry`) and `sizes` ({slot: calls}) from their next slot, or (`clear`)
-    the department's sizes again. The ERP site checks who may and
+    products, the `industry`), the `district` and `sizes` ({slot: calls}) from their next slot,
+    or (`clear`) the department's sizes again. The ERP site checks who may and
     what is valid; it answers with the department as `get_call_plans` lists it."""
     require_leads()
     users = frappe.parse_json(users) if isinstance(users, str) else users
@@ -193,7 +194,7 @@ def save_call_plan(
         product=(product or "").strip() or None,
         sizes=sizes or None,
         clear=cint(clear),
-        **({"industry": industry.strip()} if (industry or "").strip() else {}),
+        **only_given(industry=industry, district=district),
         permission_message=_(PLANNERS_ONLY),
     )
     if result is None:
@@ -211,10 +212,11 @@ def get_department_leads(
     start: int | str = 0,
     page_length: int | str = 50,
     industry: str | None = None,
+    district: str | None = None,
 ) -> dict:
     """A page of a department's open leads: a member's (`owner`) or, with no owner, the
-    unassigned ones, with how many there are of each product and industry (`industry`
-    narrows to one, "-" for none). Never cached: a lead that
+    unassigned ones, with how many there are of each product, industry and district
+    (`industry` and `district` narrow to one, "-" for none). Never cached: a lead that
     was just moved must show where it went."""
     require_leads()
     result = call_if_deployed(
@@ -225,7 +227,7 @@ def get_department_leads(
         search=(search or "").strip() or None,
         start=max(cint(start), 0),
         page_length=min(max(cint(page_length) or 50, 1), 100),
-        **({"industry": industry.strip()} if (industry or "").strip() else {}),
+        **only_given(industry=industry, district=district),
         permission_message=_(PLANNERS_ONLY),
     )
     if result is None:
@@ -241,9 +243,11 @@ def assign_leads(
     count: int | str = 0,
     product: str | None = None,
     industry: str | None = None,
+    district: str | None = None,
 ) -> dict:
     """Give a member the `leads` picked (moving them from whoever had them) or the next
-    `count` unassigned leads of `product` (and of `industry`): {assigned, skipped}."""
+    `count` unassigned leads of `product` (and of `industry` and `district`): {assigned,
+    skipped}."""
     require_leads()
     names = frappe.parse_json(leads) if isinstance(leads, str) else leads
     if not names and cint(count) <= 0:
@@ -256,13 +260,21 @@ def assign_leads(
         leads=list(names or []) or None,
         count=0 if names else cint(count),
         product=(product or "").strip() or None,
-        **({"industry": industry.strip()} if (industry or "").strip() else {}),
+        **only_given(industry=industry, district=district),
         permission_message=_(PLANNERS_ONLY),
     )
     if result is None:
         frappe.throw(_(OLDER_ERP), LeadsUnavailableError)
     clear_cached_reads()
     return result
+
+
+def only_given(**values: str | None) -> dict:
+    """The `values` that are set, trimmed: one left blank is not sent, so an ERP site older
+    than it is not asked for it."""
+    return {
+        key: value.strip() for key, value in values.items() if (value or "").strip()
+    }
 
 
 @frappe.whitelist(methods=["POST"])

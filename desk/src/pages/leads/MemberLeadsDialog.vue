@@ -27,6 +27,14 @@
           :options="productFilter"
         />
         <FormControl
+          v-if="withDistricts"
+          v-model="filters.district"
+          type="select"
+          class="w-full sm:w-48"
+          :label="__('District')"
+          :options="districtFilter"
+        />
+        <FormControl
           v-model="filters.search"
           type="search"
           class="min-w-0 flex-1"
@@ -61,6 +69,14 @@
               industryMode ? __('Any industry') : __('Any product')
             )
           "
+        />
+        <FormControl
+          v-if="withDistricts"
+          v-model="give.district"
+          type="select"
+          class="w-full sm:w-48"
+          :label="__('In district')"
+          :options="districtChoices"
         />
         <Button
           type="submit"
@@ -155,7 +171,11 @@
                   {{ lead.company_name || lead.lead_name || lead.name }}
                 </span>
                 <span class="block truncate text-sm text-ink-gray-6">
-                  {{ [lead.stage, lead.phone].filter(Boolean).join(" · ") }}
+                  {{
+                    [lead.stage, lead.district, lead.phone]
+                      .filter(Boolean)
+                      .join(" · ")
+                  }}
                 </span>
               </span>
               <span
@@ -313,6 +333,7 @@ import {
 import { computed, reactive, ref, watch } from "vue";
 import {
   byIndustry,
+  hasDistricts,
   type DepartmentLead,
   type DepartmentLeads,
   type PlanDepartment,
@@ -330,6 +351,8 @@ const props = defineProps<{
   startOnPool?: boolean;
   /** the product the list opens on ("" or none: every product) */
   startProduct?: string;
+  /** the district the list opens on ("" or none: every district) */
+  startDistrict?: string;
   /** a department viewer: the leads are shown, nothing can be moved */
   readOnly?: boolean;
 }>();
@@ -344,10 +367,10 @@ const MAX_LEADS = 500;
 const PAGE = 50;
 
 const view = ref<View>("theirs");
-const filters = reactive({ product: "", search: "" });
+const filters = reactive({ product: "", district: "", search: "" });
 const rows = ref<DepartmentLead[]>([]);
 const picked = ref<string[]>([]);
-const give = reactive({ count: 25, product: "" });
+const give = reactive({ count: 25, product: "", district: "" });
 const act = reactive({ product: "", to: "" });
 const busy = ref<"" | "give" | "assign" | "move" | "unassign" | "product">("");
 const actionError = ref("");
@@ -363,8 +386,8 @@ const title = computed(() =>
     : __("Unassigned leads in {0}", props.department.department)
 );
 const emptyText = computed(() =>
-  filters.product || filters.search
-    ? __("No leads match. Clear the product or the search.")
+  filters.product || filters.district || filters.search
+    ? __("No leads match. Clear the filters or the search.")
     : view.value === "theirs"
     ? __(
         "{0} has no open leads in {1}.",
@@ -389,6 +412,7 @@ function load(start = 0, again = false) {
     ...(industryMode.value
       ? { industry: filters.product || null }
       : { product: filters.product || null }),
+    district: filters.district || null,
     search: filters.search || null,
     start,
     page_length: PAGE,
@@ -409,6 +433,7 @@ function load(start = 0, again = false) {
 function setView(next: View) {
   view.value = next;
   filters.product = "";
+  filters.district = "";
   filters.search = "";
   load();
 }
@@ -419,6 +444,7 @@ watch(
     if (!open) return;
     view.value = props.member && !props.startOnPool ? "theirs" : "pool";
     filters.product = props.startProduct ?? "";
+    filters.district = props.startDistrict ?? "";
     filters.search = "";
     actionError.value = "";
     resultText.value = "";
@@ -426,12 +452,13 @@ watch(
       props.startProduct ||
       (industryMode.value ? props.member?.industry : props.member?.product) ||
       "";
+    give.district = props.startDistrict || props.member?.district || "";
     load(0, true);
   },
   { immediate: true }
 );
 watch(
-  () => filters.product,
+  () => [filters.product, filters.district],
   () => props.open && load()
 );
 watchDebounced(
@@ -460,40 +487,59 @@ function pickAll(on: boolean) {
 
 // a department without products picks leads by industry instead (byIndustry)
 const industryMode = computed(() => byIndustry(props.department));
+// and the leads can be narrowed to a district once the ERP site sends them (hasDistricts)
+const withDistricts = computed(() => hasDistricts(props.department));
 const productNames = computed(() =>
   industryMode.value
     ? props.department.industries ?? []
     : props.department.products.map((p) => p.product_name)
 );
-const productFilter = computed(() => {
-  const counts =
-    (industryMode.value ? leads.data?.industries : leads.data?.products) ?? {};
+
+/** A filter's choices: `all`, each name with how many leads the list has of it, then `none`
+ * ("-": the leads without one). */
+function filterOptions(
+  names: string[],
+  counts: Record<string, number> | undefined,
+  all: string,
+  none: string
+) {
   const label = (name: string, key: string) =>
-    counts[key] === undefined ? name : `${name} (${counts[key]})`;
+    counts?.[key] === undefined ? name : `${name} (${counts[key]})`;
   return [
-    {
-      label: industryMode.value ? __("All industries") : __("All products"),
-      value: "",
-    },
-    ...productNames.value.map((name) => ({
-      label: label(name, name),
-      value: name,
-    })),
-    {
-      label: label(
-        industryMode.value ? __("No industry") : __("No product"),
-        ""
-      ),
-      value: "-",
-    },
+    { label: all, value: "" },
+    ...names.map((name) => ({ label: label(name, name), value: name })),
+    { label: label(none, ""), value: "-" },
   ];
-});
+}
+const productFilter = computed(() =>
+  filterOptions(
+    productNames.value,
+    industryMode.value ? leads.data?.industries : leads.data?.products,
+    industryMode.value ? __("All industries") : __("All products"),
+    industryMode.value ? __("No industry") : __("No product")
+  )
+);
+const districtFilter = computed(() =>
+  filterOptions(
+    props.department.districts ?? [],
+    leads.data?.districts,
+    __("All districts"),
+    __("No district")
+  )
+);
 function productChoices(blank: string) {
   return [
     { label: blank, value: "" },
     ...productNames.value.map((name) => ({ label: name, value: name })),
   ];
 }
+const districtChoices = computed(() => [
+  { label: __("Any district"), value: "" },
+  ...(props.department.districts ?? []).map((name) => ({
+    label: name,
+    value: name,
+  })),
+]);
 const moveChoices = computed(() => [
   { label: __("Choose a person"), value: "" },
   ...props.department.members
@@ -549,6 +595,7 @@ function giveByNumber() {
       ...(industryMode.value
         ? { industry: give.product || null }
         : { product: give.product || null }),
+      district: give.district || null,
     },
     (r) => __("{0} leads given to {1}.", String(r.assigned), firstName.value)
   );

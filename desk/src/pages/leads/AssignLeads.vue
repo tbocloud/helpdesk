@@ -184,14 +184,12 @@
                 <div
                   class="hidden items-center gap-2 px-4 py-2 text-xs text-ink-gray-6 md:grid"
                   :class="rowColumns"
-                  :style="{ '--slots': current.slots.length }"
+                  :style="gridStyle"
                   aria-hidden="true"
                 >
                   <span v-if="canEdit" />
                   <span>{{ __("Name") }}</span>
-                  <span>{{
-                    industryMode ? __("Industry") : __("Product")
-                  }}</span>
+                  <span>{{ planHeader }}</span>
                   <span
                     v-for="slot in current.slots"
                     :key="slot.label"
@@ -216,7 +214,7 @@
                           : 'grid-cols-[minmax(0,1fr)]',
                         isPicked(member.user) && 'bg-surface-gray-1',
                       ]"
-                      :style="{ '--slots': current.slots.length }"
+                      :style="gridStyle"
                     >
                       <Checkbox
                         v-if="canEdit"
@@ -238,12 +236,13 @@
                       <span
                         class="hidden min-w-0 truncate text-sm md:block"
                         :class="
-                          planChoice(member)
+                          planChoice(member) || member.district
                             ? 'text-ink-gray-8'
                             : 'text-ink-gray-5'
                         "
+                        :title="planText(member)"
                       >
-                        {{ planChoice(member) || anyLabel }}
+                        {{ planText(member) }}
                       </span>
                       <span
                         v-for="slot in current.slots"
@@ -387,6 +386,23 @@
                     : undefined
                 "
               />
+              <FormControl
+                v-if="withDistricts"
+                v-model="form.district"
+                type="select"
+                :label="__('District')"
+                :disabled="!picked.length || !!current.campaign_district"
+                :options="districtOptions"
+                :description="
+                  current.campaign_district
+                    ? __(
+                        '{0} calls only in {1}, set in the department.',
+                        current.department,
+                        current.campaign_district
+                      )
+                    : undefined
+                "
+              />
 
               <!-- the product's unassigned leads: see them, or hand some out now -->
               <div
@@ -396,11 +412,7 @@
                 <div class="flex items-center justify-between gap-2">
                   <p class="text-p-sm text-ink-gray-8">
                     <span class="font-mono tabular-nums">{{ ready }}</span>
-                    {{
-                      chosen
-                        ? __("unassigned {0} leads", chosen)
-                        : __("unassigned leads")
-                    }}
+                    {{ readyText }}
                   </p>
                   <Button
                     :label="__('See leads')"
@@ -480,13 +492,7 @@
                     aria-hidden="true"
                   />
                   <span>
-                    {{
-                      __(
-                        "{0} unassigned {1} leads are ready.",
-                        String(ready),
-                        chosen || __("open")
-                      )
-                    }}
+                    {{ __("{0} {1} are ready.", String(ready), readyText) }}
                     <template v-if="short">
                       {{
                         __(
@@ -566,6 +572,7 @@
     :member="leadsOf"
     :start-on-pool="leadsOnPool"
     :start-product="leadsProduct"
+    :start-district="leadsDistrict"
     @changed="plans.reload()"
   />
   <Dialog
@@ -620,6 +627,7 @@ import MemberLeadsDialog from "./MemberLeadsDialog.vue";
 import {
   autoAssignText,
   byIndustry,
+  hasDistricts,
   industryReady,
   leadsReady,
   poolStuck,
@@ -661,9 +669,14 @@ const stuck = computed(() => (current.value ? poolStuck(current.value) : null));
 const canEdit = computed(() => current.value?.can_edit !== false);
 const rowColumns = computed(() =>
   canEdit.value
-    ? "md:grid-cols-[2rem_minmax(0,1fr)_9rem_repeat(var(--slots),4.5rem)_6rem_6rem]"
-    : "md:grid-cols-[minmax(0,1fr)_9rem_repeat(var(--slots),4.5rem)_6rem_6rem]"
+    ? "md:grid-cols-[2rem_minmax(0,1fr)_var(--plan)_repeat(var(--slots),4.5rem)_6rem_6rem]"
+    : "md:grid-cols-[minmax(0,1fr)_var(--plan)_repeat(var(--slots),4.5rem)_6rem_6rem]"
 );
+// the plan column holds "PhoebiX · Malappuram" once plans can call for a district
+const gridStyle = computed(() => ({
+  "--slots": current.value?.slots.length ?? 0,
+  "--plan": withDistricts.value ? "12rem" : "9rem",
+}));
 
 // live: today's calls and the leads move all day, so the page reads again every 15 seconds
 // while it is in view, and at once when it comes back into view
@@ -788,14 +801,18 @@ const defaultText = computed(() => {
 const form = reactive<{
   product: string;
   industry: string;
+  district: string;
   sizes: Record<string, number>;
 }>({
   product: "",
   industry: "",
+  district: "",
   sizes: {},
 });
 // a department without products plans and gives leads by industry (callPlans.byIndustry)
 const industryMode = computed(() => byIndustry(current.value));
+// any plan may also call for one district, once the ERP site sends them (callPlans.hasDistricts)
+const withDistricts = computed(() => hasDistricts(current.value));
 /** The product, or in industry mode the industry, the plan calls for ("" for any). */
 const chosen = computed(() =>
   industryMode.value ? form.industry : form.product
@@ -806,6 +823,15 @@ const anyLabel = computed(() =>
 function planChoice(member: PlanMember) {
   return (industryMode.value ? member.industry : member.product) || "";
 }
+/** "PhoebiX · Malappuram": what the person's plan calls for. */
+function planText(member: PlanMember) {
+  const what = planChoice(member) || anyLabel.value;
+  return member.district ? `${what} · ${member.district}` : what;
+}
+const planHeader = computed(() => {
+  const what = industryMode.value ? __("Industry") : __("Product");
+  return withDistricts.value ? __("{0} · District", what) : what;
+});
 const formError = ref("");
 
 /** One person picked: their plan to edit. Otherwise the department's slot sizes, or what
@@ -815,6 +841,7 @@ function fillForm(from?: PlanMember) {
   if (!department) return;
   form.product = department.campaign_product || from?.product || "";
   form.industry = from?.industry || "";
+  form.district = department.campaign_district || from?.district || "";
   form.sizes = Object.fromEntries(
     department.slots.map((slot) => [
       slot.label,
@@ -839,7 +866,8 @@ watch(
   }
 );
 
-/** "PhoebiX · 120 unassigned": how many leads of each product wait to be handed out. */
+/** "PhoebiX · 120 unassigned": how many leads of each product (in the district chosen) wait
+ * to be handed out. */
 const productOptions = computed(() => {
   const department = current.value;
   const label = (name: string, product: string | null) =>
@@ -847,7 +875,7 @@ const productOptions = computed(() => {
       ? __(
           "{0} · {1} unassigned",
           name,
-          String(leadsReady(department, product))
+          String(leadsReady(department, product, form.district || null))
         )
       : name;
   return [
@@ -865,11 +893,21 @@ const perPerson = computed(() =>
     0
   )
 );
-const ready = computed(() => {
-  if (!current.value) return 0;
+/** The unassigned leads of the product (or industry) chosen, in `district` (null: any). */
+function readyIn(district: string | null) {
+  const department = current.value;
+  if (!department) return 0;
   return industryMode.value
-    ? industryReady(current.value, form.industry || null)
-    : leadsReady(current.value, form.product || null);
+    ? industryReady(department, form.industry || null, district)
+    : leadsReady(department, form.product || null, district);
+}
+const ready = computed(() => readyIn(form.district || null));
+/** "unassigned PhoebiX leads in Malappuram", said after the count. */
+const readyText = computed(() => {
+  const what = chosen.value
+    ? __("unassigned {0} leads", chosen.value)
+    : __("unassigned leads");
+  return form.district ? __("{0} in {1}", what, form.district) : what;
 });
 /** "Hospitality · 120 unassigned", for a department planned by industry. */
 const industryOptions = computed(() => {
@@ -879,7 +917,7 @@ const industryOptions = computed(() => {
     __(
       "{0} · {1} unassigned",
       name,
-      String(industryReady(department, industry))
+      String(industryReady(department, industry, form.district || null))
     );
   return [
     { label: label(__("Any industry"), null), value: "" },
@@ -887,6 +925,20 @@ const industryOptions = computed(() => {
       label: label(name, name),
       value: name,
     })),
+  ];
+});
+/** "Malappuram · 40 unassigned" of the product (or industry) chosen. A plan's district whose
+ * open leads are all gone stays listed, so the field never shows blank. */
+const districtOptions = computed(() => {
+  const label = (name: string, district: string | null) =>
+    __("{0} · {1} unassigned", name, String(readyIn(district)));
+  const names = current.value?.districts ?? [];
+  return [
+    { label: label(__("Any district"), null), value: "" },
+    ...(form.district && !names.includes(form.district)
+      ? [form.district, ...names]
+      : names
+    ).map((name) => ({ label: label(name, name), value: name })),
   ];
 });
 const short = computed(
@@ -949,6 +1001,7 @@ function assign() {
     users: picked.value,
     product: industryMode.value ? null : form.product || null,
     ...(industryMode.value ? { industry: form.industry || null } : {}),
+    district: form.district || null,
     sizes,
   });
 }
@@ -970,19 +1023,23 @@ const showLeads = ref(false);
 const leadsOf = ref<PlanMember | null>(null);
 const leadsOnPool = ref(false);
 const leadsProduct = ref("");
+const leadsDistrict = ref("");
 function openLeads(member: PlanMember | null) {
   leadsOf.value = member;
   leadsOnPool.value = false;
   leadsProduct.value = "";
+  leadsDistrict.value = "";
   showLeads.value = true;
 }
 
-/** The chosen product's unassigned leads, ready to give to the one person picked. */
+/** The chosen product's (and district's) unassigned leads, ready to give to the one person
+ * picked. */
 function openPool() {
   leadsOf.value =
     pickedMembers.value.length === 1 ? pickedMembers.value[0] : null;
   leadsOnPool.value = true;
   leadsProduct.value = chosen.value;
+  leadsDistrict.value = form.district;
   showLeads.value = true;
 }
 
@@ -1015,6 +1072,7 @@ async function giveNow() {
         ...(industryMode.value
           ? { industry: form.industry || null }
           : { product: form.product || null }),
+        district: form.district || null,
       });
       given += Number(result?.assigned) || 0;
     }
@@ -1034,11 +1092,11 @@ async function giveNow() {
   }
 }
 
-/** "PhoebiX · 50 + 50", the plan on one line for a phone. */
+/** "PhoebiX · Malappuram · 50 + 50", the plan on one line for a phone. */
 function planLine(member: PlanMember) {
   const sizes = (current.value?.slots ?? [])
     .map((slot) => member.sizes[slot.label] ?? slot.size)
     .join(" + ");
-  return `${planChoice(member) || anyLabel.value} · ${sizes}`;
+  return `${planText(member)} · ${sizes}`;
 }
 </script>
