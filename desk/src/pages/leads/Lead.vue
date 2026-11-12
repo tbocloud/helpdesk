@@ -2,68 +2,128 @@
   <div class="flex h-full flex-col">
     <LayoutHeader>
       <template #left-header>
-        <nav
-          class="flex min-w-0 items-center gap-1.5 text-lg-medium"
-          :aria-label="__('Breadcrumb')"
+        <router-link
+          :to="{ name: 'Leads' }"
+          class="inline-flex items-center gap-1.5 rounded text-lg-medium text-ink-gray-7 hover:text-ink-gray-9 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+          :aria-label="__('Back to leads')"
         >
-          <router-link
-            :to="{ name: 'Leads' }"
-            class="shrink-0 rounded text-ink-gray-6 hover:text-ink-gray-8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
-            >{{ __("Leads") }}</router-link
-          >
-          <LucideChevronRight
-            class="size-4 shrink-0 text-ink-gray-4"
-            aria-hidden="true"
-          />
-          <h1 class="truncate text-ink-gray-9">
-            {{ lead?.lead_name || leadId }}
-          </h1>
-        </nav>
-      </template>
-      <template v-if="lead" #right-header>
-        <!-- Call and Edit are icons on a phone, so Move stage keeps its room; `label` names them -->
-        <Button
-          v-if="canCall"
-          :label="__('Call')"
-          :loading="clickToCall.loading"
-          :tooltip="__('MyOperator rings your phone, then the lead')"
-          @click="callWithMyOperator"
-        >
-          <template #prefix>
-            <LucidePhone class="size-4" aria-hidden="true" />
-          </template>
-          <span class="hidden sm:inline">{{ __("Call") }}</span>
-        </Button>
-        <!-- for a call made outside MyOperator; only once the ERP site can log it -->
-        <Button
-          v-if="options?.can_log_call"
-          :label="__('Log call')"
-          @click="showLogCall = true"
-        >
-          <template #prefix>
-            <LucidePhoneForwarded class="size-4" aria-hidden="true" />
-          </template>
-          <span class="hidden lg:inline">{{ __("Log call") }}</span>
-        </Button>
-        <Button :label="__('Edit')" @click="showEdit = true">
-          <template #prefix>
-            <LucidePencil class="size-4" aria-hidden="true" />
-          </template>
-          <span class="hidden sm:inline">{{ __("Edit") }}</span>
-        </Button>
-        <Button
-          variant="solid"
-          :label="__('Move stage')"
-          :disabled="!stageChoices.length"
-          :tooltip="
-            stageChoices.length
-              ? ''
-              : __('This lead can\'t move from its current stage.')
-          "
-          @click="openStageDialog"
-        />
+          <LucideChevronLeft class="size-4 shrink-0" aria-hidden="true" />
+          {{ __("Leads") }}
+        </router-link>
       </template>
     </LayoutHeader>
+
+    <!-- who this is, what to do about it, and where it stands -->
+    <header
+      v-if="lead"
+      class="border-b border-outline-gray-2 bg-surface-base"
+      :aria-label="__('Lead')"
+    >
+      <div
+        class="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-4 md:px-6"
+      >
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <div class="min-w-0 flex-1 basis-64">
+            <p class="truncate text-xs text-ink-gray-6">
+              <span class="font-mono tabular-nums">{{ leadId }}</span>
+              <template v-if="departmentLabel(lead)">
+                · {{ departmentLabel(lead) }}
+              </template>
+              <template v-if="lead.product"> · {{ lead.product }}</template>
+            </p>
+            <h1
+              class="mt-0.5 truncate text-xl font-semibold text-ink-gray-9"
+              :title="lead.lead_name || leadId"
+            >
+              {{ lead.lead_name || leadId }}
+            </h1>
+          </div>
+          <TaskyBadge
+            v-if="temperature"
+            :tone="temperature === 'Hot' ? 'warning' : 'neutral'"
+            :icon="temperature === 'Hot' ? LucideFlame : undefined"
+            :label="temperature"
+          />
+          <div class="flex flex-wrap items-center gap-2">
+            <Button
+              v-if="whatsappLink"
+              :label="__('WhatsApp')"
+              :link="whatsappLink"
+              target="_blank"
+            >
+              <template #prefix>
+                <LucideMessageCircle class="size-4" aria-hidden="true" />
+              </template>
+            </Button>
+            <!-- for a call made outside MyOperator; only once the ERP site can log it -->
+            <Button
+              v-if="options?.can_log_call"
+              :label="__('Log call')"
+              @click="showLogCall = true"
+            >
+              <template #prefix>
+                <LucidePhoneForwarded class="size-4" aria-hidden="true" />
+              </template>
+            </Button>
+            <Button :label="__('Edit')" @click="showEdit = true">
+              <template #prefix>
+                <LucidePencil class="size-4" aria-hidden="true" />
+              </template>
+            </Button>
+            <Button
+              v-if="canCall"
+              variant="solid"
+              :label="__('Call')"
+              :loading="clickToCall.loading"
+              :tooltip="__('MyOperator rings your phone, then the lead')"
+              @click="callWithMyOperator"
+            >
+              <template #prefix>
+                <LucidePhone class="size-4" aria-hidden="true" />
+              </template>
+            </Button>
+          </div>
+        </div>
+
+        <!-- the stages as steps: the ones this lead may move to are buttons -->
+        <div
+          v-if="steps.length"
+          class="flex gap-1 overflow-x-auto"
+          role="group"
+          :aria-label="__('Stage')"
+        >
+          <button
+            v-for="step in steps"
+            :key="step.name"
+            type="button"
+            class="inline-flex h-9 min-w-24 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight disabled:cursor-default"
+            :class="step.class"
+            :disabled="step.current || !step.allowed"
+            :aria-current="step.current ? 'step' : undefined"
+            :title="
+              step.current || step.allowed
+                ? ''
+                : __('This lead can\'t move to {0} from here.', step.label)
+            "
+            @click="openStageDialog(step.name)"
+          >
+            <component
+              :is="stageIcon(step.name)"
+              v-if="stageIcon(step.name)"
+              class="size-4 shrink-0"
+              aria-hidden="true"
+            />
+            {{ step.label }}
+          </button>
+        </div>
+        <Button
+          v-else-if="stageChoices.length"
+          class="self-start"
+          :label="__('Move stage')"
+          @click="openStageDialog()"
+        />
+      </div>
+    </header>
 
     <div class="flex-1 overflow-auto">
       <div class="mx-auto w-full max-w-6xl px-4 py-5 md:px-6">
@@ -82,7 +142,7 @@
 
         <div
           v-else-if="!data"
-          class="grid grid-cols-1 gap-4 lg:grid-cols-[20rem_1fr]"
+          class="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_24rem]"
           aria-busy="true"
           :aria-label="__('Loading')"
         >
@@ -94,26 +154,76 @@
           />
         </div>
 
-        <div v-else class="grid grid-cols-1 gap-4 lg:grid-cols-[20rem_1fr]">
+        <div
+          v-else
+          class="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_24rem]"
+        >
           <LeadDocuments
             class="lg:col-span-2"
             :lead-id="leadId"
             :chain="data.documents"
             :can-write="!!lead?.can_write"
           />
-          <div class="flex min-w-0 flex-col gap-4">
+
+          <!-- the card column comes first on a phone: the numbers are what a call needs -->
+          <aside
+            class="flex min-w-0 flex-col gap-4 lg:order-2"
+            :aria-label="__('Lead details')"
+          >
             <LeadDuplicates
               v-if="lead?.can_merge"
               :lead="lead"
               @merged="merged"
             />
             <section
-              class="rounded-xl border border-outline-gray-2 bg-surface-base"
+              class="rounded-xl border border-outline-gray-2 bg-surface-base p-4"
+              :aria-label="__('Next step')"
+            >
+              <h2 class="mb-2 text-base-medium text-ink-gray-9">
+                {{ __("Next step") }}
+              </h2>
+              <p
+                v-if="lead?.next_follow_up"
+                class="text-base-medium"
+                :class="followUpLate ? 'text-danger' : 'text-ink-gray-9'"
+              >
+                {{ __("Follow up") }}
+                <span class="tabular-nums">{{
+                  dayjs(lead.next_follow_up).format("ddd, D MMM YYYY")
+                }}</span>
+                <span v-if="followUpLate" class="font-normal"
+                  >· {{ __("overdue") }}</span
+                >
+              </p>
+              <p v-else class="text-p-sm text-ink-gray-6">
+                {{ __("No follow-up set. Edit the lead to add one.") }}
+              </p>
+              <p
+                v-if="lead?.owner_name || lead?.lead_owner"
+                class="mt-0.5 text-sm text-ink-gray-6"
+              >
+                {{ lead.owner_name || ownerName(options, lead.lead_owner) }}
+              </p>
+            </section>
+            <section
+              v-if="lead?.numbers"
+              class="rounded-xl border border-outline-gray-2 bg-surface-base p-4"
+            >
+              <LeadNumbers
+                :lead-id="leadId"
+                :lead-name="lead.lead_name || leadId"
+                :numbers="lead.numbers"
+                :can-write="!!lead.can_write"
+                :can-call="!!lead.can_call"
+                :can-remove="!!lead.can_remove_numbers"
+                @changed="detail.reload()"
+              />
+            </section>
+            <section
+              class="rounded-xl border border-outline-gray-2 bg-surface-base p-4"
               :aria-label="__('Details')"
             >
-              <div
-                class="flex flex-wrap items-center gap-2 border-b border-outline-gray-1 px-4 py-3"
-              >
+              <div class="mb-3 flex flex-wrap items-center gap-2">
                 <h2 class="text-base-medium text-ink-gray-9">
                   {{ __("Details") }}
                 </h2>
@@ -125,49 +235,26 @@
                   :icon="lastCall(lead)!.icon"
                   :title="__('Last call')"
                 />
-                <TaskyBadge
-                  v-if="lead?.tbo_stage"
-                  :class="lead && lastCall(lead) ? '' : 'ml-auto'"
-                  :label="stageLabel(options, lead.tbo_stage)"
-                  :tone="stageTone(options, lead.tbo_stage)"
-                  :icon="stageIcon(lead.tbo_stage)"
-                />
               </div>
-              <div
-                v-if="lead?.numbers"
-                class="border-b border-outline-gray-1 px-4 py-3"
+              <dl
+                class="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-3 gap-y-2.5 text-sm"
               >
-                <LeadNumbers
-                  :lead-id="leadId"
-                  :lead-name="lead.lead_name || leadId"
-                  :numbers="lead.numbers"
-                  :can-write="!!lead.can_write"
-                  :can-call="!!lead.can_call"
-                  :can-remove="!!lead.can_remove_numbers"
-                  @changed="detail.reload()"
-                />
-              </div>
-              <dl class="flex flex-col gap-3 px-4 py-4">
-                <div
-                  v-for="field in detailFields"
-                  :key="field.label"
-                  class="flex flex-col gap-0.5"
-                >
-                  <dt class="text-xs text-ink-gray-5">{{ field.label }}</dt>
+                <template v-for="field in detailFields" :key="field.label">
+                  <dt class="text-ink-gray-6">{{ field.label }}</dt>
                   <dd
-                    class="min-w-0 break-words text-base text-ink-gray-8"
+                    class="min-w-0 break-words text-ink-gray-8"
                     :class="field.mono ? 'font-mono tabular-nums' : ''"
                   >
                     <a
                       v-if="field.href"
                       :href="field.href"
+                      class="rounded underline decoration-outline-gray-3 underline-offset-2 hover:text-ink-gray-9 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
                       @click="field.href.startsWith('tel:') && phoneCalled()"
-                      class="rounded underline decoration-outline-gray-3 underline-offset-2 hover:text-ink-gray-9 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
                       >{{ field.value }}</a
                     >
                     <template v-else>{{ field.value }}</template>
                   </dd>
-                </div>
+                </template>
               </dl>
             </section>
             <template v-if="lead?.place">
@@ -180,6 +267,19 @@
               <LeadPhotos :lead-id="leadId" :can-write="!!lead.can_write" />
             </template>
             <LeadWhyCall :prospect="lead?.prospect" />
+            <LeadQuotations :quotations="data.quotations || []" />
+            <LeadProposals
+              :lead-id="leadId"
+              :proposals="
+                (data.proposals || []).filter(
+                  (p) => (p.document_type || 'Proposal') === 'Proposal'
+                )
+              "
+              :can-write="!!lead?.can_write"
+            />
+          </aside>
+
+          <div class="flex min-w-0 flex-col gap-4 lg:order-1">
             <LeadWhatsApp
               v-if="lead?.whatsapp && lead.whatsapp_box"
               :lead-id="leadId"
@@ -196,118 +296,110 @@
               }"
               @changed="detail.reload()"
             />
-            <LeadQuotations :quotations="data.quotations || []" />
-            <LeadProposals
-              :lead-id="leadId"
-              :proposals="
-                (data.proposals || []).filter(
-                  (p) => (p.document_type || 'Proposal') === 'Proposal'
-                )
-              "
-              :can-write="!!lead?.can_write"
-            />
-          </div>
-
-          <section
-            class="min-w-0 rounded-xl border border-outline-gray-2 bg-surface-base"
-            :aria-label="__('Timeline')"
-          >
-            <h2
-              class="border-b border-outline-gray-1 px-4 py-3 text-base-medium text-ink-gray-9"
+            <section
+              class="min-w-0 rounded-xl border border-outline-gray-2 bg-surface-base px-4 py-4 sm:px-5"
+              :aria-label="__('Timeline')"
             >
-              {{ __("Timeline") }}
-            </h2>
-            <form
-              class="flex flex-col gap-2 border-b border-outline-gray-1 px-4 py-4"
-              @submit.prevent="submitNote"
-            >
-              <FormControl
-                v-model="note"
-                type="textarea"
-                :rows="3"
-                :label="__('Add a note')"
-                :placeholder="
-                  __('What was said, what was agreed, what\'s next')
-                "
-              />
-              <p v-if="noteError" role="alert" class="text-p-sm text-danger">
-                {{ noteError }}
-              </p>
-              <div class="flex justify-end">
+              <div class="mb-3 flex items-baseline gap-2">
+                <h2 class="text-base-medium text-ink-gray-9">
+                  {{ __("Activity") }}
+                </h2>
+                <span class="text-sm text-ink-gray-6">{{
+                  __("newest first")
+                }}</span>
+              </div>
+              <form
+                class="flex items-start gap-2 pb-2"
+                @submit.prevent="submitNote"
+              >
+                <FormControl
+                  v-model="note"
+                  class="min-w-0 flex-1"
+                  type="textarea"
+                  :rows="2"
+                  :aria-label="__('Add a note')"
+                  :placeholder="
+                    __(
+                      'Add a note: what was said, what was agreed, what\'s next'
+                    )
+                  "
+                />
                 <Button
                   type="submit"
                   :label="__('Add note')"
                   :loading="addNote.loading"
                   :disabled="!note.trim()"
                 />
-              </div>
-            </form>
-            <p
-              v-if="!data.timeline?.length"
-              class="px-4 py-6 text-p-sm text-ink-gray-6"
-            >
-              {{
-                __(
-                  "Nothing here yet. Notes and stage moves from here and the ERP site show up in this timeline."
-                )
-              }}
-            </p>
-            <ol v-else role="list" class="flex flex-col">
-              <li
-                v-for="(entry, i) in data.timeline"
-                :key="entry.ref || i"
-                class="flex gap-3 border-b border-outline-gray-1 px-4 py-3 last:border-b-0"
+              </form>
+              <p
+                v-if="noteError"
+                role="alert"
+                class="pb-2 text-p-sm text-danger"
               >
-                <component
-                  :is="timelineIcon(entry)"
-                  class="mt-0.5 size-4 shrink-0"
-                  :class="
-                    entry.call && entry.status === 'missed'
-                      ? 'text-danger'
-                      : 'text-ink-gray-5'
-                  "
-                  aria-hidden="true"
-                />
-                <div class="flex min-w-0 flex-1 flex-col gap-1">
-                  <LeadCallEntry v-if="entry.call" :entry="entry" />
-                  <p
-                    v-else-if="entry.text"
-                    class="whitespace-pre-line break-words"
+                {{ noteError }}
+              </p>
+              <p
+                v-if="!data.timeline?.length"
+                class="border-t border-outline-gray-1 py-6 text-p-sm text-ink-gray-6"
+              >
+                {{
+                  __(
+                    "Nothing here yet. Notes and stage moves from here and the ERP site show up in this timeline."
+                  )
+                }}
+              </p>
+              <ol v-else role="list" class="flex flex-col">
+                <li
+                  v-for="(entry, i) in data.timeline"
+                  :key="entry.ref || i"
+                  class="flex gap-3 border-t border-outline-gray-1 py-3.5"
+                >
+                  <span
+                    class="grid size-8 shrink-0 place-items-center rounded-full"
                     :class="
-                      entry.kind === 'note'
-                        ? 'text-p-sm text-ink-gray-8'
-                        : 'text-base-medium text-ink-gray-9'
+                      entry.call && entry.status === 'missed'
+                        ? 'bg-danger-soft text-danger'
+                        : entry.call && entry.status === 'answered'
+                        ? 'bg-success-soft text-success'
+                        : 'bg-surface-gray-2 text-ink-gray-7'
                     "
+                    aria-hidden="true"
                   >
-                    <span class="sr-only"
-                      >{{ TIMELINE_LABELS[entry.kind] }}: </span
-                    >{{ entry.text }}
-                  </p>
-                  <p class="text-xs text-ink-gray-5">
-                    {{
-                      entry.kind === "whatsapp" &&
-                      entry.direction === "incoming"
-                        ? __("The lead, on WhatsApp")
-                        : entry.who_name || entry.who
-                    }}
-                    <template v-if="entry.at">
+                    <component :is="timelineIcon(entry)" class="size-4" />
+                  </span>
+                  <div class="flex min-w-0 flex-1 flex-col gap-1">
+                    <div class="flex flex-wrap items-baseline gap-x-2">
                       <span
-                        v-if="entry.who || entry.kind === 'whatsapp'"
-                        aria-hidden="true"
+                        v-if="!entry.call"
+                        class="text-base-medium text-ink-gray-9"
+                        >{{ TIMELINE_LABELS[entry.kind] }}</span
                       >
-                        ·
-                      </span>
+                      <span class="text-sm text-ink-gray-6">{{
+                        entry.kind === "whatsapp" &&
+                        entry.direction === "incoming"
+                          ? __("The lead, on WhatsApp")
+                          : entry.who_name || entry.who
+                      }}</span>
                       <time
+                        v-if="entry.at"
+                        class="ml-auto font-mono text-xs tabular-nums text-ink-gray-6"
                         :datetime="entry.at"
                         :title="dayjs(entry.at).format('D MMM YYYY, h:mm a')"
                         >{{ dayjs(entry.at).fromNow() }}</time
                       >
-                    </template>
-                  </p>
-                </div>
-              </li>
-            </ol>
-          </section>
+                    </div>
+                    <LeadCallEntry v-if="entry.call" :entry="entry" />
+                    <p
+                      v-else-if="entry.text"
+                      class="whitespace-pre-line break-words text-p-sm text-ink-gray-8"
+                    >
+                      {{ entry.text }}
+                    </p>
+                  </div>
+                </li>
+              </ol>
+            </section>
+          </div>
         </div>
       </div>
     </div>
@@ -413,9 +505,10 @@ import { useRouter } from "vue-router";
 import LucideArrowRight from "~icons/lucide/arrow-right";
 import LucideBot from "~icons/lucide/bot";
 import LucideCalendar from "~icons/lucide/calendar";
-import LucideChevronRight from "~icons/lucide/chevron-right";
+import LucideChevronLeft from "~icons/lucide/chevron-left";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideFileText from "~icons/lucide/file-text";
+import LucideFlame from "~icons/lucide/flame";
 import LucideHistory from "~icons/lucide/history";
 import LucideMessageCircle from "~icons/lucide/message-circle";
 import LucideMessageCircleReply from "~icons/lucide/message-circle-reply";
@@ -441,6 +534,7 @@ import LogCallDialog from "./LogCallDialog.vue";
 import LeadProposals from "./LeadProposals.vue";
 import LeadQuotations from "./LeadQuotations.vue";
 import {
+  departmentLabel,
   dropUnsavedNote,
   loadLeadOptions,
   leadOptions,
@@ -552,6 +646,23 @@ const canCall = computed(
     !!(lead.value.mobile_no || lead.value.phone || lead.value.whatsapp_no)
 );
 
+/** Hot or Warm, when the ERP site's lead says so. */
+const temperature = computed(() => {
+  const value = lead.value?.temperature;
+  return typeof value === "string" ? value : "";
+});
+const whatsappLink = computed(() => {
+  const digits = String(
+    lead.value?.whatsapp_no || lead.value?.mobile_no || ""
+  ).replace(/\D/g, "");
+  return digits ? `https://wa.me/${digits}` : "";
+});
+const followUpLate = computed(
+  () =>
+    !!lead.value?.next_follow_up &&
+    dayjs(lead.value.next_follow_up).isBefore(dayjs().startOf("day"))
+);
+
 const detailFields = computed(() => {
   const l = lead.value;
   if (!l) return [];
@@ -578,12 +689,6 @@ const detailFields = computed(() => {
     {
       label: __("Owner"),
       value: l.owner_name || ownerName(options.value, l.lead_owner),
-    },
-    {
-      label: __("Next follow-up"),
-      value: l.next_follow_up
-        ? dayjs(l.next_follow_up).format("ddd, D MMM YYYY")
-        : "",
     },
     { label: __("Source"), value: l.source || "" },
     { label: __("Segment"), value: l.segment || "" },
@@ -666,9 +771,31 @@ const stageChoices = computed<LeadStage[]>(() =>
     .filter((s) => s.name !== lead.value?.tbo_stage)
 );
 
-function openStageDialog() {
+/** The stages as a row of steps: done ones before the current, the current, then the rest. */
+const steps = computed(() => {
+  const all = options.value?.stages ?? [];
+  const at = all.findIndex((st) => st.name === lead.value?.tbo_stage);
+  const allowed = new Set(stageChoices.value.map((st) => st.name));
+  return all.map((st, i) => {
+    const current = i === at;
+    return {
+      name: st.name,
+      label: st.label || st.name,
+      current,
+      allowed: allowed.has(st.name),
+      class: current
+        ? "bg-brand text-brand-on"
+        : i < at
+        ? "bg-brand-soft text-brand-ink hover:bg-surface-gray-2 disabled:opacity-70"
+        : "bg-surface-gray-2 text-ink-gray-8 hover:bg-surface-gray-3 disabled:opacity-60",
+    };
+  });
+});
+
+function openStageDialog(preselect?: string) {
   nextStage.value =
-    stageChoices.value.length === 1 ? stageChoices.value[0].name : "";
+    preselect ||
+    (stageChoices.value.length === 1 ? stageChoices.value[0].name : "");
   stageNote.value = "";
   stageError.value = "";
   showStage.value = true;

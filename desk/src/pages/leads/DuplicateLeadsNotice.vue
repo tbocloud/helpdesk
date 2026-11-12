@@ -2,7 +2,7 @@
   <div
     v-if="matches.length"
     role="status"
-    class="flex flex-col gap-2 rounded-md bg-warning-soft px-3 py-2 text-p-sm text-ink-gray-8"
+    class="flex flex-col gap-2 rounded-xl bg-warning-soft px-4 py-3 text-p-sm text-ink-gray-8"
   >
     <p class="flex items-start gap-2 font-medium text-warning">
       <LucideTriangleAlert class="mt-0.5 size-4 shrink-0" aria-hidden="true" />

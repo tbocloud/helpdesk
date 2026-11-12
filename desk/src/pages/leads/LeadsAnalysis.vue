@@ -43,15 +43,17 @@
       <div v-else class="overflow-x-auto">
         <table class="w-full min-w-[44rem] text-sm">
           <thead>
-            <tr class="text-left text-xs text-ink-gray-6">
-              <th scope="col" class="px-4 py-2 font-normal">
+            <tr
+              class="bg-surface-gray-1 text-left text-xs font-medium text-ink-gray-6"
+            >
+              <th scope="col" class="px-4 py-2 font-medium">
                 {{ __("Person") }}
               </th>
               <th
                 v-for="col in CALLING_COLUMNS"
                 :key="col.key"
                 scope="col"
-                class="px-3 py-2 text-right font-normal"
+                class="px-3 py-2 text-right font-medium"
                 :title="col.hint"
               >
                 {{ col.label }}
@@ -62,7 +64,7 @@
             <tr
               v-for="row in calling"
               :key="row.user"
-              class="border-t border-outline-gray-1"
+              class="border-t border-outline-gray-1 hover:bg-surface-gray-1"
             >
               <th
                 scope="row"
@@ -80,7 +82,12 @@
                     : 'text-ink-gray-9'
                 "
               >
-                {{ col.format(row) }}
+                <TaskyBadge
+                  v-if="col.key === 'overdue' && row.overdue"
+                  tone="danger"
+                  :label="col.format(row)"
+                />
+                <template v-else>{{ col.format(row) }}</template>
               </td>
             </tr>
           </tbody>
@@ -130,15 +137,17 @@
       <div v-else class="mt-3 overflow-x-auto">
         <table class="w-full min-w-[40rem] text-sm">
           <thead>
-            <tr class="text-left text-xs text-ink-gray-6">
-              <th scope="col" class="px-4 py-2 font-normal">
+            <tr
+              class="bg-surface-gray-1 text-left text-xs font-medium text-ink-gray-6"
+            >
+              <th scope="col" class="px-4 py-2 font-medium">
                 {{ groupLabel }}
               </th>
               <th
                 v-for="col in QUALITY_COLUMNS"
                 :key="col.key"
                 scope="col"
-                class="px-3 py-2 text-right font-normal"
+                class="px-3 py-2 text-right font-medium"
                 :title="col.hint"
               >
                 {{ col.label }}
@@ -149,31 +158,31 @@
             <tr
               v-for="row in rows"
               :key="row.value || '-'"
-              class="border-t border-outline-gray-1"
+              class="border-t border-outline-gray-1 hover:bg-surface-gray-1"
             >
               <th
                 scope="row"
                 class="max-w-[14rem] px-4 py-2 text-left font-normal"
               >
                 <span
-                  class="block truncate"
+                  class="inline-block max-w-[10rem] truncate align-middle"
                   :class="row.value ? 'text-ink-gray-9' : 'text-ink-gray-6'"
                   >{{ row.value || __("Not set") }}</span
                 >
-                <span
+                <TaskyBadge
                   v-if="row.value && row.value === best"
-                  class="inline-flex items-center gap-1 text-xs text-success"
-                >
-                  <LucideArrowUp class="size-3" aria-hidden="true" />
-                  {{ __("Picks up most") }}
-                </span>
-                <span
+                  class="ml-2"
+                  tone="success"
+                  :icon="LucideArrowUp"
+                  :label="__('Picks up most')"
+                />
+                <TaskyBadge
                   v-else-if="row.value && row.value === worst"
-                  class="inline-flex items-center gap-1 text-xs text-danger"
-                >
-                  <LucideArrowDown class="size-3" aria-hidden="true" />
-                  {{ __("Picks up least") }}
-                </span>
+                  class="ml-2"
+                  tone="danger"
+                  :icon="LucideArrowDown"
+                  :label="__('Picks up least')"
+                />
               </th>
               <td
                 v-for="col in QUALITY_COLUMNS"
@@ -202,6 +211,7 @@
 <script setup lang="ts">
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
+import TaskyBadge from "@/components/TaskyBadge.vue";
 import { Button, TabButtons } from "frappe-ui";
 import { computed, ref, useId } from "vue";
 import LucideArrowDown from "~icons/lucide/arrow-down";
