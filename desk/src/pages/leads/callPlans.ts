@@ -1,6 +1,6 @@
-/** Assign leads: who in a department is handed which product and how many calls per slot
- * (docs/leads.md, "Assign leads"; TBO Smart's call-batches.md §11). The ERP site keeps the
- * plans and hands out the batches; the hub only shows and saves them. */
+/** Assign leads: who in a department is handed which product (and district) and how many calls
+ * per slot (docs/leads.md, "Assign leads"; TBO Smart's call-batches.md §11). The ERP site keeps
+ * the plans and hands out the batches; the hub only shows and saves them. */
 
 import { __ } from "@/translation";
 
@@ -20,6 +20,8 @@ export interface PlanMember {
   product: string | null;
   /** a department without products plans by industry; null: any (absent from an older TBO Smart) */
   industry?: string | null;
+  /** the district they are handed; null: any (absent from an older TBO Smart) */
+  district?: string | null;
   /** calls per slot label: the plan's, else the slot's size */
   sizes: Record<string, number>;
   total: number;
@@ -37,6 +39,7 @@ export interface DepartmentLead {
   company_name?: string;
   product: string | null;
   industry?: string | null;
+  district?: string | null;
   stage?: string;
   temperature?: string;
   phone?: string;
@@ -49,6 +52,16 @@ export interface DepartmentLeads {
   products: Record<string, number>;
   /** open leads per industry ("" for none), whatever the filters (absent from an older TBO Smart) */
   industries?: Record<string, number>;
+  /** open leads per district ("" for none), whatever the filters (absent from an older TBO Smart) */
+  districts?: Record<string, number>;
+}
+
+/** Open unassigned leads with a phone in one district. */
+export interface DistrictPool {
+  /** per product ("" for none) */
+  products: Record<string, number>;
+  /** per industry ("" for none) */
+  industries: Record<string, number>;
 }
 
 export interface PlanDepartment {
@@ -57,6 +70,8 @@ export interface PlanDepartment {
   products: { product_name: string; intro_line?: string }[];
   /** a manager's limit on the department: the only product a plan can take */
   campaign_product: string | null;
+  /** a manager's limit: the only district a plan can take (absent from an older TBO Smart) */
+  campaign_district?: string | null;
   /** false: the person is one of the department's viewers and only watches it (absent from an
    * older TBO Smart: they plan it) */
   can_edit?: boolean;
@@ -68,6 +83,10 @@ export interface PlanDepartment {
   industries?: string[];
   /** open unassigned leads with a phone, per industry ("" for none) */
   unassigned_industries?: Record<string, number>;
+  /** the districts its open leads are in (absent from an older TBO Smart) */
+  districts?: string[];
+  /** open unassigned leads with a phone, per district ("" for none) */
+  unassigned_districts?: Record<string, DistrictPool>;
   members: PlanMember[];
   /** the daily auto-assign (TBO Smart's call-batches.md §14; absent from an older TBO Smart) */
   auto_assign?: {
@@ -119,21 +138,49 @@ export function byIndustry(department: PlanDepartment | undefined) {
   );
 }
 
-/** The unassigned leads a plan for `industry` can be handed ("" or null: every industry). */
-export function industryReady(
-  department: PlanDepartment,
-  industry: string | null
-) {
-  const counts = department.unassigned_industries || {};
-  if (industry) return counts[industry] ?? 0;
-  return Object.values(counts).reduce((sum, count) => sum + count, 0);
+/** A plan can call for one district, and the leads can be filtered by it, once the ERP site
+ * sends the department's districts and its leads have any. */
+export function hasDistricts(department: PlanDepartment | undefined) {
+  return !!department?.districts?.length;
 }
 
-/** The unassigned leads a plan for `product` can be handed ("" or null: every product). */
-export function leadsReady(department: PlanDepartment, product: string | null) {
-  const counts = department.unassigned || {};
-  if (product) return counts[product] ?? 0;
-  return Object.values(counts).reduce((sum, count) => sum + count, 0);
+/** `counts[key]`, or with no key the sum of them all. */
+function countOf(
+  counts: Record<string, number> | undefined,
+  key: string | null
+) {
+  if (key) return counts?.[key] ?? 0;
+  return Object.values(counts ?? {}).reduce((sum, count) => sum + count, 0);
+}
+
+/** The unassigned leads a plan for `industry` can be handed ("" or null: every industry), in
+ * `district` (null: every district). */
+export function industryReady(
+  department: PlanDepartment,
+  industry: string | null,
+  district: string | null = null
+) {
+  return countOf(
+    district
+      ? department.unassigned_districts?.[district]?.industries
+      : department.unassigned_industries,
+    industry
+  );
+}
+
+/** The unassigned leads a plan for `product` can be handed ("" or null: every product), in
+ * `district` (null: every district). */
+export function leadsReady(
+  department: PlanDepartment,
+  product: string | null,
+  district: string | null = null
+) {
+  return countOf(
+    district
+      ? department.unassigned_districts?.[district]?.products
+      : department.unassigned,
+    product
+  );
 }
 
 /** Why leads waiting in the pool will not be handed to anyone, or null when someone gets them. */

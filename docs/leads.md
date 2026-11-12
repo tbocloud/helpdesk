@@ -63,7 +63,7 @@ user exists there with a sales role, applies what they may see, and records writ
 | `get_daily_report` | GET | `date, owner` | each salesperson's day and week to date (§2.5.1) |
 | `log_call` | POST | `lead, outcome, note, callback_at` | `{name, status, outcomes, stage}` (§2.7, §2.16) |
 | `get_my_calls`, `get_next_batch`, `record_call_outcome`, `get_call_batches_report` | GET, POST, POST, GET | see [Today's calls](#todays-calls) | TBO Smart's `hub-leads-api.md` §2.13 |
-| `get_call_plans`, `save_call_plan`, `get_department_leads`, `assign_leads`, `unassign_leads` | GET, POST, GET, POST, POST | `department, users, product, sizes, clear` (save); `department, owner, product, search, start, page_length`; `department, user, leads or count + product`; `department, leads` | see [Assign leads](#assign-leads), TBO Smart's `hub-leads-api.md` §2.23 (v1.23) |
+| `get_call_plans`, `save_call_plan`, `get_department_leads`, `assign_leads`, `unassign_leads` | GET, POST, GET, POST, POST | `department, users, product, industry, district, sizes, clear` (save); `department, owner, product, industry, district, search, start, page_length`; `department, user, leads or count + product, industry, district`; `department, leads` | see [Assign leads](#assign-leads), TBO Smart's `hub-leads-api.md` §2.23 (v1.23) |
 | `estimate_prospect_run`, `start_prospect_run`, `get_prospect_runs`, `get_prospect_run` | POST, POST, GET, GET | `values: {industry, state, districts, provider, max_results, department, require_phone}`; `name` | a run and its price, the started run, the runs, one run with its leads; see [Find prospects](#find-prospects), TBO Smart's `hub-leads-api.md` §2.15 |
 | `get_lead_ai` | GET | `name` | what the AI proposes, the lead's health and likely duplicates (TBO Smart's `hub-leads-api.md` §2.6) |
 | `refresh_lead_ai`, `apply_ai_stage`, `dismiss_ai_stage` | POST | `name` | as above, or the lead (apply) |
@@ -390,6 +390,21 @@ TBO Smart keeps it as the member's `call_industry`, and the batches and the 11:0
 follow it). The leads window filters and gives by industry too and hides Set product. An older
 TBO Smart sends no industries, so the page stays as it was.
 
+**A district narrows it all.** When the ERP site sends a department's districts (those its open
+leads are in; `callPlans.hasDistricts`), the Assign panel has a **District** under Product (or
+Industry): *Any district* or one district, each with its unassigned leads of the product chosen
+(*Malappuram · 40 unassigned*), and the product's counts follow the district chosen. The box says
+*40 unassigned PhoebiX leads in Malappuram*; **See leads** opens the Unassigned window on that
+product and district, **Give now** gives the next leads of both, and **Assign leads** saves the
+district with the plan, so the batches, *Calling for* and the 11:00 auto-assign take only that
+district's new leads (TBO Smart keeps it as the member's `call_district`; `save_call_plan`,
+`assign_leads`, `get_department_leads` send `district` only when one is chosen). The people
+table's plan column reads *PhoebiX · Malappuram* (*Product · District*). A department's campaign
+district is the only one: the field is locked and says why. The leads window gets a **District**
+filter with counts (*All districts*, each district, *No district*), each lead shows its district
+next to the stage, and *Give the next* takes an **In district** too. An older TBO Smart sends no
+districts, so the field stays out instead of filtering nothing.
+
 **The product's unassigned leads, there and then.** Each product in the picker says how many
 unassigned leads with a phone it has (*PhoebiX · 120 unassigned*; *Any product* the total). With
 people picked, a box under it says *120 unassigned PhoebiX leads* with **See leads** (the
@@ -414,7 +429,8 @@ Smart on the ERP site*, none of them is sent, and the Assign leads line stays ou
 
 **Each person's leads, and the unassigned ones.** Every row ends with *1,219 leads* (their
 open leads in the department); it opens a window (`MemberLeadsDialog.vue`) with **Their leads** and
-**Unassigned**, a Product filter with counts and a search (name, company, phone):
+**Unassigned**, a Product filter and a District filter with counts and a search (name, company,
+phone):
 - tick leads and **Move to** another member, **Unassign** them (back to the department's pool),
   or **Set product** (the existing `bulk_set_lead_category`, which a head may do for their
   department);
@@ -460,13 +476,14 @@ Code: `helpdesk/api/call_batches.py` (`get_call_plans`, `save_call_plan`; a 403 
 
 1. Open **Sales → Assign leads** and pick the **Department**. The list shows its people.
 2. Tick the people (or the box at the top for everyone).
-3. Choose the **Product** and type the calls for each slot, for example Morning 40, Afternoon 30, Evening 30.
+3. Choose the **Product** and, to call one place only, the **District**. Type the calls for each
+   slot, for example Morning 40, Afternoon 30, Evening 30.
 4. Check the line under it: if fewer unassigned leads are ready than you plan, the batches give
    what there is.
 5. Press **Assign leads**. It counts from the next slot.
 6. To see or move someone's leads, press **N leads** on their row. Tick leads to **Move to**
    someone else, **Unassign** or **Set product**. Under **Unassigned**, tick leads and assign them,
-   or type how many to give (and of which product) and press **Give to**.
+   or type how many to give (and of which product and district) and press **Give to**.
 7. To remove someone's plan, tick them and press **Remove plan · use (department) default
    (50 + 50)**; the button shows the department's slot sizes. It asks first ("Remove Fidha V P's
    plan? From the next slot they get GrowthX's default: Morning 50 + Afternoon 50, any

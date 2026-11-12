@@ -344,6 +344,34 @@ class TestCallPlans(FrappeTestCase):
         api.save_call_plan("TBO", ["shahana@tbo.example"], sizes={"Morning": 40})
         self.assertNotIn("industry", self.calls("save_call_plan")[-1][1])
 
+    def test_a_district_narrows_the_plan_the_list_and_the_leads_given(self):
+        api.save_call_plan(
+            "GrowthX",
+            ["shahana@tbo.example"],
+            "PhoebiX",
+            {"Morning": 40},
+            district=" Malappuram ",
+        )
+        ((_post, params),) = self.calls("save_call_plan")
+        self.assertEqual(
+            (params["product"], params["district"]), ("PhoebiX", "Malappuram")
+        )
+        self.crm.lead_answers["get_department_leads"] = {
+            "rows": [],
+            "total": 0,
+            "products": {},
+        }
+        api.get_department_leads("GrowthX", district="Malappuram")
+        ((_post, params),) = self.calls("get_department_leads")
+        self.assertEqual(params["district"], "Malappuram")
+        self.crm.lead_answers["assign_leads"] = {"assigned": 5, "skipped": []}
+        api.assign_leads("GrowthX", "shahana@tbo.example", count=5, district="Kannur")
+        ((_post, params),) = self.calls("assign_leads")
+        self.assertEqual((params["count"], params["district"]), (5, "Kannur"))
+        # any district: nothing is sent for it, so an older ERP site is not asked
+        api.assign_leads("GrowthX", "shahana@tbo.example", count=5, district=" ")
+        self.assertNotIn("district", self.calls("assign_leads")[-1][1])
+
     def test_a_plan_needs_people(self):
         self.assertRaises(
             frappe.ValidationError, api.save_call_plan, "GrowthX", "[]", "PhoebiX"
