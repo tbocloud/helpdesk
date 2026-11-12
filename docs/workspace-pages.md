@@ -535,6 +535,18 @@ from the tasks the viewer can see, so a plain member's card counts their own tas
 `desk/src/pages/work/MyWork.vue`; API `helpdesk.api.work.get_my_work(user)`. `?user=` opens a
 team member's work, for leads and managers of their projects (the Team page links here).
 
+- **Layout**: the header bar shows the title, "N open · M due today" and the one primary
+  action, **New task** (`NewTaskDialog`, which asks for the project; hidden on someone else's
+  work), next to the person picker and refresh. On wide screens a right column holds
+  **Working on now** (`components/WorkingNow.vue`: the first task in progress, its running
+  stretch ticking from `get_timer`, **Pause** / **Resume** through `stop_timer` / `start_timer`
+  (one running timer per person, the 8 h daily cap and work hours stay on the server) and
+  **Complete**, which opens the same Complete step with hours and notes) and **This week**
+  (done since Monday from Completed, tasks due this week, tasks whose due date has slipped).
+  On phones Working on now comes first and This week after the list. Task rows
+  (`WorkItemRow` with `card` and `checkable`) have a checkbox that opens the Complete step
+  (the task stays open until it is done), a **KEY** tag (`components/KeyTag.vue`) and the
+  deadline as a pill. There is no Group by: the groups below are the only grouping.
 - **Groups**, in this order, each with its count, from `dueGroup()` in `workMeta.ts`: Overdue
   (past the due date or SLA), Today, This week (the next 7 days, as on the Team page), Later
   (further out, no date, or a ticket whose SLA is paused), On hold, In review. Held and
