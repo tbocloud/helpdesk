@@ -689,6 +689,27 @@ export function stageIcon(stage?: string): Component | undefined {
   return stage ? CALL_STAGES[stage] : undefined;
 }
 
+/** The way a lead usually goes, as the lead page's steps: every stage in one row left no
+ * room to read them. Scheduling and the three meetings are one step. A stage the ERP site
+ * doesn't have is left out, and every stage off the path (Not Responding, On Hold, Closed –
+ * Lost…) is a side stage, reached from the Move to menu. */
+export const STAGE_PATH: { stages: string[]; label?: string }[] = [
+  { stages: ["New Lead"] },
+  { stages: ["Contacted"] },
+  {
+    label: __("Meeting"),
+    stages: [
+      "Meeting Scheduled",
+      "First Meeting Completed",
+      "Second Meeting Completed",
+      "Third Meeting Completed",
+    ],
+  },
+  { stages: ["Proposal Sent"] },
+  { stages: ["Negotiation"] },
+  { stages: ["Closed – Won"] },
+];
+
 /** "5m", "3h", "2d": how long ago, compactly, for a chip. */
 export function shortAgo(when?: string | null) {
   if (!when) return "";
