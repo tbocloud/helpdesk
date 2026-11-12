@@ -41,7 +41,12 @@
 		"column_break_triage",
 		"triage_job_timeout",
 		"draft_kb_articles",
-		"automation_user"
+		"automation_user",
+		"monitoring_section",
+		"internal_customer",
+		"internal_project",
+		"column_break_monitoring",
+		"monitor_quiet_minutes"
 	],
 	"fields": [
 		{
@@ -274,11 +279,41 @@
 			"options": "User",
 			"label": "Hub's Own Work Shown As",
 			"description": "AI triage and investigation notes, reminders, KB drafts and changes from Outlook or GitHub are credited to this user, e.g. a \"TBO AI\" user (ai@teambackoffice.com). Empty: Administrator. Agents' own replies stay theirs."
+		},
+		{
+			"fieldname": "monitoring_section",
+			"fieldtype": "Section Break",
+			"label": "Monitoring"
+		},
+		{
+			"fieldname": "internal_customer",
+			"fieldtype": "Link",
+			"label": "Internal customer",
+			"options": "HD Customer",
+			"description": "The customer the watcher's alert tickets belong to (TBO itself)."
+		},
+		{
+			"fieldname": "internal_project",
+			"fieldtype": "Link",
+			"label": "Internal project",
+			"options": "Project",
+			"description": "The project the watcher's follow-up tasks go to (certificates expiring, disks filling up)."
+		},
+		{
+			"fieldname": "column_break_monitoring",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "monitor_quiet_minutes",
+			"fieldtype": "Int",
+			"label": "Watcher quiet after (minutes)",
+			"default": "3",
+			"description": "Minutes without a heartbeat before the Agent Managers hear that the watcher is quiet."
 		}
 	],
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-10-17 17:25:51.799475",
+	"modified": "2026-11-12 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Hub Settings",

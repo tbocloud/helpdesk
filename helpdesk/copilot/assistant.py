@@ -1244,6 +1244,21 @@ def _press(user: str, channel: str, chat, verb: str, data: dict, inputs: dict) -
             verb == "approve",
             (inputs.get("reason") or "").strip(),
         )
+    if verb in ("action_approve", "action_reject", "action_show"):
+        from helpdesk.copilot import actions
+
+        approval = frappe.get_doc(actions.ACTION, data.get("approval"))
+        if verb == "action_show":
+            return {"replies": [actions.card(approval)], "card": None}
+        if approval.status != actions.PENDING:
+            return {"replies": [], "card": actions.decided_card(approval)}
+        return decide_action(
+            user,
+            channel,
+            approval,
+            verb == "action_approve",
+            (inputs.get("reason") or "").strip(),
+        )
     message = frappe.get_doc(MESSAGE, data.get("message"))
     if (
         message.chat != chat.name
@@ -1362,6 +1377,54 @@ def decide(user: str, channel: str, approval, approve: bool, reason: str) -> dic
         if approval.status == "Pending"
         else decided_card(approval),
     }
+
+
+def decide_action(
+    user: str, channel: str, approval, approve: bool, reason: str
+) -> dict:
+    """An action approval's buttons: the same rules as on the panel, first decision wins."""
+    from helpdesk.copilot import actions
+
+    if not approve and not reason:
+        return {
+            "replies": [
+                text_card(
+                    _(
+                        "Please write the reason in the box, then press Reject: the person who asked gets it."
+                    )
+                )
+            ],
+            "card": None,
+        }
+    arguments = {"approval": approval.name, "approve": approve, "note": reason}
+    try:
+        with as_user(user):
+            outcome = actions.decide(approval.name, user, approve, reason, via=channel)
+    except (frappe.PermissionError, frappe.ValidationError) as e:
+        frappe.clear_last_message()
+        log_action(
+            user,
+            channel,
+            "decide_action",
+            "Refused",
+            arguments,
+            str(e),
+            None,
+            approval.ticket,
+        )
+        return {"replies": [text_card(str(e), "warning")], "card": None}
+    log_action(
+        user,
+        channel,
+        "decide_action",
+        "OK",
+        arguments,
+        json.dumps(outcome, default=str),
+        None,
+        approval.ticket,
+    )
+    approval.reload()
+    return {"replies": [], "card": actions.decided_card(approval)}
 
 
 def execute(user: str, channel: str, message) -> dict:

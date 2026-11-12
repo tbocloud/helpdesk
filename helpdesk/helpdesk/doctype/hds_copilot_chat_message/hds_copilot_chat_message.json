@@ -21,6 +21,7 @@
 		"run",
 		"approval",
 		"release",
+		"action_approval",
 		"files",
 		"teams_activity",
 		"cost_usd"
@@ -129,6 +130,14 @@
 			"options": "HDS Deploy Request"
 		},
 		{
+			"fieldname": "action_approval",
+			"fieldtype": "Link",
+			"label": "Action approval",
+			"options": "HDS Action Approval",
+			"read_only": 1,
+			"search_index": 1
+		},
+		{
 			"fieldname": "files",
 			"fieldtype": "Code",
 			"options": "JSON",
@@ -149,7 +158,7 @@
 		}
 	],
 	"links": [],
-	"modified": "2026-10-28 22:30:00.000000",
+	"modified": "2026-11-12 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Copilot Chat Message",

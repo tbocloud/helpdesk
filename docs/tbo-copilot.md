@@ -583,3 +583,49 @@ Ticket numbers may be written as people write them (`236`, `#236`, `HD-0236`).
 | `customer_erp_read` | One read tool on the ticket's customer site through the hub (`MCPClient`, logged in HDS Remote Audit Log too): `get_doc`, `get_list`, `get_count`, `get_meta`, `get_error_log`, `execute_report`, `get_installed_apps`, `get_site_info`, `get_code_identity`, `get_customizations`, `get_deploy_status`, `get_version_history`. Never a write tool; results over 64,000 characters are cut |
 
 **Permission fixes in the support hub API.** `get_connections` lists all connections only to managers (Administrator, System Manager, Agent Manager); other agents see the connections of customers whose tickets they can read. `get_session_detail` needs read access to the session's ticket. `start_investigation` needs read access to the ticket, and an agent may only investigate the ticket's own customer site (managers may choose another).
+
+## Action approvals (Phase 18: `copilot/actions.py`, `api/copilot_actions.py`)
+
+One record, **HDS Action Approval**, and one card for an action someone asks Copilot to run: a
+Press action (`kind` Press), an AWS change from the desktop app (AWS), a repair (Repair). What is
+approved is the exact payload (the method and its arguments, or the AWS command), hashed, so what
+runs is what the approver saw.
+
+- `actions.request(kind, title, details, payload, risk, user, via, ticket)`: a Pending record,
+  assigned to the least loaded approver (a senior for `risk="senior"`), never the requester; the
+  same ask twice returns the live request. The card goes out like a fix's card: Teams when the bot
+  can reach the approver, else the panel plus the usual notification.
+- `actions.decide(name, user, approve, note, via)`: first decision wins; the requester may not decide
+  their own; a senior action refuses a plain approver; an expired request is refused and marked
+  Expired. Buttons `action_approve` / `action_reject` in the assistant's `_press`; the panel calls
+  `api.copilot_actions.decide_action` (a reason is needed to reject).
+- The caller runs the action after Approve: `actions.approved_for(kind, payload, user)` finds the
+  live approval of exactly that payload for that person; `actions.mark_executed(name, ok, log)` keeps
+  the outcome (Executed / Failed). Every record expires **60 minutes** after it was asked, run or not.
+- `actions.remind_and_escalate` (every 15 minutes): a reminder at 15 minutes, the managers at 45,
+  expiry at 60.
+- Endpoints for the desktop app and the panel (agents only): `request_action_approval`,
+  `get_action_approval`, `approved_action`, `decide_action`, `mark_action_executed`.
+- Every decision is in HDS Copilot Call Log (`decide_action`); HDS Copilot Chat Message links the
+  card to the record (`action_approval`).
+
+## Monitor intake (Phase 18: `monitor.py`, `api/monitor.py`)
+
+The watcher server (tbocloud-infra, `watcher/`) tells the hub what it sees. Callers hold the role
+**TBO Monitor** (API only; the user `watcher@teambackoffice.com` is made on migrate, DevOps makes
+its API key). HDS Hub Settings → Monitoring names the **internal customer** (the alert tickets'
+customer, TBO itself), the **internal project** (follow-up tasks) and the watcher's quiet time.
+
+- `alert(key, state, title, text, severity, evidence, runbook, source)`: `state` open opens one
+  ticket per key while it is open (type Alert, raised by TBO AI, priority from the severity, the
+  evidence as `<pre>` on the description; a repeat adds a "Monitor update" comment); `state`
+  resolved sets "Resolved by monitor" and posts the resolve line to the channel, as the mail intake
+  does (`intake.open_alert`, `intake.resolved_status`). Sending the same thing twice changes nothing.
+- `followup(key, subject, details, priority)`: one open Task per key in the internal project
+  (`custom_monitor_key`), for slow-burning issues (a certificate expiring in two weeks, a disk filling).
+- `heartbeat(source)`: every minute from the watcher. `monitor.watch_heartbeats` (every 5 minutes)
+  tells the Agent Managers when a watcher that was once heard goes quiet for the quiet time, once an
+  hour while it lasts, and once when it is back.
+- `self_check()`: the hub's own numbers for the watcher (and any agent): the scheduler, the queues
+  and failed jobs, stuck mail, the error rate, when the error watch and the deploy train last ran,
+  the workers' last claim. Numbers only; the watcher applies the thresholds.

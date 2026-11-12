@@ -409,6 +409,16 @@ def get_custom_fields():
                 "no_copy": 1,
             },
             {
+                # the watcher's follow-up key: one open task per slow-burning issue (helpdesk/monitor.py)
+                "fieldname": "custom_monitor_key",
+                "fieldtype": "Data",
+                "label": "Monitor key",
+                "insert_after": "custom_ai_description",
+                "read_only": 1,
+                "no_copy": 1,
+                "search_index": 1,
+            },
+            {
                 "fieldname": "custom_category",
                 "fieldtype": "Select",
                 "label": "Category",

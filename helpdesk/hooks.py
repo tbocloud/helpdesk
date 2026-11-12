@@ -60,8 +60,12 @@ scheduler_events = {
             "helpdesk.helpdesk.doctype.hd_meeting.hd_meeting.sync_with_outlook",
             # Copilot fix approvals: remind the approver, then hand to a senior
             "helpdesk.copilot.approvals.remind_and_escalate",
+            # action approvals (Press, AWS, repairs): remind, escalate, expire (Phase 18)
+            "helpdesk.copilot.actions.remind_and_escalate",
         ],
         "*/5 * * * *": [
+            # the watcher's heartbeat: the Agent Managers hear when it goes quiet (Phase 18)
+            "helpdesk.monitor.watch_heartbeats",
             # Copilot deploys through Press: start, follow, check (helpdesk.copilot.deploy)
             "helpdesk.copilot.deploy.run_due",
             # releases of every merge: the CI gate and approval reminders (off by default)
