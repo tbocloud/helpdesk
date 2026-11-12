@@ -26,6 +26,7 @@ from frappe.utils import escape_html, now_datetime
 from helpdesk import intake, monitor
 from helpdesk.automation import automation_user
 from helpdesk.copilot import actions, approvals
+from helpdesk.utils import add_assignment
 
 REPAIR = "HDS Repair"
 SETTINGS = "HDS Hub Settings"
@@ -246,14 +247,15 @@ def assign_to_devops(ticket: str | None, why: str) -> str | None:
     to = least_busy(people)
     if not to:
         return None
-    monitor.assign(
+    add_assignment(
         {
             "assign_to": [to],
             "doctype": "HD Ticket",
             "name": str(ticket),
             "description": why[:500],
             "assigned_by": automation_user(),
-        }
+        },
+        ignore_permissions=True,
     )
     return to
 

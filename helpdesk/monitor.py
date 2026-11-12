@@ -22,6 +22,7 @@ from helpdesk import intake
 from helpdesk.automation import as_automation_user, automation_user
 from helpdesk.consts import ALERT_TICKET_TYPE
 from helpdesk.intake import AlertSubject
+from helpdesk.utils import add_assignment
 
 ROLE = "TBO Monitor"
 USER = "watcher@teambackoffice.com"
@@ -277,25 +278,16 @@ def followup(
             }
         ).insert(ignore_permissions=True)
     if assign_to:
-        assign(
+        add_assignment(
             {
                 "assign_to": [assign_to],
                 "doctype": "Task",
                 "name": task.name,
                 "assigned_by": automation_user(),
-            }
+            },
+            ignore_permissions=True,
         )
     return {"task": task.name, "action": "created"}
-
-
-def assign(args: dict):
-    """An assignment made by the hub itself, past the assigner's permissions. Newer Frappe keeps
-    that option on the private `_add`; older Frappe has it on `add`."""
-    from frappe.desk.form import assign_to
-
-    if hasattr(assign_to, "_add"):
-        return assign_to._add(args, ignore_permissions=True)
-    return assign_to.add(args, ignore_permissions=True)
 
 
 # --- heartbeats ------------------------------------------------------------------------------

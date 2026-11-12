@@ -14,11 +14,10 @@ meanwhile. Each step leaves a line in the ticket's chat, so everyone sees why.
 
 import frappe
 from frappe import _
-from frappe.desk.form.assign_to import add as add_assignment
-from frappe.desk.form.assign_to import remove as remove_assignment
 from frappe.utils import add_days, add_to_date, formatdate, get_fullname, now_datetime
 
 from helpdesk.automation import automation_user
+from helpdesk.utils import add_assignment, remove_assignment
 
 # Project User.custom_role values whose members take the customer's tickets
 PROJECT_TEAM_ROLES = ("Developer", "Support Engineer")

@@ -234,19 +234,6 @@ def get_ticket_chat_notes(ticket) -> list[str]:
     return lines
 
 
-def age_ticket(ticket, minutes: int):
-    """Moves a ticket's creation `minutes` into the past."""
-    from frappe.utils import add_to_date, now_datetime
-
-    frappe.db.set_value(
-        "HD Ticket",
-        str(ticket),
-        "creation",
-        add_to_date(now_datetime(), minutes=-minutes),
-        update_modified=False,
-    )
-
-
 def get_ticket_notices(ticket, notification_type: str) -> list[tuple[str, str]]:
     """The (user_to, message) pairs of a ticket's HD Notifications of one type
     (e.g. New Ticket, Ticket Update), sorted."""
@@ -5961,13 +5948,19 @@ def make_content_edits(post: str, user: str, count: int):
         frappe.db.set_value("Version", version.name, "owner", user)
 
 
-def age_ticket(ticket: str, hours: int, **values):
-    """Makes the ticket `ticket` look `hours` hours old, with any other `values` (for
-    example agreement_status) set straight in the database."""
+def age_ticket(ticket: str, hours: int = 0, minutes: int = 0, **values):
+    """Makes the ticket `ticket` look `hours` hours (or `minutes` minutes) old, with any other
+    `values` (for example agreement_status) set straight in the database.
+
+    One helper for both: two branches each added an age_ticket, one by minutes and one by hours,
+    and the later definition hid the earlier one."""
     frappe.db.set_value(
         "HD Ticket",
-        ticket,
-        {"creation": add_to_date(now_datetime(), hours=-hours), **values},
+        str(ticket),
+        {
+            "creation": add_to_date(now_datetime(), hours=-hours, minutes=-minutes),
+            **values,
+        },
         update_modified=False,
     )
 
