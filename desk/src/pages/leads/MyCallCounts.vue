@@ -136,5 +136,6 @@ function dayLabel(date: string) {
   return day.format("ddd, D MMM YYYY");
 }
 
-defineExpose({ reload: () => counts.reload() });
+// Refresh reads past the server's 60-second cache
+defineExpose({ reload: () => counts.submit({ days: 366, fresh: 1 }) });
 </script>

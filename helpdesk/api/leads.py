@@ -730,7 +730,8 @@ def set_lead_department_active(name: str, active: int | str = 1) -> dict:
 
 def change_department(method: str, **params) -> dict:
     """A department write on the ERP site; the signed-in person's cached reads go, as the
-    departments (and what they may see) changed."""
+    departments (and what they may see) changed, and everyone's cached pickers, which say
+    who heads a department (`is_bd`): a new head gets the managers' screens straight away."""
     saved = call_if_deployed(
         method,
         post=True,
@@ -747,6 +748,7 @@ def change_department(method: str, **params) -> dict:
             LeadsUnavailableError,
         )
     clear_cached_reads()
+    frappe.cache.delete_keys(f"{CACHE_PREFIX}:*:options:")
     return saved
 
 
@@ -1092,7 +1094,9 @@ def refresh_lead_ai(name: str) -> dict:
 def apply_ai_stage(name: str) -> dict:
     """Moves the lead to the stage the AI suggested, as the signed-in person."""
     require_leads()
-    return call("apply_ai_stage", post=True, name=name) or {}
+    result = call("apply_ai_stage", post=True, name=name) or {}
+    clear_cached_reads()
+    return result
 
 
 @frappe.whitelist(methods=["POST"])

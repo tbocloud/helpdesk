@@ -64,6 +64,7 @@ import {
   dismissCall,
   loadPendingCalls,
   pendingCalls,
+  queueChanged,
   type PendingCall,
 } from "./pendingCalls";
 
@@ -130,6 +131,7 @@ function answer(
   request
     .then(() => {
       toast.success(__("Saved"));
+      if (pending.item) queueChanged.value++;
       return next();
     })
     .catch((e: unknown) =>

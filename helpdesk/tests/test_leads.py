@@ -387,6 +387,16 @@ class TestLeads(FrappeTestCase):
 
         self.assertEqual(leads_api.get_overview_page()["overview"]["totals"]["new"], 4)
 
+    def test_applying_the_ai_stage_clears_that_persons_cached_figures(self):
+        self.crm.lead_answers["get_overview"] = {"totals": {"new": 3}}
+        self.crm.lead_answers["apply_ai_stage"] = {"name": "CRM-LEAD-0001"}
+        self.as_bde()
+        leads_api.get_overview_page()
+        self.crm.lead_answers["get_overview"] = {"totals": {"new": 4}}
+        leads_api.apply_ai_stage("CRM-LEAD-0001")
+
+        self.assertEqual(leads_api.get_overview_page()["overview"]["totals"]["new"], 4)
+
     def test_ai_suggestions_are_the_signed_in_persons_to_act_on(self):
         self.crm.lead_answers["get_lead_ai"] = {"enabled": True, "insight": None}
         self.as_bde()
@@ -516,6 +526,26 @@ class TestLeads(FrappeTestCase):
                 "don't have a sales account",
             ),
             (
+                CRMError(
+                    "x",
+                    403,
+                    "bde@example.com has no sales role here.",
+                    "bde@example.com has no sales role here.",
+                ),
+                LeadsError,
+                "don't have a sales account",
+            ),
+            (
+                CRMError(
+                    "x",
+                    403,
+                    "PermissionError",
+                    "No permission for Lead CRM-LEAD-0001",
+                ),
+                LeadsError,
+                "No permission for Lead CRM-LEAD-0001",
+            ),
+            (
                 CRMError("x", 404, "Lead CRM-LEAD-0001 not found."),
                 LeadsError,
                 "isn't on the ERP site",
@@ -587,6 +617,16 @@ class TestLeads(FrappeTestCase):
         self.assertEqual(
             leads_api.get_lead_departments()["departments"][0]["name"], "Sales Pod"
         )
+
+    def test_a_department_change_renews_everyones_pickers(self):
+        # who heads a department (is_bd) comes from the pickers: a new head must not wait
+        # OPTIONS_TTL for the managers' screens
+        self.crm.lead_answers["save_lead_department"] = lead_department()
+        other = f"{leads_api.CACHE_PREFIX}:someone@example.com:options:{{}}"
+        frappe.cache.set_value(other, {"departments": []}, expires_in_sec=600)
+        self.as_bde()
+        leads_api.save_lead_department({"department_name": "GrowthX"})
+        self.assertIsNone(frappe.cache.get_value(other, expires=True))
 
     def test_a_departments_products_and_campaign_product_are_saved_as_given(self):
         self.crm.lead_answers["save_lead_department"] = lead_department(
