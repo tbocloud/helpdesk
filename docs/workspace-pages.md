@@ -14,7 +14,7 @@ Shared building blocks, in `desk/src/components/`:
   `valueTone` colours the number the same way; `delta`, `deltaText` and `deltaTone` add a
   change line with an up/down arrow; `compact` tightens it for a strip above a list (an
   inline icon, no circle). Used by Overview, Team, the By project view, Performance, the
-  tickets summary strip ([tickets-and-calendar-pages.md](tickets-and-calendar-pages.md)), and
+  tickets view tabs ([tickets-and-calendar-pages.md](tickets-and-calendar-pages.md)), and
   the customer report and the customer and contact pages ([customer-pages.md](customer-pages.md)).
 - **`DirectoryList`**: the Customers and Contacts list (link rows, bulk delete, paging and
   every state), with `useDirectory()` keeping search and sort in the URL
