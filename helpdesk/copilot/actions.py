@@ -34,6 +34,9 @@ EXPIRES_MINUTES = 60  # an approval not acted on in an hour is void: ask again
 REMIND_MINUTES = 15
 ESCALATE_MINUTES = 45
 LOG_CHARS = 2000
+# kinds the hub runs itself right after Approve (a background job); the others are run by
+# whoever asked (the desktop app, the watcher) once they see the approval
+EXECUTORS = {"Press": "helpdesk.copilot.press_tools.execute_approved"}
 
 
 def payload_hash(payload) -> str:
@@ -200,6 +203,13 @@ def decide(name: str, user: str, approve: bool, note: str = "", via: str = "Web"
         update_modified=False,
     )
     refresh_cards(name)
+    if approve and approval.kind in EXECUTORS:
+        frappe.enqueue(
+            EXECUTORS[approval.kind],
+            name=name,
+            queue="long",
+            enqueue_after_commit=True,
+        )
     return {"outcome": "approved" if approve else "rejected", "approval": name}
 
 

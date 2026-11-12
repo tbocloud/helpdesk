@@ -22,6 +22,7 @@ TOOL_MODULES = (
     "helpdesk.copilot.mcp.tools_read",
     "helpdesk.copilot.mcp.tools_write",
     "helpdesk.copilot.mcp.tools_worker",
+    "helpdesk.copilot.mcp.tools_press",
 )
 MAX_RESULT_CHARS = 100_000
 SAVEPOINT = "copilot_mcp_tool"

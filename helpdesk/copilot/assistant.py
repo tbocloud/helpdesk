@@ -31,8 +31,21 @@ INTENTS = (
     "snooze",
     "build",
     "fix",
+    "press_status",
+    "press_backup",
+    "press_action",
     "help",
     "unclear",
+)
+# what Press may be asked to do from a chat (press_tools.ACTIONS, the approval ones)
+PRESS_ACTIONS = (
+    "restart_bench",
+    "update_site",
+    "migrate_site",
+    "change_plan",
+    "deploy",
+    "restore",
+    "new_site",
 )
 # intents about one ticket: they also go to that ticket's chat (Phase 11)
 TICKET_KINDS = (
@@ -53,14 +66,17 @@ TICKET_RE = re.compile(r"(?:ticket\s*#?|#)\s*(\d{1,7})\b", re.I)
 
 INTENT_PROMPT = """You read one message that a TBO support engineer sent to TBO Copilot, the team's AI support
 engineer, in a chat. You decide what they want; you never act yourself. Answer with JSON only:
-{"intent": "question" | "approve" | "reject" | "change_request" | "new_work" | "waiting" | "snooze" | "build" | "fix" | "help" | "unclear",
+{"intent": "question" | "approve" | "reject" | "change_request" | "new_work" | "waiting" | "snooze" | "build" | "fix" | "press_status" | "press_backup" | "press_action" | "help" | "unclear",
  "ticket": a ticket number they name, like "0312", or "",
  "task": a task they name, like "TASK-2026-00123", or "",
  "reason": for reject or change_request, their reason or the change they want, in their own words, or "",
  "customer": for new_work, the customer or site they name, or "",
  "summary": for new_work, a short title of the problem (at most 12 words), or "",
  "question": for question, their question, or "",
- "hours": for snooze, how many hours if they say, else 0}
+ "hours": for snooze, how many hours if they say, else 0,
+ "site": for press_status, press_backup or press_action, the hosted site or bench they name, like "galom", "galom.tbo365.cloud" or "bench-0020", or "",
+ "press_action": for press_action, one of "restart_bench" | "update_site" | "migrate_site" | "change_plan" | "deploy" | "restore" | "new_site", or "",
+ "plan": for change_plan, the plan they name, or ""}
 
 question: they ask about a ticket, a task, a fix or Copilot's work ("what did Copilot change?", "why this way?").
 approve: they want to approve a fix that waits for approval. reject: they refuse a fix (say why).
@@ -69,6 +85,9 @@ new_work: they report a new problem of a customer for Copilot to work on.
 waiting: they ask what waits for them. snooze: they want a reminder later. help: they ask what you can do.
 build: they want Copilot to build a customization whose estimate the customer approved ("build ticket 0004").
 fix: they want Copilot to write the fix for a bug it diagnosed ("let Copilot fix 0009", "fix it", "go ahead and fix").
+press_status: they ask how a hosted site is doing on Press ("what's the status of galom.tbo365.cloud?", "is demoerp up?", "when was alpha last backed up?").
+press_backup: they want a backup of a hosted site taken now ("take a backup of demoerp").
+press_action: they want Press to act on a hosted site or its bench: restart the bench, update or migrate the site, change its plan, deploy the bench group, restore a backup, create a site ("restart the bench of galom").
 unclear: anything else, or when you are not sure.
 When they say "it" or "this fix", they mean the one fix waiting for them, when there is exactly one; for fix, the
 ticket of the last diagnosis they got.
@@ -425,6 +444,8 @@ def handle(
         return [waiting_card(user)]
     if kind == "new_work" or (files and kind == "unclear"):
         return propose_new_work(user, channel, chat, intent, text, files)
+    if kind in ("press_status", "press_backup", "press_action"):
+        return press_reply(user, channel, kind, intent, text)
     if kind in (
         "approve",
         "reject",
@@ -714,9 +735,183 @@ def help_card() -> dict:
             _('Let Copilot fix a bug it diagnosed: "fix ticket 0009", or "fix it".'),
             _('Build a customization the customer approved: "build ticket 0004".'),
             _(
+                'Ask about a hosted site: "status of galom.tbo365.cloud"; "take a backup of demoerp" runs at once.'
+            ),
+            _(
+                'Ask Press for more: "restart the bench of galom", "update demoerp", "deploy bench group X"; an approver gets a card first.'
+            ),
+            _(
                 "Nothing happens until you press Yes, and I act with your own permissions."
             ),
         ],
+    )
+
+
+# --- Press (Phase 18) ----------------------------------------------------------------------------
+
+
+def press_reply(
+    user: str, channel: str, kind: str, intent: dict, text: str
+) -> list[dict]:
+    """A hosted site's status, a backup now, or a Press action that waits for an approval card."""
+    from helpdesk.copilot import press_tools
+    from helpdesk.copilot.press import PressError
+
+    if not frappe.db.get_single_value("HDS Copilot Settings", "press_url"):
+        return [text_card(_("Press is not set up in HDS Copilot Settings."), "warning")]
+    named = (intent.get("site") or "").strip()
+    action = (intent.get("press_action") or "").strip()
+    try:
+        if kind == "press_action" and action == "deploy":
+            target, problem = named, None  # a bench group, named as Press names it
+            if not target:
+                problem = text_card(_("Which bench group? Name it as Press shows it."))
+        elif kind == "press_action" and action == "new_site":
+            return [
+                text_card(
+                    _(
+                        "A new site needs its subdomain, bench group, apps and plan: ask for it from the desktop app, where the form is."
+                    )
+                )
+            ]
+        else:
+            target, problem = resolve_site(named or text)
+        if problem:
+            return [problem]
+        if kind == "press_status":
+            return [press_status_card(press_tools.site_status(target))]
+        if kind == "press_backup":
+            done = press_tools.run("backup", target, user, channel)
+            return [text_card(done["text"], "good")]
+        if action not in PRESS_ACTIONS:
+            return [
+                text_card(
+                    _("Which Press action? I know: {0}.").format(
+                        ", ".join(a.replace("_", " ") for a in PRESS_ACTIONS)
+                    )
+                )
+            ]
+        extra = {}
+        if action == "change_plan":
+            if not intent.get("plan"):
+                return [text_card(_("Which plan? Name it as Press shows it."))]
+            extra["plan"] = intent["plan"]
+        if action == "restore":
+            return [
+                text_card(
+                    _(
+                        "A restore needs the backup's files: ask for it from the desktop app, where you can pick them."
+                    )
+                )
+            ]
+        if action == "restart_bench":
+            target = press_tools.site_status(target).get("bench") or target
+        with as_user(user):
+            asked = press_tools.run(action, target, user, channel, extra=extra)
+    except (PressError, frappe.ValidationError, frappe.PermissionError) as e:
+        frappe.clear_last_message()
+        return [text_card(str(e), "warning")]
+    who = (
+        frappe.utils.get_fullname(asked["approver"])
+        if asked.get("approver")
+        else _("the Agent Managers")
+    )
+    return [
+        card(
+            _("Asked {0} to approve: {1}").format(who, asked["title"]),
+            [
+                _(
+                    "It runs as soon as they press Approve, and I will tell you how it went. The request expires in an hour."
+                )
+            ],
+            facts=[(_("Approval"), asked["approval"])],
+        )
+    ]
+
+
+def resolve_site(text: str):
+    """The one site a person means, or a card that asks which."""
+    from helpdesk.copilot import press_tools
+
+    words = [w.strip(" ?.,!\"'") for w in (text or "").split()]
+    candidates = []
+    for word in sorted(words, key=len, reverse=True):
+        if len(word) < 3:
+            continue
+        candidates = press_tools.find_site(word)
+        if candidates:
+            break
+    if not candidates:
+        return None, text_card(
+            _("Which site? Name it as Press shows it, like galom.tbo365.cloud.")
+        )
+    if len(candidates) > 1:
+        return None, card(
+            _("Which site do you mean?"),
+            [", ".join(s["name"] for s in candidates[:8])],
+        )
+    return candidates[0]["name"], None
+
+
+def press_status_card(status: dict) -> dict:
+    """Plan, health, apps, last backup and last update of a site, as one card."""
+    plan = status.get("plan") or {}
+    ping_ = status.get("ping") or {}
+    backup = status.get("last_backup") or {}
+    update = status.get("last_update") or {}
+    apps = status.get("apps") or []
+    health = (
+        _("answers in {0} ms").format(ping_.get("ms"))
+        if ping_.get("ok")
+        else _("does not answer ({0})").format(ping_.get("code"))
+    )
+    usage = ", ".join(
+        f"{label} {plan.get(key)}%"
+        for key, label in (
+            ("database_pct", _("database")),
+            ("disk_pct", _("disk")),
+            ("cpu_pct", _("CPU")),
+        )
+        if plan.get(key) not in (None, "")
+    )
+    return card(
+        _("{0}: {1}, {2}").format(
+            status.get("site"), status.get("status") or "?", health
+        ),
+        [
+            _("Plan {0}{1}").format(
+                plan.get("name") or "?", f" · {usage}" if usage else ""
+            ),
+            _("Apps: {0}").format(
+                ", ".join(
+                    f"{a.get('app')} {a.get('tag') or a.get('branch') or ''} {a.get('hash') or ''}".strip()
+                    for a in apps[:8]
+                )
+                or "?"
+            ),
+        ],
+        facts=[
+            (_("Bench"), status.get("bench")),
+            (_("Group"), status.get("group")),
+            (_("Server"), status.get("server")),
+            (_("Version"), status.get("version")),
+            (
+                _("Last backup"),
+                f"{str(backup.get('creation'))[:16]}{' (with files)' if backup.get('with_files') else ''}"
+                if backup
+                else _("none found"),
+            ),
+            (
+                _("Last update"),
+                f"{str(update.get('creation'))[:16]} {update.get('status') or ''}".strip()
+                if update
+                else _("none"),
+            ),
+            (_("Last deployed"), status.get("last_deployed")),
+        ],
+        tone="good"
+        if ping_.get("ok") and status.get("status") == "Active"
+        else "warning",
     )
 
 

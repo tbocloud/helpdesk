@@ -629,3 +629,29 @@ customer, TBO itself), the **internal project** (follow-up tasks) and the watche
 - `self_check()`: the hub's own numbers for the watcher (and any agent): the scheduler, the queues
   and failed jobs, stuck mail, the error rate, when the error watch and the deploy train last ran,
   the workers' last claim. Numbers only; the watcher applies the thresholds.
+
+## Press tools (Phase 18: `copilot/press_tools.py`, `api/copilot_press.py`, `copilot/mcp/tools_press.py`)
+
+The team asks Copilot about TBO's own Press (tbocloud.in) from Teams, the panel, the desktop app
+or an MCP client, on the Phase 2 client (`copilot/press.py`, the Press key in HDS Copilot
+Settings; it never leaves the hub). Press cannot limit what a key does, so **`press_tools.ACTIONS`
+is the guard**:
+
+| Level | Actions | What happens |
+|---|---|---|
+| read | site status (`press.api.site.get`, `current_plan`, `installed_apps`, the last Site Backup and Site Update, a ping from the hub), sites, jobs, one job with its steps, failed jobs, benches, deploy history, servers, logs | answers at once |
+| logged | `backup` (`press.api.site.backup`) | runs at once, the job is followed, HDS Copilot Call Log keeps it |
+| approval | `restart_bench`, `update_site`, `migrate_site`, `change_plan` (any approver); `deploy`, `restore`, `new_site` (a senior) | an action approval (above) first; on Approve the hub runs the exact approved payload in the background (`press_tools.execute_approved`), follows the agent job, writes the outcome on the record and on the ticket, and tells the person who asked |
+| never | `press_tools.NEVER`: archive, reinstall, deactivate, login as admin, site config, SQL, uninstall app, bench archive, server archive and reboot, `press.api.client` writes | not callable; a test fails if any of these names appears anywhere else in the code |
+
+- **Chat** (`assistant.py`): intents `press_status`, `press_backup`, `press_action`; a site is found
+  by its exact name, then the name it starts with, then the name that contains it; two matches ask
+  which. "Restart the bench of galom" restarts galom's bench (`bench-NNNN`) after approval. A
+  restore or a new site needs files or a form, so the chat sends the person to the desktop app.
+- **Endpoints** (agents only): `sites`, `site_status`, `jobs`, `job`, `failed_jobs`, `benches`,
+  `deploy_history`, `servers`, `logs`, `backup`, `request_action`, `actions_table`.
+- **MCP** (people only): `press_site_status`, `press_sites`, `press_jobs`, `press_job`,
+  `press_failed_jobs`, `press_deploy_history` (read) and `press_backup` (write). A Copilot run gets
+  no Press tool: the worker activates four tools per profile.
+- **Press side:** the Press user of the key needs a Press Role listing the sites and bench groups
+  Copilot may read (Press roles narrow what is *seen*, never what is *done*).
