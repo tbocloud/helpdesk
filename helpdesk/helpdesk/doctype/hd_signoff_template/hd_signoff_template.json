@@ -8,10 +8,16 @@
 	"field_order": [
 		"template_name",
 		"module",
+		"signoff_type",
 		"column_break_1",
 		"is_active",
+		"project_type",
 		"description_section",
 		"description",
+		"mail_section",
+		"email_subject",
+		"email_body",
+		"default_cc",
 		"questions_section",
 		"items"
 	],
@@ -32,6 +38,15 @@
 			"description": "Suggested module title for new sign-offs, e.g. Accounts."
 		},
 		{
+			"fieldname": "signoff_type",
+			"fieldtype": "Select",
+			"label": "For",
+			"options": "Training\nUAT",
+			"default": "Training",
+			"in_list_view": 1,
+			"description": "Training: a checklist the customer confirms item by item. UAT: the client's tests come from the project's SRS, so a UAT template carries only the mail."
+		},
+		{
 			"fieldname": "column_break_1",
 			"fieldtype": "Column Break"
 		},
@@ -45,6 +60,13 @@
 			"description": "Inactive templates can't be picked for new sign-offs; existing sign-offs keep their questions."
 		},
 		{
+			"fieldname": "project_type",
+			"fieldtype": "Select",
+			"label": "Project Type",
+			"options": "\nERP Implementation\nMobile App\nWebsite\nContent Calendar\nSupport\nOther",
+			"description": "Offered for projects of this type; blank: for every project."
+		},
+		{
 			"fieldname": "description_section",
 			"fieldtype": "Section Break"
 		},
@@ -52,6 +74,29 @@
 			"fieldname": "description",
 			"fieldtype": "Small Text",
 			"label": "Description"
+		},
+		{
+			"fieldname": "mail_section",
+			"fieldtype": "Section Break",
+			"label": "Mail"
+		},
+		{
+			"fieldname": "email_subject",
+			"fieldtype": "Data",
+			"label": "Subject",
+			"length": 240
+		},
+		{
+			"fieldname": "email_body",
+			"fieldtype": "Text Editor",
+			"label": "Body",
+			"description": "Placeholders: {{ contact_salutation }}, {{ contact_name }}, {{ customer_name }}, {{ project_name }}, {{ modules }}, {{ training_date }}, {{ trainer_name }}, {{ sign_off_link }}, {{ sender_name }}, {{ sender_designation }}, {{ company_name }}. {{ sign_off_link }} is where the customer's link goes; without it the link is added at the end."
+		},
+		{
+			"fieldname": "default_cc",
+			"fieldtype": "Small Text",
+			"label": "Always CC",
+			"description": "Email addresses, comma separated."
 		},
 		{
 			"fieldname": "questions_section",
@@ -67,7 +112,7 @@
 	],
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-10-08 10:00:00.000000",
+	"modified": "2026-11-13 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Signoff Template",

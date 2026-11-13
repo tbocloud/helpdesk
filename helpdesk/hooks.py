@@ -63,6 +63,11 @@ scheduler_events = {
             # each CRM dashboard data source whose sync interval has passed (docs/crm-dashboard.md)
             "helpdesk.crm_dashboard.sync.sync_due_sources",
         ],
+        # mid-morning: the one reminder for a sign-off unanswered for two working days
+        # (docs/project-signoff.md, Reminders)
+        "30 10 * * *": [
+            "helpdesk.helpdesk.doctype.hd_project_signoff.hd_project_signoff.send_signoff_reminders",
+        ],
         "*/5 * * * *": [
             # pauses every running timer once the work day (or the morning, with a lunch
             # break set) has closed

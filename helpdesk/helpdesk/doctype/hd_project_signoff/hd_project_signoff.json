@@ -22,6 +22,10 @@
 		"signatory_contact",
 		"signatory_name",
 		"signatory_email",
+		"mail_section",
+		"cc_emails",
+		"email_subject",
+		"email_body",
 		"items_section",
 		"items",
 		"link_section",
@@ -30,6 +34,7 @@
 		"column_break_2",
 		"link_sent_on",
 		"link_sent_by",
+		"reminder_sent_on",
 		"signature_section",
 		"signed_on",
 		"signer_name",
@@ -163,6 +168,28 @@
 			"reqd": 1
 		},
 		{
+			"fieldname": "mail_section",
+			"fieldtype": "Section Break",
+			"label": "Mail"
+		},
+		{
+			"fieldname": "cc_emails",
+			"fieldtype": "Small Text",
+			"label": "CC",
+			"description": "Email addresses, comma separated."
+		},
+		{
+			"fieldname": "email_subject",
+			"fieldtype": "Data",
+			"label": "Subject",
+			"length": 240
+		},
+		{
+			"fieldname": "email_body",
+			"fieldtype": "Text Editor",
+			"label": "Body"
+		},
+		{
 			"fieldname": "items_section",
 			"fieldtype": "Section Break",
 			"label": "Questions"
@@ -209,6 +236,13 @@
 			"label": "Link Sent By",
 			"options": "User",
 			"read_only": 1
+		},
+		{
+			"fieldname": "reminder_sent_on",
+			"fieldtype": "Datetime",
+			"label": "Reminder Sent On",
+			"read_only": 1,
+			"description": "The one reminder for the link sent last (docs/project-signoff.md, Reminders)."
 		},
 		{
 			"fieldname": "signature_section",
@@ -285,7 +319,7 @@
 	],
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-10-20 14:00:00.000000",
+	"modified": "2026-11-13 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Project Signoff",
