@@ -50,6 +50,8 @@
 		"send_daily_sales_report",
 		"column_break_6",
 		"leads_teams",
+		"dashboards_section",
+		"dashboard_currency",
 		"status_section",
 		"last_sync_on",
 		"last_sync_result"
@@ -112,6 +114,18 @@
 			"label": "Send Welcome Email to New CRM Users",
 			"default": "1",
 			"description": "So they can set a password on the CRM site."
+		},
+		{
+			"fieldname": "dashboards_section",
+			"fieldtype": "Section Break",
+			"label": "CRM Dashboards"
+		},
+		{
+			"fieldname": "dashboard_currency",
+			"fieldtype": "Link",
+			"label": "Reporting Currency",
+			"options": "Currency",
+			"description": "CRM dashboards show money in this currency; each data source converts its own amounts with its rate."
 		},
 		{
 			"fieldname": "status_section",
@@ -346,7 +360,7 @@
 	],
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-10-26 12:00:00.000000",
+	"modified": "2026-11-12 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD CRM Settings",

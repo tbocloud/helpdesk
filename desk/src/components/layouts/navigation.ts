@@ -8,6 +8,7 @@ import LucideCalendarClock from "~icons/lucide/calendar-clock";
 import LucideCalendarDays from "~icons/lucide/calendar-days";
 import LucideCamera from "~icons/lucide/camera";
 import LucideChartColumn from "~icons/lucide/chart-column";
+import LucideChartPie from "~icons/lucide/chart-pie";
 import LucideClipboardList from "~icons/lucide/clipboard-list";
 import LucideClock from "~icons/lucide/clock";
 import LucideContact2 from "~icons/lucide/contact-2";
@@ -55,6 +56,8 @@ export interface NavItem {
   overviewOnly?: boolean;
   adoptionOnly?: boolean;
   customerReportOnly?: boolean;
+  /** CRM dashboards: someone who may open at least one */
+  crmDashboardsOnly?: boolean;
 }
 
 /** A page in the tree under a parent item (a saved view). */
@@ -325,6 +328,14 @@ export const agentNavAreas: NavArea[] = [
             to: "Leads",
             leadTab: "business",
             leadsOnly: true,
+          },
+          // configurable lead reporting across companies (docs/crm-dashboard.md)
+          {
+            id: "crm-dashboards",
+            label: __("CRM dashboards"),
+            icon: LucideChartPie,
+            to: "CrmDashboard",
+            crmDashboardsOnly: true,
           },
           // who is handed which product and how many calls per slot (docs/leads.md)
           {

@@ -5136,3 +5136,241 @@ class FakeLeadERP:
 
     def get_mirror_scopes(self):
         return {"scopes": self.scopes, "now": str(self.clock)}
+
+
+class FakeCRMSite:
+    """In-memory stand-in for an ERPNext site a CRM dashboard source reads (CRMClient's
+    get_page, get_list, doctype_fields, logged_user and call). Leads keep the fields they are
+    given; each change moves the site's clock a second, so `modified` orders them."""
+
+    LEAD_FIELDS = (
+        ("company", "Link"),
+        ("branch", "Link"),
+        ("department", "Link"),
+        ("team", "Data"),
+        ("lead_owner", "Link"),
+        ("status", "Select"),
+        ("source", "Link"),
+        ("expected", "Currency"),
+        ("won", "Currency"),
+        ("closed_on", "Date"),
+        ("lead_name", "Data"),
+        ("annual_revenue", "Currency"),
+    )
+
+    def __init__(self):
+        self.leads: dict[str, dict] = {}
+        # unit type -> records, as ERPNext's Company, Branch, Department and Employee list them
+        self.org: dict[str, list[dict]] = {}
+        self.clock = datetime(2031, 3, 4, 5, 6, 7)
+        self.down = False
+        self.pages: list[dict] = []
+
+    def tick(self) -> str:
+        self.clock += timedelta(seconds=1)
+        return str(self.clock)
+
+    def put(self, name: str, **values) -> dict:
+        """Adds or changes a lead; `creation` defaults to the site's clock."""
+        lead = self.leads.setdefault(name, {"name": name, "creation": str(self.clock)})
+        lead.update(values)
+        lead["modified"] = self.tick()
+        return lead
+
+    def remove(self, name: str):
+        self.leads.pop(name, None)
+
+    def check(self):
+        if self.down:
+            from helpdesk.integrations.crm.client import CRMError
+
+            raise CRMError("Couldn't reach the CRM site: down")
+
+    def get_page(
+        self, doctype, fields, filters=None, order_by="", start=0, page_length=500
+    ):
+        self.check()
+        if doctype != "Lead":
+            from helpdesk.integrations.crm.client import CRMError
+
+            # as the real client does for a 404
+            raise CRMError(f"The CRM site has no {doctype}.", 404)
+        self.pages.append({"doctype": doctype, "filters": filters, "start": start})
+        rows = sorted(
+            self.leads.values(), key=lambda lead: (lead["modified"], lead["name"])
+        )
+        for field, op, value in filters or []:
+            if field == "modified" and op == ">=":
+                rows = [lead for lead in rows if lead["modified"] >= value]
+        page = rows[start : start + page_length]
+        return [{f: lead.get(f) for f in fields} for lead in page]
+
+    def get_list(self, doctype, fields, filters=None):
+        self.check()
+        if doctype not in self.org:
+            from helpdesk.integrations.crm.client import CRMError
+
+            raise CRMError("The CRM site answered 403: no access", 403)
+        return [{f: record.get(f) for f in fields} for record in self.org[doctype]]
+
+    def doctype_fields(self, doctype):
+        self.check()
+        if doctype != "Lead":
+            return []
+        return [
+            {"fieldname": name, "label": name.title(), "fieldtype": fieldtype}
+            for name, fieldtype in self.LEAD_FIELDS
+        ]
+
+    def logged_user(self):
+        self.check()
+        return "api@source.example"
+
+    def call(self, method, post=False, **params):
+        self.check()
+        if method == "frappe.client.get_count":
+            return len(self.leads)
+        raise AssertionError(f"FakeCRMSite has no method {method}")
+
+
+def make_crm_source(name: str = "Test Source", **values):
+    """Creates a CRM dashboard data source with its own (fake) connection, mapped to
+    FakeCRMSite's lead fields, statuses New → Open, Won, Lost and Converted mapped, in INR.
+    `values` override any field, e.g. a status_map."""
+    doc = frappe.get_doc(
+        {
+            "doctype": "HD CRM Source",
+            "source_name": name,
+            "site_url": f"https://{frappe.scrub(name)}.example",
+            "api_key": "key",
+            "api_secret": "secret",
+            "currency": "INR",
+            "company_field": "company",
+            "branch_field": "branch",
+            "department_field": "department",
+            "owner_field": "lead_owner",
+            "status_field": "status",
+            "source_field": "source",
+            "expected_revenue_field": "expected",
+            "won_value_field": "won",
+            "created_field": "creation",
+            "closing_date_field": "closed_on",
+            "status_map": [
+                {"status": "New", "category": "Open"},
+                {"status": "Won", "category": "Won"},
+                {"status": "Lost", "category": "Lost"},
+                {"status": "Converted", "category": "Converted"},
+            ],
+            **values,
+        }
+    )
+    doc.insert(ignore_permissions=True)
+    return doc
+
+
+def make_crm_org_unit(source: str, unit_type: str, unit_name: str, **values):
+    """Creates a company, branch, department, team or employee of a CRM dashboard source."""
+    doc = frappe.get_doc(
+        {
+            "doctype": "HD CRM Org Unit",
+            "source": source,
+            "unit_type": unit_type,
+            "unit_name": unit_name,
+            **values,
+        }
+    )
+    doc.insert(ignore_permissions=True)
+    return doc
+
+
+def fill_crm_site(site: FakeCRMSite, today):
+    """Puts five leads on a FakeCRMSite, all created 40 days before `today`: one per
+    category (New, Won, Lost, Converted) and one whose status no mapping covers.
+    Acme has branches North and South; Beta has none; the fifth has no company."""
+
+    def day(days_ago: int) -> str:
+        return f"{add_to_date(today, days=-days_ago)} 10:00:00"
+
+    def date(days_ago: int) -> str:
+        return str(add_to_date(today, days=-days_ago))
+
+    site.put(
+        "L1",
+        company="Acme",
+        branch="North",
+        department="Sales North",
+        lead_owner="ann.crmdash@example.com",
+        status="New",
+        source="Web",
+        expected=1000,
+        creation=day(40),
+    )
+    site.put(
+        "L2",
+        company="Acme",
+        branch="North",
+        lead_owner="ann.crmdash@example.com",
+        status="Won",
+        source="Web",
+        expected=600,
+        won=500,
+        creation=day(40),
+        closed_on=date(30),
+    )
+    site.put(
+        "L3",
+        company="Acme",
+        branch="South",
+        lead_owner="bob.crmdash@example.com",
+        status="Lost",
+        source="Referral",
+        expected=200,
+        creation=day(40),
+        closed_on=date(10),
+    )
+    site.put(
+        "L4",
+        company="Beta",
+        lead_owner="bob.crmdash@example.com",
+        status="Converted",
+        source="Referral",
+        won=300,
+        creation=day(40),
+        closed_on=date(20),
+    )
+    site.put(
+        "L5",
+        lead_owner="cat.crmdash@example.com",
+        status="Demo Demanded",
+        creation=day(40),
+    )
+
+
+def crm_kpi(page: dict, metric: str, aggregation: str | None = None) -> dict:
+    """The KPI card of `metric` (and `aggregation`, when given) on a CRM dashboard page."""
+    return next(
+        card
+        for card in page["kpis"]
+        if card["metric"] == metric
+        and (aggregation is None or card["aggregation"] == aggregation)
+    )
+
+
+def make_crm_dashboard(dashboard_name: str = "Test Dashboard", **values):
+    """Creates an active CRM dashboard: by default every company over all time, the
+    Company, Branch and Status category filters, one card per metric and no charts."""
+    from helpdesk.crm_dashboard.registry import ALL_KPIS
+
+    doc = frappe.get_doc(
+        {
+            "doctype": "HD CRM Dashboard",
+            "dashboard_name": dashboard_name,
+            "scope": "all",
+            "default_period": "all_time",
+            "filters": [{"filter": f} for f in ("company", "branch", "category")],
+            "kpis": [{"metric": metric} for metric in ALL_KPIS],
+            **values,
+        }
+    )
+    doc.insert(ignore_permissions=True)
+    return doc
