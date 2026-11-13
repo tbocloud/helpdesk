@@ -133,18 +133,17 @@
           </div>
         </fieldset>
 
-        <!-- two lines so a long copy shows in full; it stays one line of text (a
-             Data field of 140 characters) -->
+        <!-- one point per line: Enter starts the next point, so three points read as
+             three lines, each starting at the left edge -->
         <FormControl
           ref="titleInput"
           :model-value="form.title"
           type="textarea"
-          :rows="2"
-          maxlength="140"
+          :rows="3"
           :label="__('Copy')"
+          :description="__('One point per line')"
           :placeholder="__('e.g. Diwali offer carousel')"
-          @update:model-value="(v: string) => (form.title = oneLine(v))"
-          @keydown.enter.prevent
+          @update:model-value="(v: string) => (form.title = copyPoints(v))"
         />
 
         <div class="flex flex-col gap-1.5">
@@ -249,7 +248,12 @@ import {
   toast,
 } from "frappe-ui";
 import { computed, nextTick, reactive, ref, watch } from "vue";
-import { oneLine, TEAM_ROLES, type TeamRole, textToHtml } from "../constants";
+import {
+  copyPoints,
+  TEAM_ROLES,
+  type TeamRole,
+  textToHtml,
+} from "../constants";
 import { useContentOptions } from "../contentOptions";
 import ContentProjectNote from "./ContentProjectNote.vue";
 import AddOptionChip from "./AddOptionChip.vue";

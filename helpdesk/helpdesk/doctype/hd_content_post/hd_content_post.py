@@ -430,9 +430,9 @@ class HDContentPost(Document):
         """The post's copy, sub copy and description, for the people doing it."""
         parts = []
         if post.title:
-            parts.append(
-                f"<p><strong>{_('Copy')}:</strong> {escape_html(post.title)}</p>"
-            )
+            # each point of the copy is its own line
+            copy = escape_html(post.title.strip()).replace("\n", "<br>")
+            parts.append(f"<p><strong>{_('Copy')}</strong></p><p>{copy}</p>")
         if strip_html(post.caption or "").strip():
             parts.append(f"<p><strong>{_('Sub copy')}</strong></p>{post.caption}")
         if (post.brief or "").strip():
@@ -772,8 +772,14 @@ class HDContentPost(Document):
 
     @property
     def label(self) -> str:
-        """The copy, or the post type and then the ID when there's no copy yet."""
-        return self.title or self.format or self.name
+        return self.label_of(self)
+
+    @staticmethod
+    def label_of(post) -> str:
+        """The copy on one line, its points joined by " · " (subjects and notifications
+        can't hold line breaks); the post type, then the ID, while there's no copy."""
+        points = [p.strip() for p in (post.title or "").splitlines() if p.strip()]
+        return " · ".join(points) or post.format or post.name
 
     @property
     def platforms_label(self) -> str:
@@ -998,7 +1004,7 @@ def send_due_reminders():
             "HD Content Post",
             post.name,
             _("{0} publishes {1} and is still in {2}").format(
-                post.title or post.format or post.name,
+                HDContentPost.label_of(post),
                 format_datetime(post.publish_on, "d MMM, h:mm a"),
                 _(post.status),
             ),
@@ -1059,7 +1065,7 @@ def send_missed_post_alerts():
             _(
                 "Missed: {0} was due {1} and isn't published. Publish or postpone it."
             ).format(
-                post.title or post.format or post.name,
+                HDContentPost.label_of(post),
                 format_datetime(post.publish_on, "d MMM, h:mm a"),
             ),
             link=f"/content?post={post.name}",
@@ -1077,7 +1083,7 @@ def _send_missed_post_alert(settings, post, recipients: set[str]):
     subject, message = settings.render(
         "missed_post",
         {
-            "title": post.title or post.format or post.name,
+            "title": HDContentPost.label_of(post),
             "customer": post.customer,
             "channel": post.platforms or post.channel,
             "due_datetime": format_datetime(post.publish_on),

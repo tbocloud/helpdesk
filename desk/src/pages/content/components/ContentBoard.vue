@@ -452,7 +452,7 @@
                       :title="copyOf(post)"
                       @click="emit('open', post.name)"
                     >
-                      {{ post.title || __("No copy yet") }}
+                      {{ post.title ? copyOf(post) : __("No copy yet") }}
                     </button>
                     <!-- the post type stands out: a tinted tag with the same icon as the
                          dialogs' post type chips (owner's request, 2026-10-14) -->

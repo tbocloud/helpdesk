@@ -387,7 +387,7 @@ same labels and fields:
 
 | Label | Field | Notes |
 | --- | --- | --- |
-| Copy | `title` | Optional (owner's request, 2026-10-24). Without it the post is named by its post type, then its ID: `label` on the controller, `copyOf()` in `pages/content/constants.ts`, also in task names, reminders and the client approval. The dialogs show it in a two-line box that wraps, so a long copy reads in full; it stays one line of at most 140 characters (a Data field): Enter adds no line break and pasted line breaks become spaces (`oneLine()`). |
+| Copy | `title` | Optional (owner's request, 2026-10-24). Without it the post is named by its post type, then its ID: `label` on the controller, `copyOf()` in `pages/content/constants.ts`, also in task names, reminders and the client approval. It holds one point per line (a Small Text field, so there's no 140-character cap): in both dialogs Enter starts the next point, and pasted Windows line ends, blank lines and spaces around a break are dropped (`copyPoints()`), so three points read as three left-aligned lines. The client portal shows it the same way (`white-space: pre-line`), and the task description gives each point its own line. Anywhere one line is needed (the board card, the sheet, the calendar, task cards, the dialog title, task subjects, notifications and alert emails) the points are joined by " · ": `copyLine()` / `copyOf()` in the desk, `HDContentPost.label_of()` on the server. |
 | Campaign (optional) | `campaign` | Free text (Data), e.g. "Diwali 2026". |
 | Special day (optional) | `special_day` | Free text, e.g. "Diwali". Highlights the post on the calendar (see below). |
 | Platforms | `platforms`, `channel` | Chips; one post can go out on several. The first is `channel`. |

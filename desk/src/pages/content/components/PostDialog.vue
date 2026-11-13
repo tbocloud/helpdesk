@@ -3,7 +3,7 @@
     <template #body-title>
       <div class="flex items-center gap-2">
         <h3 class="text-xl-semibold text-ink-gray-9">
-          {{ isNew ? __("New post") : form.title || __("Post") }}
+          {{ isNew ? __("New post") : copyLine(form.title) || __("Post") }}
         </h3>
         <span v-if="!isNew" class="font-mono text-xs text-ink-gray-5">{{
           post?.name
@@ -134,17 +134,16 @@
               maxlength="140"
             />
           </div>
-          <!-- two lines so a long copy shows in full; it stays one line of text (a
-               Data field of 140 characters) -->
+          <!-- one point per line: Enter starts the next point, so three points read as
+               three lines, each starting at the left edge -->
           <FormControl
             :model-value="form.title"
             type="textarea"
-            :rows="2"
-            maxlength="140"
+            :rows="3"
             :label="__('Copy')"
+            :description="__('One point per line')"
             :placeholder="__('e.g. Diwali offer carousel')"
-            @update:model-value="(v: string) => (form.title = joinMalayalamSigns(oneLine(v)))"
-            @keydown.enter.prevent
+            @update:model-value="(v: string) => (form.title = joinMalayalamSigns(copyPoints(v)))"
           />
           <div class="flex flex-col gap-1.5">
             <div class="flex items-center justify-between gap-2">
@@ -457,7 +456,8 @@ import {
   STATUSES,
   htmlToText,
   joinMalayalamSigns,
-  oneLine,
+  copyLine,
+  copyPoints,
   platformsOf,
   TEAM_ROLES,
   type TeamRole,
@@ -827,6 +827,7 @@ async function save() {
   saving.value = true;
   const values = {
     ...form,
+    title: form.title.trim(),
     campaign: form.campaign.trim(),
     special_day: form.special_day.trim(),
     channel: platforms.value[0],

@@ -216,7 +216,7 @@ import LucidePanelRight from "~icons/lucide/panel-right";
 import LucidePause from "~icons/lucide/pause";
 import LucideClock from "~icons/lucide/clock";
 import LucideTimer from "~icons/lucide/timer";
-import { platformsOf, ROLE_TONES } from "../constants";
+import { copyLine, platformsOf, ROLE_TONES } from "../constants";
 import {
   type ContentTask,
   dueText,
@@ -246,7 +246,7 @@ const emit = defineEmits<{
 const userStore = useUserStore();
 const titleId = useId();
 
-const title = computed(() => props.post?.title || props.task.subject);
+const title = computed(() => copyLine(props.post?.title) || props.task.subject);
 const platforms = computed(() => (props.post ? platformsOf(props.post) : []));
 const missed = computed(() => !!props.post?.is_missed);
 const goLive = computed(() =>
