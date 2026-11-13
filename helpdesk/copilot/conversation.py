@@ -1393,9 +1393,11 @@ def _reply(doc, after) -> dict:
 
 def month_cost(since) -> float:
     """What the customer chats cost the AI budget since `since` (pilot.month_spend adds it)."""
+    from helpdesk.utils import aggregate  # Frappe v16 rejects "sum(cost_usd) as usd"
+
     rows = frappe.get_all(
         CONVERSATION,
         filters={"creation": [">=", since]},
-        fields=["sum(cost_usd) as usd"],
+        fields=[aggregate("sum", "cost_usd", "usd")],
     )
     return flt(rows[0].usd) if rows else 0.0

@@ -26,6 +26,7 @@ from frappe.utils import (
 )
 
 from helpdesk.copilot import settings as copilot_settings
+from helpdesk.utils import aggregate
 
 RUN = "HDS Copilot Run"
 USAGE = "HDS AI Usage Log"
@@ -263,7 +264,8 @@ def pilot_rows(from_date, to_date, customer: str | None = None) -> list[dict]:
                     [get_datetime(from_date), get_datetime(f"{to_date} 23:59:59")],
                 ],
             },
-            fields=["ticket", "sum(estimated_cost_usd) as usd"],
+            # Frappe v16 rejects SQL functions written as strings in `fields`
+            fields=["ticket", aggregate("sum", "estimated_cost_usd", "usd")],
             group_by="ticket",
         )
     }
