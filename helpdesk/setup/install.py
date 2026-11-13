@@ -1021,15 +1021,14 @@ def add_default_status():
     statuses = [
         {
             "label_agent": "Open",
-            # red only means late (Phase 15)
-            "color": "Blue",
+            "color": "Red",
             "enabled": 1,
             "category": "Open",
             "order": 1,
         },
         {
             "label_agent": "Replied",
-            "color": "Amber",
+            "color": "Blue",
             "enabled": 1,
             "category": "Paused",
             "different_view": 1,
@@ -1045,7 +1044,7 @@ def add_default_status():
         },
         {
             "label_agent": "Waiting on Task",
-            "color": "Amber",
+            "color": "Orange",
             "enabled": 1,
             "category": "Paused",
             "different_view": 1,

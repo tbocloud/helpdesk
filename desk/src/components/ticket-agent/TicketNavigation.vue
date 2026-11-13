@@ -79,13 +79,5 @@ onMounted(() => {
       goToPreviousTicket();
     }
   });
-
-  // [ and ] too (Phase 15)
-  useShortcut("]", () => {
-    if (!disableRightCondition.value) goToNextTicket();
-  });
-  useShortcut("[", () => {
-    if (!disableLeftCondition.value) goToPreviousTicket();
-  });
 });
 </script>

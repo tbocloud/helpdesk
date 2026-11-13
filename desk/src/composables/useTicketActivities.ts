@@ -113,9 +113,7 @@ export function useTicketActivities(
     }
 
     const doc = ticketDoc.value;
-    // the customer's rating, once there is one, on a resolved or closed ticket (Phase 15)
-    if (!doc?.feedback_rating || doc?.status_category !== "Resolved")
-      return result;
+    if (doc?.feedback_rating === 0) return result;
     const feedback: FeedbackActivity = {
       type: "feedback",
       key: "feedback-activity",

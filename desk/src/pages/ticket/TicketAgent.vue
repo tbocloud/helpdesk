@@ -2,8 +2,8 @@
   <div v-if="ticket.doc?.name" class="flex-1">
     <TicketHeader
       :viewers="viewers"
-      :details-open="isSheet ? detailsOpen : !detailsHidden"
-      @toggle-details="toggleDetails"
+      :details-open="detailsOpen"
+      @toggle-details="detailsOpen = !detailsOpen"
     />
     <div class="h-full flex overflow-hidden">
       <div class="flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -12,11 +12,7 @@
       </div>
 
       <!-- Side panel: inline with a resizer from lg, a sheet below -->
-      <TicketSidebar
-        v-model:open="detailsOpen"
-        :sheet="isSheet"
-        :hidden="!isSheet && detailsHidden"
-      />
+      <TicketSidebar v-model:open="detailsOpen" :sheet="isSheet" />
     </div>
     <SetContactPhoneModal
       v-if="ticket.doc.contact"
@@ -97,7 +93,7 @@ import {
   ref,
   watch,
 } from "vue";
-import { useMediaQuery, useStorage } from "@vueuse/core";
+import { useMediaQuery } from "@vueuse/core";
 import { useRoute } from "vue-router";
 import { showCommentBox, showEmailBox } from "./modalStates";
 
@@ -116,12 +112,6 @@ const showPhoneModal = ref(false);
 const detailsOpen = ref(false);
 // below lg the side panel is a sheet, opened from the header or by a field shortcut
 const isSheet = useMediaQuery("(max-width: 1023.98px)");
-// from lg the panel sits beside the conversation; it can be hidden (Phase 15), per browser
-const detailsHidden = useStorage("helpdesk-ticket-details-hidden", false);
-function toggleDetails() {
-  if (isSheet.value) detailsOpen.value = !detailsOpen.value;
-  else detailsHidden.value = !detailsHidden.value;
-}
 provide("openTicketDetails", async () => {
   if (!isSheet.value || detailsOpen.value) return;
   detailsOpen.value = true;

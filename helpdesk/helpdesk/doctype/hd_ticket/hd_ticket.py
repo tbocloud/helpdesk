@@ -1582,13 +1582,17 @@ class HDTicket(Document):
                 "key": "priority",
                 "width": "7rem",
             },
-            # one column for what is due next: the first reply until it is sent, then the
-            # resolution (Phase 15); First response and Resolution stay under Columns
             {
-                "label": "Due",
+                "label": "First response",
+                "type": "Datetime",
+                "key": "response_by",
+                "width": "8rem",
+            },
+            {
+                "label": "Resolution",
                 "type": "Datetime",
                 "key": "resolution_by",
-                "width": "10rem",
+                "width": "8rem",
             },
             {
                 "label": "Assigned To",

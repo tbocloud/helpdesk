@@ -55,12 +55,7 @@
               aria-keyshortcuts="s"
             >
               <template #prefix>
-                <component
-                  :is="statusLook.icon"
-                  class="size-4"
-                  :class="INK[statusLook.tone]"
-                  aria-hidden="true"
-                />
+                <IndicatorIcon :class="statusColor" />
               </template>
               <template #suffix>
                 <LucideChevronDown
@@ -74,11 +69,11 @@
         </Dropdown>
         <!-- who has it (Phase 12): pick someone working today -->
         <AssignTo hide-label quiet class="hidden w-48 sm:flex" />
-        <!-- Details: beside the conversation from lg (shown or hidden), a sheet below -->
+        <!-- the side panel is a sheet below lg -->
         <Button
+          class="lg:hidden"
           :label="__('Details')"
           :aria-expanded="detailsOpen"
-          :title="__('Show or hide the details')"
           @click="emit('toggle-details')"
         >
           <template #prefix>
@@ -141,10 +136,7 @@ import {
   View,
 } from "@/types";
 import { HDTicketStatus } from "@/types/doctypes";
-import { INK } from "@/components/tone";
-import { statusBadge } from "@/pages/ticket/ticketMeta";
-import { copyToClipboard, getIcon } from "@/utils";
-import LucideCopy from "~icons/lucide/copy";
+import { getIcon } from "@/utils";
 import {
   Breadcrumbs,
   Button,
@@ -177,6 +169,7 @@ import { openReplyBox, showCreateTask } from "@/pages/ticket/modalStates";
 import LucideMerge from "~icons/lucide/merge";
 import LucidePanelRight from "~icons/lucide/panel-right";
 import LucideReply from "~icons/lucide/reply";
+import { IndicatorIcon } from "../icons";
 import AssignTo from "./AssignTo.vue";
 import TicketNavigation from "./TicketNavigation.vue";
 import TicketSubjectModal from "./TicketSubjectModal.vue";
@@ -234,13 +227,10 @@ const statusDropdown = computed(() => {
         }
       );
     },
-    icon: () => {
-      const look = statusBadge(o.label_agent, o.category);
-      return h(look.icon, {
-        class: ["size-4", INK[look.tone]],
-        "aria-hidden": "true",
-      });
-    },
+    icon: () =>
+      h(IndicatorIcon, {
+        class: o.parsed_color,
+      }),
   }));
 });
 const breadcrumbs = computed(() => {
@@ -321,27 +311,12 @@ const showMergeOption = computed(() => {
     ticketCount.data > 1
   );
 });
-// the status as an icon and a word in its tone (Phase 15), as in the list
-const statusLook = computed(() =>
-  statusBadge(
-    ticket.value.doc.status,
-    ticketStatusStore.getStatus(ticket.value.doc.status)?.category ??
-      ticket.value.doc.status_category
-  )
+const statusColor = computed(
+  () => ticketStatusStore.getStatus(ticket.value.doc.status)?.parsed_color
 );
 
 const defaultActions = computed(() => {
   let items: any[] = [
-    {
-      // the number is in the breadcrumb; copying it lives here (and on ⌘ .)
-      label: __("Copy ticket ID"),
-      icon: LucideCopy,
-      onClick: () =>
-        copyToClipboard(
-          ticket.value.doc.name,
-          __("Ticket #{0} copied to clipboard", ticket.value.doc.name)
-        ),
-    },
     {
       label: __("Create task"),
       icon: LucideListPlus,
